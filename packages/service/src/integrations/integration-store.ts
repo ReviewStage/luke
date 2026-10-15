@@ -13,6 +13,10 @@
  */
 
 import { Database, type DatabaseServices, type QueryError } from "@luke/database/core/query";
+import {
+  INTEGRATION_ROW_STATUS,
+  type IntegrationRowStatus,
+} from "@luke/database/integration-vocabulary";
 import { InstantColumnSchema } from "@luke/database/models/columns";
 import { integrationConnection } from "@luke/database/schemas/integration";
 import {
@@ -23,17 +27,7 @@ import { and, eq } from "drizzle-orm";
 import { DateTime, Effect, Option, Redacted, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 
-/** What a row's status may say. No row is a disconnected provider. */
-export const INTEGRATION_ROW_STATUS = {
-  /** A first sign-in is under way and has not completed. */
-  PENDING: "pending",
-  /** A sign-in completed and Connect last answered with a token. */
-  CONNECTED: "connected",
-  /** The account was connected, and Connect then answered it holds no grant it can use. */
-  EXPIRED: "expired",
-} as const;
-
-type IntegrationRowStatus = (typeof INTEGRATION_ROW_STATUS)[keyof typeof INTEGRATION_ROW_STATUS];
+export { INTEGRATION_ROW_STATUS } from "@luke/database/integration-vocabulary";
 
 export type IntegrationStoreEffect<A> = Effect.Effect<
   A,

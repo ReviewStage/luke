@@ -253,7 +253,11 @@ export const PLANNING_EXPLORE_ASK =
   "The call has just started, and the developer has not said what they want yet. " +
   "Start exploring the task's folder now, so you already know the code when they do: " +
   "what the project is, how it is laid out, how it is built and tested, and anything the " +
-  "task's name or the plan's saved document points to. Hand anything broader to the worker. " +
+  "task's name or the plan's saved document points to. Where the plan was started from a Linear issue, " +
+  "that issue is the work to plan: research it on your own, reading more of it and what it " +
+  "links to through the Linear connection where you need it, and explore the code it concerns. " +
+  "The issue is context, not a request to change it: change nothing in Linear unless the " +
+  "developer asks. Hand anything broader to the worker. " +
   "Queue no question until the developer has spoken. " +
   "Return one short sentence on what the project is.";
 
@@ -301,6 +305,7 @@ Transcripts can contain mistakes, unfinished phrases, and later corrections. Fol
 const TASK_MARKER = "[task]";
 const DOCUMENT_MARKER = "[saved document]";
 const AGENT_EDITS_MARKER = "[recent edits by coding agents]";
+const LINEAR_ISSUE_MARKER = "[linear issue the plan was started from]";
 /** The marker the sections the developer last wrote ride behind, which the brain and the notetaker are each told to keep as written. */
 export const DEVELOPER_FIELDS_MARKER = "[sections the developer wrote]";
 
@@ -352,9 +357,16 @@ function developerFieldsText(stored: StoredPlan): readonly string[] {
   ];
 }
 
+/** The issue the plan was started from, as JSON, as it was read then; nothing for a plan started from none. */
+function linearIssueText(stored: StoredPlan): readonly string[] {
+  if (stored.linearIssue === undefined) return [];
+  return [LINEAR_ISSUE_MARKER, JSON.stringify(stored.linearIssue)];
+}
+
 /**
  * What a planning turn is handed beside its instructions every turn: the
- * plan's name, the saved document as JSON, the newest saves coding agents
+ * plan's name, the Linear issue it was started from where it was, the saved
+ * document as JSON, the newest saves coding agents
  * made on it (so Luke can raise what an agent asked or decided), the sections
  * the developer last wrote themselves (so Luke treats them as decided), and the
  * whiteboard as the model reads it (`board-text.ts`), each read again every
@@ -372,6 +384,7 @@ export function planningStandingContext(
   return [
     heading,
     `Name: ${plan.name}`,
+    ...linearIssueText(stored),
     DOCUMENT_MARKER,
     JSON.stringify(plan.document),
     ...agentEditsText(stored.agentEdits),

@@ -10,6 +10,8 @@ import type {
   PlanningFileParams,
   PlanningGitHubDisconnectAnswer,
   PlanningGitHubPageAnswer,
+  PlanningLinearIssuesAnswer,
+  PlanningLinearIssuesParams,
   PlanningMessagesParams,
   PlanningMoveAnswer,
   PlanningMoveParams,
@@ -60,6 +62,7 @@ import {
   ALREADY_INVITED_REFUSAL,
   GITHUB_LAST_SIGN_IN_REFUSAL,
   isGitHubAddress,
+  LINEAR_UNAVAILABLE_REFUSAL,
   WORKSPACE_NOT_PERMITTED_REFUSAL,
 } from "@luke/host/acts";
 import { Effect } from "effect";
@@ -117,6 +120,15 @@ export interface PlanningActsDependencies {
     workspaceGitHubDisconnect(
       params: PlanningWorkspaceParams,
     ): Effect.Effect<PlanningWorkspaceAnswer>;
+    workspaceLinearConnect(
+      params: PlanningWorkspaceParams,
+    ): Effect.Effect<PlanningWorkspaceGitHubConnectAnswer>;
+    workspaceLinearDisconnect(
+      params: PlanningWorkspaceParams,
+    ): Effect.Effect<PlanningWorkspaceAnswer>;
+    workspaceLinearIssues(
+      params: PlanningLinearIssuesParams,
+    ): Effect.Effect<PlanningLinearIssuesAnswer>;
     workspaceMembers(
       params: PlanningWorkspaceMembersParams,
     ): Effect.Effect<PlanningWorkspaceMembersAnswer>;
@@ -200,6 +212,9 @@ type PlanningActKind =
   | typeof ACT_KIND.WORKSPACE_INVITATION_CANCEL
   | typeof ACT_KIND.WORKSPACE_GITHUB_CONNECT
   | typeof ACT_KIND.WORKSPACE_GITHUB_DISCONNECT
+  | typeof ACT_KIND.WORKSPACE_LINEAR_CONNECT
+  | typeof ACT_KIND.WORKSPACE_LINEAR_DISCONNECT
+  | typeof ACT_KIND.WORKSPACE_LINEAR_ISSUES
   | typeof ACT_KIND.WORKSPACE_MEMBERS_READ
   | typeof ACT_KIND.WORKSPACE_PHOTO_READ
   | typeof ACT_KIND.WORKSPACE_MEMBER_REMOVE
@@ -216,6 +231,9 @@ type WorkspaceActKind =
   | typeof ACT_KIND.WORKSPACE_INVITATION_CANCEL
   | typeof ACT_KIND.WORKSPACE_GITHUB_CONNECT
   | typeof ACT_KIND.WORKSPACE_GITHUB_DISCONNECT
+  | typeof ACT_KIND.WORKSPACE_LINEAR_CONNECT
+  | typeof ACT_KIND.WORKSPACE_LINEAR_DISCONNECT
+  | typeof ACT_KIND.WORKSPACE_LINEAR_ISSUES
   | typeof ACT_KIND.WORKSPACE_MEMBERS_READ
   | typeof ACT_KIND.WORKSPACE_MEMBER_REMOVE
   | typeof ACT_KIND.WORKSPACE_MEMBER_ROLE
@@ -256,8 +274,15 @@ function refusedWorkspace(kind: WorkspaceActKind, failure: WorkspaceCallFailure)
       ? WORKSPACE_NOT_PERMITTED_REFUSAL
       : failure === WORKSPACE_CALL_FAILURE.ALREADY_INVITED
         ? ALREADY_INVITED_REFUSAL
-        : ACT[kind].refusal;
+        : failure === WORKSPACE_CALL_FAILURE.LINEAR_UNAVAILABLE
+          ? LINEAR_UNAVAILABLE_REFUSAL
+          : ACT[kind].refusal;
   return Effect.fail(new ActRefused({ message }));
+}
+
+/** Whether an address the host answered parses and is https, the one kind a browser is sent to unnamed. */
+function isBrowserAddress(url: string): boolean {
+  return URL.canParse(url) && new URL(url).protocol === "https:";
 }
 
 /** Whether an address the host answered parses and stands on the service's own origin. */
@@ -523,6 +548,39 @@ export function planningActRows(
         "workspace" in answer
           ? Effect.void
           : refusedWorkspace(ACT_KIND.WORKSPACE_GITHUB_DISCONNECT, answer.failure),
+      );
+    },
+    // Note that the address the service answered opens only where it is
+    // https, because it is Vercel Connect's and the panel did not name it.
+    [ACT_KIND.WORKSPACE_LINEAR_CONNECT]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.WORKSPACE_LINEAR_CONNECT, sender);
+      return Effect.flatMap(host.workspaceLinearConnect(params), (answer) => {
+        if ("failure" in answer) {
+          return refusedWorkspace(ACT_KIND.WORKSPACE_LINEAR_CONNECT, answer.failure);
+        }
+        if (!isBrowserAddress(answer.url)) {
+          return refusedWorkspace(
+            ACT_KIND.WORKSPACE_LINEAR_CONNECT,
+            WORKSPACE_CALL_FAILURE.UNANSWERED,
+          );
+        }
+        return Effect.promise(() => dependencies.openExternal(answer.url));
+      });
+    },
+    [ACT_KIND.WORKSPACE_LINEAR_DISCONNECT]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.WORKSPACE_LINEAR_DISCONNECT, sender);
+      return Effect.flatMap(host.workspaceLinearDisconnect(params), (answer) =>
+        "workspace" in answer
+          ? Effect.void
+          : refusedWorkspace(ACT_KIND.WORKSPACE_LINEAR_DISCONNECT, answer.failure),
+      );
+    },
+    [ACT_KIND.WORKSPACE_LINEAR_ISSUES]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.WORKSPACE_LINEAR_ISSUES, sender);
+      return Effect.flatMap(host.workspaceLinearIssues(params), (answer) =>
+        "issues" in answer
+          ? Effect.succeed(answer.issues)
+          : refusedWorkspace(ACT_KIND.WORKSPACE_LINEAR_ISSUES, answer.failure),
       );
     },
     [ACT_KIND.WORKSPACE_MEMBERS_READ]: (params, sender) => {

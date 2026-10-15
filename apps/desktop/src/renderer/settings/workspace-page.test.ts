@@ -1159,7 +1159,7 @@ test("an owner or an admin of a connected workspace sees GitHub's row, led by it
     const group = githubGroup(page);
     const row = rowNamed(group, "GitHub");
 
-    assert.equal(group.querySelector("h2")?.textContent, "GitHub");
+    assert.equal(group.querySelector("h2")?.textContent, "Integrations");
     assert.equal(
       row.querySelector(".settings-row-mark")?.innerHTML,
       renderToStaticMarkup(createElement(ProviderMark, { provider: INTEGRATION_PROVIDER.GITHUB })),
@@ -1616,4 +1616,57 @@ test("an invitations read that failed says so with Retry in the list's place, wh
     invitationRows(page).map((row) => row.querySelector("strong")?.textContent),
     ["sam@example.com"],
   );
+});
+
+/** The workspace Linear connects and disconnects sent, by their payloads. */
+const linearSent = () =>
+  sent.flatMap((request) =>
+    request.kind === ACT_KIND.WORKSPACE_LINEAR_CONNECT ||
+    request.kind === ACT_KIND.WORKSPACE_LINEAR_DISCONNECT
+      ? [[request.kind, request.payload]]
+      : [],
+  );
+
+test("an admin's Linear row in Integrations asks first, saying every member reads what the connection reaches, private teams' issues included, then connects for the workspace", async () => {
+  const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
+  const row = rowNamed(githubGroup(page), "Linear");
+  const before = rowWords(row);
+
+  act(() => button(row, "Connect").click());
+  await settle();
+  const body = dialog().querySelector("p")?.textContent ?? "";
+  const beforeConfirm = linearSent();
+  await confirm("Continue to Linear");
+
+  assert.deepEqual(before, ["Linear", "Not connected."]);
+  assert.match(body, /Every member/u);
+  assert.match(body, /private teams' issues included/u);
+  assert.deepEqual(beforeConfirm, []);
+  assert.deepEqual(linearSent(), [[ACT_KIND.WORKSPACE_LINEAR_CONNECT, { workspaceId: ACME.id }]]);
+});
+
+test("a connected workspace's Linear reads connected for everyone, its Manage disconnects after asking, and a member sees it read only", async () => {
+  const connected: Workspace = { ...CONNECTED, linear: { active: true } };
+  const admin = await mount(connected);
+  const row = rowNamed(admin.page, "Linear");
+  const words = rowWords(row);
+  const controls = rowButtons(row);
+
+  await chooseAction(row, "Disconnect");
+  await confirm("Disconnect");
+  for (const root of roots.splice(0)) act(() => root.unmount());
+  const member = await mount({ ...connected, role: WORKSPACE_ROLE.MEMBER });
+  const memberRow = rowNamed(member.page, "Linear");
+  const unconnected = await mount({ ...ACME, role: WORKSPACE_ROLE.MEMBER });
+
+  assert.deepEqual(words, ["Linear", "Connected for everyone in this workspace"]);
+  assert.deepEqual(controls, ["Manage"]);
+  assert.deepEqual(linearSent(), [
+    [ACT_KIND.WORKSPACE_LINEAR_DISCONNECT, { workspaceId: connected.id }],
+  ]);
+  assert.deepEqual(rowButtons(memberRow), []);
+  assert.deepEqual(rowWords(rowNamed(unconnected.page, "Linear")), [
+    "Linear",
+    "Not connected. Ask an owner or admin.",
+  ]);
 });

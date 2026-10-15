@@ -90,6 +90,7 @@ import {
   integrationStatusViewSchema,
   integrationToolsViewSchema,
 } from "@luke/features/integration-view";
+import { type LinearIssueSummary, linearIssueSummarySchema } from "@luke/features/linear-wire";
 import { PLAN_MARKDOWN_MAX_CHARS } from "@luke/features/plan-markdown";
 import {
   type CodeLines,
@@ -112,6 +113,7 @@ import {
   planningEditParamsSchema,
   planningFileAnswerSchema,
   planningFileParamsSchema,
+  planningLinearIssuesParamsSchema,
   planningMessagesParamsSchema,
   planningMoveAnswerSchema,
   planningMoveParamsSchema,
@@ -336,6 +338,9 @@ export const ACT_KIND = {
   WORKSPACE_INVITATION_CANCEL: "workspace.invitationCancel",
   WORKSPACE_GITHUB_CONNECT: "workspace.githubConnect",
   WORKSPACE_GITHUB_DISCONNECT: "workspace.githubDisconnect",
+  WORKSPACE_LINEAR_CONNECT: "workspace.linearConnect",
+  WORKSPACE_LINEAR_DISCONNECT: "workspace.linearDisconnect",
+  WORKSPACE_LINEAR_ISSUES: "workspace.linearIssues",
   WORKSPACE_MEMBERS_READ: "workspace.membersRead",
   WORKSPACE_MEMBER_REMOVE: "workspace.memberRemove",
   WORKSPACE_MEMBER_ROLE: "workspace.memberRole",
@@ -556,11 +561,17 @@ export const WORKSPACE_NOT_PERMITTED_REFUSAL =
 
 const workspaceMembersSchema = EffectSchema.Array(workspaceMemberSchema);
 
+const linearIssuesSchema = EffectSchema.Array(linearIssueSummarySchema);
+
 const workspaceInvitationsSchema = EffectSchema.Array(workspaceInvitationSchema);
 
 /** What a GitHub disconnect is refused with where GitHub is the account's only way to sign in. */
 export const GITHUB_LAST_SIGN_IN_REFUSAL =
   "GitHub is the only way you sign in to this Luke account, so it cannot be disconnected." as const;
+
+/** What a Linear read is refused with where the workspace's Linear could not be read. */
+export const LINEAR_UNAVAILABLE_REFUSAL =
+  "Linear is not connected to this workspace, or it stopped answering. An owner or admin can connect it in Settings › Workspace." as const;
 
 /** What an invitation is refused with where the address is already in the workspace or already invited. */
 export const ALREADY_INVITED_REFUSAL =
@@ -879,6 +890,21 @@ export const ACT = {
     payload: actSchema(planningWorkspaceParamsSchema),
     result: answersNothing,
     refusal: "Could not disconnect GitHub from that workspace on this system.",
+  },
+  [ACT_KIND.WORKSPACE_LINEAR_CONNECT]: {
+    payload: actSchema(planningWorkspaceParamsSchema),
+    result: answersNothing,
+    refusal: "Could not connect Linear to that workspace on this system.",
+  },
+  [ACT_KIND.WORKSPACE_LINEAR_DISCONNECT]: {
+    payload: actSchema(planningWorkspaceParamsSchema),
+    result: answersNothing,
+    refusal: "Could not disconnect Linear from that workspace on this system.",
+  },
+  [ACT_KIND.WORKSPACE_LINEAR_ISSUES]: {
+    payload: actSchema(planningLinearIssuesParamsSchema),
+    result: wireResult<readonly LinearIssueSummary[]>(isReadable(linearIssuesSchema)),
+    refusal: "Could not read that workspace's Linear issues on this system.",
   },
   [ACT_KIND.WORKSPACE_MEMBERS_READ]: {
     payload: actSchema(planningWorkspaceMembersParamsSchema),

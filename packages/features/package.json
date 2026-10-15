@@ -25,6 +25,7 @@
     "./github-connection-wire": "./src/github-connection-wire.js",
     "./inbox-wire": "./src/inbox-wire.js",
     "./mac-command-wire": "./src/mac-command-wire.js",
+    "./linear-wire": "./src/linear-wire.js",
     "./mention-link": "./src/mention-link.js",
     "./open-address": "./src/open-address.js",
     "./integration-view": "./src/integration-view.js",

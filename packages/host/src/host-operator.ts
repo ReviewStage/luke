@@ -103,6 +103,8 @@ import {
   type PlanningFileParams,
   type PlanningGitHubDisconnectAnswer,
   type PlanningGitHubPageAnswer,
+  type PlanningLinearIssuesAnswer,
+  type PlanningLinearIssuesParams,
   type PlanningMessagesParams,
   type PlanningMoveAnswer,
   type PlanningMoveParams,
@@ -149,6 +151,7 @@ import {
   planningFileAnswerSchema,
   planningGitHubDisconnectAnswerSchema,
   planningGitHubPageAnswerSchema,
+  planningLinearIssuesAnswerSchema,
   planningMoveAnswerSchema,
   planningPageAnswerSchema,
   planningRepositoriesAnswerSchema,
@@ -372,6 +375,18 @@ export interface HostOperator {
   workspaceGitHubDisconnect(
     params: PlanningWorkspaceParams,
   ): Effect.Effect<PlanningWorkspaceAnswer>;
+  /** A workspace's Linear connection begun; Vercel Connect's sign-in address to open, or why there is none. */
+  workspaceLinearConnect(
+    params: PlanningWorkspaceParams,
+  ): Effect.Effect<PlanningWorkspaceGitHubConnectAnswer>;
+  /** A workspace's Linear disconnected; the workspace as it then stands, or why it is not. */
+  workspaceLinearDisconnect(
+    params: PlanningWorkspaceParams,
+  ): Effect.Effect<PlanningWorkspaceAnswer>;
+  /** The Linear issues a workspace's connection reaches; or why there are none. */
+  workspaceLinearIssues(
+    params: PlanningLinearIssuesParams,
+  ): Effect.Effect<PlanningLinearIssuesAnswer>;
   /** One workspace's members; or why there are none. */
   workspaceMembers(
     params: PlanningWorkspaceMembersParams,
@@ -999,6 +1014,26 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         }),
         workspaceAnswer(planningWorkspaceAnswerSchema),
       ),
+    workspaceLinearConnect: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.WORKSPACES_LINEAR_CONNECT, { workspaceId: params.workspaceId }),
+        workspaceAnswer(planningWorkspaceGitHubConnectAnswerSchema),
+      ),
+    workspaceLinearDisconnect: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.WORKSPACES_LINEAR_DISCONNECT, {
+          workspaceId: params.workspaceId,
+        }),
+        workspaceAnswer(planningWorkspaceAnswerSchema),
+      ),
+    workspaceLinearIssues: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.WORKSPACES_LINEAR_ISSUES, {
+          workspaceId: params.workspaceId,
+          ...("query" in params ? { query: params.query } : undefined),
+        }),
+        workspaceAnswer(planningLinearIssuesAnswerSchema),
+      ),
     workspaceMembers: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.WORKSPACES_MEMBERS, { workspaceId: params.workspaceId }),
@@ -1105,6 +1140,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           ...("name" in request ? { name: request.name } : undefined),
           ...("repository" in request ? { repository: request.repository } : undefined),
           ...("workspaceId" in request ? { workspaceId: request.workspaceId } : undefined),
+          ...("linearIssueId" in request ? { linearIssueId: request.linearIssueId } : undefined),
         }),
         (answer): PlanningStartAnswer =>
           (answer.ok

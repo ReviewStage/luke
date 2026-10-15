@@ -46,7 +46,7 @@ import { MenuRow } from "./menu-row";
 import { ReadFailed, SettingsGroup } from "./settings-group";
 
 /**
- * workspace-page.tsx -- Settings' Workspace page: the workspace the sidebar lists, its members, its invitations, its GitHub, and the way out of it.
+ * workspace-page.tsx -- Settings' Workspace page: the workspace the sidebar lists, its members, its invitations, its integrations, and the way out of it.
  *
  * The page shows the workspace the plans' sidebar lists and no other, so
  * there is one choice of workspace in the window: a Settings link that names
@@ -61,14 +61,18 @@ import { ReadFailed, SettingsGroup } from "./settings-group";
  * removes anyone else, and an admin removes members. An owner or an admin
  * then invites people by address and role, an admin as a member alone,
  * sees the invitations still pending with each one's accept link to copy and
- * send, and cancels one. GitHub, the one place a workspace's repositories
- * are set, is drawn as Settings › Integrations draws its rows: every GitHub
+ * send, and cancels one. Integrations holds what the workspace connects for
+ * everyone, each drawn as Settings › Integrations draws its rows. GitHub,
+ * the one place a workspace's repositories are set: every GitHub
  * account whose installation of the Luke GitHub App is connected, each
  * Connected or suspended; an owner or an admin connects the first with
  * Connect and another with Add connection, beside those standing, and
  * Manage's one item chooses repositories on GitHub, where which accounts and
  * repositories Luke reaches is managed, so nothing here disconnects one. A
- * member sees the same list, or is told to ask. Last, anyone but the owner leaves, and the
+ * member sees the same list, or is told to ask. Linear, which plans start
+ * from: an owner or an admin connects it once for every member, told first
+ * that every member then reads whatever their Linear account reaches, and
+ * disconnects it from Manage; a member sees whether it is connected. Last, anyone but the owner leaves, and the
  * owner hands the workspace to an admin first.
  *
  * Its rows are the Settings kit's: a row's one constructive act stands at
@@ -195,6 +199,26 @@ const GITHUB_MANAGED_ON_GITHUB = "Accounts and repositories are managed on GitHu
 /** One connected GitHub account as the page lists it: its login, whether its installation is active, and its id where the service named it. */
 type ShownConnection = Pick<WorkspaceGithubInstallation, "login" | "active"> &
   Partial<Pick<WorkspaceGithubInstallation, "installationId">>;
+
+/** What the Linear row's line says, by where the workspace's Linear stands and who is reading it. */
+const LINEAR_LINE = {
+  CONNECTED: "Connected for everyone in this workspace",
+  EXPIRED: "Linear stopped honouring this connection. Connect again.",
+  EXPIRED_MEMBER: "Linear stopped honouring this connection. Ask an owner or admin.",
+  MANAGES: "Not connected.",
+  MEMBER: "Not connected. Ask an owner or admin.",
+} as const;
+
+/**
+ * What an owner or admin is asked before connecting Linear: the grant is
+ * the workspace's, so what it reaches, every member reads.
+ */
+const LINEAR_CONNECT_QUESTION = (workspace: string) => ({
+  title: `Connect Linear for everyone in ${workspace}?`,
+  body: "You sign in to Linear once for the whole workspace. Every member can then start plans from, and have Luke read, any issue your Linear account can see, private teams' issues included, and Luke's changes to issues show as yours.",
+  verb: "Continue to Linear",
+  running: "Opening Linear",
+});
 
 /**
  * What a refused act answers in the dialog that asked: its refusal's own
@@ -1068,6 +1092,103 @@ function WorkspaceGitHub({ workspace }: { workspace: Workspace }): React.JSX.Ele
   );
 }
 
+/** The workspace's Linear row's words: Linear, and under it whether its one connection stands. */
+function LinearCopy({
+  linear,
+  manages,
+}: {
+  linear: Workspace["linear"];
+  manages: boolean;
+}): React.JSX.Element {
+  if (linear === undefined) {
+    return <RowCopy name="Linear" line={manages ? LINEAR_LINE.MANAGES : LINEAR_LINE.MEMBER} />;
+  }
+  return (
+    <RowCopy
+      name="Linear"
+      line={
+        linear.active ? (
+          <span className="settings-state" data-state="connected">
+            {LINEAR_LINE.CONNECTED}
+          </span>
+        ) : (
+          <span className="settings-state" data-state="attention">
+            {manages ? LINEAR_LINE.EXPIRED : LINEAR_LINE.EXPIRED_MEMBER}
+          </span>
+        )
+      }
+    />
+  );
+}
+
+/**
+ * The workspace's Linear, for an owner or an admin: Connect while none is,
+ * or Connect again once Linear stopped honouring it, which first says that
+ * every member reads whatever the admin's Linear account reaches, private
+ * teams' issues included, then opens Linear's sign-in in the browser; and
+ * Manage once one stands, whose menu holds Disconnect, which asks first. A
+ * plan already started from an issue keeps what it read.
+ */
+function ManagedLinear({ workspace }: { workspace: Workspace }): React.JSX.Element {
+  const { act } = useAct();
+  const { linear } = workspace;
+  const workspaceId = workspace.id;
+  const connect = useConfirmDialog({ subject: true, surfaceOpen: true }, () =>
+    act(ACT_KIND.WORKSPACE_LINEAR_CONNECT, { workspaceId }).then(() => ACCEPTED, refusedWith),
+  );
+  const disconnect = useConfirmDialog({ subject: linear !== undefined, surfaceOpen: true }, () =>
+    act(ACT_KIND.WORKSPACE_LINEAR_DISCONNECT, { workspaceId }).then(() => ACCEPTED, refusedWith),
+  );
+  const actions =
+    linear === undefined
+      ? []
+      : [[{ label: "Disconnect", icon: <TrashIcon />, danger: true, onSelect: disconnect.ask }]];
+  return (
+    <>
+      <MenuRow label="Linear actions" actions={actions} triggerLabel="Manage">
+        <span className="settings-row-mark">
+          <ProviderMark provider={INTEGRATION_PROVIDER.LINEAR} />
+        </span>
+        <LinearCopy linear={linear} manages />
+        {linear?.active === true ? null : (
+          <button type="button" className="toolbar-button bordered-button" onClick={connect.ask}>
+            {linear === undefined ? "Connect" : "Connect again"}
+          </button>
+        )}
+      </MenuRow>
+      <ConfirmDialog confirm={connect} question={LINEAR_CONNECT_QUESTION(workspace.name)} />
+      {linear === undefined ? null : (
+        <ConfirmDialog
+          confirm={disconnect}
+          question={{
+            title: `Disconnect Linear from ${workspace.name}?`,
+            body: "Nobody in the workspace can start a plan from an issue until Linear is connected again. Plans already started from one keep what they read.",
+            verb: "Disconnect",
+            running: "Disconnecting",
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+/**
+ * The workspace's Linear: an owner's or an admin's to connect for
+ * everyone, and for a member, read only, whether it is connected or the ask
+ * to have it.
+ */
+function WorkspaceLinear({ workspace }: { workspace: Workspace }): React.JSX.Element {
+  if (managesWorkspace(workspace)) return <ManagedLinear workspace={workspace} />;
+  return (
+    <div className="settings-row">
+      <span className="settings-row-mark">
+        <ProviderMark provider={INTEGRATION_PROVIDER.LINEAR} />
+      </span>
+      <LinearCopy linear={workspace.linear} manages={false} />
+    </div>
+  );
+}
+
 /** What Settings' Workspace page is handed: the workspaces, the one the sidebar lists, and the fall back after a leave. */
 export interface WorkspaceSettingsControl {
   /** Every workspace the account is a member of, its first one first. */
@@ -1361,8 +1482,9 @@ function ShownWorkspace({
           />
         </SettingsGroup>
       ) : null}
-      <SettingsGroup title="GitHub" anchor={SETTINGS_SECTION.GITHUB_REPOSITORIES}>
+      <SettingsGroup title="Integrations" anchor={SETTINGS_SECTION.GITHUB_REPOSITORIES}>
         <WorkspaceGitHub workspace={workspace} />
+        <WorkspaceLinear workspace={workspace} />
       </SettingsGroup>
       <LeaveGroup
         workspace={workspace}

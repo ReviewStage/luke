@@ -17,6 +17,7 @@ import * as githubRepositoriesWire from "./github-repositories-wire.js";
 import * as inboxWire from "./inbox-wire.js";
 import * as integrationView from "./integration-view.js";
 import * as integrationWire from "./integration-wire.js";
+import * as linearWire from "./linear-wire.js";
 import * as liveContract from "./live-contract.js";
 import * as modelsWire from "./models-wire.js";
 import * as pictureWire from "./picture-wire.js";
@@ -291,6 +292,12 @@ const EFFECT_MODULE_SCHEMAS = {
     wireUuidSchema: serviceWire.wireUuidSchema,
     memberRefSchema: serviceWire.memberRefSchema,
   } satisfies RecordedEffectJsonSchemas<typeof serviceWire>,
+  "linear-wire": {
+    linearIssueIdSchema: linearWire.linearIssueIdSchema,
+    linearIssueSummarySchema: linearWire.linearIssueSummarySchema,
+    planLinearIssueSchema: linearWire.planLinearIssueSchema,
+    linearIssuesAnswerSchema: linearWire.linearIssuesAnswerSchema,
+  } satisfies RecordedEffectJsonSchemas<typeof linearWire>,
   "transcript-wire": {
     transcriptTextPartSchema: transcriptWire.transcriptTextPartSchema,
     transcriptMessageSchema: transcriptWire.transcriptMessageSchema,
@@ -310,6 +317,10 @@ const EFFECT_MODULE_SCHEMAS = {
     workspacePhotoSetRequestSchema: workspaceWire.workspacePhotoSetRequestSchema,
     workspaceGithubRequestSchema: workspaceWire.workspaceGithubRequestSchema,
     workspaceGithubConnectAnswerSchema: workspaceWire.workspaceGithubConnectAnswerSchema,
+    workspaceLinearSchema: workspaceWire.workspaceLinearSchema,
+    workspaceLinearRequestSchema: workspaceWire.workspaceLinearRequestSchema,
+    workspaceLinearConnectAnswerSchema: workspaceWire.workspaceLinearConnectAnswerSchema,
+    linearIssuesRequestSchema: workspaceWire.linearIssuesRequestSchema,
     workspaceMemberSchema: workspaceWire.workspaceMemberSchema,
     workspaceMembersAnswerSchema: workspaceWire.workspaceMembersAnswerSchema,
     workspaceMemberRemovalSchema: workspaceWire.workspaceMemberRemovalSchema,

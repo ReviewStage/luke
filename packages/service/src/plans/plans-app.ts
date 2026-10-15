@@ -81,6 +81,8 @@ import {
   readJsonBodyEffect,
   type UserIdResolver,
 } from "../http/http-effect.js";
+import type { IntegrationConnect } from "../integrations/integration-connect.js";
+import { linearIssue, workspaceLinearToken } from "../integrations/linear-issues.js";
 import type { ModelCatalog } from "../providers/model-catalog.js";
 import { ANY_METHOD, type WebRoutes } from "../route.js";
 import { HOSTED_TOOL_SET } from "./brain-tool-set.js";
@@ -293,7 +295,12 @@ export interface PlansAppSeams extends EveReach {
 }
 
 /** What the routes may require of the function that stands them: the store, GitHub through the App for a repository's check, and the model catalog a planning worker's transcript prices its turns at. */
-export type PlansAppServices = DatabaseServices | GitHubApp | HttpClient.HttpClient | ModelCatalog;
+export type PlansAppServices =
+  | DatabaseServices
+  | GitHubApp
+  | HttpClient.HttpClient
+  | ModelCatalog
+  | IntegrationConnect;
 
 type PlansServices = PlansAppServices | HttpServerRequest.HttpServerRequest;
 
@@ -424,13 +431,34 @@ const startingWorkspace = /* @__PURE__ */ Effect.fnUntraced(function* (
   return first.value;
 });
 
+/**
+ * The Linear issue a plan starts from, read through the workspace's own
+ * Linear connection whatever team it is in, or the Linear refusal: the
+ * workspace has none connected, its grant is refused, or the issue is none
+ * it reaches. Nothing is written before it is read, so a refusal starts no
+ * plan.
+ */
+const startingLinearIssue = /* @__PURE__ */ Effect.fnUntraced(function* (
+  organizationId: string,
+  issueId: string,
+) {
+  const token = yield* hostedStoreOrUnavailable(workspaceLinearToken(organizationId));
+  if (Result.isFailure(token)) return yield* Effect.fail(HOSTED_REFUSAL.LINEAR_UNAVAILABLE);
+  return yield* linearIssue(token.success.token, issueId).pipe(
+    Effect.tapError((failure) =>
+      Effect.logWarning("Linear gave no issue to start a plan from", failure.reason),
+    ),
+    Effect.mapError(() => HOSTED_REFUSAL.LINEAR_UNAVAILABLE),
+  );
+});
+
 /** Whether a list read asks for the archived plans too; a build from before archiving never does. */
 function listsArchived(request: Request): boolean {
   const asked = new URL(request.url).searchParams.get(PLAN_LIST_QUERY.ARCHIVED);
   return asked === PLAN_LIST_ARCHIVED.INCLUDE;
 }
 
-/** GET lists the account's plans; POST starts one with an empty document, and its repository confirmed first. */
+/** GET lists the account's plans; POST starts one with an empty document, its repository confirmed and its Linear issue read first. */
 const collectionEndpoint = /* @__PURE__ */ Effect.fn("web/plansCollectionEndpoint")(function* (
   seams: PlansAppSeams,
 ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, PlansServices> {
@@ -456,11 +484,16 @@ const collectionEndpoint = /* @__PURE__ */ Effect.fn("web/plansCollectionEndpoin
     Effect.succeed(organizationId),
     started.success.repository,
   );
+  const issue =
+    started.success.linearIssueId === undefined
+      ? undefined
+      : yield* startingLinearIssue(organizationId, started.success.linearIssueId);
   const plan = yield* hostedStoreOrUnavailable(
     createPlan(userId, {
       organizationId,
       ...(started.success.name === undefined ? undefined : { name: started.success.name }),
       repository,
+      ...(issue === undefined ? undefined : { linearIssue: issue }),
     }),
   );
   return hostedJsonResponse(HOSTED_HTTP_STATUS.CREATED, { plan });

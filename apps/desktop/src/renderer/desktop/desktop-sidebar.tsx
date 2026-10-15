@@ -42,6 +42,7 @@ import { MemberDirectory, useMemberDirectory } from "../member-directory";
 import type { NavigationHistory } from "../navigation-history";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { NEEDS_YOU } from "../planning/inbox-model";
+import { LinearIssuePicker } from "../planning/linear-issue-picker";
 import { useMinute } from "../planning/plan-time";
 import { useUnreadPlans } from "../planning/use-plan-looks";
 import type { PlansControl } from "../planning/use-plans-tab";
@@ -912,6 +913,79 @@ interface DesktopSidebarProps {
 }
 
 /**
+ * New plan, heading the list. Where the listed workspace has Linear
+ * connected, a press opens the picker of its issues beside the button
+ * (`linear-issue-picker.tsx`), whose Blank plan opens the New plan dialog;
+ * anywhere else the press opens the dialog at once, as the menu bar's and
+ * the chord's New plan always do.
+ */
+function NewPlanButton({
+  plans,
+  chosen,
+  onNewPlan,
+  onShowPlans,
+}: {
+  plans: PlansControl;
+  chosen: FloatingSidebar["chosen"];
+  onNewPlan: () => void;
+  onShowPlans: () => void;
+}): React.JSX.Element {
+  const { linear } = plans.newPlan;
+  const [picking, setPicking] = useState(false);
+  const wrap = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const open = picking && linear !== undefined;
+  const blankPlan = chosen(onNewPlan);
+  // Note that we hand focus back to New plan, as a menu returns it to its
+  // trigger, because closing takes the focused search field away with it.
+  const close = () => {
+    setPicking(false);
+    trigger.current?.focus();
+  };
+  const press = () => {
+    if (linear === undefined) {
+      blankPlan();
+      return;
+    }
+    onShowPlans();
+    setPicking(!open);
+  };
+  return (
+    <div className="sidebar-new-plan-wrap" ref={wrap}>
+      <button
+        ref={trigger}
+        type="button"
+        className="sidebar-new-plan"
+        aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.NEW_PLAN)}
+        aria-haspopup={linear === undefined ? undefined : "dialog"}
+        aria-expanded={linear === undefined ? undefined : open}
+        disabled={!plans.signedIn}
+        onClick={press}
+      >
+        <ComposeIcon />
+        New task
+        <Shortcut chord={APP_SHORTCUTS[APP_COMMAND.NEW_PLAN].chord} className="row-shortcut" />
+      </button>
+      {linear === undefined ? null : (
+        <LinearIssuePicker
+          open={open}
+          read={linear.issues}
+          start={linear.start}
+          onBlankPlan={() => {
+            setPicking(false);
+            blankPlan();
+          }}
+          onClose={close}
+          onLeave={(left) => {
+            if (!(left instanceof Node && wrap.current?.contains(left))) setPicking(false);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
  * The window's left column: at its head the workspace chosen, by its tile
  * and name and who shares it, with the menu that chooses another
  * (`workspace-switcher.tsx`), or Luke while no workspace is read; the way to
@@ -976,8 +1050,11 @@ function SidebarColumn({
     if (!onPlans) onTabChange(PANEL_TAB.PLANS);
     plans.onSelect(planId);
   };
-  const newPlan = () => {
+  const showPlans = () => {
     if (!onPlans) onTabChange(PANEL_TAB.PLANS);
+  };
+  const newPlan = () => {
+    showPlans();
     plans.onNewPlan();
   };
   const openPinnedTab = (pin: PinnedTab) => {
@@ -1117,17 +1194,7 @@ function SidebarColumn({
         <LukeIdentity />
       )}
 
-      <button
-        type="button"
-        className="sidebar-new-plan"
-        aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.NEW_PLAN)}
-        disabled={!plans.signedIn}
-        onClick={chosen(newPlan)}
-      >
-        <ComposeIcon />
-        New task
-        <Shortcut chord={APP_SHORTCUTS[APP_COMMAND.NEW_PLAN].chord} className="row-shortcut" />
-      </button>
+      <NewPlanButton plans={plans} chosen={chosen} onNewPlan={newPlan} onShowPlans={showPlans} />
       {/* Search is a second door to the command palette, drawn as New plan
           is, since it heads the list the same way. */}
       <button

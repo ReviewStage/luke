@@ -68,6 +68,7 @@ import {
   openGithubUser,
   type SentToGitHub,
 } from "@luke/service/testing/github-app-fake";
+import { integrationConnectOver } from "@luke/service/testing/integration-connect";
 import { added } from "@luke/service/testing/plan-contents";
 import {
   INVITATIONS_TEXT,
@@ -168,6 +169,7 @@ const answer = (
       Layer.succeed(Clock.Clock, yield* Clock.Clock),
       github.layer,
       modelCatalogOf([]),
+      integrationConnectOver({ LINEAR_CONNECTOR_UID: "oauth/linear" }),
     );
     const { handler, dispose } = HttpRouter.toWebHandler(
       plansApp({
@@ -624,6 +626,27 @@ it.layer(getTestDB())("the plan routes", (it) => {
           yield* ask(request(EDIT, owner, { id: planId, method: "GET" })),
           refusal(HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED, HOSTED_API_ERROR.METHOD_NOT_ALLOWED),
         );
+      }),
+  );
+
+  it.effect(
+    "a start from a Linear issue in a workspace with no Linear connected is refused, and starts no plan",
+    () =>
+      Effect.gen(function* () {
+        const { owner, ask } = yield* openAccounts();
+
+        const refused = yield* ask(
+          request(PLANS, owner, { method: "POST", body: { ...RELAY, linearIssueId: "issue-1" } }),
+        );
+
+        assert.deepEqual(
+          refused,
+          refusal(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.LINEAR_UNAVAILABLE),
+        );
+        assert.deepEqual(yield* ask(request(PLANS, owner)), {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: { plans: [] },
+        });
       }),
   );
 

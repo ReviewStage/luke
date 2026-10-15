@@ -7396,3 +7396,34 @@ body:has(.confirm-dialog-backdrop) .toast[data-action="true"] {
   margin: 0;
   font-variant-numeric: tabular-nums;
 }
+
+/* New plan's Linear issue picker (`linear-issue-picker.tsx`) stands beside
+   the sidebar, level with the button it came from, and a notch on its
+   leading edge points back at that button, so the picker reads as New
+   plan's own rather than a menu of the page it floats over. */
+.sidebar-new-plan-wrap {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.searchable-menu.linear-issue-picker {
+  z-index: 20;
+  top: calc(var(--space-8) * -1);
+  left: calc(100% + var(--space-12));
+  width: 380px;
+  overflow: visible;
+}
+
+.searchable-menu.linear-issue-picker::before {
+  position: absolute;
+  top: calc(var(--space-8) + var(--control-height) / 2 - 6px);
+  left: -6px;
+  width: 12px;
+  height: 12px;
+  border-bottom: 1px solid var(--hairline);
+  border-left: 1px solid var(--hairline);
+  background: inherit;
+  content: "";
+  transform: rotate(45deg);
+}

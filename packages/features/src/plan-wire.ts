@@ -1,6 +1,7 @@
 import { Schema as EffectSchema } from "effect";
 import { CHECK_SUMMARY, CODING_AGENT_STATUS, PULL_REQUEST_STATE } from "./coding-agent-wire.js";
 import { githubRepositoryFullNameSchema } from "./github-repositories-wire.js";
+import { linearIssueIdSchema } from "./linear-wire.js";
 import { countedNumber, memberRefSchema, wireUuidSchema } from "./service-wire.js";
 
 /**
@@ -108,10 +109,12 @@ const repositoryChoiceSchema = EffectSchema.NullOr(githubRepositoryFullNameSchem
 
 /**
  * Starting a plan (POST): its name where one is given, the repository it is
- * about where one is chosen, and the workspace it starts in where one is
- * named, the account's first workspace where none is; the document starts as
- * the untouched template. A name left out, or nothing but whitespace, starts
- * the plan as `UNTITLED_PLAN_NAME` until it is renamed.
+ * about where one is chosen, the workspace it starts in where one is named,
+ * the account's first workspace where none is, and the Linear issue it
+ * starts from where one was picked, which the service reads through the
+ * workspace's own Linear connection (`linear-wire.ts`); the document starts
+ * as the untouched template. A name left out, or nothing but whitespace,
+ * starts the plan as `UNTITLED_PLAN_NAME` until it is renamed.
  */
 export const planCreateRequestSchema = EffectSchema.Struct({
   name: EffectSchema.optionalKey(
@@ -119,6 +122,7 @@ export const planCreateRequestSchema = EffectSchema.Struct({
   ),
   workspaceId: EffectSchema.optionalKey(workspaceIdSchema),
   repository: EffectSchema.optionalKey(repositoryChoiceSchema),
+  linearIssueId: EffectSchema.optionalKey(linearIssueIdSchema),
 });
 
 export type PlanCreateRequest = typeof planCreateRequestSchema.Type;

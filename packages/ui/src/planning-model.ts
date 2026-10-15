@@ -1,4 +1,10 @@
-import type { Plan, PlanSummary, RepositoryPin } from "@luke/features/plan-wire";
+import type { LinearIssueSummary } from "@luke/features/linear-wire";
+import {
+  PLAN_BOUNDS,
+  type Plan,
+  type PlanSummary,
+  type RepositoryPin,
+} from "@luke/features/plan-wire";
 import {
   PLAN_CALL_FAILURE,
   PLANNING_READ,
@@ -112,6 +118,16 @@ export function workspaceReaches(
   const { github } = workspace;
   const [owner] = repository.split("/");
   return github != null && github.active && github.login.toLowerCase() === owner?.toLowerCase();
+}
+
+/**
+ * The name a plan started from a Linear issue takes: the issue's title,
+ * its ends trimmed and cut to a plan name's bound, or the issue's key where
+ * its title is blank.
+ */
+export function planNameOfIssue(issue: Pick<LinearIssueSummary, "identifier" | "title">): string {
+  const title = issue.title.trim().slice(0, PLAN_BOUNDS.MAX_NAME_CHARS).trim();
+  return title === "" ? issue.identifier : title;
 }
 
 /**

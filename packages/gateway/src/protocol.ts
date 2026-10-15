@@ -72,6 +72,12 @@ export const GATEWAY_METHOD = {
   WORKSPACES_GITHUB_CONNECT: "workspaces.githubConnect",
   /** A workspace's GitHub organization disconnected on the service; the view's workspaces are read again. */
   WORKSPACES_GITHUB_DISCONNECT: "workspaces.githubDisconnect",
+  /** A workspace's Linear connection begun on the service by an owner or admin: Vercel Connect's sign-in address, for the caller to open. */
+  WORKSPACES_LINEAR_CONNECT: "workspaces.linearConnect",
+  /** A workspace's Linear disconnected on the service; the view's workspaces are read again. */
+  WORKSPACES_LINEAR_DISCONNECT: "workspaces.linearDisconnect",
+  /** The Linear issues a workspace's connection reaches, read from the service now; answered to the caller, never held in the view. */
+  WORKSPACES_LINEAR_ISSUES: "workspaces.linearIssues",
   /** One workspace's members, read from the service now; answered to the caller, never held in the view. */
   WORKSPACES_MEMBERS: "workspaces.members",
   /** One workspace's photo, read from the service now as its bytes in base64; answered to the caller, never held in the view. */

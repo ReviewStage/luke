@@ -134,3 +134,26 @@ test("a turn of a plan's conversation is handed the plan's name and the document
   assert.ok(second.includes(handed(SECOND)));
   assert.equal(second.includes(handed(FIRST)), false);
 });
+
+test("a plan started from a Linear issue hands every turn the issue as it was read then, beside the plan's name", async () => {
+  const issue = {
+    identifier: "ENG-42",
+    title: "Start a plan from Linear",
+    url: "https://linear.app/acme/issue/ENG-42",
+    description: "Pick an issue and plan it at once.",
+  };
+  const userId = await database.createUser();
+  const plan = await database.run(startPlan(userId, { name: issue.title, linearIssue: issue }));
+  const plain = await database.run(startPlan(userId, { name: PLAN_NAME }));
+  const targetOf = async (planId: string) => ({
+    userId,
+    conversationId: Option.getOrThrow(await database.run(openPlanConversation(userId, planId)))
+      .conversationId,
+  });
+
+  const started = await standingContextOf(await targetOf(plan.id));
+  const other = await standingContextOf(await targetOf(plain.id));
+
+  assert.ok(started.includes(`[linear issue the plan was started from]\n${JSON.stringify(issue)}`));
+  assert.equal(other.includes("[linear issue"), false);
+});
