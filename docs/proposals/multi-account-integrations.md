@@ -1,8 +1,15 @@
 # Proposal: more than one account per integration (two Notion workspaces)
 
-Status: **proposed, research and plan only; nothing is built.** Dean decides
-§7. §8 answers Dean's follow-up on Instinct. A live probe (Appendix A, run on Dean's Mac) settles the one open
-provider-side question before PR 2 merges.
+Status: **Dean said go on 2026-10-15 ("Let's go forward with option A for
+multiple accounts"), with every recommended decision (7.1–7.10), and it is
+built as five stacked PRs held for Dean to try before any merges:** the rows
+(1/5), the service and wire (2/5), the agents (3/5), the desktop (4/5), and
+these docs (5/5). Two things in §3 were not built: the duplicate check
+(§3.2), which waits on the probe showing whether Connect fills `tenantId` or
+`externalSubject`, and `prompt` for any provider but Linear, which documents
+its own. The probe (Appendix A) still gates offering a second account to
+anyone but Dean; a provider that fails it is switched off with its
+`<PROVIDER>_MULTIPLE_ACCOUNTS=off`.
 
 The design show is `docs/proposals/multi-account-integrations/index.html`
 (Settings › Integrations, the MCP popover, a mention, a disconnect, with two
