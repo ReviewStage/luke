@@ -92,7 +92,7 @@ afterEach(() => {
 });
 
 /** The summary of a plan whose running agent opened the pull request, the plan's column showing `shown`; every agent it opens recorded. */
-function mount(shown: "agent" | "plan"): { page: HTMLElement; opened: string[] } {
+function mount(shown: "agent" | "plan") {
   const opened: string[] = [];
   const base = plansControl();
   const plans = plansControl({
