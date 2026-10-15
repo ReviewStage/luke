@@ -17,13 +17,13 @@ import {
   holdSandbox,
   releaseCredentialRenewal,
 } from "@luke/database/models/sandbox-terminal-lease";
-import { agentRepositoryToken } from "@luke/service/agents/coder-host/checkout";
-import { AgentSandbox, agentSandboxLayer } from "@luke/service/agents/terminal/agent-sandbox";
-import { type InteractiveShell, SandboxUnavailable } from "@luke/service/agents/vercel-sandbox-api";
-import type { GitHubApp } from "@luke/service/github/github-app";
 import { Duration, Effect, Option, Redacted, Schedule } from "effect";
 import { HttpClient } from "effect/http";
 import { WebSocket } from "ws";
+import { agentRepositoryToken } from "../agents/coder-host/checkout.js";
+import { AgentSandbox, agentSandboxLayer } from "../agents/terminal/agent-sandbox.js";
+import { type InteractiveShell, SandboxUnavailable } from "../agents/vercel-sandbox-api.js";
+import type { GitHubApp } from "../github/github-app.js";
 import { voiceSocket } from "../voice/socket.js";
 import type { RelayDependencies } from "./relay.js";
 

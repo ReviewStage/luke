@@ -26,19 +26,6 @@ import {
   type LiveAppendEvent,
   type LiveClientEvent,
 } from "@luke/live";
-import {
-  MESSAGE_AUTHOR,
-  MESSAGE_CHANNEL,
-  MESSAGE_ROLE,
-  type UserMessageMetadata,
-} from "@luke/service/core";
-import {
-  delegated,
-  heard,
-  said,
-  sessionStarted,
-  thinkingAppended,
-} from "@luke/service/testing/live-events";
 import { liveBrainLayer, liveRecordLayer } from "@luke/voice/effect";
 import {
   LIVE_BRAIN_CANCEL,
@@ -60,9 +47,22 @@ import { type ToolSet, tool } from "ai";
 import { Deferred, Effect, Layer, Result, Schema, Scope } from "effect";
 import { afterAll } from "vitest";
 import { z } from "zod";
-import { hostedLiveRecord } from "../server/voice/live-record";
-import { observedSideband } from "../server/voice/live-sideband";
-import { settled } from "./support/settle";
+import {
+  MESSAGE_AUTHOR,
+  MESSAGE_CHANNEL,
+  MESSAGE_ROLE,
+  type UserMessageMetadata,
+} from "../core.js";
+import {
+  delegated,
+  heard,
+  said,
+  sessionStarted,
+  thinkingAppended,
+} from "../testing/live-events.js";
+import { settled } from "../testing/settle.js";
+import { hostedLiveRecord } from "./live-record.js";
+import { observedSideband } from "./live-sideband.js";
 
 /**
  * The live session service over the hosted record, on the real migrations in

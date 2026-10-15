@@ -7,7 +7,7 @@ import { seams, sessionSkills } from "../host.js";
  * it starts and standing for its life (`packages/service/src/agents/agent-runtime/skills.ts`),
  * each under its own name, which `load_skill` loads when the developer names
  * one or the work matches it. The session starts on the call's opening ask,
- * the voice's warm-up (`server/voice/live-brain.ts`), so the read is done
+ * the voice's warm-up (`packages/service/src/voice/live-brain.ts`), so the read is done
  * before the developer's first question. Under the scripted fixture the
  * session is offered none, so the eval reaches no GitHub.
  */

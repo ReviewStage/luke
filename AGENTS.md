@@ -65,7 +65,7 @@ lands. A component is placed by review under the same rule.
 ## The scheduled sweep
 
 Vercel's cron calls `/api/maintenance/sweep` once a minute (`apps/web/vercel.json`;
-`apps/web/server/hosted/maintenance-sweep.ts`) under the deployment's own
+`packages/service/src/maintenance/maintenance-sweep.ts`) under the deployment's own
 `CRON_SECRET`, compared in constant time; a deployment missing that secret
 answers unavailable and sweeps nothing. Each call purges the conversations
 stamped deleted thirty days ago, settles as abandoned every turn still running

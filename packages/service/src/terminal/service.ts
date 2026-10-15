@@ -16,11 +16,11 @@
 import http, { type IncomingHttpHeaders, type IncomingMessage } from "node:http";
 import type { Duplex } from "node:stream";
 import { TERMINAL_RELAY } from "@luke/features/terminal-wire";
-import { unparsedWire, wireUuidSchema } from "@luke/service/core";
 import { HTTP_STATUS } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Effect, FiberSet, Option, Result, Schema, type Scope } from "effect";
 import { type WebSocket, WebSocketServer } from "ws";
+import { unparsedWire, wireUuidSchema } from "../core.js";
 import { voiceSocket } from "../voice/socket.js";
 import { type RelayAsk, type RelayDependencies, relayTerminal } from "./relay.js";
 

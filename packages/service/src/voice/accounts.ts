@@ -1,5 +1,5 @@
 import type { QuotaEffect, VoiceSecondsOutcome } from "@luke/database/models/quota";
-import type { UserIdResolver } from "@luke/service/http/http-effect";
+import type { UserIdResolver } from "../http/http-effect.js";
 
 /**
  * What the voice function asks of the account side of this same deployment,

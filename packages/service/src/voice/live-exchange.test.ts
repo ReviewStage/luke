@@ -23,34 +23,30 @@ import {
   type LiveClientEvent,
   type LiveServerEventType,
 } from "@luke/live";
-import { BRAIN_HOST_TURN } from "@luke/service/agents/brain-host/bounds";
-import {
-  EVE_SEND_OUTCOME,
-  type EveMessage,
-  type EveSessions,
-} from "@luke/service/agents/brain-host/eve-sessions";
-import { PLANNING_EXPLORE_ASK } from "@luke/service/agents/brain-host/planning";
-import {
-  memoryRelayState,
-  type RelayStanding,
-  StreamRelay,
-} from "@luke/service/agents/brain-host/relay";
-import { MESSAGE_ROLE } from "@luke/service/core";
-import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
-import { HOSTED_TOOL_SET } from "@luke/service/plans/brain-tool-set";
-import type { PlanDraft } from "@luke/service/plans/plan-scribe";
-import { FIRST_EVE_TURN, spokenTurn } from "@luke/service/testing/eve-turns";
-import { delegated, heard, said, sessionStarted } from "@luke/service/testing/live-events";
-import { added } from "@luke/service/testing/plan-contents";
-import { scriptedScribeModel } from "@luke/service/testing/scribe-model";
 import { sidebandOverSocket } from "@luke/voice/live-session";
 import { FakeLiveSocket } from "@luke/voice/testing";
 import type { LanguageModel } from "ai";
 import { Deferred, Effect, Exit, Option, Schema, Scope } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll } from "vitest";
-import { hostedLiveExchange } from "../server/voice/live-exchange";
-import { settled } from "./support/settle";
+import { BRAIN_HOST_TURN } from "../agents/brain-host/bounds.js";
+import {
+  EVE_SEND_OUTCOME,
+  type EveMessage,
+  type EveSessions,
+} from "../agents/brain-host/eve-sessions.js";
+import { PLANNING_EXPLORE_ASK } from "../agents/brain-host/planning.js";
+import { memoryRelayState, type RelayStanding, StreamRelay } from "../agents/brain-host/relay.js";
+import { MESSAGE_ROLE } from "../core.js";
+import { HOSTED_HTTP_STATUS } from "../http/http.js";
+import { HOSTED_TOOL_SET } from "../plans/brain-tool-set.js";
+import type { PlanDraft } from "../plans/plan-scribe.js";
+import { FIRST_EVE_TURN, spokenTurn } from "../testing/eve-turns.js";
+import { delegated, heard, said, sessionStarted } from "../testing/live-events.js";
+import { added } from "../testing/plan-contents.js";
+import { scriptedScribeModel } from "../testing/scribe-model.js";
+import { settled } from "../testing/settle.js";
+import { hostedLiveExchange } from "./live-exchange.js";
 
 /**
  * The hosted live exchange composed whole over the real store on PGlite: a

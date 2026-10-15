@@ -38,7 +38,7 @@ proposal's questions (`docs/proposals/terminal-tab.md`). No code yet.
 | 8 | **Vercel sandbox shell API** | `@vercel/sandbox`, pinned exactly | Session-level `openInteractive()` mints `{url, token}` for the controller's PTY WebSocket and does **not** resume. Behind one `InteractiveShell` `Context.Tag`; the fallback layer is `runCommand({ stdin: true, detached: true })` plus `writeStdin` plus `logs()` under `script -qfc`. |
 | 9 | **tmux in the image** | `PREPARE_SCRIPT` in `agent-runtime/sandbox.ts` | One tmux session per terminal, which outlives any socket. |
 | 10 | **Lease** | `packages/database/src/schemas/` + `models/sandbox-terminal-lease.ts` (new) | A row per agent conversation: `held_until`, `credential_at`. Written by the relay; read by the store hook and the sweep. |
-| 11 | **Lifecycle hooks** | `apps/web/coder/hooks/store.ts`, `hosted/maintenance-sweep.ts` | The turn's-end stop skips a held sandbox, and the sweep stops a lapsed one (§3). |
+| 11 | **Lifecycle hooks** | `apps/web/coder/hooks/store.ts`, `packages/service/src/maintenance/maintenance-sweep.ts` | The turn's-end stop skips a held sandbox, and the sweep stops a lapsed one (§3). |
 | 12 | **GitHub credential refresher** | in the relay, through `coder-host` | While a terminal is connected, it renews the firewall token once it is 50 minutes old, using the same rule and policy shape as the store hook's `renewCredential`. |
 
 More on the three components with the most moving parts:

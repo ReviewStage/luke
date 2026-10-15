@@ -25,38 +25,28 @@ import {
   SEED_ROLE,
   sessionInstructions,
 } from "@luke/live";
-import { BRAIN_HOST_TURN } from "@luke/service/agents/brain-host/bounds";
+import { isRecord, unparsedWire, type WireRecord } from "@luke/wire";
+import { Effect, Exit, Option, Redacted, Schema, Scope } from "effect";
+import { afterAll } from "vitest";
+import { BRAIN_HOST_TURN } from "../agents/brain-host/bounds.js";
 import {
   EVE_SEND_OUTCOME,
   type EveMessage,
   type EveSessions,
-} from "@luke/service/agents/brain-host/eve-sessions";
-import { PLANNING_EXPLORE_ASK } from "@luke/service/agents/brain-host/planning";
-import { memoryRelayState, StreamRelay } from "@luke/service/agents/brain-host/relay";
-import { HOSTED_API_ERROR, MESSAGE_ROLE } from "@luke/service/core";
-import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
-import { HOSTED_TOOL_SET } from "@luke/service/plans/brain-tool-set";
-import { FIRST_EVE_TURN, spokenTurn } from "@luke/service/testing/eve-turns";
+} from "../agents/brain-host/eve-sessions.js";
+import { PLANNING_EXPLORE_ASK } from "../agents/brain-host/planning.js";
+import { memoryRelayState, StreamRelay } from "../agents/brain-host/relay.js";
+import { HOSTED_API_ERROR, MESSAGE_ROLE } from "../core.js";
+import { HOSTED_HTTP_STATUS } from "../http/http.js";
+import { HOSTED_TOOL_SET } from "../plans/brain-tool-set.js";
+import { FIRST_EVE_TURN, spokenTurn } from "../testing/eve-turns.js";
 import {
   appended,
   delegated,
   heard,
   sessionStarted,
   thinkingAppended,
-} from "@luke/service/testing/live-events";
-import { isRecord, unparsedWire, type WireRecord } from "@luke/wire";
-import { Effect, Exit, Option, Redacted, Schema, Scope } from "effect";
-import { afterAll } from "vitest";
-import { deploymentExchange } from "../server/voice/deployment-exchange";
-import type { AttachedSession } from "../server/voice/live-exchange";
-import { LOG_EVENT, type LogEntry } from "../server/voice/log";
-import {
-  listening,
-  VoiceService,
-  type VoiceServiceOptions,
-  voiceServer,
-} from "../server/voice/service";
-import { SOCKET_CLOSE_CODE } from "../server/voice/socket";
+} from "../testing/live-events.js";
 import {
   connect,
   fakeAccounts,
@@ -66,7 +56,12 @@ import {
   send,
   sendText,
   startFakeOpenAi,
-} from "./support/voice-fakes";
+} from "../testing/voice-fakes.js";
+import { deploymentExchange } from "./deployment-exchange.js";
+import type { AttachedSession } from "./live-exchange.js";
+import { LOG_EVENT, type LogEntry } from "./log.js";
+import { listening, VoiceService, type VoiceServiceOptions, voiceServer } from "./service.js";
+import { SOCKET_CLOSE_CODE } from "./socket.js";
 
 /**
  * The hosted exchange attached to the sessions route, over the real store on

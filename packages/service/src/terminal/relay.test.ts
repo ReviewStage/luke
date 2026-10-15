@@ -6,7 +6,6 @@ import {
   TERMINAL_RELAY_CLOSE,
   TERMINAL_RELAY_FRAME,
 } from "@luke/features/terminal-wire";
-import type { AgentSandboxService } from "@luke/service/agents/terminal/agent-sandbox";
 import {
   type Cause,
   Deferred,
@@ -19,13 +18,14 @@ import {
   Stream,
 } from "effect";
 import { TestClock } from "effect/testing";
+import type { AgentSandboxService } from "../agents/terminal/agent-sandbox.js";
 import {
   type RelayAgent,
   type RelayDependencies,
   type RelayFrame,
   type RelaySocket,
   relayTerminal,
-} from "../server/terminal/relay";
+} from "./relay.js";
 
 /**
  * One attached shell as the relay pipes it, over sockets and a sandbox that

@@ -1,16 +1,13 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { noDatabase } from "@luke/database/testing/no-database";
-import type { SessionSandboxSweepOutcome } from "@luke/service/agents/session-sandboxes";
-import { HOSTED_API_ERROR } from "@luke/service/http/http";
-import { MAINTENANCE_SWEEP_PATH } from "@luke/service/maintenance/maintenance-bounds";
-import type { TerminalLeaseSweepOutcome } from "@luke/service/maintenance/terminal-lease-sweep";
 import { Effect, Redacted } from "effect";
-import {
-  handleMaintenanceSweep,
-  type MaintenanceSweepOptions,
-} from "../server/hosted/maintenance-sweep";
-import type { VoiceOrphanSweepOutcome } from "../server/voice/orphan-sweep";
+import type { SessionSandboxSweepOutcome } from "../agents/session-sandboxes.js";
+import { HOSTED_API_ERROR } from "../http/http.js";
+import type { VoiceOrphanSweepOutcome } from "../voice/orphan-sweep.js";
+import { MAINTENANCE_SWEEP_PATH } from "./maintenance-bounds.js";
+import { handleMaintenanceSweep, type MaintenanceSweepOptions } from "./maintenance-sweep.js";
+import type { TerminalLeaseSweepOutcome } from "./terminal-lease-sweep.js";
 
 const CRON_SECRET = Redacted.make("cron-secret-1");
 /** What the sweep over the detached voice sessions answers. */

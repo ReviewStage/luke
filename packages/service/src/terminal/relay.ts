@@ -36,11 +36,6 @@ import {
   TERMINAL_RELAY_FRAME,
   terminalRelayResizeSchema,
 } from "@luke/features/terminal-wire";
-import { CODER } from "@luke/service/agents/coder-host/bounds";
-import type { AgentSandboxService } from "@luke/service/agents/terminal/agent-sandbox";
-import { attachTerminal, TMUX } from "@luke/service/agents/terminal/tmux";
-import type { InteractiveShell, SandboxUnavailable } from "@luke/service/agents/vercel-sandbox-api";
-import { unparsedWire } from "@luke/service/core";
 import { readEither } from "@luke/wire/effect";
 import {
   type Cause,
@@ -59,6 +54,11 @@ import {
   type Scope,
   Stream,
 } from "effect";
+import { CODER } from "../agents/coder-host/bounds.js";
+import type { AgentSandboxService } from "../agents/terminal/agent-sandbox.js";
+import { attachTerminal, TMUX } from "../agents/terminal/tmux.js";
+import type { InteractiveShell, SandboxUnavailable } from "../agents/vercel-sandbox-api.js";
+import { unparsedWire } from "../core.js";
 import { frameBytes } from "../voice/socket.js";
 
 const TERMINAL_RELAY_BOUNDS = {

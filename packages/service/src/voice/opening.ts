@@ -20,6 +20,8 @@ import {
   startupTokens,
   withinStartupBound,
 } from "@luke/live";
+import { Effect, Option, type Schema, type Scope } from "effect";
+import type { WebSocket } from "ws";
 import {
   HOSTED_API_ERROR,
   type HostedApiError,
@@ -30,9 +32,7 @@ import {
   type SessionCreateFrame,
   sessionOpeningFrameFromWire,
   VOICE_SERVICE_FRAME,
-} from "@luke/service/core";
-import { Effect, Option, type Schema, type Scope } from "effect";
-import type { WebSocket } from "ws";
+} from "../core.js";
 import type { VoiceAccounts } from "./accounts.js";
 import { LOG_EVENT } from "./log.js";
 import type { LiveUpstream } from "./openai.js";

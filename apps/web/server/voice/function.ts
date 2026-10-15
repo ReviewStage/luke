@@ -4,17 +4,17 @@ import { deploymentEveOrigin } from "@luke/service/agents/brain-host/eve-origin"
 import { hostedUserInfo, userIdForAuthorization } from "@luke/service/auth/bearer";
 import { CRON_ENVIRONMENT } from "@luke/service/maintenance/maintenance-bounds";
 import { HOSTED_OPENAI_ENVIRONMENT } from "@luke/service/providers/openai";
-import { Effect, Redacted } from "effect";
-import { runWeb } from "../runtime.js";
-import type { VoiceAccounts } from "./accounts.js";
-import { deploymentExchange } from "./deployment-exchange.js";
-import { LOG_EVENT, standardOutputLog } from "./log.js";
+import type { VoiceAccounts } from "@luke/service/voice/accounts";
+import { deploymentExchange } from "@luke/service/voice/deployment-exchange";
+import { LOG_EVENT, standardOutputLog } from "@luke/service/voice/log";
 import {
   type VoiceServer,
   VoiceService,
   type VoiceServiceOptions,
   voiceServer,
-} from "./service.js";
+} from "@luke/service/voice/service";
+import { Effect, Redacted } from "effect";
+import { runWeb } from "../runtime.js";
 
 /**
  * The deployment's real seams handed to the voice service, once per function

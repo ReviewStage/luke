@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
+import { voiceServer } from "@luke/service/voice/service";
 import { test } from "vitest";
 import { voiceFunctionOptions } from "../server/voice/function";
-import { voiceServer } from "../server/voice/service";
 
 /**
  * The route's own composition passes the exchange. #1209 landed the attach
