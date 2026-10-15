@@ -494,10 +494,20 @@ function accountOf(record: typeof GitHubAccountSchema.Type): GitHubAccount {
   };
 }
 
-/** The accounts a commit's message names as co-authors by their noreply addresses, in the order it names them. */
+/**
+ * The accounts a commit's message names as co-authors by their noreply
+ * addresses, in the order it names them. Note that only the message's last
+ * paragraph is read, because that is where git reads trailers from, so a
+ * trailer-shaped line quoted in the body names nobody.
+ */
 function coAuthorsOf(message: string | undefined): readonly GitHubAccount[] {
   if (message === undefined) return [];
-  return [...message.matchAll(CO_AUTHOR_TRAILER)].map(([, id = "", login = ""]) => ({
+  const trailers =
+    message
+      .trimEnd()
+      .split(/\n[ \t]*\n/u)
+      .at(-1) ?? "";
+  return [...trailers.matchAll(CO_AUTHOR_TRAILER)].map(([, id = "", login = ""]) => ({
     id: Number(id),
     login,
     bot: login.endsWith(BOT_LOGIN_SUFFIX),

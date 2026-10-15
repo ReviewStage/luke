@@ -256,6 +256,15 @@ test("a pull request the agent opened as its developer names them and Luke among
   assert.equal(developer.opener, "Charles Pan");
   assert.doesNotMatch(developer.line, /as the GitHub App/u);
   assert.deepEqual(developer.commits, ["Charles Pan", "Expiry job"]);
+  const lapsed = await strip({
+    author: LUKE_BOT,
+    writtenAs: CODING_AGENT_AUTHOR.DEVELOPER,
+    commitAuthors: [CHARLES_ON_GITHUB, LUKE_BOT],
+  });
+  assert.match(
+    lapsed.line,
+    /Expiry job as the GitHub App, since its starter's GitHub sign-in could not be used$/u,
+  );
   assert.equal(unlinked.opener, "Expiry job");
   assert.match(
     unlinked.line,

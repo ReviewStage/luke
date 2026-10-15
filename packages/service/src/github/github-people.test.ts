@@ -253,7 +253,7 @@ it.layer(getTestDB())("who a pull request names", (it) => {
   );
 
   it.effect(
-    "a pull request a developer opened with Luke's agent names Luke's bot among the commit authors, as the co-author its commits' trailers name by its noreply address, and a co-author at any other address is left out",
+    "a pull request a developer opened with Luke's agent names Luke's bot among the commit authors, as the co-author its commits' trailers name by its noreply address, and a co-author at any other address, or a trailer-shaped line in a commit's body, is left out",
     () =>
       Effect.gen(function* () {
         const charles = yield* linkedAccount(CHARLES.id);
@@ -270,6 +270,12 @@ it.layer(getTestDB())("who a pull request names", (it) => {
               {
                 author: CHARLES,
                 commit: { message: "Rename the flag\n\nCo-authored-by: Priya <priya@example.com>" },
+              },
+              {
+                author: CHARLES,
+                commit: {
+                  message: `Quote the trailer\n\nThe agent ends each commit on\n${coAuthor.replace(String(LUKE.id), "4242")}\nas its instructions say.\n\nSigned-off-by: Charles <charles@example.com>`,
+                },
               },
               { author: CHARLES, commit: { message: `Fix the test\n\n${coAuthor}\n` } },
             ],

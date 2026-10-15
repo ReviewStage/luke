@@ -50,11 +50,13 @@ const REVIEW_WORDS = {
 
 /**
  * Why the agent opened its pull request as the App rather than as the
- * developer who started it, as the "Opened by" line ends; nothing where it
- * writes as the developer.
+ * developer who started it, as the "Opened by" line ends where Luke's own
+ * bot opened it: the reason the agent writes as the App, or, for an agent
+ * that writes as its developer, their sign-in failing it on the way.
  */
 const WRITTEN_AS_WORDS = {
-  [CODING_AGENT_AUTHOR.DEVELOPER]: "",
+  [CODING_AGENT_AUTHOR.DEVELOPER]:
+    " as the GitHub App, since its starter's GitHub sign-in could not be used",
   [CODING_AGENT_AUTHOR.APP_UNLINKED]: " as the GitHub App, since its starter has no GitHub linked",
   [CODING_AGENT_AUTHOR.APP_NO_PUSH]: " as the GitHub App, since its starter can't push here",
   [CODING_AGENT_AUTHOR.APP_AUTOMATION]: " as the GitHub App, for an automation",
