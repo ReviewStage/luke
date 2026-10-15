@@ -4,7 +4,6 @@ import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { SETTINGS_SECTION, SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { ProviderMark } from "@luke/ui";
 import { memberActor, ROLE_WORDS } from "@luke/ui/actor-model";
-import { repositoryNameOf } from "@luke/ui/planning-model";
 import { ChevronRightIcon, GitBranchIcon, LockIcon } from "lucide-react";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, ActorStack, YouBadge } from "../actor-ref";
@@ -154,8 +153,10 @@ function People({
   );
 }
 
-/** What the repository's crumb reaches: its owner's picture and its default branch. */
+/** What the repository's crumb says and reaches: its name, its owner's picture, and its default branch. */
 interface RepositoryCrumbDoors {
+  /** Says a repository as the sidebar's header does: its name, or `owner/name` where another shares the name. */
+  readonly label: (repository: string) => string;
   /** Whether owners' pictures are drawn at all: not in a fixture run. */
   readonly pictures: boolean;
   /** Reads the repositories the plan's workspace reaches, which say each one's default branch. */
@@ -274,7 +275,7 @@ function RepositoryCrumb({
           pictures={doors.pictures}
           fallback={<ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />}
         />
-        <span className="plan-crumb-name">{repositoryNameOf(repository)}</span>
+        <span className="plan-crumb-name">{doors.label(repository)}</span>
       </span>
     </Tooltip>
   );

@@ -4,7 +4,13 @@ import { planSections } from "@luke/features/plan-document";
 import { TERMINAL_ASK } from "@luke/features/terminal-entry";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
-import { DOCUMENT_REGION, PLAN_MARK, PLANS_PAGE } from "@luke/ui/planning-model";
+import {
+  DOCUMENT_REGION,
+  PLAN_MARK,
+  PLANS_PAGE,
+  repositoryGroups,
+  repositoryLabel,
+} from "@luke/ui/planning-model";
 import { agentOfTab, followedAgent, sameTab } from "@luke/ui/tab-strip-model";
 import { InboxIcon } from "lucide-react";
 import { Fragment, useCallback, useEffect, useId, useMemo, useState } from "react";
@@ -649,6 +655,8 @@ function PlanDocument({
                                 plans.onGoHome();
                               },
                               repository: {
+                                label: (repository) =>
+                                  repositoryLabel(repository, repositoryGroups(plans.listed.plans)),
                                 pictures: plans.repositories.pictures,
                                 read: plans.newPlan.repositoriesIn(home.id).read,
                               },

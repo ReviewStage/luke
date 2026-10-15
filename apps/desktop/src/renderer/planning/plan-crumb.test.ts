@@ -9,6 +9,7 @@ import {
 } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
+import { repositoryLabel } from "@luke/ui/planning-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -134,6 +135,7 @@ async function crumb(
                   personal: false,
                   onOpenWorkspace: () => asked.push(`home ${shown.id}`),
                   repository: {
+                    label: (named) => repositoryLabel(named, []),
                     pictures: false,
                     read: () => {
                       asked.push("read repositories");
