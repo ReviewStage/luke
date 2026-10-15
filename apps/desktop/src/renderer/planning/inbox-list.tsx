@@ -99,15 +99,17 @@ function ItemGlyph({
   plan,
   agentId,
   models,
+  readerId,
 }: {
   plan: PlanSummary;
   agentId: string;
   models: readonly CatalogModel[] | undefined;
+  readerId: string | undefined;
 }): React.JSX.Element {
   const agent = plan.agents?.agents.find((each) => each.id === agentId);
   if (agent === undefined) return <AgentGlyph agent={undefined} />;
   return (
-    <AgentRef subject={lineSubject(agent, models)} models={models} onOpen={undefined}>
+    <AgentRef subject={lineSubject(agent, models, readerId)} models={models} onOpen={undefined}>
       <AgentGlyph agent={agent} />
     </AgentRef>
   );
@@ -124,6 +126,7 @@ export function InboxItemRow({
   chosen,
   now,
   models,
+  readerId,
   context,
   onChoose,
 }: {
@@ -131,6 +134,8 @@ export function InboxItemRow({
   chosen: boolean;
   now: number;
   models: readonly CatalogModel[] | undefined;
+  /** The signed-in account's id, whose own agents' cards name no starter. */
+  readerId: string | undefined;
   context?: string;
   onChoose: (listed: InboxListed) => void;
 }): React.JSX.Element {
@@ -150,7 +155,7 @@ export function InboxItemRow({
         >
           <span className="sidebar-plan-line">
             <span className="sidebar-pinned-tab-glyph">
-              <ItemGlyph plan={plan} agentId={item.agentId} models={models} />
+              <ItemGlyph plan={plan} agentId={item.agentId} models={models} readerId={readerId} />
             </span>
             <span className="sidebar-plan-name">{title}</span>
             {context === undefined ? null : <span className="home-row-context">{context}</span>}
@@ -294,6 +299,7 @@ export function InboxList({
   head,
   note,
   models,
+  readerId,
   columns,
   onChoose,
 }: {
@@ -302,6 +308,8 @@ export function InboxList({
   chosen: string | undefined;
   /** The catalog as last read, which names each agent's model on its card. */
   models: readonly CatalogModel[] | undefined;
+  /** The signed-in account's id, whose own agents' cards name no starter, where a teammate's name theirs. */
+  readerId: string | undefined;
   head: InboxListHead | undefined;
   /** What stands under the rows: the list's empty line, a spinner, or a read that did not answer. */
   note: React.ReactNode;
@@ -326,6 +334,7 @@ export function InboxList({
       chosen={listed.item.id === chosen}
       now={now}
       models={models}
+      readerId={readerId}
       onChoose={onChoose}
     />
   );

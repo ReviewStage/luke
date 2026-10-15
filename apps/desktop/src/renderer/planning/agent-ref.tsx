@@ -91,10 +91,11 @@ export function agentCardReading(
   };
 }
 
-/** An agent as the sidebar's list names it: where it stands and since when, and its pair, with no step to preview. */
+/** An agent as the sidebar's list names it: where it stands and since when, its pair, and the teammate who started it, as `readerId` reads it, with no step to preview. */
 export function lineSubject(
   line: PlanAgentLine,
   models: readonly CatalogModel[] | undefined,
+  readerId: string | undefined,
 ): AgentSubject {
   const writing = agentStillWriting(line.status);
   const reading: CardReading = {
@@ -106,6 +107,7 @@ export function lineSubject(
     }),
     choice: { model: line.model, effort: line.effort },
     transcript: undefined,
+    startedBy: teammateStarter(line.startedBy, readerId),
   };
   return { name: agentTabLabel(line, models), read: () => reading };
 }

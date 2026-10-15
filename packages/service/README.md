@@ -1413,11 +1413,12 @@ segment-captured id.
 Each row of the list carries `agents` where the plan has a coding agent
 (`src/agents/plan-agents.ts`): how many it has and how many are starting
 or running, the three it names (those at work first, then the newest), each
-with its title, model, effort, status, and since when, and the pull requests
-they opened, each number once and at most three, as GitHub last answered a
-read of them. Three statements answer the whole list: the agents of every
-plan listed with `coding_agent.published` (migration 0078), their newest
-turns, and the lines awaiting a turn; the list asks GitHub nothing.
+with its title, model, effort, status, since when, and the member who
+started it while their account stands, and the pull requests they opened,
+each number once and at most three, as GitHub last answered a read of them.
+Four statements answer the whole list: the agents of every plan listed with
+`coding_agent.published` (migration 0078), their newest turns, the lines
+awaiting a turn, and their starters' names; the list asks GitHub nothing.
 `packages/features/src/plan-wire.ts` declares every request and answer. Each
 endpoint resolves the bearer first, and every statement in
 `packages/database/src/models/plan-store.ts` names the account beside the plan and gates on

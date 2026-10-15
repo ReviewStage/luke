@@ -6,6 +6,7 @@ import {
   listPublishedCodingAgents,
   type PublishedCodingAgent,
 } from "@luke/database/models/coding-agent-store";
+import { readAccountNames } from "@luke/database/models/workspace-store";
 import {
   CODING_AGENT_STATUS,
   type CodingAgentStatus,
@@ -24,11 +25,12 @@ import { codingAgentRunStartedAt, codingAgentStatusOf } from "./coder-host/statu
 /**
  * plan-agents.ts -- what each listed plan's coding agents are doing and what they published, in brief, for the sidebar's row and its hover card.
  *
- * Three statements answer the whole list however many plans it holds: the
+ * Four statements answer the whole list however many plans it holds: the
  * agents of every plan named with the pull request each last published,
- * their newest turns, and which of them hold a line awaiting its turn. An
- * agent's status is read exactly as its tab's is (`coder-host/status.ts`),
- * and a pull request is the one its row keeps as GitHub last answered, so
+ * their newest turns, which of them hold a line awaiting its turn, and the
+ * names of the members who started them. An agent's status and its starter
+ * are read exactly as its tab's are (`coder-host/status.ts`), and a pull
+ * request is the one its row keeps as GitHub last answered, so
  * nothing here asks GitHub. A plan with no agent carries nothing, so the
  * list stays as small as it was for every plan nobody has started an agent
  * on.
@@ -47,14 +49,16 @@ interface ReadAgent {
   readonly published: PublishedCodingAgent["published"];
 }
 
-/** One agent as its row names it, its status read at `now`: since its run began while it works, since its newest turn ended once it has. */
+/** One agent as its row names it, its status read at `now`: since its run began while it works, since its newest turn ended once it has; its starter named by `names`, and left unnamed once their account is gone. */
 function agentLine(
   held: PublishedCodingAgent,
   turn: CodingAgentLatestTurn | undefined,
   lineAwaits: boolean,
   now: number,
+  names: ReadonlyMap<string, string>,
 ): ReadAgent {
   const { agent } = held;
+  const starter = names.get(agent.userId);
   const status = codingAgentStatusOf(turn, { createdAt: agent.createdAt, now, lineAwaits });
   const at = WORKING_STATUSES.has(status)
     ? codingAgentRunStartedAt(turn, { createdAt: agent.createdAt, lineAwaits })
@@ -67,6 +71,9 @@ function agentLine(
       effort: agent.effort,
       status,
       ...(at === undefined ? undefined : { at }),
+      ...(starter === undefined
+        ? undefined
+        : { startedBy: { userId: agent.userId, name: starter } }),
     },
     createdAt: agent.createdAt.getTime(),
     published: held.published,
@@ -126,13 +133,20 @@ export function withPlanAgents(
     // The agents were read through the plans' gate, and each conversation is its starter's, a teammate's as often as the account's.
     const turns = yield* latestTurnsOfReached(conversationIds);
     const awaiting = yield* awaitingLinesOfReached(conversationIds);
+    const names = yield* readAccountNames(held.map(({ agent }) => agent.userId));
     const now = yield* Clock.currentTimeMillis;
     const byPlan = new Map<string, ReadAgent[]>();
     for (const agent of held) {
       const { conversationId, planId } = agent.agent;
       // An agent with no plan is no plan's to summarise.
       if (planId === null) continue;
-      const line = agentLine(agent, turns.get(conversationId), awaiting.has(conversationId), now);
+      const line = agentLine(
+        agent,
+        turns.get(conversationId),
+        awaiting.has(conversationId),
+        now,
+        names,
+      );
       byPlan.set(planId, [...(byPlan.get(planId) ?? []), line]);
     }
     return plans.map((plan) => {

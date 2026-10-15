@@ -35,6 +35,22 @@
     "at": {
       "type": "number",
       "minimum": 0
+    },
+    "startedBy": {
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "userId",
+        "name"
+      ],
+      "additionalProperties": false
     }
   },
   "required": [

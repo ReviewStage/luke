@@ -207,6 +207,7 @@ function HomeInbox({ plans, now }: { plans: PlansControl; now: number }): React.
               chosen={false}
               now={now}
               models={plans.agents.models}
+              readerId={plans.me}
               context={listed.plan.name}
               onChoose={open}
             />
