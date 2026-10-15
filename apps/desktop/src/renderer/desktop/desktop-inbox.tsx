@@ -65,9 +65,9 @@ import { planCardOf } from "./plan-card";
  * leaving the Inbox. With nothing listed, it says so under the Inbox's
  * glyph (`empty-state.tsx`). Escape leaves it for the plan it stood over,
  * and so does any row of the sidebar. Too narrow for the list and the item
- * side by side, it shows one at a time (`inbox-columns.ts`): the list, and
- * the item a press opens, whose way back, Back's chord, or Escape gives the
- * list back before Escape leaves the Inbox. Everything in it that names a
+ * side by side, it shows one at a time (`inbox-columns.ts`): the chosen
+ * item, whose way back, Back's chord, or Escape gives the list, and a press
+ * on a row there the item again, before Escape leaves the Inbox. Everything in it that names a
  * person, an answer and an agent's starter, reads them against the listed
  * workspace's members (`member-directory.tsx`).
  */
@@ -232,7 +232,7 @@ export function DesktopInbox({ plans }: { plans: PlansControl }): React.JSX.Elem
   const reading =
     holdings.some((holding) => !read.items.has(holding.planId)) ||
     plans.inboxPlanless.some((each) => !planless.items.has(each.agentId));
-  const columns = useInboxColumns(chosen?.item.id);
+  const columns = useInboxColumns(chosen?.item.id, true);
   // A choice that asks for its item opens it once, the one column the Inbox shows being the
   // item's; Back from it then stands on the list, the choice taken already.
   const opensItem = asked?.opened === true && chosen?.item.id === asked.itemId;

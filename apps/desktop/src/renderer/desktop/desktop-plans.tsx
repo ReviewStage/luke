@@ -163,8 +163,10 @@ function NewTabChord({ onNewTab }: { onNewTab: () => void }): null {
  * read. With nothing chosen, the first item that waits stands chosen, else
  * the newest; a plan whose read holds nothing says so under the Inbox's
  * glyph. The pane's plan crumb chooses the plan's tab and its agent crumb
- * the agent's. Too narrow for both, it shows the list or the item a press
- * opened, as the window's Inbox does (`inbox-columns.ts`).
+ * the agent's. Too narrow for both, it shows the chosen item, and the list
+ * once its way back is taken, as the window's Inbox does
+ * (`inbox-columns.ts`); holding one item, it is that item, with no list to
+ * go back to.
  */
 function PlanInboxTab({
   plans,
@@ -192,7 +194,7 @@ function PlanInboxTab({
     chosen: asked,
   });
   const chosen = listedItems(list).find(({ item }) => item.id === asked) ?? firstChoice(list);
-  const columns = useInboxColumns(chosen?.item.id);
+  const columns = useInboxColumns(chosen?.item.id, listedItems(list).length > 1);
   return (
     <section
       ref={columns.ref}
