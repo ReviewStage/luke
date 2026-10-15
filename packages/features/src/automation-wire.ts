@@ -342,7 +342,7 @@ export type AutomationRunSummary = typeof automationRunSummarySchema.Type;
  * runs and why not where the service paused it, what fires it and what it
  * starts, its guards, when a schedule is next due, and its newest run.
  */
-const automationSummarySchema = EffectSchema.Struct({
+export const automationSummarySchema = EffectSchema.Struct({
   id: wireUuidSchema,
   /** The plan it was made on; null for an automation made on its workspace with no plan, which its repositories stand in for. */
   planId: EffectSchema.NullOr(wireUuidSchema),

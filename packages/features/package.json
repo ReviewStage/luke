@@ -10,6 +10,7 @@
     "./app-links": "./src/app-links.js",
     "./automation-schedule": "./src/automation-schedule.js",
     "./automation-wire": "./src/automation-wire.js",
+    "./automation-view": "./src/automation-view.js",
     "./board-text": "./src/board-text.js",
     "./agent-tools": "./src/agent-tools.js",
     "./board-vocabulary": "./src/board-vocabulary.js",

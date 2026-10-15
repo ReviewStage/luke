@@ -1,6 +1,23 @@
 import type { AccountSnapshot } from "@luke/credentials/snapshot";
 import { ACCOUNT_PROVIDER } from "@luke/credentials/snapshot";
 import {
+  type AutomationDeletedView,
+  type AutomationListView,
+  type AutomationRunsView,
+  type AutomationRunView,
+  type AutomationView,
+  automationChangeParamsSchema,
+  automationCreateParamsSchema,
+  automationDeletedViewSchema,
+  automationIdParamsSchema,
+  automationListParamsSchema,
+  automationListViewSchema,
+  automationRunParamsSchema,
+  automationRunsViewSchema,
+  automationRunViewSchema,
+  automationViewSchema,
+} from "@luke/features/automation-view";
+import {
   type CodingAgentAgentAnswer,
   type CodingAgentChangesAnswerView,
   type CodingAgentDefaultAnswer,
@@ -339,6 +356,13 @@ export const ACT_KIND = {
   CODING_AGENTS_PULL_REQUEST: "codingAgents.pullRequest",
   /** One agent's changes, its pull request's files with their patches, which its Changes tab draws. */
   CODING_AGENTS_CHANGES: "codingAgents.changes",
+  /** The account's automations: listed, made, changed, deleted, run now, and one's runs read. */
+  AUTOMATIONS_LIST: "automations.list",
+  AUTOMATIONS_CREATE: "automations.create",
+  AUTOMATIONS_CHANGE: "automations.change",
+  AUTOMATIONS_DELETE: "automations.delete",
+  AUTOMATIONS_RUN: "automations.run",
+  AUTOMATIONS_RUNS: "automations.runs",
   /**
    * Settings › API keys: the account's own provider keys read as hints and
    * statuses, one saved, one removed. The save's payload is the one place a
@@ -1016,6 +1040,36 @@ export const ACT = {
       isReadable(codingAgentChangesAnswerViewSchema),
     ),
     refusal: "Could not read the agent's changes on this system.",
+  },
+  [ACT_KIND.AUTOMATIONS_LIST]: {
+    payload: actSchema(automationListParamsSchema),
+    result: wireResult<AutomationListView>(isReadable(automationListViewSchema)),
+    refusal: "Could not read the automations on this system.",
+  },
+  [ACT_KIND.AUTOMATIONS_CREATE]: {
+    payload: actSchema(automationCreateParamsSchema),
+    result: wireResult<AutomationView>(isReadable(automationViewSchema)),
+    refusal: "Could not make the automation on this system.",
+  },
+  [ACT_KIND.AUTOMATIONS_CHANGE]: {
+    payload: actSchema(automationChangeParamsSchema),
+    result: wireResult<AutomationView>(isReadable(automationViewSchema)),
+    refusal: "Could not change the automation on this system.",
+  },
+  [ACT_KIND.AUTOMATIONS_DELETE]: {
+    payload: actSchema(automationIdParamsSchema),
+    result: wireResult<AutomationDeletedView>(isReadable(automationDeletedViewSchema)),
+    refusal: "Could not delete the automation on this system.",
+  },
+  [ACT_KIND.AUTOMATIONS_RUN]: {
+    payload: actSchema(automationRunParamsSchema),
+    result: wireResult<AutomationRunView>(isReadable(automationRunViewSchema)),
+    refusal: "Could not run the automation on this system.",
+  },
+  [ACT_KIND.AUTOMATIONS_RUNS]: {
+    payload: actSchema(automationIdParamsSchema),
+    result: wireResult<AutomationRunsView>(isReadable(automationRunsViewSchema)),
+    refusal: "Could not read the automation's runs on this system.",
   },
   [ACT_KIND.PROVIDER_KEYS_READ]: {
     payload: noPayload,
