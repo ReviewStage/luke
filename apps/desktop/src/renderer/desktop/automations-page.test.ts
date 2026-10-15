@@ -21,7 +21,7 @@ import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { onRegistry } from "#testing/copy-feedback";
 import { plansControl } from "#testing/plans-control";
@@ -82,6 +82,16 @@ const FAILING = automation(3, {
     settledAt: 3,
   },
 });
+
+/** The models a new agent may run on. */
+const CATALOG = [
+  {
+    id: "anthropic/claude-opus-5.5",
+    name: "Claude Opus 5.5",
+    provider: "anthropic",
+    efforts: ["low", "high"],
+  },
+] as const;
 
 /** The account's default model, which a new agent runs on until another is chosen. */
 const DEFAULT_CHOICE = { model: "anthropic/claude-opus-5.5", effort: "high" };
@@ -198,7 +208,7 @@ beforeEach(() => {
           return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { automation: made } });
         }
         if (request.kind === ACT_KIND.CODING_AGENTS_MODELS) {
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { models: [] } });
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { models: CATALOG } });
         }
         if (request.kind === ACT_KIND.CODING_AGENTS_DEFAULT_READ) {
           const value = defaultRefused
@@ -248,6 +258,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.restoreAllMocks();
   act(() => root?.unmount());
   root = undefined;
   document.body.innerHTML = "";
@@ -1017,9 +1028,21 @@ test("a default model that could not be read is said as unknown, and a model can
 
   assert.equal(page.querySelector(".agent-model-chip"), null, "no model is drawn as the default");
   assert.match(page.textContent ?? "", /It runs on your default model, which could not be read\./u);
+  // Note that the menu is hung from the chip by its laid-out boxes, which jsdom draws none of.
+  vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+    if (this.classList.contains("automation-model-picker"))
+      return DOMRect.fromRect({ x: 200, y: 400, width: 120, height: 24 });
+    if (this.classList.contains("anchored-popover"))
+      return DOMRect.fromRect({ x: 0, y: 0, width: 340, height: 300 });
+    return DOMRect.fromRect({ x: 0, y: 0, width: 0, height: 0 });
+  });
   act(() => button("Choose a model").click());
   await settle();
 
-  assert.ok(page.querySelector(".agent-model-chip"));
-  assert.equal(page.querySelector(".automation-editor-status")?.textContent, "Unsaved changes");
+  assert.ok(page.querySelector(".agent-model-menu"), "the model menu opens");
+  assert.equal(
+    page.querySelector(".automation-editor-status")?.textContent,
+    "Saved",
+    "opening the menu chooses nothing",
+  );
 });

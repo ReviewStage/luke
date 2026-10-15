@@ -29,7 +29,7 @@ import {
   type AutomationSummary,
   type AutomationTargetKind,
 } from "@luke/features/automation-wire";
-import { CODING_AGENT_DEFAULT_CHOICE } from "@luke/features/models-wire";
+import type { ModelChoice } from "@luke/features/models-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import {
@@ -40,16 +40,20 @@ import {
   Trash2Icon,
   ZapIcon,
 } from "lucide-react";
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
+import { AnchoredPopover, POPOVER_ALIGN } from "../anchored-popover";
 import { useAppCommand } from "../app-commands";
+import { CHIP_LOOK, Chip } from "../chip";
 import { AgentModelChip } from "../planning/agent-model-chip";
+import { ModelMenu } from "../planning/model-menu";
 import { dayAndTimeText, sinceText, useMinute } from "../planning/plan-time";
 import { CHIP_PLACE, RepositoryChip, type RepositoryChooser } from "../planning/repository-chip";
 import { Segmented } from "../segmented";
 import { ConfirmDialog, useConfirmDialog } from "../settings/confirm-dialog";
 import { BusyLabel } from "../spinner";
 import { Switch } from "../switch";
+import { useDisclosure } from "../use-disclosure";
 import { AutomationRunsPanel } from "./automation-runs-panel";
 import { useAutomationRuns } from "./use-automation-runs";
 import { type AgentsRead, type RunChoices, useRunChoices } from "./use-run-choices";
@@ -429,6 +433,64 @@ const TARGETS: readonly { value: AutomationTargetKind; label: string }[] = [
   { value: AUTOMATION_TARGET.SAME_AGENT, label: "Same agent" },
 ];
 
+/**
+ * Choose a model, where the default could not be read: a chip naming no
+ * model, whose menu is the agent box's model menu with nothing checked, so
+ * nothing is chosen until a model is picked in it.
+ */
+function ModelPicker({
+  models,
+  onChoose,
+}: {
+  models: RunChoices["models"];
+  onChoose: (choice: ModelChoice) => void;
+}): React.JSX.Element {
+  const [open, setOpen] = useState(false);
+  const drawn = useDisclosure(open);
+  const menuId = useId();
+  const root = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const close = () => {
+    setOpen(false);
+    trigger.current?.focus();
+  };
+  return (
+    <div className="automation-model-picker" ref={root}>
+      <Chip
+        ref={trigger}
+        look={CHIP_LOOK.TOOLBAR}
+        chevron
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-controls={open ? menuId : undefined}
+        onClick={() => setOpen(!open)}
+      >
+        Choose a model
+      </Chip>
+      {drawn.mounted ? (
+        <AnchoredPopover align={POPOVER_ALIGN.START}>
+          <ModelMenu
+            leaving={drawn.leaving}
+            ref={drawn.ref}
+            id={menuId}
+            className="agent-model-menu"
+            models={models}
+            chosen={undefined}
+            onChoose={(choice) => {
+              onChoose(choice);
+              setOpen(false);
+            }}
+            onClose={close}
+            onLeave={(left) => {
+              if (!(left instanceof Node && root.current?.contains(left))) setOpen(false);
+            }}
+          />
+        </AnchoredPopover>
+      ) : null}
+    </div>
+  );
+}
+
 /** A new agent's model: the chip the agent box wears, on the account's default until one is chosen. */
 function ModelControl({
   draft,
@@ -448,13 +510,7 @@ function ModelControl({
         <span className="automation-form-note">
           It runs on your default model, which could not be read.
         </span>
-        <button
-          type="button"
-          className="toolbar-button bordered-button"
-          onClick={() => onDraft({ choice: CODING_AGENT_DEFAULT_CHOICE })}
-        >
-          Choose a model
-        </button>
+        <ModelPicker models={choices.models} onChoose={(choice) => onDraft({ choice })} />
       </div>
     ) : (
       <p className="automation-form-note">Your default model.</p>
