@@ -2380,3 +2380,17 @@ test("a channel chosen in Chat is the listed workspace's, so another workspace l
   assert.equal(tab.control().chatView.open, true, "Chat stays open");
   assert.deepEqual(tab.control().chatView.place, FOR_YOU);
 });
+
+test("the task's Chat tab, opened from ⌘K's Chat row, stands on its strip only while the account has Chat on", async () => {
+  handState(experimentsOn(EXPERIMENT.CHAT));
+  const on = mount({ shown: true, tasks: OPEN }, {}, AtomRegistryModule.make());
+  await settle();
+  act(() => on.control().onShowChat(TASK.id));
+  assert.ok(on.control().mainTabs.tabs.includes(MAIN_TAB.CHAT));
+
+  handState({});
+  const off = mount({ shown: true, tasks: OPEN }, {}, AtomRegistryModule.make());
+  await settle();
+  act(() => off.control().onShowChat(TASK.id));
+  assert.ok(!off.control().mainTabs.tabs.includes(MAIN_TAB.CHAT));
+});

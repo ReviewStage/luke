@@ -15,9 +15,10 @@ import { TASK_TREE_ENTRY, type Task } from "@luke/features/task-wire";
 import type { TaskCodeShowing, TasksTreeAnswer } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
 import { APP_COMMAND, type AppCommand } from "@luke/settings/shortcuts";
-import { settingsView } from "@luke/settings/testing";
+import { experimentsOn, settingsView } from "@luke/settings/testing";
 import { DOCUMENT_REGION, TASK_MARK, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { shownFiles } from "@luke/voice/code-pane-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -27,6 +28,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, test } from "vitest";
 import { fakeAppBridge } from "#testing/app-bridge";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
+import { handState } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { sidebarProps } from "#testing/desktop-sidebar";
 import { DOCUMENT_TASK } from "#testing/document-task";
@@ -1335,4 +1337,64 @@ test("with a task open, ⌘K offers Pin task, which pins it under Pinned and tur
   press("Unpin task");
   assert.deepEqual(pinnedNames(), []);
   assert.deepEqual(pinRows(), ["Pin task"]);
+});
+
+/** The palette over the task given, under a registry of its own that reads the window's state as handed. */
+async function paletteUnderState(tasks: TasksControl): Promise<void> {
+  const host = document.createElement("div");
+  document.body.append(host);
+  const root = createRoot(host);
+  roots.push(root);
+  act(() =>
+    root.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(WindowPalette, {
+          available: true,
+          tab: PANEL_TAB.TASKS,
+          onTabChange: () => undefined,
+          tasks,
+          settings: {
+            rows: { settings: settingsView(), voiceControlsDrawn: true, accountDrawn: true },
+            onViewChange: () => undefined,
+          },
+          readFiles: () => Promise.reject(new Error("no repository is open")),
+        }),
+      ),
+    ),
+  );
+  await act(async () => {
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
+  act(() => {
+    assert.ok(runAppCommand(APP_COMMAND.COMMAND_PALETTE), "⌘K is offered");
+  });
+}
+
+test("⌘K offers the open task's Chat tab only while the account has Chat on", async () => {
+  const tasks = tasksControl({
+    activeTaskId: "plan-1",
+    tasks: [
+      {
+        id: "plan-1",
+        workspaceId: "workspace-personal",
+        name: "Billing usage alerts",
+        createdAt: 1,
+        updatedAt: 2,
+        repository: null,
+      },
+    ],
+    chatView: { ...tasksControl().chatView, available: true },
+  });
+  handState(experimentsOn(EXPERIMENT.CHAT));
+  await paletteUnderState(tasks);
+  chooseFilter("Agents");
+  assert.ok(rows().includes("Chat · Billing usage alerts"), "Chat on offers the task's Chat");
+  for (const root of roots.splice(0)) act(() => root.unmount());
+  document.body.innerHTML = "";
+
+  handState({});
+  await paletteUnderState(tasks);
+  chooseFilter("Agents");
+  assert.ok(!rows().some((row) => row.startsWith("Chat")), "Chat off offers no Chat");
 });

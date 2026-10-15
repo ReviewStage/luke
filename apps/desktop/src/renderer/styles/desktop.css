@@ -5751,6 +5751,15 @@ button.automation-run:hover {
   font-weight: 600;
 }
 
+/* The plan's own Chat tab fills its column as an agent's tab does, the
+   channel's head standing in for the column's bar. */
+.desktop-plan-chat {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
 /* A member's mark: an agent's glyph as its tab wears it, Luke's initial in
    his blue, a person's initial on a quiet ground. */
 .chat-mark {
