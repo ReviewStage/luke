@@ -347,10 +347,10 @@ test("a plan opened on its Inbox tab rather than its own is read at once, its ro
 });
 
 /** A second plan beside `DOCUMENT_PLAN`, saved after it. */
-const BILLING_PLAN: Plan = {
+const NOTES_PLAN: Plan = {
   ...DOCUMENT_PLAN,
   id: "0c9a3f1e-6b2d-4e8f-a1c7-3d5e7f9a1b2c",
-  name: "Billing export",
+  name: "Release notes",
   createdAt: 4,
   updatedAt: 5,
 };
@@ -418,9 +418,9 @@ function rowReadMark(name: string, choose = false): string | undefined {
 }
 
 test("Mark as unread on the task being looked at draws its row unread through a save landing as it stays, and until it is opened again", () => {
-  const draw = mountListing([DOCUMENT_PLAN, BILLING_PLAN], {
+  const draw = mountListing([DOCUMENT_PLAN, NOTES_PLAN], {
     [DOCUMENT_PLAN.id]: DOCUMENT_PLAN.updatedAt,
-    [BILLING_PLAN.id]: BILLING_PLAN.updatedAt,
+    [NOTES_PLAN.id]: NOTES_PLAN.updatedAt,
   });
   draw(DOCUMENT_PLAN);
   assert.equal(rowUnread(DOCUMENT_NAME), "false");
@@ -430,7 +430,7 @@ test("Mark as unread on the task being looked at draws its row unread through a 
   draw({ ...DOCUMENT_PLAN, updatedAt: DOCUMENT_PLAN.updatedAt + 1 });
   assert.equal(rowUnread(DOCUMENT_NAME), "true");
 
-  draw(BILLING_PLAN);
+  draw(NOTES_PLAN);
   assert.equal(rowUnread(DOCUMENT_NAME), "true");
 
   draw(DOCUMENT_PLAN);
@@ -438,21 +438,21 @@ test("Mark as unread on the task being looked at draws its row unread through a 
 });
 
 test("a task's menu offers Mark as read while its row is unread, which draws it read, and Mark as unread after", () => {
-  const draw = mountListing([DOCUMENT_PLAN, BILLING_PLAN], {
+  const draw = mountListing([DOCUMENT_PLAN, NOTES_PLAN], {
     [DOCUMENT_PLAN.id]: DOCUMENT_PLAN.updatedAt,
-    [BILLING_PLAN.id]: BILLING_PLAN.updatedAt - 1,
+    [NOTES_PLAN.id]: NOTES_PLAN.updatedAt - 1,
   });
   draw(undefined);
-  assert.equal(rowUnread(BILLING_PLAN.name), "true");
+  assert.equal(rowUnread(NOTES_PLAN.name), "true");
   assert.equal(rowReadMark(DOCUMENT_NAME), "Mark as unread");
 
-  assert.equal(rowReadMark(BILLING_PLAN.name, true), "Mark as read");
-  assert.equal(rowUnread(BILLING_PLAN.name), "false");
-  assert.equal(rowReadMark(BILLING_PLAN.name), "Mark as unread");
+  assert.equal(rowReadMark(NOTES_PLAN.name, true), "Mark as read");
+  assert.equal(rowUnread(NOTES_PLAN.name), "false");
+  assert.equal(rowReadMark(NOTES_PLAN.name), "Mark as unread");
 
-  assert.equal(rowReadMark(BILLING_PLAN.name, true), "Mark as unread");
-  assert.equal(rowUnread(BILLING_PLAN.name), "true");
-  assert.equal(rowReadMark(BILLING_PLAN.name), "Mark as read");
+  assert.equal(rowReadMark(NOTES_PLAN.name, true), "Mark as unread");
+  assert.equal(rowUnread(NOTES_PLAN.name), "true");
+  assert.equal(rowReadMark(NOTES_PLAN.name), "Mark as read");
 });
 
 /** Lets every promise settled so far run its continuations. */
