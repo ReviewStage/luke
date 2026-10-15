@@ -1362,16 +1362,21 @@ eve, a scripted GitHub, a fixed catalog, and PGlite.
 
 A GitHub trigger fires on the Luke App's own webhook
 (`src/github/github-webhook-app.ts`, through `src/automations/automation-github.ts`): a
-pull request opened or labelled, an issue opened or labelled, a check suite
-that completed as `failure` or `timed_out`, and a push to a branch, each in
-the repository of the automation's plan (matched the way GitHub folds a
-name's case), filtered by the trigger's labels (the label just applied, or
+pull request opened or labelled, a pull request ready for review opened,
+reopened, marked ready, or pushed to (`pull-request-updated`; a draft fires
+nothing until it is marked ready, and an opened pull request is both this and
+`pull-request-opened`), an issue opened or labelled, a check suite that
+completed as `failure` or `timed_out`, and a push to a branch, each in any of
+the automation's repositories (or its plan's, on a row an older build wrote,
+matched the way GitHub folds a name's case), of an owner still a member of
+the automation's workspace, filtered by the trigger's labels (the label just applied, or
 any label of what was opened) and branches (a pull request's base, a check
 suite's or a push's branch). Only the repository, the number, title, and
 address of the issue or pull request, the branch, and a failed check's
-commit by its address are read; never a body. A run whose plan has moved to
-another repository by the time the sweep acts on it is skipped as
-`repository-changed`. A run is queued under the delivery's `X-GitHub-Delivery`, which a
+commit by its address are read; never a body. The run's agent starts in the
+repository the event named, as the automation spells it among its
+repositories; a run whose automation no longer lists that repository by the
+time the sweep acts on it is skipped as `repository-changed`. A run is queued under the delivery's `X-GitHub-Delivery`, which a
 redelivery carries again, so each automation records one run per
 delivery, and the sweep starts its agent within the minute rather than
 inside GitHub's ten seconds. An automation cannot fire itself: a pull
