@@ -3882,6 +3882,24 @@ body:has(.app-stage[data-capture="true"])
   color: var(--text-primary);
 }
 
+/* An item standing alone ends its bar in the pager (`inbox-pager.tsx`):
+   where it stands in the list, in the meta voice's figures, and the arrows
+   up and down it, as far in from the Inbox's edge as its crumbs start. An
+   arrow with nowhere to go steps back. */
+.inbox-pager {
+  align-items: center;
+  margin-left: auto;
+  padding-right: var(--column-inset);
+}
+
+.inbox-pager-count {
+  margin-right: var(--space-6);
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 /* One agent's page stands in the plan's place as the Inbox does: its toolbar
    over the agent's tab, which fills the rest as it fills a plan's column. */
 .agent-page {

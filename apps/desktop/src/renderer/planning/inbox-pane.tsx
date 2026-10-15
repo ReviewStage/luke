@@ -73,6 +73,7 @@ import {
   withChoice,
   withValue,
 } from "./inbox-model";
+import { type InboxPager, InboxPagerControls } from "./inbox-pager";
 import { useMinute } from "./plan-time";
 import { RelativeTime } from "./relative-time";
 import { type KindLook, TAB_KIND, tabLook } from "./tab-look";
@@ -1012,7 +1013,8 @@ function Crumbs({
  * agent; or the agent's own message says it took the item back, and why.
  * Where the item stands alone, the whole Inbox wide, the crumbs follow a
  * way back to the list (`inbox-columns.ts`), its tooltip naming Back's
- * chord, which goes back as Escape does.
+ * chord, which goes back as Escape does, and the bar ends in the pager,
+ * "2 of 8" and the arrows up and down the list (`inbox-pager.tsx`).
  */
 export function InboxPane({
   holder,
@@ -1022,6 +1024,7 @@ export function InboxPane({
   doors,
   hidden,
   onBack,
+  pager,
 }: {
   /** What holds the item: its plan, or the automation that started its agent with no plan. */
   holder: InboxHolder;
@@ -1034,6 +1037,8 @@ export function InboxPane({
   hidden: boolean;
   /** Goes back to the list, where the item stands alone. */
   onBack: (() => void) | undefined;
+  /** Where the item stands in the list and the steps either side, drawn at the bar's end where the item stands alone among others. */
+  pager: InboxPager | undefined;
 }): React.JSX.Element {
   const now = useMinute();
   const by: ItemAgent = {
@@ -1055,6 +1060,7 @@ export function InboxPane({
           </Tooltip>
         )}
         <Crumbs holder={holder} by={by} doors={doors} />
+        {pager === undefined || pager.total < 2 ? null : <InboxPagerControls pager={pager} />}
       </header>
       <div className="desktop-inbox">
         <div

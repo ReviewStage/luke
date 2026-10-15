@@ -1,9 +1,11 @@
 /**
  * shortcuts.ts -- the window's keyboard shortcuts: one table the menu bar, the renderer's keymap, the hovers, and the Keyboard shortcuts page all read.
  *
- * Every shortcut but Escape holds Command, the way a Mac app's own chords
- * do, so none can be the talk or stop key: those take the machine, and
- * Command chords belong to whichever app is frontmost. Each is a command the window runs and
+ * Every shortcut but Escape and the Inbox's J and K holds Command, the way a
+ * Mac app's own chords do, so none can be the talk or stop key: those take
+ * the machine, and Command chords belong to whichever app is frontmost. J
+ * and K are a letter alone, as Linear's and Superhuman's are, answered only
+ * where the press is not typing, and the menu bar never offers them. Each is a command the window runs and
  * a chord that reaches it; the menu bar shows the chord beside the command's
  * name, and a click there sends the command to the window, which runs it
  * exactly as the key does. The key itself is the renderer's to read: Chromium
@@ -53,6 +55,8 @@ export const APP_COMMAND = {
   HOME: "home",
   INBOX: "inbox",
   EXIT_INBOX: "exit-inbox",
+  PREVIOUS_INBOX_ITEM: "previous-inbox-item",
+  NEXT_INBOX_ITEM: "next-inbox-item",
   EXIT_AGENT_PAGE: "exit-agent-page",
   FACTORY: "factory",
   EXIT_FACTORY: "exit-factory",
@@ -187,7 +191,10 @@ function modifierGlyph(name: string): string {
  * A chord: Command, the modifiers named here, and the key. A `bare` chord is
  * the key alone, which only Escape is: the window's Escape steps back one
  * layer at a time in `app.tsx`, so the keymap leaves it there, and the table
- * names it so the menu bar and the shortcuts page can say what it does.
+ * names it so the menu bar and the shortcuts page can say what it does. A
+ * `plain` chord is a letter alone too, which the keymap answers itself, but
+ * only where the press is not typing into a field, and which no menu item
+ * carries, since a menu's bare key would take the letter from every field.
  * Control joins only the system's own ⌃⌘F, since a Control chord is
  * otherwise a text field's caret move.
  */
@@ -197,6 +204,12 @@ export interface ShortcutChord {
   option?: true;
   shift?: true;
   bare?: true;
+  plain?: true;
+}
+
+/** Whether a chord is pressed without Command: the window's layered Escape, or a letter alone. */
+function commandless(chord: ShortcutChord): boolean {
+  return chord.bare === true || chord.plain === true;
 }
 
 /** One command as the menu, the hover, and the shortcuts page name it, and the chord that runs it. */
@@ -330,6 +343,14 @@ export const APP_SHORTCUTS = {
     label: "Exit inbox",
     chord: { key: SHORTCUT_KEY.ESCAPE, bare: true },
   },
+  [APP_COMMAND.PREVIOUS_INBOX_ITEM]: {
+    label: "Previous inbox item",
+    chord: { key: SHORTCUT_KEY.K, plain: true },
+  },
+  [APP_COMMAND.NEXT_INBOX_ITEM]: {
+    label: "Next inbox item",
+    chord: { key: SHORTCUT_KEY.J, plain: true },
+  },
   [APP_COMMAND.EXIT_AGENT_PAGE]: {
     label: "Exit agent page",
     chord: { key: SHORTCUT_KEY.ESCAPE, bare: true },
@@ -396,6 +417,8 @@ export const APP_SHORTCUT_GROUPS = [
       APP_COMMAND.HOME,
       APP_COMMAND.INBOX,
       APP_COMMAND.EXIT_INBOX,
+      APP_COMMAND.PREVIOUS_INBOX_ITEM,
+      APP_COMMAND.NEXT_INBOX_ITEM,
       APP_COMMAND.EXIT_AGENT_PAGE,
       APP_COMMAND.FACTORY,
       APP_COMMAND.EXIT_FACTORY,
@@ -492,7 +515,7 @@ export function shortcutAccelerator(chord: ShortcutChord): string {
     chord.control ? "Control" : undefined,
     chord.option ? "Alt" : undefined,
     chord.shift ? "Shift" : undefined,
-    chord.bare ? undefined : "Command",
+    commandless(chord) ? undefined : "Command",
     chord.key.accelerator,
   ]
     .filter((part) => part !== undefined)
@@ -525,7 +548,7 @@ export function shortcutLabel(accelerator: string): string {
 /** The chord as `aria-keyshortcuts` spells it. */
 export function shortcutAria(chord: ShortcutChord): string {
   return [
-    chord.bare ? undefined : "Meta",
+    commandless(chord) ? undefined : "Meta",
     chord.control ? "Control" : undefined,
     chord.option ? "Alt" : undefined,
     chord.shift ? "Shift" : undefined,
@@ -536,7 +559,7 @@ export function shortcutAria(chord: ShortcutChord): string {
 }
 
 /**
- * Whether a key press is the chord: Command and exactly the chord's other
+ * Whether a key press is the chord: Command, unless the chord goes without, and exactly the chord's other
  * modifiers, and the key. The character is read where it can be,
  * which is what the menu bar matches too, and the physical key where Option
  * has changed the character. A key with an unshifted character answers
@@ -544,7 +567,7 @@ export function shortcutAria(chord: ShortcutChord): string {
  * is the keyboard layout's to say.
  */
 function shortcutMatches(chord: ShortcutChord, event: KeyboardEvent): boolean {
-  if (event.metaKey === (chord.bare === true)) return false;
+  if (event.metaKey === commandless(chord)) return false;
   if (event.ctrlKey !== (chord.control === true)) return false;
   const shiftFree = chord.key.unshifted !== undefined;
   if (event.altKey !== (chord.option === true)) return false;
@@ -567,7 +590,7 @@ export function shortcutLayered(chord: ShortcutChord): boolean {
   return chord.bare === true;
 }
 
-/** Whether a field taking typing already answers the chord, so it is left to the field. */
+/** Whether a field taking typing already answers the chord, so it is left to the field: a key it edits with, or a letter alone. */
 export function shortcutEditsText(chord: ShortcutChord): boolean {
-  return chord.key.editsText === true;
+  return chord.key.editsText === true || chord.plain === true;
 }

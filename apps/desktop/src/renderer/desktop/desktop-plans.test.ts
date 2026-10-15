@@ -23,7 +23,7 @@ import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
 import { codingAgentsControl, plansControl, UNPINNED_SUMMARY } from "#testing/plans-control";
 import { relayout } from "#testing/resize-observer";
-import { runAppCommand } from "../app-commands";
+import { runAppCommand, useAppKeymap } from "../app-commands";
 import { MAIN_TAB } from "../planning/use-main-tabs";
 import { NO_LOOKS } from "../planning/use-plan-looks";
 import { SIDE_PANEL_TAB } from "../planning/use-side-panel";
@@ -191,7 +191,7 @@ function approvalItem(id: string, title: string, at: number): InboxItem {
 }
 
 /** The plan's Inbox tab over the items given, laid out 700px wide, too narrow for its list and the item side by side. */
-async function narrowPlanInbox(items: readonly InboxItem[]) {
+async function narrowPlanInbox(items: readonly InboxItem[], fullScreen = false) {
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
     value: () => ({
@@ -219,6 +219,7 @@ async function narrowPlanInbox(items: readonly InboxItem[]) {
               tabs: [MAIN_TAB.PLAN, MAIN_TAB.INBOX],
               tab: MAIN_TAB.INBOX,
             },
+            sidePanel: { ...plansControl().sidePanel, open: fullScreen, fullScreen },
             agents: codingAgentsControl({
               agentIds: ["8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21"],
               readInbox: ({ after }) =>
@@ -248,6 +249,7 @@ async function narrowPlanInbox(items: readonly InboxItem[]) {
         ? (tab.querySelector("[data-inbox-title]")?.textContent ?? "item")
         : "",
     ],
+    title: () => tab.querySelector("[data-inbox-title]")?.textContent,
     back: () => tab.querySelector<HTMLButtonElement>("button.inbox-back"),
     row: (title: string) =>
       [...tab.querySelectorAll<HTMLButtonElement>(".inbox-plans .sidebar-plan")].find((each) =>
@@ -268,6 +270,29 @@ test("a plan's Inbox tab too narrow for its list and the item side by side is th
   assert.equal(inbox.back(), null, "no way back to a list of one");
   assert.equal(runAppCommand(APP_COMMAND.BACK), false, "nor does Back's chord go to one");
   inbox.unmount();
+});
+
+test("a plan's Inbox the full-screen side panel covers leaves K and J to the panel, stepping nothing it hides", async () => {
+  const keys = createRoot(document.body.appendChild(document.createElement("div")));
+  function Keymap() {
+    useAppKeymap(true);
+    return null;
+  }
+  act(() => keys.render(createElement(Keymap)));
+  const inbox = await narrowPlanInbox(
+    [
+      approvalItem("a1b2c3d4-0000-4000-8000-000000000001", "Expire after 7 days?", 1_000),
+      approvalItem("a1b2c3d4-0000-4000-8000-000000000002", "Resend on bounce?", 2_000),
+    ],
+    true,
+  );
+  assert.equal(inbox.title(), "Resend on bounce?");
+  act(() => {
+    document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "j", bubbles: true }));
+  });
+  assert.equal(inbox.title(), "Resend on bounce?");
+  inbox.unmount();
+  act(() => keys.unmount());
 });
 
 test("a plan's Inbox tab too narrow for its list and the item side by side shows the chosen item under a way back to the list, whose rows open their items again", async () => {

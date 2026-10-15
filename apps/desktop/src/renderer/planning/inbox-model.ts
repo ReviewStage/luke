@@ -457,6 +457,44 @@ export function listedItems(view: InboxListView): readonly InboxListed[] {
   return view.groups.flatMap(({ holder, items }) => items.map((item) => ({ holder, item })));
 }
 
+/** Where the chosen item stands among those listed, counted from one, and the items either side of it in the list's order. */
+export interface InboxSteps {
+  readonly at: number;
+  readonly total: number;
+  readonly previous: InboxListed | undefined;
+  readonly next: InboxListed | undefined;
+}
+
+/**
+ * The items a reader steps through, in the list's order: every one listed
+ * but a folded group's, though the chosen item keeps its place where its
+ * group folds, since it stays open, so the steps from it still reach the
+ * rows either side.
+ */
+function rowedItems(
+  view: InboxListView,
+  folded: (key: string) => boolean,
+  chosen: string | undefined,
+): readonly InboxListed[] {
+  if (view.grouping === INBOX_GROUPING.NEWEST) return view.items;
+  return view.groups.flatMap(({ holder, items }) => {
+    const shut = folded(holderKey(holder));
+    return items.filter((item) => !shut || item.id === chosen).map((item) => ({ holder, item }));
+  });
+}
+
+/** The chosen item's place among the rows, in the list's own order, its grouping and filter as drawn and a folded group's other items left out; none where the list does not hold it. */
+export function inboxSteps(
+  view: InboxListView,
+  chosen: string | undefined,
+  folded: (key: string) => boolean,
+): InboxSteps | undefined {
+  const rowed = rowedItems(view, folded, chosen);
+  const at = rowed.findIndex(({ item }) => item.id === chosen);
+  if (at < 0) return undefined;
+  return { at: at + 1, total: rowed.length, previous: rowed[at - 1], next: rowed[at + 1] };
+}
+
 /** The item that stands chosen where none is: the first listed that waits, else the first listed. */
 export function firstChoice(view: InboxListView): InboxListed | undefined {
   const listed = listedItems(view);
