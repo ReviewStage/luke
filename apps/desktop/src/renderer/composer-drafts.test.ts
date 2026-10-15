@@ -348,3 +348,16 @@ test("past the most drafts kept, the oldest written goes, whosever it is, and th
   await sam.show(BILLING, { account: SAM });
   assert.equal(sam.box(), "Also the CSV", "a newer draft of another account's stands");
 });
+
+test("where an account kept a draft for one place under its id and a later one under its address, the later stands once both are its id's", async () => {
+  window.localStorage.setItem(
+    "luke.composerDrafts",
+    JSON.stringify([
+      keptEntry(DEAN.id, INVITES.plan.id, INVITES.agent.id, "Expire after a month"),
+      keptEntry(DEAN.email, INVITES.plan.id, INVITES.agent.id, "Expire invites after a week"),
+    ]),
+  );
+  const app = windowOn(AtomRegistry.make());
+  await app.show(INVITES, { account: DEAN });
+  assert.equal(app.box(), "Expire invites after a week");
+});

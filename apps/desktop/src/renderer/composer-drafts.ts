@@ -210,15 +210,26 @@ const draftsAtom = Atom.writable(
   (ctx, change: DraftChange) => ctx.set(draftsOf(ctx.get(ownerAtom)), change),
 );
 
-/** Moves the drafts kept under an account's address to its id, the order they were written kept, once its identity learns its id. */
+/**
+ * Moves the drafts kept under an account's address to its id once its
+ * identity learns the id, the order they were written kept; where the id
+ * and the address each kept a draft for one place, the one written later
+ * stands, as one place holds one draft.
+ */
 function adoptDrafts(address: string, accountId: string): void {
-  const stored = readStored();
-  if (!stored.some((entry) => entry.accountId === address)) return;
-  writeKept(
-    STORAGE_KEY,
-    storedDrafts,
-    stored.map((entry) => (entry.accountId === address ? { ...entry, accountId } : entry)),
+  const entries = readStored();
+  if (!entries.some((entry) => entry.accountId === address)) return;
+  const moved = entries.map((entry) =>
+    entry.accountId === address ? { ...entry, accountId } : entry,
   );
+  const latest = moved.filter(
+    (entry, at) =>
+      entry.accountId !== accountId ||
+      !moved
+        .slice(at + 1)
+        .some((later) => later.accountId === accountId && Equal.equals(later.place, entry.place)),
+  );
+  writeKept(STORAGE_KEY, storedDrafts, latest);
 }
 
 /**
