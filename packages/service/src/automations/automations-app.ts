@@ -16,7 +16,7 @@ import {
 } from "@luke/database/models/automation-store";
 import { readCodingAgent } from "@luke/database/models/coding-agent-store";
 import { readPlan } from "@luke/database/models/plan-store";
-import { personalWorkspaceOf } from "@luke/database/models/workspace-store";
+import { isWorkspaceMember, personalWorkspaceOf } from "@luke/database/models/workspace-store";
 import { wireUuidSchema } from "@luke/features";
 import { nextScheduledRun, readSchedule } from "@luke/features/automation-schedule";
 import {
@@ -46,6 +46,7 @@ import { acceptedAgentChoice } from "../agents/coder-host/start.js";
 import { type AgentTurnStanding, codingAgentStatusOf } from "../agents/coder-host/status.js";
 import { type EveReach, eveFor, standingsOf } from "../agents/coder-host/stop.js";
 import type { GitHubApp } from "../github/github-app.js";
+import { workspaceRepository } from "../github/workspace-repository.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
   HOSTED_REFUSAL,
@@ -237,6 +238,9 @@ const summaryOf = /* @__PURE__ */ Effect.fnUntraced(function* (
     id: automation.id,
     planId: automation.planId,
     planName: automation.planName,
+    ...(automation.organizationId === null
+      ? undefined
+      : { workspaceId: automation.organizationId }),
     name: automation.name,
     enabled: automation.enabled,
     pausedReason: automation.pausedReason,
@@ -294,24 +298,98 @@ const checkedScope = /* @__PURE__ */ Effect.fnUntraced(function* (
   return scope;
 });
 
-/** GET: the account's automations, or one plan's. */
+/** GET: the account's automations, or one plan's, or one workspace's. */
 const listEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   request: Request,
 ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, RouteServices> {
-  const plans = new URL(request.url).searchParams.getAll(AUTOMATION_LIST_QUERY.PLAN_ID);
-  if (plans.length > 1) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  const [named] = plans;
-  const plan = named === undefined ? undefined : readEither(wireUuidSchema)(unparsedWire(named));
-  if (plan !== undefined && Result.isFailure(plan)) {
+  const query = new URL(request.url).searchParams;
+  const plans = query.getAll(AUTOMATION_LIST_QUERY.PLAN_ID);
+  const workspaces = query.getAll(AUTOMATION_LIST_QUERY.WORKSPACE_ID);
+  if (plans.length > 1 || workspaces.length > 1) {
     return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   }
-  const automations = yield* hostedStoreOrUnavailable(listAutomations(userId, plan?.success));
+  const [named] = plans;
+  const [organizationId] = workspaces;
+  const plan = named === undefined ? undefined : readEither(wireUuidSchema)(unparsedWire(named));
+  if ((plan !== undefined && Result.isFailure(plan)) || organizationId === "") {
+    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  }
+  const automations = yield* hostedStoreOrUnavailable(
+    listAutomations(userId, { planId: plan?.success, organizationId }),
+  );
   const summaries = yield* Effect.forEach(automations, (each) => summaryOf(userId, each));
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { automations: summaries });
 });
 
-/** POST: an automation made on one of the account's plans with a repository. */
+/**
+ * The repositories an automation's runs work in, each as GitHub spells it,
+ * where the workspace's installation reaches every one; refused as the
+ * first it does not reach is refused.
+ */
+const reachedRepositories = /* @__PURE__ */ Effect.fnUntraced(function* (
+  organizationId: string,
+  repositories: readonly string[],
+): Effect.fn.Return<
+  readonly string[],
+  HostedRefusal,
+  GitHubApp | HttpClient.HttpClient | DatabaseServices
+> {
+  const reached = yield* Effect.forEach(repositories, (repository) =>
+    workspaceRepository(organizationId, repository),
+  );
+  return reached.map((repository) => repository.fullName);
+});
+
+/** Where a new automation stands: its plan, as the plan names its workspace and repository, or a workspace and the repositories named, each reached through it. */
+interface Standing {
+  readonly planId: string | null;
+  readonly organizationId: string;
+  readonly repositories: readonly string[] | undefined;
+}
+
+/**
+ * Where the request puts a new automation, read as the account: on a plan
+ * that names a repository, or on a workspace the account is a member of with
+ * repositories its installation reaches; a request naming both, or neither,
+ * or a workspace with no repositories, or with a GitHub trigger, which is
+ * heard only on a plan's repository, is refused as no request at all.
+ */
+const standingOf = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
+  made: typeof automationCreateRequestSchema.Type,
+): Effect.fn.Return<Standing, HostedRefusal, RouteServices> {
+  if (made.planId !== undefined) {
+    if (made.workspaceId !== undefined || made.repositories !== undefined) {
+      return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+    }
+    const plan = yield* hostedStoreOrUnavailable(readPlan(userId, made.planId));
+    if (Option.isNone(plan)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+    if (plan.value.plan.repository === null) {
+      return yield* Effect.fail(HOSTED_REFUSAL.NO_REPOSITORY);
+    }
+    return {
+      planId: made.planId,
+      organizationId: plan.value.plan.workspaceId,
+      repositories: undefined,
+    };
+  }
+  // Note that a GitHub event is heard only on a plan's repository while GitHub triggers stay
+  // dormant, so an automation with no plan fires on its schedule alone.
+  if (
+    made.workspaceId === undefined ||
+    made.repositories === undefined ||
+    made.trigger.kind === AUTOMATION_TRIGGER.GITHUB
+  ) {
+    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  }
+  const member = yield* hostedStoreOrUnavailable(isWorkspaceMember(userId, made.workspaceId));
+  if (!member) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  const repositories = yield* reachedRepositories(made.workspaceId, made.repositories);
+  return { planId: null, organizationId: made.workspaceId, repositories };
+});
+
+/** POST: an automation made on one of the account's plans with a repository, or on a workspace of the account's with the repositories its runs work in. */
 const createEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
 ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, RouteServices> {
@@ -323,12 +401,10 @@ const createEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   const now = yield* Clock.currentTimeMillis;
   const nextRunAt = yield* firstDue(made.trigger, now);
   const action = yield* checkedAction(userId, made.action);
-  const plan = yield* hostedStoreOrUnavailable(readPlan(userId, made.planId));
-  if (Option.isNone(plan)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  if (plan.value.plan.repository === null) return yield* Effect.fail(HOSTED_REFUSAL.NO_REPOSITORY);
+  const standing = yield* standingOf(userId, made);
   const scope = yield* checkedScope(
     userId,
-    plan.value.plan.workspaceId,
+    standing.organizationId,
     made.scope ?? AUTOMATION_SCOPE.PERSONAL,
   );
   const target = yield* checkedTarget(userId, made.target ?? { kind: AUTOMATION_TARGET.NEW_AGENT });
@@ -336,7 +412,9 @@ const createEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
     made.trigger.kind === AUTOMATION_TRIGGER.WEBHOOK ? mintWebhookSecret() : undefined;
   const created = yield* hostedStoreOrUnavailable(
     createAutomation(userId, {
-      planId: made.planId,
+      planId: standing.planId,
+      organizationId: standing.organizationId,
+      repositories: standing.repositories,
       name: made.name,
       trigger: made.trigger,
       action,
@@ -386,7 +464,7 @@ const changesOf = /* @__PURE__ */ Effect.fnUntraced(function* (
 ): Effect.fn.Return<
   { readonly changes: AutomationChanges; readonly webhookSecret: string | undefined },
   HostedRefusal,
-  DatabaseServices | ModelCatalog
+  DatabaseServices | ModelCatalog | GitHubApp | HttpClient.HttpClient
 > {
   const now = yield* Clock.currentTimeMillis;
   // A webhook sent again is no change, since a webhook names nothing but its kind, so its secret
@@ -411,6 +489,15 @@ const changesOf = /* @__PURE__ */ Effect.fnUntraced(function* (
       : yield* checkedScope(userId, standing.organizationId, asked.scope);
   const target =
     asked.target === undefined ? undefined : yield* checkedTarget(userId, asked.target);
+  // Note that new repositories are read through the automation's own workspace, as its runs will
+  // reach them, and that one standing on a plan takes its plan's repository and no other.
+  if (asked.repositories !== undefined && standing.planId !== null) {
+    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  }
+  const repositories =
+    asked.repositories === undefined || standing.organizationId === null
+      ? undefined
+      : yield* reachedRepositories(standing.organizationId, asked.repositories);
   // Note that only a resume or a pause moves the due instant, so a form that sends `enabled` as it stands skips no firing.
   const reschedules =
     newTrigger !== undefined || (asked.enabled !== undefined && asked.enabled !== standing.enabled);
@@ -425,6 +512,7 @@ const changesOf = /* @__PURE__ */ Effect.fnUntraced(function* (
     ...(reschedules ? { nextRunAt: enabled ? due : null } : undefined),
     ...(webhook === undefined ? undefined : { webhookSecretHash: webhook.hash }),
     ...(scope === undefined ? undefined : { scope }),
+    ...(repositories === undefined ? undefined : { repositories }),
     ...target,
     ...(asked.archiveSuccessful === undefined
       ? undefined

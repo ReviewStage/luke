@@ -87,6 +87,42 @@ const nightly = (planId: string): NewAutomation => ({
 
 it.layer(getTestDB())("the automation store", (it) => {
   it.effect(
+    "an automation made on a workspace with no plan takes the workspace and repositories named, lists under that workspace, and is made by no account outside it",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const outsider = yield* openAccount;
+        const planId = yield* openPlan(owner);
+        const onPlan = Option.getOrThrow(yield* createAutomation(owner, nightly(planId)));
+        const workspace = onPlan.organizationId ?? "";
+        const made = (by: string) =>
+          createAutomation(by, {
+            ...nightly(planId),
+            planId: null,
+            organizationId: workspace,
+            repositories: ["acme/api", "acme/web"],
+          });
+
+        const planless = Option.getOrThrow(yield* made(owner));
+        const refused = yield* made(outsider);
+
+        assert.deepEqual(
+          [planless.planId, planless.planName, planless.organizationId, planless.repositories],
+          [null, null, workspace, ["acme/api", "acme/web"]],
+        );
+        assert.ok(Option.isNone(refused), "an account outside the workspace makes nothing there");
+        // Note that the two were made in one instant, so their order is their ids', and read as a set.
+        assert.deepEqual(
+          (yield* listAutomations(owner, { organizationId: workspace }))
+            .map((each) => each.id)
+            .toSorted(),
+          [planless.id, onPlan.id].toSorted(),
+        );
+        assert.deepEqual(yield* listAutomations(outsider, { organizationId: workspace }), []);
+      }),
+  );
+
+  it.effect(
     "a new automation takes its plan's workspace and repository, its owner's alone and a new agent each run where the maker names neither",
     () =>
       Effect.gen(function* () {
