@@ -61,20 +61,23 @@ export function OpenPage(): React.JSX.Element {
             {WORDS.OPEN}
           </a>
         )}
-        {pressed ? (
-          <p className="mt-4 mb-0 animate-arrive-late text-muted-foreground" role="status">
-            {WORDS.DID_NOT_OPEN}{" "}
-            <a className={QUIET_LINK} href={LANDING_URL}>
-              {WORDS.INSTALLED}
-            </a>
-            .
-          </p>
-        ) : null}
         <p className="mt-4 mb-0 text-muted-foreground">
           {WORDS.NO_APP}{" "}
           <a className={QUIET_LINK} href={LANDING_URL}>
             {WORDS.GET}
           </a>
+        </p>
+        {/* Note that the line's room stands from the first paint, because a card growing under a press would move the button from under the pointer. */}
+        <p className="mt-3 mb-0 min-h-5 text-muted-foreground text-sm" role="status">
+          {pressed ? (
+            <span className="animate-arrive-late">
+              {WORDS.DID_NOT_OPEN}{" "}
+              <a className={QUIET_LINK} href={LANDING_URL}>
+                {WORDS.INSTALLED}
+              </a>
+              .
+            </span>
+          ) : null}
         </p>
       </section>
     </main>

@@ -56,7 +56,7 @@ test("the press opens the plan's section in the app, in the app's own scheme", (
 
 test("a press is followed by a line saying what to check, which leads to the landing page", () => {
   const page = pageAt(`/acme/plan/${PLAN_ID}`);
-  assert.equal(page.querySelector('[role="status"]'), null);
+  assert.equal(page.querySelector('[role="status"]')?.textContent, "");
 
   const open = linkNamed(page, "Open in Luke");
   assert.ok(open !== undefined);
