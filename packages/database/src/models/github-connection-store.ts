@@ -11,7 +11,7 @@ import { Database } from "../core/query.js";
 import { account } from "../schemas/auth.js";
 import { githubConnectIntent } from "../schemas/github-connect-intent.js";
 import { InstantColumnSchema } from "./columns.js";
-import type { PlanStoreEffect } from "./plan-store.js";
+import type { TaskStoreEffect } from "./task-store.js";
 
 /**
  * github-connection-store.ts -- whether an account has linked its GitHub, and the connect intents that carry a Mac's request to the browser that links it.
@@ -131,7 +131,7 @@ function usableAt(row: GitHubAccountTokens, now: Date): boolean {
 }
 
 /** A new connect intent for the account, answering its opaque id; it stands for ten minutes from now. */
-export function openGitHubConnectIntent(userId: string): PlanStoreEffect<string> {
+export function openGitHubConnectIntent(userId: string): TaskStoreEffect<string> {
   return Effect.gen(function* () {
     const now = yield* DateTime.now;
     const id = randomBytes(INTENT_ID_BYTES).toString("base64url");
@@ -152,7 +152,7 @@ export function openGitHubConnectIntent(userId: string): PlanStoreEffect<string>
 export function claimGitHubConnectIntent(
   intentId: string,
   userId: string,
-): PlanStoreEffect<GitHubConnectClaim> {
+): TaskStoreEffect<GitHubConnectClaim> {
   return Effect.gen(function* () {
     const now = DateTime.toDate(yield* DateTime.now);
     const standing = yield* findStandingIntent({ id: intentId, now });
@@ -169,7 +169,7 @@ export function claimGitHubConnectIntent(
  * is null: the service holds none to answer with, and no token leaves it to
  * read one.
  */
-export function githubConnection(userId: string): PlanStoreEffect<GitHubConnection> {
+export function githubConnection(userId: string): TaskStoreEffect<GitHubConnection> {
   return Effect.gen(function* () {
     const now = DateTime.toDate(yield* DateTime.now);
     const row = yield* findNewestGitHubAccount(userId);

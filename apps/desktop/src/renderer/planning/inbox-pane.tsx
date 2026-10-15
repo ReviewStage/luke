@@ -19,7 +19,7 @@ import {
   knownResponse,
 } from "@luke/features/inbox-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
-import type { CodeRef } from "@luke/features/plan-wire";
+import type { CodeRef } from "@luke/features/task-wire";
 import { BackIcon, ChevronRightIcon, CodingAgentsIcon } from "@luke/ui";
 import { copiedLines, fileRefText } from "@luke/voice/code-pane-model";
 import { CheckIcon, ClockIcon } from "lucide-react";

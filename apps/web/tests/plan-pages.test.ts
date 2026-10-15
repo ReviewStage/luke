@@ -4,7 +4,7 @@ import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { listPages, readPageVersion, writePage } from "@luke/database/models/plan-pages";
 import { user } from "@luke/database/schemas/auth";
-import { getTestDB, joinWorkspace, startPlan } from "@luke/database/testing";
+import { getTestDB, joinWorkspace, startTask } from "@luke/database/testing";
 import { Effect, Option } from "effect";
 
 /**
@@ -29,7 +29,7 @@ const openAccount = Effect.gen(function* () {
 
 const openPlan = Effect.gen(function* () {
   const userId = yield* openAccount;
-  const plan = yield* startPlan(userId, { name: "Teammate invitations" });
+  const plan = yield* startTask(userId, { name: "Teammate invitations" });
   return { userId, planId: plan.id, workspaceId: plan.workspaceId };
 });
 

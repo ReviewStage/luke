@@ -27,7 +27,7 @@ the host, and a web function alike.
   the template's own shape, with no sample line.
 
 No full persona stands here: the brain's planning instructions
-(`packages/service/src/agents/brain-host/planning.ts`) hold it, and shape what the
+(`packages/service/src/agents/brain-host/brain.ts`) hold it, and shape what the
 brain hands the voice.
 
 ## Tests

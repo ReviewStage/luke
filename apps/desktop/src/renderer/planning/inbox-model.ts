@@ -17,9 +17,9 @@ import {
   inboxReplyRefusal,
   knownResponse,
 } from "@luke/features/inbox-wire";
-import type { PlanFileRequest, PlanSummary } from "@luke/features/plan-wire";
-import type { PlanCode, PlanningFileAnswer } from "@luke/features/planning-view";
-import type { AppInboxPlanlessItem } from "@luke/host/app-state";
+import type { TaskFileRequest, TaskSummary } from "@luke/features/task-wire";
+import type { TaskCode, TasksFileAnswer } from "@luke/features/tasks-view";
+import type { AppInboxTasklessItem } from "@luke/host/app-state";
 import { isWireString } from "@luke/wire";
 import type { CountNoun } from "../desktop/sidebar-group-header";
 import { refusalLine, refusalPasses } from "./file-tab-model";
@@ -296,7 +296,7 @@ export const INBOX_HOLDER = {
 } as const;
 
 /** An agent with no plan as main's read of what waits on the developer names it: its title, its model, and the automation that started it. */
-type InboxAgentLine = Pick<AppInboxPlanlessItem, "agentTitle" | "agentModel" | "automationId">;
+type InboxAgentLine = Pick<AppInboxTasklessItem, "agentTitle" | "agentModel" | "automationId">;
 
 /**
  * The plan holding an item, or the automation holding an item of an agent
@@ -305,7 +305,7 @@ type InboxAgentLine = Pick<AppInboxPlanlessItem, "agentTitle" | "agentModel" | "
  * reader may read started.
  */
 export type InboxHolder =
-  | { readonly kind: typeof INBOX_HOLDER.PLAN; readonly plan: PlanSummary }
+  | { readonly kind: typeof INBOX_HOLDER.PLAN; readonly plan: TaskSummary }
   | {
       readonly kind: typeof INBOX_HOLDER.AUTOMATION;
       readonly automationId: string | null;
@@ -316,7 +316,7 @@ export type InboxHolder =
 
 /** An agent with no plan as the Inbox groups it: what its group and row name it by, and the workspace whose list holds it; one with an item waiting, or one a link names whose items are all settled. */
 export type PlanlessAgent = Pick<
-  AppInboxPlanlessItem,
+  AppInboxTasklessItem,
   | "agentId"
   | "agentTitle"
   | "agentModel"
@@ -333,7 +333,7 @@ export function holderKey(holder: InboxHolder): string {
 }
 
 /** A plan as the holder of its items. */
-export function planHolder(plan: PlanSummary): InboxHolder {
+export function planHolder(plan: TaskSummary): InboxHolder {
   return { kind: INBOX_HOLDER.PLAN, plan };
 }
 
@@ -355,7 +355,7 @@ const NO_AUTOMATION_NAME = "Other agents";
  * stand, as every plan's do.
  */
 export function listedIn(
-  entry: Pick<AppInboxPlanlessItem, "workspaceId">,
+  entry: Pick<AppInboxTasklessItem, "workspaceId">,
   workspaceId: string | undefined,
 ): boolean {
   return (
@@ -544,7 +544,7 @@ export const CODE_READ = {
 
 export type CodeRead =
   | { readonly kind: typeof CODE_READ.READING }
-  | { readonly kind: typeof CODE_READ.READY; readonly code: PlanCode }
+  | { readonly kind: typeof CODE_READ.READY; readonly code: TaskCode }
   | {
       readonly kind: typeof CODE_READ.NOTICE;
       readonly line: string;
@@ -560,7 +560,7 @@ const CODE_UNREAD = "These lines could not be read.";
  * of the file around them, at the block's commit. Note that the window may
  * run past the file's end, which the service answers with the lines it has.
  */
-export function codeWindow(block: InboxCodeBlock): PlanFileRequest {
+export function codeWindow(block: InboxCodeBlock): TaskFileRequest {
   return {
     path: block.path,
     firstLine: Math.max(1, block.startLine - CODE_CONTEXT_LINES),
@@ -591,7 +591,7 @@ export function codeNotice(block: InboxCodeBlock, repository: string | null): st
  * it; or why they are not drawn, a file that ends before they do included, and
  * whether reading again may draw them.
  */
-export function codeReadOf(block: InboxCodeBlock, answer: PlanningFileAnswer): CodeRead {
+export function codeReadOf(block: InboxCodeBlock, answer: TasksFileAnswer): CodeRead {
   if ("refusal" in answer) {
     return {
       kind: CODE_READ.NOTICE,

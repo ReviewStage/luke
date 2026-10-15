@@ -55,7 +55,7 @@ it.layer(getTestDB())("an agent's title", (it) => {
         const organizationId = yield* openWorkspace(owner);
         const started = Option.getOrThrow(
           yield* createCodingAgent(owner, {
-            planId: null,
+            taskId: null,
             organizationId,
             planSnapshot: null,
             prompt: HANDED,

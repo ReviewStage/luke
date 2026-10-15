@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import type { CodingAgentAgentAnswer } from "@luke/features/coding-agent-view";
-import type { PlanningFileAnswer } from "@luke/features/planning-view";
+import type { TasksFileAnswer } from "@luke/features/tasks-view";
 import { ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -84,7 +84,7 @@ const PAGE: PlanMentionsValue = {
 };
 
 /** The file as the service read it at the head's commit. */
-const readFile = (): Promise<PlanningFileAnswer> =>
+const readFile = (): Promise<TasksFileAnswer> =>
   Promise.resolve({
     file: {
       path: "src/invite.ts",

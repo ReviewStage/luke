@@ -60,7 +60,7 @@ export interface VoiceView extends VoiceSpeakers {
   /** The developer's own words still being said, drawn only under the captions preference. */
   developerCaptions: readonly string[] | undefined;
   /** The plan the standing call is about, where the panel's open plan opened it; none for no call. */
-  callPlanId: string | undefined;
+  callTaskId: string | undefined;
   /** What was said on the standing call so far, whatever the captions preference; none for no call or before its first line. */
   callTranscript: VoiceCallTranscript | undefined;
   /** The store's id for the session of the last call Luke ended himself; none before he has. */
@@ -101,7 +101,7 @@ export const IDLE_VOICE_VIEW: VoiceView = {
   talkOpening: false,
   lukeCaptions: undefined,
   developerCaptions: undefined,
-  callPlanId: undefined,
+  callTaskId: undefined,
   callTranscript: undefined,
   lukeEndedCall: undefined,
   speakerMuted: false,
@@ -121,8 +121,8 @@ const CALL_IN_PROGRESS: ReadonlySet<LiveStatus> = new Set([
  * progress. The panel's call bar, the mute chords, and the floating call
  * window all answer to it.
  */
-export function callInProgress(view: Pick<VoiceView, "voiceStatus" | "callPlanId">): boolean {
-  return view.callPlanId !== undefined && CALL_IN_PROGRESS.has(view.voiceStatus);
+export function callInProgress(view: Pick<VoiceView, "voiceStatus" | "callTaskId">): boolean {
+  return view.callTaskId !== undefined && CALL_IN_PROGRESS.has(view.voiceStatus);
 }
 
 const LIVE_STATUSES: ReadonlySet<string> = new Set(Object.values(LIVE_STATUS));
@@ -171,7 +171,7 @@ export function isVoiceView(value: UnparsedWireValue): value is VoiceView & Wire
   if (!isOptionalWireString(value.voiceError) || !isOptionalWireString(value.voiceNotice))
     return false;
   if (!isWireBoolean(value.talkOpening)) return false;
-  if (!isOptionalWireString(value.callPlanId)) return false;
+  if (!isOptionalWireString(value.callTaskId)) return false;
   if (!isOptionalCallTranscript(value.callTranscript)) return false;
   if (!isOptionalWireString(value.lukeEndedCall)) return false;
   if (!isWireBoolean(value.speakerMuted)) return false;

@@ -239,7 +239,7 @@ export function usePlanInbox(input: {
       let after = INBOX_CURSOR_START;
       while (live) {
         const { reader, readInbox } = latest.current;
-        const read = reader === undefined ? readInbox({ planId, after }) : reader(after);
+        const read = reader === undefined ? readInbox({ taskId: planId, after }) : reader(after);
         const answer = await read.catch((): CodingAgentInboxAnswerView => UNANSWERED);
         if (!live) return;
         if ("failure" in answer) {

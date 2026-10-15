@@ -1,7 +1,7 @@
-import type { PlanSummary } from "@luke/features/plan-wire";
+import type { TaskSummary } from "@luke/features/task-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { CONFIRM_STAGE, confirmAsked } from "@luke/ui/confirm-state";
-import { strandedPlanHome, workspaceReaches } from "@luke/ui/planning-model";
+import { strandedTaskHome, workspaceReaches } from "@luke/ui/tasks-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useId, useRef, useState } from "react";
 import { ModalShell } from "../modal-shell";
@@ -44,12 +44,12 @@ const STEP_KEYS = new Map([
 const MOVE_REFUSED = "The task could not be moved. Try again.";
 
 /** The workspaces a plan may be moved to: every one the account is in but its own. */
-function otherWorkspaces(plans: PlansControl, plan: PlanSummary): readonly Workspace[] {
+function otherWorkspaces(plans: PlansControl, plan: TaskSummary): readonly Workspace[] {
   return plans.workspaces.filter((workspace) => workspace.id !== plan.workspaceId);
 }
 
 /** Whether the reader may be the one to move the plan: its owner, or nobody the window can tell is not. */
-function ownsPlan(plans: Pick<PlansControl, "me">, plan: PlanSummary): boolean {
+function ownsPlan(plans: Pick<PlansControl, "me">, plan: TaskSummary): boolean {
   return plan.ownerId === undefined || plans.me === undefined || plan.ownerId === plans.me;
 }
 
@@ -166,7 +166,7 @@ function MovePlanCard({
   onChoose,
 }: {
   confirm: DialogConfirm;
-  plan: PlanSummary;
+  plan: TaskSummary;
   from: Workspace | undefined;
   workspaces: readonly Workspace[];
   personalId: string | undefined;
@@ -249,10 +249,10 @@ function MovePlanCard({
  */
 export function strandedHome(
   plans: Pick<PlansControl, "me" | "workspaces">,
-  plan: PlanSummary,
+  plan: TaskSummary,
 ): Workspace | undefined {
   if (plan.archivedAt !== undefined || !ownsPlan(plans, plan)) return undefined;
-  return strandedPlanHome(plan, plans.workspaces);
+  return strandedTaskHome(plan, plans.workspaces);
 }
 
 /** One plan's Move to workspace as a door holds it. */
@@ -266,7 +266,7 @@ interface MovePlanDoor {
 /** One plan's Move to workspace, held for whichever door offers its menu. */
 export function useMovePlanDialog(
   plans: PlansControl,
-  plan: PlanSummary | undefined,
+  plan: TaskSummary | undefined,
 ): MovePlanDoor {
   const others = plan === undefined ? [] : otherWorkspaces(plans, plan);
   const offered =

@@ -18,11 +18,11 @@ import {
 } from "@luke/features";
 import { PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
 import {
-  PLAN_FILE_REFUSAL,
-  PLAN_TREE_ENTRY,
-  planSkillsAnswerSchema,
-  planTreeAnswerSchema,
-} from "@luke/features/plan-wire";
+  TASK_FILE_REFUSAL,
+  TASK_TREE_ENTRY,
+  taskSkillsAnswerSchema,
+  taskTreeAnswerSchema,
+} from "@luke/features/task-wire";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Clock, Effect, Layer, Option, Result, type Schema } from "effect";
@@ -357,18 +357,18 @@ it.layer(getTestDB())("the repositories route", (it) => {
           ] as const;
 
         const tree = readOf(
-          planTreeAnswerSchema,
+          taskTreeAnswerSchema,
           yield* read(owner, HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_TREE, [
             ...place("acme/relay"),
             ["path", "src"],
           ]),
         );
         const skills = readOf(
-          planSkillsAnswerSchema,
+          taskSkillsAnswerSchema,
           yield* read(owner, HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_SKILLS, place("acme/relay")),
         );
         const elsewhere = readOf(
-          planTreeAnswerSchema,
+          taskTreeAnswerSchema,
           yield* read(owner, HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_TREE, place("acme/ledger")),
         );
 
@@ -378,8 +378,8 @@ it.layer(getTestDB())("the repositories route", (it) => {
             repository: "acme/relay",
             branch: "main",
             entries: [
-              { name: "invite.ts", kind: PLAN_TREE_ENTRY.FILE },
-              { name: "mail", kind: PLAN_TREE_ENTRY.FOLDER },
+              { name: "invite.ts", kind: TASK_TREE_ENTRY.FILE },
+              { name: "mail", kind: TASK_TREE_ENTRY.FOLDER },
             ],
             truncated: false,
           },
@@ -387,7 +387,7 @@ it.layer(getTestDB())("the repositories route", (it) => {
         assert.deepEqual(skills, {
           skills: { repository: "acme/relay", branch: "main", skills: [] },
         });
-        assert.deepEqual(elsewhere, { refusal: PLAN_FILE_REFUSAL.NOT_REACHABLE });
+        assert.deepEqual(elsewhere, { refusal: TASK_FILE_REFUSAL.NOT_REACHABLE });
       }),
   );
 

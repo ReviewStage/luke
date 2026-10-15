@@ -5,10 +5,13 @@ import {
 } from "@luke/database/models/coding-agent-store";
 import { sentLineId } from "@luke/database/models/ids";
 import { sentLineStands } from "@luke/database/models/message-reads";
-import { readPlan } from "@luke/database/models/plan-store";
 import { recordedRuntimeSession } from "@luke/database/models/recorded-session";
-import type { LineSender, StoreWriter } from "@luke/database/models/writer";
-import { STORE_WRITE_REFUSAL } from "@luke/database/models/writer";
+import { readTask } from "@luke/database/models/task-store";
+import {
+  type LineSender,
+  STORE_WRITE_REFUSAL,
+  type StoreWriter,
+} from "@luke/database/models/writer";
 import { CODING_AGENT_STATUS, type CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import { causeKind } from "@luke/runtime/effect";
 import { Clock, Effect, Option, Result } from "effect";
@@ -124,25 +127,25 @@ export const steerCodingAgent = /* @__PURE__ */ Effect.fn("web/steerCodingAgent"
   if (agent.archivedAt !== null) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   // An agent on a plan answers to the plan, read as the sender; one with no plan, to its workspace.
   const held =
-    agent.planId === null
+    agent.taskId === null
       ? undefined
-      : yield* hostedStoreOrUnavailable(readPlan(userId, agent.planId));
+      : yield* hostedStoreOrUnavailable(readTask(userId, agent.taskId));
   if (held !== undefined && Option.isNone(held))
     return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  const plan = held === undefined ? undefined : Option.getOrUndefined(held);
-  if (plan?.plan.archivedAt !== undefined) return yield* Effect.fail(HOSTED_REFUSAL.PLAN_ARCHIVED);
+  const task = held === undefined ? undefined : Option.getOrUndefined(held);
+  if (task?.task.archivedAt !== undefined) return yield* Effect.fail(HOSTED_REFUSAL.TASK_ARCHIVED);
   const workspace = yield* hostedStoreOrUnavailable(agentWorkspace(userId, agent));
   if (Option.isNone(workspace)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   yield* workspaceRepository(
     workspace.value,
     agent.repository,
-    plan?.ownerId === userId ? userId : undefined,
+    task?.ownerId === userId ? userId : undefined,
   );
   const sessionId = yield* hostedStoreOrUnavailable(recordedRuntimeSession(target));
   if (sessionId === undefined) return yield* Effect.fail(yield* unstartedRefusal(agent));
   // What the words mention of the plan goes with them, read off the plan this send read as its sender.
-  const reads = yield* hostedStoreOrUnavailable(readMentioned(userId, line.text, plan?.plan));
-  const mentioned = mentionedContext(line.text, plan?.plan, reads);
+  const reads = yield* hostedStoreOrUnavailable(readMentioned(userId, line.text, task?.task));
+  const mentioned = mentionedContext(line.text, task?.task, reads);
   // eve's refusal is kept beside the dispatch, since the write answers only whether a row landed.
   let refused: HostedRefusal | undefined;
   const handOver = eve
@@ -173,7 +176,7 @@ export const steerCodingAgent = /* @__PURE__ */ Effect.fn("web/steerCodingAgent"
   const dispatch = dispatchMentioningServers(
     userId,
     agent.id,
-    mentionedServers(line.text, plan?.plan.repository ?? null),
+    mentionedServers(line.text, task?.task.repository ?? null),
     handOver,
   ).pipe(
     Effect.catchCause((cause) =>

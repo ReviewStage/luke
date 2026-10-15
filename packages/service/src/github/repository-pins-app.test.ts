@@ -4,7 +4,7 @@ import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB } from "@luke/database/testing";
-import { repositoryPinsAnswerSchema } from "@luke/features/plan-wire";
+import { repositoryPinsAnswerSchema } from "@luke/features/task-wire";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Clock, Effect, Layer, Option, Result } from "effect";

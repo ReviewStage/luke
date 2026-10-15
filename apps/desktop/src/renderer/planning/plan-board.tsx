@@ -75,8 +75,8 @@ interface BoardSave {
 const boardSaveAtom = rendererRuntime.fn((save: BoardSave) =>
   Effect.gen(function* () {
     yield* Effect.sleep(SAVE_PAUSE);
-    const scene: ActPayload<typeof ACT_KIND.PLANNING_BOARD_SAVE> = {
-      planId: save.planId,
+    const scene: ActPayload<typeof ACT_KIND.TASKS_BOARD_SAVE> = {
+      taskId: save.planId,
       elements: admittedElements(save.elements),
       appliedDrawing: save.appliedDrawing,
     };
@@ -85,7 +85,7 @@ const boardSaveAtom = rendererRuntime.fn((save: BoardSave) =>
       : undefined;
     const payload = image === undefined ? scene : { ...scene, image };
     yield* Effect.tryPromise({
-      try: () => window.luke.act(actRequest(ACT_KIND.PLANNING_BOARD_SAVE, payload)),
+      try: () => window.luke.act(actRequest(ACT_KIND.TASKS_BOARD_SAVE, payload)),
       catch: (error) => error,
     });
   }),
@@ -110,7 +110,7 @@ function BoardCanvas({
   const latestBoard = useRef(board);
   latestBoard.current = board;
   const save = useAtomSet(boardSaveAtom);
-  const looking = useAppState()?.planning.activity?.planner?.action === LOOK_AT_BOARD_TOOL_NAME;
+  const looking = useAppState()?.tasks.activity?.planner?.action === LOOK_AT_BOARD_TOOL_NAME;
 
   useEffect(() => {
     const element = host.current;

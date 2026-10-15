@@ -32,7 +32,7 @@
     "./models/plan-pages": "./src/models/plan-pages.js",
     "./models/plan-revisions": "./src/models/plan-revisions.js",
     "./models/plan-template-revisions": "./src/models/plan-template-revisions.js",
-    "./models/plan-store": "./src/models/plan-store.js",
+    "./models/task-store": "./src/models/task-store.js",
     "./models/provider-key-seal": "./src/models/provider-key-seal.js",
     "./models/provider-key-store": "./src/models/provider-key-store.js",
     "./models/quota": "./src/models/quota.js",

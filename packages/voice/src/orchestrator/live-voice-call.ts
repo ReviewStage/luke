@@ -18,7 +18,7 @@ import type { Effect } from "effect";
  */
 export interface LiveVoiceCallOpening {
   /** The plan the call is about, which the host creates the session about. */
-  planId: string;
+  taskId: string;
 }
 
 export interface LiveVoiceCall {

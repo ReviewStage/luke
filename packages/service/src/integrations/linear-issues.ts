@@ -22,7 +22,7 @@ import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import {
   LINEAR_BOUNDS,
   type LinearIssueSummary,
-  type PlanLinearIssue,
+  type TaskLinearIssue,
 } from "@luke/features/linear-wire";
 import { Data, Duration, Effect, Option, Redacted, Result, Schema } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
@@ -253,7 +253,7 @@ export function linearIssueByIdentifier(
 export function linearIssue(
   token: Redacted.Redacted,
   id: string,
-): Effect.Effect<PlanLinearIssue, LinearReadFailure, HttpClient.HttpClient> {
+): Effect.Effect<TaskLinearIssue, LinearReadFailure, HttpClient.HttpClient> {
   return Effect.flatMap(graphql(token, QUERY.ONE, { id }, IssueOneSchema), (answer) =>
     Option.match(Option.fromNullOr(answer.data.issue), {
       onNone: () => Effect.fail(failed(LINEAR_READ_FAILURE.NOT_FOUND)),

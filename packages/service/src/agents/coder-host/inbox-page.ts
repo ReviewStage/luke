@@ -6,16 +6,16 @@ import type { InboxAnswer } from "@luke/features/inbox-wire";
 import { Clock, Duration, Effect, Schedule } from "effect";
 import {
   accountInboxAutomations,
-  accountInboxPlans,
-  accountPlanlessItems,
+  accountInboxTasks,
+  accountTasklessItems,
   accountWaitingItems,
   accountWaitingStamps,
   type InboxStamp,
   type InboxStoreEffect,
   memberAgentInboxItems,
   memberAgentInboxStamps,
-  planInboxItems,
-  planInboxStamps,
+  taskInboxItems,
+  taskInboxStamps,
 } from "../../inbox/inbox-store.js";
 import { CODER } from "./bounds.js";
 
@@ -123,13 +123,13 @@ export function agentInboxPast(
 }
 
 /** The plan's inbox as it stands, held while its cursor is still the reader's. */
-export function planInboxPast(
+export function taskInboxPast(
   userId: string,
-  planId: string,
+  taskId: string,
   after: string,
 ): InboxStoreEffect<InboxAnswer> {
-  return heldUntilMoved(planInboxStamps(userId, planId), after, CODER.MESSAGES_POLL).pipe(
-    Effect.andThen(planInboxItems(userId, planId)),
+  return heldUntilMoved(taskInboxStamps(userId, taskId), after, CODER.MESSAGES_POLL).pipe(
+    Effect.andThen(taskInboxItems(userId, taskId)),
     Effect.map((items) => ({ items, cursor: cursorOf(items) })),
   );
 }
@@ -147,14 +147,14 @@ export function accountInboxPast(
   const read = Effect.gen(function* () {
     const readAt = yield* Clock.currentTimeMillis;
     const rows = yield* accountWaitingItems(userId);
-    const plans = yield* accountInboxPlans(userId);
-    const planlessRows = yield* accountPlanlessItems(userId);
+    const tasks = yield* accountInboxTasks(userId);
+    const tasklessRows = yield* accountTasklessItems(userId);
     const automations = yield* accountInboxAutomations(userId);
     const failedRuns = yield* failedRunsOf(userId);
     const items = rows.map(({ status: _status, ...entry }) => entry);
-    const planless = planlessRows.map(({ status: _status, ...entry }) => entry);
-    const cursor = cursorOf([...rows, ...planlessRows, ...failedRunStamps(failedRuns)]);
-    return { items, plans, planless, automations, failedRuns, cursor, readAt };
+    const planless = tasklessRows.map(({ status: _status, ...entry }) => entry);
+    const cursor = cursorOf([...rows, ...tasklessRows, ...failedRunStamps(failedRuns)]);
+    return { items, plans: tasks, planless, automations, failedRuns, cursor, readAt };
   });
   const stamps = Effect.zipWith(
     accountWaitingStamps(userId),

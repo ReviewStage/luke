@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
-import { PLANS_PAGE } from "@luke/ui/planning-model";
+import { TASKS_PAGE } from "@luke/ui/tasks-model";
 import { act, createElement, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, test } from "vitest";
@@ -27,7 +27,7 @@ function mount(initial: PlansControl) {
     restand = setPlans;
     history = useWindowHistory({
       known: true,
-      tab: PANEL_TAB.PLANS,
+      tab: PANEL_TAB.TASKS,
       onTabChange: () => undefined,
       settingsView: SETTINGS_VIEW.ACCOUNT,
       onSettingsViewChange: () => undefined,
@@ -50,14 +50,14 @@ function mount(initial: PlansControl) {
 test("a launch that reopens the plan last open leaves nothing behind it to go back to", () => {
   const window = mount(plansControl({ restoring: true }));
   window.stand(
-    plansControl({ page: PLANS_PAGE.DOCUMENT, activePlanId: PLAN_ID, boundFor: PLAN_ID }),
+    plansControl({ page: TASKS_PAGE.DOCUMENT, activePlanId: PLAN_ID, boundFor: PLAN_ID }),
   );
   assert.equal(window.history().canGoBack, false);
 });
 
 test("leaving a plan for the home page is a step Back returns from", () => {
   const window = mount(
-    plansControl({ page: PLANS_PAGE.DOCUMENT, activePlanId: PLAN_ID, boundFor: PLAN_ID }),
+    plansControl({ page: TASKS_PAGE.DOCUMENT, activePlanId: PLAN_ID, boundFor: PLAN_ID }),
   );
   window.stand(plansControl());
   assert.equal(window.history().canGoBack, true);
@@ -83,7 +83,7 @@ test("a step back cancelled at the leave ask leaves the trail where the window s
   const homes: string[] = [];
   const atPlan = asking(
     plansControl({
-      page: PLANS_PAGE.DOCUMENT,
+      page: TASKS_PAGE.DOCUMENT,
       activePlanId: PLAN_ID,
       boundFor: PLAN_ID,
       onLeavePlan: () => homes.push("home"),
@@ -120,7 +120,7 @@ test("a person's page is a step of its own, which Back from a plan opened after 
   const window = mount(standing("user-charles"));
   window.stand(standing("user-maya"));
   window.stand(
-    standing(undefined, { page: PLANS_PAGE.DOCUMENT, activePlanId: PLAN_ID, boundFor: PLAN_ID }),
+    standing(undefined, { page: TASKS_PAGE.DOCUMENT, activePlanId: PLAN_ID, boundFor: PLAN_ID }),
   );
 
   act(() => window.history().onBack());
@@ -169,7 +169,7 @@ test("a person's page opened again with a newer name keeps that name in its step
   window.stand(standing("user-lee", "Lee Chen"));
   window.stand(
     standing(undefined, undefined, {
-      page: PLANS_PAGE.DOCUMENT,
+      page: TASKS_PAGE.DOCUMENT,
       activePlanId: PLAN_ID,
       boundFor: PLAN_ID,
     }),

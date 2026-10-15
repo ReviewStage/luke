@@ -5,7 +5,7 @@ import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { UPDATE_STATUS } from "@luke/settings/update";
-import { PLANS_PAGE } from "@luke/ui/planning-model";
+import { TASKS_PAGE } from "@luke/ui/tasks-model";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { NOTIFICATIONS_STATUS } from "@luke/voice/settings-controls";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
@@ -120,7 +120,7 @@ function mount(width: number, onGoHome: () => void = ignore): HTMLElement {
   root = createRoot(container);
   function Window() {
     const sidebar = useSidebarCollapse(false);
-    const [tab, setTab] = useState<PanelTab>(PANEL_TAB.PLANS);
+    const [tab, setTab] = useState<PanelTab>(PANEL_TAB.TASKS);
     return createElement(DesktopShell, {
       gates: {
         accountRequired: false,
@@ -129,7 +129,7 @@ function mount(width: number, onGoHome: () => void = ignore): HTMLElement {
       },
       tab,
       onTabChange: setTab,
-      plans: plansControl({ page: PLANS_PAGE.HOME, onGoHome }),
+      plans: plansControl({ page: TASKS_PAGE.HOME, onGoHome }),
       history: {
         canGoBack: false,
         canGoForward: false,

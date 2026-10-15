@@ -1,7 +1,7 @@
 import { LiveCloseReasonSchema, TRANSCRIPT_SPEAKER } from "@luke/live";
 import { Schema as EffectSchema } from "effect";
-import { planEditorSchema } from "./plan-wire.js";
 import { countedNumber, wireUuidSchema } from "./service-wire.js";
+import { planEditorSchema } from "./task-wire.js";
 
 /**
  * transcript-wire.ts -- what was said on a plan's voice calls with Luke, as the service keeps it and the Plans tab reads it.
@@ -115,15 +115,15 @@ export const transcriptCallSchema = EffectSchema.Struct({
 export type TranscriptCall = typeof transcriptCallSchema.Type;
 
 /** A plan's transcript: its calls oldest first, and whether older words were left out of the read. */
-export const planTranscriptSchema = EffectSchema.Struct({
+export const taskTranscriptSchema = EffectSchema.Struct({
   calls: EffectSchema.Array(transcriptCallSchema),
   earlierOmitted: EffectSchema.Boolean,
 });
 
-export type PlanTranscript = typeof planTranscriptSchema.Type;
+export type TaskTranscript = typeof taskTranscriptSchema.Type;
 
 /** A transcript read (GET). */
-export const planTranscriptAnswerSchema = EffectSchema.Struct({ transcript: planTranscriptSchema });
+export const taskTranscriptAnswerSchema = EffectSchema.Struct({ transcript: taskTranscriptSchema });
 
 /** The transcript of a plan no call has been made about. */
-export const EMPTY_TRANSCRIPT: PlanTranscript = { calls: [], earlierOmitted: false };
+export const EMPTY_TRANSCRIPT: TaskTranscript = { calls: [], earlierOmitted: false };

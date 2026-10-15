@@ -9,7 +9,7 @@ import {
   type TurnRecord,
 } from "@luke/features/coding-agent-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
-import { PLAN_WORK_STATE, type PlanWorkState } from "@luke/features/planning-view";
+import { TASK_WORK_STATE, type TaskWorkState } from "@luke/features/tasks-view";
 import { CALL_KIND, CALL_WORDS, type CallKind } from "@luke/features/turn-rows";
 import { isRecord, isWireString, TURN_ORIGIN, type WireRecord, type WireValue } from "@luke/wire";
 import { TOOL_STATE, type ToolState } from "../ai-elements/tool";
@@ -38,7 +38,7 @@ export interface WorkCallRow {
   kind: CallKind;
   /** The input a reader looks for first; absent for a call that has none. */
   subject?: string;
-  state: PlanWorkState;
+  state: TaskWorkState;
   /** Whether the row still moves: the call runs on a call that still stands. */
   running: boolean;
 }
@@ -66,7 +66,7 @@ export interface WorkTurnRow {
   /** When the turn ended, where the service said; none while it runs or was left running. */
   endedAt?: number;
   /** Running only while the turn moves; a turn its call left running is drawn as stopped, since nothing more of it will be told. */
-  state: PlanWorkState;
+  state: TaskWorkState;
   /** Whether the turn still moves: it runs on a call that still stands. */
   moving: boolean;
   earlierOmitted: boolean;
@@ -179,7 +179,7 @@ export function startedAgentCallIds(conversation: PlanConversation): readonly st
 /** A call's state as the agent tab marks it, in the AI SDK's words: running only while it still moves. */
 function toolStateOf(call: WorkCallRow): ToolState {
   if (call.running) return TOOL_STATE.INPUT_AVAILABLE;
-  return call.state === PLAN_WORK_STATE.FAILED
+  return call.state === TASK_WORK_STATE.FAILED
     ? TOOL_STATE.OUTPUT_ERROR
     : TOOL_STATE.OUTPUT_AVAILABLE;
 }
@@ -201,12 +201,12 @@ function settledJournal(journal: readonly WireValue[], moving: boolean): readonl
 
 /** Where a worker stands on the plan's work, by where its own session's page says it does. */
 const WORK_STATE_OF_STATUS = {
-  [CODING_AGENT_STATUS.STARTING]: PLAN_WORK_STATE.RUNNING,
-  [CODING_AGENT_STATUS.RUNNING]: PLAN_WORK_STATE.RUNNING,
-  [CODING_AGENT_STATUS.COMPLETED]: PLAN_WORK_STATE.DONE,
-  [CODING_AGENT_STATUS.FAILED]: PLAN_WORK_STATE.FAILED,
-  [CODING_AGENT_STATUS.CANCELLED]: PLAN_WORK_STATE.DONE,
-} as const satisfies Record<CodingAgentStatus, PlanWorkState>;
+  [CODING_AGENT_STATUS.STARTING]: TASK_WORK_STATE.RUNNING,
+  [CODING_AGENT_STATUS.RUNNING]: TASK_WORK_STATE.RUNNING,
+  [CODING_AGENT_STATUS.COMPLETED]: TASK_WORK_STATE.DONE,
+  [CODING_AGENT_STATUS.FAILED]: TASK_WORK_STATE.FAILED,
+  [CODING_AGENT_STATUS.CANCELLED]: TASK_WORK_STATE.DONE,
+} as const satisfies Record<CodingAgentStatus, TaskWorkState>;
 
 /** A delegation's part's input as a field of words, where it carries one. */
 function inputText(part: WireRecord, field: string): string | undefined {
@@ -243,10 +243,10 @@ function workerOfPart(
     standing !== undefined
       ? WORK_STATE_OF_STATUS[standing.status]
       : failed
-        ? PLAN_WORK_STATE.FAILED
+        ? TASK_WORK_STATE.FAILED
         : moving
-          ? PLAN_WORK_STATE.RUNNING
-          : PLAN_WORK_STATE.DONE;
+          ? TASK_WORK_STATE.RUNNING
+          : TASK_WORK_STATE.DONE;
   // A failed session is recorded as failed, as its own transcript ends, rather than as one that stopped.
   const ended =
     standing?.status === CODING_AGENT_STATUS.FAILED ? { ending: TURN_ENDING.FAILED } : {};
@@ -264,7 +264,7 @@ function workerOfPart(
       kind: CALL_KIND.WORKER,
       subject: task,
       state,
-      running: callLive && state === PLAN_WORK_STATE.RUNNING,
+      running: callLive && state === TASK_WORK_STATE.RUNNING,
     },
     task,
     session: {
@@ -279,7 +279,7 @@ function workerOfPart(
 const JOB_CALL: WorkCallRow = {
   id: "",
   kind: CALL_KIND.WORKER,
-  state: PLAN_WORK_STATE.DONE,
+  state: TASK_WORK_STATE.DONE,
   running: false,
 };
 
@@ -325,9 +325,9 @@ function workerCallPart(part: WireRecord, worker: WorkWorkerBlock): WireValue {
 }
 
 /** A turn's state as its journal says it: running until it closed, ended without answering where its record says how it ended (stopped, failed, or past its bound), and done otherwise. */
-function turnStateOf(message: CodingAgentMessage): PlanWorkState {
-  if (message.ending !== undefined) return PLAN_WORK_STATE.FAILED;
-  return message.finishedAt === undefined ? PLAN_WORK_STATE.RUNNING : PLAN_WORK_STATE.DONE;
+function turnStateOf(message: CodingAgentMessage): TaskWorkState {
+  if (message.ending !== undefined) return TASK_WORK_STATE.FAILED;
+  return message.finishedAt === undefined ? TASK_WORK_STATE.RUNNING : TASK_WORK_STATE.DONE;
 }
 
 /** One turn's journal as the tab draws it: its parts, each worker's call standing where that worker does, and the workers beside it. */
@@ -338,8 +338,8 @@ function rowOf(
   callLive: boolean,
 ): WorkTurnRow {
   const state = turnStateOf(message);
-  const moving = callLive && state === PLAN_WORK_STATE.RUNNING;
-  const left = state === PLAN_WORK_STATE.RUNNING && !moving;
+  const moving = callLive && state === TASK_WORK_STATE.RUNNING;
+  const left = state === TASK_WORK_STATE.RUNNING && !moving;
   const workers: WorkWorkerBlock[] = [];
   const parts = settledJournal(message.parts, moving).map((part) => {
     if (!isRecord(part) || !isWireString(part.toolCallId) || !isWireString(part.type)) return part;
@@ -361,7 +361,7 @@ function rowOf(
     key: message.turnId,
     startedAt: message.startedAt ?? 0,
     ...(message.finishedAt === undefined ? undefined : { endedAt: message.finishedAt }),
-    state: left ? PLAN_WORK_STATE.FAILED : state,
+    state: left ? TASK_WORK_STATE.FAILED : state,
     moving,
     earlierOmitted: message.earlierOmitted ?? false,
     message: {
@@ -370,7 +370,7 @@ function rowOf(
       // SAFETY: every part is the wire's stored part or one built from it, a JSON object either way.
       parts: parts as CodingAgentMessage["parts"],
       ...(message.startedAt === undefined ? undefined : { startedAt: message.startedAt }),
-      ...(state === PLAN_WORK_STATE.RUNNING || message.finishedAt === undefined
+      ...(state === TASK_WORK_STATE.RUNNING || message.finishedAt === undefined
         ? undefined
         : { finishedAt: message.finishedAt }),
       ...record,

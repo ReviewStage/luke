@@ -21,7 +21,7 @@ import { useAppCommand } from "./app-commands";
  * Settings, not by a chord.
  */
 export function useCallCommands(
-  view: Pick<VoiceView, "voiceStatus" | "callPlanId" | "speakerMuted">,
+  view: Pick<VoiceView, "voiceStatus" | "callTaskId" | "speakerMuted">,
   microphoneGranted: boolean,
   send: (command: VoiceCommand) => void,
 ): void {

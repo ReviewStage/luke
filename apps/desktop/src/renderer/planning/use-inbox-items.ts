@@ -1,7 +1,9 @@
-import type { CodingAgentInboxAnswerView } from "@luke/features/coding-agent-view";
-import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
+import {
+  CODING_AGENT_CALL_FAILURE,
+  type CodingAgentInboxAnswerView,
+} from "@luke/features/coding-agent-view";
 import { INBOX_CURSOR_START, type InboxItem } from "@luke/features/inbox-wire";
-import type { AppInboxPlanHolding } from "@luke/host/app-state";
+import type { AppInboxTaskHolding } from "@luke/host/app-state";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { InboxReader } from "./use-plan-inbox";
 
@@ -45,7 +47,7 @@ export interface InboxItemsControl {
 
 export function useInboxItems(input: {
   /** Every plan the Inbox lists, as main last read them. */
-  holdings: readonly AppInboxPlanHolding[];
+  holdings: readonly AppInboxTaskHolding[];
   readInbox: InboxReader;
 }): InboxItemsControl {
   const { holdings, readInbox } = input;
@@ -68,13 +70,13 @@ export function useInboxItems(input: {
 
   // A retry's press asks again of the plans whose read failed, the ones not yet read.
   useEffect(() => {
-    for (const { planId, updatedAt } of holdings) {
+    for (const { taskId: planId, updatedAt } of holdings) {
       if (latest.current.reads.get(planId)?.at === updatedAt) continue;
       if (asking.current.get(planId) === updatedAt) continue;
       asking.current.set(planId, updatedAt);
       newest.current.set(planId, Math.max(newest.current.get(planId) ?? updatedAt, updatedAt));
       latest.current
-        .readInbox({ planId, after: INBOX_CURSOR_START })
+        .readInbox({ taskId: planId, after: INBOX_CURSOR_START })
         .catch((): CodingAgentInboxAnswerView => UNANSWERED)
         .then((answer) => {
           if (asking.current.get(planId) === updatedAt) asking.current.delete(planId);
@@ -104,18 +106,18 @@ export function useInboxItems(input: {
   );
   // Note that only a plan still listed fails the list, because one another workspace listed is not drawn.
   const pending = holdings.some(
-    ({ planId, updatedAt }) => reads.get(planId)?.at !== updatedAt && !failed.has(planId),
+    ({ taskId: planId, updatedAt }) => reads.get(planId)?.at !== updatedAt && !failed.has(planId),
   );
   // Note that a plan main lists no more has no newer read on its way, so its last read stands.
   const current = new Set(
     [...reads].flatMap(([planId, read]) => {
-      const holding = holdings.find((each) => each.planId === planId);
+      const holding = holdings.find((each) => each.taskId === planId);
       return holding === undefined || holding.updatedAt === read.at ? [planId] : [];
     }),
   );
   return {
     items,
-    failed: holdings.some((holding) => failed.has(holding.planId)),
+    failed: holdings.some((holding) => failed.has(holding.taskId)),
     pending,
     current,
     onRetry,

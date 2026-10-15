@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import { IDLE_PLANNING_VIEW, type PlanningView } from "@luke/features/planning-view";
+import { IDLE_TASKS_VIEW, type TasksView } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { test } from "vitest";
-import { noticePlanTitle } from "./agent-notices.js";
+import { noticeTaskTitle } from "./agent-notices.js";
 
 /**
  * notice-title.test.ts -- a notice names the plan it is about, and, once the
@@ -26,15 +26,15 @@ const RETRIES = {
   repository: null,
 };
 
-function planning(workspaces: readonly Workspace[]): PlanningView {
-  return { ...IDLE_PLANNING_VIEW, plans: [RETRIES], workspaces };
+function tasks(workspaces: readonly Workspace[]): TasksView {
+  return { ...IDLE_TASKS_VIEW, tasks: [RETRIES], workspaces };
 }
 
 test("a notice's title leads with the plan's workspace once the account is in more than one", () => {
   assert.equal(
-    noticePlanTitle(planning([ACME, NORTHWIND]), RETRIES.id),
+    noticeTaskTitle(tasks([ACME, NORTHWIND]), RETRIES.id),
     "Northwind · Checkout retries",
   );
-  assert.equal(noticePlanTitle(planning([NORTHWIND]), RETRIES.id), "Checkout retries");
-  assert.equal(noticePlanTitle(planning([ACME, NORTHWIND]), "unknown-plan"), undefined);
+  assert.equal(noticeTaskTitle(tasks([NORTHWIND]), RETRIES.id), "Checkout retries");
+  assert.equal(noticeTaskTitle(tasks([ACME, NORTHWIND]), "unknown-plan"), undefined);
 });

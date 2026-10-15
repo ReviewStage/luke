@@ -6,7 +6,7 @@ import {
   readCodingAgentByKey,
 } from "@luke/database/models/coding-agent-store";
 import { listJournals } from "@luke/database/models/message-reads";
-import { listPlans } from "@luke/database/models/plan-store";
+import { listTasks } from "@luke/database/models/task-store";
 import type { LineSender, StoreWriter } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import {
@@ -36,11 +36,11 @@ import {
   wireUuidSchema,
 } from "../core.js";
 import type { GitHubApp } from "../github/github-app.js";
-import { agentWorkspace, planWorkspace } from "../github/workspace-repository.js";
+import { agentWorkspace, taskWorkspace } from "../github/workspace-repository.js";
 import type { HostedRefusal } from "../http/http-effect.js";
 import { logStoreFailure, type StoreFailure } from "../http/store-failure.js";
-import type { PlanDocumentBinding } from "../plans/plan-notes.js";
 import { ModelCatalog, ModelChoiceRefused, type OfferedModel } from "../providers/model-catalog.js";
+import type { PlanDocumentBinding } from "../tasks/plan-notes.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import type { EveSessions } from "./brain-host/eve-sessions.js";
 import { agentPublished } from "./coder-host/published.js";
@@ -178,7 +178,7 @@ export const START_CODING_AGENT_REFUSAL = {
 const START_REFUSAL_WORDS: ReadonlyMap<string, string> = new Map([
   [HOSTED_API_ERROR.NO_REPOSITORY, START_CODING_AGENT_REFUSAL.NO_REPOSITORY],
   [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE, START_CODING_AGENT_REFUSAL.NOT_REACHABLE],
-  [HOSTED_API_ERROR.PLAN_ARCHIVED, START_CODING_AGENT_REFUSAL.ARCHIVED],
+  [HOSTED_API_ERROR.TASK_ARCHIVED, START_CODING_AGENT_REFUSAL.ARCHIVED],
 ]);
 
 /** The refusal's sentence for each hosted refusal a steer may answer; any other is the service down. */
@@ -187,7 +187,7 @@ const REFUSAL_WORDS: ReadonlyMap<string, string> = new Map([
   [HOSTED_API_ERROR.AGENT_NOT_READY, CODING_AGENT_TOOL_REFUSAL.NOT_READY],
   [HOSTED_API_ERROR.AGENT_RETIRED, CODING_AGENT_TOOL_REFUSAL.RETIRED],
   [HOSTED_API_ERROR.NOT_FOUND, CODING_AGENT_TOOL_REFUSAL.NO_AGENT],
-  [HOSTED_API_ERROR.PLAN_ARCHIVED, CODING_AGENT_TOOL_REFUSAL.ARCHIVED],
+  [HOSTED_API_ERROR.TASK_ARCHIVED, CODING_AGENT_TOOL_REFUSAL.ARCHIVED],
 ]);
 
 /** Who calls an agent tool: Luke on a call, or a coding agent from its own session. */
@@ -566,13 +566,13 @@ function callerUserId(caller: AgentCaller): string {
 
 /** The task the caller works on: the call's, or the coding agent's own, which may be none. */
 function callerTask(caller: AgentCaller): string | null {
-  return caller.kind === AGENT_CALLER.LUKE ? caller.plan.planId : caller.agent.planId;
+  return caller.kind === AGENT_CALLER.LUKE ? caller.plan.taskId : caller.agent.taskId;
 }
 
 /** The workspace the caller reaches agents in, read on its member's standing now; nothing where they no longer reach it. */
 const callerWorkspace = (caller: AgentCaller) =>
   caller.kind === AGENT_CALLER.LUKE
-    ? planWorkspace(caller.plan.userId, caller.plan.planId)
+    ? taskWorkspace(caller.plan.userId, caller.plan.taskId)
     : agentWorkspace(caller.agent.userId, caller.agent);
 
 /** An agent of the caller's workspace under the id, with its task, or nothing: one of another workspace, the member's other ones included, or none. */
@@ -593,8 +593,8 @@ const taskOfCallerWorkspace = (caller: AgentCaller, taskId: string) =>
   Effect.gen(function* () {
     const workspace = yield* callerWorkspace(caller);
     if (Option.isNone(workspace)) return false;
-    const taskWorkspace = yield* planWorkspace(callerUserId(caller), taskId);
-    return Option.isSome(taskWorkspace) && taskWorkspace.value === workspace.value;
+    const owning = yield* taskWorkspace(callerUserId(caller), taskId);
+    return Option.isSome(owning) && owning.value === workspace.value;
   });
 
 /** A call's refusal as the model reads it, here and at a coding agent's edge for a session it does not admit. */
@@ -661,7 +661,7 @@ const startedReading = (
     modelName: modelLabel(agent.model, offered),
     effort: agent.effort,
     status: standing(agent).status,
-    onYourTask: agent.planId !== null && agent.planId === ownTask,
+    onYourTask: agent.taskId !== null && agent.taskId === ownTask,
   }));
 
 /** A store that could not be read is the one refusal, logged for the operator and said to the model. */
@@ -791,7 +791,7 @@ export function runMessageAgent(
           id: agent.id,
           title: agentName(agent),
           status: CODING_AGENT_STATUS.RUNNING,
-          onYourTask: agent.planId !== null && agent.planId === callerTask(caller),
+          onYourTask: agent.taskId !== null && agent.taskId === callerTask(caller),
         },
       };
     }),
@@ -844,7 +844,7 @@ export function runStartAgent(
         if (!reached) return agentToolRejected(START_CODING_AGENT_REFUSAL.NO_SUCH_TASK);
       }
       const started = yield* startCodingAgent(Effect.succeed(eve), callerUserId(caller), {
-        planId,
+        taskId: planId,
         idempotencyKey: call.clientKey,
         choice,
         prompt,
@@ -889,7 +889,7 @@ export function runListTasks(
         return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_WORKSPACE);
       }
       const ownTask = callerTask(caller);
-      const plans = yield* listPlans(callerUserId(caller));
+      const plans = yield* listTasks(callerUserId(caller));
       const matching = plans.filter(
         (plan) =>
           plan.workspaceId === workspace.value &&

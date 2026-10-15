@@ -14,7 +14,7 @@ import { MIGRATIONS_FOLDER } from "../../core/migrator.js";
 import { Database } from "../../core/query.js";
 import { createAutomation } from "../../models/automation-store.js";
 import { createCodingAgent } from "../../models/coding-agent-store.js";
-import { createPlan } from "../../models/plan-store.js";
+import { createTask } from "../../models/task-store.js";
 import { getTestDB } from "../../testing/index.js";
 import { member, organization, user } from "../auth.js";
 
@@ -40,7 +40,7 @@ const statements = Effect.promise(async () =>
 );
 
 /** A plan in a workspace the account owns, and the workspace. */
-const openPlan = Effect.gen(function* () {
+const openTask = Effect.gen(function* () {
   const db = yield* Database;
   const userId = `user-${randomUUID()}`;
   yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
@@ -52,12 +52,12 @@ const openPlan = Effect.gen(function* () {
   yield* db
     .insert(member)
     .values({ id: randomUUID(), organizationId, userId, role: "owner", createdAt: now });
-  const plan = yield* createPlan(userId, {
+  const task = yield* createTask(userId, {
     organizationId,
     name: "Nightly triage",
     repository: "acme/api",
   });
-  return { userId, organizationId, planId: plan.id };
+  return { userId, organizationId, taskId: task.id };
 });
 
 it.layer(getTestDB())("the contract step's organization migration", (it) => {
@@ -66,10 +66,10 @@ it.layer(getTestDB())("the contract step's organization migration", (it) => {
     () =>
       Effect.gen(function* () {
         const sql = yield* SqlClient.SqlClient;
-        const { userId, organizationId, planId } = yield* openPlan;
+        const { userId, organizationId, taskId } = yield* openTask;
         const made = Option.getOrThrow(
           yield* createAutomation(userId, {
-            planId,
+            taskId,
             name: "Nightly flaky-test sweep",
             trigger: { kind: AUTOMATION_TRIGGER.SCHEDULE, cron: "0 2 * * *", timezone: "UTC" },
             action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: "Fix one flaky test." },
@@ -80,7 +80,7 @@ it.layer(getTestDB())("the contract step's organization migration", (it) => {
         );
         const started = Option.getOrThrow(
           yield* createCodingAgent(userId, {
-            planId,
+            taskId,
             idempotencyKey: randomUUID(),
             model: "anthropic/claude-opus-5.5",
             effort: "high",

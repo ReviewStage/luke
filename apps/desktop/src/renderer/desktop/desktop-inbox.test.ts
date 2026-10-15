@@ -23,10 +23,10 @@ import {
   INBOX_WIRE_VERSION,
   type InboxItem,
 } from "@luke/features/inbox-wire";
-import type { PlanSummary } from "@luke/features/plan-wire";
+import type { TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
-import type { AppInboxPlanHolding, AppInboxPlanlessItem } from "@luke/host/app-state";
+import type { AppInboxTaskHolding, AppInboxTasklessItem } from "@luke/host/app-state";
 import { EXPERIMENT } from "@luke/settings";
 import { experimentsOn } from "@luke/settings/testing";
 import { DocumentIcon } from "@luke/ui";
@@ -61,7 +61,7 @@ const AGENT: CodingAgentSummary = {
   turnId: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c99",
 };
 
-const BILLING: PlanSummary = {
+const BILLING: TaskSummary = {
   id: PLAN_ID,
   workspaceId: "workspace-personal",
   name: "Billing usage alerts",
@@ -85,7 +85,7 @@ const BILLING: PlanSummary = {
     pullRequests: [],
   },
 };
-const INVITES: PlanSummary = {
+const INVITES: TaskSummary = {
   id: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32",
   workspaceId: BILLING.workspaceId,
   name: "Invites",
@@ -135,9 +135,9 @@ const RETRY: InboxItem = {
 };
 const EXPIRY = item("a1b2c3d4-0000-4000-8000-000000000003", "Expire after 7 days?", 4_000);
 
-const HOLDING: readonly AppInboxPlanHolding[] = [
-  { planId: BILLING.id, items: 2, updatedAt: 5_000 },
-  { planId: INVITES.id, items: 1, updatedAt: 4_000 },
+const HOLDING: readonly AppInboxTaskHolding[] = [
+  { taskId: BILLING.id, items: 2, updatedAt: 5_000 },
+  { taskId: INVITES.id, items: 1, updatedAt: 4_000 },
 ];
 
 let root: Root | undefined;
@@ -146,13 +146,13 @@ let listedAgents: readonly CodingAgentSummary[] = [AGENT];
 /** Each plan's inbox as the service answers a read of it from the start. */
 let inboxes = new Map<string, readonly InboxItem[]>();
 /** Moves main's list of the plans holding items, as its read of the account would. */
-let setHolding: (holding: readonly AppInboxPlanHolding[]) => void = () => undefined;
+let setHolding: (holding: readonly AppInboxTaskHolding[]) => void = () => undefined;
 /** Moves the account's list of plans, as an archive on another Mac would. */
-let setPlans: (plans: readonly PlanSummary[]) => void = () => undefined;
+let setPlans: (plans: readonly TaskSummary[]) => void = () => undefined;
 /** Chooses an item from outside the list, as a notification's click does. */
 let chooseFromOutside: (chosen: InboxChoice) => void = () => undefined;
 /** Moves main's read of what waits on the agents with no plan, as main does when an item opens or is answered. */
-let setPlanless: (planless: readonly AppInboxPlanlessItem[]) => void = () => undefined;
+let setPlanless: (planless: readonly AppInboxTasklessItem[]) => void = () => undefined;
 /** Whether an agent's own inbox read answers that it could not be read. */
 let agentReadFails = false;
 /** Whether a read of a plan's agents is held open, never answering. */
@@ -258,7 +258,7 @@ beforeEach(() => {
           return done({ items, cursor: "1" });
         }
         if (request.kind === ACT_KIND.CODING_AGENTS_INBOX) {
-          const { planId, after } = request.payload;
+          const { taskId: planId, after } = request.payload;
           // A read past the cursor is held open while nothing changes, as the service holds it.
           if (after !== INBOX_CURSOR_START) return heldRead(planId);
           return startRead?.(planId) ?? done({ items: inboxes.get(planId) ?? [], cursor: "1" });
@@ -287,13 +287,13 @@ interface Asked {
 }
 
 /** The Inbox over the two plans, and the items of agents with no plan given, its own view real, as the plans tab holds it, and every press that leaves it recorded. */
-function mount(firstPlanless: readonly AppInboxPlanlessItem[] = []) {
+function mount(firstPlanless: readonly AppInboxTasklessItem[] = []) {
   const asked: Asked = { shownPlans: [], shownAgents: [], shownAutomations: [], closed: 0 };
   function Page() {
     const [chosen, setChosen] = useState<InboxChoice | undefined>(undefined);
     chooseFromOutside = setChosen;
     const [holding, setHeld] = useState(HOLDING);
-    const [listed, setListed] = useState<readonly PlanSummary[]>([BILLING, INVITES]);
+    const [listed, setListed] = useState<readonly TaskSummary[]>([BILLING, INVITES]);
     setHolding = setHeld;
     const [planless, setWaiting] = useState(firstPlanless);
     setPlanless = setWaiting;
@@ -304,8 +304,8 @@ function mount(firstPlanless: readonly AppInboxPlanlessItem[] = []) {
         workspace: listedWorkspace,
         plans: listed,
         inbox: [
-          { planId: BILLING.id, items: [waitingOf(THRESHOLD)] },
-          { planId: INVITES.id, items: [waitingOf(EXPIRY)] },
+          { taskId: BILLING.id, items: [waitingOf(THRESHOLD)] },
+          { taskId: INVITES.id, items: [waitingOf(EXPIRY)] },
         ],
         inboxPlans: holding,
         inboxPlanless: planless,
@@ -803,8 +803,8 @@ test("a plan main says changed is read again, so an item answered on another Mac
   ]);
   act(() =>
     setHolding([
-      { planId: INVITES.id, items: 1, updatedAt: 6_000 },
-      { planId: BILLING.id, items: 2, updatedAt: 5_000 },
+      { taskId: INVITES.id, items: 1, updatedAt: 6_000 },
+      { taskId: BILLING.id, items: 2, updatedAt: 5_000 },
     ]),
   );
   await settle();
@@ -866,8 +866,8 @@ test("Needs you's glyph wears the rows' dot while anything needs you, the filter
   inboxes.set(INVITES.id, [{ ...EXPIRY, updatedAt: 6_000 }]);
   act(() =>
     setHolding([
-      { planId: INVITES.id, items: 1, updatedAt: 6_000 },
-      { planId: BILLING.id, items: 1, updatedAt: 5_000 },
+      { taskId: INVITES.id, items: 1, updatedAt: 6_000 },
+      { taskId: BILLING.id, items: 1, updatedAt: 5_000 },
     ]),
   );
   await settle();
@@ -882,8 +882,8 @@ test("a folded plan counts what in it needs you, and one where nothing does coun
   inboxes.set(INVITES.id, [{ ...EXPIRY, status: INBOX_STATUS.CLOSED, updatedAt: 6_000 }]);
   act(() =>
     setHolding([
-      { planId: INVITES.id, items: 1, updatedAt: 6_000 },
-      { planId: BILLING.id, items: 2, updatedAt: 5_000 },
+      { taskId: INVITES.id, items: 1, updatedAt: 6_000 },
+      { taskId: BILLING.id, items: 2, updatedAt: 5_000 },
     ]),
   );
   await settle();
@@ -1190,8 +1190,8 @@ test("with Needs you on, a focused row whose item is answered on another Mac lea
   ]);
   act(() =>
     setHolding([
-      { planId: INVITES.id, items: 1, updatedAt: 6_000 },
-      { planId: BILLING.id, items: 2, updatedAt: 5_000 },
+      { taskId: INVITES.id, items: 1, updatedAt: 6_000 },
+      { taskId: BILLING.id, items: 2, updatedAt: 5_000 },
     ]),
   );
   await settle();
@@ -1591,7 +1591,7 @@ test("a chosen item whose plan leaves the account's list, archived on another Ma
   );
   act(() => {
     setPlans([INVITES]);
-    setHolding([{ planId: INVITES.id, items: 1, updatedAt: 4_000 }]);
+    setHolding([{ taskId: INVITES.id, items: 1, updatedAt: 4_000 }]);
   });
   await settle();
   assert.deepEqual(listed(page), ["# Invites", "▸ *Expire after 7 days?"]);
@@ -1609,8 +1609,8 @@ test("once the chosen plan's own held read fails, the list's read of that plan s
   inboxes.set(BILLING.id, [THRESHOLD, RETRY, posted]);
   act(() =>
     setHolding([
-      { planId: BILLING.id, items: 3, updatedAt: 7_000 },
-      { planId: INVITES.id, items: 1, updatedAt: 4_000 },
+      { taskId: BILLING.id, items: 3, updatedAt: 7_000 },
+      { taskId: INVITES.id, items: 1, updatedAt: 4_000 },
     ]),
   );
   await settle();
@@ -1626,8 +1626,8 @@ test("an answer to a plan's read that a newer one overtook moves nothing: the ne
   await settle();
   act(() =>
     setHolding([
-      { planId: BILLING.id, items: 2, updatedAt: 5_000 },
-      { planId: INVITES.id, items: 1, updatedAt: 6_000 },
+      { taskId: BILLING.id, items: 2, updatedAt: 5_000 },
+      { taskId: INVITES.id, items: 1, updatedAt: 6_000 },
     ]),
   );
   await settle();
@@ -1805,7 +1805,7 @@ const THIRD_ASK: InboxItem = {
 };
 
 /** One waiting item of an agent with no plan, as main's read lists it. */
-function waitingPlanless(asked: InboxItem): AppInboxPlanlessItem {
+function waitingPlanless(asked: InboxItem): AppInboxTasklessItem {
   return {
     id: asked.id,
     agentId: asked.agentId,
@@ -2082,8 +2082,8 @@ test("a link to an item newer than its task's last read waits for the read of it
       : undefined;
   act(() =>
     setHolding([
-      { planId: BILLING.id, items: 2, updatedAt: 5_000 },
-      { planId: INVITES.id, items: 2, updatedAt: 7_000 },
+      { taskId: BILLING.id, items: 2, updatedAt: 5_000 },
+      { taskId: INVITES.id, items: 2, updatedAt: 7_000 },
     ]),
   );
   act(() => chooseFromOutside({ planId: INVITES.id, itemId: posted.id, opened: true }));

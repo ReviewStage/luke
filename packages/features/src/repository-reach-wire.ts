@@ -1,7 +1,7 @@
 import { Schema as EffectSchema } from "effect";
 import { githubRepositoryFullNameSchema } from "./github-repositories-wire.js";
-import { workspaceIdSchema } from "./plan-wire.js";
 import { HOSTED_API_ERROR } from "./service-wire.js";
+import { workspaceIdSchema } from "./task-wire.js";
 
 /**
  * repository-reach-wire.ts -- why a plan's repository is out of the workspace's reach, as a refusal carries it.

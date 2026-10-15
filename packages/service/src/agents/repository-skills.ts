@@ -28,7 +28,7 @@
  * which is what a harness does with a key it does not know.
  */
 
-import { PLAN_SKILL_BOUNDS } from "@luke/features/plan-wire";
+import { TASK_SKILL_BOUNDS } from "@luke/features/task-wire";
 import { Effect, Option, type Redacted, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { GitHubUnavailable } from "../github/github-app.js";
@@ -46,13 +46,13 @@ type SkillRoot = (typeof SKILL_ROOT)[keyof typeof SKILL_ROOT];
 /** How much of a repository's skills is read. */
 const REPOSITORY_SKILLS = {
   /** The most skills read, across every root: as many as the desktop's read of them carries. */
-  MAX_SKILLS: PLAN_SKILL_BOUNDS.MAX_SKILLS,
+  MAX_SKILLS: TASK_SKILL_BOUNDS.MAX_SKILLS,
   /** The most `SKILL.md` files read, across every root: a skill's in each root, twice the skills. */
   MAX_READS: 128,
   /** The largest `SKILL.md` read; a larger one is left out. */
   MAX_FILE_BYTES: 64 * 1024,
   /** The convention's bound on a description, past which it is cut, which the desktop's read holds it to. */
-  MAX_DESCRIPTION_CHARS: PLAN_SKILL_BOUNDS.MAX_DESCRIPTION_CHARS,
+  MAX_DESCRIPTION_CHARS: TASK_SKILL_BOUNDS.MAX_DESCRIPTION_CHARS,
   /** How many `SKILL.md` reads stand at once. */
   READ_CONCURRENCY: 8,
 } as const;

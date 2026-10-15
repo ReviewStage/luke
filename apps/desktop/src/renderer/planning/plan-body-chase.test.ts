@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { PLAN_ACTOR, type Plan } from "@luke/features/plan-wire";
+import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -44,12 +44,12 @@ function typesIn(by: typeof DEAN): boolean {
   roots.push(root);
   const registry = AtomRegistry.make();
   const reader = { readerId: DEAN.userId };
-  const plan = (body: string, at: number): Plan => ({
+  const plan = (body: string, at: number): Task => ({
     ...DOCUMENT_PLAN,
     document: { body, assumptions: [] },
     lastEdit: { actor: PLAN_ACTOR.DEVELOPER, by, at, duringCall: false },
   });
-  const draw = (shown: Plan) =>
+  const draw = (shown: Task) =>
     act(() =>
       root.render(
         onRegistry(registry, createElement(PlanBody, { plan: shown, live: true, reader })),

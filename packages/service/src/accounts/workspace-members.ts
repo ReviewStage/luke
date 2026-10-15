@@ -4,7 +4,7 @@ import { member, user } from "@luke/database/schemas/auth";
 import { automation } from "@luke/database/schemas/automation";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { inboxItem } from "@luke/database/schemas/inbox";
-import { plan } from "@luke/database/schemas/plan";
+import { task } from "@luke/database/schemas/plan";
 import { planRevision } from "@luke/database/schemas/plan-revision";
 import { pinnedPictureUrl } from "@luke/features/account-picture";
 import { AUTOMATION_SCOPE } from "@luke/features/automation-wire";
@@ -79,9 +79,9 @@ const findFormer = SqlSchema.findAll({
   execute: (organizationId) =>
     Database.use((db) => {
       const tasks = db
-        .select({ id: plan.id })
-        .from(plan)
-        .where(eq(plan.organizationId, organizationId));
+        .select({ id: task.id })
+        .from(task)
+        .where(eq(task.organizationId, organizationId));
       return db
         .select({ userId: user.id, name: user.name, image: user.image })
         .from(user)
@@ -91,9 +91,9 @@ const findFormer = SqlSchema.findAll({
               inArray(
                 user.id,
                 db
-                  .select({ id: plan.userId })
-                  .from(plan)
-                  .where(eq(plan.organizationId, organizationId)),
+                  .select({ id: task.userId })
+                  .from(task)
+                  .where(eq(task.organizationId, organizationId)),
               ),
               inArray(
                 user.id,
@@ -120,7 +120,7 @@ const findFormer = SqlSchema.findAll({
                 db
                   .select({ id: planRevision.userId })
                   .from(planRevision)
-                  .where(and(inArray(planRevision.planId, tasks), isNotNull(planRevision.userId))),
+                  .where(and(inArray(planRevision.taskId, tasks), isNotNull(planRevision.userId))),
               ),
               inArray(
                 user.id,

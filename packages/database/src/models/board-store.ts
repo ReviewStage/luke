@@ -9,9 +9,9 @@ import { eq, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices } from "../core/query.js";
-import { plan, planBoard } from "../schemas/plan.js";
-import { PlanArchived, type PlanStoreEffect, type PlanStoreFailure } from "./plan-store.js";
-import { reachablePlan } from "./workspace-store.js";
+import { task, taskBoard } from "../schemas/plan.js";
+import { TaskArchived, type TaskStoreEffect, type TaskStoreFailure } from "./task-store.js";
+import { reachableTask } from "./workspace-store.js";
 
 /**
  * board-store.ts -- a plan's whiteboard: read it, write the Mac's scene, and write Luke's drawing.
@@ -25,7 +25,7 @@ import { reachablePlan } from "./workspace-store.js";
  * the plan row's own lock, so a plan deleted meanwhile reads as gone rather
  * than written back into being. Every statement names the account beside the
  * plan, so a plan of a workspace the account is not in reads and writes as no
- * plan, exactly as in `plan-store.ts`, and a board one member saved is read
+ * plan, exactly as in `task-store.ts`, and a board one member saved is read
  * by the rest.
  *
  * The Mac's first save to hold a new drawing of Luke's carries the scene
@@ -34,7 +34,7 @@ import { reachablePlan } from "./workspace-store.js";
  * (`readBoardImage`), and a board read never carries it.
  */
 
-const PlanKeySchema = Schema.Struct({ userId: Schema.String, planId: Schema.String });
+const TaskKeySchema = Schema.Struct({ userId: Schema.String, taskId: Schema.String });
 
 const BoardRowSchema = Schema.Struct({
   elements: Schema.NullOr(boardElementsSchema),
@@ -46,37 +46,37 @@ const BoardRowSchema = Schema.Struct({
 type BoardRow = typeof BoardRowSchema.Type;
 
 const BOARD_COLUMNS = {
-  elements: planBoard.elements,
-  appliedDrawing: planBoard.appliedDrawing,
-  drawing: planBoard.drawing,
-  drawingNumber: planBoard.drawingNumber,
+  elements: taskBoard.elements,
+  appliedDrawing: taskBoard.appliedDrawing,
+  drawing: taskBoard.drawing,
+  drawingNumber: taskBoard.drawingNumber,
 };
 
 /** A plan's board row joined to the plan, so a plan with no board yet still answers a row of nulls. */
 const findBoard = SqlSchema.findOneOption({
-  Request: PlanKeySchema,
+  Request: TaskKeySchema,
   Result: BoardRowSchema,
-  execute: ({ userId, planId }) =>
+  execute: ({ userId, taskId }) =>
     Database.use((db) =>
       db
         .select(BOARD_COLUMNS)
-        .from(plan)
-        .leftJoin(planBoard, eq(planBoard.planId, plan.id))
-        .where(reachablePlan(userId, planId))
+        .from(task)
+        .leftJoin(taskBoard, eq(taskBoard.taskId, task.id))
+        .where(reachableTask(userId, taskId))
         .limit(1),
     ),
 });
 
 /** The plan's id and whether it is archived, under its row's lock until the transaction ends; nothing where the account reaches no such plan. */
-const lockPlan = SqlSchema.findOneOption({
-  Request: PlanKeySchema,
+const lockTask = SqlSchema.findOneOption({
+  Request: TaskKeySchema,
   Result: Schema.Struct({ id: Schema.String, archived: Schema.Boolean }),
-  execute: ({ userId, planId }) =>
+  execute: ({ userId, taskId }) =>
     Database.use((db) =>
       db
-        .select({ id: plan.id, archived: sql<boolean>`${plan.archivedAt} is not null` })
-        .from(plan)
-        .where(reachablePlan(userId, planId))
+        .select({ id: task.id, archived: sql<boolean>`${task.archivedAt} is not null` })
+        .from(task)
+        .where(reachableTask(userId, taskId))
         .for("update"),
     ),
 });
@@ -89,18 +89,18 @@ const lockPlan = SqlSchema.findOneOption({
  */
 function upsertScene(elements: readonly BoardElement[], image: string | undefined) {
   return SqlSchema.findOne({
-    Request: Schema.Struct({ planId: Schema.String, appliedDrawing: Schema.Int, now: Schema.Date }),
+    Request: Schema.Struct({ taskId: Schema.String, appliedDrawing: Schema.Int, now: Schema.Date }),
     Result: BoardRowSchema,
-    execute: ({ planId, appliedDrawing, now }) => {
+    execute: ({ taskId, appliedDrawing, now }) => {
       const scene = { elements, appliedDrawing, updatedAt: now };
       // Note that a save moving to a new drawing with no image drops the old one, which shows a drawing gone.
-      const kept = sql`case when ${planBoard.appliedDrawing} = ${appliedDrawing} then ${planBoard.image} end`;
+      const kept = sql`case when ${taskBoard.appliedDrawing} = ${appliedDrawing} then ${taskBoard.image} end`;
       return Database.use((db) =>
         db
-          .insert(planBoard)
-          .values({ planId, ...scene, image: image ?? null })
+          .insert(taskBoard)
+          .values({ taskId, ...scene, image: image ?? null })
           .onConflictDoUpdate({
-            target: planBoard.planId,
+            target: taskBoard.taskId,
             set: { ...scene, image: image ?? kept },
           })
           .returning(BOARD_COLUMNS),
@@ -117,19 +117,19 @@ const BoardImageRowSchema = Schema.Struct({
 });
 
 const findBoardImage = SqlSchema.findOneOption({
-  Request: PlanKeySchema,
+  Request: TaskKeySchema,
   Result: BoardImageRowSchema,
-  execute: ({ userId, planId }) =>
+  execute: ({ userId, taskId }) =>
     Database.use((db) =>
       db
         .select({
-          image: planBoard.image,
-          appliedDrawing: planBoard.appliedDrawing,
-          drawingNumber: planBoard.drawingNumber,
+          image: taskBoard.image,
+          appliedDrawing: taskBoard.appliedDrawing,
+          drawingNumber: taskBoard.drawingNumber,
         })
-        .from(plan)
-        .leftJoin(planBoard, eq(planBoard.planId, plan.id))
-        .where(reachablePlan(userId, planId))
+        .from(task)
+        .leftJoin(taskBoard, eq(taskBoard.taskId, task.id))
+        .where(reachableTask(userId, taskId))
         .limit(1),
     ),
 });
@@ -137,16 +137,16 @@ const findBoardImage = SqlSchema.findOneOption({
 /** Luke's drawing written whole, as the next number. */
 function upsertDrawing(drawing: readonly DrawingElement[]) {
   return SqlSchema.findOne({
-    Request: Schema.Struct({ planId: Schema.String, now: Schema.Date }),
+    Request: Schema.Struct({ taskId: Schema.String, now: Schema.Date }),
     Result: BoardRowSchema,
-    execute: ({ planId, now }) =>
+    execute: ({ taskId, now }) =>
       Database.use((db) =>
         db
-          .insert(planBoard)
-          .values({ planId, drawing, drawingNumber: 1, updatedAt: now })
+          .insert(taskBoard)
+          .values({ taskId, drawing, drawingNumber: 1, updatedAt: now })
           .onConflictDoUpdate({
-            target: planBoard.planId,
-            set: { drawing, drawingNumber: sql`${planBoard.drawingNumber} + 1`, updatedAt: now },
+            target: taskBoard.taskId,
+            set: { drawing, drawingNumber: sql`${taskBoard.drawingNumber} + 1`, updatedAt: now },
           })
           .returning(BOARD_COLUMNS),
       ),
@@ -164,15 +164,15 @@ function boardOf(row: BoardRow): Board {
  * Runs one write under the plan row's lock, handed whether the plan is
  * archived as the lock read it; nothing where the account reaches no such plan.
  */
-function underPlanLock<E>(
+function underTaskLock<E>(
   userId: string,
-  planId: string,
+  taskId: string,
   write: (now: Date, archived: boolean) => Effect.Effect<BoardRow, E, DatabaseServices>,
 ) {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
-        const locked = yield* lockPlan({ userId, planId });
+        const locked = yield* lockTask({ userId, taskId });
         if (Option.isNone(locked)) return Option.none<Board>();
         const now = yield* DateTime.nowAsDate;
         return Option.some(boardOf(yield* write(now, locked.value.archived)));
@@ -182,8 +182,8 @@ function underPlanLock<E>(
 }
 
 /** The plan's board, the empty board before anything was drawn; nothing where the account reaches no such plan. */
-export function readBoard(userId: string, planId: string): PlanStoreEffect<Option.Option<Board>> {
-  return Effect.map(findBoard({ userId, planId }), Option.map(boardOf));
+export function readBoard(userId: string, taskId: string): TaskStoreEffect<Option.Option<Board>> {
+  return Effect.map(findBoard({ userId, taskId }), Option.map(boardOf));
 }
 
 /**
@@ -193,9 +193,9 @@ export function readBoard(userId: string, planId: string): PlanStoreEffect<Optio
  */
 export function readBoardImage(
   userId: string,
-  planId: string,
-): PlanStoreEffect<Option.Option<string>> {
-  return Effect.map(findBoardImage({ userId, planId }), (row) =>
+  taskId: string,
+): TaskStoreEffect<Option.Option<string>> {
+  return Effect.map(findBoardImage({ userId, taskId }), (row) =>
     Option.flatMap(row, ({ image, appliedDrawing, drawingNumber }) =>
       image !== null && appliedDrawing === drawingNumber ? Option.some(image) : Option.none(),
     ),
@@ -210,29 +210,29 @@ export function readBoardImage(
  */
 export function writeScene(
   userId: string,
-  planId: string,
+  taskId: string,
   elements: readonly BoardElement[],
   appliedDrawing: number,
   image?: string,
-): Effect.Effect<Option.Option<Board>, PlanStoreFailure | PlanArchived, DatabaseServices> {
-  return underPlanLock(userId, planId, (now, archived) =>
+): Effect.Effect<Option.Option<Board>, TaskStoreFailure | TaskArchived, DatabaseServices> {
+  return underTaskLock(userId, taskId, (now, archived) =>
     archived
-      ? Effect.fail(new PlanArchived())
+      ? Effect.fail(new TaskArchived())
       : upsertScene(
           elements,
           image,
-        )({ planId, appliedDrawing, now }).pipe(Effect.catchTag("NoSuchElementError", Effect.die)),
+        )({ taskId, appliedDrawing, now }).pipe(Effect.catchTag("NoSuchElementError", Effect.die)),
   );
 }
 
 /** Luke's drawing, written whole as the next number; the board as written. */
 export function writeDrawing(
   userId: string,
-  planId: string,
+  taskId: string,
   drawing: readonly DrawingElement[],
-): PlanStoreEffect<Option.Option<Board>> {
+): TaskStoreEffect<Option.Option<Board>> {
   // An upsert that returned no row is the database breaking its own contract, not an outcome.
-  return underPlanLock(userId, planId, (now) =>
-    upsertDrawing(drawing)({ planId, now }).pipe(Effect.catchTag("NoSuchElementError", Effect.die)),
+  return underTaskLock(userId, taskId, (now) =>
+    upsertDrawing(drawing)({ taskId, now }).pipe(Effect.catchTag("NoSuchElementError", Effect.die)),
   );
 }

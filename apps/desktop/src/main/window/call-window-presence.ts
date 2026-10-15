@@ -146,7 +146,7 @@ export class CallWindowPlace {
  */
 export class CallWindowPresence {
   readonly #surface: CallWindowSurface;
-  #view: Pick<VoiceView, "voiceStatus" | "callPlanId"> | undefined;
+  #view: Pick<VoiceView, "voiceStatus" | "callTaskId"> | undefined;
   #avatar: AvatarState | undefined;
   #focused: WebContents | undefined;
   #standing = false;
@@ -157,7 +157,7 @@ export class CallWindowPresence {
   }
 
   voiceChanged(voice: {
-    view?: Pick<VoiceView, "voiceStatus" | "callPlanId"> | undefined;
+    view?: Pick<VoiceView, "voiceStatus" | "callTaskId"> | undefined;
     avatar: AvatarState;
   }): void {
     this.#view = voice.view;

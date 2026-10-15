@@ -13,9 +13,9 @@ import {
   INBOX_WIRE_VERSION,
   type InboxItem,
 } from "@luke/features/inbox-wire";
-import type { Plan } from "@luke/features/plan-wire";
+import type { Task } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
-import { DOCUMENT_REGION, PLANS_PAGE } from "@luke/ui/planning-model";
+import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -35,7 +35,7 @@ import { SIDE_PANEL_TAB } from "../planning/use-side-panel";
 import "../file-tree/index";
 import { DesktopPlans } from "./desktop-plans";
 
-const PLAN: Plan = {
+const PLAN: Task = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
   workspaceId: "workspace-personal",
   name: "Teammate invitations",
@@ -63,7 +63,7 @@ test("a task the service will not hand the reader, as a link to another workspac
         summary: UNPINNED_SUMMARY,
         looks: NO_LOOKS,
         plans: plansControl({
-          page: PLANS_PAGE.DOCUMENT,
+          page: TASKS_PAGE.DOCUMENT,
           activePlanId: PLAN.id,
           region: { kind: DOCUMENT_REGION.MISSING },
           onLeavePlan: () => left.push(PLAN.id),
@@ -91,9 +91,9 @@ test("the Call tab draws each call's spoken lines as the developer's bubbles and
       summary: UNPINNED_SUMMARY,
       looks: NO_LOOKS,
       plans: plansControl({
-        page: PLANS_PAGE.DOCUMENT,
+        page: TASKS_PAGE.DOCUMENT,
         activePlanId: PLAN.id,
-        region: { kind: DOCUMENT_REGION.READY, plan: PLAN },
+        region: { kind: DOCUMENT_REGION.READY, task: PLAN },
         sidePanel: { ...plansControl().sidePanel, open: true, tab: SIDE_PANEL_TAB.CALL },
         transcript: {
           region: {
@@ -165,9 +165,9 @@ test("a plan's Inbox tab whose read holds nothing says nothing needs you under t
           looks: NO_LOOKS,
           captions: undefined,
           plans: plansControl({
-            page: PLANS_PAGE.DOCUMENT,
+            page: TASKS_PAGE.DOCUMENT,
             activePlanId: PLAN.id,
-            region: { kind: DOCUMENT_REGION.READY, plan: PLAN },
+            region: { kind: DOCUMENT_REGION.READY, task: PLAN },
             mainTabs: {
               ...plansControl().mainTabs,
               tabs: [MAIN_TAB.PLAN, MAIN_TAB.INBOX],
@@ -255,9 +255,9 @@ async function narrowPlanInbox(
           looks: NO_LOOKS,
           captions: undefined,
           plans: plansControl({
-            page: PLANS_PAGE.DOCUMENT,
+            page: TASKS_PAGE.DOCUMENT,
             activePlanId: PLAN.id,
-            region: { kind: DOCUMENT_REGION.READY, plan: PLAN },
+            region: { kind: DOCUMENT_REGION.READY, task: PLAN },
             mainTabs: {
               ...plansControl().mainTabs,
               tabs: [MAIN_TAB.PLAN, MAIN_TAB.INBOX],
@@ -562,9 +562,9 @@ test("the crumb's workspace opens that workspace's home page, the window switchi
             summary: UNPINNED_SUMMARY,
             looks: NO_LOOKS,
             plans: plansControl({
-              page: PLANS_PAGE.DOCUMENT,
+              page: TASKS_PAGE.DOCUMENT,
               activePlanId: PLAN.id,
-              region: { kind: DOCUMENT_REGION.READY, plan: PLAN },
+              region: { kind: DOCUMENT_REGION.READY, task: PLAN },
               workspaces: [personal, acme],
               workspace: listed,
               onChooseWorkspace: (workspaceId) => asked.push(`choose ${workspaceId}`),
@@ -614,9 +614,9 @@ test("the crumb says the plan's repository as the sidebar does: its name alone, 
             summary: UNPINNED_SUMMARY,
             looks: NO_LOOKS,
             plans: plansControl({
-              page: PLANS_PAGE.DOCUMENT,
+              page: TASKS_PAGE.DOCUMENT,
               activePlanId: plan.id,
-              region: { kind: DOCUMENT_REGION.READY, plan },
+              region: { kind: DOCUMENT_REGION.READY, task: plan },
               workspaces: [home],
               workspace: home,
               plans: [summary, ...listed],

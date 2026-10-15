@@ -3,7 +3,7 @@
  *
  * The read answers facts and bytes, never a decision: whether the path is a
  * regular file of the tree, its size, and its bytes where GitHub carries
- * them, which `plans/shown-file.ts` decides on exactly as it decides on the
+ * them, which `tasks/shown-file.ts` decides on exactly as it decides on the
  * planning checkout's probe. A path GitHub would resolve outside the
  * repository's contents (an empty, `.`, or `..` segment, which a URL folds
  * away) is asked nothing and reads as no file. A link, a directory, or a

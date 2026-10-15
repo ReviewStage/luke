@@ -82,7 +82,7 @@ export function PlanPictures({
   const names = useRef(new Map<string, string>());
   const read = useCallback(
     (owner: string, id: string) =>
-      act(ACT_KIND.PLANNING_PICTURE_READ, { planId: owner, attachmentId: id }),
+      act(ACT_KIND.TASKS_PICTURE_READ, { planId: owner, attachmentId: id }),
     [act],
   );
   const door = useMemo<PlanPicturesDoor>(
@@ -183,7 +183,7 @@ export function usePlanPictureDrawer(): PictureDrawer | undefined {
       return (
         <PlanPicture
           door={door}
-          owner={named.planId}
+          owner={named.taskId}
           id={named.attachmentId}
           alt={alt}
           caption={title}

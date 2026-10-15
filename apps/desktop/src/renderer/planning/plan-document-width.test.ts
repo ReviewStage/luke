@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { PLAN_ACTOR, type Plan } from "@luke/features/plan-wire";
-import type { PlanningRepositoriesAnswer } from "@luke/features/planning-view";
+import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
+import type { TasksRepositoriesAnswer } from "@luke/features/tasks-view";
 import {
   WORKSPACE_ROLE,
   type Workspace,
@@ -81,7 +81,7 @@ const BODY = [
 ].join("\n\n");
 
 /** A plan with a long name, a list, and a table, last written by Luke on Grace's call. */
-const PLAN: Plan = {
+const PLAN: Task = {
   ...DOCUMENT_PLAN,
   name: "Let members invite teammates by email with expiring single-use links",
   repository: "northwind-platform/customer-identity-and-access-management-service",
@@ -134,7 +134,7 @@ async function drawnAt(width: number): Promise<HTMLElement> {
       repository: {
         label: (named) => repositoryLabel(named, []),
         pictures: false,
-        read: () => new Promise<PlanningRepositoriesAnswer>(() => undefined),
+        read: () => new Promise<TasksRepositoriesAnswer>(() => undefined),
       },
     },
   });

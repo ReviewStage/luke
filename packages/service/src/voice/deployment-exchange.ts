@@ -9,8 +9,8 @@ import {
   eveSessionsComposer,
 } from "../agents/brain-host/eve-sessions.js";
 import { openAiBrainModel } from "../agents/brain-host/model.js";
-import { HOSTED_TOOL_SET } from "../plans/brain-tool-set.js";
-import { PLAN_SCRIBE } from "../plans/plan-scribe.js";
+import { HOSTED_TOOL_SET } from "../tasks/brain-tool-set.js";
+import { PLAN_SCRIBE } from "../tasks/plan-scribe.js";
 import { exchangeAttachment } from "./exchange-attachment.js";
 import type { ExchangeAttachment } from "./live-exchange.js";
 

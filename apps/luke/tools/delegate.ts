@@ -1,4 +1,4 @@
-import { PLANNER_DELEGATE_TOOL } from "@luke/service/agents/brain-host/planning";
+import { BRAIN_DELEGATE_TOOL } from "@luke/service/agents/brain-host/brain";
 import { emitJsonSchema } from "@luke/wire/effect";
 import { defineWorkflowTool, type WorkflowServeReceive } from "eve/tools";
 
@@ -27,8 +27,8 @@ interface DelegateInput {
 }
 
 export default defineWorkflowTool({
-  description: PLANNER_DELEGATE_TOOL.description,
-  inputSchema: emitJsonSchema(PLANNER_DELEGATE_TOOL.inputSchema),
+  description: BRAIN_DELEGATE_TOOL.description,
+  inputSchema: emitJsonSchema(BRAIN_DELEGATE_TOOL.inputSchema),
   async serve(receive: WorkflowServeReceive<DelegateInput>, ctx) {
     "use workflow";
     const worker = ctx.agent(WORKER);

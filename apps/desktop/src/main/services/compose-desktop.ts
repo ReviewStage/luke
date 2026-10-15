@@ -3,7 +3,7 @@ import {
   AgentNoticeDoors,
   type AgentNotices,
   createAgentNotices,
-  noticePlanTitle,
+  noticeTaskTitle,
 } from "@luke/host/agent-notices";
 import {
   type DuplicateGatewayMethod,
@@ -248,10 +248,10 @@ export function composeDesktop(
         report: config.report,
       });
       const notices = yield* createAgentNotices({
-        listAgents: (planId) => operator.host.codingAgentList({ planId }),
+        listAgents: (planId) => operator.host.codingAgentList({ taskId: planId }),
         readAgent: (agentId) => operator.host.codingAgentPage({ agentId }),
         readPullRequest: (agentId) => operator.host.codingAgentPullRequest({ agentId }),
-        planName: (planId) => noticePlanTitle(state.snapshot().planning, planId),
+        taskName: (planId) => noticeTaskTitle(state.snapshot().tasks, planId),
         open: (place) => {
           windows.panels.focusExpanded();
           windows.showAgent(place);
@@ -269,8 +269,8 @@ export function composeDesktop(
         onAccountChanged: (listener) =>
           operator.host.onAccountChanged((account) => listener(accountKey(account))),
         // An agent starting or ending, or a new pull request, is read on the sidebar's rows from the list.
-        onPlanAgentsMoved: () => {
-          void run(operator.host.planningRefresh());
+        onTaskAgentsMoved: () => {
+          void run(operator.host.tasksRefresh());
         },
         readAccountInbox: (after) => operator.host.codingAgentAccountInbox({ after }),
         accounts: Stream.map(state.changes, (document) => accountKey(document.account)),
@@ -279,7 +279,7 @@ export function composeDesktop(
           windows.panels.focusExpanded();
           windows.showInbox(planId);
         },
-        openPlanlessItem: (item) => {
+        openTasklessItem: (item) => {
           windows.panels.focusExpanded();
           windows.showInboxItem(item);
         },
@@ -299,10 +299,10 @@ export function composeDesktop(
       // reported rather than left to end the fiber, which would never resume.
       yield* Effect.forkScoped(
         Stream.runForEach(
-          Stream.changes(Stream.map(state.changes, (document) => document.planning.planlessAgents)),
+          Stream.changes(Stream.map(state.changes, (document) => document.tasks.tasklessAgents)),
           (agents) =>
             Effect.catchDefect(
-              Effect.sync(() => notices.observePlanless(agents ?? [])),
+              Effect.sync(() => notices.observeTaskless(agents ?? [])),
               (defect) =>
                 Effect.sync(() =>
                   config.report(

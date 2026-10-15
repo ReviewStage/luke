@@ -1,5 +1,4 @@
 import type { DatabaseServices } from "@luke/database/core/query";
-import type { PlanStoreEffect, PlanStoreFailure } from "@luke/database/models/plan-store";
 import {
   type KeyRing,
   openProviderKey,
@@ -12,6 +11,7 @@ import {
   setProviderKeyFastAccess,
   setProviderKeyStatus,
 } from "@luke/database/models/provider-key-store";
+import type { TaskStoreEffect, TaskStoreFailure } from "@luke/database/models/task-store";
 import {
   type FastAccess,
   PROVIDER_KEY_PROVIDER,
@@ -83,7 +83,7 @@ function keyOf(
 export function accountProviderKeys(
   userId: string,
   seams: AccountKeysSeams,
-): PlanStoreEffect<ProviderKeys> {
+): TaskStoreEffect<ProviderKeys> {
   return Effect.map(listProviderKeyRows(userId), (rows) => {
     const parsed = seams.ring === undefined ? undefined : parseKeyRing(seams.ring);
     const ring = parsed !== undefined && Result.isSuccess(parsed) ? parsed.success : undefined;
@@ -115,7 +115,7 @@ export function accountProviderKeys(
  */
 export function anthropicFastAccess(
   userId: string,
-): Effect.Effect<FastAccess | undefined, PlanStoreFailure, DatabaseServices | ModelCatalog> {
+): Effect.Effect<FastAccess | undefined, TaskStoreFailure, DatabaseServices | ModelCatalog> {
   return Effect.gen(function* () {
     const rows = yield* listProviderKeyRows(userId);
     const own = rows.find((row) => row.provider === PROVIDER_KEY_PROVIDER.ANTHROPIC);

@@ -7,7 +7,7 @@ import {
   settleCodingAgentAuthor,
   updateCodingAgentBranch,
 } from "@luke/database/models/coding-agent-store";
-import { getTestDB, startPlan } from "@luke/database/testing";
+import { getTestDB, startTask } from "@luke/database/testing";
 import { CODING_AGENT_AUTHOR, type CodingAgentAuthor } from "@luke/features/coding-agent-wire";
 import { ACTION_RESULT_STATUS, unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { Clock, Effect, Option } from "effect";
@@ -79,10 +79,10 @@ const openAgent = (
       repositories: [RELAY],
     };
     const userId = yield* openGithubUser(row);
-    const plan = yield* startPlan(userId, { name: "Invitations", repository: RELAY_FULL_NAME });
+    const plan = yield* startTask(userId, { name: "Invitations", repository: RELAY_FULL_NAME });
     yield* connectWorkspaceGitHub(plan.workspaceId, installation);
     const started = yield* createCodingAgent(userId, {
-      planId: plan.id,
+      taskId: plan.id,
       idempotencyKey: "start-1",
       model: "anthropic/claude-opus-5.5",
       effort: "high",

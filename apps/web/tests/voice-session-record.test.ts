@@ -6,7 +6,7 @@ import { InstantColumnSchema } from "@luke/database/models/columns";
 import { voiceSessionRecord } from "@luke/database/models/voice-session-record";
 import { user } from "@luke/database/schemas/auth";
 import { voiceSessions, voiceTranscriptSegments } from "@luke/database/schemas/voice";
-import { getTestDB, joinWorkspace, startPlan } from "@luke/database/testing";
+import { getTestDB, joinWorkspace, startTask } from "@luke/database/testing";
 import {
   VOICE_DELEGATION_MODE,
   VOICE_SEGMENT_ROLE,
@@ -67,7 +67,7 @@ const callWith = (
     const voiceSessionId = yield* record.register({
       userId: input.userId,
       sessionId: liveSessionId,
-      planId: input.planId,
+      taskId: input.planId,
       attachId: randomUUID(),
       model: LIVE_DEFAULTS.MODEL,
     });
@@ -96,14 +96,14 @@ it.layer(getTestDB())("the voice session record over effect/sql", (it) => {
         const registered = yield* record.register({
           userId: owner,
           sessionId: liveSessionId,
-          planId,
+          taskId: planId,
           attachId: randomUUID(),
           model: LIVE_DEFAULTS.MODEL,
         });
         const taken = yield* record.register({
           userId: other,
           sessionId: liveSessionId,
-          planId: randomUUID(),
+          taskId: randomUUID(),
           attachId: randomUUID(),
           model: LIVE_DEFAULTS.MODEL,
         });
@@ -114,7 +114,7 @@ it.layer(getTestDB())("the voice session record over effect/sql", (it) => {
         assert.equal(taken, undefined);
         assert.deepEqual(yield* record.owned({ userId: owner, sessionId: liveSessionId }), {
           voiceSessionId: registered,
-          planId,
+          taskId: planId,
         });
         assert.equal(yield* record.owned({ userId: other, sessionId: liveSessionId }), undefined);
         assert.equal(yield* record.owned({ userId: owner, sessionId: "live_never" }), undefined);
@@ -146,11 +146,11 @@ it.layer(getTestDB())("the voice session record over effect/sql", (it) => {
         const starter = yield* openUser;
         const teammate = yield* openUser;
         const stranger = yield* openUser;
-        const plan = yield* startPlan(starter, { name: "Teammate invitations" });
+        const plan = yield* startTask(starter, { name: "Teammate invitations" });
         yield* joinWorkspace(plan.workspaceId, teammate);
 
-        assert.equal((yield* record.heldPlan({ userId: teammate, planId: plan.id }))?.id, plan.id);
-        assert.equal(yield* record.heldPlan({ userId: stranger, planId: plan.id }), undefined);
+        assert.equal((yield* record.heldTask({ userId: teammate, taskId: plan.id }))?.id, plan.id);
+        assert.equal(yield* record.heldTask({ userId: stranger, taskId: plan.id }), undefined);
       }),
   );
 
@@ -178,13 +178,13 @@ it.layer(getTestDB())("the voice session record over effect/sql", (it) => {
           [USER, "A teammate's."],
         ]);
 
-        assert.deepEqual(yield* record.earlierCalls({ userId: owner, planId }), [
+        assert.deepEqual(yield* record.earlierCalls({ userId: owner, taskId: planId }), [
           { voiceSessionId: first, role: USER, text: "Invites should expire." },
           { voiceSessionId: first, role: ASSISTANT, text: "After how many days?" },
           { voiceSessionId: second, role: USER, text: "Seven days." },
           { voiceSessionId: teammates, role: USER, text: "A teammate's." },
         ]);
-        assert.deepEqual(yield* record.earlierCalls({ userId: owner, planId: randomUUID() }), []);
+        assert.deepEqual(yield* record.earlierCalls({ userId: owner, taskId: randomUUID() }), []);
       }),
   );
 });

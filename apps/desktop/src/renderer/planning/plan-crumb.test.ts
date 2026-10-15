@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { PlanSummary } from "@luke/features/plan-wire";
-import type { PlanningRepositoriesAnswer } from "@luke/features/planning-view";
+import type { TaskSummary } from "@luke/features/task-wire";
+import type { TasksRepositoriesAnswer } from "@luke/features/tasks-view";
 import {
   WORKSPACE_ROLE,
   type Workspace,
@@ -61,7 +61,7 @@ const MEMBERS: readonly WorkspaceMember[] = [
 ];
 
 /** The repositories Acme's GitHub reaches, as the service answers them. */
-const REPOSITORIES: PlanningRepositoriesAnswer = {
+const REPOSITORIES: TasksRepositoriesAnswer = {
   repositories: {
     installed: true,
     installationUrl: "https://github.com/apps/luke/installations/new",
@@ -106,7 +106,7 @@ async function crumb(
   repository: string | null,
   members: readonly WorkspaceMember[] | undefined,
   archived = false,
-  created?: Pick<PlanSummary, "createdBy" | "ownerId" | "createdAt">,
+  created?: Pick<TaskSummary, "createdBy" | "ownerId" | "createdAt">,
 ) {
   const links: SettingsLink[] = [];
   /** What the crumb's doors were asked, in order. */
@@ -415,7 +415,7 @@ test("the reader's own task says it was created by you, and a task whose creator
     ownerId: "user-sam",
     createdAt: 1,
   };
-  const said = async (created?: Pick<PlanSummary, "createdBy" | "ownerId" | "createdAt">) => {
+  const said = async (created?: Pick<TaskSummary, "createdBy" | "ownerId" | "createdAt">) => {
     const { nav } = await crumb(ACME, "acme-corp/relay", MEMBERS, false, created);
     const people =
       nav.querySelector<HTMLElement>(".plan-crumb-people") ?? assert.fail("who can edit");

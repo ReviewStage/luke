@@ -23,4 +23,4 @@ import { defineSandbox } from "eve/sandbox";
  */
 export { environment };
 
-export default defineSandbox(() => openSandbox(AGENT_ROLE.PLANNER));
+export default defineSandbox(() => openSandbox(AGENT_ROLE.BRAIN));

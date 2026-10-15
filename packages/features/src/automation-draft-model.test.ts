@@ -212,9 +212,9 @@ test("a save changes only what moved, the task keeping its model, and a draft th
     ),
     { repositories: ["acme/web"], scope: AUTOMATION_SCOPE.PERSONAL },
   );
-  const onPlan = { ...SAVED, planId: "9b1d2c3e-4f5a-4b6c-8d7e-0f1a2b3c4d5e" };
+  const onTask = { ...SAVED, planId: "9b1d2c3e-4f5a-4b6c-8d7e-0f1a2b3c4d5e" };
   assert.equal(
-    changeOf({ ...automationDraft(onPlan, DEFAULTS), repository: "acme/web" }, onPlan, DEFAULTS),
+    changeOf({ ...automationDraft(onTask, DEFAULTS), repository: "acme/web" }, onTask, DEFAULTS),
     undefined,
     "a plan's automation works in its plan's repository",
   );

@@ -50,7 +50,7 @@ const failed = EffectSchema.Struct({
 
 /** The list asked for: the account's automations, or one plan's, or one workspace's. */
 export const automationListParamsSchema = EffectSchema.Struct({
-  planId: EffectSchema.optionalKey(wireUuidSchema),
+  taskId: EffectSchema.optionalKey(wireUuidSchema),
   workspaceId: EffectSchema.optionalKey(EffectSchema.NonEmptyString),
 });
 

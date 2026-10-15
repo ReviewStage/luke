@@ -19,6 +19,6 @@ export {
   HOST_NODE_CAPABILITY_LIST,
   HOST_OPERATOR_CLIENT_ID,
 } from "./node-capabilities.js";
-export { highlightSnippet } from "./plan-code.js";
 export { type RunMode, runModeFor, sentryReportingEnabled } from "./run-mode.js";
+export { highlightSnippet } from "./task-code.js";
 export { openSocketOverWs } from "./voice/socket-over-ws.js";

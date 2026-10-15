@@ -1,4 +1,4 @@
-import type { PlanShownCode } from "@luke/features/planning-view";
+import type { TaskShownCode } from "@luke/features/tasks-view";
 import type { Effect } from "effect";
 
 /**
@@ -83,7 +83,7 @@ export type LiveBrainRunEvent =
   | ({
       readonly kind: typeof LIVE_BRAIN_RUN_EVENT.CODE_SHOWN;
       readonly runId: string;
-    } & PlanShownCode)
+    } & TaskShownCode)
   // The developer said they are done and the planning model asked to end
   // the call; the service decides whether this run may still end it.
   | { readonly kind: typeof LIVE_BRAIN_RUN_EVENT.CALL_ENDING; readonly runId: string }

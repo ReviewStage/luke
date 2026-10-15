@@ -1,4 +1,4 @@
-import { LOOK_AT_PICTURE_TOOL, pictureLookModelOutput } from "@luke/service/plans/picture-look";
+import { LOOK_AT_PICTURE_TOOL, pictureLookModelOutput } from "@luke/service/tasks/picture-look";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { emitJsonSchema } from "@luke/wire/effect";
 import { defineTool } from "eve/tools";

@@ -16,7 +16,7 @@ import {
 import { listWorkspaces } from "@luke/database/models/workspace-store";
 import { account, user } from "@luke/database/schemas/auth";
 import { githubInstallation } from "@luke/database/schemas/github-installation";
-import { fakeWorkspaceSeams, getTestDB, leaveWorkspace, startPlan } from "@luke/database/testing";
+import { fakeWorkspaceSeams, getTestDB, leaveWorkspace, startTask } from "@luke/database/testing";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -193,17 +193,17 @@ function pullRequestDelivery(action: string, ref: string) {
 const openAgent = (pull: PullRequestFixture) =>
   Effect.gen(function* () {
     const owner = yield* openGithubUser();
-    const plan = yield* startPlan(owner, {
+    const task = yield* startTask(owner, {
       name: "Teammate invitations",
       repository: RELAY_FULL_NAME,
     });
     const installation = installationOfRelay();
     assert.equal(
-      yield* connectWorkspaceGitHub(plan.workspaceId, installation),
+      yield* connectWorkspaceGitHub(task.workspaceId, installation),
       LINK_OUTCOME.LINKED,
     );
     const started = yield* createCodingAgent(owner, {
-      planId: plan.id,
+      taskId: task.id,
       idempotencyKey: randomUUID(),
       model: "anthropic/claude-opus-5.5",
       effort: "high",
@@ -224,7 +224,7 @@ const openAgent = (pull: PullRequestFixture) =>
       DatabaseServices
     > =>
       Effect.map(
-        listPublishedCodingAgents(owner, [plan.id]),
+        listPublishedCodingAgents(owner, [task.id]),
         (agents) => agents.find((each) => each.agent.id === agent.id)?.published,
       );
     return { github, kept, ref };
@@ -423,7 +423,7 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
       Effect.gen(function* () {
         const owner = yield* openGithubUser();
         const repositoryName = `Acme/triage-${randomUUID()}`;
-        const plan = yield* startPlan(owner, { name: "Triage", repository: repositoryName });
+        const task = yield* startTask(owner, { name: "Triage", repository: repositoryName });
         const trigger: AutomationTrigger = {
           kind: AUTOMATION_TRIGGER.GITHUB,
           event: GITHUB_TRIGGER_EVENT.ISSUE_OPENED,
@@ -431,7 +431,7 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
         };
         const made = Option.getOrThrow(
           yield* createAutomation(owner, {
-            planId: plan.id,
+            taskId: task.id,
             name: "Fix reported bugs",
             trigger,
             action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: "Fix the reported bug." },
@@ -501,12 +501,12 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
       Effect.gen(function* () {
         const owner = yield* openGithubUser();
         const repositoryName = `Acme/review-${randomUUID()}`;
-        const plan = yield* startPlan(owner, { name: "Reviews", repository: null });
+        const task = yield* startTask(owner, { name: "Reviews", repository: null });
         const onWorkspace = (event: GitHubTriggerEvent, name: string) =>
           Effect.map(
             createAutomation(owner, {
-              planId: null,
-              organizationId: plan.workspaceId,
+              taskId: null,
+              organizationId: task.workspaceId,
               repositories: ["Acme/elsewhere", repositoryName],
               name,
               trigger: { kind: AUTOMATION_TRIGGER.GITHUB, event },
@@ -565,7 +565,7 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
         assert.equal((yield* listAutomationRuns(owner, greet.id)).length, 1);
 
         // Its owner gone from the workspace, the automation hears nothing more.
-        yield* leaveWorkspace(plan.workspaceId, owner);
+        yield* leaveWorkspace(task.workspaceId, owner);
         assert.deepEqual(yield* queued(pull("synchronize")), { read: 0, queued: 0, told: 0 });
       }),
   );
@@ -576,12 +576,12 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
       Effect.gen(function* () {
         const owner = yield* openGithubUser();
         const repositoryName = `Acme/settings-${randomUUID()}`;
-        const plan = yield* startPlan(owner, { name: "Reviews", repository: null });
+        const task = yield* startTask(owner, { name: "Reviews", repository: null });
         const listening = (trigger: AutomationTrigger) =>
           Effect.map(
             createAutomation(owner, {
-              planId: null,
-              organizationId: plan.workspaceId,
+              taskId: null,
+              organizationId: task.workspaceId,
               repositories: [repositoryName],
               name: "Code review",
               trigger,
@@ -665,11 +665,11 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
       Effect.gen(function* () {
         const owner = yield* openGithubUser();
         const repositoryName = `Acme/agents-${randomUUID()}`;
-        const plan = yield* startPlan(owner, { name: "Reviews", repository: null });
+        const plan = yield* startTask(owner, { name: "Reviews", repository: null });
         const hearing = (senders: readonly GitHubSender[]) =>
           Effect.map(
             createAutomation(owner, {
-              planId: null,
+              taskId: null,
               organizationId: plan.workspaceId,
               repositories: [repositoryName],
               name: "Code review",
@@ -741,10 +741,10 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
     Effect.gen(function* () {
       const owner = yield* openGithubUser();
       const repositoryName = `Acme/ci-${randomUUID()}`;
-      const plan = yield* startPlan(owner, { name: "CI", repository: repositoryName });
+      const task = yield* startTask(owner, { name: "CI", repository: repositoryName });
       const made = Option.getOrThrow(
         yield* createAutomation(owner, {
-          planId: plan.id,
+          taskId: task.id,
           name: "Fix main",
           trigger: {
             kind: AUTOMATION_TRIGGER.GITHUB,

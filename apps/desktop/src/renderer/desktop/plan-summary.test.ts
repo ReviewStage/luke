@@ -19,9 +19,9 @@ import { relayout } from "#testing/resize-observer";
 import { fadedEdges, layFades } from "#testing/scroll-fade";
 import { LinkWorkspaceProvider } from "../copy-link-item";
 import {
-  PlanSummary,
   SummaryButton,
   type SummaryLayout,
+  TaskSummary,
   useSummaryLayout,
   useSummaryPin,
 } from "./plan-summary";
@@ -130,7 +130,7 @@ function mount(shown: "agent" | "plan", linkWorkspace?: string) {
         createElement(
           LinkWorkspaceProvider,
           { value: linkWorkspace },
-          createElement(PlanSummary, {
+          createElement(TaskSummary, {
             plans,
             layout: PINNED,
             cardId: "summary-card",
@@ -229,7 +229,7 @@ function PlanColumn(): React.JSX.Element {
     "div",
     { ref: setColumn },
     createElement(SummaryButton, { layout, cardId: "summary-card" }),
-    createElement(PlanSummary, {
+    createElement(TaskSummary, {
       plans: plansControl(),
       layout,
       cardId: "summary-card",

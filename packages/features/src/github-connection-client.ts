@@ -16,10 +16,10 @@ import {
   githubConnectAnswerSchema,
   githubConnectionAnswerSchema,
 } from "./github-connection-wire.js";
-import type { PlanCallResult } from "./plan-client.js";
-import { GITHUB_DISCONNECT_FAILURE, PLAN_CALL_FAILURE } from "./planning-view.js";
 import { HOSTED_SERVICE_PATH } from "./service-paths.js";
 import { HOSTED_API_ERROR, hostedErrorSchema, readServiceAnswer } from "./service-wire.js";
+import type { TaskCallResult } from "./task-client.js";
+import { GITHUB_DISCONNECT_FAILURE, TASK_CALL_FAILURE } from "./tasks-view.js";
 
 /**
  * github-connection-client.ts -- whether the signed-in account has connected its GitHub, and the page that connects it, as the host asks the service for them.
@@ -35,7 +35,7 @@ import { HOSTED_API_ERROR, hostedErrorSchema, readServiceAnswer } from "./servic
 
 /** Why a GitHub connection call has no answer: the service never gave one the wire reads. */
 export const GITHUB_CONNECTION_CALL_FAILURE = {
-  UNANSWERED: PLAN_CALL_FAILURE.UNANSWERED,
+  UNANSWERED: TASK_CALL_FAILURE.UNANSWERED,
   /** GitHub is the account's only way to sign in, so the service keeps it linked. */
   NOT_PERMITTED: GITHUB_DISCONNECT_FAILURE.NOT_PERMITTED,
 } as const;
@@ -44,7 +44,7 @@ export type GitHubConnectionCallFailure =
   (typeof GITHUB_CONNECTION_CALL_FAILURE)[keyof typeof GITHUB_CONNECTION_CALL_FAILURE];
 
 /** A connect or a status read: its answer, or why there is none. */
-export type GitHubConnectionCallResult<Answer> = PlanCallResult<
+export type GitHubConnectionCallResult<Answer> = TaskCallResult<
   Answer,
   GitHubConnectionCallFailure
 >;

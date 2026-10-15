@@ -39,11 +39,11 @@ const LISTENING: VoiceView = {
   ...IDLE_VOICE_VIEW,
   voiceStatus: LIVE_STATUS.LISTENING,
   listening: true,
-  callPlanId: PLAN_ID,
+  callTaskId: PLAN_ID,
 };
 
 const CARD: CallCardInput = {
-  card: { planName: "Teammate invitations", status: undefined, microphoneMuted: false },
+  card: { taskName: "Teammate invitations", status: undefined, microphoneMuted: false },
   speakerMuted: false,
   controls: {
     onReturn: () => undefined,

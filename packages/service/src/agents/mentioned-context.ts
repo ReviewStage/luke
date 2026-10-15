@@ -14,7 +14,7 @@ import {
 import type { PageVersion } from "@luke/features/page-wire";
 import { planSections } from "@luke/features/plan-document";
 import { planMarkdown } from "@luke/features/plan-markdown";
-import type { Plan } from "@luke/features/plan-wire";
+import type { Task } from "@luke/features/task-wire";
 
 /**
  * mentioned-context.ts -- what a coding agent's message mentions that the agent cannot read for itself, as it stood when the message was sent.
@@ -140,21 +140,21 @@ interface HandedMention {
 }
 
 /** What a mention of the plan or one of its sections is handed as. */
-function excerptOf({ mention, name }: NamedMention, plan: Plan): string {
-  if (mention.kind === MENTION_KIND.PLAN) {
-    const whole = planMarkdown(plan);
+function excerptOf({ mention, name }: NamedMention, task: Task): string {
+  if (mention.kind === MENTION_KIND.TASK) {
+    const whole = planMarkdown(task);
     if (whole.length <= MENTIONED_BOUNDS.PLAN_CHARS) return `The whole plan:\n\n${whole.trimEnd()}`;
     // Note that a section is left out by where it starts, past the cut, never by its heading's words, which earlier text may quote.
     const bodyKept =
       keptLength(whole, MENTIONED_BOUNDS.PLAN_CHARS) -
-      (whole.length - plan.document.body.trimEnd().length - 1);
-    const headings = planSections(plan.document.body)
+      (whole.length - task.document.body.trimEnd().length - 1);
+    const headings = planSections(task.document.body)
       .filter((section) => section.heading !== "" && section.from >= bodyKept)
       .map((section) => section.heading);
     const rest = headings.length === 0 ? "" : `\n\nIts other sections: ${headingList(headings)}.`;
     return `The whole plan, cut short:\n\n${cutOnLine(whole, MENTIONED_BOUNDS.PLAN_CHARS)}${rest}`;
   }
-  const sections = planSections(plan.document.body);
+  const sections = planSections(task.document.body);
   const anchors = sectionAnchors(sections.map((section) => section.heading));
   const section = sections[anchors.indexOf(mention.anchor)];
   if (section === undefined) {
@@ -244,7 +244,7 @@ function readingOf(agent: MentionedAgent, repository: string | null): string {
 }
 
 /** What a mention of another of the plan's agents is handed as: its name, its id, and where its work stands on GitHub; never its conversation. */
-function agentNoteOf(agentId: string, name: string, reads: MentionedReads, plan: Plan): string {
+function agentNoteOf(agentId: string, name: string, reads: MentionedReads, plan: Task): string {
   const agent = reads.agents.get(agentId);
   if (agent === undefined) return `The coding agent "${name}": no longer on this task.`;
   const archived = agent.archived ? ", archived," : "";
@@ -284,13 +284,13 @@ function noteOf(mention: ServerMention): string {
 }
 
 /** The mention as the part hands it, where it hands it anything: one of another plan, or of a plan where the agent has none, is handed nothing. */
-function handedMention(mention: Mention, plan: Plan | undefined): Handed | undefined {
+function handedMention(mention: Mention, plan: Task | undefined): Handed | undefined {
   switch (mention.kind) {
-    case MENTION_KIND.PLAN:
+    case MENTION_KIND.TASK:
     case MENTION_KIND.SECTION:
     case MENTION_KIND.PAGE:
     case MENTION_KIND.AGENT:
-      return mention.planId === plan?.id ? mention : undefined;
+      return mention.taskId === plan?.id ? mention : undefined;
     case MENTION_KIND.SERVER:
     case MENTION_KIND.TOOL:
     case MENTION_KIND.LINK:
@@ -314,8 +314,8 @@ function sameMention(first: Handed, second: Handed): boolean {
         first.lines?.startLine === second.lines?.startLine &&
         first.lines?.endLine === second.lines?.endLine
       );
-    case MENTION_KIND.PLAN:
-      return second.kind === MENTION_KIND.PLAN;
+    case MENTION_KIND.TASK:
+      return second.kind === MENTION_KIND.TASK;
     case MENTION_KIND.SECTION:
       return second.kind === MENTION_KIND.SECTION && first.anchor === second.anchor;
     case MENTION_KIND.SERVER:
@@ -343,11 +343,11 @@ function sameMention(first: Handed, second: Handed): boolean {
 /** What the part hands for one mention; a mention of the plan or of what it holds only where the agent has one (`handedMention`). */
 function handedAs(
   { mention, name }: HandedMention,
-  plan: Plan | undefined,
+  plan: Task | undefined,
   reads: MentionedReads,
 ): string {
   switch (mention.kind) {
-    case MENTION_KIND.PLAN:
+    case MENTION_KIND.TASK:
     case MENTION_KIND.SECTION:
       return plan === undefined ? "" : excerptOf({ mention, name }, plan);
     case MENTION_KIND.PAGE:
@@ -370,12 +370,12 @@ export interface MentionedIds {
 }
 
 /** The pages and agents of the plan the words mention, by id, each once: what the send reads for `mentionedContext` to hand. */
-export function mentionedOfPlan(words: string, plan: Plan): MentionedIds {
+export function mentionedOfPlan(words: string, plan: Task): MentionedIds {
   const pages = new Set<string>();
   const agents = new Set<string>();
   for (const { mention } of mentionsIn(words, plan.repository)) {
-    if (mention.kind === MENTION_KIND.PAGE && mention.planId === plan.id) pages.add(mention.pageId);
-    if (mention.kind === MENTION_KIND.AGENT && mention.planId === plan.id)
+    if (mention.kind === MENTION_KIND.PAGE && mention.taskId === plan.id) pages.add(mention.pageId);
+    if (mention.kind === MENTION_KIND.AGENT && mention.taskId === plan.id)
       agents.add(mention.agentId);
   }
   return { pages: [...pages], agents: [...agents] };
@@ -404,12 +404,12 @@ export function mentionedServers(words: string, repository: string | null): read
  */
 export function mentionedContext(
   words: string,
-  plan: Plan | undefined,
+  task: Task | undefined,
   reads: MentionedReads = NO_MENTIONED_READS,
 ): string | undefined {
   const named: HandedMention[] = [];
-  for (const { mention, label } of mentionsIn(words, plan?.repository ?? null)) {
-    const handed = handedMention(mention, plan);
+  for (const { mention, label } of mentionsIn(words, task?.repository ?? null)) {
+    const handed = handedMention(mention, task);
     if (handed === undefined) continue;
     if (!named.some((each) => sameMention(each.mention, handed))) {
       named.push({ mention: handed, name: mentionName(label) });
@@ -422,7 +422,7 @@ export function mentionedContext(
   // ending the part, so a shorter one after it still goes; what was passed
   // over is counted, and said once at the end.
   for (const mention of named) {
-    const excerpt = `\n\n${handedAs(mention, plan, reads)}`;
+    const excerpt = `\n\n${handedAs(mention, task, reads)}`;
     if (part.length + excerpt.length + LEFT_OUT_ROOM <= MENTIONED_BOUNDS.PART_CHARS)
       part += excerpt;
     else left += 1;

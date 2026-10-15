@@ -1,7 +1,7 @@
 import type { AccountSnapshot } from "@luke/credentials/snapshot";
-import type { PlanlessAgent } from "@luke/features/coding-agent-wire";
+import type { TasklessAgent } from "@luke/features/coding-agent-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import type { PlanSummary } from "@luke/features/plan-wire";
+import type { TaskSummary } from "@luke/features/task-wire";
 import { EXPERIMENT } from "@luke/settings";
 import {
   ArchiveIcon,
@@ -17,7 +17,6 @@ import {
   UnpinIcon,
 } from "@luke/ui";
 import { actorName, creatorActor } from "@luke/ui/actor-model";
-import { PLANS_PAGE, repositoryPageUrl } from "@luke/ui/planning-model";
 import { isAgentTab, sameTab } from "@luke/ui/tab-strip-model";
 import {
   agentRow,
@@ -36,6 +35,7 @@ import {
   taskRowsCreatedBy,
   taskRowTime,
 } from "@luke/ui/task-list-model";
+import { repositoryPageUrl, TASKS_PAGE } from "@luke/ui/tasks-model";
 import type { UpdateControl } from "@luke/voice/settings-controls";
 import { FactoryIcon, HouseIcon, InboxIcon, ZapIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -172,7 +172,7 @@ interface RowContext {
   /** Opens an agent with no plan on its own page. */
   readonly onOpenAgent: (agentId: string) => void;
   /** Whether a plan was saved since the developer last looked at it on this Mac. */
-  readonly unread: (plan: PlanSummary) => boolean;
+  readonly unread: (plan: TaskSummary) => boolean;
   /** Whether an agent's turn ended while the developer was not looking at it. */
   readonly unseenAgent: (agentId: string) => boolean;
   /** The time each row's last update is counted back from. */
@@ -242,7 +242,7 @@ function PlanRows({
 }
 
 /** Pin or Unpin for an agent's row, the account's own; none for an archived agent, which the sidebar draws among the archived whether or not it is pinned, as a plan's. */
-function pinOf(plans: PlansControl, agent: PlanlessAgent): ((pinned: boolean) => void) | undefined {
+function pinOf(plans: PlansControl, agent: TasklessAgent): ((pinned: boolean) => void) | undefined {
   return agent.archivedAt === undefined
     ? (pinned) => plans.onPinAgent(agent.id, pinned)
     : undefined;
@@ -252,11 +252,11 @@ function pinOf(plans: PlansControl, agent: PlanlessAgent): ((pinned: boolean) =>
 type PinnedRow =
   | {
       readonly kind: typeof TASK_ROW.TASK;
-      readonly plan: PlanSummary;
+      readonly plan: TaskSummary;
       readonly pin: PinnedTab | undefined;
       readonly at: number;
     }
-  | { readonly kind: typeof TASK_ROW.AGENT; readonly agent: PlanlessAgent; readonly at: number };
+  | { readonly kind: typeof TASK_ROW.AGENT; readonly agent: TasklessAgent; readonly at: number };
 
 /**
  * The rows under Pinned, newest pinned first: the pinned plans, the pinned
@@ -265,8 +265,8 @@ type PinnedRow =
  * nowhere, its plan being out of the list.
  */
 function pinnedRows(
-  pinned: readonly PlanSummary[],
-  agents: readonly PlanlessAgent[],
+  pinned: readonly TaskSummary[],
+  agents: readonly TasklessAgent[],
   plans: PlansControl,
 ): PinnedRow[] {
   const planRows = pinned.map(
@@ -585,7 +585,7 @@ function CreatorSection({
 }
 
 /** Who created a row, as its creator's face and name are read: a task's creator and owner, or whoever started the agent. */
-function creatorOf(row: TaskRow): Pick<PlanSummary, "createdBy" | "ownerId"> {
+function creatorOf(row: TaskRow): Pick<TaskSummary, "createdBy" | "ownerId"> {
   if (row.kind === TASK_ROW.TASK) return row.plan;
   const { startedBy } = row.agent;
   return startedBy === undefined ? {} : { createdBy: startedBy, ownerId: startedBy.userId };
@@ -1115,7 +1115,7 @@ function SidebarColumn({
   call,
   onPressWithin,
 }: DesktopSidebarProps): React.JSX.Element {
-  const onPlans = tab === PANEL_TAB.PLANS;
+  const onPlans = tab === PANEL_TAB.TASKS;
   const overlay = useFloatingSidebar(sidebar);
   // The window's Inbox, an agent's page, Factory, and the Automations page stand in the plan's place, so while one does no plan is the place shown.
   const inInbox = onPlans && plans.inboxView.open;
@@ -1139,41 +1139,41 @@ function SidebarColumn({
   // A press in the list is always about plans, so it brings the Plans tab
   // forward from Settings as well as choosing.
   const openPlan = (planId: string) => {
-    if (!onPlans) onTabChange(PANEL_TAB.PLANS);
+    if (!onPlans) onTabChange(PANEL_TAB.TASKS);
     plans.onSelect(planId);
   };
   const showPlans = () => {
-    if (!onPlans) onTabChange(PANEL_TAB.PLANS);
+    if (!onPlans) onTabChange(PANEL_TAB.TASKS);
   };
   const newPlan = () => {
     showPlans();
     plans.onNewPlan();
   };
   const openPinnedTab = (pin: PinnedTab) => {
-    if (!onPlans) onTabChange(PANEL_TAB.PLANS);
+    if (!onPlans) onTabChange(PANEL_TAB.TASKS);
     plans.onOpenPinnedTab(pin);
   };
   const openInbox = () => {
-    if (!onPlans) onTabChange(PANEL_TAB.PLANS);
+    if (!onPlans) onTabChange(PANEL_TAB.TASKS);
     plans.inboxView.onOpen();
   };
   const openFactory = () => {
-    if (!onPlans) onTabChange(PANEL_TAB.PLANS);
+    if (!onPlans) onTabChange(PANEL_TAB.TASKS);
     plans.factoryView.onOpen();
   };
   const openAutomations = () => {
-    if (!onPlans) onTabChange(PANEL_TAB.PLANS);
+    if (!onPlans) onTabChange(PANEL_TAB.TASKS);
     plans.automationsView.onOpen();
   };
   const goHome = () => {
-    if (!onPlans) onTabChange(PANEL_TAB.PLANS);
+    if (!onPlans) onTabChange(PANEL_TAB.TASKS);
     plans.onGoHome();
   };
   // The home page is the place shown while no plan is open, the Inbox is not
   // standing in its place, and no launch is still reopening a plan.
-  const atHome = onPlans && !standingIn && plans.page === PLANS_PAGE.HOME && !plans.restoring;
+  const atHome = onPlans && !standingIn && plans.page === TASKS_PAGE.HOME && !plans.restoring;
   const newPlanIn = (repository: string) => {
-    if (!onPlans) onTabChange(PANEL_TAB.PLANS);
+    if (!onPlans) onTabChange(PANEL_TAB.TASKS);
     plans.onNewPlanIn(repository);
   };
   const folds = useFoldedGroups(sidebar.staged);
@@ -1203,7 +1203,7 @@ function SidebarColumn({
   const currentRow = (row: TaskRow) =>
     row.kind === TASK_ROW.TASK ? current(row.plan.id) : row.agent.id === agentShown;
   const openAgent = (agentId: string) => {
-    if (!onPlans) onTabChange(PANEL_TAB.PLANS);
+    if (!onPlans) onTabChange(PANEL_TAB.TASKS);
     plans.agentView.onOpen(agentId);
   };
   // The list is the chosen workspace's; the unread marks above read every plan.

@@ -18,7 +18,7 @@
 
 import type { DatabaseServices } from "@luke/database/core/query";
 import type { CodingAgent } from "@luke/database/models/coding-agent-store";
-import { readPlan } from "@luke/database/models/plan-store";
+import { readTask } from "@luke/database/models/task-store";
 import { isWorkspaceMember } from "@luke/database/models/workspace-store";
 import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
 import { Effect, Option, Result } from "effect";
@@ -39,13 +39,13 @@ import { githubReachOrRefusal, logWorkspaceReadFailure } from "./github-refusal.
  * GitHub read of the plan's repository goes through; none where the account
  * reaches no such plan.
  */
-export function planWorkspace(
+export function taskWorkspace(
   userId: string,
-  planId: string,
+  taskId: string,
 ): Effect.Effect<Option.Option<string>, StoreFailure, DatabaseServices> {
   return Effect.map(
-    readPlan(userId, planId),
-    Option.map((stored) => stored.plan.workspaceId),
+    readTask(userId, taskId),
+    Option.map((stored) => stored.task.workspaceId),
   );
 }
 
@@ -56,9 +56,9 @@ export function planWorkspace(
  */
 export function agentWorkspace(
   userId: string,
-  agent: Pick<CodingAgent, "planId" | "organizationId">,
+  agent: Pick<CodingAgent, "taskId" | "organizationId">,
 ): Effect.Effect<Option.Option<string>, StoreFailure, DatabaseServices> {
-  if (agent.planId !== null) return planWorkspace(userId, agent.planId);
+  if (agent.taskId !== null) return taskWorkspace(userId, agent.taskId);
   const { organizationId } = agent;
   return Effect.map(isWorkspaceMember(userId, organizationId), (member) =>
     member ? Option.some(organizationId) : Option.none(),

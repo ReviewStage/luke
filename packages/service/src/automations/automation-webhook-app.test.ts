@@ -8,7 +8,7 @@ import {
   queuedAutomationRuns,
   updateAutomation,
 } from "@luke/database/models/automation-store";
-import { getTestDB, leaveWorkspace, startPlan } from "@luke/database/testing";
+import { getTestDB, leaveWorkspace, startTask } from "@luke/database/testing";
 import { automationPath, automationWebhookPath, HOSTED_API_ERROR } from "@luke/features";
 import {
   AUTOMATION_ACTION,
@@ -93,11 +93,11 @@ const standing = Effect.gen(function* () {
 /** An owner with a webhook automation on a workspace, and its secret as the routes would have answered it. */
 const openWebhook = Effect.gen(function* () {
   const owner = yield* openGithubUser();
-  const plan = yield* startPlan(owner, { name: "Alerts", repository: null });
+  const task = yield* startTask(owner, { name: "Alerts", repository: null });
   const secret = randomBytes(32).toString("base64url");
   const made = yield* createAutomation(owner, {
-    planId: null,
-    organizationId: plan.workspaceId,
+    taskId: null,
+    organizationId: task.workspaceId,
     repositories: ["Acme/Relay"],
     name: "Fix Sentry alerts",
     trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK },
@@ -106,7 +106,7 @@ const openWebhook = Effect.gen(function* () {
     nextRunAt: null,
     webhookSecretHash: createHash("sha256").update(secret).digest("hex"),
   });
-  return { owner, automation: Option.getOrThrow(made), secret, workspaceId: plan.workspaceId };
+  return { owner, automation: Option.getOrThrow(made), secret, workspaceId: task.workspaceId };
 });
 
 const ALERT = JSON.stringify({ title: "TypeError in checkout", culprit: "cart.ts" });

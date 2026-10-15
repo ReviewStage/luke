@@ -21,7 +21,7 @@ import { CODER_DEPLOYMENT_TURNS, coderChannelInput } from "./channel.js";
 import { INBOX_TOOLS } from "./inbox.js";
 import { coderInstructions } from "./instructions.js";
 import { SLEEP_TOOL } from "./sleep.js";
-import { CODER_TOOL, planToolsOf } from "./tool-set.js";
+import { CODER_TOOL, taskToolsOf } from "./tool-set.js";
 
 const SECRET = "cron-secret-1";
 const ACCOUNT = "user-a";
@@ -130,32 +130,32 @@ test("a follow-up steers the turn under way; the deployment's typed line on the 
 });
 
 test("an agent on a task is told of the task's links and pages, and one an automation started with no task of neither", () => {
-  const PLAN_LINK = "`https://tryluke.dev/<workspace>/plan/<id>` link names a task";
+  const TASK_LINK = "`https://tryluke.dev/<workspace>/plan/<id>` link names a task";
   const PAGES = `show it with \`${CODER_TOOL.SHOW_PAGE}\``;
   for (const brief of Object.values(CODING_AGENT_BRIEF)) {
-    const onPlan = coderInstructions("Acme/Relay", brief, true);
-    const planless = coderInstructions("Acme/Relay", brief, true, false);
-    assert.deepEqual([onPlan.includes(PLAN_LINK), onPlan.includes(PAGES)], [true, true], brief);
+    const onTask = coderInstructions("Acme/Relay", brief, true);
+    const taskless = coderInstructions("Acme/Relay", brief, true, false);
+    assert.deepEqual([onTask.includes(TASK_LINK), onTask.includes(PAGES)], [true, true], brief);
     assert.deepEqual(
-      [planless.includes(PLAN_LINK), planless.includes(PAGES)],
+      [taskless.includes(TASK_LINK), taskless.includes(PAGES)],
       [false, false],
       brief,
     );
-    assert.ok(planless.includes("## The developer's inbox"), "a planless agent keeps its inbox");
-    assert.ok(!planless.includes("luke://plan/"), "nor an older message's plan link");
+    assert.ok(taskless.includes("## The developer's inbox"), "a planless agent keeps its inbox");
+    assert.ok(!taskless.includes("luke://plan/"), "nor an older message's plan link");
   }
 });
 
 test("an agent handed its task's plan is offered edit_plan and show_page, one handed a prompt on a task show_page alone, and one an automation started with no task neither", () => {
-  const offered = (agent: Parameters<typeof planToolsOf>[0]) => [...planToolsOf(agent)].sort();
-  assert.deepEqual(offered({ planId: "plan-1", prompt: null }), [
+  const offered = (agent: Parameters<typeof taskToolsOf>[0]) => [...taskToolsOf(agent)].sort();
+  assert.deepEqual(offered({ taskId: "plan-1", prompt: null }), [
     CODER_TOOL.EDIT_PLAN,
     CODER_TOOL.SHOW_PAGE,
   ]);
-  assert.deepEqual(offered({ planId: "plan-1", prompt: "Fix the flaky test." }), [
+  assert.deepEqual(offered({ taskId: "plan-1", prompt: "Fix the flaky test." }), [
     CODER_TOOL.SHOW_PAGE,
   ]);
-  assert.deepEqual(offered({ planId: null, prompt: "Sweep the flaky tests." }), []);
+  assert.deepEqual(offered({ taskId: null, prompt: "Sweep the flaky tests." }), []);
 });
 
 test("the session and the post tool are told never to ask for a credential or a secret in a form, since the answer reaches the transcript", () => {
@@ -234,8 +234,8 @@ test("every agent is told that what happens on its pull request after its turn r
 
 test("every agent is told to look at a UI it built in the image's Chromium and show the developer what it saw", () => {
   for (const brief of Object.values(CODING_AGENT_BRIEF)) {
-    for (const onPlan of [true, false]) {
-      const instructions = coderInstructions("Acme/Relay", brief, true, onPlan);
+    for (const onTask of [true, false]) {
+      const instructions = coderInstructions("Acme/Relay", brief, true, onTask);
       assert.ok(instructions.includes("playwright screenshot"), brief);
       assert.ok(instructions.includes('NODE_PATH="$(npm root -g)"'), brief);
       assert.ok(instructions.includes(`with \`${CODER_TOOL.SHOW_IMAGE}\``), brief);

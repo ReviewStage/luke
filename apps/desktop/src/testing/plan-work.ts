@@ -16,11 +16,11 @@ import {
   TURN_ENDING,
 } from "@luke/features/coding-agent-wire";
 import {
-  PLAN_WORK_STATE,
-  type PlanWorkState,
-  type PlanWorkTurn,
-  type PlanWorkWorker,
-} from "@luke/features/planning-view";
+  TASK_WORK_STATE,
+  type TaskWorkState,
+  type TaskWorkTurn,
+  type TaskWorkWorker,
+} from "@luke/features/tasks-view";
 import { MESSAGE_ROLE, type TurnOrigin, type WireRecord, type WireValue } from "@luke/wire";
 import { TOOL_STATE, type ToolState } from "../renderer/ai-elements/tool";
 
@@ -72,12 +72,12 @@ function receipt(taskId: string): string {
 export function worker(
   callId: string,
   task: string,
-  rest: Partial<Omit<PlanWorkWorker, "callId" | "task">> = {},
-): PlanWorkWorker {
+  rest: Partial<Omit<TaskWorkWorker, "callId" | "task">> = {},
+): TaskWorkWorker {
   return {
     callId,
     task,
-    state: PLAN_WORK_STATE.DONE,
+    state: TASK_WORK_STATE.DONE,
     earlierOmitted: false,
     journal: [],
     ...rest,
@@ -85,7 +85,7 @@ export function worker(
 }
 
 /** The call that started a worker, as the turn's journal stores it: eve's `worker` call, answered with the receipt naming its task where it has one. */
-export function workerCall(started: PlanWorkWorker): WireRecord {
+export function workerCall(started: TaskWorkWorker): WireRecord {
   return toolCall(
     EVE_TOOL.WORKER,
     started.callId,
@@ -95,13 +95,13 @@ export function workerCall(started: PlanWorkWorker): WireRecord {
 }
 
 /** A planning turn as a test builds it: the frame's shape, and what opened the turn where the test says, which the planner page carries and the frame does not. */
-export interface TestPlanWorkTurn extends PlanWorkTurn {
+export interface TestPlanWorkTurn extends TaskWorkTurn {
   readonly origin?: TurnOrigin;
 }
 
 /** A turn of `state` whose journal holds `journal`, with the workers and anything else `rest` gives it. */
 export function workTurn(
-  state: PlanWorkState,
+  state: TaskWorkState,
   journal: readonly WireValue[],
   rest: Partial<Omit<TestPlanWorkTurn, "state" | "journal">> = {},
 ): TestPlanWorkTurn {
@@ -118,16 +118,16 @@ export function workTurn(
 
 /** Where a worker's own session stands, as a planner page says it, by where the test's worker stands. */
 const STATUS_OF_STATE = {
-  [PLAN_WORK_STATE.RUNNING]: CODING_AGENT_STATUS.RUNNING,
-  [PLAN_WORK_STATE.DONE]: CODING_AGENT_STATUS.COMPLETED,
-  [PLAN_WORK_STATE.FAILED]: CODING_AGENT_STATUS.FAILED,
-} as const satisfies Record<PlanWorkState, CodingAgentStatus>;
+  [TASK_WORK_STATE.RUNNING]: CODING_AGENT_STATUS.RUNNING,
+  [TASK_WORK_STATE.DONE]: CODING_AGENT_STATUS.COMPLETED,
+  [TASK_WORK_STATE.FAILED]: CODING_AGENT_STATUS.FAILED,
+} as const satisfies Record<TaskWorkState, CodingAgentStatus>;
 
 /** A turn's journal as a planner page carries it: its parts, its turn, what opened it and the lines that asked for it, and its span and record; a turn that ended without answering says it stopped where it says nothing else. */
 function messageOfTurn(turn: TestPlanWorkTurn): CodingAgentMessage {
   const { model, effort, tokens } = turn;
   const ending =
-    turn.state === PLAN_WORK_STATE.FAILED ? (turn.ending ?? TURN_ENDING.STOPPED) : turn.ending;
+    turn.state === TASK_WORK_STATE.FAILED ? (turn.ending ?? TURN_ENDING.STOPPED) : turn.ending;
   return {
     id: turn.turnId,
     role: MESSAGE_ROLE.ASSISTANT,
@@ -139,7 +139,7 @@ function messageOfTurn(turn: TestPlanWorkTurn): CodingAgentMessage {
     ...(turn.asked === undefined ? undefined : { asked: turn.asked }),
     ...(turn.askedAt === undefined ? undefined : { askedAt: turn.askedAt }),
     startedAt: turn.startedAt,
-    ...(turn.state === PLAN_WORK_STATE.RUNNING
+    ...(turn.state === TASK_WORK_STATE.RUNNING
       ? undefined
       : { finishedAt: turn.endedAt ?? turn.startedAt }),
     ...(model === undefined ? undefined : { model }),
@@ -167,7 +167,7 @@ export function conversationOf(
     messages: turns.map(messageOfTurn),
     cursor: CODING_AGENT_CURSOR_START,
     ...(earlier === undefined ? undefined : { earlier }),
-    status: turns.some((turn) => turn.state === PLAN_WORK_STATE.RUNNING)
+    status: turns.some((turn) => turn.state === TASK_WORK_STATE.RUNNING)
       ? CODING_AGENT_STATUS.RUNNING
       : CODING_AGENT_STATUS.COMPLETED,
     subagents: workers.map(({ turn, worker }) => ({

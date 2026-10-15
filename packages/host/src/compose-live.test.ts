@@ -43,7 +43,7 @@ import { SettingsStore } from "./settings-store.js";
  * stream and no Gateway answer or event.
  */
 
-const PLAN_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
+const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const SDP_OFFER =
   "v=0\r\no=- 1 1 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\n";
 const SDP_ANSWER =
@@ -145,12 +145,12 @@ function subject(options: { videoOnCall?: boolean } = {}) {
           store,
         },
         account: { agentTrace: undefined, voiceCapabilities: { liveSessions: source } },
-        activePlanId: () => PLAN_ID,
+        activeTaskId: () => TASK_ID,
         showPlanDraft: () => undefined,
-        showPlanActivity: () => undefined,
-        showPlanCode: () => undefined,
-        showPlanWork: () => undefined,
-        planCallEnded: () => undefined,
+        showTaskActivity: () => undefined,
+        showTaskCode: () => undefined,
+        showTaskWork: () => undefined,
+        taskCallEnded: () => undefined,
       }),
       HostKernelTag,
       kernel,
@@ -185,7 +185,7 @@ function subject(options: { videoOnCall?: boolean } = {}) {
     };
     const openCall = Effect.gen(function* () {
       const fiber = yield* Effect.forkChild(
-        call(GATEWAY_METHOD.VOICE_CREATE_LIVE_SESSION, { sdp: SDP_OFFER, planId: PLAN_ID }),
+        call(GATEWAY_METHOD.VOICE_CREATE_LIVE_SESSION, { sdp: SDP_OFFER, taskId: TASK_ID }),
       );
       const created = yield* Fiber.join(fiber);
       assert.ok(created);

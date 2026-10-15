@@ -1,4 +1,4 @@
-import type { PlanSummary } from "@luke/features/plan-wire";
+import type { TaskSummary } from "@luke/features/task-wire";
 import { FolderIcon, WingFace } from "@luke/ui";
 import { teammateCreator } from "@luke/ui/actor-model";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
@@ -56,7 +56,7 @@ function greeting(name: string | undefined): string {
 }
 
 /** The workspace's plans with the latest activity, their own saves and their agents' alike, the archived left out. */
-function recentPlans(plans: readonly PlanSummary[]): PlanSummary[] {
+function recentPlans(plans: readonly TaskSummary[]): TaskSummary[] {
   return orderTasks(plans, TASK_ORDER.UPDATED).slice(0, RECENT_COUNT);
 }
 
@@ -84,7 +84,7 @@ export function RecentRow({
   face = true,
   onOpen,
 }: {
-  plan: PlanSummary;
+  plan: TaskSummary;
   pictures: boolean;
   now: number;
   /** Whether a teammate's task wears its creator's face, which a person's own page says once in its head instead. */

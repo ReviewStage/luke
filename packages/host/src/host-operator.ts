@@ -99,91 +99,91 @@ import {
 import type { ModelChoice } from "@luke/features/models-wire";
 import {
   GITHUB_DISCONNECT_FAILURE,
-  PLAN_CALL_FAILURE,
-  type PlanningArchiveParams,
-  type PlanningBoardSaveParams,
-  type PlanningEditAnswer,
-  type PlanningEditParams,
-  type PlanningFileAnswer,
-  type PlanningFileParams,
-  type PlanningGitHubDisconnectAnswer,
-  type PlanningGitHubPageAnswer,
-  type PlanningLinearIssuesAnswer,
-  type PlanningLinearIssuesParams,
-  type PlanningMessagesParams,
-  type PlanningMoveAnswer,
-  type PlanningMoveParams,
-  type PlanningPageAnswer,
-  type PlanningPageParams,
-  type PlanningPictureAnswer,
-  type PlanningPictureKeepAnswer,
-  type PlanningPictureKeepParams,
-  type PlanningPictureParams,
-  type PlanningPinParams,
-  type PlanningPinRepositoryParams,
-  type PlanningPullRequestAnswer,
-  type PlanningPullRequestParams,
-  type PlanningRenameParams,
-  type PlanningRepositoriesAnswer,
-  type PlanningRepositoriesParams,
-  type PlanningRevisionAnswer,
-  type PlanningRevisionParams,
-  type PlanningRevisionsAnswer,
-  type PlanningRevisionsParams,
-  type PlanningSetRepositoryAnswer,
-  type PlanningSetRepositoryParams,
-  type PlanningSkillsAnswer,
-  type PlanningSkillsParams,
-  type PlanningStartAnswer,
-  type PlanningStartRequest,
-  type PlanningTreeAnswer,
-  type PlanningTreeParams,
-  type PlanningView,
-  type PlanningWorkspaceAnswer,
-  type PlanningWorkspaceCreateParams,
-  type PlanningWorkspaceGitHubConnectAnswer,
-  type PlanningWorkspaceInvitationAnswer,
-  type PlanningWorkspaceInvitationCancelParams,
-  type PlanningWorkspaceInvitationsAnswer,
-  type PlanningWorkspaceInviteParams,
-  type PlanningWorkspaceLeaveAnswer,
-  type PlanningWorkspaceLeaveParams,
-  type PlanningWorkspaceMemberRemoveParams,
-  type PlanningWorkspaceMemberRoleParams,
-  type PlanningWorkspaceMembersAnswer,
-  type PlanningWorkspaceMembersParams,
-  type PlanningWorkspaceParams,
-  type PlanningWorkspacePhotoAnswer,
-  type PlanningWorkspacePhotoParams,
-  type PlanningWorkspacePhotoSetParams,
-  type PlanningWorkspaceRenameParams,
-  type PlanningWorkspaceTransferParams,
-  planningEditAnswerSchema,
-  planningFileAnswerSchema,
-  planningGitHubDisconnectAnswerSchema,
-  planningGitHubPageAnswerSchema,
-  planningLinearIssuesAnswerSchema,
-  planningMoveAnswerSchema,
-  planningPageAnswerSchema,
-  planningPictureAnswerSchema,
-  planningPictureKeepAnswerSchema,
   planningPullRequestAnswerSchema,
-  planningRepositoriesAnswerSchema,
-  planningRevisionAnswerSchema,
-  planningRevisionsAnswerSchema,
-  planningSetRepositoryAnswerSchema,
-  planningSkillsAnswerSchema,
-  planningStartAnswerSchema,
-  planningTreeAnswerSchema,
-  planningViewSchema,
-  planningWorkspaceAnswerSchema,
-  planningWorkspaceGitHubConnectAnswerSchema,
-  planningWorkspaceInvitationAnswerSchema,
-  planningWorkspaceInvitationsAnswerSchema,
-  planningWorkspaceLeaveAnswerSchema,
-  planningWorkspaceMembersAnswerSchema,
-  planningWorkspacePhotoAnswerSchema,
-} from "@luke/features/planning-view";
+  TASK_CALL_FAILURE,
+  type TasksArchiveParams,
+  type TasksBoardSaveParams,
+  type TasksEditAnswer,
+  type TasksEditParams,
+  type TasksFileAnswer,
+  type TasksFileParams,
+  type TasksGitHubDisconnectAnswer,
+  type TasksGitHubPageAnswer,
+  type TasksLinearIssuesAnswer,
+  type TasksLinearIssuesParams,
+  type TasksMessagesParams,
+  type TasksMoveAnswer,
+  type TasksMoveParams,
+  type TasksPageAnswer,
+  type TasksPageParams,
+  type TasksPictureAnswer,
+  type TasksPictureKeepAnswer,
+  type TasksPictureKeepParams,
+  type TasksPictureParams,
+  type TasksPinParams,
+  type TasksPinRepositoryParams,
+  type TasksPullRequestAnswer,
+  type TasksPullRequestParams,
+  type TasksRenameParams,
+  type TasksRepositoriesAnswer,
+  type TasksRepositoriesParams,
+  type TasksRevisionAnswer,
+  type TasksRevisionParams,
+  type TasksRevisionsAnswer,
+  type TasksRevisionsParams,
+  type TasksSetRepositoryAnswer,
+  type TasksSetRepositoryParams,
+  type TasksSkillsAnswer,
+  type TasksSkillsParams,
+  type TasksStartAnswer,
+  type TasksStartRequest,
+  type TasksTreeAnswer,
+  type TasksTreeParams,
+  type TasksView,
+  type TasksWorkspaceAnswer,
+  type TasksWorkspaceCreateParams,
+  type TasksWorkspaceGitHubConnectAnswer,
+  type TasksWorkspaceInvitationAnswer,
+  type TasksWorkspaceInvitationCancelParams,
+  type TasksWorkspaceInvitationsAnswer,
+  type TasksWorkspaceInviteParams,
+  type TasksWorkspaceLeaveAnswer,
+  type TasksWorkspaceLeaveParams,
+  type TasksWorkspaceMemberRemoveParams,
+  type TasksWorkspaceMemberRoleParams,
+  type TasksWorkspaceMembersAnswer,
+  type TasksWorkspaceMembersParams,
+  type TasksWorkspaceParams,
+  type TasksWorkspacePhotoAnswer,
+  type TasksWorkspacePhotoParams,
+  type TasksWorkspacePhotoSetParams,
+  type TasksWorkspaceRenameParams,
+  type TasksWorkspaceTransferParams,
+  tasksEditAnswerSchema,
+  tasksFileAnswerSchema,
+  tasksGitHubDisconnectAnswerSchema,
+  tasksGitHubPageAnswerSchema,
+  tasksLinearIssuesAnswerSchema,
+  tasksMoveAnswerSchema,
+  tasksPageAnswerSchema,
+  tasksPictureAnswerSchema,
+  tasksPictureKeepAnswerSchema,
+  tasksRepositoriesAnswerSchema,
+  tasksRevisionAnswerSchema,
+  tasksRevisionsAnswerSchema,
+  tasksSetRepositoryAnswerSchema,
+  tasksSkillsAnswerSchema,
+  tasksStartAnswerSchema,
+  tasksTreeAnswerSchema,
+  tasksViewSchema,
+  tasksWorkspaceAnswerSchema,
+  tasksWorkspaceGitHubConnectAnswerSchema,
+  tasksWorkspaceInvitationAnswerSchema,
+  tasksWorkspaceInvitationsAnswerSchema,
+  tasksWorkspaceLeaveAnswerSchema,
+  tasksWorkspaceMembersAnswerSchema,
+  tasksWorkspacePhotoAnswerSchema,
+} from "@luke/features/tasks-view";
 import {
   type TerminalCreatedActAnswer,
   type TerminalResumedActAnswer,
@@ -195,11 +195,13 @@ import {
   terminalStateEventSchema,
   terminalsActAnswerSchema,
 } from "@luke/features/terminal-view";
-import type { GatewayCallResult, GatewayClient, GatewayMethod } from "@luke/gateway";
 import {
   carried,
   GATEWAY_EVENT,
   GATEWAY_METHOD,
+  type GatewayCallResult,
+  type GatewayClient,
+  type GatewayMethod,
   gatewayEventReader,
   type VoiceCreateLiveSessionResult,
   type VoiceEndLiveSessionParams,
@@ -291,7 +293,7 @@ export interface HostOperator {
    */
   createLiveSession(
     sdp: string,
-    planId: string,
+    taskId: string,
   ): Effect.Effect<Option.Option<VoiceCreateLiveSessionResult>>;
   /** The peer's hang-up of the session it names; one the host no longer holds is left alone. */
   endLiveSession(request: VoiceEndLiveSessionParams): Effect.Effect<void>;
@@ -309,65 +311,61 @@ export interface HostOperator {
     properties: ProductEventPropertiesFor<Name>,
   ): Effect.Effect<void>;
   /** The Plans tab shows: the host reads the plan list and the active document now and follows both until it is paused. */
-  planningRefresh(): Effect.Effect<void>;
+  tasksRefresh(): Effect.Effect<void>;
   /** The account's workspaces read again, where the host's last read is a minute old. */
   workspacesRefresh(): Effect.Effect<void>;
   /** The Work tab scrolled back: the host reads the open plan's page of work before the oldest turn it holds, and the view takes it. */
-  planningWorkEarlier(): Effect.Effect<void>;
+  tasksWorkEarlier(): Effect.Effect<void>;
   /** The Call tab scrolled back: the host reads the open plan's page of conversation before the oldest turn it holds, and the view takes it. */
-  planningConversationEarlier(): Effect.Effect<void>;
+  tasksConversationEarlier(): Effect.Effect<void>;
   /** One page of a plan's conversation, or a planning worker's, held by the service while it runs; or why there is none. */
-  planningMessages(params: PlanningMessagesParams): Effect.Effect<CodingAgentMessagesAnswerView>;
+  tasksMessages(params: TasksMessagesParams): Effect.Effect<CodingAgentMessagesAnswerView>;
   /** The Plans tab stopped showing: the host follows nothing, and the open plan and its call stand. */
   /** One plan made the active one, replacing whichever was; answers whether the host took it. */
-  planningOpen(planId: string): Effect.Effect<boolean>;
+  tasksOpen(taskId: string): Effect.Effect<boolean>;
   /** The developer left the open plan: its call ends and no plan is active. */
-  planningClose(): Effect.Effect<void>;
+  tasksClose(): Effect.Effect<void>;
   /** A named plan started on the repository it names, where it names one, and made the active one; or why none started. */
-  planningStart(request: PlanningStartRequest): Effect.Effect<PlanningStartAnswer>;
+  tasksStart(request: TasksStartRequest): Effect.Effect<TasksStartAnswer>;
   /** One plan deleted; answers whether the service deleted it. */
-  planningDelete(planId: string): Effect.Effect<boolean>;
+  tasksDelete(taskId: string): Effect.Effect<boolean>;
   /** One plan renamed; answers whether the service renamed it. */
-  planningRename(params: PlanningRenameParams): Effect.Effect<boolean>;
+  tasksRename(params: TasksRenameParams): Effect.Effect<boolean>;
   /** One plan pinned or unpinned; answers whether the service changed it. */
-  planningPin(params: PlanningPinParams): Effect.Effect<boolean>;
+  tasksPin(params: TasksPinParams): Effect.Effect<boolean>;
   /** One repository pinned in the sidebar or unpinned, kept on the account; answers whether the service changed the pins. */
-  planningPinRepository(params: PlanningPinRepositoryParams): Effect.Effect<boolean>;
+  tasksPinRepository(params: TasksPinRepositoryParams): Effect.Effect<boolean>;
   /** One plan archived or brought back; answers whether the service changed it. */
-  planningArchive(params: PlanningArchiveParams): Effect.Effect<boolean>;
+  tasksArchive(params: TasksArchiveParams): Effect.Effect<boolean>;
   /** The repositories the account reaches through the Luke GitHub App, read from the service now; or why there is no list. */
-  planningRepositories(
-    params: PlanningRepositoriesParams,
-  ): Effect.Effect<PlanningRepositoriesAnswer>;
+  tasksRepositories(params: TasksRepositoriesParams): Effect.Effect<TasksRepositoriesAnswer>;
   /** One plan given its repository, or none; the repository as kept, or why it is unchanged. */
-  planningSetRepository(
-    params: PlanningSetRepositoryParams,
-  ): Effect.Effect<PlanningSetRepositoryAnswer>;
+  tasksSetRepository(params: TasksSetRepositoryParams): Effect.Effect<TasksSetRepositoryAnswer>;
   /** One plan moved to another of the account's workspaces; the workspace it now belongs to, or why it stands where it was. */
-  planningMove(params: PlanningMoveParams): Effect.Effect<PlanningMoveAnswer>;
+  tasksMove(params: TasksMoveParams): Effect.Effect<TasksMoveAnswer>;
   /** The developer's edit of a plan's document; saved, a conflict with the text as it stands now, or why nothing was saved. */
-  planningEdit(params: PlanningEditParams): Effect.Effect<PlanningEditAnswer>;
+  tasksEdit(params: TasksEditParams): Effect.Effect<TasksEditAnswer>;
   /** The open plan's whiteboard scene, saved whole with the number of Luke's drawing it holds. */
-  planningBoardSave(params: PlanningBoardSaveParams): Effect.Effect<void>;
+  tasksBoardSave(params: TasksBoardSaveParams): Effect.Effect<void>;
   /** A window of a file of a plan's repository, coloured; or why it is not shown. */
-  planningFile(params: PlanningFileParams): Effect.Effect<PlanningFileAnswer>;
-  planningTree(params: PlanningTreeParams): Effect.Effect<PlanningTreeAnswer>;
+  tasksFile(params: TasksFileParams): Effect.Effect<TasksFileAnswer>;
+  tasksTree(params: TasksTreeParams): Effect.Effect<TasksTreeAnswer>;
   /** The skills a developer may choose of a plan's repository; or why they are not read. */
-  planningSkills(params: PlanningSkillsParams): Effect.Effect<PlanningSkillsAnswer>;
+  tasksSkills(params: TasksSkillsParams): Effect.Effect<TasksSkillsAnswer>;
   /** One pull request of a repository a workspace's installation reaches, by its number; null where there is none to draw, or that the service did not answer. */
-  planningPullRequest(params: PlanningPullRequestParams): Effect.Effect<PlanningPullRequestAnswer>;
+  tasksPullRequest(params: TasksPullRequestParams): Effect.Effect<TasksPullRequestAnswer>;
   /** A page of a plan's history; or that the service did not answer. */
-  planningRevisions(params: PlanningRevisionsParams): Effect.Effect<PlanningRevisionsAnswer>;
+  tasksRevisions(params: TasksRevisionsParams): Effect.Effect<TasksRevisionsAnswer>;
   /** One revision of a plan beside the one before it; or that the service did not answer. */
-  planningRevision(params: PlanningRevisionParams): Effect.Effect<PlanningRevisionAnswer>;
+  tasksRevision(params: TasksRevisionParams): Effect.Effect<TasksRevisionAnswer>;
   /** One revision of a plan restored as its content; answers whether the service restored it. */
-  planningRestore(params: PlanningRevisionParams): Effect.Effect<boolean>;
+  tasksRestore(params: TasksRevisionParams): Effect.Effect<boolean>;
   /** One version of one page of a plan with its HTML, for the frame that draws it; or that the service did not answer. */
-  planningPage(params: PlanningPageParams): Effect.Effect<PlanningPageAnswer>;
+  tasksPage(params: TasksPageParams): Effect.Effect<TasksPageAnswer>;
   /** One picture of one plan as its bytes in base64, or why there is none. */
-  planningPicture(params: PlanningPictureParams): Effect.Effect<PlanningPictureAnswer>;
+  tasksPicture(params: TasksPictureParams): Effect.Effect<TasksPictureAnswer>;
   /** One picture kept on one plan, answering the id its text names it by, or why it was not kept. */
-  planningPictureKeep(params: PlanningPictureKeepParams): Effect.Effect<PlanningPictureKeepAnswer>;
+  tasksPictureKeep(params: TasksPictureKeepParams): Effect.Effect<TasksPictureKeepAnswer>;
   /** Where every one of the account's integrations stands; or why there is no answer. */
   integrationsStatus(): Effect.Effect<IntegrationStatusesView>;
   /** A sign-in to one provider begun and opened in the browser by the host; whether it was, never the address. */
@@ -381,69 +379,59 @@ export interface HostOperator {
   /** One account at a provider named as the developer calls it; the account as it then stands, or why there is no answer. */
   integrationsRename(params: IntegrationRenameParams): Effect.Effect<IntegrationAccountView>;
   /** The page that connects the account's GitHub, asked of the service; its address, or why there is none. */
-  githubConnect(): Effect.Effect<PlanningGitHubPageAnswer>;
+  githubConnect(): Effect.Effect<TasksGitHubPageAnswer>;
   /** The account's GitHub disconnected under the Mac's session; the connection as it then stands, or why it is not. */
-  githubDisconnect(): Effect.Effect<PlanningGitHubDisconnectAnswer>;
+  githubDisconnect(): Effect.Effect<TasksGitHubDisconnectAnswer>;
   /** A workspace made under a name, owned by the account; the workspace, or why none was. */
-  workspaceCreate(params: PlanningWorkspaceCreateParams): Effect.Effect<PlanningWorkspaceAnswer>;
+  workspaceCreate(params: TasksWorkspaceCreateParams): Effect.Effect<TasksWorkspaceAnswer>;
   /** A workspace renamed by an owner or admin; the workspace under its new name, or why it was not. */
-  workspaceRename(params: PlanningWorkspaceRenameParams): Effect.Effect<PlanningWorkspaceAnswer>;
+  workspaceRename(params: TasksWorkspaceRenameParams): Effect.Effect<TasksWorkspaceAnswer>;
   /** A workspace's photo set or removed by an owner or admin; the workspace with its photo's new version or none, or why it was not. */
-  workspacePhotoSet(
-    params: PlanningWorkspacePhotoSetParams,
-  ): Effect.Effect<PlanningWorkspaceAnswer>;
+  workspacePhotoSet(params: TasksWorkspacePhotoSetParams): Effect.Effect<TasksWorkspaceAnswer>;
   /** A workspace's GitHub organization connection begun; the install address to open, or why there is none. */
   workspaceGitHubConnect(
-    params: PlanningWorkspaceParams,
-  ): Effect.Effect<PlanningWorkspaceGitHubConnectAnswer>;
+    params: TasksWorkspaceParams,
+  ): Effect.Effect<TasksWorkspaceGitHubConnectAnswer>;
   /** A workspace's GitHub organization disconnected; the workspace as it then stands, or why it is not. */
-  workspaceGitHubDisconnect(
-    params: PlanningWorkspaceParams,
-  ): Effect.Effect<PlanningWorkspaceAnswer>;
+  workspaceGitHubDisconnect(params: TasksWorkspaceParams): Effect.Effect<TasksWorkspaceAnswer>;
   /** A workspace's Linear connection begun; Vercel Connect's sign-in address to open, or why there is none. */
   workspaceLinearConnect(
-    params: PlanningWorkspaceParams,
-  ): Effect.Effect<PlanningWorkspaceGitHubConnectAnswer>;
+    params: TasksWorkspaceParams,
+  ): Effect.Effect<TasksWorkspaceGitHubConnectAnswer>;
   /** A workspace's Linear disconnected; the workspace as it then stands, or why it is not. */
-  workspaceLinearDisconnect(
-    params: PlanningWorkspaceParams,
-  ): Effect.Effect<PlanningWorkspaceAnswer>;
+  workspaceLinearDisconnect(params: TasksWorkspaceParams): Effect.Effect<TasksWorkspaceAnswer>;
   /** The Linear issues a workspace's connection reaches; or why there are none. */
-  workspaceLinearIssues(
-    params: PlanningLinearIssuesParams,
-  ): Effect.Effect<PlanningLinearIssuesAnswer>;
+  workspaceLinearIssues(params: TasksLinearIssuesParams): Effect.Effect<TasksLinearIssuesAnswer>;
   /** One workspace's members; or why there are none. */
-  workspaceMembers(
-    params: PlanningWorkspaceMembersParams,
-  ): Effect.Effect<PlanningWorkspaceMembersAnswer>;
+  workspaceMembers(params: TasksWorkspaceMembersParams): Effect.Effect<TasksWorkspaceMembersAnswer>;
   /** One workspace's photo, its bytes in base64 under its media type; or why there is none. */
-  workspacePhoto(params: PlanningWorkspacePhotoParams): Effect.Effect<PlanningWorkspacePhotoAnswer>;
+  workspacePhoto(params: TasksWorkspacePhotoParams): Effect.Effect<TasksWorkspacePhotoAnswer>;
   /** One member removed from a workspace; the members who remain, or why none was removed. */
   workspaceMemberRemove(
-    params: PlanningWorkspaceMemberRemoveParams,
-  ): Effect.Effect<PlanningWorkspaceMembersAnswer>;
+    params: TasksWorkspaceMemberRemoveParams,
+  ): Effect.Effect<TasksWorkspaceMembersAnswer>;
   /** Another member of a workspace made an admin or an admin a member by the owner; the members as they then stand, or why no role changed. */
   workspaceMemberRole(
-    params: PlanningWorkspaceMemberRoleParams,
-  ): Effect.Effect<PlanningWorkspaceMembersAnswer>;
+    params: TasksWorkspaceMemberRoleParams,
+  ): Effect.Effect<TasksWorkspaceMembersAnswer>;
   /** A workspace handed by its owner to one of its admins, the owner becoming an admin; the members as they then stand, or why it was not handed over. */
   workspaceTransfer(
-    params: PlanningWorkspaceTransferParams,
-  ): Effect.Effect<PlanningWorkspaceMembersAnswer>;
+    params: TasksWorkspaceTransferParams,
+  ): Effect.Effect<TasksWorkspaceMembersAnswer>;
   /** One workspace left; or why it was not. */
-  workspaceLeave(params: PlanningWorkspaceLeaveParams): Effect.Effect<PlanningWorkspaceLeaveAnswer>;
+  workspaceLeave(params: TasksWorkspaceLeaveParams): Effect.Effect<TasksWorkspaceLeaveAnswer>;
   /** One workspace's pending invitations; or why there are none. */
   workspaceInvitations(
-    params: PlanningWorkspaceParams,
-  ): Effect.Effect<PlanningWorkspaceInvitationsAnswer>;
+    params: TasksWorkspaceParams,
+  ): Effect.Effect<TasksWorkspaceInvitationsAnswer>;
   /** An invitation made; it with its accept link, or why none was. */
   workspaceInvite(
-    params: PlanningWorkspaceInviteParams,
-  ): Effect.Effect<PlanningWorkspaceInvitationAnswer>;
+    params: TasksWorkspaceInviteParams,
+  ): Effect.Effect<TasksWorkspaceInvitationAnswer>;
   /** A pending invitation canceled; those still pending, or why it was not. */
   workspaceInvitationCancel(
-    params: PlanningWorkspaceInvitationCancelParams,
-  ): Effect.Effect<PlanningWorkspaceInvitationsAnswer>;
+    params: TasksWorkspaceInvitationCancelParams,
+  ): Effect.Effect<TasksWorkspaceInvitationsAnswer>;
   /** The models a coding agent may run on, as the service offers them now; or why there is no list. */
   codingAgentModels(): Effect.Effect<CodingAgentModelsAnswer>;
   /** The account's default model and effort for a coding agent; or why there is none. */
@@ -548,7 +536,7 @@ export interface HostOperator {
   onAccountChanged(listener: (account: AccountSnapshot) => void): () => void;
   onVoiceLiveSessionChanged(listener: (change: VoiceLiveSessionChanged) => void): () => void;
   onSessionReplayChanged(listener: (replay: HostSessionReplay) => void): () => void;
-  onPlanningChanged(listener: (view: PlanningView) => void): () => void;
+  onTasksChanged(listener: (view: TasksView) => void): () => void;
   /** An agent's shells and where its sandbox stands, or why not; none where the host could not answer. */
   terminalList(params: { agentId: string }): Effect.Effect<TerminalsActAnswer | undefined>;
   terminalCreate(params: {
@@ -629,13 +617,13 @@ function workspaceAnswer<Answer, Encoded>(schema: EffectSchema.Codec<Answer, Enc
 const WORKSPACE_UNANSWERED = { failure: WORKSPACE_CALL_FAILURE.UNANSWERED } as const;
 
 /** A GitHub page's answer as its schema reads it; unanswered where the host refused or the shape is not read. */
-function githubPage(answer: GatewayCallResult): PlanningGitHubPageAnswer {
+function githubPage(answer: GatewayCallResult): TasksGitHubPageAnswer {
   return (
     (answer.ok
       ? Result.getOrUndefined(
-          readEither(planningGitHubPageAnswerSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
+          readEither(tasksGitHubPageAnswerSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
         )
-      : undefined) ?? { failure: PLAN_CALL_FAILURE.UNANSWERED }
+      : undefined) ?? { failure: TASK_CALL_FAILURE.UNANSWERED }
   );
 }
 
@@ -822,9 +810,9 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(client.call(GATEWAY_METHOD.VOICE_DIAGNOSTICS), (answer) =>
         Option.fromUndefinedOr(answered<LiveDiagnostics>(record(answer)?.diagnostics)),
       ),
-    createLiveSession: (sdp, planId) =>
+    createLiveSession: (sdp, taskId) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.VOICE_CREATE_LIVE_SESSION, { sdp, planId }),
+        client.call(GATEWAY_METHOD.VOICE_CREATE_LIVE_SESSION, { sdp, taskId }),
         (answer) =>
           answer.ok
             ? Result.getSuccess(
@@ -868,221 +856,214 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           }),
         ),
       ),
-    planningRefresh: () => fire(client.call(GATEWAY_METHOD.PLANNING_REFRESH)),
+    tasksRefresh: () => fire(client.call(GATEWAY_METHOD.TASKS_REFRESH)),
     workspacesRefresh: () => fire(client.call(GATEWAY_METHOD.WORKSPACES_REFRESH)),
-    planningWorkEarlier: () => fire(client.call(GATEWAY_METHOD.PLANNING_WORK_EARLIER)),
-    planningConversationEarlier: () =>
-      fire(client.call(GATEWAY_METHOD.PLANNING_CONVERSATION_EARLIER)),
-    planningMessages: (params) =>
+    tasksWorkEarlier: () => fire(client.call(GATEWAY_METHOD.TASKS_WORK_EARLIER)),
+    tasksConversationEarlier: () => fire(client.call(GATEWAY_METHOD.TASKS_CONVERSATION_EARLIER)),
+    tasksMessages: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.PLANNING_MESSAGES, {
-          planId: params.planId,
+        client.call(GATEWAY_METHOD.TASKS_MESSAGES, {
+          taskId: params.taskId,
           ...("after" in params ? { after: params.after } : undefined),
           ...("before" in params ? { before: params.before } : undefined),
           ...("callId" in params ? { callId: params.callId } : undefined),
         }),
         codingAgentAnswer(codingAgentMessagesAnswerViewSchema),
       ),
-    planningOpen: (planId) =>
+    tasksOpen: (taskId) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.PLANNING_OPEN, { planId }),
+        client.call(GATEWAY_METHOD.TASKS_OPEN, { taskId }),
         (answer) => record(answer)?.opened === true,
       ),
-    planningClose: () => fire(client.call(GATEWAY_METHOD.PLANNING_CLOSE)),
-    planningDelete: (planId) =>
+    tasksClose: () => fire(client.call(GATEWAY_METHOD.TASKS_CLOSE)),
+    tasksDelete: (taskId) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.PLANNING_DELETE, { planId }),
+        client.call(GATEWAY_METHOD.TASKS_DELETE, { taskId }),
         (answer) => record(answer)?.deleted === true,
       ),
-    planningRename: (params) =>
+    tasksRename: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.PLANNING_RENAME, { planId: params.planId, name: params.name }),
+        client.call(GATEWAY_METHOD.TASKS_RENAME, { taskId: params.taskId, name: params.name }),
         (answer) => record(answer)?.renamed === true,
       ),
-    planningPin: (params) =>
+    tasksPin: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.PLANNING_PIN, { planId: params.planId, pinned: params.pinned }),
+        client.call(GATEWAY_METHOD.TASKS_PIN, { taskId: params.taskId, pinned: params.pinned }),
         (answer) => record(answer)?.changed === true,
       ),
-    planningPinRepository: (params) =>
+    tasksPinRepository: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.PLANNING_PIN_REPOSITORY, {
+        client.call(GATEWAY_METHOD.TASKS_PIN_REPOSITORY, {
           repository: params.repository,
           pinned: params.pinned,
         }),
         (answer) => record(answer)?.changed === true,
       ),
-    planningArchive: (params) =>
+    tasksArchive: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.PLANNING_ARCHIVE, {
-          planId: params.planId,
+        client.call(GATEWAY_METHOD.TASKS_ARCHIVE, {
+          taskId: params.taskId,
           archived: params.archived,
         }),
         (answer) => record(answer)?.changed === true,
       ),
-    planningRepositories: (params) =>
+    tasksRepositories: (params) =>
       Effect.map(
         client.call(
-          GATEWAY_METHOD.PLANNING_REPOSITORIES,
+          GATEWAY_METHOD.TASKS_REPOSITORIES,
           params.workspaceId === undefined ? {} : { workspaceId: params.workspaceId },
         ),
-        (answer): PlanningRepositoriesAnswer =>
+        (answer): TasksRepositoriesAnswer =>
           (answer.ok
             ? Result.getOrUndefined(
-                readEither(planningRepositoriesAnswerSchema, { excess: EXCESS_KEYS.DROP })(
+                readEither(tasksRepositoriesAnswerSchema, { excess: EXCESS_KEYS.DROP })(
                   answer.result,
                 ),
               )
-            : undefined) ?? { failure: PLAN_CALL_FAILURE.UNANSWERED },
+            : undefined) ?? { failure: TASK_CALL_FAILURE.UNANSWERED },
       ),
-    planningFile: (params) =>
+    tasksFile: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.PLANNING_FILE, {
-          planId: params.planId,
+        client.call(GATEWAY_METHOD.TASKS_FILE, {
+          taskId: params.taskId,
           path: params.path,
           firstLine: params.firstLine,
           lastLine: params.lastLine,
           ...(params.raw === undefined ? undefined : { raw: params.raw }),
           ...(params.ref === undefined ? undefined : { ref: params.ref }),
         }),
-        (answer): PlanningFileAnswer =>
+        (answer): TasksFileAnswer =>
           (answer.ok
             ? Result.getOrUndefined(
-                readEither(planningFileAnswerSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
+                readEither(tasksFileAnswerSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
               )
-            : undefined) ?? { failure: PLAN_CALL_FAILURE.UNANSWERED },
+            : undefined) ?? { failure: TASK_CALL_FAILURE.UNANSWERED },
       ),
-    planningTree: (params) =>
+    tasksTree: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.PLANNING_TREE, {
+        client.call(GATEWAY_METHOD.TASKS_TREE, {
           ...("planId" in params
             ? { planId: params.planId }
             : { workspaceId: params.workspaceId, repository: params.repository }),
           path: params.path,
           ...(params.recursive === undefined ? undefined : { recursive: params.recursive }),
         }),
-        (answer): PlanningTreeAnswer =>
+        (answer): TasksTreeAnswer =>
           (answer.ok
             ? Result.getOrUndefined(
-                readEither(planningTreeAnswerSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
+                readEither(tasksTreeAnswerSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
               )
-            : undefined) ?? { failure: PLAN_CALL_FAILURE.UNANSWERED },
+            : undefined) ?? { failure: TASK_CALL_FAILURE.UNANSWERED },
       ),
-    planningSkills: (params) =>
+    tasksSkills: (params) =>
       Effect.map(
         client.call(
-          GATEWAY_METHOD.PLANNING_SKILLS,
+          GATEWAY_METHOD.TASKS_SKILLS,
           "planId" in params
             ? { planId: params.planId }
             : { workspaceId: params.workspaceId, repository: params.repository },
         ),
-        (answer): PlanningSkillsAnswer =>
+        (answer): TasksSkillsAnswer =>
           (answer.ok
             ? Result.getOrUndefined(
-                readEither(planningSkillsAnswerSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
+                readEither(tasksSkillsAnswerSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
               )
-            : undefined) ?? { failure: PLAN_CALL_FAILURE.UNANSWERED },
+            : undefined) ?? { failure: TASK_CALL_FAILURE.UNANSWERED },
       ),
-    planningPullRequest: (params) =>
+    tasksPullRequest: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.PLANNING_PULL_REQUEST, {
+        client.call(GATEWAY_METHOD.TASKS_PULL_REQUEST, {
           workspaceId: params.workspaceId,
           repository: params.repository,
           number: params.number,
         }),
-        (answer): PlanningPullRequestAnswer =>
+        (answer): TasksPullRequestAnswer =>
           (answer.ok
             ? Result.getOrUndefined(
                 readEither(planningPullRequestAnswerSchema, { excess: EXCESS_KEYS.DROP })(
                   answer.result,
                 ),
               )
-            : undefined) ?? { failure: PLAN_CALL_FAILURE.UNANSWERED },
+            : undefined) ?? { failure: TASK_CALL_FAILURE.UNANSWERED },
       ),
-    planningRevisions: (params) =>
+    tasksRevisions: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.PLANNING_REVISIONS, {
-          planId: params.planId,
+        client.call(GATEWAY_METHOD.TASKS_REVISIONS, {
+          taskId: params.taskId,
           ...(params.before === undefined ? undefined : { before: params.before }),
         }),
-        (answer): PlanningRevisionsAnswer =>
+        (answer): TasksRevisionsAnswer =>
           (answer.ok
             ? Result.getOrUndefined(
-                readEither(planningRevisionsAnswerSchema, { excess: EXCESS_KEYS.DROP })(
-                  answer.result,
-                ),
+                readEither(tasksRevisionsAnswerSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
               )
-            : undefined) ?? { failure: PLAN_CALL_FAILURE.UNANSWERED },
+            : undefined) ?? { failure: TASK_CALL_FAILURE.UNANSWERED },
       ),
-    planningRevision: (params) =>
+    tasksRevision: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.PLANNING_REVISION, { planId: params.planId, seq: params.seq }),
-        (answer): PlanningRevisionAnswer =>
+        client.call(GATEWAY_METHOD.TASKS_REVISION, { taskId: params.taskId, seq: params.seq }),
+        (answer): TasksRevisionAnswer =>
           (answer.ok
             ? Result.getOrUndefined(
-                readEither(planningRevisionAnswerSchema, { excess: EXCESS_KEYS.DROP })(
-                  answer.result,
-                ),
+                readEither(tasksRevisionAnswerSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
               )
-            : undefined) ?? { failure: PLAN_CALL_FAILURE.UNANSWERED },
+            : undefined) ?? { failure: TASK_CALL_FAILURE.UNANSWERED },
       ),
-    planningPictureKeep: (params) =>
+    tasksPictureKeep: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.PLANNING_PICTURE_KEEP, {
+        client.call(GATEWAY_METHOD.TASKS_PICTURE_KEEP, {
           planId: params.planId,
           picture: params.picture,
         }),
-        (answer): PlanningPictureKeepAnswer =>
+        (answer): TasksPictureKeepAnswer =>
           (answer.ok
             ? Result.getOrUndefined(
-                readEither(planningPictureKeepAnswerSchema, { excess: EXCESS_KEYS.DROP })(
+                readEither(tasksPictureKeepAnswerSchema, { excess: EXCESS_KEYS.DROP })(
                   answer.result,
                 ),
               )
-            : undefined) ?? { failure: PLAN_CALL_FAILURE.UNANSWERED },
+            : undefined) ?? { failure: TASK_CALL_FAILURE.UNANSWERED },
       ),
-    planningPicture: (params) =>
+    tasksPicture: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.PLANNING_PICTURE, {
+        client.call(GATEWAY_METHOD.TASKS_PICTURE, {
           planId: params.planId,
           attachmentId: params.attachmentId,
         }),
-        (answer): PlanningPictureAnswer =>
+        (answer): TasksPictureAnswer =>
           (answer.ok
             ? Result.getOrUndefined(
-                readEither(planningPictureAnswerSchema, { excess: EXCESS_KEYS.DROP })(
-                  answer.result,
-                ),
+                readEither(tasksPictureAnswerSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
               )
-            : undefined) ?? { failure: PLAN_CALL_FAILURE.UNANSWERED },
+            : undefined) ?? { failure: TASK_CALL_FAILURE.UNANSWERED },
       ),
-    planningPage: (params) =>
+    tasksPage: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.PLANNING_PAGE, {
-          planId: params.planId,
+        client.call(GATEWAY_METHOD.TASKS_PAGE, {
+          taskId: params.taskId,
           pageId: params.pageId,
           version: params.version,
         }),
-        (answer): PlanningPageAnswer =>
+        (answer): TasksPageAnswer =>
           (answer.ok
             ? Result.getOrUndefined(
-                readEither(planningPageAnswerSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
+                readEither(tasksPageAnswerSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
               )
-            : undefined) ?? { failure: PLAN_CALL_FAILURE.UNANSWERED },
+            : undefined) ?? { failure: TASK_CALL_FAILURE.UNANSWERED },
       ),
-    planningRestore: (params) =>
+    tasksRestore: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.PLANNING_RESTORE, { planId: params.planId, seq: params.seq }),
+        client.call(GATEWAY_METHOD.TASKS_RESTORE, { taskId: params.taskId, seq: params.seq }),
         (answer) => record(answer)?.restored === true,
       ),
     githubConnect: () => Effect.map(client.call(GATEWAY_METHOD.GITHUB_CONNECT), githubPage),
     githubDisconnect: () =>
       Effect.map(
         client.call(GATEWAY_METHOD.GITHUB_DISCONNECT),
-        (answer): PlanningGitHubDisconnectAnswer =>
+        (answer): TasksGitHubDisconnectAnswer =>
           (answer.ok
             ? Result.getOrUndefined(
-                readEither(planningGitHubDisconnectAnswerSchema, { excess: EXCESS_KEYS.DROP })(
+                readEither(tasksGitHubDisconnectAnswerSchema, { excess: EXCESS_KEYS.DROP })(
                   answer.result,
                 ),
               )
@@ -1091,7 +1072,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     workspaceCreate: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.WORKSPACES_CREATE, { name: params.name }),
-        workspaceAnswer(planningWorkspaceAnswerSchema),
+        workspaceAnswer(tasksWorkspaceAnswerSchema),
       ),
     workspaceRename: (params) =>
       Effect.map(
@@ -1099,7 +1080,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           workspaceId: params.workspaceId,
           name: params.name,
         }),
-        workspaceAnswer(planningWorkspaceAnswerSchema),
+        workspaceAnswer(tasksWorkspaceAnswerSchema),
       ),
     workspacePhotoSet: (params) =>
       Effect.map(
@@ -1107,31 +1088,31 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           workspaceId: params.workspaceId,
           photo: params.photo,
         }),
-        workspaceAnswer(planningWorkspaceAnswerSchema),
+        workspaceAnswer(tasksWorkspaceAnswerSchema),
       ),
     workspaceGitHubConnect: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.WORKSPACES_GITHUB_CONNECT, { workspaceId: params.workspaceId }),
-        workspaceAnswer(planningWorkspaceGitHubConnectAnswerSchema),
+        workspaceAnswer(tasksWorkspaceGitHubConnectAnswerSchema),
       ),
     workspaceGitHubDisconnect: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.WORKSPACES_GITHUB_DISCONNECT, {
           workspaceId: params.workspaceId,
         }),
-        workspaceAnswer(planningWorkspaceAnswerSchema),
+        workspaceAnswer(tasksWorkspaceAnswerSchema),
       ),
     workspaceLinearConnect: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.WORKSPACES_LINEAR_CONNECT, { workspaceId: params.workspaceId }),
-        workspaceAnswer(planningWorkspaceGitHubConnectAnswerSchema),
+        workspaceAnswer(tasksWorkspaceGitHubConnectAnswerSchema),
       ),
     workspaceLinearDisconnect: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.WORKSPACES_LINEAR_DISCONNECT, {
           workspaceId: params.workspaceId,
         }),
-        workspaceAnswer(planningWorkspaceAnswerSchema),
+        workspaceAnswer(tasksWorkspaceAnswerSchema),
       ),
     workspaceLinearIssues: (params) =>
       Effect.map(
@@ -1140,17 +1121,17 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           ...("query" in params ? { query: params.query } : undefined),
           ...("identifier" in params ? { identifier: params.identifier } : undefined),
         }),
-        workspaceAnswer(planningLinearIssuesAnswerSchema),
+        workspaceAnswer(tasksLinearIssuesAnswerSchema),
       ),
     workspaceMembers: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.WORKSPACES_MEMBERS, { workspaceId: params.workspaceId }),
-        workspaceAnswer(planningWorkspaceMembersAnswerSchema),
+        workspaceAnswer(tasksWorkspaceMembersAnswerSchema),
       ),
     workspacePhoto: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.WORKSPACES_PHOTO, { workspaceId: params.workspaceId }),
-        workspaceAnswer(planningWorkspacePhotoAnswerSchema),
+        workspaceAnswer(tasksWorkspacePhotoAnswerSchema),
       ),
     workspaceMemberRemove: (params) =>
       Effect.map(
@@ -1158,7 +1139,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           workspaceId: params.workspaceId,
           userId: params.userId,
         }),
-        workspaceAnswer(planningWorkspaceMembersAnswerSchema),
+        workspaceAnswer(tasksWorkspaceMembersAnswerSchema),
       ),
     workspaceMemberRole: (params) =>
       Effect.map(
@@ -1167,7 +1148,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           userId: params.userId,
           role: params.role,
         }),
-        workspaceAnswer(planningWorkspaceMembersAnswerSchema),
+        workspaceAnswer(tasksWorkspaceMembersAnswerSchema),
       ),
     workspaceTransfer: (params) =>
       Effect.map(
@@ -1175,17 +1156,17 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           workspaceId: params.workspaceId,
           userId: params.userId,
         }),
-        workspaceAnswer(planningWorkspaceMembersAnswerSchema),
+        workspaceAnswer(tasksWorkspaceMembersAnswerSchema),
       ),
     workspaceLeave: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.WORKSPACES_LEAVE, { workspaceId: params.workspaceId }),
-        workspaceAnswer(planningWorkspaceLeaveAnswerSchema),
+        workspaceAnswer(tasksWorkspaceLeaveAnswerSchema),
       ),
     workspaceInvitations: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.WORKSPACES_INVITATIONS, { workspaceId: params.workspaceId }),
-        workspaceAnswer(planningWorkspaceInvitationsAnswerSchema),
+        workspaceAnswer(tasksWorkspaceInvitationsAnswerSchema),
       ),
     workspaceInvite: (params) =>
       Effect.map(
@@ -1194,7 +1175,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           email: params.email,
           role: params.role,
         }),
-        workspaceAnswer(planningWorkspaceInvitationAnswerSchema),
+        workspaceAnswer(tasksWorkspaceInvitationAnswerSchema),
       ),
     workspaceInvitationCancel: (params) =>
       Effect.map(
@@ -1202,65 +1183,65 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           workspaceId: params.workspaceId,
           invitationId: params.invitationId,
         }),
-        workspaceAnswer(planningWorkspaceInvitationsAnswerSchema),
+        workspaceAnswer(tasksWorkspaceInvitationsAnswerSchema),
       ),
-    planningSetRepository: (params) =>
+    tasksSetRepository: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.PLANNING_SET_REPOSITORY, {
-          planId: params.planId,
+        client.call(GATEWAY_METHOD.TASKS_SET_REPOSITORY, {
+          taskId: params.taskId,
           repository: params.repository,
         }),
-        (answer): PlanningSetRepositoryAnswer =>
+        (answer): TasksSetRepositoryAnswer =>
           (answer.ok
             ? Result.getOrUndefined(
-                readEither(planningSetRepositoryAnswerSchema, { excess: EXCESS_KEYS.DROP })(
+                readEither(tasksSetRepositoryAnswerSchema, { excess: EXCESS_KEYS.DROP })(
                   answer.result,
                 ),
               )
-            : undefined) ?? { failure: PLAN_CALL_FAILURE.UNANSWERED },
+            : undefined) ?? { failure: TASK_CALL_FAILURE.UNANSWERED },
       ),
-    planningMove: (params) =>
+    tasksMove: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.PLANNING_MOVE, {
-          planId: params.planId,
+        client.call(GATEWAY_METHOD.TASKS_MOVE, {
+          taskId: params.taskId,
           workspaceId: params.workspaceId,
         }),
-        (answer): PlanningMoveAnswer =>
+        (answer): TasksMoveAnswer =>
           (answer.ok
             ? Result.getOrUndefined(
-                readEither(planningMoveAnswerSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
+                readEither(tasksMoveAnswerSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
               )
-            : undefined) ?? { failure: PLAN_CALL_FAILURE.UNANSWERED },
+            : undefined) ?? { failure: TASK_CALL_FAILURE.UNANSWERED },
       ),
-    planningEdit: (params) =>
+    tasksEdit: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.PLANNING_EDIT, { planId: params.planId, edit: params.edit }),
-        (answer): PlanningEditAnswer =>
+        client.call(GATEWAY_METHOD.TASKS_EDIT, { taskId: params.taskId, edit: params.edit }),
+        (answer): TasksEditAnswer =>
           (answer.ok
             ? Result.getOrUndefined(
-                readEither(planningEditAnswerSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
+                readEither(tasksEditAnswerSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
               )
-            : undefined) ?? { failure: PLAN_CALL_FAILURE.UNANSWERED },
+            : undefined) ?? { failure: TASK_CALL_FAILURE.UNANSWERED },
       ),
-    planningStart: (request) =>
+    tasksStart: (request) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.PLANNING_START, {
+        client.call(GATEWAY_METHOD.TASKS_START, {
           ...("name" in request ? { name: request.name } : undefined),
           ...("repository" in request ? { repository: request.repository } : undefined),
           ...("workspaceId" in request ? { workspaceId: request.workspaceId } : undefined),
           ...("linearIssueId" in request ? { linearIssueId: request.linearIssueId } : undefined),
         }),
-        (answer): PlanningStartAnswer =>
+        (answer): TasksStartAnswer =>
           (answer.ok
             ? Result.getOrUndefined(
-                readEither(planningStartAnswerSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
+                readEither(tasksStartAnswerSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
               )
-            : undefined) ?? { failure: PLAN_CALL_FAILURE.UNANSWERED },
+            : undefined) ?? { failure: TASK_CALL_FAILURE.UNANSWERED },
       ),
-    planningBoardSave: (params) =>
+    tasksBoardSave: (params) =>
       fire(
-        client.call(GATEWAY_METHOD.PLANNING_BOARD_SAVE, {
-          planId: params.planId,
+        client.call(GATEWAY_METHOD.TASKS_BOARD_SAVE, {
+          taskId: params.taskId,
           elements: params.elements,
           appliedDrawing: params.appliedDrawing,
           ...(params.image === undefined ? undefined : { image: params.image }),
@@ -1295,7 +1276,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     codingAgentList: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_LIST, {
-          planId: params.planId,
+          taskId: params.taskId,
           ...(params.includeArchived === undefined
             ? undefined
             : { includeArchived: params.includeArchived }),
@@ -1305,7 +1286,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     codingAgentStart: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_START, {
-          planId: params.planId,
+          taskId: params.taskId,
           idempotencyKey: params.idempotencyKey,
           ...("model" in params ? { model: params.model } : undefined),
           ...("effort" in params ? { effort: params.effort } : undefined),
@@ -1492,7 +1473,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     codingAgentInbox: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_INBOX, {
-          planId: params.planId,
+          taskId: params.taskId,
           after: params.after,
         }),
         codingAgentAnswer(codingAgentInboxAnswerViewSchema),
@@ -1565,13 +1546,11 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           ),
         listener,
       ),
-    onPlanningChanged: (listener) =>
+    onTasksChanged: (listener) =>
       on(
-        GATEWAY_EVENT.PLANNING_CHANGED,
+        GATEWAY_EVENT.TASKS_CHANGED,
         (payload) =>
-          Result.getOrUndefined(
-            readEither(planningViewSchema, { excess: EXCESS_KEYS.DROP })(payload),
-          ),
+          Result.getOrUndefined(readEither(tasksViewSchema, { excess: EXCESS_KEYS.DROP })(payload)),
         listener,
       ),
     terminalList: (params) =>

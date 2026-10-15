@@ -17,7 +17,7 @@ import {
   INBOX_WIRE_VERSION,
   type InboxItem,
 } from "@luke/features/inbox-wire";
-import type { PlanAgentLine, PlanSummary } from "@luke/features/plan-wire";
+import type { TaskAgentLine, TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
@@ -96,9 +96,9 @@ function agent(
   n: number,
   title: string,
   startedBy: typeof CHARLES,
-  status: PlanAgentLine["status"],
+  status: TaskAgentLine["status"],
   ago: number,
-): PlanAgentLine {
+): TaskAgentLine {
   return {
     id: `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`,
     title,
@@ -115,9 +115,9 @@ function task(
   name: string,
   createdBy: typeof CHARLES,
   ago: number,
-  agents: readonly PlanAgentLine[] = [],
-): PlanSummary {
-  const plan: PlanSummary = {
+  agents: readonly TaskAgentLine[] = [],
+): TaskSummary {
+  const plan: TaskSummary = {
     id: `11111111-0000-4000-8000-${String(n).padStart(12, "0")}`,
     workspaceId: ACME.id,
     name,
@@ -182,8 +182,8 @@ const SWEEP_AGENT = "5e6f7081-92a3-4b4c-8d5e-6f708192a3b4";
 const SWEEP_ITEM: InboxItem = { ...item(9, "Quarantine the flaky test?", SWEEP_AGENT, MINUTE) };
 
 const HOLDING: Pick<PlansControl, "inbox" | "inboxPlans"> = {
-  inbox: [{ planId: RETRIES.id, items: [waitingOf(RETRY_429), waitingOf(ROLLOUT)] }],
-  inboxPlans: [{ planId: RETRIES.id, items: 2, updatedAt: RETRY_429.updatedAt }],
+  inbox: [{ taskId: RETRIES.id, items: [waitingOf(RETRY_429), waitingOf(ROLLOUT)] }],
+  inboxPlans: [{ taskId: RETRIES.id, items: 2, updatedAt: RETRY_429.updatedAt }],
 };
 
 let root: Root | undefined;
@@ -234,7 +234,7 @@ beforeEach(() => {
         }
         if (request.kind === ACT_KIND.CODING_AGENTS_INBOX && !inboxRefused) {
           const value: CodingAgentInboxAnswerView = {
-            items: INBOXES.get(request.payload.planId) ?? [],
+            items: INBOXES.get(request.payload.taskId) ?? [],
             cursor: "1",
           };
           return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });

@@ -1,9 +1,9 @@
 import type { GitHubRepository } from "@luke/features";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import { PLAN_CALL_FAILURE, type PlanningRepositoriesAnswer } from "@luke/features/planning-view";
+import { TASK_CALL_FAILURE, type TasksRepositoriesAnswer } from "@luke/features/tasks-view";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { GearIcon, ProviderMark } from "@luke/ui";
-import { repositoryFailureNote } from "@luke/ui/planning-model";
+import { repositoryFailureNote } from "@luke/ui/tasks-model";
 import { RotateCwIcon } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { CHIP_LOOK, Chip, type ChipLook } from "../chip";
@@ -48,7 +48,7 @@ export interface RepositoryChooser {
   /** The repositories the account's plans were about lately, the newest first, each once. */
   recent: readonly string[];
   /** Reads the repositories the account reaches now, as the service answers them. */
-  read: () => Promise<PlanningRepositoriesAnswer>;
+  read: () => Promise<TasksRepositoriesAnswer>;
   /** Opens a page of GitHub's in the browser, such as a repository's own. */
   openGitHub: (url: string) => void;
   /** Whether a repository is drawn with its owner's picture: not in a fixture run (`repository-picture.tsx`). */
@@ -187,7 +187,7 @@ export function RepositoryChip(props: {
   const openSettings = useOpenSettings();
   const [open, setOpen] = useState(false);
   const drawn = useDisclosure(open);
-  const [list, setList] = useState<PlanningRepositoriesAnswer | undefined>(undefined);
+  const [list, setList] = useState<TasksRepositoriesAnswer | undefined>(undefined);
   const menuId = useId();
   const chip = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -202,7 +202,7 @@ export function RepositoryChip(props: {
 
   const read = useCallback(() => {
     latest.current.read().then(setList, () => {
-      setList({ failure: PLAN_CALL_FAILURE.UNANSWERED });
+      setList({ failure: TASK_CALL_FAILURE.UNANSWERED });
     });
   }, []);
 

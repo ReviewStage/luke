@@ -16,14 +16,14 @@ export const FAILURE_REASON = {
   /** The repository is not one the workspace can reach at all: the plan names another. */
   CHOOSE_REPOSITORY: "choose-repository",
   /** The repository's owner is connected to another workspace of the account's: the plan moves there. */
-  MOVE_PLAN: "move-plan",
+  MOVE_TASK: "move-plan",
   OTHER: "other",
 } as const;
 
 export type FailureReason = (typeof FAILURE_REASON)[keyof typeof FAILURE_REASON];
 
 /** The remedies that mend a plan's repository in the plan's own place, and so name the plan. */
-type PlanRemedyReason =
+type TaskRemedyReason =
   | typeof FAILURE_REASON.CONNECT_GITHUB
   | typeof FAILURE_REASON.RECONNECT_GITHUB
   | typeof FAILURE_REASON.CHOOSE_REPOSITORY;
@@ -38,7 +38,7 @@ export type Failure =
       /** What the account is called among its provider's others, where it has others. */
       readonly name?: string;
     }
-  | { readonly reason: PlanRemedyReason; readonly text: string; readonly planId: string }
+  | { readonly reason: TaskRemedyReason; readonly text: string; readonly taskId: string }
   | {
       readonly reason: typeof FAILURE_REASON.ADD_REPOSITORY;
       readonly text: string;
@@ -48,9 +48,9 @@ export type Failure =
       readonly settingsUrl: string;
     }
   | {
-      readonly reason: typeof FAILURE_REASON.MOVE_PLAN;
+      readonly reason: typeof FAILURE_REASON.MOVE_TASK;
       readonly text: string;
-      readonly planId: string;
+      readonly taskId: string;
       /** The workspace the plan moves to, whose name the press says. */
       readonly workspace: { readonly id: string; readonly name: string };
     }
@@ -74,7 +74,7 @@ export function remedyLabel(failure: Failure): string | undefined {
       return `Add ${failure.repository} to Luke on GitHub`;
     case FAILURE_REASON.CHOOSE_REPOSITORY:
       return "Choose a repository";
-    case FAILURE_REASON.MOVE_PLAN:
+    case FAILURE_REASON.MOVE_TASK:
       return `Move task to ${failure.workspace.name}`;
     case FAILURE_REASON.OTHER:
       return undefined;

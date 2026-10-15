@@ -9,7 +9,7 @@ import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { Database } from "../core/query.js";
 import { conversationAttachment } from "../schemas/conversation-attachment.js";
-import type { PlanStoreEffect } from "./plan-store.js";
+import type { TaskStoreEffect } from "./task-store.js";
 import type { ConversationTarget } from "./writer.js";
 
 /**
@@ -156,7 +156,7 @@ function sha256Hex(bytes: Uint8Array): string {
 export function keepConversationPicture(
   target: ConversationTarget,
   picture: PictureToKeep,
-): PlanStoreEffect<Option.Option<KeptPicture>> {
+): TaskStoreEffect<Option.Option<KeptPicture>> {
   return Effect.gen(function* () {
     const { conversationId } = target;
     const sha256 = sha256Hex(picture.bytes);
@@ -187,6 +187,6 @@ export function keepConversationPicture(
 export function readConversationPicture(
   conversationId: string,
   id: string,
-): PlanStoreEffect<Option.Option<StoredPicture>> {
+): TaskStoreEffect<Option.Option<StoredPicture>> {
   return findPicture({ conversationId, id });
 }

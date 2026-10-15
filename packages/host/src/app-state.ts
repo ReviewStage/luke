@@ -1,6 +1,6 @@
 import type { AccountSnapshot } from "@luke/credentials/snapshot";
 import type { AccountFailedRun } from "@luke/features/account-inbox-wire";
-import type { PlanningView } from "@luke/features/planning-view";
+import type { TasksView } from "@luke/features/tasks-view";
 import {
   type SessionReplayBootstrap,
   WINDOW_ROLE,
@@ -33,13 +33,13 @@ export const RUN_PROFILE = {
   MUTED: "muted",
   DUPLEX: "duplex",
   /** The panel's Plans tab, opened at launch over a synthetic plan. */
-  PLANNING: "planning",
+  TASKS: "planning",
   /** The same plan, opened at launch on the whiteboard Luke drew for it. */
-  PLANNING_BOARD: "planning-board",
+  TASKS_BOARD: "planning-board",
   /** The same plan mid-call, opened at launch on the transcript of what was said on its calls. */
-  PLANNING_TRANSCRIPT: "planning-transcript",
+  TASKS_TRANSCRIPT: "planning-transcript",
   /** The same plan mid-call, opened at launch on the work Luke's planning model did on its calls. */
-  PLANNING_WORK: "planning-work",
+  TASKS_WORK: "planning-work",
 } as const;
 
 export type RunProfile = (typeof RUN_PROFILE)[keyof typeof RUN_PROFILE];
@@ -137,14 +137,14 @@ export interface AppInboxWaitingItem {
 }
 
 /** One plan with inbox items waiting on the developer: the plan, and its open items, the latest changed first. */
-export interface AppInboxPlan {
-  planId: string;
+export interface AppInboxTask {
+  taskId: string;
   items: readonly AppInboxWaitingItem[];
 }
 
 /** One plan holding inbox items, waiting or settled: the plan, how many, and when the latest changed, by the service's clock. */
-export interface AppInboxPlanHolding {
-  planId: string;
+export interface AppInboxTaskHolding {
+  taskId: string;
   items: number;
   updatedAt: number;
 }
@@ -156,7 +156,7 @@ export interface AppInboxPlanHolding {
  * automation, and its name, null where the reader may not read it or none
  * stands.
  */
-export interface AppInboxPlanlessItem extends AppInboxWaitingItem {
+export interface AppInboxTasklessItem extends AppInboxWaitingItem {
   agentTitle: string | null;
   agentModel: string;
   automationId: string | null;
@@ -182,11 +182,11 @@ interface AppInboxAutomationHolding {
  * open, and empty while nobody is signed in.
  */
 export interface AppInboxSlice {
-  waiting: readonly AppInboxPlan[];
+  waiting: readonly AppInboxTask[];
   /** Every plan holding an inbox item, waiting or settled, the plan whose item changed latest first: what the window's Inbox lists. */
-  plans: readonly AppInboxPlanHolding[];
+  tasks: readonly AppInboxTaskHolding[];
   /** The open items of agents with no plan, the latest changed first, which wait beside the plans' and count with them. */
-  planless: readonly AppInboxPlanlessItem[];
+  taskless: readonly AppInboxTasklessItem[];
   /** Every automation holding items of its agents with no plan, as `plans` lists the plans. */
   automations: readonly AppInboxAutomationHolding[];
   /** The newest run of each of the account's own automations that failed to start lately, the latest first, which marks the window's Automations until that automation is opened. */
@@ -228,7 +228,7 @@ export interface AppState {
    * the panel's Plans tab draws it, and the active plan is the one a voice
    * session and the talk key bind to.
    */
-  planning: PlanningView;
+  tasks: TasksView;
   codingAgents: AppCodingAgentsSlice;
   inbox: AppInboxSlice;
   notifications: AppNotificationsSlice;

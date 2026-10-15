@@ -364,7 +364,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       // The plan open in the panel is what a press with no call opens one
       // about, whether or not the panel still shows it; a standing call takes
       // the press whatever plan is open, and with neither the key opens nothing.
-      talkPlanId: () => state.snapshot().planning.activePlanId,
+      talkPlanId: () => state.snapshot().tasks.activeTaskId,
       hotkeyChanged: (rank) => {
         const current = state.snapshot().hotkeys;
         const talk = rank === HOTKEY_RANK.TALK ? hotkeys.talk : current.talk;
@@ -504,7 +504,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       if (!launchStanding()) return;
       // A plan's pages are read through the host on the account's bearer, so the frame holds an address alone.
       session.defaultSession.protocol.handle(PAGE_SCHEME, (request) =>
-        run(pageResponse(request.url, operator.host.planningPage)),
+        run(pageResponse(request.url, operator.host.tasksPage)),
       );
       panels.reconcile();
       raiseVoiceWindow();

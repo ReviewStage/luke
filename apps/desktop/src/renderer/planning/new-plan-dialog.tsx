@@ -1,6 +1,6 @@
-import { PLAN_BOUNDS } from "@luke/features/plan-wire";
+import { TASK_BOUNDS } from "@luke/features/task-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
-import { workspaceReaches } from "@luke/ui/planning-model";
+import { workspaceReaches } from "@luke/ui/tasks-model";
 import { useId, useRef, useState } from "react";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutAria } from "#shared/shortcuts";
 import { WorkspaceTile } from "../desktop/workspace-tile";
@@ -167,7 +167,7 @@ function NewPlanCard({ newPlan }: { newPlan: PlansControl["newPlan"] }): React.J
         aria-label="Task name"
         aria-keyshortcuts={shortcutAria(CREATE_CHORD)}
         placeholder="Task name (optional)"
-        maxLength={PLAN_BOUNDS.MAX_NAME_CHARS}
+        maxLength={TASK_BOUNDS.MAX_NAME_CHARS}
         spellCheck
         value={name}
         disabled={starting}

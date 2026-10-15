@@ -4,7 +4,7 @@ import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { writePage } from "@luke/database/models/plan-pages";
 import { PLAN_REVISION } from "@luke/database/models/plan-revisions";
-import { createPlan } from "@luke/database/models/plan-store";
+import { createTask } from "@luke/database/models/task-store";
 import { personalWorkspaceOf } from "@luke/database/models/workspace-store";
 import { user } from "@luke/database/schemas/auth";
 import { voiceSessions, voiceTranscriptSegments } from "@luke/database/schemas/voice";
@@ -30,34 +30,34 @@ import { DEFAULT_PLAN_TEMPLATE } from "@luke/features/plan-document-template";
 import { PLAN_EDIT_REFUSAL, planEditAnswerSchema } from "@luke/features/plan-edit";
 import { PLAN_HEADING } from "@luke/features/plan-template";
 import {
-  PLAN_ACTOR,
-  PLAN_BOUNDS,
-  PLAN_FIELD,
-  PLAN_FILE_REFUSAL,
-  planAnswerSchema,
-  planFileAnswerSchema,
-  planListAnswerSchema,
-  planRevisionAnswerSchema,
-  planRevisionsAnswerSchema,
-  UNTITLED_PLAN_NAME,
-} from "@luke/features/plan-wire";
-import { planWorkAnswerSchema } from "@luke/features/planning-view";
-import {
   REPOSITORY_UNREACHED,
   type RepositoryUnreached,
 } from "@luke/features/repository-reach-wire";
 import {
-  planTranscriptAnswerSchema,
+  PLAN_ACTOR,
+  PLAN_FIELD,
+  planRevisionAnswerSchema,
+  planRevisionsAnswerSchema,
+  TASK_BOUNDS,
+  TASK_FILE_REFUSAL,
+  taskAnswerSchema,
+  taskFileAnswerSchema,
+  taskListAnswerSchema,
+  UNTITLED_TASK_NAME,
+} from "@luke/features/task-wire";
+import { taskWorkAnswerSchema } from "@luke/features/tasks-view";
+import {
   TRANSCRIPT_PART_TYPE,
   type TranscriptMessage,
+  taskTranscriptAnswerSchema,
 } from "@luke/features/transcript-wire";
 import { TRANSCRIPT_SPEAKER } from "@luke/live";
 import { LINK_OUTCOME } from "@luke/service/github/github-installations";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "@luke/service/http/http";
-import { DRAW_ON_BOARD_STATUS, runDrawOnBoard } from "@luke/service/plans/board-tool";
-import { PLAN_SAVE_STATUS, saveNotes } from "@luke/service/plans/plan-notes";
-import { plansApp } from "@luke/service/plans/plans-app";
 import { modelCatalogOf } from "@luke/service/providers/model-catalog";
+import { DRAW_ON_BOARD_STATUS, runDrawOnBoard } from "@luke/service/tasks/board-tool";
+import { PLAN_SAVE_STATUS, saveNotes } from "@luke/service/tasks/plan-notes";
+import { tasksApp } from "@luke/service/tasks/tasks-app";
 import {
   connectWorkspaceGitHub,
   type FakeGitHub,
@@ -69,12 +69,12 @@ import {
   type SentToGitHub,
 } from "@luke/service/testing/github-app-fake";
 import { integrationConnectOver } from "@luke/service/testing/integration-connect";
-import { added } from "@luke/service/testing/plan-contents";
 import {
   INVITATIONS_TEXT,
-  makeDocumentPlan,
-  makeSavedDocumentPlan,
+  makeDocumentTask,
+  makeSavedDocumentTask,
 } from "@luke/service/testing/plan-documents";
+import { added } from "@luke/service/testing/task-contents";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { eq } from "drizzle-orm";
@@ -172,7 +172,7 @@ const answer = (
       integrationConnectOver({ LINEAR_CONNECTOR_UID: "oauth/linear" }),
     );
     const { handler, dispose } = HttpRouter.toWebHandler(
-      plansApp({
+      tasksApp({
         resolveUserId: (incoming) =>
           Effect.succeed(
             Option.fromNullishOr(bearers.get(incoming.headers.get("authorization") ?? "")),
@@ -231,7 +231,7 @@ function readAnswer<S extends Schema.ConstraintDecoder<unknown>>(
 
 /** The started plan's id, failing the test where the answer is not a started plan. */
 function startedId(started: Answer): string {
-  return readAnswer(planAnswerSchema, HOSTED_HTTP_STATUS.CREATED, started).plan.id;
+  return readAnswer(taskAnswerSchema, HOSTED_HTTP_STATUS.CREATED, started).plan.id;
 }
 
 const refusal = (status: number, error: string): Answer => ({ status, body: { error } });
@@ -335,7 +335,7 @@ const callAbout = (
       .insert(voiceSessions)
       .values({
         userId: input.userId,
-        planId: input.planId,
+        taskId: input.planId,
         liveSessionId: `live_t_${randomUUID()}`,
         delegationMode: VOICE_DELEGATION_MODE.CLIENT,
         startedAt: new Date(input.startedAt),
@@ -384,7 +384,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
     Effect.gen(function* () {
       const { owner, ask } = yield* openAccounts();
       const planId = startedId(yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })));
-      const saved = yield* saveNotes({ userId: owner, planId }, [
+      const saved = yield* saveNotes({ userId: owner, taskId: planId }, [
         added(PLAN_HEADING.CONTEXT, "Only admins can invite."),
         added(PLAN_HEADING.OPEN_QUESTIONS, "- Who can withdraw an invite?"),
       ]);
@@ -394,14 +394,14 @@ it.layer(getTestDB())("the plan routes", (it) => {
       const opened = yield* ask(request(ONE_PLAN, owner, { id: planId }));
 
       assert.deepEqual(
-        readAnswer(planListAnswerSchema, HOSTED_HTTP_STATUS.OK, listed).plans.map((plan) => [
+        readAnswer(taskListAnswerSchema, HOSTED_HTTP_STATUS.OK, listed).plans.map((plan) => [
           plan.id,
           plan.name,
         ]),
         [[planId, RELAY.name]],
       );
       assert.deepEqual(
-        readAnswer(planAnswerSchema, HOSTED_HTTP_STATUS.OK, opened).plan.document,
+        readAnswer(taskAnswerSchema, HOSTED_HTTP_STATUS.OK, opened).plan.document,
         saved.status === PLAN_SAVE_STATUS.SAVED ? saved.document : undefined,
       );
     }),
@@ -415,14 +415,14 @@ it.layer(getTestDB())("the plan routes", (it) => {
         const start = (body: WireBoundaryInput) =>
           ask(request(PLANS, owner, { method: "POST", body }));
         const nameOf = (answer: Answer) =>
-          readAnswer(planAnswerSchema, HOSTED_HTTP_STATUS.CREATED, answer).plan.name;
+          readAnswer(taskAnswerSchema, HOSTED_HTTP_STATUS.CREATED, answer).plan.name;
 
         const unnamed = yield* start({});
         const blank = yield* start({ name: "   " });
-        const overlong = yield* start({ name: "x".repeat(PLAN_BOUNDS.MAX_NAME_CHARS + 1) });
+        const overlong = yield* start({ name: "x".repeat(TASK_BOUNDS.MAX_NAME_CHARS + 1) });
 
-        assert.equal(nameOf(unnamed), UNTITLED_PLAN_NAME);
-        assert.equal(nameOf(blank), UNTITLED_PLAN_NAME);
+        assert.equal(nameOf(unnamed), UNTITLED_TASK_NAME);
+        assert.equal(nameOf(blank), UNTITLED_TASK_NAME);
         assert.deepEqual(
           overlong,
           refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
@@ -440,12 +440,12 @@ it.layer(getTestDB())("the plan routes", (it) => {
       const personal = yield* personalWorkspaceOf(owner);
       assert.ok(Option.isSome(personal));
       assert.equal(
-        readAnswer(planAnswerSchema, HOSTED_HTTP_STATUS.CREATED, started).plan.workspaceId,
+        readAnswer(taskAnswerSchema, HOSTED_HTTP_STATUS.CREATED, started).plan.workspaceId,
         personal.value,
       );
       const listed = yield* ask(request(PLANS, owner));
       assert.deepEqual(
-        readAnswer(planListAnswerSchema, HOSTED_HTTP_STATUS.OK, listed).plans.map(
+        readAnswer(taskListAnswerSchema, HOSTED_HTTP_STATUS.OK, listed).plans.map(
           (plan) => plan.workspaceId,
         ),
         [personal.value, personal.value],
@@ -464,12 +464,12 @@ it.layer(getTestDB())("the plan routes", (it) => {
       );
 
       assert.equal(
-        readAnswer(planAnswerSchema, HOSTED_HTTP_STATUS.CREATED, started).plan.workspaceId,
+        readAnswer(taskAnswerSchema, HOSTED_HTTP_STATUS.CREATED, started).plan.workspaceId,
         shared,
       );
       const listed = yield* ask(request(PLANS, owner));
       assert.deepEqual(
-        readAnswer(planListAnswerSchema, HOSTED_HTTP_STATUS.OK, listed).plans.map((plan) => [
+        readAnswer(taskListAnswerSchema, HOSTED_HTTP_STATUS.OK, listed).plans.map((plan) => [
           plan.name,
           plan.workspaceId,
         ]),
@@ -495,13 +495,13 @@ it.layer(getTestDB())("the plan routes", (it) => {
 
         const ownersOf = (bearer: string) =>
           Effect.map(ask(request(PLANS, bearer)), (listed) =>
-            readAnswer(planListAnswerSchema, HOSTED_HTTP_STATUS.OK, listed).plans.map((plan) => [
+            readAnswer(taskListAnswerSchema, HOSTED_HTTP_STATUS.OK, listed).plans.map((plan) => [
               plan.ownerId,
               plan.createdBy,
             ]),
           );
         const opened = readAnswer(
-          planAnswerSchema,
+          taskAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
           yield* ask(request(ONE_PLAN, other, { id: planId })),
         ).plan;
@@ -535,7 +535,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
         assert.deepEqual(refused, notFound);
         assert.deepEqual(unknown, notFound);
         const listed = yield* ask(request(PLANS, owner));
-        assert.deepEqual(readAnswer(planListAnswerSchema, HOSTED_HTTP_STATUS.OK, listed).plans, []);
+        assert.deepEqual(readAnswer(taskListAnswerSchema, HOSTED_HTTP_STATUS.OK, listed).plans, []);
       }),
   );
 
@@ -708,13 +708,13 @@ it.layer(getTestDB())("the plan routes", (it) => {
           ],
         );
         const opened = readAnswer(
-          planAnswerSchema,
+          taskAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
           yield* ask(request(ONE_PLAN, owner, { id: planId })),
         );
         assert.deepEqual([opened.plan.name, opened.plan.repository], [RELAY.name, null]);
         assert.equal(
-          readAnswer(planListAnswerSchema, HOSTED_HTTP_STATUS.OK, yield* ask(request(PLANS, owner)))
+          readAnswer(taskListAnswerSchema, HOSTED_HTTP_STATUS.OK, yield* ask(request(PLANS, owner)))
             .plans.length,
           1,
         );
@@ -737,7 +737,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
         assert.deepEqual(yield* ask(request(BOARD, other, { id: planId })), notFound);
         assert.deepEqual(yield* save(other, { elements: [NOTE], appliedDrawing: 0 }), notFound);
         assert.equal(
-          (yield* runDrawOnBoard({ userId: other, planId }, unparsedWire(DRAW_API))).status,
+          (yield* runDrawOnBoard({ userId: other, taskId: planId }, unparsedWire(DRAW_API))).status,
           DRAW_ON_BOARD_STATUS.NOT_DRAWN,
         );
         assert.deepEqual(
@@ -767,7 +767,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
           Effect.map(
             ask(request(TRANSCRIPT, owner, { id: planId })),
             (answered) =>
-              readAnswer(planTranscriptAnswerSchema, HOSTED_HTTP_STATUS.OK, answered).transcript,
+              readAnswer(taskTranscriptAnswerSchema, HOSTED_HTTP_STATUS.OK, answered).transcript,
           );
         const { USER, ASSISTANT } = VOICE_SEGMENT_ROLE;
 
@@ -830,7 +830,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
       Effect.gen(function* () {
         const { owner, other, ask } = yield* openAccounts();
         const started = readAnswer(
-          planAnswerSchema,
+          taskAnswerSchema,
           HOSTED_HTTP_STATUS.CREATED,
           yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
         ).plan;
@@ -839,7 +839,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
           Effect.map(
             ask(request(TRANSCRIPT, userId, { id: started.id })),
             (answered) =>
-              readAnswer(planTranscriptAnswerSchema, HOSTED_HTTP_STATUS.OK, answered).transcript,
+              readAnswer(taskTranscriptAnswerSchema, HOSTED_HTTP_STATUS.OK, answered).transcript,
           );
         const { USER } = VOICE_SEGMENT_ROLE;
 
@@ -891,7 +891,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
     Effect.gen(function* () {
       const { owner, other, ask } = yield* openAccounts();
       const started = readAnswer(
-        planAnswerSchema,
+        taskAnswerSchema,
         HOSTED_HTTP_STATUS.CREATED,
         yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
       ).plan;
@@ -928,7 +928,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
 
         assert.deepEqual(
           readAnswer(
-            planWorkAnswerSchema,
+            taskWorkAnswerSchema,
             HOSTED_HTTP_STATUS.OK,
             yield* ask(request(WORK, owner, { id: planId })),
           ),
@@ -972,7 +972,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
           ask(request(FILE, userId, { id: planId, query: { path, first, last } }));
 
         const read = readAnswer(
-          planFileAnswerSchema,
+          taskFileAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
           yield* window(owner, "src/invite.ts", "2", "3"),
         );
@@ -995,7 +995,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
         assert.equal(JSON.stringify(read).includes(GITHUB_FIXTURE_INSTALLATION_TOKEN), false);
         assert.deepEqual(
           readAnswer(
-            planFileAnswerSchema,
+            taskFileAnswerSchema,
             HOSTED_HTTP_STATUS.OK,
             yield* window(owner, "src/invite.ts", "9", "12"),
           ),
@@ -1041,7 +1041,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
         );
 
         const read = readAnswer(
-          planFileAnswerSchema,
+          taskFileAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
           yield* ask(
             request(FILE, owner, {
@@ -1086,15 +1086,15 @@ it.layer(getTestDB())("the plan routes", (it) => {
         const refusalOf = (path: string) =>
           Effect.map(
             ask(request(FILE, owner, { id: planId, query: { path, first: "1", last: "10" } })),
-            (answered) => readAnswer(planFileAnswerSchema, HOSTED_HTTP_STATUS.OK, answered),
+            (answered) => readAnswer(taskFileAnswerSchema, HOSTED_HTTP_STATUS.OK, answered),
           );
         const asked = () =>
           github.sent.filter((sent) => CONTENTS_PATH.test(new URL(sent.url).pathname)).length;
 
         assert.deepEqual(yield* refusalOf("config/.env.local"), {
-          refusal: PLAN_FILE_REFUSAL.SECRET,
+          refusal: TASK_FILE_REFUSAL.SECRET,
         });
-        const missing = { refusal: PLAN_FILE_REFUSAL.MISSING };
+        const missing = { refusal: TASK_FILE_REFUSAL.MISSING };
         assert.deepEqual(yield* refusalOf("src/../../other/secret.ts"), missing);
         assert.equal(asked(), 0, "neither is asked of GitHub");
         assert.deepEqual(
@@ -1104,9 +1104,9 @@ it.layer(getTestDB())("the plan routes", (it) => {
         );
         assert.deepEqual(yield* refusalOf("src"), missing, "a directory is on the branch");
         assert.deepEqual(yield* refusalOf("linked.ts"), missing, "a link is on the branch");
-        assert.deepEqual(yield* refusalOf("big.json"), { refusal: PLAN_FILE_REFUSAL.NOT_TEXT });
+        assert.deepEqual(yield* refusalOf("big.json"), { refusal: TASK_FILE_REFUSAL.NOT_TEXT });
         assert.deepEqual(yield* refusalOf("assets/logo.png"), {
-          refusal: PLAN_FILE_REFUSAL.NOT_TEXT,
+          refusal: TASK_FILE_REFUSAL.NOT_TEXT,
         });
       }),
   );
@@ -1131,7 +1131,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
 
         // The member has no GitHub account row, so the read can only go through the installation.
         const read = readAnswer(
-          planFileAnswerSchema,
+          taskFileAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
           yield* ask(
             request(FILE, other, {
@@ -1177,11 +1177,13 @@ it.layer(getTestDB())("the plan routes", (it) => {
    */
   const twoRevisions = (userId: string, planId: string) =>
     Effect.gen(function* () {
-      yield* saveNotes({ userId, planId }, [
+      yield* saveNotes({ userId, taskId: planId }, [
         added(PLAN_HEADING.CONTEXT, "Only admins can invite."),
       ]);
       yield* TestClock.adjust(Duration.millis(PLAN_REVISION.JOIN_WITHIN_MS + 1));
-      yield* saveNotes({ userId, planId }, [added(PLAN_HEADING.GOAL, "Members invite by email.")]);
+      yield* saveNotes({ userId, taskId: planId }, [
+        added(PLAN_HEADING.GOAL, "Members invite by email."),
+      ]);
     });
 
   it.effect(
@@ -1266,7 +1268,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
         const planId = startedId(
           yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
         );
-        yield* makeSavedDocumentPlan(planId, INVITATIONS_TEXT);
+        yield* makeSavedDocumentTask(planId, INVITATIONS_TEXT);
         const value = INVITATIONS_TEXT.replace("Only an admin", "Only an owner");
 
         const answered = readAnswer(
@@ -1322,7 +1324,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
           yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
         );
         const lukes = `${INVITATIONS_TEXT}- An accepted invite is never reused.\n`;
-        yield* makeDocumentPlan(planId, lukes);
+        yield* makeDocumentTask(planId, lukes);
         const edit = (id: string, value: string) =>
           ask(
             request(EDIT, owner, {
@@ -1333,7 +1335,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
           );
 
         // At the bound alone, but past it once laid over the line Luke added.
-        const padding = "x".repeat(PLAN_BOUNDS.MAX_BODY_CHARS - INVITATIONS_TEXT.length);
+        const padding = "x".repeat(TASK_BOUNDS.MAX_BODY_CHARS - INVITATIONS_TEXT.length);
         const oversized = yield* edit(
           planId,
           INVITATIONS_TEXT.replace("Only an admin", `Only an admin${padding}`),
@@ -1383,7 +1385,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
         const change = (planId: string, repository: string) =>
           ask(request(ONE_PLAN, owner, { id: planId, method: "PATCH", body: { repository } }));
         const repositoryOf = (status: number, answered: Answer) =>
-          readAnswer(planAnswerSchema, status, answered).plan.repository;
+          readAnswer(taskAnswerSchema, status, answered).plan.repository;
         const ofOtherOwner = unreachable({
           reason: REPOSITORY_UNREACHED.OTHER_OWNER,
           repository: "octocat/dotfiles",
@@ -1421,13 +1423,13 @@ it.layer(getTestDB())("the plan routes", (it) => {
           ],
         );
         const opened = readAnswer(
-          planAnswerSchema,
+          taskAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
           yield* ask(request(ONE_PLAN, owner, { id: personal })),
         );
         assert.equal(opened.plan.repository, null);
         const listed = readAnswer(
-          planListAnswerSchema,
+          taskListAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
           yield* ask(request(PLANS, owner)),
         );
@@ -1458,7 +1460,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
         const octocat = yield* openConnectedWorkspace(owner, octocatInstallation);
         const strangers = yield* openWorkspace(other);
         yield* joinWorkspace(bare, other);
-        const plan = yield* createPlan(owner, {
+        const plan = yield* createTask(owner, {
           organizationId: bare,
           name: RELAY.name,
           repository: "acme/relay",
@@ -1487,7 +1489,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
             connectedTo: "octocat",
           }),
         );
-        const moved = readAnswer(planAnswerSchema, HOSTED_HTTP_STATUS.OK, toAcme).plan;
+        const moved = readAnswer(taskAnswerSchema, HOSTED_HTTP_STATUS.OK, toAcme).plan;
         assert.deepEqual([moved.workspaceId, moved.repository], [acme, "acme/relay"]);
         // The teammate was in the workspace the plan left, not the one it moved to.
         assert.deepEqual(

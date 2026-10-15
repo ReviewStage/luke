@@ -1,6 +1,6 @@
 import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
-import type { PlanAgentLine } from "@luke/features/plan-wire";
+import type { TaskAgentLine } from "@luke/features/task-wire";
 import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@luke/ui/actor-model";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { ActorRef } from "../actor-ref";
@@ -104,7 +104,7 @@ export function agentCardReading(
 
 /** An agent as the sidebar's list names it: its tile, where it stands and since when, its pair, and the automation or teammate who started it, as `readerId` reads it, with no step or pull request to preview. */
 export function lineSubject(
-  line: PlanAgentLine,
+  line: TaskAgentLine,
   models: readonly CatalogModel[] | undefined,
   readerId: string | undefined,
 ): AgentSubject {

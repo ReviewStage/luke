@@ -67,7 +67,7 @@ export const CODER_TOOL = {
 } as const;
 
 /** The tools that act on the agent's plan: `edit_plan`, which takes notes in it, and `show_page`, which shows a page on it. */
-export type PlanTool = typeof CODER_TOOL.EDIT_PLAN | typeof CODER_TOOL.SHOW_PAGE;
+export type TaskTool = typeof CODER_TOOL.EDIT_PLAN | typeof CODER_TOOL.SHOW_PAGE;
 
 /**
  * The plan's tools an agent is offered: none for one on no plan, as an
@@ -76,8 +76,8 @@ export type PlanTool = typeof CODER_TOOL.EDIT_PLAN | typeof CODER_TOOL.SHOW_PAGE
  * would only be refused by (`host.ts`'s `editPlan` and `showPage`), and that
  * the instructions leave out the same words (`instructions.ts`).
  */
-export function planToolsOf(agent: Pick<CodingAgent, "planId" | "prompt">): ReadonlySet<PlanTool> {
-  if (agent.planId === null) return new Set();
+export function taskToolsOf(agent: Pick<CodingAgent, "taskId" | "prompt">): ReadonlySet<TaskTool> {
+  if (agent.taskId === null) return new Set();
   if (agent.prompt !== null) return new Set([CODER_TOOL.SHOW_PAGE]);
   return new Set([CODER_TOOL.EDIT_PLAN, CODER_TOOL.SHOW_PAGE]);
 }

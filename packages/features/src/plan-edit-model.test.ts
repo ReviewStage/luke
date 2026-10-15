@@ -14,7 +14,7 @@ import {
   editorTyped,
   pendingSave,
 } from "./plan-edit-model.js";
-import { PLAN_CALL_FAILURE } from "./planning-view.js";
+import { TASK_CALL_FAILURE } from "./tasks-view.js";
 
 const TEXT = "# Context\n\nOnly an admin can add a member.\n";
 
@@ -54,7 +54,7 @@ test("a conflict holds the developer's words and saves nothing until they choose
 test("a failed save keeps the words, says why, and waits to be tried again or typed on", () => {
   const typed = editorTyped(editorOpened(TEXT), `${TEXT}Mine.\n`);
   const out = editorSent(typed, saved(typed));
-  const unanswered = editorAnswered(out, { failure: PLAN_CALL_FAILURE.UNANSWERED });
+  const unanswered = editorAnswered(out, { failure: TASK_CALL_FAILURE.UNANSWERED });
   const tooLong = editorAnswered(out, { failure: PLAN_EDIT_REFUSAL.TOO_LONG });
 
   assert.deepEqual(unanswered.state, {

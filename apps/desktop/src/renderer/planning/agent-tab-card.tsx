@@ -4,7 +4,7 @@ import type {
   CodingAgentStatus,
 } from "@luke/features/coding-agent-wire";
 import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
-import type { PlanEditor } from "@luke/features/plan-wire";
+import type { PlanEditor } from "@luke/features/task-wire";
 import type { Actor } from "@luke/ui/actor-model";
 import {
   ACTOR_SIZE,

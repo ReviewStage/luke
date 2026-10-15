@@ -1,11 +1,7 @@
 import { Schema } from "effect";
 import { PLAN_EDIT_REFUSAL, type PlanEditRequest, type PlanEditValue } from "./plan-edit.js";
-import { PLAN_BOUNDS } from "./plan-wire.js";
-import {
-  PLAN_CALL_FAILURE,
-  type PlanningEditAnswer,
-  type PlanningEditFailure,
-} from "./planning-view.js";
+import { TASK_BOUNDS } from "./task-wire.js";
+import { TASK_CALL_FAILURE, type TasksEditAnswer, type TasksEditFailure } from "./tasks-view.js";
 
 /**
  * plan-edit-model.ts -- the open plan's text in its editor: what the developer typed, what the service holds of theirs, and when to save.
@@ -56,18 +52,18 @@ export interface DocumentEditor {
 
 /** What a failed save says beside the editor, by why it failed. */
 const FAILURE_NOTE = {
-  [PLAN_CALL_FAILURE.UNANSWERED]: "Not saved: the service did not answer.",
-  [PLAN_CALL_FAILURE.NOT_FOUND]: "Not saved: this task no longer exists.",
-  [PLAN_CALL_FAILURE.PLAN_ARCHIVED]: "Not saved: this task is archived.",
+  [TASK_CALL_FAILURE.UNANSWERED]: "Not saved: the service did not answer.",
+  [TASK_CALL_FAILURE.NOT_FOUND]: "Not saved: this task no longer exists.",
+  [TASK_CALL_FAILURE.TASK_ARCHIVED]: "Not saved: this task is archived.",
   [PLAN_EDIT_REFUSAL.TOO_LONG]: "Not saved: the plan is too long.",
-} as const satisfies Record<PlanningEditFailure, string>;
+} as const satisfies Record<TasksEditFailure, string>;
 
 /** What the editor says while Luke's words and the developer's disagree. */
 export const CONFLICT_NOTE = "Luke changed this section while you were editing.";
 
 /** Whether a text is past what a document may hold, which the service would refuse. */
 function tooLong(text: string): boolean {
-  return text.length > PLAN_BOUNDS.MAX_BODY_CHARS;
+  return text.length > TASK_BOUNDS.MAX_BODY_CHARS;
 }
 
 const isText = Schema.is(Schema.String);
@@ -120,7 +116,7 @@ export function editorSent(editor: DocumentEditor, request: PlanEditRequest): Do
 }
 
 /** The service's answer to the save that was out. */
-export function editorAnswered(editor: DocumentEditor, answer: PlanningEditAnswer): DocumentEditor {
+export function editorAnswered(editor: DocumentEditor, answer: TasksEditAnswer): DocumentEditor {
   const { sending: sent, ...rest } = editor;
   if ("saved" in answer) {
     const base = sent === undefined ? editor.base : sent.document.value;

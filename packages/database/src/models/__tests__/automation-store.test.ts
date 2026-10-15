@@ -18,7 +18,7 @@ import { Database } from "../../core/query.js";
 import { member, organization, user } from "../../schemas/auth.js";
 import { automation, automationRun } from "../../schemas/automation.js";
 import { personalWorkspace } from "../../schemas/personal-workspace.js";
-import { plan } from "../../schemas/plan.js";
+import { task } from "../../schemas/plan.js";
 import { getTestDB } from "../../testing/index.js";
 import {
   automationRunsSince,
@@ -37,7 +37,7 @@ import {
   settleAutomationRun,
   updateAutomation,
 } from "../automation-store.js";
-import { createPlan, updatePlan } from "../plan-store.js";
+import { createTask, updateTask } from "../task-store.js";
 
 /**
  * An account's automations and their runs, over a real dialect: made only
@@ -57,7 +57,7 @@ const openAccount = Effect.gen(function* () {
 });
 
 /** A plan in a workspace the account owns, as the organization plugin would leave the rows. */
-const openPlan = (userId: string) =>
+const openTask = (userId: string) =>
   Effect.gen(function* () {
     const db = yield* Database;
     const organizationId = randomUUID();
@@ -71,7 +71,7 @@ const openPlan = (userId: string) =>
     yield* db
       .insert(member)
       .values({ id: randomUUID(), organizationId, userId, role: "owner", createdAt: now });
-    const made = yield* createPlan(userId, {
+    const made = yield* createTask(userId, {
       organizationId,
       name: "Nightly triage",
       repository: "acme/api",
@@ -79,8 +79,8 @@ const openPlan = (userId: string) =>
     return made.id;
   });
 
-const nightly = (planId: string): NewAutomation => ({
-  planId,
+const nightly = (taskId: string): NewAutomation => ({
+  taskId,
   name: "Nightly flaky-test sweep",
   trigger: { kind: AUTOMATION_TRIGGER.SCHEDULE, cron: "0 2 * * *", timezone: "Europe/London" },
   action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: "Find and fix one flaky test." },
@@ -95,16 +95,16 @@ it.layer(getTestDB())("the automation store", (it) => {
     () =>
       Effect.gen(function* () {
         const owner = yield* openAccount;
-        const planId = yield* openPlan(owner);
+        const taskId = yield* openTask(owner);
         // Never due, so no other test's claim finds it.
-        const onPlan = Option.getOrThrow(
-          yield* createAutomation(owner, { ...nightly(planId), nextRunAt: null }),
+        const onTask = Option.getOrThrow(
+          yield* createAutomation(owner, { ...nightly(taskId), nextRunAt: null }),
         );
-        const workspace = onPlan.organizationId ?? "";
+        const workspace = onTask.organizationId ?? "";
         const hooked = Option.getOrThrow(
           yield* createAutomation(owner, {
-            ...nightly(planId),
-            planId: null,
+            ...nightly(taskId),
+            taskId: null,
             organizationId: workspace,
             repositories: ["acme/api"],
             trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK },
@@ -114,7 +114,7 @@ it.layer(getTestDB())("the automation store", (it) => {
         );
 
         const read = yield* readWebhookAutomation(hooked.id);
-        const scheduled = yield* readWebhookAutomation(onPlan.id);
+        const scheduled = yield* readWebhookAutomation(onTask.id);
         yield* recordAutomationRun(hooked, {
           dedupeKey: randomUUID(),
           firing: { kind: AUTOMATION_FIRING.WEBHOOK, bytes: 5 },
@@ -147,22 +147,22 @@ it.layer(getTestDB())("the automation store", (it) => {
       Effect.gen(function* () {
         const owner = yield* openAccount;
         const outsider = yield* openAccount;
-        const planId = yield* openPlan(owner);
-        const onPlan = Option.getOrThrow(yield* createAutomation(owner, nightly(planId)));
-        const workspace = onPlan.organizationId ?? "";
+        const taskId = yield* openTask(owner);
+        const onTask = Option.getOrThrow(yield* createAutomation(owner, nightly(taskId)));
+        const workspace = onTask.organizationId ?? "";
         const made = (by: string) =>
           createAutomation(by, {
-            ...nightly(planId),
-            planId: null,
+            ...nightly(taskId),
+            taskId: null,
             organizationId: workspace,
             repositories: ["acme/api", "acme/web"],
           });
 
-        const planless = Option.getOrThrow(yield* made(owner));
+        const taskless = Option.getOrThrow(yield* made(owner));
         const refused = yield* made(outsider);
 
         assert.deepEqual(
-          [planless.planId, planless.planName, planless.organizationId, planless.repositories],
+          [taskless.taskId, taskless.taskName, taskless.organizationId, taskless.repositories],
           [null, null, workspace, ["acme/api", "acme/web"]],
         );
         assert.ok(Option.isNone(refused), "an account outside the workspace makes nothing there");
@@ -171,7 +171,7 @@ it.layer(getTestDB())("the automation store", (it) => {
           (yield* listAutomations(owner, { organizationId: workspace }))
             .map((each) => each.id)
             .toSorted(),
-          [planless.id, onPlan.id].toSorted(),
+          [taskless.id, onTask.id].toSorted(),
         );
         assert.deepEqual(yield* listAutomations(outsider, { organizationId: workspace }), []);
       }),
@@ -182,10 +182,10 @@ it.layer(getTestDB())("the automation store", (it) => {
     () =>
       Effect.gen(function* () {
         const owner = yield* openAccount;
-        const planId = yield* openPlan(owner);
-        const made = Option.getOrThrow(yield* createAutomation(owner, nightly(planId)));
-        const [planRow] = yield* Database.use((db) =>
-          db.select({ organizationId: plan.organizationId }).from(plan).where(eq(plan.id, planId)),
+        const taskId = yield* openTask(owner);
+        const made = Option.getOrThrow(yield* createAutomation(owner, nightly(taskId)));
+        const [taskRow] = yield* Database.use((db) =>
+          db.select({ organizationId: task.organizationId }).from(task).where(eq(task.id, taskId)),
         );
 
         assert.deepEqual(
@@ -197,7 +197,7 @@ it.layer(getTestDB())("the automation store", (it) => {
             made.archiveSuccessful,
           ],
           [
-            planRow?.organizationId,
+            taskRow?.organizationId,
             ["acme/api"],
             AUTOMATION_SCOPE.PERSONAL,
             AUTOMATION_TARGET.NEW_AGENT,
@@ -212,8 +212,8 @@ it.layer(getTestDB())("the automation store", (it) => {
     () =>
       Effect.gen(function* () {
         const owner = yield* openAccount;
-        const planId = yield* openPlan(owner);
-        const made = Option.getOrThrow(yield* createAutomation(owner, nightly(planId)));
+        const taskId = yield* openTask(owner);
+        const made = Option.getOrThrow(yield* createAutomation(owner, nightly(taskId)));
         const elsewhere = randomUUID();
         const now = yield* DateTime.nowAsDate;
         yield* Database.use((db) =>
@@ -234,7 +234,7 @@ it.layer(getTestDB())("the automation store", (it) => {
           }),
         );
 
-        yield* updatePlan(owner, planId, { repository: "acme/moved", organizationId: elsewhere });
+        yield* updateTask(owner, taskId, { repository: "acme/moved", organizationId: elsewhere });
         const followed = Option.getOrThrow(yield* readAutomation(owner, made.id));
 
         assert.deepEqual(
@@ -250,9 +250,9 @@ it.layer(getTestDB())("the automation store", (it) => {
     () =>
       Effect.gen(function* () {
         const owner = yield* openAccount;
-        const planId = yield* openPlan(owner);
+        const taskId = yield* openTask(owner);
         const shared = Option.getOrThrow(
-          yield* createAutomation(owner, { ...nightly(planId), scope: AUTOMATION_SCOPE.WORKSPACE }),
+          yield* createAutomation(owner, { ...nightly(taskId), scope: AUTOMATION_SCOPE.WORKSPACE }),
         );
         const personal = randomUUID();
         const now = yield* DateTime.nowAsDate;
@@ -279,7 +279,7 @@ it.layer(getTestDB())("the automation store", (it) => {
             .values({ userId: owner, organizationId: personal, createdAt: now }),
         );
 
-        yield* updatePlan(owner, planId, { organizationId: personal });
+        yield* updateTask(owner, taskId, { organizationId: personal });
 
         const moved = Option.getOrThrow(yield* readAutomation(owner, shared.id));
         assert.deepEqual(
@@ -295,17 +295,17 @@ it.layer(getTestDB())("the automation store", (it) => {
       Effect.gen(function* () {
         const owner = yield* openAccount;
         const other = yield* openAccount;
-        const planId = yield* openPlan(owner);
+        const taskId = yield* openTask(owner);
 
         assert.deepEqual(
-          yield* createAutomation(other, nightly(planId)),
+          yield* createAutomation(other, nightly(taskId)),
           Option.none(),
           "an account outside the plan's workspace makes nothing on it",
         );
-        const made = Option.getOrThrow(yield* createAutomation(owner, nightly(planId)));
+        const made = Option.getOrThrow(yield* createAutomation(owner, nightly(taskId)));
         assert.equal(made.enabled, true);
-        assert.equal(made.planName, "Nightly triage");
-        assert.deepEqual(made.trigger, nightly(planId).trigger);
+        assert.equal(made.taskName, "Nightly triage");
+        assert.deepEqual(made.trigger, nightly(taskId).trigger);
 
         assert.deepEqual(
           (yield* listAutomations(owner)).map((each) => each.id),
@@ -342,7 +342,7 @@ it.layer(getTestDB())("the automation store", (it) => {
         const owner = yield* openAccount;
         const other = yield* openAccount;
         const made = Option.getOrThrow(
-          yield* createAutomation(owner, nightly(yield* openPlan(owner))),
+          yield* createAutomation(owner, nightly(yield* openTask(owner))),
         );
         const firing = {
           dedupeKey: "2026-10-15T01:00:00.000Z",
@@ -390,7 +390,7 @@ it.layer(getTestDB())("the automation store", (it) => {
       Effect.gen(function* () {
         const owner = yield* openAccount;
         const made = Option.getOrThrow(
-          yield* createAutomation(owner, nightly(yield* openPlan(owner))),
+          yield* createAutomation(owner, nightly(yield* openTask(owner))),
         );
         yield* recordAutomationRun(made, {
           dedupeKey: "manual-1",
@@ -415,11 +415,11 @@ it.layer(getTestDB())("the automation store", (it) => {
     () =>
       Effect.gen(function* () {
         const owner = yield* openAccount;
-        const planId = yield* openPlan(owner);
+        const taskId = yield* openTask(owner);
         const now = new Date("2026-10-15T09:05:00Z");
         const next = new Date("2026-10-16T09:00:00Z");
         const make = (nextRunAt: Date) =>
-          Effect.map(createAutomation(owner, { ...nightly(planId), nextRunAt }), Option.getOrThrow);
+          Effect.map(createAutomation(owner, { ...nightly(taskId), nextRunAt }), Option.getOrThrow);
         const due = yield* make(new Date("2026-10-15T09:00:00Z"));
         const stale = yield* make(new Date("2026-10-15T06:00:00Z"));
         const later = yield* make(new Date("2026-10-15T10:00:00Z"));
@@ -438,7 +438,7 @@ it.layer(getTestDB())("the automation store", (it) => {
         const leaver = yield* openAccount;
         const left = Option.getOrThrow(
           yield* createAutomation(leaver, {
-            ...nightly(yield* openPlan(leaver)),
+            ...nightly(yield* openTask(leaver)),
             nextRunAt: new Date("2026-10-15T09:00:00Z"),
           }),
         );
@@ -495,20 +495,20 @@ it.layer(getTestDB())("the automation store", (it) => {
     () =>
       Effect.gen(function* () {
         const owner = yield* openAccount;
-        const planId = yield* openPlan(owner);
+        const taskId = yield* openTask(owner);
         const github = {
           kind: AUTOMATION_TRIGGER.GITHUB,
           event: "issue-opened",
           labels: ["bug"],
         } as const;
         const listening = Option.getOrThrow(
-          yield* createAutomation(owner, { ...nightly(planId), trigger: github, nextRunAt: null }),
+          yield* createAutomation(owner, { ...nightly(taskId), trigger: github, nextRunAt: null }),
         );
         const paused = Option.getOrThrow(
-          yield* createAutomation(owner, { ...nightly(planId), trigger: github, nextRunAt: null }),
+          yield* createAutomation(owner, { ...nightly(taskId), trigger: github, nextRunAt: null }),
         );
         yield* updateAutomation(owner, paused.id, { enabled: false });
-        yield* createAutomation(owner, nightly(planId));
+        yield* createAutomation(owner, nightly(taskId));
 
         const found = yield* githubAutomationsOn("ACME/api", "issue-opened", 10);
         assert.deepEqual(
@@ -539,11 +539,11 @@ it.layer(getTestDB())("the automation store's failed runs", (it) => {
       Effect.gen(function* () {
         const owner = yield* openAccount;
         const other = yield* openAccount;
-        const planId = yield* openPlan(owner);
-        const theirPlan = yield* openPlan(other);
-        const made = (userId: string, onPlan: string, name: string) =>
+        const planId = yield* openTask(owner);
+        const theirPlan = yield* openTask(other);
+        const made = (userId: string, onTask: string, name: string) =>
           Effect.map(
-            createAutomation(userId, { ...nightly(onPlan), name, nextRunAt: null }),
+            createAutomation(userId, { ...nightly(onTask), name, nextRunAt: null }),
             Option.getOrThrow,
           );
         const sweep = yield* made(owner, planId, "Nightly flaky-test sweep");

@@ -12,7 +12,7 @@ import {
   type PlanRevisionAnswer,
   type PlanRevisionLine,
   type PlanRevisionsAnswer,
-} from "@luke/features/plan-wire";
+} from "@luke/features/task-wire";
 import { and, desc, eq, inArray, lt } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { DateTime, Effect, Option, Schema } from "effect";
@@ -20,11 +20,11 @@ import { SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
 import { user } from "../schemas/auth.js";
 import { codingAgent } from "../schemas/coding-agent.js";
-import { plan } from "../schemas/plan.js";
+import { task } from "../schemas/plan.js";
 import { planRevision } from "../schemas/plan-revision.js";
 import { voiceSessions } from "../schemas/voice.js";
 import { InstantColumnSchema } from "./columns.js";
-import { planReachableBy } from "./workspace-store.js";
+import { taskReachableBy } from "./workspace-store.js";
 
 /**
  * plan-revisions.ts -- a plan's history: every save kept as a revision under the writer who made it.
@@ -80,7 +80,7 @@ export type PlanWriter =
 
 /** One save to record: the plan, its writer and the member who made it, its content before and after, and how many changes it made. */
 export interface PlanSaveRecord {
-  readonly planId: string;
+  readonly taskId: string;
   readonly writer: PlanWriter;
   /**
    * The member the save is made for: the developer editing, or the one whose
@@ -114,7 +114,7 @@ type RevisionRow = typeof RevisionRowSchema.Type;
 const findNewestRevision = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: RevisionRowSchema,
-  execute: (planId) =>
+  execute: (taskId) =>
     Database.use((db) =>
       db
         .select({
@@ -128,7 +128,7 @@ const findNewestRevision = SqlSchema.findOneOption({
           restoredFrom: planRevision.restoredFrom,
         })
         .from(planRevision)
-        .where(eq(planRevision.planId, planId))
+        .where(eq(planRevision.taskId, taskId))
         .orderBy(desc(planRevision.seq))
         .limit(1),
     ),
@@ -136,7 +136,7 @@ const findNewestRevision = SqlSchema.findOneOption({
 
 const insertRevision = SqlSchema.void({
   Request: Schema.Struct({
-    planId: Schema.String,
+    taskId: Schema.String,
     seq: Schema.Number,
     actor: Schema.Literals(Object.values(PLAN_ACTOR)),
     userId: Schema.NullOr(Schema.String),
@@ -153,18 +153,18 @@ const insertRevision = SqlSchema.void({
 
 const moveRevisionOn = SqlSchema.void({
   Request: Schema.Struct({
-    planId: Schema.String,
+    taskId: Schema.String,
     seq: Schema.Number,
     document: Schema.String,
     changes: Schema.Number,
     at: Schema.Date,
   }),
-  execute: ({ planId, seq, ...moved }) =>
+  execute: ({ taskId, seq, ...moved }) =>
     Database.use((db) =>
       db
         .update(planRevision)
         .set(moved)
-        .where(and(eq(planRevision.planId, planId), eq(planRevision.seq, seq))),
+        .where(and(eq(planRevision.taskId, taskId), eq(planRevision.seq, seq))),
     ),
 });
 
@@ -182,7 +182,7 @@ const LastEditRowSchema = Schema.Struct({
 const findLastEdit = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: LastEditRowSchema,
-  execute: (planId) =>
+  execute: (taskId) =>
     Database.use((db) =>
       db
         .select({
@@ -198,7 +198,7 @@ const findLastEdit = SqlSchema.findOneOption({
         .from(planRevision)
         .leftJoin(codingAgent, eq(codingAgent.id, planRevision.agentId))
         .leftJoin(user, eq(user.id, planRevision.userId))
-        .where(eq(planRevision.planId, planId))
+        .where(eq(planRevision.taskId, taskId))
         .orderBy(desc(planRevision.seq))
         .limit(1),
     ),
@@ -227,11 +227,11 @@ type LastEditRow = typeof LastEditRowSchema.Type;
 const findRevisionLines = SqlSchema.findAll({
   Request: Schema.Struct({
     userId: Schema.String,
-    planId: Schema.String,
+    taskId: Schema.String,
     before: Schema.NullOr(Schema.Number),
   }),
   Result: RevisionLineRowSchema,
-  execute: ({ userId, planId, before }) =>
+  execute: ({ userId, taskId, before }) =>
     Database.use((db) =>
       db
         .select({
@@ -251,7 +251,7 @@ const findRevisionLines = SqlSchema.findAll({
           restoredAt: restored.at,
         })
         .from(planRevision)
-        .innerJoin(plan, eq(plan.id, planRevision.planId))
+        .innerJoin(task, eq(task.id, planRevision.taskId))
         .leftJoin(codingAgent, eq(codingAgent.id, planRevision.agentId))
         .leftJoin(user, eq(user.id, planRevision.userId))
         // The call a revision names by its Live API id, read as the transcript names it.
@@ -265,14 +265,14 @@ const findRevisionLines = SqlSchema.findAll({
         .leftJoin(
           restored,
           and(
-            eq(restored.planId, planRevision.planId),
+            eq(restored.taskId, planRevision.taskId),
             eq(restored.seq, planRevision.restoredFrom),
           ),
         )
         .where(
           and(
-            eq(planRevision.planId, planId),
-            planReachableBy(userId),
+            eq(planRevision.taskId, taskId),
+            taskReachableBy(userId),
             before === null ? undefined : lt(planRevision.seq, before),
           ),
         )
@@ -291,11 +291,11 @@ const RevisionContentRowSchema = Schema.Struct({
 const findRevisionContents = SqlSchema.findAll({
   Request: Schema.Struct({
     userId: Schema.String,
-    planId: Schema.String,
+    taskId: Schema.String,
     seqs: Schema.Array(Schema.Number),
   }),
   Result: RevisionContentRowSchema,
-  execute: ({ userId, planId, seqs }) =>
+  execute: ({ userId, taskId, seqs }) =>
     Database.use((db) =>
       db
         .select({
@@ -303,11 +303,11 @@ const findRevisionContents = SqlSchema.findAll({
           document: planRevision.document,
         })
         .from(planRevision)
-        .innerJoin(plan, eq(plan.id, planRevision.planId))
+        .innerJoin(task, eq(task.id, planRevision.taskId))
         .where(
           and(
-            eq(planRevision.planId, planId),
-            planReachableBy(userId),
+            eq(planRevision.taskId, taskId),
+            taskReachableBy(userId),
             inArray(planRevision.seq, [...seqs]),
           ),
         ),
@@ -330,7 +330,7 @@ type SectionRevisionRow = typeof SectionRevisionRowSchema.Type;
 const findSectionRevisions = SqlSchema.findAll({
   Request: Schema.String,
   Result: SectionRevisionRowSchema,
-  execute: (planId) =>
+  execute: (taskId) =>
     Database.use((db) =>
       db
         .select({
@@ -344,7 +344,7 @@ const findSectionRevisions = SqlSchema.findAll({
         })
         .from(planRevision)
         .leftJoin(user, eq(user.id, planRevision.userId))
-        .where(eq(planRevision.planId, planId))
+        .where(eq(planRevision.taskId, taskId))
         .orderBy(desc(planRevision.seq))
         .limit(PLAN_REVISION.SECTION_HISTORY + 1),
     ),
@@ -426,7 +426,7 @@ function recordEarlier(
     onSome: (at) =>
       Effect.as(
         insertRevision({
-          planId: record.planId,
+          taskId: record.taskId,
           seq: 1,
           actor: PLAN_ACTOR.EARLIER,
           userId: null,
@@ -466,10 +466,10 @@ export function recordRevision(
   return Effect.gen(function* () {
     const now = yield* DateTime.nowAsDate;
     const { writer, after } = record;
-    const newest = yield* findNewestRevision(record.planId);
+    const newest = yield* findNewestRevision(record.taskId);
     if (Option.isSome(newest) && joins(newest.value, record, now)) {
       return yield* moveRevisionOn({
-        planId: record.planId,
+        taskId: record.taskId,
         seq: newest.value.seq,
         document: after,
         changes: newest.value.changes + record.changes,
@@ -478,7 +478,7 @@ export function recordRevision(
     }
     const last = Option.isSome(newest) ? newest.value.seq : yield* recordEarlier(record);
     yield* insertRevision({
-      planId: record.planId,
+      taskId: record.taskId,
       seq: last + 1,
       actor: writer.actor,
       userId: memberOf(record),
@@ -499,9 +499,9 @@ export function recordRevision(
  * nothing for a plan with no history yet.
  */
 export function readLastEdit(
-  planId: string,
+  taskId: string,
 ): Effect.Effect<Option.Option<PlanLastEdit>, RevisionFailure, DatabaseServices> {
-  return Effect.map(findLastEdit(planId), Option.map(lastEditOf));
+  return Effect.map(findLastEdit(taskId), Option.map(lastEditOf));
 }
 
 /**
@@ -513,11 +513,11 @@ export function readLastEdit(
  * read only where the first revision is among those read.
  */
 export function readSectionWriters<E, R>(
-  planId: string,
+  taskId: string,
   started: Effect.Effect<string, E, R>,
 ): Effect.Effect<readonly PlanSectionWriter[], RevisionFailure | E, DatabaseServices | R> {
   return Effect.gen(function* () {
-    const rows = [...(yield* findSectionRevisions(planId))].reverse();
+    const rows = [...(yield* findSectionRevisions(taskId))].reverse();
     const first = rows[0];
     if (first === undefined) return [];
     const fromStart =
@@ -539,10 +539,10 @@ export function readSectionWriters<E, R>(
  */
 export function listRevisions(
   userId: string,
-  planId: string,
+  taskId: string,
   before?: number,
 ): Effect.Effect<PlanRevisionsAnswer, RevisionFailure, DatabaseServices> {
-  return Effect.map(findRevisionLines({ userId, planId, before: before ?? null }), (rows) => {
+  return Effect.map(findRevisionLines({ userId, taskId, before: before ?? null }), (rows) => {
     const page = rows.slice(0, PLAN_HISTORY_BOUNDS.PAGE);
     const revisions = page.map(
       (row): PlanRevisionLine => ({
@@ -567,10 +567,10 @@ export function listRevisions(
 /** The plan's text at one revision; nothing where it has no such revision, or the account reaches no such plan. */
 export function readRevisionContent(
   userId: string,
-  planId: string,
+  taskId: string,
   seq: number,
 ): Effect.Effect<Option.Option<string>, RevisionFailure, DatabaseServices> {
-  return Effect.map(findRevisionContents({ userId, planId, seqs: [seq] }), (rows) =>
+  return Effect.map(findRevisionContents({ userId, taskId, seqs: [seq] }), (rows) =>
     Option.map(Option.fromNullishOr(rows[0]), (row) => row.document),
   );
 }
@@ -583,10 +583,10 @@ export function readRevisionContent(
  */
 export function readRevision(
   userId: string,
-  planId: string,
+  taskId: string,
   seq: number,
 ): Effect.Effect<Option.Option<PlanRevisionAnswer["revision"]>, RevisionFailure, DatabaseServices> {
-  return Effect.map(findRevisionContents({ userId, planId, seqs: [seq - 1, seq] }), (rows) => {
+  return Effect.map(findRevisionContents({ userId, taskId, seqs: [seq - 1, seq] }), (rows) => {
     const documentAt = (at: number): PlanDocument | null => {
       const row = rows.find((each) => each.seq === at);
       return row === undefined ? null : { body: row.document, assumptions: [] };

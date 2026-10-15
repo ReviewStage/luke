@@ -67,21 +67,21 @@ it.effect(
       const { client, requests } = recordingClient();
       const operator = operatorOver(client);
 
-      yield* operator.planningStart({
+      yield* operator.tasksStart({
         name: "Billing export",
         repository: "acme/ledger",
         workspaceId: "workspace-acme",
       });
-      yield* operator.planningStart({ name: "Teammate invitations" });
+      yield* operator.tasksStart({ name: "Teammate invitations" });
 
       assert.deepEqual(
         requests.map((request) => [request.method, request.params]),
         [
           [
-            GATEWAY_METHOD.PLANNING_START,
+            GATEWAY_METHOD.TASKS_START,
             { name: "Billing export", repository: "acme/ledger", workspaceId: "workspace-acme" },
           ],
-          [GATEWAY_METHOD.PLANNING_START, { name: "Teammate invitations" }],
+          [GATEWAY_METHOD.TASKS_START, { name: "Teammate invitations" }],
         ],
       );
     }),

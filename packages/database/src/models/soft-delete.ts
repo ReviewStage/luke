@@ -2,14 +2,14 @@ import { and, eq, inArray, isNotNull, lte, notExists, or } from "drizzle-orm";
 import { Duration, Effect, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
-import { plan } from "../schemas/plan.js";
+import { task } from "../schemas/plan.js";
 import { conversations } from "../schemas/storage.js";
 import { voiceSessions } from "../schemas/voice.js";
 import { queueSessionSandboxes, sessionsOf } from "./session-sandbox-cleanup.js";
 
 /**
  * The purge that follows a soft delete. Nothing is erased at the stamp: a
- * deleted plan's conversation is stamped `deleted_at` (`plan-store.ts`), so
+ * deleted plan's conversation is stamped `deleted_at` (`task-store.ts`), so
  * the reads — which skip a stamped row — show nothing of it from the call
  * after, while the rows stand until the purge. There is no archive, no
  * registry, and no cutoff: the stamp is the whole record, and the cron's
@@ -21,7 +21,7 @@ import { queueSessionSandboxes, sessionsOf } from "./session-sandbox-cleanup.js"
  * conversation's row is the last record that names it.
  *
  * A deleted plan's calls are not stamped: the delete removes the ones that
- * had ended (`plan-store.ts`), and the cron removes each one left once it
+ * had ended (`task-store.ts`), and the cron removes each one left once it
  * has ended too, the words said on it going with it by the cascade.
  */
 
@@ -31,7 +31,7 @@ export const CLEARED_CONVERSATION_RETENTION_MS = Duration.toMillis(Duration.days
 type ClearFailure = QueryError | Schema.SchemaError;
 
 /** The most calls one sweep removes, so a backlog is worked through a sweep at a time rather than in one statement. */
-const DELETED_PLAN_CALLS_PER_SWEEP = 200;
+const DELETED_TASK_CALLS_PER_SWEEP = 200;
 
 const IdRowSchema = Schema.Struct({ id: Schema.String });
 
@@ -89,14 +89,14 @@ const purgeCallRows = SqlSchema.findAll({
               .from(voiceSessions)
               .where(
                 and(
-                  isNotNull(voiceSessions.planId),
+                  isNotNull(voiceSessions.taskId),
                   notExists(
-                    db.select({ id: plan.id }).from(plan).where(eq(plan.id, voiceSessions.planId)),
+                    db.select({ id: task.id }).from(task).where(eq(task.id, voiceSessions.taskId)),
                   ),
                   or(isNotNull(voiceSessions.closedAt), lte(voiceSessions.startedAt, liveEdge)),
                 ),
               )
-              .limit(DELETED_PLAN_CALLS_PER_SWEEP),
+              .limit(DELETED_TASK_CALLS_PER_SWEEP),
           ),
         )
         .returning({ id: voiceSessions.id }),
@@ -108,7 +108,7 @@ const purgeCallRows = SqlSchema.findAll({
  * most a sweep's worth; each call's segments cascade with it. Answers how
  * many calls went.
  */
-export function purgeDeletedPlanCalls(
+export function purgeDeletedTaskCalls(
   liveEdge: Date,
 ): Effect.Effect<number, ClearFailure, DatabaseServices> {
   return Effect.map(purgeCallRows(liveEdge), (rows) => rows.length);

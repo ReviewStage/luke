@@ -9,9 +9,9 @@ import {
   INBOX_WIRE_VERSION,
   type InboxItem,
 } from "@luke/features/inbox-wire";
-import type { Plan } from "@luke/features/plan-wire";
-import { DOCUMENT_REGION, PLANS_PAGE } from "@luke/ui/planning-model";
+import type { Task } from "@luke/features/task-wire";
 import { sameTab, TAB_WORDS } from "@luke/ui/tab-strip-model";
+import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -53,7 +53,7 @@ import { NO_LOOKS } from "./planning/use-plan-looks";
 
 /** A task with one agent of its own, open on its agent's tab. */
 function task(id: string, name: string, agentId: string) {
-  const plan: Plan = {
+  const plan: Task = {
     id,
     workspaceId: "workspace-personal",
     name,
@@ -146,10 +146,10 @@ function windowOn(registry: AtomRegistry.AtomRegistry) {
   ) => {
     const agentTab = { agent: open.agent.id };
     const plans = plansControl({
-      page: PLANS_PAGE.DOCUMENT,
+      page: TASKS_PAGE.DOCUMENT,
       plans: [INVITES.plan, BILLING.plan],
       activePlanId: open.plan.id,
-      region: { kind: DOCUMENT_REGION.READY, plan: open.plan },
+      region: { kind: DOCUMENT_REGION.READY, task: open.plan },
       mainTabs: {
         ...plansControl().mainTabs,
         tabs: [MAIN_TAB.PLAN, agentTab],
@@ -419,7 +419,7 @@ async function sidebarOn(open: typeof INVITES, pinned: boolean) {
   });
   const pin = { plan: open.plan.id, tab: { agent: open.agent.id }, label: "Agent", at: 5 };
   const plans = plansControl({
-    page: PLANS_PAGE.DOCUMENT,
+    page: TASKS_PAGE.DOCUMENT,
     plans: [INVITES.plan, BILLING.plan],
     activePlanId: open.plan.id,
     chosenPin: pinned ? pin : undefined,
@@ -475,10 +475,10 @@ const DRAFT_KEY = "draft-invites";
  */
 async function columnOn(tabs: readonly MainTab[], chosen: MainTab, agent = INVITES.agent) {
   const plans = plansControl({
-    page: PLANS_PAGE.DOCUMENT,
+    page: TASKS_PAGE.DOCUMENT,
     plans: [INVITES.plan],
     activePlanId: INVITES.plan.id,
-    region: { kind: DOCUMENT_REGION.READY, plan: INVITES.plan },
+    region: { kind: DOCUMENT_REGION.READY, task: INVITES.plan },
     mainTabs: {
       ...plansControl().mainTabs,
       tabs: [MAIN_TAB.PLAN, ...tabs],
@@ -635,10 +635,10 @@ async function inboxOn(item: InboxItem) {
   const root = createRoot(container);
   roots.push(root);
   const plans = plansControl({
-    page: PLANS_PAGE.DOCUMENT,
+    page: TASKS_PAGE.DOCUMENT,
     plans: [INVITES.plan],
     activePlanId: INVITES.plan.id,
-    region: { kind: DOCUMENT_REGION.READY, plan: INVITES.plan },
+    region: { kind: DOCUMENT_REGION.READY, task: INVITES.plan },
     mainTabs: {
       ...plansControl().mainTabs,
       tabs: [MAIN_TAB.PLAN, MAIN_TAB.INBOX],

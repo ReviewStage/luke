@@ -24,14 +24,9 @@ import {
 } from "@luke/service/agents/coder-host/pull-request";
 import { showImageRejected } from "@luke/service/agents/coder-host/show-image";
 import {
-  type PullRequestToolResult,
-  pullRequestRejected,
-} from "@luke/service/agents/coder-host/pull-request";
-import { showImageRejected } from "@luke/service/agents/coder-host/show-image";
-import {
   type CODER_TOOL,
-  type PlanTool,
-  planToolsOf,
+  type TaskTool,
+  taskToolsOf,
 } from "@luke/service/agents/coder-host/tool-set";
 import { agentToolRejected } from "@luke/service/agents/coding-agent-tools";
 import {
@@ -41,8 +36,8 @@ import {
   runOnMacTool,
 } from "@luke/service/agents/mac-command";
 import { hostedEnvironment } from "@luke/service/environment";
-import { showPageRejected } from "@luke/service/plans/page-tool";
-import { type PictureLookResult, pictureNotLooked } from "@luke/service/plans/picture-look";
+import { showPageRejected } from "@luke/service/tasks/page-tool";
+import { type PictureLookResult, pictureNotLooked } from "@luke/service/tasks/picture-look";
 import { scriptedModel } from "@luke/service/testing/coder-scripted-model";
 import {
   ACTION_RESULT_STATUS,
@@ -172,14 +167,14 @@ export function relayChildEvent(
 export function offeredPlanTools(
   auth: SessionAuth,
   sessionId: string,
-): Promise<ReadonlySet<PlanTool>> {
+): Promise<ReadonlySet<TaskTool>> {
   return runAgent(
     Effect.gen(function* () {
       const admitted = yield* host.admit(auth, sessionId);
-      if (Result.isFailure(admitted)) return new Set<PlanTool>();
+      if (Result.isFailure(admitted)) return new Set<TaskTool>();
       const agent = yield* host.agent(admitted.success);
-      if (Result.isFailure(agent)) return new Set<PlanTool>();
-      return planToolsOf(agent.success);
+      if (Result.isFailure(agent)) return new Set<TaskTool>();
+      return taskToolsOf(agent.success);
     }),
   );
 }
@@ -197,21 +192,6 @@ export function editPlanNotes(
       const admitted = yield* host.admit(auth, sessionId);
       if (Result.isFailure(admitted)) return planEditRejected(admitted.failure);
       return yield* host.editPlan(admitted.success, input, takenInTurn, sandbox);
-    }),
-  );
-}
-
-/** One `open_pull_request` call run under the agent's session, for the tool, which runs here rather than at an edge of its own. */
-export function runPullRequestTool(
-  auth: SessionAuth,
-  sessionId: string,
-  input: UnparsedWireValue,
-): Promise<PullRequestToolResult> {
-  return runAgent(
-    Effect.gen(function* () {
-      const admitted = yield* host.admit(auth, sessionId);
-      if (Result.isFailure(admitted)) return pullRequestRejected(admitted.failure);
-      return yield* host.openPullRequest(admitted.success, input);
     }),
   );
 }

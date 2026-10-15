@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { unparsedWire } from "@luke/wire";
 import { test } from "vitest";
-import { planPicturesIn } from "./plan-attachment-link.js";
+import { taskPicturesIn } from "./plan-attachment-link.js";
 import { planSections } from "./plan-document.js";
 import {
   applyNotesToText,
@@ -12,7 +12,7 @@ import {
   textNotesInProgress,
   withAgentEdit,
 } from "./plan-template.js";
-import { PLAN_FIELD } from "./plan-wire.js";
+import { PLAN_FIELD } from "./task-wire.js";
 
 function add(section: string, text: string): PlanNote {
   return { kind: NOTE_KIND.ADD, section, text };
@@ -427,7 +427,7 @@ test("deleting the line a picture stands on is a retraction, and is taken, while
   ]);
   const cut: PlanNote = { kind: NOTE_KIND.REPLACE, find: "![Members page", text: "" };
 
-  assert.deepEqual(planPicturesIn(taken.text), []);
+  assert.deepEqual(taskPicturesIn(taken.text), []);
   assert.equal(taken.missed, undefined);
   assert.deepEqual(applyNotesToText(PICTURED, [cut]).missed, cut);
 });

@@ -1,5 +1,5 @@
 import type { DatabaseServices, QueryError } from "@luke/database/core/query";
-import { openPlanConversation } from "@luke/database/models/plan-store";
+import { openTaskConversation } from "@luke/database/models/task-store";
 import type { StoreWriter } from "@luke/database/models/writer";
 import type { LanguageModel } from "ai";
 import { Data, Effect, Option, type Schema, type Scope } from "effect";
@@ -46,7 +46,7 @@ class ExchangeCannotStand extends Data.TaggedError("ExchangeCannotStand")<{
 
 const EXCHANGE_CANNOT_STAND_MESSAGE = "the exchange could not stand on the session's sideband";
 
-const PLAN_GONE_MESSAGE = "the plan the session is bound to no longer stands";
+const TASK_GONE_MESSAGE = "the plan the session is bound to no longer stands";
 
 /**
  * The conversation a call lands in: its plan's, opened and attached now
@@ -55,11 +55,11 @@ const PLAN_GONE_MESSAGE = "the plan the session is bound to no longer stands";
  * one the account no longer reaches, has none to offer, and the session is
  * refused.
  */
-const planConversation = (userId: string, planId: string) =>
+const taskConversation = (userId: string, taskId: string) =>
   Effect.flatMap(
-    openPlanConversation(userId, planId),
+    openTaskConversation(userId, taskId),
     Option.match({
-      onNone: () => Effect.fail(new ExchangeCannotStand({ message: PLAN_GONE_MESSAGE })),
+      onNone: () => Effect.fail(new ExchangeCannotStand({ message: TASK_GONE_MESSAGE })),
       onSome: (opened) => Effect.succeed(opened),
     }),
   );
@@ -73,7 +73,7 @@ export function exchangeAttachment(deps: ExchangeAttachmentDeps): ExchangeAttach
     Scope.Scope | DatabaseServices
   > =>
     Effect.gen(function* () {
-      const opened = yield* planConversation(session.accountId, session.planId);
+      const opened = yield* taskConversation(session.accountId, session.taskId);
       const scribeModel = deps.scribeModel();
       const exchange = yield* hostedLiveExchange({
         accountId: session.accountId,
@@ -83,7 +83,7 @@ export function exchangeAttachment(deps: ExchangeAttachmentDeps): ExchangeAttach
           ? undefined
           : {
               scribe: {
-                planId: session.planId,
+                taskId: session.taskId,
                 model: scribeModel,
                 ...(session.onPlanDraft ? { onDraft: session.onPlanDraft } : undefined),
               },

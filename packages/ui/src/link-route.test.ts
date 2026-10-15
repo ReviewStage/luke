@@ -61,7 +61,7 @@ test("a place of an experiment the account has off opens nowhere, and one it has
     kind: LINK_ROUTE.EXPERIMENT_OFF,
   });
   assert.deepEqual(linkRoute({ workspace: "acme", place: automation }, WINDOW), {
-    kind: LINK_ROUTE.PLANS,
+    kind: LINK_ROUTE.TASKS,
   });
   assert.deepEqual(
     linkRoute({ workspace: "acme", place: automation }, { ...WINDOW, automationsOn: false }),
@@ -76,7 +76,7 @@ test("a task, an agent, or an Inbox item opens on the Plans tab, whatever worksp
     { kind: LINK_PLACE.INBOX_ITEM, agentId: "a1", itemId: "i1" },
   ] as const) {
     assert.deepEqual(linkRoute({ workspace: "someone-elses", place }, WINDOW), {
-      kind: LINK_ROUTE.PLANS,
+      kind: LINK_ROUTE.TASKS,
     });
   }
 });

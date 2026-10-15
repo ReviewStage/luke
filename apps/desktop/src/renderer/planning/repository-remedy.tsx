@@ -52,14 +52,14 @@ export function useRepositoryRemedy(): (
     switch (failure.reason) {
       case FAILURE_REASON.CONNECT_GITHUB:
       case FAILURE_REASON.RECONNECT_GITHUB:
-        return () => doors.openWorkspaceGitHub(failure.planId);
+        return () => doors.openWorkspaceGitHub(failure.taskId);
       case FAILURE_REASON.ADD_REPOSITORY:
         return () => doors.openGitHub(failure.settingsUrl);
       case FAILURE_REASON.CHOOSE_REPOSITORY:
-        return () => doors.chooseRepository(failure.planId);
-      case FAILURE_REASON.MOVE_PLAN:
+        return () => doors.chooseRepository(failure.taskId);
+      case FAILURE_REASON.MOVE_TASK:
         return () => {
-          void doors.movePlan(failure.planId, failure.workspace.id).then((moved) => {
+          void doors.movePlan(failure.taskId, failure.workspace.id).then((moved) => {
             if (moved) retry?.();
           });
         };

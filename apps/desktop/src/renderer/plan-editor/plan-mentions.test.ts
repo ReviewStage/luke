@@ -32,7 +32,7 @@ const PLACE: MentionPlace = { workspace: "acme", repository: "acme/checkout" };
 
 /** A mention of the section an anchor names, written with the name given. */
 const named = (anchor: string, name: string) =>
-  mentionMarkdown({ kind: MENTION_KIND.SECTION, planId: PLAN_ID, anchor }, name, PLACE);
+  mentionMarkdown({ kind: MENTION_KIND.SECTION, taskId: PLAN_ID, anchor }, name, PLACE);
 
 const section = (heading: string) => named(sectionAnchors([heading])[0] ?? "", heading);
 

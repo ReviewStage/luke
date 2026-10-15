@@ -21,7 +21,7 @@ import {
 import { linkLabels } from "@luke/features/mention-link";
 import type { ModelChoice } from "@luke/features/models-wire";
 import type { PlanAgentEdit } from "@luke/features/plan-template";
-import type { CodeRef } from "@luke/features/plan-wire";
+import type { CodeRef } from "@luke/features/task-wire";
 import { CALL_KIND, type CallKind, commandDescription, pageName } from "@luke/features/turn-rows";
 import { skillWord } from "@luke/ui/skill-mention";
 import { fileRefText } from "@luke/voice/code-pane-model";

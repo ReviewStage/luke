@@ -34,11 +34,11 @@ import {
   type ModelChoice,
   type ModelProvider,
 } from "@luke/features/models-wire";
-import type { PlanEditor } from "@luke/features/plan-wire";
 import {
   REPOSITORY_UNREACHED,
   type RepositoryUnreached,
 } from "@luke/features/repository-reach-wire";
+import type { PlanEditor } from "@luke/features/task-wire";
 import {
   ROW_PART,
   type RowReading,
@@ -313,7 +313,7 @@ const SHARED_FAILURE_NOTE = {
   [CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY]:
     "The agent is still starting. Try again in a moment.",
   [CODING_AGENT_CALL_FAILURE.AGENT_RETIRED]: "This agent has ended. Start a new one.",
-  [CODING_AGENT_CALL_FAILURE.PLAN_ARCHIVED]: "This task is archived. Unarchive it first.",
+  [CODING_AGENT_CALL_FAILURE.TASK_ARCHIVED]: "This task is archived. Unarchive it first.",
 } as const;
 
 /** Said beside Start when the model or effort the menu chose could not be kept as the default. */
@@ -333,7 +333,7 @@ export function chooseFailureNote(failure: CodingAgentCallFailure): string {
     case CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG:
     case CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY:
     case CODING_AGENT_CALL_FAILURE.AGENT_RETIRED:
-    case CODING_AGENT_CALL_FAILURE.PLAN_ARCHIVED:
+    case CODING_AGENT_CALL_FAILURE.TASK_ARCHIVED:
       return MODEL_CHANGE_FAILED;
   }
 }
@@ -421,13 +421,13 @@ function unreachedFailure(
       return {
         reason: FAILURE_REASON.CONNECT_GITHUB,
         text: `This workspace isn't connected to GitHub, so Luke can't reach ${repository}.`,
-        planId,
+        taskId: planId,
       };
     case REPOSITORY_UNREACHED.CONNECTION_LAPSED:
       return {
         reason: FAILURE_REASON.RECONNECT_GITHUB,
         text: `This workspace's GitHub connection was removed or suspended, so Luke can't reach ${repository}.`,
-        planId,
+        taskId: planId,
       };
     case REPOSITORY_UNREACHED.OTHER_OWNER:
       return {
@@ -436,19 +436,19 @@ function unreachedFailure(
           unreached.connectedTo === undefined
             ? `${repository} isn't under the GitHub account this workspace is connected to.`
             : `${repository} isn't under ${unreached.connectedTo}, the GitHub account this workspace is connected to.`,
-        planId,
+        taskId: planId,
       };
     case REPOSITORY_UNREACHED.GONE:
       return {
         reason: FAILURE_REASON.CHOOSE_REPOSITORY,
         text: `${repository} was renamed, transferred, or deleted on GitHub.`,
-        planId,
+        taskId: planId,
       };
     case REPOSITORY_UNREACHED.OTHER_WORKSPACE:
       return {
-        reason: FAILURE_REASON.MOVE_PLAN,
+        reason: FAILURE_REASON.MOVE_TASK,
         text: `${repository} is connected to ${unreached.workspace.name}, not this workspace.`,
-        planId,
+        taskId: planId,
         workspace: unreached.workspace,
       };
   }
@@ -470,7 +470,7 @@ function startFailureWords(failure: CodingAgentCallFailure): string {
     case CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG:
     case CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY:
     case CODING_AGENT_CALL_FAILURE.AGENT_RETIRED:
-    case CODING_AGENT_CALL_FAILURE.PLAN_ARCHIVED:
+    case CODING_AGENT_CALL_FAILURE.TASK_ARCHIVED:
       return SHARED_FAILURE_NOTE[failure];
   }
 }
@@ -499,7 +499,7 @@ export function messageFailureWords(failure: CodingAgentCallFailure): string {
     case CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG:
     case CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY:
     case CODING_AGENT_CALL_FAILURE.AGENT_RETIRED:
-    case CODING_AGENT_CALL_FAILURE.PLAN_ARCHIVED:
+    case CODING_AGENT_CALL_FAILURE.TASK_ARCHIVED:
       return SHARED_FAILURE_NOTE[failure];
   }
 }

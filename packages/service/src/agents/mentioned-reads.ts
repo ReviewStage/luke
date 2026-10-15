@@ -2,7 +2,7 @@ import type { DatabaseServices } from "@luke/database/core/query";
 import { listPublishedCodingAgents } from "@luke/database/models/coding-agent-store";
 import { listPages, readPageVersion } from "@luke/database/models/plan-pages";
 import type { PageVersion } from "@luke/features/page-wire";
-import type { Plan } from "@luke/features/plan-wire";
+import type { Task } from "@luke/features/task-wire";
 import { Effect, Option } from "effect";
 import type { StoreFailure } from "../http/store-failure.js";
 import {
@@ -59,7 +59,7 @@ const readAgents = (userId: string, planId: string, named: readonly string[]) =>
 export function readMentioned(
   userId: string,
   words: string,
-  plan: Plan | undefined,
+  plan: Task | undefined,
 ): Effect.Effect<MentionedReads, StoreFailure, DatabaseServices> {
   if (plan === undefined) return Effect.succeed(NO_MENTIONED_READS);
   const named = mentionedOfPlan(words, plan);

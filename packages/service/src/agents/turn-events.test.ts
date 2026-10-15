@@ -9,7 +9,7 @@ import { Effect } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll, test } from "vitest";
 import { BRAIN_RUN_EVENT, SLOW_STEP_KIND } from "../core.js";
-import { HOSTED_TOOL_SET } from "../plans/brain-tool-set.js";
+import { HOSTED_TOOL_SET } from "../tasks/brain-tool-set.js";
 import { stampedEveEvent } from "../testing/eve-events.js";
 import { BRAIN_HOST_TURN } from "./brain-host/bounds.js";
 import { memoryRelayState, type RelayStanding, StreamRelay } from "./brain-host/relay.js";

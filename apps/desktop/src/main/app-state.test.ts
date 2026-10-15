@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
-import { PLAN_WORK_STATE } from "@luke/features/planning-view";
+import { TASK_WORK_STATE } from "@luke/features/tasks-view";
 import { runModeFor } from "@luke/host";
 import { type AppState, sessionReplayBootstrap } from "@luke/host/app-state";
 import type { HostBootstrap } from "@luke/host/host-operator";
@@ -185,13 +185,13 @@ it("recording is what the host permitted less what an account's end stood down",
 it("the voice and call windows are sent the document, and answered their first read of it, without the planning turns' work or the plan's planning conversation, and the rest of the plan as held", () => {
   const held = initialAppState(RUN, true);
   const planning = {
-    ...held.planning,
-    activePlanId: "plan-1",
+    ...held.tasks,
+    activeTaskId: "plan-1",
     work: [
       {
         turnId: "turn-1",
         startedAt: 0,
-        state: PLAN_WORK_STATE.DONE,
+        state: TASK_WORK_STATE.DONE,
         earlierOmitted: false,
         journal: [{ type: "text", text: "Invites live in one file." }],
         workers: [],
@@ -219,10 +219,10 @@ it("the voice and call windows are sent the document, and answered their first r
       title: null,
     },
   } as const;
-  const sent = voiceWindowState({ ...held, planning });
-  assert.equal(sent.planning.activePlanId, "plan-1");
-  assert.equal("work" in sent.planning, false);
-  assert.equal("conversation" in sent.planning, false);
+  const sent = voiceWindowState({ ...held, tasks: planning });
+  assert.equal(sent.tasks.activeTaskId, "plan-1");
+  assert.equal("work" in sent.tasks, false);
+  assert.equal("conversation" in sent.tasks, false);
   assert.doesNotMatch(JSON.stringify(sent), /invite-expiry/u);
   // A window's first read of the document answers the same: the voice and call windows' without either, a panel's whole.
   for (const window of [
@@ -230,11 +230,11 @@ it("the voice and call windows are sent the document, and answered their first r
     { voice: false, call: true },
   ]) {
     assert.doesNotMatch(
-      JSON.stringify(windowAppState({ ...held, planning }, window)),
+      JSON.stringify(windowAppState({ ...held, tasks: planning }, window)),
       /invite-expiry/u,
     );
   }
-  const panel = windowAppState({ ...held, planning }, { voice: false, call: false });
-  assert.equal(panel.planning.conversation?.cursor, "1:1");
+  const panel = windowAppState({ ...held, tasks: planning }, { voice: false, call: false });
+  assert.equal(panel.tasks.conversation?.cursor, "1:1");
   assert.deepEqual(sent.run, held.run);
 });
