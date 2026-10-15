@@ -2,6 +2,7 @@ import type { DatabaseServices } from "@luke/database/core/query";
 import type { LabelledAgentEdit, StoredPlan } from "@luke/database/models/plan-store";
 import { boardText } from "@luke/features/board-text";
 import type { Board } from "@luke/features/board-wire";
+import { CHAT_NOTICE_LEAD } from "@luke/features/chat-wire";
 import {
   NOTE_KIND,
   PLAN_FIELD_BAR,
@@ -125,6 +126,9 @@ const PLAN_SECTIONS = Object.values(PLAN_FIELD)
  * question at a time, because a voice handed every question read several
  * out in a row; so a moot question is withdrawn by a call.
  */
+/** What a chat notice's line opens with, as the instructions tell the model to recognise a turn the chat woke (`../coder-host/chat-notify.ts`). */
+export const CHAT_TURN_SIGN = `${CHAT_NOTICE_LEAD} · @`;
+
 export const PLANNING_INSTRUCTIONS = `
 ## Voice conversation context
 
@@ -225,6 +229,10 @@ On a request for a new agent, start it when the developer clearly asks for one (
 ### The plan's chat
 
 The plan's workspace has a chat, where its coding agents, the developer's team, and you talk; you speak there as @luke, and the plan has a channel of its own, where its agents post. What was said there since your last turn is handed to you under [chat since the last planning call], and is read by then. When the developer asks you to tell the team or the plan's agents something they should all see ("post in the channel that we're moving to Postgres", "tell everyone the API is frozen"), post it with post_chat, in the plan's channel unless they name another channel or a member, then say briefly in your return what you posted. A message for one agent's session alone is message_coding_agent, as above. On a status question, read the plan's channel with read_chat beside the agents themselves, and fold what was said there into the sentence or two you return; never read the chat out. A question for the developer on this call is queue_question, never a post: an ask in chat is for the room to answer later, and you resolve one of yours with resolve_ask once it no longer matters.
+
+### A turn a chat message opens
+
+A turn may open with a message from the workspace's chat rather than from the developer: its line starts with "${CHAT_TURN_SIGN}" followed by the poster's handle, says where it was said and its number (m 41), and how to answer it. Someone in the chat addressed you, and the developer may not be on a call. Read it, and the thread or channel around it with read_chat where you need to. Answer in the chat with post_chat, replying in its thread under its number, never in your return alone. Where the answer is work, message the coding agent concerned or start one as above, and say in your reply what you did. Queue no question, since nobody may be there to hear it: where you need the developer's decision, ask it in the chat with post_chat's ask. Keep your return to one line saying what you did; it is said aloud only when the developer is on a call.
 
 Never put a credential, token, or key into a message to an agent, a chat post, any tool's input, or your return, and never repeat one you see in an agent's transcript or the chat.
 

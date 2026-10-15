@@ -77,6 +77,7 @@ import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/mode
 import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
+import { isTextUIPart } from "ai";
 import { and, eq } from "drizzle-orm";
 import {
   Clock,
@@ -137,6 +138,7 @@ import {
   type EveSessions,
   EveUnreachable,
 } from "./brain-host/eve-sessions.js";
+import { CHAT_TURN_SIGN, PLANNING_INSTRUCTIONS } from "./brain-host/planning.js";
 import { CODER } from "./coder-host/bounds.js";
 import {
   CHAT_TOOL_REFUSAL,
@@ -1626,6 +1628,10 @@ it.layer(getTestDB())("telling a chat message to the agents it addresses", (it) 
           conversationId: conversation.conversationId,
         });
         assert.ok(line?.message.role === MESSAGE_ROLE.USER);
+        // The line opens with the sign the planning instructions tell Luke a chat turn by.
+        const words = line.message.parts.find(isTextUIPart)?.text ?? "";
+        assert.ok(words.startsWith(`${CHAT_TURN_SIGN}agent-1`), words);
+        assert.ok(PLANNING_INSTRUCTIONS.includes(`"${CHAT_TURN_SIGN}"`));
         assert.deepEqual(line.message.metadata, {
           author: MESSAGE_AUTHOR.AGENT,
           channel: MESSAGE_CHANNEL.CHAT,
