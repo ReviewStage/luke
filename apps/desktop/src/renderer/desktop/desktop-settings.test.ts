@@ -37,7 +37,7 @@ const accepted = () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED }
 
 /** The sidebar's groups and their rows, in the order the approved layout lists them, where no workspace is listed to head the first. */
 const PAGE_GROUPS = [
-  { heading: "Workspace", rows: ["Members and GitHub"] },
+  { heading: "Workspace", rows: ["Workspace"] },
   {
     heading: "Account",
     rows: ["Profile", "Coding agents", "Integrations", "Plan template", "Experimental"],
@@ -254,18 +254,18 @@ test("Settings opens on Profile, and its sidebar lists every page once under Wor
   assert.equal(page.querySelector(".settings-page-title")?.textContent, "Profile");
 });
 
-test("the sidebar's first group is headed by the listed workspace's name, over its Members and GitHub", () => {
+test("the sidebar's first group is headed by the listed workspace's name, over its Workspace page", () => {
   const page = mount(createElement(SettingsHarness, { workspace: listing(ACME) }));
   assert.deepEqual(
     pageGroups(page).map((group) => group.heading),
     ["Acme", "Account", "This Mac"],
   );
-  assert.deepEqual(pageGroups(page)[0]?.rows, ["Members and GitHub"]);
+  assert.deepEqual(pageGroups(page)[0]?.rows, ["Workspace"]);
 });
 
 test("the Workspace page is titled with the workspace the sidebar lists, and follows the sidebar when it lists another", () => {
   const page = mount(createElement(SettingsHarness, { workspace: listing(PERSONAL) }));
-  openPage(page, "Members and GitHub");
+  openPage(page, "Workspace");
   const first = page.querySelector(".settings-page-title")?.textContent;
 
   redraw(createElement(SettingsHarness, { workspace: listing(ACME) }));

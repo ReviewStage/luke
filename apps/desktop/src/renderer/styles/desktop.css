@@ -582,13 +582,6 @@ body,
 
 /* The photo's row on Settings › Workspace: the tile at the size its
    photo is looked at, beside Upload… (`workspace-page.tsx`). */
-.workspace-tile[data-size="settings"] {
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
-  font-size: 22px;
-}
-
 /* A workspace named (`workspace-ref.tsx`): its tile and its name as one
    object in the ink of the place it stands in, the name cut short rather
    than wrapped; with a line under the name, the two stand in a column

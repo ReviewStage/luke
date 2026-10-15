@@ -22,13 +22,15 @@ import {
 import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE } from "@luke/settings/settings-anchors";
 import { SETTINGS_SECTION } from "@luke/settings/settings-views";
 import { ProviderMark } from "@luke/ui";
-import { act, createElement } from "react";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
+import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, test, vi } from "vitest";
+import { onRegistry } from "#testing/copy-feedback";
 import { installScrollIntoView } from "#testing/scroll-into-view";
-import { focusedSegment, pressKeyIn, readSegmented, segmentedGroup } from "#testing/segmented";
 import { dayAndTimeText } from "../planning/plan-time";
+import { ToastHost } from "../toast";
 import { WorkspacePage, type WorkspaceSettingsControl } from "./workspace-page";
 
 /**
@@ -212,6 +214,7 @@ function answer(request: Act): Promise<ActOutcome> {
 }
 
 const roots: Root[] = [];
+const registries: AtomRegistry.AtomRegistry[] = [];
 
 beforeEach(() => {
   installScrollIntoView();
@@ -237,6 +240,7 @@ beforeEach(() => {
 
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
+  for (const registry of registries.splice(0)) registry.dispose();
   document.body.innerHTML = "";
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
@@ -269,8 +273,23 @@ async function mount(workspace: Workspace, others: readonly Workspace[] = []) {
         pressed.left += 1;
       },
     };
-    act(() => root.render(createElement(WorkspacePage, { control, readerId: READER_ID })));
+    act(() =>
+      root.render(
+        onRegistry(
+          registry,
+          createElement(
+            Fragment,
+            null,
+            createElement(WorkspacePage, { control, readerId: READER_ID }),
+            createElement(ToastHost),
+          ),
+        ),
+      ),
+    );
   };
+  // Each page holds its own atoms, so a toast one test raised is not the next one's.
+  const registry = AtomRegistry.make();
+  registries.push(registry);
   render(workspace.id);
   await settle();
   /** Stands the page again over another workspace, as the sidebar listing it does. */
@@ -290,10 +309,12 @@ const buttons = (within: Element, words: string) =>
 const button = (within: Element, words: string) =>
   buttons(within, words)[0] ?? assert.fail(`no ${words} button`);
 
-/** The page's row naming `name`, the reader's own beside its You. */
+/** The page's row naming `name` past its first row, the workspace's own, the reader's own beside its You. */
 const rowNamed = (page: HTMLElement, name: string) =>
   [...page.querySelectorAll<HTMLElement>(".settings-row")].find(
-    (row) => row.querySelector("strong")?.firstChild?.textContent === name,
+    (row) =>
+      row.closest(".settings-group") !== page.querySelector(".settings-group") &&
+      row.querySelector("strong")?.firstChild?.textContent === name,
   ) ?? assert.fail(`no ${name} row`);
 
 /** The rows of the invitations still pending, by the line each wears. */
@@ -339,17 +360,21 @@ async function confirm(verb: string): Promise<void> {
   await settle();
 }
 
-/** The account's role, as the page's head says it. */
-const roleLine = (page: HTMLElement) =>
-  rowNamed(page, "Your role").querySelector("small")?.textContent;
+/** The page's first row: the workspace's tile, name, and line, its Rename, and its ⋯. */
+const identity = (page: HTMLElement) =>
+  page.querySelector<HTMLElement>(".settings-group .settings-row") ??
+  assert.fail("no identity row");
+
+/** Who shares the workspace and the account's role in it, as the identity row's line says it. */
+const roleLine = (page: HTMLElement) => identity(page).querySelector("small")?.textContent;
 
 /** The renames the page asked for, by their payloads. */
 const renames = () =>
   sent.flatMap((request) => (request.kind === ACT_KIND.WORKSPACE_RENAME ? [request.payload] : []));
 
-/** Opens the Name row's field with Rename, types `typed` over the name, and ends the edit with `key`. */
+/** Opens the name's field with Rename, types `typed` over the name, and ends the edit with `key`. */
 async function renameTo(page: HTMLElement, typed: string, key: string): Promise<void> {
-  act(() => button(rowNamed(page, "Name"), "Rename").click());
+  act(() => button(identity(page), "Rename").click());
   const field =
     page.querySelector<HTMLInputElement>('input[aria-label="Workspace name"]') ??
     assert.fail("no name field");
@@ -363,7 +388,7 @@ async function renameTo(page: HTMLElement, typed: string, key: string): Promise<
 test("an owner renames the workspace in place with its ends trimmed, and Escape or the same name sends nothing", async () => {
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
 
-  assert.equal(rowNamed(page, "Name").querySelector("small")?.textContent, ACME.name);
+  assert.equal(identity(page).querySelector("strong")?.textContent, ACME.name);
   await renameTo(page, "  Acme Labs  ", "Escape");
   await renameTo(page, ACME.name, "Enter");
   await renameTo(page, "  Acme Labs  ", "Enter");
@@ -372,7 +397,7 @@ test("an owner renames the workspace in place with its ends trimmed, and Escape 
   assert.equal(page.querySelector('input[aria-label="Workspace name"]') === null, true);
   // Note that the elements are compared as a yes or no, because a failure's
   // diff of two would print the whole document.
-  assert.equal(document.activeElement === button(rowNamed(page, "Name"), "Rename"), true);
+  assert.equal(document.activeElement === button(identity(page), "Rename"), true);
 });
 
 test("an admin's rename the service refuses says so under the row, and a member is offered no rename", async () => {
@@ -382,23 +407,34 @@ test("an admin's rename the service refuses says so under the row, and a member 
 
   assert.deepEqual(renames(), [{ workspaceId: ACME.id, name: "Acme Labs" }]);
   assert.equal(
-    admin.page.querySelector('.workspace-name + [role="alert"]')?.textContent,
+    admin.page.querySelector('.menu-row + [role="alert"]')?.textContent,
     WORKSPACE_NOT_PERMITTED_REFUSAL,
   );
 
   const member = await mount(ACME);
-  assert.equal(roleLine(member.page), "Member");
+  assert.equal(roleLine(member.page), "You're a member");
   assert.equal(buttons(member.page, "Rename").length, 0);
-  assert.equal(member.page.querySelector(".workspace-name") === null, true);
+  assert.equal(member.page.querySelector('input[aria-label="Workspace name"]') === null, true);
+});
+
+test("the identity row says who shares the workspace and the account's role, and an account's own workspace with nobody else in it just that it is personal", async () => {
+  const team = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN, memberCount: 6 });
+  const shared = roleLine(team.page);
+  const alone = await mount({ ...FIRST, memberCount: 1 });
+  const ownShared = await mount({ ...FIRST, memberCount: 2 });
+
+  assert.equal(shared, "6 members · You're an admin");
+  assert.equal(roleLine(alone.page), "Personal workspace");
+  assert.equal(roleLine(ownShared.page), "2 members · You're the owner");
 });
 
 test("a personal workspace shows its owner's name with no Rename to its owner and an admin alike, and still offers its photo", async () => {
   for (const role of [WORKSPACE_ROLE.OWNER, WORKSPACE_ROLE.ADMIN]) {
     const { page } = await mount({ ...FIRST, role });
 
-    assert.equal(rowNamed(page, "Name").querySelector("small")?.textContent, FIRST.name);
+    assert.equal(identity(page).querySelector("strong")?.textContent, FIRST.name);
     assert.equal(buttons(page, "Rename").length, 0);
-    assert.ok(rowNamed(page, "Photo"));
+    assert.deepEqual(rowActions(identity(page)), ["Upload photo"]);
   }
   const team = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
   assert.equal(buttons(team.page, "Rename").length, 1);
@@ -456,10 +492,10 @@ async function drain(): Promise<void> {
   await settle();
 }
 
-/** Picks `file` in the Photo row's hidden picker, as the dialog Upload… opens would. */
+/** Picks `file` in the identity row's hidden picker, as the dialog Upload photo opens would. */
 async function pickPhoto(page: HTMLElement, file: File): Promise<void> {
   const picker =
-    rowNamed(page, "Photo").querySelector<HTMLInputElement>('input[type="file"]') ??
+    identity(page).querySelector<HTMLInputElement>('input[type="file"]') ??
     assert.fail("no photo picker");
   Object.defineProperty(picker, "files", { configurable: true, value: [file] });
   act(() => {
@@ -468,18 +504,18 @@ async function pickPhoto(page: HTMLElement, file: File): Promise<void> {
   await drain();
 }
 
-test("an owner's picked photo is sent drawn as its centre square in WebP, 256 pixels a side, and Upload… opens the picker", async () => {
+test("an owner's picked photo is sent drawn as its centre square in WebP, 256 pixels a side, and Upload photo in the ⋯ opens the picker", async () => {
   const webp = webpBytes();
   const drawn = stubCanvas(400, 300, webp);
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
-  const row = rowNamed(page, "Photo");
+  const row = identity(page);
   const picker = row.querySelector<HTMLInputElement>('input[type="file"]');
   let opened = 0;
   picker?.addEventListener("click", () => {
     opened += 1;
   });
 
-  act(() => button(row, "Upload…").click());
+  await chooseAction(row, "Upload photo");
   await pickPhoto(page, new File([new Uint8Array([1, 2, 3])], "team.png", { type: "image/png" }));
 
   assert.equal(opened, 1);
@@ -518,7 +554,7 @@ test("Remove photo stands disabled while an upload is still under way, so the up
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER, photoVersion: "v1" });
   await pickPhoto(page, new File(["x"], "team.png", { type: "image/png" }));
   const ellipsis =
-    rowNamed(page, "Photo").querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]') ??
+    identity(page).querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]') ??
     assert.fail("the row draws no ⋯");
   act(() => ellipsis.click());
   const remove =
@@ -529,25 +565,23 @@ test("Remove photo stands disabled while an upload is still under way, so the up
   assert.equal(remove.disabled || remove.getAttribute("aria-disabled") === "true", true);
 });
 
-test("Remove photo, offered only where a photo is set, asks first and then sends no photo", async () => {
+test("Remove photo, offered only where a photo is set, asks first and then sends no photo, and a set photo is replaced rather than uploaded", async () => {
   const bare = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
-  assert.deepEqual(rowActions(rowNamed(bare.page, "Photo")), []);
+  assert.deepEqual(rowActions(identity(bare.page)), ["Upload photo"]);
 
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER, photoVersion: "v1" });
-  await chooseAction(rowNamed(page, "Photo"), "Remove photo");
+  assert.deepEqual(rowActions(identity(page)), ["Replace photo", "Remove photo"]);
+  await chooseAction(identity(page), "Remove photo");
   assert.deepEqual(photos(), []);
   await confirm("Remove");
 
   assert.deepEqual(photos(), [{ workspaceId: ACME.id, photo: null }]);
 });
 
-test("a member is offered no Photo row", async () => {
+test("a member is offered none of the photo's acts", async () => {
   const { page } = await mount(ACME);
 
-  assert.equal(
-    [...page.querySelectorAll(".settings-row strong")].some((name) => name.textContent === "Photo"),
-    false,
-  );
+  assert.deepEqual(rowActions(identity(page)), []);
   assert.equal(page.querySelector('input[type="file"]') === null, true);
 });
 
@@ -558,15 +592,27 @@ test("the chosen team workspace's members are listed with their email and role, 
     sent.map((request) => request.kind),
     [ACT_KIND.WORKSPACE_MEMBERS_READ],
   );
-  assert.equal(
-    rowNamed(page, "Dana").querySelector("small")?.textContent,
-    "dana@example.com · Owner",
-  );
-  assert.equal(
-    rowNamed(page, "Sam").querySelector("small")?.textContent,
-    "sam@example.com · Member",
+  assert.equal(rowNamed(page, "Dana").querySelector("small")?.textContent, "dana@example.com");
+  assert.deepEqual(
+    ["Dana", "Sam"].map(
+      (name) => rowNamed(page, name).querySelector(".settings-row-value")?.textContent,
+    ),
+    ["Owner", "Member"],
   );
   assert.deepEqual(rowActions(rowNamed(page, "Sam")), []);
+  assert.equal(
+    page.querySelector(".settings-act-slot"),
+    null,
+    "no row keeps a ⋯'s room where none has one",
+  );
+});
+
+test("where some members' rows carry a ⋯, a row without one keeps its room, so every role ends in one column", async () => {
+  const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
+
+  assert.notEqual(rowNamed(page, "Dana").querySelector(".settings-act-slot"), null);
+  assert.equal(rowNamed(page, "Sam").querySelector(".settings-act-slot"), null);
+  assert.deepEqual(rowActions(rowNamed(page, "Sam")), ["Remove from workspace"]);
 });
 
 test("each member's row leads with their face, their picture where the read lists one and their letter where it lists none, and the reader's own wears You", async () => {
@@ -665,11 +711,27 @@ test("a removal the account's role does not allow says so in the dialog that ask
   );
 });
 
-test("a member leaves after confirming, which asks to list another workspace, and an owner is offered no Leave", async () => {
+test("a member leaves after confirming, which names what stays and what stops, says so in a toast, and lands the window; an owner is offered no Leave", async () => {
   const member = await mount(ACME);
   const leaveRow = button(member.page, "Leave").closest(".settings-row") ?? assert.fail();
+  const line = leaveRow.querySelector("small")?.textContent;
   act(() => button(leaveRow, "Leave").click());
-  await confirm("Leave");
+  const named = [...dialog().querySelectorAll(".leave-consequences li")].map(
+    (li) => li.textContent,
+  );
+  await confirm("Leave acme");
+
+  assert.equal(line, "You lose its plans, agents, and Inbox until someone invites you again.");
+  assert.deepEqual(named, [
+    "Plans you wrote stay in acme, for its members to keep.",
+    "Agents you started stay in its history, named as a former member.",
+    "Automations you created stop running.",
+    "Your own workspace, Dana, isn't affected.",
+  ]);
+  assert.equal(
+    document.querySelector(".toast-stack")?.textContent?.includes("You left acme."),
+    true,
+  );
 
   assert.deepEqual(
     sent
@@ -690,12 +752,9 @@ test("the account's first workspace reads like any other: its role, its members 
   act(() => button(row, "Connect").click());
   await settle();
 
-  assert.equal(roleLine(page), "Owner");
+  assert.equal(roleLine(page), "You're the owner");
   assert.ok(page.querySelector(".workspace-invite"));
-  assert.equal(
-    rowNamed(page, "Dana").querySelector("small")?.textContent,
-    "dana@example.com · Owner",
-  );
+  assert.equal(rowNamed(page, "Dana").querySelector("small")?.textContent, "dana@example.com");
   assert.deepEqual(
     sent.filter((request) => request.kind === ACT_KIND.WORKSPACE_GITHUB_CONNECT),
     [{ kind: ACT_KIND.WORKSPACE_GITHUB_CONNECT, payload: { workspaceId: FIRST.id } }],
@@ -738,20 +797,19 @@ const githubSent = () =>
       : [],
   );
 
-test("an owner or an admin of a connected workspace sees the GitHub group's GitHub row, Connected, led by GitHub's mark, with Manage its one control", async () => {
+test("an owner or an admin of a connected workspace sees the GitHub group's GitHub row, connected to its account, led by GitHub's mark, with Manage its one control", async () => {
   for (const role of [WORKSPACE_ROLE.OWNER, WORKSPACE_ROLE.ADMIN]) {
     const { page } = await mount({ ...CONNECTED, role });
     const group = githubGroup(page);
     const row = rowNamed(group, "GitHub");
 
     assert.equal(group.querySelector("h2")?.textContent, "GitHub");
-    assert.deepEqual(rowWords(row), ["GitHub", "Connected"]);
+    assert.deepEqual(rowWords(row), ["GitHub", "Connected to acme-org"]);
     assert.equal(
       row.querySelector(".settings-row-mark")?.innerHTML,
       renderToStaticMarkup(createElement(ProviderMark, { provider: INTEGRATION_PROVIDER.GITHUB })),
     );
     assert.deepEqual(rowButtons(row), ["Manage"], `a ${role} has Manage and nothing else`);
-    assert.equal(row.textContent?.includes("acme-org"), false, "the account is not named");
     assert.equal(row.textContent?.includes("Repositories"), false, "nor its repositories");
     for (const root of roots.splice(0)) act(() => root.unmount());
   }
@@ -895,8 +953,7 @@ test("a member reads that GitHub is connected, or is told to ask an owner or adm
   const unconnected = await mount(ACME);
   const unconnectedRow = rowNamed(unconnected.page, "GitHub");
 
-  assert.deepEqual(rowWords(connectedRow), ["GitHub", "Connected"]);
-  assert.equal(connectedRow.textContent?.includes("acme-org"), false);
+  assert.deepEqual(rowWords(connectedRow), ["GitHub", "Connected to acme-org"]);
   assert.deepEqual(rowWords(unconnectedRow), ["GitHub", "Not connected. Ask an owner or admin."]);
   for (const row of [connectedRow, unconnectedRow]) {
     assert.equal(row.querySelector("button"), null);
@@ -925,8 +982,8 @@ test("the page has no workspace picker of its own, and shows another workspace, 
 
   assert.equal(page.querySelector('button[aria-label^="Workspace:"]'), null, "no picker");
   assert.equal(rowNames.includes("Workspace"), false, "no Workspace row");
-  assert.equal(listedRole, "Member");
-  assert.equal(roleLine(page), "Admin");
+  assert.equal(listedRole, "You're a member");
+  assert.equal(roleLine(page), "You're an admin");
   assert.deepEqual(
     sent
       .filter((request) => request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ)
@@ -934,6 +991,27 @@ test("the page has no workspace picker of its own, and shows another workspace, 
     [{ workspaceId: ACME.id }, { workspaceId: beta.id }],
   );
 });
+
+/** The invite form's role chip, which names the role an invitation is sent as. */
+const roleChip = (form: HTMLElement) =>
+  form.querySelector<HTMLButtonElement>('button[aria-label^="Invite as"]') ??
+  assert.fail("no role chip");
+
+/** The role menu's items, each its role's name and what it may do. */
+const roleItems = () => [
+  ...document.querySelectorAll<HTMLElement>(
+    '[role="menu"] [role="menuitemcheckbox"], [role="menu"] [role="menuitem"], [role="menu"] [role="menuitemradio"]',
+  ),
+];
+
+/** Opens the role chip's menu and chooses `words`. */
+function chooseRole(form: HTMLElement, words: string): void {
+  act(() => roleChip(form).click());
+  const item =
+    roleItems().find((each) => each.textContent?.startsWith(words)) ??
+    assert.fail(`no ${words} in the role's menu`);
+  act(() => item.click());
+}
 
 /** Types an address, chooses a role, and presses Invite in the page's form, as many times as asked before any answer. */
 async function invite(page: HTMLElement, email: string, role: string, presses = 1): Promise<void> {
@@ -945,7 +1023,7 @@ async function invite(page: HTMLElement, email: string, role: string, presses = 
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(address, email);
     address.dispatchEvent(new Event("input", { bubbles: true }));
   });
-  act(() => button(form, roleWords).click());
+  if (roleWords !== roleChip(form).textContent) chooseRole(form, roleWords);
   act(() => {
     for (let press = 0; press < presses; press += 1) form.requestSubmit();
   });
@@ -998,31 +1076,21 @@ test("an admin invites an address as a role, sees it pending with its link to co
   );
 });
 
-test("an invitation's Role is a radio group, Member checked and the one stop for Tab, and an arrow chooses Admin, which the invitation is sent as", async () => {
+test("an invitation's role is a field chip, Member by default, whose menu checks the role and says what each may do, and the invitation is sent as the role chosen", async () => {
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
   const form = page.querySelector<HTMLFormElement>(".workspace-invite") ?? assert.fail("no form");
-  const role = segmentedGroup(form, "Role");
-  const before = readSegmented(role);
-  const address = form.querySelector("input") ?? assert.fail("no address field");
+  const before = roleChip(form).textContent;
+  act(() => roleChip(form).click());
+  const offered = roleItems().map((item) => [item.textContent, item.getAttribute("aria-checked")]);
+  act(() => roleChip(form).click());
 
-  pressKeyIn(role, "ArrowRight");
-  act(() => {
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(
-      address,
-      "alan@example.com",
-    );
-    address.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-  const moved = focusedSegment();
-  act(() => form.requestSubmit());
-  await settle();
+  await invite(page, "alan@example.com", WORKSPACE_ROLE.ADMIN);
 
-  assert.deepEqual(before, {
-    options: ["Member", "Admin"],
-    checked: ["Member"],
-    tabStops: ["Member"],
-  });
-  assert.equal(moved, "Admin");
+  assert.equal(before, "Member");
+  assert.deepEqual(offered, [
+    ["MemberWorks on plans and agents", "true"],
+    ["AdminAlso manages members and GitHub", "false"],
+  ]);
   assert.deepEqual(
     sent.flatMap((request) =>
       request.kind === ACT_KIND.WORKSPACE_INVITE ? [request.payload.role] : [],

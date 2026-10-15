@@ -16,10 +16,9 @@ import {
 } from "@luke/ui";
 import { BellIcon, FlaskConicalIcon, InfoIcon, UsersIcon } from "lucide-react";
 
-/** A page's name and glyph, and the row's own words where the sidebar's row says what the page holds rather than its name. */
+/** A page's name and glyph. */
 interface SettingsPage {
   readonly title: string;
-  readonly row?: string;
   readonly icon: React.JSX.Element;
 }
 
@@ -28,16 +27,14 @@ interface SettingsPage {
  * table, because the row that opens a page and the title over it must never
  * disagree about its name. The name and the glyph are the whole row: what a
  * page holds is one press away. Account's own page is Profile, so its row
- * does not repeat the heading it stands under; the Workspace page's row,
- * under the listed workspace's name, says what the page holds, and its head
- * names that workspace, so Workspace is its name only to the command palette
- * and wherever no workspace is listed.
+ * does not repeat the heading it stands under; the Workspace page's row is
+ * Workspace under the listed workspace's name, and its head names that
+ * workspace.
  */
 const SETTINGS_PAGE = {
   [SETTINGS_VIEW.ACCOUNT]: { title: "Profile", icon: <UserIcon /> },
   [SETTINGS_VIEW.WORKSPACE]: {
     title: "Workspace",
-    row: "Members and GitHub",
     icon: <UsersIcon className="settings-icon" />,
   },
   [SETTINGS_VIEW.CODING_AGENTS]: { title: "Coding agents", icon: <TerminalIcon /> },

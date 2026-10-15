@@ -509,18 +509,66 @@
   font-family: var(--font-mono);
 }
 
-/* Settings › Workspace › Members: the invite form, an address field taking
-   the row's room, then the role's segments and Invite, the field drawn as
-   API keys' is. The workspace's name, renamed in place at the page's head,
-   draws its field the same way. */
-.workspace-invite .settings-input,
-.workspace-name .settings-input {
+/* Settings › Workspace › Invitations: the invite form, an address field
+   taking the row's room, then the role's chip and Invite, the field drawn
+   as API keys' is. The chip is a field chip of one width, as every Settings
+   picker shares one, so the row does not reshape as the role changes. */
+.workspace-invite .settings-input {
   min-width: 0;
   height: var(--control-height);
   flex: 1;
   padding: 0 var(--space-8);
   border-radius: var(--control-radius);
   letter-spacing: 0;
+}
+
+.workspace-invite-role {
+  width: 104px;
+  justify-content: space-between;
+}
+
+/* The workspace's name, renamed in place on the name's own line in the
+   page's first row, the field's words where the name's stood. */
+.workspace-name-input {
+  height: 24px;
+  margin: -3px 0 -1px -9px;
+  padding: 0 8px;
+  border-radius: var(--control-radius);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+/* A row's value standing in a column of its own at the row's end, in the
+   value's ink at the row's size, as the Keyboard shortcuts page sets a
+   chord: a member's role. */
+.settings-row-value {
+  min-width: 64px;
+  flex: none;
+  color: var(--text-secondary);
+  font-size: 13px;
+  text-align: right;
+}
+
+/* The ⋯'s room on a row with none, in a list where other rows have one, so
+   every row's value ends in one column. */
+.settings-act-slot {
+  width: var(--control-height);
+  flex: none;
+}
+
+/* What a leave keeps and stops, under the leave dialog's body, in its
+   muted words. */
+.leave-consequences {
+  margin: var(--space-12) 0 0;
+  padding-left: 18px;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.leave-consequences li + li {
+  margin-top: var(--space-4);
 }
 
 /* The Keyboard shortcuts page: a reference list more than a form, so the
