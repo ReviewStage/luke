@@ -185,6 +185,28 @@ function runRepository(automation: Automation, run: AutomationRun): string | und
   return automation.repositories.find((repository) => repository.toLowerCase() === named);
 }
 
+/**
+ * Whether a GitHub firing's repository is one its run can work in: among the
+ * automation's repositories, and, where every run goes to the same agent,
+ * that agent's own, since a run sent to an agent works in its checkout and
+ * no other. An agent gone is the send's to refuse, as for any firing.
+ */
+const firingRepositoryHeld = Effect.fnUntraced(function* (
+  automation: Automation,
+  run: AutomationRun,
+) {
+  const repository = runRepository(automation, run);
+  if (repository === undefined) return false;
+  if (automation.targetKind !== AUTOMATION_TARGET.SAME_AGENT || automation.targetAgentId === null) {
+    return true;
+  }
+  const agent = yield* readCodingAgent(automation.userId, automation.targetAgentId);
+  return Option.match(agent, {
+    onNone: () => true,
+    onSome: (held) => held.repository.toLowerCase() === repository.toLowerCase(),
+  });
+});
+
 /** The fixed word for why a start was refused, so nothing a provider or GitHub said reaches the history. */
 function reasonOfRefusal(refusal: HostedRefusal | ModelChoiceRefused): AutomationRunReason {
   if ("_tag" in refusal) return AUTOMATION_RUN_REASON.MODEL;
@@ -379,7 +401,7 @@ const decide = (automationId: string, run: AutomationRun) =>
       // A GitHub event is about the repository it named; an automation that works elsewhere since starts nothing.
       const moved =
         run.firing.kind === AUTOMATION_FIRING.GITHUB &&
-        runRepository(automation, run) === undefined;
+        !(yield* firingRepositoryHeld(automation, run));
       const held = paused
         ? AUTOMATION_RUN_REASON.PAUSED
         : moved
