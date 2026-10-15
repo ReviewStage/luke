@@ -513,9 +513,12 @@ function panelTabRows(
 }
 
 /**
- * Mark as unread for the plan drawn, or Mark as read once it is marked so,
- * as the plan's menus offer it; none while no plan is drawn. No chord
- * reaches it, since Mail's ⇧⌘U is Automations' here.
+ * Mark as unread for the plan on screen, or Mark as read once it is marked
+ * so, as the plan's menus offer it; none while no plan is looked at. Note
+ * that a plan Settings or the Inbox covers is offered nothing, because the
+ * row does not name the plan, and going back to it opens it, which takes
+ * the mark back before it is ever seen. No chord reaches it, since Mail's
+ * ⇧⌘U is Automations' here.
  */
 function readMarkRows(
   plans: PlansControl,
@@ -524,6 +527,7 @@ function readMarkRows(
 ): readonly PaletteRow[] {
   if (plans.region.kind !== DOCUMENT_REGION.READY) return [];
   const { plan } = plans.region;
+  if (plan.id !== reads.watched) return [];
   const item = markReadItem({
     unread: reads.markedUnread(plan.id),
     onMark: (unread) => reads.mark(plan, unread),

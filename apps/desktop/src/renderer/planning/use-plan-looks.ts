@@ -377,6 +377,8 @@ export function useUnreadPlans(
 
 /** Whether the developer marked a plan unread, and the mark a menu sets either way. */
 export interface ReadMarks {
+  /** The plan the developer is looking at now, none while Settings or the Inbox covers it. */
+  readonly watched: string | undefined;
   /** Whether the plan is marked unread by hand: the only way the plan being looked at is unread. */
   readonly markedUnread: (planId: string) => boolean;
   /** Marks the plan unread until it next opens, or read, as a look at its newest save. */
@@ -387,7 +389,9 @@ export interface ReadMarks {
 export function useReadMarks(): ReadMarks {
   const looks = useAtomValue(looksAtom);
   const keep = useAtomSet(looksAtom);
+  const watched = useAtomValue(watchedAtom);
   return {
+    watched,
     markedUnread: (planId) => markedUnread(looks.marks[planId]),
     mark: (plan, unread) =>
       keep({

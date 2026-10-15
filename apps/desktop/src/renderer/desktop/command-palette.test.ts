@@ -17,16 +17,21 @@ import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
 import { settingsView } from "@luke/settings/testing";
+import { DOCUMENT_REGION } from "@luke/ui/planning-model";
 import { shownFiles } from "@luke/voice/code-pane-model";
-import { act, createElement } from "react";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
+import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, test } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
+import { onRegistry } from "#testing/copy-feedback";
+import { DOCUMENT_PLAN } from "#testing/document-plan";
 import { codingAgentsControl, plansControl } from "#testing/plans-control";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { runAppCommand } from "../app-commands";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
+import { usePlanLooks } from "../planning/use-plan-looks";
 import type { PlansControl } from "../planning/use-plans-tab";
 import type { SidePanelControl } from "../planning/use-side-panel";
 import { CommandPalette } from "./command-palette";
@@ -81,6 +86,72 @@ function openPalette(
   });
   return sent;
 }
+
+/** The window's look at `looked`, as its shell takes one while the plan is on screen, and none while it is covered. */
+function Looker({ looked }: { looked: typeof DOCUMENT_PLAN | undefined }): null {
+  usePlanLooks(looked, undefined);
+  return null;
+}
+
+/** The palette over `DOCUMENT_PLAN` drawn, looked at or covered as `looked` says, redrawn by the answer. */
+function paletteOverPlan(): (looked: typeof DOCUMENT_PLAN | undefined) => void {
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(root);
+  const registry = AtomRegistry.make();
+  const plans = plansControl({
+    region: { kind: DOCUMENT_REGION.READY, plan: DOCUMENT_PLAN },
+    activePlanId: DOCUMENT_PLAN.id,
+  });
+  return (looked) =>
+    act(() =>
+      root.render(
+        onRegistry(
+          registry,
+          createElement(
+            Fragment,
+            null,
+            createElement(Looker, { looked }),
+            createElement(CommandPalette, {
+              available: true,
+              tab: PANEL_TAB.PLANS,
+              onTabChange: () => undefined,
+              plans,
+              settings: {
+                rows: { settings: settingsView(), voiceControlsDrawn: true, accountDrawn: true },
+                onViewChange: () => undefined,
+              },
+              readFiles: () => Promise.reject(new Error("no repository is open")),
+            }),
+          ),
+        ),
+      ),
+    );
+}
+
+/** The rows ⌘K lists for "mark", the palette opened afresh. */
+function markRows(): string[] {
+  act(() => {
+    assert.ok(runAppCommand(APP_COMMAND.COMMAND_PALETTE), "⌘K is offered");
+  });
+  type("mark");
+  return rows().filter((row) => row.startsWith("Mark as"));
+}
+
+test("⌘K marks the task on screen unread and then read, and offers no mark for a task Settings or the Inbox covers", () => {
+  const draw = paletteOverPlan();
+  draw(undefined);
+  assert.deepEqual(markRows(), []);
+  act(() => {
+    assert.ok(runAppCommand(APP_COMMAND.COMMAND_PALETTE), "⌘K closes");
+  });
+
+  draw(DOCUMENT_PLAN);
+  assert.deepEqual(markRows(), ["Mark as unread"]);
+  press("Mark as unread");
+  assert.deepEqual(markRows(), ["Mark as read"]);
+  press("Mark as read");
+  assert.deepEqual(markRows(), ["Mark as unread"]);
+});
 
 function field(): HTMLInputElement {
   const input = document.querySelector<HTMLInputElement>(".command-palette-search input");
