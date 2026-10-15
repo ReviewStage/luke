@@ -28,7 +28,6 @@ import { HOSTED_TOOL_SET } from "../../plans/brain-tool-set.js";
 import { type ModelCatalog, providerModelOf } from "../../providers/model-catalog.js";
 import { delegatedChildOf, type HostAdmission, hostAdmission } from "../agent-runtime/host-core.js";
 import { type AgentSkill, repositorySkills } from "../agent-runtime/skills.js";
-import { HELD_DOORS } from "../coder-host/chat-notify.js";
 import type { CoderModelSelection } from "../coder-host/model.js";
 import { titleSubagent } from "../coder-host/title.js";
 import { MeterUnavailable, ResearchBudget } from "../public-research.js";
@@ -43,6 +42,7 @@ import {
   RELAY_TURN,
 } from "./bounds.js";
 import { ChatPostTally, chatSince, chatTakenIn, lukeOn } from "./chat.js";
+import { wakingDoors } from "./chat-wake.js";
 import { readRecentMessages } from "./context.js";
 import {
   type AdmittedConversation,
@@ -443,6 +443,11 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
           secret === undefined || origin === undefined
             ? undefined
             : eve({ origin, caller: { secret, account: starter }, mount: EVE_MOUNT.CODER });
+        // A message to another plan's Luke wakes it on its planning brain, as the deployment for the caller.
+        const brainEveFor = (account: string) =>
+          secret === undefined || origin === undefined
+            ? undefined
+            : eve({ origin, caller: { secret, account } });
         return yield* runPlanningTool(
           name,
           plan === undefined
@@ -475,7 +480,7 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
                   luke: {
                     ...lukeOn(caller, plan.plan.id),
                     repository: plan.plan.repository,
-                    telling: { eveFor, writer: seams.writer(), doors: HELD_DOORS },
+                    telling: { eveFor, writer: seams.writer(), doors: wakingDoors(brainEveFor) },
                   },
                   clientKey: context.callId,
                   turnId: binding.turn.turnId,

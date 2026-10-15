@@ -302,10 +302,12 @@ test("at the door the deployment is admitted for the named account's own convers
     await refusal(() => auth(scheduled("user-b", BRAIN_HOST_TURN.SPOKEN))),
     BRAIN_HOST_REFUSAL.NOT_OWNER,
   );
-  // The authenticator's own refusal reaches the caller through the door with its reason, not as nobody signed in.
+  // A chat message to the plan's Luke wakes it with a typed turn the deployment opens for the account (`chat-wake.ts`).
+  const woken = await auth(scheduled("user-a", BRAIN_HOST_TURN.TYPED));
+  assert.equal(actedForAccount(woken ?? null), "user-a");
   assert.equal(
-    await refusal(() => auth(scheduled("user-a", BRAIN_HOST_TURN.TYPED))),
-    BRAIN_HOST_REFUSAL.NOT_DEPLOYMENT_ACT,
+    await refusal(() => auth(scheduled("user-b", BRAIN_HOST_TURN.TYPED))),
+    BRAIN_HOST_REFUSAL.NOT_OWNER,
   );
   assert.equal(
     await refusal(() =>

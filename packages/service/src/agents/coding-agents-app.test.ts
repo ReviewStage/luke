@@ -128,6 +128,7 @@ import {
   type RepositoryScript,
 } from "../testing/github-app-fake.js";
 import { BRAIN_HOST_TURN } from "./brain-host/bounds.js";
+import { wakingDoors } from "./brain-host/chat-wake.js";
 import {
   EVE_CANCEL_OUTCOME,
   EVE_RESET_OUTCOME,
@@ -1577,6 +1578,69 @@ it.layer(getTestDB())("telling a chat message to the agents it addresses", (it) 
         );
       return { ...opened, workspace, first, second, person, channel, telling, post, rowsOf };
     });
+
+  it.effect(
+    "a DM to @luke opens a turn on the plan's conversation as a chat-marked line, a second while Luke has not read is held, and one after it reads is told",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const opened = yield* openChat(eve);
+        const chat = {
+          ...opened,
+          telling: {
+            ...opened.telling,
+            doors: wakingDoors((account) => eve.eve(`Bearer ${account}`)),
+          },
+        };
+        const post = (author: { readonly id: string }, text: string, channelId: string) =>
+          postChat(chat.telling, {
+            authorMemberId: author.id,
+            to: { channelId },
+            blocks: [{ type: CHAT_BLOCK.MARKDOWN, text }],
+            mentions: mentionedHandles(text),
+            clientKey: randomUUID(),
+          }).pipe(Effect.provide(chat.github.layer));
+        const luke = Option.getOrThrow(
+          yield* ensureMember(chat.owner, chat.workspace, {
+            kind: MEMBER_KIND.PLANNER,
+            planId: chat.plan.id,
+          }),
+        );
+        const dm = Option.getOrThrow(
+          yield* findOrMakeDm(chat.owner, chat.workspace, chat.first.member.id, luke.id),
+        );
+        const opensBefore = eve.opened.length;
+
+        const sent = yield* post(chat.first.member, "Who owns the invite table?", dm.id);
+        assert.deepEqual(sent.receipt.told, ["luke"]);
+        const conversation = Option.getOrThrow(
+          yield* openPlanConversation(chat.owner, chat.plan.id),
+        );
+        assert.deepEqual(
+          eve.opened.slice(opensBefore).map((each) => each.message.conversationId),
+          [conversation.conversationId],
+        );
+        // The notice is the plan conversation's one line, marked as the agent's chat, not the developer typing.
+        const [line] = yield* chat.rowsOf({
+          userId: conversation.ownerId,
+          conversationId: conversation.conversationId,
+        });
+        assert.ok(line?.message.role === MESSAGE_ROLE.USER);
+        assert.deepEqual(line.message.metadata, {
+          author: MESSAGE_AUTHOR.AGENT,
+          channel: MESSAGE_CHANNEL.CHAT,
+          chat_seq: sent.message.seq,
+          from: "agent-1",
+        });
+
+        const held = yield* post(chat.first.member, "And the emails?", dm.id);
+        assert.deepEqual(held.receipt.held, ["luke"]);
+        assert.equal(eve.opened.length + eve.sent.length, opensBefore + 1);
+        yield* unreadFor(chat.owner, chat.workspace, luke.id);
+        const told = yield* post(chat.first.member, "Never mind, found it.", dm.id);
+        assert.deepEqual(told.receipt.told, ["luke"]);
+      }),
+  );
 
   it.effect(
     "a DM steers the other agent once as a chat-marked line of its own, a second while the first is unread is held, and one after it reads is told",

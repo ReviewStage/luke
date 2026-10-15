@@ -31,6 +31,7 @@ import { delegatedChildOf, type HostAdmission, hostAdmission } from "../agent-ru
 import type { AgentSkill } from "../agent-runtime/skills.js";
 import { turnKindOf } from "../brain-host/auth.js";
 import { RELAY_TURN } from "../brain-host/bounds.js";
+import { wakingDoors } from "../brain-host/chat-wake.js";
 import {
   type AdmittedConversation,
   admitConversation,
@@ -59,7 +60,6 @@ import {
   readAsAgent,
   resolveAsAgent,
 } from "./chat.js";
-import { HELD_DOORS } from "./chat-notify.js";
 import {
   agentCiReadable,
   agentRepositoryToken,
@@ -616,7 +616,9 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         const compose = yield* eveSessionsComposer;
         const eveFor = (starter: string) =>
           compose({ origin, caller: { secret, account: starter }, mount: EVE_MOUNT.CODER });
-        const telling = { eveFor, writer: seams.writer(), doors: HELD_DOORS };
+        // A message to the plan's Luke wakes it on the planning brain, as the deployment for the account.
+        const brainEveFor = (account: string) => compose({ origin, caller: { secret, account } });
+        const telling = { eveFor, writer: seams.writer(), doors: wakingDoors(brainEveFor) };
         const { clientKey, postsInTurn, sandbox } = call;
         return yield* postAsAgent({ ...reader, repository, telling }, call.input, {
           clientKey,

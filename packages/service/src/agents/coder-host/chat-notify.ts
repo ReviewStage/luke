@@ -114,10 +114,17 @@ export interface ChatNotice {
   readonly from: ChatMemberRow;
 }
 
+/** One door: a member told of a notice under the telling that posted it, answering what that came to. */
+export type ChatNoticeDoor = (
+  member: ChatMemberRow,
+  notice: ChatNotice,
+  telling: ChatTelling,
+) => Effect.Effect<NoticeOutcome, never, DatabaseServices>;
+
 /** How a planner and a person are told, each a door its own chain fills. */
 export interface ChatNoticeDoors {
-  readonly planner: (member: ChatMemberRow, notice: ChatNotice) => Effect.Effect<NoticeOutcome>;
-  readonly human: (member: ChatMemberRow, notice: ChatNotice) => Effect.Effect<NoticeOutcome>;
+  readonly planner: ChatNoticeDoor;
+  readonly human: ChatNoticeDoor;
 }
 
 /** The doors before Luke's report turn and the window's announcement fill them: each holds the message for the member's next read. */
@@ -166,6 +173,20 @@ const AUTHOR_OF_KIND = {
   [MEMBER_KIND.PLANNER]: MESSAGE_AUTHOR.PLANNER,
   [MEMBER_KIND.HUMAN]: MESSAGE_AUTHOR.HUMAN,
 } as const;
+
+/**
+ * Who a notice's row says wrote it: the poster, by the kind of member it is
+ * and its handle, from the chat at the message's place.
+ * @public
+ */
+export function noticeMetadata(notice: ChatNotice) {
+  return {
+    author: AUTHOR_OF_KIND[notice.from.kind],
+    channel: MESSAGE_CHANNEL.CHAT,
+    chat_seq: notice.message.seq,
+    from: notice.from.handle,
+  } as const;
+}
 
 /** One block as a notice's line reads it, and a read of the chat: words as written, anything else named by what it is. */
 export function blockWords(block: ChatReadBlock): string {
@@ -266,12 +287,7 @@ function tellAgent(
     const steered = yield* steerCodingAgent(eve, telling.writer, userId, agent.value, {
       text: notice.text,
       clientKey: chatNoticeKey(notice.message.id, notice.message.askRevision ?? 0, member.id),
-      metadata: {
-        author: AUTHOR_OF_KIND[notice.from.kind],
-        channel: MESSAGE_CHANNEL.CHAT,
-        chat_seq: notice.message.seq,
-        from: notice.from.handle,
-      },
+      metadata: noticeMetadata(notice),
     }).pipe(Effect.result);
     if (Result.isSuccess(steered)) return NOTICE_OUTCOME.TOLD;
     yield* hostedStoreOrUnavailable(releaseNotice(userId, organizationId, member.id, place));
@@ -327,12 +343,12 @@ export function tellMessage(
         case MEMBER_KIND.AGENT:
           return Effect.map(tellAgent(telling, member, notice), (outcome) => ({ member, outcome }));
         case MEMBER_KIND.PLANNER:
-          return Effect.map(telling.doors.planner(member, notice), (outcome) => ({
+          return Effect.map(telling.doors.planner(member, notice, telling), (outcome) => ({
             member,
             outcome,
           }));
         case MEMBER_KIND.HUMAN:
-          return Effect.map(telling.doors.human(member, notice), (outcome) => ({
+          return Effect.map(telling.doors.human(member, notice, telling), (outcome) => ({
             member,
             outcome,
           }));
