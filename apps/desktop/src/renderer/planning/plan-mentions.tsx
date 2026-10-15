@@ -7,8 +7,9 @@ import {
   useRef,
   useState,
 } from "react";
+import type { LinkDrawer } from "../markdown-message";
 import type { MentionNode } from "../plan-editor/contract";
-import type { MentionDoors } from "./mention-chip";
+import { type MentionDoors, mentionLinkDrawer } from "./mention-chip";
 import { useOpenPlan } from "./use-open-link";
 
 /**
@@ -110,6 +111,12 @@ export function useMentionDoors(): MentionDoors {
     [openPlan],
   );
   return page ?? windowDoors;
+}
+
+/** What draws a link in Markdown drawn here as its mention's chip, through the doors `useMentionDoors` hands. */
+export function useMentionLink(): LinkDrawer {
+  const doors = useMentionDoors();
+  return useMemo(() => mentionLinkDrawer(doors), [doors]);
 }
 
 /** Makes the agent's message box the one a mention made elsewhere on the page is laid into, for as long as it is drawn. */

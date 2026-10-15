@@ -18,9 +18,11 @@ import {
 } from "../ai-elements/conversation";
 import { CopyGlyph, copyHint, useCopyFeedback } from "../copy-feedback";
 import { FIND_SKIP_ATTRIBUTE } from "../find-matches";
+import { MarkdownMessage } from "../markdown-message";
 import { Tooltip } from "../tooltip";
 import { CallCheckpoint, CallEnded } from "./call-card";
 import { FileRef } from "./file-ref";
+import { useMentionLink } from "./plan-mentions";
 
 /**
  * code-pane.tsx -- the code Luke put on screen on a plan's calls: the side panel's Code tab, every snippet he showed, one card each, in the order he showed them.
@@ -216,6 +218,17 @@ export function CodeCardHeader({
   );
 }
 
+/**
+ * Luke's note on a snippet, as Markdown, a link naming a mention drawn as
+ * its chip, as a File tab draws the same note (`file-note.tsx`). Note that
+ * it reads the page's mentions itself, so the page drawn again draws the
+ * note again rather than the card's lines.
+ */
+function CodeCardNote({ note }: { note: string }): React.JSX.Element {
+  const link = useMentionLink();
+  return <MarkdownMessage words={note} className="code-card-note" link={link} />;
+}
+
 /** One snippet: its header, Luke's note, where code shown before notes were asked for has none, and the lines themselves. */
 function CodeCardContent({
   showing,
@@ -233,7 +246,7 @@ function CodeCardContent({
         copied={copiedLines(code)}
         onOpen={() => onOpenFile(code.ref, code.commit)}
       />
-      {code.note === undefined ? null : <p className="code-card-note">{code.note}</p>}
+      {code.note === undefined ? null : <CodeCardNote note={code.note} />}
       <CodeLines code={code} />
     </article>
   );

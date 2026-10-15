@@ -3,6 +3,7 @@ import { lineRangeText } from "@luke/voice/code-pane-model";
 import type { ReactNode } from "react";
 import { MarkdownMessage } from "../markdown-message";
 import type { FileNote } from "./file-tab-model";
+import { useMentionLink } from "./plan-mentions";
 import { useMinute } from "./plan-time";
 import { RelativeTime } from "./relative-time";
 
@@ -52,6 +53,7 @@ function FileNoteCard({
   const lines = lineRangeText(note) ?? "";
   // Note that the age moves on with the minute, because a tab left open draws nothing else anew.
   const now = useMinute();
+  const link = useMentionLink();
   return (
     <aside
       className="file-note"
@@ -81,7 +83,9 @@ function FileNoteCard({
           {SHOW_IN_CODE_LABEL}
         </button>
       </header>
-      {folded ? null : <MarkdownMessage words={note.note} className="file-note-words" />}
+      {folded ? null : (
+        <MarkdownMessage words={note.note} className="file-note-words" link={link} />
+      )}
     </aside>
   );
 }

@@ -11,6 +11,7 @@ import { Skeleton, SkeletonRegion } from "../skeleton";
 import { TOAST_HOLD, TOAST_TONE, type ToastNotice, UNDO_LABEL } from "../toast";
 import { Tooltip } from "../tooltip";
 import { VERSION_CHANGE, type VersionDiff, versionDiff } from "./plan-history-model";
+import { useMentionLink } from "./plan-mentions";
 import { dayAndTimeText, momentText } from "./plan-time";
 import { PlanTitle } from "./plan-title";
 import { HISTORY_READ, type PlanHistoryControl, type ViewedVersion } from "./use-plan-history";
@@ -89,6 +90,7 @@ function VersionBody({
   section: number | undefined;
 }): React.JSX.Element {
   const units = section === undefined ? diff.units : diff.units.slice(section, section + 1);
+  const link = useMentionLink();
   return (
     <div className="plan-body">
       {title === undefined || section !== undefined ? null : <PlanTitle name={title} />}
@@ -100,6 +102,7 @@ function VersionBody({
           words={unit.words}
           className={`plan-unit${CHANGE_CLASS[unit.change]}`}
           edit={unit.marks.length === 0 ? undefined : { marks: unit.marks }}
+          link={link}
         />
       ))}
     </div>

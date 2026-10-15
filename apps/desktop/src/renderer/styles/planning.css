@@ -551,6 +551,18 @@ button.plan-unit-byline:focus-visible {
   text-underline-offset: 0.15em;
 }
 
+/* A link the read view draws as a mention's chip wears the chip's light look
+   while its section is edited, so opening the section does not turn its
+   chips into underlined words; its glyph is the read view's alone. */
+.plan-document-text a.plan-mention-link {
+  padding: 0 var(--space-4);
+  border-radius: 5px;
+  background: var(--raised-strong);
+  font-weight: 500;
+  text-decoration: none;
+  box-decoration-break: clone;
+}
+
 .plan-document-text p.is-editor-empty:first-child::before {
   float: left;
   height: 0;

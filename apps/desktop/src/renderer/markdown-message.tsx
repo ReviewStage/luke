@@ -266,8 +266,9 @@ const REMARK_PLUGINS: Options["remarkPlugins"] = [[remarkGfm, { singleTilde: fal
  * an arbitrary address, and a message's words must not become an action by
  * being pressed. Only HTTP and HTTPS destinations survive `urlTransform`
  * below, so anything else arrives here as words alone. The one exception is
- * a place that draws its own links (`LinkDrawer`): a plan's page draws a
- * mention as the chip that opens what it names.
+ * a place that draws its own links (`LinkDrawer`): one showing a plan's
+ * words or Luke's notes draws a link naming a mention as the chip that
+ * opens what it names.
  *
  * A heading is styled, never announced: a reader walking the document's
  * headings should meet the panel's, not a reply's. An image has no picture
@@ -300,6 +301,30 @@ function plainLink(href: string | undefined, children: ReactNode): ReactNode {
  * and its label's words; nothing for one it leaves drawn as any link is.
  */
 export type LinkDrawer = (href: string, label: string) => ReactNode | undefined;
+
+/** The change mark every word of a link wears, drawn mid-edit; nothing where its words wear none, or more than one. */
+function markOf(link: HastParent | undefined): (typeof MARK_DRAWN)[MarkdownMarkKind] | undefined {
+  const drawn = (link?.children ?? []).filter((child) => !isBlockBreak(child));
+  const first = drawn[0];
+  if (first?.type !== "element") return undefined;
+  const mark = Object.values(MARK_DRAWN).find((each) => each.tagName === first.tagName);
+  return mark !== undefined &&
+    drawn.every((child) => child.type === "element" && child.tagName === mark.tagName)
+    ? mark
+    : undefined;
+}
+
+/**
+ * A link the place drew its own way, a mention's chip say, in the change
+ * mark its words wore, so a mention written in or struck out in a version
+ * still reads as the change it is.
+ */
+function marked(drawn: ReactNode, link: HastParent | undefined): ReactNode {
+  const mark = markOf(link);
+  if (mark === undefined) return drawn;
+  const Mark = mark.tagName;
+  return <Mark className={mark.className}>{drawn}</Mark>;
+}
 
 /** The words under a node of the tree, however they are formatted: a heading's emphasis copied into a label still reads as its words. */
 function wordsOf(node: HastParent | HastNode): string {
@@ -365,9 +390,10 @@ export function MarkdownMessage({
         ? COMPONENTS
         : {
             ...COMPONENTS,
-            a: ({ href, children, node }) =>
-              (href === undefined ? undefined : link(href, labelOf(node))) ??
-              plainLink(href, children),
+            a: ({ href, children, node }) => {
+              const drawn = href === undefined ? undefined : link(href, labelOf(node));
+              return drawn === undefined ? plainLink(href, children) : marked(drawn, node);
+            },
           },
     [link],
   );

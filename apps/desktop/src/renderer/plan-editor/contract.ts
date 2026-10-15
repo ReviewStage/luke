@@ -79,6 +79,8 @@ export interface PlanEditorMentions {
   readonly retarget: (target: string, change: HeadingsChange) => string | undefined;
   /** The mention words pasted whole stand for, a page of an integration's address; nothing for any other words, which paste as words. */
   readonly pasted: (words: string) => MentionNode | undefined;
+  /** Whether a link's target names a mention, which the read view draws as its chip, so the editor draws the link in a chip's light look. */
+  readonly namesMention: (target: string) => boolean;
 }
 
 /** An editor as mounted. */
