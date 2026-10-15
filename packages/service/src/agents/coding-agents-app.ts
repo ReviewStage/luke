@@ -851,6 +851,17 @@ function inboxAnswered(item: InboxItem, taken: boolean): HttpServerResponse.Http
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { item, taken });
 }
 
+/**
+ * Whether an answer is handed to the agent as a message: every answer to an
+ * item that asks to be heard back, and any other carrying words the
+ * developer typed, since words are written to be read; a bare press on an
+ * item that asks nothing back, Done or Got it, is kept for the agent to
+ * read in its own time.
+ */
+function heardBack(item: InboxItem, answer: InboxReply): boolean {
+  return item.needsReply || (answer.note ?? "").trim() !== "";
+}
+
 /** Whether a hand-off was refused because the agent's session has ended for good, so no message will ever reach it. */
 function retiredRefusal(refusal: HostedRefusal): boolean {
   return refusal.error === HOSTED_REFUSAL.AGENT_RETIRED.error;
@@ -862,7 +873,8 @@ function retiredRefusal(refusal: HostedRefusal): boolean {
  * revision the agent has since moved on from, or an item no longer open,
  * is answered with the item as it stands and not taken. Otherwise the
  * answer is taken first, at the revision it names, and only then, where
- * the item asks to be heard back, handed to the agent as one of the
+ * the item asks to be heard back or the developer typed a note, handed to
+ * the agent as one of the
  * developer's messages under the answer's own key through the one steer
  * path (`coder-host/steer.ts`), so an answer the item no longer takes
  * never reaches the agent. A hand-off that fails, is interrupted, or dies
@@ -898,7 +910,9 @@ const inboxAnswerEndpoint = /* @__PURE__ */ Effect.fn("web/inboxAnswerEndpoint")
     if (Option.isNone(now)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
     return inboxAnswered(now.value.item, now.value.answerKey === clientKey);
   }
-  if (!taken.needsReply || taken.answer === undefined) return inboxAnswered(taken, true);
+  if (taken.answer === undefined || !heardBack(taken, taken.answer)) {
+    return inboxAnswered(taken, true);
+  }
   const answer = taken.answer;
   const handedOver = Effect.gen(function* () {
     const agent = yield* hostedStoreOrUnavailable(readCodingAgent(userId, taken.agentId));

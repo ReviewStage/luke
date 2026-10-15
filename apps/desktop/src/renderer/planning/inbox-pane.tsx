@@ -106,7 +106,8 @@ import type { InboxImage, PlanInboxControl } from "./use-plan-inbox";
  * asking nothing are answered by presses in its footer, the one that holds
  * back and the one that goes ahead, as a confirm's are; words, a choice,
  * and a form by the box's own Send. A card whose agent need not hear back
- * says so, since answering it messages nobody. Once the item is settled,
+ * says whether its answer will message the agent: a bare press does not, and
+ * a typed note does. Once the item is settled,
  * nothing it offered goes: the options, or the presses it was answered by,
  * stand with the developer's pick marked and the rest stepped back, and
  * the developer's reply follows as their own bubble, what they wrote in it
@@ -153,6 +154,16 @@ const NEWER_LUKE = {
 /** How long ago a thread's line says something happened: muted a size down, in tabular figures, as a card's corner says it. */
 const THREAD_TIME_CLASS =
   "text-[11.5px] whitespace-nowrap text-(color:--text-tertiary) tabular-nums";
+
+/**
+ * What the box says on an item whose agent need not hear back: a bare
+ * press, Done or Got it, is kept for the agent to read, and a typed note is
+ * sent to it as a message, so the line says which the answer will be.
+ */
+const QUIET_LINE = {
+  BARE: "Without a note, this won't message the agent.",
+  NOTED: "Your note will be sent to the agent.",
+} as const;
 
 /** What the box's Send is called. */
 const SEND = "Send to agent";
@@ -707,9 +718,12 @@ function AgentName({ by }: { by: ItemAgent }): React.JSX.Element {
   return <AgentActorRef subject={by.subject} models={by.models} onOpen={by.onOpen} />;
 }
 
-/** What a settled item's line says of where the answer went: to the agent as a message, its name its reference, or kept for it to read. */
+/** What a settled item's line says of where the answer went: to the agent as a message, its name its reference, or, a bare press on an item asking nothing back, kept for it to read. */
 function Delivered({ item, by }: { item: InboxItem; by: ItemAgent }): React.JSX.Element {
-  if (!item.needsReply) return <>Saved for the agent to read</>;
+  // Note that a typed note reaches the agent whether or not the item asked to be heard back (`coding-agents-app.ts`).
+  if (!item.needsReply && (item.answer?.note ?? "").trim() === "") {
+    return <>Saved for the agent to read</>;
+  }
   return (
     <ActorLine>
       {"Sent to "}
@@ -865,7 +879,9 @@ function AnswerBox({
           <PromptInputFooter>
             <PromptInputTools className="px-1 text-[12px] text-muted-foreground">
               {item.needsReply ? null : (
-                <span data-inbox-quiet="">Answering doesn't message the agent.</span>
+                <span data-inbox-quiet="">
+                  {draft.note.trim() === "" ? QUIET_LINE.BARE : QUIET_LINE.NOTED}
+                </span>
               )}
             </PromptInputTools>
             <SendPresses
