@@ -52,6 +52,12 @@
     },
     "pictureUrl": {
       "type": "string"
+    },
+    "personal": {
+      "type": "boolean",
+      "enum": [
+        true
+      ]
     }
   },
   "required": [

@@ -208,6 +208,13 @@ export const workspaceSchema = EffectSchema.Struct({
    * before it, and from every workspace a teammate shares.
    */
   pictureUrl: EffectSchema.optionalKey(EffectSchema.String),
+  /**
+   * True on a workspace that is the first one made for an account, to every
+   * member of it: it is named by its owner's account name and is never
+   * renamed. Absent from every other workspace, and from a service before it,
+   * which the desktop reads as one it may offer to rename.
+   */
+  personal: EffectSchema.optionalKey(EffectSchema.Literal(true)),
 });
 
 export type Workspace = typeof workspaceSchema.Type;
@@ -230,7 +237,7 @@ export const workspaceCreateRequestSchema = EffectSchema.Struct({
   ),
 });
 
-/** A workspace renamed (POST) by an owner or admin of it: the workspace, and its new name held as a created one's is; answered with the workspace. */
+/** A workspace renamed (POST) by an owner or admin of it, never an account's first workspace: the workspace, and its new name held as a created one's is; answered with the workspace. */
 export const workspaceRenameRequestSchema = EffectSchema.Struct({
   workspaceId: workspaceIdSchema,
   name: workspaceCreateRequestSchema.fields.name,

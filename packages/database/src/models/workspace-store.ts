@@ -43,8 +43,9 @@ import {
  * personal, and named the account's in `personal_workspace`. That row is
  * how a start or a listing finds the account's default, and how every read
  * names the workspace for its owner as the owner is called now
- * (`WORKSPACE_NAME`), so it has no name of its own; nothing reads the mark,
- * and it is otherwise a workspace like any other. That write is no transaction: Better
+ * (`WORKSPACE_NAME`) and lists it as personal, so it has no name of its own
+ * and is never renamed; nothing reads the mark, and it is otherwise a
+ * workspace like any other. That write is no transaction: Better
  * Auth writes over its own pool, outside the fiber's `SqlClient`, so two Macs
  * ensuring at once settle on unique keys instead, the workspace's slug and
  * the account's row, and the one that loses adopts what the other made.
@@ -100,6 +101,8 @@ const WorkspaceRowSchema = Schema.Struct({
   slug: Schema.String,
   /** The account's own id where this workspace is the first one made for it, else null. */
   personalOf: Schema.NullOr(Schema.String),
+  /** Whether this workspace is the first one made for any account, the asking one or another. */
+  personal: Schema.Boolean,
   /** The plugin's role text, which may list several roles comma-separated. */
   role: Schema.String,
   /** The login of the GitHub account the workspace's installation is on, or null where none is connected. */
@@ -242,6 +245,7 @@ function workspaceRows(db: DatabaseShape, userId: string, organizationId?: strin
       name: WORKSPACE_NAME,
       slug: organization.slug,
       personalOf: personalWorkspace.userId,
+      personal: sql<boolean>`exists(select 1 from ${personalWorkspace} as "first" where "first"."organization_id" = ${organization.id})`,
       role: member.role,
       login: githubInstallation.accountLogin,
       status: githubInstallation.status,
@@ -305,7 +309,7 @@ function faceOfRow(
 
 /** One row as the wire carries the workspace. */
 function workspaceOfRow(row: typeof WorkspaceRowSchema.Type): Workspace {
-  return {
+  const workspace: Workspace = {
     id: row.id,
     name: row.name,
     slug: row.slug,
@@ -317,6 +321,7 @@ function workspaceOfRow(row: typeof WorkspaceRowSchema.Type): Workspace {
     memberCount: row.memberCount,
     ...faceOfRow(row),
   };
+  return row.personal ? { ...workspace, personal: true } : workspace;
 }
 
 /** The longest slug spelled from a workspace's name, before any suffix. */
