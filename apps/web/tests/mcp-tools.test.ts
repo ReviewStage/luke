@@ -152,58 +152,69 @@ it.effect("a tool's title is its own, else its annotations', and none where neit
   }),
 );
 
-it.effect("a tool keeps the arguments its input schema declares, each type in a few words", () =>
-  Effect.gen(function* () {
-    const tools = yield* listMcpTools(URL, TOKEN).pipe(
-      Effect.provide(
-        listingServer([
-          {
-            name: "search_issues",
-            description: "Searches issues.",
-            inputSchema: {
-              type: "object",
-              properties: {
-                query: {
-                  type: "string",
-                  description: "  What to search for.  ",
-                  default: "is:open",
+it.effect(
+  "a tool keeps the arguments its input schema declares, the required first, each type in a few words",
+  () =>
+    Effect.gen(function* () {
+      const tools = yield* listMcpTools(URL, TOKEN).pipe(
+        Effect.provide(
+          listingServer([
+            {
+              name: "search_issues",
+              description: "Searches issues.",
+              inputSchema: {
+                type: "object",
+                properties: {
+                  query: {
+                    type: "string",
+                    description: "  What to search for.  ",
+                    default: "is:open",
+                  },
+                  labels: { type: "array", items: { type: "string" } },
+                  assignee: { type: ["string", "null"], description: "Null to remove." },
+                  sort: { type: "string", enum: ["date", "freq"], default: "date" },
+                  slaType: {
+                    anyOf: [{ type: "string", enum: ["all", "business"] }, { type: "null" }],
+                  },
+                  limit: { type: "number", default: 10 },
+                  links: { type: "array", items: { type: "object", properties: {} } },
+                  ids: {
+                    type: "array",
+                    items: { anyOf: [{ type: "string" }, { type: "number" }] },
+                  },
+                  anything: {},
                 },
-                labels: { type: "array", items: { type: "string" } },
-                assignee: { type: ["string", "null"], description: "Null to remove." },
-                sort: { type: "string", enum: ["date", "freq"], default: "date" },
-                slaType: {
-                  anyOf: [{ type: "string", enum: ["all", "business"] }, { type: "null" }],
-                },
-                limit: { type: "number", default: 10 },
-                links: { type: "array", items: { type: "object", properties: {} } },
-                ids: { type: "array", items: { anyOf: [{ type: "string" }, { type: "number" }] } },
-                anything: {},
+                required: ["query", "sort", "not_a_property"],
               },
-              required: ["query", "sort", "not_a_property"],
             },
-          },
-        ]),
-      ),
-    );
+          ]),
+        ),
+      );
 
-    assert.deepEqual(tools[0]?.parameters, [
-      {
-        name: "query",
-        type: "string",
-        required: true,
-        description: "What to search for.",
-        default: "is:open",
-      },
-      { name: "labels", type: "string[]", required: false },
-      { name: "assignee", type: "string | null", required: false, description: "Null to remove." },
-      { name: "sort", type: "enum", required: true, values: ["date", "freq"], default: "date" },
-      { name: "slaType", type: "enum | null", required: false, values: ["all", "business"] },
-      { name: "limit", type: "number", required: false, default: "10" },
-      { name: "links", type: "object[]", required: false },
-      { name: "ids", type: "(string | number)[]", required: false },
-      { name: "anything", type: "any", required: false },
-    ]);
-  }),
+      assert.deepEqual(tools[0]?.parameters, [
+        {
+          name: "query",
+          type: "string",
+          required: true,
+          description: "What to search for.",
+          default: "is:open",
+        },
+        { name: "sort", type: "enum", required: true, values: ["date", "freq"], default: "date" },
+        { name: "not_a_property", type: "any", required: true },
+        { name: "labels", type: "string[]", required: false },
+        {
+          name: "assignee",
+          type: "string | null",
+          required: false,
+          description: "Null to remove.",
+        },
+        { name: "slaType", type: "enum | null", required: false, values: ["all", "business"] },
+        { name: "limit", type: "number", required: false, default: "10" },
+        { name: "links", type: "object[]", required: false },
+        { name: "ids", type: "(string | number)[]", required: false },
+        { name: "anything", type: "any", required: false },
+      ]);
+    }),
 );
 
 it.effect(
@@ -387,6 +398,7 @@ it.effect(
       );
 
       assert.deepEqual(tools[0]?.parameters, [
+        { name: "mode", type: "enum", required: true, values: ["safe"] },
         {
           name: "speed",
           type: "enum",
@@ -395,9 +407,78 @@ it.effect(
           values: ["slow"],
         },
         { name: "id", type: "string", required: false, description: "An identifier." },
-        { name: "mode", type: "enum", required: true, values: ["safe"] },
       ]);
     }),
+);
+
+it.effect(
+  "a required argument stands first, past any bound, even one the schema requires without declaring",
+  () =>
+    Effect.gen(function* () {
+      const optional = Object.fromEntries(
+        Array.from({ length: 70 }, (_, index) => [`option${index}`, { type: "boolean" }]),
+      );
+      const tools = yield* listMcpTools(URL, TOKEN).pipe(
+        Effect.provide(
+          listingServer([
+            {
+              name: "sprawl",
+              description: "Sprawls.",
+              inputSchema: {
+                type: "object",
+                properties: { ...optional, query: { type: "string" } },
+                required: ["query", "token"],
+                additionalProperties: { type: "string", description: "Any other key." },
+              },
+            },
+            {
+              name: "bare",
+              description: "Bare.",
+              inputSchema: { type: "object", required: ["id"] },
+            },
+          ]),
+        ),
+      );
+
+      const parameters = tools[0]?.parameters ?? [];
+      assert.equal(parameters.length, 64);
+      assert.deepEqual(parameters.slice(0, 3), [
+        { name: "query", type: "string", required: true },
+        { name: "token", type: "string", required: true, description: "Any other key." },
+        { name: "option0", type: "boolean", required: false },
+      ]);
+      assert.deepEqual(tools[1]?.parameters, [{ name: "id", type: "any", required: true }]);
+    }),
+);
+
+it.effect("a union lists its values only where every branch but a null one is a closed set", () =>
+  Effect.gen(function* () {
+    const tools = yield* listMcpTools(URL, TOKEN).pipe(
+      Effect.provide(
+        listingServer([
+          {
+            name: "pick",
+            description: "Picks.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                open: { anyOf: [{ enum: ["auto"] }, { type: "string" }] },
+                closed: { anyOf: [{ enum: ["a", "b"] }, { const: "c" }, { type: "null" }] },
+              },
+            },
+          },
+        ]),
+      ),
+    );
+
+    assert.deepEqual(
+      tools[0]?.parameters?.map((parameter) => [parameter.name, parameter.values]),
+      [
+        ["open", undefined],
+        ["closed", ["a", "b", "c"]],
+      ],
+    );
+  }),
 );
 
 it.effect("a tool keeps a bounded number of arguments, each bounded", () =>

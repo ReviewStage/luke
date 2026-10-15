@@ -1056,7 +1056,7 @@ that table.
   schema's top-level arguments, gathered through `allOf` and its own
   `$defs` references, each its name, its type in a few words,
   whether it is required, and its description, values, and default where
-  the schema gives them, 64 at most, and none at all where the schema
+  the schema gives them, the required first and 64 at most, and none at all where the schema
   cannot be read as an object's (`server/hosted/mcp-tool-parameters.ts`).
   None of it is what a model is handed. It is held in the instance's memory
   for five minutes per account and provider. A provider the account has not
