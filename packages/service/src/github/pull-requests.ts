@@ -185,13 +185,14 @@ const BOT_LOGIN_SUFFIX = "[bot]";
 const PEOPLE_PER_PAGE = 100;
 
 /**
- * The most pages of reviews or of commits a read takes. GitHub lists at
- * most 250 commits of a pull request, so three pages hold every one; a
- * pull request reviewed past this many pages is read as far as the bound,
- * its newer reviews left unread, rather than holding the changes on a
- * history that does not end.
+ * The most pages each listing is read to. GitHub lists a pull request's
+ * reviews oldest first, and a reviewer stands by their newest, so its
+ * reviews are read to their end, bounded only where no pull request goes,
+ * three thousand reviews, rather than holding the changes on a history that
+ * does not end; GitHub lists at most 250 commits of a pull request, so three
+ * pages hold every one.
  */
-const PEOPLE_MAX_PAGES = 5;
+const PEOPLE_MAX_PAGES = { REVIEWS: 30, COMMITS: 3 } as const;
 
 /** A path segment as GitHub takes it, so a branch spelled with a slash stays one branch. */
 function segment(value: string): string {
@@ -546,9 +547,10 @@ const everyPage = /* @__PURE__ */ Effect.fnUntraced(function* <A>(
   token: Redacted.Redacted,
   path: string,
   schema: Schema.Codec<readonly A[], unknown>,
+  maxPages: number,
 ) {
   const listed: A[] = [];
-  for (let page = 1; page <= PEOPLE_MAX_PAGES; page += 1) {
+  for (let page = 1; page <= maxPages; page += 1) {
     const request = githubRead(path, token).pipe(
       HttpClientRequest.setUrlParams({ per_page: String(PEOPLE_PER_PAGE), page: String(page) }),
     );
@@ -576,8 +578,8 @@ export const pullRequestPeople = /* @__PURE__ */ Effect.fn("web/pullRequestPeopl
   const [pull, reviews, commits] = yield* Effect.all(
     [
       readOptional(githubRead(path, token), PullRequestPeopleSchema),
-      everyPage(token, `${path}/reviews`, ReviewsSchema),
-      everyPage(token, `${path}/commits`, CommitsSchema),
+      everyPage(token, `${path}/reviews`, ReviewsSchema, PEOPLE_MAX_PAGES.REVIEWS),
+      everyPage(token, `${path}/commits`, CommitsSchema, PEOPLE_MAX_PAGES.COMMITS),
     ],
     { concurrency: "unbounded" },
   );
