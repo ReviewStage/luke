@@ -29,13 +29,13 @@ type OwnerMarkSize = (typeof OWNER_MARK_SIZE)[keyof typeof OWNER_MARK_SIZE];
 export function OwnerMark({
   owner,
   workspace,
-  mine = true,
+  mine,
   size,
 }: {
   owner: AutomationScope;
   workspace: Workspace | undefined;
-  /** Whether the reading account made it, so a personal one is drawn as its own. */
-  mine?: boolean | undefined;
+  /** Whether the reading account made it, so a personal one is drawn as its own; a service that does not say is not taken as saying so. */
+  mine: boolean;
   size: OwnerMarkSize;
 }): React.JSX.Element | null {
   const account = useAppState()?.account;

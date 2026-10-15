@@ -64,7 +64,7 @@ function OwnerCell({
   workspace,
 }: {
   owner: AutomationScope;
-  mine: boolean | undefined;
+  mine: boolean;
   workspace: Workspace | undefined;
 }): React.JSX.Element {
   const name = automationOwnerName(owner, workspace?.name);
@@ -107,7 +107,11 @@ function AutomationRow({
           </span>
         </span>
       </button>
-      <OwnerCell owner={automationOwner(automation)} mine={automation.mine} workspace={workspace} />
+      <OwnerCell
+        owner={automationOwner(automation)}
+        mine={automation.mine === true}
+        workspace={workspace}
+      />
       <span
         className="automation-row-when"
         title={next.kind === AUTOMATION_NEXT.AT ? momentText(next.at) : undefined}

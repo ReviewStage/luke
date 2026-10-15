@@ -227,11 +227,14 @@ function ownerName(owner: AutomationScope, workspace: Workspace | undefined): st
 function OwnerRow({
   owner,
   owners,
+  mine,
   workspace,
   onOwner,
 }: {
   owner: AutomationScope;
   owners: readonly { value: AutomationScope; label: string }[];
+  /** Whether the reading account made it, so Personal is drawn as its own; a new one is. */
+  mine: boolean;
   workspace: Workspace | undefined;
   onOwner: (owner: AutomationScope) => void;
 }): React.JSX.Element {
@@ -253,11 +256,20 @@ function OwnerRow({
       describedBy={detailId}
       value={owner}
       valueLabel={ownerName(owner, workspace)}
-      valueIcon={<OwnerMark owner={owner} workspace={workspace} size={OWNER_MARK_SIZE.INLINE} />}
+      valueIcon={
+        <OwnerMark owner={owner} workspace={workspace} mine={mine} size={OWNER_MARK_SIZE.INLINE} />
+      }
       rows={owners.map((each) => ({
         id: each.value,
         label: each.label,
-        icon: <OwnerMark owner={each.value} workspace={workspace} size={OWNER_MARK_SIZE.ROW} />,
+        icon: (
+          <OwnerMark
+            owner={each.value}
+            workspace={workspace}
+            mine={mine}
+            size={OWNER_MARK_SIZE.ROW}
+          />
+        ),
       }))}
       noMatch="No owner matches"
       onPick={(id) => {
@@ -983,6 +995,7 @@ function EditorForm({
           <OwnerRow
             owner={draft.owner}
             owners={owners}
+            mine={automation === undefined || automation.mine === true}
             workspace={workspace}
             onOwner={(owner) => onDraft({ owner })}
           />

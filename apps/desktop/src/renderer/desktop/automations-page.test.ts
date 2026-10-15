@@ -851,6 +851,18 @@ test("the Owner picker draws Personal by the account's picture and the workspace
   assert.ok(picker(page, "Owner").querySelector(".workspace-tile"), "the workspace wears its tile");
 });
 
+test("another's personal automation's Owner picker draws its owner unnamed, never as the reader", async () => {
+  handState({});
+  standing = [{ ...DIGEST, mine: false }];
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: DIGEST.id });
+  await settle();
+
+  assert.equal(
+    picker(page, "Owner").querySelector(".actor-mark")?.getAttribute("data-kind"),
+    "someone",
+  );
+});
+
 test("the list's Owner column draws the workspace by its tile, the account's own by its picture, and another's personal one unnamed", async () => {
   handState({});
   standing = [
