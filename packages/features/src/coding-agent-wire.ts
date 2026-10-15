@@ -723,6 +723,20 @@ const turnRecordSchema = EffectSchema.Struct(turnRecordFields);
 export type TurnRecord = typeof turnRecordSchema.Type;
 
 /**
+ * What sent one of the developer's messages to a coding agent, by the name
+ * a reader sees over it: a member by their account's id and the name it
+ * holds now, a member who has left among them, and with no id what sent it
+ * in a member's place or a member whose account is gone, each named as the
+ * service words it. The window names nobody over the reader's own.
+ */
+const codingAgentSenderSchema = EffectSchema.Struct({
+  name: EffectSchema.String,
+  userId: EffectSchema.optionalKey(EffectSchema.String),
+});
+
+export type CodingAgentSender = typeof codingAgentSenderSchema.Type;
+
+/**
  * One message of an agent's transcript, as the conversation's row holds it:
  * an AI SDK `UIMessage`, its parts as the SDK shapes them (text, reasoning,
  * tool calls with their input and output, step boundaries) and the stored
@@ -782,6 +796,8 @@ export const codingAgentMessageSchema = EffectSchema.Struct({
   role: EffectSchema.Literals(Object.values(MESSAGE_ROLE)),
   parts: EffectSchema.Array(storedObjectSchema),
   metadata: EffectSchema.optionalKey(storedObjectSchema),
+  /** What sent one of the developer's messages to a coding agent (`codingAgentSenderSchema`); absent on every other row, on a message written before senders were kept, and from a service older than it. */
+  sentBy: EffectSchema.optionalKey(codingAgentSenderSchema),
   /** Epoch milliseconds the turn began, as a working line counts it: its start, or its queueing where eve has not started it; absent on the developer's rows, and from a service older than it. */
   startedAt: EffectSchema.optionalKey(countedNumber),
   /** Epoch milliseconds the turn answered or ended; absent while it is still written, on the developer's rows, and from a service older than it. */

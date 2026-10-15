@@ -26,6 +26,7 @@ import {
 import { sentLineId } from "@luke/database/models/ids";
 import { sentLineStands } from "@luke/database/models/message-reads";
 import { storeWriter } from "@luke/database/models/writer";
+import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import {
   AUTOMATION_FIRING,
   AUTOMATION_RUN_REASON,
@@ -240,7 +241,11 @@ const steerClaimed = Effect.fnUntraced(function* (
       storeWriter({ tools: CODER_TOOL_SET }),
       automation.userId,
       found.value,
-      { text: automationTask(automation, run), clientKey: run.id },
+      {
+        text: automationTask(automation, run),
+        clientKey: run.id,
+        sender: { kind: MESSAGE_SENDER.AUTOMATION, name: automation.name },
+      },
     ),
   );
   if (Result.isFailure(sent)) return yield* failedRun(run, reasonOfSteerRefusal(sent.failure));

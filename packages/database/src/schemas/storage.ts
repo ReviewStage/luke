@@ -21,7 +21,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { CONVERSATION_KIND } from "../storage-vocabulary.js";
+import { CONVERSATION_KIND, type MessageSender } from "../storage-vocabulary.js";
 import { createdAt, timestamptz } from "./_helpers.js";
 import { user } from "./auth.js";
 
@@ -140,6 +140,17 @@ export const messages = pgTable(
      * a row placed back among the messages it belongs with.
      */
     placedAt: timestamptz("placed_at").notNull(),
+    /** What sent a developer's line to a coding agent (`MESSAGE_SENDER`); null on every other row, and on a line written before senders were kept. */
+    sender: text("sender").$type<MessageSender>(),
+    /** The member who sent the line, where a member did; set null with their account, which then reads as a former member's. */
+    senderUserId: text("sender_user_id").references(() => user.id, { onDelete: "set null" }),
+    /**
+     * The automation whose run sent the line, by its name as it stood then;
+     * null on every other row. Note that the name is kept rather than a
+     * reference, because an automation is deleted outright and a reference
+     * would have every delete look through every message for its lines.
+     */
+    senderName: text("sender_name"),
   },
   (table) => [
     unique("messages_conversation_client").on(table.conversationId, table.clientId),

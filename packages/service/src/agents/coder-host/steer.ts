@@ -7,7 +7,7 @@ import { sentLineId } from "@luke/database/models/ids";
 import { sentLineStands } from "@luke/database/models/message-reads";
 import { readPlan } from "@luke/database/models/plan-store";
 import { recordedRuntimeSession } from "@luke/database/models/recorded-session";
-import type { StoreWriter } from "@luke/database/models/writer";
+import type { LineSender, StoreWriter } from "@luke/database/models/writer";
 import { STORE_WRITE_REFUSAL } from "@luke/database/models/writer";
 import { CODING_AGENT_STATUS, type CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import { causeKind } from "@luke/runtime/effect";
@@ -53,7 +53,8 @@ import { codingAgentStatusOf } from "./status.js";
  * first step. The caller is any member of the agent's workspace, whose plan
  * read gates the send, or for an agent with no plan whose membership of its
  * workspace does, and whose standing with GitHub is asked, while the
- * line lands in the agent's conversation under the member who started it.
+ * line lands in the agent's conversation under the member who started it,
+ * naming what sent it: the member, Luke from a call, or an automation's run.
  * Who reaches eve is the caller's: the route holds the
  * developer's own bearer, and the voice brain's tool acts as the
  * deployment for the account, which the coder channel's table admits for
@@ -64,11 +65,12 @@ import { codingAgentStatusOf } from "./status.js";
  * nothing, since every list leaves it out until it is brought back.
  */
 
-/** The developer's words, the files they attached where they did, and the key the send is made under, which a repeat carries again. */
+/** The developer's words, the files they attached where they did, the key the send is made under, which a repeat carries again, and what sent them, which the row keeps and eve is not told. */
 export interface SteerLine {
   readonly text: string;
   readonly clientKey: string;
   readonly attachments?: readonly CodingAgentAttachment[] | undefined;
+  readonly sender: LineSender;
 }
 
 /** What a steer came to: the line sent and written, or found already sent under its key. */

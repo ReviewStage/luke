@@ -1187,6 +1187,52 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   );
 
   it.effect(
+    "each member's line to an agent names them as its sender, by the name their account holds now, a line from before senders were kept names nobody, and a member whose account is gone reads as a former member",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, other, plan, agent, ask, sent } = yield* startedAgent(eve, {
+          running: true,
+        });
+        yield* joinWorkspace(plan.workspaceId, other);
+        yield* Database.use((db) =>
+          db.update(user).set({ name: "Dean Stratakos" }).where(eq(user.id, owner)),
+        );
+        yield* Database.use((db) =>
+          db.update(user).set({ name: "Charles Pan" }).where(eq(user.id, other)),
+        );
+        yield* sent("Use seven days.");
+        readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.ACCEPTED,
+          yield* ask(messageAs(other, agent.id, { text: "Not five.", clientKey: randomUUID() })),
+        );
+        /** Each of the developer's lines as a member reads the page, beside what sent it. */
+        const sendersAs = (reader: string) =>
+          Effect.map(ask(request(AGENT_MESSAGES, reader, { id: agent.id })), (answered) =>
+            readAnswer(codingAgentMessagesAnswerSchema, HOSTED_HTTP_STATUS.OK, answered)
+              .messages.filter((message) => message.role === MESSAGE_ROLE.USER)
+              .map((message) => [userTexts({ messages: [message] })[0], message.sentBy]),
+          );
+
+        const named = [
+          // The task the relay wrote as the turn received it keeps no sender.
+          [SNAPSHOT, undefined],
+          ["Use seven days.", { userId: owner, name: "Dean Stratakos" }],
+          ["Not five.", { userId: other, name: "Charles Pan" }],
+        ];
+        assert.deepEqual(yield* sendersAs(owner), named);
+        assert.deepEqual(yield* sendersAs(other), named);
+
+        yield* Database.use((db) => db.delete(user).where(eq(user.id, other)));
+        assert.deepEqual((yield* sendersAs(owner)).at(-1), [
+          "Not five.",
+          { name: "Former member" },
+        ]);
+      }),
+  );
+
+  it.effect(
     "a message while a turn runs reaches eve under the developer's bearer with no policy of its own, shows in the transcript at once as the developer's line, and leaves the agent running",
     () =>
       Effect.gen(function* () {

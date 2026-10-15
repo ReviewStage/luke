@@ -8,6 +8,7 @@ import {
 } from "@luke/database/models/coding-agent-store";
 import { listJournals } from "@luke/database/models/message-reads";
 import type { StoreWriter } from "@luke/database/models/writer";
+import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import {
   CODING_AGENT_BOUNDS,
   CODING_AGENT_STATUS,
@@ -534,6 +535,7 @@ export function runMessageCodingAgent(
       const sent = yield* steerCodingAgent(eve, call.writer, call.plan.userId, found.value, {
         text,
         clientKey: call.clientKey,
+        sender: { kind: MESSAGE_SENDER.LUKE },
       }).pipe(Effect.result);
       if (Result.isFailure(sent)) return rejected(refusalWords(sent.failure));
       return {

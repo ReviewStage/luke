@@ -55,7 +55,7 @@ import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError, queryBuilder } from "../core/query.js";
 import { asks, conversations, messages, turns } from "../schemas/storage.js";
 import { voiceSessions } from "../schemas/voice.js";
-import { CONVERSATION_KIND } from "../storage-vocabulary.js";
+import { CONVERSATION_KIND, MESSAGE_SENDER } from "../storage-vocabulary.js";
 import { lineParts, receivedPartsOf } from "./attached-file-parts.js";
 import {
   EpochMillisColumnSchema,
@@ -302,13 +302,23 @@ type UserMessageWriteResult = Result.Result<
   typeof NO_CONVERSATION | MessageRefused
 >;
 
-/** The developer's line to a coding agent as the message route and the queue's drain write it: its words, the files attached to it, and the client's key for the send. */
+/**
+ * What sent a line to a coding agent, as its row keeps it: the member by
+ * their account, Luke, or an automation by its name as it stands at the send.
+ */
+export type LineSender =
+  | { readonly kind: typeof MESSAGE_SENDER.MEMBER; readonly userId: string }
+  | { readonly kind: typeof MESSAGE_SENDER.LUKE }
+  | { readonly kind: typeof MESSAGE_SENDER.AUTOMATION; readonly name: string };
+
+/** The developer's line to a coding agent as the message route and the queue's drain write it: its words, the files attached to it, the client's key for the send, and what sent it. */
 interface AwaitingLineWrite {
   readonly text: string;
   readonly clientKey: string;
   readonly attachments?: readonly CodingAgentAttachment[] | undefined;
   /** What the line mentioned, as eve was handed it (`attached-file-parts.ts`); nothing where it mentioned nothing eve cannot read. */
   readonly mentioned?: string | undefined;
+  readonly sender: LineSender;
 }
 
 /** What writing an awaiting line did: the row, written now or already standing under the key, or nothing where the dispatch answered nothing; or a refusal. */
@@ -562,6 +572,9 @@ const MessageInsertSchema = Schema.Struct({
   createdAt: Schema.Date,
   placedAt: Schema.Date,
   finishedAt: Schema.NullOr(Schema.Date),
+  sender: Schema.NullOr(Schema.Literals(Object.values(MESSAGE_SENDER))),
+  senderUserId: Schema.NullOr(Schema.String),
+  senderName: Schema.NullOr(Schema.String),
 });
 
 const lockConversation = SqlSchema.findOneOption({
@@ -706,6 +719,9 @@ const insertMessageRow = SqlSchema.findOneOption({
           createdAt: row.createdAt,
           placedAt: row.placedAt,
           finishedAt: row.finishedAt,
+          sender: row.sender,
+          senderUserId: row.senderUserId,
+          senderName: row.senderName,
         })
         .returning({ id: messages.id }),
     ),
@@ -1148,6 +1164,8 @@ const insertMessage = /* @__PURE__ */ Effect.fnUntraced(function* (
     turnId: string | undefined;
     message: StoredUIMessage;
     finishedAt: Date | undefined;
+    /** What sent a developer's line to a coding agent; none for every other row. */
+    sender?: LineSender;
   },
 ): Effect.fn.Return<InsertedMessage, WriteFailure, DatabaseServices> {
   const seq = yield* allocateMessageSeq(context);
@@ -1167,6 +1185,9 @@ const insertMessage = /* @__PURE__ */ Effect.fnUntraced(function* (
     createdAt,
     placedAt,
     finishedAt: nullable(row.finishedAt),
+    sender: nullable(row.sender?.kind),
+    senderUserId: row.sender?.kind === MESSAGE_SENDER.MEMBER ? row.sender.userId : null,
+    senderName: row.sender?.kind === MESSAGE_SENDER.AUTOMATION ? row.sender.name : null,
   });
   const written = yield* required(inserted, "the message insert answered no row");
   return { id: written.id, seq };
@@ -2011,6 +2032,7 @@ const writeAwaitingLine = /* @__PURE__ */ Effect.fnUntraced(function* (
     turnId: undefined,
     message: read.success,
     finishedAt: context.now,
+    sender: line.sender,
   });
   return Result.succeed(Option.some({ id, effect: STORE_WRITE_EFFECT.WRITTEN }));
 });

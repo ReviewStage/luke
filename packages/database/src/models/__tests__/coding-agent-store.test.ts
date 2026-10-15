@@ -1,25 +1,35 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { TURN_ORIGIN, TURN_STATUS } from "@luke/wire";
+import {
+  MESSAGE_AUTHOR,
+  MESSAGE_CHANNEL,
+  MESSAGE_ROLE,
+  TURN_ORIGIN,
+  TURN_STATUS,
+} from "@luke/wire";
 import { eq } from "drizzle-orm";
 import { DateTime, Effect, Option } from "effect";
 import { Database } from "../../core/query.js";
 import { member, organization, user } from "../../schemas/auth.js";
 import { codingAgent } from "../../schemas/coding-agent.js";
-import { conversations, turns } from "../../schemas/storage.js";
-import { CONVERSATION_KIND } from "../../storage-vocabulary.js";
+import { conversations, messages, turns } from "../../schemas/storage.js";
+import { CONVERSATION_KIND, MESSAGE_SENDER } from "../../storage-vocabulary.js";
 import { getTestDB } from "../../testing/index.js";
 import {
   archiveUnmovedCodingAgent,
   delegationsOf,
+  lineSendersOf,
   listWorkspaceCodingAgents,
   readCodingAgent,
   recordTurnFastRefused,
   turnUsagesOf,
   writeDelegation,
 } from "../coding-agent-store.js";
+import { sentLineId } from "../ids.js";
+import { readMessageByClientId } from "../message-reads.js";
 import { conversationReachableBy } from "../recorded-session.js";
+import { type LineSender, storeWriter } from "../writer.js";
 
 /**
  * The workers a coding agent's conversation delegated to, over a real
@@ -27,7 +37,8 @@ import { conversationReachableBy } from "../recorded-session.js";
  * first, each on the pair it recorded, and none of another account's. And
  * a turn Anthropic refused Fast for, as its usage reads it. And an agent
  * with no plan, which its workspace's members reach and no one else does,
- * and the workspace's agents listed for its members alone.
+ * and the workspace's agents listed for its members alone. And what sent
+ * each of the developer's lines to an agent, read by the agent's account.
  *
  * Synthetic accounts and conversations throughout.
  */
@@ -93,6 +104,87 @@ it.layer(getTestDB())("the coding-agent store's delegations", (it) => {
           ],
         );
         assert.deepEqual(yield* delegationsOf({ userId: other, conversationId: agent }), []);
+      }),
+  );
+});
+
+it.layer(getTestDB())("the coding-agent store's line senders", (it) => {
+  it.effect(
+    "each line names what sent it, a member by the name their account holds now and none once it is gone, a line written with no sender names nothing, and another account reads none",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const teammate = yield* openAccount;
+        const db = yield* Database;
+        yield* db.update(user).set({ name: "Charles Pan" }).where(eq(user.id, teammate));
+        const target = {
+          userId: owner,
+          conversationId: yield* openConversation(owner, CONVERSATION_KIND.CODING_AGENT),
+        };
+        const writer = yield* storeWriter({ tools: {} });
+        /** The line written as a send lands, answering its row's id. */
+        const line = (clientKey: string, sender: LineSender) =>
+          Effect.gen(function* () {
+            yield* writer.writeAwaitingLine(
+              target,
+              { text: clientKey, clientKey, sender },
+              Effect.succeed(true),
+            );
+            const read = yield* readMessageByClientId(
+              owner,
+              target.conversationId,
+              {},
+              sentLineId(clientKey),
+            );
+            assert.ok(read.ok);
+            return read.value[0]?.id ?? "";
+          });
+        const byTeammate = yield* line("teammate", {
+          kind: MESSAGE_SENDER.MEMBER,
+          userId: teammate,
+        });
+        const byLuke = yield* line("luke", { kind: MESSAGE_SENDER.LUKE });
+        const byAutomation = yield* line("automation", {
+          kind: MESSAGE_SENDER.AUTOMATION,
+          name: "Nightly triage",
+        });
+        // A line as a build before senders were kept wrote it.
+        const [earlier] = yield* db
+          .insert(messages)
+          .values({
+            userId: owner,
+            conversationId: target.conversationId,
+            seq: 100,
+            clientId: "earlier",
+            role: MESSAGE_ROLE.USER,
+            parts: [{ type: "text", text: "earlier" }],
+            metadata: { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.TYPED },
+            placedAt: new Date(),
+          })
+          .returning({ id: messages.id });
+        const ids = [byTeammate, byLuke, byAutomation, earlier?.id ?? ""];
+
+        const senders = yield* lineSendersOf(target, ids);
+        assert.deepEqual(
+          ids.map((id) => senders.get(id)),
+          [
+            { kind: MESSAGE_SENDER.MEMBER, member: { userId: teammate, name: "Charles Pan" } },
+            { kind: MESSAGE_SENDER.LUKE },
+            { kind: MESSAGE_SENDER.AUTOMATION, name: "Nightly triage" },
+            undefined,
+          ],
+        );
+        assert.equal(
+          (yield* lineSendersOf({ userId: teammate, conversationId: target.conversationId }, ids))
+            .size,
+          0,
+        );
+
+        yield* db.delete(user).where(eq(user.id, teammate));
+        assert.deepEqual((yield* lineSendersOf(target, [byTeammate])).get(byTeammate), {
+          kind: MESSAGE_SENDER.MEMBER,
+          member: undefined,
+        });
       }),
   );
 });
