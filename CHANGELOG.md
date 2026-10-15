@@ -263,6 +263,8 @@ read-only board of every task, from Plan to Build to Ship, beside the Inbox.
   [#2644](https://github.com/ReviewStage/luke/pull/2644))
 - A task counts as read the moment it opens, on whichever of its tabs
   ([#2900](https://github.com/ReviewStage/luke/pull/2900))
+- A pinned task is pinned for you alone, not for the whole workspace
+  ([#2901](https://github.com/ReviewStage/luke/pull/2901))
 - Luke answers sooner on a call, his replies waiting on nothing earlier, and a
   call greets you from where the last one left off
   ([#2623](https://github.com/ReviewStage/luke/pull/2623))
