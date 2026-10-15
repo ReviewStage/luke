@@ -559,7 +559,8 @@ interface FloatingSidebar {
 /**
  * The floating sidebar's doors: a press in a peek opens it, the pointer
  * leaving a peek puts it away, though not for the toggle standing over its
- * head, and Escape puts it away while no menu in it took the key first.
+ * head, and Escape puts it away while no menu in it took the key first,
+ * wherever the keyboard stands, a peek leaving it in the work under it.
  * Opened from away, it takes the keyboard, which Escape gives back. It goes
  * with the sidebar, so a menu's way to Settings or a version history, or
  * any other way off the plans, leaves it away for their return.
@@ -585,6 +586,20 @@ function useFloatingSidebar(sidebar: SidebarCollapse): FloatingSidebar {
     first?.focus();
   }, [overlay]);
   useEffect(() => () => onOverlay(SIDEBAR_OVERLAY.CLOSED), [onOverlay]);
+  // Note that a peek leaves the keyboard in the work under it, so Escape
+  // there is heard at the window, before the work's own layers hear it.
+  useEffect(() => {
+    if (!floating) return;
+    const putAway = (event: KeyboardEvent) => {
+      const held = ref.current;
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      if (held !== null && event.target instanceof Node && held.contains(event.target)) return;
+      event.preventDefault();
+      onOverlay(SIDEBAR_OVERLAY.CLOSED);
+    };
+    window.addEventListener("keydown", putAway, true);
+    return () => window.removeEventListener("keydown", putAway, true);
+  }, [floating, onOverlay]);
   return {
     ref,
     inSight: !sidebar.collapsed || floating,

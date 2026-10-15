@@ -302,3 +302,20 @@ test("a floating sidebar left for Settings by its chord is away when the plans c
   act(() => back.click());
   assert.equal(standing(page), "away");
 });
+
+test("Escape puts a peek away while the keyboard stays in the work under it, and the window's layers beneath do not hear it", () => {
+  const page = mount(1000);
+  const main = page.querySelector("main.desktop-main");
+  const edge = page.querySelector("[data-sidebar-peek-edge]");
+  assert.ok(main && edge);
+  const work = main.querySelector<HTMLButtonElement>("button");
+  assert.ok(work, "the work offers a press to hold the keyboard");
+  work.focus();
+  pointerCross(main, edge);
+  assert.equal(standing(page), "floating");
+  const press = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+  act(() => {
+    work.dispatchEvent(press);
+  });
+  assert.deepEqual([standing(page), press.defaultPrevented], ["away", true]);
+});

@@ -98,7 +98,7 @@ test("the Call tab draws each call's spoken lines as the developer's bubbles and
   assert.match(call.textContent ?? "", /Live/u);
 });
 
-test("a plan's Inbox tab whose read holds nothing says nothing needs you under the Inbox's glyph, rather than standing blank", async () => {
+test("a plan's Inbox tab whose read holds nothing says nothing needs you under the Inbox's glyph, or under its list where the list stands alone, rather than standing blank", async () => {
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
     value: () => ({
@@ -142,9 +142,18 @@ test("a plan's Inbox tab whose read holds nothing says nothing needs you under t
   await act(async () => {
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
   });
-  const tab = container.querySelector('section.inbox-view[aria-label="Inbox"]');
+  const tab = container.querySelector<HTMLElement>('section.inbox-view[aria-label="Inbox"]');
   assert.ok(tab, "the plan's Inbox tab");
   assert.match(tab.textContent ?? "", /Nothing needs you/u);
+  // Too narrow for the pane beside it, the list standing alone says so.
+  vi.spyOn(tab, "getBoundingClientRect").mockReturnValue(
+    DOMRect.fromRect({ width: 700, height: 800 }),
+  );
+  act(() => relayout());
+  const shown = [...tab.querySelectorAll(".inbox-plans, .inbox-view-items")].filter(
+    (column) => !column.hasAttribute("hidden"),
+  );
+  assert.match(shown.map((column) => column.textContent).join(""), /Nothing needs you/u);
   act(() => root.unmount());
   container.remove();
 });

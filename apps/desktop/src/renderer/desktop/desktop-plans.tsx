@@ -194,6 +194,9 @@ function PlanInboxTab({
             <div className="sidebar-note">
               <ReadFailure line="The inbox could not be read." onRetry={inbox.onRetry} />
             </div>
+          ) : inbox.read && items.length === 0 && columns.shown !== INBOX_COLUMNS.BOTH ? (
+            // Note that the list standing alone says what the hidden pane would.
+            <p className="sidebar-note">{NEEDS_YOU.NONE}</p>
           ) : null
         }
         onChoose={({ item }) => {
