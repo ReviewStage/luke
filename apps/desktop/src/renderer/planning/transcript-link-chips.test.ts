@@ -86,7 +86,9 @@ function drawn(page: PlanMentionsValue | undefined): HTMLElement {
   roots.push(root);
   const words = createElement(TranscriptWords, { text: WORDS });
   act(() =>
-    root.render(page === undefined ? words : createElement(PlanMentions, { value: page }, words)),
+    root.render(
+      page === undefined ? words : createElement(PlanMentions, { value: page, children: words }),
+    ),
   );
   return container;
 }
