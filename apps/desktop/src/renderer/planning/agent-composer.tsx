@@ -10,7 +10,12 @@ import {
   hasWordsOrFiles,
 } from "@luke/features/coding-agent-wire";
 import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
-import { INTEGRATION_NAME, type IntegrationProvider } from "@luke/features/integration-wire";
+import {
+  INTEGRATION_NAME,
+  INTEGRATION_PROVIDER_LIST,
+  INTEGRATION_STATUS,
+  type IntegrationProvider,
+} from "@luke/features/integration-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { PlusIcon } from "@luke/ui";
 import { lapsedServer } from "@luke/ui/agent-servers-model";
@@ -106,9 +111,12 @@ import { DICTATION_PHASE, useDictation } from "./use-dictation";
  * is said in the same note a file's refusal is.
  *
  * An `@` at the start of a word, on a plan's page, opens the list of what
- * the message can mention, the plan's repository's files and folders and
- * the plan's sections (`mention-picker.tsx`), and the one chosen is written
- * into the words as its link, drawn as its chip (`mention-chip.tsx`).
+ * the message can mention, the plan's repository's files and folders, the
+ * plan's sections, and the account's connected MCP servers and their tools
+ * (`mention-picker.tsx`), and the one chosen is written into the words as
+ * its link, drawn as its chip (`mention-chip.tsx`). A server mentioned is
+ * handed to the agent's next turn even where its switch is off, and to that
+ * turn alone.
  *
  * A `/` at the start of a word opens the list of the skills the plan's
  * repository keeps, at the caret, and the one chosen is written into the
@@ -269,6 +277,10 @@ export function AgentComposer({
   const planMentions = usePlanMentions();
   const mentionPicker = useMentionPicker({
     source: planMentions,
+    // The servers the account connected, each one a mention hands the agent's next turn.
+    servers: INTEGRATION_PROVIDER_LIST.filter(
+      (provider) => statuses.statusOf(provider) === INTEGRATION_STATUS.CONNECTED,
+    ),
     room,
     side: MENTION_MENU_SIDE.ABOVE,
     onChoose: (mention) => editor.current?.chooseMention(mention),

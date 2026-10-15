@@ -5,6 +5,7 @@ import {
   appLinkOf,
   decodeMention,
   encodeMention,
+  isMentionableTool,
   isMentionLabel,
   MENTION_KIND,
   type Mention,
@@ -467,5 +468,22 @@ test("a server no integration offers, a tool no server could list, or a step pas
     "luke://mcp/linear#list_issues",
   ]) {
     assert.equal(decodeMention(target, REPOSITORY), undefined, target);
+  }
+});
+
+test("a tool named by a step an address resolves away is no tool a mention can carry", () => {
+  for (const tool of [".", ".."]) {
+    assert.equal(isMentionableTool(tool), false, tool);
+    assert.equal(
+      decodeMention(
+        encodeMention(
+          { kind: MENTION_KIND.TOOL, provider: INTEGRATION_PROVIDER.LINEAR, tool },
+          PLACE,
+        ),
+        REPOSITORY,
+      ),
+      undefined,
+      tool,
+    );
   }
 });

@@ -1,5 +1,7 @@
+import { INTEGRATION_NAME, type IntegrationProvider } from "@luke/features/integration-wire";
 import {
   encodeMention,
+  isMentionableTool,
   MENTION_KIND,
   type Mention,
   type MentionPlace,
@@ -14,6 +16,7 @@ import { FolderIcon, HashIcon } from "lucide-react";
 import { type RefObject, useEffect, useId, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";
+import { type IntegrationToolsReads, useIntegrationTools } from "../integration-tools";
 import type { ComposerTrigger, MentionNode } from "../plan-editor/contract";
 import { FileTypeIcon } from "./file-type-icon";
 
@@ -32,17 +35,37 @@ import { FileTypeIcon } from "./file-type-icon";
  * typed, through the same listing ⌘K finds files with
  * (`ACT_KIND.PLANNING_TREE`, the whole tree at the default branch).
  *
+ * Where the editor's words go to an agent, the list offers the account's
+ * connected MCP servers too, and once a word is typed each one's tools, read
+ * while the list stands open through the same read the agent's servers
+ * popover draws its tools from (`../integration-tools.ts`); a mention of one
+ * hands the agent's next turn that server whatever its switch says
+ * (`apps/web/server/hosted/agent-runtime/servers.ts`).
+ *
  * A pick hands the editor the mention's name and its target
  * (`@luke/features/mention-link`), which the editor writes in place of
- * the word; the name is the file's or folder's own name, the heading, or
- * the plan's name.
+ * the word; the name is the file's or folder's own name, the heading, the
+ * plan's name, the server's name, or the server's name and the tool's.
  */
 
 /** What the list's groups are called, in the order they stand. */
 const MENTION_GROUP = {
   FILES: "Files and folders",
   PLAN: "Plan",
+  SERVERS: "MCP servers",
 } as const;
+
+/** What a server's row says beside its name. */
+const SERVER_DETAIL = "MCP server";
+
+/** What a tool's row says beside its name, which already names its server. */
+const TOOL_DETAIL = "Tool";
+
+/** What stands between a server's name and its tool's in a tool's mention. */
+const TOOL_JOIN = " · ";
+
+/** The servers of a list that offers none. */
+const NO_SERVERS: readonly IntegrationProvider[] = [];
 
 /** The most rows one group lists. */
 const PER_GROUP = 4;
@@ -136,6 +159,39 @@ function planRows(planId: string, planName: string, text: string): MentionRow[] 
   ];
 }
 
+/** Each connected server's row, and once a word is typed each of its tools' rows as far as its read answered, found by the server's name and the tool's. */
+function serverRows(
+  servers: readonly IntegrationProvider[],
+  reads: IntegrationToolsReads,
+  query: string,
+): MentionRow[] {
+  return servers.flatMap((provider) => {
+    const name = INTEGRATION_NAME[provider];
+    const server: MentionRow = {
+      mention: { kind: MENTION_KIND.SERVER, provider },
+      name,
+      detail: SERVER_DETAIL,
+      terms: name,
+    };
+    const read = reads[provider];
+    if (query.trim() === "" || read === undefined || !("tools" in read)) return [server];
+    // Note that a tool whose name no mention can carry is left out, since its pick would name nothing.
+    const tools = read.tools.flatMap((tool): MentionRow[] => {
+      const mention: Mention = { kind: MENTION_KIND.TOOL, provider, tool: tool.name };
+      if (!isMentionableTool(tool.name)) return [];
+      return [
+        {
+          mention,
+          name: `${name}${TOOL_JOIN}${tool.name}`,
+          detail: TOOL_DETAIL,
+          terms: `${tool.name} ${name}`,
+        },
+      ];
+    });
+    return [server, ...tools];
+  });
+}
+
 /** The rows matching the query, best first, as many as a group lists; every row in order for no query. */
 function best(rows: readonly MentionRow[], query: string): readonly MentionRow[] {
   if (query.trim() === "") return rows.slice(0, PER_GROUP);
@@ -147,16 +203,18 @@ function best(rows: readonly MentionRow[], query: string): readonly MentionRow[]
     .map((each) => each.row);
 }
 
-/** The groups the list offers for the word: the plan's alone for no query, else each kind's best, files and folders first. */
+/** The groups the list offers for the word: the plan's and the servers' for no query, else each kind's best, files and folders first. */
 function groupsFor(
   query: string,
   paths: readonly RepositoryPath[] | undefined,
   plan: readonly MentionRow[],
+  servers: readonly MentionRow[],
 ): readonly MentionGroup[] {
   const files = query.trim() === "" || paths === undefined ? [] : best(paths.map(pathRow), query);
   return [
     { label: MENTION_GROUP.FILES, rows: files },
     { label: MENTION_GROUP.PLAN, rows: best(plan, query) },
+    { label: MENTION_GROUP.SERVERS, rows: best(servers, query) },
   ].filter((group) => group.rows.length > 0);
 }
 
@@ -287,11 +345,14 @@ export interface MentionSource {
  */
 export function useMentionPicker({
   source,
+  servers = NO_SERVERS,
   room,
   side,
   onChoose,
 }: {
   source: MentionSource | undefined;
+  /** The account's connected MCP servers, where the words go to an agent; none for the plan's own words. */
+  servers?: readonly IntegrationProvider[];
   /** The element the list is placed in, by the word. */
   room: RefObject<HTMLElement | null>;
   side: MentionMenuSide;
@@ -344,8 +405,15 @@ export function useMentionPicker({
     };
   }, [open, read, act, planId, repository]);
 
+  // Each server's tools are read while the list stands open, and forgotten once it closes.
+  const tools = useIntegrationTools(open ? servers : NO_SERVERS);
   const groups = open
-    ? groupsFor(trigger.query, read, planRows(planId, source.planName, source.text()))
+    ? groupsFor(
+        trigger.query,
+        read,
+        planRows(planId, source.planName, source.text()),
+        serverRows(servers, tools, trigger.query),
+      )
     : [];
   const rows = groups.flatMap((group) => group.rows);
   const held =
