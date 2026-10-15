@@ -86,7 +86,7 @@ class FakePersona implements PersonaSessionSlice {
   }
 }
 
-/** A remote track as WebRTC hands one over, video or audio: muted until media flows on it. */
+/** A remote track as WebRTC hands one over: muted until media flows on it. */
 class FakeTrack extends EventTarget {
   muted = true;
 
@@ -144,31 +144,24 @@ it.effect("a grant reports starting, then live on the video's first frame, not o
     video.firstFrame();
     const audio = new FakeTrack();
     persona.options.onAudioTrack(asTrack(audio));
-    audio.firstFrame();
     assert.deepEqual(yield* Queue.take(avatar.reports), { status: AVATAR_STATUS.LIVE });
   }).pipe(Effect.scoped),
 );
 
-it.effect(
-  "a first frame drawn before the avatar's voice arrives, or before it sounds, is not yet live",
-  () =>
-    Effect.gen(function* () {
-      const avatar = yield* harness();
-      yield* Queue.offer(avatar.grants, GRANT);
-      assert.deepEqual(yield* Queue.take(avatar.reports), { status: AVATAR_STATUS.STARTING });
-      const persona = yield* avatar.joined;
-      const video = new FakeTrack();
-      persona.options.onVideoTrack(asTrack(video));
-      video.firstFrame();
-      for (let turn = 0; turn < 20; turn += 1) yield* Effect.yieldNow;
-      assert.ok(Option.isNone(yield* Queue.poll(avatar.reports)), "live before the voice arrived");
-      const audio = new FakeTrack();
-      persona.options.onAudioTrack(asTrack(audio));
-      for (let turn = 0; turn < 20; turn += 1) yield* Effect.yieldNow;
-      assert.ok(Option.isNone(yield* Queue.poll(avatar.reports)), "live before the voice sounded");
-      audio.firstFrame();
-      assert.deepEqual(yield* Queue.take(avatar.reports), { status: AVATAR_STATUS.LIVE });
-    }).pipe(Effect.scoped),
+it.effect("a first frame drawn before the avatar's voice arrives is not yet live", () =>
+  Effect.gen(function* () {
+    const avatar = yield* harness();
+    yield* Queue.offer(avatar.grants, GRANT);
+    assert.deepEqual(yield* Queue.take(avatar.reports), { status: AVATAR_STATUS.STARTING });
+    const persona = yield* avatar.joined;
+    const video = new FakeTrack();
+    persona.options.onVideoTrack(asTrack(video));
+    video.firstFrame();
+    for (let turn = 0; turn < 20; turn += 1) yield* Effect.yieldNow;
+    assert.ok(Option.isNone(yield* Queue.poll(avatar.reports)), "live before the voice arrived");
+    persona.options.onAudioTrack(asTrack(new FakeTrack()));
+    assert.deepEqual(yield* Queue.take(avatar.reports), { status: AVATAR_STATUS.LIVE });
+  }).pipe(Effect.scoped),
 );
 
 it.effect(

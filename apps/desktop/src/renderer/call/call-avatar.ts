@@ -9,7 +9,7 @@
  * ends from this side. The feed is mapped exactly as Keyframe's own bridge
  * maps it, and the panel reports the avatar to main with the act only it
  * may send: `STARTING` once a grant stands, `LIVE` once the first frame of
- * video has drawn and the voice's first sound has arrived, and `ENDED` with the reason the session closed for.
+ * video has drawn and the voice has arrived, and `ENDED` with the reason the session closed for.
  *
  * The grant's token reaches the panel and the session it opens, and is
  * never reported, logged, or held anywhere but the scope it opened.
@@ -115,8 +115,8 @@ function fed(session: AvatarSession, feed: AvatarFeed): Effect.Effect<void> {
   }
 }
 
-/** A track's first media, the video's first frame or the voice's first sound: a remote track stands muted until media flows on it. */
-const firstMedia = (track: MediaStreamTrack): Effect.Effect<void> =>
+/** The video's first frame: a remote track stands muted until media flows on it. */
+const firstFrame = (track: MediaStreamTrack): Effect.Effect<void> =>
   track.muted
     ? Effect.callback<void>((resume) => {
         const unmuted = () => resume(Effect.void);
@@ -128,7 +128,7 @@ const firstMedia = (track: MediaStreamTrack): Effect.Effect<void> =>
 /**
  * One grant's avatar, for the life of the scope it runs in: reported as
  * starting, opened, fed, its tracks published as each arrives, reported live
- * once the video's first frame and the voice's first sound have both arrived, and reported ended once the session closes,
+ * once the video's first frame and the voice have both arrived, and reported ended once the session closes,
  * for the reason it closed. A session that cannot be opened ends as an
  * error, and a scope closed under it ends it as the developer's own close,
  * which `callAvatar` lets through only while the grant still stands: the
@@ -143,18 +143,16 @@ const runAvatar = Effect.fnUntraced(
     yield* doors.report({ status: AVATAR_STATUS.STARTING });
     const session = yield* openAvatarSession(grant, yield* doors.module);
     yield* Effect.forkScoped(Stream.runForEach(doors.feeds, (feed) => fed(session, feed)));
-    // Note that live waits on the voice's first sound as well as the first
-    // frame, because the voice window mutes Luke the moment it reads live.
+    // Note that live waits on the voice as well as the first frame, because the
+    // voice window mutes Luke the moment it reads live.
     const live = yield* Effect.forkScoped(
       Effect.ignore(
         Effect.all(
           [
-            Effect.flatMap(session.audio, (audio) =>
-              Effect.andThen(publish({ audio }), firstMedia(audio)),
-            ),
+            Effect.flatMap(session.audio, (audio) => publish({ audio })),
             session.video.pipe(
               Effect.tap((video) => publish({ video })),
-              Effect.flatMap(firstMedia),
+              Effect.flatMap(firstFrame),
             ),
           ],
           { concurrency: "unbounded" },
