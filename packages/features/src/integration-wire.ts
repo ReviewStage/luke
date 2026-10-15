@@ -7,16 +7,24 @@ import { Schema as EffectSchema } from "effect";
  *
  * An integration is a service an account connects so Luke's agents can use
  * it on the account's behalf, each through its own hosted MCP server and a
- * grant Vercel Connect holds. `GET /api/account/integrations` answers where
- * every provider's connection stands, one word each.
+ * grant Vercel Connect holds. A Luke account may connect more than one
+ * account at a provider (two Notion workspaces), each its own grant under
+ * its own connection name. `GET /api/account/integrations` answers where
+ * every provider's first account stands, one word each, and every account
+ * the account holds with its name, label, and standing.
  * `POST /api/account/integrations/{provider}/connect` begins a browser
- * sign-in through Vercel Connect and answers the address the browser opens,
- * which the desktop opens and never draws.
- * `POST /api/account/integrations/{provider}/disconnect` ends the connection
- * and answers its word. The browser returns from a sign-in to the service's
- * own callback, which settles it and sends the browser on to the landing
- * page below with the provider and one word of its own. No answer carries a
- * token or an identity at the provider.
+ * sign-in through Vercel Connect, for the account a `connection` query names
+ * or for a new one with `add=true`, and answers the address the browser
+ * opens, which the desktop opens and never draws.
+ * `POST /api/account/integrations/{provider}/disconnect` ends one account's
+ * connection and answers its word; `…/rename` and `…/primary` name one or
+ * make it the provider's primary. The browser returns from a sign-in to the
+ * service's own callback, which settles it and sends the browser on to the
+ * landing page below with the provider and one word of its own. No answer
+ * carries a token. An account's label is its name at the provider (a
+ * workspace's, an organization's), or the developer's own for it: it is an
+ * identity at the provider, never a credential, and it is answered to the
+ * desktop alone, never to a log line, a span, a counted event, or a fixture.
  */
 
 /**
@@ -250,6 +258,52 @@ export type IntegrationStatus = (typeof INTEGRATION_STATUS)[keyof typeof INTEGRA
 
 const integrationStatusSchema = EffectSchema.Literals(Object.values(INTEGRATION_STATUS));
 
+/**
+ * The queries a provider's routes read beside the provider the rewrite
+ * moves into its own: the account a call is about, by its connection name
+ * (the provider's first account where none is named), and, on a Connect, a
+ * new account to sign in rather than one that stands.
+ */
+export const INTEGRATION_QUERY = {
+  CONNECTION: "connection",
+  ADD: "add",
+} as const;
+
+/** The value of `INTEGRATION_QUERY.ADD` that asks for a new account. */
+export const INTEGRATION_ADD_ACCOUNT = "true";
+
+/** The most accounts a Luke account may hold at one provider. */
+export const INTEGRATION_ACCOUNTS_MAX = 5;
+
+/** The longest label an account may carry, in characters. */
+export const INTEGRATION_LABEL_MAX = 64;
+
+/** One account the Luke account holds at a provider, as the statuses read answers it. */
+export const integrationAccountSchema = EffectSchema.Struct({
+  provider: integrationProviderSchema,
+  connection: integrationConnectionNameSchema,
+  /** Its name at the provider, or the developer's own for it, where either is known. */
+  label: EffectSchema.optionalKey(EffectSchema.String),
+  /** Whether it is the provider's primary account, which the agents use unless told otherwise. */
+  primary: EffectSchema.Boolean,
+  status: integrationStatusSchema,
+});
+
+export type IntegrationAccount = typeof integrationAccountSchema.Type;
+
+/** A label as the developer names an account (POST): trimmed, never blank, and bounded. */
+export const integrationRenameRequestSchema = EffectSchema.Struct({
+  label: EffectSchema.Trim.check(
+    EffectSchema.isMinLength(1),
+    EffectSchema.isMaxLength(INTEGRATION_LABEL_MAX),
+  ),
+});
+
+/** One account as a rename or a Make primary leaves it (POST). */
+export const integrationAccountAnswerSchema = EffectSchema.Struct({
+  account: integrationAccountSchema,
+});
+
 /** How a sign-in the browser never brought back to Luke ended, as Vercel Connect tells it. */
 export const INTEGRATION_SIGN_IN_FAILURE = {
   /** The developer cancelled it on Connect's own page. */
@@ -261,6 +315,8 @@ export const INTEGRATION_SIGN_IN_FAILURE = {
 /** One provider's sign-in that ended without a grant, and why, with Connect's own line where it carried no credential. */
 export const integrationSignInFailureSchema = EffectSchema.Struct({
   provider: integrationProviderSchema,
+  /** The account whose sign-in it was, where the service names one. */
+  connection: EffectSchema.optionalKey(integrationConnectionNameSchema),
   reason: EffectSchema.Literals(Object.values(INTEGRATION_SIGN_IN_FAILURE)),
   message: EffectSchema.optionalKey(EffectSchema.String),
 });
@@ -268,11 +324,16 @@ export const integrationSignInFailureSchema = EffectSchema.Struct({
 export type IntegrationSignInFailure = typeof integrationSignInFailureSchema.Type;
 
 /**
- * Where every provider's connection stands (GET), and each sign-in this
- * read found ended without a grant: a read says so once, as it ends it.
+ * Where every provider's connection stands (GET): its first account's word,
+ * which a desktop that predates more than one account reads alone; every
+ * account the Luke account holds; the providers it may add another account
+ * at; and each sign-in this read found ended without a grant, which a read
+ * says so once, as it ends it.
  */
 export const integrationStatusesAnswerSchema = EffectSchema.Struct({
   integrations: EffectSchema.Record(integrationProviderSchema, integrationStatusSchema),
+  accounts: EffectSchema.optionalKey(EffectSchema.Array(integrationAccountSchema)),
+  addable: EffectSchema.optionalKey(EffectSchema.Array(integrationProviderSchema)),
   signInFailures: EffectSchema.optionalKey(EffectSchema.Array(integrationSignInFailureSchema)),
 });
 
@@ -358,9 +419,10 @@ export const integrationToolsAnswerSchema = EffectSchema.Union([
   }),
 ]);
 
-/** The address a sign-in opens in the browser (POST): https, and nothing else. */
+/** The address a sign-in opens in the browser (POST): https, and nothing else; and the account it signs in, where the service names one. */
 export const integrationConnectAnswerSchema = EffectSchema.Struct({
   url: EffectSchema.String.check(EffectSchema.isPattern(/^https:\/\/\S+$/)),
+  connection: EffectSchema.optionalKey(integrationConnectionNameSchema),
 });
 
 export type IntegrationConnectAnswer = typeof integrationConnectAnswerSchema.Type;

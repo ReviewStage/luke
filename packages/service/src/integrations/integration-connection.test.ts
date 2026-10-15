@@ -83,6 +83,7 @@ interface FakeGrant {
 function fakeConnect(grants: Map<string, FakeGrant>): ConnectorService {
   return {
     configured: true,
+    multipleAccounts: false,
     authorize: () =>
       Effect.succeed({
         url: "https://vercel.com/connect/authorize/fixture",

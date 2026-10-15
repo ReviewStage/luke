@@ -1,0 +1,49 @@
+{
+  "type": "object",
+  "properties": {
+    "provider": {
+      "type": "string",
+      "enum": [
+        "executor",
+        "github",
+        "granola",
+        "linear",
+        "mercury",
+        "neon",
+        "notion",
+        "posthog",
+        "sentry",
+        "slack",
+        "supabase",
+        "vercel",
+        "ycombinator"
+      ]
+    },
+    "connection": {
+      "type": "string"
+    },
+    "label": {
+      "type": "string"
+    },
+    "primary": {
+      "type": "boolean"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "connected",
+        "pending",
+        "expired",
+        "disconnected",
+        "unavailable"
+      ]
+    }
+  },
+  "required": [
+    "provider",
+    "connection",
+    "primary",
+    "status"
+  ],
+  "additionalProperties": false
+}

@@ -4,11 +4,13 @@ import {
   completeIntegrationSignIn,
   deleteIntegrationConnection,
   endIntegrationSignIn,
+  makeIntegrationPrimary,
   readIntegrationConnections,
   readIntegrationSignIn,
+  renameIntegrationConnection,
 } from "./integration-store.js";
 import type { IntegrationsAppSeams } from "./integrations-app.js";
-import { mintIntegrationState } from "./integrations-app.js";
+import { mintIntegrationState, mintIntegrationSubject } from "./integrations-app.js";
 import type { WorkspaceLinearAppSeams } from "./workspace-linear-app.js";
 
 /**
@@ -29,7 +31,10 @@ export function integrationsAppSeams(): IntegrationsAppSeams {
     completeSignIn: completeIntegrationSignIn,
     endSignIn: endIntegrationSignIn,
     deleteConnection: deleteIntegrationConnection,
+    renameConnection: renameIntegrationConnection,
+    makePrimary: makeIntegrationPrimary,
     mintState: mintIntegrationState,
+    mintSubject: mintIntegrationSubject,
     now: () => Date.now(),
   };
 }

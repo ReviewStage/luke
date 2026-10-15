@@ -49,6 +49,7 @@ export function integrationConnectOf(
 /** A connector a suite that asks Connect nothing stands up: every ask is a defect. */
 export const CONNECTOR_ASKED_NOTHING: ConnectorService = {
   configured: true,
+  multipleAccounts: false,
   authorize: () => Effect.die(new Error("this suite asks Connect nothing")),
   signInResult: () => Effect.die(new Error("this suite asks Connect nothing")),
   token: () => Effect.die(new Error("this suite asks Connect nothing")),
