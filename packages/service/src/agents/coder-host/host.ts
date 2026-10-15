@@ -84,6 +84,7 @@ import {
   recordPlanEdit,
 } from "./plan-edit.js";
 import type { CoderHostSeams } from "./production.js";
+import { runShowImage, SHOW_IMAGE_REFUSAL, showImageRejected } from "./show-image.js";
 import { agentSkills } from "./skills.js";
 import { titleCodingAgent, titleSubagent } from "./title.js";
 import { CODER_TOOL } from "./tool-set.js";
@@ -278,6 +279,18 @@ export interface CoderHost extends HostAdmission {
   /** Runs one `show_page` call (`../page-tool.ts`) on the agent's plan, a page's path read from the session's sandbox through the door given. */
   showPage(
     admitted: AdmittedConversation,
+    input: UnparsedWireValue,
+    sandbox: InboxSandboxDoor,
+  ): Effect.Effect<WireRecord, never, DatabaseServices>;
+  /** Runs one `show_image` call (`show-image.ts`): the pictures read from the session's sandbox through the door given and kept beside the agent's transcript. */
+  showImage(
+    admitted: AdmittedConversation,
+    input: UnparsedWireValue,
+    sandbox: InboxSandboxDoor,
+  ): Effect.Effect<WireRecord, never, DatabaseServices>;
+  /** Runs one of a worker's `show_image` calls, its pictures kept beside the worker's own transcript, the child of the call that started it; nothing kept for a session that is no worker the account reaches. */
+  showDelegatedImage(
+    session: SessionContext["session"],
     input: UnparsedWireValue,
     sandbox: InboxSandboxDoor,
   ): Effect.Effect<WireRecord, never, DatabaseServices>;
@@ -612,6 +625,20 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
       }).pipe(
         Effect.tapError(logStoreFailure),
         Effect.catch(() => Effect.succeed(showPageRejected(SHOW_PAGE_REFUSAL.UNAVAILABLE))),
+      ),
+
+    showImage: (admitted, input, sandbox) =>
+      runShowImage({ target: admitted.target, sandbox, checkout: CODER.CHECKOUT_PATH }, input),
+
+    showDelegatedImage: (session, input, sandbox) =>
+      Effect.gen(function* () {
+        const found = yield* delegatedChildOf(session);
+        if (Option.isNone(found)) return showImageRejected(SHOW_IMAGE_REFUSAL.UNAVAILABLE);
+        const binding = { target: found.value.child, sandbox, checkout: CODER.CHECKOUT_PATH };
+        return yield* runShowImage(binding, input);
+      }).pipe(
+        Effect.tapError(logStoreFailure),
+        Effect.catch(() => Effect.succeed(showImageRejected(SHOW_IMAGE_REFUSAL.UNAVAILABLE))),
       ),
 
     title: (admitted) =>

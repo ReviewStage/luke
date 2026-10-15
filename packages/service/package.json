@@ -66,6 +66,7 @@
     "./agents/coder-host/host": "./src/agents/coder-host/host.js",
     "./agents/coder-host/inbox": "./src/agents/coder-host/inbox.js",
     "./agents/coder-host/inbox-image": "./src/agents/coder-host/inbox-image.js",
+    "./agents/coder-host/show-image": "./src/agents/coder-host/show-image.js",
     "./agents/coder-host/inbox-page": "./src/agents/coder-host/inbox-page.js",
     "./agents/coder-host/instructions": "./src/agents/coder-host/instructions.js",
     "./agents/coder-host/model": "./src/agents/coder-host/model.js",

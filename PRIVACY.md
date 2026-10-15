@@ -234,7 +234,12 @@ beside the task's conversation or the agent's transcript the call is written
 to, which names the picture by an id rather than carrying it; a conversation
 or transcript keeps up to 200 MB of pictures. A larger picture, one past
 that, or one of another kind is not kept, and the record says only its kind
-and size. A coding agent's kept pictures, and its workers', are served only
+and size. A coding agent or one of its workers can also show you pictures
+from its sandbox, such as screenshots of a page it changed, up to twenty at a
+time with a line of its own words each: our service reads each file from the
+sandbox and keeps it the same way, beside the agent's transcript or the
+worker's, and the model is told only that they were shown, never handed the
+pictures back. A coding agent's kept pictures, and its workers', are served only
 to Luke signed in as a member of the workspace who can read the agent. Kept
 pictures are readable by our own operators, like the transcript, and go
 when it does.
