@@ -105,13 +105,31 @@ const TASKS = [
   task("t-4", "Release checklist", "acme/relay", DEAN, { createdAt: 5, updatedAt: 5 }, 900),
 ];
 
-/** The sidebar listing `plans` in `workspace`, read by Dean. */
-function mountSidebar(workspace: Workspace, plans: readonly PlanSummary[] = TASKS): HTMLElement {
+const ARCHIVED = [
+  { ...task("t-9", "Spike: edge caching", "acme/relay", CHARLES), archivedAt: 50 },
+  {
+    ...task("t-8", "Old dashboard charts", "acme/console", DEAN, { createdAt: 1, updatedAt: 9 }),
+    archivedAt: 40,
+  },
+];
+
+/** The sidebar listing `plans`, and `archived` archived, in `workspace`, read by Dean. */
+function mountSidebar(
+  workspace: Workspace,
+  plans: readonly PlanSummary[] = TASKS,
+  archived: readonly PlanSummary[] = ARCHIVED,
+): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  const control = plansControl({ plans: [...plans], workspace, workspaces: [workspace], me: DEAN });
+  const control = plansControl({
+    plans: [...plans],
+    archived: [...archived],
+    workspace,
+    workspaces: [workspace],
+    me: DEAN,
+  });
   act(() =>
     root.render(
       onRegistry(AtomRegistry.make(), createElement(DesktopSidebar, sidebarProps(control))),
@@ -244,7 +262,10 @@ test("a workspace nobody shares offers no grouping by creator", () => {
   assert.ok(button, "the Tasks head offers View options");
   act(() => button.click());
   act(() => menuItem("Group by").click());
-  const choices = [...document.querySelectorAll('[role="menuitemcheckbox"]')].map(
+  const menus = [...document.querySelectorAll('[role="menu"]')];
+  const groupBy = menus.at(-1);
+  assert.ok(groupBy, "Group by's submenu stands");
+  const choices = [...groupBy.querySelectorAll('[role="menuitemcheckbox"]')].map(
     (item) => item.textContent,
   );
   assert.deepEqual(choices, ["Repository", "None"]);
@@ -254,8 +275,9 @@ test("a workspace nobody shares offers no grouping by creator", () => {
 async function mountRead(
   workspace: Workspace,
   plans?: readonly PlanSummary[],
+  archived?: readonly PlanSummary[],
 ): Promise<HTMLElement> {
-  const sidebar = mountSidebar(workspace, plans);
+  const sidebar = mountSidebar(workspace, plans, archived);
   await act(async () => undefined);
   return sidebar;
 }
@@ -361,8 +383,155 @@ test("in one run, a task with no repository says so on its row", async () => {
 });
 
 test("an empty workspace under a filter says only that it holds no tasks", async () => {
-  const sidebar = await mountRead(ACME, []);
+  const sidebar = await mountRead(ACME, [], []);
   choose(sidebar, "Created by", "Me");
   const notes = [...sidebar.querySelectorAll(".sidebar-note")].map((note) => note.textContent);
   assert.deepEqual(notes, ["No tasks yet."]);
+});
+
+/** The Tasks section's head, as it names the section. */
+function headName(sidebar: HTMLElement): string | undefined {
+  return (
+    sidebar.querySelector('nav[aria-label="Tasks"] .sidebar-section-head-name')?.textContent ??
+    undefined
+  );
+}
+
+/** Turns the Tasks section to the archived tasks, or back, from View options. */
+function toggleArchived(sidebar: HTMLElement): void {
+  const button = sidebar.querySelector<HTMLButtonElement>('button[aria-label="View options"]');
+  assert.ok(button, "the Tasks head offers View options");
+  act(() => button.click());
+  act(() => menuItem("Archived tasks").click());
+}
+
+test("the archived tasks stand in no group at the list's foot, and View options turns the section to them, the pins aside, a chip leading back", async () => {
+  const sidebar = await mountRead(ACME);
+  assert.ok(
+    !taskRows(sidebar).some((row) => row.name === "Spike: edge caching"),
+    "an archived task stands nowhere in the list",
+  );
+  assert.equal(groupNames(sidebar).includes("Archived"), false);
+
+  toggleArchived(sidebar);
+  assert.equal(headName(sidebar), "Archived tasks");
+  assert.deepEqual(
+    taskRows(sidebar).map((row) => row.name),
+    ["Old dashboard charts", "Spike: edge caching"],
+  );
+  assert.equal(sidebar.querySelector('nav[aria-label="Pinned"]'), null, "the pins stand aside");
+  assert.equal(chipWords(sidebar), "Archived");
+  const options = sidebar.querySelector('button[aria-label="View options"]');
+  assert.equal(options?.getAttribute("data-filtered"), "true");
+
+  const back = chip(sidebar)?.querySelector("button");
+  assert.ok(back, "the chip offers its ×");
+  act(() => back.click());
+  assert.equal(headName(sidebar), "Tasks");
+  assert.ok(sidebar.querySelector('nav[aria-label="Pinned"]'), "the pins are back");
+});
+
+test("the archived view filters by creator as the list does, and is not kept for the next launch", async () => {
+  const sidebar = await mountRead(ACME);
+  choose(sidebar, "Created by", "Me");
+  toggleArchived(sidebar);
+  assert.deepEqual(
+    taskRows(sidebar).map((row) => row.name),
+    ["Old dashboard charts"],
+  );
+  unmountAll();
+
+  const relaunched = await mountRead(ACME);
+  assert.equal(headName(relaunched), "Tasks");
+  assert.equal(
+    chipWords(relaunched),
+    "Created by me",
+    "the creator filter is kept, the archive not",
+  );
+});
+
+test("with nothing archived, the archived view says so", async () => {
+  const sidebar = await mountRead(ACME, TASKS, []);
+  toggleArchived(sidebar);
+  const notes = [...sidebar.querySelectorAll(".sidebar-note")].map((note) => note.textContent);
+  assert.ok(notes.includes("No archived tasks."), "the empty archive says so");
+});
+
+test("choosing another workspace lets go of the archived view, so coming back opens on the tasks", async () => {
+  const other = { ...ACME, id: "workspace-other", name: "Other" };
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const listed = (workspace: Workspace) =>
+    onRegistry(
+      AtomRegistry.make(),
+      createElement(
+        DesktopSidebar,
+        sidebarProps(
+          plansControl({
+            plans: [...TASKS],
+            archived: [...ARCHIVED],
+            workspace,
+            workspaces: [ACME, other],
+            me: DEAN,
+          }),
+        ),
+      ),
+    );
+  const registry = AtomRegistry.make();
+  const draw = (workspace: Workspace) =>
+    act(() => root.render(onRegistry(registry, listed(workspace))));
+  draw(ACME);
+  await act(async () => undefined);
+  toggleArchived(container);
+  assert.equal(headName(container), "Archived tasks");
+
+  draw(other);
+  assert.equal(headName(container), "Tasks");
+  draw(ACME);
+  assert.equal(headName(container), "Tasks");
+});
+
+test("a repository's menu among the archived tasks offers no Archive", async () => {
+  const sidebar = await mountRead(ACME);
+  toggleArchived(sidebar);
+  const ellipsis = sidebar.querySelector<HTMLButtonElement>(
+    'button[aria-label="Actions for relay"]',
+  );
+  assert.ok(ellipsis, "the group offers its actions");
+  act(() => ellipsis.click());
+  const menu = document.querySelector('[role="menu"][aria-label="relay actions"]');
+  assert.deepEqual(
+    [...(menu?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [])].map(itemLabel),
+    ["Pin", "Open on GitHub"],
+  );
+});
+
+test("before the list is first read, the archived view says nothing of being empty", () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const control = plansControl({ workspace: ACME, workspaces: [ACME], me: DEAN, listRead: false });
+  act(() =>
+    root.render(
+      onRegistry(AtomRegistry.make(), createElement(DesktopSidebar, sidebarProps(control))),
+    ),
+  );
+  toggleArchived(container);
+  const notes = [...container.querySelectorAll(".sidebar-note")].map((note) => note.textContent);
+  assert.ok(!notes.includes("No archived tasks."), "nothing is said before the read");
+  assert.ok(!notes.includes("No tasks yet."), "nor that no task stands");
+});
+
+test("with every task archived, the list says so and offers the archived tasks", async () => {
+  const sidebar = await mountRead(ACME, [], ARCHIVED);
+  const note = [...sidebar.querySelectorAll(".sidebar-note")].find((each) =>
+    each.textContent?.startsWith("Every task is archived."),
+  );
+  const show = note?.querySelector("button");
+  assert.ok(show, "the note offers Show archived");
+  act(() => show.click());
+  assert.equal(headName(sidebar), "Archived tasks");
 });

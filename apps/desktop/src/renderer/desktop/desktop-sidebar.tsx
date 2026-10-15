@@ -27,7 +27,6 @@ import {
   repositoryGroups,
   repositoryLabel,
   TASK_GROUPING,
-  TASK_ORDER,
   type TaskOrder,
   taskTime,
 } from "@luke/ui/task-list-model";
@@ -60,7 +59,12 @@ import { SIDEBAR_OVERLAY, SIDEBAR_WIDTH, type SidebarCollapse } from "./sidebar-
 import { SidebarFoot } from "./sidebar-foot";
 import { type CountNoun, SidebarGroupHeader } from "./sidebar-group-header";
 import { SidebarPinnedTab } from "./sidebar-pinned-tab";
-import { CreatedByChip, SidebarSectionHead, TaskViewOptions } from "./sidebar-task-view";
+import {
+  type ArchivedView,
+  SidebarSectionHead,
+  TaskViewOptions,
+  ViewChips,
+} from "./sidebar-task-view";
 import { useTaskListView } from "./task-list-view";
 import { EDGE_SIDE, type ResizableEdgeProps, useResizableEdge } from "./use-resizable-edge";
 import { WorkspaceSwitcher } from "./workspace-switcher";
@@ -158,6 +162,8 @@ interface RowContext {
   readonly now: number;
   /** The list's order, whose time each of its rows shows. */
   readonly order: TaskOrder;
+  /** Whether the rows are the archived tasks, which no Archive is offered for. */
+  readonly archived: boolean;
   /** Whether a teammate's task wears its creator's face: not while the list holds one creator's tasks. */
   readonly faces: boolean;
   /** Whether the sidebar is in sight: folded away, nothing it opened stands over the window. */
@@ -311,16 +317,26 @@ function PinnedSection({
  * account, Archive plans puts every plan under the header away, and Open on
  * GitHub opens the repository's page, under GitHub's mark rather than the
  * owner's picture, since it is about GitHub. The plans with no repository
- * have no pin, since they always stand last, and no page to open.
+ * have no pin, since they always stand last, and no page to open. A group of
+ * archived plans offers no Archive, since its plans are already away, so the
+ * plans with no repository offer nothing there.
  */
-function repositoryActionGroups(group: RepositoryGroup, plans: PlansControl): MenuAction[][] {
+function repositoryActionGroups(
+  group: RepositoryGroup,
+  plans: PlansControl,
+  archived: boolean,
+): MenuAction[][] {
   const { repository } = group;
-  const archive: MenuAction = {
-    label: "Archive tasks",
-    icon: <ArchiveIcon />,
-    onSelect: () => plans.onArchivePlans(group.plans.map((plan) => plan.id)),
-  };
-  if (repository === null) return [[archive]];
+  const archive: MenuAction[] = archived
+    ? []
+    : [
+        {
+          label: "Archive tasks",
+          icon: <ArchiveIcon />,
+          onSelect: () => plans.onArchivePlans(group.plans.map((plan) => plan.id)),
+        },
+      ];
+  if (repository === null) return archive.length === 0 ? [] : [archive];
   const pin: MenuAction = plans.pinnedRepositories.includes(repository)
     ? {
         label: "Unpin",
@@ -333,7 +349,7 @@ function repositoryActionGroups(group: RepositoryGroup, plans: PlansControl): Me
     icon: <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />,
     onSelect: () => plans.repositories.openGitHub(repositoryPageUrl(repository)),
   };
-  return [[pin, archive], [github]];
+  return [[pin, ...archive], [github]];
 }
 
 /** Pinned holds tabs as well as plans, so its count is read as pins. */
@@ -377,6 +393,7 @@ function RepositorySection({
   // closes with the sidebar folding away as well as with the tab hiding.
   const menu = useActionMenu(context.plans.shown && context.inSight);
   const ellipsis = useRef<HTMLButtonElement | null>(null);
+  const actionGroups = repositoryActionGroups(group, context.plans, context.archived);
   return (
     <div className="sidebar-repository">
       <SidebarGroupHeader
@@ -404,21 +421,23 @@ function RepositorySection({
         }
         tooltip={repository === null || label === repository ? undefined : repository}
         menuOpen={menu.open !== undefined}
-        onContextMenu={menu.contextMenu(ellipsis)}
+        onContextMenu={actionGroups.length === 0 ? undefined : menu.contextMenu(ellipsis)}
         onToggle={() => folds.toggle(repository)}
         actions={
           <>
-            <Tooltip label="Repository actions">
-              <button
-                ref={ellipsis}
-                type="button"
-                className="sidebar-repository-action"
-                aria-label={`Actions for ${named}`}
-                {...menu.trigger()}
-              >
-                <EllipsisIcon />
-              </button>
-            </Tooltip>
+            {actionGroups.length === 0 ? null : (
+              <Tooltip label="Repository actions">
+                <button
+                  ref={ellipsis}
+                  type="button"
+                  className="sidebar-repository-action"
+                  aria-label={`Actions for ${named}`}
+                  {...menu.trigger()}
+                >
+                  <EllipsisIcon />
+                </button>
+              </Tooltip>
+            )}
             {repository === null ? null : (
               <Tooltip label={`New task in ${label}`}>
                 <button
@@ -438,7 +457,7 @@ function RepositorySection({
         <ActionMenu
           label={`${named} actions`}
           menu={menu.drawn}
-          groups={repositoryActionGroups(group, context.plans)}
+          groups={actionGroups}
           onClose={menu.close}
         />
       )}
@@ -599,38 +618,6 @@ function TaskGroups({
         <PlanRows rows={sections.plans} context={context} repository={repositoryOf} />
       );
   }
-}
-
-/**
- * The plans under Archived, folded away behind a header drawn as a
- * repository's is, the way Codex and ChatGPT keep theirs: an archive box in
- * the picture's place, giving way to the fold's chevron while hovered or
- * reached from the keyboard, and folded, the count after its name. A press
- * unfolds the list beneath it, and each archived plan opens and offers its
- * actions like any other. It draws nothing
- * while no plan is archived, and it starts folded, because an archived plan
- * is one the developer put out of the way.
- */
-function ArchivedPlans({ context }: { context: RowContext }): React.JSX.Element | null {
-  const [unfolded, setUnfolded] = useState(false);
-  const { archived } = context.plans.listed;
-  if (archived.length === 0) return null;
-  return (
-    <div className="sidebar-archived">
-      <SidebarGroupHeader
-        glyph={<ArchiveIcon />}
-        name="Archived"
-        folded={!unfolded}
-        count={archived.length}
-        onToggle={() => setUnfolded((was) => !was)}
-      />
-      {/* Note that the archived rows stand apart from the Tasks view, so they
-          wear their faces and their last update whatever it filters by or orders. */}
-      {unfolded ? (
-        <PlanRows rows={archived} context={{ ...context, order: TASK_ORDER.UPDATED }} face />
-      ) : null}
-    </div>
-  );
 }
 
 /**
@@ -930,7 +917,8 @@ interface DesktopSidebarProps {
  * (`task-list-view.ts`): under their repositories' headers by default, the
  * pinned repositories first, newest pinned first, then the group updated
  * most recently first; under their creators'; or in one run. The archived
- * ones are folded away under them all.
+ * ones stand in the list's place while View options' Archived tasks is
+ * chosen, until its chip's × or another workspace turns it back.
  * It is where the developer moves between things; what they work on is the
  * column beside it.
  * The open plan's row is marked, or, where the plan was opened from a pin,
@@ -1014,6 +1002,17 @@ function SidebarColumn({
   const { memberCount } = plans.workspace ?? {};
   const shared = memberCount === undefined ? (reader.members?.length ?? 0) > 1 : memberCount > 1;
   const createdBy = shared ? taskView.view.createdBy : undefined;
+  // The archived tasks stand in the list's place for the workspace they were
+  // turned to in, and no longer: another workspace, or the next launch,
+  // opens on its tasks.
+  const [archivedIn, setArchivedIn] = useState<string | undefined>(undefined);
+  // Note that the view is let go of as the workspace changes, rather than
+  // only hidden, so coming back to the workspace opens on its tasks.
+  if (archivedIn !== undefined && archivedIn !== plans.workspace?.id) setArchivedIn(undefined);
+  const archive: ArchivedView = {
+    shown: archivedIn !== undefined && archivedIn === plans.workspace?.id,
+    onShown: (shown) => setArchivedIn(shown ? plans.workspace?.id : undefined),
+  };
   const unread = useUnreadPlans([...plans.plans, ...plans.archived], {
     listRead: plans.listRead,
     staged: sidebar.staged,
@@ -1047,6 +1046,7 @@ function SidebarColumn({
     now,
     order: taskView.view.order,
     faces: createdBy === undefined,
+    archived: archive.shown,
     inSight: overlay.inSight,
   };
   // A pinned tab is on show where its plan is open and its column shows it:
@@ -1061,8 +1061,11 @@ function SidebarColumn({
           : plans.sidePanel.open &&
             plans.sidePanel.tab !== undefined &&
             sameTab(plans.sidePanel.tab, pin.tab))));
-  // Note that the pins are never filtered, because a pin is already the reader's own choice.
-  const unpinned = plans.listed.plans.filter((plan) => plan.pinnedAt === undefined);
+  // Note that the pins are never filtered, because a pin is already the
+  // reader's own choice, and stand aside while the archived tasks are shown.
+  const unpinned = archive.shown
+    ? plans.listed.archived
+    : plans.listed.plans.filter((plan) => plan.pinnedAt === undefined);
   const tasks = createdByOnly(unpinned, createdBy);
   const { grouping, order } = taskView.view;
   const sections = taskSections(
@@ -1081,7 +1084,11 @@ function SidebarColumn({
   // away, the open plan standing in its place even under a fold, so walking
   // the list still moves from it.
   const drawn = [
-    ...(folds.pinnedFolded ? pinned.filter((plan) => current(plan.id)) : pinned),
+    ...(archive.shown
+      ? []
+      : folds.pinnedFolded
+        ? pinned.filter((plan) => current(plan.id))
+        : pinned),
     ...drawnTasks(sections, folds, current),
   ];
   // Moving up and down the list as it reads: down from the home page, where
@@ -1169,7 +1176,7 @@ function SidebarColumn({
       {/* One scroller for both sections, so the pinned plans scroll away
           with the rest rather than holding half the column. */}
       <div className="sidebar-section">
-        {plans.signedIn && pinnedSection.length > 0 ? (
+        {plans.signedIn && pinnedSection.length > 0 && !archive.shown ? (
           <PinnedSection
             rows={pinnedSection}
             folds={folds}
@@ -1180,25 +1187,31 @@ function SidebarColumn({
         ) : null}
         <nav className="sidebar-group" aria-label="Tasks">
           {plans.signedIn ? (
-            <SidebarSectionHead name="Tasks">
+            <SidebarSectionHead name={archive.shown ? "Archived tasks" : "Tasks"}>
               <TaskViewOptions
                 shown={plans.shown && overlay.inSight}
                 control={taskView}
                 shared={shared}
-                filtered={createdBy !== undefined}
+                archive={archive}
+                filtered={createdBy !== undefined || archive.shown}
               />
             </SidebarSectionHead>
           ) : null}
-          {plans.signedIn && createdBy !== undefined ? (
-            <CreatedByChip
+          {plans.signedIn ? (
+            <ViewChips
               createdBy={createdBy}
               plans={unpinned}
-              onClear={() => taskView.onCreatedBy(undefined)}
+              onClearCreatedBy={() => taskView.onCreatedBy(undefined)}
+              archive={archive}
             />
+          ) : null}
+          {archive.shown && unpinned.length === 0 && plans.listRead && !plans.listFailed ? (
+            <p className="sidebar-note">No archived tasks.</p>
           ) : null}
           {createdBy !== undefined &&
           tasks.length === 0 &&
           !unlisted &&
+          !(archive.shown && unpinned.length === 0) &&
           plans.listRead &&
           !plans.listFailed ? (
             <p className="sidebar-note">
@@ -1222,8 +1235,26 @@ function SidebarColumn({
           {plans.signedIn && unlisted && !plans.listRead && !plans.listFailed ? (
             <ListSkeleton />
           ) : null}
-          {plans.signedIn && unlisted && plans.listRead && !plans.listFailed ? (
+          {plans.signedIn && unlisted && plans.listRead && !plans.listFailed && !archive.shown ? (
             <p className="sidebar-note">No tasks yet.</p>
+          ) : null}
+          {/* Every task archived, the list would stand empty with no word of where they went. */}
+          {plans.signedIn &&
+          !archive.shown &&
+          plans.listRead &&
+          !plans.listFailed &&
+          plans.listed.plans.length === 0 &&
+          plans.listed.archived.length > 0 ? (
+            <p className="sidebar-note">
+              Every task is archived.{" "}
+              <button
+                type="button"
+                className="toolbar-button quiet-button"
+                onClick={() => archive.onShown(true)}
+              >
+                Show archived
+              </button>
+            </p>
           ) : null}
           {plans.signedIn ? null : <p className="sidebar-note">Sign in to start a task.</p>}
           <TaskGroups
@@ -1233,7 +1264,6 @@ function SidebarColumn({
             onNewPlanIn={chosen(newPlanIn)}
             context={context}
           />
-          {plans.signedIn ? <ArchivedPlans context={context} /> : null}
         </nav>
       </div>
 
