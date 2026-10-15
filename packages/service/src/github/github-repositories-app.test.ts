@@ -207,6 +207,59 @@ it.layer(getTestDB())("the repositories route", (it) => {
   );
 
   it.effect(
+    "a workspace whose installation its account suspended lists none, as not installed, rather than refusing the read as GitHub unavailable",
+    () =>
+      Effect.gen(function* () {
+        const github = githubReaching([
+          {
+            id: 7401,
+            login: "acme",
+            repositories: [{ owner: "acme", name: "relay" }],
+            suspendedAt: "2026-10-12T00:00:00Z",
+          },
+        ]);
+        const { owner, ask } = yield* openAccounts(github);
+        const workspace = yield* openInstallationWorkspace(owner, {
+          installationId: 7401,
+          accountId: 9401,
+          accountLogin: "acme",
+        });
+
+        const reached = listed(yield* ask(owner, "GET", [workspace]));
+
+        assert.deepEqual([reached.installed, reached.repositories], [false, []]);
+      }),
+  );
+
+  it.effect(
+    "a repository taken from the installation on GitHub is gone from the very next listing, since none is held between reads",
+    () =>
+      Effect.gen(function* () {
+        const repositories = [
+          { owner: "acme", name: "relay" },
+          { owner: "acme", name: "ledger" },
+        ];
+        const github = githubReaching([{ id: 7501, login: "acme", repositories }]);
+        const { owner, ask } = yield* openAccounts(github);
+        const workspace = yield* openInstallationWorkspace(owner, {
+          installationId: 7501,
+          accountId: 9501,
+          accountLogin: "acme",
+        });
+        const names = (answered: Answer) =>
+          listed(answered).repositories.map((repository) => repository.fullName);
+
+        const before = names(yield* ask(owner, "GET", [workspace]));
+        // Note that this is GitHub's side alone: an `installation_repositories` delivery stores nothing.
+        repositories.pop();
+        const after = names(yield* ask(owner, "GET", [workspace]));
+
+        assert.deepEqual(before.toSorted(), ["acme/ledger", "acme/relay"]);
+        assert.deepEqual(after, ["acme/relay"]);
+      }),
+  );
+
+  it.effect(
     "a workspace the account is not in is not found, and two named are invalid, before GitHub is asked",
     () =>
       Effect.gen(function* () {
