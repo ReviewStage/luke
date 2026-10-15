@@ -19,7 +19,7 @@ import { Fragment, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 import { EmptyState } from "../empty-state";
-import { useOpenFeedback } from "../open-feedback";
+import { ExperimentTag, SendFeedbackButton } from "../experiment-marks";
 import { momentText, useMinute } from "../planning/plan-time";
 import { AUTOMATIONS_PAGE, type PlansControl } from "../planning/use-plans-tab";
 import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
@@ -186,7 +186,6 @@ function ListPage({
 }): React.JSX.Element {
   const view = plans.automationsView;
   useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, view.onClose);
-  const openFeedback = useOpenFeedback();
   const toast = useToast();
   const now = useMinute();
   const workspace = plans.workspace;
@@ -207,16 +206,10 @@ function ListPage({
       <header className="desktop-toolbar">
         <div className="desktop-toolbar-heading">
           <h1 className="desktop-toolbar-title">Automations</h1>
-          <span className="integration-tool-badge experiment-badge">Experimental</span>
+          <ExperimentTag />
         </div>
         <div className="desktop-toolbar-actions">
-          <button
-            type="button"
-            className="experiment-feedback"
-            onClick={() => openFeedback(EXPERIMENT.AUTOMATIONS)}
-          >
-            Send feedback
-          </button>
+          <SendFeedbackButton experiment={EXPERIMENT.AUTOMATIONS} />
           <button
             type="button"
             className="toolbar-button bordered-button"

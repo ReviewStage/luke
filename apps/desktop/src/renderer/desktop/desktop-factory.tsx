@@ -14,8 +14,8 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { ACTOR_SIZE, ActorMark, CreatorHeard } from "../actor-ref";
 import { useAppCommand } from "../app-commands";
+import { ExperimentTag, SendFeedbackButton } from "../experiment-marks";
 import { MemberDirectory, useMemberDirectory } from "../member-directory";
-import { useOpenFeedback } from "../open-feedback";
 import { NEEDS_YOU } from "../planning/inbox-model";
 import { useMinute } from "../planning/plan-time";
 import { PullRequestMark } from "../planning/pull-request-mark";
@@ -60,7 +60,7 @@ import { planCardOf } from "./plan-card";
  * nothing else moves, and the times count on with the window's minute.
  * Escape leaves it for the plan it stood over, and so does any row of the
  * sidebar. It is an experiment (`EXPERIMENT.FACTORY`): every door to it is
- * gated on the account's switch, and its toolbar says so with a quiet badge
+ * gated on the account's switch, and its toolbar says so with the Experimental tag
  * and Send feedback.
  */
 
@@ -463,7 +463,6 @@ function Summary({
 /** The window's Factory, in the plan's place: the line as it stands now. */
 export function DesktopFactory({ plans }: { plans: PlansControl }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_FACTORY, plans.factoryView.onClose);
-  const openFeedback = useOpenFeedback();
   const now = useMinute();
   const board = useFactoryBoard(plans, now);
   const [root, setRoot] = useState<HTMLElement | null>(null);
@@ -479,16 +478,10 @@ export function DesktopFactory({ plans }: { plans: PlansControl }): React.JSX.El
       <header className="desktop-toolbar">
         <div className="desktop-toolbar-heading">
           <h1 className="desktop-toolbar-title">Factory</h1>
-          <span className="integration-tool-badge experiment-badge">Experimental</span>
+          <ExperimentTag />
         </div>
         <div className="desktop-toolbar-actions">
-          <button
-            type="button"
-            className="experiment-feedback"
-            onClick={() => openFeedback(EXPERIMENT.FACTORY)}
-          >
-            Send feedback
-          </button>
+          <SendFeedbackButton experiment={EXPERIMENT.FACTORY} />
         </div>
       </header>
       <div className="factory-scroll">
