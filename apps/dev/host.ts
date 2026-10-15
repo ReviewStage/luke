@@ -22,6 +22,7 @@ import {
 } from "@luke/service/agents/mac-command";
 import { hostedEnvironment } from "@luke/service/environment";
 import { showPageRejected } from "@luke/service/plans/page-tool";
+import { scriptedModel } from "@luke/service/testing/coder-scripted-model";
 import {
   ACTION_RESULT_STATUS,
   type UnparsedWireValue,
@@ -34,7 +35,6 @@ import { Effect, Result, Schema } from "effect";
 import type { SessionAuth } from "eve/context";
 import { defineTool } from "eve/tools";
 import { runAgent } from "./runtime.js";
-import { scriptedModel } from "./scripted-model.js";
 
 /**
  * The one host every authored file of this eve project shares, over the

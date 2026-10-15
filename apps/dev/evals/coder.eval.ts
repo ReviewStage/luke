@@ -17,6 +17,16 @@ import { CODER_MODEL_FIXTURE } from "@luke/service/agents/coder-host/bounds";
 import { TODOS_SAVED } from "@luke/service/agents/coder-host/todos";
 import { CODER_TOOL } from "@luke/service/agents/coder-host/tool-set";
 import {
+  SCRIPTED_CODER_REPLY,
+  SCRIPTED_DELEGATE,
+  SCRIPTED_DELEGATED_REPLY,
+  SCRIPTED_SKILL_REPLY,
+  SCRIPTED_SKILLS,
+  SCRIPTED_TODOS,
+  SCRIPTED_TODOS_REPLY,
+  SCRIPTED_WORKER_CHOICE,
+} from "@luke/service/testing/coder-scripted-model";
+import {
   EXCESS_KEYS,
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
@@ -31,16 +41,6 @@ import { isTextUIPart, isToolUIPart } from "ai";
 import { eq } from "drizzle-orm";
 import { Effect, ManagedRuntime, Option, Result, Schema } from "effect";
 import { defineEval } from "eve/evals";
-import {
-  SCRIPTED_CODER_REPLY,
-  SCRIPTED_DELEGATE,
-  SCRIPTED_DELEGATED_REPLY,
-  SCRIPTED_SKILL_REPLY,
-  SCRIPTED_SKILLS,
-  SCRIPTED_TODOS,
-  SCRIPTED_TODOS_REPLY,
-  SCRIPTED_WORKER_CHOICE,
-} from "../scripted-model";
 
 /**
  * The whole coding-agent host under eve, end to end: eve's runtime runs a
