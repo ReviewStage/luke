@@ -1,10 +1,13 @@
 import type { CodingAgent, CodingAgentLatestTurn } from "@luke/database/models/coding-agent-store";
+import type { StoredAutomationOrigin } from "@luke/database/schemas/coding-agent";
+import { AUTOMATION_FIRING } from "@luke/features/automation-wire";
 import {
   CODING_AGENT_BRIEF,
   CODING_AGENT_FAILURE,
   CODING_AGENT_STATUS,
   CONTEXT_WINDOW,
   type CodingAgentFailure,
+  type CodingAgentOrigin,
   type CodingAgentPage,
   type CodingAgentStatus,
   type CodingAgentSummary,
@@ -173,6 +176,9 @@ function summaryFields(
       : { disabledServers: agent.disabledServers }),
     ...(starter === undefined ? undefined : { startedBy: { userId: agent.userId, name: starter } }),
     ...(agent.automationId === null ? undefined : { automationId: agent.automationId }),
+    ...(agent.automationOrigin === null
+      ? undefined
+      : { automationName: agent.automationOrigin.name }),
   };
   const started = codingAgentRunStartedAt(standing.turn, {
     createdAt: agent.createdAt,
@@ -195,6 +201,48 @@ export function codingAgentSummary(
   return { id: agent.id, planId: agent.planId, ...summaryFields(agent, standing, now, names) };
 }
 
+/**
+ * The run that started an agent as its page opens on it: the prompt alone,
+ * the issue or pull request a GitHub event named, a webhook's body, and the
+ * member who asked for a run now, named by `names` where their account
+ * stands.
+ */
+function originOf(
+  origin: StoredAutomationOrigin,
+  names: ReadonlyMap<string, string>,
+): CodingAgentOrigin {
+  const { firing } = origin;
+  const subject =
+    firing.kind === AUTOMATION_FIRING.GITHUB && firing.number !== undefined
+      ? {
+          number: firing.number,
+          ...(firing.title === undefined ? undefined : { title: firing.title }),
+          ...(firing.url === undefined ? undefined : { url: firing.url }),
+        }
+      : undefined;
+  const runner =
+    firing.kind === AUTOMATION_FIRING.MANUAL && firing.userId !== undefined
+      ? firing.userId
+      : undefined;
+  const name = runner === undefined ? undefined : names.get(runner);
+  return {
+    prompt: origin.prompt,
+    ...(subject === undefined ? undefined : { subject }),
+    ...(origin.body === undefined ? undefined : { body: origin.body }),
+    ...(runner === undefined || name === undefined
+      ? undefined
+      : { runBy: { userId: runner, name } }),
+  };
+}
+
+/** The accounts an agent's page names: its starter, and whoever asked for the run that started it. */
+export function pageAccounts(agent: CodingAgent): readonly string[] {
+  const firing = agent.automationOrigin?.firing;
+  return firing?.kind === AUTOMATION_FIRING.MANUAL && firing.userId !== undefined
+    ? [agent.userId, firing.userId]
+    : [agent.userId];
+}
+
 /** One agent as its own page reads it, on a plan or with none, its status read at `now`. */
 export function codingAgentPage(
   agent: CodingAgent,
@@ -207,6 +255,9 @@ export function codingAgentPage(
     planId: agent.planId,
     ...summaryFields(agent, standing, now, names),
     automationId: agent.automationId,
+    ...(agent.automationOrigin === null
+      ? undefined
+      : { origin: originOf(agent.automationOrigin, names) }),
     workspaceId: agent.organizationId,
     repository: agent.repository,
   };

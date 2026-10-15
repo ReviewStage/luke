@@ -1,0 +1,50 @@
+{
+  "type": "object",
+  "properties": {
+    "prompt": {
+      "type": "string"
+    },
+    "subject": {
+      "type": "object",
+      "properties": {
+        "number": {
+          "type": "number",
+          "minimum": 0
+        },
+        "title": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "number"
+      ],
+      "additionalProperties": false
+    },
+    "body": {
+      "type": "string"
+    },
+    "runBy": {
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "userId",
+        "name"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "prompt"
+  ],
+  "additionalProperties": false
+}

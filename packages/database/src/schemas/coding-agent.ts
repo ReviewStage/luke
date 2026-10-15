@@ -1,3 +1,4 @@
+import type { AutomationFiring } from "@luke/features/automation-wire";
 import {
   CONTEXT_WINDOW,
   type CodingAgentPullRequest,
@@ -59,6 +60,10 @@ import { conversations } from "./storage.js";
  * since its last turn started (`@Linear`), which its next turn is handed
  * whatever `disabled_servers` says and then takes back to null, so a mention
  * turns a server on for the one turn and never touches the switch.
+ * `automation_origin` is the run of an automation that started the agent,
+ * kept as it stood when the run started (`StoredAutomationOrigin`), so the
+ * agent still names its automation once that automation is deleted and
+ * `automation_id` goes null; null for an agent started by hand.
  * There is no commit column: the
  * checkout's own output is in the transcript, and the pull request on
  * GitHub records its base.
@@ -88,6 +93,21 @@ export interface StoredAgentStep {
   readonly at: number;
 }
 
+/**
+ * The run of an automation that started an agent, as the run started it: the
+ * automation's name, what fired the run, the automation's prompt alone,
+ * without the lines Luke adds of the firing, and a webhook call's body as
+ * its caller sent it, cut as the agent was handed it, where the firing was
+ * one. The body is the agent's task already, so it is kept nowhere the task
+ * is not.
+ */
+export interface StoredAutomationOrigin {
+  readonly name: string;
+  readonly firing: AutomationFiring;
+  readonly prompt: string;
+  readonly body?: string;
+}
+
 export const codingAgent = pgTable(
   "coding_agent",
   {
@@ -102,6 +122,8 @@ export const codingAgent = pgTable(
     automationId: uuid("automation_id").references((): AnyPgColumn => automation.id, {
       onDelete: "set null",
     }),
+    /** The run of an automation that started the agent, as it stood then; null for one started by hand. */
+    automationOrigin: jsonb("automation_origin").$type<StoredAutomationOrigin>(),
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),

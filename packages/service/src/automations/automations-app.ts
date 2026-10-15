@@ -597,7 +597,7 @@ const runEndpoint = /* @__PURE__ */ Effect.fn("web/automationRunEndpoint")(funct
   const recorded = yield* hostedStoreOrUnavailable(
     recordAutomationRun(automation.value, {
       dedupeKey: key,
-      firing: { kind: AUTOMATION_FIRING.MANUAL },
+      firing: { kind: AUTOMATION_FIRING.MANUAL, userId },
       firedAt,
     }),
   );

@@ -89,7 +89,7 @@ import {
   withPublishedCache,
 } from "./coder-host/published.js";
 import { acceptedAgentChoice, startCodingAgent } from "./coder-host/start.js";
-import { codingAgentPage, codingAgentSummary } from "./coder-host/status.js";
+import { codingAgentPage, codingAgentSummary, pageAccounts } from "./coder-host/status.js";
 import { steerCodingAgent } from "./coder-host/steer.js";
 import {
   type EveReach,
@@ -662,7 +662,7 @@ const agentEndpoint = /* @__PURE__ */ Effect.fn("web/agentEndpoint")(function* (
   const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
   const { agent } = yield* reachedAgent(seams, request);
   const standing = yield* standingsOf([agent.conversationId]);
-  const names = yield* hostedStoreOrUnavailable(readAccountNames([agent.userId]));
+  const names = yield* hostedStoreOrUnavailable(readAccountNames(pageAccounts(agent)));
   const now = yield* Clock.currentTimeMillis;
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
     agent: codingAgentPage(agent, standing(agent.conversationId), now, names),
