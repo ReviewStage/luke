@@ -828,7 +828,7 @@ and the erasure call itself runs over the ambient
 `HttpClient` rather than an injected transport, so nothing in `AccountAppSeams`
 carries one — a test provides its own fake `HttpClient` layer instead.
 
-The preferences snapshot carries two parts. `preferences` is the settings
+The preferences snapshot carries three parts. `preferences` is the settings
 snapshot the desktop syncs, replaced whole by a write that names it.
 `codingAgent` is the account's default model and effort for a coding agent —
 what a click on Start runs on — as `{ model, effort }` in AI Gateway's catalog
@@ -850,6 +850,18 @@ that carries only `codingAgent`: the desktop reads the answer's `updatedAt`
 as a snapshot to apply over its own settings, so a row a choice alone opened
 must answer none, or a Mac that never synced would take an empty snapshot
 over the voice it holds.
+
+`experiments` is the third part: each experiment the account turned on or
+back off in Settings › Experimental, keyed by `@luke/settings`'s
+`EXPERIMENT`, as `{ "factory": true }`, and `{}` until it chooses one. It is
+the server's to hold rather than the desktop's to sync: a write is a patch
+whose keys are merged over what stood (`jsonb ||` on the `experiments`
+column), so a Mac that knows fewer experiments never erases another's
+choice, and it never moves `updated_at`. Both directions read it
+tolerantly (`experimentChoicesFrom`): a key this deployment does not list
+is passed over rather than refused, because it is an older or newer build's
+experiment, and only a value that is not a record at all is
+`invalid-request`.
 
 The plan template is the group's third path, `/api/account/plan-template`:
 `GET` answers `{ template, custom }`, the account's own Markdown or

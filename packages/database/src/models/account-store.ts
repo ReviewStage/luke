@@ -1,8 +1,15 @@
 import { CONTEXT_WINDOW, contextWindowSchema } from "@luke/features/coding-agent-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
 import { CODING_AGENT_DEFAULT_CHOICE } from "@luke/features/models-wire";
-import { type AccountPreferences, accountPreferencesFromStored } from "@luke/settings";
-import { eq } from "drizzle-orm";
+import {
+  type AccountPreferences,
+  accountPreferencesFromStored,
+  type ExperimentChoices,
+  experimentChoicesFrom,
+  NO_EXPERIMENTS,
+} from "@luke/settings";
+import { WireValueSchema } from "@luke/wire";
+import { eq, sql } from "drizzle-orm";
 import { type Cause, DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
@@ -16,8 +23,8 @@ import { queueSessionSandboxes, sessionsOf } from "./session-sandbox-cleanup.js"
 /**
  * What the account group reads and writes of an account: the erasure, the
  * cross-device snapshot behind `/api/account/preferences`, which is the
- * settings preferences and the coding agents' default model, effort, and
- * context window beside them, and the plan template behind
+ * settings preferences, the coding agents' default model, effort, and
+ * context window, and the experiments the account turned on, and the plan template behind
  * `/api/account/plan-template`, a column of the same row that neither path
  * reads of the other, whose every change is kept as a revision
  * (`plan-template-revisions.ts`). Every function here is an effect over the ambient `SqlClient`
@@ -33,6 +40,8 @@ export interface AccountPreferencesRow {
   preferences: AccountPreferences;
   /** What a click on Start runs on; the catalog's default until the account chooses. */
   codingAgent: ModelChoice;
+  /** Each experiment the account turned on or back off; one it never chose is absent, and off. */
+  experiments: ExperimentChoices;
   /**
    * When the preferences part was last written; none on a row only a
    * coding-agent choice or a plan template opened. The desktop reads its presence as a snapshot
@@ -45,10 +54,13 @@ export interface AccountPreferencesRow {
  * What a write carries: each part present replaces what stood, and a part
  * left out stands as it was, so the desktop's settings sync and the Start
  * menu's choice each write their own part without reading the other first.
+ * The experiments part is the one patch: its keys are merged over what
+ * stood, so a Mac that knows fewer experiments never erases another's.
  */
 export interface AccountPreferencesWrite {
   preferences?: AccountPreferences;
   codingAgent?: ModelChoice;
+  experiments?: ExperimentChoices;
 }
 
 /** What an account seam answers: an effect over the ambient client, composed into the request that made it. */
@@ -119,6 +131,7 @@ const PREFERENCE_COLUMNS = {
   codingAgentModel: accountPreference.codingAgentModel,
   codingAgentEffort: accountPreference.codingAgentEffort,
   codingAgentContextWindow: accountPreference.codingAgentContextWindow,
+  experiments: accountPreference.experiments,
   updatedAt: accountPreference.updatedAt,
 };
 
@@ -127,6 +140,7 @@ const PreferenceRowSchema = Schema.Struct({
   codingAgentModel: Schema.NullOr(Schema.String),
   codingAgentEffort: Schema.NullOr(Schema.String),
   codingAgentContextWindow: Schema.NullOr(contextWindowSchema),
+  experiments: Schema.NullOr(WireValueSchema),
   updatedAt: Schema.NullOr(InstantColumnSchema),
 });
 
@@ -151,6 +165,8 @@ function snapshotOf(row: PreferenceRow): AccountPreferencesRow {
   return {
     preferences: accountPreferencesFromStored(row.voice ? { voice: row.voice } : {}) ?? {},
     codingAgent,
+    // Note that a stored key no build lists any more reads as nothing, because the experiment it named graduated or went.
+    experiments: experimentChoicesFrom(row.experiments ?? undefined) ?? NO_EXPERIMENTS,
     updatedAt: row.updatedAt ?? undefined,
   };
 }
@@ -188,6 +204,7 @@ const PreferenceWriteSchema = Schema.Struct({
       contextWindow: Schema.optionalKey(contextWindowSchema),
     }),
   ),
+  experiments: Schema.optionalKey(Schema.Record(Schema.String, Schema.Boolean)),
   updatedAt: Schema.Date,
 });
 
@@ -196,6 +213,7 @@ type PreferenceWrite = typeof PreferenceWriteSchema.Type;
 /** The columns a write replaces: each part the write carries, the instant with the preferences part. */
 function writtenColumns(write: PreferenceWrite) {
   return {
+    ...(write.experiments === undefined ? undefined : { experiments: write.experiments }),
     ...(write.voice === undefined ? undefined : { voice: write.voice, updatedAt: write.updatedAt }),
     ...(write.codingAgent === undefined
       ? undefined
@@ -218,11 +236,19 @@ const upsertPreference = SqlSchema.findOne({
   Result: PreferenceRowSchema,
   execute: (write) => {
     const columns = writtenColumns(write);
+    // The experiments are the one part merged rather than replaced: the patch's keys over what stood.
+    const merged =
+      write.experiments === undefined
+        ? columns
+        : {
+            ...columns,
+            experiments: sql`coalesce(${accountPreference.experiments}, '{}'::jsonb) || ${JSON.stringify(write.experiments)}::jsonb`,
+          };
     return Database.use((db) =>
       db
         .insert(accountPreference)
         .values({ userId: write.userId, ...columns })
-        .onConflictDoUpdate({ target: accountPreference.userId, set: columns })
+        .onConflictDoUpdate({ target: accountPreference.userId, set: merged })
         .returning(PREFERENCE_COLUMNS),
     );
   },
@@ -230,7 +256,7 @@ const upsertPreference = SqlSchema.findOne({
 
 /**
  * Writes each part the write carries over what stood — the preferences
- * whole, the coding-agent default whole — and answers the snapshot as it
+ * whole, the coding-agent default whole, the experiments key by key — and answers the snapshot as it
  * now stands. The instant moves with the preferences part alone, so a
  * coding-agent choice never reads to a Mac as a settings snapshot it has
  * to take.
@@ -246,6 +272,7 @@ export function writeAccountPreferences(
       updatedAt,
       ...(write.preferences === undefined ? undefined : { voice: write.preferences.voice ?? null }),
       ...(write.codingAgent === undefined ? undefined : { codingAgent: write.codingAgent }),
+      ...(write.experiments === undefined ? undefined : { experiments: write.experiments }),
     };
     const row = yield* upsertPreference(stored).pipe(
       // An upsert that returned no row is the database breaking its own contract, not an outcome.

@@ -34,7 +34,7 @@ import {
 } from "@luke/service/http/http-effect";
 import { forgetPosthogPersonEffect } from "@luke/service/providers/posthog";
 import { ANY_METHOD, type WebRoutes } from "@luke/service/route";
-import { accountPreferencesFromWire } from "@luke/settings";
+import { accountPreferencesFromWire, experimentChoicesFrom, NO_EXPERIMENTS } from "@luke/settings";
 import { isRecord, type UnparsedWireValue, unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Effect, Layer, Option, Redacted, Result, Schema } from "effect";
@@ -59,12 +59,17 @@ import { retireSessions } from "./hosted/retire-sessions.js";
  * what each endpoint answers is a boolean or the caller's own stored value,
  * never a token or a session id.
  *
- * The preferences snapshot is two parts: the settings preferences the
- * desktop syncs, and the coding agents' default model, effort, and context
- * window beside them, which Settings and the Start menu both write. A write carries either
- * part or both, and a coding-agent choice is accepted only as the catalog
- * accepts it (`hosted/model-catalog.ts`), so what is stored is always a
- * choice a Start could run.
+ * The preferences snapshot is three parts: the settings preferences the
+ * desktop syncs, the coding agents' default model, effort, and context
+ * window beside them, which Settings and the Start menu both write, and the
+ * experiments the account turned on in Settings › Experimental. A write
+ * carries any of them, a coding-agent choice is accepted only as the
+ * catalog accepts it (`hosted/model-catalog.ts`), so what is stored is
+ * always a choice a Start could run, and the experiments are a patch read
+ * as tolerantly as they are answered: a key this deployment does not list
+ * is passed over rather than refused, because it is an older or newer
+ * build's experiment and refusing it would refuse the build's every other
+ * choice too.
  *
  * The plan template is a path of its own rather than a third part of the
  * snapshot, because the desktop syncs the snapshot and applies it over its
@@ -154,6 +159,7 @@ function snapshotAnswer(row: AccountPreferencesRow | undefined) {
   return {
     preferences: row?.preferences ?? {},
     codingAgent: row?.codingAgent ?? CODING_AGENT_DEFAULT_CHOICE,
+    experiments: row?.experiments ?? NO_EXPERIMENTS,
     ...(updatedAt === undefined ? undefined : { updatedAt: updatedAt.getTime() }),
   };
 }
@@ -271,9 +277,10 @@ const acceptedCodingAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
 
 /**
  * PUT: writes each part the body carries — `preferences`, a validated
- * settings snapshot that replaces the stored one whole, and `codingAgent`, a
- * choice the catalog accepts — and answers the snapshot as it then stands.
- * A body carrying neither asks for nothing and is refused.
+ * settings snapshot that replaces the stored one whole, `codingAgent`, a
+ * choice the catalog accepts, and `experiments`, each experiment's on or
+ * off merged over what stood — and answers the snapshot as it then stands.
+ * A body carrying none of them asks for nothing and is refused.
  */
 const preferencesWriteEndpoint = /* @__PURE__ */ Effect.fn("web/preferencesWriteEndpoint")(
   function* (
@@ -289,7 +296,11 @@ const preferencesWriteEndpoint = /* @__PURE__ */ Effect.fn("web/preferencesWrite
     // SAFETY: Request JSON is untrusted boundary data; each part's reader validates it before use.
     const body = parsed as UnparsedWireValue;
     if (!isRecord(body)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-    if (body.preferences === undefined && body.codingAgent === undefined) {
+    if (
+      body.preferences === undefined &&
+      body.codingAgent === undefined &&
+      body.experiments === undefined
+    ) {
       return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
     }
 
@@ -301,6 +312,11 @@ const preferencesWriteEndpoint = /* @__PURE__ */ Effect.fn("web/preferencesWrite
     }
     if (body.codingAgent !== undefined) {
       write.codingAgent = yield* acceptedCodingAgent(seams, userId, body.codingAgent);
+    }
+    if (body.experiments !== undefined) {
+      const experiments = experimentChoicesFrom(body.experiments);
+      if (experiments === undefined) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+      write.experiments = experiments;
     }
 
     const row = yield* hostedStoreOrUnavailable(seams.writePreferences(userId, write));
