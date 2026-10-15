@@ -24,7 +24,7 @@ import { DOCUMENT_NAME, DOCUMENT_PLAN } from "#testing/document-plan";
 import { plansControl } from "#testing/plans-control";
 import { runAppCommand } from "../app-commands";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
-import type { PlansControl } from "../planning/use-plans-tab";
+import { AUTOMATIONS_PAGE, type PlansControl } from "../planning/use-plans-tab";
 import type { SettingsPanelProps } from "../settings/settings-panel";
 import { DesktopShell } from "./desktop-shell";
 import { SIDEBAR_OVERLAY, type SidebarCollapse } from "./sidebar-collapse";
@@ -403,6 +403,7 @@ test("the Automations page stands in the plan's place, titled for the listed wor
   const closed: string[] = [];
   const automationsView = {
     open: true,
+    place: { kind: AUTOMATIONS_PAGE.LIST } as const,
     onOpen: ignore,
     onClose: () => closed.push("closed"),
   };
