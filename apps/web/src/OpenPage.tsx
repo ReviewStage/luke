@@ -54,6 +54,7 @@ const TITLE = {
   [LINK_PLACE.AUTOMATION_RUN]: "Open this run in Luke",
   [LINK_PLACE.FACTORY]: "Open Factory in Luke",
   [LINK_PLACE.SETTINGS]: "Open these settings in Luke",
+  [LINK_PLACE.PERSON]: "Open this profile in Luke",
 } as const satisfies Record<LinkPlaceKind, string>;
 
 /** The landing page, on whichever host served this one. */
