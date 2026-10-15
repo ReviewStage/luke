@@ -25,6 +25,14 @@ function letterOf(name: string): string {
   return first === undefined ? "" : first.segment.toUpperCase();
 }
 
+/** The tile's sizes: a row's glyph, or the sidebar's head. */
+export const TILE_SIZE = {
+  ROW: "row",
+  HEAD: "head",
+} as const;
+
+type TileSize = (typeof TILE_SIZE)[keyof typeof TILE_SIZE];
+
 /** The hue a workspace is drawn in, from 1, read off its id alone. */
 function hueOf(id: string): number {
   let hash = 0;
@@ -32,14 +40,21 @@ function hueOf(id: string): number {
   return (hash % WORKSPACE_HUES) + 1;
 }
 
-/** A workspace's tile, at a row's glyph size. */
+/** A workspace's tile, at a row's glyph size unless said otherwise. */
 export function WorkspaceTile({
   workspace,
+  size = TILE_SIZE.ROW,
 }: {
   workspace: Pick<Workspace, "id" | "name">;
+  size?: TileSize;
 }): React.JSX.Element {
   return (
-    <span className="workspace-tile" data-hue={hueOf(workspace.id)} aria-hidden="true">
+    <span
+      className="workspace-tile"
+      data-size={size}
+      data-hue={hueOf(workspace.id)}
+      aria-hidden="true"
+    >
       {letterOf(workspace.name)}
     </span>
   );

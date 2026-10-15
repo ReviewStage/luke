@@ -615,10 +615,11 @@ function useFloatingSidebar(sidebar: SidebarCollapse): FloatingSidebar {
 }
 
 /**
- * The window's left column: Luke, the way to a new plan, Search, which
- * opens the command palette, every plan of the workspace chosen, headed by
- * the workspace's switcher while an account is signed in
- * (`workspace-switcher.tsx`), and the account's
+ * The window's left column: at its head the workspace chosen, by its tile
+ * and name and who shares it, with the menu that chooses another
+ * (`workspace-switcher.tsx`), or Luke while no workspace is read; the way to
+ * a new plan, Search, which opens the command palette, every plan of the
+ * workspace chosen, and the account's
  * row, whose menu and gear lead to Settings and the rest. Home's row and
  * then the Inbox's follow Search above the rule: Home's goes to the home
  * page, and the Inbox's counts what waits on the developer and opens the
@@ -796,7 +797,13 @@ export function DesktopSidebar({
     >
       <div className="desktop-drag-strip" />
       <HistoryButtons history={history} />
-      <LukeIdentity />
+      {/* The workspace heads the sidebar once one is read, as everything under it is that
+          workspace's; Luke's own head stands until then. */}
+      {plans.signedIn && plans.workspace !== undefined ? (
+        <WorkspaceSwitcher plans={plans} inSight={overlay.inSight} />
+      ) : (
+        <LukeIdentity />
+      )}
 
       <button
         type="button"
@@ -832,9 +839,6 @@ export function DesktopSidebar({
         onOpen={chosen(openInbox)}
       />
       <hr className="sidebar-rule" />
-      {/* The workspace the list is, while an account is signed in; it
-          stands over the scroller, so it never scrolls away. */}
-      {plans.signedIn ? <WorkspaceSwitcher plans={plans} inSight={overlay.inSight} /> : null}
 
       {/* One scroller for both sections, so the pinned plans scroll away
           with the rest rather than holding half the column. */}
