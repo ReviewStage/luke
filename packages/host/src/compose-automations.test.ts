@@ -45,6 +45,9 @@ const SUMMARY = {
   createdAt: 1,
 } as const;
 
+/** A webhook secret as the service would answer it once; synthetic. */
+const SECRET = "whsec-fixture-not-a-secret";
+
 const CREATE = {
   workspaceId: WORKSPACE_ID,
   repositories: ["acme/web"],
@@ -70,24 +73,34 @@ function fakeService() {
     remove: answer("remove", { deleted: true } as const),
     runNow: answer("run", { failure: AUTOMATION_CALL_FAILURE.NOT_FOUND }),
     runs: answer("runs", { runs: [] }),
+    rotateWebhookSecret: answer("rotate", { automation: SUMMARY, webhookSecret: SECRET }),
   };
   return { client, asked };
 }
 
-function subject(options: { signedIn?: boolean; sendsNetwork?: boolean } = {}) {
+function subject(
+  options: { signedIn?: boolean; sendsNetwork?: boolean; clipboardTakes?: boolean } = {},
+) {
   return Effect.gen(function* () {
     const service = fakeService();
+    const clipboard: string[] = [];
     const composer = yield* composeAutomations({
       kernel: { runMode: { sendsNetwork: options.sendsNetwork ?? true } },
       account: { capabilitiesActive: () => options.signedIn ?? true },
       client: service.client,
+      copyText: (text) =>
+        Effect.sync(() => {
+          if (options.clipboardTakes === false) return false;
+          clipboard.push(text);
+          return true;
+        }),
     });
     const call = (method: GatewayMethod, params: WireRecord = {}) => {
       const handler = composer.methods[method];
       assert.ok(handler, `no handler for ${method}`);
       return handler(params, context);
     };
-    return { call, asked: service.asked };
+    return { call, asked: service.asked, clipboard };
   });
 }
 
@@ -149,4 +162,26 @@ it.effect("params of the wrong shape are refused before anything travels", () =>
     assert.equal(refused._tag, "InvalidParamsRefusal");
     assert.deepEqual(asked, []);
   }),
+);
+
+it.effect(
+  "a webhook's fresh secret is put on the clipboard and the window hears only that it was copied, and a clipboard that refuses it answers unanswered",
+  () =>
+    Effect.gen(function* () {
+      const { call, asked, clipboard } = yield* subject();
+      const refusing = yield* subject({ clipboardTakes: false });
+      const named = { automationId: AUTOMATION_ID };
+
+      const copied = yield* call(GATEWAY_METHOD.AUTOMATIONS_COPY_WEBHOOK_SECRET, named);
+      const refused = yield* refusing.call(GATEWAY_METHOD.AUTOMATIONS_COPY_WEBHOOK_SECRET, named);
+
+      assert.deepEqual(copied, { automation: SUMMARY, secretCopied: true });
+      assert.deepEqual(clipboard, [SECRET]);
+      assert.deepEqual(asked, [["rotate", named]]);
+      assert.deepEqual(refused, { failure: AUTOMATION_CALL_FAILURE.UNANSWERED });
+      assert.ok(
+        !JSON.stringify([copied, refused]).includes(SECRET),
+        "no answer carries the secret",
+      );
+    }),
 );

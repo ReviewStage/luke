@@ -28,6 +28,7 @@ export interface GatewayWiringDependencies {
   /** This machine's native capabilities, performed here at the host's ask. */
   node: {
     openExternal: (url: string) => Promise<void>;
+    copyText: (text: string) => void;
   };
 }
 
@@ -68,6 +69,17 @@ export const wireGateway = /* @__PURE__ */ Effect.fn("desktop/wireGateway")(func
           if (!isWireString(url)) return failed("open needs a url");
           return Effect.as(
             Effect.promise(() => dependencies.node.openExternal(url)),
+            {
+              status: NODE_CAPABILITY_STATUS.OK,
+              value: undefined,
+            },
+          );
+        }
+        case HOST_NODE_CAPABILITY.COPY_TEXT: {
+          const { text } = params;
+          if (!isWireString(text)) return failed("copy needs text");
+          return Effect.as(
+            Effect.sync(() => dependencies.node.copyText(text)),
             {
               status: NODE_CAPABILITY_STATUS.OK,
               value: undefined,

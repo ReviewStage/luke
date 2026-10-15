@@ -20,6 +20,7 @@ import {
   AUTOMATION_TARGET,
   AUTOMATION_TRIGGER,
   type AutomationSummary,
+  GITHUB_TRIGGER_EVENT,
 } from "./automation-wire.js";
 
 /**
@@ -234,10 +235,52 @@ test("an automation fired by an event keeps its trigger: its schedule fields sto
   const opened = automationDraft(onEvent, DEFAULTS);
   const rescheduled = { ...opened, schedule: scheduleDraftOf("*/5 * * * *") };
 
-  assert.equal(opened.scheduled, false);
+  assert.equal(opened.triggerKind, AUTOMATION_TRIGGER.GITHUB);
   assert.deepEqual(draftProblems(rescheduled, false, NOW), {});
   assert.deepEqual(draftNextRuns(rescheduled, NOW, 2), []);
   assert.equal(changeOf(rescheduled, onEvent, DEFAULTS), undefined);
+});
+
+test("a trigger written as a GitHub event or a webhook is made and changed as one, and a GitHub trigger keeps the filters it was given", () => {
+  const fresh = {
+    ...automationDraft(undefined, DEFAULTS),
+    name: "Code review",
+    prompt: "Review this pull request.",
+    repository: "acme/ledger",
+  };
+  const filtered = {
+    ...SAVED,
+    trigger: {
+      kind: AUTOMATION_TRIGGER.GITHUB,
+      event: GITHUB_TRIGGER_EVENT.ISSUE_OPENED,
+      labels: ["bug"],
+    },
+  };
+  const opened = automationDraft(filtered, DEFAULTS);
+
+  assert.deepEqual(
+    createRequestOf({ ...fresh, triggerKind: AUTOMATION_TRIGGER.GITHUB }, "workspace-1").trigger,
+    { kind: AUTOMATION_TRIGGER.GITHUB, event: GITHUB_TRIGGER_EVENT.PULL_REQUEST_UPDATED },
+  );
+  assert.deepEqual(
+    changeOf(
+      { ...automationDraft(SAVED, DEFAULTS), triggerKind: AUTOMATION_TRIGGER.WEBHOOK },
+      SAVED,
+      DEFAULTS,
+    ),
+    { trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK } },
+  );
+  assert.deepEqual(
+    changeOf({ ...opened, githubEvent: GITHUB_TRIGGER_EVENT.ISSUE_LABELED }, filtered, DEFAULTS),
+    {
+      trigger: {
+        kind: AUTOMATION_TRIGGER.GITHUB,
+        event: GITHUB_TRIGGER_EVENT.ISSUE_LABELED,
+        labels: ["bug"],
+      },
+    },
+  );
+  assert.ok(!sameDraft(opened, { ...opened, githubEvent: GITHUB_TRIGGER_EVENT.PUSH }));
 });
 
 test("two drafts are the same where every field the editor writes is, the words trimmed", () => {

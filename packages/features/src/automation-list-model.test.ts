@@ -19,6 +19,7 @@ import {
   AUTOMATION_TRIGGER,
   type AutomationRunSummary,
   type AutomationSummary,
+  GITHUB_TRIGGER_EVENT,
 } from "./automation-wire.js";
 import { CODING_AGENT_STATUS } from "./coding-agent-wire.js";
 
@@ -93,6 +94,31 @@ test("a schedule the picker writes is said in words in its zone's city, and any 
   assert.equal(said("0 * * * *", "UTC"), "Every hour · UTC");
   assert.equal(said("0 9 1 * *"), "0 9 1 * * · New York");
   assert.equal(said("*/30 9-17 * * 1-5"), "*/30 9-17 * * 1-5 · New York");
+});
+
+test("a GitHub event is said as what happens, where, and the labels and branches it keeps to, and a webhook as its call", () => {
+  const event = (trigger: Partial<{ labels: string[]; branches: string[] }> = {}) => ({
+    kind: AUTOMATION_TRIGGER.GITHUB,
+    event: GITHUB_TRIGGER_EVENT.PULL_REQUEST_UPDATED,
+    ...trigger,
+  });
+
+  assert.equal(
+    automationTriggerText(event(), ["acme/ledger"]),
+    "When a pull request is opened or updated in acme/ledger",
+  );
+  assert.equal(
+    automationTriggerText(event({ labels: ["bug", "p1"], branches: ["main"] }), [
+      "acme/api",
+      "acme/web",
+      "acme/ledger",
+    ]),
+    "When a pull request is opened or updated in acme/api, acme/web, or acme/ledger labelled bug or p1 on main",
+  );
+  assert.equal(
+    automationTriggerText({ kind: AUTOMATION_TRIGGER.WEBHOOK }, ["acme/ledger"]),
+    "When its webhook is called",
+  );
 });
 
 test("a newest run is working while its agent works, failed where it could not start or its agent failed, and at rest otherwise", () => {

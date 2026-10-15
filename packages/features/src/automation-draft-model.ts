@@ -17,17 +17,22 @@ import {
   type AutomationSummary,
   type AutomationTarget,
   type AutomationTargetKind,
+  type AutomationTrigger,
+  type AutomationTriggerKind,
+  GITHUB_TRIGGER_EVENT,
+  type GitHubTriggerEvent,
 } from "./automation-wire.js";
 import type { ModelChoice } from "./models-wire.js";
 
 /**
- * automation-draft-model.ts -- an automation as its editor holds it while it is written: a schedule in the picker's terms, the task, the repository, and the owner, with what stops it saving and the write that saves it.
+ * automation-draft-model.ts -- an automation as its editor holds it while it is written: its trigger, a schedule in the picker's terms, a GitHub event, or a webhook, the task, the repository, and the owner, with what stops it saving and the write that saves it.
  *
  * The picker writes a schedule as a kind and a time, every hour, every day,
  * on weekdays, or on one day of the week, and keeps a cron it did not write
  * as it was, so opening an automation made elsewhere never rewrites its
- * schedule; one fired by an event rather than a schedule keeps its trigger
- * untouched, since the editor writes schedules alone. The repository the
+ * schedule. A GitHub event is chosen by its kind, any label or branch filter
+ * it was given kept as it was, since the editor does not show them; a
+ * webhook is its kind alone, its secret the service's. The repository the
  * editor shows is the first, where a run starts; any others it was given
  * are kept behind it. A save sends only what changed, so a field the editor does not
  * show, a model or a target, stands as the service holds it. Every word a
@@ -72,8 +77,15 @@ export interface AutomationDraft {
   readonly schedule: ScheduleDraft;
   readonly timezone: string;
   readonly prompt: string;
-  /** Whether it runs on a schedule, which the editor writes, rather than on an event, which it keeps as it was. */
-  readonly scheduled: boolean;
+  /** What fires it: a schedule, a GitHub event, or a call to its webhook. */
+  readonly triggerKind: AutomationTriggerKind;
+  /** The GitHub event it fires on, where that is its trigger; a new draft's is a pull request opened or updated. */
+  readonly githubEvent: GitHubTriggerEvent;
+  /** The label and branch filters a GitHub trigger was given, kept as they were. */
+  readonly githubFilters: {
+    readonly labels?: readonly string[];
+    readonly branches?: readonly string[];
+  };
   /** The repository a run starts in, `owner/name`, or none chosen yet. */
   readonly repository: string | null;
   /** Any other repositories its runs work in, kept behind the first as they were given. */
@@ -161,6 +173,22 @@ function targetOf(draft: AutomationDraft): AutomationTarget {
     : { kind: AUTOMATION_TARGET.NEW_AGENT };
 }
 
+/** The trigger a draft writes: its schedule's cron and zone, its GitHub event with the filters it kept, or its webhook. */
+function triggerOf(draft: AutomationDraft): AutomationTrigger {
+  switch (draft.triggerKind) {
+    case AUTOMATION_TRIGGER.SCHEDULE:
+      return {
+        kind: AUTOMATION_TRIGGER.SCHEDULE,
+        cron: cronOf(draft.schedule),
+        timezone: draft.timezone,
+      };
+    case AUTOMATION_TRIGGER.GITHUB:
+      return { kind: AUTOMATION_TRIGGER.GITHUB, event: draft.githubEvent, ...draft.githubFilters };
+    case AUTOMATION_TRIGGER.WEBHOOK:
+      return { kind: AUTOMATION_TRIGGER.WEBHOOK };
+  }
+}
+
 /** A trimmed text past its bound, or empty, as its field says it; nothing while it reads. */
 function textProblem(text: string, most: number, empty: string, long: string): string | undefined {
   const trimmed = text.trim();
@@ -207,10 +235,9 @@ export function cronOf(schedule: ScheduleDraft): string {
 }
 
 /**
- * The draft an automation opens as, or a new one's from the defaults. A
- * trigger the picker does not write, an event's, opens unscheduled, kept as
- * it was, its schedule fields standing at a new one's only so a draft has
- * them.
+ * The draft an automation opens as, or a new one's from the defaults. One
+ * fired by an event opens with its schedule fields standing at a new one's,
+ * only so a draft has them should its trigger become a schedule.
  */
 export function automationDraft(
   automation: AutomationSummary | undefined,
@@ -222,7 +249,9 @@ export function automationDraft(
       schedule: NEW_SCHEDULE,
       timezone: defaults.timezone,
       prompt: "",
-      scheduled: true,
+      triggerKind: AUTOMATION_TRIGGER.SCHEDULE,
+      githubEvent: GITHUB_TRIGGER_EVENT.PULL_REQUEST_UPDATED,
+      githubFilters: {},
       repository: null,
       alsoRepositories: [],
       owner: defaults.owner,
@@ -234,12 +263,20 @@ export function automationDraft(
   }
   const { trigger } = automation;
   const scheduled = trigger.kind === AUTOMATION_TRIGGER.SCHEDULE;
+  const github = trigger.kind === AUTOMATION_TRIGGER.GITHUB;
   return {
     name: automation.name,
     schedule: scheduled ? scheduleDraftOf(trigger.cron) : NEW_SCHEDULE,
     timezone: scheduled ? trigger.timezone : defaults.timezone,
     prompt: automation.action.prompt,
-    scheduled,
+    triggerKind: trigger.kind,
+    githubEvent: github ? trigger.event : GITHUB_TRIGGER_EVENT.PULL_REQUEST_UPDATED,
+    githubFilters: github
+      ? {
+          ...(trigger.labels === undefined ? undefined : { labels: trigger.labels }),
+          ...(trigger.branches === undefined ? undefined : { branches: trigger.branches }),
+        }
+      : {},
     repository: automation.repositories?.[0] ?? null,
     alsoRepositories: automation.repositories?.slice(1) ?? [],
     owner: automation.scope ?? AUTOMATION_SCOPE.PERSONAL,
@@ -276,7 +313,9 @@ export function draftProblems(
   );
   const read = readSchedule({ cron: cronOf(draft.schedule), timezone: draft.timezone }, now);
   const schedule =
-    draft.scheduled && Result.isFailure(read) ? SCHEDULE_REFUSAL_WORDS[read.failure] : undefined;
+    draft.triggerKind === AUTOMATION_TRIGGER.SCHEDULE && Result.isFailure(read)
+      ? SCHEDULE_REFUSAL_WORDS[read.failure]
+      : undefined;
   const repository =
     !planBacked && draft.repository === null ? "Choose the repository it works in." : undefined;
   const agent =
@@ -294,7 +333,7 @@ export function draftProblems(
 
 /** The next instants a draft's schedule is due after `now`, as many as asked; none for one Luke cannot read. */
 export function draftNextRuns(draft: AutomationDraft, now: Date, count: number): readonly number[] {
-  if (!draft.scheduled) return [];
+  if (draft.triggerKind !== AUTOMATION_TRIGGER.SCHEDULE) return [];
   const schedule = { cron: cronOf(draft.schedule), timezone: draft.timezone };
   const runs: number[] = [];
   let after = now;
@@ -315,11 +354,7 @@ export function createRequestOf(
   const made = {
     workspaceId,
     name: draft.name.trim(),
-    trigger: {
-      kind: AUTOMATION_TRIGGER.SCHEDULE,
-      cron: cronOf(draft.schedule),
-      timezone: draft.timezone,
-    },
+    trigger: triggerOf(draft),
     action: actionOf(draft),
     scope: draft.owner,
     target: targetOf(draft),
@@ -333,6 +368,8 @@ export function sameDraft(one: AutomationDraft, other: AutomationDraft): boolean
   return (
     one.name.trim() === other.name.trim() &&
     one.prompt.trim() === other.prompt.trim() &&
+    one.triggerKind === other.triggerKind &&
+    one.githubEvent === other.githubEvent &&
     cronOf(one.schedule) === cronOf(other.schedule) &&
     one.timezone === other.timezone &&
     one.repository === other.repository &&
@@ -356,17 +393,18 @@ export function changeOf(
   defaults: DraftDefaults,
 ): AutomationChangeParams["change"] | undefined {
   const was = automationDraft(automation, defaults);
-  const cron = cronOf(draft.schedule);
   const scheduleMoved =
-    draft.scheduled && (cron !== cronOf(was.schedule) || draft.timezone !== was.timezone);
+    draft.triggerKind === AUTOMATION_TRIGGER.SCHEDULE &&
+    (cronOf(draft.schedule) !== cronOf(was.schedule) || draft.timezone !== was.timezone);
+  const eventMoved =
+    draft.triggerKind === AUTOMATION_TRIGGER.GITHUB && draft.githubEvent !== was.githubEvent;
+  const triggerMoved = draft.triggerKind !== was.triggerKind || scheduleMoved || eventMoved;
   const actionMoved = draft.prompt.trim() !== was.prompt || !sameChoice(draft.choice, was.choice);
   const targetMoved = draft.target !== was.target || landingAgent(draft) !== landingAgent(was);
   const repositoryMoved = automation.planId === null && draft.repository !== was.repository;
   const change: ChangeDraft = {};
   if (draft.name.trim() !== was.name) change.name = draft.name.trim();
-  if (scheduleMoved) {
-    change.trigger = { kind: AUTOMATION_TRIGGER.SCHEDULE, cron, timezone: draft.timezone };
-  }
+  if (triggerMoved) change.trigger = triggerOf(draft);
   if (actionMoved) change.action = actionOf(draft);
   if (targetMoved && (draft.target === AUTOMATION_TARGET.NEW_AGENT || draft.agentId !== null)) {
     change.target = targetOf(draft);

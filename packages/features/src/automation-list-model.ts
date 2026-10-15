@@ -10,6 +10,8 @@ import {
   type AutomationScope,
   type AutomationSummary,
   type AutomationTrigger,
+  GITHUB_TRIGGER_EVENT,
+  type GitHubTriggerEvent,
 } from "./automation-wire.js";
 import { CODING_AGENT_STATUS, type CodingAgentStatus } from "./coding-agent-wire.js";
 
@@ -20,7 +22,8 @@ import { CODING_AGENT_STATUS, type CodingAgentStatus } from "./coding-agent-wire
  * doubt, so the list falls into the workspace's automations, then the
  * account's personal ones, and each row names its owner besides. A schedule
  * is said in words where its cron is one the picker writes, and as its cron
- * otherwise, with its zone named by its city. Nothing here formats a date:
+ * otherwise, with its zone named by its city; a GitHub event as what happens
+ * and where, and a webhook as its call. Nothing here formats a date:
  * when a row's next run falls is handed back as an instant for the window to
  * say on its own clock.
  */
@@ -50,11 +53,23 @@ const RUN_REASON_WORDS = {
   [AUTOMATION_RUN_REASON.GITHUB_SIGN_IN]: "Its GitHub sign-in had lapsed.",
   [AUTOMATION_RUN_REASON.MODEL]: "Its model is no longer offered. Choose another.",
   [AUTOMATION_RUN_REASON.UNAVAILABLE]: "Coding agents couldn't be reached.",
-  [AUTOMATION_RUN_REASON.REPOSITORY_CHANGED]: "Its plan moved to another repository first.",
+  [AUTOMATION_RUN_REASON.REPOSITORY_CHANGED]:
+    "It no longer works in the repository the event came from.",
   [AUTOMATION_RUN_REASON.PAUSED]: "It was turned off before the run could start.",
   [AUTOMATION_RUN_REASON.MISSED]: "It waited too long to start.",
   [AUTOMATION_RUN_REASON.AGENT_GONE]: "The agent its runs go to is gone or archived.",
 } as const satisfies Record<AutomationRunReason, string>;
+
+/** Each GitHub event as a trigger's sentence says what happens, after "When". */
+const GITHUB_EVENT_WORDS = {
+  [GITHUB_TRIGGER_EVENT.PULL_REQUEST_OPENED]: "a pull request is opened",
+  [GITHUB_TRIGGER_EVENT.PULL_REQUEST_LABELED]: "a pull request is labelled",
+  [GITHUB_TRIGGER_EVENT.PULL_REQUEST_UPDATED]: "a pull request is opened or updated",
+  [GITHUB_TRIGGER_EVENT.ISSUE_OPENED]: "an issue is opened",
+  [GITHUB_TRIGGER_EVENT.ISSUE_LABELED]: "an issue is labelled",
+  [GITHUB_TRIGGER_EVENT.CHECK_FAILED]: "a check fails",
+  [GITHUB_TRIGGER_EVENT.PUSH]: "commits are pushed",
+} as const satisfies Record<GitHubTriggerEvent, string>;
 
 /** What fired a run, as its row's title says it while its agent has no title of its own. */
 const FIRING_WORDS = {
@@ -161,13 +176,32 @@ export function automationGroups(
   })).filter((group) => group.automations.length > 0);
 }
 
-/** A trigger in one line, as a row says what fires it. */
-export function automationTriggerText(trigger: AutomationTrigger): string {
+/** Names in a run of words: "a", "a or b", "a, b, or c". */
+function eitherOf(names: readonly string[]): string {
+  if (names.length <= 2) return names.join(" or ");
+  return `${names.slice(0, -1).join(", ")}, or ${names.at(-1)}`;
+}
+
+/**
+ * A trigger as one sentence, as a row and the editor say what fires it: a
+ * schedule in words, a GitHub event with the repositories it is heard in and
+ * the labels and branches it keeps to, and a webhook's call.
+ */
+export function automationTriggerText(
+  trigger: AutomationTrigger,
+  repositories: readonly string[] = [],
+): string {
   switch (trigger.kind) {
     case AUTOMATION_TRIGGER.SCHEDULE:
       return scheduleText(trigger.cron, trigger.timezone);
-    case AUTOMATION_TRIGGER.GITHUB:
-      return "On a GitHub event";
+    case AUTOMATION_TRIGGER.GITHUB: {
+      const where = repositories.length === 0 ? "" : ` in ${eitherOf(repositories)}`;
+      const labels = trigger.labels ?? [];
+      const branches = trigger.branches ?? [];
+      const labelled = labels.length === 0 ? "" : ` labelled ${eitherOf(labels)}`;
+      const on = branches.length === 0 ? "" : ` on ${eitherOf(branches)}`;
+      return `When ${GITHUB_EVENT_WORDS[trigger.event]}${where}${labelled}${on}`;
+    }
     case AUTOMATION_TRIGGER.WEBHOOK:
       return "When its webhook is called";
   }

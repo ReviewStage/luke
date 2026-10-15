@@ -126,7 +126,7 @@ it.effect("each call goes to its own path, and the list names its workspace in t
 );
 
 it.effect(
-  "a refusal is named in the window's words, with why a repository is out of reach, and a write the service would refuse by shape, or on a trigger other than a schedule, never travels",
+  "a refusal is named in the window's words, with why a repository is out of reach, and a write the service would refuse by shape never travels",
   () =>
     Effect.gen(function* () {
       const unreached = { reason: REPOSITORY_UNREACHED.NOT_CONNECTED, repository: "acme/web" };
@@ -149,17 +149,6 @@ it.effect(
         ask.change({ automationId: AUTOMATION_ID, change: { repositories: ["not a repository"] } }),
         api.layer,
       );
-      const webhook = yield* Effect.provide(
-        ask.create({ ...MADE, trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK } }),
-        api.layer,
-      );
-      const toWebhook = yield* Effect.provide(
-        ask.change({
-          automationId: AUTOMATION_ID,
-          change: { trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK } },
-        }),
-        api.layer,
-      );
 
       assert.deepEqual(outOfReach, {
         failure: AUTOMATION_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
@@ -168,14 +157,38 @@ it.effect(
       assert.deepEqual(gone, { failure: AUTOMATION_CALL_FAILURE.NOT_FOUND });
       assert.deepEqual(unnamed, { failure: AUTOMATION_CALL_FAILURE.INVALID });
       assert.deepEqual(unspelled, { failure: AUTOMATION_CALL_FAILURE.INVALID });
-      assert.deepEqual(
-        [webhook, toWebhook],
-        [
-          { failure: AUTOMATION_CALL_FAILURE.INVALID },
-          { failure: AUTOMATION_CALL_FAILURE.INVALID },
-        ],
-        "the window writes a schedule alone, so no write it makes mints a secret it could not be told",
-      );
       assert.equal(api.requests().length, 2, "no unsendable write traveled");
+    }),
+);
+
+it.effect(
+  "a webhook's secret is minted again by a change asking for it, and the fresh secret is answered for the host alone to copy",
+  () =>
+    Effect.gen(function* () {
+      const api = fakeCloudApi({
+        [`PATCH /api/automations/${AUTOMATION_ID}`]: {
+          answer: () => ({
+            automation: { ...SUMMARY, trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK } },
+            webhookSecret: "a-fresh-secret",
+          }),
+        },
+      });
+
+      const rotated = yield* Effect.provide(
+        client().rotateWebhookSecret({ automationId: AUTOMATION_ID }),
+        api.layer,
+      );
+
+      assert.ok(!("failure" in rotated) && rotated.webhookSecret === "a-fresh-secret");
+      // A window's own write to a webhook travels, its minted secret dropped as every write's is.
+      const toWebhook = yield* Effect.provide(
+        client().change({
+          automationId: AUTOMATION_ID,
+          change: { trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK } },
+        }),
+        api.layer,
+      );
+      assert.ok(!JSON.stringify(toWebhook).includes("a-fresh-secret"));
+      assert.deepEqual(JSON.parse(api.requests()[0]?.body ?? "{}"), { rotateWebhookSecret: true });
     }),
 );
