@@ -8,6 +8,7 @@ import { user } from "@luke/database/schemas/auth";
 import { conversations } from "@luke/database/schemas/storage";
 import { readMessagesByConversationTyped, readTurnById, startPlan } from "@luke/database/testing";
 import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "@luke/service/agents/brain-host/bounds";
+import { REPOSITORY_SHELL_REFUSAL } from "@luke/service/agents/repository-shell";
 import {
   EXCESS_KEYS,
   MESSAGE_AUTHOR,
@@ -27,7 +28,6 @@ import {
   PLANNER_DELEGATE_TOOL,
   planningToolDeclarations,
 } from "../../server/hosted/brain-host/planning";
-import { REPOSITORY_SHELL_REFUSAL } from "../../server/hosted/repository-shell";
 import {
   SCRIPTED_DELEGATE,
   SCRIPTED_NOT_READ_REPLY,

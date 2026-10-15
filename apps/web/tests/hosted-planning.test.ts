@@ -15,6 +15,7 @@ import {
   type BrainHostTurn,
 } from "@luke/service/agents/brain-host/bounds";
 import { readRecentMessages } from "@luke/service/agents/brain-host/context";
+import type { RepositorySandboxDoor } from "@luke/service/agents/repository-shell";
 import type { GitHubApp } from "@luke/service/github/github-app";
 import { modelCatalogOf } from "@luke/service/providers/model-catalog";
 import {
@@ -25,6 +26,7 @@ import {
   openGithubUser,
 } from "@luke/service/testing/github-app-fake";
 import { noNetwork } from "@luke/service/testing/no-network";
+import { sandboxDouble } from "@luke/service/testing/repository-sandbox";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import {
   generateText,
@@ -50,9 +52,7 @@ import { type BrainHost, brainHost } from "../server/hosted/brain-host/host";
 import type { BrainHostSeams } from "../server/hosted/brain-host/production";
 import { memoryRelayState, type RelayStateStore } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
-import type { RepositorySandboxDoor } from "../server/hosted/repository-shell";
 import { stampedEveEvent } from "./support/eve-events";
-import { sandboxDouble } from "./support/repository-sandbox";
 
 /**
  * The planning model as the hosted brain runs it, end to end in one process:

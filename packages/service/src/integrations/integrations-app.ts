@@ -75,8 +75,11 @@ import {
   integrationLandingPath,
   integrationProviderFromWire,
 } from "@luke/features/integration-wire";
-import type { GitHubApp } from "@luke/service/github/github-app";
-import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
+import { Effect, Layer, Option, Redacted, Result } from "effect";
+import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
+import type * as HttpClient from "effect/http/HttpClient";
+import type { GitHubApp } from "../github/github-app.js";
+import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
   HOSTED_REFUSAL,
   type HostedRefusal,
@@ -86,13 +89,14 @@ import {
   hostedRefusalResponse,
   hostedStoreOrUnavailable,
   type UserIdResolver,
-} from "@luke/service/http/http-effect";
+} from "../http/http-effect.js";
+import { ANY_METHOD, type WebRoutes } from "../route.js";
 import {
   GITHUB_GRANT_REFUSAL,
   githubIntegrationStatus,
   githubOffered,
   githubSignInGrant,
-} from "@luke/service/integrations/github-integration";
+} from "./github-integration.js";
 import {
   accountIntegrationConnect,
   CONNECT_SIGN_IN_RESULT,
@@ -100,24 +104,20 @@ import {
   INTEGRATION_CONNECT_FAILURE,
   type IntegrationConnect,
   revokeIntegrationGrant,
-} from "@luke/service/integrations/integration-connect";
+} from "./integration-connect.js";
 import {
   INTEGRATION_ROW_STATUS,
   type IntegrationConnectionRow,
   type IntegrationStoreEffect,
-} from "@luke/service/integrations/integration-store";
-import { INTEGRATION, type IntegrationDefinition } from "@luke/service/integrations/integrations";
+} from "./integration-store.js";
+import { INTEGRATION, type IntegrationDefinition } from "./integrations.js";
 import {
   listMcpTools,
   MCP_TOOLS_FAILURE,
   type McpTool,
   type McpToolsFailure,
   type McpToolsFailureReason,
-} from "@luke/service/integrations/mcp-tools";
-import { ANY_METHOD, type WebRoutes } from "@luke/service/route";
-import { Effect, Layer, Option, Redacted, Result } from "effect";
-import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
-import type * as HttpClient from "effect/http/HttpClient";
+} from "./mcp-tools.js";
 
 /** How long a sign-in may stay under way before its state no longer settles it: Connect's own requests last about as long. */
 const INTEGRATION_SIGN_IN_WINDOW_MS = 15 * 60 * 1000;

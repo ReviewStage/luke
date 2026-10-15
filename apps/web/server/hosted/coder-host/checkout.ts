@@ -1,9 +1,6 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import type { CodingAgent } from "@luke/database/models/coding-agent-store";
 import type { ConversationTarget } from "@luke/database/models/writer";
-import { GitHubApp, noreplyAddress } from "@luke/service/github/github-app";
-import { Data, Effect, Option, type Redacted } from "effect";
-import type * as HttpClient from "effect/http/HttpClient";
 import {
   type CheckoutIdentity,
   cloneRepository,
@@ -11,8 +8,11 @@ import {
   type RepositorySandbox,
   runInSandbox,
   setCheckoutIdentity,
-} from "../repository-shell.js";
-import { agentWorkspace as workspaceOfAgent } from "../workspace-repository.js";
+} from "@luke/service/agents/repository-shell";
+import { GitHubApp, noreplyAddress } from "@luke/service/github/github-app";
+import { agentWorkspace as workspaceOfAgent } from "@luke/service/github/workspace-repository";
+import { Data, Effect, Option, type Redacted } from "effect";
+import type * as HttpClient from "effect/http/HttpClient";
 import { CODER, CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
 
 /**

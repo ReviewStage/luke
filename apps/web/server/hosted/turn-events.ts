@@ -1,4 +1,5 @@
 import type { StoredTurnRecord } from "@luke/database/models/message-reads";
+import { RUN_IN_REPOSITORY_TOOL } from "@luke/service/agents/repository-shell";
 import {
   isSettledToolPartState,
   isStoredToolPart,
@@ -23,8 +24,7 @@ import {
   WITHDRAW_QUESTION_TOOL,
   withdrawnQuestionOf,
 } from "@luke/service/plans/queue-question";
-import { RUN_IN_REPOSITORY_TOOL } from "./repository-shell.js";
-import { SHOW_CODE_TOOL, shownCodeOf } from "./show-code.js";
+import { SHOW_CODE_TOOL, shownCodeOf } from "@luke/service/plans/show-code";
 
 /**
  * One turn's run seams as the voice session hears them while the turn runs:

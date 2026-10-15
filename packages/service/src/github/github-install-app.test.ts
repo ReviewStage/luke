@@ -2,13 +2,13 @@ import assert from "node:assert/strict";
 import { generateKeyPairSync } from "node:crypto";
 import { noDatabase } from "@luke/database/testing/no-database";
 import { GITHUB_INSTALL_STATUS, HOSTED_SERVICE_PATH } from "@luke/features";
-import { GitHubApp, type GitHubAppSettings } from "@luke/service/github/github-app";
-import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
 import { Layer, Redacted } from "effect";
 import { HttpRouter } from "effect/http";
 import { test } from "vitest";
-import { githubInstallApp } from "../server/github-install-app.js";
+import { HOSTED_HTTP_STATUS } from "../http/http.js";
+import { GitHubApp, type GitHubAppSettings } from "./github-app.js";
+import { githubInstallApp } from "./github-install-app.js";
 
 /**
  * The install group over the real `GitHubApp` with GitHub a fake behind the

@@ -20,6 +20,7 @@ import {
 } from "@luke/service/agents/brain-host/eve-sessions";
 import { mentionedContext, mentionedServers } from "@luke/service/agents/mentioned-context";
 import type { GitHubApp } from "@luke/service/github/github-app";
+import { agentWorkspace, workspaceRepository } from "@luke/service/github/workspace-repository";
 import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import {
   HOSTED_REFUSAL,
@@ -28,7 +29,6 @@ import {
 } from "@luke/service/http/http-effect";
 import { Clock, Effect, Option, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
-import { agentWorkspace, workspaceRepository } from "../workspace-repository.js";
 import { codingAgentStatusOf } from "./status.js";
 
 /**

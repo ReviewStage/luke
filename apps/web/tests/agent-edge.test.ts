@@ -12,6 +12,10 @@ import {
   BRAIN_HOST_PRINCIPAL_TYPE,
 } from "@luke/service/agents/brain-host/bounds";
 import { NO_GITHUB, openGithubUser } from "@luke/service/testing/github-app-fake";
+import {
+  CONNECTOR_ASKED_NOTHING,
+  integrationConnectOf,
+} from "@luke/service/testing/integration-connect";
 import { Effect, Layer, Option, Result } from "effect";
 import type { SessionAuth, SessionContext } from "eve/context";
 import { afterAll, test } from "vitest";
@@ -19,7 +23,6 @@ import { type EdgeKit, edgeKit } from "../server/hosted/agent-runtime/edge";
 import { type CoderHost, coderHost } from "../server/hosted/coder-host/host";
 import { CODER_TOOL_SET } from "../server/hosted/coder-host/tool-set";
 import type { WebAgentRun } from "../server/runtime";
-import { CONNECTOR_ASKED_NOTHING, integrationConnectOf } from "./support/integration-connect";
 
 /**
  * A session over another account's conversation is handed nothing under

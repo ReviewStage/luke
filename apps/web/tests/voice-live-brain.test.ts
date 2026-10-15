@@ -28,6 +28,11 @@ import {
   type EveSessions,
   eveSessions,
 } from "@luke/service/agents/brain-host/eve-sessions";
+import {
+  SEARCH_WEB_REFUSAL,
+  SEARCH_WEB_STATUS,
+  SEARCH_WEB_TOOL,
+} from "@luke/service/agents/public-research";
 import { ASK_ORIGIN, TURN_SLOW_STEP } from "@luke/service/core";
 import {
   LIVE_BRAIN_CANCEL,
@@ -52,11 +57,6 @@ import {
   StreamRelay,
 } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
-import {
-  SEARCH_WEB_REFUSAL,
-  SEARCH_WEB_STATUS,
-  SEARCH_WEB_TOOL,
-} from "../server/hosted/public-research";
 import {
   type HostedLiveBrain,
   type HostedLiveBrainOptions,

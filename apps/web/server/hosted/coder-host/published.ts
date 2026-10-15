@@ -20,10 +20,10 @@ import {
   type PullRequestReadFailure,
   pullRequestOfBranch,
 } from "@luke/service/github/pull-requests";
+import { agentWorkspace } from "@luke/service/github/workspace-repository";
 import type { StoreFailure } from "@luke/service/http/store-failure";
 import { Cache, Data, Duration, Effect, Exit, type Layer, Option, type Redacted } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
-import { agentWorkspace } from "../workspace-repository.js";
 import { CODER } from "./bounds.js";
 
 /**

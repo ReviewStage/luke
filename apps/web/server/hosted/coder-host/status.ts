@@ -9,9 +9,9 @@ import {
   type CodingAgentStatus,
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
+import { REPOSITORY_REFUSAL } from "@luke/service/agents/repository-shell";
 import { BRAIN_REQUEST_FAILURE, TURN_STATUS } from "@luke/service/core";
 import { Duration } from "effect";
-import { REPOSITORY_REFUSAL } from "../repository-shell.js";
 import { CODER, CODER_REFUSAL } from "./bounds.js";
 
 /**

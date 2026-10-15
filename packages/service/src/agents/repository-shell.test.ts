@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { getTestDB, startPlan } from "@luke/database/testing";
-import type { GitHubApp } from "@luke/service/github/github-app";
+import { unparsedWire } from "@luke/wire";
+import { Effect, type Layer } from "effect";
+import type * as HttpClient from "effect/http/HttpClient";
+import type { GitHubApp } from "../github/github-app.js";
 import {
   connectWorkspaceGitHub,
   GITHUB_FIXTURE_INSTALLATION_TOKEN,
@@ -9,17 +12,14 @@ import {
   type InstallationFixture,
   openGithubUser,
   type SentToGitHub,
-} from "@luke/service/testing/github-app-fake";
-import { unparsedWire } from "@luke/wire";
-import { Effect, type Layer } from "effect";
-import type * as HttpClient from "effect/http/HttpClient";
+} from "../testing/github-app-fake.js";
+import { type CommandTable, sandboxDouble } from "../testing/repository-sandbox.js";
 import {
   REPOSITORY_SHELL_REFUSAL,
   REPOSITORY_SHELL_STATUS,
   type RepositoryCall,
   runInRepository,
-} from "../server/hosted/repository-shell";
-import { type CommandTable, sandboxDouble } from "./support/repository-sandbox";
+} from "./repository-shell.js";
 
 /**
  * The planning model's shell, run in the session's sandbox on a checkout of

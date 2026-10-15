@@ -170,7 +170,7 @@ opener. A coding agent still runs on its starter's provider keys and GitHub
 token, and its steps are its starter's spend, whichever member messages it.
 
 A workspace's members are read, removed, and left through
-`server/workspaces-app.ts`. `GET /api/workspaces/members?workspaceId=`
+`packages/service/src/accounts/workspaces-app.ts`. `GET /api/workspaces/members?workspaceId=`
 answers a workspace's members to a member under the Mac's OAuth token, read
 through Drizzle (`packages/service/src/accounts/workspace-members.ts`), owners first, then admins,
 then members, since the plugin's own `listMembers` takes a session.
@@ -185,7 +185,7 @@ caller's role and membership again behind Luke's own rules. A workspace the
 account is not in is `not-found`; a role that does not allow it,
 `not-permitted`; a session the service does not take,
 `invalid-token`, which is the Mac's cue to ask for a new one through the
-hand-off page (`desktop-session.html`). `tests/workspaces-app.test.ts` holds
+hand-off page (`desktop-session.html`). `packages/service/src/accounts/workspaces-app.test.ts` holds
 each over the plugin on PGlite, and `packages/service/src/accounts/member-seams.test.ts` the
 plugin's own refusals.
 
@@ -544,7 +544,7 @@ a byte they never asked for.
 
 ## The events and maintenance groups
 
-`server/events-app.ts` and `server/maintenance-app.ts` are two route groups of
+`packages/service/src/events/events-app.ts` and `server/maintenance-app.ts` are two route groups of
 one path each — `server/routes/events.ts` mounts `eventsApp()` and
 `server/routes/maintenance/sweep.ts` mounts `maintenanceApp()` — since
 `vercel.json` already sends each function only the requests for its own path.
@@ -558,7 +558,7 @@ behind a passthrough shaped like the auth group's (`effectPassthrough` in
 `packages/service/src/http/http-effect.ts`): the `HttpServerRequest` becomes the `Request`
 the handler always took, and its `Response` is carried back with
 `HttpServerResponse.raw`.
-`server/events-app.ts` holds one query of its own, the events handler's
+`packages/service/src/events/events-app.ts` holds one query of its own, the events handler's
 PostHog person read (`readPerson`), a `SqlSchema` query whose builder renders
 against the auth schema module and runs on the ambient `SqlClient`.
 
@@ -632,442 +632,6 @@ belong in that loop. It lives in `account_preference.plan_template`
 the preferences part's own, so a row a template opened answers no snapshot.
 `tests/account-plan-template.test.ts` answers the path over a real dialect.
 
-## Integrations
-
-Every agent Luke runs — the planning assistant, the coding agent, and each
-one's declared worker — can use the signed-in account's integrations, each
-through the provider's own hosted MCP server with every tool it lists, the
-ones that write and the ones that answer a credential among them (`AGENTS.md`'s
-carve-out for integrations), and no approval step of Luke's: Executor
-(`https://mcp.executor.sh/mcp`, the apps the developer set up in Executor),
-GitHub (`https://api.githubcopilot.com/mcp/x/all`, every toolset), Granola
-(`https://mcp.granola.ai/mcp`), Linear (`https://mcp.linear.app/mcp`), Mercury
-(`https://mcp.mercury.com/mcp`), Neon (`https://mcp.neon.tech/mcp`), Notion
-(`https://mcp.notion.com/mcp`), PostHog (`https://mcp.posthog.com/mcp?mode=tools`, each tool by its own
-name rather than its default single `exec`),
-Sentry (`https://mcp.sentry.dev/mcp`), Slack (`https://mcp.slack.com/mcp`),
-Supabase (`https://mcp.supabase.com/mcp`), Vercel (`https://mcp.vercel.com`),
-and Y Combinator's Bookface (`https://api.ycombinator.com/v1/mcp`). What a
-grant can do is still the provider's to bound: the scopes its connector asks
-for, and the boxes the developer leaves ticked on the provider's own consent
-page. Executor bounds it further by its own policy on each app's tools: a
-call an app holds for approval, or that needs input, answers the agent with
-the question and a request id, at the plain `/mcp`, its default `model`
-elicitation mode, and the agent asks the developer and calls Executor's
-`resume` with their answer. Its `native` mode would ask over an MCP
-elicitation instead, which eve's client never answers, so Executor's
-connection stays on the plain URL, and the mode is fixed in the grant
-whatever URL a client later opens it at (https://executor.sh/docs/mcp). A connection belongs to the account, so it reaches every plan and
-project the account has. `packages/service/src/integrations/integrations.ts` is the one table of
-providers: the variable each connector's UID is read from, the one naming
-the accounts it is offered to, its MCP server
-and what the model is told of it, and the name its nested calls are stored
-under. Everything below is the same for every provider but GitHub, whose
-grant is the account's own GitHub sign-in.
-
-**GitHub's grant** (`packages/service/src/integrations/github-integration.ts`). GitHub's MCP
-server takes a GitHub App user token, and an account that signed in with
-GitHub already holds one: the Luke GitHub App's, which `GitHubApp.userToken`
-reads off the `account` row and refreshes ("The Luke GitHub App" above). So
-GitHub has no connector, no `integration_connection` row, and no Connect or
-Disconnect (`INTEGRATION_GRANT_OF` in `@luke/features/integration-wire`): the
-statuses route answers it `connected` while that token reads, `disconnected`
-for an account with no usable GitHub sign-in, and `unavailable` on a
-deployment without the App, and a turn is handed GitHub's server wherever the
-App is configured. The token handed to eve is said to expire inside
-`userToken`'s refresh margin, so eve asks again, and the token is refreshed
-if need be, before it lapses. What the agents reach is what the App reaches
-for the account, under the App's permissions, on the repositories it is
-installed on. Settings › Integrations' GitHub row is where an account links its own GitHub, through the connect
-page, or disconnects it, under the Mac's session; that link reaches no
-repository of a workspace's, which comes from the workspace's installation
-alone. The grant ends with the account's GitHub, when the developer
-disconnects or revokes the App or deletes the account.
-
-**Who holds what.** Vercel Connect holds each grant, encrypted, and refreshes
-it; Luke never stores a token. Luke holds one row per account and provider
-in `integration_connection` (`schemas/integration.ts`), which is its own word
-on whether its agents may use the grant: `connected` lets them, anything else
-or no row does not. Connect has no way to ask whether a sign-in finished and
-its SDK caches tokens in process, so this row is also what makes a Disconnect
-take effect regardless of any cache. The migration that made the table copied
-every row of Linear's own table in as Linear's, and the one after it dropped
-that table.
-
-**The routes** (`server/integrations-app.ts`):
-
-- `GET /api/account/integrations` answers `{ integrations: { <provider>:
-  status }, signInFailures?: [{ provider, reason, message? }] }`, each
-  status `connected`, `pending`, `expired`, `disconnected`, or
-  `unavailable` (no connector for it on this deployment). A sign-in still
-  under way, begun within the last fifteen minutes, is settled here by
-  asking Connect for a token afresh, and stands `pending` until it settles,
-  over an `expired` row as over none. One with no token yet is asked after
-  by the `verifier` Connect's `startAuthorization` answered it with, kept in
-  the row's `connect_verifier` beside its state (never logged, never
-  answered): Connect's `GET /v1/connect/result/{verifier}`, the read its
-  CLI polls, under the deployment's OIDC token. One Connect answers
-  `canceled` (the developer cancelled on Connect's page) or `error` (Connect
-  or the provider refused it) is ended here and named once in
-  `signInFailures`, `reason` `canceled` or `error`, with the first line of
-  Connect's error message, cut to 200 characters, where it is shaped like no
-  credential (`credentialFreeLine` in `packages/service/src/integrations/mcp-tools.ts`).
-- `POST /api/account/integrations/{provider}/connect` asks Connect's
-  `startAuthorization` for the account, with Luke's own user id as the
-  subject and `/api/account/integrations/connected?state=…` as the callback,
-  records the sign-in's one-time state and Connect's verifier, and answers
-  the address. The
-  desktop's host opens it through the native node; no window draws it and
-  nothing logs it.
-- `POST /api/account/integrations/{provider}/cancel` ends the sign-in under
-  way and nothing else: a first sign-in's row goes, any other row keeps its
-  status, and no grant is revoked, so a sign-in that completed just before
-  the press stays connected. It answers `{ status }` as it then stands. The
-  desktop's Cancel asks it, never a Disconnect.
-- `POST /api/account/integrations/{provider}/disconnect` deletes the row
-  first, then asks Connect to revoke the grant. A failed revoke is logged and
-  the account is disconnected all the same. Connect revokes at the provider
-  where the provider allows it; otherwise its token stands until it expires,
-  though Luke no longer uses it. Deleting the account revokes every
-  provider's grant the same way.
-- `GET /api/account/integrations/{provider}/tools` answers the tools the
-  provider's server offers the account's agents, `{ tools: [{ name, title?,
-  description, annotations?, parameters? }] }`, for the composer's MCP
-  popover and Settings › Integrations. It reads them as an MCP client does
-  (`packages/service/src/integrations/mcp-tools.ts`: `initialize`, then `tools/list` page by
-  page, JSON or event-stream answers), with the account's token from
-  Connect. A title is the tool's own, else its annotations', the spec's
-  order; a description is kept whole up to 8,000 characters; the hints are
-  kept as the server spelled them; and the parameters are the input
-  schema's top-level arguments, gathered through `allOf` and its own
-  `$defs` references, each its name, its type in a few words,
-  whether it is required, and its description, values, and default where
-  the schema gives them, the required first and 64 at most, and none at all where the schema
-  cannot be read as an object's (`packages/service/src/integrations/mcp-tool-parameters.ts`).
-  None of it is what a model is handed. It is held in the instance's memory
-  for five minutes per account and provider. A provider the account has not
-  connected is refused as unavailable before any token is read.
-- `GET /api/account/integrations/connected` is where Connect returns the
-  browser from any provider. The state names the account and the provider,
-  Connect is asked for a token afresh, and the browser lands on
-  `/integration-connected.html` with the provider and one word: `connected`,
-  `not-completed` (declined or cancelled), `expired`, or `unavailable`. A
-  `not-completed` ends the sign-in, so the desktop's next read finds it no
-  longer pending and says it failed, unless Connect's result names it
-  `canceled` or `error`: that one is left for the next statuses read, which
-  says why as it ends it. The callback carries the state Luke put on it and
-  nothing of Connect's: no error and no reason. A sign-in that fails on
-  Connect's own page ("Connection Failed", a token exchange the provider
-  refused) never sends the browser back here at all, and the statuses read
-  is what learns how it ended, from Connect's result.
-
-The rewrite moves a provider's path segment into the `provider` query
-(`function-rewrites.ts`), as a plan's id is moved into `id`.
-
-**The agents** (`server/hosted/integration-connection.ts`,
-`server/hosted/agent-runtime/connections.ts`). eve hands a declared subagent
-none of its parent's connections, so each of the four agents registers one
-`connections/integrations.ts`: a dynamic connection resolved as each turn
-starts, which hands the turn every server its role's policy has on
-(`agent-runtime/servers.ts`), each the one definition over its provider and
-that agent's own ownership check: the root's `admit`, or a worker's
-`admitDelegated`. The planning agents are handed every integration; a coding
-agent and its worker are handed every one the developer has not switched off
-for that agent. The
-definition's auth is eve's plain `getToken` form, credentialed as the app,
-and the account is the admitted conversation's owner, never the session's
-principal. That matters because a spoken planning turn runs as the
-deployment acting for the account, and eve's user-scoped auth (`connect()`
-from `@vercel/connect/eve`) would refuse it before reading any token. That
-form has no interactive half either, so eve never pauses a run for a
-sign-in. eve opens the client once per model step: the row is read at each
-opening, and again after Connect answers, so a Disconnect takes effect from
-the next step. A connection that cannot be used throws one of
-`integrationUnavailable`'s fixed sentences, which fails only the call that
-tried it; every other tool, and the run, carries on. Workers stay read-only
-in the checkout and change an integration only when their task explicitly
-asks them to.
-
-**Transcripts** (`packages/service/src/integrations/connection-tools.ts`). eve offers a
-connection through `connection_search` and `connection_execute`, and tells a
-remote call as a call of its own nested under the `connection_execute` that
-ran it, named `<provider>__<tool>`, with id `<wrapper>:1`. The relay stores
-the nested call under the provider's fixed name (`linear_remote` for
-Linear), whose input is `{ remoteTool, parentCallId, input }`, and settles it
-with what the provider answered, before the wrapper's own result. Every name
-is in both agents' tool sets whatever any account's connections stand at, so
-a transcript reads back the same after a Disconnect. Rows hold provider
-content (Linear's issues and comments, Notion's pages); no token reaches a
-row. A turn cancelled while a provider was answering leaves the call's
-outcome unknown ("it may have run"), never a failure to retry.
-
-**Provisioning a deployment.** For each provider, from the `apps/web` Vercel
-project's directory:
-
-```
-vercel link
-vercel connect create mcp.executor.sh --name executor          # Executor; corrected below
-vercel connect create mcp.linear.app --name linear             # Linear; prints the connector UID
-vercel connect create mcp.notion.com --name notion             # Notion
-vercel connect create mcp.sentry.dev --name sentry             # Sentry
-vercel connect create granola --name granola                   # Granola
-vercel connect create mcp.mercury.com --name luke-mercury      # Mercury, whose clients' names may not begin with "Mercury"
-# Neon: an OAuth connector over a client registered by hand, below
-vercel connect create posthog --name posthog                   # PostHog
-vercel connect create supabase --name supabase                 # Supabase
-vercel connect create vercel --target mcp --name vercel        # Vercel, through Connect's own Vercel MCP target
-vercel connect create api.ycombinator.com/v1/mcp --name ycombinator   # Y Combinator's Bookface
-vercel connect attach <connector-uid> --yes                    # each of the above: production, preview, and development
-# Slack: an OAuth connector against Slack's MCP authorization server, created and attached below
-```
-
-Each of those is a server that publishes its OAuth discovery and registers
-clients itself, so Connect registers its own client and no app of ours is
-needed; a provider in Connect's catalog is created by its catalog name, the
-rest by their server's address. Vercel's MCP server accepts only the clients
-Vercel has reviewed, which is why it is created through Connect's own Vercel
-target rather than by address. A connector created this way asks for no
-scopes, and the provider grants its own default, which is enough for
-Linear, Notion, Sentry, Granola, and Vercel. Mercury grants a write scope,
-and a refresh token (`offline_access`), only when asked; Y Combinator's
-server asks for `mcp:access`; and PostHog's and Supabase's granular scopes
-are better asked for in full than left to a default. Those four connectors
-ask for every scope their server publishes (`scopes_supported` in its
-`/.well-known/oauth-protected-resource`), set on the connector's
-`data.userAuthorization.scopes`:
-
-```
-vercel connect list                                        # the connector's scl_ id
-vercel api "/v1/connect/connectors/<connector-id>?teamId=<team-id>"   # what it stands at now
-# ~/scopes.json: {"data":{"userAuthorization":{"enabled":true,"scopes":["read","offline_access",…]}}}
-vercel api "/v2/connect/connectors/<connector-id>?teamId=<team-id>" -X PATCH --input ~/scopes.json
-```
-
-Every `vercel api` call on a connector names the team in its URL. The CLI
-run by an agent without a terminal ignores the saved team and `--scope`,
-and takes the team from `VERCEL_ORG_ID` or the directory's link instead,
-so a connector of another team answers 404 ("Connector not found") although
-`vercel connect list`, which picks its team itself, lists it; a `teamId`
-already in the URL is the one the CLI sends. The PATCH answers the
-connector wrapped as `{"connector": {…}}`, the GET bare.
-
-A grant is then bounded by what the developer allows on the provider's
-consent page alone. Mercury's `transactions:request` and `transfers:request`
-scopes request a payment or transfer that an approver still confirms in
-Mercury. Y Combinator's server serves only accounts YC has enabled MCP
-access for.
-
-**Neon's connector.** Neon's registration endpoint refuses a client that
-does not name its `response_types`, which Connect's registration leaves
-out, so Neon's client is registered by hand at that endpoint and the
-connector is a plain OAuth connector over it, with Neon's two scopes
-(Neon's consent page still asks whether to allow writes):
-
-```
-(umask 077; curl -s https://mcp.neon.tech/api/register -H 'content-type: application/json' -d '{"client_name":"Luke","redirect_uris":["https://connect.vercel.com/callback"],"grant_types":["authorization_code","refresh_token"],"response_types":["code"],"token_endpoint_auth_method":"client_secret_post","scope":"read write"}' > ~/neon-client.json)
-# ~/neon.json, from its client_id and client_secret, written under the same umask:
-# {"serverUrl":"https://mcp.neon.tech","clientId":"…","clientSecret":"…","tokenEndpointAuthMethod":"client_secret_post","pkceRequired":true,"userAuthorization":{"enabled":true,"scopes":["read","write"]},"refreshTokens":{"enabled":true}}
-vercel connect create mcp.neon.tech --name neon --connector-type oauth --data @"$HOME/neon.json" --json
-rm ~/neon-client.json ~/neon.json
-vercel connect attach <connector-uid> --yes
-```
-
-**Executor's connector.** Executor's authorization server
-(`https://executor.sh/.well-known/oauth-authorization-server/api/auth`) has
-the issuer `https://executor.sh/api/auth` and its endpoints on
-`app.executor.sh`, publishes no client ID metadata document support, and
-lists `none` among its token endpoint auth methods. So, as for Granola, a
-public client is registered by hand at its registration endpoint and the
-connector is PATCHed to it, with the two scopes the server's challenge names
-(`mcp` and `offline_access`, the latter for a refresh token) and the RFC
-8707 resource its protected-resource document answers
-(`https://mcp.executor.sh/mcp`, the path included), pinned rather than left
-to what Connect derives from the host it was created by, as Y Combinator's
-is. Each grant belongs to the one Executor organization the developer picks
-on its consent page.
-
-```
-(umask 077; curl -s https://app.executor.sh/api/auth/oauth2/register -H 'content-type: application/json' -d '{"client_name":"Luke","redirect_uris":["https://connect.vercel.com/callback"],"grant_types":["authorization_code","refresh_token"],"response_types":["code"],"token_endpoint_auth_method":"none","scope":"mcp offline_access"}' > ~/executor-client.json)
-jq '{data:{clientId:.client_id,tokenEndpointAuthMethod:"none",pkceRequired:true,codeChallengeMethod:"S256",defaultResource:"https://mcp.executor.sh/mcp",userAuthorization:{enabled:true,scopes:["mcp","offline_access"]}}}' ~/executor-client.json > ~/executor-patch.json
-(umask 077; vercel api "/v1/connect/connectors/<connector-id>?teamId=<team-id>" > ~/executor-before.json)   # the backup
-vercel api "/v2/connect/connectors/<connector-id>?teamId=<team-id>" -X PATCH --input ~/executor-patch.json
-rm ~/executor-client.json ~/executor-patch.json
-```
-
-**Granola's, PostHog's, Supabase's, and Y Combinator's connectors.** Each
-is created as above and then corrected in place, its UID unchanged, because
-the client Connect registers for it fails at the provider:
-
-- Granola and PostHog publish client ID metadata documents and
-  `private_key_jwt`, and Connect signs a client assertion whose audience
-  they refuse at the code exchange (Granola: "client_assertion aud must be
-  the authorization server issuer"). Both accept a public client, so one is
-  registered by hand at the provider's registration endpoint
-  (`https://mcp-auth.granola.ai/oauth2/register`,
-  `https://oauth.posthog.com/oauth/register/`) with
-  `"token_endpoint_auth_method":"none"`, and the connector is PATCHed to it:
-  `{"data":{"clientId":"…","tokenEndpointAuthMethod":"none","pkceRequired":true,"codeChallengeMethod":"S256"}}`.
-- Supabase's authorization server publishes no client ID metadata document
-  support and answered Connect's client "Unrecognized client_id". It takes
-  confidential clients alone, so one is registered by hand at
-  `https://api.supabase.com/platform/oauth/apps/register` with
-  `"token_endpoint_auth_method":"client_secret_post"`, and the connector is
-  PATCHed to its `clientId` and `clientSecret` with
-  `"tokenEndpointAuthMethod":"client_secret_post"` and `"pkceRequired":true`.
-- Y Combinator's protected resource is its origin
-  (`https://api.ycombinator.com/.well-known/oauth-protected-resource`
-  answers `"resource":"https://api.ycombinator.com"`, and the path-scoped
-  document is absent), so the RFC 8707 resource Connect derived from
-  `/v1/mcp` was refused ("The requested resource is missing, unsupported,
-  or does not match the authorization grant"). The connector pins it:
-  `{"data":{"defaultResource":"https://api.ycombinator.com"}}`.
-
-Each registration names `https://connect.vercel.com/callback`, the redirect
-a connector without a `redirectUri` of its own replays, and is written under
-`umask 077`, and every registration file is deleted once its PATCH is in,
-as Neon's is, since nothing reads it again and Supabase's holds its secret.
-The backup a PATCH is taken against is written the same way, since a
-connector's read may carry its credentials too, and is kept until the
-provider connects, the one way back if it does not
-(`rm ~/granola-before.json` after a sign-in succeeds).
-Granola's, for example:
-
-```
-(umask 077; curl -s https://mcp-auth.granola.ai/oauth2/register -H 'content-type: application/json' -d '{"client_name":"Luke","redirect_uris":["https://connect.vercel.com/callback"],"grant_types":["authorization_code","refresh_token"],"response_types":["code"],"token_endpoint_auth_method":"none"}' > ~/granola-client.json)
-jq '{data:{clientId:.client_id,tokenEndpointAuthMethod:"none",pkceRequired:true,codeChallengeMethod:"S256"}}' ~/granola-client.json > ~/granola-patch.json
-(umask 077; vercel api "/v1/connect/connectors/<connector-id>?teamId=<team-id>" > ~/granola-before.json)   # the backup
-vercel api "/v2/connect/connectors/<connector-id>?teamId=<team-id>" -X PATCH --input ~/granola-patch.json
-rm ~/granola-client.json ~/granola-patch.json
-```
-
-A sign-in can still fail once right after a connector changes, Granola's
-did, and connects on a second try. Supabase's consent page asks which
-organization to grant before it returns, and a sign-in that waited there
-came back to Connect as "Callback state not found or expired"; signing in
-again straight through connects.
-
-Then set the provider's variable (`EXECUTOR_CONNECTOR_UID`, `GRANOLA_CONNECTOR_UID`,
-`LINEAR_CONNECTOR_UID`, `MERCURY_CONNECTOR_UID`, `NEON_CONNECTOR_UID`,
-`NOTION_CONNECTOR_UID`, `POSTHOG_CONNECTOR_UID`, `SENTRY_CONNECTOR_UID`,
-`SLACK_CONNECTOR_UID`, `SUPABASE_CONNECTOR_UID`, `VERCEL_CONNECTOR_UID`,
-`YCOMBINATOR_CONNECTOR_UID`) to that UID in the `luke-web` project for
-production, preview, and development. The web, `eve`, and `coder` are services of that
-one project (`vercel.json`'s `services`), so its variables and the
-connector's link reach all three, which matters because the agents read
-tokens too. Asking Connect about an arbitrary user id needs the deployment's
-own Vercel OIDC token, which the SDK reads from the request
-(`x-vercel-oidc-token`) or `VERCEL_OIDC_TOKEN`. Keep OIDC enabled for the
-project. For local development, `vercel env pull` writes a
-short-lived `VERCEL_OIDC_TOKEN`. A deployment without a provider's variable
-runs every agent without that provider, and neither Settings nor the
-composer's MCP servers popover draws a row for it. Every token request is
-billed by Connect and rate-limited per team.
-
-**Slack's connector.** Slack's MCP server serves user tokens alone, and only
-ones issued by its own authorization server
-(`https://mcp.slack.com/.well-known/oauth-authorization-server`: Slack's
-`oauth/v2_user/authorize` and `oauth.v2.user.access`). Vercel's managed
-Slack connector (`vercel connect create slack`) signs in through Slack's
-classic app OAuth instead, so its tokens are refused by the server
-(`invalid_token`), and its app's default user scopes mix Sign in with
-Slack's `identity.*` scopes with the rest, which Slack refuses to grant in
-one authorization ("Invalid permissions requested"). Slack's connector is
-therefore a plain OAuth connector against the MCP server's own
-authorization server, credentialed by a Slack app of the team's workspace:
-
-1. The app is internal, never publicly distributed, since the server serves
-   Marketplace and internal apps alone.
-2. Its Redirect URLs (OAuth & Permissions) include Connect's callback,
-   `https://connect.vercel.com/callback`, which is the one a connector uses
-   unless its own `redirectUri` names another (`vercel api
-   /v1/connect/connectors/<connector-id>`).
-3. Its User Token Scopes are the ones below, and none is an `identity.*`
-   scope.
-4. Its Model Context Protocol switch is on (Agents & AI Apps,
-   `https://api.slack.com/apps/<appId>/app-assistant`). Without it the
-   server answers every request 400 ("App is not enabled for Slack MCP
-   server access", which Settings shows on Slack's row), and a token issued
-   before the switch went on keeps that 400, so whoever connected before
-   connects again.
-5. Its App Credentials go into `~/slack-mcp.json`, outside the checkout so
-   an interrupted setup cannot leave the secret where a commit picks it up,
-   and written by hand rather than through a shell command so it stays out
-   of shell history; the connector is created from it and linked to the
-   project:
-
-```json
-{
-  "serverUrl": "https://mcp.slack.com",
-  "clientId": "<Client ID>",
-  "clientSecret": "<Client Secret>",
-  "tokenEndpointAuthMethod": "client_secret_post",
-  "pkceRequired": true,
-  "userAuthorization": {
-    "enabled": true,
-    "scopes": [
-      "search:read.public", "search:read.private", "search:read.mpim", "search:read.im",
-      "search:read.files", "search:read.users", "emoji:read",
-      "channels:history", "groups:history", "mpim:history", "im:history",
-      "channels:read", "groups:read", "mpim:read", "im:read",
-      "chat:write", "reactions:read", "reactions:write",
-      "channels:write", "groups:write", "mpim:write", "im:write",
-      "canvases:read", "canvases:write", "lists:read", "lists:write",
-      "files:read", "files:write", "users:read", "users:read.email"
-    ]
-  },
-  "refreshTokens": { "enabled": true }
-}
-```
-
-```
-vercel connect create mcp.slack.com --name slack-mcp --connector-type oauth --data @"$HOME/slack-mcp.json" --json
-rm "$HOME/slack-mcp.json"
-vercel connect attach mcp.slack.com/slack-mcp --yes   # production, preview, and development
-```
-
-Those are the user scopes every tool of Slack's MCP server needs
-(`https://docs.slack.dev/ai/slack-mcp-server/`: search, read, send and
-schedule messages, react, create conversations, write canvases and lists,
-and upload files), and the Slack app's User Token Scopes hold the same list.
-A scope added later goes on the app first, then on the connector, whose
-`userAuthorization.scopes` a PATCH changes (`vercel api
-/v2/connect/connectors/<connector-id> -X PATCH --input <file>`); a token
-keeps the scopes it was granted, so everyone connected before connects
-again. `SLACK_CONNECTOR_UID` is the UID this create prints
-(`mcp.slack.com/slack-mcp`). A developer who connected under another
-connector disconnects and connects again, because a grant belongs to the
-connector it was made under.
-
-**Offering a provider to some accounts.** An internal Slack app works for
-its own workspace alone, so production offers Slack only to the accounts
-that workspace's people sign in with. Each provider has an optional
-allowlist variable beside its connector's (`<PROVIDER>_ALLOWED_ACCOUNTS`:
-`EXECUTOR_ALLOWED_ACCOUNTS`, `GRANOLA_ALLOWED_ACCOUNTS`, `LINEAR_ALLOWED_ACCOUNTS`,
-`MERCURY_ALLOWED_ACCOUNTS`, `NEON_ALLOWED_ACCOUNTS`,
-`NOTION_ALLOWED_ACCOUNTS`, `POSTHOG_ALLOWED_ACCOUNTS`,
-`SENTRY_ALLOWED_ACCOUNTS`, `SLACK_ALLOWED_ACCOUNTS`,
-`SUPABASE_ALLOWED_ACCOUNTS`, `VERCEL_ALLOWED_ACCOUNTS`,
-`YCOMBINATOR_ALLOWED_ACCOUNTS`): comma-separated entries, each `@domain.com` for
-every account whose email is at that domain, or one exact email, matched
-without regard to case against the email on the account's user row.
-Unset or empty, the provider is offered to every account. The list fails
-closed: one of nothing but blanks offers the provider to nobody, and an
-entry of neither shape (a bare `@`, a domain without its `@`) is ignored
-rather than read as matching anything. The list lives in the project's
-Vercel environment alone, never in code:
-
-```
-vercel env add SLACK_ALLOWED_ACCOUNTS production   # e.g. @example.com,someone@example.org
-```
-
-The server enforces it for every read and agent
-(`accountIntegrationConnect` in `integration-connect.ts`): an account the
-list leaves out is answered `unavailable` by the statuses read, refused by
-Connect and the tools read as a provider with no connector is, lands a
-sign-in it began earlier on `unavailable`, and no agent of its is handed
-the provider's server (`agent-runtime/servers.ts`); the desktop draws no row
-for it. Disconnect and deleting the account still revoke its grant.
-
 ## The plans group
 
 `server/plans-app.ts` is the Mac's Plans tab's route group over the account's
@@ -1119,7 +683,7 @@ account. It names the repository and nothing of it, so it asks GitHub
 nothing. It is a path of its own rather than one under `/api/plans/`, whose
 rewrite reads the next segment as a plan's id.
 
-`server/workspaces-app.ts` answers the account's workspaces
+`packages/service/src/accounts/workspaces-app.ts` answers the account's workspaces
 (`packages/features/src/workspace-wire.ts`). Membership has nothing to do with
 GitHub: a teammate joins a workspace by invitation, and a workspace's
 repositories come only from the one Luke GitHub App installation an owner or
@@ -1151,7 +715,7 @@ A `github_installation` row (`packages/database/src/schemas/github-installation.
 ties one workspace to one installation, keyed on GitHub's installation id and
 account id (both unique), with the account's login and kind and the
 installation's status, which the installation webhook keeps. The connect's
-callback links it (above, under the install group). `tests/workspaces-app.test.ts` holds
+callback links it (above, under the install group). `packages/service/src/accounts/workspaces-app.test.ts` holds
 all of it over the plugin on PGlite and a scripted GitHub.
 
 `GET /api/plans/{id}/work` reads back what the planning model wrote and
@@ -1167,7 +731,7 @@ never read back. `packages/features/src/planning-view.ts` declares the
 answer (`planWorkAnswerSchema`).
 
 `GET /api/plans/{id}/file?path=&first=&last=` reads a window of one file of
-the plan's repository for the Mac's File tab (`server/hosted/plan-file.ts`),
+the plan's repository for the Mac's File tab (`packages/service/src/plans/plan-file.ts`),
 at most 500 lines a window. No sandbox stands outside a planning turn, so it
 reads GitHub's contents API at the head of the default branch, not the
 session's checkout, or with `ref=` at that commit, a whole 40-character
@@ -1312,7 +876,7 @@ from its own repository, led by where they stand in its checkout. A skill
 load reaches the Work tab as `other` named `load_skill`, a kind every desktop
 reads, with the skill as its subject.
 
-The research reads (`server/hosted/public-research.ts`) are `search_web`,
+The research reads (`packages/service/src/agents/public-research.ts`) are `search_web`,
 one query sent to OpenAI's Responses API with its own `web_search` tool on
 Luke's key and the brain's model at low reasoning effort and low search
 context, since the planning turn waits on it, asked to store nothing, and
@@ -1336,7 +900,7 @@ page from at most 1 MB read (`PUBLIC_RESEARCH_BOUNDS`). A search is a paid
 inference on Luke's key, so each one is counted as one of the calling account's
 hosted uses before it is sent; a count that cannot be written is logged and stops
 nothing.
-`tests/public-research.test.ts` holds both against scripted HTTP and DNS.
+`packages/service/src/agents/public-research.test.ts` holds both against scripted HTTP and DNS.
 `tests/hosted-planning.test.ts` runs the scripted model through the host and
 the relay, and the `brain-host` eval runs a plan conversation through eve.
 
@@ -1366,7 +930,7 @@ and opens one about that plan, so only one plan is ever spoken. `tests/voice-ser
 plans and the re-attach over the real store.
 
 The planning model reads source through one tool,
-`run_in_repository({ command })` (`server/hosted/repository-shell.ts`), which
+`run_in_repository({ command })` (`packages/service/src/agents/repository-shell.ts`), which
 runs the command in the planning session's own Vercel Sandbox, the one eve
 opens per session from `eve/sandbox.ts` and hands a tool through
 `ctx.getSandbox()`, on a checkout of the plan's repository. The first call
@@ -1393,8 +957,8 @@ anything it would need: a plan with no repository yet opens no sandbox; a
 repository the workspace's installation no longer reaches, a GitHub that
 could not be read, a sandbox that could not
 be opened or carries no firewall, and a clone that failed, with git's words,
-each check nothing out. `tests/repository-shell.test.ts` holds it over a
-sandbox double at eve's boundary (`tests/support/repository-sandbox.ts`), a
+each check nothing out. `packages/service/src/agents/repository-shell.test.ts` holds it over a
+sandbox double at eve's boundary (`packages/service/src/testing/repository-sandbox.ts`), a
 scripted GitHub, and PGlite, and `tests/hosted-planning.test.ts` drives the
 scripted model's read through the host and the relay, reading the record
 back for the listing and never the token. The old `plan_command` table, the
@@ -2347,7 +1911,7 @@ also refuses a stored default that has since left the catalog. It refuses a
 plan with no repository (`no-repository`, 409) and one the installation of
 the plan's workspace no longer reaches, read at the start rather than when
 the plan named it (`repository-not-reachable`, 403;
-`server/hosted/workspace-repository.ts`), snapshots the
+`packages/service/src/github/workspace-repository.ts`), snapshots the
 plan's document as the Markdown Copy puts on the clipboard
 (`@luke/features/plan-markdown`), makes the agent and its conversation
 (`createCodingAgent`), and opens the eve session under the developer's own

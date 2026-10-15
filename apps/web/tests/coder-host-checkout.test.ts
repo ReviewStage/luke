@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { getTestDB, startPlan } from "@luke/database/testing";
+import { REPOSITORY_SANDBOX_CONTRACT } from "@luke/service/agents/repository-shell";
 import { LINK_OUTCOME } from "@luke/service/github/github-installations";
 import {
   connectWorkspaceGitHub,
@@ -11,10 +12,9 @@ import {
   type InstallationFixture,
   openGithubUser,
 } from "@luke/service/testing/github-app-fake";
+import { sandboxDouble } from "@luke/service/testing/repository-sandbox";
 import { Effect, Option, Redacted } from "effect";
 import { checkOutAgentRepository } from "../server/hosted/coder-host/checkout";
-import { REPOSITORY_SANDBOX_CONTRACT } from "../server/hosted/repository-shell";
-import { sandboxDouble } from "./support/repository-sandbox";
 
 /**
  * A coding agent's checkout: the repository cloned whole into its sandbox

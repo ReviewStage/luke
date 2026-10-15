@@ -1,5 +1,5 @@
+import { REPOSITORY_SANDBOX_CONTRACT } from "@luke/service/agents/repository-shell";
 import { Duration } from "effect";
-import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-shell.js";
 
 /**
  * bounds.ts -- the bounds and names the coding-agent host runs under.

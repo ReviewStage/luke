@@ -8,10 +8,10 @@
 
 import type { CodingAgent } from "@luke/database/models/coding-agent-store";
 import type { ConversationTarget } from "@luke/database/models/writer";
+import type { RepositorySkill } from "@luke/service/agents/repository-skills";
+import { agentWorkspace } from "@luke/service/github/workspace-repository";
 import type { Effect } from "effect";
 import { type AgentSkill, repositorySkills } from "../agent-runtime/skills.js";
-import type { RepositorySkill } from "../repository-skills.js";
-import { agentWorkspace } from "../workspace-repository.js";
 import { CODER } from "./bounds.js";
 import type { CheckoutServices } from "./checkout.js";
 

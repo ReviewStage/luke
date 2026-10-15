@@ -15,7 +15,7 @@ import {
   runSearchWeb,
   SEARCH_WEB_REFUSAL,
   SEARCH_WEB_STATUS,
-} from "../server/hosted/public-research";
+} from "./public-research.js";
 
 /**
  * The planning model's public research at its HTTP boundary: OpenAI's

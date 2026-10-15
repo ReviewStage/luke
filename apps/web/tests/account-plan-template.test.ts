@@ -31,6 +31,10 @@ import {
 import { HostedEnvironment, type HostedEnvironmentValues } from "@luke/service/environment";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import { modelCatalogOf } from "@luke/service/providers/model-catalog";
+import {
+  CONNECTOR_ASKED_NOTHING,
+  integrationConnectOf,
+} from "@luke/service/testing/integration-connect";
 import { noNetwork } from "@luke/service/testing/no-network";
 import { HTTP_METHOD, unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
@@ -39,7 +43,6 @@ import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { accountApp } from "../server/account-app";
 import { anthropicFastAccess } from "../server/hosted/coder-host/account-keys";
-import { CONNECTOR_ASKED_NOTHING, integrationConnectOf } from "./support/integration-connect";
 
 /**
  * The account's plan template, answered by the account group the way its

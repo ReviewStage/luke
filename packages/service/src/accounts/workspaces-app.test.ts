@@ -22,14 +22,6 @@ import {
   workspaceGithubConnectAnswerSchema,
   workspacesAnswerSchema,
 } from "@luke/features/workspace-wire";
-import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "@luke/service/http/http";
-import {
-  type FakeGitHub,
-  GITHUB_FIXTURE_REFUSED_CODE,
-  githubReaching,
-  openGithubUser,
-} from "@luke/service/testing/github-app-fake";
-import { openWorkspacePlugin } from "@luke/service/testing/workspace-plugin";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { eq } from "drizzle-orm";
@@ -37,8 +29,16 @@ import { Cause, Clock, Effect, Layer, Option, Result, type Schema } from "effect
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
-import { githubInstallApp } from "../server/github-install-app";
-import { type WorkspacesAppSeams, workspacesApp } from "../server/workspaces-app";
+import { githubInstallApp } from "../github/github-install-app.js";
+import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
+import {
+  type FakeGitHub,
+  GITHUB_FIXTURE_REFUSED_CODE,
+  githubReaching,
+  openGithubUser,
+} from "../testing/github-app-fake.js";
+import { openWorkspacePlugin } from "../testing/workspace-plugin.js";
+import { type WorkspacesAppSeams, workspacesApp } from "./workspaces-app.js";
 
 /**
  * The account's workspaces, answered by their group the way a function

@@ -22,6 +22,14 @@ import {
   claimRuntimeSession,
   SESSION_STANDING,
 } from "@luke/service/agents/brain-host/conversation";
+import {
+  type ReadWebPageResult,
+  ResearchBudget,
+  runReadWebPage,
+  runSearchWeb,
+  type SearchWebResult,
+} from "@luke/service/agents/public-research";
+import type { RepositorySandbox } from "@luke/service/agents/repository-shell";
 import type { UnparsedWireValue, WireRecord } from "@luke/service/core";
 import { logStoreFailure } from "@luke/service/http/store-failure";
 import { runShowPage, SHOW_PAGE_REFUSAL, showPageRejected } from "@luke/service/plans/page-tool";
@@ -38,14 +46,6 @@ import { delegatedChildOf, type HostAdmission, hostAdmission } from "../agent-ru
 import type { AgentSkill } from "../agent-runtime/skills.js";
 import type { SessionPromptRecord } from "../brain-host/host.js";
 import { type RelayStanding, type RelayStateStore, StreamRelay } from "../brain-host/relay.js";
-import {
-  type ReadWebPageResult,
-  ResearchBudget,
-  runReadWebPage,
-  runSearchWeb,
-  type SearchWebResult,
-} from "../public-research.js";
-import type { RepositorySandbox } from "../repository-shell.js";
 import { anthropicFastAccess } from "./account-keys.js";
 import { CODER, CODER_MODEL_FIXTURE, CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
 import {

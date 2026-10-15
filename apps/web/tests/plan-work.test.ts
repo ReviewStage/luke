@@ -32,12 +32,17 @@ import {
 import { BRAIN_HOST_TURN, RELAY_TURN } from "@luke/service/agents/brain-host/bounds";
 import { openChildConversation } from "@luke/service/agents/brain-host/conversation";
 import {
+  REPOSITORY_SHELL_STATUS,
+  RUN_IN_REPOSITORY_TOOL,
+} from "@luke/service/agents/repository-shell";
+import {
   ASK_ORIGIN,
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
   MESSAGE_ROLE,
   TURN_STATUS,
 } from "@luke/service/core";
+import { SHOW_CODE_TOOL } from "@luke/service/plans/show-code";
 import { isRecord, isWireString, TURN_ORIGIN, type WireRecord, type WireValue } from "@luke/wire";
 import { eq } from "drizzle-orm";
 import { Effect, Fiber, Option } from "effect";
@@ -60,8 +65,6 @@ import {
   plannerTurnsPage,
   plannerWorkerSession,
 } from "../server/hosted/planner-transcript";
-import { REPOSITORY_SHELL_STATUS, RUN_IN_REPOSITORY_TOOL } from "../server/hosted/repository-shell";
-import { SHOW_CODE_TOOL } from "../server/hosted/show-code";
 import { planWorkOf } from "../server/voice/plan-work";
 import { stampedEveEvent } from "./support/eve-events";
 import { FIRST_EVE_TURN } from "./support/eve-turns";

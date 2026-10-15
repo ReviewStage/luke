@@ -1,8 +1,8 @@
-import type { MessageStreamEvent } from "eve/client";
 import {
   REPOSITORY_SHELL_STATUS,
   RUN_IN_REPOSITORY_TOOL,
-} from "../../server/hosted/repository-shell";
+} from "@luke/service/agents/repository-shell";
+import type { MessageStreamEvent } from "eve/client";
 import { stampedEveEvent } from "./eve-events";
 
 /**

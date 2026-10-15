@@ -1,12 +1,12 @@
 import type { DatabaseServices } from "@luke/database/core/query";
-import { readAccountPerson } from "@luke/service/accounts/account-person";
-import { resolveHostedUserId } from "@luke/service/auth/bearer";
-import { HostedEnvironment } from "@luke/service/environment";
-import { type EventsOptions, handleEvents } from "@luke/service/events/events";
-import { effectPassthrough, hostedNotFoundRoute } from "@luke/service/http/http-effect";
-import { ANY_METHOD, type WebRoutes } from "@luke/service/route";
 import { Effect, Layer, Redacted } from "effect";
 import { HttpRouter } from "effect/http";
+import { readAccountPerson } from "../accounts/account-person.js";
+import { resolveHostedUserId } from "../auth/bearer.js";
+import { HostedEnvironment } from "../environment.js";
+import { effectPassthrough, hostedNotFoundRoute } from "../http/http-effect.js";
+import { ANY_METHOD, type WebRoutes } from "../route.js";
+import { type EventsOptions, handleEvents } from "./events.js";
 
 /**
  * The events group: the desktop's analytics ingest, carried to an `HttpApp`

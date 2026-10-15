@@ -19,17 +19,17 @@ import {
 } from "@luke/service/agents/brain-host/bounds";
 import { GitHubApp } from "@luke/service/github/github-app";
 import { GITHUB_APP_SETTINGS, openGithubUser } from "@luke/service/testing/github-app-fake";
+import {
+  CONNECTOR_ASKED_NOTHING,
+  integrationConnectOf,
+  integrationConnectOver,
+} from "@luke/service/testing/integration-connect";
 import { noNetwork } from "@luke/service/testing/no-network";
 import { Effect, Layer, Option, Result } from "effect";
 import type { SessionAuth } from "eve/context";
 import { type ServerStanding, turnServers } from "../server/hosted/agent-runtime/servers";
 import { type CoderHost, coderHost } from "../server/hosted/coder-host/host";
 import { CODER_TOOL_SET } from "../server/hosted/coder-host/tool-set";
-import {
-  CONNECTOR_ASKED_NOTHING,
-  integrationConnectOf,
-  integrationConnectOver,
-} from "./support/integration-connect";
 
 /**
  * The MCP servers an agent's turn is handed, read as the turn starts under

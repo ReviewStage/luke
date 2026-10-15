@@ -9,25 +9,9 @@ import {
   type ShownCode,
   shownCodeSchema,
 } from "@luke/features/plan-wire";
-import { AGENT_TOOL } from "@luke/service/agents/agent-runtime/tools";
-import {
-  ACTION_RESULT_STATUS,
-  type StoredToolPart,
-  TOOL_PART_STATE,
-  type UnparsedWireValue,
-  type WireRecord,
-} from "@luke/service/core";
-import {
-  isSecretFile,
-  SHOWN_FILE_BOUNDS,
-  SHOWN_FILE_REFUSAL,
-  type ShownFileFacts,
-  type ShownFileRefusal,
-  shownFileRefusal,
-  shownLines,
-} from "@luke/service/plans/shown-file";
 import { describeWire } from "@luke/wire/effect";
 import { Data, Effect, Result, Schema } from "effect";
+import { AGENT_TOOL } from "../agents/agent-runtime/tools.js";
 import {
   checkedOutSandbox,
   REPOSITORY_REFUSAL,
@@ -36,7 +20,23 @@ import {
   type RepositoryRefusal,
   type RepositoryShellServices,
   runInSandbox,
-} from "./repository-shell.js";
+} from "../agents/repository-shell.js";
+import {
+  ACTION_RESULT_STATUS,
+  type StoredToolPart,
+  TOOL_PART_STATE,
+  type UnparsedWireValue,
+  type WireRecord,
+} from "../core.js";
+import {
+  isSecretFile,
+  SHOWN_FILE_BOUNDS,
+  SHOWN_FILE_REFUSAL,
+  type ShownFileFacts,
+  type ShownFileRefusal,
+  shownFileRefusal,
+  shownLines,
+} from "./shown-file.js";
 
 /**
  * show-code.ts -- the planning model's `show_code` tool: code of the plan's repository put on the developer's screen as Luke talks about it.

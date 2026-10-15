@@ -45,6 +45,7 @@ import {
   wireUuidSchema,
 } from "@luke/service/core";
 import type { GitHubApp } from "@luke/service/github/github-app";
+import { workspaceRepository } from "@luke/service/github/workspace-repository";
 import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import {
   HOSTED_REFUSAL,
@@ -57,12 +58,15 @@ import {
   readJsonBodyEffect,
   type UserIdResolver,
 } from "@luke/service/http/http-effect";
+import { readPlanFile } from "@luke/service/plans/plan-file";
 import {
   PLAN_SAVE_REFUSAL,
   PLAN_SAVE_STATUS,
   restoreRevision,
   saveDeveloperEdit,
 } from "@luke/service/plans/plan-notes";
+import { readPlanSkills } from "@luke/service/plans/plan-skills";
+import { readPlanTree } from "@luke/service/plans/plan-tree";
 import type { ModelCatalog } from "@luke/service/providers/model-catalog";
 import { ANY_METHOD, type WebRoutes } from "@luke/service/route";
 import { readEither } from "@luke/wire/effect";
@@ -84,9 +88,6 @@ import {
   transcriptPast,
 } from "./hosted/coder-host/transcript.js";
 import { withPlanAgents } from "./hosted/plan-agents.js";
-import { readPlanFile } from "./hosted/plan-file.js";
-import { readPlanSkills } from "./hosted/plan-skills.js";
-import { readPlanTree } from "./hosted/plan-tree.js";
 import { readPlanCode, readPlanWork } from "./hosted/plan-work-store.js";
 import {
   PLANNER_POLL,
@@ -97,7 +98,6 @@ import {
   plannerTurnsPage,
   plannerWorkerSession,
 } from "./hosted/planner-transcript.js";
-import { workspaceRepository } from "./hosted/workspace-repository.js";
 
 /**
  * plans-app.ts -- the Mac Plans tab's named plans: list, start, open, change, and delete.
@@ -132,11 +132,11 @@ import { workspaceRepository } from "./hosted/workspace-repository.js";
  * (`hosted/plan-work-store.ts`). `/api/plans/{id}/file` is a window of one
  * file of the plan's repository for the File tab, read from GitHub as it
  * stands now, or at the commit an inbox item's code reference pins, through
- * the App, under the rule `show_code` is held to (`hosted/plan-file.ts`), and `/api/plans/{id}/tree` one folder of it for
+ * the App, under the rule `show_code` is held to (`packages/service/src/plans/plan-file.ts`), and `/api/plans/{id}/tree` one folder of it for
  * the tree beside that tab, listed where and as the file is read
- * (`hosted/plan-tree.ts`); `/api/plans/{id}/skills` is the skills a
+ * (`packages/service/src/plans/plan-tree.ts`); `/api/plans/{id}/skills` is the skills a
  * developer may choose of that repository, read where and as the file is
- * (`hosted/plan-skills.ts`). `/api/plans/{id}/revisions` is the plan's history
+ * (`packages/service/src/plans/plan-skills.ts`). `/api/plans/{id}/revisions` is the plan's history
  * for the History tab, a page at a time; `/api/plans/{id}/revisions/{seq}`
  * one revision's content beside the one before it, both formatted under the
  * plan's name as it stands; and `/api/plans/{id}/revisions/{seq}/restore`
@@ -165,7 +165,7 @@ import { workspaceRepository } from "./hosted/workspace-repository.js";
  *
  * Starting a plan otherwise names nothing of the developer's Mac: the
  * planning model reads the repository in its own sandbox on the service
- * (`hosted/repository-shell.ts`), and no route here carries a command.
+ * (`packages/service/src/agents/repository-shell.ts`), and no route here carries a command.
  */
 
 const PLANS_PATH = {
@@ -302,7 +302,7 @@ const idOf = /* @__PURE__ */ Effect.fnUntraced(function* (
 /**
  * The repository as the row keeps it: null where none was named, or the
  * full name as GitHub spells it once the App confirms the workspace's
- * installation reaches it (`hosted/workspace-repository.ts`). The workspace
+ * installation reaches it (`packages/service/src/github/workspace-repository.ts`). The workspace
  * is read only where a repository is named.
  */
 const reachableRepository = /* @__PURE__ */ Effect.fnUntraced(function* (

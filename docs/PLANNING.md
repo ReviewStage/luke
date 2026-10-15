@@ -373,7 +373,7 @@ sidebar does (`desktop/side-panel.tsx`, `planning/use-side-panel.ts`).
   one per file, the snippet's lines lit; opening a file already open chooses
   its tab and moves the lit lines, and the "+" lists every file shown under
   Files. The file is read a window of 500 lines at a time as the tab scrolls
-  (`GET /api/plans/{id}/file`, `hosted/plan-file.ts`), from GitHub at the
+  (`GET /api/plans/{id}/file`, `packages/service/src/plans/plan-file.ts`), from GitHub at the
   head of the default branch through the Luke GitHub App, since no checkout
   stands outside a call, under the rule `show_code` keeps
   (`packages/service/src/plans/shown-file.ts`); a file changed since is drawn as it is now, and
@@ -929,7 +929,7 @@ and so does the code it puts on the developer's screen. What only the Mac
 has, it reaches with `run_on_mac` (below).
 `run_in_repository` runs one bash command in a Vercel Sandbox the planning
 conversation's eve session owns (`apps/web/eve/sandbox.ts`), on a checkout of
-the plan's GitHub repository (`apps/web/server/hosted/repository-shell.ts`).
+the plan's GitHub repository (`packages/service/src/agents/repository-shell.ts`).
 The first call that finds no checkout of the plan's repository makes one, at
 the repository's current default branch and one commit deep, and later calls
 reuse it; a plan whose repository changed is checked out again. Before the
@@ -946,7 +946,7 @@ repository is no longer reachable through the App, or the checkout failed;
 in every case nothing of the code has been read, and Luke never describes it
 as read.
 
-`show_code` (`apps/web/server/hosted/show-code.ts`) reads from the same
+`show_code` (`packages/service/src/plans/show-code.ts`) reads from the same
 checkout: the file named and a window of at most 200 lines around the lines
 pointed at, each line cut to 400 characters, with the path resolved inside
 the checkout root and a `.env` file never read. The call carries a note of
@@ -1276,7 +1276,7 @@ changes when a check is run, not when one is planned.
   - the checkout of a plan's repository at its default branch, one commit
     deep, with the token at the firewall for the clone alone, and every
     refusal (no repository, not reachable, sign-in required, no sandbox or
-    firewall) checking nothing out (`apps/web/tests/repository-shell.test.ts`);
+    firewall) checking nothing out (`packages/service/src/agents/repository-shell.test.ts`);
     a coding agent's checkout on the same terms
     (`apps/web/tests/coder-host-checkout.test.ts`); and the Start, list,
     messages, and Stop routes over a fake eve
@@ -1325,7 +1325,7 @@ changes when a check is run, not when one is planned.
 - **A live GitHub checkout.** No repository has been checked out in a real
   Vercel Sandbox through the Luke GitHub App outside the fakes: the shell is
   held against a sandbox double at eve's boundary and a scripted GitHub
-  (`apps/web/tests/repository-shell.test.ts`), and the eve build's sandbox
+  (`packages/service/src/agents/repository-shell.test.ts`), and the eve build's sandbox
   prewarm has not been run on Vercel.
 - **A coding agent.** No coding agent has run against a real provider, a
   real checkout, a push, or a pull request. The coder eval

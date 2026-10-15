@@ -14,6 +14,18 @@ import { AGENT_ROLE } from "@luke/service/agents/agent-runtime/role";
 import { AGENT_TOOL, toolsOf } from "@luke/service/agents/agent-runtime/tools";
 import { COMMAND_DESCRIPTION_INSTRUCTION } from "@luke/service/agents/command-description";
 import { RUN_ON_MAC_TOOL, runOnMacTool } from "@luke/service/agents/mac-command";
+import {
+  READ_WEB_PAGE_TOOL,
+  type ResearchCall,
+  runReadWebPage,
+  runSearchWeb,
+  SEARCH_WEB_TOOL,
+} from "@luke/service/agents/public-research";
+import {
+  type RepositoryCall,
+  RUN_IN_REPOSITORY_TOOL,
+  runInRepository,
+} from "@luke/service/agents/repository-shell";
 import { ACTION_RESULT_STATUS, wireValidatedTool } from "@luke/service/core";
 import type { GitHubApp } from "@luke/service/github/github-app";
 import { connectionToolEntries } from "@luke/service/integrations/connection-tools";
@@ -29,6 +41,7 @@ import {
   runWithdrawQuestion,
   WITHDRAW_QUESTION_TOOL,
 } from "@luke/service/plans/queue-question";
+import { runShowCode, SHOW_CODE_TOOL } from "@luke/service/plans/show-code";
 import type { ModelCatalog } from "@luke/service/providers/model-catalog";
 import type { UnparsedWireValue, WireRecord } from "@luke/wire";
 import { emitJsonSchema } from "@luke/wire/effect";
@@ -47,19 +60,6 @@ import {
   runStartCodingAgent,
   START_CODING_AGENT_TOOL,
 } from "../coding-agent-tools.js";
-import {
-  READ_WEB_PAGE_TOOL,
-  type ResearchCall,
-  runReadWebPage,
-  runSearchWeb,
-  SEARCH_WEB_TOOL,
-} from "../public-research.js";
-import {
-  type RepositoryCall,
-  RUN_IN_REPOSITORY_TOOL,
-  runInRepository,
-} from "../repository-shell.js";
-import { runShowCode, SHOW_CODE_TOOL } from "../show-code.js";
 
 /**
  * planning.ts -- what a plan conversation's turns run under: the planning model's instructions, its document, and its tools.
