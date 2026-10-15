@@ -207,6 +207,9 @@ test("two agents of one name each keep a face, told apart by their ids, and agen
 
   assert.equal(editors([edit("agent-1"), edit("agent-2"), edit("agent-1")]).length, 2);
   assert.equal(editors([edit(), edit()]).length, 1);
+  // An edit with no id never hides two agents its name matches, whichever section stands first.
+  assert.equal(editors([edit(), edit("agent-1"), edit("agent-2")]).length, 3);
+  assert.equal(editors([edit("agent-1"), edit("agent-2"), edit()]).length, 3);
 });
 
 test("a plan's creator is the member it names, or, from a service that names only the owner's id, the reader as their account or a member the read lists, and never a face with no name", () => {

@@ -367,14 +367,21 @@ export function activityWords(activity: ActorActivity): string {
   return `Edited ${NAMES.format(named)}`;
 }
 
-/** Whether two agents are one: by their ids where both carry one, since two agents may share a title, and by name only where an older service named no id. */
+/**
+ * Whether two agents are one: by their ids where both carry one, since two
+ * agents may share a title, and by name only between two an older service
+ * named no id for. Note that an agent with an id is never one with an agent
+ * without, because a name matching each of two agents that differ by id
+ * would make the pile hide one of them, depending on which section stood first.
+ */
 function sameAgent(
   one: Extract<Actor, { kind: typeof ACTOR_KIND.AGENT }>,
   other: Extract<Actor, { kind: typeof ACTOR_KIND.AGENT }>,
 ): boolean {
-  if (one.agentId !== undefined && other.agentId !== undefined)
-    return one.agentId === other.agentId;
-  return one.name === other.name;
+  if (one.agentId === undefined || other.agentId === undefined) {
+    return one.agentId === other.agentId && one.name === other.name;
+  }
+  return one.agentId === other.agentId;
 }
 
 /** Whether two actors are one: a member by their id, an agent as `sameAgent` says, an automation by its name, someone by why and the name they go by. */
