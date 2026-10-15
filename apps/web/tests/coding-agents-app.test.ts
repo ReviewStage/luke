@@ -37,6 +37,7 @@ import {
 } from "@luke/features/coding-agent-wire";
 import {
   INBOX_BLOCK,
+  INBOX_CURSOR_START,
   INBOX_IMAGE_TYPE,
   INBOX_REPLY,
   INBOX_RESPONSE,
@@ -126,6 +127,7 @@ const ORIGIN = "https://luke.test";
 const PLAN_AGENTS = "/api/plans/agents";
 const AGENT_MESSAGES = "/api/agents/messages";
 const AGENT = "/api/agents/agent";
+const AGENT_INBOX = "/api/agents/inbox";
 /** One plan, served by the plans group, whose delete stops the plan's agents through the same Stop. */
 const PLAN = "/api/plans/plan";
 
@@ -999,6 +1001,44 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           [null, null, plan.workspaceId],
         );
         assert.equal(planless.agent.status, CODING_AGENT_STATUS.COMPLETED);
+        assert.deepEqual(
+          outside,
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+      }),
+  );
+
+  it.effect(
+    "an agent's inbox reads by the agent for a member of its workspace, an agent with no plan among them, and as not found for anyone else",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, other, plan, agent, ask } = yield* startedAgent(eve, { running: false });
+        yield* Database.use((db) =>
+          db
+            .update(codingAgent)
+            .set({ planId: null, organizationId: plan.workspaceId })
+            .where(eq(codingAgent.id, agent.id)),
+        );
+        const posted = yield* postInboxItem(
+          { userId: owner, planId: null, agentId: agent.id },
+          { key: "which-queue", title: "Which queue?", response: { type: INBOX_RESPONSE.TEXT } },
+        );
+        assert.ok(Result.isSuccess(posted));
+
+        const read = readAnswer(
+          inboxAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(AGENT_INBOX, owner, { id: agent.id, after: INBOX_CURSOR_START })),
+        );
+        const outside = yield* ask(
+          request(AGENT_INBOX, other, { id: agent.id, after: INBOX_CURSOR_START }),
+        );
+
+        assert.deepEqual(
+          read.items.map((item) => [item.id, item.title]),
+          [[posted.success.id, "Which queue?"]],
+        );
         assert.deepEqual(
           outside,
           refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),

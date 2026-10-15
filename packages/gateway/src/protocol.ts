@@ -133,6 +133,7 @@ export const GATEWAY_METHOD = {
   DICTATION_TRANSCRIBE: "dictation.transcribe",
   /** One plan's inbox past a cursor: every item its coding agents posted for the developer, held open by the service while nothing changed. */
   CODING_AGENTS_INBOX: "codingAgents.inbox",
+  CODING_AGENTS_AGENT_INBOX: "codingAgents.agentInbox",
   /** One item of a plan's inbox answered against the revision the panel drew, under the panel's own key; the item as it then stands and whether the answer was taken, or why there is no answer. */
   CODING_AGENTS_INBOX_ANSWER: "codingAgents.inboxAnswer",
   /** Where every one of the account's integrations stands, read from the service now. */

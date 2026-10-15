@@ -120,6 +120,10 @@
     "dest": "/api/default.js?route=agents/changes&id=$1"
   },
   {
+    "src": "/api/agents/([^/]+)/inbox",
+    "dest": "/api/default.js?route=agents/inbox&id=$1"
+  },
+  {
     "src": "/api/agents/([^/]+)/terminals/([^/]+)",
     "dest": "/api/default.js?route=agents/terminal&id=$1&terminal=$2"
   },

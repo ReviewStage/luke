@@ -93,6 +93,7 @@ import {
 import { type RepositoryUnreached, repositoryNotReachableSchema } from "./repository-reach-wire.js";
 import {
   agentChangesPath,
+  agentInboxPath,
   agentMessagesPath,
   agentPath,
   agentPullRequestPath,
@@ -649,6 +650,17 @@ export class HostedCodingAgentClient {
   ): Effect.Effect<CodingAgentInboxAnswerView, never, HttpClient.HttpClient> {
     return Effect.flatMap(
       this.#held.send({ method: HTTP_METHOD.GET, path: planInboxPath(planId, after) }),
+      (answer) => readAnswer(answer, inboxAnswerSchema, ROW_REFUSALS),
+    );
+  }
+
+  /** One agent's inbox past the cursor, an agent with no plan as much as one on a plan: every item it posted, held by the service while nothing changed. */
+  agentInbox(
+    agentId: string,
+    after: string,
+  ): Effect.Effect<CodingAgentInboxAnswerView, never, HttpClient.HttpClient> {
+    return Effect.flatMap(
+      this.#held.send({ method: HTTP_METHOD.GET, path: agentInboxPath(agentId, after) }),
       (answer) => readAnswer(answer, inboxAnswerSchema, ROW_REFUSALS),
     );
   }

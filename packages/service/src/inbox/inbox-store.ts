@@ -378,10 +378,11 @@ const closeItem = SqlSchema.findOneOption({
     ),
 });
 
-/** Where a read looks: one plan's items, any member's agents' alike, or one agent's own, under the member who started it. */
+/** Where a read looks: one plan's items, any member's agents' alike; one agent's own, under the member who started it; or one agent's, as any member of its workspace reads them. */
 const INBOX_SCOPE = {
   PLAN: "plan",
   AGENT: "agent",
+  AGENT_OF_WORKSPACE: "agent-of-workspace",
 } as const;
 
 const ScopeSchema = Schema.Struct({
@@ -392,11 +393,16 @@ const ScopeSchema = Schema.Struct({
 
 type InboxScope = typeof ScopeSchema.Type;
 
-/** The rows a scope names: the plan's, where the account is a member of its workspace, or the agent's, under the account that started it. */
+/** The rows a scope names: the plan's or the agent's where the account is a member of their workspace, or the agent's under the account that started it. */
 function inScope(scope: InboxScope) {
-  return scope.scope === INBOX_SCOPE.PLAN
-    ? and(eq(inboxItem.planId, scope.id), itemReachableBy(scope.userId))
-    : and(eq(inboxItem.agentId, scope.id), eq(inboxItem.userId, scope.userId));
+  switch (scope.scope) {
+    case INBOX_SCOPE.PLAN:
+      return and(eq(inboxItem.planId, scope.id), itemReachableBy(scope.userId));
+    case INBOX_SCOPE.AGENT_OF_WORKSPACE:
+      return and(eq(inboxItem.agentId, scope.id), itemReachableBy(scope.userId));
+    case INBOX_SCOPE.AGENT:
+      return and(eq(inboxItem.agentId, scope.id), eq(inboxItem.userId, scope.userId));
+  }
 }
 
 /** The order every read keeps: the latest changed first, and by id among those changed at one instant, so two reads of the same rows agree. */
@@ -834,12 +840,35 @@ export function planInboxItems(
   return scopeItems({ userId, scope: INBOX_SCOPE.PLAN, id: planId }, INBOX_BOUNDS.MAX_ITEMS_READ);
 }
 
+/** One agent's items as any member of its workspace reads them, an agent with no plan as much as one on a plan: every open one, then the latest settled. */
+export function memberAgentInboxItems(
+  userId: string,
+  agentId: string,
+): InboxStoreEffect<readonly InboxItem[]> {
+  return scopeItems(
+    { userId, scope: INBOX_SCOPE.AGENT_OF_WORKSPACE, id: agentId },
+    INBOX_BOUNDS.MAX_ITEMS_READ,
+  );
+}
+
+/** Where each of the agent's items stands, the same items `memberAgentInboxItems` reads and none of their words: what a held read compares between looks. */
+export function memberAgentInboxStamps(
+  userId: string,
+  agentId: string,
+): InboxStoreEffect<readonly InboxStamp[]> {
+  return scopeStamps({ userId, scope: INBOX_SCOPE.AGENT_OF_WORKSPACE, id: agentId });
+}
+
 /** Where each of the plan's items stands, the same items `planInboxItems` reads and none of their words: what a held read compares between looks. */
 export function planInboxStamps(
   userId: string,
   planId: string,
 ): InboxStoreEffect<readonly InboxStamp[]> {
-  const scope = { userId, scope: INBOX_SCOPE.PLAN, id: planId };
+  return scopeStamps({ userId, scope: INBOX_SCOPE.PLAN, id: planId });
+}
+
+/** Where the scope's items stand: every open one, then the latest settled, as `scopeItems` reads them. */
+function scopeStamps(scope: InboxScope): InboxStoreEffect<readonly InboxStamp[]> {
   return Effect.map(
     Effect.all([
       findOpenStamps(scope),

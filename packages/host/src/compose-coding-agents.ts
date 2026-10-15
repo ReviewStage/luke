@@ -14,6 +14,7 @@ import {
   type CodingAgentPageAnswerView,
   type CodingAgentPullRequestAnswerView,
   codingAgentAccountInboxParamsSchema,
+  codingAgentAgentInboxParamsSchema,
   codingAgentArchiveParamsSchema,
   codingAgentChooseParamsSchema,
   codingAgentDefaultWriteParamsSchema,
@@ -85,6 +86,7 @@ export type CodingAgentClient = Pick<
   | "archive"
   | "stop"
   | "agent"
+  | "agentInbox"
   | "pullRequest"
   | "changes"
   | "readProviderKeys"
@@ -364,6 +366,16 @@ function composed(dependencies: CodingAgentsDependencies): CodingAgentsComposer 
           "reading a plan's inbox names the plan and a cursor",
         );
         const answer = yield* asked(client.inbox(planId, after));
+        return carried<CodingAgentInboxAnswerView>(answer);
+      }),
+    [GATEWAY_METHOD.CODING_AGENTS_AGENT_INBOX]: (params) =>
+      Effect.gen(function* () {
+        const { agentId, after } = yield* read(
+          codingAgentAgentInboxParamsSchema,
+          params,
+          "reading an agent's inbox names the agent and a cursor",
+        );
+        const answer = yield* asked(client.agentInbox(agentId, after));
         return carried<CodingAgentInboxAnswerView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_INBOX_ATTACHMENT]: (params) =>

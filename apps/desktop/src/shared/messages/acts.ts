@@ -13,6 +13,7 @@ import {
   type CodingAgentPageAnswerView,
   type CodingAgentPullRequestAnswerView,
   codingAgentAgentAnswerSchema,
+  codingAgentAgentInboxParamsSchema,
   codingAgentArchiveParamsSchema,
   codingAgentChangesAnswerViewSchema,
   codingAgentChooseParamsSchema,
@@ -372,6 +373,7 @@ export const ACT_KIND = {
    * key. The window holds what it draws; nothing here does.
    */
   CODING_AGENTS_INBOX: "codingAgents.inbox",
+  CODING_AGENTS_AGENT_INBOX: "codingAgents.agentInbox",
   CODING_AGENTS_INBOX_ANSWER: "codingAgents.inboxAnswer",
   /** One image of an inbox item, fetched by the host under the account, so the window holds no bearer and no address. */
   CODING_AGENTS_INBOX_ATTACHMENT: "codingAgents.inboxAttachment",
@@ -1070,6 +1072,11 @@ export const ACT = {
     payload: actSchema(codingAgentInboxParamsSchema),
     result: wireResult<CodingAgentInboxAnswerView>(isReadable(codingAgentInboxAnswerViewSchema)),
     refusal: "Could not read the plan's inbox on this system.",
+  },
+  [ACT_KIND.CODING_AGENTS_AGENT_INBOX]: {
+    payload: actSchema(codingAgentAgentInboxParamsSchema),
+    result: wireResult<CodingAgentInboxAnswerView>(isReadable(codingAgentInboxAnswerViewSchema)),
+    refusal: "Could not read the agent's inbox on this system.",
   },
   [ACT_KIND.CODING_AGENTS_INBOX_ANSWER]: {
     payload: actSchema(codingAgentInboxAnswerParamsSchema),

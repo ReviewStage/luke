@@ -236,6 +236,11 @@ function fakeService() {
         asked.push(`page:${agentId}`);
         return { agent: PAGE };
       }),
+    agentInbox: (agentId, after) =>
+      Effect.sync(() => {
+        asked.push(`agent-inbox:${agentId}:${after}`);
+        return { items: [ITEM], cursor: "8" };
+      }),
     pullRequest: (agentId) =>
       Effect.sync(() => {
         asked.push(`pull-request:${agentId}`);
@@ -446,6 +451,13 @@ it.effect("each method asks the service once and answers what it said, whole", (
       agent: PAGE,
     });
     assert.deepEqual(
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_AGENT_INBOX, {
+        agentId: AGENT_ID,
+        after: INBOX_CURSOR_START,
+      }),
+      { items: [ITEM], cursor: "8" },
+    );
+    assert.deepEqual(
       yield* call(GATEWAY_METHOD.CODING_AGENTS_PULL_REQUEST, { agentId: AGENT_ID }),
       PUBLISHED,
     );
@@ -507,6 +519,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `stop:${AGENT_ID}`,
       `archive:${AGENT_ID}:true`,
       `page:${AGENT_ID}`,
+      `agent-inbox:${AGENT_ID}:${INBOX_CURSOR_START}`,
       `pull-request:${AGENT_ID}`,
       `changes:${AGENT_ID}`,
       `inbox:${PLAN_ID}:${INBOX_CURSOR_START}`,

@@ -10,6 +10,8 @@ import {
   accountWaitingStamps,
   type InboxStamp,
   type InboxStoreEffect,
+  memberAgentInboxItems,
+  memberAgentInboxStamps,
   planInboxItems,
   planInboxStamps,
 } from "@luke/service/inbox/inbox-store";
@@ -76,6 +78,18 @@ function heldUntilMoved(
     Effect.repeat({ schedule: Schedule.spaced(poll), until: (changed) => changed }),
     Effect.timeoutOption(CODER.MESSAGES_HOLD),
     Effect.asVoid,
+  );
+}
+
+/** One agent's inbox as any member of its workspace reads it, held while its cursor is still the reader's: what an agent's page answers from. */
+export function agentInboxPast(
+  userId: string,
+  agentId: string,
+  after: string,
+): InboxStoreEffect<InboxAnswer> {
+  return heldUntilMoved(memberAgentInboxStamps(userId, agentId), after, CODER.MESSAGES_POLL).pipe(
+    Effect.andThen(memberAgentInboxItems(userId, agentId)),
+    Effect.map((items) => ({ items, cursor: cursorOf(items) })),
   );
 }
 
