@@ -4581,6 +4581,11 @@ body:has(.app-stage[data-capture="true"])
   gap: var(--space-6);
 }
 
+.automation-servers > .provider-mark {
+  width: var(--menu-glyph);
+  height: var(--menu-glyph);
+}
+
 .automation-cron {
   height: var(--control-height);
   padding-block: 0;
