@@ -542,15 +542,16 @@ function settingRows(
 
 /**
  * Whether a row's creator explains why the query found it: their name holds a
- * word of the query, or the query reaches the row through no other of its
- * words, as a loose match on the name does.
+ * word of the query, or the query reaches the row only with the name among
+ * its words, as a loose match on the name, or one running from the task's
+ * name into its creator's, does.
  */
 function creatorExplains(row: PaletteRow, query: string, tokens: readonly string[]): boolean {
   const { creator } = row;
   if (creator === undefined || tokens.length === 0) return false;
   if (matchRanges(creator, tokens).length > 0) return true;
   const others = row.terms.filter((term) => term !== creator).join(" ");
-  return fuzzyScore(others, query) === 0 && fuzzyScore(creator, query) > 0;
+  return fuzzyScore(others, query) === 0;
 }
 
 function PaletteItem({

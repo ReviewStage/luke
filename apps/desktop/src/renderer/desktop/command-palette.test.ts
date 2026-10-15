@@ -645,4 +645,7 @@ test("a teammate's task wears its creator's face at its row's end, and is found 
   assert.deepEqual(rows(), ["Retry budget · acme/relay · Charles Pan"]);
   type("rtry");
   assert.equal(rows()[0], "Retry budget · acme/relay");
+  // A query running from the task's name into its creator's names them too.
+  type("budgetch");
+  assert.deepEqual(rows(), ["Retry budget · acme/relay · Charles Pan"]);
 });
