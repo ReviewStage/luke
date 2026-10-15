@@ -30,8 +30,9 @@ import type { StoreFailure } from "../http/store-failure.js";
  * and it is spent once GitHub returns the browser from a one-time
  * authorization of the App, where the installation is linked only after the
  * user who authorized shows they can see it (`github-install-app.ts`). The installation webhook keeps each row's
- * status, and a disconnect deletes the row, which is Luke's own, and the
- * workspace's outstanding intents with it.
+ * status, and any read of the installation from GitHub mends a status the
+ * webhook missed (`github-app.ts`); a disconnect deletes the row, which is
+ * Luke's own, and the workspace's outstanding intents with it.
  */
 
 /** The roles that connect and disconnect a workspace's GitHub organization: an owner or an admin. */
@@ -219,11 +220,17 @@ const findMemberWorkspaceOnOwner = SqlSchema.findOneOption({
 
 const findInstallationOfWorkspace = SqlSchema.findOneOption({
   Request: Schema.String,
-  Result: Schema.Struct({ installationId: Schema.Number }),
+  Result: Schema.Struct({
+    installationId: Schema.Number,
+    status: Schema.Literals(Object.values(GITHUB_INSTALLATION_STATUS)),
+  }),
   execute: (organizationId) =>
     Database.use((db) =>
       db
-        .select({ installationId: githubInstallation.installationId })
+        .select({
+          installationId: githubInstallation.installationId,
+          status: githubInstallation.status,
+        })
         .from(githubInstallation)
         .where(eq(githubInstallation.organizationId, organizationId)),
     ),
@@ -324,7 +331,7 @@ export function linkInstallation(
   });
 }
 
-/** Where the installation now stands, as its webhook said; an installation no workspace is connected to moves nothing. */
+/** Where the installation now stands, as its webhook or a read from GitHub said; an installation no workspace is connected to moves nothing. */
 export function setInstallationStatus(
   installationId: number,
   status: GitHubInstallationStatus,
@@ -346,14 +353,17 @@ export function disconnectInstallation(
   return Effect.andThen(deleteWorkspaceIntents(organizationId), deleteInstallation(organizationId));
 }
 
-/** GitHub's id for the installation connected to the workspace, whatever its status; none for a workspace with none connected. */
+/** The installation connected to the workspace as Luke last stored it. */
+export interface WorkspaceInstallation {
+  readonly installationId: number;
+  readonly status: GitHubInstallationStatus;
+}
+
+/** GitHub's id for the installation connected to the workspace, and its stored status, whatever it is; none for a workspace with none connected. */
 export function installationOfWorkspace(
   organizationId: string,
-): Effect.Effect<Option.Option<number>, StoreFailure, DatabaseServices> {
-  return Effect.map(
-    findInstallationOfWorkspace(organizationId),
-    Option.map((row) => row.installationId),
-  );
+): Effect.Effect<Option.Option<WorkspaceInstallation>, StoreFailure, DatabaseServices> {
+  return findInstallationOfWorkspace(organizationId);
 }
 
 /**

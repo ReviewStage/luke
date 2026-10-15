@@ -3,6 +3,7 @@ import { verify } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { GITHUB_ACCOUNT_TYPE } from "@luke/database/github-installation-vocabulary";
+import { listWorkspaces } from "@luke/database/models/workspace-store";
 import { account } from "@luke/database/schemas/auth";
 import { getTestDB, openWorkspace } from "@luke/database/testing";
 import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
@@ -304,6 +305,36 @@ it.layer(getTestDB())("a workspace's repositories through its installation", (it
             }),
           ),
         );
+      }).pipe(Effect.provide(GitHubApp.layer(GITHUB_APP_SETTINGS))),
+  );
+
+  it.effect(
+    "a read that finds the installation suspended or gone leaves its workspace's GitHub inactive, and one that finds it running again active, so a delivery GitHub never made is mended",
+    () =>
+      Effect.gen(function* () {
+        const running = relayInstallation(40);
+        const suspended = { ...running, suspendedAt: "2026-10-10T00:00:00Z" };
+        const owner = yield* openGithubUser();
+        const workspace = yield* openWorkspace(owner);
+        yield* connectWorkspaceGitHub(workspace, running);
+        const app = yield* GitHubApp;
+        const active = () =>
+          Effect.map(listWorkspaces(owner), (workspaces) =>
+            workspaces.filter((each) => each.id === workspace).map((each) => each.github?.active),
+          );
+
+        yield* app
+          .workspaceRepositories(workspace)
+          .pipe(Effect.provide(githubReaching([suspended]).layer));
+        const afterSuspension = yield* active();
+        yield* app
+          .repositoryReach(workspace, "octo-org/relay")
+          .pipe(Effect.provide(githubReaching([running]).layer));
+        const afterReturn = yield* active();
+        yield* app.workspaceRepositories(workspace).pipe(Effect.provide(githubReaching([]).layer));
+        const afterRemoval = yield* active();
+
+        assert.deepEqual([afterSuspension, afterReturn, afterRemoval], [[false], [true], [false]]);
       }).pipe(Effect.provide(GitHubApp.layer(GITHUB_APP_SETTINGS))),
   );
 

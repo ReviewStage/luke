@@ -46,7 +46,9 @@ import { createPrivateKey, createSign, type KeyObject } from "node:crypto";
 import { Database, type DatabaseServices } from "@luke/database/core/query";
 import {
   GITHUB_ACCOUNT_TYPE,
+  GITHUB_INSTALLATION_STATUS,
   type GitHubAccountType,
+  type GitHubInstallationStatus,
 } from "@luke/database/github-installation-vocabulary";
 import { InstantColumnSchema } from "@luke/database/models/columns";
 import { account } from "@luke/database/schemas/auth";
@@ -78,7 +80,11 @@ import { SqlClient, SqlSchema } from "effect/sql";
 import { AUTH_SECRET_ENVIRONMENT, GITHUB_APP_ENVIRONMENT } from "../auth/auth-deployment.js";
 import { type GitHubRepository, text } from "../core.js";
 import type { StoreFailure } from "../http/store-failure.js";
-import { installationOfWorkspace } from "./github-installations.js";
+import {
+  installationOfWorkspace,
+  setInstallationStatus,
+  type WorkspaceInstallation,
+} from "./github-installations.js";
 
 const GITHUB_API = "https://api.github.com";
 const GITHUB_TOKEN_ENDPOINT = "https://github.com/login/oauth/access_token";
@@ -1001,6 +1007,28 @@ function githubAppService(
     });
 
   /**
+   * The workspace's connected installation as GitHub holds it now, its
+   * stored status written to match where the two differ. Note that we mend
+   * the status on every read, because GitHub never redelivers a failed
+   * installation delivery on its own, and Settings reads the stored status:
+   * a missed removal or suspension, or a missed return, is set right by the
+   * next chip opened or agent started rather than never.
+   */
+  const connectedInstallation = (connected: WorkspaceInstallation) =>
+    Effect.gen(function* () {
+      const reached = yield* installation(connected.installationId);
+      const status: GitHubInstallationStatus = Option.match(reached, {
+        onNone: () => GITHUB_INSTALLATION_STATUS.DELETED,
+        onSome: (on) =>
+          on.suspended ? GITHUB_INSTALLATION_STATUS.SUSPENDED : GITHUB_INSTALLATION_STATUS.ACTIVE,
+      });
+      if (status !== connected.status) {
+        yield* setInstallationStatus(connected.installationId, status);
+      }
+      return reached;
+    });
+
+  /**
    * The installation connected to the workspace as GitHub holds it now; none
    * where none is connected, GitHub no longer knows the one that is, or its
    * account suspended it, since GitHub mints a suspended installation no
@@ -1010,7 +1038,7 @@ function githubAppService(
     Effect.gen(function* () {
       const connected = yield* installationOfWorkspace(organizationId);
       if (Option.isNone(connected)) return Option.none<GitHubInstallation>();
-      const reached = yield* installation(connected.value);
+      const reached = yield* connectedInstallation(connected.value);
       return Option.filter(reached, (running) => !running.suspended);
     });
 
@@ -1038,7 +1066,7 @@ function githubAppService(
       if (Option.isNone(connected)) {
         return unreached({ reason: REPOSITORY_UNREACHED.NOT_CONNECTED, repository: fullName });
       }
-      const reached = yield* installation(connected.value);
+      const reached = yield* connectedInstallation(connected.value);
       if (Option.isNone(reached) || reached.value.suspended) {
         return unreached({ reason: REPOSITORY_UNREACHED.CONNECTION_LAPSED, repository: fullName });
       }
