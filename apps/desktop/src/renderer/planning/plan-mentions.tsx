@@ -9,6 +9,7 @@ import {
 } from "react";
 import type { MentionNode } from "../plan-editor/contract";
 import type { MentionDoors } from "./mention-chip";
+import { useOpenPlan } from "./use-open-link";
 
 /**
  * plan-mentions.tsx -- what a plan's page hands every place on it that picks or draws a mention: the plan, its saved text, and what opening a mention does.
@@ -78,6 +79,37 @@ export function PlanMentions({
 /** The plan's page's mentions; nothing off a plan's page. */
 export function usePlanMentions(): PlanMentionsValue | undefined {
   return useContext(PlanMentionsContext);
+}
+
+/** Where no plan's page stands, its doors' plan: none, so a section of any plan is drawn as found. */
+const NO_PLAN = "";
+
+/** The anchors of no plan. */
+const NO_ANCHORS: ReadonlySet<string> = new Set();
+
+/** What a press on a plan's chip does with no opener at hand, as in a test of one surface: nothing. */
+const OPEN_NOTHING = (): void => undefined;
+
+/**
+ * The doors a mention's chip opens through where it is drawn: the plan's
+ * page's, or, off one, as in the workspace's Inbox, the window's own: a
+ * plan or a section opened by the window's opener, no file, since no
+ * repository is at hand, so a GitHub page is drawn as GitHub's.
+ */
+export function useMentionDoors(): MentionDoors {
+  const page = useContext(PlanMentionsContext)?.doors;
+  const openPlan = useOpenPlan();
+  const windowDoors = useMemo<MentionDoors>(
+    () => ({
+      planId: NO_PLAN,
+      place: { workspace: "", repository: null },
+      anchors: NO_ANCHORS,
+      onOpenPlan: openPlan ?? OPEN_NOTHING,
+      onOpenFile: undefined,
+    }),
+    [openPlan],
+  );
+  return page ?? windowDoors;
 }
 
 /** Makes the agent's message box the one a mention made elsewhere on the page is laid into, for as long as it is drawn. */

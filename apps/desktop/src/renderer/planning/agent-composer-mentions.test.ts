@@ -14,6 +14,7 @@ import {
   type Mention,
   type MentionPlace,
   mentionMarkdown,
+  type PlanMention,
 } from "@luke/features/mention-link";
 import { PLAN_TREE_ENTRY } from "@luke/features/plan-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
@@ -36,6 +37,7 @@ import { PlanMentions, type PlanMentionsValue } from "./plan-mentions";
 import type { SkillSource } from "./skill-picker";
 import { TranscriptWords } from "./transcript-blocks";
 import { type MessageSender, useAgentComposer } from "./use-agent-composer";
+import { OpenPlanProvider } from "./use-open-link";
 
 /**
  * `@` in an agent's message box and its transcript, on a plan's page and
@@ -43,7 +45,8 @@ import { type MessageSender, useAgentComposer } from "./use-agent-composer";
  * plan's sections and the repository's files, the row chosen is written
  * into the message as its link and drawn in the box as its chip, the link
  * is what is sent, and a sent message's mention is drawn as the chip that
- * opens it. Off a plan's page an `@` is a letter and a mention is words.
+ * opens it. Off a plan's page an `@` is a letter, and a sent mention is
+ * still its chip, opened through the window's own doors.
  * Synthetic plan and repository.
  */
 
@@ -295,17 +298,26 @@ test("a sent message's mention is drawn on a plan's page as the chip that opens 
   assert.equal(carryingTarget(container), undefined);
 });
 
-test("off a plan's page a sent message's mention is drawn as its words, not a chip", () => {
+test("off a plan's page a sent message's mention is still its chip, which opens through the window's opener", () => {
+  const opened: PlanMention[] = [];
   const container = drawn(
-    createElement(TranscriptWords, {
-      text: `Follow ${mentionMarkdown(ROLLOUT, "Rollout", PLACE)}.`,
-    }),
+    createElement(
+      OpenPlanProvider,
+      { value: (mention: PlanMention) => opened.push(mention) },
+      createElement(TranscriptWords, {
+        text: `Follow ${mentionMarkdown(ROLLOUT, "Rollout", PLACE)}.`,
+      }),
+    ),
     undefined,
   );
 
-  assert.equal(container.querySelector(".mention-chip"), null);
+  const chip = container.querySelector<HTMLButtonElement>("button.mention-chip");
+  assert.ok(chip !== null, "the mention is a chip");
+  act(() => chip.click());
+
+  assert.equal(container.textContent, "Follow Rollout.");
+  assert.deepEqual(opened, [ROLLOUT]);
   assert.equal(carryingTarget(container), undefined);
-  assert.equal(container.textContent, "Follow @Rollout.");
 });
 
 test("once the plan's repository changes, the box offers the new repository's files", async () => {
@@ -478,7 +490,7 @@ test("a sent message's page of an integration's is a chip that opens the page in
   assert.equal(carryingTarget(container), undefined);
 });
 
-test("off a plan's page a sent message's page of an integration's is a link, its address on no attribute the recording keeps", () => {
+test("off a plan's page a sent message's page of an integration's is still its chip, its address on no attribute the recording keeps", () => {
   const container = drawn(
     createElement(TranscriptWords, {
       text: `Fix ${mentionMarkdown({ kind: MENTION_KIND.LINK, provider: INTEGRATION_PROVIDER.LINEAR, url: ISSUE_URL }, "LUKE-142/fix-the-thing", PLACE)}.`,
@@ -486,6 +498,10 @@ test("off a plan's page a sent message's page of an integration's is a link, its
     undefined,
   );
 
-  assert.equal(container.querySelector(".mention-chip"), null);
+  const chip = container.querySelector<HTMLButtonElement>("button.mention-chip");
+  assert.ok(chip !== null, "the page is a chip");
+  act(() => chip.click());
+
+  assert.deepEqual(told.at(-1), { kind: ACT_KIND.WEB_OPEN, payload: { url: ISSUE_URL } });
   assert.equal(carryingTarget(container), undefined);
 });

@@ -7,6 +7,7 @@ import {
   encodeMention,
   isMentionableTool,
   isMentionLabel,
+  linkMention,
   MENTION_KIND,
   type Mention,
   type MentionPlace,
@@ -235,6 +236,51 @@ test("only a label that starts with @ and says more is a mention's, which its ch
   assert.equal(isMentionLabel("Rollout"), false);
   assert.equal(isMentionLabel("@"), false);
   assert.equal(mentionName("@Rollout"), "Rollout");
+});
+
+test("any link whose target names a mention is one, whatever its label says, named by its label without its @", () => {
+  const lines = `https://github.com/${REPOSITORY}/blob/0a1b2c3d/apps/web/store.ts#L3-L5`;
+  const read = (label: string, target: string) => {
+    const found = linkMention(label, target, REPOSITORY);
+    return found === undefined ? undefined : [found.mention.kind, found.name];
+  };
+
+  assert.deepEqual(read("@Rollout", encodeMention(ROLLOUT, PLACE)), [
+    MENTION_KIND.SECTION,
+    "Rollout",
+  ]);
+  assert.deepEqual(read("the rollout", encodeMention(ROLLOUT, PLACE)), [
+    MENTION_KIND.SECTION,
+    "the rollout",
+  ]);
+  assert.deepEqual(read("the store", lines), [MENTION_KIND.FILE, "the store"]);
+  assert.deepEqual(read("LUKE-142", "https://linear.app/acme/issue/LUKE-142/fix"), [
+    MENTION_KIND.LINK,
+    "LUKE-142",
+  ]);
+  assert.equal(read("the docs", "https://example.com/docs"), undefined);
+  assert.equal(read("@the docs", "https://example.com/docs"), undefined);
+});
+
+test("a bare address is named by what it says of the thing: a file's name and lines, a section's anchor, a page's last steps", () => {
+  const named = (address: string) => linkMention(address, address, REPOSITORY)?.name;
+
+  assert.equal(
+    named(`https://github.com/${REPOSITORY}/blob/0a1b2c3d/apps/web/store.ts#L3-L5`),
+    "store.ts:3–5",
+  );
+  assert.equal(
+    named(`https://github.com/${REPOSITORY}/blob/0a1b2c3d/apps/web/store.ts#L7`),
+    "store.ts:7",
+  );
+  assert.equal(named(`https://github.com/${REPOSITORY}/tree/HEAD/apps/web/`), "web");
+  assert.equal(named(encodeMention(ROLLOUT, PLACE)), "rollout");
+  assert.equal(named(encodeMention(PLAN, PLACE)), "Plan");
+  assert.equal(
+    named("https://linear.app/acme/issue/LUKE-142/fix-the-thing"),
+    "LUKE-142/fix-the-thing",
+  );
+  assert.equal(named("https://github.com/acme/relay/pull/123"), "relay/pull/123");
 });
 
 test("a step back at a path's root is taken by the address itself, and stays inside the repository", () => {
