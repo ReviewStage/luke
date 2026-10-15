@@ -46,6 +46,7 @@ const PLACE_KIND = {
   HOME: "home",
   INBOX: "inbox",
   AGENT: "agent",
+  PERSON: "person",
   FACTORY: "factory",
   AUTOMATIONS: "automations",
   SETTINGS: "settings",
@@ -62,6 +63,14 @@ type Place =
   | { readonly kind: typeof PLACE_KIND.HOME }
   | { readonly kind: typeof PLACE_KIND.INBOX }
   | { readonly kind: typeof PLACE_KIND.AGENT; readonly agentId: string }
+  | {
+      readonly kind: typeof PLACE_KIND.PERSON;
+      readonly userId: string;
+      /** The name the page was opened with, which it is opened with again. */
+      readonly name: string | undefined;
+      /** The workspace the page was the person's in, which it is no place of another's. */
+      readonly workspaceId: string | undefined;
+    }
   | { readonly kind: typeof PLACE_KIND.FACTORY }
   | { readonly kind: typeof PLACE_KIND.AUTOMATIONS }
   | { readonly kind: typeof PLACE_KIND.SETTINGS; readonly view: SettingsView };
@@ -73,11 +82,14 @@ interface Trail {
 
 const EMPTY_TRAIL: Trail = { places: [], at: -1 };
 
-/** Whether two places are one step of the history: the same plan, the same plan's version history, the home page, the Inbox on any plan, the same agent's page, Factory, the Automations page, or Settings on any page. */
+/** Whether two places are one step of the history: the same plan, the same plan's version history, the home page, the Inbox on any plan, the same agent's or person's page, Factory, the Automations page, or Settings on any page. */
 function sameStep(one: Place | undefined, other: Place): boolean {
   if (one === undefined || one.kind !== other.kind) return false;
   if ("planId" in one && "planId" in other) return one.planId === other.planId;
   if ("agentId" in one && "agentId" in other) return one.agentId === other.agentId;
+  if ("userId" in one && "userId" in other) {
+    return one.userId === other.userId && one.workspaceId === other.workspaceId;
+  }
   return true;
 }
 
@@ -90,13 +102,16 @@ function sameSpot(one: HistorySpot | undefined, other: HistorySpot | undefined):
   );
 }
 
-/** Whether a step stands as it stood: Settings on the same page, a version history where it was. */
+/** Whether a step stands as it stood: Settings on the same page, a version history where it was, a person's page by the name it was last opened with. */
 function samePlace(one: Place, other: Place): boolean {
   if (one.kind === PLACE_KIND.SETTINGS && other.kind === PLACE_KIND.SETTINGS) {
     return one.view === other.view;
   }
   if (one.kind === PLACE_KIND.VERSION_HISTORY && other.kind === PLACE_KIND.VERSION_HISTORY) {
     return sameSpot(one.spot, other.spot);
+  }
+  if (one.kind === PLACE_KIND.PERSON && other.kind === PLACE_KIND.PERSON) {
+    return one.name === other.name;
   }
   return true;
 }
@@ -247,6 +262,8 @@ export function useWindowHistory(input: {
     | "history"
     | "inboxView"
     | "agentView"
+    | "personView"
+    | "workspace"
     | "factoryView"
     | "automationsView"
     | "restoring"
@@ -259,6 +276,9 @@ export function useWindowHistory(input: {
   const { spot } = plans.history;
   const inboxOpen = plans.inboxView.open;
   const pageAgent = plans.agentView.agentId;
+  const pagePerson = plans.personView.userId;
+  const personName = plans.personView.name;
+  const listedWorkspace = plans.workspace?.id;
   const factoryOpen = plans.factoryView.open;
   const factoryOn = useExperiment(EXPERIMENT.FACTORY);
   const automationsOpen = plans.automationsView.open;
@@ -274,6 +294,14 @@ export function useWindowHistory(input: {
     if (tab === PANEL_TAB.SETTINGS) return { kind: PLACE_KIND.SETTINGS, view: settingsView };
     if (inboxOpen) return { kind: PLACE_KIND.INBOX };
     if (pageAgent !== undefined) return { kind: PLACE_KIND.AGENT, agentId: pageAgent };
+    if (pagePerson !== undefined) {
+      return {
+        kind: PLACE_KIND.PERSON,
+        userId: pagePerson,
+        name: personName,
+        workspaceId: listedWorkspace,
+      };
+    }
     if (factoryOpen) return { kind: PLACE_KIND.FACTORY };
     if (automationsOpen) return { kind: PLACE_KIND.AUTOMATIONS };
     if (boundFor === undefined) return { kind: PLACE_KIND.HOME };
@@ -289,6 +317,9 @@ export function useWindowHistory(input: {
     spot,
     inboxOpen,
     pageAgent,
+    pagePerson,
+    personName,
+    listedWorkspace,
     factoryOpen,
     automationsOpen,
   ]);
@@ -296,6 +327,8 @@ export function useWindowHistory(input: {
     // Factory and the Automations page are experiments, so back and forward pass over each while it is off.
     if (to.kind === PLACE_KIND.FACTORY) return factoryOn;
     if (to.kind === PLACE_KIND.AUTOMATIONS) return automationsOn;
+    // A person's page is theirs in the workspace it stood in, so Back passes over it once another is listed.
+    if (to.kind === PLACE_KIND.PERSON) return to.workspaceId === listedWorkspace;
     if (!("planId" in to) || to.planId === boundFor) return true;
     if (plans.archived.some((plan) => plan.id === to.planId)) return false;
     return (
@@ -319,6 +352,10 @@ export function useWindowHistory(input: {
       plans.agentView.onOpen(to.agentId);
       return;
     }
+    if (to.kind === PLACE_KIND.PERSON) {
+      plans.personView.onOpen(to.userId, to.name);
+      return;
+    }
     if (to.kind === PLACE_KIND.FACTORY) {
       plans.factoryView.onOpen();
       return;
@@ -327,9 +364,10 @@ export function useWindowHistory(input: {
       plans.automationsView.onOpen();
       return;
     }
-    // Every other place of the Plans tab is the plan's, which the Inbox, an agent's page, Factory, and the Automations page stand over.
+    // Every other place of the Plans tab is the plan's, which the Inbox, an agent's or a person's page, Factory, and the Automations page stand over.
     if (inboxOpen) plans.inboxView.onClose();
     if (pageAgent !== undefined) plans.agentView.onClose();
+    if (pagePerson !== undefined) plans.personView.onClose();
     if (factoryOpen) plans.factoryView.onClose();
     if (automationsOpen) plans.automationsView.onClose();
     // Note that a version history is opened on its spot even where it is

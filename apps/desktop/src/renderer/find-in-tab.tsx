@@ -78,6 +78,7 @@ export const FIND_PAGE = {
   FACTORY: "factory",
   AUTOMATIONS: "automations",
   VERSION_HISTORY: "version-history",
+  PERSON: "person",
 } as const;
 
 type FindPage = (typeof FIND_PAGE)[keyof typeof FIND_PAGE];

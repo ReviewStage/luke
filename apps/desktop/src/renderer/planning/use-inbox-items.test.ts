@@ -54,3 +54,27 @@ test("a read that failed for a plan another workspace listed says nothing once t
   assert.equal(before, true);
   assert.equal(control?.failed, false);
 });
+
+test("a plan that changed since its items were read is pending until a read of it answers, its old items standing meanwhile", async () => {
+  const answers: ((answer: CodingAgentInboxAnswerView) => void)[] = [];
+  const readInbox = (): Promise<CodingAgentInboxAnswerView> =>
+    new Promise((resolve) => answers.push(resolve));
+  let control: InboxItemsControl | undefined;
+  function Probe({ holdings }: { holdings: readonly AppInboxPlanHolding[] }) {
+    control = useInboxItems({ holdings, readInbox });
+    return null;
+  }
+  root = createRoot(document.createElement("div"));
+  act(() => root?.render(createElement(Probe, { holdings: [holding("acme-plan")] })));
+  const unread = control?.pending;
+  await act(async () => answers[0]?.({ items: [], cursor: INBOX_CURSOR_START }));
+  await settle();
+  const read = control?.pending;
+  act(() =>
+    root?.render(createElement(Probe, { holdings: [{ ...holding("acme-plan"), updatedAt: 2 }] })),
+  );
+  await settle();
+
+  assert.deepEqual([unread, read, control?.pending], [true, false, true]);
+  assert.deepEqual(control?.items.get("acme-plan"), []);
+});

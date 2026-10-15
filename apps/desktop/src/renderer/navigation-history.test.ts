@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { PLANS_PAGE } from "@luke/ui/planning-model";
 import { act, createElement, useState } from "react";
@@ -100,4 +101,78 @@ test("a step back cancelled at the leave ask leaves the trail where the window s
 
   act(() => asked[0]?.());
   assert.deepEqual(homes, ["home"], "Leave takes the step it asked about");
+});
+
+test("a person's page is a step of its own, which Back from a plan opened after it returns to, and another person's is another step", () => {
+  const reopened: string[] = [];
+  // Every control the window stands on opens a person's page the same way, recorded.
+  const standing = (userId: string | undefined, rest: Partial<PlansControl> = {}) =>
+    plansControl({
+      ...rest,
+      personView: {
+        userId,
+        name: undefined,
+        onOpen: (id) => reopened.push(id),
+        onClose: () => undefined,
+      },
+    });
+  const window = mount(standing("user-charles"));
+  window.stand(standing("user-maya"));
+  window.stand(
+    standing(undefined, { page: PLANS_PAGE.DOCUMENT, activePlanId: PLAN_ID, boundFor: PLAN_ID }),
+  );
+
+  act(() => window.history().onBack());
+  window.stand(standing("user-maya"));
+  act(() => window.history().onBack());
+
+  assert.deepEqual(reopened, ["user-maya", "user-charles"]);
+});
+
+test("a person's page is theirs in the workspace it stood in, so once another is listed Back passes over it", () => {
+  const reopened: string[] = [];
+  const standing = (workspaceId: string, userId: string | undefined) =>
+    plansControl({
+      workspace: { id: workspaceId, name: workspaceId, role: WORKSPACE_ROLE.MEMBER, github: null },
+      personView: {
+        userId,
+        name: undefined,
+        onOpen: (id) => reopened.push(id),
+        onClose: () => undefined,
+      },
+    });
+  const window = mount(standing("workspace-acme", undefined));
+  window.stand(standing("workspace-acme", "user-charles"));
+  window.stand(standing("workspace-platform", undefined));
+
+  act(() => window.history().onBack());
+
+  assert.deepEqual(reopened, []);
+});
+
+test("a person's page opened again with a newer name keeps that name in its step, which Back opens it with", () => {
+  const reopened: (string | undefined)[] = [];
+  const standing = (userId: string | undefined, name?: string, rest: Partial<PlansControl> = {}) =>
+    plansControl({
+      ...rest,
+      personView: {
+        userId,
+        name,
+        onOpen: (_id, opened) => reopened.push(opened),
+        onClose: () => undefined,
+      },
+    });
+  const window = mount(standing("user-lee", "Lee Park"));
+  window.stand(standing("user-lee", "Lee Chen"));
+  window.stand(
+    standing(undefined, undefined, {
+      page: PLANS_PAGE.DOCUMENT,
+      activePlanId: PLAN_ID,
+      boundFor: PLAN_ID,
+    }),
+  );
+
+  act(() => window.history().onBack());
+
+  assert.deepEqual(reopened, ["Lee Chen"]);
 });

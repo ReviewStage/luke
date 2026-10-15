@@ -263,6 +263,7 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
       onChoose: ignore,
     },
     agentView: { agentId: undefined, onOpen: ignore, onClose: ignore },
+    personView: { userId: undefined, name: undefined, onOpen: ignore, onClose: ignore },
     inboxPlanless: [],
     factoryView: { open: false, onOpen: ignore, onClose: ignore },
     automationsView: {
