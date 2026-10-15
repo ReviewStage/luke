@@ -1,8 +1,7 @@
 import { INBOX_STATUS } from "@luke/features/inbox-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
-import type { PlanSummary } from "@luke/features/plan-wire";
 import { DocumentIcon } from "@luke/ui";
-import { ArrowDownNarrowWideIcon, InboxIcon, SlidersHorizontalIcon } from "lucide-react";
+import { ArrowDownNarrowWideIcon, InboxIcon, SlidersHorizontalIcon, ZapIcon } from "lucide-react";
 import { ActionMenu, type MenuAction, useActionMenu } from "../desktop/action-menu";
 import { SidebarResizeEdge } from "../desktop/desktop-sidebar";
 import {
@@ -17,8 +16,11 @@ import { Tooltip } from "../tooltip";
 import { AgentRef, lineSubject } from "./agent-ref";
 import { INBOX_COLUMNS, type InboxColumnsShown } from "./inbox-columns";
 import {
+  holderKey,
   INBOX_GROUPING,
+  INBOX_HOLDER,
   type InboxGrouping,
+  type InboxHolder,
   type InboxListed,
   type InboxListView,
   NEEDS_YOU,
@@ -94,19 +96,22 @@ function drawnWidth(width: number, alone: boolean): string | undefined {
   return `min(${width}px, max(${INBOX_LIST_WIDTH.MIN}px, 100cqw - ${PANE_RESERVE}px))`;
 }
 
-/** The mark of the agent that posted an item, as the plan's summary lists it, hanging the agent's card, else the mark of an agent this window does not list. */
+/** The mark of the agent that posted an item, as the plan's summary lists it, hanging the agent's card, else the mark of an agent this window does not list, as an agent with no plan is. */
 function ItemGlyph({
-  plan,
+  holder,
   agentId,
   models,
   readerId,
 }: {
-  plan: PlanSummary;
+  holder: InboxHolder;
   agentId: string;
   models: readonly CatalogModel[] | undefined;
   readerId: string | undefined;
 }): React.JSX.Element {
-  const agent = plan.agents?.agents.find((each) => each.id === agentId);
+  const agent =
+    holder.kind === INBOX_HOLDER.PLAN
+      ? holder.plan.agents?.agents.find((each) => each.id === agentId)
+      : undefined;
   if (agent === undefined) return <AgentGlyph agent={undefined} />;
   return (
     <AgentRef subject={lineSubject(agent, models, readerId)} models={models} onOpen={undefined}>
@@ -139,7 +144,7 @@ export function InboxItemRow({
   context?: string;
   onChoose: (listed: InboxListed) => void;
 }): React.JSX.Element {
-  const { plan, item } = listed;
+  const { holder, item } = listed;
   const title = cardTitle(item.title);
   const needsYou = item.status === INBOX_STATUS.OPEN;
   return (
@@ -155,7 +160,12 @@ export function InboxItemRow({
         >
           <span className="sidebar-plan-line">
             <span className="sidebar-pinned-tab-glyph">
-              <ItemGlyph plan={plan} agentId={item.agentId} models={models} readerId={readerId} />
+              <ItemGlyph
+                holder={holder}
+                agentId={item.agentId}
+                models={models}
+                readerId={readerId}
+              />
             </span>
             <span className="sidebar-plan-name">{title}</span>
             {context === undefined ? null : <span className="home-row-context">{context}</span>}
@@ -352,21 +362,22 @@ export function InboxList({
         {view.grouping === INBOX_GROUPING.NEWEST ? (
           <ul className="sidebar-plans">{view.items.map(row)}</ul>
         ) : (
-          view.groups.map(({ plan, items }) => {
-            const folded = head?.folds.folded(plan.id) ?? false;
+          view.groups.map(({ holder, items }) => {
+            const key = holderKey(holder);
+            const folded = head?.folds.folded(key) ?? false;
             return (
-              <div key={plan.id} className="sidebar-repository">
+              <div key={key} className="sidebar-repository">
                 <SidebarGroupHeader
-                  glyph={<DocumentIcon />}
-                  name={plan.name}
+                  glyph={holder.kind === INBOX_HOLDER.PLAN ? <DocumentIcon /> : <ZapIcon />}
+                  name={holder.kind === INBOX_HOLDER.PLAN ? holder.plan.name : holder.name}
                   folded={folded}
                   count={items.filter(({ status }) => status === INBOX_STATUS.OPEN).length}
                   noun={NEEDS_YOU.COUNT}
                   steady
-                  onToggle={() => head?.folds.toggle(plan.id)}
+                  onToggle={() => head?.folds.toggle(key)}
                 />
                 {folded ? null : (
-                  <ul className="sidebar-plans">{items.map((item) => row({ plan, item }))}</ul>
+                  <ul className="sidebar-plans">{items.map((item) => row({ holder, item }))}</ul>
                 )}
               </div>
             );

@@ -9,15 +9,20 @@ import { useAct } from "../act";
 import { runAppCommand } from "../app-commands";
 import { InboxItemRow } from "../planning/inbox-list";
 import {
+  holderName,
   INBOX_GROUPING,
+  INBOX_HOLDER,
   type InboxListed,
   inboxList,
   listedItems,
   NEEDS_YOU,
+  planHolder,
+  planlessGroups,
 } from "../planning/inbox-model";
 import { useMinute } from "../planning/plan-time";
 import { RelativeTime } from "../planning/relative-time";
 import { useInboxItems } from "../planning/use-inbox-items";
+import { usePlanlessInboxItems } from "../planning/use-planless-inbox-items";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { RepositoryPicture } from "../repository-picture";
 import { RetryButton } from "../retry-button";
@@ -65,10 +70,12 @@ function recentPlans(plans: readonly PlanSummary[]): PlanSummary[] {
 }
 
 /**
- * Every open Inbox item of the listed workspace's plans, the latest changed
- * first, read as the window's Inbox reads them: each plan main says holds an
- * item and the listed workspace's list holds, read whole, a teammate's agent's
- * items among them, as every member's Inbox lists them.
+ * Every open Inbox item of the listed workspace's plans, and of its agents
+ * with no plan, the latest changed first, read as the window's Inbox reads
+ * them: each plan main says holds an item and the listed workspace's list
+ * holds, read whole, a teammate's agent's items among them, as every
+ * member's Inbox lists them, and each agent with no plan main says
+ * something waits on.
  */
 function useWaitingItems(plans: PlansControl) {
   const { act } = useAct();
@@ -84,15 +91,27 @@ function useWaitingItems(plans: PlansControl) {
     [inboxPlans, listed],
   );
   const read = useInboxItems({ holdings, readInbox });
-  const entries = holdings.flatMap((holding) => {
-    const plan = listed.find((each) => each.id === holding.planId);
-    return plan === undefined ? [] : [{ plan, items: read.items.get(holding.planId) ?? [] }];
-  });
+  const planless = usePlanlessInboxItems(plans.inboxPlanless);
+  const entries = [
+    ...holdings.flatMap((holding) => {
+      const plan = listed.find((each) => each.id === holding.planId);
+      return plan === undefined
+        ? []
+        : [{ holder: planHolder(plan), items: read.items.get(holding.planId) ?? [] }];
+    }),
+    ...planlessGroups(plans.inboxPlanless, planless.items, plans.workspace?.id),
+  ];
   const items = listedItems(
     inboxList(entries, { grouping: INBOX_GROUPING.NEWEST, waitingOnly: true, chosen: undefined }),
   );
-  const reading = holdings.some((holding) => !read.items.has(holding.planId));
-  return { items, reading, failed: read.failed, onRetry: read.onRetry };
+  const reading =
+    holdings.some((holding) => !read.items.has(holding.planId)) ||
+    plans.inboxPlanless.some((each) => !planless.items.has(each.agentId));
+  const onRetry = () => {
+    read.onRetry();
+    planless.onRetry();
+  };
+  return { items, reading, failed: read.failed || planless.failed, onRetry };
 }
 
 /**
@@ -185,9 +204,13 @@ function RecentRow({
 function HomeInbox({ plans, now }: { plans: PlansControl; now: number }): React.JSX.Element {
   const waiting = useWaitingItems(plans);
   const { inboxView } = plans;
-  const open = ({ plan, item }: InboxListed) => {
+  const open = ({ holder, item }: InboxListed) => {
     inboxView.onOpen();
-    inboxView.onChoose({ planId: plan.id, itemId: item.id });
+    inboxView.onChoose(
+      holder.kind === INBOX_HOLDER.PLAN
+        ? { planId: holder.plan.id, itemId: item.id }
+        : { agentId: item.agentId, itemId: item.id },
+    );
   };
   const empty = waiting.items.length === 0;
   return (
@@ -206,7 +229,7 @@ function HomeInbox({ plans, now }: { plans: PlansControl; now: number }): React.
               now={now}
               models={plans.agents.models}
               readerId={plans.me}
-              context={listed.plan.name}
+              context={holderName(listed.holder)}
               onChoose={open}
             />
           ))}
@@ -253,11 +276,12 @@ export function DesktopHome({
   useRowKeys(column, plans.shown);
   const { listed } = plans;
   if (!plans.listRead && !plans.listFailed) return null;
-  // Only an account with no plan in any workspace is new; a workspace of
-  // its own with none still says what needs it elsewhere.
-  if (!plans.listFailed && plans.plans.length === 0 && plans.archived.length === 0) {
-    return <Welcome plans={plans} />;
-  }
+  // Only an account with no plan in any workspace, and nothing an agent with
+  // no plan waits on, is new; a workspace of its own with none still says
+  // what needs it elsewhere.
+  const fresh =
+    plans.plans.length === 0 && plans.archived.length === 0 && plans.inboxPlanless.length === 0;
+  if (!plans.listFailed && fresh) return <Welcome plans={plans} />;
   const recent = recentPlans(listed.plans);
   return (
     <div className="home-scroll">

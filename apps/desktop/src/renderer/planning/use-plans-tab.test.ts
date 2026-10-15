@@ -883,10 +883,10 @@ test("an Inbox item chosen in one workspace gives way as another is listed, so m
 
   act(() => tab.control().inboxView.onOpen());
   act(() => tab.control().inboxView.onChoose({ planId: "notes", itemId: "notes-item-0" }));
-  const chosen = tab.control().inboxView.chosen?.planId;
+  const chosen = tab.control().inboxView.chosen;
   act(() => tab.control().onChooseWorkspace(ACME.id));
 
-  assert.equal(chosen, "notes");
+  assert.deepEqual(chosen, { planId: "notes", itemId: "notes-item-0" });
   assert.equal(tab.control().inboxView.chosen, undefined);
   assert.equal(tab.shownInboxes.at(-1), null);
 });

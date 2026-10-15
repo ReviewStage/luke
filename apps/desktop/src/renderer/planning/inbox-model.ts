@@ -19,6 +19,7 @@ import {
 } from "@luke/features/inbox-wire";
 import type { PlanFileRequest, PlanSummary } from "@luke/features/plan-wire";
 import type { PlanCode, PlanningFileAnswer } from "@luke/features/planning-view";
+import type { AppInboxPlanlessItem } from "@luke/host/app-state";
 import { isWireString } from "@luke/wire";
 import type { CountNoun } from "../desktop/sidebar-group-header";
 import { refusalLine, refusalPasses } from "./file-tab-model";
@@ -304,6 +305,82 @@ export const NEEDS_YOU = {
   NONE: "Nothing needs you",
 } as const;
 
+/** What an item is listed under: the plan its agent works on, or, for an agent with no plan, the automation that started it. */
+export const INBOX_HOLDER = {
+  PLAN: "plan",
+  AUTOMATION: "automation",
+} as const;
+
+/** The plan holding an item, or the automation holding an item of an agent with no plan, named as its group's header names it; none for the agents no automation the reader may read started. */
+export type InboxHolder =
+  | { readonly kind: typeof INBOX_HOLDER.PLAN; readonly plan: PlanSummary }
+  | {
+      readonly kind: typeof INBOX_HOLDER.AUTOMATION;
+      readonly automationId: string | null;
+      readonly name: string;
+      readonly repository: string;
+    };
+
+/** The key a holder's group is folded and drawn by: the plan's id, the automation's, or one key for the agents no automation names. */
+export function holderKey(holder: InboxHolder): string {
+  if (holder.kind === INBOX_HOLDER.PLAN) return holder.plan.id;
+  return holder.automationId ?? NO_AUTOMATION_KEY;
+}
+
+/** A plan as the holder of its items. */
+export function planHolder(plan: PlanSummary): InboxHolder {
+  return { kind: INBOX_HOLDER.PLAN, plan };
+}
+
+/** A holder's name as its header and a row's context say it: the plan's, or the automation's. */
+export function holderName(holder: InboxHolder): string {
+  return holder.kind === INBOX_HOLDER.PLAN ? holder.plan.name : holder.name;
+}
+
+/** What one group of agents no readable automation started is keyed by. */
+const NO_AUTOMATION_KEY = "no-automation";
+
+/** What the group of agents no automation the reader may read started is called. */
+const NO_AUTOMATION_NAME = "Other agents";
+
+/**
+ * The groups the items of agents with no plan stand in: one per automation
+ * that started them, by its name, and one for the agents no automation the
+ * reader may read names, each holding every item its agents' reads hold,
+ * settled ones too; only the listed workspace's agents, where the service
+ * names an agent's workspace, so another workspace's list holds none of
+ * them.
+ */
+export function planlessGroups(
+  waiting: readonly AppInboxPlanlessItem[],
+  read: ReadonlyMap<string, readonly InboxItem[]>,
+  workspaceId: string | undefined,
+): readonly InboxGroup[] {
+  const groups = new Map<string, { holder: InboxHolder; agents: Set<string> }>();
+  for (const entry of waiting) {
+    // Note that with no workspace listed every agent's items stand, as every plan's do.
+    const elsewhere =
+      workspaceId !== undefined &&
+      entry.workspaceId !== undefined &&
+      entry.workspaceId !== workspaceId;
+    if (elsewhere) continue;
+    const holder: InboxHolder = {
+      kind: INBOX_HOLDER.AUTOMATION,
+      automationId: entry.automationId,
+      name: entry.automationName ?? NO_AUTOMATION_NAME,
+      repository: entry.repository,
+    };
+    const key = holderKey(holder);
+    const group = groups.get(key) ?? { holder, agents: new Set<string>() };
+    group.agents.add(entry.agentId);
+    groups.set(key, group);
+  }
+  return [...groups.values()].map(({ holder, agents }) => ({
+    holder,
+    items: [...agents].flatMap((agentId) => read.get(agentId) ?? []),
+  }));
+}
+
 /** How the window's Inbox lists its items: under each plan, or in one list. */
 export const INBOX_GROUPING = {
   PLAN: "plan",
@@ -312,21 +389,21 @@ export const INBOX_GROUPING = {
 
 export type InboxGrouping = (typeof INBOX_GROUPING)[keyof typeof INBOX_GROUPING];
 
-/** One plan and every item its inbox holds, as the list is handed them. */
-export interface InboxPlanItems {
-  readonly plan: PlanSummary;
+/** One holder, a plan or an automation, and every item it holds, as the list is handed them. */
+export interface InboxGroup {
+  readonly holder: InboxHolder;
   readonly items: readonly InboxItem[];
 }
 
-/** One item the list draws, with the plan it belongs to. */
+/** One item the list draws, with what holds it. */
 export interface InboxListed {
-  readonly plan: PlanSummary;
+  readonly holder: InboxHolder;
   readonly item: InboxItem;
 }
 
 /** The list as it is drawn: a group for each plan holding an item it shows, or every item in one run. */
 export type InboxListView =
-  | { readonly grouping: typeof INBOX_GROUPING.PLAN; readonly groups: readonly InboxPlanItems[] }
+  | { readonly grouping: typeof INBOX_GROUPING.PLAN; readonly groups: readonly InboxGroup[] }
   | { readonly grouping: typeof INBOX_GROUPING.NEWEST; readonly items: readonly InboxListed[] };
 
 /** The latest change first. */
@@ -341,7 +418,7 @@ function newestFirst(a: InboxItem, b: InboxItem): number {
  * chosen, so the item answered does not slip away from under them.
  */
 export function inboxList(
-  plans: readonly InboxPlanItems[],
+  plans: readonly InboxGroup[],
   view: {
     readonly grouping: InboxGrouping;
     readonly waitingOnly: boolean;
@@ -351,25 +428,25 @@ export function inboxList(
   const shows = (item: InboxItem) =>
     !view.waitingOnly || item.status === INBOX_STATUS.OPEN || item.id === view.chosen;
   const groups = plans
-    .map(({ plan, items }) => ({ plan, items: items.filter(shows).toSorted(newestFirst) }))
+    .map(({ holder, items }) => ({ holder, items: items.filter(shows).toSorted(newestFirst) }))
     .filter((group) => group.items.length > 0)
     .toSorted((a, b) => (b.items[0]?.updatedAt ?? 0) - (a.items[0]?.updatedAt ?? 0));
   if (view.grouping === INBOX_GROUPING.PLAN) return { grouping: INBOX_GROUPING.PLAN, groups };
   const items = groups
-    .flatMap(({ plan, items }) => items.map((item) => ({ plan, item })))
+    .flatMap(({ holder, items }) => items.map((item) => ({ holder, item })))
     .toSorted((a, b) => newestFirst(a.item, b.item));
   return { grouping: INBOX_GROUPING.NEWEST, items };
 }
 
 /** Whether any plan's item needs the developer, listed or filtered out. */
-export function anyNeedsYou(plans: readonly InboxPlanItems[]): boolean {
+export function anyNeedsYou(plans: readonly InboxGroup[]): boolean {
   return plans.some(({ items }) => items.some((item) => item.status === INBOX_STATUS.OPEN));
 }
 
 /** Every item the list draws, in the order it draws them. */
 export function listedItems(view: InboxListView): readonly InboxListed[] {
   if (view.grouping === INBOX_GROUPING.NEWEST) return view.items;
-  return view.groups.flatMap(({ plan, items }) => items.map((item) => ({ plan, item })));
+  return view.groups.flatMap(({ holder, items }) => items.map((item) => ({ holder, item })));
 }
 
 /** The item that stands chosen where none is: the first listed that waits, else the first listed. */

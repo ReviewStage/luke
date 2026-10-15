@@ -11,6 +11,7 @@ import {
 } from "@luke/features/inbox-wire";
 import type { PlanSummary } from "@luke/features/plan-wire";
 import { PLAN_CALL_FAILURE } from "@luke/features/planning-view";
+import type { AppInboxPlanlessItem } from "@luke/host/app-state";
 import { test } from "vitest";
 import {
   CODE_READ,
@@ -19,11 +20,14 @@ import {
   codeWindow,
   EMPTY_INBOX_DRAFT,
   firstChoice,
+  holderName,
   INBOX_GROUPING,
   type InboxListView,
   inboxBoard,
   inboxList,
   inboxReply,
+  planHolder,
+  planlessGroups,
   proposedOptions,
   SETTLED_BY,
   settlementOf,
@@ -332,20 +336,22 @@ const BILLING = plan("7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10", "Billing alerts");
 const INVITES = plan("9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32", "Invites");
 const PLANS = [
   {
-    plan: BILLING,
+    holder: planHolder(BILLING),
     items: [
       item({ id: "threshold", updatedAt: 30 }),
       item({ id: "retry", status: INBOX_STATUS.ANSWERED, updatedAt: 50 }),
       item({ id: "channel", status: INBOX_STATUS.CLOSED, updatedAt: 10 }),
     ],
   },
-  { plan: INVITES, items: [item({ id: "expiry", updatedAt: 40 })] },
+  { holder: planHolder(INVITES), items: [item({ id: "expiry", updatedAt: 40 })] },
 ];
 
 /** Each group of a list as its plan's name and its items' ids, or the one run's ids. */
 function drawn(view: InboxListView): readonly (string | readonly [string, readonly string[]])[] {
   return view.grouping === INBOX_GROUPING.PLAN
-    ? view.groups.map(({ plan, items }) => [plan.name, items.map((each) => each.id)] as const)
+    ? view.groups.map(
+        ({ holder, items }) => [holderName(holder), items.map((each) => each.id)] as const,
+      )
     : view.items.map(({ item }) => item.id);
 }
 
@@ -376,10 +382,18 @@ test("Needs you lists only what waits and the item chosen, so one just answered 
   ]);
   assert.deepEqual(
     drawn(
-      inboxList([{ plan: BILLING, items: [item({ id: "done", status: INBOX_STATUS.ANSWERED })] }], {
-        ...waiting,
-        chosen: undefined,
-      }),
+      inboxList(
+        [
+          {
+            holder: planHolder(BILLING),
+            items: [item({ id: "done", status: INBOX_STATUS.ANSWERED })],
+          },
+        ],
+        {
+          ...waiting,
+          chosen: undefined,
+        },
+      ),
     ),
     [],
   );
@@ -395,7 +409,9 @@ test("with nothing chosen, the first listed item that waits stands chosen, else 
     firstChoice(inboxList(PLANS, { ...all, grouping: INBOX_GROUPING.NEWEST }))?.item.id,
     "expiry",
   );
-  const settled = [{ plan: BILLING, items: [item({ id: "done", status: INBOX_STATUS.ANSWERED })] }];
+  const settled = [
+    { holder: planHolder(BILLING), items: [item({ id: "done", status: INBOX_STATUS.ANSWERED })] },
+  ];
   assert.equal(
     firstChoice(inboxList(settled, { ...all, grouping: INBOX_GROUPING.NEWEST }))?.item.id,
     "done",
@@ -481,4 +497,63 @@ test("an answer names who gave it: the reader as You, a teammate by name, and so
   assert.equal(settlementOf(chose(DANA), CHARLES.userId)?.lead, "Dana Reyes chose Postgres");
   assert.equal(settlementOf(chose(), DANA.userId)?.lead, "Someone chose Postgres");
   assert.equal(settlementOf(chose(DANA), undefined)?.lead, "Dana Reyes chose Postgres");
+});
+
+/** An item of an agent with no plan as main's read lists it. */
+function waitingPlanless(
+  agentId: string,
+  patch: Partial<AppInboxPlanlessItem> = {},
+): AppInboxPlanlessItem {
+  return {
+    id: `item-${agentId}`,
+    agentId,
+    title: "Quarantine the flaky test?",
+    postedAt: 1,
+    agentTitle: null,
+    agentModel: "anthropic/claude-opus-5.5",
+    automationId: "automation-sweep",
+    automationName: "Nightly flake sweep",
+    repository: "acme/relay",
+    workspaceId: "workspace-acme",
+    ...patch,
+  };
+}
+
+test("the items of agents with no plan stand under the automation that started them, the unnamed ones together, and only the listed workspace's", () => {
+  // An item from a service before workspaces were named, which stands in every workspace's list.
+  const { workspaceId: _unnamed, ...unnamedWorkspace } = waitingPlanless("agent-5", {
+    automationId: "automation-old",
+    automationName: "Old",
+  });
+  const waiting = [
+    waitingPlanless("agent-1"),
+    waitingPlanless("agent-2"),
+    waitingPlanless("agent-3", { automationId: null, automationName: null }),
+    waitingPlanless("agent-4", { workspaceId: "workspace-beta" }),
+    unnamedWorkspace,
+  ];
+  const read = new Map([
+    ["agent-1", [item({ id: "one", agentId: "agent-1" })]],
+    [
+      "agent-2",
+      [
+        item({ id: "two", agentId: "agent-2" }),
+        item({ id: "settled", agentId: "agent-2", status: INBOX_STATUS.ANSWERED }),
+      ],
+    ],
+    ["agent-3", [item({ id: "three", agentId: "agent-3" })]],
+    ["agent-4", [item({ id: "four", agentId: "agent-4" })]],
+  ]);
+
+  assert.deepEqual(
+    planlessGroups(waiting, read, "workspace-acme").map(({ holder, items }) => [
+      holderName(holder),
+      items.map((each) => each.id),
+    ]),
+    [
+      ["Nightly flake sweep", ["one", "two", "settled"]],
+      ["Other agents", ["three"]],
+      ["Old", []],
+    ],
+  );
 });

@@ -18,7 +18,7 @@ import {
 } from "@luke/features/inbox-wire";
 import type { PlanSummary } from "@luke/features/plan-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
-import type { AppInboxPlanHolding } from "@luke/host/app-state";
+import type { AppInboxPlanHolding, AppInboxPlanlessItem } from "@luke/host/app-state";
 import { DocumentIcon } from "@luke/ui";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
@@ -135,6 +135,12 @@ let inboxes = new Map<string, readonly InboxItem[]>();
 let setHolding: (holding: readonly AppInboxPlanHolding[]) => void = () => undefined;
 /** Moves the account's list of plans, as an archive on another Mac would. */
 let setPlans: (plans: readonly PlanSummary[]) => void = () => undefined;
+/** Moves main's read of what waits on the agents with no plan, as main does when an item opens or is answered. */
+let setPlanless: (planless: readonly AppInboxPlanlessItem[]) => void = () => undefined;
+/** Whether an agent's own inbox read answers that it could not be read. */
+let agentReadFails = false;
+/** Holds the next agent read's answer, handing the test what lands it, where a test asks. */
+let holdAgentRead: ((respond: () => void) => void) | undefined;
 /** A read of a plan's inbox as the act answers it: done, carrying the view the service answered. */
 interface ReadOutcome {
   readonly status: typeof ACT_OUTCOME_STATUS.DONE;
@@ -145,6 +151,10 @@ interface ReadOutcome {
 let heldRead: (planId: string) => Promise<ReadOutcome> = () => new Promise(() => undefined);
 /** How a read of a plan from the start answers, where a test holds it in its own hands. */
 let startRead: ((planId: string) => Promise<ReadOutcome> | undefined) | undefined;
+/** Each agent with no plan's items, as its own inbox read answers them. */
+let agentInboxes = new Map<string, readonly InboxItem[]>();
+/** Every agent whose own inbox was read from the start, in order. */
+let agentReads: string[] = [];
 
 beforeEach(() => {
   window.localStorage.clear();
@@ -155,6 +165,10 @@ beforeEach(() => {
   heldRead = () => new Promise(() => undefined);
   startRead = undefined;
   listedAgents = [AGENT];
+  agentInboxes = new Map();
+  agentReads = [];
+  agentReadFails = false;
+  holdAgentRead = undefined;
   Object.defineProperty(window, "luke", {
     configurable: true,
     value: {
@@ -164,6 +178,22 @@ beforeEach(() => {
         const done = (value: CodingAgentListAnswer | CodingAgentInboxAnswerView) =>
           Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
         if (request.kind === ACT_KIND.CODING_AGENTS_LIST) return done({ agents: listedAgents });
+        if (request.kind === ACT_KIND.CODING_AGENTS_AGENT_INBOX) {
+          const { agentId, after } = request.payload;
+          if (after !== INBOX_CURSOR_START) return new Promise(() => undefined);
+          agentReads.push(agentId);
+          if (agentReadFails) return done({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+          const items = agentInboxes.get(agentId) ?? [];
+          const hold = holdAgentRead;
+          if (hold !== undefined) {
+            return new Promise((resolve) =>
+              hold(() =>
+                resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { items, cursor: "1" } }),
+              ),
+            );
+          }
+          return done({ items, cursor: "1" });
+        }
         if (request.kind === ACT_KIND.CODING_AGENTS_INBOX) {
           const { planId, after } = request.payload;
           // A read past the cursor is held open while nothing changes, as the service holds it.
@@ -191,14 +221,16 @@ interface Asked {
   closed: number;
 }
 
-/** The Inbox over the two plans, its own view real, as the plans tab holds it, and every press that leaves it recorded. */
-function mount() {
+/** The Inbox over the two plans, and the items of agents with no plan given, its own view real, as the plans tab holds it, and every press that leaves it recorded. */
+function mount(firstPlanless: readonly AppInboxPlanlessItem[] = []) {
   const asked: Asked = { shownPlans: [], shownAgents: [], closed: 0 };
   function Page() {
     const [chosen, setChosen] = useState<InboxChoice | undefined>(undefined);
     const [holding, setHeld] = useState(HOLDING);
     const [listed, setListed] = useState<readonly PlanSummary[]>([BILLING, INVITES]);
     setHolding = setHeld;
+    const [planless, setWaiting] = useState(firstPlanless);
+    setPlanless = setWaiting;
     setPlans = setListed;
     return createElement(DesktopInbox, {
       plans: plansControl({
@@ -209,6 +241,7 @@ function mount() {
           { planId: INVITES.id, items: [waitingOf(EXPIRY)] },
         ],
         inboxPlans: holding,
+        inboxPlanless: planless,
         inboxView: {
           open: true,
           chosen,
@@ -859,4 +892,133 @@ test("an answer to a plan's read that a newer one overtook moves nothing: the ne
     false,
     "the overtaken read lists nothing",
   );
+});
+
+/** An agent with no plan an automation started, and the question it asked. */
+const SWEEP_AGENT = "5e6f7081-92a3-4b4c-8d5e-6f708192a3b4";
+const QUARANTINE: InboxItem = {
+  ...item("a1b2c3d4-0000-4000-8000-000000000009", "Quarantine the flaky test?", 6_000),
+  agentId: SWEEP_AGENT,
+};
+
+test("an item of an agent with no plan stands under the automation that started it, and opens on its agent's own read under the automation's crumb", async () => {
+  agentInboxes = new Map([[SWEEP_AGENT, [QUARANTINE]]]);
+  const { page, asked } = mount([
+    {
+      id: QUARANTINE.id,
+      agentId: SWEEP_AGENT,
+      title: QUARANTINE.title,
+      postedAt: QUARANTINE.postedAt,
+      agentTitle: "Sweep the flaky tests",
+      agentModel: "anthropic/claude-opus-5.5",
+      automationId: "5a0c4d2e-8f1b-4c3a-9e7d-2b6f1a8c9d04",
+      automationName: "Nightly flake sweep",
+      repository: "acme/relay",
+    },
+  ]);
+  await settle();
+
+  assert.ok(agentReads.length > 0 && agentReads.every((agentId) => agentId === SWEEP_AGENT));
+  const rows = listed(page);
+  assert.ok(rows.includes("# Nightly flake sweep"), rows.join(" | "));
+  assert.equal(rows[rows.indexOf("# Nightly flake sweep") + 1], "▸ *Quarantine the flaky test?");
+
+  act(() => rowNamed(page, "Quarantine the flaky test?").click());
+  await settle();
+
+  const crumbs = page.querySelector(".inbox-crumbs")?.textContent ?? "";
+  assert.match(crumbs, /Nightly flake sweep/u);
+  assert.equal(page.querySelector("[data-inbox-title]")?.textContent, "Quarantine the flaky test?");
+  assert.deepEqual(asked.shownPlans, [], "the automation's crumb opens no plan");
+});
+
+/** Another agent with no plan the same automation started, whose two questions wait. */
+const SECOND_AGENT = "6f708192-a3b4-4c5d-8e6f-708192a3b4c5";
+const SECOND_ASK: InboxItem = {
+  ...item("a1b2c3d4-0000-4000-8000-00000000000a", "Skip the slow suite?", 2_000),
+  agentId: SECOND_AGENT,
+};
+const THIRD_ASK: InboxItem = {
+  ...item("a1b2c3d4-0000-4000-8000-00000000000b", "Retry the flaky job?", 2_500),
+  agentId: SECOND_AGENT,
+};
+
+/** One waiting item of an agent with no plan, as main's read lists it. */
+function waitingPlanless(asked: InboxItem): AppInboxPlanlessItem {
+  return {
+    id: asked.id,
+    agentId: asked.agentId,
+    title: asked.title,
+    postedAt: asked.postedAt,
+    agentTitle: null,
+    agentModel: "anthropic/claude-opus-5.5",
+    automationId: "5a0c4d2e-8f1b-4c3a-9e7d-2b6f1a8c9d04",
+    automationName: "Nightly flake sweep",
+    repository: "acme/relay",
+  };
+}
+
+test("an agent with no plan whose waiting items move, one answered on another Mac, is read again, the answered item no longer needing you", async () => {
+  agentInboxes = new Map([
+    [SWEEP_AGENT, [QUARANTINE]],
+    [SECOND_AGENT, [SECOND_ASK, THIRD_ASK]],
+  ]);
+  const { page } = mount([QUARANTINE, SECOND_ASK, THIRD_ASK].map(waitingPlanless));
+  await settle();
+  assert.ok(listed(page).includes("*Skip the slow suite?"));
+
+  agentInboxes.set(SECOND_AGENT, [{ ...SECOND_ASK, status: INBOX_STATUS.ANSWERED }, THIRD_ASK]);
+  act(() => setPlanless([QUARANTINE, THIRD_ASK].map(waitingPlanless)));
+  await settle();
+
+  assert.ok(listed(page).includes("Skip the slow suite?"), listed(page).join(" | "));
+});
+
+test("a read of an agent with no plan that fails is said with Retry, which reads it again though it was read before", async () => {
+  agentInboxes = new Map([[SECOND_AGENT, [SECOND_ASK, THIRD_ASK]]]);
+  const { page } = mount([QUARANTINE, SECOND_ASK, THIRD_ASK].map(waitingPlanless));
+  await settle();
+
+  agentReadFails = true;
+  act(() => setPlanless([QUARANTINE, THIRD_ASK].map(waitingPlanless)));
+  await settle();
+  assert.match(
+    page.querySelector(".inbox-plans")?.textContent ?? "",
+    /Some items could not be read\./u,
+  );
+  const before = agentReads.filter((agentId) => agentId === SECOND_AGENT).length;
+
+  agentReadFails = false;
+  act(() =>
+    [...page.querySelectorAll<HTMLButtonElement>(".inbox-plans button")]
+      .find((button) => button.textContent === "Retry")
+      ?.click(),
+  );
+  await settle();
+
+  assert.ok(agentReads.filter((agentId) => agentId === SECOND_AGENT).length > before);
+  assert.doesNotMatch(page.querySelector(".inbox-plans")?.textContent ?? "", /could not be read/u);
+});
+
+test("an agent whose waiting items come back to what it was read for lets go of the read asked between, so its late answer draws nothing", async () => {
+  agentInboxes = new Map([[SECOND_AGENT, [SECOND_ASK, THIRD_ASK]]]);
+  const { page } = mount([QUARANTINE, SECOND_ASK, THIRD_ASK].map(waitingPlanless));
+  await settle();
+  // The read asked for the items between is held, to land only after they came back.
+  let landBetween: () => void = () => undefined;
+  const answered = agentInboxes;
+  agentInboxes = new Map([[SECOND_AGENT, []]]);
+  holdAgentRead = (respond) => {
+    landBetween = respond;
+  };
+  act(() => setPlanless([QUARANTINE, THIRD_ASK].map(waitingPlanless)));
+  await settle();
+  holdAgentRead = undefined;
+  agentInboxes = answered;
+  act(() => setPlanless([QUARANTINE, SECOND_ASK, THIRD_ASK].map(waitingPlanless)));
+  await settle();
+  act(() => landBetween());
+  await settle();
+
+  assert.ok(listed(page).includes("*Skip the slow suite?"), listed(page).join(" | "));
 });

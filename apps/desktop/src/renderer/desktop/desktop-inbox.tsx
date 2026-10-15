@@ -1,7 +1,12 @@
-import type { CodingAgentInboxParams } from "@luke/features/coding-agent-view";
+import {
+  CODING_AGENT_CALL_FAILURE,
+  type CodingAgentInboxParams,
+} from "@luke/features/coding-agent-view";
 import type { InboxItem } from "@luke/features/inbox-wire";
+import { PLAN_CALL_FAILURE, type PlanningFileAnswer } from "@luke/features/planning-view";
 import { ACT_KIND } from "@luke/host/acts";
 import type { AppInboxPlanHolding } from "@luke/host/app-state";
+import { EXPERIMENT } from "@luke/settings";
 import { InboxIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
@@ -13,21 +18,27 @@ import { InboxList } from "../planning/inbox-list";
 import {
   anyNeedsYou,
   firstChoice,
+  INBOX_HOLDER,
+  type InboxGroup,
+  type InboxHolder,
   type InboxListed,
-  type InboxPlanItems,
   inboxList,
   listedItems,
   NEEDS_YOU,
+  planHolder,
+  planlessGroups,
 } from "../planning/inbox-model";
-import { InboxPane } from "../planning/inbox-pane";
+import { InboxPane, type InboxPaneDoors } from "../planning/inbox-pane";
 import { useMinute } from "../planning/plan-time";
 import { useCodingAgents } from "../planning/use-coding-agents";
 import { useInboxItems } from "../planning/use-inbox-items";
 import { useOpenLink } from "../planning/use-open-link";
 import { usePlanInbox } from "../planning/use-plan-inbox";
-import type { PlansControl } from "../planning/use-plans-tab";
+import { usePlanlessInboxItems } from "../planning/use-planless-inbox-items";
+import { AUTOMATIONS_PAGE, type PlansControl } from "../planning/use-plans-tab";
 import { ReadFailure } from "../read-failure";
 import { SPINNER_SIZE, Spinner } from "../spinner";
+import { useExperiment } from "../use-app-state";
 import { useInboxPlanFolds, useInboxViewChoices } from "./folded-groups";
 import { planCardOf } from "./plan-card";
 
@@ -92,7 +103,11 @@ function ListNote({
   return <p className="sidebar-note">{NEEDS_YOU.NONE}</p>;
 }
 
-/** The window's Inbox, in the plan's place: every plan's items, and the chosen one read beside them. */
+/** A planless item's code reads no file, there being no plan whose repository it reads through. */
+const UNREAD_FILE = (): Promise<PlanningFileAnswer> =>
+  Promise.resolve({ failure: PLAN_CALL_FAILURE.UNANSWERED });
+
+/** The window's Inbox, in the plan's place: every plan's items and every automation's, and the chosen one read beside them. */
 export function DesktopInbox({ plans }: { plans: PlansControl }): React.JSX.Element {
   const view = plans.inboxView;
   useAppCommand(APP_COMMAND.EXIT_INBOX, view.onClose);
@@ -101,6 +116,7 @@ export function DesktopInbox({ plans }: { plans: PlansControl }): React.JSX.Elem
   const now = useMinute();
   const choices = useInboxViewChoices();
   const folds = useInboxPlanFolds();
+  const automationsOn = useExperiment(EXPERIMENT.AUTOMATIONS);
   const readInbox = useCallback(
     (params: CodingAgentInboxParams) => act(ACT_KIND.CODING_AGENTS_INBOX, params),
     [act],
@@ -111,11 +127,18 @@ export function DesktopInbox({ plans }: { plans: PlansControl }): React.JSX.Elem
     [inboxPlans, listedPlans],
   );
   const read = useInboxItems({ holdings, readInbox });
-  const chosenPlan = plans.plans.find((plan) => plan.id === view.chosen?.planId);
+  const planless = usePlanlessInboxItems(plans.inboxPlanless);
+  const asked = view.chosen;
+  const chosenPlan =
+    asked !== undefined && "planId" in asked
+      ? plans.plans.find((plan) => plan.id === asked.planId)
+      : undefined;
   const planId = chosenPlan?.id;
+  const chosenAgentId = asked !== undefined && "agentId" in asked ? asked.agentId : undefined;
   const agents = useCodingAgents({
     acts: { act },
     planId,
+    ...(chosenAgentId === undefined ? undefined : { agentId: chosenAgentId }),
     repository: chosenPlan?.repository ?? null,
     archived: false,
     onUnarchive: () => undefined,
@@ -125,50 +148,80 @@ export function DesktopInbox({ plans }: { plans: PlansControl }): React.JSX.Elem
     onStarted: () => undefined,
     me: plans.me,
   });
+  const readAgentInbox = useCallback(
+    (after: string) =>
+      chosenAgentId === undefined
+        ? Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const)
+        : act(ACT_KIND.CODING_AGENTS_AGENT_INBOX, { agentId: chosenAgentId, after }),
+    [act, chosenAgentId],
+  );
+  // Note that an agent with no plan holds its own read, by its id, as a plan's is held by the plan's.
   const live = usePlanInbox({
-    planId,
+    planId: planId ?? chosenAgentId,
+    ...(chosenAgentId === undefined ? undefined : { reader: readAgentInbox }),
     shown: plans.shown,
-    waiting: plans.inbox.some((each) => each.planId === planId),
+    waiting:
+      plans.inbox.some((each) => each.planId === planId) ||
+      plans.inboxPlanless.some((each) => each.agentId === chosenAgentId),
     agents,
   });
   // Note that the models come from the open plan's agents where this plan's have not read them, so an agent is named alike in both.
   const named = { ...agents, models: agents.models ?? plans.agents.models };
-  // The chosen plan's own held read stands in for the list's once it answered, so an answer shows
+  // The chosen holder's own held read stands in for the list's once it answered, so an answer shows
   // at once, and only while it holds, since one that failed stops hearing what changed.
   const liveItems: readonly InboxItem[] = [...live.board.open, ...live.board.settled];
-  const entries: InboxPlanItems[] = holdings.flatMap((holding) => {
+  const holdsLive = live.read && !live.failed;
+  const planEntries: InboxGroup[] = holdings.flatMap((holding) => {
     const plan = plans.plans.find((each) => each.id === holding.planId);
     if (plan === undefined) return [];
     const items =
-      live.read && !live.failed && holding.planId === planId
-        ? liveItems
-        : read.items.get(holding.planId);
-    return [{ plan, items: items ?? [] }];
+      holdsLive && holding.planId === planId ? liveItems : read.items.get(holding.planId);
+    return [{ holder: planHolder(plan), items: items ?? [] }];
   });
+  const planlessRead =
+    holdsLive && chosenAgentId !== undefined
+      ? new Map(planless.items).set(chosenAgentId, liveItems)
+      : planless.items;
+  const entries = [
+    ...planEntries,
+    ...planlessGroups(plans.inboxPlanless, planlessRead, plans.workspace?.id),
+  ];
   const list = inboxList(entries, {
     grouping: choices.grouping,
     waitingOnly: choices.waitingOnly,
-    chosen: view.chosen?.itemId,
+    chosen: asked?.itemId,
   });
-  const chosen = listedItems(list).find(({ item }) => item.id === view.chosen?.itemId);
-  // Note that a chosen item whose plan is listed but not read yet keeps its place, because it may
-  // be listed once the read lands; one whose plan left the list, archived elsewhere, gives way.
+  const chosen = listedItems(list).find(({ item }) => item.id === asked?.itemId);
+  // Note that a chosen item whose plan or agent is listed but not read yet keeps its place, because
+  // it may be listed once the read lands; one whose plan left the list, archived elsewhere, gives way.
   const chosenWaits =
-    planId !== undefined &&
-    holdings.some((holding) => holding.planId === planId) &&
-    !read.items.has(planId) &&
-    !live.read;
+    (planId !== undefined &&
+      holdings.some((holding) => holding.planId === planId) &&
+      !read.items.has(planId) &&
+      !live.read) ||
+    (chosenAgentId !== undefined && !planless.items.has(chosenAgentId) && !live.read);
   const standIn = chosen === undefined && !chosenWaits ? firstChoice(list) : undefined;
   const { onChoose } = view;
   const choose = useCallback(
-    ({ plan, item }: InboxListed) => onChoose({ planId: plan.id, itemId: item.id }),
+    ({ holder, item }: InboxListed) =>
+      onChoose(
+        holder.kind === INBOX_HOLDER.PLAN
+          ? { planId: holder.plan.id, itemId: item.id }
+          : { agentId: item.agentId, itemId: item.id },
+      ),
     [onChoose],
   );
   useEffect(() => {
     if (standIn !== undefined) choose(standIn);
   }, [standIn, choose]);
-  const reading = holdings.some((holding) => !read.items.has(holding.planId));
+  const reading =
+    holdings.some((holding) => !read.items.has(holding.planId)) ||
+    plans.inboxPlanless.some((each) => !planless.items.has(each.agentId));
   const columns = useInboxColumns(chosen?.item.id);
+  const onRetry = () => {
+    read.onRetry();
+    planless.onRetry();
+  };
   return (
     <div className="inbox-view" ref={columns.ref} data-columns={columns.shown}>
       <InboxList
@@ -180,10 +233,10 @@ export function DesktopInbox({ plans }: { plans: PlansControl }): React.JSX.Elem
         readerId={plans.me}
         note={
           <ListNote
-            failed={read.failed}
+            failed={read.failed || planless.failed}
             reading={reading}
             empty={listedItems(list).length === 0}
-            onRetry={read.onRetry}
+            onRetry={onRetry}
           />
         }
         onChoose={(listed) => {
@@ -202,26 +255,58 @@ export function DesktopInbox({ plans }: { plans: PlansControl }): React.JSX.Elem
         </section>
       ) : (
         <InboxPane
-          plan={chosen.plan}
+          holder={chosen.holder}
           item={chosen.item}
           control={live}
           agents={named}
           hidden={columns.shown === INBOX_COLUMNS.LIST}
           onBack={columns.onBack}
-          doors={{
-            onOpenPlan: () => plans.onShowPlan(chosen.plan.id),
-            planCard: planCardOf(plans, chosen.plan, now),
-            onOpenAgent: (agentId) => plans.onShowAgent(chosen.plan.id, agentId),
-            openLink,
-            code: {
-              repository: chosen.plan.repository,
-              readFile: (window) =>
-                act(ACT_KIND.PLANNING_FILE, { planId: chosen.plan.id, ...window }),
-              onOpenFile: (ref, commit) => plans.onShowFile(chosen.plan.id, ref, commit),
-            },
-          }}
+          doors={paneDoors(plans, chosen.holder, { act, openLink, now, automationsOn })}
         />
       )}
     </div>
   );
+}
+
+/**
+ * The pane's doors for what holds its item: a plan's open the plan, its
+ * agents' tabs, and its files; an automation's open its page where the
+ * Automations experiment is on, its agents' own pages, and no file, there
+ * being no plan whose repository a file is read through.
+ */
+function paneDoors(
+  plans: PlansControl,
+  holder: InboxHolder,
+  seams: {
+    act: ReturnType<typeof useAct>["act"];
+    openLink: (url: string) => void;
+    now: number;
+    automationsOn: boolean;
+  },
+): InboxPaneDoors {
+  if (holder.kind === INBOX_HOLDER.PLAN) {
+    const { plan } = holder;
+    return {
+      onOpenHolder: () => plans.onShowPlan(plan.id),
+      planCard: planCardOf(plans, plan, seams.now),
+      onOpenAgent: (agentId) => plans.onShowAgent(plan.id, agentId),
+      openLink: seams.openLink,
+      code: {
+        repository: plan.repository,
+        readFile: (window) => seams.act(ACT_KIND.PLANNING_FILE, { planId: plan.id, ...window }),
+        onOpenFile: (ref, commit) => plans.onShowFile(plan.id, ref, commit),
+      },
+    };
+  }
+  const { automationId } = holder;
+  return {
+    onOpenHolder:
+      seams.automationsOn && automationId !== null
+        ? () => plans.automationsView.onOpen({ kind: AUTOMATIONS_PAGE.EDIT, automationId })
+        : undefined,
+    planCard: undefined,
+    onOpenAgent: (agentId) => plans.agentView.onOpen(agentId),
+    openLink: seams.openLink,
+    code: { repository: null, readFile: UNREAD_FILE, onOpenFile: () => undefined },
+  };
 }
