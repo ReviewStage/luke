@@ -224,7 +224,7 @@ test("an automation a GitHub event fires says where on its card, as its row in t
   const automation = cards()[1]?.querySelector("[data-actor-card='automation']");
   assert.equal(
     automation?.querySelector(".card-sub")?.textContent,
-    "When a pull request is opened in acme/relay or acme/ledger",
+    "When a pull request by people is opened in acme/relay or acme/ledger",
   );
 });
 
