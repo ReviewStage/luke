@@ -3,6 +3,7 @@ import { ChevronDownIcon, GearIcon, PlusIcon } from "@luke/ui";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { ActionMenu, dropBelowStart, type MenuAction, useActionMenu } from "./action-menu";
 import { useNewWorkspaceDialog } from "./new-workspace-dialog";
+import { WorkspaceTile } from "./workspace-tile";
 
 /**
  * workspace-switcher.tsx -- the head of the sidebar's plans: which of the account's workspaces they are, and the menu that lists another.
@@ -18,7 +19,7 @@ import { useNewWorkspaceDialog } from "./new-workspace-dialog";
  * included, because its menu is where a workspace is made.
  */
 
-/** The menu's items: every workspace, the listed one checked; then New workspace and Workspace settings. */
+/** The menu's items: every workspace by its tile, the listed one checked; then New workspace and Workspace settings. */
 function workspaceMenuGroups(
   listed: Workspace,
   plans: PlansControl,
@@ -27,6 +28,7 @@ function workspaceMenuGroups(
   const choices = plans.workspaces.map(
     (workspace): MenuAction => ({
       label: workspace.name,
+      icon: <WorkspaceTile workspace={workspace} />,
       checked: workspace.id === listed.id,
       onSelect: () => plans.onChooseWorkspace(workspace.id),
     }),

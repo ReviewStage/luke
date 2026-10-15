@@ -250,3 +250,28 @@ test("Enter while an input method composes creates nothing, and a press dragged 
   assert.deepEqual(asked, []);
   assert.ok(document.querySelector('[role="alertdialog"]'), "the card still stands");
 });
+
+test("each workspace in the menu wears its tile, its first letter, and a rename keeps the tile's hue", () => {
+  const tiles = (workspaces: readonly Workspace[]) => {
+    const page = mount({ workspaces, workspace: workspaces[0] });
+    open(page.switcher());
+    const drawn = menuItems()
+      .map((item) => item.querySelector(".workspace-tile"))
+      .filter((tile) => tile !== null)
+      .map((tile) => [tile.getAttribute("data-letter"), tile.getAttribute("data-hue")]);
+    // Each reading stands alone, so the next finds only its own menu.
+    for (const root of roots.splice(0)) act(() => root.unmount());
+    document.body.innerHTML = "";
+    return drawn;
+  };
+
+  const before = tiles([PERSONAL, CONNECTED]);
+  assert.deepEqual(
+    before.map(([letter]) => letter),
+    ["P", "A"],
+    "a tile stands beside each workspace and on no other item",
+  );
+  const renamed = tiles([PERSONAL, { ...CONNECTED, name: "Zenith" }]);
+  assert.equal(renamed[1]?.[0], "Z");
+  assert.equal(renamed[1]?.[1], before[1]?.[1], "the hue is the workspace's, not its name's");
+});
