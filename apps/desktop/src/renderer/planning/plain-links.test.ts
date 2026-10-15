@@ -12,6 +12,7 @@ import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { installEditorBundle, installEditorLayout } from "#testing/composer";
 import { DOCUMENT_PLAN } from "#testing/document-plan";
 import { markdownHtmlParserLanded } from "#testing/markdown";
+import { MARKDOWN_MARK, MarkdownMessage } from "../markdown-message";
 import { useConfirmDialog } from "../settings/confirm-dialog";
 import { notesBefore } from "./file-note";
 import { PlanBody } from "./plan-body";
@@ -236,4 +237,45 @@ test("a plain link pressed in a version or a note opens in the browser", () => {
 
     assert.deepEqual(sent, [{ kind: ACT_KIND.WEB_OPEN, payload: { url: DOCS } }]);
   }
+});
+
+test("a bare address an edit or a change marks inside is drawn whole, its caret and its marks where they stand", () => {
+  const words = `See ${BARE} now.`;
+  const inside = words.indexOf("current");
+  const changed = drawn(
+    createElement(MarkdownMessage, {
+      words,
+      edit: {
+        marks: [{ kind: MARKDOWN_MARK.INSERTED, from: inside, to: inside + "current".length }],
+      },
+    }),
+  );
+  const typed = drawn(createElement(MarkdownMessage, { words, edit: { caret: inside } }));
+
+  for (const surface of [changed, typed]) {
+    assert.deepEqual(plainLinks(surface), [[BARE, false]]);
+  }
+  assert.equal(changed.querySelector(".text-link ins.markdown-inserted")?.textContent, "current");
+  assert.notEqual(typed.querySelector(".text-link .markdown-caret"), null);
+});
+
+test("a plain link to an address the window refuses to open is drawn going nowhere", () => {
+  const long = `https://example.com/${"a".repeat(2_100)}`;
+  const container = drawn(
+    createElement(PlanBody, {
+      plan: {
+        ...PLAN,
+        document: { body: `## Rollout\n\n[the long page](${long})`, assumptions: [] },
+      },
+      live: false,
+      sectionLinks: SECTION_LINKS,
+    }),
+  );
+  const link = container.querySelector<HTMLElement>(".text-link");
+  assert.ok(link !== null);
+
+  act(() => link.click());
+
+  assert.equal(link.tagName, "SPAN");
+  assert.deepEqual(sent, []);
 });

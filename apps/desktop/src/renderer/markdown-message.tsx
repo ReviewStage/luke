@@ -297,7 +297,7 @@ function plainLink(
 ): ReactNode {
   if (href === undefined || !SAFE_LINK.test(href)) return children;
   return (
-    <TextLink href={href} words={labelOf(link)} onOpen={openLink}>
+    <TextLink href={href} words={plainLabelOf(link)} onOpen={openLink}>
       {children}
     </TextLink>
   );
@@ -374,6 +374,12 @@ function wordsOf(node: HastParent | HastNode): string {
 /** A link's label as its words. */
 function labelOf(link: HastParent | undefined): string {
   return link === undefined ? "" : wordsOf(link);
+}
+
+/** A link's label as its words where it is words alone; nothing where an edit or a change marks inside it. */
+function plainLabelOf(link: HastParent | undefined): string | undefined {
+  const marked = link?.children.some((child) => child.type === "element") ?? false;
+  return marked ? undefined : labelOf(link);
 }
 
 function heading(level: number, children: ReactNode): React.JSX.Element {

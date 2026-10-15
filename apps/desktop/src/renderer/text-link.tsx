@@ -1,6 +1,7 @@
 import { linkFace, TEXT_LINK_CLASS } from "@luke/ui/link-face";
 import { ArrowUpRightIcon } from "lucide-react";
 import type { ReactNode } from "react";
+import { opensAsLink } from "./planning/use-open-link";
 import { Tooltip } from "./tooltip";
 
 /**
@@ -16,12 +17,16 @@ import { Tooltip } from "./tooltip";
  * a reader names a page, and the ↗ says a press leaves the window, as a
  * chip's press stays in it.
  *
- * A place that opens links hands `onOpen`, and the link is pressed; a press
- * goes no further than the link, so a section's block under it opens no
- * editor. A place that opens none draws the same words going nowhere.
+ * A place that opens links hands `onOpen`, and the link is pressed where the
+ * window opens its address at all (`opensAsLink`); a press goes no further
+ * than the link, so a section's block under it opens no editor. A place
+ * that opens none, or an address the window refuses, draws the same words
+ * going nowhere. A label that is more than words, one an edit or a
+ * version's change marks inside, is drawn as it is and never cut short, so
+ * its caret and its marks stay where they stand.
  */
 
-/** A plain link to `href`: its label as `children`, and its label's words, which say whether it is its own address. */
+/** A plain link to `href`: its label as `children`, and its label's words, which say whether it is its own address; no words for a label that is more than words. */
 export function TextLink({
   href,
   words,
@@ -29,23 +34,24 @@ export function TextLink({
   onOpen,
 }: {
   href: string;
-  words: string;
+  words: string | undefined;
   children: ReactNode;
   /** Opens the link; without one, the link is words going nowhere. */
   onOpen?: ((href: string) => void) | undefined;
 }): React.JSX.Element {
-  const face = linkFace(href, words);
-  const said = face.shortened ? (
-    <>
-      {face.words}
-      <ArrowUpRightIcon className="text-link-out" aria-hidden="true" />
-    </>
-  ) : (
-    children
-  );
+  const face = words === undefined ? undefined : linkFace(href, words);
+  const said =
+    face?.shortened === true ? (
+      <>
+        {face.words}
+        <ArrowUpRightIcon className="text-link-out" aria-hidden="true" />
+      </>
+    ) : (
+      children
+    );
   return (
     <Tooltip label={href}>
-      {onOpen === undefined ? (
+      {onOpen === undefined || !opensAsLink(href) ? (
         <span className={TEXT_LINK_CLASS}>{said}</span>
       ) : (
         <a
