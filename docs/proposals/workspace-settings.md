@@ -1,11 +1,18 @@
 # Proposal: Settings › Workspace, finished
 
-Status: **Dean picked A on 2026-10-15** ("I think I like A, but let's focus
-more on the leave workspace flow. And also I do want to support changing role
-types. Also, is the member/admin toggle next to the invite button standard for
-the rest of our app's feel?"). Plan PR 1 (#2810) and PR 3 (#2813) are in
-review and merge on their own. PR 2 and PR 4 wait on the round-two
-decisions in §7, which the show's §0 draws.
+Status: **decided by Dean on 2026-10-15 and being built.** He picked A
+("I think I like A, but let's focus more on the leave workspace flow. And
+also I do want to support changing role types. Also, is the member/admin
+toggle next to the invite button standard for the rest of our app's
+feel?"), then took every round-two recommendation in §7 ("let's go with
+the recommendations"), with two changes: no label carries a trailing
+ellipsis, and invitations stay valid after whoever sent them leaves (R-5,
+"Let's keep invitations valid when someone leaves"). Shipped: #2810 (the
+small mismatches), #2813 (Profile on `ActorMark`), #2820 (the reshaped
+page, the leave flow, the invite's role chip), #2824 (owner-only role
+changes and the handover, service side). In review: #2840 (the role
+changes and handover on the page), then 4c (invitations outlive their
+inviter).
 
 Dean's ask: "I really don't like the workspace settings page. It needs a
 redesign to look more finished." Then: "It should match our other settings
@@ -185,7 +192,7 @@ Leave group. A teammate's personal workspace is left like any other.
 
 **Edge cases:**
 
-- Invitations the leaver sent stay pending.
+- Invitations the leaver sent stay valid; an admin's leave dialog says so.
 - An invitation to the leaver's own address stays good.
 - A member whose members read failed can still leave.
 
@@ -196,9 +203,21 @@ Leave group. A teammate's personal workspace is left like any other.
 - **R-3, invite as Admin.** The owner alone.
 - **R-4, naming the reader's automations in the leave dialog.** Needs one
   optional field on the automation summary.
-- **R-5, invitations the leaver sent.** Keep them pending.
-- **R-6, the leaver's still-running agents.** Let them finish, once the
-  service's behaviour is confirmed.
+- **R-5, invitations the leaver sent.** Decided: **they stay valid**, an
+  invitation being the workspace's. Better Auth's `getInvitation` refuses
+  one whose inviter is no longer a member (`INVITER_IS_NO_LONGER_A_MEMBER_OF_THE_ORGANIZATION`),
+  though its `acceptInvitation` asks nothing of the inviter, so the accept
+  page reads an invitation through Luke's own
+  `GET /api/workspaces/invitations/offer`, which makes the plugin's other
+  checks and names the inviter only while they are a member (4c). GitHub
+  documents the opposite, cancelling a removed member's invitations; Slack
+  and Vercel manage invitations as the workspace's without saying.
+- **R-6, the leaver's still-running agents.** As built: **they stop at
+  their next step**, since every step of an agent runs as its starter and
+  is read through their membership (`coder-host/host.ts`,
+  `agentReachableBy`); the leave dialog says so ("and any still working
+  stop"). Making them finish would be a service change of its own, not
+  taken.
 
 **PR plan, revised:**
 
