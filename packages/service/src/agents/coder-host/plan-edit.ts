@@ -40,7 +40,9 @@ export const EDIT_PLAN_TOOL = {
     "the line holding one. Use it to record a question the plan does not answer under its open " +
     "questions together with the assumption you go on under, to correct a fact you verified in " +
     "the code, to record a hard part you met, an interface you had to change, or a decision you " +
-    "made, each under the heading it belongs to. Every save is recorded in the plan as yours. The developer reads the plan on their next " +
+    "made, each under the heading it belongs to. Write a file, a pull request, or an issue a note names as a Markdown " +
+    "link to its page, such as [store.ts](https://github.com/<owner>/<name>/blob/HEAD/<path>), so the plan draws it as a chip. " +
+    "Every save is recorded in the plan as yours. The developer reads the plan on their next " +
     "planning call; you do not wait for an answer. A note naming a phrase the plan does not " +
     `hold is passed over and reported. A turn may take at most ${PLAN_EDIT.MAX_NOTES_PER_TURN} notes.`,
   inputSchema: planNotesSchema,
