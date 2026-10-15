@@ -489,6 +489,69 @@ export interface PlansControl {
    * plan back to the home page.
    */
   back: () => boolean;
+  /** The window's one ask before leaving a page whose unsaved work would be lost. */
+  leaveGuard: LeaveGuard;
+}
+
+/** Asks before the window leaves a page whose unsaved work would be lost; `leave` goes, past the ask, once the developer says to. */
+export type LeaveAsk = (leave: () => void) => void;
+
+/**
+ * The window's ask before leaving a page that holds unsaved work. A page
+ * stands its ask for as long as it holds that work; every way the window
+ * moves its place, a sidebar row, ⌘K, history, a tab, is a door this
+ * guards, so each asks first, and a page's own way out once its work is
+ * saved, or the developer said to leave, passes.
+ */
+export interface LeaveGuard {
+  /** Stands `ask` until the returned function takes it down. */
+  readonly stand: (ask: LeaveAsk) => () => void;
+  /** Takes a way out past the ask, as the page holding the work takes its own. */
+  readonly pass: (leave: () => void) => void;
+  /** A way out that asks first while an ask stands. */
+  readonly guard: <Args extends readonly unknown[]>(
+    leave: (...args: Args) => void,
+  ) => (...args: Args) => void;
+}
+
+/**
+ * The window's one leave guard, made where the window's tabs are, so the
+ * tab switch is guarded as the plans tab's own doors are. Note that the ask
+ * standing is read through a ref, because a door is called from a closure a
+ * render handed out earlier.
+ */
+export function useLeaveGuard(): LeaveGuard {
+  const standing = useRef<LeaveAsk | undefined>(undefined);
+  const passing = useRef(false);
+  return useMemo<LeaveGuard>(() => {
+    const pass = (leave: () => void) => {
+      passing.current = true;
+      try {
+        leave();
+      } finally {
+        passing.current = false;
+      }
+    };
+    return {
+      stand: (ask) => {
+        standing.current = ask;
+        return () => {
+          if (standing.current === ask) standing.current = undefined;
+        };
+      },
+      pass,
+      guard:
+        (leave) =>
+        (...args) => {
+          const ask = standing.current;
+          if (ask === undefined || passing.current) {
+            leave(...args);
+            return;
+          }
+          ask(() => pass(() => leave(...args)));
+        },
+    };
+  }, []);
 }
 
 /** The open plan's history as the window opens and draws it, over what is read of it. */
@@ -654,8 +717,11 @@ export function usePlansTab(input: {
   onOpenApiKeys: () => void;
   /** Opens Settings at the place the link names. */
   onOpenSettings: (link: SettingsLink) => void;
+  /** The window's ask before leaving unsaved work, which guards every door here that moves the place. */
+  leaveGuard: LeaveGuard;
 }): PlansControl {
-  const { shown, voice } = input;
+  const { shown, voice, leaveGuard } = input;
+  const { guard } = leaveGuard;
   const { act, tell } = input.acts;
   const copyWithToast = useCopyToast();
   const toast = useToast();
@@ -1831,11 +1897,13 @@ export function usePlansTab(input: {
     // Note that the pin's own plan opened by its row is the plan the
     // sidebar marks again rather than the pin; another plan's lets the pin
     // go only once it opens.
-    onSelect: (planId) => {
+    onSelect: guard((planId: string) => {
       setChosen((held) => (held?.pin.plan === planId ? undefined : held));
       select(planId);
-    },
-    onShowAgent: (planId, agentId) => showColumnTab(planId, { agent: agentId }),
+    }),
+    onShowAgent: guard((planId: string, agentId: string) =>
+      showColumnTab(planId, { agent: agentId }),
+    ),
     inbox: input.inboxWaiting,
     inboxShown: shownInbox,
     inboxPlans: input.inboxPlans,
@@ -1844,13 +1912,13 @@ export function usePlansTab(input: {
     inboxView: {
       open: inboxView !== undefined,
       chosen: inboxChosen,
-      onOpen: () => {
+      onOpen: guard(() => {
         setHistoryFor(undefined);
         setStandIn((held) =>
           held?.kind === STAND_IN.INBOX ? held : { kind: STAND_IN.INBOX, chosen: undefined },
         );
-      },
-      onClose: () => setStandIn(undefined),
+      }),
+      onClose: guard(() => setStandIn(undefined)),
       onChoose: (chosen) =>
         setStandIn((held) =>
           held?.kind === STAND_IN.INBOX ? { kind: STAND_IN.INBOX, chosen } : held,
@@ -1859,37 +1927,37 @@ export function usePlansTab(input: {
     // An agent's page stands over the plan's place as the Inbox does, so a version history there gives way.
     agentView: {
       agentId: agentView?.agentId,
-      onOpen: (agentId) => {
+      onOpen: guard((agentId: string) => {
         setHistoryFor(undefined);
         setStandIn({ kind: STAND_IN.AGENT, agentId });
-      },
-      onClose: () => setStandIn(undefined),
+      }),
+      onClose: guard(() => setStandIn(undefined)),
     },
     // Factory stands over the plan's place as the Inbox and an agent's page do, each giving way to the others.
     factoryView: {
       open: standIn?.kind === STAND_IN.FACTORY,
-      onOpen: () => {
+      onOpen: guard(() => {
         setHistoryFor(undefined);
         setStandIn({ kind: STAND_IN.FACTORY });
-      },
-      onClose: () => setStandIn(undefined),
+      }),
+      onClose: guard(() => setStandIn(undefined)),
     },
     // The Automations page stands over the plan's place as Factory does, each giving way to the others.
     automationsView: {
       open: standIn?.kind === STAND_IN.AUTOMATIONS,
       place: standIn?.kind === STAND_IN.AUTOMATIONS ? standIn.place : AUTOMATIONS_LIST,
-      onOpen: (place = AUTOMATIONS_LIST) => {
+      onOpen: guard((place: AutomationsPlace = AUTOMATIONS_LIST) => {
         setHistoryFor(undefined);
         setStandIn({ kind: STAND_IN.AUTOMATIONS, place });
-      },
-      onClose: () => setStandIn(undefined),
+      }),
+      onClose: guard(() => setStandIn(undefined)),
     },
     callPlanId: callInProgress(reported) ? reported.callPlanId : undefined,
     onShowFile: showFile,
     // A version's Open lands where its writer wrote it: an agent's tab as a
     // notification opens it, or the side panel's Call tab, asked to
     // bring the call or the turn into view once it draws.
-    onShowSource: (planId, source) => {
+    onShowSource: guard((planId: string, source: RevisionSource) => {
       if (source.kind === REVISION_SOURCE.AGENT) {
         showColumnTab(planId, { agent: source.agentId });
         return;
@@ -1898,27 +1966,27 @@ export function usePlansTab(input: {
       setHistoryFor(undefined);
       setReveal({ planId, source });
       sidePanel.onShow(planId, SIDE_PANEL_TAB.CALL);
-    },
+    }),
     // The call card's way back lands where the plan's call bar is in sight.
     secondCall: {
       confirm: secondCall,
       question: secondCallQuestion(callCard({ view: voice.view, planning }).planName),
     },
-    onShowPlan: (planId) => showColumnTab(planId, MAIN_TAB.PLAN),
+    onShowPlan: guard((planId: string) => showColumnTab(planId, MAIN_TAB.PLAN)),
     // Each ask is its own, so the same section asked twice scrolls twice.
-    onShowMention: (mention) => {
+    onShowMention: guard((mention: PlanMention) => {
       showColumnTab(mention.planId, MAIN_TAB.PLAN);
       const anchor = mention.kind === MENTION_KIND.SECTION ? mention.anchor : undefined;
       sectionAsks.current += 1;
       setSectionReveal({ planId: mention.planId, reveal: { anchor, ask: sectionAsks.current } });
-    },
+    }),
     sectionReveal,
     // Only the ask shown is let go; a newer one stands until its own plan shows it.
     onSectionRevealed: (ask) =>
       setSectionReveal((last) => (last?.reveal.ask === ask ? undefined : last)),
-    onShowInbox: (planId) => showColumnTab(planId, MAIN_TAB.INBOX),
+    onShowInbox: guard((planId: string) => showColumnTab(planId, MAIN_TAB.INBOX)),
     // A pinned tab is in one of the plan's columns, so a version history over it gives way as well.
-    onOpenPinnedTab: (pin) => {
+    onOpenPinnedTab: guard((pin: PinnedTab) => {
       const { tab } = pin;
       setChosen({ pin, over: openPlanId });
       if (pin.plan !== planning.activePlanId) select(pin.plan);
@@ -1930,7 +1998,7 @@ export function usePlansTab(input: {
       }
       if (sidePanel.fullScreen) sidePanel.onToggleFullScreen();
       mainTabs.onShow(pin.plan, tab);
-    },
+    }),
     chosenPin: chosen !== undefined && chosen.pin.plan === boundFor ? chosen.pin : undefined,
     onReopenClosedTab: reopenable.length === 0 ? undefined : reopenClosedTab,
     repositories: repositoriesIn(repositoriesOf),
@@ -1970,10 +2038,10 @@ export function usePlansTab(input: {
       start: startPlan,
       onClose: () => setNewPlanAsk(undefined),
     },
-    onLeavePlan: () => leavePlan(),
+    onLeavePlan: guard(() => leavePlan()),
     // Home is the page with no plan open, so where none is, only the Inbox, an
     // agent's page, or Factory standing over it is put away, and the host is asked nothing.
-    onGoHome: () => (boundFor === undefined ? setStandIn(undefined) : leavePlan()),
+    onGoHome: guard(() => (boundFor === undefined ? setStandIn(undefined) : leavePlan())),
     onRenamePlan: renamePlan,
     onDraftName: draftName,
     onMarkPlan: (planId, mark) => markPlan(planId, mark),
@@ -1982,5 +2050,6 @@ export function usePlansTab(input: {
     onPinRepository: pinRepository,
     onDeletePlan: deletePlan,
     back,
+    leaveGuard,
   };
 }

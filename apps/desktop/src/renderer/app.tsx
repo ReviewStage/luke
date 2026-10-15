@@ -58,7 +58,7 @@ import { useAgentEndToasts } from "./planning/agent-end-toast";
 import { useInboxToasts } from "./planning/inbox-toast";
 import { type RepositoryRemedyDoors, RepositoryRemedyProvider } from "./planning/repository-remedy";
 import { OpenPlanProvider } from "./planning/use-open-link";
-import { usePlansTab } from "./planning/use-plans-tab";
+import { useLeaveGuard, usePlansTab } from "./planning/use-plans-tab";
 import { applySessionReplay } from "./session-replay";
 import { settingsRowsInput } from "./settings/settings-panel";
 import { followSettingsLink, useSettingsWorkspace } from "./settings-link";
@@ -132,21 +132,25 @@ export function App(): React.JSX.Element {
   useEffect(prefetchEditorBundle, []);
   // So does the parser a reply's markdown is drawn through, so a transcript opened finds it there.
   useEffect(prefetchMarkdownHtmlParser, []);
+  // Note that the tab switch asks first while a page holds unsaved work, because Settings takes the window and the page with it.
+  const leaveGuard = useLeaveGuard();
+  const { guard: guardLeave } = leaveGuard;
   const changeTab = useCallback(
-    (next: PanelTab) => {
-      setTab(next);
-      // Arriving at the tab is arriving at its first page, Profile: a page
-      // left open behind a tab switch would greet the next visit with a
-      // corner of the settings rather than the settings. A flow that needs
-      // another page sets it right after this reset.
-      setSettingsView(SETTINGS_VIEW.ACCOUNT);
-      // `PanelTab` and the counted tab are the same union: both are
-      // `APP_PANEL_TAB`'s own set, which `PanelTab` aliases.
-      window.luke.recordSurfaceEvent(PRODUCT_SURFACE_EVENT.PANEL_TAB_CHANGE, {
-        panel_tab: next,
-      });
-    },
-    [setSettingsView, setTab],
+    (next: PanelTab) =>
+      guardLeave((tab: PanelTab) => {
+        setTab(tab);
+        // Arriving at the tab is arriving at its first page, Profile: a page
+        // left open behind a tab switch would greet the next visit with a
+        // corner of the settings rather than the settings. A flow that needs
+        // another page sets it right after this reset.
+        setSettingsView(SETTINGS_VIEW.ACCOUNT);
+        // `PanelTab` and the counted tab are the same union: both are
+        // `APP_PANEL_TAB`'s own set, which `PanelTab` aliases.
+        window.luke.recordSurfaceEvent(PRODUCT_SURFACE_EVENT.PANEL_TAB_CHANGE, {
+          panel_tab: tab,
+        });
+      })(next),
+    [guardLeave, setSettingsView, setTab],
   );
   // Where a link's workspace is handed, read through a ref, because the
   // workspace Settings shows is held beside the Plans tab, built after the opener.
@@ -269,6 +273,7 @@ export function App(): React.JSX.Element {
     onOpenSettings: (link) => openSettings(link),
     onOpenIntegrations: () => openSettings({ page: SETTINGS_VIEW.INTEGRATIONS }),
     onOpenApiKeys: () => openSettings({ page: SETTINGS_VIEW.CODING_AGENTS }),
+    leaveGuard,
   });
   // The workspace Settings shows: the sidebar's, or one a link named while Settings stays open.
   const settingsWorkspace = useSettingsWorkspace({
