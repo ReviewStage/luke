@@ -528,7 +528,7 @@ test("the title's ⋯ is a section's: in its row, shown while the keyboard is on
 
   act(() => more.click());
   const first = document.querySelector<HTMLElement>('[role="menu"] [role="menuitem"]');
-  assert.deepEqual(menuLabels(), ["Copy link to plan", "Rename", "Version history"]);
+  assert.deepEqual(menuLabels(), ["Copy link to task", "Rename", "Version history"]);
   assert.equal(document.activeElement, first, "the menu opens on its first item");
   act(() => {
     first?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
@@ -541,7 +541,7 @@ test("the title's ⋯ copies the plan's link, its Rename puts the caret in the t
   const { container, more, histories } = drawnTitled();
 
   act(() => more.click());
-  await chooseItem("Copy link to plan");
+  await chooseItem("Copy link to task");
   act(() => more.click());
   await chooseItem("Rename");
   const typing = document.activeElement;
@@ -549,7 +549,7 @@ test("the title's ⋯ copies the plan's link, its Rename puts the caret in the t
   await chooseItem("Version history");
 
   assert.deepEqual(copied, [`https://tryluke.dev/acme/plan/${PLAN_ID}`]);
-  assert.equal(typing, container.querySelector('[role="textbox"][aria-label="Plan name"]'));
+  assert.equal(typing, container.querySelector('[role="textbox"][aria-label="Task name"]'));
   assert.deepEqual(histories, [undefined]);
 });
 
@@ -561,5 +561,5 @@ test("on a plan that cannot be edited, the title's ⋯ is a Tab stop offering it
   act(() => more.click());
 
   assert.equal(more.tabIndex, 0);
-  assert.deepEqual(menuLabels(), ["Copy link to plan"]);
+  assert.deepEqual(menuLabels(), ["Copy link to task"]);
 });

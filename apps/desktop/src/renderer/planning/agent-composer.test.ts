@@ -358,7 +358,7 @@ async function mountedRefusedForMove() {
   await settle();
   const move =
     [...container.querySelectorAll("button")].find(
-      (each) => each.textContent === "Move plan to Acme Team",
+      (each) => each.textContent === "Move task to Acme Team",
     ) ?? assert.fail("the note offers the move");
   act(() => move.click());
   await settle();

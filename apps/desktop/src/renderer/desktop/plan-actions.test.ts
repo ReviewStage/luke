@@ -138,7 +138,7 @@ function mountToolbar(plans: PlansControl): HTMLButtonElement {
       plans,
     }),
   );
-  const more = container.querySelector('[aria-label="Plan actions"]');
+  const more = container.querySelector('[aria-label="Task actions"]');
   assert.ok(more instanceof HTMLButtonElement);
   return more;
 }
@@ -229,7 +229,7 @@ test("Permanently delete asks in a dialog naming the plan, from the ⋯ and from
   assert.equal(question.getAttribute("aria-modal"), "true");
   const title = document.getElementById(question.getAttribute("aria-labelledby") ?? "");
   const body = document.getElementById(question.getAttribute("aria-describedby") ?? "");
-  assert.equal(title?.textContent, "Permanently delete plan?");
+  assert.equal(title?.textContent, "Permanently delete task?");
   assert.equal(
     body?.textContent,
     "“Teammate invitations” and its board and transcript will be deleted. This can’t be undone. To keep it out of the way instead, archive it.",
@@ -320,14 +320,14 @@ test("Start and the plan's ⋯ stand in the toolbar on the Plan tab alone", () =
       }),
     );
     const toolbar = container.querySelector(".desktop-toolbar");
-    const shown = ["Start a coding agent", "Plan actions"].filter(
+    const shown = ["Start a coding agent", "Task actions"].filter(
       (label) => toolbar?.querySelector(`[aria-label="${label}"]`) !== null,
     );
     unmountAll();
     return shown;
   };
 
-  assert.deepEqual(drawn(MAIN_TAB.PLAN), ["Start a coding agent", "Plan actions"]);
+  assert.deepEqual(drawn(MAIN_TAB.PLAN), ["Start a coding agent", "Task actions"]);
   assert.deepEqual(drawn(MAIN_TAB.INBOX), []);
 });
 
@@ -425,14 +425,14 @@ function installClipboard(): string[] {
   return copied;
 }
 
-test("Copy link to plan copies the plan's address on tryluke.dev, alike from the toolbar's ⋯, the ⋯ beside its title, and its sidebar row", async () => {
+test("Copy link to task copies the plan's address on tryluke.dev, alike from the toolbar's ⋯, the ⋯ beside its title, and its sidebar row", async () => {
   const copied = installClipboard();
   const opened = openTab();
   const plans: PlansControl = { ...opened.plans, workspaces: [{ ...PERSONAL, slug: "dean" }] };
   const link = `https://tryluke.dev/dean/plan/${PLAN.id}`;
   const copyFromMenu = async () => {
-    const item = menuItems().find((candidate) => candidate.textContent === "Copy link to plan");
-    assert.ok(item, "the menu offers Copy link to plan");
+    const item = menuItems().find((candidate) => candidate.textContent === "Copy link to task");
+    assert.ok(item, "the menu offers Copy link to task");
     await act(async () => item.click());
   };
 

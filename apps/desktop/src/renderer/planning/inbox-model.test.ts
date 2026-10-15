@@ -465,7 +465,7 @@ test("a code block near the file's top reads from its first line, a file that en
   });
   assert.equal(
     codeNotice(block, null),
-    "These lines are in acme/relay, which this plan no longer reads.",
+    "These lines are in acme/relay, which this task no longer reads.",
     "a plan that names no repository reads none",
   );
   assert.equal(codeNotice(block, "Acme/Relay"), undefined);

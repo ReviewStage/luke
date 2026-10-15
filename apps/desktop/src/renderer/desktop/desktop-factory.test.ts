@@ -202,7 +202,7 @@ test("each plan stands in its step, and what waits on the developer stands at th
   });
   assert.equal(
     page.querySelector(".factory-summary")?.textContent,
-    "1 question and 1 merge need you·1 agent working on 1 plan",
+    "1 question and 1 merge need you·1 agent working on 1 task",
   );
   assert.deepEqual(rows(page, "plan"), ["Usage alerts"]);
   assert.deepEqual(rows(page, "build"), ["Search across plans", `${QUESTION} (waits)`]);
@@ -252,7 +252,7 @@ test("the plan on the call stands in Plan however old, and with nothing standing
     "Nothing is happening right now.",
   );
   const newPlan = [...page.querySelectorAll("button")].find((each) =>
-    each.textContent?.startsWith("New plan"),
+    each.textContent?.startsWith("New task"),
   );
   assert.ok(newPlan);
   act(() => newPlan.click());

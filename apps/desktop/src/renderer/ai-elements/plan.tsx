@@ -19,7 +19,7 @@ import {
  * and is what opens it, so the registry's separate trigger button is not
  * here. Neither is its streaming title, because the plan a coding agent is
  * handed is finished before the agent starts. Closed by default, as
- * docs/PLANNING.md's rule for an agent's transcript asks: the plan is
+ * docs/TASKS.md's rule for an agent's transcript asks: the plan is
  * there to be read, never in the way of the agent's own words. The card
  * clips what it holds to its rounded corners, so the header's hover fill
  * follows the card's radius; the header's focus ring is drawn inside it

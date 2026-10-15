@@ -70,8 +70,8 @@ function PeopleCard({
 }): React.JSX.Element {
   const only = count <= 1;
   const note = archived
-    ? "Each can read this plan, and edit it once it is unarchived."
-    : "Each can read and edit this plan, join its calls, and message its agents.";
+    ? "Each can read this task, and edit it once it is unarchived."
+    : "Each can read and edit this task, join its calls, and message its agents.";
   return (
     <HoverCard data-people-card="">
       <CardHead
@@ -80,7 +80,7 @@ function PeopleCard({
         sub={only ? `${workspace.name} has no other members` : `${count} members`}
       />
       <CardNote>
-        {only ? "Invite someone to this workspace and they can read and edit its plans." : note}
+        {only ? "Invite someone to this workspace and they can read and edit its tasks." : note}
       </CardNote>
       {only || members === undefined ? null : (
         <>
@@ -263,7 +263,7 @@ function RepositoryCrumb({
   const actions: MenuAction[] = [
     { label: "Open on GitHub", icon: <ExternalIcon />, onSelect: doors.onOpenGitHub },
     {
-      label: "New plan in this repository",
+      label: "New task in this repository",
       icon: <ComposeIcon />,
       onSelect: () => doors.onNewPlanIn(repository),
     },
@@ -344,7 +344,7 @@ export function PlanCrumb({
   const count = editorsOf(workspace, members);
   const page = { page: SETTINGS_VIEW.WORKSPACE, workspaceId: workspace.id };
   return (
-    <nav className="plan-crumb" aria-label="Where this plan is">
+    <nav className="plan-crumb" aria-label="Where this task is">
       <Tooltip
         label={workspace.name}
         card={<WorkspaceCard workspace={workspace} personal={doors.personal} />}

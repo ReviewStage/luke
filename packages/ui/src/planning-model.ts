@@ -167,7 +167,7 @@ export function repositoryFailureNote(failure: RepositoryCallFailure): string {
 }
 
 /** What a plan's name says, where it was edited, when the service refused the rename. */
-export const RENAME_FAILED_NOTE = "The plan could not be renamed. Try again.";
+export const RENAME_FAILED_NOTE = "The task could not be renamed. Try again.";
 
 /** The names given to plans that main's view has yet to carry, by plan id. */
 export type PendingRenames = ReadonlyMap<string, string>;
@@ -220,10 +220,10 @@ export type PlanMark = (typeof PLAN_MARK)[keyof typeof PLAN_MARK];
 
 /** What the toast says when the service refused a pin or an archive, by what was asked. */
 export const MARK_FAILED_NOTES = {
-  [PLAN_MARK.PIN]: "The plan could not be pinned. Try again.",
-  [PLAN_MARK.UNPIN]: "The plan could not be unpinned. Try again.",
-  [PLAN_MARK.ARCHIVE]: "The plan could not be archived. Try again.",
-  [PLAN_MARK.UNARCHIVE]: "The plan could not be unarchived. Try again.",
+  [PLAN_MARK.PIN]: "The task could not be pinned. Try again.",
+  [PLAN_MARK.UNPIN]: "The task could not be unpinned. Try again.",
+  [PLAN_MARK.ARCHIVE]: "The task could not be archived. Try again.",
+  [PLAN_MARK.UNARCHIVE]: "The task could not be unarchived. Try again.",
 } as const satisfies Record<PlanMark, string>;
 
 /**
@@ -231,8 +231,8 @@ export const MARK_FAILED_NOTES = {
  * its Undo asks for. A pin says nothing, since the row it moves is in sight.
  */
 export const MARK_UNDOS = {
-  [PLAN_MARK.ARCHIVE]: { note: "Plan archived", undo: PLAN_MARK.UNARCHIVE },
-  [PLAN_MARK.UNARCHIVE]: { note: "Plan unarchived", undo: PLAN_MARK.ARCHIVE },
+  [PLAN_MARK.ARCHIVE]: { note: "Task archived", undo: PLAN_MARK.UNARCHIVE },
+  [PLAN_MARK.UNARCHIVE]: { note: "Task unarchived", undo: PLAN_MARK.ARCHIVE },
 } as const satisfies Partial<Record<PlanMark, { note: string; undo: PlanMark }>>;
 
 /**
@@ -241,7 +241,7 @@ export const MARK_UNDOS = {
  * archive of one says.
  */
 export function archivedPlansNote(landed: number, refused: number): string {
-  const kept = landed === 1 ? MARK_UNDOS[PLAN_MARK.ARCHIVE].note : `${landed} plans archived`;
+  const kept = landed === 1 ? MARK_UNDOS[PLAN_MARK.ARCHIVE].note : `${landed} tasks archived`;
   return refused === 0 ? kept : `${kept}, ${refused} could not be`;
 }
 
@@ -249,7 +249,7 @@ export function archivedPlansNote(landed: number, refused: number): string {
 export function archivePlansFailedNote(refused: number): string {
   return refused === 1
     ? MARK_FAILED_NOTES[PLAN_MARK.ARCHIVE]
-    : "The plans could not be archived. Try again.";
+    : "The tasks could not be archived. Try again.";
 }
 
 /** A plan's pin and archive as the list carries them, each only where it stands. */
@@ -566,7 +566,7 @@ export interface MicrophoneButton {
 }
 
 /** What the microphone button says on an archived plan, which no call is about. */
-const ARCHIVED_CALL_LABEL = "Unarchive the plan to talk about it";
+const ARCHIVED_CALL_LABEL = "Unarchive the task to talk about it";
 
 /** The statuses of a call that has a session, the ones whose microphone is either heard or muted. */
 const CALL_STANDING: ReadonlySet<LiveStatus> = new Set([
@@ -618,7 +618,7 @@ export function microphoneButton(input: {
     return { press: MICROPHONE_PRESS.NONE, label: row.detail ?? VOICE_KEYLESS_NOTE, muted: false };
   }
   if (input.activePlanId === undefined) {
-    return { press: MICROPHONE_PRESS.NONE, label: "Open a plan to talk about it", muted: false };
+    return { press: MICROPHONE_PRESS.NONE, label: "Open a task to talk about it", muted: false };
   }
   const ownCall = input.callPlanId === input.activePlanId;
   if (ownCall && input.listening) {
@@ -630,5 +630,5 @@ export function microphoneButton(input: {
   if (input.archived) {
     return { press: MICROPHONE_PRESS.NONE, label: ARCHIVED_CALL_LABEL, muted: false };
   }
-  return { press: MICROPHONE_PRESS.TALK, label: "Talk about this plan", muted: false };
+  return { press: MICROPHONE_PRESS.TALK, label: "Talk about this task", muted: false };
 }

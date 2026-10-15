@@ -211,7 +211,7 @@ test("with the field empty, ← and → step through the filters, wrapping at th
   openPalette();
 
   assert.equal(key(RIGHT), false, "the step is the palette's, not the caret's");
-  assert.equal(chosenFilter(), "Plans");
+  assert.equal(chosenFilter(), "Tasks");
   key(RIGHT);
   assert.equal(chosenFilter(), "Agents");
   key(LEFT);
@@ -241,7 +241,7 @@ test("⌘[ and ⌘] step through the filters, wrapping at the ends, whether or n
   openPalette();
 
   assert.equal(key(FORWARD), false, "the window's Forward is held off");
-  assert.equal(chosenFilter(), "Plans");
+  assert.equal(chosenFilter(), "Tasks");
   type("invite");
   key(FORWARD);
   assert.equal(chosenFilter(), "Agents");
@@ -593,7 +593,7 @@ test("Search lists the listed workspace's plans first, then every other workspac
       ],
     }),
   );
-  chooseFilter("Plans");
+  chooseFilter("Tasks");
   const listed = rows();
   type("northwind");
 

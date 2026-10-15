@@ -14,14 +14,14 @@ import { CHIP_PLACE, RepositoryChip } from "./repository-chip";
 import type { PlansControl } from "./use-plans-tab";
 
 /**
- * new-plan-dialog.tsx -- New plan as a small modal over the window: the plan's name, the GitHub repository it is about, Cancel and Create plan.
+ * new-plan-dialog.tsx -- New plan as a small modal over the window: the plan's name, the GitHub repository it is about, Cancel and Create task.
  *
  * The window asks the way Linear's and Notion's "New …" ask: it dims over
  * whatever stood open, and a card holds the one field and the repository
  * chip. Its title says where the plan will start, "New plan in Acme", the
  * workspace a chip there that chooses another, as Linear's team chip and
  * GitHub's Owner do; the repository chip then lists that workspace's
- * repositories, under where they come from. The chip leads the card's foot with Cancel and Create plan at its
+ * repositories, under where they come from. The chip leads the card's foot with Cancel and Create task at its
  * end, as the feedback dialog's screenshot button leads its own. The field
  * takes focus, Tab stays inside the card, and focus goes back to whatever
  * opened it. The name is one line, so Return creates the plan with any
@@ -34,12 +34,12 @@ import type { PlansControl } from "./use-plans-tab";
  * workspace's GitHub reaches, and the page where the developer chooses which
  * ones Luke can see. A workspace with no GitHub connected offers none, and
  * the plan starts with none, to be given one later. A
- * refusal keeps the card with the reason under the field, and Create plan
+ * refusal keeps the card with the reason under the field, and Create task
  * can be pressed again; a plan started closes the card and opens as the
  * host's open plan, its call with it.
  */
 
-/** Create plan's chord: Return alone, from the name field. */
+/** Create task's chord: Return alone, from the name field. */
 const CREATE_CHORD: ShortcutChord = { key: SHORTCUT_KEY.ENTER, bare: true };
 
 /**
@@ -152,7 +152,7 @@ function NewPlanCard({ newPlan }: { newPlan: PlansControl["newPlan"] }): React.J
     >
       <div className="new-plan-title">
         <h2 id={titleId} className="confirm-dialog-title">
-          {startsIn === undefined ? "New plan" : "New plan in"}
+          {startsIn === undefined ? "New task" : "New task in"}
         </h2>
         <WorkspaceChip
           workspaces={newPlan.workspaces}
@@ -165,9 +165,9 @@ function NewPlanCard({ newPlan }: { newPlan: PlansControl["newPlan"] }): React.J
         ref={field}
         type="text"
         className="dialog-name-field"
-        aria-label="Plan name"
+        aria-label="Task name"
         aria-keyshortcuts={shortcutAria(CREATE_CHORD)}
-        placeholder="Plan name"
+        placeholder="Task name"
         maxLength={PLAN_BOUNDS.MAX_NAME_CHARS}
         spellCheck
         value={name}
@@ -201,7 +201,7 @@ function NewPlanCard({ newPlan }: { newPlan: PlansControl["newPlan"] }): React.J
           onClick={start}
         >
           <BusyLabel busy={starting} label="Creating">
-            Create plan
+            Create task
           </BusyLabel>
           <Shortcut chord={CREATE_CHORD} />
         </button>

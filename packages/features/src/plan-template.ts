@@ -15,7 +15,7 @@ import { PLAN_BOUNDS, PLAN_SECTION_BOUNDS, type PlanField } from "./plan-wire.js
  * plan-template.ts -- the default template's sections and what each asks, the notes Luke takes into a plan's text, and the agents' journal of them.
  *
  * A plan is one Markdown text started from its account's own template
- * (`plan-document.ts`, `docs/PLANNING.md`). The default template is the
+ * (`plan-document.ts`, `docs/TASKS.md`). The default template is the
  * design doc two engineering teammates would write after talking a task
  * through: why it matters, what done looks like, how they will build it and
  * what they weighed against it, the hard parts, what they leave out, how the

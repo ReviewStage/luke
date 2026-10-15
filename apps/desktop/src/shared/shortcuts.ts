@@ -237,21 +237,21 @@ export interface AppShortcut {
  * menu's own items answer them.
  */
 export const APP_SHORTCUTS = {
-  [APP_COMMAND.NEW_PLAN]: { label: "New plan", chord: { key: SHORTCUT_KEY.N } },
+  [APP_COMMAND.NEW_PLAN]: { label: "New task", chord: { key: SHORTCUT_KEY.N } },
   [APP_COMMAND.COPY_PLAN]: { label: "Copy plan", chord: { key: SHORTCUT_KEY.C, shift: true } },
   [APP_COMMAND.ARCHIVE_PLAN]: {
-    label: "Archive plan",
+    label: "Archive task",
     chord: { key: SHORTCUT_KEY.A, shift: true },
   },
   [APP_COMMAND.DELETE_PLAN]: {
-    label: "Permanently delete plan",
+    label: "Permanently delete task",
     chord: { key: SHORTCUT_KEY.BACKSPACE },
   },
   [APP_COMMAND.PREVIOUS_PLAN]: {
-    label: "Previous plan",
+    label: "Previous task",
     chord: { key: SHORTCUT_KEY.UP, option: true },
   },
-  [APP_COMMAND.NEXT_PLAN]: { label: "Next plan", chord: { key: SHORTCUT_KEY.DOWN, option: true } },
+  [APP_COMMAND.NEXT_PLAN]: { label: "Next task", chord: { key: SHORTCUT_KEY.DOWN, option: true } },
   [APP_COMMAND.TOGGLE_SIDEBAR]: { label: "Toggle sidebar", chord: { key: SHORTCUT_KEY.B } },
   [APP_COMMAND.TOGGLE_SIDE_PANEL]: {
     label: "Toggle panel",
@@ -386,7 +386,7 @@ export const APP_SHORTCUT_GROUPS = [
     ],
   },
   {
-    title: "Plans",
+    title: "Tasks",
     commands: [
       APP_COMMAND.NEW_PLAN,
       APP_COMMAND.COPY_PLAN,

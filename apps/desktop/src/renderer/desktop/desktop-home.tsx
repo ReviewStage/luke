@@ -152,7 +152,7 @@ export function NewPlanButton({ plans }: { plans: PlansControl }): React.JSX.Ele
       disabled={!plans.signedIn}
       onClick={plans.onNewPlan}
     >
-      New plan
+      New task
       <Shortcut chord={APP_SHORTCUTS[APP_COMMAND.NEW_PLAN].chord} />
     </button>
   );
@@ -253,14 +253,14 @@ function HomeInbox({ plans, now }: { plans: PlansControl; now: number }): React.
   );
 }
 
-/** A new account's welcome: Luke's face and New plan. */
+/** A new account's welcome: Luke's face and New task. */
 function Welcome({ plans }: { plans: PlansControl }): React.JSX.Element {
   return (
     <section className="home-welcome" aria-label="Welcome">
       <span className="home-welcome-face" aria-hidden="true">
         <WingFace />
       </span>
-      <h1 className="home-title">Plan your first feature</h1>
+      <h1 className="home-title">Start your first task</h1>
       <NewPlanButton plans={plans} />
     </section>
   );
@@ -319,7 +319,7 @@ export function DesktopHome({
                 onClick={() => runAppCommand(APP_COMMAND.COMMAND_PALETTE)}
               >
                 <SearchIcon />
-                Search all {listed.plans.length} plans
+                Search all {listed.plans.length} tasks
                 <Shortcut chord={APP_SHORTCUTS[APP_COMMAND.COMMAND_PALETTE].chord} />
               </button>
             ) : null}

@@ -31,7 +31,7 @@ export interface CountNoun {
   readonly many: string;
 }
 
-const PLAN_NOUN: CountNoun = { one: "plan", many: "plans" };
+const PLAN_NOUN: CountNoun = { one: "task", many: "tasks" };
 
 /**
  * A folded group's count of what it holds, shown after its name while the

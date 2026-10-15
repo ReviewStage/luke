@@ -17,8 +17,8 @@ import type { MenuAction } from "../desktop/action-menu";
 
 /** What copying a plan's link is called, and what its toast says once the clipboard took it. */
 const PLAN_LINK = {
-  COPY: "Copy link to plan",
-  COPIED: "Link to plan copied",
+  COPY: "Copy link to task",
+  COPIED: "Link to task copied",
 } as const;
 
 /** Where a plan's links are written: its workspace by slug, or by id until the workspaces are read, and its repository. */

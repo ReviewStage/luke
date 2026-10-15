@@ -214,11 +214,11 @@ function usePlaceCommands(
  */
 function TitleBarNewPlan({ plans }: { plans: PlansControl }): React.JSX.Element {
   return (
-    <Tooltip label="New plan" command={APP_COMMAND.NEW_PLAN}>
+    <Tooltip label="New task" command={APP_COMMAND.NEW_PLAN}>
       <button
         type="button"
         className="icon-button"
-        aria-label="New plan"
+        aria-label="New task"
         disabled={!plans.signedIn}
         onClick={plans.onNewPlan}
       >

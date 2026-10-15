@@ -386,7 +386,7 @@ test("while the plan's agents are still being read, the picker says so and offer
   assert.deepEqual(picker()?.rows, []);
   assert.equal(
     document.querySelector(".terminal-picker .command-palette-empty")?.textContent,
-    "Reading the plan’s agents…",
+    "Reading the task’s agents…",
   );
   assert.deepEqual(plan.shown, []);
 });

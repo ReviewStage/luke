@@ -17,7 +17,7 @@ const DEMO = {
 const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
 
 const DEMO_LABEL =
-  "A one-minute recording of a planning call: Luke asks about a budgeting feature while the plan fills in beside him.";
+  "A one-minute recording of a call with Luke: he asks about a budgeting feature while the plan fills in beside him.";
 
 export function DemoVideo(): React.JSX.Element {
   const video = useRef<HTMLVideoElement>(null);

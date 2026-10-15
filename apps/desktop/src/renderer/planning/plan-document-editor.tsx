@@ -330,7 +330,7 @@ export function EditableTitle({
           contentEditable="plaintext-only"
           suppressContentEditableWarning
           role="textbox"
-          aria-label="Plan name"
+          aria-label="Task name"
           tabIndex={-1}
           spellCheck
           onFocus={() => {

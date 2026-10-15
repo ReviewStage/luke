@@ -19,7 +19,7 @@ Then you press Start and a coding agent implements the plan in a sandbox and
 opens the pull request, or you copy the plan into Claude Code, Codex, or any
 other agent.
 
-![Luke's window with the plan "Teammate invitations" open and being written during a voice call.](docs/media/luke-plan.png)
+![Luke's window with the task "Teammate invitations" open and its plan being written during a voice call.](docs/media/luke-plan.png)
 
 ## Install
 
@@ -36,7 +36,7 @@ Luke asks for microphone access the first time you start a call.
 
 ## Usage
 
-1. Press **New plan**, name it, and choose its GitHub repository.
+1. Press **New task**, name it, and choose its GitHub repository.
 2. Press the microphone and describe the feature.
 3. Answer Luke's questions until the plan is complete.
 4. Press **Start** to have a coding agent implement it and open a pull
@@ -64,10 +64,10 @@ from it.
 
 ## Code access
 
-Nothing reads code on your Mac. Luke's service checks the plan's repository
+Nothing reads code on your Mac. Luke's service checks the task's repository
 out in a Vercel Sandbox, with a token the Luke GitHub App mints for that one
-repository and sets at the sandbox's firewall, never inside it, and the
-planning model runs commands such as `ls`, `grep`, or `cat` there. A coding
+repository and sets at the sandbox's firewall, never inside it, and Luke
+runs commands such as `ls`, `grep`, or `cat` there. A coding
 agent you start works in a sandbox of its own, on a full checkout, and pushes
 its branch and pull request through the same App, as the App's own bot. See
 [PRIVACY.md](PRIVACY.md) for details.

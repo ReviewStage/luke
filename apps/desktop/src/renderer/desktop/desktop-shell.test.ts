@@ -197,10 +197,10 @@ test("Escape pressed while Settings is still loading leaves Settings for the pla
 });
 
 test("with the sidebar folded, New plan stands beside its toggle over the home page and the Inbox alike", () => {
-  assert.deepEqual(titleBarButtons(mount(false)), ["Show sidebar", "New plan"]);
+  assert.deepEqual(titleBarButtons(mount(false)), ["Show sidebar", "New task"]);
   act(() => root?.unmount());
   root = undefined;
-  assert.deepEqual(titleBarButtons(mount(true)), ["Show sidebar", "New plan"]);
+  assert.deepEqual(titleBarButtons(mount(true)), ["Show sidebar", "New task"]);
 });
 
 test("the home page welcomes an account with no plan, and its New plan raises the dialog over the window, which Cancel puts away", () => {
@@ -208,12 +208,12 @@ test("the home page welcomes an account with no plan, and its New plan raises th
   const home = page.querySelector('section[aria-label="Home"]');
   assert.ok(home, "the home page stands");
   const newPlan = [...home.querySelectorAll("button")].find((button) =>
-    button.textContent?.startsWith("New plan"),
+    button.textContent?.startsWith("New task"),
   );
   assert.ok(newPlan, "the home page offers New plan");
   act(() => newPlan.click());
   const dialog = document.querySelector('[role="dialog"][aria-modal="true"]');
-  assert.equal(dialog?.querySelector("h2")?.textContent, "New plan");
+  assert.equal(dialog?.querySelector("h2")?.textContent, "New task");
   const cancel = [...(dialog?.querySelectorAll("button") ?? [])].find(
     (button) => button.textContent === "Cancel",
   );

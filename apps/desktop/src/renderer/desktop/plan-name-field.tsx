@@ -24,7 +24,7 @@ export interface NameEdit {
 export function PlanNameField({
   name,
   className,
-  label = "Plan name",
+  label = "Task name",
   maxLength = PLAN_BOUNDS.MAX_NAME_CHARS,
   onEnd,
 }: {

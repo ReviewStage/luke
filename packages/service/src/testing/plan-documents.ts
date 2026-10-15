@@ -6,7 +6,7 @@ import { eq, sql } from "drizzle-orm";
  * plan-documents.ts -- a stored plan's text and its revisions, as a test sets them.
  *
  * A plan starts as one document, a copy of its account's template
- * (`docs/PLANNING.md`); a test that needs other words writes the text, or a
+ * (`docs/TASKS.md`); a test that needs other words writes the text, or a
  * revision of the text, straight onto the rows.
  */
 

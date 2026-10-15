@@ -183,9 +183,9 @@ export const AGENT_LEAD: TranscriptLead = {
 /** What the tab says where its transcript could not be read. */
 const TRANSCRIPT_FAILED_LINE = "The transcript could not be read.";
 
-/** A worker's transcript: the task it was handed, and the worker starting. */
+/** A worker's transcript: the subagent task it was handed, and the worker starting. */
 const WORKER_LEAD: TranscriptLead = {
-  label: "Task",
+  label: "Subagent task",
   icon: <BotIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />,
   startingLine: "The worker is starting.",
   grouped: false,

@@ -41,7 +41,7 @@ const STEP_KEYS = new Map([
 ]);
 
 /** What the dialog says under its list when the service refused the move. */
-const MOVE_REFUSED = "The plan could not be moved. Try again.";
+const MOVE_REFUSED = "The task could not be moved. Try again.";
 
 /** The workspaces a plan may be moved to: every one the account is in but its own. */
 function otherWorkspaces(plans: PlansControl, plan: PlanSummary): readonly Workspace[] {

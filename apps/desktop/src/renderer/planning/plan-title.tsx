@@ -2,7 +2,7 @@
  * plan-title.tsx -- the plan's name, drawn as the title over its text.
  *
  * A plan's text holds no title line, since its name is its own and is
- * renamed apart from the text (`docs/PLANNING.md`). So the window draws the
+ * renamed apart from the text (`docs/TASKS.md`). So the window draws the
  * name over the text, in the look of a `#` heading, as an element of its own
  * ahead of the text's first section, where the title can be edited in the
  * same flow as the text (`plan-document-editor.tsx`). Nothing here reads or

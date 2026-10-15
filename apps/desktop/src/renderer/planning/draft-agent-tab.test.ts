@@ -320,7 +320,7 @@ test("a Start refused because the repository's owner is connected to another wor
   await tab.send();
 
   assert.equal(tab.words(), "Acme/Relay is connected to Acme Team, not this workspace.");
-  await tab.press("Move plan to Acme Team");
+  await tab.press("Move task to Acme Team");
   assert.deepEqual(tab.remedies, [`move:${PLAN_ID}:team-1`]);
   assert.deepEqual(tab.starts, [DRAFT.prompt, DRAFT.prompt]);
   assert.equal(tab.note(), undefined);
@@ -335,7 +335,7 @@ test("a Start GitHub did not answer says so and offers Retry alone, and one from
 
   assert.equal(tab.words(), "GitHub didn't answer. Try again.");
   await tab.press("Retry");
-  assert.equal(tab.words(), "Luke can't reach this plan's repository on GitHub.");
+  assert.equal(tab.words(), "Luke can't reach this task's repository on GitHub.");
   assert.ok(tab.button("Retry"));
   assert.deepEqual(tab.remedies, []);
 });

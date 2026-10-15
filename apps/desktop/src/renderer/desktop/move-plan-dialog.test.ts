@@ -136,7 +136,7 @@ function openMenu(plans: PlansControl): void {
     root.render(createElement(DesktopPlans, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, plans })),
   );
   const more =
-    container.querySelector<HTMLButtonElement>('[aria-label="Plan actions"]') ??
+    container.querySelector<HTMLButtonElement>('[aria-label="Task actions"]') ??
     assert.fail("the toolbar draws the plan's ⋯");
   act(() => more.click());
 }
@@ -264,7 +264,7 @@ test("a refused move keeps the dialog up, saying so under the list", async () =>
   assert.equal(dialog(), moving, "the dialog stays up");
   assert.equal(
     moving.querySelector('[role="alert"]')?.textContent,
-    "The plan could not be moved. Try again.",
+    "The task could not be moved. Try again.",
   );
 });
 
@@ -325,7 +325,7 @@ test("a plan whose repository its workspace cannot reach and another of the acco
   );
   const banner = strandedBanner(page) ?? assert.fail("the stranded plan says so");
   const words = document.getElementById(banner.getAttribute("aria-labelledby") ?? "");
-  assert.equal(words === null ? undefined : heard(words), "This plan's repository belongs to Acme");
+  assert.equal(words === null ? undefined : heard(words), "This task's repository belongs to Acme");
   assert.equal(banner.querySelector(".workspace-ref .workspace-tile")?.textContent, "A");
   for (const element of [banner, ...banner.querySelectorAll("*")]) {
     for (const attribute of element.attributes) {
@@ -365,9 +365,9 @@ test("a stranded plan's banner stands over every tab of the plan: its Inbox too 
       ];
     }),
     [
-      ["This plan's repository belongs to AcmeMove to Acme", "desktop-plan-main"],
-      ["This plan's repository belongs to AcmeMove to Acme", "desktop-plan-main"],
-      ["This plan's repository belongs to AcmeMove to Acme", "side-panel"],
+      ["This task's repository belongs to AcmeMove to Acme", "desktop-plan-main"],
+      ["This task's repository belongs to AcmeMove to Acme", "desktop-plan-main"],
+      ["This task's repository belongs to AcmeMove to Acme", "side-panel"],
     ],
   );
 });

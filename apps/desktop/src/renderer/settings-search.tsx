@@ -198,7 +198,7 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           page: SETTINGS_VIEW.PLAN_TEMPLATE,
           haystack: [
             "Plan template",
-            "new plan starter document markdown sections headings default",
+            "new task plan starter document markdown sections headings default",
           ],
         }
       : undefined,

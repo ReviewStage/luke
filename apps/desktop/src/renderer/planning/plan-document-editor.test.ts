@@ -131,7 +131,7 @@ function _button(container: HTMLElement, text: string): HTMLButtonElement {
 }
 
 function title(container: HTMLElement): HTMLElement {
-  const text = container.querySelector<HTMLElement>('[aria-label="Plan name"]');
+  const text = container.querySelector<HTMLElement>('[aria-label="Task name"]');
   assert.ok(text, "the title's words");
   return text;
 }

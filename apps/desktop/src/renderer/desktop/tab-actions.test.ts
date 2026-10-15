@@ -221,7 +221,7 @@ test("an agent's tab and a subagent's put their right-click's content actions, a
 test("the plan's tab keeps the plan's own ⋯ in its bar", () => {
   const container = mountEveryTab({ main: MAIN_TAB.PLAN, side: SIDE_PANEL_TAB.BOARD });
   const [more, ...others] = slotButtons(bars(container).main);
-  assert.equal(more?.getAttribute("aria-label"), "Plan actions");
+  assert.equal(more?.getAttribute("aria-label"), "Task actions");
   assert.equal(others.length, 0);
 });
 

@@ -41,7 +41,7 @@ export function useStrandedPlanBanner(
   return {
     banner: (
       <PlanBanner action={{ label: `Move to ${home.name}`, onPress: ask }}>
-        This plan's repository belongs to{" "}
+        This task's repository belongs to{" "}
         <WorkspaceRef
           workspace={home}
           card={<WorkspaceCard workspace={home} personal={personal} />}

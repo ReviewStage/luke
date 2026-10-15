@@ -84,7 +84,8 @@ type Speaker = (typeof SPEAKER)[keyof typeof SPEAKER];
 /** What the brief's heading calls it: the plan an agent was handed, or a prompt in its place, or the task a worker was handed. */
 const BRIEF_LABEL = {
   PLAN: "Plan",
-  TASK: "Task",
+  PROMPT: "Prompt",
+  SUBAGENT_TASK: "Subagent task",
 } as const;
 
 /** The most characters of one call's answer the full copy carries before it cuts the rest. */
@@ -199,7 +200,11 @@ export function agentTranscript(input: {
   const messages = task === undefined ? input.messages : workerLines(task, input.messages);
   const first = messages.find((message) => message.role === MESSAGE_ROLE.USER);
   const label =
-    task !== undefined || brief === CODING_AGENT_BRIEF.PROMPT ? BRIEF_LABEL.TASK : BRIEF_LABEL.PLAN;
+    task !== undefined
+      ? BRIEF_LABEL.SUBAGENT_TASK
+      : brief === CODING_AGENT_BRIEF.PROMPT
+        ? BRIEF_LABEL.PROMPT
+        : BRIEF_LABEL.PLAN;
   const turns = messages.flatMap((message): CopiedTurn[] => {
     if (message === first) return [];
     if (message.role === MESSAGE_ROLE.USER) {

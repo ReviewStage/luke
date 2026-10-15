@@ -71,7 +71,7 @@ export function remedyLabel(failure: Failure): string | undefined {
     case FAILURE_REASON.CHOOSE_REPOSITORY:
       return "Choose a repository";
     case FAILURE_REASON.MOVE_PLAN:
-      return `Move plan to ${failure.workspace.name}`;
+      return `Move task to ${failure.workspace.name}`;
     case FAILURE_REASON.OTHER:
       return undefined;
   }

@@ -59,7 +59,7 @@ test("the microphone asks for the permission first, then for a plan, and then ta
   );
   assert.deepEqual(microphoneButton(input), {
     press: MICROPHONE_PRESS.TALK,
-    label: "Talk about this plan",
+    label: "Talk about this task",
     muted: false,
   });
   assert.deepEqual(
@@ -96,7 +96,7 @@ test("the microphone asks for the permission first, then for a plan, and then ta
   for (const callPlanId of [undefined, "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21"]) {
     assert.equal(
       microphoneButton({ ...input, listening: true, callPlanId }).label,
-      "Talk about this plan",
+      "Talk about this task",
     );
   }
 });

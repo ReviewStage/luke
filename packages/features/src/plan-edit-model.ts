@@ -57,8 +57,8 @@ export interface DocumentEditor {
 /** What a failed save says beside the editor, by why it failed. */
 const FAILURE_NOTE = {
   [PLAN_CALL_FAILURE.UNANSWERED]: "Not saved: the service did not answer.",
-  [PLAN_CALL_FAILURE.NOT_FOUND]: "Not saved: this plan no longer exists.",
-  [PLAN_CALL_FAILURE.PLAN_ARCHIVED]: "Not saved: this plan is archived.",
+  [PLAN_CALL_FAILURE.NOT_FOUND]: "Not saved: this task no longer exists.",
+  [PLAN_CALL_FAILURE.PLAN_ARCHIVED]: "Not saved: this task is archived.",
   [PLAN_EDIT_REFUSAL.TOO_LONG]: "Not saved: the plan is too long.",
 } as const satisfies Record<PlanningEditFailure, string>;
 

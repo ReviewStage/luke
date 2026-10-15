@@ -118,7 +118,7 @@ repository once however GitHub cases its name. One listing GitHub does not
 answer, or is still answering full pages of at the bound (`PAGING`, fifty
 pages), fails the whole read as unavailable or unreadable rather than
 answering the rest; none where no installation is running.
-`workspaceRepository(organizationId, "owner/name")` is the check a plan's
+`workspaceRepository(organizationId, "owner/name")` is the check a task's
 repository passes before it is kept: only the workspace's own installation
 on the owner can reach it, found by its stored login first and then by
 GitHub's own reading of the rest, so the listing is paged only
@@ -128,14 +128,14 @@ GitHub spells it. `repositoryReadToken(organizationId, "owner/name")` is the
 same check followed by the one token the App mints for that repository:
 naming it alone and `contents: read`, answered sealed beside the repository
 as GitHub spells it, or none where the installation does not reach it. It is
-what the planning sandbox's checkout reads through
+what the checkout in Luke's sandbox reads through
 (`src/agents/repository-shell.ts`), and the File tab, the tree, and the skills
 beside it. `repositoryPullRequestToken` adds `pull_requests: read` and
 `repositoryWriteToken` cuts contents and pull requests write, each with CI
 read beside it where the installation grants it; `appBot(token)` reads the
 App's bot user (`GET /users/<slug>[bot]`) on a token already minted, which
-is who a coding agent's commits are by. A plan's repository is reached
-through its plan's workspace, read afresh at each use, so an installation
+is who a coding agent's commits are by. A task's repository is reached
+through its task's workspace, read afresh at each use, so an installation
 suspended, removed, or reinstalled decides the very next read.
 
 `GET /api/github/repositories` (`src/github/github-repositories-app.ts`) is that
@@ -209,7 +209,7 @@ reading the workspace's repositories again when the window next takes focus
 
 The App's webhook is `POST /api/github/webhook` (`src/github/github-webhook-app.ts`),
 which keeps what a coding agent published current on the agent's row
-(`coding_agent.published`) for the plan list while nobody has the agent's tab
+(`coding_agent.published`) for the task list while nobody has the agent's tab
 open. GitHub signs every delivery with the App's webhook secret,
 `GITHUB_APP_WEBHOOK_SECRET`, and the route compares `X-Hub-Signature-256`
 against the HMAC-SHA256 of the body's own bytes in constant time before it
@@ -221,14 +221,14 @@ ready_for_review, converted_to_draft), `check_suite`, a completed
 name, and nothing of a delivery is kept or logged: the branch finds the agents
 whose rows stand on it, of whichever account, at most ten, newest first, and
 each one's pull request is read again from GitHub on a token minted on its
-plan's workspace installation through `agentPublished`, as the agent's tab
+task's workspace installation through `agentPublished`, as the agent's tab
 reads it, which writes the row.
 A redelivery reads the same again. GitHub's `ping` and any other event are
 answered and ignored. An `installation` delivery, which GitHub sends every
 App unsubscribed, moves the status of its workspace's `github_installation`
 row: `deleted` to deleted, `suspend` to suspended, `unsuspend` back to active;
 `GET /api/workspaces` then carries that workspace's `github.active` as false,
-its plans stay reachable, and nothing is deleted. A `github_app_authorization`
+its tasks stay reachable, and nothing is deleted. A `github_app_authorization`
 delivery, which GitHub also sends every App unsubscribed
 ([GitHub: github_app_authorization](https://docs.github.com/en/webhooks/webhook-events-and-payloads#github_app_authorization)),
 with action `revoked` clears the sealed tokens, which no longer reach
@@ -302,7 +302,7 @@ call throws is still one indistinguishable nothing: the resolution recovers
 it, so a missing header, an expired token, and a refusing auth service are
 the same 401 they always were, and no route repeats the recovery.
 
-Every caller yields it. `resolveHostedUserId`, which the account and plans
+Every caller yields it. `resolveHostedUserId`, which the account and tasks
 groups are handed as their `resolveUserId`, and the voice function's own
 resolver are Effect-shaped, so each reads the bearer on its own fiber instead
 of wrapping a promise in `Effect.promise`. One caller is a
@@ -320,7 +320,7 @@ developer dictated into a message box, `{ audio, durationMs, keywords }`
 (`@luke/features/dictation-wire`), answered `{ text }`. The clip is WebM
 with Opus in base64, held to two minutes and a megabyte and refused past
 either as `request_too_large` before anything goes upstream; `keywords` are
-up to fifty words the desktop expects to hear (the repository, the plan's
+up to fifty words the desktop expects to hear (the repository, the task's
 title, the paths it names), each on one line. `src/dictation/transcription.ts`
 sends the clip and the words to OpenAI's `gpt-transcribe` on Luke's key as one
 multipart `POST /v1/audio/transcriptions`, the words as its `keywords[]`
@@ -437,7 +437,7 @@ whose ring it would need.
 
 ## Integrations
 
-Every agent Luke runs — the planning assistant, the coding agent, and each
+Every agent Luke runs — his own brain, the coding agent, and each
 one's declared worker — can use the signed-in account's integrations, each
 through the provider's own hosted MCP server with every tool it lists, the
 ones that write and the ones that answer a credential among them (`AGENTS.md`'s
@@ -460,7 +460,7 @@ elicitation mode, and the agent asks the developer and calls Executor's
 `resume` with their answer. Its `native` mode would ask over an MCP
 elicitation instead, which eve's client never answers, so Executor's
 connection stays on the plain URL, and the mode is fixed in the grant
-whatever URL a client later opens it at (https://executor.sh/docs/mcp). A connection belongs to the account, so it reaches every plan and
+whatever URL a client later opens it at (https://executor.sh/docs/mcp). A connection belongs to the account, so it reaches every task and
 project the account has. `src/integrations/integrations.ts` is the one table of
 providers: the variable each connector's UID is read from, the one naming
 the accounts it is offered to, its MCP server
@@ -565,7 +565,7 @@ that table.
   is what learns how it ended, from Connect's result.
 
 The rewrite moves a provider's path segment into the `provider` query
-(`apps/web/server/function-rewrites.ts`), as a plan's id is moved into `id`.
+(`apps/web/server/function-rewrites.ts`), as a task's id is moved into `id`.
 
 **The agents** (`src/integrations/integration-connection.ts`,
 `src/agents/agent-runtime/connections.ts`). eve hands a declared subagent
@@ -574,12 +574,12 @@ none of its parent's connections, so each of the four agents registers one
 starts, which hands the turn every server its role's policy has on
 (`src/agents/agent-runtime/servers.ts`), each the one definition over its provider and
 that agent's own ownership check: the root's `admit`, or a worker's
-`admitDelegated`. The planning agents are handed every integration; a coding
+`admitDelegated`. Luke's brain and its worker are handed every integration; a coding
 agent and its worker are handed every one the developer has not switched off
 for that agent. The
 definition's auth is eve's plain `getToken` form, credentialed as the app,
 and the account is the admitted conversation's owner, never the session's
-principal. That matters because a spoken planning turn runs as the
+principal. That matters because a spoken turn runs as the
 deployment acting for the account, and eve's user-scoped auth (`connect()`
 from `@vercel/connect/eve`) would refuse it before reading any token. That
 form has no interactive half either, so eve never pauses a run for a
@@ -588,7 +588,7 @@ opening, and again after Connect answers, so a Disconnect takes effect from
 the next step. A connection that cannot be used throws one of
 `integrationUnavailable`'s fixed sentences, which fails only the call that
 tried it; every other tool, and the run, carries on. Workers stay read-only
-in the checkout and change an integration only when their task explicitly
+in the checkout and change an integration only when their subagent task explicitly
 asks them to.
 
 **Transcripts** (`src/integrations/connection-tools.ts`). eve offers a
@@ -889,7 +889,7 @@ URLs eve mints resolve to the public path. The web functions reach it through
 A coding agent is one eve session over a `coding_agent` conversation
 (`packages/database/src/models/coding-agent-store.ts`), and the host behind the authored
 files is `src/agents/coder-host/`: the same door and conversation
-admission as the planning brain's (`src/agents/brain-host/door.ts`,
+admission as the hosted brain's (`src/agents/brain-host/door.ts`,
 `src/agents/brain-host/conversation.ts`), with the developer's own bearer the caller
 the channel walks in for the desktop's routes (`src/agents/coder-host/channel.ts`): a
 Start and a Stop come from a route still holding it, and a follow-up
@@ -900,7 +900,7 @@ developer's own principal with the deployment named as its carrier. The agent (`
 tools and authors its own under `apps/web/coder/tools/`, which is exactly the set the
 store writer registers (`src/agents/coder-host/tool-set.ts`): eve's `bash`, `read_file`,
 `write_file`, and `glob`, the code extension's `apply_patch` and `grep` from
-`apps/web/eve/extensions/code/tools`, the planning model's own `search_web` and
+`apps/web/eve/extensions/code/tools`, Luke's own `search_web` and
 `read_web_page` (`public-research.ts`: the search screened, cited, and
 budgeted per turn on Luke's key and counted on the account's meter, the page
 read refusing any address off the public internet), and two of Luke's own: `delegate`, the hand-off to a worker (below), and
@@ -908,11 +908,11 @@ read refusing any address off the public internet), and two of Luke's own: `dele
 notetaker's own notes (`@luke/features/plan-template`'s `planNotesSchema`)
 into the agent's plan through the plan's one write (`plan-notes.ts`): an open
 question the agent met with the assumption it goes on under, a fact it
-corrected in the code, a decision it made. The save is journaled on the plan
+corrected in the code, a decision it made. The save is journaled on the task's
 row (`plan.agent_edits`, the last fifty, the agent's id and its notes as
 taken) and named from the agent's row at read time, so the window's "Updated
-by" line and the planning model's "recent edits by coding agents" say what the
-row says now; the developer reads them on their next planning call while the
+by" line and Luke's "recent edits by coding agents" say what the
+row says now; the developer reads them on their next call while the
 agent runs on, and a turn may take only so many notes. The
 extension itself is not mounted, since its `worker` subagent runs on an AI
 Gateway model and its `gh` tool on Vercel Connect, and Luke runs neither.
@@ -920,7 +920,7 @@ Gateway model and its `gh` tool on Vercel Connect, and Luke runs neither.
 session's input tokens are uncapped and compaction is eve's default.
 
 The worker (`apps/web/coder/subagents/worker/`) is Luke's own declared subagent, in
-the planning worker's shape (`apps/web/eve/subagents/worker/`): read-only in the
+the shape of Luke's own worker (`apps/web/eve/subagents/worker/`): read-only in the
 agent's own sandbox and checkout, uncommitted edits included
 (`defineParentSandbox`), authored exactly the agent's reads
 (`WORKER_TOOL_NAMES`: `bash`, `read_file`, `glob`, `grep`, `search_web`,
@@ -928,16 +928,16 @@ agent's own sandbox and checkout, uncommitted edits included
 agent it runs under is. It is declared
 hidden (`tool: false`), because eve's own subagent tool carries a message
 and nothing else, and the agent chooses each worker's model and effort: the
-model sees `delegate` (`apps/web/coder/tools/delegate.ts`), a resumable task
+model sees `delegate` (`apps/web/coder/tools/delegate.ts`), a resumable subagent task
 (`serve`, the shape eve gives every agent call) whose input is
 `{ task, model?, effort?, background? }`. The call answers with eve's
-receipt at once and the worker's answer reaches the agent as a task result,
+receipt at once and the worker's answer reaches the agent as a subagent task's result,
 so the turn stays open while it works; unless the agent sets `background`,
 the tool's words have it call `task_wait` right after, which is a foreground
 delegation in eve's terms, and a developer's message during the wait reaches
 the agent at once without stopping the worker. Several calls in one step run
-at once, and a call with the task's id sends the worker more, into the same
-session. The planning model delegates through the same shape
+at once, and a call with the subagent task's id sends the worker more, into the same
+session. Luke delegates through the same shape
 (`apps/web/eve/tools/delegate.ts`, `PLANNER_DELEGATE_TOOL`), always in the background
 and on its own model, its worker declared hidden too; the Work tab reads its
 calls as worker calls under either name, eve's `worker` in earlier
@@ -948,7 +948,7 @@ Its step fills the pair in from the agent's own row, holds it to the same
 catalog a Start is held to (`src/agents/coder-host/delegation.ts`, refusing with the
 models offered or the named model's efforts, which the body throws so the
 model reads it and tries again), opens the child conversation the call
-names (`childConversationId(agent conversation, callId)`, as the planning
+names (`childConversationId(agent conversation, callId)`, as Luke's own
 worker's is named) and writes the pair under it
 (`coding_agent_delegation`, migration 0066); then the body opens the worker
 through `ctx.agent("worker")`. eve hands a resolver no lineage, so the
@@ -956,7 +956,7 @@ worker's hook (`subagents/worker/hooks/store.ts`) pins the parent call's id
 in the worker's own state as the session starts, the model resolver reads
 it at every step and is told the recorded pair (`host.delegatedModel`), and
 the hook relays the worker's stream into the child conversation as a child
-turn naming that pair (`host.relayChild`). The task's result names the pair
+turn naming that pair (`host.relayChild`). The subagent task's result names the pair
 and the worker's answer; the starting call's `toolCallId` is what names the
 child. `delegate` is not among `SANDBOX_TOOLS`: a refused or web-only
 delegation opens no sandbox, and counting it would have the turn's end open
@@ -972,7 +972,7 @@ provider's own, and the step is told `@ai-sdk/anthropic` on
 catalog lists for the model (`CatalogModel.contextWindow`) or a fallback
 where it lists none. Each step also asks for its reasoning in words, so the
 agent's and each worker's tab show it as the Work tab shows Luke's:
-`reasoningSummary: "auto"` on OpenAI, as the planning brain asks, and
+`reasoningSummary: "auto"` on OpenAI, as the hosted brain asks, and
 adaptive thinking with `display: "summarized"` on a Claude 5 model, which
 thinks whether asked or not. An older Claude is not asked, since the ask
 would start it thinking. Nothing goes through AI Gateway.
@@ -1001,7 +1001,7 @@ platform's 24-hour maximum timeout, prepared with the code extension's
 tooling (`gh`, signed commits, TypeScript diagnostics), pnpm, and Python
 beside the image's Node and git. As it opens, the agent's repository is
 checked out whole at its default branch through the same firewall-scoped
-clone the planning checkout makes (`repository-shell.ts`'s
+clone the hosted brain's checkout makes (`repository-shell.ts`'s
 `cloneRepository`), on a token `repositoryWriteToken` mints for that one
 repository with contents and pull requests write, plus checks, statuses, and
 Actions read where the installation has granted the App those
@@ -1017,7 +1017,7 @@ not watched. A token lasts an hour, so the store hook renews it at the
 firewall on the first step past `CODER.GITHUB_TOKEN_REFRESH`.
 
 The store hook (`apps/web/coder/hooks/store.ts`) relays every event into the store
-through the relay the planning brain shares (`src/agents/brain-host/relay.ts`), composed
+through the relay the hosted brain shares (`src/agents/brain-host/relay.ts`), composed
 with no ask record, so an agent's turns land as `turns` rows naming its
 model and effort and its `messages` rows as `UIMessage`s; it also stops the
 sandbox the moment a turn ends, completed, failed, or cancelled, where a
@@ -1026,13 +1026,13 @@ tell the agent to read `AGENTS.md` and `CLAUDE.md` first, reread the code the
 plan names and say where it no longer fits, run the repository's checks,
 work on a `luke/<slug>` branch and never push the default branch, and decide
 on a pull request and its draft state itself; the plan is the session's
-first message, or for an agent started on a developer's task, the task is,
+first message, or for an agent started on a developer's prompt, the prompt is,
 the agent is never handed the plan, and the instructions are worded for a
-task in the plan's place. The service needs `ANTHROPIC_API_KEY` and `OPENAI_API_KEY`,
+prompt in the plan's place. The service needs `ANTHROPIC_API_KEY` and `OPENAI_API_KEY`,
 `DATABASE_URL`, the GitHub App's variables, and the Vercel Sandbox
 credentials its build prewarms under; `LUKE_CODER_MODEL_FIXTURE=scripted`
 selects the scripted model for `apps/web/coder/evals/coder.eval.ts`, which
-`pnpm --filter @luke/web test:agent` runs beside the planning eval and which
+`pnpm --filter @luke/web test:agent` runs beside the brain's eval and which
 runs a turn under the scripted model with no tool call, so no sandbox opens,
 and a second turn that delegates to the worker, whose only call is the
 delegation, so no sandbox opens there either.
@@ -1041,7 +1041,7 @@ delegation, so no sandbox opens there either.
 
 `src/agents/turn-events.ts`'s `projectTurnEvents` is what the voice's live
 brain hears of a turn while it runs, in process (above). Nothing is stored for
-it: the five events — a slow step began, a planning turn queued a question,
+it: the five events — a slow step began, a turn queued a question,
 every action settled, one sentence of the reply, the turn ended — are a
 projection over the turn row and the turn's journal, the assistant message the
 store writer opens under the turn's id and amends as each call is written
@@ -1122,8 +1122,8 @@ the preferences part's own, so a row a template opened answers no snapshot.
 ## The coding-agent routes
 
 `src/agents/coding-agents-app.ts` is the group the desktop starts, lists,
-reads, messages, re-models, and stops a plan's agents through. An agent
-belongs to its plan's workspace: every route reads it through the plan's
+reads, messages, re-models, and stops a task's agents through. An agent
+belongs to its task's workspace: every route reads it through the task's
 membership gate (`coding-agent-store.ts`), so any member lists, reads,
 messages, renames, re-models, and stops an agent a teammate started, while
 its conversation stays its starter's, the row's `userId`, under which its
@@ -1134,18 +1134,18 @@ declares every request and answer, and `service-paths.ts` the addresses.
 both of the choice or neither, the account's default (`/api/account/preferences`)
 where neither, checked against the catalog with `acceptedModelChoice`, which
 also refuses a stored default that has since left the catalog. It refuses a
-plan with no repository (`no-repository`, 409) and one the installation of
-the plan's workspace no longer reaches, read at the start rather than when
-the plan named it (`repository-not-reachable`, 403;
+task with no repository (`no-repository`, 409) and one the installation of
+the task's workspace no longer reaches, read at the start rather than when
+the task named it (`repository-not-reachable`, 403;
 `src/github/workspace-repository.ts`), snapshots the
-plan's document as the Markdown Copy puts on the clipboard
+task's plan as the Markdown Copy puts on the clipboard
 (`@luke/features/plan-markdown`), makes the agent and its conversation
 (`createCodingAgent`), and opens the eve session under the developer's own
 bearer with the snapshot as the first message of a typed turn. A Start
-naming a task, the developer's own words bounded as a message is, opens the
-session with the task as that first message instead: the agent is never
-handed the plan, its row keeps the task and no snapshot, and it still works
-in the plan's repository under the same checks; an eve that
+naming a prompt (`task`), the developer's own words bounded as a message is, opens the
+session with the prompt as that first message instead: the agent is never
+handed the plan, its row keeps the prompt and no snapshot, and it still works
+in the task's repository under the same checks; an eve that
 did not take it discards the agent again (`discardCodingAgent`) and answers
 `unavailable`, so a retry starts afresh. A retry under the same key answers
 the agent the first Start made, 200 rather than 201, and opens nothing. A
@@ -1153,7 +1153,7 @@ Start that named a model writes it as the account's default.
 
 `GET /api/plans/{id}/agents` answers each agent's id, model, effort, start
 instant, status, `brief` (`plan` or `task`, what it was handed first, so its
-tab draws a plan as the plan's card and a task as the developer's message),
+tab draws a plan as the plan's card and a prompt as the developer's message),
 and `turnId`, the newest turn the status is read from
 (null before the first), so a reader keying an agent's run by agent and
 turn sees the run a message opens as its own (`src/agents/coder-host/status.ts`):
@@ -1191,7 +1191,7 @@ queues one. The route first reads whether a line already stands under the
 key (`sentLineStands`, by the `messages` row's `client_id`, which is
 `sentLineId(clientKey)`), and answers the agent as it stands with nothing
 sent again where one does, which is what makes a send repeated after a lost
-answer safe; then confirms the plan's workspace still reaches the repository
+answer safe; then confirms the task's workspace still reaches the repository
 (`repository-not-reachable`, as a Start does),
 hands the words to the agent's eve session under the developer's own
 bearer inside the conversation's lock (`writeAwaitingLine`, which reads the
@@ -1244,7 +1244,7 @@ fails is logged and the sandbox stops regardless, and a turn that opened
 no sandbox writes nothing. A row with no branch published nothing, and
 GitHub is not asked; a row still on the repository's default branch, as
 an agent that only read leaves it, published nothing either. GitHub then says what stands, once the
-installation of the plan's workspace is confirmed to reach the repository as
+installation of the task's workspace is confirmed to reach the repository as
 a Start confirms it (`repository-not-reachable`, 403, otherwise), on a token
 the App mints for that repository with pull requests read
 (`src/github/pull-requests.ts`): the newest pull
@@ -1253,7 +1253,7 @@ the head's check runs and commit statuses read together for the one word,
 and a head whose checks the App may not read reading as `none` with a
 warning rather than failing the answer. Every answer read is written on the
 agent's row (`coding_agent.published`, the pull request or null), which is
-what the plan list's `agents` reads. The answer is kept
+what the task list's `agents` reads. The answer is kept
 per agent for `CODER.PUBLISHED_TTL` (thirty seconds) in an Effect `Cache`
 built once with the routes, under a key that says whether the agent had
 ended, so the first read after a turn ends is fresh rather than the running
@@ -1280,16 +1280,16 @@ double, reading every run for the token and never finding it.
 
 ## Automations
 
-An automation is an account's saved coding-agent Start on one of its plans,
+An automation is an account's saved coding-agent Start on one of its tasks,
 fired by a trigger (`docs/proposals/automations-research.md` is the
-research and the plan behind it). The account, the plan, the trigger, the
+research and the plan behind it). The account, the task, the trigger, the
 action, and the guards are an `automation` row
 (`packages/database/src/schemas/automation.ts`), the trigger, the action,
 and the guards as `@luke/features/automation-wire`'s own JSON; every
 firing is an `automation_run` row, kept whatever came of it, under a
 dedupe key unique per automation, so the same firing claimed twice is one
 run. The store is `packages/database/src/models/automation-store.ts`: an
-automation is made only on a plan the account reaches, and every other
+automation is made only on a task the account reaches, and every other
 statement an account makes names it.
 
 A schedule is five-field cron read in an IANA zone
@@ -1315,13 +1315,13 @@ queued is skipped as `paused` (the owner's own "Run now" still runs), and
 a run past the daily cap (runs started in the last twenty-four
 hours) or past the concurrency guard (agents its runs started still
 starting or running, read as each agent's tab reads it) is skipped, never
-queued. Then it is a Start with a task, on the one path a Start takes
-(`src/agents/coder-host/start.ts`): the plan, its repository, the owner's reach of it
+queued. Then it is a Start with a prompt, on the one path a Start takes
+(`src/agents/coder-host/start.ts`): the task, its repository, the owner's reach of it
 through the App, and the model are checked as for the developer's own
 Start, the agent runs as the owner on the owner's keys, and eve is reached
 as the deployment acting for the owner under `CRON_SECRET`, the opening the
-coder channel already admits for the voice brain. The task is the
-automation's prompt with a closing line naming the automation and why it
+coder channel already admits for the voice brain. The prompt is the
+automation's own prompt with a closing line naming the automation and why it
 fired. The run's id is the Start's key, so a run two sweeps both act on
 starts one agent, and a named model does not become the account's default.
 A refused start is a failed run with one fixed word
@@ -1342,15 +1342,15 @@ made where one stands, and failed as `unavailable` where none does.
 
 The routes are `src/automations/automations-app.ts`, under the account bearer, every
 row gated by the store on the account owning the automation and still
-reaching its plan, so another account's automation, or one on a plan of a
+reaching its task, so another account's automation, or one on a task of a
 workspace the account left, is `not-found`:
 
 - `GET /api/automations` answers the account's automations newest first,
-  or one plan's under `?planId=`, each with its newest run;
+  or one task's under `?planId=`, each with its newest run;
   `POST /api/automations` makes one (`201`). A schedule that does not
   read (five-field cron, a known zone, no more often than every fifteen
   minutes), a model the catalog does not offer the account, or a key the
-  frame does not name is `invalid-request`; a plan with no repository is
+  frame does not name is `invalid-request`; a task with no repository is
   `no-repository`. A webhook trigger's secret is minted here, answered
   once as `webhookSecret`, and kept only as its SHA-256.
 - `GET`, `PATCH`, and `DELETE /api/automations/{id}` read, change, and
@@ -1384,7 +1384,7 @@ otherwise the call is `202 { queued }`, the run recorded under the SHA-256 of
 the caller's `Idempotency-Key` where it sends one. The body, UTF-8, at most
 64 KiB, and holding no NUL, is kept on the run's `payload`, read only by the act that starts the
 run, and handed to the agent fenced as the caller's own text, its angle
-brackets spelled as entities, cut with a note where it would push the task
+brackets spelled as entities, cut with a note where it would push the prompt
 past its bound. The body reaches the run's agent task, transcript, and traces
 by the carve-out in root `AGENTS.md`; nothing of it or the secret is logged.
 
@@ -1399,7 +1399,7 @@ reopened, marked ready, or pushed to (`pull-request-updated`; a draft fires
 nothing until it is marked ready, and an opened pull request is both this and
 `pull-request-opened`), an issue opened or labelled, a check suite that
 completed as `failure` or `timed_out`, and a push to a branch, each in any of
-the automation's repositories (or its plan's, on a row an older build wrote,
+the automation's repositories (or its task's, on a row an older build wrote,
 matched the way GitHub folds a name's case), of an owner still a member of
 the automation's workspace, filtered by the trigger's labels (the label just applied, or
 any label of what was opened) and branches (a pull request's base, a check
@@ -1422,10 +1422,10 @@ request and check events it already reads, a setting of the App on GitHub
 rather than of this repository; until it does, those two triggers never
 fire.
 
-## The plans group
+## The tasks group
 
-`src/plans/plans-app.ts` is the Mac's Plans tab's route group over the account's
-named feature plans (`docs/PLANNING.md`): `GET /api/plans` lists them, newest
+`src/plans/plans-app.ts` is the Mac's Tasks tab's route group over the account's
+named tasks (`docs/TASKS.md`): `GET /api/plans` lists them, newest
 started first and the archived ones left out unless `?archived=include` asks
 for them, so a build from before archiving never draws one, `POST /api/plans`
 starts one with its name, the untouched
@@ -1438,33 +1438,33 @@ in the account's first workspace, ensured first, where it names none,
 pinned, whether it is archived, the workspace it belongs to, or several at
 once, each pin and archive a stamp on the row (`pinned_at`, `archived_at`)
 answered as `pinnedAt` and `archivedAt` only where it stands; a move
-(`workspaceId`) is the plan's owner's alone (`not-permitted` for a
+(`workspaceId`) is the task's owner's alone (`not-permitted` for a
 teammate), into a workspace they are a member of (`not-found` otherwise)
-whose installation reaches the plan's repository, refused as a repository
+whose installation reaches the task's repository, refused as a repository
 change would be otherwise, and its coding agents go with it, and
 `DELETE /api/plans/{id}` deletes it, its coding agents' rows going with it
-and their conversations stamped deleted beside the plan's own (`deletePlan`),
+and their conversations stamped deleted beside the task's own (`deletePlan`),
 the id moved into
 the query by the rewrite `apps/web/server/function-rewrites.ts` makes of every
 segment-captured id.
-Each row of the list carries `agents` where the plan has a coding agent
+Each row of the list carries `agents` where the task has a coding agent
 (`src/agents/plan-agents.ts`): how many it has and how many are starting
 or running, the three it names (those at work first, then the newest), each
 with its title, model, effort, status, since when, and the member who
 started it while their account stands, and the pull requests they opened,
 each number once and at most three, as GitHub last answered a read of them.
-Four statements answer the whole list: the agents of every plan listed with
+Four statements answer the whole list: the agents of every task listed with
 `coding_agent.published` (migration 0078), their newest turns, the lines
 awaiting a turn, and their starters' names; the list asks GitHub nothing.
 `packages/features/src/plan-wire.ts` declares every request and answer. Each
 endpoint resolves the bearer first, and every statement in
-`packages/database/src/models/plan-store.ts` names the account beside the plan and gates on
-its membership of the plan's workspace, so a teammate's plan reads and
-writes as the account's own, and a plan of a workspace the account is not in
+`packages/database/src/models/plan-store.ts` names the account beside the task and gates on
+its membership of the task's workspace, so a teammate's task reads and
+writes as the account's own, and a task of a workspace the account is not in
 answers exactly as none does.
 
 `src/github/repository-pins-app.ts` answers `/api/repository-pins`, the
-repositories the account pinned in the sidebar, whose groups of plans stand
+repositories the account pinned in the sidebar, whose groups of tasks stand
 above the rest: `GET` reads them newest pinned first, and `PUT` pins or
 unpins one and answers them all as they then stand. A pin is a row of
 `repository_pin` keyed by the account and the repository's full name
@@ -1472,7 +1472,7 @@ unpins one and answers them all as they then stand. A pin is a row of
 deleted when it is undone, bounded at fifty an account, and gone with the
 account. It names the repository and nothing of it, so it asks GitHub
 nothing. It is a path of its own rather than one under `/api/plans/`, whose
-rewrite reads the next segment as a plan's id.
+rewrite reads the next segment as a task's id.
 
 `src/accounts/workspaces-app.ts` answers the account's workspaces
 (`packages/features/src/workspace-wire.ts`). Membership has nothing to do with
@@ -1519,8 +1519,8 @@ installation, its status, and an account standing for another workspace is
 refused and stays there. `src/accounts/workspaces-app.test.ts` holds
 all of it over the plugin on PGlite and a scripted GitHub.
 
-`GET /api/plans/{id}/work` reads back what the planning model wrote and
-ran on the plan's calls (`src/plans/plan-work-store.ts`): the plan's
+`GET /api/plans/{id}/work` reads back what Luke wrote and
+ran on the task's calls (`src/plans/plan-work-store.ts`): the task's
 conversation's turns, twenty a page newest first, each read from its
 row and journal by the same `src/plans/plan-work.ts` a live call tells them
 through, and `?before=<turn id>` for the page before that turn; the answer
@@ -1532,8 +1532,8 @@ never read back. `packages/features/src/planning-view.ts` declares the
 answer (`planWorkAnswerSchema`).
 
 `GET /api/plans/{id}/file?path=&first=&last=` reads a window of one file of
-the plan's repository for the Mac's File tab (`src/plans/plan-file.ts`),
-at most 500 lines a window. No sandbox stands outside a planning turn, so it
+the task's repository for the Mac's File tab (`src/plans/plan-file.ts`),
+at most 500 lines a window. No sandbox stands outside one of Luke's turns, so it
 reads GitHub's contents API at the head of the default branch, not the
 session's checkout, or with `ref=` at that commit, a whole 40-character
 lowercase SHA and nothing a branch or a path could spell, as an inbox item's
@@ -1561,30 +1561,30 @@ revision it brought back; `?before=<seq>` reads the page before that
 revision, and the answer names the revision the next older page is read
 before while one stands. `GET /api/plans/{id}/revisions/{seq}` reads one
 revision's content and the content before it, null for the first, each
-formatted under the plan's name as it stands now, so a rename since is no
+formatted under the task's name as it stands now, so a rename since is no
 difference between them. `POST /api/plans/{id}/revisions/{seq}/restore`
 puts that revision's text back through the plan's one
 locked save (`src/plans/plan-notes.ts`'s `restoreRevision`), kept as a
 revision of the developer's naming the one restored, and answers the plan.
 It takes no body and no base: what it replaced is the revision before it,
 so a restore over a save that landed meanwhile is undone by restoring that.
-Every member of the plan's workspace reads the history any of them wrote;
-a plan of a workspace the account is not in reads as an empty history and
+Every member of the task's workspace reads the history any of them wrote;
+a task of a workspace the account is not in reads as an empty history and
 restores as `not-found`. `packages/features/src/plan-wire.ts` declares the answers
 (`planRevisionsAnswerSchema`, `planRevisionAnswerSchema`).
 
-A plan's repository is `plan.repository` (migration 0063), the full name
-`owner/name` as GitHub spells it, or null for a plan with none, which is
-where every plan from before repositories stands and is no error. It is
+A task's repository is `plan.repository` (migration 0063), the full name
+`owner/name` as GitHub spells it, or null for a task with none, which is
+where every task from before repositories stands and is no error. It is
 kept only once `workspaceRepository` on the `GitHubApp` confirms the
-installation connected to the plan's workspace reaches it, read from GitHub
-before the row is written, so a plan never names a repository its workspace
+installation connected to the task's workspace reaches it, read from GitHub
+before the row is written, so a task never names a repository its workspace
 could not reach at the moment it was named; the stored spelling is GitHub's,
 whatever case the request used. A start or a change naming one outside that
 installation, or any in a workspace with nothing connected, is
 `repository-not-reachable` (403) with nothing written, the name beside it
 included; a GitHub that did not answer is `github-unanswered` (502), and an
-App or store the service could not read `unavailable`, the plan standing as
+App or store the service could not read `unavailable`, the task standing as
 it was. A change naming null clears it.
 
 A `repository-not-reachable` refusal says why in `unreached`
@@ -1597,12 +1597,12 @@ workspace holds one alone); the
 installation on the owner was not given the repository (`not-selected`,
 with the installation's settings page on GitHub); or one given every
 repository of the owner still does not list it, which a rename, a
-transfer, or a delete leaves (`gone`). Where the plan's owner asks and the
+transfer, or a delete leaves (`gone`). Where the task's owner asks and the
 workspace has nothing connected or another account's installation, and the
 owner's installation stands for another workspace they are in, the reason
 is `other-workspace`, naming that workspace, since an installation stands
-for one workspace alone and moving the plan there is what reaches the repository:
-a plan a personal workspace held before #2524 is left that way.
+for one workspace alone and moving the task there is what reaches the repository:
+a task a personal workspace held before #2524 is left that way.
 
 A plan's text has one write, `src/plans/plan-notes.ts`, and four
 writers. `POST /api/plans/{id}/edit` takes the developer's edit of the
@@ -1610,55 +1610,55 @@ whole text against the base it was made on (`saveDeveloperEdit`), saved
 where the text still holds that base, laid over what Luke wrote meanwhile
 where it can be, and answered as a conflict with the text as it stands, with
 nothing saved, where it cannot (`packages/features/src/plan-edit.ts`); a
-restore above is the second. A planning call's notetaker
+restore above is the second. A call's notetaker
 (`src/plans/plan-scribe.ts`) and a coding agent's `edit_plan`
 (`src/agents/coder-host/plan-edit.ts`) answer with notes
 (`packages/features/src/plan-template.ts`): a point added under a heading, a
 phrase corrected, or a line struck. `saveNotes` takes them in order over the
 text as it stands, passing over a note that names a phrase the plan does not
-hold, and saves it under a binding of account and plan the service built
+hold, and saves it under a binding of account and task the service built
 rather than anything the model sends, answering the document as saved or
 why nothing was: a text past its bound,
-a plan deleted meanwhile, which a save never recreates because it is an
+a task deleted meanwhile, which a save never recreates because it is an
 `update` over the row that stands, and a store that could not be reached,
 each leaving the prior document in place.
-`readPlan` is the read the planning model starts and resumes from, with the
+`readPlan` is the read Luke starts and resumes from, with the
 conversation `attachPlanConversation` associated, and it moves nothing.
 `src/plans/plans.test.ts` and `apps/web/tests/plans-app.test.ts` hold both halves
 against a real dialect.
 
-The planning model is the hosted brain run over a `plan` conversation, which
-`openPlanConversation` opens once per plan and attaches; deleting the plan
-stamps it cleared, so the purge takes its words thirty days on. A plan's is
+Luke's judgment is the hosted brain run over a task conversation (`plan`), which
+`openPlanConversation` opens once per task and attaches; deleting the task
+stamps it cleared, so the purge takes its words thirty days on. A task's is
 the only conversation any code still opens, and the host runs every
 conversation it admits as one, which fixes three things
-(`src/agents/brain-host/planning.ts`): the prompt is the
-authored planning instructions, the standing context each turn opens with is
-the plan's name and saved document read again from the row,
-and the tools are the planning list alone: `run_in_repository` bound to the
-plan the conversation belongs to (`readPlanOfConversation`), the two public
+(`src/agents/brain-host/planning.ts`): the prompt is
+Luke's authored instructions, the standing context each turn opens with is
+the task's name and saved plan read again from the row,
+and the tools are Luke's list alone: `run_in_repository` bound to the
+task the conversation belongs to (`readPlanOfConversation`), the two public
 research reads beside it, `queue_question`
 (`src/plans/queue-question.ts`), which runs nothing: its journaled call is
 how a question reaches the voice while the turn still runs, and the four
-tools about the plan's coding agents (`src/agents/coding-agent-tools.ts`):
+tools about the task's coding agents (`src/agents/coding-agent-tools.ts`):
 a list with each agent's status and what it published, one agent's recent
 progress as a bounded tail, a message to one, which takes the message
 box's own steer path (`src/agents/coder-host/steer.ts`), and a start of
-a new one on the call's plan, which takes the Start button's own path
+a new one on the call's task, which takes the Start button's own path
 (`src/agents/coder-host/start.ts`) under the tool call's id as its key;
 both reach eve as the deployment acting for the account, the two rows the
 coder channel's deployment table admits. A resumed session
 is seeded with the conversation so far. The writer holds rows to
-`HOSTED_TOOL_SET`, which is the planning tools and nothing else, so a turn's
+`HOSTED_TOOL_SET`, which is Luke's tools and nothing else, so a turn's
 calls are written and read back under the same list it was offered.
 Question choice, agreement, assumption flags, and corrections are the
 instructions' alone: no code reads the document for meaning.
 
 **One tool registry** (`src/agents/agent-runtime/tools.ts`). Every tool
 Luke offers any of its four agents is named once there, with the roles it
-serves: the planner, the planning worker, the coding agent, and its worker.
-What each is offered is derived from it: the planning root's hosted resolver
-offers the planner's (`PLANNER_TOOL_NAMES`), the planning worker its own
+serves: Luke's brain, its worker, the coding agent, and its worker.
+What each is offered is derived from it: the brain's hosted resolver
+offers its own (`PLANNER_TOOL_NAMES`), the brain's worker its own
 (`WORKER_TOOL_NAMES`), and the coding agent's files under `apps/web/coder/tools/` and
 its worker's are held to their roles by `coder-agent.test.ts`; each role's
 stored set names every tool the role is offered. A tool's
@@ -1667,12 +1667,12 @@ every module may import it. eve's own injected tools (`task_wait`,
 `task_cancel`, `connection_search`, `connection_execute`) are eve's, not
 listed.
 
-The planning session is offered the skills the plan's repository keeps
+Luke's session is offered the skills the task's repository keeps
 (`apps/web/eve/skills/repository.ts`, `src/agents/agent-runtime/skills.ts`), read
 from GitHub on a read token for that repository as the session starts, which
 is the call's warm-up ask, and loaded with eve's own `load_skill`; each body
 says where the skill stands in the repository, so its files are read with
-`run_in_repository`. A plan with no repository, one the App does not reach,
+`run_in_repository`. A task with no repository, one the App does not reach,
 or a read that fails offers none, and a coding agent's are read the same way
 from its own repository, led by where they stand in its checkout. A skill
 load reaches the Work tab as `other` named `load_skill`, a kind every desktop
@@ -1681,13 +1681,13 @@ reads, with the skill as its subject.
 The research reads (`src/agents/public-research.ts`) are `search_web`,
 one query sent to OpenAI's Responses API with its own `web_search` tool on
 Luke's key and the brain's model at low reasoning effort and low search
-context, since the planning turn waits on it, asked to store nothing, and
+context, since the turn waits on it, asked to store nothing, and
 `read_web_page`, one public HTTPS page fetched and reduced to its text.
-Neither knows the account or the plan: what leaves is the query and fixed
+Neither knows the account or the task: what leaves is the query and fixed
 instructions, or a GET for one URL with no credential of the account's, and
 the result goes back only to the call that asked. A query is one line of at
 most 200 characters with nothing shaped like a credential; keeping private
-repository text out of it is the planning instructions' rule, since plain
+repository text out of it is Luke's instructions' rule, since plain
 words cannot be told apart by code. A search is `found` only with a cited
 public URL, each with the answer's words that cited it; a finished uncited
 answer is `no-results` and its words go no further, one the token bound cut
@@ -1704,14 +1704,14 @@ hosted uses before it is sent; a count that cannot be written is logged and stop
 nothing.
 `src/agents/public-research.test.ts` holds both against scripted HTTP and DNS.
 `src/agents/brain-host/planning.test.ts` runs the scripted model through the host and
-the relay, and the `brain-host` eval runs a plan conversation through eve.
+the relay, and the `brain-host` eval runs a task conversation through eve.
 
-The developer talks to the planning model through the ordinary voice
+The developer talks to Luke through the ordinary voice
 session. Every call is a `/api/voice/sessions` session whose
-`session.create` names the plan (`planId`), which the service checks the
+`session.create` names the task (`planId`), which the service checks the
 account holds before anything is spent; a create naming none is refused. It is created under
-the planning call's instructions (`sessionInstructions()` in
-`@luke/live`), whose delegation policy hands the developer's planning words to the backend and says back the
+the call's instructions (`sessionInstructions()` in
+`@luke/live`), whose delegation policy hands the developer's words to the backend and says back the
 finding and its one next question. A call just created speaks first: it is
 created with `planningOpeningHistory()` as the last developer message of its
 startup history, the Live conversations guide's way to greet before the
@@ -1720,30 +1720,30 @@ acknowledged, or cued after `session.started`, and a re-attach, which creates
 nothing, opens nothing again. The plan seed's first line says whether the
 plan is new (the untouched template and no assumption) or under way, which
 is what the opening picks its first question from. The exchange lands every spoken ask and
-the session's record in the plan's conversation (`openPlanConversation`),
-so the delegation reaches the
-planning model with its document, its tools, and the conversation so far.
+the session's record in the task's conversation (`openPlanConversation`),
+so the delegation reaches
+Luke with the plan, his tools, and the conversation so far.
 The recent words ride the delegation as context, and whether an answer
-agrees to anything is the planning instructions' to judge. The binding is the session's for life. It is written on
+agrees to anything is Luke's instructions' to judge. The binding is the session's for life. It is written on
 the `voice_sessions` row as a plain `plan_id`,
 and a re-attach reads it from there, so a later connection cannot move a
-session onto another plan, and one whose row names no plan is refused. The Mac holds one call at a time, which outlives
-the plan on screen and moves only when another plan's Talk press hangs it up
-and opens one about that plan, so only one plan is ever spoken. `src/voice/voice-service-exchange.test.ts` drives both
-plans and the re-attach over the real store.
+session onto another task, and one whose row names no task is refused. The Mac holds one call at a time, which outlives
+the task on screen and moves only when another task's Talk press hangs it up
+and opens one about that task, so only one task is ever spoken about. `src/voice/voice-service-exchange.test.ts` drives both
+tasks and the re-attach over the real store.
 
-The planning model reads source through one tool,
+Luke reads source through one tool,
 `run_in_repository({ command })` (`src/agents/repository-shell.ts`), which
-runs the command in the planning session's own Vercel Sandbox, the one eve
+runs the command in Luke's session's own Vercel Sandbox, the one eve
 opens per session from `apps/web/eve/sandbox.ts` and hands a tool through
-`ctx.getSandbox()`, on a checkout of the plan's repository. The first call
-that finds no checkout of the plan's repository makes one, at the
+`ctx.getSandbox()`, on a checkout of the task's repository. The first call
+that finds no checkout of the task's repository makes one, at the
 repository's current default branch and one commit deep, and later calls
-reuse it; a plan whose repository changed meanwhile is checked out again,
+reuse it; a task whose repository changed meanwhile is checked out again,
 and the worker subagent shares the session's sandbox
 (`apps/web/eve/subagents/worker/sandbox.ts`), so its reads see the same checkout. The
 checkout reads through the Luke GitHub App: `repositoryReadToken` confirms
-the installation of the plan's workspace still reaches the repository and
+the installation of the task's workspace still reaches the repository and
 mints a token for that one
 repository with contents read, which the shell sets as GitHub's `Basic`
 header at the sandbox's firewall, on `github.com` under the repository's own
@@ -1756,7 +1756,7 @@ as the Mac runner once gave one), with its text handed to bash as an
 argument rather than spliced into shell text, and answers its exit code and
 up to 20,000 characters each of stdout and stderr. Every refusal is
 `not-run` with a reason the model can act on, and each is answered ahead of
-anything it would need: a plan with no repository yet opens no sandbox; a
+anything it would need: a task with no repository yet opens no sandbox; a
 repository the workspace's installation no longer reaches, a GitHub that
 could not be read, a sandbox that could not
 be opened or carries no firewall, and a clone that failed, with git's words,
@@ -1771,7 +1771,7 @@ Mac's claim and settle routes, and the Mac's command runner are gone
 ## Hosted conversation store
 
 The `conversations`, `messages`, `turns`, and `asks` tables hold the hosted
-brain's conversations per account: a plan's conversation, its messages, the
+brain's conversations per account: a task's conversation, its messages, the
 turns that ran over it, and the asks handed to it. Every row is keyed by
 `user_id` and cascades with the user row, so
 `apps/web/server/routes/account/delete.ts` erases them with the account.
@@ -1951,12 +1951,12 @@ bearer, resolved through the same in-process `/oauth2/userinfo` seam every
 hosted route uses, and one session is counted against it by the same
 `hosted_usage` meter before any session exists. The
 socket's first frame is `session.create` (the SDP offer, a voice, the seed,
-and the id of the plan the call is about); the opener
+and the id of the task the call is about); the opener
 (`src/voice/opening.ts`, which is where the first frame becomes a session
-or a refusal) checks the account holds that plan, and
+or a refusal) checks the account holds that task, and
 the function creates the session at OpenAI on the deployment's key, writes
 down the session's `voice_sessions` row (the account, the live session id,
-client delegation, the plan the call is bound to, and the model it was
+client delegation, the task the call is bound to, and the model it was
 created on), attaches the trusted sideband, stands the hosted
 exchange on it (below), and answers `session.created` with the id, the SDP
 answer, and the store's own id for the `voice_sessions` row
@@ -2115,18 +2115,18 @@ is told as a failed end so the exchange settles rather than waiting forever.
 The bound is `LIVE_BRAIN_FOLLOW_BOUNDS` in `src/voice/live-brain.ts`: the
 plain `FOLLOW`, ten minutes, past eve's own turn deadline with room for one
 queued turn ahead, until the journal shows the turn handed work to the
-`worker`, which eve runs as a task the planning turn parks on (`turn.waiting`)
+`worker`, which eve runs as a subagent task the turn parks on (`turn.waiting`)
 and resumes from in the same turn once the findings land, minutes or longer
 later. From that call on the follow runs under `PARKED_FOLLOW` instead: the
 plain bound plus the sweep's `TURN_ABANDON.AFTER_MS`, an hour, at which a turn
 still running is settled as failed on the record and the follow hears that end,
 so following longer could hear nothing more. The record does not say when the
-task settles — the relay tells nothing for the park and the findings reach the
+subagent task settles — the relay tells nothing for the park and the findings reach the
 journal as the steps after them — so the parked bound covers the turn from its
 delegation, and the follow still stops the moment the turn completes, fails, or
 is cancelled, or the socket's scope closes. On the eve
 path the reply arrives whole at the turn's end; what the follow carries
-mid-turn is the slow step, each question a planning turn queued, the
+mid-turn is the slow step, each question a turn queued, the
 actions settling, and, as the live brain's own and no event of the stream,
 each look's count of the turn's settled calls with the kind of the latest
 (`STEP_SETTLED`), never a call's input or output, which the service words as
@@ -2140,7 +2140,7 @@ service speaks only the newest request's reply, and the rest tell only its
 end, so a reply is never said once per folded ask. Each delegation is an
 exchange of its own in the service, a revision of the request: a newer one
 silences the older exchange's reply, slow-step note, and end note, and leaves
-its run to finish rather than cancelling it, because a planning call
+its run to finish rather than cancelling it, because a call
 delegates every answer while the exploration it began still runs; the
 questions a silenced run queues are still handed on. A refusal at the door is
 spoken as the build's own note for it, never composed with the ask. One
@@ -2180,9 +2180,9 @@ he did and thought, then what was said of it.
 live session — the brain answered in process, the record over the voice
 writer with the sideband observed once ahead of the service — over one
 store context, with the eve client handed in as the caller composed it. The
-brain's asks are pinned to the conversation the record writes, the plan's,
+brain's asks are pinned to the conversation the record writes, the task's,
 so an ask and the lines it leaves cannot name two conversations: once the
-plan's deletion has stamped it, the ask is refused at the door and eve is
+task's deletion has stamped it, the ask is refused at the door and eve is
 not reached, rather than eve taking a turn the record cannot write. The
 composition is a scope's:
 `hostedLiveExchange` answers an effect built in the `Scope` its caller opened
@@ -2210,7 +2210,7 @@ the relay pipes. The service hands the attachment the socket and reaches
 nothing of the exchange or the live-session door itself; the attachment
 builds the sideband over that socket and adopts. One
 socket, one scope: the attachment is an effect the service runs in a scope
-forked from the session's own, building the plan's conversation, the
+forked from the session's own, building the task's conversation, the
 exchange, and its adoption of the sideband in it, and the
 service's stop is that scope's close; a standing that could not be reached
 has the scope closed by the service before the session is refused, so nothing
@@ -2236,7 +2236,7 @@ held), and waits for every record write already started, so no line begun
 before the settle is cut; an append not yet sent is dropped with the session
 and never re-sent, and a write that fails after the socket closed is
 reported. `src/voice/exchange-attachment.ts` is what the function passes:
-the plan's conversation resolved at the session's start, under whichever
+the task's conversation resolved at the session's start, under whichever
 member of its workspace opened it, the function's writer, eve reached as the
 deployment for the calling account, and the plan's
 notetaker (`src/plans/plan-scribe.ts`), which runs only where the
@@ -2294,7 +2294,7 @@ no connection is left to end it. So a socket may also open with `session.attach`
 a session id. The function resolves the bearer, checks that this account is
 the one the session was created for (the `voice_sessions` row written at
 creation, indexed over the owner and the live session id for this lookup),
-reads the plan the call was bound to off the same row, refusing a row that
+reads the task the call was bound to off the same row, refusing a row that
 names none, attaches a fresh
 sideband to OpenAI's `/v1/live/sessions/{id}/attach`, answers
 `session.attached`, and pipes as before. Nothing the session said between the
@@ -2365,10 +2365,10 @@ its main process), `503` while
 `OPENAI_API_KEY` is absent. Once a socket stands, one frame `{ "error": <reason> }`
 in `hostedErrorSchema`'s vocabulary, then a close with code 1008 and the same
 reason: `invalid-request` for a first frame that is not a valid `session.create`
-or `session.attach`, a create naming no plan, or an attach to a session bound
+or `session.attach`, a create naming no task, or an attach to a session bound
 to none; `invalid-token` for a
 bearer no account stands behind, and for an attach to a session this account
-did not create; `not-found` for a call naming a plan the account
+did not create; `not-found` for a call naming a task the account
 does not hold, refused before the session is counted; `upstream-error` when OpenAI refused the
 creation or the sideband could not attach; `upstream-throttled` when OpenAI
 answered 429.
@@ -2387,8 +2387,8 @@ only on production deployments.
 The sweep ends what no request will, and it reads no word of any account.
 It runs three things in turn and answers what each did: the purge of
 conversations stamped deleted more than thirty days ago, which is what a
-deleted plan's conversation comes to, counted as `purged`; the sweep over
-turns still running past their kind's bound, an hour for a planning turn
+deleted task's conversation comes to, counted as `purged`; the sweep over
+turns still running past their kind's bound, an hour for one of Luke's turns
 and a day and an hour for a coding agent's
 (`packages/database/src/models/abandoned-turns.ts`, `TURN_ABANDON.AFTER_MS` and
 `TURN_ABANDON.CODING_AGENT_AFTER_MS`), whose end

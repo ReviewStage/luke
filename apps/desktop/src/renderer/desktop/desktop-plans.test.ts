@@ -277,7 +277,7 @@ test("the crumb's workspace opens that workspace's home page, the window switchi
       ),
     );
     const crumb = container.querySelector<HTMLButtonElement>(
-      'nav[aria-label="Where this plan is"] button.plan-crumb-item',
+      'nav[aria-label="Where this task is"] button.plan-crumb-item',
     );
     assert.ok(crumb, "the crumb names the plan's workspace");
     act(() => crumb.click());
@@ -291,7 +291,7 @@ test("the crumb's workspace opens that workspace's home page, the window switchi
   assert.deepEqual(asked, ["home", `choose ${personal.id}`, "home"]);
 });
 
-test("the crumb's New plan in this repository starts in the plan's own workspace, the window switching to it first where another is listed", () => {
+test("the crumb's New task in this repository starts in the plan's own workspace, the window switching to it first where another is listed", () => {
   const acme = { id: "workspace-acme", name: "Acme", role: WORKSPACE_ROLE.MEMBER, github: null };
   const personal = { ...acme, id: PLAN.workspaceId, name: "Personal" };
   const plan = { ...PLAN, repository: "acme/web" };
@@ -322,9 +322,9 @@ test("the crumb's New plan in this repository starts in the plan's own workspace
   assert.ok(chip, "the crumb names the plan's repository as a chip");
   act(() => chip.click());
   const item = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
-    (each) => each.textContent === "New plan in this repository",
+    (each) => each.textContent === "New task in this repository",
   );
-  assert.ok(item, "the chip's menu offers New plan in this repository");
+  assert.ok(item, "the chip's menu offers New task in this repository");
   act(() => item.click());
   act(() => root.unmount());
   container.remove();

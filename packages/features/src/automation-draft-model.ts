@@ -319,7 +319,7 @@ export function draftProblems(
     draft.prompt,
     AUTOMATION_BOUNDS.MAX_PROMPT_CHARS,
     "Tell the agent what to do.",
-    `Keep the task under ${AUTOMATION_BOUNDS.MAX_PROMPT_CHARS.toLocaleString("en-US")} characters.`,
+    `Keep the prompt under ${AUTOMATION_BOUNDS.MAX_PROMPT_CHARS.toLocaleString("en-US")} characters.`,
   );
   const read = readSchedule({ cron: cronOf(draft.schedule), timezone: draft.timezone }, now);
   const schedule =

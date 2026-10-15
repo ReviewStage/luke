@@ -288,7 +288,7 @@ function PinnedSection({
 function repositoryActionGroups(group: RepositoryGroup, plans: PlansControl): MenuAction[][] {
   const { repository } = group;
   const archive: MenuAction = {
-    label: "Archive plans",
+    label: "Archive tasks",
     icon: <ArchiveIcon />,
     onSelect: () => plans.onArchivePlans(group.plans.map((plan) => plan.id)),
   };
@@ -392,11 +392,11 @@ function RepositorySection({
               </button>
             </Tooltip>
             {repository === null ? null : (
-              <Tooltip label={`New plan in ${label}`}>
+              <Tooltip label={`New task in ${label}`}>
                 <button
                   type="button"
                   className="sidebar-repository-action sidebar-repository-new"
-                  aria-label={`New plan in ${label}`}
+                  aria-label={`New task in ${label}`}
                   onClick={() => onNewPlanIn(repository)}
                 >
                   <PlusIcon />
@@ -455,7 +455,7 @@ function ArchivedPlans({ context }: { context: RowContext }): React.JSX.Element 
  */
 function ListSkeleton(): React.JSX.Element {
   return (
-    <SkeletonRegion label="Reading your plans…" className="sidebar-skeleton">
+    <SkeletonRegion label="Reading your tasks…" className="sidebar-skeleton">
       {LIST_SKELETON.map((width) => (
         <div key={width} className="sidebar-skeleton-row">
           <Skeleton width={width} />
@@ -923,7 +923,7 @@ export function DesktopSidebar({
         onClick={chosen(newPlan)}
       >
         <ComposeIcon />
-        New plan
+        New task
         <Shortcut chord={APP_SHORTCUTS[APP_COMMAND.NEW_PLAN].chord} className="row-shortcut" />
       </button>
       {/* Search is a second door to the command palette, drawn as New plan
@@ -981,7 +981,7 @@ export function DesktopSidebar({
         <nav className="sidebar-group" aria-label="Plans">
           {plans.listFailed ? (
             <div className="sidebar-note">
-              <ReadFailure line="Your plans could not be read." onRetry={plans.onRetryList} />
+              <ReadFailure line="Your tasks could not be read." onRetry={plans.onRetryList} />
             </div>
           ) : null}
           {/* The list is empty before its first read lands, so that it
@@ -990,9 +990,9 @@ export function DesktopSidebar({
             <ListSkeleton />
           ) : null}
           {plans.signedIn && unlisted && plans.listRead && !plans.listFailed ? (
-            <p className="sidebar-note">No plans yet.</p>
+            <p className="sidebar-note">No tasks yet.</p>
           ) : null}
-          {plans.signedIn ? null : <p className="sidebar-note">Sign in to plan a feature.</p>}
+          {plans.signedIn ? null : <p className="sidebar-note">Sign in to start a task.</p>}
           {groups.map((group) => (
             <RepositorySection
               key={group.repository ?? NO_REPOSITORY}
