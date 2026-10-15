@@ -209,6 +209,8 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
   const landing = yield* landingOf(userId, ask);
   yield* workspaceRepository(landing.workspaceId, landing.repository, landing.mover);
   const brief = landing.place;
+  // The words a mention is read from: the prompt with any note after it, or a plan start's note alone.
+  const words = brief.prompt ?? (ask.planId === null ? undefined : ask.note);
   const started = yield* hostedStoreOrArchived(
     createCodingAgent(userId, {
       ...brief,
@@ -219,9 +221,8 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
       contextWindow: choice.contextWindow,
       repository: landing.repository,
       disabledServers: ask.disabledServers,
-      // The servers the prompt mentions are its first turn's, whatever the switches say.
-      mentionedServers:
-        brief.prompt === null ? [] : mentionedServers(brief.prompt, landing.repository),
+      // The servers the prompt or the note mentions are its first turn's, whatever the switches say.
+      mentionedServers: words === undefined ? [] : mentionedServers(words, landing.repository),
     }),
   );
   if (Option.isNone(started)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
@@ -236,7 +237,11 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
       turn: BRAIN_HOST_TURN.TYPED,
       message:
         brief.prompt === null
-          ? brief.planSnapshot
+          ? eveContent(
+              brief.planSnapshot,
+              [],
+              words === undefined ? undefined : mentionedContext(words, landing.plan),
+            )
           : eveContent(
               brief.prompt,
               ask.attachments ?? [],
