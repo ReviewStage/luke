@@ -12,8 +12,8 @@ import { user } from "../auth.js";
 
 /**
  * The migration that makes an integration row one account's, over a
- * database from before it, and the one after it that keeps the primary
- * flag's column standing: an account connected at two providers keeps both rows, each its
+ * database from before it, the one after it that keeps the primary flag's
+ * column standing, and the one that drops it once nothing reads it: an account connected at two providers keeps both rows, each its
  * provider's first account, asking under the account's own user id, though
  * the two share that subject; and the migrations run again, as a run that
  * stopped partway is finished by the next, change nothing. The table is put back as it stood before the
@@ -24,6 +24,7 @@ import { user } from "../auth.js";
 const MIGRATIONS = [
   "20261015191901_integration_connection_accounts",
   "20261015212606_integration_connection_primary_kept",
+  "20261015212832_integration_connection_drop_primary",
 ];
 
 const STATEMENT_BREAKPOINT = "--> statement-breakpoint";
