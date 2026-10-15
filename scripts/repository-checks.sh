@@ -367,6 +367,8 @@ node --input-type=module -e '
 # platform, so it is logic and belongs in a package. Shell is stated by role
 # rather than by list: an app's entries in `knip.json`, its runtime edges in
 # `effect-edges.json`, and the deployment and test-support files named here.
+# The agents' eve workspace is scanned on the same terms: eve's file
+# conventions are its knip entries, and each imports `eve`, a platform.
 # The source is parsed with the root's `typescript`, so a comment or a string
 # that says "window" is not a reach into the DOM. `react` is deliberately not
 # a platform, so a DOM-free hook is flagged and belongs in `@luke/ui`; a
@@ -379,7 +381,7 @@ node --input-type=module -e '
   import path from "node:path";
   const root = process.argv[1];
   const ts = createRequire(path.join(root, "package.json"))("typescript");
-  const SCANNED = ["apps/desktop/src", "apps/web/src", "apps/web/server"];
+  const SCANNED = ["apps/desktop/src", "apps/web/src", "apps/web/server", "apps/eve"];
   const APP_MODULE = /^(?:\.{1,2}\/|#(?:main|renderer|shared|preload|testing)\/)/;
   const PLATFORM =
     /^(?:electron|electron-updater|@sentry\/electron|react-dom|better-auth|@better-auth\/[^/]+|eve|@vercel\/[^/]+|vite|@tailwindcss\/[^/]+|posthog-js|@fontsource[^/]*(?:\/[^/]+)?)(?:\/.*)?$/;
@@ -411,7 +413,7 @@ node --input-type=module -e '
   const knip = JSON.parse(await readFile(path.join(root, "knip.json"), "utf8"));
   const edges = JSON.parse(await readFile(path.join(root, "tools/anti-slop/effect-edges.json"), "utf8"));
   const shellGlobs = [
-    ...["apps/desktop", "apps/web"].flatMap((app) =>
+    ...["apps/desktop", "apps/web", "apps/eve"].flatMap((app) =>
       (knip.workspaces[app]?.entry ?? []).map((entry) => `${app}/${entry}`),
     ),
     "apps/web/server/function-*.ts",
@@ -427,6 +429,7 @@ node --input-type=module -e '
   for await (const found of glob(SCANNED.map((dir) => `${dir}/**/*.ts`), { cwd: root })) {
     const file = found.split(path.sep).join("/");
     if (/\.test\.ts$/.test(file) || /\/(?:__tests__|tests)\//.test(file) || shell.has(file)) continue;
+    if (/\/(?:node_modules|\.eve|\.vercel)\//.test(file)) continue;
     candidates.push(file);
   }
   // One program over every candidate, resolving no import, so the checker

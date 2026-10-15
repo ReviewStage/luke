@@ -3,9 +3,6 @@ import {
   type CodingAgentTodos,
   codingAgentDelegationOutputSchema,
 } from "@luke/features/coding-agent-wire";
-import type { AgentSkill } from "@luke/service/agents/agent-runtime/skills";
-import { CODER_MODEL_FIXTURE } from "@luke/service/agents/coder-host/bounds";
-import { CODER_TOOL } from "@luke/service/agents/coder-host/tool-set";
 import type { LanguageModel } from "ai";
 import { Option, Schema } from "effect";
 import {
@@ -14,6 +11,9 @@ import {
   type MockModelToolResult,
   mockModel,
 } from "eve/evals";
+import type { AgentSkill } from "../agents/agent-runtime/skills.js";
+import { CODER_MODEL_FIXTURE } from "../agents/coder-host/bounds.js";
+import { CODER_TOOL } from "../agents/coder-host/tool-set.js";
 
 /**
  * The fixture model the end-to-end eval runs the coding agent under: a
