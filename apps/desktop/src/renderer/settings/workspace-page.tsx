@@ -50,7 +50,7 @@ import { ReadFailed, SettingsGroup } from "./settings-group";
  */
 
 /** What each role reads as on a member's row. */
-const ROLE_WORDS = {
+export const ROLE_WORDS = {
   [WORKSPACE_ROLE.OWNER]: "Owner",
   [WORKSPACE_ROLE.ADMIN]: "Admin",
   [WORKSPACE_ROLE.MEMBER]: "Member",

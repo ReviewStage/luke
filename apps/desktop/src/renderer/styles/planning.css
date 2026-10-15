@@ -151,6 +151,110 @@
   color: var(--text-secondary);
 }
 
+/* Where the plan lives and who can edit it, over the "Edited by" line in its
+   muted voice (plan-crumb.tsx). Its presses hang past the column's start by
+   their own inset, so the tile stands level with the words under it. */
+.plan-crumb {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-6);
+  font-size: 12.5px;
+  color: var(--text-secondary);
+}
+
+.plan-crumb-item,
+.plan-crumb-people {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-6);
+  padding: var(--space-2) var(--space-6);
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  white-space: nowrap;
+}
+
+.plan-crumb > :first-child {
+  margin-left: calc(-1 * var(--space-6));
+}
+
+:is(button.plan-crumb-item, .plan-crumb-people):hover {
+  background: var(--raised);
+  color: var(--text-primary);
+}
+
+.plan-crumb-separator {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  opacity: 0.6;
+}
+
+.plan-crumb-people {
+  margin-left: auto;
+  margin-right: calc(-1 * var(--space-6));
+  font-size: 12px;
+}
+
+.plan-crumb-people > svg {
+  width: 12px;
+  height: 12px;
+}
+
+.plan-crumb-faces {
+  display: inline-flex;
+}
+
+.plan-crumb-faces .sidebar-avatar {
+  width: 18px;
+  height: 18px;
+  margin-left: -5px;
+  box-shadow: 0 0 0 2px var(--desktop-ground);
+  font-size: 9px;
+}
+
+.plan-crumb-faces .sidebar-avatar:first-child {
+  margin-left: 0;
+}
+
+/* The crumb's card lists everyone who can edit, a face, a name, and a role a row. */
+.plan-crumb-people-list {
+  display: grid;
+  gap: var(--space-6);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.plan-crumb-people-list li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  font-size: 12.5px;
+}
+
+.plan-crumb-people-list .sidebar-avatar {
+  width: 20px;
+  height: 20px;
+  font-size: 10px;
+}
+
+.plan-crumb-person {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plan-crumb-role {
+  margin-left: auto;
+  color: var(--text-secondary);
+}
+
 /* Who last changed a section, and when: a quiet line at the end of its
    heading's row, shown while the pointer or the keyboard is on the section.
    It fades on opacity alone, so nothing moves. */
