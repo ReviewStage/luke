@@ -18,7 +18,7 @@ import {
 } from "@luke/features/inbox-wire";
 import type { PlanSummary } from "@luke/features/plan-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
-import type { AppInboxPlanHolding } from "@luke/host/app-state";
+import type { AppInboxPlanHolding, AppInboxPlanlessItem } from "@luke/host/app-state";
 import { DocumentIcon } from "@luke/ui";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
@@ -145,6 +145,10 @@ interface ReadOutcome {
 let heldRead: (planId: string) => Promise<ReadOutcome> = () => new Promise(() => undefined);
 /** How a read of a plan from the start answers, where a test holds it in its own hands. */
 let startRead: ((planId: string) => Promise<ReadOutcome> | undefined) | undefined;
+/** Each agent with no plan's items, as its own inbox read answers them. */
+let agentInboxes = new Map<string, readonly InboxItem[]>();
+/** Every agent whose own inbox was read from the start, in order. */
+let agentReads: string[] = [];
 
 beforeEach(() => {
   window.localStorage.clear();
@@ -155,6 +159,8 @@ beforeEach(() => {
   heldRead = () => new Promise(() => undefined);
   startRead = undefined;
   listedAgents = [AGENT];
+  agentInboxes = new Map();
+  agentReads = [];
   Object.defineProperty(window, "luke", {
     configurable: true,
     value: {
@@ -164,6 +170,12 @@ beforeEach(() => {
         const done = (value: CodingAgentListAnswer | CodingAgentInboxAnswerView) =>
           Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
         if (request.kind === ACT_KIND.CODING_AGENTS_LIST) return done({ agents: listedAgents });
+        if (request.kind === ACT_KIND.CODING_AGENTS_AGENT_INBOX) {
+          const { agentId, after } = request.payload;
+          if (after !== INBOX_CURSOR_START) return new Promise(() => undefined);
+          agentReads.push(agentId);
+          return done({ items: agentInboxes.get(agentId) ?? [], cursor: "1" });
+        }
         if (request.kind === ACT_KIND.CODING_AGENTS_INBOX) {
           const { planId, after } = request.payload;
           // A read past the cursor is held open while nothing changes, as the service holds it.
@@ -191,8 +203,8 @@ interface Asked {
   closed: number;
 }
 
-/** The Inbox over the two plans, its own view real, as the plans tab holds it, and every press that leaves it recorded. */
-function mount() {
+/** The Inbox over the two plans, and the items of agents with no plan given, its own view real, as the plans tab holds it, and every press that leaves it recorded. */
+function mount(planless: readonly AppInboxPlanlessItem[] = []) {
   const asked: Asked = { shownPlans: [], shownAgents: [], closed: 0 };
   function Page() {
     const [chosen, setChosen] = useState<InboxChoice | undefined>(undefined);
@@ -209,6 +221,7 @@ function mount() {
           { planId: INVITES.id, items: [waitingOf(EXPIRY)] },
         ],
         inboxPlans: holding,
+        inboxPlanless: planless,
         inboxView: {
           open: true,
           chosen,
@@ -859,4 +872,42 @@ test("an answer to a plan's read that a newer one overtook moves nothing: the ne
     false,
     "the overtaken read lists nothing",
   );
+});
+
+/** An agent with no plan an automation started, and the question it asked. */
+const SWEEP_AGENT = "5e6f7081-92a3-4b4c-8d5e-6f708192a3b4";
+const QUARANTINE: InboxItem = {
+  ...item("a1b2c3d4-0000-4000-8000-000000000009", "Quarantine the flaky test?", 6_000),
+  agentId: SWEEP_AGENT,
+};
+
+test("an item of an agent with no plan stands under the automation that started it, and opens on its agent's own read under the automation's crumb", async () => {
+  agentInboxes = new Map([[SWEEP_AGENT, [QUARANTINE]]]);
+  const { page, asked } = mount([
+    {
+      id: QUARANTINE.id,
+      agentId: SWEEP_AGENT,
+      title: QUARANTINE.title,
+      postedAt: QUARANTINE.postedAt,
+      agentTitle: "Sweep the flaky tests",
+      agentModel: "anthropic/claude-opus-5.5",
+      automationId: "5a0c4d2e-8f1b-4c3a-9e7d-2b6f1a8c9d04",
+      automationName: "Nightly flake sweep",
+      repository: "acme/relay",
+    },
+  ]);
+  await settle();
+
+  assert.ok(agentReads.length > 0 && agentReads.every((agentId) => agentId === SWEEP_AGENT));
+  const rows = listed(page);
+  assert.ok(rows.includes("# Nightly flake sweep"), rows.join(" | "));
+  assert.equal(rows[rows.indexOf("# Nightly flake sweep") + 1], "▸ *Quarantine the flaky test?");
+
+  act(() => rowNamed(page, "Quarantine the flaky test?").click());
+  await settle();
+
+  const crumbs = page.querySelector(".inbox-crumbs")?.textContent ?? "";
+  assert.match(crumbs, /Nightly flake sweep/u);
+  assert.equal(page.querySelector("[data-inbox-title]")?.textContent, "Quarantine the flaky test?");
+  assert.deepEqual(asked.shownPlans, [], "the automation's crumb opens no plan");
 });

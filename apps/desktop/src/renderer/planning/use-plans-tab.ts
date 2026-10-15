@@ -164,10 +164,10 @@ interface SourceReveal {
 }
 
 /** The item chosen in the window's Inbox, and the plan it belongs to. */
-export interface InboxChoice {
-  readonly planId: string;
-  readonly itemId: string;
-}
+/** The item chosen in the window's Inbox, by the plan it stands on, or, for an agent with no plan, by its agent. */
+export type InboxChoice =
+  | { readonly planId: string; readonly itemId: string }
+  | { readonly agentId: string; readonly itemId: string };
 
 /**
  * The window's Inbox, standing in the plan's place beside the sidebar: the
@@ -917,14 +917,19 @@ export function usePlansTab(input: {
         ? mainTabs.tab.agent
         : null;
   // The Inbox lists the listed workspace's items alone, so a choice another workspace's list made gives way with it.
+  // Note that an agent's with no plan is held to the listed workspace by the list itself, which lists its workspace's alone.
+  const inboxAsked = inboxView?.chosen;
   const inboxChosen =
-    inboxView?.chosen !== undefined &&
-    inWorkspace([inboxView.chosen], planning.plans, listedWorkspaceId).length > 0
-      ? inboxView.chosen
+    inboxAsked !== undefined &&
+    (!("planId" in inboxAsked) ||
+      inWorkspace([inboxAsked], planning.plans, listedWorkspaceId).length > 0)
+      ? inboxAsked
       : undefined;
   const shownInbox =
     shown && fixture === undefined && inboxView !== undefined
-      ? (inboxChosen?.planId ?? null)
+      ? inboxChosen !== undefined && "planId" in inboxChosen
+        ? inboxChosen.planId
+        : null
       : columnShown && mainTabs.tab === MAIN_TAB.INBOX
         ? (viewed.activePlanId ?? null)
         : null;

@@ -9,11 +9,14 @@ import { useAct } from "../act";
 import { runAppCommand } from "../app-commands";
 import { InboxItemRow } from "../planning/inbox-list";
 import {
+  holderName,
   INBOX_GROUPING,
+  INBOX_HOLDER,
   type InboxListed,
   inboxList,
   listedItems,
   NEEDS_YOU,
+  planHolder,
 } from "../planning/inbox-model";
 import { useMinute } from "../planning/plan-time";
 import { RelativeTime } from "../planning/relative-time";
@@ -86,7 +89,9 @@ function useWaitingItems(plans: PlansControl) {
   const read = useInboxItems({ holdings, readInbox });
   const entries = holdings.flatMap((holding) => {
     const plan = listed.find((each) => each.id === holding.planId);
-    return plan === undefined ? [] : [{ plan, items: read.items.get(holding.planId) ?? [] }];
+    return plan === undefined
+      ? []
+      : [{ holder: planHolder(plan), items: read.items.get(holding.planId) ?? [] }];
   });
   const items = listedItems(
     inboxList(entries, { grouping: INBOX_GROUPING.NEWEST, waitingOnly: true, chosen: undefined }),
@@ -185,9 +190,11 @@ function RecentRow({
 function HomeInbox({ plans, now }: { plans: PlansControl; now: number }): React.JSX.Element {
   const waiting = useWaitingItems(plans);
   const { inboxView } = plans;
-  const open = ({ plan, item }: InboxListed) => {
+  const open = ({ holder, item }: InboxListed) => {
     inboxView.onOpen();
-    inboxView.onChoose({ planId: plan.id, itemId: item.id });
+    if (holder.kind === INBOX_HOLDER.PLAN) {
+      inboxView.onChoose({ planId: holder.plan.id, itemId: item.id });
+    }
   };
   const empty = waiting.items.length === 0;
   return (
@@ -206,7 +213,7 @@ function HomeInbox({ plans, now }: { plans: PlansControl; now: number }): React.
               now={now}
               models={plans.agents.models}
               readerId={plans.me}
-              context={listed.plan.name}
+              context={holderName(listed.holder)}
               onChoose={open}
             />
           ))}

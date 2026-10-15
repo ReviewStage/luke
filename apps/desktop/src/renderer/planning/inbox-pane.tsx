@@ -18,10 +18,10 @@ import {
   knownResponse,
 } from "@luke/features/inbox-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
-import type { CodeRef, PlanSummary } from "@luke/features/plan-wire";
+import type { CodeRef } from "@luke/features/plan-wire";
 import { BackIcon, ChevronRightIcon } from "@luke/ui";
 import { copiedLines, fileRefText } from "@luke/voice/code-pane-model";
-import { CheckIcon } from "lucide-react";
+import { CheckIcon, ZapIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { Message, MessageContent } from "../ai-elements/message";
@@ -53,7 +53,9 @@ import {
   codeReadOf,
   codeWindow,
   fieldValueOf,
+  INBOX_HOLDER,
   type InboxDraft,
+  type InboxHolder,
   inboxReply,
   pressesOf,
   proposedOptions,
@@ -873,9 +875,9 @@ function AnswerBox({
 
 /** What the pane's crumbs open, and the cards they hang. */
 export interface InboxPaneDoors {
-  /** Opens the item's plan. */
-  readonly onOpenPlan: () => void;
-  /** The plan's hover card, as its sidebar row hangs it. */
+  /** Opens what holds the item: its plan, or its automation's page; nothing where there is none to open. */
+  readonly onOpenHolder: (() => void) | undefined;
+  /** The plan's hover card, as its sidebar row hangs it; none for an automation. */
   readonly planCard: React.ReactNode;
   /** Opens the agent's tab on its plan. */
   readonly onOpenAgent: (agentId: string) => void;
@@ -908,15 +910,18 @@ function CrumbWords({ look }: { look: KindLook }): React.JSX.Element {
  * plan's column, the plan's document glyph and the agent's mark: each opens
  * what it names, the plan or the agent's tab, and hangs the card its
  * sidebar row or tab hangs, the plan's crumb as every place naming the
- * plan does (`PlanRef`). An agent this window does not list, one started on
- * another Mac, hangs a card saying so and still opens its tab.
+ * plan does (`PlanRef`). An agent with no plan stands under the automation
+ * that started it instead, by its zap and name, which opens the
+ * automation's page where that can be opened. An agent this window does
+ * not list, one started on another Mac, hangs a card saying so and still
+ * opens its tab.
  */
 function Crumbs({
-  plan,
+  holder,
   by,
   doors,
 }: {
-  plan: PlanSummary;
+  holder: InboxHolder;
   by: ItemAgent;
   doors: InboxPaneDoors;
 }): React.JSX.Element {
@@ -925,14 +930,25 @@ function Crumbs({
     <nav className="file-breadcrumbs inbox-crumbs" aria-label="Path">
       <ol>
         <li className="tab inbox-crumb">
-          <PlanRef
-            plan={plan}
-            card={doors.planCard}
-            onOpen={doors.onOpenPlan}
-            className="tab-button"
-          >
-            <CrumbWords look={tabLook({ kind: TAB_KIND.PLAN, name: plan.name })} />
-          </PlanRef>
+          {holder.kind === INBOX_HOLDER.PLAN ? (
+            <PlanRef
+              plan={holder.plan}
+              card={doors.planCard}
+              onOpen={doors.onOpenHolder ?? (() => undefined)}
+              className="tab-button"
+            >
+              <CrumbWords look={tabLook({ kind: TAB_KIND.PLAN, name: holder.plan.name })} />
+            </PlanRef>
+          ) : (
+            <button
+              type="button"
+              className="tab-button"
+              disabled={doors.onOpenHolder === undefined}
+              onClick={doors.onOpenHolder}
+            >
+              <CrumbWords look={{ icon: <ZapIcon />, label: holder.name }} />
+            </button>
+          )}
         </li>
         <li className="file-breadcrumb-separator" aria-hidden="true">
           <ChevronRightIcon />
@@ -963,7 +979,7 @@ function Crumbs({
  * chord, which goes back as Escape does.
  */
 export function InboxPane({
-  plan,
+  holder,
   item,
   control,
   agents,
@@ -971,9 +987,10 @@ export function InboxPane({
   hidden,
   onBack,
 }: {
-  plan: PlanSummary;
+  /** What holds the item: its plan, or the automation that started its agent with no plan. */
+  holder: InboxHolder;
   item: InboxItem;
-  /** The live read of the item's plan, which answers it and holds its draft. */
+  /** The live read of the item's plan, or of its agent with no plan, which answers it and holds its draft. */
   control: PlanInboxControl;
   agents: CodingAgentsControl;
   doors: InboxPaneDoors;
@@ -1001,7 +1018,7 @@ export function InboxPane({
             </button>
           </Tooltip>
         )}
-        <Crumbs plan={plan} by={by} doors={doors} />
+        <Crumbs holder={holder} by={by} doors={doors} />
       </header>
       <div className="desktop-inbox">
         <div

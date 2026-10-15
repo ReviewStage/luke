@@ -177,7 +177,10 @@ function withItem(items: readonly InboxItem[], item: InboxItem): readonly InboxI
 }
 
 export function usePlanInbox(input: {
+  /** The plan whose inbox is held, or, with `reader`, the agent with no plan whose inbox is. */
   planId: string | undefined;
+  /** How the inbox is read where it is one agent's with no plan rather than a plan's. */
+  reader?: ((after: string) => Promise<CodingAgentInboxAnswerView>) | undefined;
   /** Whether the window shows the plans. */
   shown: boolean;
   /** Whether main's read of what waits across the account says an item waits on the plan. */
@@ -214,8 +217,8 @@ export function usePlanInbox(input: {
   // against, so a change of the agent's starts its card afresh.
   const [drafts, setDrafts] = useState<ReadonlyMap<string, KeptDraft>>(new Map());
   const attempts = useRef(new Map<string, Attempt>());
-  const latest = useRef({ ...agents, planId });
-  latest.current = { ...agents, planId };
+  const latest = useRef({ ...agents, planId, reader: input.reader });
+  latest.current = { ...agents, planId, reader: input.reader };
 
   // A plan with no agent, standing or archived, has no Inbox tab and nothing
   // to read, so it holds no read open, unless an item waits on it, which an
@@ -228,9 +231,9 @@ export function usePlanInbox(input: {
     const loop = async () => {
       let after = INBOX_CURSOR_START;
       while (live) {
-        const answer = await latest.current
-          .readInbox({ planId, after })
-          .catch((): CodingAgentInboxAnswerView => UNANSWERED);
+        const { reader, readInbox } = latest.current;
+        const read = reader === undefined ? readInbox({ planId, after }) : reader(after);
+        const answer = await read.catch((): CodingAgentInboxAnswerView => UNANSWERED);
         if (!live) return;
         if ("failure" in answer) {
           setHeld((was) => ({ ...was, failed: true }));

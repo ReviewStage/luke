@@ -21,6 +21,7 @@ import {
   inboxList,
   listedItems,
   NEEDS_YOU,
+  planHolder,
 } from "../planning/inbox-model";
 import { type InboxCodeDoors, InboxPane } from "../planning/inbox-pane";
 import { PlanBody, type SectionLinks } from "../planning/plan-body";
@@ -167,7 +168,7 @@ function PlanInboxTab({
   const now = useMinute();
   const [asked, setAsked] = useState<string | undefined>(undefined);
   const items = [...inbox.board.open, ...inbox.board.settled];
-  const list = inboxList([{ plan, items }], {
+  const list = inboxList([{ holder: planHolder(plan), items }], {
     grouping: INBOX_GROUPING.NEWEST,
     waitingOnly: false,
     chosen: asked,
@@ -218,14 +219,14 @@ function PlanInboxTab({
         </section>
       ) : (
         <InboxPane
-          plan={plan}
+          holder={planHolder(plan)}
           item={chosen.item}
           control={inbox}
           agents={plans.agents}
           hidden={columns.shown === INBOX_COLUMNS.LIST}
           onBack={columns.onBack}
           doors={{
-            onOpenPlan,
+            onOpenHolder: onOpenPlan,
             planCard: planCardOf(plans, plan, now),
             onOpenAgent,
             openLink,
