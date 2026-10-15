@@ -56,7 +56,7 @@
       ],
       "project": ["src/**"]
     },
-    "apps/web/coder": {
+    "apps/dev": {
       "ignoreDependencies": [
         "@ai-sdk/anthropic",
         "@ai-sdk/openai",

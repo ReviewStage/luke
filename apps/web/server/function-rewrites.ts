@@ -230,7 +230,7 @@ const ServiceRewriteSchema = Schema.Struct({
 
 const VercelConfig = Schema.Struct({
   $schema: Schema.String,
-  services: Schema.Struct({ web: WebService, luke: EveService, coder: CoderService }),
+  services: Schema.Struct({ web: WebService, luke: EveService, dev: CoderService }),
   crons: Schema.Array(Schema.Struct({ path: Schema.String, schedule: Schema.String })),
   rewrites: Schema.Array(ServiceRewriteSchema),
 });

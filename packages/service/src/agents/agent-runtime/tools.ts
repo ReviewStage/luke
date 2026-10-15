@@ -7,7 +7,7 @@
  * is listed here with the roles it serves (`role.ts`), and everything that would otherwise be kept
  * twice is derived from it: what each planning agent is offered
  * (`../brain-host/planning.ts`), what each coding agent's authored tools are
- * (`../coder-host/tool-set.ts`, held to the files under `coder/tools/` by
+ * (`../coder-host/tool-set.ts`, held to the files under `apps/dev/tools/` by
  * its test), and every set the store writer holds a role's rows to. A tool
  * a role is not listed for is never offered to it, so adding a tool to a
  * role is one entry here and its implementation where the role's root

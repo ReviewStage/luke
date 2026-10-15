@@ -1339,9 +1339,9 @@ changes when a check is run, not when one is planned.
   prewarm has not been run on Vercel.
 - **A coding agent.** No coding agent has run against a real provider, a
   real checkout, a push, or a pull request. The coder eval
-  (`apps/web/coder/evals/coder.eval.ts`) runs one turn under a scripted model
+  (`apps/dev/evals/coder.eval.ts`) runs one turn under a scripted model
   that calls no tool, so no sandbox opens and no repository is checked out,
-  and the `coder` service's sandbox `prepare` has not been run on Vercel.
+  and the `dev` service's sandbox `prepare` has not been run on Vercel.
 
 ### Known limitations
 
