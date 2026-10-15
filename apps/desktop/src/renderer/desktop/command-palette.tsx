@@ -159,7 +159,7 @@ type FilesRead =
   | { read: typeof FILES_READ.LISTED; paths: readonly string[]; truncated: boolean }
   | { read: typeof FILES_READ.MISSED; notice: string };
 
-/** What the Files filter says while no plan with a repository is open. */
+/** What the Files filter says while no plan with a repository stands open, as under an agent's page. */
 const NO_REPOSITORY_LINE = "Open a task with a repository to search its files.";
 
 /** What the Files filter says where the read did not land. */
@@ -855,7 +855,9 @@ export function CommandPalette({
     files !== undefined && files.planId === planId && files.repository === repository
       ? files
       : undefined;
-  const filesAsked = open && (filter === PALETTE_FILTER.FILES || tokens.length > 0);
+  // Note that a task's files are searched only while its panel is the one standing, which an agent's page holds otherwise.
+  const filesOpen = holdsPlanPanel(plans) && planId !== undefined && repository !== null;
+  const filesAsked = open && filesOpen && (filter === PALETTE_FILTER.FILES || tokens.length > 0);
 
   // Note that the repository is read the first time its files are searched
   // rather than as the palette opens, because most of its uses never ask
@@ -912,7 +914,7 @@ export function CommandPalette({
     onPlans(() => shownOverHistory(plans, () => plans.sidePanel.onOpenFile({ path })));
   const rowsFor = (kind: PaletteKind): readonly PaletteRow[] =>
     kind === PALETTE_FILTER.FILES
-      ? (holdsPlanPanel(plans) ? matchedPaths : []).map((path) =>
+      ? (filesOpen ? matchedPaths : []).map((path) =>
           fileRow(path, { shown: plans.shownCode ?? [], repository }, openFile),
         )
       : tiersOf[kind]()
@@ -926,11 +928,12 @@ export function CommandPalette({
         .map((kind) => ({ kind, rows: rowsFor(kind) }))
         .filter((section) => section.rows.length > 0)
     : [];
-  const notice =
-    filter === PALETTE_FILTER.FILES
-      ? filesNotice(planId !== undefined && repository !== null, held)
-      : undefined;
-  const cut = filter === PALETTE_FILTER.FILES && held?.read === FILES_READ.LISTED && held.truncated;
+  const notice = filter === PALETTE_FILTER.FILES ? filesNotice(filesOpen, held) : undefined;
+  const cut =
+    filesOpen &&
+    filter === PALETTE_FILTER.FILES &&
+    held?.read === FILES_READ.LISTED &&
+    held.truncated;
   let place = 0;
 
   return (

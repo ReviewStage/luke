@@ -549,7 +549,7 @@ test("an agent's Changes row is named as its tab is, with its pull request's num
   assert.ok(rows().includes(changes), "found by its pull request's title");
 });
 
-test("while an agent's page holds the side panel, ⌘K offers none of the open plan's panel tabs, workers, or Changes, which would open beside the agent", () => {
+test("while an agent's page holds the side panel, ⌘K offers none of the open plan's panel tabs, workers, Changes, or files, which would open beside the agent", () => {
   const agent = {
     id: "agent-7",
     planId: "plan-1",
@@ -561,10 +561,21 @@ test("while an agent's page holds the side panel, ⌘K offers none of the open p
     turnId: null,
   };
   const control = plansControl({});
+  const read: string[] = [];
   openPalette(
     plansControl({
       activePlanId: DOCUMENT_PLAN.id,
-      region: { kind: DOCUMENT_REGION.READY, plan: DOCUMENT_PLAN },
+      plans: [
+        {
+          id: DOCUMENT_PLAN.id,
+          workspaceId: DOCUMENT_PLAN.workspaceId,
+          name: DOCUMENT_PLAN.name,
+          createdAt: 1,
+          updatedAt: 2,
+          repository: "acme/relay",
+        },
+      ],
+      region: { kind: DOCUMENT_REGION.READY, plan: { ...DOCUMENT_PLAN, repository: "acme/relay" } },
       agentView: { ...control.agentView, agentId: "agent-page-1" },
       agents: codingAgentsControl({
         agents: [agent],
@@ -586,14 +597,23 @@ test("while an agent's page holds the side panel, ⌘K offers none of the open p
         ]),
       }),
     }),
+    (planId) => {
+      read.push(planId);
+      return Promise.reject(new Error("not read here"));
+    },
   );
 
   type("#42");
   const changes = rows().filter((row) => row.startsWith("Changes"));
   type("Show board");
   const board = rows().filter((row) => row.startsWith("Show board"));
+  chooseFilter("Files");
+  type("index");
+  const notice = document.querySelector(".command-palette-empty")?.textContent;
 
   assert.deepEqual([changes, board], [[], []]);
+  assert.deepEqual(read, [], "the hidden task's files are not read");
+  assert.equal(notice, "Open a task with a repository to search its files.");
 });
 
 test('a file found wears the look the side panel\'s "+" gives it, hangs its card with Luke\'s note, and opens through the panel\'s one door for a file, as the "+" row of a file whose tab stands does', async () => {
