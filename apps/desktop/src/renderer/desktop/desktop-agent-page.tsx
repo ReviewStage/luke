@@ -1,4 +1,6 @@
 import { dictationKeywords } from "@luke/features/dictation-keywords";
+import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
+import { ACT_KIND } from "@luke/host/acts";
 import { sameTab } from "@luke/ui/tab-strip-model";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { useMemo } from "react";
@@ -9,6 +11,7 @@ import { FindScope } from "../find-in-tab";
 import { MemberDirectory } from "../member-directory";
 import { agentTabLabel } from "../planning/coding-agent-model";
 import { PlanMentions, type PlanMentionsValue, planlessMentions } from "../planning/plan-mentions";
+import { SkillFiles } from "../planning/skill-chip";
 import { TOOL_TARGET, type ToolTarget } from "../planning/tool-call-model";
 import { useCodingAgents } from "../planning/use-coding-agents";
 import type { PlansControl } from "../planning/use-plans-tab";
@@ -32,7 +35,9 @@ import { useTabViews } from "./strip-tabs";
  * its id (`use-coding-agents.ts`'s `agentId`). ⌘F finds in it as in a
  * plan's column. An `@` in its box offers its repository's files, its
  * skills, and the servers, read through its workspace since no plan names
- * them (`planlessMentions`), and a dictation listens for its repository and
+ * them (`planlessMentions`); a skill a message names is its chip, which
+ * opens the skill's `SKILL.md` on GitHub, as a file it names does, since no
+ * File tab reads a repository no plan names; and a dictation listens for its repository and
  * its title. A row of its inbox calls opens the window's Inbox, since the
  * agent's items stand there and no plan's Inbox tab does. Its title names the agent as
  * its tab would. An archived agent takes no message, so its composer gives
@@ -71,7 +76,7 @@ export function DesktopAgentPage({
   agentId: string;
 }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_AGENT_PAGE, plans.agentView.onClose);
-  const { act } = useAct();
+  const { act, tell } = useAct();
   const views = useTabViews();
   const agents = useCodingAgents({
     acts: { act },
@@ -133,6 +138,13 @@ export function DesktopAgentPage({
     chosen: (opened) => sameTab(opened, tab),
     shownCode: [],
   });
+  // A skill's file opens where a file the agent names does: its page on GitHub.
+  const openSkill = (skill: { readonly path: string }) => {
+    if (agentRepository === undefined) return;
+    const place = { workspace: listed?.slug ?? workspaceId ?? "", repository: agentRepository };
+    const url = encodeMention({ kind: MENTION_KIND.FILE, path: skill.path }, place);
+    tell(ACT_KIND.GITHUB_OPEN, { url });
+  };
   // What an `@` offers once the read named the agent's workspace and repository, which its files are read through.
   const mentions =
     workspaceId === undefined || agentRepository === undefined
@@ -152,21 +164,23 @@ export function DesktopAgentPage({
       </header>
       {agent !== undefined ? (
         <MemberDirectory workspace={workspace} readerId={plans.me}>
-          <AgentMentions value={mentions}>
-            <FindScope className="desktop-plan-column" active={plans.shown} subject={tab}>
-              <AgentPane
-                label={agentTabLabel(agent, control.models)}
-                tabbed={false}
-                tab={tab}
-                agents={control}
-                shown={plans.shown}
-                views={views}
-                onOpenDelegation={nothing}
-                onOpenTarget={openTarget}
-                cards={cards}
-              />
-            </FindScope>
-          </AgentMentions>
+          <SkillFiles source={control.readSkills} onOpen={openSkill}>
+            <AgentMentions value={mentions}>
+              <FindScope className="desktop-plan-column" active={plans.shown} subject={tab}>
+                <AgentPane
+                  label={agentTabLabel(agent, control.models)}
+                  tabbed={false}
+                  tab={tab}
+                  agents={control}
+                  shown={plans.shown}
+                  views={views}
+                  onOpenDelegation={nothing}
+                  onOpenTarget={openTarget}
+                  cards={cards}
+                />
+              </FindScope>
+            </AgentMentions>
+          </SkillFiles>
         </MemberDirectory>
       ) : agents.listFailed ? (
         <div className="agent-page-note">
