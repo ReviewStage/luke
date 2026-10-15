@@ -1,6 +1,7 @@
 import type { FileChip } from "@luke/features/attachment-model";
 import { planAttachmentIdsIn, planAttachmentOf } from "@luke/features/plan-attachment-link";
 import { ACT_KIND } from "@luke/host/acts";
+import { PICTURE_STATE, type PictureAnswer, pictureNow, usePicture } from "@luke/ui/picture-cache";
 import { ImageIcon } from "lucide-react";
 import {
   createContext,
@@ -14,7 +15,6 @@ import {
 import { useAct } from "../act";
 import type { PictureDrawer } from "../markdown-message";
 import { PictureBlock } from "../picture-block";
-import { PICTURE_STATE, type PictureAnswer, pictureNow, usePicture } from "../picture-cache";
 import { TextLink } from "../text-link";
 import { AttachmentViewer } from "./attachment-viewer";
 import { useOpenLink } from "./use-open-link";
