@@ -1,7 +1,6 @@
 import { TEXT_LINK_CLASS } from "@luke/ui/link-face";
 import { type AnyExtension, Editor, Extension } from "@tiptap/core";
 import Heading from "@tiptap/extension-heading";
-import Image from "@tiptap/extension-image";
 import { TaskItem, TaskList } from "@tiptap/extension-list";
 import Paragraph from "@tiptap/extension-paragraph";
 import { TableKit } from "@tiptap/extension-table";
@@ -13,6 +12,7 @@ import StarterKit from "@tiptap/starter-kit";
 import type {
   MentionNode,
   PlanEditorHandle,
+  PlanEditorPictures,
   PlanEditorPlacement,
   PlanEditorProps,
 } from "./contract";
@@ -27,14 +27,24 @@ import {
   sourcesOf,
 } from "./document-source";
 import { mentionNode, pastedMention } from "./mention-node";
+import {
+  copiedPictures,
+  droppedPictures,
+  laidInPictures,
+  pastedPictures,
+  pictureNode,
+  removedPicture,
+  settledPicture,
+} from "./picture-node";
 import { planMentions } from "./plan-mentions";
 
 /**
  * plan-editor.ts -- a plan's text, edited in place on TipTap, drawn exactly as the document draws it.
  *
  * What the text may hold, and every shortcut for writing it, is TipTap's
- * own: StarterKit, `@tiptap/markdown`, task lists, tables, and images,
- * each image inline in a paragraph even where it stands alone on its line;
+ * own: StarterKit, `@tiptap/markdown`, task lists, tables, and pictures
+ * (`./picture-node.ts`), each inline in a paragraph even where it stands
+ * alone on its line;
  * underline alone is left out, because Markdown cannot store it and the
  * document could not draw it. A heading wears the read view's own class and
  * level, so the editor's words stand where the drawn words stood and opening
@@ -76,26 +86,6 @@ const DocumentParagraph = Paragraph.extend({
       return helpers.createNode("paragraph", undefined, helpers.parseInline(tokens));
     }
     return this.parent?.(token, helpers) ?? [];
-  },
-});
-
-/** Escapes the characters that would end a picture's alt text, address, or title early. */
-function escaped(words: string, ends: RegExp): string {
-  return words.replace(ends, "\\$&");
-}
-
-/**
- * A picture written back as `![alt](src "title")` with its alt text's
- * brackets, its address's parentheses, and its title's quotes escaped, so
- * the text reads back as the picture it was. Note that TipTap's own writes
- * all three bare.
- */
-const DocumentImage = Image.extend({
-  renderMarkdown: (node) => {
-    const alt = escaped(String(node.attrs?.alt ?? ""), /[\\[\]]/gu);
-    const src = escaped(String(node.attrs?.src ?? ""), /[\\()]/gu);
-    const title = node.attrs?.title ? ` "${escaped(String(node.attrs.title), /[\\"]/gu)}"` : "";
-    return `![${alt}](${src}${title})`;
   },
 });
 
@@ -146,6 +136,7 @@ function linkLook(namesMention: ((target: string) => boolean) | undefined) {
 export function markdownExtensions(
   drawMention?: ((element: HTMLElement, mention: MentionNode) => () => void) | undefined,
   namesMention?: ((target: string) => boolean) | undefined,
+  pictures?: PlanEditorPictures | undefined,
 ): AnyExtension[] {
   const kit = StarterKit.configure({
     heading: false,
@@ -162,7 +153,7 @@ export function markdownExtensions(
     TaskList,
     TaskItem,
     TableKit,
-    DocumentImage.configure({ inline: true }),
+    pictureNode(pictures),
     RawBlock,
     mentionNode(drawMention),
     linkLook(namesMention),
@@ -225,8 +216,9 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
     onLeaveUp,
     mentions,
     drawDiagram,
+    pictures,
   } = props;
-  const extensions = markdownExtensions(mentions?.drawMention, mentions?.namesMention);
+  const extensions = markdownExtensions(mentions?.drawMention, mentions?.namesMention, pictures);
   const manager = documentManager(extensions);
   // Filled once the editor is built, since a block's source is known by the node it opened as.
   let held: HeldSources = { sources: new Map(), lead: "", ending: "" };
@@ -252,9 +244,15 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
         "aria-multiline": "true",
         "aria-label": label,
       },
-      // Note that a page of an integration's pasted whole is laid in as its mention, as the box lays it in.
-      handlePaste: (view, event) =>
-        mentions === undefined ? false : pastedMention(view, event, mentions.pasted),
+      // Note that image files pasted are laid in as pictures, and a page of an integration's pasted whole as its mention, as the box lays it in.
+      handlePaste: (view, event) => {
+        if (pictures !== undefined && pastedPictures(view, event, pictures)) return true;
+        return mentions === undefined ? false : pastedMention(view, event, mentions.pasted);
+      },
+      handleDrop: (view, event, _slice, moved) =>
+        pictures === undefined ? false : droppedPictures(view, event, moved, pictures),
+      transformPasted: (slice) =>
+        pictures === undefined ? slice : copiedPictures(slice, pictures),
       handleKeyDown: (view, event) => {
         // A key an input method is composing with is its own: its Enter confirms its words, its Escape drops them.
         if (event.isComposing || view.composing || event.keyCode === COMPOSING_KEY_CODE) {
@@ -287,6 +285,11 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
     },
     chooseMention: (mention) => picking?.choose(editor, mention),
     markdown: () => documentMarkdown(manager, editor.state.doc, held),
+    insertPictures: (files) => {
+      if (pictures !== undefined) laidInPictures(editor.view, files, pictures);
+    },
+    settlePicture: (upload, src) => settledPicture(editor.view, upload, src),
+    removePicture: (upload) => removedPicture(editor.view, upload),
     destroy: () => editor.destroy(),
   };
 }

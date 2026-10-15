@@ -100,6 +100,7 @@ import {
   type PlanningMoveAnswer,
   type PlanningPageSourceAnswer,
   type PlanningPictureAnswer,
+  type PlanningPictureKeepAnswer,
   type PlanningRepositoriesAnswer,
   type PlanningRevisionAnswer,
   type PlanningRevisionsAnswer,
@@ -121,6 +122,8 @@ import {
   planningPageParamsSchema,
   planningPageSourceAnswerSchema,
   planningPictureAnswerSchema,
+  planningPictureKeepAnswerSchema,
+  planningPictureKeepParamsSchema,
   planningPictureParamsSchema,
   planningPinParamsSchema,
   planningPinRepositoryParamsSchema,
@@ -318,6 +321,8 @@ export const ACT_KIND = {
   PLANNING_PAGE_SOURCE: "planning.pageSource",
   /** One picture of the open plan as its bytes in base64, read from the service for the document drawing it; answered to the view, never on the document. */
   PLANNING_PICTURE_READ: "planning.pictureRead",
+  /** A picture pasted, dropped, or chosen into the open plan's editor, kept on the service; answered with the id the text then names it by. */
+  PLANNING_PICTURE_KEEP: "planning.pictureKeep",
   /**
    * The account's workspaces: one made under a name, answered as made, which
    * the account owns; one renamed by its owners and admins, answered under
@@ -995,6 +1000,11 @@ export const ACT = {
     payload: actSchema(planningPictureParamsSchema),
     result: wireResult<PlanningPictureAnswer>(isReadable(planningPictureAnswerSchema)),
     refusal: "Could not read that picture on this system.",
+  },
+  [ACT_KIND.PLANNING_PICTURE_KEEP]: {
+    payload: actSchema(planningPictureKeepParamsSchema),
+    result: wireResult<PlanningPictureKeepAnswer>(isReadable(planningPictureKeepAnswerSchema)),
+    refusal: "Could not keep that picture on this system.",
   },
   [ACT_KIND.PLANNING_PAGE_SOURCE]: {
     payload: actSchema(planningPageParamsSchema),

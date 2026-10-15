@@ -80,6 +80,7 @@ export const APP_COMMAND = {
   SHOW_EVERYONES_TASKS: "show-everyones-tasks",
   SHOW_ARCHIVED_TASKS: "show-archived-tasks",
   HIDE_ARCHIVED_TASKS: "hide-archived-tasks",
+  INSERT_PICTURE: "insert-picture",
 } as const;
 
 export type AppCommand = (typeof APP_COMMAND)[keyof typeof APP_COMMAND];
@@ -418,6 +419,10 @@ export const APP_SHORTCUTS = {
     label: "Mention lines in agent",
     chord: { key: SHORTCUT_KEY.K, option: true },
   },
+  [APP_COMMAND.INSERT_PICTURE]: {
+    label: "Insert image",
+    chord: { key: SHORTCUT_KEY.I, option: true },
+  },
 } as const satisfies Record<KeyedCommand, AppShortcut>;
 
 /**
@@ -475,6 +480,7 @@ export const APP_SHORTCUT_GROUPS = [
       APP_COMMAND.MOVE_TAB_RIGHT,
       APP_COMMAND.SHOW_TERMINAL,
       APP_COMMAND.MENTION_LINES,
+      APP_COMMAND.INSERT_PICTURE,
     ],
   },
   {

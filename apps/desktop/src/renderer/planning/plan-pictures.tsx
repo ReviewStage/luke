@@ -43,7 +43,7 @@ const UNNAMED_PICTURE = "Picture";
 const DATA_URL_TYPE = /^data:([^;,]+)[;,]/u;
 
 /** What the pictures under a plan's words share: the plan, how a picture is read, and how one is opened. */
-interface PlanPicturesDoor {
+export interface PlanPicturesDoor {
   readonly planId: string;
   readonly read: (owner: string, id: string) => Promise<PictureAnswer>;
   readonly open: (id: string) => void;
@@ -164,6 +164,11 @@ function OutsidePicture({
       {words}
     </TextLink>
   );
+}
+
+/** What the pictures under a plan's words share, for a place that draws them itself, as the plan's editor does; none outside `PlanPictures`. */
+export function usePlanPicturesDoor(): PlanPicturesDoor | undefined {
+  return useContext(PlanPicturesContext);
 }
 
 /** The drawer for the messages under `PlanPictures`; none outside one, where every picture is its alt text. */

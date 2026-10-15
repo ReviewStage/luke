@@ -19,6 +19,8 @@ import type {
   PlanningPageParams,
   PlanningPageSourceAnswer,
   PlanningPictureAnswer,
+  PlanningPictureKeepAnswer,
+  PlanningPictureKeepParams,
   PlanningPictureParams,
   PlanningPinParams,
   PlanningPinRepositoryParams,
@@ -110,6 +112,9 @@ export interface PlanningActsDependencies {
     planningRestore(params: PlanningRevisionParams): Effect.Effect<boolean>;
     planningPage(params: PlanningPageParams): Effect.Effect<PlanningPageAnswer>;
     planningPicture(params: PlanningPictureParams): Effect.Effect<PlanningPictureAnswer>;
+    planningPictureKeep(
+      params: PlanningPictureKeepParams,
+    ): Effect.Effect<PlanningPictureKeepAnswer>;
     githubConnect(): Effect.Effect<PlanningGitHubPageAnswer>;
     githubDisconnect(): Effect.Effect<PlanningGitHubDisconnectAnswer>;
     workspaceCreate(params: PlanningWorkspaceCreateParams): Effect.Effect<PlanningWorkspaceAnswer>;
@@ -208,6 +213,7 @@ type PlanningActKind =
   | typeof ACT_KIND.PLANNING_RESTORE
   | typeof ACT_KIND.PLANNING_PAGE_SOURCE
   | typeof ACT_KIND.PLANNING_PICTURE_READ
+  | typeof ACT_KIND.PLANNING_PICTURE_KEEP
   | typeof ACT_KIND.WORKSPACE_CREATE
   | typeof ACT_KIND.WORKSPACE_RENAME
   | typeof ACT_KIND.WORKSPACE_PHOTO_SET
@@ -472,6 +478,11 @@ export function planningActRows(
     [ACT_KIND.PLANNING_PICTURE_READ]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.PLANNING_PICTURE_READ, sender);
       return host.planningPicture(params);
+    },
+    // A refusal is the editor's to say on the picture, with its retry, so it is answered rather than refused.
+    [ACT_KIND.PLANNING_PICTURE_KEEP]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.PLANNING_PICTURE_KEEP, sender);
+      return host.planningPictureKeep(params);
     },
     // The version is read as its frame reads it and held nowhere here, so its HTML reaches the tab that asked alone.
     [ACT_KIND.PLANNING_PAGE_SOURCE]: (params, sender) => {

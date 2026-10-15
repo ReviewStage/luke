@@ -58,6 +58,8 @@ export const GATEWAY_METHOD = {
   PLANNING_PAGE: "planning.page",
   /** One picture of one plan, read from the service now as its bytes in base64; answered to the caller, never held in the view. */
   PLANNING_PICTURE: "planning.picture",
+  /** One picture kept on one plan on the service, sent as a `data:` URL, answered with the id its text names it by; never held in the view. */
+  PLANNING_PICTURE_KEEP: "planning.pictureKeep",
   /** One revision of one plan put back as its content on the service; the view takes the plan as the service answered it. */
   PLANNING_RESTORE: "planning.restore",
   /** The developer's scene of the open plan's whiteboard, saved over the revision it was drawn on; the view takes the board as the service answered it. */

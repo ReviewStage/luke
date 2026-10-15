@@ -40,6 +40,9 @@ const STAND_IN: PlanEditorModule = {
       },
       chooseMention: () => undefined,
       markdown: () => props.markdown,
+      insertPictures: () => undefined,
+      settlePicture: () => undefined,
+      removePicture: () => undefined,
       destroy: () => {
         editor.destroyed = true;
       },

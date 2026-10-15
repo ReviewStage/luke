@@ -350,6 +350,7 @@ function fullMenuTemplate(appName: string, update?: UpdateMenu): MenuItemConstru
         },
         SEPARATOR,
         commandItem(APP_COMMAND.MENTION_LINES),
+        commandItem(APP_COMMAND.INSERT_PICTURE),
         SEPARATOR,
         {
           label: "Speech",

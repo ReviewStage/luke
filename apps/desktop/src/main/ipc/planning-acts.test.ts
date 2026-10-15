@@ -218,6 +218,11 @@ function fixture() {
           asked.push(`restore:${params.seq}`);
           return true;
         }),
+      planningPictureKeep: (params) =>
+        Effect.sync(() => {
+          asked.push(`keep:${params.planId}`);
+          return { id: PICTURE_ID };
+        }),
       planningPicture: (params) =>
         Effect.sync(() => {
           asked.push(`picture:${params.planId}:${params.attachmentId}`);
@@ -671,6 +676,25 @@ it.effect(
         value: { failure: PLAN_CALL_FAILURE.NOT_FOUND },
       });
       assert.equal(fromVoice.status, ACT_OUTCOME_STATUS.REFUSED);
+    }),
+);
+
+it.effect(
+  "a picture is kept through the host from a panel alone, never from the voice window",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const keep = {
+        kind: ACT_KIND.PLANNING_PICTURE_KEEP,
+        payload: { planId: "plan-1", picture: "data:image/png;base64,iVBORw0KGgo=" },
+      };
+
+      const kept = yield* f.router.performAct(keep, PANEL);
+      const fromVoice = yield* f.router.performAct(keep, VOICE);
+
+      assert.deepEqual(kept, { status: ACT_OUTCOME_STATUS.DONE, value: { id: PICTURE_ID } });
+      assert.equal(fromVoice.status, ACT_OUTCOME_STATUS.REFUSED);
+      assert.deepEqual(f.asked, ["keep:plan-1"]);
     }),
 );
 

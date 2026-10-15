@@ -111,6 +111,8 @@ import {
   type PlanningPageAnswer,
   type PlanningPageParams,
   type PlanningPictureAnswer,
+  type PlanningPictureKeepAnswer,
+  type PlanningPictureKeepParams,
   type PlanningPictureParams,
   type PlanningPinParams,
   type PlanningPinRepositoryParams,
@@ -157,6 +159,7 @@ import {
   planningMoveAnswerSchema,
   planningPageAnswerSchema,
   planningPictureAnswerSchema,
+  planningPictureKeepAnswerSchema,
   planningRepositoriesAnswerSchema,
   planningRevisionAnswerSchema,
   planningRevisionsAnswerSchema,
@@ -350,6 +353,8 @@ export interface HostOperator {
   planningPage(params: PlanningPageParams): Effect.Effect<PlanningPageAnswer>;
   /** One picture of one plan as its bytes in base64, or why there is none. */
   planningPicture(params: PlanningPictureParams): Effect.Effect<PlanningPictureAnswer>;
+  /** One picture kept on one plan, answering the id its text names it by, or why it was not kept. */
+  planningPictureKeep(params: PlanningPictureKeepParams): Effect.Effect<PlanningPictureKeepAnswer>;
   /** Where every one of the account's integrations stands; or why there is no answer. */
   integrationsStatus(): Effect.Effect<IntegrationStatusesView>;
   /** A sign-in to one provider begun and opened in the browser by the host; whether it was, never the address. */
@@ -956,6 +961,21 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           (answer.ok
             ? Result.getOrUndefined(
                 readEither(planningRevisionAnswerSchema, { excess: EXCESS_KEYS.DROP })(
+                  answer.result,
+                ),
+              )
+            : undefined) ?? { failure: PLAN_CALL_FAILURE.UNANSWERED },
+      ),
+    planningPictureKeep: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.PLANNING_PICTURE_KEEP, {
+          planId: params.planId,
+          picture: params.picture,
+        }),
+        (answer): PlanningPictureKeepAnswer =>
+          (answer.ok
+            ? Result.getOrUndefined(
+                readEither(planningPictureKeepAnswerSchema, { excess: EXCESS_KEYS.DROP })(
                   answer.result,
                 ),
               )

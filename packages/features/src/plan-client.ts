@@ -28,6 +28,7 @@ import {
   planPageVersionAnswerSchema,
 } from "./page-wire.js";
 import { pictureTypeSchema } from "./picture-wire.js";
+import { PLAN_ATTACHMENT_REFUSAL, planAttachmentAnswerSchema } from "./plan-attachment-wire.js";
 import {
   type PlanEditAnswer,
   type PlanEditRequest,
@@ -67,10 +68,12 @@ import {
   repositoryPinsAnswerSchema,
 } from "./plan-wire.js";
 import {
+  PICTURE_KEEP_FAILURE,
   PLAN_CALL_FAILURE,
   type PlanCallFailure,
   type PlanCodeAnswer,
   type PlanningPictureAnswer,
+  type PlanningPictureKeepAnswer,
   type PlanWorkAnswer,
   planCodeAnswerSchema,
   planWorkAnswerSchema,
@@ -81,6 +84,7 @@ import {
 import {
   HOSTED_SERVICE_PATH,
   planAttachmentPath,
+  planAttachmentsPath,
   planBoardPath,
   planCodePath,
   planEditPath,
@@ -521,6 +525,42 @@ export class HostedPlanClient {
       }
       const picture = yield* imageBodyOf(answer.response, pictureTypeSchema);
       return picture ?? { failure: PLAN_CALL_FAILURE.UNANSWERED };
+    });
+  }
+
+  /**
+   * One picture kept on one plan, sent as the `data:` URL the Mac made of
+   * it: the id the plan's text then names it by; too many where the plan
+   * holds its bound; not found where the plan is not one the account may
+   * write, an archived one among them; unanswered for anything else.
+   */
+  keepPicture(
+    planId: string,
+    picture: string,
+  ): Effect.Effect<PlanningPictureKeepAnswer, never, HttpClient.HttpClient> {
+    const send = this.#call.send;
+    return Effect.gen(function* () {
+      const answer = yield* send({
+        method: HTTP_METHOD.POST,
+        path: planAttachmentsPath(planId),
+        body: JSON.stringify({ picture }),
+      });
+      if (!callAnswered(answer)) return { failure: PICTURE_KEEP_FAILURE.UNANSWERED };
+      const payload = unparsedWire(yield* jsonOf(answer.response));
+      if (!answer.response.ok) {
+        const refused = refusedAs(payload, NOT_FOUND_REFUSAL);
+        return { failure: refused.ok ? PICTURE_KEEP_FAILURE.UNANSWERED : refused.failure };
+      }
+      const kept = Result.getOrUndefined(readServiceAnswer(planAttachmentAnswerSchema)(payload));
+      if (kept === undefined) return { failure: PICTURE_KEEP_FAILURE.UNANSWERED };
+      return "id" in kept
+        ? { id: kept.id }
+        : {
+            failure:
+              kept.refused === PLAN_ATTACHMENT_REFUSAL.TOO_MANY
+                ? PICTURE_KEEP_FAILURE.TOO_MANY
+                : PICTURE_KEEP_FAILURE.UNANSWERED,
+          };
     });
   }
 

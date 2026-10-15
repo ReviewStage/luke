@@ -406,7 +406,7 @@ export function planRestorePath(planId: string, seq: number): string {
 }
 
 /** One plan's pictures: one kept on the plan (POST). */
-function planAttachmentsPath(planId: string): string {
+export function planAttachmentsPath(planId: string): string {
   return `${planPath(planId)}/attachments`;
 }
 
