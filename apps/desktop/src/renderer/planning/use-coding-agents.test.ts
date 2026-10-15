@@ -286,8 +286,8 @@ test("a read of an agent's changes keeps who its pull request names, by agent an
       reviewers: [{ by: { login: "octocat", bot: false }, state }],
     },
   });
-  let land: (answer: unknown) => void = () => undefined;
-  const older = new Promise<unknown>((resolve) => {
+  let land: (answer: ReturnType<typeof answerWith>) => void = () => undefined;
+  const older = new Promise<ReturnType<typeof answerWith>>((resolve) => {
     land = resolve;
   });
   tab.answer(ACT_KIND.CODING_AGENTS_CHANGES, older, answerWith("approved"), {
