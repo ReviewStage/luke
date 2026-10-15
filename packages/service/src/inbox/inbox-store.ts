@@ -8,6 +8,7 @@ import {
   planReachableBy,
   workspaceReachableBy,
 } from "@luke/database/models/workspace-store";
+import { user } from "@luke/database/schemas/auth";
 import { automation } from "@luke/database/schemas/automation";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { inboxItem } from "@luke/database/schemas/inbox";
@@ -128,6 +129,11 @@ const INBOX_COLUMNS = {
   status: inboxItem.status,
   answer: inboxItem.answer,
   answerKey: inboxItem.answerKey,
+  answeredBy: inboxItem.answeredBy,
+  // A scalar read rather than a join, because `returning` projects these too and joins nothing.
+  answeredByName: sql<
+    string | null
+  >`(select "name" from ${user} where ${user.id} = ${inboxItem.answeredBy})`,
   closedReason: inboxItem.closedReason,
   postedAt: inboxItem.postedAt,
   updatedAt: inboxItem.updatedAt,
@@ -146,6 +152,8 @@ const InboxRowSchema = Schema.Struct({
   status: Schema.Literals(Object.values(INBOX_STATUS)),
   answer: Schema.NullOr(inboxReplySchema),
   answerKey: Schema.NullOr(Schema.String),
+  answeredBy: Schema.NullOr(Schema.String),
+  answeredByName: Schema.NullOr(Schema.String),
   closedReason: Schema.NullOr(Schema.String),
   postedAt: InstantColumnSchema,
   updatedAt: InstantColumnSchema,
@@ -168,6 +176,9 @@ function storedItem(row: InboxRow): StoredInboxItem {
       needsReply: row.needsReply,
       status: row.status,
       ...(row.answer === null ? undefined : { answer: row.answer }),
+      ...(row.answeredBy === null || row.answeredByName === null
+        ? undefined
+        : { answeredBy: { userId: row.answeredBy, name: row.answeredByName } }),
       ...(row.closedReason === null ? undefined : { closedReason: row.closedReason }),
       postedAt: row.postedAt.getTime(),
       updatedAt: row.updatedAt.getTime(),
@@ -327,6 +338,7 @@ const upsertItem = SqlSchema.findOne({
       status: INBOX_STATUS.OPEN,
       answer: null,
       answerKey: null,
+      answeredBy: null,
       closedReason: null,
       updatedAt: write.now,
     };
@@ -702,7 +714,13 @@ const answerItem = SqlSchema.findOneOption({
     Database.use((db) =>
       db
         .update(inboxItem)
-        .set({ status: INBOX_STATUS.ANSWERED, answer, answerKey, updatedAt: now })
+        .set({
+          status: INBOX_STATUS.ANSWERED,
+          answer,
+          answerKey,
+          answeredBy: userId,
+          updatedAt: now,
+        })
         .where(
           and(
             eq(inboxItem.id, itemId),
@@ -871,7 +889,13 @@ const withdrawAnswer = SqlSchema.findOneOption({
     Database.use((db) =>
       db
         .update(inboxItem)
-        .set({ status: INBOX_STATUS.OPEN, answer: null, answerKey: null, updatedAt: now })
+        .set({
+          status: INBOX_STATUS.OPEN,
+          answer: null,
+          answerKey: null,
+          answeredBy: null,
+          updatedAt: now,
+        })
         .where(
           and(
             eq(inboxItem.id, itemId),

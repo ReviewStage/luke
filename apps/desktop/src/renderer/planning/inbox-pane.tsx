@@ -45,6 +45,7 @@ import { AttachmentViewer } from "./attachment-viewer";
 import { CodeCardHeader, CodeLines } from "./code-pane";
 import type { ReadFileWindow } from "./file-tab";
 import {
+  answererOf,
   CODE_READ,
   CODE_READ_FAILED,
   type CodeRead,
@@ -687,7 +688,16 @@ function Delivered({ item, by }: { item: InboxItem; by: ItemAgent }): React.JSX.
  * beside its label, and the rest stepped back to an outline, so what was
  * offered and what was chosen read together.
  */
-function Proposal({ item }: { item: InboxItem }): React.JSX.Element | null {
+function Proposal({
+  item,
+  readerId,
+}: {
+  item: InboxItem;
+  readerId: string | undefined;
+}): React.JSX.Element | null {
+  // Note that the reader is told apart by id, never by the name the answerer goes by.
+  const yours = readerId !== undefined && item.answeredBy?.userId === readerId;
+  const pick = yours ? "Your pick" : `${answererOf(item, readerId)}'s pick`;
   const options = proposedOptions(item);
   if (options.length === 0) return null;
   return (
@@ -702,7 +712,7 @@ function Proposal({ item }: { item: InboxItem }): React.JSX.Element | null {
             {option.picked ? (
               <span className="inbox-picked">
                 <CheckIcon aria-hidden="true" />
-                Your pick
+                {pick}
               </span>
             ) : null}
           </span>
@@ -749,12 +759,15 @@ function Answered({
   item,
   by,
   now,
+  readerId,
 }: {
   item: InboxItem;
   by: ItemAgent;
   now: number;
+  /** The signed-in account's id, whose own answer reads as theirs. */
+  readerId: string | undefined;
 }): React.JSX.Element | null {
-  const settled = settlementOf(item);
+  const settled = settlementOf(item, readerId);
   if (settled === undefined) return null;
   if (settled.by === SETTLED_BY.AGENT) return null;
   return (
@@ -778,12 +791,15 @@ function Withdrawn({
   item,
   by,
   now,
+  readerId,
 }: {
   item: InboxItem;
   by: ItemAgent;
   now: number;
+  /** The signed-in account's id, whose own answer reads as theirs. */
+  readerId: string | undefined;
 }): React.JSX.Element | null {
-  const settled = settlementOf(item);
+  const settled = settlementOf(item, readerId);
   if (settled?.by !== SETTLED_BY.AGENT) return null;
   return (
     <Message from="assistant" data-inbox-withdrawn="">
@@ -1015,12 +1031,12 @@ export function InboxPane({
                   onDraft={(next) => control.onDraft(item, next)}
                 />
               ) : (
-                <Proposal item={item} />
+                <Proposal item={item} readerId={agents.me} />
               )}
             </MessageContent>
           </Message>
-          <Answered item={item} by={by} now={now} />
-          <Withdrawn item={item} by={by} now={now} />
+          <Answered item={item} by={by} now={now} readerId={agents.me} />
+          <Withdrawn item={item} by={by} now={now} readerId={agents.me} />
           {control.failed ? (
             <ReadFailure line={INBOX_FAILED_LINE} onRetry={control.onRetry} />
           ) : null}

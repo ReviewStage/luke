@@ -217,6 +217,36 @@ it.layer(getTestDB())("the inbox store", (it) => {
   );
 
   it.effect(
+    "an answer names the member who gave it, to every member, and an answer withdrawn or an item asked again names nobody",
+    () =>
+      Effect.gen(function* () {
+        const { agent, workspaceId } = yield* openPlanlessAgent;
+        const teammate = yield* openUser;
+        yield* joinWorkspace(workspaceId, teammate);
+        const posted = yield* postInboxItem(agent, SETTINGS);
+        assert.ok(Result.isSuccess(posted));
+        const { id } = posted.success;
+        const key = randomUUID();
+
+        const answered = Option.getOrThrow(yield* answerInboxItem(teammate, id, 1, DONE, key));
+        assert.deepEqual(answered.answeredBy, { userId: teammate, name: "Test User" });
+        for (const reader of [agent.userId, teammate]) {
+          assert.equal(
+            Option.getOrThrow(yield* readInboxItem(reader, id)).item.answeredBy?.userId,
+            teammate,
+          );
+        }
+
+        const withdrawn = Option.getOrThrow(yield* withdrawInboxAnswer(teammate, id, key));
+        assert.equal(withdrawn.answeredBy, undefined);
+        yield* answerInboxItem(agent.userId, id, withdrawn.revision, DONE, randomUUID());
+        const askedAgain = yield* postInboxItem(agent, SETTINGS);
+        assert.ok(Result.isSuccess(askedAgain));
+        assert.equal(askedAgain.success.answeredBy, undefined);
+      }),
+  );
+
+  it.effect(
     "a plan moved to another workspace takes its agents and their items along, so deleting the workspace it left keeps them",
     () =>
       Effect.gen(function* () {

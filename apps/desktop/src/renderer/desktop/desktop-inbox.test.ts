@@ -106,9 +106,13 @@ function item(id: string, title: string, updatedAt: number): InboxItem {
 }
 
 const THRESHOLD = item("a1b2c3d4-0000-4000-8000-000000000001", "Alert at 80%?", 3_000);
+/** The account reading the Inbox, who answered the retry question themselves. */
+const READER = { userId: "user-reader", name: "Dana Reyes" };
+
 const RETRY: InboxItem = {
   ...item("a1b2c3d4-0000-4000-8000-000000000002", "How is a failed email retried?", 5_000),
   status: INBOX_STATUS.ANSWERED,
+  answeredBy: READER,
   answer: {
     reply: INBOX_REPLY.CHOSE,
     choices: ["Retry 3 times over an hour"],
@@ -198,6 +202,7 @@ function mount() {
     setPlans = setListed;
     return createElement(DesktopInbox, {
       plans: plansControl({
+        me: READER.userId,
         plans: listed,
         inbox: [
           { planId: BILLING.id, items: [waitingOf(THRESHOLD)] },

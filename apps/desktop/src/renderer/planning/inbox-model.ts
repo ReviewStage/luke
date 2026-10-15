@@ -221,17 +221,34 @@ export const SETTLED_BY = {
   AGENT: "agent",
 } as const;
 
-/** What each answer's kind says the developer did. */
+/** What each answer's kind says its answerer did, after who they are. */
 const REPLY_WORDS = {
-  [INBOX_REPLY.CHOSE]: "You chose",
-  [INBOX_REPLY.APPROVED]: "You approved",
-  [INBOX_REPLY.DECLINED]: "You declined",
-  [INBOX_REPLY.ANSWERED]: "You answered",
-  [INBOX_REPLY.DONE]: "You marked it done",
-  [INBOX_REPLY.NOT_DONE]: "You couldn't do it",
-  [INBOX_REPLY.SUBMITTED]: "You filled it in",
-  [INBOX_REPLY.ACKNOWLEDGED]: "You acknowledged it",
+  [INBOX_REPLY.CHOSE]: "chose",
+  [INBOX_REPLY.APPROVED]: "approved",
+  [INBOX_REPLY.DECLINED]: "declined",
+  [INBOX_REPLY.ANSWERED]: "answered",
+  [INBOX_REPLY.DONE]: "marked it done",
+  [INBOX_REPLY.NOT_DONE]: "couldn't do it",
+  [INBOX_REPLY.SUBMITTED]: "filled it in",
+  [INBOX_REPLY.ACKNOWLEDGED]: "acknowledged it",
 } as const satisfies Record<InboxReplyKind, string>;
+
+/** How an answer's member is named where the service names nobody: their account is gone, or the answer predates answerers being kept. */
+const UNNAMED_ANSWERER = "Someone";
+
+/**
+ * Who answered an item, as its settled line names them: "You" only for the
+ * reader, a teammate by name, and someone where nobody can be named or the
+ * reader's id is not known.
+ */
+export function answererOf(
+  item: Pick<InboxItem, "answeredBy">,
+  readerId: string | undefined,
+): string {
+  const by = item.answeredBy;
+  if (by === undefined) return UNNAMED_ANSWERER;
+  return readerId !== undefined && by.userId === readerId ? "You" : by.name;
+}
 
 /** How a settled item came to be settled: who settled it, what they did in a few words, and what they wrote. */
 export interface Settlement {
@@ -249,8 +266,11 @@ function answerWords(answer: InboxReply): string | undefined {
   return lines.length === 0 ? undefined : lines.join("\n");
 }
 
-/** How an item was settled, or nothing while it waits: the developer's answer and their words, or the agent taking it back and why. */
-export function settlementOf(item: InboxItem): Settlement | undefined {
+/** How an item was settled, or nothing while it waits: who answered and what they did and wrote, or the agent taking it back and why. */
+export function settlementOf(
+  item: InboxItem,
+  readerId: string | undefined,
+): Settlement | undefined {
   if (item.status === INBOX_STATUS.OPEN) return undefined;
   if (item.status === INBOX_STATUS.CLOSED) {
     return {
@@ -260,12 +280,13 @@ export function settlementOf(item: InboxItem): Settlement | undefined {
     };
   }
   const answer = item.answer;
+  const who = answererOf(item, readerId);
   if (answer === undefined)
-    return { by: SETTLED_BY.DEVELOPER, lead: REPLY_WORDS[INBOX_REPLY.ANSWERED] };
+    return { by: SETTLED_BY.DEVELOPER, lead: `${who} ${REPLY_WORDS[INBOX_REPLY.ANSWERED]}` };
   const lead =
     answer.reply === INBOX_REPLY.CHOSE
-      ? `${REPLY_WORDS[INBOX_REPLY.CHOSE]} ${(answer.choices ?? []).join(", ")}`
-      : REPLY_WORDS[answer.reply];
+      ? `${who} ${REPLY_WORDS[INBOX_REPLY.CHOSE]} ${(answer.choices ?? []).join(", ")}`
+      : `${who} ${REPLY_WORDS[answer.reply]}`;
   const words = answerWords(answer);
   return { by: SETTLED_BY.DEVELOPER, lead, ...(words === undefined ? undefined : { words }) };
 }

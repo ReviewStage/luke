@@ -52,6 +52,9 @@ function item(overrides: Partial<InboxItem> & Pick<InboxItem, "id">): InboxItem 
   };
 }
 
+const DANA = { userId: "user-dana", name: "Dana Reyes" };
+const CHARLES = { userId: "user-charles", name: "Charles Pan" };
+
 const QUEUE = item({
   id: "a1b2c3d4-0000-4000-8000-000000000001",
   response: {
@@ -208,14 +211,16 @@ test("an approval, a task, and an item asking nothing are answered by their pres
 });
 
 test("a settled item says who settled it and what they did: the developer's pick, a form's values a line each, and their note, or the agent taking it back and why; an open one is not settled", () => {
-  assert.equal(settlementOf(QUEUE), undefined);
+  assert.equal(settlementOf(QUEUE, DANA.userId), undefined);
   assert.deepEqual(
     settlementOf(
       item({
         id: "a",
         status: INBOX_STATUS.ANSWERED,
+        answeredBy: DANA,
         answer: { reply: INBOX_REPLY.CHOSE, choices: ["Redis", "Postgres"], note: "Fine." },
       }),
+      DANA.userId,
     ),
     { by: SETTLED_BY.DEVELOPER, lead: "You chose Redis, Postgres", words: "Fine." },
   );
@@ -224,6 +229,7 @@ test("a settled item says who settled it and what they did: the developer's pick
       item({
         id: "f",
         status: INBOX_STATUS.ANSWERED,
+        answeredBy: DANA,
         answer: {
           reply: INBOX_REPLY.SUBMITTED,
           values: [
@@ -232,6 +238,7 @@ test("a settled item says who settled it and what they did: the developer's pick
           ],
         },
       }),
+      DANA.userId,
     ),
     {
       by: SETTLED_BY.DEVELOPER,
@@ -241,12 +248,21 @@ test("a settled item says who settled it and what they did: the developer's pick
   );
   assert.deepEqual(
     settlementOf(
-      item({ id: "n", status: INBOX_STATUS.ANSWERED, answer: { reply: INBOX_REPLY.ACKNOWLEDGED } }),
+      item({
+        id: "n",
+        status: INBOX_STATUS.ANSWERED,
+        answeredBy: DANA,
+        answer: { reply: INBOX_REPLY.ACKNOWLEDGED },
+      }),
+      DANA.userId,
     ),
     { by: SETTLED_BY.DEVELOPER, lead: "You acknowledged it" },
   );
   assert.deepEqual(
-    settlementOf(item({ id: "b", status: INBOX_STATUS.CLOSED, closedReason: "Found it." })),
+    settlementOf(
+      item({ id: "b", status: INBOX_STATUS.CLOSED, closedReason: "Found it." }),
+      DANA.userId,
+    ),
     { by: SETTLED_BY.AGENT, lead: "Withdrawn by the agent", words: "Found it." },
   );
 });
@@ -449,4 +465,20 @@ test("a code block near the file's top reads from its first line, a file that en
     "These lines cannot be read.",
     "lines running backwards are no window to read",
   );
+});
+
+test("an answer names who gave it: the reader as You, a teammate by name, and someone where nobody can be named", () => {
+  const chose = (answeredBy?: typeof DANA) =>
+    item({
+      id: "c",
+      status: INBOX_STATUS.ANSWERED,
+      ...(answeredBy === undefined ? undefined : { answeredBy }),
+      answer: { reply: INBOX_REPLY.CHOSE, choices: ["Postgres"] },
+    });
+
+  assert.equal(settlementOf(chose(DANA), DANA.userId)?.lead, "You chose Postgres");
+  assert.equal(settlementOf(chose(CHARLES), DANA.userId)?.lead, "Charles Pan chose Postgres");
+  assert.equal(settlementOf(chose(DANA), CHARLES.userId)?.lead, "Dana Reyes chose Postgres");
+  assert.equal(settlementOf(chose(), DANA.userId)?.lead, "Someone chose Postgres");
+  assert.equal(settlementOf(chose(DANA), undefined)?.lead, "Dana Reyes chose Postgres");
 });

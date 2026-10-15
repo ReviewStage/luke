@@ -163,8 +163,10 @@ Luke signed in as you. Items and their pictures are stored under your account
 and readable by our own operators, like the agent's transcript. The agent can
 change or withdraw an item, and our service keeps each as it last stood; a
 picture goes when the item stops naming it. Your answer, and any note, is
-stored with the item and, where the agent asked to hear back, handed to it as
-one of your messages, kept in its transcript. While you are signed in, Luke
+stored with the item under the account of whichever member gave it, which
+every member of the plan's workspace sees by name beside the answer, and,
+where the agent asked to hear back, handed to it as one of your messages,
+kept in its transcript. While you are signed in, Luke
 on your Mac keeps a read open to our service for every item waiting on you,
 each in brief (its plan, agent, and title), and for every plan holding an item,
 to count them in its sidebar and on its Dock icon. Opening the Inbox reads
