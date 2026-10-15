@@ -110,18 +110,20 @@ test("a Luke window draws the card only with the keyboard, a call in progress, a
   assert.equal(shown(IDLE_VOICE_VIEW, true, BILLING), false);
 });
 
-test("the call bar is on screen only on a plan's document, and not under its version history, the window's Inbox, or a side panel filling the window", () => {
+test("the call bar is on screen only on a plan's document, and not under its version history, the window's Inbox, an agent's page, or a side panel filling the window", () => {
   const onPlan = {
     plansTab: true,
     documentPage: true,
     historyOpen: false,
     inboxOpen: false,
+    agentPageOpen: false,
     sidePanelFullScreen: false,
     activePlanId: INVITES,
   };
   assert.equal(callBarPlanId(onPlan), INVITES);
   assert.equal(callBarPlanId({ ...onPlan, historyOpen: true }), undefined);
   assert.equal(callBarPlanId({ ...onPlan, inboxOpen: true }), undefined);
+  assert.equal(callBarPlanId({ ...onPlan, agentPageOpen: true }), undefined);
   assert.equal(callBarPlanId({ ...onPlan, sidePanelFullScreen: true }), undefined);
   assert.equal(callBarPlanId({ ...onPlan, documentPage: false }), undefined);
   assert.equal(callBarPlanId({ ...onPlan, plansTab: false }), undefined);
