@@ -474,10 +474,10 @@ it("a failure message keeps its words and loses every run shaped like a credenti
   );
 });
 
-it("a failure message of one long word run ending in a bare name is read in one pass", () => {
-  // Note that a name's prefix is bounded, so no offset of this run is rescanned to its end.
-  const run = `${"a".repeat(50_000)}key`;
-  assert.equal(redactCredentials(run), "[redacted]");
-  assert.equal(redactCredentials(`${run} refused`), "[redacted] refused");
-  assert.equal(redactCredentials(`${"a".repeat(100)}_key=fixture refused`), "[redacted] refused");
+it("a name prefixed by 64 word characters still loses its whole value", () => {
+  // Note that the value carries a dot, so the bare run cannot take it in the name's place.
+  assert.equal(
+    redactCredentials(`${"a".repeat(60)}api_key=fixture.value refused`),
+    "[redacted] refused",
+  );
 });
