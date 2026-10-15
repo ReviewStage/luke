@@ -77,6 +77,7 @@ import {
   type WorkerJobs,
 } from "./tool-call-model";
 import {
+  MacOwnerProvider,
   TranscriptNote,
   TranscriptOpeningCall,
   TranscriptReasoning,
@@ -761,35 +762,37 @@ function AgentTabView({
   const working = agentStillWriting(agent.status);
   return (
     <section className="agent-tab ph-no-capture" aria-label={agentTabLabel(agent, models)}>
-      <AgentTranscriptView
-        messages={lines}
-        brief={agent.brief}
-        briefSender={starter}
-        delegation={{
-          models,
-          own: { model: agent.model, effort: agent.effort },
-          starts: delegationStarts && workerStarts(delegationStarts, transcript.subagents),
-          onOpen: onOpenSubagent,
-          onOpenTarget,
-          cards,
-          standings: transcript.subagents,
-        }}
-        reading={transcript.reading}
-        failed={transcript.failed}
-        working={working}
-        sessionStarting={agent.status === CODING_AGENT_STATUS.STARTING}
-        startedAt={startedAt}
-        ended={endLine(agent.status, transcript.failure, transcript.turnUsage, starter)}
-        endReason={endLineReason(transcript.failure, starter)}
-        onOpenApiKeys={onOpenApiKeys}
-        onRetry={transcript.onRetry}
-        footer={
-          showsPublishedRow(agent.status, published) ? (
-            <PublishedRow pullRequest={published.pullRequest} openGitHub={openGitHub} />
-          ) : null
-        }
-        overComposer
-      />
+      <MacOwnerProvider value={starter}>
+        <AgentTranscriptView
+          messages={lines}
+          brief={agent.brief}
+          briefSender={starter}
+          delegation={{
+            models,
+            own: { model: agent.model, effort: agent.effort },
+            starts: delegationStarts && workerStarts(delegationStarts, transcript.subagents),
+            onOpen: onOpenSubagent,
+            onOpenTarget,
+            cards,
+            standings: transcript.subagents,
+          }}
+          reading={transcript.reading}
+          failed={transcript.failed}
+          working={working}
+          sessionStarting={agent.status === CODING_AGENT_STATUS.STARTING}
+          startedAt={startedAt}
+          ended={endLine(agent.status, transcript.failure, transcript.turnUsage, starter)}
+          endReason={endLineReason(transcript.failure, starter)}
+          onOpenApiKeys={onOpenApiKeys}
+          onRetry={transcript.onRetry}
+          footer={
+            showsPublishedRow(agent.status, published) ? (
+              <PublishedRow pullRequest={published.pullRequest} openGitHub={openGitHub} />
+            ) : null
+          }
+          overComposer
+        />
+      </MacOwnerProvider>
       <footer className="agent-tab-foot">
         <TodosDock messages={lines} working={working} />
         {onUnarchive !== undefined ? (
@@ -974,6 +977,11 @@ export function AgentSubagentTab({
     onTitle: () => undefined,
   });
   const { messages, pageStatus, runStartedAt, pageTitle } = transcript;
+  // A worker runs as its agent does, so a command it ran on a Mac ran on its agent's starter's.
+  const owner =
+    control.agents?.find((each) => each.id === agentId) ??
+    control.archived?.find((each) => each.id === agentId);
+  const macOwner = teammateStarter(owner?.startedBy, control.me);
   // As an agent's: dated by the page it was read from, with the worker's own title.
   useEffect(() => {
     if (pageStatus === undefined || messages.length === 0) return;
@@ -982,18 +990,20 @@ export function AgentSubagentTab({
   }, [onHeld, callId, messages, pageStatus, runStartedAt, pageTitle]);
   return (
     <section className="agent-tab ph-no-capture" aria-label={cardTitle(task)}>
-      <AgentTranscriptView
-        messages={workerLines(task, transcript.messages)}
-        lead={WORKER_LEAD}
-        delegation={{ models: control.models }}
-        reading={transcript.reading}
-        failed={transcript.failed}
-        working={agentStillWriting(status)}
-        sessionStarting={status === CODING_AGENT_STATUS.STARTING}
-        startedAt={shown ? transcript.runStartedAt : undefined}
-        ended={endLine(status, transcript.failure)}
-        onRetry={transcript.onRetry}
-      />
+      <MacOwnerProvider value={macOwner}>
+        <AgentTranscriptView
+          messages={workerLines(task, transcript.messages)}
+          lead={WORKER_LEAD}
+          delegation={{ models: control.models }}
+          reading={transcript.reading}
+          failed={transcript.failed}
+          working={agentStillWriting(status)}
+          sessionStarting={status === CODING_AGENT_STATUS.STARTING}
+          startedAt={shown ? transcript.runStartedAt : undefined}
+          ended={endLine(status, transcript.failure)}
+          onRetry={transcript.onRetry}
+        />
+      </MacOwnerProvider>
     </section>
   );
 }

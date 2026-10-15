@@ -6,12 +6,15 @@ import {
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
 import { FAILURE_REASON } from "@luke/features/failure-remedy";
+import { CALL_KIND } from "@luke/features/turn-rows";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { test } from "vitest";
+import { TOOL_BLOCK, TOOL_STATE } from "../ai-elements/tool";
 import { agentCardReading, NOTHING_HELD } from "./agent-ref";
 import { AgentTabCard } from "./agent-tab-card";
 import { endLine, endLineReason, teammateStarter } from "./coding-agent-model";
+import { MacOwnerProvider, TranscriptTool } from "./transcript-blocks";
 
 /**
  * agent-starter.test.ts -- an agent a teammate started says so: its card
@@ -79,4 +82,28 @@ test("a key a teammate's agent failed on is named as theirs, with no Settings of
     ),
     "Failed: Fast isn't available on Charles Pan's own API key; choose the model with Fast off",
   );
+});
+
+/** The words a Mac command's row says, drawn in the transcript of an agent `starter` started, or the reader's own. */
+function macCommandRow(starter: string | undefined): string {
+  return renderToStaticMarkup(
+    createElement(
+      MacOwnerProvider,
+      { value: starter },
+      createElement(TranscriptTool, {
+        state: TOOL_STATE.OUTPUT_AVAILABLE,
+        kind: CALL_KIND.MAC_COMMAND,
+        subject: "pnpm test",
+        input: { kind: TOOL_BLOCK.COMMAND, text: "pnpm test" },
+        output: { kind: TOOL_BLOCK.TEXT, text: "ok" },
+        errorText: undefined,
+      }),
+    ),
+  );
+}
+
+test("a command a teammate's agent ran on a Mac says it ran on theirs, and the reader's own agent's on the reader's", () => {
+  assert.match(macCommandRow("Charles Pan"), /On Charles Pan(?:'|&#x27;)s Mac/u);
+  assert.doesNotMatch(macCommandRow("Charles Pan"), /On your Mac/u);
+  assert.match(macCommandRow(undefined), /On your Mac/u);
 });
