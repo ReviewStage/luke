@@ -95,6 +95,8 @@ let sent: Act[] = [];
 let refuseInvitationsRead = false;
 /** Whether the service refuses to read the members. */
 let refuseMembersRead = false;
+/** Where the next members read waits, holding what it read, so a test can land it after a write. */
+let membersHeld: Promise<void> | undefined;
 /** Whether the service refuses the next removal for the account's role. */
 let refuseRemoval = false;
 /** The invitations the test's service holds pending. */
@@ -155,6 +157,12 @@ function answer(request: Act): Promise<ActOutcome> {
     case ACT_KIND.WORKSPACE_MEMBERS_READ:
       if (refuseMembersRead) {
         return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Could not read." });
+      }
+      if (membersHeld !== undefined) {
+        const held = membersHeld;
+        const read = stored;
+        membersHeld = undefined;
+        return held.then(() => done(read));
       }
       return Promise.resolve(done(stored));
     case ACT_KIND.WORKSPACE_MEMBER_REMOVE:
@@ -280,6 +288,7 @@ beforeEach(() => {
   stored = [OWNER, MEMBER];
   sent = [];
   refuseMembersRead = false;
+  membersHeld = undefined;
   refuseInvitationsRead = false;
   refuseRemoval = false;
   invitations = [];
@@ -996,6 +1005,22 @@ test("the members are read again when the window's list counts another, so an ad
     dialog().querySelector('button[aria-label^="New owner"]')?.getAttribute("aria-label"),
     "New owner: Ola",
   );
+});
+
+test("a members read sent before a role change and landing after it does not put back the role the change made", async () => {
+  stored = [OWNER, ADMIN_OLA, MEMBER];
+  const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
+  let release: () => void = () => undefined;
+  membersHeld = new Promise((resolve) => {
+    release = resolve;
+  });
+  act(() => button(leaveGroup(page) ?? assert.fail("no leave"), "Transfer ownership").click());
+  act(() => button(dialog(), "Cancel").click());
+  await chooseAction(rowNamed(page, "Sam"), "Make admin");
+  release();
+  await settle();
+
+  assert.equal(rowNamed(page, "Sam").querySelector(".settings-row-value")?.textContent, "Admin");
 });
 
 test("a removal the account's role does not allow says so in the dialog that asked", async () => {

@@ -249,32 +249,39 @@ function removes(reader: Workspace["role"], role: WorkspaceMember["role"]): bool
  * joining or leaving elsewhere makes it; a write's answer stands in once it
  * lands. Retry reads again from nothing; a refresh reads again keeping the
  * list it has on screen until the new one lands, and a refresh that fails
- * keeps it.
+ * keeps it. Note that only the newest thing asked is shown, a read or a
+ * write's answer, because a read sent before a write can land after it and
+ * would put back what the write changed.
  */
 function useMembersRead(workspaceId: string, memberCount: number | undefined) {
   const { act } = useAct();
   const [read, setRead] = useState<ListRead<WorkspaceMember>>(undefined);
   const [attempt, setAttempt] = useState({ count: 0, keep: false });
+  const latest = useRef(0);
   useEffect(() => {
-    let live = true;
+    const asked = ++latest.current;
     if (!attempt.keep) setRead(undefined);
     act(ACT_KIND.WORKSPACE_MEMBERS_READ, { workspaceId }).then(
       (items) => {
-        if (live) setRead({ items });
+        if (asked === latest.current) setRead({ items });
       },
       () => {
-        if (live && !attempt.keep) setRead({ failed: READ_FAILED.MEMBERS });
+        if (asked === latest.current && !attempt.keep) setRead({ failed: READ_FAILED.MEMBERS });
       },
     );
     return () => {
-      live = false;
+      // A read the workspace or a newer ask replaced is passed over when it lands.
+      if (asked === latest.current) latest.current += 1;
     };
   }, [act, workspaceId, memberCount, attempt]);
   return {
     read,
     retry: () => setAttempt((was) => ({ count: was.count + 1, keep: false })),
     refresh: () => setAttempt((was) => ({ count: was.count + 1, keep: true })),
-    changed: (items: readonly WorkspaceMember[]) => setRead({ items }),
+    changed: (items: readonly WorkspaceMember[]) => {
+      latest.current += 1;
+      setRead({ items });
+    },
   };
 }
 
