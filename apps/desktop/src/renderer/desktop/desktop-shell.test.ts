@@ -591,6 +591,7 @@ const PLACE = {
   OTHER_PLAN: "another plan",
   INBOX: "the Inbox",
   AGENT_PAGE: "an agent's page",
+  PERSON_PAGE: "a person's page",
   FACTORY: "Factory",
   AUTOMATIONS: "the Automations page",
   SIDE_PANEL_FULL_SCREEN: "a side panel filling the window",
@@ -606,6 +607,7 @@ const LEFT_COLUMN = {
   [PLACE.OTHER_PLAN]: { selector: "aside.desktop-sidebar", folds: true },
   [PLACE.INBOX]: { selector: "aside.desktop-sidebar", folds: true },
   [PLACE.AGENT_PAGE]: { selector: "aside.desktop-sidebar", folds: true },
+  [PLACE.PERSON_PAGE]: { selector: "aside.desktop-sidebar", folds: true },
   [PLACE.FACTORY]: { selector: "aside.desktop-sidebar", folds: true },
   [PLACE.AUTOMATIONS]: { selector: "aside.desktop-sidebar", folds: true },
   [PLACE.SIDE_PANEL_FULL_SCREEN]: { selector: "aside.desktop-sidebar", folds: true },
@@ -625,6 +627,7 @@ function placed(place: Place) {
     [PLACE.OTHER_PLAN]: onPlan,
     [PLACE.INBOX]: { inboxView: { ...control.inboxView, open: true } },
     [PLACE.AGENT_PAGE]: { agentView: { ...control.agentView, agentId: "agent-page-1" } },
+    [PLACE.PERSON_PAGE]: { personView: { ...control.personView, userId: "user-charles" } },
     [PLACE.FACTORY]: { factoryView: { ...control.factoryView, open: true } },
     [PLACE.AUTOMATIONS]: { automationsView: { ...control.automationsView, open: true } },
     [PLACE.SIDE_PANEL_FULL_SCREEN]: {
@@ -751,6 +754,7 @@ test("the side panel's toggle stands on a plan and on an agent's page, which kee
     [PLACE.OTHER_PLAN]: true,
     [PLACE.INBOX]: false,
     [PLACE.AGENT_PAGE]: true,
+    [PLACE.PERSON_PAGE]: false,
     [PLACE.FACTORY]: false,
     [PLACE.AUTOMATIONS]: false,
     [PLACE.SIDE_PANEL_FULL_SCREEN]: true,
@@ -785,6 +789,7 @@ test("⌘F opens a find over every page that stands in the window, and Settings 
     [PLACE.INBOX]: true,
     // Note that this agent is never read here, and an agent's page finds once its agent is drawn (`desktop-agent-page.test.ts`).
     [PLACE.AGENT_PAGE]: false,
+    [PLACE.PERSON_PAGE]: true,
     [PLACE.FACTORY]: true,
     [PLACE.AUTOMATIONS]: true,
     // Note that the panel filling the window holds the keys, on its Board, whose canvas no find reads.

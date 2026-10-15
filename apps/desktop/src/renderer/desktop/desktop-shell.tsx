@@ -496,13 +496,10 @@ export function DesktopShell({
           // Keyed by the agent, so another agent's page is a page of its own, holding nothing of the last.
           <DesktopAgentPage key={pageAgent} plans={plans} agentId={pageAgent} />
         ) : pagePerson !== undefined ? (
-          // Keyed by the person, so another person's page holds nothing of the last.
-          <PersonPage
-            key={pagePerson}
-            plans={plans}
-            userId={pagePerson}
-            name={plans.personView.name}
-          />
+          // Keyed by the person, so another person's page holds nothing of the last, its find among it.
+          <PageFind key={pagePerson} page={FIND_PAGE.PERSON} at={pagePerson} active={plans.shown}>
+            <PersonPage plans={plans} userId={pagePerson} name={plans.personView.name} />
+          </PageFind>
         ) : factoryOpen ? (
           <PageFind page={FIND_PAGE.FACTORY} active={plans.shown}>
             <DesktopFactory plans={plans} />
