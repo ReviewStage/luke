@@ -122,7 +122,7 @@ function mount(listed: readonly PlanSummary[], overrides: Partial<PlansControl> 
   const base = plansControl();
   const plans = plansControl({
     plans: listed,
-    listed: { plans: listed, archived: [] },
+    listed: { plans: listed, archived: [], inbox: [], inboxPlans: [] },
     onSelect: (planId) => opened.plans.push(planId),
     onNewPlan: () => {
       opened.newPlans += 1;
@@ -158,7 +158,11 @@ function mount(listed: readonly PlanSummary[], overrides: Partial<PlansControl> 
   draw(plans);
   /** The same page drawn again over another read of the plan list. */
   const rerender = (next: readonly PlanSummary[]) =>
-    draw({ ...plans, plans: next, listed: { plans: next, archived: [] } });
+    draw({
+      ...plans,
+      plans: next,
+      listed: { plans: next, archived: [], inbox: [], inboxPlans: [] },
+    });
   return { page: container, opened, rerender };
 }
 
