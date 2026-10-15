@@ -136,7 +136,7 @@ it.effect(
       yield* Effect.flatMap(sessions, (eve) => eve.cancel(SESSION, "turn_0"));
       assert.deepEqual(
         seen.map((request) => request.url),
-        [`${ORIGIN}/eve/coder/v1/session`, `${ORIGIN}/eve/coder/v1/session/${SESSION}/cancel`],
+        [`${ORIGIN}/eve/dev/v1/session`, `${ORIGIN}/eve/dev/v1/session/${SESSION}/cancel`],
       );
       for (const request of seen) {
         assert.equal(request.headers.get("authorization"), "Bearer developer-token-1");

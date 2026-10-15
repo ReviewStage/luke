@@ -1,8 +1,8 @@
 /**
  * run.ts -- the runners a service module is handed by the deployment's edge.
  *
- * The edge itself, `apps/web/server/runtime.ts` (or an eve root's own
- * `runtime.ts`), builds the runtime and holds `runWeb` (or `runAgent`); a module here names only the shape of what it is handed, so it
+ * The edge itself, `apps/web/server/runtime.ts` (or the agents'
+ * `apps/eve/runtime.ts`), builds the runtime and holds `runWeb` (or `runAgent`); a module here names only the shape of what it is handed, so it
  * never imports the edge and the database driver the edge's layer carries.
  */
 

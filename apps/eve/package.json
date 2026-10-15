@@ -3,12 +3,12 @@
   "version": "0.13.0",
   "private": true,
   "type": "module",
-  "description": "The agents' eve workspace: Luke (agents/luke) on the web deployment",
+  "description": "The agents' eve workspace: Luke (agents/luke) and the coding agent (agents/dev) on the web deployment",
   "engines": {
     "node": "24.x"
   },
   "scripts": {
-    "test:agent": "LUKE_BRAIN_MODEL_FIXTURE=scripted eve eval --agent luke",
+    "test:agent": "LUKE_BRAIN_MODEL_FIXTURE=scripted eve eval --agent luke && LUKE_CODER_MODEL_FIXTURE=scripted eve eval --agent dev",
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
@@ -19,6 +19,7 @@
     "@better-auth/oauth-provider": "1.7.7",
     "@effect/sql-pg": "catalog:",
     "@luke/database": "workspace:*",
+    "@luke/features": "workspace:*",
     "@luke/service": "workspace:*",
     "@luke/wire": "workspace:*",
     "@vercel/connect": "2.4.1",

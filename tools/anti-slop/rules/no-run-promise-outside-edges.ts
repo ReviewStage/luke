@@ -48,8 +48,8 @@ const RUNNER_FACTORIES: ReadonlySet<string> = new Set(["webRuntime"]);
 /**
  * Runners an edge exports for a collaborator to hold. `runWeb`
  * (`apps/web/server/runtime.ts`) runs an effect on the one runtime `apps/web`
- * builds, and `runAgent` (each eve root's `runtime.ts`) on the one its root
- * builds, so either in a module that is not itself an edge is the same escape
+ * builds, and `runAgent` (`apps/eve/runtime.ts`) on the one each agent's
+ * service builds, so either in a module that is not itself an edge is the same escape
  * `Effect.runPromise` would be.
  */
 const HANDED_RUNNERS: ReadonlySet<string> = new Set(["runWeb", "runAgent"]);

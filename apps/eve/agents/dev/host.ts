@@ -33,7 +33,7 @@ import { emitJsonSchema } from "@luke/wire/effect";
 import { Effect, Result, Schema } from "effect";
 import type { SessionAuth } from "eve/context";
 import { defineTool } from "eve/tools";
-import { runAgent } from "./runtime.js";
+import { runAgent } from "../../runtime.js";
 import { scriptedModel } from "./scripted-model.js";
 
 /**

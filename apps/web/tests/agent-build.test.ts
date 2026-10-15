@@ -15,13 +15,13 @@ const decodeManifest = Schema.decodeUnknownSync(
  * its declaration fails the deploy rather than any local check.
  */
 describe("the agents' external dependencies", () => {
-  for (const manifestPath of ["../../eve/package.json", "../coder/package.json"]) {
-    it(`are each declared by ${manifestPath}`, () => {
-      const manifest = decodeManifest(readFileSync(new URL(manifestPath, import.meta.url), "utf8"));
-      const undeclared = AGENT_EXTERNAL_DEPENDENCIES.filter(
-        (name) => manifest.dependencies[name] === undefined,
-      );
-      expect(undeclared).toEqual([]);
-    });
-  }
+  it("are each declared by the agents' eve workspace's package", () => {
+    const manifest = decodeManifest(
+      readFileSync(new URL("../../eve/package.json", import.meta.url), "utf8"),
+    );
+    const undeclared = AGENT_EXTERNAL_DEPENDENCIES.filter(
+      (name) => manifest.dependencies[name] === undefined,
+    );
+    expect(undeclared).toEqual([]);
+  });
 });

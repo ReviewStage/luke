@@ -24,7 +24,7 @@ import { CODER_TOOL } from "./tool-set.js";
  * so they are estimated here the way eve's own compaction estimates a
  * message, the bytes of its JSON over four: the instructions the session
  * runs under, the definitions of the tools the coder project authors
- * (`coder/tools/`), built from the same functions and words those files
+ * (`apps/eve/agents/dev/tools/`), built from the same functions and words those files
  * are, and the plan or task the agent was handed as its first message. The tools are the same
  * for every agent, so they are estimated once, as the module loads, which
  * is in eve's service alone: this module reaches eve's tools, which no

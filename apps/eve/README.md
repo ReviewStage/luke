@@ -11,6 +11,7 @@ layout, its agent files directly under `agents/<name>/`, with its evals in
 | Member | Agent | Public mount |
 | --- | --- | --- |
 | `luke` | Luke's planning brain, the agent the developer talks a plan through with | `/eve/luke/v1/*` |
+| `dev` | The coding agent, a run in a sandbox on the plan's repository | `/eve/dev/v1/*` |
 
 `runtime.ts` is the agents' runtime edge: each member's authored files run
 their effects through its `runAgent`, on a runtime built over
@@ -34,11 +35,15 @@ A generated service's routes turn `/eve/<member>/v1/*` back into `/eve/v1/*`
 before the member reads a request, so the member's door
 (`packages/service/src/agents/brain-host/door.ts`, `auth.ts`) spells the paths
 it sees as `/eve/v1/*` while callers address the public mount
-(`brain-host/eve-sessions.ts`'s `EVE_MOUNT`). Luke's mount from before the
-workspace, `/eve/v1/*`, still routes to `eve-luke` for the sessions already
-running and their eve callbacks.
+(`brain-host/eve-sessions.ts`'s `EVE_MOUNT`). Each agent's mount from before
+the workspace still routes to its service for the sessions already running and
+their eve callbacks: Luke's `/eve/v1/*`, read as it stands, and the coding
+agent's `/eve/coder/v1/*`, which `vercel.ts` adds to `eve-dev`'s routes so it is
+turned back into `/eve/v1/*` too. A coding agent's turn runs for up to
+twenty-five hours, so they stand until the turns begun on them are over.
 
-`agents/luke/sandbox.ts` is the session's sandbox, a
+`agents/luke/sandbox.ts` (and `agents/dev/sandbox.ts`, the coding agent's
+checkout) is the session's sandbox, a
 `VercelSandbox.environment` whose `prepare` holds the one thing the checkout
 needs of eve's base image, git; `eve build` prewarms its snapshot on Vercel,
 so the member's build needs Vercel Sandbox credentials (the build's own
@@ -55,11 +60,12 @@ token is sealed under.
 ## Evals
 
 `agents/luke/evals/brain-host.eval.ts` is the planning brain's end-to-end
-eval, and nothing local runs it unasked. `./scripts/check.sh` runs vitest over
+eval, and `agents/dev/evals/coder.eval.ts` the coding agent's; nothing local
+runs them unasked. `./scripts/check.sh` runs vitest over
 the workspaces `vitest.config.ts` lists, and `@luke/eve` is not one of them;
-the eval is `pnpm --filter @luke/eve test:agent` (`eve eval --agent luke`, on
-a scripted model), or `pnpm --filter @luke/web test:agent` for every agent's,
-and it writes through the real store writer against the database
+`pnpm --filter @luke/eve test:agent` runs both (`eve eval --agent luke` and
+`--agent dev`, each on a scripted model), as does `pnpm --filter @luke/web
+test:agent`, and each writes through the real store writer against the database
 `DATABASE_URL` names, migrated (`pnpm --filter @luke/web db:migrate`). CI does
-not run it either, so run it by hand before a change to the brain host, the
-writer, or a schema module it reads back through.
+not run them either, so run them by hand before a change to an agent's host,
+the writer, or a schema module they read back through.

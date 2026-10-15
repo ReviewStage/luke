@@ -3,8 +3,8 @@ import { CODER_DEPLOYMENT_TURNS, coderChannelInput } from "@luke/service/agents/
 import { hostedUserId } from "@luke/service/auth/bearer";
 import { Effect, Option } from "effect";
 import { eveChannel } from "eve/channels/eve";
+import { runAgent } from "../../../runtime.js";
 import { seams } from "../host.js";
-import { runAgent } from "../runtime.js";
 
 /**
  * The bearer's account, resolved as an effect and run once here: eve's door

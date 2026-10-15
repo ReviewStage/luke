@@ -14,8 +14,8 @@ import { Effect, Redacted, Result } from "effect";
 import { defineState } from "eve/context";
 import { authenticateGitHub } from "eve/extensions/code/sandbox";
 import { defineHook, type HookContext } from "eve/hooks";
+import { runAgent } from "../../../runtime.js";
 import { host, seams } from "../host.js";
-import { runAgent } from "../runtime.js";
 import { environment } from "../sandbox.js";
 import { sandboxRecord, sessionPrompt } from "../session-prompt.js";
 

@@ -188,11 +188,11 @@ request, so there is no request fiber to compose it into),
 `apps/web/server/terminal/function.ts` (the terminal relay, stood for a
 function instance's life on the same terms) and
 `apps/web/server/seed-clients.ts` (the OAuth client seeding command, run as
-its own process), the agents' module-scope memoized runtimes,
+its own process), the agents' module-scope memoized runtime
 `apps/eve/runtime.ts` (the eve workspace's, which each member's service holds
-a copy of) and `apps/web/coder/runtime.ts`, built over the same layer
-(`@luke/service/runtime`'s `webServices`) and each holding its `runAgent`,
-the eve workspace's `luke` member's authored files —
+a copy of), built over the same layer (`@luke/service/runtime`'s
+`webServices`) and holding its `runAgent`, the eve workspace's `luke`
+member's authored files —
 `apps/eve/agents/luke/agent.ts`, `apps/eve/agents/luke/channels/eve.ts`,
 `apps/eve/agents/luke/hooks/store.ts`, `apps/eve/agents/luke/instructions/prompt.ts`,
 `apps/eve/agents/luke/instructions/seed.ts`, and `apps/eve/agents/luke/tools/brain.ts` — each
@@ -202,13 +202,13 @@ an authored file is where this deployment runs what it hands eve — and
 which composes the production seams over `HostedEnvironment` with
 `Effect.runSync` as it loads, because the channel's door takes the
 deployment's secret as a value and the environment read suspends on nothing —
-and the coding-agent eve project's authored files on the same terms —
-`apps/web/coder/agent.ts`, `apps/web/coder/channels/eve.ts`,
-`apps/web/coder/hooks/store.ts`, `apps/web/coder/instructions/prompt.ts`, and
-`apps/web/coder/sandbox.ts` (the sandbox selector, which eve calls as a
+and the `dev` member's, the coding agent's, on the same terms —
+`apps/eve/agents/dev/agent.ts`, `apps/eve/agents/dev/channels/eve.ts`,
+`apps/eve/agents/dev/hooks/store.ts`, `apps/eve/agents/dev/instructions/prompt.ts`, and
+`apps/eve/agents/dev/sandbox.ts` (the sandbox selector, which eve calls as a
 promise when a tool first needs the sandbox and which runs the checkout
 there), each an edge because eve drives them through promise-shaped hooks of
-its own, and `apps/web/coder/host.ts`, the one module those files share their
+its own, and `apps/eve/agents/dev/host.ts`, the one module those files share their
 host through, composed with `Effect.runSync` as it loads for the same reason
 `apps/eve/agents/luke/host.ts` is. Not
 every seam in `packages/service/src/` is an effect down to its floor:
@@ -226,7 +226,7 @@ belong nowhere else — everything between the edges returns an Effect and lets 
 decide — which the oxlint rule `no-run-promise-outside-edges` enforces against
 that same file's `runtimeEdges`, `runShims`, and `runOnHandedRuntime` lists,
 reading `apps/web/server/runtime.ts`'s own `runWeb` and `webRuntime`, and
-each eve root's `runAgent`, as the runs they are, so a module that holds the edge's runner rather than
+`apps/eve/runtime.ts`'s `runAgent`, as the runs they are, so a module that holds the edge's runner rather than
 `Effect.runPromise` itself is no less visible to it;
 `no-raw-async-primitives` enforces the equivalent for `setTimeout`,
 `setInterval`, `new Promise`, `AbortController`, and `fs.watch` against its
@@ -270,7 +270,7 @@ PR that finishes the callers it was for, not left as a name on an allowlist.
 - **The test-support edges** — `packages/database/src/testing/sql-client.ts`,
   `packages/database/src/testing/no-database.ts`,
   `packages/database/src/testing/hosted-store-database.ts`,
-  `apps/eve/agents/luke/evals/brain-host.eval.ts`, `apps/web/coder/evals/coder.eval.ts`, and
+  `apps/eve/agents/luke/evals/brain-host.eval.ts`, `apps/eve/agents/dev/evals/coder.eval.ts`, and
   `packages/wire/src/testing/effect.ts` each build a runner (a
   `ManagedRuntime` over a throwaway database, a `SqlClient` that refuses every
   statement) so a suite or an offline eval still written on `node:assert` or a

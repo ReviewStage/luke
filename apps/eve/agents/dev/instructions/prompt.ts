@@ -1,8 +1,8 @@
 import { pinnedState } from "@luke/service/agents/brain-host/pinned-state";
 import { Effect, Result } from "effect";
 import { defineDynamic, defineInstructions } from "eve/instructions";
+import { runAgent } from "../../../runtime.js";
 import { host } from "../host.js";
-import { runAgent } from "../runtime.js";
 import { sessionPrompt } from "../session-prompt.js";
 
 /**

@@ -359,15 +359,14 @@ while the project's Framework Preset is Services. `@vercel/config`'s
 service and public-route shapes beside it. `web` is this app, rooted at
 `apps/web`, and carries the migrate-and-seed build, the install filter, the
 ignore rule, and the `routes` above unchanged.
-`eve-luke` is the hosted brain, the service `withEve` generates for the
-`luke` member of the agents' eve workspace (`apps/eve/README.md`).
-`coder` is the coding-agent service, an eve app root of its own at
-`apps/web/coder/` (`packages/service/README.md`'s "The coding-agent service").
+`eve-luke` is the hosted brain and `eve-dev` the coding agent, the services
+`withEve` generates for the `luke` and `dev` members of the agents' eve
+workspace (`apps/eve/README.md`).
 Public routing is the top-level `routes`, each naming the service a request
-enters: `withEve`'s own put `/eve/luke/v1/*` into `eve-luke`, ahead of the
-authored ones, which put `/eve/coder/v1/*` into the coder service, Luke's
-mount from before the workspace, `/eve/v1/*`, into `eve-luke`, and everything
-else into the web service. A service's own routes run only once a request has
+enters: `withEve`'s own put `/eve/luke/v1/*` into `eve-luke` and
+`/eve/dev/v1/*` into `eve-dev`, ahead of the authored ones, which put each
+agent's mount from before the workspace, `/eve/v1/*` and `/eve/coder/v1/*`,
+into its service, and everything else into the web service. A service's own routes run only once a request has
 entered it, which is why the generated `/api/` rewrites live under the web
 service's `routes` rather than among the top-level ones. The project's
 environment variables reach every service alike, and each service's own
@@ -688,5 +687,6 @@ separate service is deployed. Tests run against a fake OpenAI on loopback and an
 
 ## The agents
 
-Luke's planning brain is a member of the agents' eve workspace, `apps/eve`;
-its layout, deployment, and evals are in `apps/eve/README.md`.
+Luke's planning brain and the coding agent are the members of the agents' eve
+workspace, `apps/eve`; its layout, deployment, and evals are in
+`apps/eve/README.md`.

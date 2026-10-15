@@ -2,8 +2,8 @@ import { AGENT_EXTERNAL_DEPENDENCIES } from "@luke/service/agents/agent-runtime/
 import { CODER } from "@luke/service/agents/coder-host/bounds";
 import { Effect, Result } from "effect";
 import { defineAgent, defineDynamic } from "eve";
+import { runAgent } from "../../runtime.js";
 import { host, readStepStarted, seams, stepTurnId } from "./host.js";
-import { runAgent } from "./runtime.js";
 import { scriptedModel } from "./scripted-model.js";
 
 /**

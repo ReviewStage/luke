@@ -66,13 +66,18 @@ const METHOD_BY_DOOR = {
 const SITE_ROOT_PATH = "/";
 /**
  * eve's own `EVE_HEALTH_ROUTE_PATH` (`/eve/v1/health`, which the package keeps
- * off its public exports) under each public mount of an agent: Luke's at the
- * workspace member's `/eve/luke`, which `withEve` routes to its service, and
- * Luke's mount from before the workspace, which the root `vercel.ts` still
- * routes there for the sessions already running. An answer is that agent's
- * service being served.
+ * off its public exports) under each public mount of an agent: each workspace
+ * member's, `/eve/luke` and `/eve/dev`, which `withEve` routes to its service,
+ * and each agent's mount from before the workspace, `/eve` and `/eve/coder`,
+ * which the root `vercel.ts` still routes there for the sessions already
+ * running. An answer is that agent's service being served.
  */
-const EVE_HEALTH_PATHS = ["/eve/luke/v1/health", "/eve/v1/health"] as const;
+const EVE_HEALTH_PATHS = [
+  "/eve/luke/v1/health",
+  "/eve/dev/v1/health",
+  "/eve/v1/health",
+  "/eve/coder/v1/health",
+] as const;
 
 const PROBE_STATUS = {
   OK: 200,

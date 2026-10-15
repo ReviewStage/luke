@@ -261,13 +261,13 @@ async function fakeCoderEve(workspaceId: string) {
   const sent: { readonly path: string; readonly headers: Headers; readonly body: string }[] = [];
   const github = githubReaching([installation], undefined, undefined, (request) => {
     const { pathname } = new URL(request.url);
-    if (!pathname.startsWith("/eve/coder/v1/session")) return undefined;
+    if (!pathname.startsWith("/eve/dev/v1/session")) return undefined;
     sent.push({ path: pathname, headers: request.headers, body: request.body });
-    if (pathname === "/eve/coder/v1/session") {
+    if (pathname === "/eve/dev/v1/session") {
       return Response.json({ sessionId: sessionId() }, { status: 202 });
     }
     return Response.json(
-      { sessionId: pathname.slice("/eve/coder/v1/session/".length), deliveryId: "delivery-1" },
+      { sessionId: pathname.slice("/eve/dev/v1/session/".length), deliveryId: "delivery-1" },
       { status: 202 },
     );
   });
@@ -294,7 +294,7 @@ test("a message to the plan's agent steers its session as the deployment acting 
   });
   assert.equal(eve.sent.length, 1);
   const [request] = eve.sent;
-  assert.equal(request?.path, `/eve/coder/v1/session/${agent.sessionId}`);
+  assert.equal(request?.path, `/eve/dev/v1/session/${agent.sessionId}`);
   assert.equal(request?.headers.get("authorization"), `Bearer ${CRON_SECRET}`);
   assert.equal(request?.headers.get(BRAIN_HOST_HEADER.ACCOUNT), userId);
   assert.equal(request?.headers.get(BRAIN_HOST_HEADER.CONVERSATION), agent.conversationId);
@@ -351,7 +351,7 @@ test("a member speaking in the plan conversation a teammate opened messages the 
   assert.equal(sent.delivery, STEER_OUTCOME.SENT);
   assert.equal(eve.sent.length, 1);
   const [request] = eve.sent;
-  assert.equal(request?.path, `/eve/coder/v1/session/${agent.sessionId}`);
+  assert.equal(request?.path, `/eve/dev/v1/session/${agent.sessionId}`);
   assert.equal(request?.headers.get(BRAIN_HOST_HEADER.ACCOUNT), member);
   assert.equal(request?.headers.get(BRAIN_HOST_HEADER.CONVERSATION), agent.conversationId);
   assert.equal(
@@ -403,7 +403,7 @@ test("Luke starts an agent on the call's plan as the deployment acting for the a
   // The session opened as the deployment for the account, on the agent's conversation, with the plan first.
   assert.equal(eve.sent.length, 1);
   const [opening] = eve.sent;
-  assert.equal(opening?.path, "/eve/coder/v1/session");
+  assert.equal(opening?.path, "/eve/dev/v1/session");
   assert.equal(opening?.headers.get("authorization"), `Bearer ${CRON_SECRET}`);
   assert.equal(opening?.headers.get(BRAIN_HOST_HEADER.ACCOUNT), userId);
   assert.equal(opening?.headers.get(BRAIN_HOST_HEADER.CONVERSATION), stored.conversationId);

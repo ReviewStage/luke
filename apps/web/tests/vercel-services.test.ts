@@ -17,7 +17,9 @@ const PathRoute = Schema.Struct({ src: Schema.String, dest: Schema.String });
 /** A route that rewrites the path a request entered its service with. */
 const TransformRoute = Schema.Struct({
   src: Schema.String,
-  transforms: Schema.Array(Schema.Unknown),
+  transforms: Schema.Array(
+    Schema.Struct({ type: Schema.String, op: Schema.String, args: Schema.String }),
+  ),
 });
 
 /**
@@ -51,6 +53,18 @@ function serviceFor(path: string): string | undefined {
     .service;
 }
 
+/** The path a service's own routes hand its runtime: the first route that matches rewrites it, as Vercel applies a `request.path` transform. */
+function pathInService(service: string, path: string): string {
+  for (const route of deployed.services[service]?.routes ?? []) {
+    if ("dest" in route) continue;
+    const pattern = new RegExp(route.src, "u");
+    if (!pattern.test(path)) continue;
+    const set = route.transforms.find((one) => one.type === "request.path" && one.op === "set");
+    return set === undefined ? path : path.replace(pattern, set.args);
+  }
+  return path;
+}
+
 /** The directory a service's build command enters first, from the service's root. */
 const ENTERED = /^cd '([^']+)'/u;
 
@@ -64,27 +78,46 @@ test("the /api/ rewrites are generated into the web service's routes, ahead of i
   assert.equal(await rewritesDrifted(WEB), false);
 });
 
-test("a public path enters its service: Luke at the workspace member's mount and at its mount from before the workspace, the coding agent at its own, and everything else the website", () => {
+test("a public path enters its service: each agent at its workspace member's mount and at its mount from before the workspace, and everything else the website", () => {
   assert.equal(serviceFor("/eve/luke/v1/session"), SERVICE.LUKE);
   assert.equal(serviceFor("/eve/luke/v1/health"), SERVICE.LUKE);
   assert.equal(serviceFor("/eve/v1/session/s_1/stream"), SERVICE.LUKE);
-  assert.equal(serviceFor("/eve/coder/v1/session"), SERVICE.CODER);
+  assert.equal(serviceFor("/eve/dev/v1/session"), SERVICE.DEV);
+  assert.equal(serviceFor("/eve/coder/v1/session/s_1/cancel"), SERVICE.DEV);
   assert.equal(serviceFor("/api/plans"), SERVICE.WEB);
   assert.equal(serviceFor("/acme/plan/p_1"), SERVICE.WEB);
+});
+
+test("an agent reads every path it is reached by as eve's own /eve/v1/*, which is what its door is written against", () => {
+  assert.equal(pathInService(SERVICE.LUKE, "/eve/luke/v1/session"), "/eve/v1/session");
+  assert.equal(
+    pathInService(SERVICE.LUKE, "/eve/v1/session/s_1/stream"),
+    "/eve/v1/session/s_1/stream",
+  );
+  assert.equal(pathInService(SERVICE.DEV, "/eve/dev/v1/session/s_1"), "/eve/v1/session/s_1");
+  assert.equal(
+    pathInService(SERVICE.DEV, "/eve/coder/v1/callback/hook_1"),
+    "/eve/v1/callback/hook_1",
+  );
 });
 
 test("every service is rooted at a directory from the repository root, and each agent's build enters its own member of the eve workspace", () => {
   for (const [name, service] of Object.entries(deployed.services)) {
     assert.ok(statSync(join(REPOSITORY, service.root)).isDirectory(), `${name}: ${service.root}`);
   }
-  const luke = deployed.services[SERVICE.LUKE];
-  assert.ok(luke);
-  const entered = ENTERED.exec(luke.buildCommand)?.[1];
-  assert.ok(entered, luke.buildCommand);
-  assert.equal(
-    join(REPOSITORY, luke.root, entered),
-    join(REPOSITORY, EVE_WORKSPACE, "agents", "luke"),
-  );
+  for (const [member, name] of [
+    ["luke", SERVICE.LUKE],
+    ["dev", SERVICE.DEV],
+  ] as const) {
+    const service = deployed.services[name];
+    assert.ok(service, name);
+    const entered = ENTERED.exec(service.buildCommand)?.[1];
+    assert.ok(entered, service.buildCommand);
+    assert.equal(
+      join(REPOSITORY, service.root, entered),
+      join(REPOSITORY, EVE_WORKSPACE, "agents", member),
+    );
+  }
 });
 
 /** The first step of a path, where it is spelled as itself rather than matched. */
