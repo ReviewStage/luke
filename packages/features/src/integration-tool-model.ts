@@ -99,10 +99,11 @@ export function toolTitle(tool: { readonly name: string; readonly title?: string
 }
 
 /** Markdown's marks in a run of words: code ticks, emphasis, and a link's brackets. */
-const INLINE_MARKS = /`([^`]*)`|\*\*([^*]*)\*\*|\*([^*]*)\*|\[([^[\]]*)\]\([^()[\]]*\)/g;
-
-/** The most of a paragraph a row's line is read from, which its one line never reaches past. */
-const SUMMARY_MAX_CHARS = 1000;
+// Note that no class here can run past the mark that closes it, and a
+// target's one level of parentheses is told apart by its first character,
+// so the pattern never backtracks over a run of brackets.
+const INLINE_MARKS =
+  /`([^`]*)`|\*\*([^*]*)\*\*|\*([^*]*)\*|\[([^[\]]*)\]\((?:[^()[\]\s]|\([^()[\]\s]*\))*\)/g;
 
 /** A line that opens a block a row does not read from: a heading, a table, a list item, a quote, or raw markup. */
 const STRUCTURE_LINE = /^(#|\||[-*+] |\d+[.)] |>|<)/;
@@ -129,7 +130,6 @@ export function toolSummary(description: string): string {
   }
   const plain = paragraph
     .join(" ")
-    .slice(0, SUMMARY_MAX_CHARS)
     .replace(
       INLINE_MARKS,
       (_mark, code, strong, emphasis, link) => code ?? strong ?? emphasis ?? link ?? "",

@@ -105,6 +105,11 @@ test("a row reads the first sentence of a description's first paragraph of words
   assert.equal(toolSummary("1) First step\n> A quote\nReads projects."), "Reads projects.");
   assert.equal(toolSummary("---\n\nLists issues. More."), "Lists issues.");
   assert.equal(toolSummary("* * *\nLists issues."), "Lists issues.");
+  assert.equal(toolSummary("See [the guide](https://x.test/a_(b)) first."), "See the guide first.");
+  assert.equal(
+    toolSummary(`${"word ".repeat(250)}\`code\` end.`),
+    `${"word ".repeat(250)}code end.`,
+  );
   assert.equal(toolSummary("Lists projects"), "Lists projects");
   assert.equal(
     toolSummary("Version 2.1 of the API, then\nmore"),

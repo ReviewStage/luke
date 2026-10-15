@@ -182,7 +182,8 @@ function closedSet(
   // they were every choice.
   const sets: UnparsedWireValue[][] = [];
   for (const branch of branches) {
-    if (isRecord(branch) && branch.type === "null") continue;
+    if (constraintsOf(branch, walk, depth + 1).schemas.some((each) => each.type === "null"))
+      continue;
     const set = valuesOf(branch, walk, depth + 1);
     if (set.length === 0) return undefined;
     sets.push([...set]);

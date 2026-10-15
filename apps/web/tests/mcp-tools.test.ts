@@ -464,7 +464,9 @@ it.effect("a union lists its values only where every branch but a null one is a 
               properties: {
                 open: { anyOf: [{ enum: ["auto"] }, { type: "string" }] },
                 closed: { anyOf: [{ enum: ["a", "b"] }, { const: "c" }, { type: "null" }] },
+                referenced: { anyOf: [{ enum: ["x"] }, { $ref: "#/$defs/Nothing" }] },
               },
+              $defs: { Nothing: { type: "null" } },
             },
           },
         ]),
@@ -476,6 +478,7 @@ it.effect("a union lists its values only where every branch but a null one is a 
       [
         ["open", undefined],
         ["closed", ["a", "b", "c"]],
+        ["referenced", ["x"]],
       ],
     );
   }),
