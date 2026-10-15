@@ -15,6 +15,7 @@ import type {
   PlanEditorPlacement,
   PlanEditorProps,
 } from "./contract";
+import { diagramPreview } from "./diagram-preview";
 import {
   documentManager,
   documentMarkdown,
@@ -36,7 +37,9 @@ import { planMentions } from "./plan-mentions";
  * document could not draw it. A heading wears the read view's own class and
  * level, so the editor's words stand where the drawn words stood and opening
  * the text moves nothing. Each untouched block keeps its exact source
- * (`./document-source.ts`). Esc and ⌘↩ finish, naming the section the caret
+ * (`./document-source.ts`). A Mermaid code block stays code, its diagram
+ * previewed under it where the panel draws one (`./diagram-preview.ts`).
+ * Esc and ⌘↩ finish, naming the section the caret
  * stood in; ↑ on the text's first line goes to the title above it.
  */
 
@@ -170,8 +173,18 @@ function placed(editor: Editor, placement: PlanEditorPlacement | undefined): Sel
  * caret where the placement says, and focused if it is asked to be.
  */
 export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): PlanEditorHandle {
-  const { markdown, placement, focus, label, className, onDraft, onFinish, onLeaveUp, mentions } =
-    props;
+  const {
+    markdown,
+    placement,
+    focus,
+    label,
+    className,
+    onDraft,
+    onFinish,
+    onLeaveUp,
+    mentions,
+    drawDiagram,
+  } = props;
   const extensions = markdownExtensions(mentions?.drawMention, mentions?.namesMention);
   const manager = documentManager(extensions);
   // Filled once the editor is built, since a block's source is known by the node it opened as.
@@ -184,7 +197,11 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
   held = { sources: new Map(), lead: opened.lead, ending: opened.ending };
   const editor: Editor = new Editor({
     element: host,
-    extensions: [...extensions, Placeholder.configure({ placeholder: "Write the plan" })],
+    extensions: [
+      ...extensions,
+      Placeholder.configure({ placeholder: "Write the plan" }),
+      ...(drawDiagram === undefined ? [] : [diagramPreview(drawDiagram)]),
+    ],
     content: opened.content,
     contentType: "json",
     editorProps: {

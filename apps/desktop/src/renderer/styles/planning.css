@@ -600,6 +600,62 @@
   white-space: pre-wrap;
 }
 
+/* A Mermaid fence drawn as its diagram (`plan-diagram.tsx`): a picture the
+   diagram bundle drew, on the section's fill, its code a press away. The
+   picture is an `<img>`, so its own size holds it and the column bounds it. */
+.plan-diagram {
+  display: block;
+  margin: var(--space-12) 0;
+  padding: var(--space-12) var(--space-16);
+  border: 1px solid var(--hairline);
+  border-radius: var(--control-radius);
+  background: var(--section-fill);
+}
+
+.plan-diagram-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-8);
+  color: var(--text-tertiary);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.plan-diagram-toggle {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-secondary);
+  font: inherit;
+  font-weight: 500;
+}
+
+.plan-diagram-toggle:hover {
+  color: var(--text-primary);
+}
+
+.plan-diagram-picture {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+}
+
+/* A fence Mermaid refused says so over its code, in the failure's red. */
+.plan-diagram-failed {
+  margin: 0 0 var(--space-8);
+  color: var(--danger-text);
+  font-size: 12px;
+}
+
+/* In the editor the fence stays code, and its diagram stands under it,
+   out of the text: nothing in it takes the caret or a selection. */
+.plan-diagram-preview {
+  margin-top: var(--space-4);
+  user-select: none;
+}
+
 /* What stands under the editor: a failed save, or Luke's change and the
    choice it asks, in the muted meta weight. */
 .plan-editor-note {

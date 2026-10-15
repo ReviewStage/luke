@@ -11,7 +11,9 @@ import { AsyncResult } from "effect/reactivity";
 import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { editorBundleAtom, prefetchEditorBundle } from "../editor-bundle";
+import { DiagramPreview } from "../plan-diagram";
 import type {
+  EditorDiagram,
   MentionNode,
   PlanEditorHandle,
   PlanEditorModule,
@@ -50,7 +52,9 @@ import { EDITOR_PLACE, type EditorHost, type PlanEditing } from "./use-plan-edit
  * developer pauses (`use-plan-editing.ts`), and the service merges them with
  * what Luke writes.
  * A save's merged answer is taken into the open editor block by block, and
- * the notetaker's drafts never redraw it. The editor stands under
+ * the notetaker's drafts never redraw it. A Mermaid code block's diagram is
+ * previewed under it, drawn here as the read view draws it
+ * (`../plan-diagram.tsx`), so the editor's bundle carries no Mermaid. The editor stands under
  * `ph-no-capture`, and its words are document text, which the recording masks.
  */
 
@@ -87,13 +91,13 @@ function steppedByArrow(event: React.KeyboardEvent<HTMLElement>): boolean {
   return true;
 }
 
-/** Whether a click lands on words to edit: no selection made by the press, and not on a link or the section's byline. */
+/** Whether a click lands on words to edit: no selection made by the press, and not on a link, a button, or the section's byline. */
 function editsOnClick(target: EventTarget): boolean {
   const selection = window.getSelection();
   if (selection !== null && !selection.isCollapsed) return false;
-  // Note that a mention's chip is its own, a link's or a folder's that opens nothing alike, and so is the byline's row, whose writer and ⋯ are presses of their own.
+  // Note that a mention's chip is its own, a link's or a folder's that opens nothing alike, and so is the byline's row, whose writer and ⋯ are presses of their own, and a button in the words, a diagram's Show code say.
   return !(
-    target instanceof Element && target.closest("a, .mention-chip, .plan-unit-row") !== null
+    target instanceof Element && target.closest("a, button, .mention-chip, .plan-unit-row") !== null
   );
 }
 
@@ -461,6 +465,11 @@ function MountedPlanEditor({
               pasted: (words) => latest.current.mentions?.pasted(words),
               namesMention: (target) => latest.current.mentions?.namesMention(target) ?? false,
             },
+      drawDiagram:
+        latest.current.drawDiagram === undefined
+          ? undefined
+          : (element, diagram) =>
+              latest.current.drawDiagram?.(element, diagram) ?? (() => undefined),
     });
     handle.current = mounted;
     return () => {
@@ -564,7 +573,8 @@ export function PlanDocumentEditor({
   useMergedAnswers(editor, editing, plan, handle);
   const module = useAtomValue(editorBundleAtom);
   const room = useRef<HTMLElement>(null);
-  const chips = useEditorMentions();
+  const chips = useEditorDrawings<MentionNode>();
+  const diagrams = useEditorDrawings<EditorDiagram>();
   // Note that the editor's own text is read, since the draft is handed over only once typing pauses.
   const text = () => handle.current?.markdown() ?? editor.draft;
   const picker = useMentionPicker({
@@ -613,6 +623,7 @@ export function PlanDocumentEditor({
             namesMention: (target) =>
               decodeMention(target, mentions.place.repository) !== undefined,
           },
+    drawDiagram: diagrams.draw,
   };
   return (
     <section
@@ -630,36 +641,46 @@ export function PlanDocumentEditor({
         ? null
         : chips.drawn.map((each) =>
             createPortal(
-              <MentionNodeChip mention={each.mention} doors={mentions} />,
+              <MentionNodeChip mention={each.what} doors={mentions} />,
               each.element,
               each.key,
             ),
           )}
+      {diagrams.drawn.map((each) =>
+        createPortal(
+          <DiagramPreview code={each.what.code} previous={each.what.previous} />,
+          each.element,
+          each.key,
+        ),
+      )}
     </section>
   );
 }
 
-/** A mention the editor asked to be drawn: the element its node stands as, what it holds, and the key its drawing goes under. */
-interface DrawnMention {
+/** Something the editor asked to be drawn: the element it stands as, what it is, and the key its drawing goes under. */
+interface DrawnInEditor<A> {
   readonly element: HTMLElement;
-  readonly mention: MentionNode;
+  readonly what: A;
   readonly key: number;
 }
 
-/** The mentions the editor holds as drawn, and the door the editor asks to draw one through. */
-interface EditorMentions {
-  readonly drawn: readonly DrawnMention[];
-  readonly draw: (element: HTMLElement, mention: MentionNode) => () => void;
+/** What the editor holds as drawn, and the door the editor asks to draw one through. */
+interface EditorDrawings<A> {
+  readonly drawn: readonly DrawnInEditor<A>[];
+  readonly draw: (element: HTMLElement, what: A) => () => void;
 }
 
-/** The mentions the editor holds, each drawn into its node's own element while it stands, as the composer draws its chips. */
-function useEditorMentions(): EditorMentions {
-  const [drawn, setDrawn] = useState<readonly DrawnMention[]>([]);
+/**
+ * What the editor asks the panel to draw, a mention or a diagram, each drawn
+ * into its own element while it stands, as the composer draws its chips.
+ */
+function useEditorDrawings<A>(): EditorDrawings<A> {
+  const [drawn, setDrawn] = useState<readonly DrawnInEditor<A>[]>([]);
   const counted = useRef(0);
-  const draw = (element: HTMLElement, mention: MentionNode) => {
+  const draw = (element: HTMLElement, what: A) => {
     counted.current += 1;
     const key = counted.current;
-    setDrawn((was) => [...was, { element, mention, key }]);
+    setDrawn((was) => [...was, { element, what, key }]);
     return () => setDrawn((was) => was.filter((each) => each.key !== key));
   };
   return { drawn, draw };
