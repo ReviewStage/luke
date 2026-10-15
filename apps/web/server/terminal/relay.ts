@@ -24,7 +24,8 @@
  * that fails gives its claim back, is logged, and is tried again at the
  * next check. The shell is said to be attached once the first renewal has
  * ended, so a command typed at once finds the token set, and what was typed
- * before waits for it.
+ * before waits for it, up to a bound past which the connection ends as
+ * unavailable.
  *
  * How the connection ended is the close code the desktop reads as the tab's
  * state (`@luke/features/terminal-wire`'s `TERMINAL_RELAY_CLOSE`).
@@ -59,6 +60,7 @@ import { CODER } from "../hosted/coder-host/bounds.js";
 import type { AgentSandboxService } from "../hosted/terminal/agent-sandbox.js";
 import { attachTerminal, TMUX } from "../hosted/terminal/tmux.js";
 import type { InteractiveShell, SandboxUnavailable } from "../hosted/vercel-sandbox-api.js";
+import { frameBytes } from "../voice/socket.js";
 
 const TERMINAL_RELAY_BOUNDS = {
   /** How long a terminal stays connected past its last keystroke. */
@@ -69,6 +71,8 @@ const TERMINAL_RELAY_BOUNDS = {
   IDLE_CHECK_EVERY: Duration.seconds(30),
   /** How often a connection asks whether the GitHub token is due. */
   CREDENTIAL_CHECK_EVERY: Duration.minutes(5),
+  /** The most the desktop may send while its shell waits on its first token, a paste's largest piece; past it the connection ends as unavailable and the desktop attaches again. */
+  HELD_MAX_BYTES: 1024 * 1024,
   /** The environment the shell's PTY starts in: a terminal that speaks colour, and text that is UTF-8. */
   ENV: ["TERM=xterm-256color", "COLORTERM=truecolor", "LANG=C.UTF-8"],
 } as const;
@@ -187,6 +191,31 @@ function renewCredential(
   });
 }
 
+/**
+ * The desktop's frames read into the relay's own queue, which ends when the
+ * desktop goes. Until the shell attaches, `held` counts the bytes the queue
+ * holds for it, and reading stops once they pass the bound, so a mint GitHub
+ * is slow to answer never has the relay hold whatever the desktop goes on
+ * sending; once it attaches `held` is none and the PTY takes what comes.
+ */
+function readDevice(
+  device: RelaySocket,
+  fromDevice: Queue.Queue<RelayFrame, Cause.Done>,
+  held: Ref.Ref<number | undefined>,
+): Effect.Effect<void> {
+  const read = Stream.runForEachWhile(device.frames, (frame) =>
+    Effect.gen(function* () {
+      const bytes = yield* Ref.updateAndGet(held, (sum) =>
+        sum === undefined ? undefined : sum + frameBytes(frame),
+      );
+      if (bytes !== undefined && bytes > TERMINAL_RELAY_BOUNDS.HELD_MAX_BYTES) return false;
+      yield* Queue.offer(fromDevice, frame);
+      return true;
+    }),
+  );
+  return Effect.ensuring(read, Queue.end(fromDevice));
+}
+
 /** The desktop's frames to the PTY: typing as it came, noted as this connection's last and moving the lease on at most once a minute, and a resize as the PTY's own frame. */
 function deviceToPty(
   deps: RelayDependencies,
@@ -295,7 +324,8 @@ export function relayTerminal(
     yield* deps.hold(agent.conversationId, heldFrom(attachedAt));
     // Note that the desktop's frames are read from here on into a queue of the relay's own, because the first renewal waits on the desktop leaving while what it typed waits for the shell.
     const fromDevice = yield* Queue.make<RelayFrame, Cause.Done>();
-    const deviceLeft = yield* Effect.forkScoped(Stream.runIntoQueue(device.frames, fromDevice));
+    const held = yield* Ref.make<number | undefined>(0);
+    const deviceLeft = yield* Effect.forkScoped(readDevice(device, fromDevice, held));
     const firstRenewed = yield* Deferred.make<void>();
     yield* Effect.forkScoped(
       Effect.repeat(
@@ -325,6 +355,11 @@ export function relayTerminal(
       Effect.as(Deferred.await(firstRenewed), false),
       Effect.as(Fiber.join(deviceLeft), true),
     );
+    const heldBytes = yield* Ref.getAndSet(held, undefined);
+    if (heldBytes !== undefined && heldBytes > TERMINAL_RELAY_BOUNDS.HELD_MAX_BYTES) {
+      yield* pty.success.close(NORMAL_CLOSE);
+      return yield* device.close(TERMINAL_RELAY_CLOSE.UNAVAILABLE);
+    }
     if (leftFirst) return yield* pty.success.close(NORMAL_CLOSE);
     yield* device.send({ text: JSON.stringify({ type: TERMINAL_RELAY_FRAME.ATTACHED }) });
     const end = yield* Effect.raceAll([

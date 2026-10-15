@@ -508,3 +508,32 @@ it.effect(
       assert.deepEqual(slow.asked.policies, [SANDBOX_SESSION]);
     }),
 );
+
+it.effect(
+  "a desktop that sends past the bound while its first token is minted ends as unavailable, holding none of it for the shell",
+  () =>
+    Effect.gen(function* () {
+      const pty = yield* scriptedSocket;
+      const device = yield* scriptedSocket;
+      const hanging = world({ pty, tokensWait: yield* Deferred.make<void>() });
+
+      const relay = yield* Effect.forkChild(
+        Effect.scoped(relayTerminal(device.socket, ASK, hanging.deps)),
+      );
+      yield* settle;
+      yield* device.push({ bytes: encode("cat <<EOF\r") });
+      yield* device.push({ bytes: new Uint8Array(1024 * 1024) });
+      yield* settle;
+      const closedWhileMinting = [...device.closed];
+      yield* device.leave;
+      yield* Fiber.join(relay);
+
+      assert.deepEqual(closedWhileMinting, [TERMINAL_RELAY_CLOSE.UNAVAILABLE]);
+      assert.deepEqual(texts(device.sent), [], "the shell was never said attached");
+      assert.ok(
+        pty.sent.every((frame) => !("bytes" in frame)),
+        "nothing typed reached the PTY",
+      );
+      assert.equal(hanging.asked.released, 1, "the stalled mint gave its claim back");
+    }),
+);
