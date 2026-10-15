@@ -3741,6 +3741,55 @@ body:has(.app-stage[data-capture="true"])
   font-size: 12px;
 }
 
+/* An automation's page: its setup at a Settings measure, then its runs in
+   a panel of their own on the right, each scrolling by itself. */
+.automation-editor-layout {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+}
+
+.automation-editor-layout > .automations-scroll {
+  min-width: 0;
+}
+
+.automation-runs {
+  display: flex;
+  width: 340px; /* off-scale */
+  flex: none;
+  flex-direction: column;
+  gap: var(--space-8);
+  overflow-y: auto;
+  padding: var(--space-16);
+  border-left: 1px solid var(--hairline);
+}
+
+.automation-runs-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.automation-run {
+  display: flex;
+  width: 100%;
+  min-height: 44px; /* off-scale */
+  align-items: center;
+  gap: var(--space-8);
+  padding: var(--space-6) var(--space-8);
+  border-radius: var(--control-radius);
+  background: none;
+  color: inherit;
+  text-align: left;
+}
+
+.automation-run > .state-glyph {
+  color: var(--text-secondary);
+}
+
+button.automation-run:hover {
+  background: var(--raised);
+}
+
 .automation-prompt {
   min-height: 120px; /* off-scale */
   resize: vertical;

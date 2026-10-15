@@ -31,7 +31,14 @@ import {
 } from "@luke/features/automation-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
-import { BuildingIcon, ChevronRightIcon, LockIcon, Trash2Icon, ZapIcon } from "lucide-react";
+import {
+  BuildingIcon,
+  ChevronRightIcon,
+  LockIcon,
+  PlayIcon,
+  Trash2Icon,
+  ZapIcon,
+} from "lucide-react";
 import { useId, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
@@ -42,6 +49,8 @@ import { Segmented } from "../segmented";
 import { ConfirmDialog, useConfirmDialog } from "../settings/confirm-dialog";
 import { BusyLabel } from "../spinner";
 import { Switch } from "../switch";
+import { AutomationRunsPanel } from "./automation-runs-panel";
+import { useAutomationRuns } from "./use-automation-runs";
 import { type AgentsRead, type RunChoices, useRunChoices } from "./use-run-choices";
 
 /**
@@ -53,7 +62,8 @@ import { type AgentsRead, type RunChoices, useRunChoices } from "./use-run-choic
  * and in the Owner row a team workspace offers. Where its runs land is
  * one row: a new agent each run, on the agent box's model chip and
  * archived once it succeeds where asked, or the same agent, chosen from
- * the workspace's agents on its repository. A schedule is chosen as the
+ * the workspace's agents on its repository. Its runs stand in the panel on
+ * the right (`automation-runs-panel.tsx`), with Run now in the toolbar. A schedule is chosen as the
  * picker writes one, every hour, every day, on weekdays, or on one day of
  * the week, at a time in a zone, and a cron the picker did not write stands
  * as custom, kept as it was; its next two runs are said under it. What
@@ -108,6 +118,14 @@ const SAVE_REFUSAL_WORDS = {
     "Luke couldn't save it as written. Check its schedule and task.",
   [AUTOMATION_CALL_FAILURE.NOT_PERMITTED]:
     "Only its creator, or the workspace's owners and admins, can change it.",
+} as const satisfies Record<AutomationCallFailure, string>;
+
+/** Why a Run now did not start a run, as the line under the name says it. */
+const RUN_REFUSAL_WORDS = {
+  ...SAVE_REFUSAL_WORDS,
+  [AUTOMATION_CALL_FAILURE.UNANSWERED]: "Couldn't run it now. Try again.",
+  [AUTOMATION_CALL_FAILURE.NOT_PERMITTED]:
+    "Only its creator, or the workspace's owners and admins, can run it.",
 } as const satisfies Record<AutomationCallFailure, string>;
 
 const ACCEPTED: ActionResult = { status: ACTION_RESULT_STATUS.ACCEPTED };
@@ -311,6 +329,8 @@ function EditorToolbar({
   onSave,
   onToggle,
   onDelete,
+  running,
+  onRunNow,
 }: {
   draft: AutomationDraft;
   automation: AutomationSummary | undefined;
@@ -321,6 +341,9 @@ function EditorToolbar({
   onSave: () => void;
   onToggle: (enabled: boolean) => void;
   onDelete: () => void;
+  /** Whether a Run now is out. */
+  running: boolean;
+  onRunNow: () => void;
 }): React.JSX.Element {
   const status =
     automation === undefined
@@ -350,6 +373,19 @@ function EditorToolbar({
         <span className="automation-editor-status" data-dirty={String(dirty)}>
           {status}
         </span>
+        {automation === undefined ? null : (
+          <button
+            type="button"
+            className="toolbar-button bordered-button"
+            disabled={running}
+            onClick={onRunNow}
+          >
+            <PlayIcon />
+            <BusyLabel busy={running} label="Running">
+              Run now
+            </BusyLabel>
+          </button>
+        )}
         <button
           type="button"
           className="primary-button"
@@ -626,6 +662,7 @@ export function AutomationEditor({
   writes,
   onBack,
   onCreated,
+  onOpenAgent,
 }: {
   automation: AutomationSummary | undefined;
   workspace: Workspace | undefined;
@@ -635,7 +672,11 @@ export function AutomationEditor({
   writes: AutomationWrites;
   onBack: () => void;
   onCreated: (automationId: string) => void;
+  /** Opens a run's agent on its own page. */
+  onOpenAgent: (agentId: string) => void;
 }): React.JSX.Element {
+  const runs = useAutomationRuns(automation?.id);
+  const [running, setRunning] = useState(false);
   const [defaults] = useState<DraftDefaults>(() => ({
     timezone: windowZone(),
     owner: AUTOMATION_SCOPE.PERSONAL,
@@ -689,6 +730,14 @@ export function AutomationEditor({
         : writes.change({ automationId: automation.id, change: change ?? {} });
     saved.then(landed);
   };
+  const runNow = () => {
+    setRunning(true);
+    setRefusal(undefined);
+    runs.runNow().then((answer) => {
+      setRunning(false);
+      if ("failure" in answer) setRefusal(RUN_REFUSAL_WORDS[answer.failure]);
+    });
+  };
   const toggle = (enabled: boolean) => {
     if (automation === undefined) return;
     writes.toggle(automation.id, enabled).then((answer) => {
@@ -723,41 +772,51 @@ export function AutomationEditor({
         onSave={save}
         onToggle={toggle}
         onDelete={deletion.ask}
+        running={running}
+        onRunNow={runNow}
       />
-      <div className="automations-scroll">
-        <div className="automation-editor">
-          <input
-            className="automation-editor-name"
-            aria-label="Automation name"
-            placeholder="Untitled automation"
-            value={draft.name}
-            onKeyDown={releaseOnEscape}
-            onChange={(event) => editDraft({ name: event.target.value })}
-          />
-          {shownProblems && problems[DRAFT_FIELD.NAME] !== undefined ? (
-            <p className="error-message automation-form-problem" role="alert">
-              {problems[DRAFT_FIELD.NAME]}
+      <div className="automation-editor-layout">
+        <div className="automations-scroll">
+          <div className="automation-editor">
+            <input
+              className="automation-editor-name"
+              aria-label="Automation name"
+              placeholder="Untitled automation"
+              value={draft.name}
+              onKeyDown={releaseOnEscape}
+              onChange={(event) => editDraft({ name: event.target.value })}
+            />
+            {shownProblems && problems[DRAFT_FIELD.NAME] !== undefined ? (
+              <p className="error-message automation-form-problem" role="alert">
+                {problems[DRAFT_FIELD.NAME]}
+              </p>
+            ) : null}
+            <p className="automation-owner-line">
+              <OwnerMark owner={draft.owner} workspace={workspace} />
+              {ownerLine(draft.owner, workspace, offersOwner)}
             </p>
-          ) : null}
-          <p className="automation-owner-line">
-            <OwnerMark owner={draft.owner} workspace={workspace} />
-            {ownerLine(draft.owner, workspace, offersOwner)}
-          </p>
-          {refusal === undefined ? null : (
-            <p className="error-message automation-save-refusal" role="alert">
-              {refusal}
-            </p>
-          )}
-          <EditorForm
-            draft={draft}
-            problems={shownProblems ? problems : {}}
-            planBacked={planBacked}
-            workspace={workspace}
-            offersOwner={offersOwner}
-            repositories={repositories}
-            onDraft={editDraft}
-          />
+            {refusal === undefined ? null : (
+              <p className="error-message automation-save-refusal" role="alert">
+                {refusal}
+              </p>
+            )}
+            <EditorForm
+              draft={draft}
+              problems={shownProblems ? problems : {}}
+              planBacked={planBacked}
+              workspace={workspace}
+              offersOwner={offersOwner}
+              repositories={repositories}
+              onDraft={editDraft}
+            />
+          </div>
         </div>
+        <AutomationRunsPanel
+          created={automation !== undefined}
+          runs={runs.read}
+          onRetry={runs.reload}
+          onOpenAgent={onOpenAgent}
+        />
       </div>
       <ConfirmDialog
         confirm={deletion}

@@ -5,12 +5,15 @@ import {
   AUTOMATION_RUN_STANDING,
   automationGroups,
   automationNext,
+  automationRunLine,
   automationRunStanding,
+  automationRunTitle,
   automationTriggerText,
 } from "./automation-list-model.js";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
+  AUTOMATION_RUN_REASON,
   AUTOMATION_RUN_STATUS,
   AUTOMATION_SCOPE,
   AUTOMATION_TRIGGER,
@@ -137,4 +140,47 @@ test("an automation turned off says so before any instant, and one with no insta
   assert.deepEqual(automationNext(automation("a", { nextRunAt: null })), {
     kind: AUTOMATION_NEXT.UNSCHEDULED,
   });
+});
+
+test("a run is titled by its agent where the agent has a title, else by what fired it", () => {
+  const agent = {
+    id: "4d5e6f70-8192-4a3b-9c4d-5e6f708192a3",
+    title: "Fix the flaky test",
+    status: CODING_AGENT_STATUS.RUNNING,
+  };
+
+  assert.equal(automationRunTitle(run({ agent })), "Fix the flaky test");
+  assert.equal(automationRunTitle(run({ agent: { ...agent, title: null } })), "Run now");
+  assert.equal(
+    automationRunTitle(run({ firing: { kind: "schedule", dueAt: 1 } })),
+    "Scheduled run",
+  );
+});
+
+test("a run's line says why it did not start, else where its agent stands, or that it waits", () => {
+  const agent = (status: (typeof CODING_AGENT_STATUS)[keyof typeof CODING_AGENT_STATUS]) => ({
+    id: "4d5e6f70-8192-4a3b-9c4d-5e6f708192a3",
+    title: null,
+    status,
+  });
+
+  assert.equal(
+    automationRunLine(
+      run({ status: AUTOMATION_RUN_STATUS.FAILED, reason: AUTOMATION_RUN_REASON.CREATOR_LEFT }),
+    ),
+    "Its creator is no longer in the workspace.",
+  );
+  assert.equal(
+    automationRunLine(
+      run({ status: AUTOMATION_RUN_STATUS.SKIPPED, reason: AUTOMATION_RUN_REASON.CONCURRENCY }),
+    ),
+    "Skipped: an earlier run's agent was still at work.",
+  );
+  assert.equal(
+    automationRunLine(run({ status: AUTOMATION_RUN_STATUS.QUEUED })),
+    "Waiting to start",
+  );
+  assert.equal(automationRunLine(run({ agent: agent(CODING_AGENT_STATUS.RUNNING) })), "Working");
+  assert.equal(automationRunLine(run({ agent: agent(CODING_AGENT_STATUS.COMPLETED) })), "Finished");
+  assert.equal(automationRunLine(run({ agent: null })), "Its agent is gone");
 });

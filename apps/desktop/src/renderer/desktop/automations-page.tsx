@@ -1,8 +1,6 @@
 import {
   AUTOMATION_NEXT,
-  AUTOMATION_RUN_STANDING,
   type AutomationGroup,
-  type AutomationRunStanding,
   automationGroups,
   automationNext,
   automationOwner,
@@ -25,10 +23,11 @@ import { useOpenFeedback } from "../open-feedback";
 import { dayAndTimeText, momentText, useMinute } from "../planning/plan-time";
 import { AUTOMATIONS_PAGE, type PlansControl } from "../planning/use-plans-tab";
 import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
-import { GLYPH_STATE, type GlyphState, StateGlyph, stateEndMark } from "../state-glyph";
+import { StateGlyph, stateEndMark } from "../state-glyph";
 import { Switch } from "../switch";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { AutomationEditor } from "./automation-editor";
+import { STANDING_GLYPH } from "./automation-runs-panel";
 import { useAutomations } from "./use-automations";
 
 /**
@@ -55,13 +54,6 @@ const WEEKDAY_AND_TIME = new Intl.DateTimeFormat(undefined, {
   hour: "numeric",
   minute: "2-digit",
 });
-
-/** The glyph each standing of a newest run wears. */
-const STANDING_GLYPH = {
-  [AUTOMATION_RUN_STANDING.WORKING]: GLYPH_STATE.WORKING,
-  [AUTOMATION_RUN_STANDING.FAILED]: GLYPH_STATE.FAILED,
-  [AUTOMATION_RUN_STANDING.REST]: GLYPH_STATE.REST,
-} as const satisfies Record<AutomationRunStanding, GlyphState>;
 
 /** What the list says where it could not be read. */
 const UNREAD_LINE = "The automations could not be read.";
@@ -377,6 +369,7 @@ export function AutomationsPage({ plans }: { plans: PlansControl }): React.JSX.E
         repositories={plans.newPlan.repositoriesIn(workspace?.id)}
         writes={automations}
         onBack={back}
+        onOpenAgent={(agentId) => plans.agentView.onOpen(agentId)}
         onCreated={(automationId) => {
           setMade(automationId);
           view.onOpen({ kind: AUTOMATIONS_PAGE.EDIT, automationId });

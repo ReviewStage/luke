@@ -13,6 +13,7 @@ import {
   AUTOMATION_SCOPE,
   AUTOMATION_TARGET,
   AUTOMATION_TRIGGER,
+  type AutomationRunSummary,
   type AutomationSummary,
 } from "@luke/features/automation-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
@@ -116,6 +117,14 @@ let creates: AutomationCreateParams[] = [];
 let deletes: string[] = [];
 /** Every ask for a workspace's agents, as the act carried it. */
 let agentsAsked: unknown[] = [];
+/** The service's runs of every automation, newest first, as a read of one's runs answers them. */
+let runs: AutomationRunSummary[] = [];
+/** Every Run now asked, by the automation it runs. */
+let runsAsked: string[] = [];
+/** What a Run now answers where it does not start a run. */
+let runRefusal: (typeof AUTOMATION_CALL_FAILURE)[keyof typeof AUTOMATION_CALL_FAILURE] | undefined;
+/** Every agent whose page a run opened. */
+let agentsOpened: string[] = [];
 /** What a change answers: the automation as changed, or why not. */
 let changeRefusal:
   | (typeof AUTOMATION_CALL_FAILURE)[keyof typeof AUTOMATION_CALL_FAILURE]
@@ -132,6 +141,10 @@ beforeEach(() => {
   creates = [];
   deletes = [];
   agentsAsked = [];
+  runs = [];
+  runsAsked = [];
+  runRefusal = undefined;
+  agentsOpened = [];
   changeRefusal = undefined;
   Object.defineProperty(window, "luke", {
     configurable: true,
@@ -196,6 +209,29 @@ beforeEach(() => {
             status: ACT_OUTCOME_STATUS.DONE,
             value: { agents: [CI_DIGEST] },
           });
+        }
+        if (request.kind === ACT_KIND.AUTOMATIONS_RUNS) {
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { runs } });
+        }
+        if (request.kind === ACT_KIND.AUTOMATIONS_RUN) {
+          runsAsked.push(request.payload.automationId);
+          if (runRefusal !== undefined) {
+            return Promise.resolve({
+              status: ACT_OUTCOME_STATUS.DONE,
+              value: { failure: runRefusal },
+            });
+          }
+          const made = {
+            id: "6e7f8091-a2b3-4c4d-8e5f-60718293a4b5",
+            firing: { kind: "manual" },
+            status: AUTOMATION_RUN_STATUS.STARTED,
+            reason: null,
+            agent: { id: CI_DIGEST.id, title: null, status: "starting" },
+            firedAt: 5,
+            settledAt: 5,
+          } as const;
+          runs = [made, ...runs];
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { run: made } });
         }
         if (request.kind === ACT_KIND.AUTOMATIONS_DELETE) {
           deletes.push(request.payload.automationId);
@@ -466,6 +502,11 @@ function mountPages(start: AutomationsPlace, workspace: Workspace = WORKSPACE): 
     const [listed, setListed] = useState(workspace);
     moveTo = setListed;
     const plans = plansControl({
+      agentView: {
+        agentId: undefined,
+        onOpen: (agentId) => agentsOpened.push(agentId),
+        onClose: () => undefined,
+      },
       workspace: listed,
       workspaces: [PERSONAL, WORKSPACE],
       automationsView: {
@@ -845,4 +886,86 @@ test("Same agent is chosen from the workspace's agents on the automation's repos
       change: { target: { kind: AUTOMATION_TARGET.SAME_AGENT, agentId: CI_DIGEST.id } },
     },
   ]);
+});
+
+test("an automation's runs stand on its page's right, newest first, a run that started an agent opening it", async () => {
+  runs = [
+    {
+      id: "1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f",
+      firing: { kind: AUTOMATION_TRIGGER.SCHEDULE, dueAt: 3 },
+      status: AUTOMATION_RUN_STATUS.STARTED,
+      reason: null,
+      agent: { id: CI_DIGEST.id, title: "Fix the flaky test", status: "running" },
+      firedAt: 3,
+      settledAt: 3,
+    },
+    {
+      id: "2d3e4f5a-6b7c-4d8e-9f0a-1b2c3d4e5f60",
+      firing: { kind: AUTOMATION_TRIGGER.SCHEDULE, dueAt: 2 },
+      status: AUTOMATION_RUN_STATUS.FAILED,
+      reason: "creator-left",
+      agent: null,
+      firedAt: 2,
+      settledAt: 2,
+    },
+  ];
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+
+  const panel = page.querySelector("aside[aria-label='Runs']");
+  assert.deepEqual(
+    [...(panel?.querySelectorAll(".automation-run") ?? [])].map((row) => [
+      row.querySelector(".automation-row-name")?.textContent,
+      row.querySelector(".automation-row-detail")?.textContent,
+    ]),
+    [
+      ["Fix the flaky test", "Working"],
+      ["Scheduled run", "Its creator is no longer in the workspace."],
+    ],
+  );
+  act(() => panel?.querySelector<HTMLButtonElement>("button.automation-run")?.click());
+  assert.deepEqual(agentsOpened, [CI_DIGEST.id]);
+  assert.equal(
+    panel?.querySelectorAll("button.automation-run").length,
+    1,
+    "a run that started no agent is no press",
+  );
+});
+
+test("Run now starts a run under a key of its own, and the run stands first once it settles", async () => {
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+  assert.match(
+    page.querySelector("aside[aria-label='Runs']")?.textContent ?? "",
+    /No runs yet\. Run now to try it\./u,
+  );
+
+  act(() => button("Run now").click());
+  await settle();
+
+  assert.deepEqual(runsAsked, [SWEEP.id]);
+  assert.equal(
+    page.querySelector("aside[aria-label='Runs'] .automation-row-name")?.textContent,
+    "Run now",
+  );
+});
+
+test("a Run now the service refuses says why under the name, and a new automation has no Run now", async () => {
+  runRefusal = AUTOMATION_CALL_FAILURE.NOT_PERMITTED;
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+
+  act(() => button("Run now").click());
+  await settle();
+  assert.equal(
+    page.querySelector(".automation-save-refusal")?.textContent,
+    "Only its creator, or the workspace's owners and admins, can run it.",
+  );
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  const fresh = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
+  await settle();
+  assert.ok(![...fresh.querySelectorAll("button")].some((each) => each.textContent === "Run now"));
+  assert.match(fresh.textContent ?? "", /Create it, then Run now to try it\./u);
 });
