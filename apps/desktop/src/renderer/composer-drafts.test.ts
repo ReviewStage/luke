@@ -18,6 +18,7 @@ import {
 import { onRegistry } from "#testing/copy-feedback";
 import { codingAgentsControl, plansControl, UNPINNED_SUMMARY } from "#testing/plans-control";
 import { installScrollIntoView } from "#testing/scroll-into-view";
+import { useDraftsOwner } from "./composer-drafts";
 import { DesktopPlans } from "./desktop/desktop-plans";
 import { SidebarPlan } from "./desktop/plan-actions";
 import { DRAFT_WORD } from "./draft-mark";
@@ -90,6 +91,12 @@ async function settle(): Promise<void> {
   });
 }
 
+/** The account signed in to the window, as the panel's root hands it the drafts. */
+function SignedIn({ accountId }: { accountId: string | undefined }): null {
+  useDraftsOwner(accountId);
+  return null;
+}
+
 /** Sends nothing anywhere: every message stays out, unanswered. */
 const NEVER_ANSWERED: MessageSender = () => new Promise(() => undefined);
 
@@ -105,7 +112,11 @@ function windowOn(registry: AtomRegistry.AtomRegistry) {
   roots.push(root);
   const show = async (
     open: typeof INVITES,
-    { onPlan = false, send = NEVER_ANSWERED }: { onPlan?: boolean; send?: MessageSender } = {},
+    {
+      onPlan = false,
+      send = NEVER_ANSWERED,
+      account,
+    }: { onPlan?: boolean; send?: MessageSender; account?: string } = {},
   ) => {
     const agentTab = { agent: open.agent.id };
     const plans = plansControl({
@@ -144,6 +155,7 @@ function windowOn(registry: AtomRegistry.AtomRegistry) {
           createElement(
             Fragment,
             null,
+            createElement(SignedIn, { accountId: account }),
             createElement("ul", null, rows),
             createElement(DesktopPlans, {
               summary: UNPINNED_SUMMARY,
@@ -251,4 +263,23 @@ test("a box emptied by hand lets its draft go, and its mark with it", async () =
   assert.equal(app.rowDrafted(INVITES.plan.name), false);
   await app.show(INVITES, { onPlan: true });
   assert.equal(app.tabDrafted(INVITES.agent.title ?? ""), false);
+});
+
+test("a draft is its account's: another signing in on the same Mac meets none of it, and its writer finds it again", async () => {
+  const app = windowOn(AtomRegistry.make());
+  await app.show(INVITES, { account: "user-dean" });
+  typeInComposer(app.container, "Expire invites after a week");
+  await settle();
+
+  await app.show(INVITES, { account: "user-sam" });
+  assert.equal(app.box(), "");
+  assert.equal(app.rowDrafted(INVITES.plan.name), false);
+  for (const root of roots.splice(0)) act(() => root.unmount());
+
+  const relaunched = windowOn(AtomRegistry.make());
+  await relaunched.show(INVITES, { account: "user-sam" });
+  assert.equal(relaunched.box(), "", "nor after a relaunch");
+  await relaunched.show(INVITES, { account: "user-dean" });
+  assert.equal(relaunched.box(), "Expire invites after a week");
+  assert.equal(relaunched.rowDrafted(INVITES.plan.name), true);
 });

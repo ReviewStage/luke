@@ -2,6 +2,7 @@ import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import { Equal, Schema } from "effect";
 import { Atom } from "effect/reactivity";
+import { useLayoutEffect, useMemo } from "react";
 import { readKept, writeKept } from "./desktop/folded-groups";
 
 /**
@@ -17,7 +18,11 @@ import { readKept, writeKept } from "./desktop/folded-groups";
  *
  * The words are kept in the renderer's own storage, as the sidebar's folds
  * and the plans' looks are, so they outlast a reload and a relaunch on this
- * Mac and reach no other. A mention or a skill is part of the words, written
+ * Mac and reach no other. They are the account's that wrote them, each kept
+ * with its account's id, and a window reads only the drafts of the account
+ * signed in to it (`useDraftsOwner`), so a teammate signing in on the same
+ * Mac meets nothing of another's unsent words, which wait for their writer
+ * to sign in again. A mention or a skill is part of the words, written
  * as its link or its `/name`, so it comes back as the chip it was. The files
  * attached are kept in this window alone, for as long as it stands, because
  * a message's files may run to megabytes and storage holds a few: a relaunch
@@ -57,10 +62,21 @@ const draftPlaceSchema = Schema.Union([
 /** Where one draft goes. */
 export type DraftPlace = typeof draftPlaceSchema.Type;
 
-/** The drafts as storage keeps them: each place's words, the latest written last. */
+/** The drafts as storage keeps them: each place's words and the account that wrote them, the latest written last. */
 const storedDrafts = Schema.fromJsonString(
-  Schema.Array(Schema.Struct({ place: draftPlaceSchema, text: Schema.String })),
+  Schema.Array(
+    Schema.Struct({
+      accountId: Schema.NullOr(Schema.String),
+      place: draftPlaceSchema,
+      text: Schema.String,
+    }),
+  ),
 );
+
+type StoredDraft = (typeof storedDrafts.Type)[number];
+
+/** The account a window's drafts are written by: the one signed in, none before its state is read, as in a test. */
+type Owner = string | null;
 
 /** What a box holds unsent: its words, and the files attached to them. */
 export interface Draft {
@@ -84,21 +100,25 @@ function holds(draft: Draft): boolean {
   return draft.text !== "" || draft.attachments.length > 0;
 }
 
-/** The kept drafts, none where none were kept or they no longer read; storage keeps no files, and no draft of files alone. */
-function readDrafts(): readonly KeptDraft[] {
-  return readKept(STORAGE_KEY, storedDrafts, [])
-    .filter((kept) => kept.text !== "")
-    .map((kept) => ({ ...kept, attachments: [] }));
+/** Every account's kept drafts, none where none were kept or they no longer read. */
+function readStored(): readonly StoredDraft[] {
+  return readKept(STORAGE_KEY, storedDrafts, []);
 }
 
-/** Keeps the drafts' words, each holding some. */
-function writeDrafts(drafts: readonly KeptDraft[]): void {
-  const worded = drafts.filter((kept) => kept.text !== "");
-  writeKept(
-    STORAGE_KEY,
-    storedDrafts,
-    worded.map(({ place, text }) => ({ place, text })),
-  );
+/** The owner's kept drafts; storage keeps no files, and no draft of files alone. */
+function readDrafts(owner: Owner): readonly KeptDraft[] {
+  return readStored()
+    .filter((kept) => kept.accountId === owner && kept.text !== "")
+    .map(({ place, text }) => ({ place, text, attachments: [] }));
+}
+
+/** Keeps the owner's drafts' words, each holding some, beside every other account's as storage holds them. */
+function writeDrafts(owner: Owner, drafts: readonly KeptDraft[]): void {
+  const others = readStored().filter((kept) => kept.accountId !== owner);
+  const worded = drafts
+    .filter((kept) => kept.text !== "")
+    .map(({ place, text }) => ({ accountId: owner, place, text }));
+  writeKept(STORAGE_KEY, storedDrafts, [...others, ...worded].slice(-MAX_KEPT));
 }
 
 /** The drafts with `place`'s set to `draft`, latest last, or let go where it holds nothing. */
@@ -108,7 +128,7 @@ function withDraft(
   draft: Draft,
 ): readonly KeptDraft[] {
   const others = drafts.filter((kept) => !Equal.equals(kept.place, place));
-  return holds(draft) ? [...others, { place, ...draft }].slice(-MAX_KEPT) : others;
+  return holds(draft) ? [...others, { place, ...draft }] : others;
 }
 
 /** A change to the drafts: one place's draft moved on from what it holds, or the drafts a predicate names let go. */
@@ -116,43 +136,61 @@ type DraftChange =
   | { readonly place: DraftPlace; readonly next: (was: Draft) => Draft }
   | { readonly drop: (place: DraftPlace) => boolean };
 
+/** The account signed in to this window, whose drafts it reads and writes. */
+const ownerAtom = Atom.keepAlive(Atom.make<Owner>(null));
+
 /**
- * Every draft this window holds. Note that a write keeps the words of every
- * other place as storage holds them, and the files as this window does,
- * since storage holds none, with a draft of files alone this window's own;
- * each draft unchanged is the very one it was, so a box reading another
+ * Every draft this window's account holds. Note that a write keeps the words
+ * of every other place as storage holds them, and the files as this window
+ * does, since storage holds none, with a draft of files alone this window's
+ * own; each draft unchanged is the very one it was, so a box reading another
  * place's draft does not draw again. The atom is kept alive, because the
- * files live nowhere else while no box is open.
+ * files live nowhere else while no box is open; another account signing in
+ * reads its own afresh.
  */
 const draftsAtom = Atom.keepAlive(
-  Atom.writable(readDrafts, (ctx, change: DraftChange) => {
-    const held = ctx.get(draftsAtom);
-    const read = readDrafts().map((stored) => {
-      const was = held.find((kept) => Equal.equals(kept.place, stored.place));
-      if (was === undefined) return stored;
-      return was.text === stored.text ? was : { ...stored, attachments: was.attachments };
-    });
-    const filesAlone = held.filter(
-      (kept) =>
-        kept.text === "" &&
-        kept.attachments.length > 0 &&
-        !read.some((stored) => Equal.equals(stored.place, kept.place)),
-    );
-    const stored = [...filesAlone, ...read];
-    const next =
-      "drop" in change
-        ? stored.filter((kept) => !change.drop(kept.place))
-        : withDraft(
-            stored,
-            change.place,
-            change.next(
-              stored.find((kept) => Equal.equals(kept.place, change.place)) ?? EMPTY_DRAFT,
-            ),
-          );
-    writeDrafts(next);
-    ctx.setSelf(next);
-  }),
+  Atom.writable(
+    (get) => readDrafts(get(ownerAtom)),
+    (ctx, change: DraftChange) => {
+      const owner = ctx.get(ownerAtom);
+      const held = ctx.get(draftsAtom);
+      const read = readDrafts(owner).map((stored) => {
+        const was = held.find((kept) => Equal.equals(kept.place, stored.place));
+        if (was === undefined) return stored;
+        return was.text === stored.text ? was : { ...stored, attachments: was.attachments };
+      });
+      const filesAlone = held.filter(
+        (kept) =>
+          kept.text === "" &&
+          kept.attachments.length > 0 &&
+          !read.some((stored) => Equal.equals(stored.place, kept.place)),
+      );
+      const stored = [...filesAlone, ...read];
+      const next =
+        "drop" in change
+          ? stored.filter((kept) => !change.drop(kept.place))
+          : withDraft(
+              stored,
+              change.place,
+              change.next(
+                stored.find((kept) => Equal.equals(kept.place, change.place)) ?? EMPTY_DRAFT,
+              ),
+            );
+      writeDrafts(owner, next);
+      ctx.setSelf(next);
+    },
+  ),
 );
+
+/**
+ * Hands this window's drafts to the account signed in to it, before the
+ * window is painted, so a box opening as the account changes never shows
+ * another's words; nothing while none is signed in.
+ */
+export function useDraftsOwner(accountId: string | undefined): void {
+  const own = useAtomSet(ownerAtom);
+  useLayoutEffect(() => own(accountId ?? null), [own, accountId]);
+}
 
 /**
  * Where a draft waits, read off every draft: the plans and the agents, each
@@ -193,11 +231,23 @@ function isNewAgent(kept: KeptDraft): kept is KeptDraft<NewAgentPlace> {
   return kept.place.kind === DRAFT_PLACE.NEW_AGENT;
 }
 
-/** The draft kept for a plan's draft agent, under whichever key it was kept; nothing where the plan has none. */
-export function useNewAgentDraft(planId: string | undefined): KeptDraft<NewAgentPlace> | undefined {
-  return useAtomValue(draftsAtom, (drafts) =>
-    drafts.filter(isNewAgent).find((kept) => kept.place.planId === planId),
-  );
+/**
+ * The draft kept for a plan's draft agent under the key the window holds, or,
+ * where it holds none, as after a relaunch, the latest kept for the plan
+ * under any; nothing where there is none. Note that a key the window holds
+ * reads its own words alone, because another window may keep a draft agent
+ * of its own on the same plan.
+ */
+export function useNewAgentDraft(
+  planId: string | undefined,
+  draftId: string | undefined,
+): KeptDraft<NewAgentPlace> | undefined {
+  return useAtomValue(draftsAtom, (drafts) => {
+    const plans = drafts.filter(isNewAgent).filter((kept) => kept.place.planId === planId);
+    return draftId === undefined
+      ? plans.at(-1)
+      : plans.find((kept) => kept.place.draftId === draftId);
+  });
 }
 
 /** The presses that write any place's draft, or let go of those a predicate names. */
@@ -206,10 +256,13 @@ export interface DraftWriter {
   readonly drop: (drop: (place: DraftPlace) => boolean) => void;
 }
 
-/** The draft writer, for an owner that reads its drafts on its own. */
+/** The draft writer, for an owner that reads its drafts on its own, the same one for as long as the window's registry stands. */
 export function useDraftWriter(): DraftWriter {
   const change = useAtomSet(draftsAtom);
-  return { update: (place, next) => change({ place, next }), drop: (drop) => change({ drop }) };
+  return useMemo(
+    () => ({ update: (place, next) => change({ place, next }), drop: (drop) => change({ drop }) }),
+    [change],
+  );
 }
 
 /** Whether a plan holds a draft: one of its agents', or its draft agent's. */

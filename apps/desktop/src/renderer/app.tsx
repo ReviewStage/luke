@@ -41,6 +41,7 @@ import { useAct } from "./act";
 import { runAppCommand, useAppCommand, useAppKeymap, useMenuCommands } from "./app-commands";
 import { type CallCardInput, callControls } from "./call/call-card";
 import { useWindowFocused } from "./call/use-window-focused";
+import { useDraftsOwner } from "./composer-drafts";
 import { CommandPalette } from "./desktop/command-palette";
 import { DesktopShell } from "./desktop/desktop-shell";
 import { ListedAutomations } from "./desktop/listed-automations";
@@ -96,6 +97,8 @@ export function App(): React.JSX.Element {
   useEffect(() => {
     forgetPictures();
   }, [accountKey]);
+  // A draft is its account's: the window reads the unsent words of the one signed in alone.
+  useDraftsOwner(account?.status === ACCOUNT_STATUS.SIGNED_IN ? account.id : undefined);
   const outputAudio = state?.audio.outputAudio;
   const [tab, setTab] = useStateWithRef<PanelTab>(PANEL_TAB.PLANS);
   const [settingsView, setSettingsView] = useStateWithRef<SettingsView>(SETTINGS_VIEW.ACCOUNT);

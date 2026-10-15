@@ -65,7 +65,11 @@ async function settle(): Promise<void> {
  * window's toast stands beside it, its atoms on `registry`, one of its own,
  * as a window's, where none is given.
  */
-function mount(initial: Standing, registry: AtomRegistry.AtomRegistry = AtomRegistry.make()) {
+function mount(
+  initial: Standing,
+  registry: AtomRegistry.AtomRegistry = AtomRegistry.make(),
+  keyPrefix = "key",
+) {
   const asked: Asked[] = [];
   const started: string[] = [];
   let unarchives = 0;
@@ -102,7 +106,7 @@ function mount(initial: Standing, registry: AtomRegistry.AtomRegistry = AtomRegi
       onStarted: (agentId) => started.push(agentId),
       mintKey: () => {
         keys += 1;
-        return `key-${keys}`;
+        return `${keyPrefix}-${keys}`;
       },
     });
     return null;
@@ -257,6 +261,37 @@ test("a draft's words outlast a relaunch, the plan opening on its draft again un
   again.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [] });
   await again.mount();
   assert.equal(again.control().draft, undefined);
+});
+
+test("two windows' draft agents on one plan each keep their own words under their own key", async () => {
+  const first = mount({ planId: PLAN, repository: "acme/relay" }, AtomRegistry.make(), "first");
+  const second = mount({ planId: PLAN, repository: "acme/relay" }, AtomRegistry.make(), "second");
+  first.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [] });
+  second.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [] });
+  await first.mount();
+  await second.mount();
+  act(() => {
+    first.control().onNewDraft();
+  });
+  act(() => {
+    second.control().onNewDraft();
+  });
+  act(() => second.control().onDraftChange({ prompt: "Ship now" }));
+  act(() => first.control().onDraftChange({ prompt: "Wait for review" }));
+
+  assert.equal(first.control().draft?.prompt, "Wait for review");
+  assert.equal(first.control().draft?.id, "first-1");
+  act(() => first.control().onDiscardDraft("first-1"));
+  for (const root of roots.splice(0)) act(() => root.unmount());
+
+  // The other window's draft, kept apart and outliving the first's, is the one a relaunch opens on.
+  const relaunched = mount({ planId: PLAN, repository: "acme/relay" });
+  relaunched.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [] });
+  await relaunched.mount();
+  assert.deepEqual(
+    [relaunched.control().draft?.id, relaunched.control().draft?.prompt],
+    ["second-1", "Ship now"],
+  );
 });
 
 test("a draft of files alone waits while another plan is open, but no relaunch brings back a draft with no words", async () => {

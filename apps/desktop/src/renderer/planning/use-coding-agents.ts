@@ -356,9 +356,10 @@ export function useCodingAgents(input: {
   const [starting, setStarting] = useState(false);
   // Each plan's draft's key and chip, by the plan's id; its words and files are kept apart.
   const [drafts, setDrafts] = useState<ReadonlyMap<string, DraftChoices>>(new Map());
-  const keptDraft = useNewAgentDraft(planId);
+  const heldDraft = planId === undefined ? undefined : drafts.get(planId);
+  const keptDraft = useNewAgentDraft(planId, heldDraft?.id);
   const writer = useDraftWriter();
-  const draft = planId === undefined ? undefined : planDraft(drafts.get(planId), keptDraft);
+  const draft = planId === undefined ? undefined : planDraft(heldDraft, keptDraft);
   const [note, setNote] = useState<{ planId: string; note: Failure } | undefined>(undefined);
   const [reads, setReads] = useState(0);
   const pending = useRef<PendingStart | undefined>(undefined);
@@ -515,17 +516,19 @@ export function useCodingAgents(input: {
     });
   };
 
-  /** The drafts with the plan's key and chips set to `next`, or let go, words and all, where it is nothing. */
-  const withDraft = (on: string, next: DraftChoices | undefined) => {
+  /** The drafts with the plan's key and chips set to `next`, or let go where it is nothing. */
+  const withDraft = (on: string, next: DraftChoices | undefined) =>
     setDrafts((was) => {
       const held = new Map(was);
       if (next === undefined) held.delete(on);
       else held.set(on, next);
       return held;
     });
-    if (next === undefined) {
-      writer.drop((place) => place.kind === DRAFT_PLACE.NEW_AGENT && place.planId === on);
-    }
+
+  /** Lets a draft agent go by its key, its words and files with it. */
+  const letGo = (draftId: string) => {
+    for (const [on, held] of drafts) if (held.id === draftId) withDraft(on, undefined);
+    writer.drop((place) => place.kind === DRAFT_PLACE.NEW_AGENT && place.draftId === draftId);
   };
 
   const onNewDraft = (): string => {
@@ -564,10 +567,7 @@ export function useCodingAgents(input: {
     next: (held: readonly CodingAgentAttachment[]) => readonly CodingAgentAttachment[],
   ) => writeWords((was) => ({ ...was, attachments: next(was.attachments) }));
 
-  const onDiscardDraft = (draftId: string) => {
-    for (const [on, held] of drafts) if (held.id === draftId) withDraft(on, undefined);
-    writer.drop((place) => place.kind === DRAFT_PLACE.NEW_AGENT && place.draftId === draftId);
-  };
+  const onDiscardDraft = letGo;
 
   // Note that the draft's key is the Start's every time it is sent, because
   // nothing a refused send asked was made, and a send whose answer was lost
@@ -591,6 +591,7 @@ export function useCodingAgents(input: {
     });
     if ("failure" in answer) return startFailureNote(answer, planId);
     withDraft(planId, undefined);
+    writer.drop((place) => place.kind === DRAFT_PLACE.NEW_AGENT && place.draftId === draftId);
     landed(planId, answer.agent);
     return undefined;
   };
