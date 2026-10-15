@@ -149,3 +149,30 @@ test("a person's page is theirs in the workspace it stood in, so once another is
 
   assert.deepEqual(reopened, []);
 });
+
+test("a person's page opened again with a newer name keeps that name in its step, which Back opens it with", () => {
+  const reopened: (string | undefined)[] = [];
+  const standing = (userId: string | undefined, name?: string, rest: Partial<PlansControl> = {}) =>
+    plansControl({
+      ...rest,
+      personView: {
+        userId,
+        name,
+        onOpen: (_id, opened) => reopened.push(opened),
+        onClose: () => undefined,
+      },
+    });
+  const window = mount(standing("user-lee", "Lee Park"));
+  window.stand(standing("user-lee", "Lee Chen"));
+  window.stand(
+    standing(undefined, undefined, {
+      page: PLANS_PAGE.DOCUMENT,
+      activePlanId: PLAN_ID,
+      boundFor: PLAN_ID,
+    }),
+  );
+
+  act(() => window.history().onBack());
+
+  assert.deepEqual(reopened, ["Lee Chen"]);
+});

@@ -102,13 +102,16 @@ function sameSpot(one: HistorySpot | undefined, other: HistorySpot | undefined):
   );
 }
 
-/** Whether a step stands as it stood: Settings on the same page, a version history where it was. */
+/** Whether a step stands as it stood: Settings on the same page, a version history where it was, a person's page by the name it was last opened with. */
 function samePlace(one: Place, other: Place): boolean {
   if (one.kind === PLACE_KIND.SETTINGS && other.kind === PLACE_KIND.SETTINGS) {
     return one.view === other.view;
   }
   if (one.kind === PLACE_KIND.VERSION_HISTORY && other.kind === PLACE_KIND.VERSION_HISTORY) {
     return sameSpot(one.spot, other.spot);
+  }
+  if (one.kind === PLACE_KIND.PERSON && other.kind === PLACE_KIND.PERSON) {
+    return one.name === other.name;
   }
   return true;
 }

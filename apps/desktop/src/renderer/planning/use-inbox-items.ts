@@ -36,6 +36,8 @@ export interface InboxItemsControl {
   readonly items: ReadonlyMap<string, readonly InboxItem[]>;
   /** Whether a plan's last read did not answer, so the list offers to try again. */
   readonly failed: boolean;
+  /** Whether a listed plan has changed since its items were last read, and no read of it has failed: its items may be older than it. */
+  readonly pending: boolean;
   readonly onRetry: () => void;
 }
 
@@ -99,5 +101,13 @@ export function useInboxItems(input: {
     [reads],
   );
   // Note that only a plan still listed fails the list, because one another workspace listed is not drawn.
-  return { items, failed: holdings.some((holding) => failed.has(holding.planId)), onRetry };
+  const pending = holdings.some(
+    ({ planId, updatedAt }) => reads.get(planId)?.at !== updatedAt && !failed.has(planId),
+  );
+  return {
+    items,
+    failed: holdings.some((holding) => failed.has(holding.planId)),
+    pending,
+    onRetry,
+  };
 }

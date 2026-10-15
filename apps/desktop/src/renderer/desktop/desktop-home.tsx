@@ -106,9 +106,9 @@ export function useWaitingItems(plans: PlansControl) {
   const items = listedItems(
     inboxList(entries, { grouping: INBOX_GROUPING.NEWEST, waitingOnly: true, chosen: undefined }),
   );
+  // Note that a plan read before it last changed is still being read, because a retry's newer read may yet answer what the older one did not hold.
   const reading =
-    holdings.some((holding) => !read.items.has(holding.planId)) ||
-    plans.inboxPlanless.some((each) => !planless.items.has(each.agentId));
+    read.pending || plans.inboxPlanless.some((each) => !planless.items.has(each.agentId));
   const onRetry = () => {
     read.onRetry();
     planless.onRetry();
