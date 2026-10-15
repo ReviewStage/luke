@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { CODING_AGENT_AUTHOR } from "@luke/features/coding-agent-wire";
 import {
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
@@ -23,6 +24,7 @@ import {
   listWorkspaceCodingAgents,
   readCodingAgent,
   recordTurnFastRefused,
+  settleCodingAgentAuthor,
   turnUsagesOf,
   writeDelegation,
 } from "../coding-agent-store.js";
@@ -39,6 +41,7 @@ import { type LineSender, storeWriter } from "../writer.js";
  * with no plan, which its workspace's members reach and no one else does,
  * and the workspace's agents listed for its members alone. And what sent
  * each of the developer's lines to an agent, read by the agent's account.
+ * And who an agent writes as on GitHub, settled once by its first session.
  *
  * Synthetic accounts and conversations throughout.
  */
@@ -396,6 +399,48 @@ it.layer(getTestDB())("the coding-agent store's agents of a workspace", (it) => 
           web.agentId,
         ]);
         assert.deepEqual(yield* listWorkspaceCodingAgents(outsider, workspace, { limit: 10 }), []);
+      }),
+  );
+});
+
+it.layer(getTestDB())("the coding-agent store's author of an agent", (it) => {
+  it.effect(
+    "the first author settled is the agent's for good, a later one is answered with it, and an account outside the workspace settles nothing",
+    () =>
+      Effect.gen(function* () {
+        const starter = yield* openAccount;
+        const outsider = yield* openAccount;
+        const workspace = yield* openWorkspace(starter);
+        yield* openWorkspace(outsider);
+        const { agentId } = yield* planlessAgent(starter, workspace);
+        const before = Option.getOrThrow(yield* readCodingAgent(starter, agentId)).author;
+
+        const refused = yield* settleCodingAgentAuthor(
+          outsider,
+          agentId,
+          CODING_AGENT_AUTHOR.APP_UNLINKED,
+        );
+        const first = yield* settleCodingAgentAuthor(
+          starter,
+          agentId,
+          CODING_AGENT_AUTHOR.DEVELOPER,
+        );
+        const second = yield* settleCodingAgentAuthor(
+          starter,
+          agentId,
+          CODING_AGENT_AUTHOR.APP_UNREAD,
+        );
+
+        assert.equal(before, null);
+        assert.ok(Option.isNone(refused));
+        assert.deepEqual(
+          [first, second],
+          [Option.some(CODING_AGENT_AUTHOR.DEVELOPER), Option.some(CODING_AGENT_AUTHOR.DEVELOPER)],
+        );
+        assert.equal(
+          Option.getOrThrow(yield* readCodingAgent(starter, agentId)).author,
+          CODING_AGENT_AUTHOR.DEVELOPER,
+        );
       }),
   );
 });

@@ -1021,14 +1021,23 @@ clone the hosted brain's checkout makes (`repository-shell.ts`'s
 repository with contents and pull requests write, plus checks, statuses, and
 Actions read where the installation has granted the App those
 (`CI_READ_PERMISSIONS`; a mint naming a permission the installation never
-granted fails whole, so they are asked only where granted), and the token is
-then set at the firewall for the session's own `gh` and `git` through eve's
-`authenticateGitHub`; it never enters the sandbox's filesystem or
-environment. The session's instructions say whether that read was granted
+granted fails whole, so they are asked only where granted), and the firewall
+is then set for the session's own `git` and `gh` (`src/agents/github-credentials.ts`):
+that token for `git`, so every push is the App's and a delivery for it names
+the App's bot, and for GitHub's API the developer's own GitHub App token
+where the agent writes as them, the same App token otherwise; neither enters
+the sandbox's filesystem or environment. Who the agent writes as is settled
+once, as its first session starts, and kept on its row
+(`coder-host/checkout.ts`'s `agentAuthor`, `CODING_AGENT_AUTHOR`): an agent
+a developer started writes as them where their GitHub sign-in may push to
+the repository, its commits authored as their GitHub account and ending on
+a `Co-authored-by` trailer naming the App's bot, and its pull request opened
+on their token; an automation's agent, and one whose developer has no
+GitHub sign-in or may not push, writes as the App's bot. The session's instructions say whether the CI read was granted
 (`host.prompt`, through `repositoryCiReadable`): where it was, the agent
 watches its pull request's checks with `gh pr checks` and fixes what fails
 for at most `CODER.CI_FIX_ROUNDS` rounds; where it was not, it says CI was
-not watched. A token lasts an hour, so the store hook renews it at the
+not watched. An App token lasts an hour, so the store hook renews both at the
 firewall on the first step past `CODER.GITHUB_TOKEN_REFRESH`.
 
 The store hook (`apps/dev/hooks/store.ts`) relays every event into the store

@@ -27,7 +27,11 @@ export default defineDynamic({
           const agent = yield* host.agent(admitted.success);
           if (Result.isFailure(agent)) return null;
           const composed = yield* host.prompt(admitted.success, agent.success);
-          prompt.update(() => ({ hash: composed.hash, ciReadable: composed.ciReadable }));
+          prompt.update(() => ({
+            hash: composed.hash,
+            ciReadable: composed.ciReadable,
+            ...(composed.coAuthor === undefined ? undefined : { coAuthor: composed.coAuthor }),
+          }));
           return defineInstructions({ content: composed.text });
         }),
       );

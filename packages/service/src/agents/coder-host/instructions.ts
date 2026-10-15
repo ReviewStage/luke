@@ -14,6 +14,9 @@ import { CODER_TOOL } from "./tool-set.js";
 
 const CODING_AGENT_EDIT_PLAN_TOOL = EDIT_PLAN_TOOL.name;
 
+/** The line every pull request the agent opens ends its description with. */
+const PULL_REQUEST_FOOTER = "Made with [Luke](https://tryluke.dev)";
+
 /**
  * instructions.ts -- what a coding agent's session runs under.
  *
@@ -29,7 +32,12 @@ const CODING_AGENT_EDIT_PLAN_TOOL = EDIT_PLAN_TOOL.name;
  * place is told as where every tool starts, the shell (`shell.ts`) and the
  * file tools (`files.ts`) alike.
  * The commit identity is the one thing the checkout set that the session
- * is told to leave alone (`checkout.ts`): the commits are the developer's.
+ * is told to leave alone (`checkout.ts`): the developer's own GitHub
+ * account where the agent writes as them, with the trailer that names the
+ * Luke GitHub App's bot as co-author handed here to end every commit with,
+ * the way Claude Code names itself on a commit it made beside its user; or
+ * the App's bot alone, which adds no trailer. Every pull request ends on one
+ * line saying Luke made it, since its author may now be a person.
  * The worker's instructions stand beside the agent's: it owns one slice,
  * grounds what it says in paths, lines, and command output, and returns a
  * result the agent reads whole, in the spirit of the planning worker's
@@ -109,12 +117,25 @@ When a result reads better as something to look at or click through than as word
   planless: { link: "", sectionLink: "", olderLinks: " and `luke://folder/<path>/`", pages: "" },
 } as const;
 
-/** The instructions for one agent, on the repository its row names, worded for what it was handed, for whether its token reads the repository's CI, and for whether it works on a plan. */
+/** Whose the agent's commits are: the developer's, ending on the trailer naming Luke's bot as co-author, or the App's bot's where no trailer is handed. */
+function authorshipRule(coAuthor: string | undefined): string {
+  return coAuthor === undefined
+    ? "Your commits are the Luke GitHub App's: the checkout's git identity is already set to its bot, so never change `user.name` or `user.email`, pass `--author`, add a `Co-authored-by` trailer, or rewrite who a commit is by."
+    : `Your commits are the developer's, with Luke as co-author: the checkout's git identity is already set to the developer's own GitHub account, so never change \`user.name\` or \`user.email\`, pass \`--author\`, or rewrite who a commit is by, and end every commit message with a blank line and then this trailer, exactly as written: \`${coAuthor}\`. The pull request you open is opened as the developer too.`;
+}
+
+/**
+ * The instructions for one agent, on the repository its row names, worded
+ * for what it was handed, for whether its token reads the repository's CI,
+ * for whether it works on a plan, and for whose its commits are: the
+ * developer's where the co-author trailer is handed, the App's otherwise.
+ */
 export function coderInstructions(
   repository: string,
   brief: CodingAgentBrief,
   ciReadable: boolean,
   onPlan = true,
+  coAuthor: string | undefined = undefined,
 ): string {
   const words = BRIEF_WORDS[brief];
   const place = onPlan ? PLAN_PLACE_WORDS.onPlan : PLAN_PLACE_WORDS.planless;
@@ -129,10 +150,10 @@ The repository is checked out at \`${CODER.CHECKOUT_PATH}\`, at its current defa
 1. Read the repository's \`AGENTS.md\` and \`CLAUDE.md\` at the root and in every directory you touch, and its package files, before anything else. They say how this repository is built, tested, and reviewed, and they outrank these instructions where the two meet.
 2. ${words.reread}
 3. Work on a branch named \`${CODER.BRANCH_PREFIX}<slug>\`, cut from the default branch. Never commit to or push the default branch.
-4. Your commits are the Luke GitHub App's: the checkout's git identity is already set to its bot, so never change \`user.name\` or \`user.email\`, pass \`--author\`, add a \`Co-authored-by\` trailer, or rewrite who a commit is by.
+4. ${authorshipRule(coAuthor)}
 5. Make the smallest coherent change that ${words.whole}. Follow the repository's own conventions over any habit of yours.
 6. Run the repository's checks as its own files describe them, and fix what they find before you consider publishing.
-7. Decide whether to open a pull request, and whether as a draft: open one when the work is complete and the checks pass; open a draft when the work is worth a reviewer's eyes but something is unresolved, and say what; open none when ${words.none}, and say why. Push the branch before you open a pull request, and ${words.describe}.
+7. Decide whether to open a pull request, and whether as a draft: open one when the work is complete and the checks pass; open a draft when the work is worth a reviewer's eyes but something is unresolved, and say what; open none when ${words.none}, and say why. Push the branch before you open a pull request, and ${words.describe}; end the description with the line \`${PULL_REQUEST_FOOTER}\`.
 8. ${ciReadable ? CHECKS_WORDS.readable : CHECKS_WORDS.unreadable}
 
 For work of more than a couple of steps, keep your to-dos with \`${TODOS_TOOL.name}\`, which the developer watches: write the list before you start, keep exactly one item in progress, and write it again as each item finishes.

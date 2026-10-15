@@ -166,3 +166,18 @@ test("the session and the post tool are told never to ask for a credential or a 
     INBOX_TOOLS.POST.description.includes("never ask for a credential or a secret in a form"),
   );
 });
+
+test("an agent writing as its developer is told to end every commit on the trailer naming Luke as co-author, one writing as the App is told never to add one, and both end a pull request on Luke's line", () => {
+  const TRAILER = "Co-authored-by: luke[bot] <90001+luke[bot]@users.noreply.github.com>";
+  for (const brief of Object.values(CODING_AGENT_BRIEF)) {
+    const developer = coderInstructions("Acme/Relay", brief, true, true, TRAILER);
+    const app = coderInstructions("Acme/Relay", brief, true);
+    assert.ok(developer.includes(`exactly as written: \`${TRAILER}\``), brief);
+    assert.ok(!developer.includes("add a `Co-authored-by` trailer"), brief);
+    assert.ok(app.includes("add a `Co-authored-by` trailer"), brief);
+    assert.ok(!app.includes(TRAILER), brief);
+    for (const instructions of [developer, app]) {
+      assert.ok(instructions.includes("`Made with [Luke](https://tryluke.dev)`"), brief);
+    }
+  }
+});

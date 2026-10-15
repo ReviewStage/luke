@@ -13,7 +13,7 @@ import { sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
 import { CODING_AGENT_BRIEF, CONTEXT_WINDOW } from "@luke/features/coding-agent-wire";
 import { INBOX_TOOL } from "@luke/features/inbox-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
-import { Effect, Option, type Redacted, Result, type Schema } from "effect";
+import { Effect, Option, Result, type Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionContext } from "eve/context";
@@ -45,6 +45,7 @@ import {
 } from "../brain-host/conversation.js";
 import type { SessionPromptRecord } from "../brain-host/host.js";
 import { type RelayStanding, type RelayStateStore, StreamRelay } from "../brain-host/relay.js";
+import { setGitHubCredentials } from "../github-credentials.js";
 import {
   type ReadWebPageResult,
   ResearchBudget,
@@ -57,7 +58,8 @@ import { anthropicFastAccess } from "./account-keys.js";
 import { CODER, CODER_MODEL_FIXTURE, CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
 import {
   agentCiReadable,
-  agentRepositoryToken,
+  agentCoAuthor,
+  agentGitHubCredentials,
   CheckoutRefused,
   type CheckoutServices,
   checkOutAgentRepository,
@@ -123,21 +125,25 @@ type HostEffect<A> = Effect.Effect<A, QueryError | Schema.SchemaError, DatabaseS
 /** How a checkout or a mint fails: the checkout's refusal, which the host's own refusal of a conversation that is no agent's is carried as, or the store's. */
 export type CheckoutFailure = CheckoutRefused | QueryError | Schema.SchemaError;
 
-/** The prompt a session runs under and the content address its turns are recorded under, with the one fact of the repository it was composed on. */
+/** The prompt a session runs under and the content address its turns are recorded under, with the facts of the repository it was composed on. */
 interface CoderSessionPrompt {
   readonly text: string;
   readonly hash: string;
   readonly ciReadable: boolean;
+  /** The co-author trailer the prompt handed, where the agent writes as its developer. */
+  readonly coAuthor: string | undefined;
 }
 
 /**
  * What the coder project keeps of the session's prompt, beside the content
  * address the planning brain keeps (`brain-host/host.ts`): whether the
- * prompt said the repository's CI is readable, which is what composes the
- * same text again for a step's estimate of it.
+ * prompt said the repository's CI is readable, and the co-author trailer it
+ * handed where it handed one, which are what compose the same text again
+ * for a step's estimate of it.
  */
 export interface CoderSessionPromptRecord extends SessionPromptRecord {
   readonly ciReadable?: boolean;
+  readonly coAuthor?: string;
 }
 
 /** The model a step runs on under the scripted fixture: whatever the authored file hands in, under the fixture's own id. */
@@ -190,7 +196,7 @@ export interface CoderHost extends HostAdmission {
     QueryError | Schema.SchemaError,
     DatabaseServices | ModelCatalog
   >;
-  /** The instructions the session runs under, with the hash its turns are recorded under, composed on whether the agent's token reads the repository's CI; the text itself is stored nowhere. */
+  /** The instructions the session runs under, with the hash its turns are recorded under, composed on whether the agent's token reads the repository's CI and whose its commits are; the text itself is stored nowhere. */
   prompt(
     admitted: AdmittedConversation,
     agent: CodingAgent,
@@ -200,15 +206,16 @@ export interface CoderHost extends HostAdmission {
     admitted: AdmittedConversation,
     agent: CodingAgent,
   ): Effect.Effect<readonly AgentSkill[], never, CheckoutServices>;
-  /** The agent's repository checked out into the sandbox; answers the write token for the caller to set at the firewall. */
+  /** The agent's repository checked out into the sandbox, with its GitHub credentials set at the sandbox's firewall. */
   checkOut(
     admitted: AdmittedConversation,
     sandbox: RepositorySandbox,
-  ): Effect.Effect<Redacted.Redacted, CheckoutFailure, CheckoutServices>;
-  /** A fresh write token for the agent's repository, for the firewall once the standing one is old. */
-  repositoryToken(
+  ): Effect.Effect<void, CheckoutFailure, CheckoutServices>;
+  /** The agent's GitHub credentials minted afresh and set at the sandbox's firewall, in place of the standing ones once they are old. */
+  renewCredentials(
     admitted: AdmittedConversation,
-  ): Effect.Effect<Redacted.Redacted, CheckoutFailure, CheckoutServices>;
+    sandbox: RepositorySandbox,
+  ): Effect.Effect<void, CheckoutFailure, CheckoutServices>;
   /**
    * The branch checked out in the sandbox as the turn ended, written on the
    * agent's row for its pull request to be read from; null where the
@@ -374,11 +381,21 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
       );
     });
 
-  /** The instructions the agent's session runs under, composed on what its row names and whether its token reads the repository's CI. */
-  const promptOf = (agent: CodingAgent, ciReadable: boolean): CoderSessionPrompt => {
+  /** The instructions the agent's session runs under, composed on what its row names, whether its token reads the repository's CI, and the co-author trailer where it writes as its developer. */
+  const promptOf = (
+    agent: CodingAgent,
+    ciReadable: boolean,
+    coAuthor: string | undefined,
+  ): CoderSessionPrompt => {
     const brief = agent.prompt === null ? CODING_AGENT_BRIEF.PLAN : CODING_AGENT_BRIEF.PROMPT;
-    const text = coderInstructions(agent.repository, brief, ciReadable, agent.planId !== null);
-    return { text, hash: promptHashOf(text), ciReadable };
+    const text = coderInstructions(
+      agent.repository,
+      brief,
+      ciReadable,
+      agent.planId !== null,
+      coAuthor,
+    );
+    return { text, hash: promptHashOf(text), ciReadable, coAuthor };
   };
 
   /**
@@ -400,7 +417,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
           const step = agentStepOf(
             event.data.usage,
             {
-              instructions: promptOf(agent, prompt.ciReadable ?? false).text,
+              instructions: promptOf(agent, prompt.ciReadable ?? false, prompt.coAuthor).text,
               brief: agent.prompt ?? agent.planSnapshot ?? "",
             },
             seams.now(),
@@ -500,8 +517,12 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
       }),
 
     prompt: (admitted, agent) =>
-      Effect.map(agentCiReadable(admitted.target, agent), (ciReadable) =>
-        promptOf(agent, ciReadable),
+      Effect.map(
+        Effect.all([
+          agentCiReadable(admitted.target, agent),
+          agentCoAuthor(admitted.target, agent),
+        ]),
+        ([ciReadable, coAuthor]) => promptOf(agent, ciReadable, coAuthor),
       ),
 
     skills: (admitted, agent) => agentSkills(admitted.target, agent),
@@ -511,10 +532,14 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         checkOutAgentRepository(admitted.target, agent, sandbox),
       ),
 
-    repositoryToken: (admitted) =>
-      Effect.flatMap(agentOrRefused(admitted), (agent) =>
-        Effect.map(agentRepositoryToken(admitted.target, agent), (minted) => minted.token),
-      ),
+    renewCredentials: (admitted, sandbox) =>
+      Effect.gen(function* () {
+        const agent = yield* agentOrRefused(admitted);
+        const credentials = yield* agentGitHubCredentials(admitted.target, agent);
+        yield* setGitHubCredentials(sandbox, credentials).pipe(
+          Effect.mapError((refused) => new CheckoutRefused({ reason: refused.reason })),
+        );
+      }),
 
     recordBranch: (admitted, sandbox) =>
       Effect.gen(function* () {

@@ -46,7 +46,6 @@ import {
   Fiber,
   Option,
   Queue,
-  type Redacted,
   Ref,
   Result,
   Schedule,
@@ -55,6 +54,7 @@ import {
   Stream,
 } from "effect";
 import { CODER } from "../agents/coder-host/bounds.js";
+import type { AgentGitHubCredentials } from "../agents/github-credentials.js";
 import type { AgentSandboxService } from "../agents/terminal/agent-sandbox.js";
 import { attachTerminal, TMUX } from "../agents/terminal/tmux.js";
 import type { InteractiveShell, SandboxUnavailable } from "../agents/vercel-sandbox-api.js";
@@ -99,8 +99,8 @@ export interface RelayAsk {
 export interface RelayAgent {
   readonly conversationId: string;
   readonly sessionId: string | undefined;
-  /** A fresh GitHub token for the agent's repository, minted under the deployment's GitHub App. */
-  readonly repositoryToken: Effect.Effect<Redacted.Redacted, unknown>;
+  /** The agent's GitHub credentials minted afresh: the App's token for its repository, and the one its API calls go out on. */
+  readonly credentials: Effect.Effect<AgentGitHubCredentials, unknown>;
 }
 
 /** What the relay stands on: the deployment's in production, a script's in a test. */
@@ -180,8 +180,8 @@ function renewCredential(
       renewedBefore,
     );
     if (!claimed) return;
-    yield* Effect.flatMap(agent.repositoryToken, (token) =>
-      deps.sandbox.setGitHubToken(sandboxSessionId, token),
+    yield* Effect.flatMap(agent.credentials, (credentials) =>
+      deps.sandbox.setGitHubCredentials(sandboxSessionId, credentials),
     ).pipe(
       // Note that a connection closing mid-renewal interrupts it, and the claim goes back then too.
       Effect.onError(() => deps.releaseRenewal(agent.conversationId, sandboxSessionId, at)),

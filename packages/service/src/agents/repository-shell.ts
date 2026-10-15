@@ -184,7 +184,7 @@ const CHECKOUT_SCRIPT = [
 
 /**
  * The commit identity set in the checkout's own config, so the agent's
- * commits are the Luke GitHub App's wherever git reads them.
+ * commits are by whoever the checkout names wherever git reads them.
  */
 const IDENTITY_SCRIPT = [
   "set -e",
@@ -392,8 +392,9 @@ export interface CheckoutIdentity {
 
 /**
  * The commit identity set in the standing checkout's own config, never the
- * sandbox's global one. What a coding agent commits is then the Luke GitHub
- * App's on GitHub, and the agent's instructions tell it to leave it alone.
+ * sandbox's global one: the developer's GitHub account or the Luke GitHub
+ * App's bot, as the coding agent's checkout settled it (`coder-host/checkout.ts`),
+ * and the agent's instructions tell it to leave it alone.
  */
 export const setCheckoutIdentity = /* @__PURE__ */ Effect.fn("web/setCheckoutIdentity")(function* (
   sandbox: RepositorySandbox,

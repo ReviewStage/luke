@@ -111,18 +111,21 @@ function world(options: {
             }
           : { state };
       }),
-    setGitHubToken: (sandboxSessionId) =>
+    setGitHubCredentials: (sandboxSessionId) =>
       Effect.sync(() => void asked.policies.push(sandboxSessionId)),
   };
   const agent: RelayAgent = {
     conversationId: CONVERSATION,
     sessionId: "wrun_1",
-    repositoryToken: Effect.suspend(() => {
+    credentials: Effect.suspend(() => {
       asked.tokens += 1;
       const answer =
         asked.tokens <= (options.tokensRefused ?? 0)
           ? Effect.fail("GitHub refused the mint")
-          : Effect.succeed(Redacted.make("ghs_fixture"));
+          : Effect.succeed({
+              git: Redacted.make("ghs_fixture"),
+              api: Redacted.make("ghu_fixture"),
+            });
       return options.tokensWait === undefined
         ? answer
         : Effect.andThen(Deferred.await(options.tokensWait), answer);
@@ -171,7 +174,7 @@ it.effect(
         agent: Option.some({
           conversationId: CONVERSATION,
           sessionId: undefined,
-          repositoryToken: Effect.die("no token"),
+          credentials: Effect.die("no token"),
         }),
         pty,
       });

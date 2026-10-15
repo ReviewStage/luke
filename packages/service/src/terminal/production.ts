@@ -20,7 +20,7 @@ import {
 import { Duration, Effect, Option, Redacted, Schedule } from "effect";
 import { HttpClient } from "effect/http";
 import { WebSocket } from "ws";
-import { agentRepositoryToken } from "../agents/coder-host/checkout.js";
+import { agentGitHubCredentials } from "../agents/coder-host/checkout.js";
 import { AgentSandbox, agentSandboxLayer } from "../agents/terminal/agent-sandbox.js";
 import { type InteractiveShell, SandboxUnavailable } from "../agents/vercel-sandbox-api.js";
 import type { GitHubApp } from "../github/github-app.js";
@@ -99,9 +99,7 @@ export const relayDependencies: Effect.Effect<RelayDependencies, never, RelaySer
             return Option.some({
               conversationId: agent.conversationId,
               sessionId: session?.sessionId,
-              repositoryToken: run(
-                Effect.map(agentRepositoryToken(target, agent), (minted) => minted.token),
-              ),
+              credentials: run(agentGitHubCredentials(target, agent)),
             });
           }),
         ),
