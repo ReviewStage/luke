@@ -16,7 +16,7 @@ import {
 import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SECTION } from "@luke/settings/settings-views";
 import { ProviderMark, TrashIcon } from "@luke/ui";
-import { memberActor, ROLE_WORDS } from "@luke/ui/actor-model";
+import { ACTOR_KIND, memberActor, ROLE_WORDS, SOMEONE_REASON } from "@luke/ui/actor-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { ExternalLinkIcon, UserMinusIcon, XIcon } from "lucide-react";
 import { Fragment, useEffect, useRef, useState } from "react";
@@ -26,6 +26,7 @@ import { useCopyToast } from "../copy-feedback";
 import { type NameEdit, PlanNameField } from "../desktop/plan-name-field";
 import { TILE_SIZE, WorkspaceTile } from "../desktop/workspace-tile";
 import { encodeImage } from "../feedback-images";
+import { dayAndTimeText } from "../planning/plan-time";
 import { Segmented } from "../segmented";
 import { SpinnerRegion } from "../spinner";
 import { ConfirmDialog, useConfirmDialog } from "./confirm-dialog";
@@ -82,6 +83,15 @@ const ACCEPTED: ActionResult = { status: ACTION_RESULT_STATUS.ACCEPTED };
 /** The roles an invitation offers, in the order the form's segments draw them, the default first. */
 const INVITATION_ROLES = [INVITATION_ROLE.MEMBER, INVITATION_ROLE.ADMIN] as const;
 
+/** What a list's line says where its read did not land, in `read-failure.tsx`'s words. */
+const READ_FAILED = {
+  MEMBERS: "The members could not be read.",
+  INVITATIONS: "The invitations could not be read.",
+} as const;
+
+/** The outline face an invited address wears until it is a member, so its words stand in the members' column. */
+const INVITED_ACTOR = { kind: ACTOR_KIND.SOMEONE, reason: SOMEONE_REASON.UNNAMED } as const;
+
 /** What the connected GitHub account's line says once the App's installation was suspended or removed. */
 const GITHUB_SUSPENDED = "Suspended or removed on GitHub.";
 
@@ -125,7 +135,7 @@ function RowCopy({ name, line }: { name: string; line?: React.ReactNode }): Reac
   );
 }
 
-/** One member's row: their face, name, email and role, You on the reader's own, and for an owner or admin, Remove in its ⋯, which asks first. */
+/** One member's row: their face, name, email and role, You on the reader's own, and for an owner or admin, Remove in its ⋯ on anyone's but an owner's and their own, which asks first. */
 function MemberRow({
   workspaceId,
   member,
@@ -165,7 +175,8 @@ function MemberRow({
       <MenuRow label={`${member.name} actions`} actions={actions}>
         <ActorMark actor={memberActor(member, readerId)} size={ACTOR_SIZE.CARD} />
         <span className="settings-copy">
-          <strong className="member-name">
+          {/* The person card's own wrapper, so You stands off the name as it does on the card. */}
+          <strong className="actor-card-name">
             {member.name}
             {member.userId === readerId ? <YouBadge /> : null}
           </strong>
@@ -245,8 +256,8 @@ function TeamMembers({
       (items) => {
         if (live) setRead({ items });
       },
-      (refused: Error) => {
-        if (live) setRead({ failed: refused.message });
+      () => {
+        if (live) setRead({ failed: READ_FAILED.MEMBERS });
       },
     );
     return () => {
@@ -268,7 +279,10 @@ function TeamMembers({
             workspaceId={workspaceId}
             member={member}
             readerId={readerId}
-            removable={manages && member.role !== WORKSPACE_ROLE.OWNER}
+            // Note that the reader's own row offers no Remove, because the way out of a workspace is Leave.
+            removable={
+              manages && member.role !== WORKSPACE_ROLE.OWNER && member.userId !== readerId
+            }
             onRemoved={(items) => setRead({ items })}
           />
         ))
@@ -283,7 +297,8 @@ function TeamMembers({
 /**
  * The workspace's invitations, for an owner or an admin: the form that
  * invites an address as a member or an admin, then those still pending,
- * each with its link to copy and Cancel invitation in its ⋯, which asks
+ * each under the outline face a person not yet in wears, saying as what and
+ * until when, with its link to copy and Cancel invitation in its ⋯, which asks
  * nothing first since inviting the address again undoes it. A refusal is
  * said under the form.
  */
@@ -320,7 +335,7 @@ function Invitations({ workspaceId }: { workspaceId: string }): React.JSX.Elemen
         if (asked !== latest.current) return;
         // A list never read is not an empty one: it says so with Retry in its place.
         if (pendingRead.current) setNote(refused.message);
-        else setFirstReadFailed(refused.message);
+        else setFirstReadFailed(READ_FAILED.INVITATIONS);
       },
     );
   };
@@ -424,7 +439,11 @@ function Invitations({ workspaceId }: { workspaceId: string }): React.JSX.Elemen
             },
           ]}
         >
-          <RowCopy name={one.email} line={`Invited · ${ROLE_WORDS[one.role]}`} />
+          <ActorMark actor={INVITED_ACTOR} size={ACTOR_SIZE.CARD} />
+          <RowCopy
+            name={one.email}
+            line={`Invited as ${ROLE_WORDS[one.role]} · Expires ${dayAndTimeText(Date.parse(one.expiresAt))}`}
+          />
           {/* Luke sends no mail: the accept link is copied and sent by hand. */}
           <button
             type="button"
