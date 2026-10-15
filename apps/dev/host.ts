@@ -13,7 +13,11 @@ import {
   type CoderHostSeams,
   productionCoderHostSeams,
 } from "@luke/service/agents/coder-host/production";
-import type { CODER_TOOL } from "@luke/service/agents/coder-host/tool-set";
+import {
+  type CODER_TOOL,
+  type PlanTool,
+  planToolsOf,
+} from "@luke/service/agents/coder-host/tool-set";
 import {
   MAC_COMMAND_STATUS,
   type MacCommandAnswer,
@@ -141,6 +145,26 @@ export function relayChildEvent(
   state: Parameters<CoderHost["relayChild"]>[2],
 ): Promise<void> {
   return edge.relayChildEvent(event, session, state);
+}
+
+/**
+ * The plan's tools the session is offered for the turn it opens, for those
+ * tools' own files (`planToolsOf`): none for a session the host does not
+ * admit or whose conversation is no agent's.
+ */
+export function offeredPlanTools(
+  auth: SessionAuth,
+  sessionId: string,
+): Promise<ReadonlySet<PlanTool>> {
+  return runAgent(
+    Effect.gen(function* () {
+      const admitted = yield* host.admit(auth, sessionId);
+      if (Result.isFailure(admitted)) return new Set<PlanTool>();
+      const agent = yield* host.agent(admitted.success);
+      if (Result.isFailure(agent)) return new Set<PlanTool>();
+      return planToolsOf(agent.success);
+    }),
+  );
 }
 
 /** One `edit_plan` call's notes taken into the agent's plan, for the tool, which runs here rather than at an edge of its own. */
