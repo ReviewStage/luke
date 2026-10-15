@@ -411,3 +411,21 @@ test("More offers a member's email to copy and, to an owner, the workspace's mem
     { page: SETTINGS_VIEW.WORKSPACE, workspaceId: ACME.id, section: SETTINGS_SECTION.MEMBERS },
   ]);
 });
+
+test("Their tasks in sidebar turns the sidebar back from its archived tasks to the tasks it lists", async () => {
+  window.sessionStorage.setItem("luke.sidebarArchivedIn", ACME.id);
+  const { page } = mount(CHARLES.userId);
+  await settle();
+
+  button(page, "Their tasks in sidebar").click();
+
+  assert.equal(window.sessionStorage.getItem("luke.sidebarArchivedIn"), null);
+  assert.equal(keptViews()[ACME.id]?.createdBy, CHARLES.userId);
+});
+
+test("someone who left offers no More: no email to copy, and no row in Settings to manage", async () => {
+  const { page } = mount(PRIYA.userId);
+  await settle();
+
+  assert.equal(page.querySelector('button[aria-label="More"]'), null);
+});

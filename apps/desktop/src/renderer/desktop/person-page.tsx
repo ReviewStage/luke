@@ -35,7 +35,7 @@ import { SPINNER_SIZE, Spinner } from "../spinner";
 import { Tooltip } from "../tooltip";
 import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
 import { RecentRow, useWaitingItems } from "./desktop-home";
-import { useTaskListView } from "./task-list-view";
+import { useArchivedView, useTaskListView } from "./task-list-view";
 
 /**
  * person-page.tsx -- one person's page in the listed workspace: who they are there, and what of theirs the window already holds.
@@ -157,7 +157,9 @@ function PersonActions({
   const member = person.kind === ACTOR_KIND.PERSON ? person : undefined;
   const you = member?.you === true;
   const { workspace } = plans;
+  // Only a member the members read lists has a row there to manage; someone who left has none.
   const manages =
+    member?.role !== undefined &&
     workspace !== undefined &&
     (workspace.role === WORKSPACE_ROLE.OWNER || workspace.role === WORKSPACE_ROLE.ADMIN);
   const email = member?.email;
@@ -263,9 +265,14 @@ function PersonColumn({
   const person = personActor(ref, members, readerId);
   // The sidebar's own view, so their tasks are listed there as its Created by lists them.
   const taskView = useTaskListView(plans.workspace?.id, staged);
+  const archive = useArchivedView(plans.workspace?.id, staged);
   const memberCount = plans.workspace?.memberCount;
   const shared = memberCount === undefined ? (members?.length ?? 0) > 1 : memberCount > 1;
-  const showTasks = () => taskView.onCreatedBy(userId);
+  // Note that the list is turned back from the archived tasks, because the page lists their open ones.
+  const showTasks = () => {
+    archive.onShown(false);
+    taskView.onCreatedBy(userId);
+  };
   const page = personPage(userId, listed);
   const you = userId === plans.me;
   const read = useWaitingItems(plans);

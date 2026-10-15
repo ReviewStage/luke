@@ -117,6 +117,16 @@ function writeArchivedIn(workspaceId: string | undefined): void {
 }
 
 /**
+ * The workspace the window turned the list to the archived tasks of since it
+ * opened, none until it first turned or turned back, the held one standing
+ * until then. One for the window, so a person's page that lists their tasks
+ * in the sidebar turns it back to the tasks it lists.
+ */
+const archivedInAtom = Atom.keepAlive(
+  Atom.make<{ readonly held: string | undefined } | undefined>(undefined),
+);
+
+/**
  * Whether the listed workspace's list stands turned to its archived tasks,
  * and the press that turns it. It is held in the window's session storage,
  * so Settings or a version history, which the sidebar steps aside for, find
@@ -124,10 +134,12 @@ function writeArchivedIn(workspaceId: string | undefined): void {
  * the tasks. A fixture run holds nothing.
  */
 export function useArchivedView(workspaceId: string | undefined, staged: boolean): ArchivedView {
-  const [held, setHeld] = useState(() => (staged ? undefined : readArchivedIn()));
+  const [stored] = useState(() => (staged ? undefined : readArchivedIn()));
+  const [chosen, setChosen] = useAtom(archivedInAtom);
+  const held = chosen === undefined ? stored : chosen.held;
   const hold = (next: string | undefined) => {
     if (!staged) writeArchivedIn(next);
-    setHeld(next);
+    setChosen({ held: next });
   };
   // Note that the view is let go of as the workspace changes, rather than
   // only hidden, so coming back to the workspace opens on its tasks.
