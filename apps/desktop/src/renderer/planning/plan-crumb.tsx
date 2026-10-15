@@ -31,13 +31,17 @@ import { Tooltip } from "../tooltip";
 /** How many faces the crumb's end draws before the count says the rest. */
 const FACES_DRAWN = 4;
 
-/** A workspace's members as the crumb holds them: read, or not (yet). */
-function useWorkspaceMembers(workspaceId: string): readonly WorkspaceMember[] | undefined {
+/** A workspace's members as the crumb holds them, read again whenever the workspace's own count changes, as a member joining or leaving changes it; none while unread or refused. */
+function useWorkspaceMembers(
+  workspaceId: string,
+  memberCount: number | undefined,
+): readonly WorkspaceMember[] | undefined {
   const { act } = useAct();
   const [read, setRead] = useState<{
     workspaceId: string;
     members: readonly WorkspaceMember[];
   }>();
+  // A changed count reads the members again by standing among the effect's dependencies.
   useEffect(() => {
     let live = true;
     act(ACT_KIND.WORKSPACE_MEMBERS_READ, { workspaceId }).then(
@@ -50,25 +54,34 @@ function useWorkspaceMembers(workspaceId: string): readonly WorkspaceMember[] | 
     return () => {
       live = false;
     };
-  }, [act, workspaceId]);
+  }, [act, workspaceId, memberCount]);
   return read?.workspaceId === workspaceId ? read.members : undefined;
 }
 
-/** Who can edit, as the crumb's end and its card say it: the members counted, else the workspace's own count. */
-function editorsOf(workspace: Workspace, members: readonly WorkspaceMember[] | undefined): number {
-  return members?.length ?? workspace.memberCount ?? 1;
+/** How many can edit: the workspace's own count, the newer word, else the members read; none where neither is known. */
+function editorsOf(
+  workspace: Workspace,
+  members: readonly WorkspaceMember[] | undefined,
+): number | undefined {
+  return workspace.memberCount ?? members?.length;
 }
 
 /** The card hung from the crumb's end: everyone who can edit, by name and role. */
 function PeopleCard({
   workspace,
   members,
+  count,
+  archived,
 }: {
   workspace: Workspace;
   members: readonly WorkspaceMember[] | undefined;
+  count: number;
+  archived: boolean;
 }): React.JSX.Element {
-  const count = editorsOf(workspace, members);
   const only = count <= 1;
+  const note = archived
+    ? "Each can read this plan, and edit it once it is unarchived."
+    : "Each can read and edit this plan, join its calls, and message its agents.";
   return (
     <HoverCard data-people-card="">
       <CardHead
@@ -77,9 +90,7 @@ function PeopleCard({
         sub={only ? `${workspace.name} has no other members` : `${count} members`}
       />
       <CardNote>
-        {only
-          ? "Invite someone to this workspace and they can read and edit its plans."
-          : "Each can read and edit this plan, join its calls, and message its agents."}
+        {only ? "Invite someone to this workspace and they can read and edit its plans." : note}
       </CardNote>
       {only || members === undefined ? null : (
         <>
@@ -99,19 +110,70 @@ function PeopleCard({
   );
 }
 
-/** The crumb over a plan's title: its workspace, its repository, and who can edit it. */
+/** The crumb's end: who can edit, its card on rest and the workspace's members on a press. */
+function People({
+  workspace,
+  members,
+  count,
+  archived,
+  onOpen,
+}: {
+  workspace: Workspace;
+  members: readonly WorkspaceMember[] | undefined;
+  count: number;
+  archived: boolean;
+  onOpen: () => void;
+}): React.JSX.Element {
+  const only = count <= 1;
+  return (
+    <Tooltip
+      label={only ? "Only you" : `Everyone in ${workspace.name}`}
+      card={
+        <PeopleCard workspace={workspace} members={members} count={count} archived={archived} />
+      }
+    >
+      <button type="button" className="plan-crumb-people" onClick={onOpen}>
+        {only ? (
+          <>
+            <LockIcon aria-hidden="true" />
+            Only you
+          </>
+        ) : (
+          <>
+            {members === undefined ? null : (
+              <span className="plan-crumb-faces" aria-hidden="true">
+                {members.slice(0, FACES_DRAWN).map((member) => (
+                  <PersonAvatar key={member.userId} name={member.name} pictureUrl={undefined} />
+                ))}
+              </span>
+            )}
+            {archived ? `${count} members` : `${count} can edit`}
+          </>
+        )}
+      </button>
+    </Tooltip>
+  );
+}
+
+/**
+ * The crumb over a plan's title: its workspace, its repository, and who can
+ * edit it, which an archived plan says as who is in the workspace, since
+ * nobody edits it until it is unarchived, and which stands nowhere while
+ * neither the workspace's count nor its members are known.
+ */
 export function PlanCrumb({
   workspace,
   repository,
+  archived,
 }: {
   workspace: Workspace;
   /** The repository the plan is about, `owner/name`, or none. */
   repository: string | null;
+  archived: boolean;
 }): React.JSX.Element {
   const openSettings = useOpenSettings();
-  const members = useWorkspaceMembers(workspace.id);
+  const members = useWorkspaceMembers(workspace.id, workspace.memberCount);
   const count = editorsOf(workspace, members);
-  const only = count <= 1;
   const page = { page: SETTINGS_VIEW.WORKSPACE, workspaceId: workspace.id };
   return (
     <nav className="plan-crumb" aria-label="Where this plan is">
@@ -125,34 +187,15 @@ export function PlanCrumb({
           <span className="plan-crumb-item">{repository.split("/").at(-1)}</span>
         </>
       )}
-      <Tooltip
-        label={only ? "Only you" : `Everyone in ${workspace.name}`}
-        card={<PeopleCard workspace={workspace} members={members} />}
-      >
-        <button
-          type="button"
-          className="plan-crumb-people"
-          onClick={() => openSettings({ ...page, section: SETTINGS_SECTION.MEMBERS })}
-        >
-          {only ? (
-            <>
-              <LockIcon aria-hidden="true" />
-              Only you
-            </>
-          ) : (
-            <>
-              {members === undefined ? null : (
-                <span className="plan-crumb-faces" aria-hidden="true">
-                  {members.slice(0, FACES_DRAWN).map((member) => (
-                    <PersonAvatar key={member.userId} name={member.name} pictureUrl={undefined} />
-                  ))}
-                </span>
-              )}
-              {`${count} can edit`}
-            </>
-          )}
-        </button>
-      </Tooltip>
+      {count === undefined ? null : (
+        <People
+          workspace={workspace}
+          members={members}
+          count={count}
+          archived={archived}
+          onOpen={() => openSettings({ ...page, section: SETTINGS_SECTION.MEMBERS })}
+        />
+      )}
     </nav>
   );
 }

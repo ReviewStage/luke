@@ -578,7 +578,11 @@ function PlanDocument({
                   sectionLinks={sectionLinksOf(plan.id, workspace)}
                   crumb={
                     home === undefined ? undefined : (
-                      <PlanCrumb workspace={home} repository={plan.repository} />
+                      <PlanCrumb
+                        workspace={home}
+                        repository={plan.repository}
+                        archived={archived}
+                      />
                     )
                   }
                 />

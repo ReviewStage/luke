@@ -56,44 +56,57 @@ async function settle(): Promise<void> {
   });
 }
 
-/** The crumb drawn over a service answering the members read with `members`, or refusing it; every Settings link it opened. */
+/** The service's answer to the members read: the members it holds, or a refusal. */
+let held: readonly WorkspaceMember[] | undefined;
+
+/**
+ * The crumb drawn over a service answering the members read with `members`,
+ * or refusing it; every Settings link it opened, and a way to draw it again
+ * over the workspace as a later read of the workspaces answers it.
+ */
 async function crumb(
   workspace: Workspace,
   repository: string | null,
   members: readonly WorkspaceMember[] | undefined,
-): Promise<{ nav: HTMLElement; links: SettingsLink[] }> {
+  archived = false,
+) {
   const links: SettingsLink[] = [];
+  held = members;
   Object.defineProperty(window, "luke", {
     configurable: true,
     value: {
       recordSurfaceEvent: () => undefined,
       act: (request: Act): Promise<ActOutcome> =>
         Promise.resolve(
-          request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ && members !== undefined
-            ? { status: ACT_OUTCOME_STATUS.DONE, value: members }
+          request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ && held !== undefined
+            ? { status: ACT_OUTCOME_STATUS.DONE, value: held }
             : { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Could not read." },
         ),
     },
   });
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
-  act(() =>
-    root?.render(
-      onRegistry(
-        AtomRegistry.make(),
-        createElement(
-          OpenSettingsProvider,
-          { value: (link: SettingsLink) => links.push(link) },
-          createElement(PlanCrumb, { workspace, repository }),
+  const registry = AtomRegistry.make();
+  const draw = async (shown: Workspace) => {
+    act(() =>
+      root?.render(
+        onRegistry(
+          registry,
+          createElement(
+            OpenSettingsProvider,
+            { value: (link: SettingsLink) => links.push(link) },
+            createElement(PlanCrumb, { workspace: shown, repository, archived }),
+          ),
         ),
       ),
-    ),
-  );
-  await settle();
-  const nav =
+    );
+    await settle();
+  };
+  await draw(workspace);
+  const nav = () =>
     container.querySelector<HTMLElement>('nav[aria-label="Where this plan is"]') ??
     assert.fail("the crumb stands");
-  return { nav, links };
+  return { nav: nav(), links, redraw: draw, current: nav };
 }
 
 /** The crumb's presses by their words. */
@@ -134,4 +147,25 @@ test("the workspace opens its Settings page, and who can edit opens its members"
     { page: SETTINGS_VIEW.WORKSPACE, workspaceId: ACME.id },
     { page: SETTINGS_VIEW.WORKSPACE, workspaceId: ACME.id, section: SETTINGS_SECTION.MEMBERS },
   ]);
+});
+
+test("a workspace whose members are counted nowhere and could not be read says nothing of who can edit, rather than only you", async () => {
+  const { nav } = await crumb({ ...ACME, memberCount: undefined }, "acme-corp/relay", undefined);
+
+  assert.equal(nav.textContent, "AAcmerelay");
+});
+
+test("an archived plan counts the workspace's members rather than who can edit it, until it is unarchived", async () => {
+  const { nav } = await crumb(ACME, "acme-corp/relay", MEMBERS, true);
+
+  assert.match(nav.textContent ?? "", /3 members$/u);
+});
+
+test("a member leaving, as the workspace's count says, reads the members again, so a former member's face goes", async () => {
+  const page = await crumb(ACME, "acme-corp/relay", MEMBERS);
+
+  held = MEMBERS.slice(0, 2);
+  await page.redraw({ ...ACME, memberCount: 2 });
+
+  assert.equal(page.current().textContent, "AAcmerelayDS2 can edit");
 });
