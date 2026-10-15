@@ -1113,7 +1113,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     planningStart: (request) =>
       Effect.map(
         client.call(GATEWAY_METHOD.PLANNING_START, {
-          name: request.name,
+          ...("name" in request ? { name: request.name } : undefined),
           ...("repository" in request ? { repository: request.repository } : undefined),
           ...("workspaceId" in request ? { workspaceId: request.workspaceId } : undefined),
         }),

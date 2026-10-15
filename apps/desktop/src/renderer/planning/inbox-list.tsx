@@ -132,7 +132,7 @@ function itemSubject(
  * leaving the press to its row; a bare tile of no known harness where the
  * holder names no such agent.
  */
-function ItemMark({
+export function ItemMark({
   holder,
   agentId,
   models,

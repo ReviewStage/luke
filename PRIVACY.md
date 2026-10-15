@@ -200,6 +200,17 @@ except that the prompt an agent is started on keeps an image or PDF by name
 alone. They go when the transcript does; the sandbox's snapshot and the
 agent's session history keep them on the terms under "Who we send it to".
 
+**Pictures in a tool's answer.** When a tool answers Luke or a coding agent
+with a picture, as a connected service can answer a screenshot or an image
+attached to an issue, the model that made the call sees it, and our service
+keeps the picture once, a PNG, JPEG, or WebP of up to 4 MB, in our database
+beside the task's conversation or the agent's transcript the call is written
+to, which names the picture by an id rather than carrying it; a conversation
+or transcript keeps up to 200 MB of pictures. A larger picture, one past
+that, or one of another kind is not kept, and the record says only its kind
+and size. Kept pictures are readable by our own operators, like the
+transcript, and go when it does.
+
 **Your own API keys.** If you add an Anthropic or OpenAI API key in Settings,
 your Mac sends it once, over HTTPS, to our service, which keeps it only if the
 provider accepts it when asked for its list of models, a request that costs

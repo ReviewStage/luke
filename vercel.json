@@ -2,11 +2,11 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "services": {
     "web": {
-      "root": ".",
+      "root": "apps/web",
       "framework": "vite",
       "installCommand": "pnpm install --frozen-lockfile --filter @luke/web...",
       "buildCommand": "(pnpm db:migrate && pnpm auth:seed) & db=$!; pnpm build && wait $db",
-      "ignoreCommand": "git diff --quiet HEAD^ HEAD -- :/apps/web :/packages :/pnpm-lock.yaml :/pnpm-workspace.yaml :/package.json :/CHANGELOG.md :/PRIVACY.md",
+      "ignoreCommand": "git diff --quiet HEAD^ HEAD -- :/apps/web :/packages :/pnpm-lock.yaml :/pnpm-workspace.yaml :/package.json :/CHANGELOG.md :/PRIVACY.md :/vercel.json",
       "routes": [
         {
           "src": "/api/auth/(.*)",
@@ -386,19 +386,19 @@
         }
       ]
     },
-    "eve": {
-      "root": "eve",
+    "luke": {
+      "root": "apps/luke",
       "framework": "eve",
-      "installCommand": "cd .. && pnpm install --frozen-lockfile --filter @luke/web... --filter @luke/eve",
+      "installCommand": "pnpm install --frozen-lockfile --filter @luke/luke...",
       "buildCommand": "pnpm exec eve build",
-      "ignoreCommand": "git diff --quiet HEAD^ HEAD -- :/apps/web :/packages :/pnpm-lock.yaml :/pnpm-workspace.yaml :/package.json"
+      "ignoreCommand": "git diff --quiet HEAD^ HEAD -- :/apps/luke :/packages :/pnpm-lock.yaml :/pnpm-workspace.yaml :/package.json :/vercel.json"
     },
-    "coder": {
-      "root": "coder",
+    "dev": {
+      "root": "apps/dev",
       "framework": "eve",
-      "installCommand": "cd .. && pnpm install --frozen-lockfile --filter @luke/web... --filter @luke/coder",
+      "installCommand": "pnpm install --frozen-lockfile --filter @luke/dev...",
       "buildCommand": "export EVE_PUBLIC_ROUTE_PREFIX=/eve/coder && pnpm exec eve build",
-      "ignoreCommand": "git diff --quiet HEAD^ HEAD -- :/apps/web :/packages :/pnpm-lock.yaml :/pnpm-workspace.yaml :/package.json",
+      "ignoreCommand": "git diff --quiet HEAD^ HEAD -- :/apps/dev :/packages :/pnpm-lock.yaml :/pnpm-workspace.yaml :/package.json :/vercel.json",
       "routes": [
         {
           "src": "^/eve/coder/v1/(.*)$",
@@ -423,13 +423,13 @@
     {
       "source": "/eve/coder/v1/(.*)",
       "destination": {
-        "service": "coder"
+        "service": "dev"
       }
     },
     {
       "source": "/eve/v1/(.*)",
       "destination": {
-        "service": "eve"
+        "service": "luke"
       }
     },
     {

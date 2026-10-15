@@ -39,6 +39,7 @@ import {
   planListAnswerSchema,
   planRevisionAnswerSchema,
   planRevisionsAnswerSchema,
+  UNTITLED_PLAN_NAME,
 } from "@luke/features/plan-wire";
 import { planWorkAnswerSchema } from "@luke/features/planning-view";
 import {
@@ -402,6 +403,29 @@ it.layer(getTestDB())("the plan routes", (it) => {
         saved.status === PLAN_SAVE_STATUS.SAVED ? saved.document : undefined,
       );
     }),
+  );
+
+  it.effect(
+    "a start with no name, or a blank one, opens as Untitled; a name past its bound is refused",
+    () =>
+      Effect.gen(function* () {
+        const { owner, ask } = yield* openAccounts();
+        const start = (body: WireBoundaryInput) =>
+          ask(request(PLANS, owner, { method: "POST", body }));
+        const nameOf = (answer: Answer) =>
+          readAnswer(planAnswerSchema, HOSTED_HTTP_STATUS.CREATED, answer).plan.name;
+
+        const unnamed = yield* start({});
+        const blank = yield* start({ name: "   " });
+        const overlong = yield* start({ name: "x".repeat(PLAN_BOUNDS.MAX_NAME_CHARS + 1) });
+
+        assert.equal(nameOf(unnamed), UNTITLED_PLAN_NAME);
+        assert.equal(nameOf(blank), UNTITLED_PLAN_NAME);
+        assert.deepEqual(
+          overlong,
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+      }),
   );
 
   it.effect("a start that names no workspace lands in the account's personal one", () =>

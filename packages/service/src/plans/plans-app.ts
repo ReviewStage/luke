@@ -431,7 +431,11 @@ const collectionEndpoint = /* @__PURE__ */ Effect.fn("web/plansCollectionEndpoin
     started.success.repository,
   );
   const plan = yield* hostedStoreOrUnavailable(
-    createPlan(userId, { organizationId, name: started.success.name, repository }),
+    createPlan(userId, {
+      organizationId,
+      ...(started.success.name === undefined ? undefined : { name: started.success.name }),
+      repository,
+    }),
   );
   return hostedJsonResponse(HOSTED_HTTP_STATUS.CREATED, { plan });
 });

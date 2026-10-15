@@ -49,6 +49,7 @@ const DECLARED_TABLES = [
   "automation_run",
   "coding_agent",
   "coding_agent_delegation",
+  "conversation_attachment",
   "conversations",
   "github_connect_intent",
   "github_install_intent",

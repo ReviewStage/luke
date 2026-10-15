@@ -49,7 +49,7 @@ SSO_HOST=vercel.com
 SSO_PATH=/sso-api
 # The deployed tree is whatever the web project's ignoreCommand diffs, read
 # from the command itself so the two cannot drift apart.
-VERCEL_CONFIG="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/../apps/web/vercel.json"
+VERCEL_CONFIG="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/../vercel.json"
 
 # Twenty minutes by default, on the probe's own observation that a record
 # appears within about 25 s of the push and settles 85–115 s later.

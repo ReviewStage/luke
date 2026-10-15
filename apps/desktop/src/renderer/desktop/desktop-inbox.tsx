@@ -16,7 +16,7 @@ import { AutomationDirectory } from "../automation-directory";
 import { EmptyState } from "../empty-state";
 import { MemberDirectory } from "../member-directory";
 import { INBOX_COLUMNS, useInboxColumns } from "../planning/inbox-columns";
-import { InboxList } from "../planning/inbox-list";
+import { InboxList, ItemMark } from "../planning/inbox-list";
 import {
   anyNeedsYou,
   firstChoice,
@@ -30,6 +30,7 @@ import {
   planHolder,
   planlessGroups,
 } from "../planning/inbox-model";
+import { inboxNext, useInboxPager } from "../planning/inbox-pager";
 import { InboxPane, type InboxPaneDoors } from "../planning/inbox-pane";
 import { useMinute } from "../planning/plan-time";
 import { useCodingAgents } from "../planning/use-coding-agents";
@@ -67,7 +68,8 @@ import { planCardOf } from "./plan-card";
  * and so does any row of the sidebar. Too narrow for the list and the item
  * side by side, it shows one at a time (`inbox-columns.ts`): the chosen
  * item, whose way back, Back's chord, or Escape gives the list, and a press
- * on a row there the item again, before Escape leaves the Inbox. Everything in it that names a
+ * on a row there the item again, before Escape leaves the Inbox. K and J, and the pager where the
+ * item stands alone, step through the list (`inbox-pager.tsx`). Everything in it that names a
  * person, an answer and an agent's starter, reads them against the listed
  * workspace's members (`member-directory.tsx`).
  */
@@ -233,6 +235,24 @@ export function DesktopInbox({ plans }: { plans: PlansControl }): React.JSX.Elem
     holdings.some((holding) => !read.items.has(holding.planId)) ||
     plans.inboxPlanless.some((each) => !planless.items.has(each.agentId));
   const columns = useInboxColumns(chosen?.item.id, true);
+  // A row's press and Next's open their item alike, the keyboard following it.
+  const open = (listed: InboxListed) => {
+    choose(listed);
+    columns.onOpen(listed.item.id);
+  };
+  const pager = useInboxPager(list, chosen?.item.id, choose, {
+    shown: plans.shown,
+    folded: folds.folded,
+  });
+  const next = inboxNext(
+    list,
+    chosen,
+    ({ holder, item }) => (
+      <ItemMark holder={holder} agentId={item.agentId} models={named.models} readerId={plans.me} />
+    ),
+    open,
+    folds.folded,
+  );
   // A choice that asks for its item opens it once, the one column the Inbox shows being the
   // item's; Back from it then stands on the list, the choice taken already.
   const opensItem = asked?.opened === true && chosen?.item.id === asked.itemId;
@@ -272,10 +292,7 @@ export function DesktopInbox({ plans }: { plans: PlansControl }): React.JSX.Elem
                 onRetry={onRetry}
               />
             }
-            onChoose={(listed) => {
-              choose(listed);
-              columns.onOpen(listed.item.id);
-            }}
+            onChoose={open}
           />
           {chosen === undefined ? (
             <section
@@ -294,6 +311,8 @@ export function DesktopInbox({ plans }: { plans: PlansControl }): React.JSX.Elem
               agents={named}
               hidden={columns.shown === INBOX_COLUMNS.LIST}
               onBack={columns.onBack}
+              pager={columns.shown === INBOX_COLUMNS.ITEM ? pager : undefined}
+              next={next}
               doors={paneDoors(plans, chosen.holder, { act, openLink, now, automationsOn })}
             />
           )}

@@ -18,15 +18,17 @@ import { FindScope } from "../find-in-tab";
 import { MemberDirectory } from "../member-directory";
 import { ArchivedBanner } from "../planning/archived-plan";
 import { INBOX_COLUMNS, useInboxColumns } from "../planning/inbox-columns";
-import { InboxList } from "../planning/inbox-list";
+import { InboxList, ItemMark } from "../planning/inbox-list";
 import {
   firstChoice,
   INBOX_GROUPING,
+  type InboxListed,
   inboxList,
   listedItems,
   NEEDS_YOU,
   planHolder,
 } from "../planning/inbox-model";
+import { inboxNext, useInboxPager } from "../planning/inbox-pager";
 import { type InboxCodeDoors, InboxPane } from "../planning/inbox-pane";
 import { PlanBody, type SectionLinks } from "../planning/plan-body";
 import { PlanCrumb } from "../planning/plan-crumb";
@@ -151,6 +153,9 @@ function NewTabChord({ onNewTab }: { onNewTab: () => void }): null {
   return null;
 }
 
+/** The plan's own Inbox lists one plan's items in one run, so nothing in it folds. */
+const NO_FOLDS = () => false;
+
 /**
  * The plan's own Inbox tab: its items newest first in the window's Inbox's
  * list, with neither head nor groups since they are one plan's, and the
@@ -161,7 +166,8 @@ function NewTabChord({ onNewTab }: { onNewTab: () => void }): null {
  * the agent's. Too narrow for both, it shows the chosen item, and the list
  * once its way back is taken, as the window's Inbox does
  * (`inbox-columns.ts`); holding one item, it is that item, with no list to
- * go back to.
+ * go back to. K and J, and the pager where the item stands alone, step
+ * through the list (`inbox-pager.tsx`).
  */
 function PlanInboxTab({
   plans,
@@ -190,6 +196,31 @@ function PlanInboxTab({
   });
   const chosen = listedItems(list).find(({ item }) => item.id === asked) ?? firstChoice(list);
   const columns = useInboxColumns(chosen?.item.id, listedItems(list).length > 1);
+  const choose = ({ item }: InboxListed) => setAsked(item.id);
+  // A row's press and Next's open their item alike, the keyboard following it.
+  const open = (listed: InboxListed) => {
+    choose(listed);
+    columns.onOpen(listed.item.id);
+  };
+  // Note that the column is hidden, though drawn, while the side panel fills the window.
+  const pager = useInboxPager(list, chosen?.item.id, choose, {
+    shown: plans.shown && !plans.sidePanel.fullScreen,
+    folded: NO_FOLDS,
+  });
+  const next = inboxNext(
+    list,
+    chosen,
+    ({ holder, item }) => (
+      <ItemMark
+        holder={holder}
+        agentId={item.agentId}
+        models={plans.agents.models}
+        readerId={plans.me}
+      />
+    ),
+    open,
+    NO_FOLDS,
+  );
   return (
     <section
       ref={columns.ref}
@@ -217,10 +248,7 @@ function PlanInboxTab({
             <EmptyState icon={<InboxIcon />}>{NEEDS_YOU.NONE}</EmptyState>
           ) : null
         }
-        onChoose={({ item }) => {
-          setAsked(item.id);
-          columns.onOpen(item.id);
-        }}
+        onChoose={open}
       />
       {chosen === undefined ? (
         <section
@@ -240,6 +268,8 @@ function PlanInboxTab({
           agents={plans.agents}
           hidden={columns.shown === INBOX_COLUMNS.LIST}
           onBack={columns.onBack}
+          pager={columns.shown === INBOX_COLUMNS.ITEM ? pager : undefined}
+          next={next}
           doors={{
             onOpenHolder: onOpenPlan,
             planCard: planCardOf(plans, plan, now),

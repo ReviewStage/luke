@@ -1523,7 +1523,8 @@ export function usePlansTab(input: {
   // A started plan becomes the host's open one, which turns the page to it,
   // so the dialog closes and the Inbox or a version history standing behind
   // it gives way. It starts in the chosen workspace; with none listed the
-  // service starts it in the account's first one. A start opens its
+  // service starts it in the account's first one. A name left blank is not
+  // sent, and the plan stands as Untitled. A start opens its
   // plan's call at once, except over a call standing about another plan,
   // which main leaves for this question to end or keep.
   const startPlan = (
@@ -1532,7 +1533,7 @@ export function usePlansTab(input: {
     workspaceId: string | undefined,
   ): Promise<string | undefined> =>
     act(ACT_KIND.PLANNING_START, {
-      name,
+      ...(name.length === 0 ? undefined : { name }),
       ...(repository === null ? undefined : { repository }),
       ...(workspaceId === undefined ? undefined : { workspaceId }),
     }).then(

@@ -51,6 +51,7 @@ import {
   RELAY_TURN,
   type RelayTurn,
 } from "./bounds.js";
+import { keptPictures } from "./relay-pictures.js";
 
 /**
  * The relay from eve's stream into the brain's own, which both eve services
@@ -545,16 +546,23 @@ export class StreamRelay {
         // A nested call the record left out leaves its result out with it.
         const held = heldCallName(standing.state.get(), event.data.turnId, result.callId);
         if (held === undefined && isRemoteToolName(result.toolName)) return Effect.void;
-        // Note that a look's image went to the model once and is not kept, because it is no record of the plan.
+        // Note that a look's image went to the model once and is not kept, because it is no
+        // record of the plan, and that any other picture a tool answered is kept beside the
+        // conversation and named by id, because the record carries every byte it holds into
+        // each read of the transcript.
         const output = unparsedWire(result.output);
         const kept =
-          result.toolName === LOOK_AT_BOARD_TOOL.name ? storedLookOutput(output) : output;
-        return this.#toolResult(
-          event.data.turnId,
-          result.callId,
-          held ?? result.toolName,
-          settlementOf(event.data.status, result.isError, kept, event.data.error?.message),
-          standing,
+          result.toolName === LOOK_AT_BOARD_TOOL.name
+            ? Effect.succeed(storedLookOutput(output))
+            : keptPictures(standing.target, output);
+        return Effect.flatMap(kept, (stored) =>
+          this.#toolResult(
+            event.data.turnId,
+            result.callId,
+            held ?? result.toolName,
+            settlementOf(event.data.status, result.isError, stored, event.data.error?.message),
+            standing,
+          ),
         );
       }
       case "reasoning.completed":

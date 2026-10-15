@@ -32,9 +32,9 @@ Command Line Tools.
 ```
 apps/
   desktop/        the Electron app: main, preload, the renderer windows, build and release scripts
+  dev/            the coding agent's eve app
+  luke/           Luke, the orchestrator: the planner's eve app
   web/            the site, the Vercel function routes (server/routes/), and the deployment shell
-    eve/          the planner's eve service root
-    coder/        the coding agent's eve service root
 packages/
   brand/          the design sources, the generators, and the generated art, motion tokens, and geometry
   credentials/    account sign-in: PKCE, loopback consent, the account session manager

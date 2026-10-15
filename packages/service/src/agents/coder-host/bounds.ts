@@ -29,7 +29,7 @@ export const CODER = {
   FALLBACK_CONTEXT_WINDOW_TOKENS: 200_000,
   /**
    * The share of the context window past which eve compacts the session,
-   * told to eve as the agent's own setting (`coder/agent.ts`) and read by
+   * told to eve as the agent's own setting (`apps/dev/agent.ts`) and read by
    * the agent's tab as the line its context ring turns red at. It is eve's
    * own default, written down so the two cannot drift apart.
    */

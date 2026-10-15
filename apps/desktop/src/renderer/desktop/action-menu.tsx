@@ -556,11 +556,16 @@ export function ActionMenu({
     action.onSelect();
   };
   // Resting on another of the menu's own items closes the submenu, as a
-  // system menu's does; resting on the submenu's items keeps it.
+  // system menu's does; resting on the submenu's items keeps it. Note that
+  // the submenu is read as it stands now rather than as this render drew it,
+  // because moving from one submenu's item to another's opens the second on
+  // the pointer's entering it, heard before this, with no render between.
   const pointerOver = (event: React.PointerEvent<HTMLDivElement>) => {
     const item = event.target instanceof Element ? event.target.closest(MENU_ITEM) : null;
-    if (submenu === undefined || item === null || item === submenu.anchor) return;
-    if (item.closest('[role="menu"]') === event.currentTarget) setSubmenu(undefined);
+    if (item === null || item.closest('[role="menu"]') !== event.currentTarget) return;
+    setSubmenu((standing) =>
+      standing === undefined || standing.anchor === item ? standing : undefined,
+    );
   };
 
   return createPortal(

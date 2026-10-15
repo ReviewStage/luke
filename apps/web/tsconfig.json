@@ -9,8 +9,6 @@
     "server/**/*.ts",
     "tests/**/*.ts",
     "scripts/**/*.ts",
-    "vite.config.ts",
-    "coder/**/*.ts",
-    "eve/**/*.ts"
+    "vite.config.ts"
   ]
 }

@@ -212,9 +212,10 @@ composer card, and nothing spoken. Leaving or deleting a task lands here.
    meanwhile; nothing polls. The arrows move the highlight while the search
    field keeps focus, Enter picks, Escape closes the menu and hands focus
    back to the chip, and so does focus leaving it.
-3. **Start**, the round arrow at the card's other end, enabled once the name
-   is set; Enter presses it. Pressing it saves the task with its name, its
-   repository, and the untouched template as its plan, and opens it. If
+3. **Start**, the round arrow at the card's other end; Enter presses it.
+   The name is optional. Pressing it saves the task with its name, its
+   repository, and the untouched template as its plan, and opens it. A task
+   started with no name stands as "Untitled" until the developer renames it. If
    the service cannot be reached, or it refuses the repository (the App does
    not reach it, or the account must sign in with GitHub again), the reason
    shows under the card and the button can be pressed again.
@@ -937,7 +938,7 @@ Luke reads the task's repository, not a folder on the Mac,
 and so does the code he puts on the developer's screen. What only the Mac
 has, he reaches with `run_on_mac` (below).
 `run_in_repository` runs one bash command in a Vercel Sandbox the task
-conversation's eve session owns (`apps/web/eve/sandbox.ts`), on a checkout of
+conversation's eve session owns (`apps/luke/sandbox.ts`), on a checkout of
 the task's GitHub repository (`packages/service/src/agents/repository-shell.ts`).
 The first call that finds no checkout of the task's repository makes one, at
 the repository's current default branch and one commit deep, and later calls
@@ -1338,9 +1339,9 @@ changes when a check is run, not when one is planned.
   prewarm has not been run on Vercel.
 - **A coding agent.** No coding agent has run against a real provider, a
   real checkout, a push, or a pull request. The coder eval
-  (`apps/web/coder/evals/coder.eval.ts`) runs one turn under a scripted model
+  (`apps/dev/evals/coder.eval.ts`) runs one turn under a scripted model
   that calls no tool, so no sandbox opens and no repository is checked out,
-  and the `coder` service's sandbox `prepare` has not been run on Vercel.
+  and the `dev` service's sandbox `prepare` has not been run on Vercel.
 
 ### Known limitations
 

@@ -52,8 +52,8 @@ After adding or renaming a route under `apps/web/server/routes/`, run:
 pnpm --filter @luke/web functions:rewrites
 ```
 
-That rewrites `apps/web/server/api-rewrites.json` and the `vercel.json` built
-from it. `repository-checks.sh` checks both sides — the packages `apps/web` names
+That rewrites `apps/web/server/api-rewrites.json` and the root `vercel.json`
+built from it. `repository-checks.sh` checks both sides — the packages `apps/web` names
 must be declared in its `package.json`, and every `/api/` path a client spells
 must resolve to a rewrite — so skipping this fails the build rather than the
 deploy. Nothing is committed under `apps/web/api/`; Vercel's zero-config pass

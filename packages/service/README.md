@@ -1,7 +1,7 @@
 # @luke/service
 
 The hosted service's logic: what the web deployment's functions and its two eve
-services (`apps/web/eve`, `apps/web/coder`) compose and run. The deployment
+services (`apps/luke`, `apps/dev`) compose and run. The deployment
 keeps only its shell in `apps/web/server` — the Vercel function entries under
 `routes/`, the runtime edge `runtime.ts`, the function layout and bundling, and
 the voice function's edge — and reaches everything else here.
@@ -22,7 +22,7 @@ package.
 ## The auth group
 
 `src/auth/auth-app.ts` is the auth route group: Better Auth's own `fetch`
-handler on the path set `apps/web/vercel.json` routes here, and the hosted
+handler on the path set the root `vercel.json` routes here, and the hosted
 vocabulary's `not-found` on any other path, which nothing routes to this
 function. The handler is held as a passthrough rather than described as
 endpoints — an `HttpApi` declaring them would be a second copy of a contract
@@ -307,7 +307,7 @@ groups are handed as their `resolveUserId`, and the voice function's own
 resolver are Effect-shaped, so each reads the bearer on its own fiber instead
 of wrapping a promise in `Effect.promise`. One caller is a
 promise of somebody else's: eve's `AuthFn`, which
-`apps/web/eve/channels/eve.ts` satisfies by running the resolution once at
+`apps/luke/channels/eve.ts` satisfies by running the resolution once at
 that authored file — eve's own edge — rather than keeping a promise-shaped
 door beside the effect in `src/auth/`. `lukeAccount` takes the
 resolved account as a `BearerAccount` promise and reaches no userinfo
@@ -754,8 +754,8 @@ Then set the provider's variable (`EXECUTOR_CONNECTOR_UID`, `GRANOLA_CONNECTOR_U
 `NOTION_CONNECTOR_UID`, `POSTHOG_CONNECTOR_UID`, `SENTRY_CONNECTOR_UID`,
 `SLACK_CONNECTOR_UID`, `SUPABASE_CONNECTOR_UID`, `VERCEL_CONNECTOR_UID`,
 `YCOMBINATOR_CONNECTOR_UID`) to that UID in the `luke-web` project for
-production, preview, and development. The web, `eve`, and `coder` are services of that
-one project (`apps/web/vercel.json`'s `services`), so its variables and the
+production, preview, and development. The web, `luke`, and `dev` are services of that
+one project (the root `vercel.json`'s `services`), so its variables and the
 connector's link reach all three, which matters because the agents read
 tokens too. Asking Connect about an arbitrary user id needs the deployment's
 own Vercel OIDC token, which the SDK reads from the request
@@ -873,9 +873,9 @@ for it. Disconnect and deleting the account still revoke its grant.
 
 ## The coding-agent service
 
-`apps/web/coder/` is the second eve app root, built and deployed as the `coder`
-service beside `eve` on the same terms (`apps/web/vercel.json`): its own
-`package.json` (`@luke/coder`, whose one dependency is `eve`), a flat layout
+`apps/dev/` is the second standalone eve app, built and deployed as the `dev`
+service beside `luke` on the same terms (the root `vercel.json`): its own
+`package.json` (`@luke/dev`, whose one dependency is `eve`), a flat layout
 eve resolves as an app root, and a build that prewarms its sandbox snapshot
 under the same Vercel Sandbox credentials. It stands at eve's named mount:
 the public route is `/eve/coder/v1/*`, which the deployment's first rewrite
@@ -896,11 +896,11 @@ Start and a Stop come from a route still holding it, and a follow-up
 steers; the deployment acting for the account is admitted for the two things
 the voice brain does there on the developer's behalf, a typed opening that
 starts an agent and a typed line that steers one, each minted as the
-developer's own principal with the deployment named as its carrier. The agent (`apps/web/coder/agent.ts`) runs none of eve's default
-tools and authors its own under `apps/web/coder/tools/`, which is exactly the set the
+developer's own principal with the deployment named as its carrier. The agent (`apps/dev/agent.ts`) runs none of eve's default
+tools and authors its own under `apps/dev/tools/`, which is exactly the set the
 store writer registers (`src/agents/coder-host/tool-set.ts`): eve's `bash`, `read_file`,
 `write_file`, and `glob`, the code extension's `apply_patch` and `grep` from
-`apps/web/eve/extensions/code/tools`, Luke's own `search_web` and
+`apps/luke/extensions/code/tools`, Luke's own `search_web` and
 `read_web_page` (`public-research.ts`: the search screened, cited, and
 budgeted per turn on Luke's key and counted on the account's meter, the page
 read refusing any address off the public internet), and two of Luke's own: `delegate`, the hand-off to a worker (below), and
@@ -919,8 +919,8 @@ Gateway model and its `gh` tool on Vercel Connect, and Luke runs neither.
 `gh` and `git` run through the shell, authenticated at the firewall. The
 session's input tokens are uncapped and compaction is eve's default.
 
-The worker (`apps/web/coder/subagents/worker/`) is Luke's own declared subagent, in
-the shape of Luke's own worker (`apps/web/eve/subagents/worker/`): read-only in the
+The worker (`apps/dev/subagents/worker/`) is Luke's own declared subagent, in
+the shape of Luke's own worker (`apps/luke/subagents/worker/`): read-only in the
 agent's own sandbox and checkout, uncommitted edits included
 (`defineParentSandbox`), authored exactly the agent's reads
 (`WORKER_TOOL_NAMES`: `bash`, `read_file`, `glob`, `grep`, `search_web`,
@@ -928,7 +928,7 @@ agent's own sandbox and checkout, uncommitted edits included
 agent it runs under is. It is declared
 hidden (`tool: false`), because eve's own subagent tool carries a message
 and nothing else, and the agent chooses each worker's model and effort: the
-model sees `delegate` (`apps/web/coder/tools/delegate.ts`), a resumable subagent task
+model sees `delegate` (`apps/dev/tools/delegate.ts`), a resumable subagent task
 (`serve`, the shape eve gives every agent call) whose input is
 `{ task, model?, effort?, background? }`. The call answers with eve's
 receipt at once and the worker's answer reaches the agent as a subagent task's result,
@@ -938,7 +938,7 @@ delegation in eve's terms, and a developer's message during the wait reaches
 the agent at once without stopping the worker. Several calls in one step run
 at once, and a call with the subagent task's id sends the worker more, into the same
 session. Luke delegates through the same shape
-(`apps/web/eve/tools/delegate.ts`, `PLANNER_DELEGATE_TOOL`), always in the background
+(`apps/luke/tools/delegate.ts`, `PLANNER_DELEGATE_TOOL`), always in the background
 and on its own model, its worker declared hidden too; the Work tab reads its
 calls as worker calls under either name, eve's `worker` in earlier
 transcripts (`PLANNER_DELEGATION_TOOLS`). A worker's row in an agent's tab
@@ -996,7 +996,7 @@ words as a key to replace in Settings. An agent's title stays on Luke's
 Anthropic key. Reading the row every
 step means a later change to it is the next step's model.
 
-The sandbox (`apps/web/coder/sandbox.ts`) is one Vercel Sandbox per session at the
+The sandbox (`apps/dev/sandbox.ts`) is one Vercel Sandbox per session at the
 platform's 24-hour maximum timeout, prepared with the code extension's
 tooling (`gh`, signed commits, TypeScript diagnostics), pnpm, and Python
 beside the image's Node and git. As it opens, the agent's repository is
@@ -1016,7 +1016,7 @@ for at most `CODER.CI_FIX_ROUNDS` rounds; where it was not, it says CI was
 not watched. A token lasts an hour, so the store hook renews it at the
 firewall on the first step past `CODER.GITHUB_TOKEN_REFRESH`.
 
-The store hook (`apps/web/coder/hooks/store.ts`) relays every event into the store
+The store hook (`apps/dev/hooks/store.ts`) relays every event into the store
 through the relay the hosted brain shares (`src/agents/brain-host/relay.ts`), composed
 with no ask record, so an agent's turns land as `turns` rows naming its
 model and effort and its `messages` rows as `UIMessage`s; it also stops the
@@ -1031,7 +1031,7 @@ the agent is never handed the plan, and the instructions are worded for a
 prompt in the plan's place. The service needs `ANTHROPIC_API_KEY` and `OPENAI_API_KEY`,
 `DATABASE_URL`, the GitHub App's variables, and the Vercel Sandbox
 credentials its build prewarms under; `LUKE_CODER_MODEL_FIXTURE=scripted`
-selects the scripted model for `apps/web/coder/evals/coder.eval.ts`, which
+selects the scripted model for `apps/dev/evals/coder.eval.ts`, which
 `pnpm --filter @luke/web test:agent` runs beside the brain's eval and which
 runs a turn under the scripted model with no tool call, so no sandbox opens,
 and a second turn that delegates to the worker, whose only call is the
@@ -1217,7 +1217,7 @@ of a workspace the account is not in, or a call that made no delegation, is
 `PATCH /api/agents/{id}` takes `{ model, effort }`, checked against the
 catalog exactly as a Start checks its own, and writes the choice on the
 agent's row (`updateCodingAgentChoice`), answering the agent's summary with
-it; the coder agent reads the row at every step (`apps/web/coder/agent.ts`'s
+it; the coder agent reads the row at every step (`apps/dev/agent.ts`'s
 `defineDynamic`, through `src/agents/coder-host/host.ts`'s `model`), so a change
 mid-turn is the next step's and an idle agent's next turn takes it. It
 refuses an agent of a workspace the account is not in as not found and a model or effort the
@@ -1234,7 +1234,7 @@ additions, deletions, and changed files; null for a branch or a pull
 request it has not. The agent reaches GitHub through `git` and `gh` in its
 shell alone, and the branch its sandbox stands on as a turn ends is the one
 its pull request is on, whatever it cut, switched, or deleted on the way:
-the service's hook (`apps/web/coder/hooks/store.ts`) runs `git branch
+the service's hook (`apps/dev/hooks/store.ts`) runs `git branch
 --show-current` in the checkout as each turn ends and writes the answer on
 the agent's row (`coding_agent.branch`, through `src/agents/coder-host/host.ts`'s
 `recordBranch`), null for a detached HEAD, ahead of relaying the end (a
@@ -1411,10 +1411,17 @@ repositories; a run whose automation no longer lists that repository by the
 time the sweep acts on it is skipped as `repository-changed`. A run is queued under the delivery's `X-GitHub-Delivery`, which a
 redelivery carries again, so each automation records one run per
 delivery, and the sweep starts its agent within the minute rather than
-inside GitHub's ten seconds. An automation cannot fire itself: a pull
-request, issue, or push whose sender is a bot, the App's own installation
-token among them, fires nothing, and neither does a failed check on a
-`luke/` branch, where a coding agent works and already watches its checks.
+inside GitHub's ten seconds. Each event is read with who sent it: Luke's
+agents where the sender is the App's own bot (`<slug>[bot]`), another bot,
+or a person; and, for a pull request, its moment (opened or reopened, marked
+ready, pushed to), whether it is a draft, and whether it comes from a fork
+(its head in another repository, or in none). The trigger's settings choose
+among them (`senders`, `moments`, `drafts`, `forks` in
+`@luke/features/automation-wire`): people's events alone, every moment, and
+no draft or fork where it names none. An automation cannot fire itself
+whatever its settings say: a push by Luke's agents, to a branch or to a pull
+request, fires nothing, and neither does a failed check on a `luke/` branch,
+where a coding agent works and already watches its checks.
 The agent is handed the event by number, address, and branch, its title
 fenced as the event's own text to read as data, its angle brackets spelled
 as entities so it cannot close the fence, and reads the rest with `gh`. The App must subscribe to the Issues and Push events beside the pull
@@ -1661,7 +1668,7 @@ Luke offers any of its four agents is named once there, with the roles it
 serves: Luke's brain, its worker, the coding agent, and its worker.
 What each is offered is derived from it: the brain's hosted resolver
 offers its own (`PLANNER_TOOL_NAMES`), the brain's worker its own
-(`WORKER_TOOL_NAMES`), and the coding agent's files under `apps/web/coder/tools/` and
+(`WORKER_TOOL_NAMES`), and the coding agent's files under `apps/dev/tools/` and
 its worker's are held to their roles by `coder-agent.test.ts`; each role's
 stored set names every tool the role is offered. A tool's
 module takes its name from the registry, so the registry imports none and
@@ -1670,7 +1677,7 @@ every module may import it. eve's own injected tools (`task_wait`,
 listed.
 
 Luke's session is offered the skills the task's repository keeps
-(`apps/web/eve/skills/repository.ts`, `src/agents/agent-runtime/skills.ts`), read
+(`apps/luke/skills/repository.ts`, `src/agents/agent-runtime/skills.ts`), read
 from GitHub on a read token for that repository as the session starts, which
 is the call's warm-up ask, and loaded with eve's own `load_skill`; each body
 says where the skill stands in the repository, so its files are read with
@@ -1737,13 +1744,13 @@ tasks and the re-attach over the real store.
 Luke reads source through one tool,
 `run_in_repository({ command })` (`src/agents/repository-shell.ts`), which
 runs the command in Luke's session's own Vercel Sandbox, the one eve
-opens per session from `apps/web/eve/sandbox.ts` and hands a tool through
+opens per session from `apps/luke/sandbox.ts` and hands a tool through
 `ctx.getSandbox()`, on a checkout of the task's repository. The first call
 that finds no checkout of the task's repository makes one, at the
 repository's current default branch and one commit deep, and later calls
 reuse it; a task whose repository changed meanwhile is checked out again,
 and the worker subagent shares the session's sandbox
-(`apps/web/eve/subagents/worker/sandbox.ts`), so its reads see the same checkout. The
+(`apps/luke/subagents/worker/sandbox.ts`), so its reads see the same checkout. The
 checkout reads through the Luke GitHub App: `repositoryReadToken` confirms
 the installation of the task's workspace still reaches the repository and
 mints a token for that one
@@ -2419,7 +2426,7 @@ answered 429.
 ## The scheduled sweep
 
 `apps/web/server/routes/maintenance/sweep.ts` is what Vercel's cron calls:
-`apps/web/vercel.json` schedules it every minute (`* * * * *`) and
+the root `vercel.json` schedules it every minute (`* * * * *`) and
 `apps/web/server/function-durations.ts` gives its function group, `maintenance-sweep`,
 a 60-second duration (`MAINTENANCE_SWEEP.MAX_DURATION_SECONDS` in
 `src/maintenance/maintenance-bounds.ts`). The logic lives in
@@ -2460,7 +2467,7 @@ bearer is 401, compared in constant time, and any method but GET is 405.
 `src/events/events-app.ts` and `src/maintenance/maintenance-app.ts` are two route groups of
 one path each — `apps/web/server/routes/events.ts` mounts `eventsApp()` and
 `apps/web/server/routes/maintenance/sweep.ts` mounts `maintenanceApp()` — since
-`apps/web/vercel.json` already sends each function only the requests for its own path.
+the root `vercel.json` already sends each function only the requests for its own path.
 Each path is declared with `HttpRouter.add` under `ANY_METHOD` rather than a
 method-specific builder, because each handler still enforces its own method
 and answers its own 405 exactly as it did before conversion; only a path

@@ -59,7 +59,7 @@ import { type InboxSandboxDoor, readInboxImage } from "./inbox-image.js";
  * tools, because the developer answers the agent it works for.
  */
 
-/** The tools as the model is shown them (`coder/tools/`): each one's name, words, and input. */
+/** The tools as the model is shown them (`apps/dev/tools/`): each one's name, words, and input. */
 export const INBOX_TOOLS = {
   POST: {
     name: INBOX_TOOL.POST,

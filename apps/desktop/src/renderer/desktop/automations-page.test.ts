@@ -24,6 +24,7 @@ import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
+import { handState } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { plansControl } from "#testing/plans-control";
 import { installScrollIntoView } from "#testing/scroll-into-view";
@@ -347,7 +348,7 @@ async function settle(): Promise<void> {
 function rows(page: HTMLElement): string[][] {
   return [...page.querySelectorAll(".automation-row")].map((row) => [
     row.querySelector(".automation-row-name")?.textContent ?? "",
-    row.querySelector(".automation-owner")?.textContent ?? "",
+    row.querySelector(".automation-owner-name")?.textContent ?? "",
   ]);
 }
 
@@ -662,12 +663,24 @@ function pick(page: HTMLElement, label: string, option: string): void {
   act(() => row.click());
 }
 
+/** The switch named, wherever it is drawn. */
+function switchNamed(name: string): HTMLButtonElement {
+  const found = document.querySelector<HTMLButtonElement>(`[role=switch][aria-label="${name}"]`);
+  assert.ok(found, `no switch ${name}`);
+  return found;
+}
+
+/** Whether the switch named is on. */
+function isOn(name: string): boolean {
+  return switchNamed(name).getAttribute("aria-checked") === "true";
+}
+
 /** The crumbs' words, in order. */
 function crumbs(page: HTMLElement): string {
   return page.querySelector(".automation-crumbs")?.textContent ?? "";
 }
 
-test("a row opens its automation's page, under crumbs naming its owner, with what it was saved as", async () => {
+test("a row opens its automation's page, under crumbs naming it, with what it was saved as", async () => {
   const page = mountPages({ kind: AUTOMATIONS_PAGE.LIST });
   await settle();
 
@@ -679,22 +692,19 @@ test("a row opens its automation's page, under crumbs naming its owner, with wha
   await settle();
 
   assert.deepEqual(places.at(-1), { kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
-  assert.equal(crumbs(page), "AutomationsAcmeNightly flaky-test sweep");
+  assert.equal(crumbs(page), "AutomationsNightly flaky-test sweep");
   assert.equal(
     page.querySelector<HTMLInputElement>("input[aria-label='Automation name']")?.value,
     SWEEP.name,
   );
-  assert.match(
-    page.textContent ?? "",
-    /A workspace automation: everyone in Acme sees and runs it\./u,
-  );
+  assert.equal(picked(page, "Owner"), "Acme");
   assert.equal(page.querySelector(".automation-editor-status")?.textContent, "Saved");
 });
 
 test("a new automation is created only once it is named and told its task, and then stands as its own page", async () => {
   const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
   await settle();
-  assert.equal(crumbs(page), "AutomationsPersonalNew automation");
+  assert.equal(crumbs(page), "AutomationsNew automation");
 
   act(() => button("Create").click());
   await settle();
@@ -723,7 +733,7 @@ test("a new automation is created only once it is named and told its task, and t
     repositories: ["acme/ledger"],
   });
   assert.equal(places.at(-1)?.kind, AUTOMATIONS_PAGE.EDIT);
-  assert.equal(crumbs(page), "AutomationsPersonalMorning triage");
+  assert.equal(crumbs(page), "AutomationsMorning triage");
 });
 
 test("an edit says it is unsaved and saves only what moved", async () => {
@@ -802,7 +812,87 @@ test("the Owner row stands in a shared workspace, and not in the account's perso
   const personal = mountPages({ kind: AUTOMATIONS_PAGE.NEW }, PERSONAL);
   await settle();
   assert.equal(personal.querySelector("button[aria-label^='Owner: ']"), null);
-  assert.match(personal.textContent ?? "", /Your automation, in your personal workspace\./u);
+});
+
+/** The groups of the editor's form, by their titles, top to bottom. */
+function formGroups(page: HTMLElement): string[] {
+  return [...page.querySelectorAll(".automation-form .settings-group-title")].map(
+    (title) => title.textContent ?? "",
+  );
+}
+
+test("who owns an automation is the editor's first setting, and nowhere else on its page", async () => {
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+
+  assert.equal(formGroups(page)[0], "Sharing");
+  assert.equal(picked(page, "Owner"), "Acme");
+  assert.equal(page.querySelector(".automation-editor .automation-owner"), null);
+  assert.equal(page.querySelector(".automation-crumbs .automation-owner"), null);
+});
+
+test("the Owner picker draws Personal by the account's picture and the workspace by its tile, on its chip and in its menu", async () => {
+  handState({});
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
+  await settle();
+
+  const chip = picker(page, "Owner");
+  assert.ok(
+    chip.querySelector(".actor-mark[data-kind='person']"),
+    "Personal wears the account's mark",
+  );
+  act(() => chip.click());
+  const marks = [...document.querySelectorAll("[role=option]")].map((row) => [
+    row.querySelector(".plan-compose-menu-name")?.textContent,
+    row.querySelector(".actor-mark") !== null
+      ? "person"
+      : row.querySelector(".workspace-tile") !== null
+        ? "tile"
+        : "none",
+  ]);
+  assert.deepEqual(marks, [
+    ["Personal", "person"],
+    ["Acme", "tile"],
+  ]);
+
+  const acme = [...document.querySelectorAll<HTMLButtonElement>("[role=option]")].find(
+    (row) => row.querySelector(".plan-compose-menu-name")?.textContent === "Acme",
+  );
+  assert.ok(acme, "the menu offers the workspace");
+  act(() => acme.click());
+  assert.ok(picker(page, "Owner").querySelector(".workspace-tile"), "the workspace wears its tile");
+});
+
+test("another's personal automation's Owner picker draws its owner unnamed, never as the reader", async () => {
+  handState({});
+  standing = [{ ...DIGEST, mine: false }];
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: DIGEST.id });
+  await settle();
+
+  assert.equal(
+    picker(page, "Owner").querySelector(".actor-mark")?.getAttribute("data-kind"),
+    "someone",
+  );
+});
+
+test("the list's Owner column draws the workspace by its tile, the account's own by its picture, and another's personal one unnamed", async () => {
+  handState({});
+  standing = [
+    SWEEP,
+    { ...DIGEST, mine: true },
+    { ...FAILING, scope: AUTOMATION_SCOPE.PERSONAL, mine: false },
+  ];
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.LIST });
+  await settle();
+
+  const markOf = (name: string) => {
+    const owner = rowOf(page, name).querySelector(".automation-owner");
+    if (owner?.querySelector(".workspace-tile")) return "tile";
+    return owner?.querySelector(".actor-mark")?.getAttribute("data-kind") ?? "none";
+  };
+  assert.equal(markOf(SWEEP.name), "tile");
+  assert.equal(markOf(DIGEST.name), "person");
+  assert.equal(markOf(FAILING.name), "someone");
 });
 
 test("the list and an automation's page each say they are an experiment, and each Send feedback is about Automations", async () => {
@@ -893,7 +983,10 @@ test("an automation fired by an event says its trigger in one sentence, and a sa
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: onEvent.id });
   await settle();
 
-  assert.equal(pickerDetail(page, "Type"), "When an issue is opened in acme/ledger labelled bug");
+  assert.equal(
+    pickerDetail(page, "Type"),
+    "When an issue by people is opened in acme/ledger labelled bug",
+  );
   assert.equal(picked(page, "Event"), "Issue opened");
   assert.equal(page.querySelector("button[aria-label^='Time zone: ']"), null);
   type(page.querySelector("textarea[aria-label='Prompt']"), "Reproduce the bug first.");
@@ -1193,18 +1286,25 @@ test("a GitHub automation's row says its trigger as one sentence, naming the rep
 
   assert.equal(
     rowOf(page, "Code review").querySelector(".automation-row-detail")?.textContent,
-    "When a pull request is opened or updated in acme/ledger",
+    "When a pull request by people is opened, marked ready, or pushed to in acme/ledger",
   );
 });
 
-test("a new automation set to a GitHub event is created on it, the trigger said as one sentence, and the list's row says it too", async () => {
+test("a new automation set to a GitHub event takes its settings as switches in the Trigger card, is created on them, and the list's row says it too", async () => {
   const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
   await settle();
 
   pick(page, "Type", "GitHub event");
   assert.equal(
     pickerDetail(page, "Type"),
-    "When a pull request is opened or updated in acme/ledger",
+    "When a pull request by people is opened, marked ready, or pushed to in acme/ledger",
+  );
+  act(() => switchNamed("From Luke's agents").click());
+  assert.equal(isOn("Skip drafts"), true);
+  assert.equal(isOn("Include forks"), false);
+  assert.equal(
+    pickerDetail(page, "Type"),
+    "When a pull request by people or Luke's agents is opened, marked ready, or pushed to in acme/ledger",
   );
   type(page.querySelector("input[aria-label='Automation name']"), "Code review");
   type(page.querySelector("textarea[aria-label='Prompt']"), "Review this pull request.");
@@ -1214,12 +1314,16 @@ test("a new automation set to a GitHub event is created on it, the trigger said 
   assert.deepEqual(creates[0]?.trigger, {
     kind: AUTOMATION_TRIGGER.GITHUB,
     event: "pull-request-updated",
+    senders: ["people", "luke-agents"],
+    moments: ["opened", "ready", "pushed"],
+    drafts: false,
+    forks: false,
   });
   act(() => button("Automations").click());
   await settle();
   assert.equal(
     rowOf(page, "Code review").querySelector(".automation-row-detail")?.textContent,
-    "When a pull request is opened or updated in acme/ledger",
+    "When a pull request by people or Luke's agents is opened, marked ready, or pushed to in acme/ledger",
   );
 });
 

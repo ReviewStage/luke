@@ -161,7 +161,8 @@ export function apiRewrites(definitions: readonly FunctionDefinition[]): readonl
   return rewrites;
 }
 
-export const VERCEL_CONFIG_FILE = "vercel.json";
+/** The deployment's configuration, at the repository root two steps above the web app. */
+export const VERCEL_CONFIG_FILE = join("..", "..", "vercel.json");
 /** The committed generation of the `/api/` rewrites, which the web service's routes are assembled from. */
 export const API_REWRITES_FILE = join("server", "api-rewrites.json");
 
@@ -229,7 +230,7 @@ const ServiceRewriteSchema = Schema.Struct({
 
 const VercelConfig = Schema.Struct({
   $schema: Schema.String,
-  services: Schema.Struct({ web: WebService, eve: EveService, coder: CoderService }),
+  services: Schema.Struct({ web: WebService, luke: EveService, dev: CoderService }),
   crons: Schema.Array(Schema.Struct({ path: Schema.String, schedule: Schema.String })),
   rewrites: Schema.Array(ServiceRewriteSchema),
 });

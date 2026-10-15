@@ -1,14 +1,15 @@
 {
-  "name": "@luke/coder",
+  "name": "@luke/luke",
   "version": "0.13.0",
   "private": true,
   "type": "module",
-  "description": "The coding agent's eve service root: a coding agent's run in a sandbox on the web deployment",
+  "description": "Luke, the orchestrator: the planning brain's eve app on the web deployment",
   "engines": {
     "node": "24.x"
   },
   "scripts": {
-    "test:agent": "LUKE_CODER_MODEL_FIXTURE=scripted eve eval"
+    "test:agent": "LUKE_BRAIN_MODEL_FIXTURE=scripted eve eval",
+    "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "4.0.78",
@@ -18,7 +19,6 @@
     "@better-auth/oauth-provider": "1.7.7",
     "@effect/sql-pg": "catalog:",
     "@luke/database": "workspace:*",
-    "@luke/features": "workspace:*",
     "@luke/service": "workspace:*",
     "@luke/wire": "workspace:*",
     "@vercel/connect": "2.4.1",
@@ -31,5 +31,9 @@
     "eve": "0.74.0",
     "pg": "8.23.0",
     "ws": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:web"
   }
 }

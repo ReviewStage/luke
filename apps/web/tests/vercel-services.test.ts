@@ -33,17 +33,17 @@ interface Rewrite {
   readonly destination: { readonly service: string };
 }
 
-const SERVICE = { WEB: "web", EVE: "eve", CODER: "coder" } as const;
+const SERVICE = { WEB: "web", LUKE: "luke", DEV: "dev" } as const;
 
 interface Services {
   readonly [SERVICE.WEB]: Service;
-  readonly [SERVICE.EVE]: Service;
-  readonly [SERVICE.CODER]: Service;
+  readonly [SERVICE.LUKE]: Service;
+  readonly [SERVICE.DEV]: Service;
 }
 
 // SAFETY: the file is this repository's own vercel.json, read for its deployment shape.
 const vercel = JSON.parse(
-  readFileSync(fileURLToPath(new URL("../vercel.json", import.meta.url)), "utf8"),
+  readFileSync(fileURLToPath(new URL("../../../vercel.json", import.meta.url)), "utf8"),
 ) as { services: Services; rewrites: readonly Rewrite[] };
 
 const WEB = fileURLToPath(new URL("..", import.meta.url));
