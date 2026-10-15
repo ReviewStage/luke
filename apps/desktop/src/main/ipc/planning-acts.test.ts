@@ -27,10 +27,10 @@ import type { WebContents } from "electron";
 import { type ActRows, type ActSender, createActRouter } from "../act-router";
 import { planningActRows } from "./planning-acts";
 
-// SAFETY: the router reads the sender by identity alone; one inert object is one window.
-
 /** The one picture the fake host holds. */
 const PICTURE_ID = "picture-1";
+
+// SAFETY: the router reads the sender by identity alone; one inert object is one window.
 const SENDER = {} as WebContents;
 
 const PANEL: ActSender = { sender: SENDER, panel: true, voice: false, call: false };

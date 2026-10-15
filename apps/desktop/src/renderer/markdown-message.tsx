@@ -1,4 +1,5 @@
 import { matchRanges } from "@luke/ui/search-tokens";
+import { isWireString } from "@luke/wire";
 import { createContext, type ReactNode, useContext, useMemo } from "react";
 import Markdown, { type AllowElement, type Components, type Options } from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -589,7 +590,7 @@ export function MarkdownMessage({
     if (diagrams === true) drawing.pre = DiagramFence;
     if (picture !== undefined) {
       drawing.img = ({ src, alt, title }) =>
-        (typeof src === "string" ? picture(src, alt ?? "", title) : undefined) ?? <>{alt ?? ""}</>;
+        (isWireString(src) ? picture(src, alt ?? "", title) : undefined) ?? <>{alt ?? ""}</>;
     }
     return drawing;
   }, [link, openLink, diagrams, picture]);
