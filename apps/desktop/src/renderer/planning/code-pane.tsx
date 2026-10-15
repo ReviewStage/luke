@@ -23,6 +23,7 @@ import { Tooltip } from "../tooltip";
 import { CallCheckpoint, CallEnded } from "./call-card";
 import { FileRef } from "./file-ref";
 import { useMentionLink } from "./plan-mentions";
+import { useOpenLink } from "./use-open-link";
 
 /**
  * code-pane.tsx -- the code Luke put on screen on a plan's calls: the side panel's Code tab, every snippet he showed, one card each, in the order he showed them.
@@ -226,7 +227,10 @@ export function CodeCardHeader({
  */
 function CodeCardNote({ note }: { note: string }): React.JSX.Element {
   const link = useMentionLink();
-  return <MarkdownMessage words={note} className="code-card-note" link={link} />;
+  const openLink = useOpenLink();
+  return (
+    <MarkdownMessage words={note} className="code-card-note" link={link} openLink={openLink} />
+  );
 }
 
 /** One snippet: its header, Luke's note, where code shown before notes were asked for has none, and the lines themselves. */

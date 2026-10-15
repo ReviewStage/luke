@@ -534,13 +534,6 @@
   margin-top: var(--plan-section-gap);
 }
 
-.plan-document-text a {
-  color: inherit;
-  text-decoration: underline;
-  text-decoration-color: var(--markdown-edge);
-  text-underline-offset: 0.15em;
-}
-
 /* A link the read view draws as a mention's chip wears the chip's light look
    while its section is edited, so opening the section does not turn its
    chips into underlined words; its glyph is the read view's alone. */
@@ -2116,19 +2109,6 @@ button.attached-file-face:hover img {
   width: 14px;
   height: 14px;
   flex: none;
-}
-
-/* A link in the transcript: a web page opens in the browser, drawn as a
-   link; any other address is drawn as words that go nowhere. */
-.agent-link {
-  color: var(--state-working);
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-
-.agent-link-inert {
-  text-decoration: underline dotted;
-  text-underline-offset: 2px;
 }
 
 /* An agent's Terminal tab (`terminal-tab.tsx`): the File tab's frame, its

@@ -146,14 +146,57 @@
   border-top: 1px solid var(--markdown-edge);
 }
 
-/* Drawn as a link, so the reader knows the words pointed somewhere, but not a
-   control: the renderer opens no arbitrary address. The destination is the
-   hover title. */
-.markdown-link {
-  text-decoration: underline;
-  text-decoration-color: var(--markdown-edge);
+/* A plain link (`text-link.tsx`), drawn alike in a transcript, the plan, its
+   versions, Luke's notes, and the plan's editor: the words' own ink over a
+   thin underline in a faint wash of it, which goes full strength under the
+   pointer or the keyboard, so a link reads by its line and not its colour
+   alone and sits apart from a mention's filled chip. A bare address cut
+   short wears a small ↗ after it, which says a press leaves the window. */
+.text-link {
+  border-radius: 2px;
+  color: inherit;
+  text-decoration-line: underline;
+  text-decoration-color: color-mix(in srgb, currentColor 32%, transparent);
   text-decoration-thickness: 1px;
-  text-underline-offset: 0.15em;
+  text-underline-offset: 0.24em;
+  transition: text-decoration-color var(--duration-hover) ease;
+}
+
+a.text-link {
+  cursor: pointer;
+}
+
+.text-link:is(:hover, :focus-visible) {
+  text-decoration-color: currentColor;
+}
+
+/* In the editor a link is words being written, so it keeps the caret's cursor. */
+[contenteditable] a.text-link {
+  cursor: text;
+}
+
+.text-link-out {
+  display: inline-block;
+  width: 0.78em;
+  height: 0.78em;
+  margin-left: 0.12em;
+  opacity: 0.55;
+  transition: opacity var(--duration-hover) ease;
+  vertical-align: -0.02em;
+}
+
+.text-link:is(:hover, :focus-visible) .text-link-out {
+  opacity: 1;
+}
+
+/* An address the window opens nothing for, a file's say: the same line,
+   dotted, with the address as its hint. */
+.text-link-inert {
+  text-decoration-line: underline;
+  text-decoration-style: dotted;
+  text-decoration-color: color-mix(in srgb, currentColor 40%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.24em;
 }
 
 /* A version's changes (`version-view.tsx`): words written in on a green

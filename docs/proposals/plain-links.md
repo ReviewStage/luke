@@ -1,6 +1,11 @@
 # Proposal: one polished style for plain links and URLs
 
-Status: **design show, awaiting Dean's pick.** Nothing is built.
+Status: **decided by Dean on 2026-10-15**: "For links, let's do (c). And
+plan/history/notes links should also open in the browser." Built as one PR:
+the `.text-link` rule, `@luke/ui/link-face`'s `linkFace`, the window's
+tooltip naming the address, and plain links in the plan, its versions and
+Luke's notes opening in the browser. History and notes drawing mentions as
+chips shipped with the mention chips' own PR (#2795).
 
 The show is `docs/proposals/plain-links/index.html`, one self-contained
 file that fetches nothing. Open it in a browser. Each frame uses main's

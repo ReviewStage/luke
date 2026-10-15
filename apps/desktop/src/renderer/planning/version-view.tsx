@@ -14,6 +14,7 @@ import { VERSION_CHANGE, type VersionDiff, versionDiff } from "./plan-history-mo
 import { type MentionedPlan, useMentionLink } from "./plan-mentions";
 import { dayAndTimeText, momentText } from "./plan-time";
 import { PlanTitle } from "./plan-title";
+import { useOpenLink } from "./use-open-link";
 import { HISTORY_READ, type PlanHistoryControl, type ViewedVersion } from "./use-plan-history";
 
 /**
@@ -93,6 +94,7 @@ function VersionBody({
 }): React.JSX.Element {
   const units = section === undefined ? diff.units : diff.units.slice(section, section + 1);
   const link = useMentionLink(plan);
+  const openLink = useOpenLink();
   return (
     <div className="plan-body">
       {title === undefined || section !== undefined ? null : <PlanTitle name={title} />}
@@ -105,6 +107,7 @@ function VersionBody({
           className={`plan-unit${CHANGE_CLASS[unit.change]}`}
           edit={unit.marks.length === 0 ? undefined : { marks: unit.marks }}
           link={link}
+          openLink={openLink}
         />
       ))}
     </div>

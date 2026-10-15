@@ -2,6 +2,7 @@ import { matchRanges } from "@luke/ui/search-tokens";
 import { type ReactNode, useMemo } from "react";
 import Markdown, { type AllowElement, type Components, type Options } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { TextLink } from "./text-link";
 
 const SAFE_LINK = /^https?:\/\//i;
 
@@ -261,21 +262,23 @@ const REMARK_PLUGINS: Options["remarkPlugins"] = [[remarkGfm, { singleTilde: fal
  * How each element is drawn where the library's default would say the wrong
  * thing on this surface.
  *
- * A link is drawn as one and names its destination on hover, but it is not a
- * control: the renderer refuses every navigation and has no door for opening
- * an arbitrary address, and a message's words must not become an action by
- * being pressed. Only HTTP and HTTPS destinations survive `urlTransform`
- * below, so anything else arrives here as words alone. The one exception is
- * a place that draws its own links (`LinkDrawer`): one showing a plan's
- * words or Luke's notes draws a link naming a mention as the chip that
- * opens what it names.
+ * A link is drawn as a plain link (`text-link.tsx`), naming its destination
+ * on hover. It is pressed only where the place showing the words hands an
+ * opener (`openLink`), as the plan's page, its versions, and Luke's notes
+ * do; elsewhere, as in a caption, it is words going nowhere, so a message's
+ * words become an action only where a reader expects a link to open. Only
+ * HTTP and HTTPS destinations survive `urlTransform` below, so anything else
+ * arrives here as words alone. A place that draws its own links
+ * (`LinkDrawer`), one showing a plan's words or Luke's notes, draws a link
+ * naming a mention as the chip that opens what it names before it is ever
+ * drawn as a plain one.
  *
  * A heading is styled, never announced: a reader walking the document's
  * headings should meet the panel's, not a reply's. An image has no picture
  * to draw in a caption, so its alternative words stand in for it.
  */
 const COMPONENTS: Components = {
-  a: ({ href, children }) => plainLink(href, children),
+  a: ({ href, children, node }) => plainLink(href, children, node, undefined),
   h1: ({ children }) => heading(1, children),
   h2: ({ children }) => heading(2, children),
   h3: ({ children }) => heading(3, children),
@@ -285,13 +288,18 @@ const COMPONENTS: Components = {
   img: ({ alt }) => <>{alt ?? ""}</>,
 };
 
-/** A link as words drawn as one, naming a web destination on hover; anything else as its words alone. */
-function plainLink(href: string | undefined, children: ReactNode): ReactNode {
+/** A web link as a plain link, pressed where an opener is handed; anything else as its words alone. */
+function plainLink(
+  href: string | undefined,
+  children: ReactNode,
+  link: HastParent | undefined,
+  openLink: ((href: string) => void) | undefined,
+): ReactNode {
   if (href === undefined || !SAFE_LINK.test(href)) return children;
   return (
-    <span className="markdown-link" title={href}>
+    <TextLink href={href} words={labelOf(link)} onOpen={openLink}>
       {children}
-    </span>
+    </TextLink>
   );
 }
 
@@ -347,10 +355,11 @@ function drawnMarked(
   link: HastParent | undefined,
   href: string,
   children: ReactNode,
+  openLink: ((href: string) => void) | undefined,
 ): ReactNode {
   const marks = marksOf(link);
   if (marks === LINK_MARKS.NONE) return drawn;
-  if (marks === LINK_MARKS.MIXED) return plainLink(href, children);
+  if (marks === LINK_MARKS.MIXED) return plainLink(href, children, link, openLink);
   const Mark = marks.tagName;
   return <Mark className={marks.className}>{drawn}</Mark>;
 }
@@ -396,6 +405,7 @@ export function MarkdownMessage({
   className,
   edit,
   link,
+  openLink,
   found,
 }: {
   words: string;
@@ -404,6 +414,8 @@ export function MarkdownMessage({
   edit?: MarkdownEdit | undefined;
   /** Draws the links the place knows better, a mention's chip say; every link is drawn as words without one. */
   link?: LinkDrawer | undefined;
+  /** Opens a plain link pressed; every plain link is words going nowhere without one. */
+  openLink?: ((href: string) => void) | undefined;
   /** The words a search asks for, marked where they landed. */
   found?: readonly string[] | undefined;
 }): React.JSX.Element {
@@ -415,18 +427,19 @@ export function MarkdownMessage({
   // so a destination that is not the web's is still words alone.
   const components = useMemo<Components>(
     () =>
-      link === undefined
+      link === undefined && openLink === undefined
         ? COMPONENTS
         : {
             ...COMPONENTS,
             a: ({ href, children, node }) => {
-              const drawn = href === undefined ? undefined : link(href, labelOf(node));
+              const drawn =
+                href === undefined || link === undefined ? undefined : link(href, labelOf(node));
               return drawn === undefined || href === undefined
-                ? plainLink(href, children)
-                : drawnMarked(drawn, node, href, children);
+                ? plainLink(href, children, node, openLink)
+                : drawnMarked(drawn, node, href, children, openLink);
             },
           },
-    [link],
+    [link, openLink],
   );
   return (
     <div className={className === undefined ? "markdown" : `markdown ${className}`}>

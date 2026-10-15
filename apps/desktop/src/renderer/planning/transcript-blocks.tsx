@@ -69,6 +69,7 @@ import {
   type ToolState,
   ToolStateMark,
 } from "../ai-elements/tool";
+import { TextLink } from "../text-link";
 import { Tooltip } from "../tooltip";
 import { useClipped } from "../use-clipped";
 import { MentionChip } from "./mention-chip";
@@ -104,39 +105,35 @@ import { WorkingTime } from "./working-time";
 
 /**
  * A link in a transcript's words. A web page, such as the pull request an
- * agent opened or the docs it read, opens in the browser over the act
- * channel (`use-open-link.ts`); any other address is drawn as words that go
- * nowhere, with the address as its hint.
+ * agent opened or the docs it read, is a plain link (`../text-link.tsx`)
+ * that opens in the browser over the act channel (`use-open-link.ts`); any
+ * other address is drawn as words that go nowhere, with the address as its
+ * hint. `words` are its label's, which say whether it is its own address.
  * Note that the press is ours rather than Streamdown's, because Streamdown's
  * link asks in a modal of its own and then calls `window.open`, which the
  * window denies (`hardened-window.ts`), so its link opened nothing.
  */
 function TranscriptLink({
   href,
+  words,
   children,
 }: {
   href: string | undefined;
+  words: string;
   children: ReactNode;
 }): ReactNode {
   const openLink = useOpenLink();
   if (href === undefined || !opensAsLink(href)) {
     return (
-      <span className="agent-link-inert" title={href}>
+      <span className="text-link-inert" title={href}>
         {children}
       </span>
     );
   }
   return (
-    <a
-      href={href}
-      className="agent-link"
-      onClick={(event) => {
-        event.preventDefault();
-        openLink(href);
-      }}
-    >
+    <TextLink href={href} words={words} onOpen={openLink}>
       {children}
-    </a>
+    </TextLink>
   );
 }
 
@@ -230,7 +227,13 @@ function MentionElement({ node, children }: ExtraProps & { children?: ReactNode 
   const target = String(node?.properties[MENTION_ELEMENT.TARGET] ?? "");
   const found =
     node === undefined ? undefined : linkMention(wordsOf(node), target, doors.place.repository);
-  if (found === undefined) return <TranscriptLink href={target}>{children}</TranscriptLink>;
+  if (found === undefined) {
+    return (
+      <TranscriptLink href={target} words={node === undefined ? "" : wordsOf(node)}>
+        {children}
+      </TranscriptLink>
+    );
+  }
   return <MentionChip mention={found.mention} name={found.name} doors={doors} />;
 }
 
@@ -244,7 +247,11 @@ function MentionElement({ node, children }: ExtraProps & { children?: ReactNode 
 const TRANSCRIPT_COMPONENTS: Components = {
   ...PANEL_MARKDOWN_COMPONENTS,
   ...TRANSCRIPT_CODE_AND_TABLE_COMPONENTS,
-  a: ({ href, children }) => <TranscriptLink href={href}>{children}</TranscriptLink>,
+  a: ({ href, children, node }) => (
+    <TranscriptLink href={href} words={node === undefined ? "" : wordsOf(node)}>
+      {children}
+    </TranscriptLink>
+  ),
   [MENTION_ELEMENT.TAG]: MentionElement,
   img: () => null,
 };
