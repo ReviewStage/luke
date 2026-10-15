@@ -1,11 +1,18 @@
 import {
   type AutomationRun,
+  archivableRunAgents,
   type ClaimedFiring,
   claimDueAutomations,
   expireQueuedAutomationRuns,
   queuedAutomationRuns,
+  settleRunArchive,
   strandedAutomationRuns,
 } from "@luke/database/models/automation-store";
+import {
+  archiveUnmovedCodingAgent,
+  awaitingLinesOfReached,
+  latestTurnsOfReached,
+} from "@luke/database/models/coding-agent-store";
 import type { PlanStoreEffect } from "@luke/database/models/plan-store";
 import { AUTOMATION_SCHEDULE, nextScheduledRun } from "@luke/features/automation-schedule";
 import {
@@ -15,9 +22,11 @@ import {
   type AutomationRunStatus,
   type AutomationTrigger,
 } from "@luke/features/automation-wire";
+import { CODING_AGENT_STATUS, type CodingAgentStatus } from "@luke/features/coding-agent-wire";
 import { Effect } from "effect";
 import { type EveForAccount, executeAutomationRun, recoverStrandedRun } from "./automation-runs.js";
 import type { StartServices } from "./coder-host/start.js";
+import { codingAgentStatusOf } from "./coder-host/status.js";
 
 /**
  * automation-sweep.ts -- the minute sweep's share of automations: claim the schedules due, once each, as queued runs, then act on the runs queued.
@@ -43,6 +52,14 @@ import type { StartServices } from "./coder-host/start.js";
  * where one stands and failed where none does. A run still queued two hours on, an hour past the last
  * sweep that would act on it, is settled as missed, so the history never
  * holds a run that will not come.
+ *
+ * Last, the agents runs started for automations that archive their
+ * successful runs are archived once each finished well, read as its tab
+ * reads it, and holds nothing open in the inbox. Each is settled once: an
+ * agent archived here, one that failed or was stopped, and one the
+ * developer already put away are marked so and never read again, so one
+ * brought back stays; one still at work or waiting on the inbox is read
+ * again by a later sweep, for a week.
  */
 
 const AUTOMATION_SWEEP = {
@@ -62,6 +79,10 @@ const AUTOMATION_SWEEP = {
    * edge must settle on its own before the expiry could reach it.
    */
   EXPIRED_AFTER_MS: 2 * 60 * 60_000,
+  /** How far back a run's agent is still archived once it finished: a week, so one whose inbox item was answered days later still is. */
+  ARCHIVE_WITHIN_MS: 7 * 24 * 60 * 60_000,
+  /** The most run agents one sweep reads for archiving. */
+  MAX_ARCHIVE_READS: 100,
 } as const;
 
 /** What the sweep's share did: how many schedules it fired, and how the runs it acted on came out. */
@@ -70,6 +91,8 @@ export interface AutomationSweepOutcome {
   readonly started: number;
   readonly skipped: number;
   readonly failed: number;
+  /** How many agents of runs that finished well were archived for their automations. */
+  readonly archived: number;
 }
 
 /** When a trigger is next due after `after`: a schedule's next instant, and never for any other trigger. */
@@ -99,7 +122,48 @@ function byAutomation(runs: readonly AutomationRun[]): readonly (readonly Automa
   return [...groups.values()];
 }
 
-/** The sweep's share at `now`: the schedules due claimed and queued, then the runs queued acted on. */
+/** The statuses an agent ends on that its automation never archives: it failed, or it was stopped. */
+const ENDED_UNWELL: ReadonlySet<CodingAgentStatus> = new Set([
+  CODING_AGENT_STATUS.FAILED,
+  CODING_AGENT_STATUS.CANCELLED,
+]);
+
+/** The agents of runs that finished well archived for automations that ask it, as above, answering how many. */
+const archiveFinishedRunAgents = Effect.fnUntraced(function* (now: number) {
+  const agents = yield* archivableRunAgents(
+    new Date(now - AUTOMATION_SWEEP.ARCHIVE_WITHIN_MS),
+    AUTOMATION_SWEEP.MAX_ARCHIVE_READS,
+  );
+  const conversations = agents.map((agent) => agent.conversationId);
+  const turns = yield* latestTurnsOfReached(conversations);
+  const awaiting = yield* awaitingLinesOfReached(conversations);
+  const archived = yield* Effect.forEach(agents, (agent) =>
+    Effect.gen(function* () {
+      const status = codingAgentStatusOf(turns.get(agent.conversationId), {
+        createdAt: agent.createdAt,
+        now,
+        lineAwaits: awaiting.has(agent.conversationId),
+      });
+      const finishedWell = agent.archivedAt === null && status === CODING_AGENT_STATUS.COMPLETED;
+      // Note that the archive takes only while the agent's lines stand where they were read, so
+      // one woken since, or whose starter left, stands and is read again by a later sweep.
+      const archived =
+        finishedWell &&
+        (yield* archiveUnmovedCodingAgent(
+          agent.userId,
+          agent.codingAgentId,
+          agent.conversationSeq,
+        ));
+      if (archived || agent.archivedAt !== null || ENDED_UNWELL.has(status)) {
+        yield* settleRunArchive(agent.runId);
+      }
+      return archived;
+    }),
+  );
+  return archived.filter(Boolean).length;
+});
+
+/** The sweep's share at `now`: the schedules due claimed and queued, then the runs queued acted on, then the finished runs' agents archived where asked. */
 export const sweepAutomations = /* @__PURE__ */ Effect.fn("web/sweepAutomations")(function* (
   eveFor: EveForAccount,
   now: number,
@@ -132,5 +196,6 @@ export const sweepAutomations = /* @__PURE__ */ Effect.fn("web/sweepAutomations"
     started: counted(AUTOMATION_RUN_STATUS.STARTED),
     skipped: counted(AUTOMATION_RUN_STATUS.SKIPPED),
     failed: counted(AUTOMATION_RUN_STATUS.FAILED),
+    archived: yield* archiveFinishedRunAgents(now),
   };
 });

@@ -24,6 +24,7 @@ import {
   automationTriggerSchema,
   type GitHubTriggerEvent,
 } from "@luke/features/automation-wire";
+import { INBOX_STATUS } from "@luke/features/inbox-wire";
 import { WORKSPACE_ROLE, type WorkspaceRole } from "@luke/features/workspace-wire";
 import {
   and,
@@ -35,6 +36,7 @@ import {
   inArray,
   isNull,
   lte,
+  notExists,
   or,
   type SQL,
   sql,
@@ -45,7 +47,9 @@ import { Database, type DatabaseServices, queryBuilder } from "../core/query.js"
 import { member } from "../schemas/auth.js";
 import { automation, automationRun } from "../schemas/automation.js";
 import { codingAgent } from "../schemas/coding-agent.js";
+import { inboxItem } from "../schemas/inbox.js";
 import { plan } from "../schemas/plan.js";
+import { conversations } from "../schemas/storage.js";
 import { InstantColumnSchema } from "./columns.js";
 import type { PlanStoreEffect, PlanStoreFailure } from "./plan-store.js";
 import { reachablePlan } from "./workspace-store.js";
@@ -695,6 +699,72 @@ const findStartedAgents = SqlSchema.findAll({
     ),
 });
 
+const ArchivableAgentSchema = Schema.Struct({
+  runId: Schema.String,
+  userId: Schema.String,
+  codingAgentId: Schema.String,
+  conversationId: Schema.String,
+  createdAt: InstantColumnSchema,
+  archivedAt: Schema.NullOr(InstantColumnSchema),
+  conversationSeq: Schema.Number,
+});
+
+/** An agent a run started that its automation archives once it finishes well: its run, whose it is, its id, its conversation and how far its lines had run when read, when it was made, and when it was put away where it already was. */
+export type ArchivableRunAgent = typeof ArchivableAgentSchema.Type;
+
+/**
+ * The agents runs fired at or after `since` started for automations that
+ * archive their successful runs and start a new agent each run, whose
+ * archive the sweep has not settled yet and that hold no open inbox item,
+ * at most `limit`, oldest run first. Note that an agent waiting on the
+ * inbox is left for a later sweep, because archiving it would put away the
+ * question it is waiting on, and that one the sweep settled is never read
+ * again, so an agent the developer brought back stays.
+ */
+const findArchivableAgents = SqlSchema.findAll({
+  Request: Schema.Struct({ since: Schema.Date, limit: Schema.Number }),
+  Result: ArchivableAgentSchema,
+  execute: ({ since, limit }) =>
+    Database.use((db) =>
+      db
+        .select({
+          runId: automationRun.id,
+          userId: codingAgent.userId,
+          codingAgentId: codingAgent.id,
+          conversationId: codingAgent.conversationId,
+          createdAt: codingAgent.createdAt,
+          archivedAt: codingAgent.archivedAt,
+          conversationSeq: conversations.nextMessageSeq,
+        })
+        .from(automationRun)
+        .innerJoin(automation, eq(automation.id, automationRun.automationId))
+        .innerJoin(codingAgent, eq(codingAgent.id, automationRun.codingAgentId))
+        .innerJoin(conversations, eq(conversations.id, codingAgent.conversationId))
+        .where(
+          and(
+            eq(automation.archiveSuccessful, true),
+            eq(automation.targetKind, AUTOMATION_TARGET.NEW_AGENT),
+            eq(automationRun.status, AUTOMATION_RUN_STATUS.STARTED),
+            gte(automationRun.firedAt, since),
+            isNull(automationRun.archiveSettledAt),
+            notExists(
+              queryBuilder
+                .select({ one: inboxItem.id })
+                .from(inboxItem)
+                .where(
+                  and(
+                    eq(inboxItem.agentId, codingAgent.id),
+                    eq(inboxItem.status, INBOX_STATUS.OPEN),
+                  ),
+                ),
+            ),
+          ),
+        )
+        .orderBy(asc(automationRun.firedAt))
+        .limit(limit),
+    ),
+});
+
 const writeExpired = SqlSchema.findAll({
   Request: Schema.Struct({
     before: Schema.Date,
@@ -1046,6 +1116,30 @@ export function startedRunAgents(
   since: Date,
 ): PlanStoreEffect<readonly StartedRunAgent[]> {
   return findStartedAgents({ automationId, since });
+}
+
+/** The agents of runs fired at or after `since` that their automations archive once finished well, as above, at most `limit`, oldest run first. */
+export function archivableRunAgents(
+  since: Date,
+  limit: number,
+): PlanStoreEffect<readonly ArchivableRunAgent[]> {
+  return findArchivableAgents({ since, limit });
+}
+
+const writeArchiveSettled = SqlSchema.void({
+  Request: Schema.Struct({ runId: Schema.String, now: Schema.Date }),
+  execute: ({ runId, now }) =>
+    Database.use((db) =>
+      db
+        .update(automationRun)
+        .set({ archiveSettledAt: now })
+        .where(and(eq(automationRun.id, runId), isNull(automationRun.archiveSettledAt))),
+    ),
+});
+
+/** Marks what becomes of the run's agent as settled, archived or left standing for good, so no later sweep reads it again. */
+export function settleRunArchive(runId: string): PlanStoreEffect<void> {
+  return Effect.flatMap(DateTime.nowAsDate, (now) => writeArchiveSettled({ runId, now }));
 }
 
 /** Settles every run still queued that fired at or before `before` as failed for the reason given, answering how many. */

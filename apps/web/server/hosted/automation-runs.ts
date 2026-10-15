@@ -46,10 +46,11 @@ import type { ModelChoiceRefused } from "./model-catalog.js";
  * automation-runs.ts -- one queued automation run acted on: its guards read, its coding agent started as the deployment acting for the owner, and the run settled.
  *
  * A run is a Start with a task, on the one path a Start takes
- * (`coder-host/start.ts`), so the plan, its repository, the owner's reach
- * of it through the Luke GitHub App, and the model are checked exactly as
- * they are for the developer's own Start, and the agent runs as the owner
- * on the owner's keys. eve is reached as the deployment acting for the
+ * (`coder-host/start.ts`), in the automation's workspace on no plan: the
+ * owner's membership of the workspace, the reach of the automation's
+ * repository through the workspace's installation, and the model are
+ * checked exactly as they are for the developer's own Start, and the agent
+ * runs as the owner on the owner's keys, naming the automation it ran for. eve is reached as the deployment acting for the
  * owner, the opening the coder channel already admits for the voice
  * brain (`coder-host/channel.ts`), since no request of the owner's is in
  * hand. The run's own id is the Start's key, so a run acted on twice, by two
@@ -64,9 +65,7 @@ import type { ModelChoiceRefused } from "./model-catalog.js";
  * automation's runs one after another (`automation-sweep.ts`); a noisy
  * trigger costs nothing past
  * its caps. A start refused is a failed run with one fixed word for why,
- * and an automation whose last three starts all failed is paused, so a
- * lapsed GitHub sign-in or a deleted repository stops firing rather than
- * failing every minute it is due.
+ * and the next firing tries again.
  */
 
 /** How long a claimed run counts as starting; a start runs in seconds, and one older is the sweep's to recover. */
@@ -268,10 +267,10 @@ const decide = (automationId: string, run: AutomationRun) =>
       }
       // A run queued before its automation was paused starts nothing; the owner's own "Run now" still runs.
       const paused = !automation.enabled && run.firing.kind !== AUTOMATION_FIRING.MANUAL;
-      // A GitHub event is about the repository it named; a plan moved to another since starts nothing.
+      // A GitHub event is about the repository it named; an automation that works elsewhere since starts nothing.
       const moved =
         run.firing.kind === AUTOMATION_FIRING.GITHUB &&
-        automation.planRepository?.toLowerCase() !== run.firing.repository.toLowerCase();
+        automation.repositories[0]?.toLowerCase() !== run.firing.repository.toLowerCase();
       const held = paused
         ? AUTOMATION_RUN_REASON.PAUSED
         : moved
@@ -293,15 +292,34 @@ const decide = (automationId: string, run: AutomationRun) =>
     }),
   );
 
-/** A claimed run's agent started, the run settled with it, or failed with the start's refusal in one fixed word. */
+/**
+ * A claimed run's agent started, the run settled with it, or failed with
+ * the start's refusal in one fixed word. The agent starts in the
+ * automation's workspace on no plan, on the first of its repositories, so
+ * the automation's runs stand apart from the plan it was made on and
+ * group under the automation itself.
+ */
 const startClaimed = Effect.fnUntraced(function* (
   eveFor: EveForAccount,
   automation: Automation,
   run: AutomationRun,
 ) {
+  const [repository] = automation.repositories;
+  const { organizationId } = automation;
+  if (organizationId === null || repository === undefined) {
+    const reason =
+      organizationId === null
+        ? AUTOMATION_RUN_REASON.PLAN_UNREACHABLE
+        : AUTOMATION_RUN_REASON.NO_REPOSITORY;
+    yield* failClaimedRun(run.id, reason);
+    const outcome: AutomationRunOutcome = { status: AUTOMATION_RUN_STATUS.FAILED, reason };
+    return outcome;
+  }
   const start = yield* Effect.result(
     startCodingAgent(eveFor(automation.userId), automation.userId, {
-      planId: automation.planId,
+      planId: null,
+      organizationId,
+      repository,
       idempotencyKey: run.id,
       choice: automation.action.choice,
       task: automationTask(automation, run),

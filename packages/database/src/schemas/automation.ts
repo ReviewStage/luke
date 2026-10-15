@@ -128,6 +128,13 @@ export const automationRun = pgTable(
     firedAt: timestamptz("fired_at").notNull(),
     /** When it was started, skipped, or failed; null while queued. */
     settledAt: timestamptz("settled_at"),
+    /**
+     * When the sweep settled what becomes of the agent a run started for an
+     * automation that archives its successful runs: archived once it
+     * finished well, or left standing for good as failed, stopped, or put
+     * away by hand; null until then, and for every other run.
+     */
+    archiveSettledAt: timestamptz("archive_settled_at"),
   },
   (table) => [
     // One run per firing: a second claim of the same firing finds this row.

@@ -1,0 +1,1 @@
+ALTER TABLE "automation_run" ADD COLUMN IF NOT EXISTS "archive_settled_at" timestamp with time zone;

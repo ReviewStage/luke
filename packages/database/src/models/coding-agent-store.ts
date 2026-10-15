@@ -13,10 +13,22 @@ import {
 } from "@luke/features/integration-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
 import { TURN_STATUS } from "@luke/wire";
-import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, type SQL, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  exists,
+  gt,
+  inArray,
+  isNotNull,
+  isNull,
+  type SQL,
+  sql,
+} from "drizzle-orm";
 import { DateTime, Effect, Option, Schema, SchemaTransformation } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
-import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
+import { Database, type DatabaseServices, type QueryError, queryBuilder } from "../core/query.js";
 import { organization } from "../schemas/auth.js";
 import {
   codingAgent,
@@ -497,6 +509,45 @@ const updateAgentTitle = SqlSchema.findOneOption({
         .set({ title })
         .where(reachableAgent(userId, agentId))
         .returning(CODING_AGENT_COLUMNS),
+    ),
+});
+
+/**
+ * The agent archived where it stands unarchived and its conversation's
+ * lines have run no further than `seenSeq`, so an agent a message woke
+ * after the caller read it is left standing.
+ */
+const updateUnmovedArchived = SqlSchema.findAll({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    agentId: Schema.String,
+    seenSeq: Schema.Number,
+    archivedAt: Schema.Date,
+  }),
+  Result: IdRowSchema,
+  execute: ({ userId, agentId, seenSeq, archivedAt }) =>
+    Database.use((db) =>
+      db
+        .update(codingAgent)
+        .set({ archivedAt })
+        .where(
+          and(
+            reachableAgent(userId, agentId),
+            isNull(codingAgent.archivedAt),
+            exists(
+              queryBuilder
+                .select({ one: conversations.id })
+                .from(conversations)
+                .where(
+                  and(
+                    eq(conversations.id, codingAgent.conversationId),
+                    eq(conversations.nextMessageSeq, seenSeq),
+                  ),
+                ),
+            ),
+          ),
+        )
+        .returning({ id: codingAgent.id }),
     ),
 });
 
@@ -981,6 +1032,25 @@ export function archiveCodingAgent(
 ): CodingAgentStoreEffect<Option.Option<CodingAgent>> {
   return Effect.flatMap(DateTime.nowAsDate, (now) =>
     updateAgentArchived({ userId, agentId, archivedAt: archived ? now : null }),
+  );
+}
+
+/**
+ * Archives the agent as `archiveCodingAgent` does, but only where it stands
+ * unarchived and its conversation's lines have run no further than the
+ * `seenSeq` its reader saw, so an agent a message woke since stands;
+ * answers whether it was archived.
+ */
+export function archiveUnmovedCodingAgent(
+  userId: string,
+  agentId: string,
+  seenSeq: number,
+): CodingAgentStoreEffect<boolean> {
+  return Effect.flatMap(DateTime.nowAsDate, (archivedAt) =>
+    Effect.map(
+      updateUnmovedArchived({ userId, agentId, seenSeq, archivedAt }),
+      (rows) => rows.length > 0,
+    ),
   );
 }
 
