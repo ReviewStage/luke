@@ -197,7 +197,13 @@ const START_CODING_AGENT_INPUT = Schema.Struct({
 
 const readAgentRef = Schema.decodeUnknownResult(READ_CODING_AGENT_INPUT);
 const readMessage = Schema.decodeUnknownResult(MESSAGE_CODING_AGENT_INPUT);
-const readStart = Schema.decodeUnknownResult(START_CODING_AGENT_INPUT);
+/** A start as a call carries it: one the model made under the tool's earlier words names its prompt `task`. */
+const START_CODING_AGENT_CALL = Schema.Struct({
+  ...START_CODING_AGENT_INPUT.fields,
+  task: Schema.optionalKey(START_PROMPT),
+});
+
+const readStart = Schema.decodeUnknownResult(START_CODING_AGENT_CALL);
 
 /** The tools as a planning model is offered them: each its name, its words, and its input schema. */
 export const LIST_CODING_AGENTS_TOOL = {
@@ -563,7 +569,8 @@ export function runStartCodingAgent(
   ) {
     return Effect.succeed(rejected(START_CODING_AGENT_REFUSAL.UNREADABLE));
   }
-  const { prompt, model, effort } = asked.success;
+  const { model, effort } = asked.success;
+  const prompt = asked.success.prompt ?? asked.success.task;
   const choice = model !== undefined && effort !== undefined ? { model, effort } : undefined;
   const eve = call.eve;
   if (eve === undefined) return Effect.succeed(rejected(START_CODING_AGENT_REFUSAL.NO_SERVICE));

@@ -444,12 +444,21 @@ test("Luke starts an agent on the call's plan as the deployment acting for the a
   });
   assert.equal(eve.sent.length, 2);
 
+  // A call the model made under the tool's earlier words names its prompt `task`, and starts on it all the same.
+  const earlier = await call(
+    START_CODING_AGENT_TOOL.name,
+    { task: "Draft the release notes." },
+    "call-6",
+  );
+  assert.equal(earlier.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(earlier));
+  assert.equal(JSON.parse(eve.sent[2]?.body ?? "").message, "Draft the release notes.");
+
   const unsecured = await callerOn(brainHost(seams), plan, eve.services, CATALOG);
   assert.deepEqual(await unsecured(START_CODING_AGENT_TOOL.name, {}, "call-5"), {
     status: ACTION_RESULT_STATUS.REJECTED,
     reason: START_CODING_AGENT_REFUSAL.NO_SERVICE,
   });
-  assert.equal(eve.sent.length, 2);
+  assert.equal(eve.sent.length, 3);
 });
 
 test("end_call is the one planning tool eve is told ends its turn, so the model is asked for no step after the goodbye it was told to add nothing to", () => {
