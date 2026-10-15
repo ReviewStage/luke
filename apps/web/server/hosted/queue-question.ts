@@ -1,3 +1,4 @@
+import { AGENT_TOOL } from "@luke/service/agents/agent-runtime/tools";
 import {
   ACTION_RESULT_STATUS,
   type StoredToolPart,
@@ -7,7 +8,6 @@ import {
 } from "@luke/service/core";
 import { describeWire } from "@luke/wire/effect";
 import { Result, Schema } from "effect";
-import { AGENT_TOOL } from "./agent-runtime/tools.js";
 
 /**
  * queue-question.ts -- the planning model's `queue_question` tool: one question handed to the voice the moment it is ready.

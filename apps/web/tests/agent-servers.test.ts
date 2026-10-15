@@ -12,17 +12,17 @@ import {
   INTEGRATION_PROVIDER_LIST,
   type IntegrationProvider,
 } from "@luke/features/integration-wire";
+import { CONNECTION_POLICY } from "@luke/service/agents/agent-runtime/role";
+import {
+  BRAIN_HOST_ATTRIBUTE,
+  BRAIN_HOST_PRINCIPAL_TYPE,
+} from "@luke/service/agents/brain-host/bounds";
 import { GitHubApp } from "@luke/service/github/github-app";
 import { GITHUB_APP_SETTINGS, openGithubUser } from "@luke/service/testing/github-app-fake";
 import { noNetwork } from "@luke/service/testing/no-network";
 import { Effect, Layer, Option, Result } from "effect";
 import type { SessionAuth } from "eve/context";
-import { CONNECTION_POLICY } from "../server/hosted/agent-runtime/role";
 import { type ServerStanding, turnServers } from "../server/hosted/agent-runtime/servers";
-import {
-  BRAIN_HOST_ATTRIBUTE,
-  BRAIN_HOST_PRINCIPAL_TYPE,
-} from "../server/hosted/brain-host/bounds";
 import { type CoderHost, coderHost } from "../server/hosted/coder-host/host";
 import { CODER_TOOL_SET } from "../server/hosted/coder-host/tool-set";
 import {

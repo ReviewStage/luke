@@ -16,6 +16,7 @@ import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import { planSections } from "@luke/features/plan-document";
 import { FAST_ACCESS } from "@luke/features/provider-key-wire";
+import { BRAIN_HOST_ATTRIBUTE, BRAIN_HOST_TURN } from "@luke/service/agents/brain-host/bounds";
 import {
   ACTION_RESULT_STATUS,
   MESSAGE_AUTHOR,
@@ -33,7 +34,6 @@ import { eq } from "drizzle-orm";
 import { Clock, Effect, Layer, Option, Redacted, Result, Schema } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
-import { BRAIN_HOST_ATTRIBUTE, BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
 import { memoryRelayState } from "../server/hosted/brain-host/relay";
 import { CODER_REFUSAL } from "../server/hosted/coder-host/bounds";
 import { type CoderHost, coderHost } from "../server/hosted/coder-host/host";

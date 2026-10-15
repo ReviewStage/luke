@@ -1435,7 +1435,7 @@ calls are written and read back under the same list it was offered.
 Question choice, agreement, assumption flags, and corrections are the
 instructions' alone: no code reads the document for meaning.
 
-**One tool registry** (`server/hosted/agent-runtime/tools.ts`). Every tool
+**One tool registry** (`packages/service/src/agents/agent-runtime/tools.ts`). Every tool
 Luke offers any of its four agents is named once there, with the roles it
 serves: the planner, the planning worker, the coding agent, and its worker.
 What each is offered is derived from it: the planning root's hosted resolver
@@ -1973,7 +1973,7 @@ checks and the host's admission read that answer, so the deployment can open
 a turn only on a conversation the named account reaches and cancel one only
 in a session a conversation that account reaches recorded. Where eve answers is an
 origin of this deployment's own, whose rewrites carry `/eve/v1/*` into the
-eve service (`deploymentEveOrigin` in `server/hosted/brain-host/eve-origin.ts`):
+eve service (`deploymentEveOrigin` in `packages/service/src/agents/brain-host/eve-origin.ts`):
 `LUKE_EVE_ORIGIN` where it is set, otherwise the project's production domain
 in production and the deployment's own host on any other deployment.
 Production names the custom domain rather than the generated `*.vercel.app`
@@ -2322,7 +2322,7 @@ carries into the service, whose own one `routes` entry turns it back into
 `/eve/v1/*` with a `request.path` transform before eve's router reads it,
 and whose build exports `EVE_PUBLIC_ROUTE_PREFIX=/eve/coder` so the callback
 URLs eve mints resolve to the public path. The web functions reach it through
-`server/hosted/brain-host/eve-sessions.ts` with `mount: EVE_MOUNT.CODER`.
+`packages/service/src/agents/brain-host/eve-sessions.ts` with `mount: EVE_MOUNT.CODER`.
 `tests/vercel-services.test.ts` holds the three services and that routing.
 
 A coding agent is one eve session over a `coding_agent` conversation

@@ -1,7 +1,7 @@
 /**
  * agent-tools.ts -- every tool name a Luke agent's transcript may carry, which the service offers and the desktop draws.
  *
- * The service's tool registry (`apps/web/server/hosted/agent-runtime/tools.ts`)
+ * The service's tool registry (`packages/service/src/agents/agent-runtime/tools.ts`)
  * says which roles each of Luke's tools serves; the names themselves are
  * declared here, once, so the desktop reads a call in a transcript by the
  * same name the service offered it under, the planning model's as a coding

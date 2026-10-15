@@ -4,6 +4,8 @@ import { hostedStore } from "@luke/database/models/hosted-store";
 import { recordVoiceSeconds } from "@luke/database/models/quota";
 import { voiceSessionRecord } from "@luke/database/models/voice-session-record";
 import { storeWriter } from "@luke/database/models/writer";
+import { deploymentEveOrigin } from "@luke/service/agents/brain-host/eve-origin";
+import { EVE_MOUNT, eveSessions } from "@luke/service/agents/brain-host/eve-sessions";
 import {
   sessionSandboxesLayer,
   sweepSessionSandboxes,
@@ -21,8 +23,6 @@ import { Effect, Layer, Redacted } from "effect";
 import { HttpClient, HttpRouter } from "effect/http";
 import type { EveForAccount } from "./hosted/automation-runs.js";
 import { sweepAutomations } from "./hosted/automation-sweep.js";
-import { deploymentEveOrigin } from "./hosted/brain-host/eve-origin.js";
-import { EVE_MOUNT, eveSessions } from "./hosted/brain-host/eve-sessions.js";
 import { HOSTED_TOOL_SET } from "./hosted/brain-tool-set.js";
 import { HostedEnvironment } from "./hosted/environment.js";
 import { handleMaintenanceSweep } from "./hosted/maintenance-sweep.js";

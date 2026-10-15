@@ -1,15 +1,15 @@
 import type { StandingSession } from "@luke/database/models/recorded-session";
 import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
-import type { HostedRefusal } from "@luke/service/http/http-effect";
-import { Duration, Effect, Option } from "effect";
-import type { HttpClient } from "effect/http";
 import {
   describeUnreachable,
   EVE_MOUNT,
   EVE_RESET_OUTCOME,
   type EveMount,
   type EveSessions,
-} from "./brain-host/eve-sessions.js";
+} from "@luke/service/agents/brain-host/eve-sessions";
+import type { HostedRefusal } from "@luke/service/http/http-effect";
+import { Duration, Effect, Option } from "effect";
+import type { HttpClient } from "effect/http";
 
 /**
  * retire-sessions.ts -- the eve sessions Luke lets go of, retired for good: a plan's at its delete, an account's at its deletion.

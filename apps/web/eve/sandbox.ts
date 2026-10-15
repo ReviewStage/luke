@@ -1,5 +1,5 @@
+import { AGENT_ROLE } from "@luke/service/agents/agent-runtime/role";
 import { defineSandbox } from "eve/sandbox";
-import { AGENT_ROLE } from "../server/hosted/agent-runtime/role.js";
 import { environment, openSandbox } from "../server/hosted/agent-runtime/sandbox.js";
 
 /**

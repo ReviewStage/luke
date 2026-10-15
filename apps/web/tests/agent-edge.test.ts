@@ -6,16 +6,16 @@ import assert from "node:assert/strict";
 import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { openHostedStoreTestDatabase, startPlan } from "@luke/database/testing";
+import { AGENT_ROLE, type AgentRole } from "@luke/service/agents/agent-runtime/role";
+import {
+  BRAIN_HOST_ATTRIBUTE,
+  BRAIN_HOST_PRINCIPAL_TYPE,
+} from "@luke/service/agents/brain-host/bounds";
 import { NO_GITHUB, openGithubUser } from "@luke/service/testing/github-app-fake";
 import { Effect, Layer, Option, Result } from "effect";
 import type { SessionAuth, SessionContext } from "eve/context";
 import { afterAll, test } from "vitest";
 import { type EdgeKit, edgeKit } from "../server/hosted/agent-runtime/edge";
-import { AGENT_ROLE, type AgentRole } from "../server/hosted/agent-runtime/role";
-import {
-  BRAIN_HOST_ATTRIBUTE,
-  BRAIN_HOST_PRINCIPAL_TYPE,
-} from "../server/hosted/brain-host/bounds";
 import { type CoderHost, coderHost } from "../server/hosted/coder-host/host";
 import { CODER_TOOL_SET } from "../server/hosted/coder-host/tool-set";
 import type { WebAgentRun } from "../server/runtime";

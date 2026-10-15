@@ -23,6 +23,12 @@ import {
   type LiveClientEvent,
   type LiveServerEventType,
 } from "@luke/live";
+import { BRAIN_HOST_TURN } from "@luke/service/agents/brain-host/bounds";
+import {
+  EVE_SEND_OUTCOME,
+  type EveMessage,
+  type EveSessions,
+} from "@luke/service/agents/brain-host/eve-sessions";
 import { MESSAGE_ROLE } from "@luke/service/core";
 import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import { added } from "@luke/service/testing/plan-contents";
@@ -32,12 +38,6 @@ import type { LanguageModel } from "ai";
 import { Deferred, Effect, Exit, Option, Schema, Scope } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll } from "vitest";
-import { BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
-import {
-  EVE_SEND_OUTCOME,
-  type EveMessage,
-  type EveSessions,
-} from "../server/hosted/brain-host/eve-sessions";
 import { PLANNING_EXPLORE_ASK } from "../server/hosted/brain-host/planning";
 import {
   memoryRelayState,

@@ -18,6 +18,14 @@ import { conversations, turns } from "@luke/database/schemas/storage";
 import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
 import { joinWorkspace, openHostedStoreTestDatabase, startPlan } from "@luke/database/testing";
 import { ASK_ORIGIN } from "@luke/features";
+import { BRAIN_HOST_TURN } from "@luke/service/agents/brain-host/bounds";
+import {
+  EVE_CANCEL_OUTCOME,
+  EVE_FIRST_TURN_ID,
+  EVE_SEND_OUTCOME,
+  type EveMessage,
+  type EveSessions,
+} from "@luke/service/agents/brain-host/eve-sessions";
 import { TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@luke/wire";
 import { eq } from "drizzle-orm";
 import { Effect, Option, PartitionedSemaphore, Result, Schema } from "effect";
@@ -29,14 +37,6 @@ import {
   STOP_REFUSAL,
   stopAsk,
 } from "../server/hosted/brain-ask";
-import { BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
-import {
-  EVE_CANCEL_OUTCOME,
-  EVE_FIRST_TURN_ID,
-  EVE_SEND_OUTCOME,
-  type EveMessage,
-  type EveSessions,
-} from "../server/hosted/brain-host/eve-sessions";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 
 /**

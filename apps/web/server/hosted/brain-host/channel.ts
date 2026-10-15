@@ -1,6 +1,3 @@
-import type { TurnPolicy } from "eve/channels";
-import { localDev } from "eve/channels/auth";
-import type { EveChannelInput } from "eve/channels/eve";
 import {
   type BearerAccount,
   DEPLOYMENT_ACT,
@@ -8,8 +5,11 @@ import {
   type DeploymentTurnTable,
   deploymentActor,
   lukeAccount,
-} from "./auth.js";
-import { BRAIN_HOST_TURN } from "./bounds.js";
+} from "@luke/service/agents/brain-host/auth";
+import { BRAIN_HOST_TURN } from "@luke/service/agents/brain-host/bounds";
+import type { TurnPolicy } from "eve/channels";
+import { localDev } from "eve/channels/auth";
+import type { EveChannelInput } from "eve/channels/eve";
 import { messageAuth, ownedAuth, type SessionOwnership } from "./door.js";
 
 /** The two ways eve can take a message that arrives while the session's turn is under way. */

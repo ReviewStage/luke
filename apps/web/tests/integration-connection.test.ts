@@ -6,6 +6,11 @@ import { storeWriter } from "@luke/database/models/writer";
 import { account } from "@luke/database/schemas/auth";
 import { getTestDB, joinWorkspace, startPlan } from "@luke/database/testing";
 import { INTEGRATION_PROVIDER, INTEGRATION_PROVIDER_LIST } from "@luke/features/integration-wire";
+import {
+  BRAIN_HOST_ATTRIBUTE,
+  BRAIN_HOST_PRINCIPAL_TYPE,
+  BRAIN_HOST_TURN,
+} from "@luke/service/agents/brain-host/bounds";
 import { GitHubApp } from "@luke/service/github/github-app";
 import {
   type ConnectorService,
@@ -28,11 +33,6 @@ import { eq } from "drizzle-orm";
 import { Effect, Layer, Logger, Option, Redacted, Result } from "effect";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
 import { test } from "vitest";
-import {
-  BRAIN_HOST_ATTRIBUTE,
-  BRAIN_HOST_PRINCIPAL_TYPE,
-  BRAIN_HOST_TURN,
-} from "../server/hosted/brain-host/bounds";
 import { type BrainHost, brainHost } from "../server/hosted/brain-host/host";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import {

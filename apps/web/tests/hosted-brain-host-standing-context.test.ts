@@ -2,15 +2,15 @@ import assert from "node:assert/strict";
 import { openPlanConversation, savePlanText } from "@luke/database/models/plan-store";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
 import { insertMessage, openHostedStoreTestDatabase, startPlan } from "@luke/database/testing";
+import { BRAIN_HOST_ATTRIBUTE, BRAIN_HOST_TURN } from "@luke/service/agents/brain-host/bounds";
+import {
+  conversationReachableBy,
+  runtimeSessionReachableBy,
+} from "@luke/service/agents/brain-host/conversation";
 import { MESSAGE_AUTHOR, MESSAGE_ROLE } from "@luke/service/core";
 import { Effect, Option, Result } from "effect";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
 import { afterAll, test } from "vitest";
-import { BRAIN_HOST_ATTRIBUTE, BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
-import {
-  conversationReachableBy,
-  runtimeSessionReachableBy,
-} from "../server/hosted/brain-host/conversation";
 import { brainHost } from "../server/hosted/brain-host/host";
 import type { BrainHostSeams } from "../server/hosted/brain-host/production";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";

@@ -9,6 +9,16 @@ import { joinWorkspace, openHostedStoreTestDatabase, startPlan } from "@luke/dat
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
 import {
+  BRAIN_HOST_ATTRIBUTE,
+  BRAIN_HOST_HEADER,
+  BRAIN_HOST_TURN,
+} from "@luke/service/agents/brain-host/bounds";
+import {
+  claimRuntimeSession,
+  conversationReachableBy,
+  runtimeSessionReachableBy,
+} from "@luke/service/agents/brain-host/conversation";
+import {
   ACTION_RESULT_STATUS,
   BRAIN_TURN_TRIGGER,
   isRecord,
@@ -28,16 +38,6 @@ import type * as HttpClient from "effect/http/HttpClient";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
 import type { ToolContext as EveToolContext } from "eve/tools";
 import { afterAll, test } from "vitest";
-import {
-  BRAIN_HOST_ATTRIBUTE,
-  BRAIN_HOST_HEADER,
-  BRAIN_HOST_TURN,
-} from "../server/hosted/brain-host/bounds";
-import {
-  claimRuntimeSession,
-  conversationReachableBy,
-  runtimeSessionReachableBy,
-} from "../server/hosted/brain-host/conversation";
 import { type BrainHost, brainHost } from "../server/hosted/brain-host/host";
 import { planningToolDeclarations } from "../server/hosted/brain-host/planning";
 import type { BrainHostSeams } from "../server/hosted/brain-host/production";

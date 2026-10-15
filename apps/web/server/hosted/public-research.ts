@@ -2,6 +2,7 @@ import { lookup } from "node:dns/promises";
 import { BlockList, isIP } from "node:net";
 import { BRAIN_OPENAI_DEFAULTS } from "@luke/features/brain";
 import { failureKind } from "@luke/runtime/effect";
+import { AGENT_TOOL } from "@luke/service/agents/agent-runtime/tools";
 import { HOSTED_OPENAI_DEFAULTS } from "@luke/service/providers/openai";
 import type { UnparsedWireValue } from "@luke/wire";
 import { describeWire, readEither } from "@luke/wire/effect";
@@ -21,7 +22,6 @@ import * as HttpClient from "effect/http/HttpClient";
 import type * as HttpClientError from "effect/http/HttpClientError";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
-import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import { providerModelOf } from "./model-catalog.js";
 
 /**

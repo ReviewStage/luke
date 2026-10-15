@@ -1,10 +1,10 @@
 import { createOpenAI } from "@ai-sdk/openai";
+import type { MeterSeams } from "@luke/service/agents/agent-runtime/meter";
+import { BRAIN_HOST } from "@luke/service/agents/brain-host/bounds";
 import type { LanguageModel } from "ai";
 import { Redacted, type Result } from "effect";
-import type { MeterSeams } from "../agent-runtime/meter.js";
 import type { CoderRefusal } from "../coder-host/bounds.js";
 import { type CoderModelSelection, coderModel } from "../coder-host/model.js";
-import { BRAIN_HOST } from "./bounds.js";
 import type { OpenAiAccess } from "./production.js";
 
 /**

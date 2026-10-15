@@ -12,17 +12,12 @@ import {
   openHostedStoreTestDatabase,
   startPlan,
 } from "@luke/database/testing";
-import { eq } from "drizzle-orm";
-import { Option, Redacted, Result } from "effect";
-import { type AuthFn, ForbiddenError } from "eve/channels/auth";
-import type { SessionAuthContext } from "eve/context";
-import { afterAll, test } from "vitest";
 import {
   actedForAccount,
   DEPLOYMENT_PRESENCE,
   deploymentActor,
   sessionAuthFor,
-} from "../server/hosted/brain-host/auth";
+} from "@luke/service/agents/brain-host/auth";
 import {
   BRAIN_HOST_ATTRIBUTE,
   BRAIN_HOST_AUTHENTICATOR,
@@ -31,15 +26,20 @@ import {
   BRAIN_HOST_PRINCIPAL_TYPE,
   BRAIN_HOST_REFUSAL,
   BRAIN_HOST_TURN,
-} from "../server/hosted/brain-host/bounds";
-import { DEPLOYMENT_TURNS } from "../server/hosted/brain-host/channel";
+} from "@luke/service/agents/brain-host/bounds";
 import {
   admitConversation,
   claimRuntimeSession,
   conversationReachableBy,
   runtimeSessionReachableBy,
   SESSION_STANDING,
-} from "../server/hosted/brain-host/conversation";
+} from "@luke/service/agents/brain-host/conversation";
+import { eq } from "drizzle-orm";
+import { Option, Redacted, Result } from "effect";
+import { type AuthFn, ForbiddenError } from "eve/channels/auth";
+import type { SessionAuthContext } from "eve/context";
+import { afterAll, test } from "vitest";
+import { DEPLOYMENT_TURNS } from "../server/hosted/brain-host/channel";
 import { ownedAuth, type SessionOwnership } from "../server/hosted/brain-host/door";
 
 /**

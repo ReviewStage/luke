@@ -9,6 +9,7 @@ import {
 import type { ConversationTarget, StoreWriter } from "@luke/database/models/writer";
 import type { PlanActivity, PlanShownCode, PlanWorkTurn } from "@luke/features/planning-view";
 import { serialQueue } from "@luke/runtime/effect";
+import type { EveSessions } from "@luke/service/agents/brain-host/eve-sessions";
 import { liveBrainLayer, liveRecordLayer } from "@luke/voice/effect";
 import {
   type AdoptableSession,
@@ -19,7 +20,6 @@ import {
 import type { LanguageModel } from "ai";
 import { Cause, Effect, Layer, Result, type Schema, type Scope } from "effect";
 import type { WebSocket } from "ws";
-import type { EveSessions } from "../hosted/brain-host/eve-sessions.js";
 import { type HostedLiveBrain, hostedLiveBrain } from "./live-brain.js";
 import { hostedLiveRecord } from "./live-record.js";
 import { observedSideband } from "./live-sideband.js";

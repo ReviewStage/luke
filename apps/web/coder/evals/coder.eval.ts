@@ -12,6 +12,7 @@ import {
   startPlan,
 } from "@luke/database/testing";
 import { CODING_AGENT_TODO_STATUS } from "@luke/features/coding-agent-wire";
+import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "@luke/service/agents/brain-host/bounds";
 import {
   EXCESS_KEYS,
   MESSAGE_AUTHOR,
@@ -27,7 +28,6 @@ import { isTextUIPart, isToolUIPart } from "ai";
 import { eq } from "drizzle-orm";
 import { Effect, ManagedRuntime, Option, Result, Schema } from "effect";
 import { defineEval } from "eve/evals";
-import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "../../server/hosted/brain-host/bounds";
 import { CODER_MODEL_FIXTURE } from "../../server/hosted/coder-host/bounds";
 import { TODOS_SAVED } from "../../server/hosted/coder-host/todos";
 import { CODER_TOOL } from "../../server/hosted/coder-host/tool-set";

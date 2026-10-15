@@ -13,6 +13,15 @@ import { sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
 import { CODING_AGENT_BRIEF, CONTEXT_WINDOW } from "@luke/features/coding-agent-wire";
 import { INBOX_TOOL } from "@luke/features/inbox-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
+import { turnKindOf } from "@luke/service/agents/brain-host/auth";
+import { RELAY_TURN } from "@luke/service/agents/brain-host/bounds";
+import {
+  type AdmittedConversation,
+  admitConversation,
+  type ConversationAdmission,
+  claimRuntimeSession,
+  SESSION_STANDING,
+} from "@luke/service/agents/brain-host/conversation";
 import type { UnparsedWireValue, WireRecord } from "@luke/service/core";
 import { logStoreFailure } from "@luke/service/http/store-failure";
 import { Effect, Option, type Redacted, Result, type Schema } from "effect";
@@ -21,15 +30,6 @@ import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionContext } from "eve/context";
 import { delegatedChildOf, type HostAdmission, hostAdmission } from "../agent-runtime/host-core.js";
 import type { AgentSkill } from "../agent-runtime/skills.js";
-import { turnKindOf } from "../brain-host/auth.js";
-import { RELAY_TURN } from "../brain-host/bounds.js";
-import {
-  type AdmittedConversation,
-  admitConversation,
-  type ConversationAdmission,
-  claimRuntimeSession,
-  SESSION_STANDING,
-} from "../brain-host/conversation.js";
 import type { SessionPromptRecord } from "../brain-host/host.js";
 import { type RelayStanding, type RelayStateStore, StreamRelay } from "../brain-host/relay.js";
 import { ModelCatalog, type OfferedModel, offeredToAccount } from "../model-catalog.js";

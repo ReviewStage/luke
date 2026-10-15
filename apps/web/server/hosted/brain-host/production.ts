@@ -2,20 +2,26 @@ import { spendHostedMeter } from "@luke/database/models/quota";
 import { type StoreWriter, storeWriter } from "@luke/database/models/writer";
 import { BRAIN_OPENAI_DEFAULTS } from "@luke/features/brain";
 import type { ModelChoice } from "@luke/features/models-wire";
+import { accountMeter } from "@luke/service/agents/agent-runtime/meter";
+import {
+  BRAIN_HOST_ENVIRONMENT,
+  BRAIN_HOST_MODEL_FIXTURE,
+} from "@luke/service/agents/brain-host/bounds";
+import {
+  conversationReachableBy,
+  runtimeSessionReachableBy,
+} from "@luke/service/agents/brain-host/conversation";
+import { deploymentEveOrigin } from "@luke/service/agents/brain-host/eve-origin";
 import { auth } from "@luke/service/auth/auth";
 import { unparsedWire, type WireBoundaryInput } from "@luke/service/core";
 import type { WebStoreRun } from "@luke/service/run";
 import type { LanguageModel } from "ai";
 import { Effect, type Redacted } from "effect";
-import { accountMeter } from "../agent-runtime/meter.js";
 import { oauthUserInfoFromAuthAnswer, type UserInfoEndpoint } from "../bearer.js";
 import { HOSTED_TOOL_SET } from "../brain-tool-set.js";
 import { titleModel } from "../coder-host/model.js";
 import { HostedEnvironment } from "../environment.js";
-import { BRAIN_HOST_ENVIRONMENT, BRAIN_HOST_MODEL_FIXTURE } from "./bounds.js";
-import { conversationReachableBy, runtimeSessionReachableBy } from "./conversation.js";
 import type { SessionOwnership } from "./door.js";
-import { deploymentEveOrigin } from "./eve-origin.js";
 
 /**
  * The deployment's real seams behind the eve project's authored files, built
