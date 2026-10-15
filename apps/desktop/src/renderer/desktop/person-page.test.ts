@@ -173,8 +173,8 @@ interface Opened {
   readonly inbox: (InboxChoice | "inbox")[];
 }
 
-/** `userId`'s page over the fixture workspace, read by Dean, every door it opens recorded. */
-function mount(userId: string) {
+/** `userId`'s page over the fixture workspace, read by Dean, opened knowing `name`, every door it opens recorded. */
+function mount(userId: string, name?: string) {
   const opened: Opened = { plans: [], agents: [], inbox: [] };
   const plans = plansControl({
     me: DEAN.userId,
@@ -196,7 +196,9 @@ function mount(userId: string) {
   document.body.append(container);
   root = createRoot(container);
   act(() =>
-    root?.render(onRegistry(AtomRegistry.make(), createElement(PersonPage, { plans, userId }))),
+    root?.render(
+      onRegistry(AtomRegistry.make(), createElement(PersonPage, { plans, userId, name })),
+    ),
   );
   return { page: container, opened };
 }
@@ -300,4 +302,11 @@ test("an Inbox that could not be read says so and offers Retry, and never passes
   assert.match(page.textContent ?? "", /Some Inbox items could not be read\./u);
   assert.ok(button(page, "Retry"));
   assert.doesNotMatch(page.textContent ?? "", /Nothing of theirs here yet/u);
+});
+
+test("someone who left whom only the place that opened the page names keeps that name, as a former member", async () => {
+  const { page } = mount("user-lee", "Lee Park");
+  await settle();
+
+  assert.deepEqual(head(page), ["Lee Park", "Former member"]);
 });

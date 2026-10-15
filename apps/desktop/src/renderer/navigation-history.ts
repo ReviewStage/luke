@@ -66,6 +66,8 @@ type Place =
   | {
       readonly kind: typeof PLACE_KIND.PERSON;
       readonly userId: string;
+      /** The name the page was opened with, which it is opened with again. */
+      readonly name: string | undefined;
       /** The workspace the page was the person's in, which it is no place of another's. */
       readonly workspaceId: string | undefined;
     }
@@ -272,6 +274,7 @@ export function useWindowHistory(input: {
   const inboxOpen = plans.inboxView.open;
   const pageAgent = plans.agentView.agentId;
   const pagePerson = plans.personView.userId;
+  const personName = plans.personView.name;
   const listedWorkspace = plans.workspace?.id;
   const factoryOpen = plans.factoryView.open;
   const factoryOn = useExperiment(EXPERIMENT.FACTORY);
@@ -289,7 +292,12 @@ export function useWindowHistory(input: {
     if (inboxOpen) return { kind: PLACE_KIND.INBOX };
     if (pageAgent !== undefined) return { kind: PLACE_KIND.AGENT, agentId: pageAgent };
     if (pagePerson !== undefined) {
-      return { kind: PLACE_KIND.PERSON, userId: pagePerson, workspaceId: listedWorkspace };
+      return {
+        kind: PLACE_KIND.PERSON,
+        userId: pagePerson,
+        name: personName,
+        workspaceId: listedWorkspace,
+      };
     }
     if (factoryOpen) return { kind: PLACE_KIND.FACTORY };
     if (automationsOpen) return { kind: PLACE_KIND.AUTOMATIONS };
@@ -307,6 +315,7 @@ export function useWindowHistory(input: {
     inboxOpen,
     pageAgent,
     pagePerson,
+    personName,
     listedWorkspace,
     factoryOpen,
     automationsOpen,
@@ -341,7 +350,7 @@ export function useWindowHistory(input: {
       return;
     }
     if (to.kind === PLACE_KIND.PERSON) {
-      plans.personView.onOpen(to.userId);
+      plans.personView.onOpen(to.userId, to.name);
       return;
     }
     if (to.kind === PLACE_KIND.FACTORY) {

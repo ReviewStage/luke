@@ -109,7 +109,12 @@ test("a person's page is a step of its own, which Back from a plan opened after 
   const standing = (userId: string | undefined, rest: Partial<PlansControl> = {}) =>
     plansControl({
       ...rest,
-      personView: { userId, onOpen: (id) => reopened.push(id), onClose: () => undefined },
+      personView: {
+        userId,
+        name: undefined,
+        onOpen: (id) => reopened.push(id),
+        onClose: () => undefined,
+      },
     });
   const window = mount(standing("user-charles"));
   window.stand(standing("user-maya"));
@@ -129,7 +134,12 @@ test("a person's page is theirs in the workspace it stood in, so once another is
   const standing = (workspaceId: string, userId: string | undefined) =>
     plansControl({
       workspace: { id: workspaceId, name: workspaceId, role: WORKSPACE_ROLE.MEMBER, github: null },
-      personView: { userId, onOpen: (id) => reopened.push(id), onClose: () => undefined },
+      personView: {
+        userId,
+        name: undefined,
+        onOpen: (id) => reopened.push(id),
+        onClose: () => undefined,
+      },
     });
   const window = mount(standing("workspace-acme", undefined));
   window.stand(standing("workspace-acme", "user-charles"));

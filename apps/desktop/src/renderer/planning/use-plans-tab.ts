@@ -216,7 +216,9 @@ interface AgentViewControl {
 interface PersonViewControl {
   /** The person whose page stands, none while none does. */
   readonly userId: string | undefined;
-  readonly onOpen: (userId: string) => void;
+  /** The name the place that opened the page knew them by, which names someone the page finds nowhere else. */
+  readonly name: string | undefined;
+  readonly onOpen: (userId: string, name?: string) => void;
   readonly onClose: () => void;
 }
 
@@ -233,7 +235,7 @@ const STAND_IN = {
 type StandIn =
   | { readonly kind: typeof STAND_IN.INBOX; readonly chosen: InboxChoice | undefined }
   | { readonly kind: typeof STAND_IN.AGENT; readonly agentId: string }
-  | { readonly kind: typeof STAND_IN.PERSON; readonly userId: string }
+  | { readonly kind: typeof STAND_IN.PERSON; readonly userId: string; readonly name?: string }
   | { readonly kind: typeof STAND_IN.FACTORY }
   | { readonly kind: typeof STAND_IN.AUTOMATIONS; readonly place: AutomationsPlace };
 
@@ -2004,9 +2006,14 @@ export function usePlansTab(input: {
     // A person's page stands over the plan's place as an agent's does, so a version history there gives way.
     personView: {
       userId: standIn?.kind === STAND_IN.PERSON ? standIn.userId : undefined,
-      onOpen: guard((userId: string) => {
+      name: standIn?.kind === STAND_IN.PERSON ? standIn.name : undefined,
+      onOpen: guard((userId: string, name?: string) => {
         setHistoryFor(undefined);
-        setStandIn({ kind: STAND_IN.PERSON, userId });
+        setStandIn(
+          name === undefined
+            ? { kind: STAND_IN.PERSON, userId }
+            : { kind: STAND_IN.PERSON, userId, name },
+        );
       }),
       onClose: guard(() => setStandIn(undefined)),
     },

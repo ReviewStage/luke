@@ -497,7 +497,12 @@ export function DesktopShell({
           <DesktopAgentPage key={pageAgent} plans={plans} agentId={pageAgent} />
         ) : pagePerson !== undefined ? (
           // Keyed by the person, so another person's page holds nothing of the last.
-          <PersonPage key={pagePerson} plans={plans} userId={pagePerson} />
+          <PersonPage
+            key={pagePerson}
+            plans={plans}
+            userId={pagePerson}
+            name={plans.personView.name}
+          />
         ) : factoryOpen ? (
           <PageFind page={FIND_PAGE.FACTORY} active={plans.shown}>
             <DesktopFactory plans={plans} />

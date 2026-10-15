@@ -143,16 +143,19 @@ function PersonHead({ person }: { person: Actor }): React.JSX.Element {
 function PersonColumn({
   plans,
   userId,
+  name: opened,
 }: {
   plans: PlansControl;
   userId: string;
+  name: string | undefined;
 }): React.JSX.Element {
   const now = useMinute();
   const listed = plans.listed.plans;
-  // Named as the list names them, or as the members read does where the list names them nowhere; nobody's name where neither does.
+  // Named as the list names them, else as the members read does, else by the name the page was opened with; nobody's name where none does.
   const { members, readerId } = useMemberDirectory();
   const member = members?.find((each) => each.userId === userId);
-  const ref = personRef(userId, listed) ?? member;
+  const known = opened === undefined ? undefined : { userId, name: opened };
+  const ref = personRef(userId, listed) ?? member ?? known;
   const person = personActor(ref, members, readerId);
   const page = personPage(userId, listed);
   const you = userId === plans.me;
@@ -250,14 +253,17 @@ function PersonColumn({
 export function PersonPage({
   plans,
   userId,
+  name,
 }: {
   plans: PlansControl;
   userId: string;
+  /** The name the place that opened the page knew them by: someone who left, whom only an edit names. */
+  name?: string | undefined;
 }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_PERSON_PAGE, plans.personView.onClose);
   return (
     <MemberDirectory workspace={plans.workspace} readerId={plans.me}>
-      <PersonColumn plans={plans} userId={userId} />
+      <PersonColumn plans={plans} userId={userId} name={name} />
     </MemberDirectory>
   );
 }
