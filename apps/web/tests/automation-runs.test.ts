@@ -11,7 +11,7 @@ import {
   recordAutomationRun,
   updateAutomation,
 } from "@luke/database/models/automation-store";
-import { readCodingAgent } from "@luke/database/models/coding-agent-store";
+import { archiveCodingAgent, readCodingAgent } from "@luke/database/models/coding-agent-store";
 import { automationRun, automation as automationTable } from "@luke/database/schemas/automation";
 import { turns } from "@luke/database/schemas/storage";
 import { getTestDB, leaveWorkspace, startPlan } from "@luke/database/testing";
@@ -39,7 +39,7 @@ import {
   type EveMessage,
   type EveSessions,
 } from "../server/hosted/brain-host/eve-sessions";
-import { postInboxItem } from "../server/hosted/inbox-store";
+import { closeInboxItem, postInboxItem } from "../server/hosted/inbox-store";
 import { modelCatalogOf, type OfferedModel } from "../server/hosted/model-catalog";
 import {
   connectWorkspaceGitHub,
@@ -187,7 +187,7 @@ const startedNow = (eve: ReturnType<typeof fakeEve>, automation: Automation) =>
 
 it.layer(getTestDB())("an automation's runs", (it) => {
   it.effect(
-    "an automation that archives its successful runs archives a run's agent once its turn settled well, and leaves standing one that failed, one waiting on the inbox, and every agent of an automation that does not",
+    "an automation that archives its successful runs archives a run's agent once its turn settled well, once, and leaves standing one that failed, one brought back by hand, one waiting on the inbox until its question closes, and every agent of an automation that does not",
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
@@ -228,6 +228,26 @@ it.layer(getTestDB())("an automation's runs", (it) => {
             yield* archived(keeping.owner, kept),
           ],
           [true, false, false, false],
+        );
+
+        // Brought back by hand, the agent stays; its question closed later, the asking one goes.
+        yield* archiveCodingAgent(archiving.owner, succeeded, false);
+        yield* closeInboxItem(
+          { userId: archiving.owner, agentId: asking },
+          "which-queue",
+          "Settled it.",
+        );
+        const later = yield* sweepAutomations(eve.eveFor, archiving.now + 3 * 86_400_000).pipe(
+          Effect.provide(services),
+        );
+        assert.equal(later.archived, 1);
+        assert.deepEqual(
+          [
+            yield* archived(archiving.owner, succeeded),
+            yield* archived(archiving.owner, failed),
+            yield* archived(archiving.owner, asking),
+          ],
+          [false, false, true],
         );
       }),
   );

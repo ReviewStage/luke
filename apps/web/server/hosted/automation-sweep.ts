@@ -5,6 +5,7 @@ import {
   claimDueAutomations,
   expireQueuedAutomationRuns,
   queuedAutomationRuns,
+  settleRunArchive,
   strandedAutomationRuns,
 } from "@luke/database/models/automation-store";
 import {
@@ -21,7 +22,7 @@ import {
   type AutomationRunStatus,
   type AutomationTrigger,
 } from "@luke/features/automation-wire";
-import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
+import { CODING_AGENT_STATUS, type CodingAgentStatus } from "@luke/features/coding-agent-wire";
 import { Effect } from "effect";
 import { type EveForAccount, executeAutomationRun, recoverStrandedRun } from "./automation-runs.js";
 import type { StartServices } from "./coder-host/start.js";
@@ -54,8 +55,11 @@ import { codingAgentStatusOf } from "./coder-host/status.js";
  *
  * Last, the agents runs started for automations that archive their
  * successful runs are archived once each finished well, read as its tab
- * reads it, and holds nothing open in the inbox; an agent that failed, was
- * stopped, or still works is left standing for the developer to see.
+ * reads it, and holds nothing open in the inbox. Each is settled once: an
+ * agent archived here, one that failed or was stopped, and one the
+ * developer already put away are marked so and never read again, so one
+ * brought back stays; one still at work or waiting on the inbox is read
+ * again by a later sweep, for a week.
  */
 
 const AUTOMATION_SWEEP = {
@@ -75,8 +79,8 @@ const AUTOMATION_SWEEP = {
    * edge must settle on its own before the expiry could reach it.
    */
   EXPIRED_AFTER_MS: 2 * 60 * 60_000,
-  /** How far back a run's agent is still archived once it finished: past the longest a coding agent's one turn may run before the abandon sweep settles it. */
-  ARCHIVE_WITHIN_MS: 26 * 60 * 60_000,
+  /** How far back a run's agent is still archived once it finished: a week, so one whose inbox item was answered days later still is. */
+  ARCHIVE_WITHIN_MS: 7 * 24 * 60 * 60_000,
   /** The most run agents one sweep reads for archiving. */
   MAX_ARCHIVE_READS: 100,
 } as const;
@@ -118,6 +122,12 @@ function byAutomation(runs: readonly AutomationRun[]): readonly (readonly Automa
   return [...groups.values()];
 }
 
+/** The statuses an agent ends on that its automation never archives: it failed, or it was stopped. */
+const ENDED_UNWELL: ReadonlySet<CodingAgentStatus> = new Set([
+  CODING_AGENT_STATUS.FAILED,
+  CODING_AGENT_STATUS.CANCELLED,
+]);
+
 /** The agents of runs that finished well archived for automations that ask it, as above, answering how many. */
 const archiveFinishedRunAgents = Effect.fnUntraced(function* (now: number) {
   const agents = yield* archivableRunAgents(
@@ -127,18 +137,23 @@ const archiveFinishedRunAgents = Effect.fnUntraced(function* (now: number) {
   const conversations = agents.map((agent) => agent.conversationId);
   const turns = yield* latestTurnsOfReached(conversations);
   const awaiting = yield* awaitingLinesOfReached(conversations);
-  const finished = agents.filter(
-    (agent) =>
-      codingAgentStatusOf(turns.get(agent.conversationId), {
+  const archived = yield* Effect.forEach(agents, (agent) =>
+    Effect.gen(function* () {
+      const status = codingAgentStatusOf(turns.get(agent.conversationId), {
         createdAt: agent.createdAt,
         now,
         lineAwaits: awaiting.has(agent.conversationId),
-      }) === CODING_AGENT_STATUS.COMPLETED,
+      });
+      const finishedWell = agent.archivedAt === null && status === CODING_AGENT_STATUS.COMPLETED;
+      if (finishedWell) yield* archiveCodingAgent(agent.userId, agent.codingAgentId, true);
+      // An agent still at work is read again by a later sweep; any other is settled for good.
+      if (finishedWell || agent.archivedAt !== null || ENDED_UNWELL.has(status)) {
+        yield* settleRunArchive(agent.runId);
+      }
+      return finishedWell;
+    }),
   );
-  yield* Effect.forEach(finished, (agent) =>
-    archiveCodingAgent(agent.userId, agent.codingAgentId, true),
-  );
-  return finished.length;
+  return archived.filter(Boolean).length;
 });
 
 /** The sweep's share at `now`: the schedules due claimed and queued, then the runs queued acted on, then the finished runs' agents archived where asked. */
