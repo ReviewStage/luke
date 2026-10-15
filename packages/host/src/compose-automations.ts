@@ -141,11 +141,15 @@ function composed(dependencies: AutomationsDependencies): AutomationsComposer {
             webhookSecretHash: createHash("sha256").update(secret).digest("hex"),
           }),
         );
-        return carried<AutomationSecretCopiedView>(
-          "failure" in replaced
-            ? replaced
-            : { automation: replaced.automation, secretCopied: true },
-        );
+        if ("failure" in replaced) {
+          // The secret was not taken, so the clipboard is cleared rather than left holding one that admits nothing.
+          yield* copyText("");
+          return carried<AutomationSecretCopiedView>(replaced);
+        }
+        return carried<AutomationSecretCopiedView>({
+          automation: replaced.automation,
+          secretCopied: true,
+        });
       }),
     [GATEWAY_METHOD.AUTOMATIONS_RUNS]: (params) =>
       Effect.gen(function* () {

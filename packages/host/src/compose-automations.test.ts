@@ -55,7 +55,7 @@ const CREATE = {
 };
 
 /** The service as a script that writes down every ask it hears, as the ask runs. */
-function fakeService() {
+function fakeService(options: { replaceRefused?: boolean } = {}) {
   const asked: unknown[] = [];
   const answer =
     <A>(name: string, value: A) =>
@@ -71,16 +71,26 @@ function fakeService() {
     remove: answer("remove", { deleted: true } as const),
     runNow: answer("run", { failure: AUTOMATION_CALL_FAILURE.NOT_FOUND }),
     runs: answer("runs", { runs: [] }),
-    replaceWebhookSecret: answer("replace", { automation: SUMMARY }),
+    replaceWebhookSecret: answer(
+      "replace",
+      options.replaceRefused === true
+        ? { failure: AUTOMATION_CALL_FAILURE.NOT_PERMITTED }
+        : { automation: SUMMARY },
+    ),
   };
   return { client, asked };
 }
 
 function subject(
-  options: { signedIn?: boolean; sendsNetwork?: boolean; clipboardTakes?: boolean } = {},
+  options: {
+    signedIn?: boolean;
+    sendsNetwork?: boolean;
+    clipboardTakes?: boolean;
+    replaceRefused?: boolean;
+  } = {},
 ) {
   return Effect.gen(function* () {
-    const service = fakeService();
+    const service = fakeService(options);
     const clipboard: string[] = [];
     const composer = yield* composeAutomations({
       kernel: { runMode: { sendsNetwork: options.sendsNetwork ?? true } },
@@ -188,5 +198,20 @@ it.effect(
         !JSON.stringify([copied, refused]).includes(secret),
         "no answer carries the secret",
       );
+    }),
+);
+
+it.effect(
+  "a replacement the service refuses leaves the clipboard cleared, not holding a secret that admits nothing",
+  () =>
+    Effect.gen(function* () {
+      const { call, clipboard } = yield* subject({ replaceRefused: true });
+
+      const refused = yield* call(GATEWAY_METHOD.AUTOMATIONS_COPY_WEBHOOK_SECRET, {
+        automationId: AUTOMATION_ID,
+      });
+
+      assert.deepEqual(refused, { failure: AUTOMATION_CALL_FAILURE.NOT_PERMITTED });
+      assert.equal(clipboard.at(-1), "");
     }),
 );
