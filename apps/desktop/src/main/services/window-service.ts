@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { APP_LINK_SCHEME, type AppLinkPlace } from "@luke/features/app-links";
+import { APP_LINK_SCHEME, type AppLinkPlace, appLinkClaim } from "@luke/features/app-links";
 import { PAGE_SCHEME } from "@luke/features/page-frame";
 import { WINDOW_ROLE } from "@luke/gateway/window-session";
 import type { AgentEndToast, AgentPlace, InboxItemToast } from "@luke/host/agent-notices";
@@ -489,8 +489,14 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       raiseVoiceWindow();
       configurePermissions();
 
-      // The packaged bundle declares the app's own scheme; macOS is asked to send its links here rather than to another app claiming it.
-      if (config.packaged) app.setAsDefaultProtocolClient(APP_LINK_SCHEME);
+      // macOS is asked to send the app's own scheme here rather than to another Luke claiming it, a live development run's among them.
+      const linkClaim = appLinkClaim({
+        packaged: config.packaged,
+        live: runMode.sendsNetwork,
+        executable: process.execPath,
+        appPath: app.getAppPath(),
+      });
+      if (linkClaim !== undefined) app.setAsDefaultProtocolClient(APP_LINK_SCHEME, ...linkClaim);
       app.on("second-instance", handleSecondInstance);
       app.on("activate", handleActivate);
       app.on("browser-window-focus", panelFocused);

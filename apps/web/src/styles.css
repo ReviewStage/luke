@@ -49,6 +49,23 @@
   --font-brand: var(--font-wordmark);
 }
 
+/* A line that waits a moment before it fades in, as the Open in Luke page's
+   "Didn't open?" does after a press: the wait is the time a browser takes to
+   hand the link to the app, and a fade rather than a slide, so reduced motion
+   need not hold it still. */
+@theme {
+  --animate-arrive-late: arrive-late 240ms ease-out 2s both;
+
+  @keyframes arrive-late {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+}
+
 :root {
   color-scheme: light;
 
