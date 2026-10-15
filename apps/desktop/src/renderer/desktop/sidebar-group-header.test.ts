@@ -154,11 +154,11 @@ test("the summary's archived agents fold under the sidebar's own Archived header
   );
 
   assert.equal(fold(sidebar, "Archived").getAttribute("aria-expanded"), "false");
-  assert.equal(fold(sidebar, "Archived").textContent, "Archived2 plans");
+  assert.equal(fold(sidebar, "Archived").textContent, "Archived2 tasks");
   assert.equal(fold(summary, "Archived").textContent, "Archived2 archived agents");
   assert.equal(
     headerShape(summary, "Archived", " archived agents"),
-    headerShape(sidebar, "Archived", " plans"),
+    headerShape(sidebar, "Archived", " tasks"),
   );
 
   act(() => fold(sidebar, "Archived").click());
@@ -183,9 +183,9 @@ test("a repository's header folds on its name, says its pin, counts its plans fo
 
   act(() => relay().click());
   assert.equal(relay().getAttribute("aria-expanded"), "false");
-  assert.equal(relay().textContent, "relay(pinned)2 plans");
+  assert.equal(relay().textContent, "relay(pinned)2 tasks");
 
-  const plus = sidebar.querySelector<HTMLButtonElement>('button[aria-label="New plan in relay"]');
+  const plus = sidebar.querySelector<HTMLButtonElement>('button[aria-label="New task in relay"]');
   assert.ok(plus, "the header offers a new plan in its repository");
   act(() => plus.click());
   assert.deepEqual(asked, ["acme/relay"]);
@@ -198,7 +198,7 @@ test("a repository's header folds on its name, says its pin, counts its plans fo
   assert.ok(menu, "the right-click opens the repository's menu");
   assert.deepEqual(
     [...menu.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent),
-    ["Unpin", "Archive plans", "Open on GitHub"],
+    ["Unpin", "Archive tasks", "Open on GitHub"],
   );
   const ellipsis = sidebar.querySelector('button[aria-label="Actions for relay"]');
   assert.equal(ellipsis?.getAttribute("aria-expanded"), "true");

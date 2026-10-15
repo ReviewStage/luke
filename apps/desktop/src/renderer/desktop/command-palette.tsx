@@ -107,7 +107,7 @@ const PALETTE_FILTERS: readonly PaletteFilter[] = Object.values(PALETTE_FILTER);
 /** Each filter's chip, which is also each kind's heading under All. */
 const FILTER_LABEL = {
   [PALETTE_FILTER.ALL]: "All",
-  [PALETTE_FILTER.PLANS]: "Plans",
+  [PALETTE_FILTER.PLANS]: "Tasks",
   [PALETTE_FILTER.AGENTS]: "Agents",
   [PALETTE_FILTER.FILES]: "Files",
   [PALETTE_FILTER.ACTIONS]: "Actions",
@@ -116,8 +116,8 @@ const FILTER_LABEL = {
 
 /** What the search field asks for under each filter. */
 const FILTER_PLACEHOLDER = {
-  [PALETTE_FILTER.ALL]: "Search plans, agents, files, actions, and settings…",
-  [PALETTE_FILTER.PLANS]: "Search plans…",
+  [PALETTE_FILTER.ALL]: "Search tasks, agents, files, actions, and settings…",
+  [PALETTE_FILTER.PLANS]: "Search tasks…",
   [PALETTE_FILTER.AGENTS]: "Search agents…",
   [PALETTE_FILTER.FILES]: "Search files…",
   [PALETTE_FILTER.ACTIONS]: "Search actions…",
@@ -153,7 +153,7 @@ type FilesRead =
   | { read: typeof FILES_READ.MISSED; notice: string };
 
 /** What the Files filter says while no plan with a repository is open. */
-const NO_REPOSITORY_LINE = "Open a plan with a repository to search its files.";
+const NO_REPOSITORY_LINE = "Open a task with a repository to search its files.";
 
 /** What the Files filter says where the read did not land. */
 const FILES_MISSED_LINE = "The files could not be read.";

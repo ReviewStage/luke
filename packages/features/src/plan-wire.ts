@@ -7,7 +7,7 @@ import { countedNumber, memberRefSchema, wireUuidSchema } from "./service-wire.j
  * plan-wire.ts -- a named feature plan and its one saved document, as the Plans tab and the service read them.
  *
  * A plan is its owner's name for it and one current document: one free
- * Markdown text (`plan-document.ts`, `docs/PLANNING.md`), answered as the
+ * Markdown text (`plan-document.ts`, `docs/TASKS.md`), answered as the
  * document's `body` with no title line, since the name is its own, and an
  * empty `assumptions` list, since its assumptions are a section of the text;
  * the list stays on the wire because a desktop through v0.11.0 requires it.

@@ -106,7 +106,7 @@ const INVITATION_ROLES = [INVITATION_ROLE.MEMBER, INVITATION_ROLE.ADMIN] as cons
 
 /** What each role may do, as the role menu's second lines say it. */
 const ROLE_DETAIL = {
-  [INVITATION_ROLE.MEMBER]: "Works on plans and agents",
+  [INVITATION_ROLE.MEMBER]: "Works on tasks and agents",
   [INVITATION_ROLE.ADMIN]: "Also manages members and GitHub",
 } as const satisfies Record<WorkspaceInvitation["role"], string>;
 
@@ -134,9 +134,9 @@ const READ_FAILED = {
  * fails as `creator-left`.
  */
 const LEAVE_WORDS = {
-  LINE: "You lose its plans, agents, and Inbox until someone invites you again.",
-  BODY: "You lose access to its plans, agents, and Inbox until someone invites you again.",
-  PLANS: (name: string) => `Plans you wrote stay in ${name}, for its members to keep.`,
+  LINE: "You lose its tasks, agents, and Inbox until someone invites you again.",
+  BODY: "You lose access to its tasks, agents, and Inbox until someone invites you again.",
+  PLANS: (name: string) => `Tasks you wrote stay in ${name}, for its members to keep.`,
   AGENTS:
     "Agents you started stay in its history, named as a former member, and any still working stop.",
   AUTOMATIONS: "Automations you created stop running.",
@@ -390,7 +390,7 @@ function MemberRow({
         confirm={remove}
         question={{
           title: `Remove ${member.name} from this workspace?`,
-          body: "They lose its plans, agents, and Inbox until they are invited again.",
+          body: "They lose its tasks, agents, and Inbox until they are invited again.",
           verb: "Remove",
           running: "Removing",
         }}
@@ -1026,7 +1026,7 @@ function ManagedGitHub({ workspace }: { workspace: Workspace }): React.JSX.Eleme
           confirm={disconnect}
           question={{
             title: `Disconnect ${github.login} from ${workspace.name}?`,
-            body: "Its plans lose these repositories until GitHub is connected again.",
+            body: "Its tasks lose these repositories until GitHub is connected again.",
             verb: "Disconnect",
             running: "Disconnecting",
           }}

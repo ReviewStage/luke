@@ -283,7 +283,7 @@ function PlanMenuFooter({
 function deleteQuestion(name: string, archived: boolean): DialogQuestion {
   const lost = `“${name}” and its board and transcript will be deleted. This can’t be undone.`;
   return {
-    title: "Permanently delete plan?",
+    title: "Permanently delete task?",
     body: archived ? lost : `${lost} To keep it out of the way instead, archive it.`,
     verb: "Permanently delete",
     running: "Deleting",
@@ -314,7 +314,7 @@ function usePlanMenu(
   const menu =
     drawn === undefined ? null : (
       <ActionMenu
-        label="Plan actions"
+        label="Task actions"
         menu={drawn}
         footer={plan === undefined ? undefined : <PlanMenuFooter plans={plans} plan={plan} />}
         groups={planActionGroups(plans, planId, {
@@ -373,11 +373,11 @@ export function PlanActions({
   return (
     <>
       {button ? (
-        <Tooltip label="Plan actions">
+        <Tooltip label="Task actions">
           <button
             type="button"
             className="icon-button"
-            aria-label="Plan actions"
+            aria-label="Task actions"
             disabled={deletion.busy}
             {...actions.trigger()}
           >

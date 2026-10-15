@@ -703,7 +703,7 @@ test("a new automation is created only once it is named and told its task, and t
   assert.match(page.textContent ?? "", /Tell the agent what to do\./u);
 
   type(page.querySelector("input[aria-label='Automation name']"), "Morning triage");
-  type(page.querySelector("textarea[aria-label='Task']"), "Triage the issues opened overnight.");
+  type(page.querySelector("textarea[aria-label='Prompt']"), "Triage the issues opened overnight.");
   act(() => button("Create").click());
   await settle();
 
@@ -730,7 +730,7 @@ test("an edit says it is unsaved and saves only what moved", async () => {
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
   await settle();
 
-  type(page.querySelector("textarea[aria-label='Task']"), "Fix the two flakiest tests.");
+  type(page.querySelector("textarea[aria-label='Prompt']"), "Fix the two flakiest tests.");
   assert.equal(page.querySelector(".automation-editor-status")?.textContent, "Unsaved changes");
   act(() => button("Save").click());
   await settle();
@@ -833,12 +833,12 @@ test("what is typed while a save is out stands, unsaved, once the save lands", a
   type(page.querySelector("input[aria-label='Automation name']"), "Sweep");
   act(() => button("Save").click());
   await settle();
-  type(page.querySelector("textarea[aria-label='Task']"), "Fix the two flakiest tests.");
+  type(page.querySelector("textarea[aria-label='Prompt']"), "Fix the two flakiest tests.");
   heldChanges[0]?.();
   await settle();
 
   assert.equal(
-    page.querySelector<HTMLTextAreaElement>("textarea[aria-label='Task']")?.value,
+    page.querySelector<HTMLTextAreaElement>("textarea[aria-label='Prompt']")?.value,
     "Fix the two flakiest tests.",
   );
   assert.equal(page.querySelector(".automation-editor-status")?.textContent, "Unsaved changes");
@@ -868,7 +868,7 @@ test("a new automation's page moved to another workspace starts afresh in that w
   act(() => moveTo({ ...WORKSPACE, id: "workspace-beta", name: "Beta" }));
   await settle();
   type(page.querySelector("input[aria-label='Automation name']"), "Beta triage");
-  type(page.querySelector("textarea[aria-label='Task']"), "Triage Beta's issues.");
+  type(page.querySelector("textarea[aria-label='Prompt']"), "Triage Beta's issues.");
   act(() => button("Create").click());
   await settle();
 
@@ -891,7 +891,7 @@ test("an automation fired by an event says its trigger in one sentence, and a sa
   assert.equal(pickerDetail(page, "Type"), "When an issue is opened in acme/ledger labelled bug");
   assert.equal(picked(page, "Event"), "Issue opened");
   assert.equal(page.querySelector("button[aria-label^='Time zone: ']"), null);
-  type(page.querySelector("textarea[aria-label='Task']"), "Reproduce the bug first.");
+  type(page.querySelector("textarea[aria-label='Prompt']"), "Reproduce the bug first.");
   act(() => button("Save").click());
   await settle();
 
@@ -1202,7 +1202,7 @@ test("a new automation set to a GitHub event is created on it, the trigger said 
     "When a pull request is opened or updated in acme/ledger",
   );
   type(page.querySelector("input[aria-label='Automation name']"), "Code review");
-  type(page.querySelector("textarea[aria-label='Task']"), "Review this pull request.");
+  type(page.querySelector("textarea[aria-label='Prompt']"), "Review this pull request.");
   act(() => button("Create").click());
   await settle();
 
@@ -1224,7 +1224,7 @@ test("a webhook made in the window shows its secret once, read-only with Copy, l
 
   pick(page, "Type", "Webhook");
   type(page.querySelector("input[aria-label='Automation name']"), "Fix Sentry alerts");
-  type(page.querySelector("textarea[aria-label='Task']"), "Fix the error the alert names.");
+  type(page.querySelector("textarea[aria-label='Prompt']"), "Fix the error the alert names.");
   act(() => button("Create").click());
   await settle();
 
@@ -1249,7 +1249,7 @@ test("a new secret shown after one was copied says nothing was copied of it yet"
   await settle();
   pick(page, "Type", "Webhook");
   type(page.querySelector("input[aria-label='Automation name']"), "Fix Sentry alerts");
-  type(page.querySelector("textarea[aria-label='Task']"), "Fix the error the alert names.");
+  type(page.querySelector("textarea[aria-label='Prompt']"), "Fix the error the alert names.");
   act(() => button("Create").click());
   await settle();
   act(() => button("Copy secret").click());
@@ -1278,7 +1278,7 @@ test("a shown secret is let go of once the automation is saved as anything but a
   await settle();
   pick(page, "Type", "Webhook");
   type(page.querySelector("input[aria-label='Automation name']"), "Fix Sentry alerts");
-  type(page.querySelector("textarea[aria-label='Task']"), "Fix the error the alert names.");
+  type(page.querySelector("textarea[aria-label='Prompt']"), "Fix the error the alert names.");
   act(() => button("Create").click());
   await settle();
   assert.equal(

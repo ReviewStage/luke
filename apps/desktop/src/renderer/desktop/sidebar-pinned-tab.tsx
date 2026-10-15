@@ -50,7 +50,7 @@ import { type TranscriptCopier, useTranscriptCopier } from "./strip-tabs";
  */
 
 /** What a pin's card says once its plan no longer holds what it opens. */
-const GONE_NOTE = "No longer on this plan";
+const GONE_NOTE = "No longer on this task";
 
 /** Whether the open plan has said the pin's agent, the agent of its Changes, or its file is gone from it; another plan's pins and a fixed tab's never are. */
 function pinGone(pin: PinnedTab, plans: PlansControl): boolean {

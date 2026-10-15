@@ -63,7 +63,7 @@ import { planCardOf } from "./plan-card";
 
 /** What each step is called, its glyph, and what its line says with nothing in it. */
 const STEPS = {
-  [FACTORY_STEP.PLAN]: { name: "Plan", Icon: AudioLinesIcon, idle: "No plan in progress" },
+  [FACTORY_STEP.PLAN]: { name: "Plan", Icon: AudioLinesIcon, idle: "No task being planned" },
   [FACTORY_STEP.BUILD]: { name: "Build", Icon: CodingAgentsIcon, idle: "No agents working" },
   [FACTORY_STEP.SHIP]: { name: "Ship", Icon: GitMergeIcon, idle: "Nothing just shipped" },
 } as const;
@@ -422,7 +422,7 @@ function Summary({
   };
   const working =
     board.agentsWorking > 0
-      ? `${count(board.agentsWorking, "agent", "agents")} working on ${count(board.plansWorking, "plan", "plans")}`
+      ? `${count(board.agentsWorking, "agent", "agents")} working on ${count(board.plansWorking, "task", "tasks")}`
       : undefined;
   return (
     <p className="factory-summary">

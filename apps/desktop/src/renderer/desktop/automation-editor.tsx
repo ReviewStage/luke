@@ -163,7 +163,7 @@ const SAVE_REFUSAL_WORDS = {
   [AUTOMATION_CALL_FAILURE.REPOSITORY_NOT_REACHABLE]:
     "Luke can't reach that repository from this workspace on GitHub.",
   [AUTOMATION_CALL_FAILURE.INVALID]:
-    "Luke couldn't save it as written. Check its schedule and task.",
+    "Luke couldn't save it as written. Check its schedule and prompt.",
   [AUTOMATION_CALL_FAILURE.NOT_PERMITTED]:
     "Only its creator, or the workspace's owners and admins, can change it.",
 } as const satisfies Record<AutomationCallFailure, string>;
@@ -892,7 +892,7 @@ function RunsGroup({
         <span className="settings-copy">
           <strong>Repository</strong>
           {planBacked ? (
-            <small>Its plan's repository.</small>
+            <small>Its task's repository.</small>
           ) : also.length === 0 ? null : (
             <small>{`Runs start here, and also work in ${also.join(", ")}.`}</small>
           )}
@@ -1017,10 +1017,10 @@ function EditorForm({
         )}
         <Problem problem={problems[DRAFT_FIELD.SCHEDULE]} />
       </SettingsGroup>
-      <SettingsGroup title="Task">
+      <SettingsGroup title="Prompt">
         <textarea
           className="automation-prompt"
-          aria-label="Task"
+          aria-label="Prompt"
           placeholder="What the agent is told each run: find the flakiest test in CI this week and fix it."
           value={draft.prompt}
           onKeyDown={releaseOnEscape}

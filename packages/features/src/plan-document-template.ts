@@ -18,7 +18,7 @@ import {
  *
  * The template is plain Markdown. Its guidance sentences are ordinary text the
  * developer and Luke both read, and nothing draws them muted. Every new plan
- * starts as a copy of it (`plan-store.ts`'s `createPlan`; `docs/PLANNING.md`,
+ * starts as a copy of it (`plan-store.ts`'s `createPlan`; `docs/TASKS.md`,
  * "The template"), and a note Luke adds to a section that still holds exactly
  * what the template put there, one paragraph of guidance, takes the place of
  * those words (`plan-template.ts`'s `applyNotesToText`).

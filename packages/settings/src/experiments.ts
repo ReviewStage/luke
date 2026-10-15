@@ -47,7 +47,7 @@ export const EXPERIMENTS = [
     key: EXPERIMENT.FACTORY,
     name: "Factory",
     detail:
-      "Every plan on one board, from Plan to Build to Ship, beside the Inbox. Read-only for now.",
+      "Every task on one board, from Plan to Build to Ship, beside the Inbox. Read-only for now.",
     owner: "Dean",
     since: "2026-10-14",
   },

@@ -540,10 +540,10 @@ const NO_PAGES: NonNullable<PlanningView["pages"]> = [];
 const PLAN_COPIED_NOTE = "Plan copied";
 
 /** What the toast says once a plan is deleted. */
-const PLAN_DELETED_NOTE = "Plan deleted";
+const PLAN_DELETED_NOTE = "Task deleted";
 
 /** What the toast says when the service did not move a plan, which stays where it was. */
-const MOVE_REFUSED_NOTE = "The plan could not be moved. Try again.";
+const MOVE_REFUSED_NOTE = "The task could not be moved. Try again.";
 
 /** What the toast says when opening a plan listed the workspace it is in. */
 function switchedNote(workspace: string): string {
@@ -556,7 +556,7 @@ function backNote(workspace: string): string {
 }
 
 /** Why a delete the service did not carry was refused. */
-const DELETE_REFUSED_NOTE = "The plan could not be deleted. Try again.";
+const DELETE_REFUSED_NOTE = "The task could not be deleted. Try again.";
 
 /** What a delete the service did not carry answers, so the plan stays and says why. */
 const DELETE_REFUSED: ActionResult = {

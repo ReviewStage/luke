@@ -127,7 +127,7 @@ function AttachmentOwner({ shown }: OwnerProps): ReactElement {
 /** Each modal by the role its card carries. */
 const DIALOGS = [
   { name: "a confirm", Owner: ConfirmOwner, role: "alertdialog" },
-  { name: "New plan", Owner: NewPlanOwner, role: "dialog" },
+  { name: "New task", Owner: NewPlanOwner, role: "dialog" },
   { name: "Send feedback", Owner: FeedbackOwner, role: "dialog" },
   { name: "the attachment viewer", Owner: AttachmentOwner, role: "dialog" },
 ] as const;

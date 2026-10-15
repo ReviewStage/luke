@@ -1341,7 +1341,7 @@ test("a refused move says so in a toast, unless its caller says it itself", asyn
   const told = await tab.control().onMovePlan("billing", ACME.id);
   await settle();
 
-  const refused = "The plan could not be moved. Try again.";
+  const refused = "The task could not be moved. Try again.";
   assert.deepEqual([quiet, told], [false, false]);
   assert.notEqual(saidQuietly, refused, "the caller says the refusal, so no toast does");
   assert.equal(newestToastSays(), refused);

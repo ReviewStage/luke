@@ -1,9 +1,9 @@
-# Planning: the voice planning journey and the Plans tab
+# Tasks: the voice journey and the Tasks tab
 
 This is the reference the Feature Planning MVP builds against (LUKE-331). It
 fixes what the developer sees and hears, in order, from picking a GitHub
 repository to copying the finished plan, and it names the existing piece of Luke
-each part of the Plans tab is built from. It is a design, not an
+each part of the Tasks tab is built from. It is a design, not an
 implementation: the issues that build it (LUKE-334 document store, LUKE-337 the
 first Mac surface, LUKE-347 its move into the panel, LUKE-338 GitHub source
 tools, LUKE-340 GPT Live, LUKE-342 review and Copy) own the code and the
@@ -12,7 +12,7 @@ tests.
 The product decisions behind it are settled in the project specification and
 are not reopened here. The two that shape everything below:
 
-- **One saved document per named plan**, one free Markdown text started as a
+- **One saved plan per named task**, one free Markdown text started as a
   copy of the account's template ("The template" below), written by the
   plan's notetaker, which takes notes into it ("The notetaker" below), by
   coding agents through the same notes, and by the developer, whose editor
@@ -21,8 +21,8 @@ are not reopened here. The two that shape everything below:
   who made it ("History" below); there is no stale-revision rejection, no
   approval state, and no export record.
 - **The model drives the workflow.** Question choice, agreement, corrections,
-  and the final review live in the planning model's instructions, and the
-  planning model never writes the document: it is handed the saved document
+  and the final review live in Luke's instructions, and Luke's
+  model never writes the document: it is handed the saved document
   every turn, so Luke keeps talking while the notetaker writes.
   The tab decides nothing; it shows the saved document and the voice state,
   and saves only the developer's own edits of the text.
@@ -32,7 +32,7 @@ are not reopened here. The two that shape everything below:
 A reviewer can hold the build to these as easily as to the layout:
 
 - No typed-chat composer and no typed fallback. The developer speaks; the only
-  text fields are ordinary setup fields (the plan's name and the repository
+  text fields are ordinary setup fields (the task's name and the repository
   filter) and the editor the document opens in, and nothing typed into them
   reaches the model as conversation. An edited section reaches it as the
   document it is handed, marked as the developer's own words.
@@ -43,28 +43,28 @@ A reviewer can hold the build to these as easily as to the layout:
 - An assumption is edited like any other line of the text, never confirmed or
   accepted: there is no checkbox, no Accept, and nothing that moves one
   elsewhere.
-- The document is the record. What was said on the plan's calls can be read
+- The document is the record. What was said on the task's calls can be read
   back in the side panel's Transcript tab, but nothing there is a second
   document: it is never copied, edited, or handed to an agent. The document
   itself is what Start hands to a coding agent, as the Markdown Copy puts on
   the clipboard ("From a plan to a pull request" below).
 - The document is always the page. The whiteboard ("Whiteboard" below), the
   code Luke has on screen, the transcript, and each coding agent started on
-  the plan stand beside it in a side panel ("Side panel" below) that the
+  the task stand beside it in a side panel ("Side panel" below) that the
   developer opens and closes; only a first drawing, first code, or an agent
   just started opens it on its own, and there are no second documents.
-- No window of its own. Planning lives in Luke's one window (LUKE-347): there
-  is no separate planning window, Dock tile, Cmd-Tab entry, or app menu for it.
+- No window of its own. Tasks live in Luke's one window (LUKE-347): there
+  is no separate task window, Dock tile, Cmd-Tab entry, or app menu for it.
 
-## The Plans tab
+## The Tasks tab
 
-Planning is the window's first place, `Plans`, beside `Settings`, and the
+Tasks are the window's first place, `Tasks`, beside `Settings`, and the
 one the window opens on. The tab draws in the work column beside the
 sidebar, one page at a time:
 
 ```
  ┌──────────────────────────────────────────────────────────────┐
- │  [ Plans ]   Settings                                        │
+ │  [ Tasks ]   Settings                                        │
  │  ‹  Teammate invitations                 [ ▶ Start ▾ ] [ ⋯ ]   │
  │     acme/relay                                               │
  │ ──────────────────────────────────────────────────────────── │
@@ -86,60 +86,60 @@ sidebar, one page at a time:
           ^ the live captions, just above the call bar
 ```
 
-- **New plan page**: the tab's home, whenever no plan is open. The plan
+- **New task page**: the tab's home, whenever no task is open. The task
   list is the window's sidebar, so there is no empty page in between.
-- **Document page**: the open plan's saved document. Its header and its
+- **Document page**: the open task's saved document. Its header and its
   microphone row hold still, and only the document scrolls between them.
 
 Escape unwinds one page at a time, after any open microphone has been muted
 (Escape mutes first, as it does for any call): the document page back to the
-new-plan page, which leaves the plan, and the new-plan page closes the panel. Escape on the Settings tab's front page comes back to Plans.
+new-task page, which leaves the task, and the new-task page closes the panel. Escape on the Settings tab's front page comes back to Tasks.
 
 ### Opening, leaving, and the talk key
 
-- Opening a plan, from the list or by starting one, makes it the host's one
-  **active plan**, and every panel's Plans tab shows it on its document page.
-- A plan stays open while the developer turns to Settings or closes the
-  window, so a call about it goes on. The sidebar draws a planning call
+- Opening a task, from the list or by starting one, makes it the host's one
+  **active task**, and every panel's Tasks tab shows it on its document page.
+- A task stays open while the developer turns to Settings or closes the
+  window, so a call about it goes on. The sidebar draws a task's call
   exactly as any call: Luke's face and the waveform beside it, with the
-  captions just above the plan's call bar, or at the window's foot where no
-  call bar is drawn. They carry no plan name, and hold back spoken words
+  captions just above the task's call bar, or at the window's foot where no
+  call bar is drawn. They carry no task name, and hold back spoken words
   while the side panel is showing the Transcript, which streams the same
   ones.
-- A plan is left by Back (`‹`) or Escape on its document page, by opening
-  another plan, or by a sign-out. Leaving a plan, or opening another, leaves
-  its call standing: the call outlives the plan on screen, and Luke goes on
-  hearing, speaking, and writing the call's plan. Only one plan is ever the
-  spoken conversation, so another plan's Talk press, or starting a plan,
-  hangs the call up and opens one about that plan. Deleting the call's plan,
+- A task is left by Back (`‹`) or Escape on its document page, by opening
+  another task, or by a sign-out. Leaving a task, or opening another, leaves
+  its call standing: the call outlives the task on screen, and Luke goes on
+  hearing, speaking, and writing the plan of the call's task. Only one task is ever the
+  spoken conversation, so another task's Talk press, or starting a task,
+  hangs the call up and opens one about that task. Deleting the call's task,
   open or not, and signing out end it.
-- While a call stands, the talk key speaks into it, whatever plan the panel
-  has open. With no call, it opens the call about the open plan, and with no
-  plan open it does nothing. The microphone and speaker mute chords answer
-  while a call is in progress wherever the panel stands, on another plan,
-  in Settings, or on the new-plan page.
-- Nothing polls. Every change to a plan happens during its call, and the
-  notetaker's drafts reach the open plan on the call's own socket as they
-  are written. The list and the open plan are read when a panel shows the
-  Plans tab; the open plan again when a plan opens, and the list again when
-  one starts or is deleted. Leaving the tab leaves the plan and its call
+- While a call stands, the talk key speaks into it, whatever task the panel
+  has open. With no call, it opens the call about the open task, and with no
+  task open it does nothing. The microphone and speaker mute chords answer
+  while a call is in progress wherever the panel stands, on another task,
+  in Settings, or on the new-task page.
+- Nothing polls. Every change to a task happens during its call, and the
+  notetaker's drafts reach the open task on the call's own socket as they
+  are written. The list and the open task are read when a panel shows the
+  Tasks tab; the open task again when a task opens, and the list again when
+  one starts or is deleted. Leaving the tab leaves the task and its call
   standing, and coming back reads everything again.
 
-### Plan list
+### Task list
 
-- Every named plan the account owns, newest started first. Opening a plan
-  moves no row, so a new plan stands at the head and nothing else moves.
-  The plans are grouped under their repositories' headers, the repository's
+- Every named task the account owns, newest started first. Opening a task
+  moves no row, so a new task stands at the head and nothing else moves.
+  The tasks are grouped under their repositories' headers, the repository's
   name with its owner on hover (or `owner/name` where two share a name), the
-  group whose plan was updated most recently first and "No repository" last;
+  group whose task was updated most recently first and "No repository" last;
   within a group the order stays newest started first, so no row moves while
   Luke writes. A header's chevron folds the group, remembered on this Mac,
-  and its + (shown on hover or focus) opens the new-plan page with that
-  repository already chosen. Each row shows the plan's name and, muted at its
+  and its + (shown on hover or focus) opens the new-task page with that
+  repository already chosen. Each row shows the task's name and, muted at its
   end, how long ago it was last updated ("now", "5m", "3h", "2d", "3w", then
   the date), moved on each minute, the full moment on hover. Pinned and
   archived rows stay flat and name their `owner/repository` beneath.
-- A workspace is a team's shared plans; the first one, made for the account
+- A workspace is a team's shared tasks; the first one, made for the account
   when it signs in, is one like any other. A signed-in account sees the list
   headed by the workspace it lists, its first one until another is chosen. Its menu lists every workspace the
   account is a member of, the listed one checked, then "New workspace…",
@@ -157,43 +157,43 @@ new-plan page, which leaves the plan, and the new-plan page closes the panel. Es
   alone. Every way into Settings at a place takes one typed link,
   `SettingsLink` (`@luke/settings/settings-views`: a page, a section, a workspace),
   followed by `settings-link.ts`. The list, Pinned, Archived, and the command palette hold the
-  chosen workspace's plans alone, New plan starts in it, the repository chip
+  chosen workspace's tasks alone, New task starts in it, the repository chip
   lists only the repositories its GitHub reaches (none, read "No repository",
-  where it has no GitHub connected, and the plan starts with none), and the
-  choice is remembered on this Mac. A plan whose repository its own
+  where it has no GitHub connected, and the task starts with none), and the
+  choice is remembered on this Mac. A task whose repository its own
   workspace cannot reach but another of the account's can, one stranded by
-  #2524, says so in a banner over every tab of the plan, "This plan's
+  #2524, says so in a banner over every tab of the task, "This plan's
   repository belongs to <workspace> · Move to <workspace>", whose press opens
   Move to workspace on that workspace; nothing moves it without that press,
-  since a move shares the plan with the other workspace's members.
-- Clicking a row opens that plan on the document page (see "Leaving and
+  since a move shares the task with the other workspace's members.
+- Clicking a row opens that task on the document page (see "Leaving and
   resuming").
-- `New plan` at the head of the list leaves any open plan for the new-plan
+- `New task` at the head of the list leaves any open task for the new-task
   page and focuses its name field. It is drawn as a row of the list, and is
-  the selected row whenever the new-plan page shows.
-- A pinned plan stands under **Pinned**, a section above the rest drawn only
-  while any plan is pinned, newest pinned first.
-- An archived plan leaves the list for **Archived (n)**, a quiet row at the
-  list's foot that unfolds the archived plans, newest archived first.
-  Archiving the open plan leaves it for the new-plan page, as deleting it
-  does, and back and forward pass archived plans over. Pins and archives are
+  the selected row whenever the new-task page shows.
+- A pinned task stands under **Pinned**, a section above the rest drawn only
+  while any task is pinned, newest pinned first.
+- An archived task leaves the list for **Archived (n)**, a quiet row at the
+  list's foot that unfolds the archived tasks, newest archived first.
+  Archiving the open task leaves it for the new-task page, as deleting it
+  does, and back and forward pass archived tasks over. Pins and archives are
   the account's (`PATCH /api/plans/{id}`), so they follow it to every Mac,
   and a Pin, an Archive, or the way back from either is drawn at once and
-  put back, with a quiet note under the plan's row, when the service refuses.
+  put back, with a quiet note under the task's row, when the service refuses.
 - There is no search in this journey.
 
-### New plan
+### New task
 
 A devtool's new-task page: the heading "What are we planning?" over one
-composer card, and nothing spoken. Leaving or deleting a plan lands here.
+composer card, and nothing spoken. Leaving or deleting a task lands here.
 
-1. **Plan name**, the card's large single-line field, focused on arrival,
+1. **Task name**, the card's large single-line field, focused on arrival,
    whose placeholder, "Name the feature, e.g. Dark mode toggle", reads as an
    example to replace rather than a filled value.
 2. **Repository**, the chip along the card's foot: the GitHub mark and the
-   `owner/name` of the repository the plan is about, which the service keeps
-   on the plan (`plan.repository`). It starts on the repository of the newest
-   started plan that has one. Its menu is the app's searchable picker
+   `owner/name` of the repository the task is about, which the service keeps
+   on the task (`plan.repository`). It starts on the repository of the newest
+   started task that has one. Its menu is the app's searchable picker
    (`renderer/searchable-menu.tsx`, which the Start button's model menu is
    too): a search field as the first row, focused as the menu opens and
    filtering as it is typed in; under it every repository the Luke GitHub
@@ -205,56 +205,56 @@ composer card, and nothing spoken. Leaving or deleting a plan lands here.
    `Open Settings` row for an owner or an admin to the workspace's GitHub
    repositories in Settings, where the App is installed and its
    repositories chosen, and for a member a line to ask one. With no repository used before it reads
-   `Choose repository`; a plan can start without one and be given one later.
+   `Choose repository`; a task can start without one and be given one later.
    The list is read when the chip mounts and again whenever the window takes
    focus, which is how the chip picks up an App installed in the browser
    meanwhile; nothing polls. The arrows move the highlight while the search
    field keeps focus, Enter picks, Escape closes the menu and hands focus
    back to the chip, and so does focus leaving it.
 3. **Start**, the round arrow at the card's other end, enabled once the name
-   is set; Enter presses it. Pressing it saves the plan with its name, its
-   repository, and the untouched template as its document, and opens it. If
+   is set; Enter presses it. Pressing it saves the task with its name, its
+   repository, and the untouched template as its plan, and opens it. If
    the service cannot be reached, or it refuses the repository (the App does
    not reach it, or the account must sign in with GitHub again), the reason
    shows under the card and the button can be pressed again.
 
 ### Header
 
-- `‹`, back to the list, which leaves the plan.
-- The plan's name. The toolbar is one row, the side panel's bar's height
+- `‹`, back to the list, which leaves the task.
+- The task's name. The toolbar is one row, the side panel's bar's height
   exactly (`--desktop-bar-height`, the one token both take), so their bottom
   borders are one line across the window.
-- The plan's repository is the sidebar's to name, by the group it stands in.
-  A plan with none yet, the 13 plans from before repositories among them,
+- The task's repository is the sidebar's to name, by the group it stands in.
+  A task with none yet, the 13 tasks from before repositories among them,
   shows a compact `Choose repository` chip in the toolbar's actions row, left
   of Start, with the composer's menu: a pick is saved through
-  `PATCH /api/plans/{id}`, and a refusal is said beside it. A plan can be
-  used without a repository; the planning model then says it has none.
-- **The plan's menu**, from the toolbar's ⋯ (drawn while the plan's own tab
+  `PATCH /api/plans/{id}`, and a refusal is said beside it. A task can be
+  used without a repository; Luke then says it has none.
+- **The task's menu**, from the toolbar's ⋯ (drawn while the task's own tab
   is chosen, not on an agent's tab or the Inbox) and from a right-click on the
-  plan in the sidebar alike: Copy plan (the open plan alone), Rename, Pin or
-  Unpin and Archive (an archived plan offers Unarchive alone), Change
+  task in the sidebar alike: Copy plan (the open task's alone), Rename, Pin or
+  Unpin and Archive (an archived task offers Unarchive alone), Change
   repository… (opens the repository picker, hung from the toolbar, opening
-  the plan first where it is not the open one), Open on GitHub
-  (`https://github.com/owner/repository`, for a plan with a repository), and
+  the task first where it is not the open one), Open on GitHub
+  (`https://github.com/owner/repository`, for a task with a repository), and
   Permanently delete, last and red, which asks first in a dialog that points
-  a plan not yet archived at Archive instead. ⇧⌘A archives the open plan and
+  a task not yet archived at Archive instead. ⇧⌘A archives the open task and
   ⌘⌫ asks to delete it, from any of its tabs.
-- An archived plan opened from under Archived reads and works as any other,
-  under a quiet line, "This plan is archived", with Unarchive beside it.
+- An archived task opened from under Archived reads and works as any other,
+  under a quiet line, "This task is archived", with Unarchive beside it.
 - **Start**, a split button (`desktop/start-agent-button.tsx`), drawn
-  while the plan's own tab is chosen, as the ⋯ is. Its main
+  while the task's own tab is chosen, as the ⋯ is. Its main
   part starts a coding agent on the plan with the account's default model and
   effort; its chevron drops the searchable picker over the models the service
   offers, grouped by provider with the newest first, each under its provider's
   mark and the default checked, with the efforts the chosen model lists and
   "Start with <model> · <effort>" pinned under the scrolling list, which the
-  service also keeps as the account's default. A plan with no repository has Start unavailable, saying why on
+  service also keeps as the account's default. A task with no repository has Start unavailable, saying why on
   hover. Each press mints a key of its own, and a press asked again after
   the service did not answer carries the same key, so one press is one agent
   ("From a plan to a pull request" below).
 - **Copy plan** stands in the ⋯ menu, with its chord ⇧⌘C still the
-  toolbar's, heard on every tab of the plan. It is always enabled, however much of the plan is written, and
+  toolbar's, heard on every tab of the task. It is always enabled, however much of the plan is written, and
   copies the current document as described in "Copy". It never launches an
   agent and never asks the model anything.
 - The side panel's toggle ("Show panel" / "Hide panel", ⌥⌘B) stands at the
@@ -268,7 +268,7 @@ composer card, and nothing spoken. Leaving or deleting a plan lands here.
   ago", "Edited by you · just now", or a coding agent by its row's name. The
   notetaker is "Luke", because the developer talks to Luke and never meets a
   notetaker. The time moves on once a minute, and a save the notetaker makes
-  on the open plan's call moves the line as it lands. A plan nobody has
+  on the open task's call moves the line as it lands. A task whose plan nobody has
   written since it started shows no line. A press on the line opens the
   plan's version history.
 - Each section says the same of the save that last changed it, in a quiet
@@ -282,27 +282,27 @@ composer card, and nothing spoken. Leaving or deleting a plan lands here.
   section's line, or Return on it from the keyboard, opens the version
   history on the revision that save made, and opens no editor.
 - The sections someone other than the developer changed since they last
-  looked at the plan on this Mac wear a still tint of Luke's accent, counted
+  looked at the task on this Mac wear a still tint of Luke's accent, counted
   under the "Edited by" line ("Changed since you last looked · 3 sections ·
-  Dismiss") until Dismiss or leaving the plan (`planning/use-plan-looks.ts`),
+  Dismiss") until Dismiss or leaving the task (`planning/use-plan-looks.ts`),
   each section known by its heading.
-  A look is the plan held open three seconds: from then on every save while
+  A look is the task held open three seconds: from then on every save while
   it stays open counts as seen, so the notetaker typing in on a call never
   lights anything. What is kept is the newest save's instant, on the
-  service's clock, by plan id in the renderer's own storage; a plan never
+  service's clock, by task id in the renderer's own storage; a task never
   looked at on this Mac lights nothing.
-- The sidebar reads the same marks. A plan's name stands in the body's
-  weight, the open plan's too, whose fill is what marks it; a plan saved
+- The sidebar reads the same marks. A task's name stands in the body's
+  weight, the open task's too, whose fill is what marks it; a task saved
   after its mark is unread, its name in the heavier weight (and "(unread)"
-  to a screen reader), until a look moves the mark past the save. The plan
+  to a screen reader), until a look moves the mark past the save. The task
   being looked at is never unread, so a save landing on it while open
-  changes nothing. The first list this Mac reads after unread plans arrived
-  marks every plan in it no look had marked at its last save, once, so the
-  plans from before are not all unread at once, and so does a list none of
-  whose plans has a mark, which is another account's; a plan arriving later
+  changes nothing. The first list this Mac reads after unread tasks arrived
+  marks every task in it no look had marked at its last save, once, so the
+  tasks from before are not all unread at once, and so does a list none of
+  whose tasks has a mark, which is another account's; a task arriving later
   with no mark, from another Mac, is unread once anything has been saved in
   it since it started.
-- The plan's name, drawn as its title in the look of a `#` heading
+- The task's name, drawn as its title in the look of a `#` heading
   (`planning/plan-title.tsx`), over its text, the saved `body` rendered as
   Markdown, and nothing else: the text has no title line, its assumptions
   are a section of it, and nothing stands in for a section it leaves empty.
@@ -321,15 +321,15 @@ composer card, and nothing spoken. Leaving or deleting a plan lands here.
 
 ### Whiteboard
 
-Each plan has one whiteboard, an Excalidraw scene that Luke and the developer
+Each task has one whiteboard, an Excalidraw scene that Luke and the developer
 both draw on. It shows in the side panel's Board tab, beside the document.
 
-- **Luke draws whole diagrams.** The planning model's `draw_on_board` tool
+- **Luke draws whole diagrams.** His `draw_on_board` tool
   sends the whole diagram each time: labelled boxes, ellipses, and diamonds,
   text, and arrows between ids. It replaces his previous drawing and leaves
   what the developer drew. The service only stores it
   (`packages/service/src/plans/board-tool.ts`). The voice hands a request to
-  draw to the planning model, as it does any other request.
+  draw to the backend, as it does any other request.
 - **The Mac converts it.** The canvas turns Luke's drawing into Excalidraw
   elements with Excalidraw's own converter, marks them as his, and puts them
   in place of his previous ones, then saves the scene. An element of his that
@@ -337,10 +337,10 @@ both draw on. It shows in the side panel's Board tab, beside the document.
 - **The developer draws with Excalidraw's own tools.** Images, embeds, and
   export are left out. The scene is saved whole once the canvas pauses, and
   the last write wins.
-- **Luke reads the board every turn.** The planning model's standing context
+- **Luke reads the board every turn.** His standing context
   carries the scene as text under `[board]` (`board-text.ts`), so whatever
-  the developer drew is in front of it on its next turn.
-- **The Mac reads the board** when a plan opens, when the tab shows, and when
+  the developer drew is in front of him on his next turn.
+- **The Mac reads the board** when a task opens, when the tab shows, and when
   the call's activity says a drawing just settled.
 - **Excalidraw is its own bundle** (`whiteboard.js`), loaded the first time a
   board is shown, with its fonts shipped beside it. The bundle every window
@@ -351,26 +351,26 @@ both draw on. It shows in the side panel's Board tab, beside the document.
 
 ### Side panel
 
-The open plan's supporting views stand in a panel at the window's right,
+The open task's supporting views stand in a panel at the window's right,
 beside the document and its microphone row, the way a devtool's secondary
 sidebar does (`desktop/side-panel.tsx`, `planning/use-side-panel.ts`).
 
-- **Tabs.** `Board`, the plan's whiteboard; `Code`, the code Luke last
-  showed on the plan, read by the service from the plan's repository ("How
-  the planning model reads code" below), live during a call and read back
-  with the plan's work when the plan opens; `Transcript`, what was said on the
-  plan's calls ("Transcript" below); `History`, the plan's versions
+- **Tabs.** `Board`, the task's whiteboard; `Code`, the code Luke last
+  showed on the task, read by the service from the task's repository ("How
+  Luke reads code" below), live during a call and read back
+  with the task's work when the task opens; `Transcript`, what was said on the
+  task's calls ("Transcript" below); `History`, the plan's versions
   ("History" below), which stands once anyone has written the plan since its
   history began; and, after them, the subagents opened from the Work tab or
-  an agent's transcript. The coding agents themselves have tabs in the plan's
-  column beside the plan's own ("Agent tabs" below). The Work tab, what the planning model wrote
-  and ran on the plan's calls, is told live during a call and read back
-  from the plan's conversation when the plan opens
+  an agent's transcript. The coding agents themselves have tabs in the task's
+  column beside the task's own ("Agent tabs" below). The Work tab, what Luke wrote
+  and ran on the task's calls, is told live during a call and read back
+  from the task's conversation when the task opens
   (`GET /api/plans/{id}/work`, `packages/service/src/plans/plan-work-store.ts`), so a restart
-  or a switch to another plan and back loses neither it nor the code. The
+  or a switch to another task and back loses neither it nor the code. The
   read answers twenty turns a page, the newest first; scrolling to the
   oldest turn drawn reads the page before it (`?before=<turn>`), and the
-  newest page also carries every code shown on the plan, oldest first,
+  newest page also carries every code shown on the task, oldest first,
   several of one file included, all of which the Code tab draws, a card
   each under the call it was shown on, Luke's note on why he showed it
   above its lines so the feed reads as a walkthrough, a live call's code appending at the
@@ -385,7 +385,7 @@ sidebar does (`desktop/side-panel.tsx`, `planning/use-side-panel.ts`).
   stands outside a call, under the rule `show_code` keeps
   (`packages/service/src/plans/shown-file.ts`); a file changed since is drawn as it is now, and
   one not on that branch, or not read at all, says so over the lines Luke
-  showed of it. A File tab opened from a code block of the plan's Inbox is
+  showed of it. A File tab opened from a code block of the task's Inbox is
   read at the commit the agent named instead. Over the first line of each
   range of the file Luke showed with a note stands his note, a card a
   range, the newest note on a range speaking for it: folded to a line or
@@ -396,7 +396,7 @@ sidebar does (`desktop/side-panel.tsx`, `planning/use-side-panel.ts`).
   overflow it, and no tab closes.
 - **The developer's alone.** The toolbar's toggle and ⌥⌘B show and hide it.
   A closed panel opens on its own only for Luke's first drawing on the
-  plan's board, the first code he puts up, each once per plan
+  task's board, the first code he puts up, each once per task
   (`planning/use-panel-arrivals.ts`), and a subagent opened from an agent's
   transcript, whose tab it opens on; an open panel keeps its tab, and an arrival on another tab
   sets that tab's label in semibold until it is shown. Its left edge
@@ -404,35 +404,35 @@ sidebar does (`desktop/side-panel.tsx`, `planning/use-side-panel.ts`).
   it has the focus.
 - **Kept across launches.** Whether it is open, its tab, and its width are
   this Mac's preference, kept in the window's own storage rather than in
-  anything main holds. A kept tab the open plan does not have reads as its
-  first, so leaving a plan or opening another never shows a tab with nothing
+  anything main holds. A kept tab the open task does not have reads as its
+  first, so leaving a task or opening another never shows a tab with nothing
   behind it. A fixture run stages its own and keeps nothing.
 
 ### Agent tabs
 
-Each coding agent started on the plan has a tab of its own in the plan's
-column, after the plan's tab (`desktop/main-tabs.tsx`,
+Each coding agent started on the task has a tab of its own in the task's
+column, after the task's tab (`desktop/main-tabs.tsx`,
 `planning/use-main-tabs.ts`, `planning/agent-tab.tsx`,
 `planning/use-coding-agents.ts`), opened and selected the moment its Start
 lands, and showing its transcript and composer where the document stands.
 The column's strip is the side panel's: tabs drag and step among
 themselves, close by ×, Delete, ⌘W, or Close and Close others, hang their
-cards, and pin to the sidebar. The plan's tab stands first for good: it
+cards, and pin to the sidebar. The task's tab stands first for good: it
 never closes or moves, a press chooses it, and its right-click offers Close
-others and Rename. The tab each plan last showed is kept, so a plan opens
+others and Rename. The tab each task last showed is kept, so a task opens
 as it was left. ⌘T and ⌘W answer the column holding the focus, the side
 panel's once the pointer goes into it. A subagent's tab stays in the side
 panel.
 
 - **A new agent from the "+".** The column's "+" offers New coding
   agent, unavailable with Start's own reason while Start could not run, and
-  each of the plan's agents, picking one opening its tab again. It
+  each of the task's agents, picking one opening its tab again. It
   opens a draft tab (`planning/draft-agent-tab.tsx`): no transcript yet,
   the composer focused, and the model chip on the account's default.
   Nothing reaches the service until the first message, which starts the
-  agent with those words as its task, never the plan, in the plan's
+  agent with those words as its prompt, never the plan, in the task's
   repository; the agent's own tab then takes the draft's place. Closing
-  the draft lets it go with nothing left behind. An agent handed a task
+  the draft lets it go with nothing left behind. An agent handed a prompt
   draws it as the developer's first message rather than as the plan's card.
 
 - **The head.** The model · the effort · the status, which the tab's glyph
@@ -486,19 +486,19 @@ panel.
   window reads `GET /api/agents/{id}/messages?after=<cursor>` in a loop on
   the service's held long-poll (`planning/use-agent-transcript.ts`): each
   page joins the messages held by id, and each carries the agent's status,
-  so the loop ends on its own when the agent ends. A tab hidden, a plan
+  so the loop ends on its own when the agent ends. A tab hidden, a task
   left, or an agent that ended stops the reads; the agents list is read when
-  the plan opens and after a Start or a Stop. The one other read is main's
+  the task opens and after a Start or a Stop. The one other read is main's
   watch, below.
 - **When it ends.** Main keeps a ledger of where each agent stands
   (`main/agent-notices.ts`), fed by every coding-agent answer that passes
-  through its acts, and lists a plan's agents again every thirty seconds
-  while one of them is starting or running, so an agent on a plan the
+  through its acts, and lists a task's agents again every thirty seconds
+  while one of them is starting or running, so an agent on a task the
   developer has left is still watched. An agent that moves from writing to
   completed or failed is announced once: a macOS notification titled with
-  the plan's name, saying the model's name and "finished" or "failed" and
+  the task's name, saying the model's name and "finished" or "failed" and
   nothing of the transcript, unless the window is focused on that agent's
-  tab; its click brings Luke forward on the plan with that tab open. The
+  tab; its click brings Luke forward on the task with that tab open. The
   agent's tab reads in semibold until it is shown or the window comes
   forward on it. A Stop is the developer's own and is not announced, and an
   agent first seen already ended, as after a relaunch, is not either. The
@@ -528,7 +528,7 @@ account starts on Claude Opus 5.5 at high.
 
 ### Transcript
 
-The Transcript tab reads back what was said on the plan's calls with Luke,
+The Transcript tab reads back what was said on the task's calls with Luke,
 as a chat does: each call from a divider saying its day and time, oldest
 first, and each run of lines from one speaker as one turn, the developer's
 in a bubble at the right and Luke's under his mark at the left, with a copy
@@ -544,8 +544,8 @@ of the turn's words under it (`planning/plan-transcript.tsx`,
   call as the id, the speaker as the role, and its words as one text part,
   the shape Luke's `messages` table keeps every conversation in. The newest
   4,000 fragments are read; past that, the tab says earlier lines are not
-  shown. The host reads it with the plan's document, and again when a call
-  about the plan ends, once at the end and once more five seconds on, after
+  shown. The host reads it with the task's plan, and again when a call
+  about the task ends, once at the end and once more five seconds on, after
   the call's last words have reached the record.
 - **The call standing now.** Its words are not on record yet, so the voice
   window reports them as they are said (`VoiceView.callTranscript`),
@@ -568,16 +568,16 @@ of the turn's words under it (`planning/plan-transcript.tsx`,
 - **Following.** The list keeps to its newest line while it is scrolled
   there; scrolling up to read leaves it in place, with a button back to the
   newest line, until the developer scrolls back down.
-- **States.** Reading, a read that failed with `Try again`, and a plan with
+- **States.** Reading, a read that failed with `Try again`, and a task with
   nothing said yet: "Nothing said yet — start a call and the transcript
   appears here."
 
 ### The notetaker
 
-A planning call's plan is written by a notetaker beside the call
+A task's plan is written during a call by a notetaker beside it
 (`packages/service/src/plans/plan-scribe.ts`), following GPT-Live's guidance to
 react to the transcript on a small model while speech goes on. It keeps both
-speakers' words from the call's sideband and the planning model's replies as
+speakers' words from the call's sideband and Luke's replies as
 research notes. Once the developer has been quiet for about a second, it makes
 one `gpt-5.6-luna` call over the plan's saved text and what was said since
 its last note, under its own instructions (`SCRIBE_INSTRUCTIONS`), and saves
@@ -599,10 +599,10 @@ passed over alone. The rest save.
 
 A coding agent takes the same notes through its `edit_plan` tool
 (`packages/service/src/agents/coder-host/plan-edit.ts`). Its save is written into
-the plan's journal (`plan.agent_edits`, the last fifty) as the agent's id,
+the task's journal (`plan.agent_edits`, the last fifty) as the agent's id,
 the instant, and the notes as taken; the agent is named at read time from its
 row, so the window's "Edited by" line over the document and the "recent
-edits by coding agents" the planning model is handed both say what the row
+edits by coding agents" Luke is handed both say what the row
 says now.
 
 ### Editing
@@ -633,7 +633,7 @@ The service lays each save over what Luke wrote meanwhile
 - **The title.** A click puts the caret in it; Return or ↓ saves it and goes
   into the text at its start; ↑ on the text's first line saves the text and
   comes back into the title; Esc saves it and selects it. It is saved by
-  renaming the plan, so the name never enters the text, and a title left
+  renaming the task, so the name never enters the text, and a title left
   empty or unchanged renames nothing.
 - **Saving.** The editor hands its text over once per pause in the typing,
   and the text saves a second after the developer stops and as the editor
@@ -662,18 +662,18 @@ The service lays each save over what Luke wrote meanwhile
   save older than the developer's edit is dropped rather than drawn, so the
   edit never flickers back out (each `plan.draft` frame names the save it
   was drawn over).
-- **What Luke is told.** The planning model's standing context names the
+- **What Luke is told.** His standing context names the
   sections the developer last wrote, by heading, under `[sections the
   developer wrote]`, as their decisions; the notetaker is told the same
   sections and never rewords or strikes them unless the call says to. A
   section the notetaker writes again leaves that list. The voice is not told
   mid-call, and a coding agent already running keeps the plan it was handed.
 - **Failures.** A save that fails keeps the words and says why under the
-  editor ("Not saved: the service did not answer.", "Not saved: this plan no
-  longer exists.", "Not saved: this plan is archived.", or "Not saved: the
+  editor ("Not saved: the service did not answer.", "Not saved: this task no
+  longer exists.", "Not saved: this task is archived.", or "Not saved: the
   plan would be longer than a plan may be."), with Retry; it is tried again
   when the developer asks or types on, and the editor stays open until it
-  saves. Words not yet saved are sent to their plan when the developer
+  saves. Words not yet saved are sent to their task when the developer
   leaves it or opens another. Unsaved words live in the window's memory
   alone, never on disk.
 - **Undo.** Inside the editor, the editor's own undo. A saved edit is undone
@@ -697,8 +697,8 @@ pause. Notes that
 change nothing are no revision, and a rename is none. A plan written before
 history began is found by its first later save, which first records what the
 plan held, at its last save, as the plan's first revision ("earlier"). History
-starts there: nothing before it is reconstructed. Revisions go when their plan
-is deleted, and there is no cap on how many a plan keeps.
+starts there: nothing before it is reconstructed. Revisions go when their task
+is deleted, and there is no cap on how many a task keeps.
 
 The plan names its newest revision as its last edit, which the document's
 "Edited by" line reads ("Document" above), and each section the writer of the
@@ -706,7 +706,7 @@ save that last changed it: the actor, the coding agent, and whether on a
 call, kept beside the revision by the same locked save, which each section's
 line reads.
 
-Version history, in the plan's ⋯ menu (the toolbar's and the sidebar row's
+Version history, in the task's ⋯ menu (the toolbar's and the sidebar row's
 right-click alike) and behind the "Edited by" line, takes the whole window
 the way Settings does (`desktop/desktop-version-history.tsx`): a column as
 wide as the sidebar, with Back at its head, "Version history", and the
@@ -720,7 +720,7 @@ the view opens, or, opened from a section's line, the revision that made the
 save it names (the oldest whose latest save is at or after the save's
 moment, older pages read until one shows it, and the newest where one cannot
 be read), is read with the content before it
-(`GET /api/plans/{id}/revisions/{seq}`), and drawn read-only under the plan's
+(`GET /api/plans/{id}/revisions/{seq}`), and drawn read-only under the task's
 name as it stands, beside the list (`planning/version-view.tsx`), under a bar with its moment and Restore this
 version; the up and down arrows step through the list. A row's ⋯, standing
 in its time's place while the row is hovered or focused, and its right-click
@@ -735,7 +735,7 @@ words written in on a green wash and struck out on a red one, word by word
 with jsdiff (`planning/plan-history-model.ts`), sections paired by their
 headings, the assumptions among them as the section they are. The first
 version has nothing before it and is drawn with nothing marked. The view is one step of the window's back and forward
-whichever version is chosen, so Back, Escape, and ⌘[ return to the plan as
+whichever version is chosen, so Back, Escape, and ⌘[ return to the task as
 it was left, its side panel untouched. Whatever is opened from it — a
 version's Open, a tab from ⌘K — is a visit after it, so ⌘[ comes back to the
 view on the version and the sections it was left on, and ⌘] goes on to what
@@ -750,11 +750,11 @@ revision's text back through the plan's one locked save
 restoring the revision before it, and it is allowed during a call. It takes
 no base: a save that landed after the version was chosen is the revision
 before the restore, and restoring it brings it back. A restore that lands
-leaves the version history for the plan, whose document the service's answer
+leaves the version history for the task, whose document the service's answer
 replaces at once, and the window's toast says
 "Version restored" with an Undo, which restores the version that stood
 before it. Until the notetaker's next save lands, the host draws no draft
-of the open plan's call, since a turn in flight was written over the
+of the open task's call, since a turn in flight was written over the
 content the restore replaced. The newest revision is the plan as it
 stands, so it offers no restore.
 
@@ -765,7 +765,7 @@ every note before the last is whole, and the last is drawn only when it adds
 a point, as its text so far. Each draft is sent to the Mac on the call's own
 socket as a `plan.draft` frame, at most every 150 ms, then once more as saved,
 so each differs from the one before only where the newest note lands. The
-host draws each draft in place of the open plan's document, and the Plans
+host draws each draft in place of the open task's document, and the Tasks
 tab's caret types that difference in where it stands: a point typed at the
 end of its section, a correction selected and retyped, a struck line selected
 and erased. A unit of the document is a section as the service cuts one
@@ -777,7 +777,7 @@ is left standing.
 ### The template
 
 A plan is one free Markdown document (`packages/features/src/plan-document.ts`,
-the row's `plan.document`), with no title line, since the plan's name is its
+the row's `plan.document`), with no title line, since the task's name is its
 own, and its assumptions an ordinary section of the text. Every plan starts
 as a copy of its account's own template, copied as the plan starts so a
 later edit of the template leaves every plan as it stands. The service keeps
@@ -831,7 +831,7 @@ Luke is the developer's teammate: someone to bounce ideas off who is also
 responsible for turning them into a concrete plan. So the default template is
 the design doc two engineering teammates would write after talking a task
 through in a meeting, and each section is a question a good teammate asks.
-The sections are what the planning model asks about, so getting them right
+The sections are what Luke asks about, so getting them right
 is what shapes Luke's questions. The same document is the whole spec a coding
 agent builds from, so Luke talks like a teammate and holds the document to a
 spec's bar.
@@ -839,7 +839,7 @@ spec's bar.
 Each default section is described once, in `plan-template.ts`: its heading
 (`PLAN_FIELD_HEADING`), what it holds and the form it is written in
 (`PLAN_FIELD_PURPOSE`), and when it is good enough for an agent to build
-from (`PLAN_FIELD_BAR`). The planning model is handed all three; the
+from (`PLAN_FIELD_BAR`). Luke is handed all three; the
 notetaker is handed the purpose alone, since it records what was said
 rather than judging it.
 
@@ -887,7 +887,7 @@ comparative evaluation.
 
 ### Microphone row and the panel's voice
 
-- **Microphone button.** One press starts talking to Luke about the open plan.
+- **Microphone button.** One press starts talking to Luke about the open task.
   The call opens if none stands, and the microphone opens. A call just
   opened is Luke's to begin: the voice service creates it with the opening
   in its startup history (`planningOpeningHistory`), asking what to build on an untouched plan
@@ -897,15 +897,15 @@ comparative evaluation.
   untouched plan is seeded as a new plan with nothing answered, and any
   other as the saved plan the call continues. A second press mutes it. The
   microphone stays open between the two presses rather than only while a
-  key is held, because a planning conversation runs for minutes.
+  key is held, because a conversation with Luke runs for minutes.
   The existing talk key keeps its hold-to-talk meaning, and speaks into the
-  open plan's call.
+  open task's call.
 - **Status**, beside the button, in two lines, each part of Luke saying only
   what it is doing. The first is the voice: the one word `LIVE_STATUS`
   already names, `Connecting`, `Listening`, `Muted`, `Speaking` (Luke), or
-  `Closing`, while a call about this plan stands, and the button's own label
+  `Closing`, while a call about this task stands, and the button's own label
   otherwise. A listening or muted call reads `Handing off` from the voice
-  model's delegation until the planning model takes the ask (or it is
+  model's delegation until the backend takes the ask (or it is
   refused), and `About to answer` from words queued for Luke until his voice
   begins them. The second line stands only while the backend works, with the
   thinking dots: `Planning model ·` the command of its pending
@@ -918,7 +918,7 @@ comparative evaluation.
   and the exchange, the live brain reads the pending call off the turn's
   journal on its own poll, and the notetaker reports its model call. The
   host holds the snapshot in the planning view as it stands, clears it on
-  leaving or switching plans, and the call's end is told as nothing doing. A
+  leaving or switching tasks, and the call's end is told as nothing doing. A
   silent Luke whose row reads `Listening` with no second line is not working,
   and that is a bug to chase rather than a pause to wait out.
 - **Everything else is the panel's own.** The waveform is the wings', the
@@ -929,17 +929,17 @@ comparative evaluation.
   left able to try again. Nothing is kept here; what matters lands in the
   document.
 
-### How the planning model reads code
+### How Luke reads code
 
-The planning model reads the plan's repository, not a folder on the Mac,
-and so does the code it puts on the developer's screen. What only the Mac
-has, it reaches with `run_on_mac` (below).
-`run_in_repository` runs one bash command in a Vercel Sandbox the planning
+Luke reads the task's repository, not a folder on the Mac,
+and so does the code he puts on the developer's screen. What only the Mac
+has, he reaches with `run_on_mac` (below).
+`run_in_repository` runs one bash command in a Vercel Sandbox the task
 conversation's eve session owns (`apps/web/eve/sandbox.ts`), on a checkout of
-the plan's GitHub repository (`packages/service/src/agents/repository-shell.ts`).
-The first call that finds no checkout of the plan's repository makes one, at
+the task's GitHub repository (`packages/service/src/agents/repository-shell.ts`).
+The first call that finds no checkout of the task's repository makes one, at
 the repository's current default branch and one commit deep, and later calls
-reuse it; a plan whose repository changed is checked out again. Before the
+reuse it; a task whose repository changed is checked out again. Before the
 checkout, the service confirms the developer still reaches the repository
 through the Luke GitHub App and mints an installation token for that one
 repository with contents read, which it sets as a header at the sandbox's
@@ -947,7 +947,7 @@ firewall for the clone and withdraws after it; the token never enters the
 sandbox. The sandbox's network is otherwise eve's default, open internet.
 The worker subagent shares the session's sandbox, so its reads see the same
 checkout. A call that runs nothing answers `not-run` with a reason the model
-can act on and repeats to Luke: the plan has no repository yet (the developer
+can act on and repeats to Luke: the task has no repository yet (the developer
 picks one in the app), the developer must sign in with GitHub again, the
 repository is no longer reachable through the App, or the checkout failed;
 in every case nothing of the code has been read, and Luke never describes it
@@ -965,7 +965,7 @@ note. The lines and the note are the call's answer, so they are journaled with t
 starts to speak, and sent to the Mac on the `plan.code` frame with the
 repository they came from; the Mac colours and draws them and reads nothing
 of its own (`packages/host/src/plan-code.ts`). Every answered call's lines
-are read back from the journals with the plan's work when the plan opens,
+are read back from the journals with the task's work when the task opens,
 picked by their parts in the statement and read by the same reading
 (`shownCodeOf`), which holds to the secret-file rule again, so the Code tab
 keeps every code shown after the call. A file that is missing,
@@ -976,7 +976,7 @@ cannot be reached, answer `rejected` with why, and nothing goes on screen.
 
 `run_on_mac` (`packages/service/src/agents/mac-command.ts`) runs one shell
 command on the developer's own Mac and answers its exit code and output, for
-the planning model, its worker, coding agents, and their workers alike, with
+Luke, his worker, coding agents, and their workers alike, with
 no approval: Dean's ruling of 2026-10-13. The call is queued under the
 account; a signed-in Mac with Settings › This Mac's "Let agents run commands
 on this Mac" on (the default) holds `GET /api/mac-commands` open, takes it,
@@ -988,21 +988,21 @@ your Mac").
 
 ### From a plan to a pull request
 
-A plan with a repository can be handed to a coding agent: a cloud session of
+A task with a repository can be handed to a coding agent: a cloud session of
 Luke's second eve service, which checks the repository out in a Vercel
 Sandbox of its own, implements the plan given as its first message, runs the
 repository's checks, and decides whether to open a pull request. Started
-instead on a task the developer wrote, it is handed that task as its first
-message and never the plan, and works in the plan's repository the same way. The service,
+instead on a prompt the developer wrote, it is handed that prompt as its first
+message and never the plan, and works in the task's repository the same way. The service,
 its routes, and what it is told are described in
 `apps/web/server/README.md` under "The coding-agent service" and "The
-coding-agent routes"; the desktop's Start button ("The Plans tab" above),
+coding-agent routes"; the desktop's Start button ("The Tasks tab" above),
 the column's New coding agent and the agent tabs ("Agent tabs" above), and Settings › Coding agents are how the
 developer starts one, watches it, stops it, and chooses what it runs on.
 
 ## The journey
 
-The reference plan is "Teammate invitations" on a private repository,
+The reference task is "Teammate invitations" on a private repository,
 `acme/relay`. Each step shows what the developer does, what Luke says (in
 brief), and the document after the notetaker's notes. Luke's lines are
 illustrations of tone and order, not prompt text: LUKE-336 writes the
@@ -1010,8 +1010,8 @@ instructions.
 
 ### 1. Starting from a GitHub repository
 
-The developer opens the panel's Plans tab. They press
-`New plan`, name the plan "Teammate invitations", pick `acme/relay` from the
+The developer opens the panel's Tasks tab. They press
+`New task`, name the task "Teammate invitations", pick `acme/relay` from the
 chip (a repository is reachable once they have signed in with GitHub and
 installed the Luke GitHub App on it, which the chip's menu offers), and press
 `Start plan`. The header's chip reads `acme/relay`,
@@ -1027,8 +1027,8 @@ Luke never assumes the developer arrives knowing what to build. Had they said
 only "people keep asking how to add a teammate", Luke would start from that
 problem, ask who hits it and what they do today, and let the repository suggest
 the directions. A developer who answers a question with "I don't know" is not
-pressed for one: the planning model puts the same decision back as two or three
-concrete options grounded in the code, with the one it recommends, and if the
+pressed for one: Luke puts the same decision back as two or three
+concrete options grounded in the code, with the one he recommends, and if the
 developer still has no preference that recommendation becomes a working
 assumption Luke names aloud.
 
@@ -1121,30 +1121,30 @@ The model treats the correction first, before its own line of questioning:
   invite: the member who sent it, any admin, or both?" It adds that question
   to `Open questions` until it is answered.
 
-In the Plans tab, the row that read `Only admins can invite teammates.` now
+In the Tasks tab, the row that read `Only admins can invite teammates.` now
 reads `Members and admins can both invite.` Application code tracks no
 dependency between answers.
 
 ### 5. Leaving and resuming
 
-Mid-conversation, the developer presses `‹` back to the plan list. The call
+Mid-conversation, the developer presses `‹` back to the task list. The call
 ends and the microphone closes. Everything the model saved is already the
-plan's document, so nothing is lost except the words of an unfinished
+task's plan, so nothing is lost except the words of an unfinished
 sentence. A save the model had not made is not in the document, and the tab
 never claims otherwise. Turning to another tab or letting the panel close does
-not leave the plan: the call goes on.
+not leave the task: the call goes on.
 
-The next day they open the Plans tab. The plan list shows
+The next day they open the Tasks tab. The task list shows
 "Teammate invitations" first. Selecting it draws the saved document with the
 same `acme/relay` on its chip. They press the microphone, and the model
-starts with the saved document and the plan's relevant conversation. Luke
+starts with the saved document and the task's relevant conversation. Luke
 picks up where they stopped:
 
 > "Last time we'd agreed any member can invite. The open one was who can
 > withdraw an invite. I'd say the sender or any admin. Does that work?"
 
-Selecting a different plan while a call stands does the same as leaving: that
-plan's call ends before the other plan opens. Only one plan is ever the
+Selecting a different task while a call stands does the same as leaving: that
+task's call ends before the other task opens. Only one task is ever the
 spoken conversation.
 
 ### 6. The spoken final review
@@ -1154,7 +1154,7 @@ the change without coming back with a question, not when every branch of the
 design tree has been asked about: every core section holds an answer or an
 agreed reason it does not apply, every hard part says how the change
 behaves, nothing open would change what gets built, and every choice the
-developer does not mind either way is stated as an assumption. The planning
+developer does not mind either way is stated as an assumption. The
 model queues only decisions that change what is built or how it is checked,
 and states the rest as working assumptions Luke says aloud. Once the plan is
 done it queues nothing more and tells Luke the plan is complete, and Luke
@@ -1182,7 +1182,7 @@ assumption.
 
 The developer chooses `Copy plan` from the ⋯ menu, or presses ⇧⌘C, and the
 toolbar reads `Copied`. The
-clipboard holds the current document as readable Markdown: the plan's name
+clipboard holds the current document as readable Markdown: the task's name
 as a `#` title over its document exactly as saved, whose assumptions are a
 section like any other (`packages/features/src/plan-markdown.ts`):
 
@@ -1221,9 +1221,9 @@ one.
 - **Repository.** A failed or incomplete read is reported to the model as
   such. Luke says it could not read the file and never describes unread code
   as inspected. If access is revoked, the reads fail the same way. Starting a
-  new plan shows the reason on the new-plan page.
-- **Loading a plan.** The document region shows the failure and `Try again`.
-- **Start.** The service refuses to start an agent on a plan with no
+  new task shows the reason on the new-task page.
+- **Loading a task.** The document region shows the failure and `Try again`.
+- **Start.** The service refuses to start an agent on a task with no
   repository (`no-repository`, 409), on one the Luke GitHub App no longer
   reaches for the workspace (`repository-not-reachable`, 403), and answers
   `unavailable` where eve did not take the session; the reason is said
@@ -1238,22 +1238,22 @@ the exact shape.
 | Part | Reuse | New |
 | --- | --- | --- |
 | The tab | The window's shell (`desktop/desktop-shell.tsx`, `desktop/desktop-sidebar.tsx`); `APP_PANEL_TAB` in `@luke/wire/app-settings`, which the sidebar and the counted `panel:tab_change` share (`panel-tabs.tsx`) | `PLANS` in `APP_PANEL_TAB` and the counted tab set; the tab's pages (`desktop/desktop-plans.tsx`) and its control (`use-plans-tab.ts`) (LUKE-347). |
-| Acts | `ACT_KIND`, `act-router.ts`, `ActSender`, `registerDesktopIpc` | Rows a panel alone may send, refusing the voice window and the takeover: the plan list read as the tab shows, opening, leaving, starting (in the workspace the sidebar's switcher chose, `desktop/workspace-switcher.tsx` over `desktop/chosen-workspace.ts`), and deleting a plan, a workspace made, its pending invitations read, one made, and one canceled, its GitHub organization connected and disconnected, its members read and removed, its photo read and set or removed, and one left (`workspace.create`, `workspace.invitationsRead`, `workspace.invite`, `workspace.invitationCancel`, `workspace.githubConnect`, `workspace.githubDisconnect`, `workspace.membersRead`, `workspace.memberRemove`, `workspace.photoRead`, `workspace.photoSet`, `workspace.leave`), the repositories the account reaches, a plan's repository, a page of GitHub's opened in the browser, the microphone, and a plan's coding agents (`codingAgents.models`, `codingAgents.defaultRead`, `codingAgents.defaultWrite`, `codingAgents.list`, `codingAgents.start`, `codingAgents.messages`, `codingAgents.stop`, `codingAgents.pullRequest`). |
-| Plan list and new-plan page | `@luke/ui` controls and the existing button, field, and row styles | The list and the form (LUKE-337). |
+| Acts | `ACT_KIND`, `act-router.ts`, `ActSender`, `registerDesktopIpc` | Rows a panel alone may send, refusing the voice window and the takeover: the task list read as the tab shows, opening, leaving, starting (in the workspace the sidebar's switcher chose, `desktop/workspace-switcher.tsx` over `desktop/chosen-workspace.ts`), and deleting a task, a workspace made, its pending invitations read, one made, and one canceled, its GitHub organization connected and disconnected, its members read and removed, its photo read and set or removed, and one left (`workspace.create`, `workspace.invitationsRead`, `workspace.invite`, `workspace.invitationCancel`, `workspace.githubConnect`, `workspace.githubDisconnect`, `workspace.membersRead`, `workspace.memberRemove`, `workspace.photoRead`, `workspace.photoSet`, `workspace.leave`), the repositories the account reaches, a task's repository, a page of GitHub's opened in the browser, the microphone, and a task's coding agents (`codingAgents.models`, `codingAgents.defaultRead`, `codingAgents.defaultWrite`, `codingAgents.list`, `codingAgents.start`, `codingAgents.messages`, `codingAgents.stop`, `codingAgents.pullRequest`). |
+| Task list and new-task page | `@luke/ui` controls and the existing button, field, and row styles | The list and the form (LUKE-337). |
 | Document body | `MarkdownMessage` (`apps/desktop/src/renderer/markdown-message.tsx`): `react-markdown` with `remark-gfm`, raw HTML not rendered, only `http`/`https` links kept; `styles/markdown.css` | A document-scale style for it. |
-| Copy | `ACT_KIND.WINDOW_COPY_TEXT` and the clipboard row in `register-desktop-ipc.ts` | The document formatter: the plan's name as a title over its text (`packages/features/src/plan-markdown.ts`). |
-| Voice state | `VoiceView` and `VOICE_COMMAND` (`packages/voice/src/voice-view.ts`), which main already forwards unchanged to every panel; `useVoiceView` (`use-voice-view.ts`); `LIVE_STATUS` (`@luke/live`) | The status word beside the microphone, for the open plan's call alone. |
+| Copy | `ACT_KIND.WINDOW_COPY_TEXT` and the clipboard row in `register-desktop-ipc.ts` | The document formatter: the task's name as a title over its text (`packages/features/src/plan-markdown.ts`). |
+| Voice state | `VoiceView` and `VOICE_COMMAND` (`packages/voice/src/voice-view.ts`), which main already forwards unchanged to every panel; `useVoiceView` (`use-voice-view.ts`); `LIVE_STATUS` (`@luke/live`) | The status word beside the microphone, for the open task's call alone. |
 | Captions, levels, errors | The caption strip (`useCaptionPresentation`, `caption-strip.tsx`) and the sidebar's waveform (`desktop/luke-identity.tsx`) | The strip stands above the call bar and yields spoken words to an on-screen Transcript. |
 | Microphone and notices | `microphoneAccessRow`, `voiceAttentionNote`, `MICROPHONE_UNGRANTED_NOTE`, `hostedVoiceUnavailableNote` (`@luke/voice/microphone-access`) | None. |
-| The call | The hidden `VoiceWindow` and `VoiceHost` / `useVoiceSession` / `LiveCall` (`renderer/voice/`); `LiveVoiceOrchestrator` (`@luke/voice`); the sessions route `/api/voice/sessions` with client delegation | The call is associated with the open plan, and the orchestrator gains the Plans tab's toggle beside the held talk key (LUKE-340); the talk key names the open plan while one is open (LUKE-347). |
-| Start, agent tabs, Settings › Coding agents | The toolbar and the plan's column's tabs (`desktop/main-tabs.tsx`, `planning/use-main-tabs.ts`), on the side panel's strip (`desktop/strip-tabs.tsx`, `@luke/ui/tab-strip-model`); the Transcript tab's AI Elements components; the account preferences route | The split button (`desktop/start-agent-button.tsx`), the agent tab (`planning/agent-tab.tsx`), their control (`planning/use-coding-agents.ts`) and the held transcript read (`planning/use-agent-transcript.ts`), and the Settings page (`settings/coding-agents-page.tsx`). |
-| Planning model and document | Hosted storage and the brain host (`apps/web/server/hosted/`); the account client (`packages/features`, `packages/credentials`) | The plan record and its one write, `saveNotes` (LUKE-334), the instructions (LUKE-336), research (LUKE-339), the default template (`packages/features/src/plan-document-template.ts`), the headings and notes it is written in (`packages/features/src/plan-template.ts`, LUKE-352), and the notetaker that writes the plan during a call (`packages/service/src/plans/plan-scribe.ts`). |
+| The call | The hidden `VoiceWindow` and `VoiceHost` / `useVoiceSession` / `LiveCall` (`renderer/voice/`); `LiveVoiceOrchestrator` (`@luke/voice`); the sessions route `/api/voice/sessions` with client delegation | The call is associated with the open task, and the orchestrator gains the Tasks tab's toggle beside the held talk key (LUKE-340); the talk key names the open task while one is open (LUKE-347). |
+| Start, agent tabs, Settings › Coding agents | The toolbar and the task's column's tabs (`desktop/main-tabs.tsx`, `planning/use-main-tabs.ts`), on the side panel's strip (`desktop/strip-tabs.tsx`, `@luke/ui/tab-strip-model`); the Transcript tab's AI Elements components; the account preferences route | The split button (`desktop/start-agent-button.tsx`), the agent tab (`planning/agent-tab.tsx`), their control (`planning/use-coding-agents.ts`) and the held transcript read (`planning/use-agent-transcript.ts`), and the Settings page (`settings/coding-agents-page.tsx`). |
+| Luke and the plan | Hosted storage and the brain host (`apps/web/server/hosted/`); the account client (`packages/features`, `packages/credentials`) | The task record and its plan's one write, `saveNotes` (LUKE-334), the instructions (LUKE-336), research (LUKE-339), the default template (`packages/features/src/plan-document-template.ts`), the headings and notes it is written in (`packages/features/src/plan-template.ts`, LUKE-352), and the notetaker that writes the plan during a call (`packages/service/src/plans/plan-scribe.ts`). |
 
 Two existing rules carry over unchanged:
 
 - **Session replay.** The panel is the one surface that records
   (`apps/desktop/src/renderer/session-replay.ts`, called from `App`), and the
-  Plans tab is part of it: every word it draws is masked, as the rest of the
+  Tasks tab is part of it: every word it draws is masked, as the rest of the
   panel's are, so what leaves the machine is the tab's layout and never the
   plan's words. It draws them with the panel's own text, fields, and
   attributes, and no new way of drawing words. The Transcript tab's root is
@@ -1280,7 +1280,7 @@ changes when a check is run, not when one is planned.
 - The journey is held by hermetic tests at the model and transport
   boundaries (fake OpenAI, fake eve, scripted model, a scripted GitHub and a
   sandbox double, PGlite):
-  - the checkout of a plan's repository at its default branch, one commit
+  - the checkout of a task's repository at its default branch, one commit
     deep, with the token at the firewall for the clone alone, and every
     refusal (no repository, not reachable, sign-in required, no sandbox or
     firewall) checking nothing out (`packages/service/src/agents/repository-shell.test.ts`);
@@ -1290,45 +1290,45 @@ changes when a check is run, not when one is planned.
     (`packages/service/src/agents/coding-agents-app.test.ts`);
   - the notetaker saves what the developer said once they are quiet a beat,
     and its drafts are drawn on the Mac as the model writes them;
-  - a spoken turn reaching the planning model in the plan's own
+  - a spoken turn reaching Luke in the task's own
     conversation, with the saved document on every turn;
-  - re-attaching and resuming on the same plan;
-  - switching plans and leaving the plan leave its call standing, and
-    deleting the call's plan or signing out ends it;
+  - re-attaching and resuming on the same task;
+  - switching tasks and leaving the task leave its call standing, and
+    deleting the call's task or signing out ends it;
   - the final review written into the same document;
   - Copy's Markdown, at the store's largest document;
-  - the talk key, pressed while a plan is open, speaking into the open
-    plan's call.
-- The Plans tab (LUKE-347) is held by renderer tests: the tab bar's four
-  tabs, the list and document pages, Back leaving the plan, the plans read
-  again each time the tab shows, and the host keeping the open plan through
+  - the talk key, pressed while a task is open, speaking into the open
+    task's call.
+- The Tasks tab (LUKE-347) is held by renderer tests: the tab bar's four
+  tabs, the list and document pages, Back leaving the task, the tasks read
+  again each time the tab shows, and the host keeping the open task through
   the tab going away, with nothing read on a clock.
   Its regions render as static markup: no composer and no approve controls,
-  a new plan's untouched template, and the failed, missing, and
+  a new task's untouched template, and the failed, missing, and
   not-connected states.
 
 ### Not validated
 
 - **A real Mac.** This Linux VM has no Mac, CI builds nothing for one, and
   the integrated application has not been run on one. The
-  Plans tab in the panel, the document's presentation, the
+  Tasks tab in the panel, the document's presentation, the
   document scrolling inside the panel's ceiling,
-  the microphone row, and the captions during a planning call
+  the microphone row, and the captions during a call
   have never been seen running. `./scripts/evidence.sh` captures the window
-  on the Plans tab over a synthetic plan
+  on the Tasks tab over a synthetic task
   (`app-smoke-planning.png`, from `--profile planning`), on the
-  plan's whiteboard (`app-smoke-planning-board.png`, from
+  task's whiteboard (`app-smoke-planning-board.png`, from
   `--profile planning-board`), on its transcript mid-call
   (`app-smoke-planning-transcript.png`, from
   `--profile planning-transcript`), on its Work tab mid-call
   (`app-smoke-planning-work.png`, from `--profile planning-work`),
   and over
-  the synthetic plan list with none open (`app-smoke-expanded.png`, the
-  window opening on Plans), but neither
+  the synthetic task list with none open (`app-smoke-expanded.png`, the
+  window opening on Tasks), but neither
   capture has been taken yet.
-- **Real voice.** No spoken planning conversation has run against GPT Live:
+- **Real voice.** No spoken conversation with Luke has run against GPT Live:
   ordinary assent, interruption, a continuing answer, a correction, resuming,
-  and switching plans by voice are untested outside the fakes.
+  and switching tasks by voice are untested outside the fakes.
 - **A live GitHub checkout.** No repository has been checked out in a real
   Vercel Sandbox through the Luke GitHub App outside the fakes: the shell is
   held against a sandbox double at eve's boundary and a scripted GitHub
@@ -1348,8 +1348,8 @@ changes when a check is run, not when one is planned.
   the token reaches the repositories the App is installed on and the
   developer can reach, with the App's registered permissions, contents and
   pull requests read and write among them. The server reads it only to list
-  installations and repositories and to confirm a plan's repository is
-  reachable (`packages/service/src/github/github-app.ts`); a planning checkout
+  installations and repositories and to confirm a task's repository is
+  reachable (`packages/service/src/github/github-app.ts`); Luke's checkout
   runs on an installation token cut to contents read, and a coding agent on
   one cut to contents and pull requests write. An account that signed in
   under the earlier OAuth App may still hold its classic `repo` token until
@@ -1364,5 +1364,5 @@ changes when a check is run, not when one is planned.
   request, though, and the socket is not pinned to the checked address. A
   host whose DNS answer changes between the lookup and the connection (DNS
   rebinding) is the one case it does not cover.
-- **The plan list is read, not followed.** A plan started on another Mac
-  appears in this Mac's list the next time its Plans tab shows.
+- **The task list is read, not followed.** A task started on another Mac
+  appears in this Mac's list the next time its Tasks tab shows.

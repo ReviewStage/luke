@@ -313,18 +313,18 @@ export function followsAgent(input: { shown: boolean; status: CodingAgentStatus 
 export const START_NEEDS_REPOSITORY = "Choose a repository first.";
 
 /** Why Start, and a draft's first message, cannot run on an archived plan. */
-export const START_ARCHIVED = "Unarchive the plan to start a coding agent.";
+export const START_ARCHIVED = "Unarchive the task to start a coding agent.";
 
 /** What the refusals a Start and a message meet alike say, worded once. */
 const SHARED_FAILURE_NOTE = {
   [CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE]:
-    "Luke can't reach this plan's repository on GitHub.",
+    "Luke can't reach this task's repository on GitHub.",
   [CODING_AGENT_CALL_FAILURE.GITHUB_UNANSWERED]: "GitHub didn't answer. Try again.",
   [CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG]: "That message is too long.",
   [CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY]:
     "The agent is still starting. Try again in a moment.",
   [CODING_AGENT_CALL_FAILURE.AGENT_RETIRED]: "This agent has ended. Start a new one.",
-  [CODING_AGENT_CALL_FAILURE.PLAN_ARCHIVED]: "This plan is archived. Unarchive it first.",
+  [CODING_AGENT_CALL_FAILURE.PLAN_ARCHIVED]: "This task is archived. Unarchive it first.",
 } as const;
 
 /** Said beside Start when the model or effort the menu chose could not be kept as the default. */
@@ -473,7 +473,7 @@ function startFailureWords(failure: CodingAgentCallFailure): string {
     case CODING_AGENT_CALL_FAILURE.INVALID_CHOICE:
       return "That model isn't offered any more. Choose another.";
     case CODING_AGENT_CALL_FAILURE.NOT_FOUND:
-      return "This plan no longer exists.";
+      return "This task no longer exists.";
     case CODING_AGENT_CALL_FAILURE.UNANSWERED:
       return "The agent could not be started. Try again.";
     case CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE:

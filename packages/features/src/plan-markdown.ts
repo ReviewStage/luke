@@ -5,7 +5,7 @@ import { PLAN_BOUNDS, type Plan } from "./plan-wire.js";
  *
  * A plan is one Markdown text with no title line, since its name is its own,
  * so Copy is its name as a title over its text, which holds its assumptions
- * and every other section itself (`docs/PLANNING.md`, "Copy").
+ * and every other section itself (`docs/TASKS.md`, "Copy").
  */
 
 /** A run of whitespace, line breaks among it, which a title spells as one space. */

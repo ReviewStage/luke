@@ -364,10 +364,10 @@ function PlanDocument({
   if (region.kind !== DOCUMENT_REGION.READY) {
     const line =
       region.kind === DOCUMENT_REGION.FAILED
-        ? "The plan could not be read."
+        ? "The task could not be read."
         : region.kind === DOCUMENT_REGION.MISSING
-          ? "This plan no longer exists."
-          : "Choose a plan, or start a new one.";
+          ? "This task no longer exists."
+          : "Choose a task, or start a new one.";
     return (
       <>
         <Toolbar
@@ -381,7 +381,7 @@ function PlanDocument({
         />
         <section className="desktop-empty">
           {region.kind === DOCUMENT_REGION.READING ? (
-            <Spinner label="Loading plan" size={SPINNER_SIZE.REGION} />
+            <Spinner label="Loading task" size={SPINNER_SIZE.REGION} />
           ) : region.kind === DOCUMENT_REGION.FAILED ? (
             <ReadFailure
               line={line}
@@ -395,7 +395,7 @@ function PlanDocument({
               the home page is said here. */}
           {region.kind === DOCUMENT_REGION.FAILED || region.kind === DOCUMENT_REGION.MISSING ? (
             <button type="button" className="toolbar-button" onClick={plans.onLeavePlan}>
-              Close plan
+              Close task
             </button>
           ) : null}
         </section>

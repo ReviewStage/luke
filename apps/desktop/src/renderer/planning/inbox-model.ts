@@ -511,7 +511,7 @@ export function codeWindow(block: InboxCodeBlock): PlanFileRequest {
  */
 export function codeNotice(block: InboxCodeBlock, repository: string | null): string | undefined {
   if (repository === null || repository.toLowerCase() !== block.repo.toLowerCase()) {
-    return `These lines are in ${block.repo}, which this plan no longer reads.`;
+    return `These lines are in ${block.repo}, which this task no longer reads.`;
   }
   if (!codeLinesReadable(block)) return "These lines cannot be read.";
   return undefined;

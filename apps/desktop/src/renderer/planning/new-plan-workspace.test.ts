@@ -13,7 +13,7 @@ import type { RepositoryChooser } from "./repository-chip";
 
 /**
  * new-plan-workspace.test.ts -- New plan says where the plan will start,
- * "New plan in Acme", and the workspace chip there chooses another: the
+ * "New task in Acme", and the workspace chip there chooses another: the
  * repository chip then lists that workspace's repositories under where they
  * come from, and the plan starts there. Synthetic throughout.
  */
@@ -123,7 +123,7 @@ test("New plan says the workspace it starts in, and the workspace chosen there l
   );
   await settle();
   const title = () => document.querySelector(".new-plan-title")?.textContent;
-  assert.match(title() ?? "", /^New plan in.*Personal$/u);
+  assert.match(title() ?? "", /^New task in.*Personal$/u);
 
   const workspaceChip =
     document.querySelector<HTMLButtonElement>('[aria-label="Workspace: Personal"]') ??
@@ -153,13 +153,13 @@ test("New plan says the workspace it starts in, and the workspace chosen there l
     "the list says where its repositories come from",
   );
 
-  const name = document.querySelector<HTMLInputElement>('input[aria-label="Plan name"]');
+  const name = document.querySelector<HTMLInputElement>('input[aria-label="Task name"]');
   act(() => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(name, "Usage");
     name?.dispatchEvent(new Event("input", { bubbles: true }));
   });
   const create = [...document.querySelectorAll<HTMLButtonElement>("button")].find((each) =>
-    each.textContent?.startsWith("Create plan"),
+    each.textContent?.startsWith("Create task"),
   );
   act(() => create?.click());
   await settle();
@@ -195,13 +195,13 @@ async function openNewPlan(workspaceId: string, preset?: string) {
     document.querySelector<HTMLButtonElement>(".repository-chip .chip") ??
     assert.fail("the repository chip stands");
   const create = async (words: string) => {
-    const name = document.querySelector<HTMLInputElement>('input[aria-label="Plan name"]');
+    const name = document.querySelector<HTMLInputElement>('input[aria-label="Task name"]');
     act(() => {
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(name, words);
       name?.dispatchEvent(new Event("input", { bubbles: true }));
     });
     const button = [...document.querySelectorAll<HTMLButtonElement>("button")].find((each) =>
-      each.textContent?.startsWith("Create plan"),
+      each.textContent?.startsWith("Create task"),
     );
     act(() => button?.click());
     await settle();

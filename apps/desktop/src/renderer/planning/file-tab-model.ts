@@ -58,9 +58,9 @@ const FILE_REFUSAL_LINE = {
   [PLAN_FILE_REFUSAL.SECRET]: "This file holds secrets, such as a .env, and is never shown.",
   [PLAN_FILE_REFUSAL.MISSING]: "There is no file at this path in the repository.",
   [PLAN_FILE_REFUSAL.NOT_TEXT]: "This file is too large to show, or is not text.",
-  [PLAN_FILE_REFUSAL.NO_REPOSITORY]: "This plan has no repository.",
+  [PLAN_FILE_REFUSAL.NO_REPOSITORY]: "This task has no repository.",
   [PLAN_FILE_REFUSAL.NOT_REACHABLE]:
-    "The Luke GitHub App no longer reaches this plan's repository.",
+    "The Luke GitHub App no longer reaches this task's repository.",
   [PLAN_FILE_REFUSAL.UNAVAILABLE]: "GitHub could not be read just now.",
 } as const satisfies Record<PlanFileRefusal, string>;
 

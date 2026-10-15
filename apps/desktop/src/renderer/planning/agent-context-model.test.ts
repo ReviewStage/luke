@@ -78,7 +78,7 @@ test("the popover divides the read into the instructions, the tools, the plan, a
 test("an agent handed a prompt names its brief so; once eve compacted, the brief is folded into the conversation; estimates that outrun the read are scaled down to it", () => {
   assert.deepEqual(
     contextRows(CONTEXT, CODING_AGENT_BRIEF.PROMPT).map((row) => row.label),
-    ["System prompt", "Tool definitions", "Task", "Conversation"],
+    ["System prompt", "Tool definitions", "Prompt", "Conversation"],
   );
   const compacted: CodingAgentContext = {
     ...CONTEXT,

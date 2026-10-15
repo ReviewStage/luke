@@ -274,7 +274,7 @@ function ViewOptions({
   const menu = useActionMenu(shown);
   const choices: MenuAction[] = [
     {
-      label: "Group by plan",
+      label: "Group by task",
       icon: <DocumentIcon />,
       checked: grouping === INBOX_GROUPING.PLAN,
       onSelect: () => onGrouping(INBOX_GROUPING.PLAN),

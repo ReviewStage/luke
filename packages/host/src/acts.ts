@@ -775,32 +775,32 @@ export const ACT = {
   [ACT_KIND.UPDATE_INSTALL]: press("Could not install that update on this system."),
   [ACT_KIND.UPDATE_OPEN_RELEASE]: press("Could not open the releases page."),
   [ACT_KIND.UPDATE_OPEN_CHANGELOG]: press("Could not open the changelog."),
-  [ACT_KIND.PLANNING_REFRESH]: press("Could not read your plans on this system."),
+  [ACT_KIND.PLANNING_REFRESH]: press("Could not read your tasks on this system."),
   [ACT_KIND.PLANNING_SELECT]: {
     payload: record({ planId: exactId }),
     result: wireResult<boolean>(isWireBoolean),
-    refusal: "Could not open that plan on this system.",
+    refusal: "Could not open that task on this system.",
   },
-  [ACT_KIND.PLANNING_CLOSE]: press("Could not leave that plan on this system."),
+  [ACT_KIND.PLANNING_CLOSE]: press("Could not leave that task on this system."),
   [ACT_KIND.PLANNING_START]: {
     payload: actSchema(planningStartRequestSchema),
     result: wireResult<PlanningStartAnswer>(isReadable(planningStartAnswerSchema)),
-    refusal: "Could not start that plan on this system.",
+    refusal: "Could not start that task on this system.",
   },
   [ACT_KIND.PLANNING_DELETE]: {
     payload: record({ planId: exactId }),
     result: wireResult<boolean>(isWireBoolean),
-    refusal: "Could not delete that plan on this system.",
+    refusal: "Could not delete that task on this system.",
   },
   [ACT_KIND.PLANNING_RENAME]: {
     payload: actSchema(planningRenameParamsSchema),
     result: wireResult<boolean>(isWireBoolean),
-    refusal: "Could not rename that plan on this system.",
+    refusal: "Could not rename that task on this system.",
   },
   [ACT_KIND.PLANNING_PIN]: {
     payload: actSchema(planningPinParamsSchema),
     result: wireResult<boolean>(isWireBoolean),
-    refusal: "Could not pin that plan on this system.",
+    refusal: "Could not pin that task on this system.",
   },
   [ACT_KIND.PLANNING_PIN_REPOSITORY]: {
     payload: actSchema(planningPinRepositoryParamsSchema),
@@ -810,7 +810,7 @@ export const ACT = {
   [ACT_KIND.PLANNING_ARCHIVE]: {
     payload: actSchema(planningArchiveParamsSchema),
     result: wireResult<boolean>(isWireBoolean),
-    refusal: "Could not archive that plan on this system.",
+    refusal: "Could not archive that task on this system.",
   },
   [ACT_KIND.PLANNING_REPOSITORIES]: {
     payload: actSchema(planningRepositoriesParamsSchema),
@@ -820,12 +820,12 @@ export const ACT = {
   [ACT_KIND.PLANNING_SET_REPOSITORY]: {
     payload: actSchema(planningSetRepositoryParamsSchema),
     result: wireResult<PlanningSetRepositoryAnswer>(isReadable(planningSetRepositoryAnswerSchema)),
-    refusal: "Could not change that plan's repository on this system.",
+    refusal: "Could not change that task's repository on this system.",
   },
   [ACT_KIND.PLANNING_MOVE]: {
     payload: actSchema(planningMoveParamsSchema),
     result: wireResult<PlanningMoveAnswer>(isReadable(planningMoveAnswerSchema)),
-    refusal: "Could not move that plan on this system.",
+    refusal: "Could not move that task on this system.",
   },
   [ACT_KIND.PLANNING_EDIT]: {
     payload: actSchema(planningEditParamsSchema),
@@ -844,7 +844,7 @@ export const ACT = {
   },
   [ACT_KIND.GITHUB_CONNECT]: GITHUB_PAGE_PRESS,
   [ACT_KIND.GITHUB_DISCONNECT]: press("Could not disconnect GitHub on this system."),
-  [ACT_KIND.PLANNING_TALK]: press("Could not talk about that plan on this system."),
+  [ACT_KIND.PLANNING_TALK]: press("Could not talk about that task on this system."),
   [ACT_KIND.WORKSPACE_CREATE]: {
     payload: actSchema(planningWorkspaceCreateParamsSchema),
     result: wireResult<Workspace>(isReadable(workspaceSchema)),
@@ -966,17 +966,17 @@ export const ACT = {
     refusal: "Could not read that page's source on this system.",
   },
   [ACT_KIND.PLANNING_WORK_EARLIER]: press(
-    "Could not read that plan's earlier work on this system.",
+    "Could not read that task's earlier work on this system.",
   ),
   [ACT_KIND.PLANNING_CONVERSATION_EARLIER]: press(
-    "Could not read that plan's earlier conversation on this system.",
+    "Could not read that task's earlier conversation on this system.",
   ),
   [ACT_KIND.PLANNING_MESSAGES]: {
     payload: actSchema(planningMessagesParamsSchema),
     result: wireResult<CodingAgentMessagesAnswerView>(
       isReadable(codingAgentMessagesAnswerViewSchema),
     ),
-    refusal: "Could not read that plan's conversation on this system.",
+    refusal: "Could not read that task's conversation on this system.",
   },
   [ACT_KIND.INTEGRATIONS_STATUS]: {
     payload: noPayload,
@@ -1021,7 +1021,7 @@ export const ACT = {
   [ACT_KIND.CODING_AGENTS_LIST]: {
     payload: actSchema(codingAgentListParamsSchema),
     result: wireResult<CodingAgentListAnswer>(isReadable(codingAgentListAnswerViewSchema)),
-    refusal: "Could not read the plan's agents on this system.",
+    refusal: "Could not read the task's agents on this system.",
   },
   [ACT_KIND.CODING_AGENTS_WORKSPACE_LIST]: {
     payload: actSchema(codingAgentWorkspaceListParamsSchema),
@@ -1186,7 +1186,7 @@ export const ACT = {
   [ACT_KIND.CODING_AGENTS_INBOX]: {
     payload: actSchema(codingAgentInboxParamsSchema),
     result: wireResult<CodingAgentInboxAnswerView>(isReadable(codingAgentInboxAnswerViewSchema)),
-    refusal: "Could not read the plan's inbox on this system.",
+    refusal: "Could not read the task's inbox on this system.",
   },
   [ACT_KIND.CODING_AGENTS_AGENT_INBOX]: {
     payload: actSchema(codingAgentAgentInboxParamsSchema),
@@ -1297,7 +1297,7 @@ export const ACT = {
   [ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS]: press("Could not open the notification settings."),
   [ACT_KIND.CONTACT_EMAIL]: press("Could not open a new email on this system."),
   [ACT_KIND.WINDOW_FOCUS_PANEL]: press("Could not focus the panel on this system."),
-  [ACT_KIND.CALL_SHOW_PLAN]: press("Could not bring the call's plan forward on this system."),
+  [ACT_KIND.CALL_SHOW_PLAN]: press("Could not bring the call's task forward on this system."),
   [ACT_KIND.WINDOW_COPY_TEXT]: {
     // A plan's whole document and a File tab's whole file are copied
     // through this act, so it admits the longer of the two the service

@@ -147,7 +147,7 @@ export function TerminalPicker({
           <Command.Empty className="command-palette-empty">No agents match.</Command.Empty>
         ) : null}
         {!read ? (
-          <div className="command-palette-empty">Reading the plan’s agents…</div>
+          <div className="command-palette-empty">Reading the task’s agents…</div>
         ) : listed.length === 0 ? (
           <Command.Item
             className="menu-item"

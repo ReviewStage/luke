@@ -37,7 +37,7 @@ import {
  * would show only its signed-out line. It draws the synthetic list instead,
  * which is what the expanded capture in `scripts/evidence.sh` shows now that
  * the panel opens on Plans, and under the planning profile it also opens the
- * reference journey's plan from `docs/PLANNING.md`, a draft of the default
+ * reference journey's plan from `docs/TASKS.md`, a draft of the default
  * template partway through with Luke working on the call about it, which is
  * what the planning capture shows. Every name and repository here is
  * invented; nothing is read from an account.

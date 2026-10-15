@@ -268,7 +268,7 @@ test("the home page greets the account, lists what needs it with each item's pla
   await settle();
 
   assert.equal(page.querySelector("h1")?.textContent, "Welcome back, Dean");
-  assert.ok(button(page, "New plan"));
+  assert.ok(button(page, "New task"));
   assert.deepEqual(rows(page, "home-inbox"), [
     "Email the invitee when an invite is withdrawn? · Teammate invitations",
     "Which billing account does the export read? · Billing export",
@@ -281,7 +281,7 @@ test("the home page greets the account, lists what needs it with each item's pla
     "Usage alerts · acme/relay",
     "Onboarding checklist · No repository",
   ]);
-  assert.ok(button(page, "Search all 8 plans"));
+  assert.ok(button(page, "Search all 8 tasks"));
 });
 
 test("a waiting item's row opens the Inbox on its item, a recent plan opens the plan, and New plan asks for one", async () => {
@@ -290,7 +290,7 @@ test("a waiting item's row opens the Inbox on its item, a recent plan opens the 
 
   button(page, "Email the invitee").click();
   button(page, "Usage alerts").click();
-  button(page, "New plan").click();
+  button(page, "New task").click();
 
   assert.deepEqual(opened.inbox, ["inbox", { planId: INVITES.id, itemId: EMAIL.id }]);
   assert.deepEqual(opened.plans, [PLANS[0]?.id]);
@@ -325,8 +325,8 @@ test("an account with no plan yet is welcomed with New plan, and nothing the pag
     inboxPlans: [],
   });
 
-  assert.equal(page.querySelector("h1")?.textContent, "Plan your first feature");
-  assert.ok(button(page, "New plan"));
+  assert.equal(page.querySelector("h1")?.textContent, "Start your first task");
+  assert.ok(button(page, "New task"));
   assert.doesNotMatch(page.textContent ?? "", /sidebar/iu);
 });
 
@@ -357,7 +357,7 @@ test("↑ and ↓ move the focus through the rows from the window, Search all in
 
   field.blur();
   press("ArrowUp");
-  assert.match(focused(), /^Search all 8 plans/u);
+  assert.match(focused(), /^Search all 8 tasks/u);
 });
 
 test("a workspace with no plan of its own, in an account with plans elsewhere, welcomes the account back rather than as new, and lists none of the others' Inbox", async () => {
@@ -372,7 +372,7 @@ test("a workspace with no plan of its own, in an account with plans elsewhere, w
 test("↑ and ↓ pressed on New plan leave the focus on it", async () => {
   const { page } = mount();
   await settle();
-  const newPlan = button(page, "New plan");
+  const newPlan = button(page, "New task");
   newPlan.focus();
   act(() => {
     newPlan.dispatchEvent(

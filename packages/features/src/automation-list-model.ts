@@ -45,7 +45,7 @@ const RUN_REASON_WORDS = {
   [AUTOMATION_RUN_REASON.DAILY_CAP]:
     "Skipped: it had already started as many runs today as it may.",
   [AUTOMATION_RUN_REASON.PLAN_UNREACHABLE]:
-    "Its plan is gone, or no longer in one of your workspaces.",
+    "Its task is gone, or no longer in one of your workspaces.",
   [AUTOMATION_RUN_REASON.CREATOR_LEFT]: "Its creator is no longer in the workspace.",
   [AUTOMATION_RUN_REASON.NO_REPOSITORY]: "It names no repository to work in.",
   [AUTOMATION_RUN_REASON.REPOSITORY_UNREACHABLE]:

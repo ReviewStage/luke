@@ -93,7 +93,7 @@ async function mount(
   await settle();
   const dialog = () => document.querySelector<HTMLElement>('[role="dialog"][aria-modal="true"]');
   const field = () => {
-    const found = document.querySelector<HTMLInputElement>('input[aria-label="Plan name"]');
+    const found = document.querySelector<HTMLInputElement>('input[aria-label="Task name"]');
     assert.ok(found, "the name field is drawn");
     return found;
   };
@@ -143,7 +143,7 @@ async function mount(
 
 test("the dialog holds the name, then the repository chip leading Cancel and Create plan, with the name taking focus", async () => {
   const card = await mount();
-  assert.deepEqual(card.controls(), ["Plan name", "acme/web", "Cancel", "Create plan⏎"]);
+  assert.deepEqual(card.controls(), ["Task name", "acme/web", "Cancel", "Create task⏎"]);
   assert.equal(document.activeElement, card.field());
   assert.equal(
     card.dialog()?.textContent?.includes("Repository"),
@@ -154,11 +154,11 @@ test("the dialog holds the name, then the repository chip leading Cancel and Cre
 
 test("Return creates the plan under the name as typed, trimmed, about the repository last used", async () => {
   const card = await mount();
-  assert.equal(card.button("Create plan").disabled, true, "nothing to create before a name");
+  assert.equal(card.button("Create task").disabled, true, "nothing to create before a name");
   await card.press("Enter", card.field());
   assert.deepEqual(card.starts, []);
   card.type("  Dark mode toggle  ");
-  assert.equal(card.button("Create plan").disabled, false);
+  assert.equal(card.button("Create task").disabled, false);
   await card.press("Enter", card.field());
   assert.deepEqual(card.starts, [["Dark mode toggle", "acme/web"]]);
 });
@@ -166,7 +166,7 @@ test("Return creates the plan under the name as typed, trimmed, about the reposi
 test("a repository group's + opens the dialog on its repository rather than the last used", async () => {
   const card = await mount(undefined, "acme/api");
   card.type("Rate limits");
-  act(() => card.button("Create plan").click());
+  act(() => card.button("Create task").click());
   await settle();
   assert.deepEqual(card.starts, [["Rate limits", "acme/api"]]);
 });
@@ -205,13 +205,13 @@ test("Escape in the repository menu closes the menu and leaves the dialog standi
 test("a refusal keeps the dialog and the name, says why under the field, and Create plan can be pressed again", async () => {
   const card = await mount("Luke can't reach acme/web.");
   card.type("Dark mode toggle");
-  act(() => card.button("Create plan").click());
+  act(() => card.button("Create task").click());
   await settle();
   assert.deepEqual(card.starts, [["Dark mode toggle", "acme/web"]]);
   assert.ok(card.dialog());
   assert.equal(card.note(), "Luke can't reach acme/web.");
   assert.equal(card.field().value, "Dark mode toggle");
-  assert.equal(card.button("Create plan").disabled, false);
+  assert.equal(card.button("Create task").disabled, false);
 });
 
 test("a workspace switch lets the pick go for the new workspace's recent repository", async () => {

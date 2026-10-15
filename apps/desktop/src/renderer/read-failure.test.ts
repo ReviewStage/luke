@@ -185,7 +185,7 @@ test("the sidebar's plans that could not be read say so in the fault red, and Re
     }),
   );
   const failure = readFailure(page);
-  assertSaidAlike(failure, "Your plans could not be read.");
+  assertSaidAlike(failure, "Your tasks could not be read.");
   failure.retry();
   assert.equal(retried, 1);
 });

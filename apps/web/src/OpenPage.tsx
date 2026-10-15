@@ -24,8 +24,8 @@ import { LukeMark } from "./SiteChrome";
  */
 
 const WORDS = {
-  TITLE: "Open this plan in Luke",
-  NOT_A_PLAN: "This isn't a link to a Luke plan",
+  TITLE: "Open this task in Luke",
+  NOT_A_PLAN: "This isn't a link to a Luke task",
   OPEN: "Open in Luke",
   DID_NOT_OPEN: "Didn't open? Make sure Luke is",
   INSTALLED: "installed and up to date",

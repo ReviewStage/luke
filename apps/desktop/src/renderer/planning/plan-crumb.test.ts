@@ -154,7 +154,7 @@ async function crumb(
   };
   await draw(workspace);
   const nav = () =>
-    container.querySelector<HTMLElement>('nav[aria-label="Where this plan is"]') ??
+    container.querySelector<HTMLElement>('nav[aria-label="Where this task is"]') ??
     assert.fail("the crumb stands");
   return { nav: nav(), links, asked, redraw: draw, current: nav };
 }
@@ -218,14 +218,14 @@ function menuItems(): HTMLButtonElement[] {
   return [...document.querySelectorAll<HTMLButtonElement>('[role="menu"] [role="menuitem"]')];
 }
 
-test("the repository is a chip whose press drops Open on GitHub, New plan in this repository, and Change repository, each doing what it says", async () => {
+test("the repository is a chip whose press drops Open on GitHub, New task in this repository, and Change repository, each doing what it says", async () => {
   const { nav, asked } = await crumb(ACME, "acme-corp/relay", MEMBERS);
   const chip =
     nav.querySelector<HTMLButtonElement>(".plan-crumb-repository") ??
     assert.fail("the repository is a chip");
 
   assert.equal(chip.textContent, "acme-corp/relay");
-  for (const words of ["Open on GitHub", "New plan in this repository", "Change repository"]) {
+  for (const words of ["Open on GitHub", "New task in this repository", "Change repository"]) {
     act(() => chip.click());
     const item =
       menuItems().find((each) => each.textContent === words) ??
@@ -297,7 +297,7 @@ test("an archived plan's repository menu offers no Change repository", async () 
 
   assert.deepEqual(
     menuItems().map((item) => item.textContent),
-    ["Open on GitHub", "New plan in this repository"],
+    ["Open on GitHub", "New task in this repository"],
   );
 });
 

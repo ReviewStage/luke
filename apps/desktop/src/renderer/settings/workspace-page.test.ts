@@ -1069,9 +1069,9 @@ test("a member leaves after confirming, which names what stays and what stops, s
   );
   await confirm("Leave acme");
 
-  assert.equal(line, "You lose its plans, agents, and Inbox until someone invites you again.");
+  assert.equal(line, "You lose its tasks, agents, and Inbox until someone invites you again.");
   assert.deepEqual(named, [
-    "Plans you wrote stay in acme, for its members to keep.",
+    "Tasks you wrote stay in acme, for its members to keep.",
     "Agents you started stay in its history, named as a former member, and any still working stop.",
     "Automations you created stop running.",
     "Your own workspace, Dana, isn't affected.",
@@ -1202,7 +1202,7 @@ test("Disconnect from Manage asks first, naming the account, Cancel disconnects 
 
   assert.deepEqual(asked, [
     "Disconnect acme-org from acme?",
-    "Its plans lose these repositories until GitHub is connected again.",
+    "Its tasks lose these repositories until GitHub is connected again.",
   ]);
   assert.deepEqual(afterCancel, []);
   assert.equal(cancelled, null);
@@ -1436,7 +1436,7 @@ test("an invitation's role is a field chip, Member by default, whose menu checks
 
   assert.equal(before, "Member");
   assert.deepEqual(offered, [
-    ["MemberWorks on plans and agents", "true"],
+    ["MemberWorks on tasks and agents", "true"],
     ["AdminAlso manages members and GitHub", "false"],
   ]);
   assert.deepEqual(
