@@ -120,7 +120,6 @@ function mount(width: number, onGoHome: () => void = ignore): HTMLElement {
         accountRequired: false,
         onBeginSignIn: ignore,
         onCancelSignIn: ignore,
-        signInFace: { play: 0 },
       },
       tab,
       onTabChange: setTab,
