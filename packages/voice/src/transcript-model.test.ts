@@ -326,6 +326,34 @@ test("a teammate's call is named for the reader, the reader's own is not, and a 
     return region.kind === TRANSCRIPT_REGION.READY ? region.calls.map((each) => each.caller) : [];
   };
 
-  assert.deepEqual(callers(DEAN.userId), [undefined, "Charles Pan", undefined]);
-  assert.deepEqual(callers(CHARLES.userId), ["Dean Stratakos", undefined, undefined]);
+  // Note that the caller keeps their account's id, which the window reads their face by.
+  assert.deepEqual(callers(DEAN.userId), [undefined, CHARLES, undefined]);
+  assert.deepEqual(callers(CHARLES.userId), [DEAN, undefined, undefined]);
+});
+
+test("a teammate's call drawn from what was heard, while its record holds fewer words, is still named for them", () => {
+  const CHARLES = { userId: "user-charles", name: "Charles Pan" };
+  const live = heardCalls({
+    held: [],
+    voice: liveReport(LIVE_CALL, "Seven days, then."),
+    planId: PLAN,
+    now: 5_000,
+  });
+  const ended = heardCalls({ held: live, voice: NO_CALL, planId: PLAN, now: 9_000 });
+  const recorded = recordedSaying("Seven");
+  const transcript: PlanTranscript = {
+    ...recorded,
+    calls: recorded.calls.map((call) => (call.id === LIVE_CALL ? { ...call, by: CHARLES } : call)),
+  };
+  const region = transcriptRegion({
+    transcript: { status: PLANNING_READ.READY, transcript },
+    heard: ended,
+    readerId: "user-dean",
+  });
+
+  assert.deepEqual(drawn(region).at(-1), [LIVE_CALL, false, "Seven days, then."]);
+  assert.deepEqual(
+    region.kind === TRANSCRIPT_REGION.READY ? region.calls.at(-1)?.caller : undefined,
+    CHARLES,
+  );
 });

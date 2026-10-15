@@ -14,10 +14,12 @@ import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
 import { CALL_KIND, CALL_WORDS } from "@luke/features/turn-rows";
 import { ACT_KIND } from "@luke/host/acts";
 import { DocumentIcon } from "@luke/ui";
+import type { Actor } from "@luke/ui/actor-model";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { BotIcon } from "lucide-react";
 import { Fragment, type ReactNode, useEffect, useRef } from "react";
 import { useAct } from "../act";
+import { ActorRef } from "../actor-ref";
 import {
   Conversation,
   ConversationContent,
@@ -29,6 +31,7 @@ import { Plan, PlanContent, PlanHeader, PlanTitle } from "../ai-elements/plan";
 import { TOOL_STATE } from "../ai-elements/tool";
 import { useCopyToast } from "../copy-feedback";
 import { FailureNote } from "../failure-note";
+import { useMemberDirectory, usePerson } from "../member-directory";
 import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { SPINNER_SIZE, Spinner } from "../spinner";
 import { AgentComposer } from "./agent-composer";
@@ -485,6 +488,15 @@ function PlanCard({
   );
 }
 
+/** Who wrote or said a message, over it: their mark and their name, hanging their card. */
+function MessageSender({ actor }: { actor: Actor }): React.JSX.Element {
+  return (
+    <span className="message-sender">
+      <ActorRef actor={actor} />
+    </span>
+  );
+}
+
 /**
  * One message: the plan the agent was handed, as a card; a message the
  * developer sent it since, as the developer's bubble; or one of the
@@ -514,15 +526,16 @@ export function AgentMessage({
   todos?: TodosPlace;
   /** Whether its words were said aloud and are drawn after it, as a spoken turn's on the Call tab are, so its words stay inside its work's fold, with how long it worked, once it has finished. */
   said?: boolean;
-  /** The teammate who wrote or said a developer's message, named over it; none for the reader's own. */
-  sender?: string | undefined;
+  /** Who wrote or said the message, named over it: a teammate, Luke, or an automation; none for the reader's own, or where nobody is named. */
+  sender?: Actor | undefined;
 }): ReactNode {
   const words = messageWords(message);
   if (plan) return <PlanCard text={words} lead={lead} title={briefTitle} />;
+  const named = sender === undefined ? null : <MessageSender actor={sender} />;
   if (message.role === MESSAGE_ROLE.USER) {
     return (
       <Message from={message.role}>
-        {sender === undefined ? null : <span className="message-sender">{sender}</span>}
+        {named}
         <AttachedFileChips files={messageFileChips(message)} />
         {words === "" ? null : (
           <>
@@ -549,6 +562,7 @@ export function AgentMessage({
   // A spoken turn's words were Luke's line, so they get no Copy, and its "Worked for" line stays inside its fold.
   return (
     <Message from={message.role}>
+      {named}
       <MessageContent>
         <TranscriptRows
           rows={agentRows(message, moving, lead.grouped, {
@@ -620,10 +634,11 @@ function AgentTranscriptView({
   /** The plan's or task's card line, where it is named otherwise than by its first line, as a planning worker is by its job. */
   briefTitle?: string | undefined;
   /** The teammate who handed the agent its task, named over the task's message; none for the reader's own agent. */
-  briefSender?: string | undefined;
+  briefSender?: Actor | undefined;
   /** The reader's own account id, whose messages are drawn with no name over them (`lineSender`). */
   readerId?: string | undefined;
 }): React.JSX.Element {
+  const { members } = useMemberDirectory();
   if (messages.length > 0) {
     const todos = todosPlace(messages, working);
     // The plan is the first of the developer's messages, unless the agent
@@ -650,7 +665,9 @@ function AgentTranscriptView({
                 delegation={delegation}
                 todos={todos}
                 briefTitle={briefTitle}
-                sender={message === task ? briefSender : lineSender(message.sentBy, readerId)}
+                sender={
+                  message === task ? briefSender : lineSender(message.sentBy, readerId, members)
+                }
               />
               {earlierOmitted && message === plan ? (
                 <TranscriptNote>Earlier steps are not shown.</TranscriptNote>
@@ -767,13 +784,14 @@ function AgentTabView({
 }): React.JSX.Element {
   const lines = agentLines(transcript.messages, composer.sent);
   const working = agentStillWriting(agent.status);
+  const starterActor = usePerson(agent.startedBy);
   return (
     <section className="agent-tab ph-no-capture" aria-label={agentTabLabel(agent, models)}>
       <MacOwnerProvider value={starter}>
         <AgentTranscriptView
           messages={lines}
           brief={agent.brief}
-          briefSender={starter}
+          briefSender={starter === undefined ? undefined : starterActor}
           readerId={readerId}
           delegation={{
             models,

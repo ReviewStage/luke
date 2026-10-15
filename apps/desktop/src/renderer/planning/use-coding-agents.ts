@@ -100,6 +100,8 @@ export interface CodingAgentsControl {
   agents: readonly CodingAgentSummary[] | undefined;
   /** The open plan's archived agents in the order started, or nothing before the first read lands. */
   archived: readonly CodingAgentSummary[] | undefined;
+  /** The workspace the one agent read as its page belongs to; none on a plan, where the plan says it, and before the page's read lands. */
+  workspaceId?: string | undefined;
   /** The agent tabs the panel may show, by agent id; nothing before the first read lands. */
   agentIds: readonly string[] | undefined;
   /** Every agent of the plan by id, an archived one among them, which its Inbox stands on, since an archived agent's items still stand; nothing before the first read lands. */
@@ -233,18 +235,20 @@ function startReason(
 /**
  * The read a list is taken from: the plan's agents, archived ones among
  * them, where a plan is open, and else the one agent named, read as its
- * page and held as a list of one.
+ * page and held as a list of one, with the workspace it belongs to.
  */
 function listRead(
   act: ActHandle["act"],
   planId: string | undefined,
   agentId: string | undefined,
-): Promise<CodingAgentListAnswer> {
+): Promise<CodingAgentListAnswer & { readonly workspaceId?: string }> {
   if (planId !== undefined) {
     return act(ACT_KIND.CODING_AGENTS_LIST, { planId, includeArchived: true });
   }
-  return act(ACT_KIND.CODING_AGENTS_PAGE, { agentId: agentId ?? "" }).then(
-    (answer): CodingAgentListAnswer => ("failure" in answer ? answer : { agents: [answer.agent] }),
+  return act(ACT_KIND.CODING_AGENTS_PAGE, { agentId: agentId ?? "" }).then((answer) =>
+    "failure" in answer
+      ? answer
+      : { agents: [answer.agent], workspaceId: answer.agent.workspaceId },
   );
 }
 
@@ -296,6 +300,7 @@ export function useCodingAgents(input: {
     agentId: string | undefined;
     agents: readonly CodingAgentSummary[] | undefined;
     failed: boolean;
+    workspaceId?: string | undefined;
   }>({ planId: undefined, agentId: undefined, agents: undefined, failed: false });
   const listOf = planId === undefined ? agentId : undefined;
   const ours = (was: { planId: string | undefined; agentId: string | undefined }) =>
@@ -337,8 +342,20 @@ export function useCodingAgents(input: {
         if (!live) return;
         setList((was) =>
           "failure" in answer
-            ? { planId, agentId: listOf, agents: ours(was) ? was.agents : undefined, failed: true }
-            : { planId, agentId: listOf, agents: answer.agents, failed: false },
+            ? {
+                planId,
+                agentId: listOf,
+                agents: ours(was) ? was.agents : undefined,
+                failed: true,
+                workspaceId: ours(was) ? was.workspaceId : undefined,
+              }
+            : {
+                planId,
+                agentId: listOf,
+                agents: answer.agents,
+                failed: false,
+                workspaceId: answer.workspaceId,
+              },
         );
       },
       () => {
@@ -349,6 +366,7 @@ export function useCodingAgents(input: {
             agentId: listOf,
             agents: ours(was) ? was.agents : undefined,
             failed: true,
+            workspaceId: ours(was) ? was.workspaceId : undefined,
           }));
       },
     );
@@ -740,6 +758,7 @@ export function useCodingAgents(input: {
   return {
     agents,
     archived: archivedAgents,
+    workspaceId: ours(list) ? list.workspaceId : undefined,
     agentIds: agents?.map((agent) => agent.id),
     heldIds: held?.map((agent) => agent.id),
     draft,

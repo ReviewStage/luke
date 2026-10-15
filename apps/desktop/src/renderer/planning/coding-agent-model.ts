@@ -6,6 +6,7 @@ import {
 import {
   CODING_AGENT_DELEGATE_TOOL,
   CODING_AGENT_FAILURE,
+  CODING_AGENT_SENDER,
   CODING_AGENT_STATUS,
   CODING_AGENT_TODO_STATUS,
   CONTEXT_WINDOW,
@@ -38,6 +39,15 @@ import {
   type RepositoryUnreached,
 } from "@luke/features/repository-reach-wire";
 import { ROW_PART, type RowReading, type TurnRow, turnRows } from "@luke/features/turn-rows";
+import type { WorkspaceMember } from "@luke/features/workspace-wire";
+import {
+  ACTOR_KIND,
+  ACTOR_STATE,
+  type Actor,
+  LUKE_ACTOR,
+  personActor,
+  SOMEONE_REASON,
+} from "@luke/ui/actor-model";
 import { isRecord, isWireString, MESSAGE_ROLE, type WireValue } from "@luke/wire";
 import { TOOL_STATE, type ToolState } from "../ai-elements/tool";
 import { GLYPH_STATE, type GlyphState, glyphStateWords } from "../state-glyph";
@@ -134,20 +144,37 @@ export function teammateStarter(
 }
 
 /**
- * What sent one of the developer's messages to an agent, as named over it:
- * a teammate by name, a former member, Luke, or an automation; none for
- * the reader's own, a message whose sender was not kept, or a member's
- * read with no account id, for the reason `teammateStarter` gives.
+ * What sent one of the developer's messages to an agent, as the actor named
+ * over it: a teammate read against the workspace's `members` for their
+ * face, a former member, Luke, or an automation; none for the reader's own,
+ * a message whose sender was not kept, or a member's read with no account
+ * id, for the reason `teammateStarter` gives. A service older than the
+ * sender's kind names Luke, an automation, and a former member alike by a
+ * name with no account, which the window cannot tell apart, so such a
+ * sender stands by its name on the outline of someone it cannot place.
  */
 export function lineSender(
   sentBy: CodingAgentSender | undefined,
   readerId: string | undefined,
-): string | undefined {
+  members: readonly WorkspaceMember[] | undefined,
+): Actor | undefined {
   if (sentBy === undefined) return undefined;
   if (sentBy.userId !== undefined && (readerId === undefined || sentBy.userId === readerId)) {
     return undefined;
   }
-  return sentBy.name;
+  switch (sentBy.kind) {
+    case CODING_AGENT_SENDER.LUKE:
+      return LUKE_ACTOR;
+    case CODING_AGENT_SENDER.AUTOMATION:
+      return { kind: ACTOR_KIND.AUTOMATION, name: sentBy.name, state: ACTOR_STATE.REST };
+    case CODING_AGENT_SENDER.FORMER:
+      return { kind: ACTOR_KIND.SOMEONE, reason: SOMEONE_REASON.FORMER };
+    case CODING_AGENT_SENDER.MEMBER:
+    case undefined:
+      return sentBy.userId === undefined
+        ? { kind: ACTOR_KIND.SOMEONE, reason: SOMEONE_REASON.UNNAMED, name: sentBy.name }
+        : personActor({ userId: sentBy.userId, name: sentBy.name }, members, readerId);
+  }
 }
 
 /** What a failed turn's end line says of a teammate's key, which the reader has no Settings to mend. */

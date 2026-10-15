@@ -1,9 +1,12 @@
+import type { PlanEditor } from "@luke/features/plan-wire";
 import { LIVE_CLOSE_REASON, type LiveCloseReason } from "@luke/live";
 import { cn } from "@luke/ui";
 import type { CallRecord } from "@luke/voice/transcript-model";
 import { AudioLinesIcon } from "lucide-react";
 import type { ReactNode } from "react";
+import { ActorRef } from "../actor-ref";
 import { Checkpoint } from "../ai-elements/checkpoint";
+import { usePerson } from "../member-directory";
 import { Tooltip } from "../tooltip";
 import { callHeading, useMinute } from "./plan-time";
 import { RUN_CARD, RunCard } from "./turn-card";
@@ -98,6 +101,28 @@ function CallCard({
   );
 }
 
+/**
+ * A teammate's call as its divider names it: "Charles Pan’s call · Today,
+ * 3:42 PM", their face and name one target hanging their card. Note that
+ * the words keep their spaces inside them and the line keeps every space,
+ * because a flex row drops a run of whitespace standing alone.
+ */
+function CallerHeading({
+  caller,
+  heading,
+}: {
+  caller: PlanEditor;
+  heading: string;
+}): React.JSX.Element {
+  const actor = usePerson(caller);
+  return (
+    <span className="call-caller">
+      <ActorRef actor={actor} possessive />
+      {` call${WORKED_SEPARATOR}${heading}`}
+    </span>
+  );
+}
+
 /** The divider a call begins at: the day and time it started, and while it stands, that it is live. */
 export function CallCheckpoint({
   startedAt,
@@ -110,7 +135,7 @@ export function CallCheckpoint({
   /** The moment the log was drawn, which the day is said against. */
   now: number;
   /** The teammate whose call it was, named before when it started; none for the reader's own. */
-  caller?: string | undefined;
+  caller?: PlanEditor | undefined;
 }): React.JSX.Element {
   return (
     <Checkpoint
@@ -123,9 +148,11 @@ export function CallCheckpoint({
         ) : null
       }
     >
-      {caller === undefined
-        ? callHeading(startedAt, now)
-        : `${caller}'s call · ${callHeading(startedAt, now)}`}
+      {caller === undefined ? (
+        callHeading(startedAt, now)
+      ) : (
+        <CallerHeading caller={caller} heading={callHeading(startedAt, now)} />
+      )}
     </Checkpoint>
   );
 }

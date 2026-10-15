@@ -7,11 +7,19 @@ import {
 } from "@luke/features/coding-agent-view";
 import {
   CODING_AGENT_BRIEF,
+  CODING_AGENT_SENDER,
   CODING_AGENT_STATUS,
   type CodingAgentMessage,
   type CodingAgentSender,
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
+import {
+  WORKSPACE_ROLE,
+  type Workspace,
+  type WorkspaceMember,
+} from "@luke/features/workspace-wire";
+import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { ACTOR_KIND } from "@luke/ui/actor-model";
 import { MESSAGE_ROLE } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -19,18 +27,37 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { onRegistry } from "#testing/copy-feedback";
 import { codingAgentsControl } from "#testing/plans-control";
+import { MemberDirectory } from "../member-directory";
 import { AgentTab } from "./agent-tab";
 
 /**
  * agent-senders.test.ts -- in an agent's tab, a message a teammate sent the
- * agent carries their name over its bubble, as a teammate's line on the Call
- * tab does, and the reader's own carries none; so do Luke's, an automation's,
- * and a former member's, and a message from before senders were kept names
- * nobody. Synthetic throughout.
+ * agent carries their face and name over its bubble, as a teammate's line
+ * on the Call tab does, and the reader's own carries none; Luke's carries
+ * his tile, an automation's its own, and a member's who has left the quiet
+ * outline, and a message from before senders were kept names nobody.
+ * Synthetic throughout.
  */
 
 const DEAN = { userId: "user-dean", name: "Dean Stratakos" };
 const CHARLES = { userId: "user-charles", name: "Charles Pan" };
+const MEMBER = CODING_AGENT_SENDER.MEMBER;
+
+/** Charles's sign-in picture, which the members read lists. */
+const CHARLES_PICTURE = "https://lh3.googleusercontent.com/a/charles=s96-c";
+
+const ACME: Pick<Workspace, "id" | "memberCount"> = { id: "workspace-acme", memberCount: 2 };
+
+/** The workspace's members as the members read answers them: Dean, and Charles with his picture. */
+const MEMBERS: readonly WorkspaceMember[] = [
+  { ...DEAN, email: "dean@example.com", role: WORKSPACE_ROLE.OWNER },
+  {
+    ...CHARLES,
+    email: "charles@example.com",
+    role: WORKSPACE_ROLE.MEMBER,
+    pictureUrl: CHARLES_PICTURE,
+  },
+];
 
 const AGENT: CodingAgentSummary = {
   id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
@@ -57,13 +84,22 @@ function line(id: string, text: string, sentBy?: CodingAgentSender): CodingAgent
 
 const MESSAGES: readonly CodingAgentMessage[] = [
   line("task", "Add the invite flow."),
-  line("dean", "Use seven days.", DEAN),
-  line("charles", "Not five.", CHARLES),
+  line("dean", "Use seven days.", { ...DEAN, kind: MEMBER }),
+  line("charles", "Not five.", { ...CHARLES, kind: MEMBER }),
   line("earlier", "Keep the old copy."),
-  line("luke", "Rebase on main.", { name: "Luke" }),
-  line("automation", "Triage the failures.", { name: "Nightly triage" }),
-  line("former", "Drop the banner.", { name: "Former member" }),
+  line("luke", "Rebase on main.", { name: "Luke", kind: CODING_AGENT_SENDER.LUKE }),
+  line("automation", "Triage the failures.", {
+    name: "Nightly triage",
+    kind: CODING_AGENT_SENDER.AUTOMATION,
+  }),
+  line("gone", "Drop the banner.", { name: "Former member", kind: CODING_AGENT_SENDER.FORMER }),
+  line("left", "Keep the banner.", { userId: "user-ana", name: "Ana Ruiz", kind: MEMBER }),
+  // A service older than the sender's kind names Luke by name alone.
+  line("older", "Rebase again.", { name: "Luke" }),
 ];
+
+/** A message's sender as a reader sees it: what kind of mark it wears, the name beside it, and the picture on it. */
+type Seen = readonly [id: string, kind: string, name: string, picture?: string];
 
 let root: Root | undefined;
 
@@ -73,8 +109,20 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** Each of the developer's messages as `reader` sees the tab, by its id: the name over it, where one is drawn. */
-async function sendersFor(reader: string): Promise<readonly (readonly [string, string | null])[]> {
+/** Each of the developer's messages as `reader` sees the tab, by its id, where a sender is drawn over it. */
+async function sendersFor(reader: string): Promise<readonly Seen[]> {
+  Object.defineProperty(window, "luke", {
+    configurable: true,
+    value: {
+      recordSurfaceEvent: () => undefined,
+      act: (request: Act): Promise<ActOutcome> =>
+        Promise.resolve(
+          request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
+            ? { status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS }
+            : { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." },
+        ),
+    },
+  });
   // Note that only the first read answers, because a read past the cursor waits on the service, and one answered at once would be read again without end.
   let reads = 0;
   const control = codingAgentsControl({
@@ -97,12 +145,16 @@ async function sendersFor(reader: string): Promise<readonly (readonly [string, s
     root?.render(
       onRegistry(
         AtomRegistry.make(),
-        createElement(AgentTab, {
-          agent: AGENT,
-          control,
-          shown: true,
-          onOpenSubagent: () => undefined,
-          onHeld: () => undefined,
+        createElement(MemberDirectory, {
+          workspace: ACME,
+          readerId: reader,
+          children: createElement(AgentTab, {
+            agent: AGENT,
+            control,
+            shown: true,
+            onOpenSubagent: () => undefined,
+            onHeld: () => undefined,
+          }),
         }),
       ),
     ),
@@ -112,37 +164,40 @@ async function sendersFor(reader: string): Promise<readonly (readonly [string, s
   });
   const drawn = [...container.querySelectorAll(".is-user")];
   assert.equal(drawn.length, MESSAGES.length);
-  return drawn.map(
-    (message, index) =>
-      [
-        MESSAGES[index]?.id ?? "",
-        message.querySelector(".message-sender")?.textContent ?? null,
-      ] as const,
-  );
+  return drawn.flatMap((message, index): Seen[] => {
+    const sender = message.querySelector<HTMLElement>(".message-sender .actor-ref");
+    if (sender === null) return [];
+    const id = MESSAGES[index]?.id ?? "";
+    const name = sender.querySelector(".actor-ref-name")?.textContent ?? "";
+    const picture = sender.querySelector("img")?.getAttribute("src");
+    const kind = sender.dataset.kind ?? "";
+    return [picture == null ? [id, kind, name] : [id, kind, name, picture]];
+  });
 }
 
-test("each member sees a teammate's name over the teammate's messages and none over their own, and a message with no sender names nobody", async () => {
+test("each member sees a teammate's face and name over the teammate's messages and none over their own, Luke and an automation each as itself, someone who left on an outline, and a message with no sender names nobody", async () => {
   const deanSees = await sendersFor(DEAN.userId);
   act(() => root?.unmount());
   const charlesSees = await sendersFor(CHARLES.userId);
+  Reflect.deleteProperty(window, "luke");
 
+  // Neither the task nor the line from before senders were kept is named for Dean, nor Dean's own line.
+  const others: readonly Seen[] = [
+    ["luke", ACTOR_KIND.LUKE, "Luke"],
+    ["automation", ACTOR_KIND.AUTOMATION, "Nightly triage"],
+    ["gone", ACTOR_KIND.SOMEONE, "Former member"],
+    // A member the workspace no longer lists has left it, and keeps their name.
+    ["left", ACTOR_KIND.SOMEONE, "Ana Ruiz"],
+    ["older", ACTOR_KIND.SOMEONE, "Luke"],
+  ];
   assert.deepEqual(deanSees, [
-    ["task", null],
-    ["dean", null],
-    ["charles", "Charles Pan"],
-    ["earlier", null],
-    ["luke", "Luke"],
-    ["automation", "Nightly triage"],
-    ["former", "Former member"],
+    ["charles", ACTOR_KIND.PERSON, "Charles Pan", CHARLES_PICTURE],
+    ...others,
   ]);
   assert.deepEqual(charlesSees, [
     // The task is Dean's, whose agent it is, as "Started by" says.
-    ["task", "Dean Stratakos"],
-    ["dean", "Dean Stratakos"],
-    ["charles", null],
-    ["earlier", null],
-    ["luke", "Luke"],
-    ["automation", "Nightly triage"],
-    ["former", "Former member"],
+    ["task", ACTOR_KIND.PERSON, "Dean Stratakos"],
+    ["dean", ACTOR_KIND.PERSON, "Dean Stratakos"],
+    ...others,
   ]);
 });

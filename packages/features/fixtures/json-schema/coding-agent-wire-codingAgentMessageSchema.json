@@ -76,6 +76,15 @@
         },
         "userId": {
           "type": "string"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "member",
+            "former",
+            "luke",
+            "automation"
+          ]
         }
       },
       "required": [

@@ -29,7 +29,7 @@ const ENDED_CALL: TranscriptCallRow = {
   lukeEnded: true,
   record: { endedAt: ENDED_START + 12 * MINUTE_MS },
   messages: [],
-  caller: "Charles Pan",
+  caller: { userId: "user-charles", name: "Charles Pan" },
 };
 
 /** A call standing now. */
@@ -111,7 +111,7 @@ test("the Code tab begins and ends each call as the Call tab does: the same divi
   assert.deepEqual(dividers(codeTab), dividers(callTab));
   assert.match(
     codeTab.querySelectorAll("[data-checkpoint]")[0]?.textContent ?? "",
-    /^Charles Pan's call · /u,
+    /Charles Pan’s call · /u,
     "a teammate's call is named over its code as over its lines",
   );
   assert.match(

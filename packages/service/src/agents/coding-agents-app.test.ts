@@ -18,6 +18,7 @@ import { storeWriter } from "@luke/database/models/writer";
 import { user } from "@luke/database/schemas/auth";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { conversations } from "@luke/database/schemas/storage";
+import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import {
   fakeWorkspaceSeams,
   getTestDB,
@@ -30,6 +31,7 @@ import { accountInboxAnswerSchema } from "@luke/features/account-inbox-wire";
 import {
   CODING_AGENT_BOUNDS,
   CODING_AGENT_BRIEF,
+  CODING_AGENT_SENDER,
   CODING_AGENT_STATUS,
   type CodingAgentMessage,
   codingAgentAnswerSchema,
@@ -1234,7 +1236,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { owner, other, plan, agent, ask, sent } = yield* startedAgent(eve, {
+        const { owner, other, plan, agent, ask, sent, writer, target } = yield* startedAgent(eve, {
           running: true,
         });
         yield* joinWorkspace(plan.workspaceId, other);
@@ -1250,6 +1252,17 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           HOSTED_HTTP_STATUS.ACCEPTED,
           yield* ask(messageAs(other, agent.id, { text: "Not five.", clientKey: randomUUID() })),
         );
+        // Luke's line from a call and an automation's run's, written as their sends write them.
+        for (const [text, sender] of [
+          ["Rebase on main.", { kind: MESSAGE_SENDER.LUKE }],
+          ["Triage the failures.", { kind: MESSAGE_SENDER.AUTOMATION, name: "Nightly triage" }],
+        ] as const) {
+          yield* writer.writeAwaitingLine(
+            target,
+            { text, clientKey: randomUUID(), sender },
+            Effect.succeed(true),
+          );
+        }
         /** Each of the developer's lines as a member reads the page, beside what sent it. */
         const sendersAs = (reader: string) =>
           Effect.map(ask(request(AGENT_MESSAGES, reader, { id: agent.id })), (answered) =>
@@ -1261,16 +1274,25 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         const named = [
           // The task the relay wrote as the turn received it keeps no sender.
           [SNAPSHOT, undefined],
-          ["Use seven days.", { userId: owner, name: "Dean Stratakos" }],
-          ["Not five.", { userId: other, name: "Charles Pan" }],
+          [
+            "Use seven days.",
+            { userId: owner, name: "Dean Stratakos", kind: CODING_AGENT_SENDER.MEMBER },
+          ],
+          ["Not five.", { userId: other, name: "Charles Pan", kind: CODING_AGENT_SENDER.MEMBER }],
+          // Luke and an automation are named by kind, so the window draws each as itself.
+          ["Rebase on main.", { name: "Luke", kind: CODING_AGENT_SENDER.LUKE }],
+          [
+            "Triage the failures.",
+            { name: "Nightly triage", kind: CODING_AGENT_SENDER.AUTOMATION },
+          ],
         ];
         assert.deepEqual(yield* sendersAs(owner), named);
         assert.deepEqual(yield* sendersAs(other), named);
 
         yield* Database.use((db) => db.delete(user).where(eq(user.id, other)));
-        assert.deepEqual((yield* sendersAs(owner)).at(-1), [
+        assert.deepEqual((yield* sendersAs(owner))[2], [
           "Not five.",
-          { name: "Former member" },
+          { name: "Former member", kind: CODING_AGENT_SENDER.FORMER },
         ]);
       }),
   );
