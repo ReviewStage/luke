@@ -2,7 +2,7 @@
  * platform-landing.ts -- a client's request as the platform and a grouped function hand it to a route, for the tests that hold a client's URL to the route it means.
  *
  * Vercel serves an `/api/` path by the first rewrite of the committed table
- * (`server/api-rewrites.json`) whose pattern matches the whole path, writes
+ * (`api-rewrites.json` at the repository root) whose pattern matches the whole path, writes
  * the pattern's groups into the destination, and merges the caller's own
  * query after the destination's; the grouped function's dispatcher then
  * restores the path the route was written against. A test that went

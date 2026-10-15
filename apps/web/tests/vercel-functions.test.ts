@@ -15,7 +15,7 @@ import { apiRewrites, readApiRewritesTable, rewritesDrifted } from "../server/fu
 
 const WEB = fileURLToPath(new URL("..", import.meta.url));
 
-test("the committed table is what the routes generate, and vercel.json's /api/ entries are the table", async () => {
+test("the committed table is what the routes generate", async () => {
   assert.deepEqual(await readApiRewritesTable(WEB), apiRewrites(await webFunctions(WEB)));
   assert.equal(await rewritesDrifted(WEB), false);
 });

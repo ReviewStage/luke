@@ -1,7 +1,7 @@
 import type { Route } from "@luke/service/route";
 
 /**
- * The query parameters a `vercel.json` rewrite adds when it lands a client
+ * The query parameters a `vercel.ts` rewrite adds when it lands a client
  * path on a grouped function: the route key the request is for, and, where
  * the client path carried more than the key names (the auth catch-all), the
  * path to hand the route in the key's place. Note that the platform merges
