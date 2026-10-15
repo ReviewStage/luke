@@ -30,7 +30,7 @@ import { ConfirmDialog, type DialogQuestion, useConfirmDialog } from "../setting
 import { Tooltip } from "../tooltip";
 import { useAppState } from "../use-app-state";
 import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
-import { useMovePlanDialog } from "./move-plan-dialog";
+import { strandedHome, useMovePlanDialog } from "./move-plan-dialog";
 import { PlanStatusMark, planCardOf } from "./plan-card";
 import { PlanNameField, usePlanRename } from "./plan-name-field";
 
@@ -379,8 +379,9 @@ export function PlanActions({
 /**
  * A plan in the sidebar, pinned, listed, or archived alike: its name, in the
  * body's weight unless the plan is unread, and at the row's end how long ago
- * it was last updated, led by one mark for an agent at work or a pull
- * request (`plan-card.tsx`), which Pin and Archive stand in place of while
+ * it was last updated, led by one mark for a repository that belongs to
+ * another workspace, an agent at work, or a pull request (`plan-card.tsx`),
+ * the first named in the row's card, which Pin and Archive stand in place of while
  * the row is hovered or reached from the keyboard.
  * A press opens it, and a right-click offers its actions where the pointer is. Renamed,
  * the row is its name's field until the edit ends, and a key that ends it
@@ -454,7 +455,7 @@ export function SidebarPlan({
               <span className="sidebar-plan-name">{plan.name}</span>
               {unread ? <span className="visually-hidden">(unread)</span> : null}
               <span className="sidebar-plan-time">
-                <PlanStatusMark plan={plan} />
+                <PlanStatusMark plan={plan} stranded={strandedHome(plans, plan)} />
                 <RelativeTime at={plan.updatedAt} now={now} hint={false} />
               </span>
             </span>
