@@ -305,7 +305,7 @@ export function AutomationCard({
     <HoverCard data-actor-card={actor.kind}>
       <ActorHead
         actor={actor}
-        sub={automationTriggerText(automation.trigger)}
+        sub={automationTriggerText(automation.trigger, automation.repositories ?? [])}
         corner={automationOwnerName(automationOwner(automation), workspaceName)}
       />
       <CardNote>{automationNextText(automation, now)}</CardNote>

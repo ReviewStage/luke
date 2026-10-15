@@ -8,6 +8,7 @@ import {
   AUTOMATION_SCOPE,
   AUTOMATION_TRIGGER,
   type AutomationSummary,
+  GITHUB_TRIGGER_EVENT,
 } from "@luke/features/automation-wire";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
@@ -84,9 +85,12 @@ const AGENT: CodingAgentSummary = {
 let root: Root | undefined;
 /** Every workspace whose automations were read, in order. */
 let listed: string[] = [];
+/** The workspace's automations, as a read of the list answers them. */
+let automations: readonly AutomationSummary[] = [TRIAGE];
 
 beforeEach(() => {
   listed = [];
+  automations = [TRIAGE];
   Object.defineProperty(window, "luke", {
     configurable: true,
     value: {
@@ -96,7 +100,7 @@ beforeEach(() => {
           listed.push(request.payload.workspaceId ?? "");
           return Promise.resolve({
             status: ACT_OUTCOME_STATUS.DONE,
-            value: { automations: [TRIAGE] },
+            value: { automations },
           });
         }
         if (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ) {
@@ -126,8 +130,8 @@ function cards(): HTMLElement[] {
   return [...document.querySelectorAll<HTMLElement>(".tooltip-card:not([data-leaving])")];
 }
 
-/** The agent named in a place of the workspace as Dean reads it, the experiment `on` or off, its card hung, and every automation page opened. */
-async function agentCard(on: boolean) {
+/** The agent named in a place of the workspace as Dean reads it, the experiment `on` or off, inside the window's own directory of the workspace too where `nested`, its card hung, and every automation page opened. */
+async function agentCard(on: boolean, nested = false) {
   const opened: string[] = [];
   const read = agentCardReading(AGENT, "Triage", NOTHING_HELD, false, {
     me: DEAN.userId,
@@ -139,16 +143,18 @@ async function agentCard(on: boolean) {
     onOpen: () => undefined,
     children: "Triage",
   });
-  const place = createElement(MemberDirectory, {
-    workspace: WORKSPACE,
-    readerId: DEAN.userId,
-    children: createElement(AutomationDirectory, {
+  const directory = (children: ReturnType<typeof createElement>) =>
+    createElement(AutomationDirectory, {
       workspace: WORKSPACE,
       on,
       wanted: true,
       onOpen: (automationId: string) => opened.push(automationId),
-      children: named,
-    }),
+      children,
+    });
+  const place = createElement(MemberDirectory, {
+    workspace: WORKSPACE,
+    readerId: DEAN.userId,
+    children: nested ? directory(directory(named)) : directory(named),
   });
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
@@ -193,6 +199,32 @@ test("the automation's name hangs its card over the agent's: its schedule, whose
   assert.equal(door?.textContent, "Open automation");
   act(() => door?.click());
   assert.deepEqual(opened, [TRIAGE.id]);
+});
+
+test("a place's directory inside the window's, of the same workspace, shares its read rather than asking for a second", async () => {
+  const { card } = await agentCard(true, true);
+  assert.equal(card.querySelector(".actor-words .actor-ref")?.textContent, "Morning Sentry triage");
+  assert.deepEqual(listed, [WORKSPACE.id]);
+});
+
+test("an automation a GitHub event fires says where on its card, as its row in the list does", async () => {
+  automations = [
+    {
+      ...TRIAGE,
+      trigger: {
+        kind: AUTOMATION_TRIGGER.GITHUB,
+        event: GITHUB_TRIGGER_EVENT.PULL_REQUEST_OPENED,
+      },
+      repositories: ["acme/relay", "acme/ledger"],
+    },
+  ];
+  const { card } = await agentCard(true);
+  hover(card.querySelector(".actor-words .actor-ref") ?? assert.fail("the automation is named"));
+  const automation = cards()[1]?.querySelector("[data-actor-card='automation']");
+  assert.equal(
+    automation?.querySelector(".card-sub")?.textContent,
+    "When a pull request is opened in acme/relay or acme/ledger",
+  );
 });
 
 test("with the Automations experiment off, the card says nothing of the automation, names the teammate who started the agent as before, and the automations go unread", async () => {

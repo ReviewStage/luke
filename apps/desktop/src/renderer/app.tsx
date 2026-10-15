@@ -11,7 +11,7 @@ import {
   RUN_PROFILE,
   sessionReplayBootstrap,
 } from "@luke/host/app-state";
-import { APP_SETTING_SCHEMA, type Experiment, VOICE_HOTKEY_NONE } from "@luke/settings";
+import { APP_SETTING_SCHEMA, EXPERIMENT, type Experiment, VOICE_HOTKEY_NONE } from "@luke/settings";
 import { SETTINGS_VIEW, type SettingsLink, type SettingsView } from "@luke/settings/settings-views";
 import { fixtureUpdate } from "@luke/settings/update-row";
 import { appSettingsView } from "@luke/settings/wire";
@@ -42,6 +42,7 @@ import { type CallCardInput, callControls } from "./call/call-card";
 import { useWindowFocused } from "./call/use-window-focused";
 import { CommandPalette } from "./desktop/command-palette";
 import { DesktopShell } from "./desktop/desktop-shell";
+import { ListedAutomations } from "./desktop/listed-automations";
 import { useSidebarCollapse } from "./desktop/sidebar-collapse";
 import { prefetchEditorBundle } from "./editor-bundle";
 import { FeedbackDialog } from "./feedback-dialog";
@@ -64,7 +65,7 @@ import { followSettingsLink, useSettingsWorkspace } from "./settings-link";
 import { useSignInFaceCycle } from "./sign-in-gate";
 import { ToastHost } from "./toast";
 import { useUpdatedToast } from "./update-toast";
-import { useAppState } from "./use-app-state";
+import { useAppState, useExperiment } from "./use-app-state";
 import { useCaptionPresentation } from "./use-caption-presentation";
 import { usePrefersReducedMotion } from "./use-reduced-motion";
 import { useSignIn } from "./use-sign-in";
@@ -404,6 +405,7 @@ export function App(): React.JSX.Element {
   });
   // The sidebar folds only where it is drawn: Settings keeps its page list,
   // and the sign-in gate draws no sidebar at all.
+  const automationsOn = useExperiment(EXPERIMENT.AUTOMATIONS);
   const sidebar = useSidebarCollapse(state?.run.fixtureMode === true);
 
   const caption = useCaptionPresentation({
@@ -579,107 +581,109 @@ export function App(): React.JSX.Element {
                 disconnect: plans.onDisconnectAccountGitHub,
               }}
             >
-              <div
-                className="app-stage"
-                data-capture={String(state.run.captureMode)}
-                // The panel is drawn as an ordinary app window's content; desktop.css
-                // lays it out.
-                data-surface="desktop"
-                // The sidebar's width lays out the shell and Settings' page list, and
-                // places the captions over the work column beside it.
-                style={cssCustomProperties({ "--sidebar-width": `${sidebar.width}px` })}
-              >
-                {/* The window's content. */}
-                <div className="desktop-stage">
-                  <DesktopShell
-                    gates={{
-                      accountRequired: state.run.accountRequired,
-                      signInWait: signIn.signInWait,
-                      signInFailure: signIn.signInFailure,
-                      lastSignIn,
-                      onBeginSignIn: signIn.beginSignIn,
-                      onCancelSignIn: signIn.cancelSignIn,
-                      signInFace,
-                    }}
+              <ListedAutomations plans={plans} on={automationsOn}>
+                <div
+                  className="app-stage"
+                  data-capture={String(state.run.captureMode)}
+                  // The panel is drawn as an ordinary app window's content; desktop.css
+                  // lays it out.
+                  data-surface="desktop"
+                  // The sidebar's width lays out the shell and Settings' page list, and
+                  // places the captions over the work column beside it.
+                  style={cssCustomProperties({ "--sidebar-width": `${sidebar.width}px` })}
+                >
+                  {/* The window's content. */}
+                  <div className="desktop-stage">
+                    <DesktopShell
+                      gates={{
+                        accountRequired: state.run.accountRequired,
+                        signInWait: signIn.signInWait,
+                        signInFailure: signIn.signInFailure,
+                        lastSignIn,
+                        onBeginSignIn: signIn.beginSignIn,
+                        onCancelSignIn: signIn.cancelSignIn,
+                        signInFace,
+                      }}
+                      tab={tab}
+                      onTabChange={changeTab}
+                      plans={plans}
+                      history={history}
+                      sidebar={sidebar}
+                      call={call}
+                      captions={{
+                        caption,
+                        volumeHint: {
+                          wanted: volumeHintWanted,
+                          text: volumeHintText(outputAudio),
+                          onDismiss: dismissVolumeHint,
+                        },
+                      }}
+                      settings={{
+                        account: state.account,
+                        onSignOut: async () => {
+                          await act(ACT_KIND.ACCOUNT_SIGN_OUT);
+                        },
+                        // The delete happens at the service before anything local moves,
+                        // so a failure resolves to why and the account is still standing.
+                        onDeleteAccount: async () => {
+                          try {
+                            await act(ACT_KIND.ACCOUNT_DELETE);
+                            return { status: ACTION_RESULT_STATUS.ACCEPTED };
+                          } catch {
+                            return {
+                              status: ACTION_RESULT_STATUS.REJECTED,
+                              reason: "Luke could not delete the account. Try again in a moment.",
+                            };
+                          }
+                        },
+                        view: settingsView,
+                        onViewChange: setSettingsView,
+                        microphone,
+                        notifications: {
+                          refused: state.notifications.refused,
+                          onOpenSettings: () => tell(ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS),
+                        },
+                        updates,
+                        settings,
+                        shortcuts,
+                        workspace,
+                      }}
+                    />
+                  </div>
+                  {/* A note to the people who make Luke, written in a dialog over the
+          window. */}
+                  <FeedbackDialog
+                    kind={feedbackKind}
+                    about={feedbackAbout}
+                    account={account}
+                    onClose={() => setFeedbackKind(undefined)}
+                  />
+                  {/* The window's passing notice: the thank-you after a note lands, what
+          came of a change made from a menu, and an update arrived. */}
+                  <ToastHost />
+                  {/* The plans, the open plan's agents and files, every command the
+          window can run now, and the settings, behind ⌘K, past the sign-in
+          alone. */}
+                  <CommandPalette
+                    available={!accountGated}
                     tab={tab}
                     onTabChange={changeTab}
                     plans={plans}
-                    history={history}
-                    sidebar={sidebar}
-                    call={call}
-                    captions={{
-                      caption,
-                      volumeHint: {
-                        wanted: volumeHintWanted,
-                        text: volumeHintText(outputAudio),
-                        onDismiss: dismissVolumeHint,
-                      },
-                    }}
                     settings={{
-                      account: state.account,
-                      onSignOut: async () => {
-                        await act(ACT_KIND.ACCOUNT_SIGN_OUT);
-                      },
-                      // The delete happens at the service before anything local moves,
-                      // so a failure resolves to why and the account is still standing.
-                      onDeleteAccount: async () => {
-                        try {
-                          await act(ACT_KIND.ACCOUNT_DELETE);
-                          return { status: ACTION_RESULT_STATUS.ACCEPTED };
-                        } catch {
-                          return {
-                            status: ACTION_RESULT_STATUS.REJECTED,
-                            reason: "Luke could not delete the account. Try again in a moment.",
-                          };
-                        }
-                      },
-                      view: settingsView,
+                      rows: settingsRowsInput({
+                        settings,
+                        microphone,
+                        account: state.account,
+                        workspace,
+                      }),
                       onViewChange: setSettingsView,
-                      microphone,
-                      notifications: {
-                        refused: state.notifications.refused,
-                        onOpenSettings: () => tell(ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS),
-                      },
-                      updates,
-                      settings,
-                      shortcuts,
-                      workspace,
                     }}
+                    readFiles={(planId) =>
+                      act(ACT_KIND.PLANNING_TREE, { planId, path: "", recursive: true })
+                    }
                   />
                 </div>
-                {/* A note to the people who make Luke, written in a dialog over the
-          window. */}
-                <FeedbackDialog
-                  kind={feedbackKind}
-                  about={feedbackAbout}
-                  account={account}
-                  onClose={() => setFeedbackKind(undefined)}
-                />
-                {/* The window's passing notice: the thank-you after a note lands, what
-          came of a change made from a menu, and an update arrived. */}
-                <ToastHost />
-                {/* The plans, the open plan's agents and files, every command the
-          window can run now, and the settings, behind ⌘K, past the sign-in
-          alone. */}
-                <CommandPalette
-                  available={!accountGated}
-                  tab={tab}
-                  onTabChange={changeTab}
-                  plans={plans}
-                  settings={{
-                    rows: settingsRowsInput({
-                      settings,
-                      microphone,
-                      account: state.account,
-                      workspace,
-                    }),
-                    onViewChange: setSettingsView,
-                  }}
-                  readFiles={(planId) =>
-                    act(ACT_KIND.PLANNING_TREE, { planId, path: "", recursive: true })
-                  }
-                />
-              </div>
+              </ListedAutomations>
             </GitHubConnectProvider>
           </RepositoryRemedyProvider>
         </OpenFeedbackProvider>
