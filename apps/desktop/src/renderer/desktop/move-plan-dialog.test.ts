@@ -331,7 +331,7 @@ test("a plan whose repository its workspace cannot reach and another of the acco
     }
   }
 
-  act(() => button(banner, "Move to Acme…").click());
+  act(() => button(banner, "Move to Acme").click());
   const moving = dialog() ?? assert.fail("the press opens Move to workspace…");
   assert.equal(
     moving.querySelector('[aria-checked="true"]')?.textContent?.includes("Acme"),
@@ -363,9 +363,9 @@ test("a stranded plan's banner stands over every tab of the plan: its Inbox too 
       ];
     }),
     [
-      ["This plan's repository belongs to AcmeMove to Acme…", "desktop-plan-main"],
-      ["This plan's repository belongs to AcmeMove to Acme…", "desktop-plan-main"],
-      ["This plan's repository belongs to AcmeMove to Acme…", "side-panel"],
+      ["This plan's repository belongs to AcmeMove to Acme", "desktop-plan-main"],
+      ["This plan's repository belongs to AcmeMove to Acme", "desktop-plan-main"],
+      ["This plan's repository belongs to AcmeMove to Acme", "side-panel"],
     ],
   );
 });
