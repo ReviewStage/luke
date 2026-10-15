@@ -15,6 +15,8 @@ import { ChatPane, MemberMark } from "../planning/chat-pane";
 import { useMinute } from "../planning/plan-time";
 import { useOpenLink } from "../planning/use-open-link";
 import type { PlansControl } from "../planning/use-plans-tab";
+import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
+import { SPINNER_SIZE, Spinner } from "../spinner";
 
 /**
  * desktop-chat.tsx -- the window's Chat: the workspace's channels and direct messages in a rail of their own, and For you or the channel chosen read beside it.
@@ -36,6 +38,9 @@ import type { PlansControl } from "../planning/use-plans-tab";
 
 /** What the view says where no chat is read. */
 const NO_CHAT = "Chat is not available yet.";
+
+/** What the view says where the workspace's chat could not be read. */
+const CHAT_FAILED = "The workspace's chat could not be read.";
 
 /** Whether a row stands for the place shown. */
 function shows(place: ChatPlace, row: ChatRailRow): boolean {
@@ -104,12 +109,20 @@ export function DesktopChat({
     () => chatNames(listed, read?.agents ?? [], accountName),
     [listed, read, accountName],
   );
-  if (read === undefined) {
+  if (read === undefined || view.failed) {
+    // Nothing read yet: a read that did not answer, one still out, or no chat to read at all.
+    const standIn = view.failed ? (
+      <ReadFailure line={CHAT_FAILED} onRetry={view.onRetry} place={READ_FAILURE_PLACE.CENTRED} />
+    ) : view.available ? (
+      <Spinner label="Loading chat" size={SPINNER_SIZE.REGION} />
+    ) : (
+      <EmptyState icon={<MessagesSquareIcon />}>{NO_CHAT}</EmptyState>
+    );
     return (
       <div className="chat-view">
         <section className="chat-stream" aria-label="Chat">
           <header className="desktop-toolbar" />
-          <EmptyState icon={<MessagesSquareIcon />}>{NO_CHAT}</EmptyState>
+          {standIn}
         </section>
       </div>
     );

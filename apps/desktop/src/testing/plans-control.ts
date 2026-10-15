@@ -256,7 +256,10 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
     callPlanId: undefined,
     chatView: {
       open: false,
+      available: false,
       chat: undefined,
+      failed: false,
+      onRetry: ignore,
       place: FOR_YOU,
       onOpen: ignore,
       onClose: ignore,

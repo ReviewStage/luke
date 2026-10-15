@@ -391,13 +391,13 @@ function chatRow(page: HTMLElement): HTMLButtonElement | undefined {
   );
 }
 
-test("the sidebar's Chat row stands only where a chat is read, counts what waits on the developer, and opens Chat in the plan's place, which it marks while Home's row is not", () => {
+test("the sidebar's Chat row stands only where Chat is available, counts what waits on the developer, and opens Chat in the plan's place, which it marks while Home's row is not", () => {
   assert.equal(chatRow(mount(false)), undefined);
   act(() => root?.unmount());
 
   let opened = 0;
   const chat = fixtureChat({ fixtureMode: true }, 0);
-  const view = { ...plansControl().chatView, chat, onOpen: () => (opened += 1) };
+  const view = { ...plansControl().chatView, available: true, chat, onOpen: () => (opened += 1) };
   const page = mount(false, false, { chatView: view });
   const row = chatRow(page);
   assert.equal(row?.textContent, "Chat4 waiting on you");

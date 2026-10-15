@@ -952,8 +952,8 @@ export function DesktopSidebar({
         disabled={!plans.signedIn}
         onOpen={chosen(openInbox)}
       />
-      {/* Chat's row stands only where a chat is read, which only a fixture run stages yet. */}
-      {plans.signedIn && plans.chatView.chat !== undefined ? (
+      {/* Chat's row stands wherever there is a chat to read: a signed-in run, or a fixture's staged one. */}
+      {plans.signedIn && plans.chatView.available ? (
         <SidebarChatRow
           waiting={waitingMessages(plans)}
           current={inChat}
