@@ -674,6 +674,24 @@ test("a plain place reads a link as markdown does: balanced parentheses and a ti
   );
   assert.equal(linkLabels("Ask [@alice](https://example.com/profile)"), "Ask @alice");
   assert.equal(linkLabels("[a](b c d) and [x]"), "[a](b c d) and [x]");
+  assert.equal(linkLabels("See [Docs](<https://example.com/the docs>) now"), "See Docs now");
+  assert.equal(linkLabels('See [Docs](<https://example.com/a b> "Title")'), "See Docs");
+  assert.equal(
+    linkLabels("See [Docs](<https://example.com/a b) now"),
+    "See [Docs](<https://example.com/a b) now",
+  );
+  assert.equal(
+    linkLabels("See [Docs](<https://example.com/a b) and [B](https://example.com/b)"),
+    "See [Docs](<https://example.com/a b) and B",
+  );
+  assert.equal(
+    linkLabels("See [Docs](<https://example.com/a\\\nb>)"),
+    "See [Docs](<https://example.com/a\\\nb>)",
+  );
+  assert.equal(
+    linkLabels("See [Docs](<https://example.com/a\rb>)"),
+    "See [Docs](<https://example.com/a\rb>)",
+  );
   assert.equal(
     linkLabels('[See](https://example.com/( "note")'),
     '[See](https://example.com/( "note")',

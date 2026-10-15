@@ -231,6 +231,18 @@ test("a plan's card is titled by its first heading, or its first line of words",
   assert.equal(cardTitle("```ts\nconst seats = plan.seats;\n```"), "const seats = plan.seats;");
 });
 
+test("a card's title says each link by its name, as markdown reads the link, and never its destination", () => {
+  assert.equal(
+    cardTitle("Review [@store.ts](https://github.com/acme/relay/blob/HEAD/store.ts) first"),
+    "Review store.ts first",
+  );
+  assert.equal(cardTitle("Read [Plan](https://www.notion.so/Plan-(draft)) now"), "Read Plan now");
+  assert.equal(cardTitle("See [the \\[draft\\]](https://example.com/a)"), "See the [draft]");
+  assert.equal(cardTitle("outer [inner](https://example.com/b) end"), "outer inner end");
+  assert.equal(cardTitle("Read [Docs](<https://example.com/the docs>)"), "Read Docs");
+  assert.equal(cardTitle("Keep [a](b c d) as written"), "Keep [a](b c d) as written");
+});
+
 test("a card's title is plain words: the marks a markdown line opens on, strong emphasis, code spans, and a link's destination are left out, and an identifier keeps its underscores", () => {
   assert.equal(
     cardTitle("**Goal:** find where `planList` refreshes.\n\n- Read it"),

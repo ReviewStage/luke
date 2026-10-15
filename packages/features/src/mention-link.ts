@@ -871,16 +871,34 @@ export function mentionsIn(
 /** The quotes a link's title may stand between, after its destination. */
 const TITLE_QUOTES: ReadonlySet<string> = new Set(['"', "'"]);
 
+/** Where a destination read so far stands: its target and the place after it, or where the read stopped, past which no link's destination can reach. */
+type DestinationRead = { readonly target: string; readonly at: number } | { readonly stop: number };
+
+/** The characters that end a line, which no destination between angle brackets spans. */
+const LINE_ENDS: ReadonlySet<string> = new Set(["\n", "\r"]);
+
 /**
- * An inline link's destination read from just after its `(`: the
- * destination, its parentheses balanced, perhaps a title in quotes after a
- * space, and the `)` that closes it; or, where the words hold no such link,
- * where the read stopped, which no link's destination can reach past.
+ * A destination between angle brackets, which may hold spaces, read from
+ * its `<` to just past its `>` on the same line. Note that one left open
+ * stops the read just after its `<`, so a link later on the line is still
+ * read as one, and the read stays one pass, since a later read reaches no
+ * further than the next `<`.
  */
-function destinationEnd(
-  words: string,
-  open: number,
-): { readonly target: string; readonly end: number } | { readonly stop: number } {
+function angledDestination(words: string, open: number): DestinationRead {
+  for (let at = open + 1; at < words.length; at += 1) {
+    const character = words[at] ?? "";
+    if (character === ">") return { target: words.slice(open + 1, at), at: at + 1 };
+    if (character === "<" || LINE_ENDS.has(character)) break;
+    if (character === "\\") {
+      if (LINE_ENDS.has(words[at + 1] ?? "")) break;
+      at += 1;
+    }
+  }
+  return { stop: open + 1 };
+}
+
+/** A destination with no angle brackets: up to a space or the `)` that closes it, its parentheses balanced. */
+function bareDestination(words: string, open: number): DestinationRead {
   let depth = 0;
   let at = open;
   for (; at < words.length; at += 1) {
@@ -890,8 +908,23 @@ function destinationEnd(
     else if (character === ")" && depth > 0) depth -= 1;
     else if (character === ")" || /\s/u.test(character)) break;
   }
-  const target = words.slice(open, at);
-  if (depth > 0) return { stop: at };
+  return depth > 0 ? { stop: at } : { target: words.slice(open, at), at };
+}
+
+/**
+ * An inline link's destination read from just after its `(`: the
+ * destination, between angle brackets or with its parentheses balanced,
+ * perhaps a title in quotes after a space, and the `)` that closes it; or,
+ * where the words hold no such link, where the read stopped, which no
+ * link's destination can reach past.
+ */
+function destinationEnd(
+  words: string,
+  open: number,
+): { readonly target: string; readonly end: number } | { readonly stop: number } {
+  const read = words[open] === "<" ? angledDestination(words, open) : bareDestination(words, open);
+  if ("stop" in read) return read;
+  const { target, at } = read;
   if (words[at] === ")") return { target, end: at };
   // A title in quotes may follow the destination, after a space, and before its `)`.
   let titleAt = at;
