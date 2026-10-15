@@ -1,3 +1,4 @@
+import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "../act";
 import { useAppCommand } from "../app-commands";
@@ -7,6 +8,7 @@ import { useCodingAgents } from "../planning/use-coding-agents";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { ReadFailure } from "../read-failure";
 import { SPINNER_SIZE, Spinner } from "../spinner";
+import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 
 /**
  * desktop-agent-page.tsx -- one agent's page: an agent an automation started with no plan, drawn as its tab would be, in the plan's place.
@@ -57,15 +59,19 @@ export function DesktopAgentPage({
   // the agent is named alike in both; and that an archived agent, which takes no message, is
   // brought back by its own Unarchive, there being no plan to bring back with it.
   const { onArchive } = agents;
+  const toast = useToast();
+  // An Unarchive refused says why, as any other refusal of the agent's does.
+  const unarchive = () => {
+    onArchive(agentId, false).then((result) => {
+      if (result.status !== ACTION_RESULT_STATUS.ACCEPTED) {
+        toast({ words: result.reason, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
+      }
+    }, nothing);
+  };
   const control = {
     ...agents,
     models: agents.models ?? plans.agents.models,
-    onUnarchive:
-      agent?.archivedAt === undefined
-        ? undefined
-        : () => {
-            void onArchive(agentId, false);
-          },
+    onUnarchive: agent?.archivedAt === undefined ? undefined : unarchive,
   };
   return (
     <section className="agent-page" aria-label="Agent">

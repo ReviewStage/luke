@@ -7,12 +7,14 @@ import {
 } from "@luke/features/coding-agent-view";
 import { CODING_AGENT_STATUS, type CodingAgentPage } from "@luke/features/coding-agent-wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement } from "react";
+import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "#shared/messages/acts";
 import { onRegistry } from "#testing/copy-feedback";
 import { plansControl } from "#testing/plans-control";
+import { archiveWords } from "../planning/coding-agent-model";
+import { ToastHost } from "../toast";
 import { DesktopAgentPage } from "./desktop-agent-page";
 
 /**
@@ -44,11 +46,14 @@ let pages: CodingAgentPageAnswerView[] = [];
 let read: string[] = [];
 /** Every archive or Unarchive asked, as the act carried it. */
 let archives: { agentId: string; archived: boolean }[] = [];
+/** Whether an archive or Unarchive is refused, as an unanswered service refuses it. */
+let archiveRefused = false;
 
 beforeEach(() => {
   pages = [{ agent: PAGE }];
   read = [];
   archives = [];
+  archiveRefused = false;
   Object.defineProperty(window, "luke", {
     configurable: true,
     value: {
@@ -57,7 +62,9 @@ beforeEach(() => {
       act: (request: Act) => {
         if (request.kind === ACT_KIND.CODING_AGENTS_ARCHIVE) {
           archives.push(request.payload);
-          const value = { agent: { ...PAGE, archivedAt: undefined } };
+          const value = archiveRefused
+            ? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }
+            : { agent: { ...PAGE, archivedAt: undefined } };
           return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
         }
         if (request.kind === ACT_KIND.CODING_AGENTS_PAGE) {
@@ -86,7 +93,12 @@ function mount(): HTMLElement {
     root?.render(
       onRegistry(
         AtomRegistry.make(),
-        createElement(DesktopAgentPage, { plans: plansControl({}), agentId: AGENT_ID }),
+        createElement(
+          Fragment,
+          null,
+          createElement(DesktopAgentPage, { plans: plansControl({}), agentId: AGENT_ID }),
+          createElement(ToastHost),
+        ),
       ),
     ),
   );
@@ -138,4 +150,24 @@ test("an archived agent's page offers Unarchive in its composer's place, which b
   await settle();
 
   assert.deepEqual(archives, [{ agentId: AGENT_ID, archived: false }]);
+});
+
+test("an Unarchive the service refuses says why, and the agent stays archived", async () => {
+  pages = [{ agent: { ...PAGE, archivedAt: 2 } }];
+  archiveRefused = true;
+  const page = mount();
+  await settle();
+
+  const unarchive = [...page.querySelectorAll("button")].find(
+    (each) => each.textContent === "Unarchive",
+  );
+  assert.ok(unarchive);
+  act(() => unarchive.click());
+  await settle();
+
+  assert.match(document.body.textContent ?? "", new RegExp(archiveWords(false).refused, "u"));
+  assert.ok(
+    [...page.querySelectorAll("button")].some((each) => each.textContent === "Unarchive"),
+    "the agent stays archived, Unarchive still offered",
+  );
 });
