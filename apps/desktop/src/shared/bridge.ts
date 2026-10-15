@@ -290,6 +290,19 @@ export const BRIDGE = {
     ),
   }),
   /**
+   * A failed run's notification clicked: the panel is to open its
+   * automation. An event, as an agent's notification's click is, because it
+   * is an ask the window answers once.
+   */
+  onShowAutomation: entry({
+    kind: "subscribe",
+    channel: "app:show-automation",
+    args: noArgs,
+    result: result<{ automationId: string }>(
+      (value) => isRecord(value) && isWireString(value.automationId),
+    ),
+  }),
+  /**
    * The floating call window moved under a pointer that did not: a drag of
    * its own. The page is told so the hover its buttons were left with is not
    * believed, since the engine keeps the hover the pointer had before.
@@ -390,6 +403,23 @@ export const BRIDGE = {
         isRecord(value) &&
         isWireString(value.planId) &&
         isWireString(value.itemId) &&
+        isWireString(value.words) &&
+        isWireString(value.detail),
+    ),
+  }),
+  /**
+   * A run of one of the account's automations failed to start while the
+   * window was focused: the panel says so in its toast, in the failed tone,
+   * whose View opens the automation. An event, as an agent's end is.
+   */
+  onRunFailed: entry({
+    kind: "subscribe",
+    channel: "app:run-failed",
+    args: noArgs,
+    result: result<{ automationId: string; words: string; detail: string }>(
+      (value) =>
+        isRecord(value) &&
+        isWireString(value.automationId) &&
         isWireString(value.words) &&
         isWireString(value.detail),
     ),

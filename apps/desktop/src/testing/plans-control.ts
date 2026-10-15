@@ -271,6 +271,7 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
       onClose: ignore,
     },
     inboxPlanless: [],
+    failedRuns: [],
     factoryView: { open: false, onOpen: ignore, onClose: ignore },
     automationsView: {
       open: false,

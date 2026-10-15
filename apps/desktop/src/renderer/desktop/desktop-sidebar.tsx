@@ -44,15 +44,17 @@ import { NEEDS_YOU } from "../planning/inbox-model";
 import { LinearIssuePicker } from "../planning/linear-issue-picker";
 import { useMinute } from "../planning/plan-time";
 import { useUnreadPlans } from "../planning/use-plan-looks";
-import type { PlansControl } from "../planning/use-plans-tab";
+import { AUTOMATIONS_PAGE, type PlansControl } from "../planning/use-plans-tab";
 import { inColumn, type PinnedTab } from "../planning/use-side-panel";
 import { ReadFailure } from "../read-failure";
 import { RepositoryPicture } from "../repository-picture";
 import { Shortcut } from "../shortcut";
 import { Skeleton, SkeletonRegion } from "../skeleton";
+import { GLYPH_STATE, stateEndMark } from "../state-glyph";
 import { commandKeyshortcuts, Tooltip } from "../tooltip";
 import { useExperiment } from "../use-app-state";
 import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
+import { useFailedRunsMark } from "./failed-runs";
 import { type FoldedGroups, useFoldedGroups } from "./folded-groups";
 import { LukeIdentity } from "./luke-identity";
 import { SidebarPlan } from "./plan-actions";
@@ -853,13 +855,18 @@ function SidebarFactoryRow({
  * The Automations page's row, after Factory's and drawn as it is: the
  * zap, its name, and its chord. A press opens the window's Automations page
  * (`automations-page.tsx`), and the row is the place shown while it stands.
+ * While a run of the account's own automation failed to start since that
+ * automation was opened, the row wears the failed mark at its end, where the
+ * Inbox's count stands on its row, giving way to the chord as that does.
  */
 function SidebarAutomationsRow({
   current,
+  failed,
   disabled,
   onOpen,
 }: {
   current: boolean;
+  failed: boolean;
   disabled: boolean;
   onOpen: () => void;
 }): React.JSX.Element {
@@ -874,6 +881,11 @@ function SidebarAutomationsRow({
     >
       <ZapIcon />
       Automations
+      {failed ? (
+        <span className="sidebar-automations-failed">
+          {stateEndMark(GLYPH_STATE.FAILED, false)}
+        </span>
+      ) : null}
       <Shortcut chord={APP_SHORTCUTS[APP_COMMAND.AUTOMATIONS].chord} className="row-shortcut" />
     </button>
   );
@@ -1024,6 +1036,15 @@ function SidebarColumn({
   const inInbox = onPlans && plans.inboxView.open;
   const inFactory = onPlans && plans.factoryView.open;
   const inAutomations = onPlans && plans.automationsView.open;
+  // Opening an automation sees its failed run, which the Automations row is marked for until then.
+  const { place: automationsPlace } = plans.automationsView;
+  const automationFailed = useFailedRunsMark(
+    plans.failedRuns,
+    inAutomations && automationsPlace.kind === AUTOMATIONS_PAGE.EDIT
+      ? automationsPlace.automationId
+      : undefined,
+    sidebar.staged,
+  );
   const standingIn =
     inInbox || inFactory || inAutomations || (onPlans && plans.agentView.agentId !== undefined);
   // Factory and the Automations page are experiments: each row stands only while the account has it on.
@@ -1228,6 +1249,7 @@ function SidebarColumn({
       {automationsOn ? (
         <SidebarAutomationsRow
           current={inAutomations}
+          failed={automationFailed}
           disabled={!plans.signedIn}
           onOpen={chosen(openAutomations)}
         />

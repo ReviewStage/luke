@@ -1,3 +1,4 @@
+import type { AccountFailedRun } from "@luke/features/account-inbox-wire";
 import type { Board } from "@luke/features/board-wire";
 import { dictationKeywords } from "@luke/features/dictation-keywords";
 import type { GitHubConnection } from "@luke/features/github-connection-wire";
@@ -426,6 +427,8 @@ export interface PlansControl {
   inboxPlans: readonly AppInboxPlanHolding[];
   /** What waits on the developer from agents with no plan, as main's read last answered: what the window's Inbox lists beside the plans' and counts with them. */
   inboxPlanless: readonly AppInboxPlanlessItem[];
+  /** The newest run of each of the account's own automations in the listed workspace that failed to start lately, which marks the sidebar's Automations until it is opened. */
+  failedRuns: readonly AccountFailedRun[];
   /** The window's Inbox: whether it stands in the plan's place, the plan chosen in it, and its presses. */
   inboxView: InboxViewControl;
   /** One agent's page: which agent's stands in the plan's place, if any, and its presses. */
@@ -771,6 +774,8 @@ export function usePlansTab(input: {
   inboxPlans: readonly AppInboxPlanHolding[];
   /** What main says waits on the developer from agents with no plan. */
   inboxPlanless: readonly AppInboxPlanlessItem[];
+  /** The newest run of each of the account's own automations main says failed to start lately. */
+  failedRuns: readonly AccountFailedRun[];
   voice: {
     view: VoiceView;
     listening: boolean;
@@ -890,7 +895,15 @@ export function usePlansTab(input: {
       : planning.plans.filter((plan) => plan.workspaceId === listedWorkspace.id),
   );
   const listedWorkspaceId = listedWorkspace?.id;
-  const { inboxWaiting, inboxPlans } = input;
+  const { inboxWaiting, inboxPlans, failedRuns } = input;
+  // An automation's failed run marks the sidebar of the workspace it stands in, whose automations the window lists.
+  const listedFailedRuns = useMemo(
+    () =>
+      listedWorkspaceId === undefined
+        ? failedRuns
+        : failedRuns.filter((run) => run.workspaceId === listedWorkspaceId),
+    [failedRuns, listedWorkspaceId],
+  );
   const listedInbox = useMemo(
     () => ({
       inbox: inWorkspace(inboxWaiting, planning.plans, listedWorkspaceId),
@@ -2168,6 +2181,7 @@ export function usePlansTab(input: {
     inboxShown: shownInbox,
     inboxPlans: input.inboxPlans,
     inboxPlanless: input.inboxPlanless,
+    failedRuns: listedFailedRuns,
     // The window's Inbox stands over the plan's place, so a version history there gives way.
     inboxView: {
       open: inboxView !== undefined,

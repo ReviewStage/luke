@@ -1364,9 +1364,13 @@ for the run's new agent, as a Start's draft switches them off; every other
 server the owner connected is handed to it.
 A refused start is a failed run with one fixed word
 (`AUTOMATION_RUN_REASON`), and nothing pauses an automation for failing:
-the next firing tries again. A row an older build paused for its failures
-stands turned off, its reason's column read no longer (and dropped by the
-release after), and the answer's
+the next firing tries again. The newest failed run of each of the owner's
+automations in the last week rides the account's inbox read
+(`GET /api/inbox`'s `failedRuns`, `src/agents/coder-host/inbox-page.ts`)
+and moves its cursor, so the owner's desktop announces it as it fails and
+marks Automations until that automation is opened; it is no inbox item. A
+row an older build paused for its failures stands turned off, its reason's
+column read no longer (and dropped by the release after), and the answer's
 `pausedReason` is always null, kept for the desktops that read it. The agent's
 questions reach the Inbox and its end the finished-agent notification as
 any agent's do.

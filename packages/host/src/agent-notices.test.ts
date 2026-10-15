@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import type { AccountInboxEntry, AccountPlanlessEntry } from "@luke/features/account-inbox-wire";
+import type {
+  AccountFailedRun,
+  AccountInboxEntry,
+  AccountPlanlessEntry,
+} from "@luke/features/account-inbox-wire";
+import { AUTOMATION_RUN_REASON } from "@luke/features/automation-wire";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAccountInboxAnswerView,
@@ -23,6 +28,7 @@ import {
   AgentNoticeDoors,
   type AgentPlace,
   createAgentNotices,
+  type FailedRunToast,
   type InboxItemToast,
 } from "./agent-notices.js";
 import type { AppInboxPlan, AppInboxPlanHolding, AppInboxSlice } from "./app-state.js";
@@ -77,17 +83,22 @@ function fixture() {
   const posted: AgentNotice[] = [];
   const toasted: AgentEndToast[] = [];
   const inboxToasted: InboxItemToast[] = [];
+  const runsToasted: FailedRunToast[] = [];
   const badges: number[] = [];
   const doors = Layer.succeed(AgentNoticeDoors, {
     post: (notice) => posted.push(notice),
     toast: (end) => toasted.push(end),
     toastInbox: (item) => inboxToasted.push(item),
+    toastFailedRun: (run) => runsToasted.push(run),
     badge: (count) => badges.push(count),
   });
   const inboxReads: string[] = [];
   const waiting: (readonly AppInboxPlan[])[] = [];
   const holding: (readonly AppInboxPlanHolding[])[] = [];
   const planless: AppInboxSlice["planless"][] = [];
+  const failedRuns: AppInboxSlice["failedRuns"][] = [];
+  const openedAutomations: string[] = [];
+  let automationsOn = true;
   const openedInboxes: string[] = [];
   let inboxAnswers: Queue.Queue<CodingAgentAccountInboxAnswerView> | undefined;
   let accounts: Queue.Queue<string | undefined> | undefined;
@@ -163,7 +174,10 @@ function fixture() {
         waiting.push(next.waiting);
         holding.push(next.plans);
         planless.push(next.planless);
+        failedRuns.push(next.failedRuns);
       },
+      openAutomation: (automationId) => openedAutomations.push(automationId),
+      automationsOn: () => automationsOn,
       openInbox: (planId) => openedInboxes.push(planId),
       openPlanlessItem: (item) => openedPlanless.push(item),
       watchInterval: WATCH,
@@ -213,6 +227,13 @@ function fixture() {
     badges,
     inboxToasted,
     openedInboxes,
+    runsToasted,
+    failedRuns,
+    openedAutomations,
+    /** The account's Automations experiment. */
+    turnAutomations: (on: boolean) => {
+      automationsOn = on;
+    },
     /** The signed-in account's id as its identity now holds it: none for one stored without it. */
     knowAccountId: (next: string | undefined) => {
       accountId = next;
@@ -809,5 +830,96 @@ it.effect(
 
       assert.equal(f.badges.at(-1), 1);
       assert.equal(f.said().length, 1);
+    }),
+);
+
+const RUN_ID = "4b5c6d7e-8f90-4a1b-8c2d-3e4f5a6b7c8d";
+const AUTOMATION_ID = "5a0c4d2e-8f1b-4c3a-9e7d-2b6f1a8c9d04";
+
+/** A run of one of the account's own automations that failed to start, as the account's inbox read carries it. */
+function failedRun(patch: Partial<AccountFailedRun> = {}): AccountFailedRun {
+  return {
+    id: RUN_ID,
+    automationId: AUTOMATION_ID,
+    automationName: "Flaky test sweep",
+    workspaceId: "workspace-acme",
+    reason: AUTOMATION_RUN_REASON.REPOSITORY_UNREACHABLE,
+    failedAt: READ_AT + 1,
+    ...patch,
+  };
+}
+
+it.effect(
+  "a run of the account's own automation that failed to start since the last answer is announced under the automation's name, its click opening the automation, and is written for the window without counting on the badge",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      yield* f.notices;
+      f.focus(false);
+      f.answerInbox({ items: [], cursor: "1", readAt: READ_AT });
+      yield* settled;
+
+      f.answerInbox({ items: [], failedRuns: [failedRun()], cursor: "2", readAt: READ_AT + 2 });
+      yield* settled;
+
+      assert.deepEqual(f.said(), [
+        {
+          title: "Flaky test sweep",
+          body: "A run couldn't start. Luke can no longer reach its repository on GitHub.",
+        },
+      ]);
+      f.posted[0]?.onClick();
+      assert.deepEqual(f.openedAutomations, [AUTOMATION_ID]);
+      assert.deepEqual(f.failedRuns.at(-1), [failedRun()]);
+      assert.equal(f.badges.at(-1), 0);
+    }),
+);
+it.effect(
+  "a run that failed to start while the window is focused is toasted under the automation's name, and is announced once however often it is carried",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      yield* f.notices;
+      f.focus(true);
+      f.answerInbox({ items: [], cursor: "1", readAt: READ_AT });
+      yield* settled;
+
+      f.answerInbox({ items: [], failedRuns: [failedRun()], cursor: "2", readAt: READ_AT + 2 });
+      yield* settled;
+      f.answerInbox({
+        items: [waitingItem(ITEM_A, { updatedAt: READ_AT })],
+        failedRuns: [failedRun()],
+        cursor: "3",
+        readAt: READ_AT + 3,
+      });
+      yield* settled;
+
+      assert.deepEqual(f.runsToasted, [
+        {
+          automationId: AUTOMATION_ID,
+          words: "A run couldn't start. Luke can no longer reach its repository on GitHub.",
+          detail: "Flaky test sweep",
+        },
+      ]);
+      assert.deepEqual(f.posted, []);
+    }),
+);
+it.effect(
+  "a failed run the first answer carries is where the account stands and is announced nowhere, nor is one while the account has Automations off, though both are written for the window",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      yield* f.notices;
+      f.focus(false);
+      f.answerInbox({ items: [], failedRuns: [failedRun()], cursor: "1", readAt: READ_AT + 2 });
+      yield* settled;
+      f.turnAutomations(false);
+      const later = failedRun({ id: ITEM_B, failedAt: READ_AT + 3 });
+
+      f.answerInbox({ items: [], failedRuns: [later], cursor: "2", readAt: READ_AT + 4 });
+      yield* settled;
+
+      assert.deepEqual(f.posted, []);
+      assert.deepEqual(f.failedRuns.at(-1), [later]);
     }),
 );

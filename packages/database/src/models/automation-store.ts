@@ -973,6 +973,55 @@ const findRunsSince = SqlSchema.findAll({
     ),
 });
 
+/** One run that failed to start, as its automation's owner is told of it. */
+const FailedRunRowSchema = Schema.Struct({
+  id: Schema.String,
+  automationId: Schema.String,
+  automationName: Schema.String,
+  workspaceId: Schema.String,
+  reason: Schema.NullOr(automationRunReasonSchema),
+  failedAt: InstantColumnSchema,
+});
+
+/**
+ * The newest run of each of the account's own automations that failed to
+ * start since `since`, the latest first. Note that the account must still
+ * be a member of the automation's workspace, because a creator who left
+ * reaches nothing of it.
+ */
+const findOwnFailedRuns = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String, since: Schema.Date }),
+  Result: FailedRunRowSchema,
+  execute: ({ userId, since }) =>
+    Database.use((db) =>
+      db
+        .selectDistinctOn([automationRun.automationId], {
+          id: automationRun.id,
+          automationId: automationRun.automationId,
+          automationName: automation.name,
+          workspaceId: AUTOMATION_WORKSPACE,
+          reason: automationRun.reason,
+          // Note that a failed run is settled by the filter below, so its instant is never null.
+          failedAt: automationRun.settledAt,
+        })
+        .from(automationRun)
+        .innerJoin(automation, eq(automation.id, automationRun.automationId))
+        .where(
+          and(
+            eq(automation.userId, userId),
+            memberOfAutomationWorkspace(userId),
+            eq(automationRun.status, AUTOMATION_RUN_STATUS.FAILED),
+            gte(automationRun.settledAt, since),
+          ),
+        )
+        .orderBy(
+          asc(automationRun.automationId),
+          desc(automationRun.settledAt),
+          desc(automationRun.id),
+        ),
+    ),
+});
+
 /** Re-reads one automation after a write, which answered only that a row was written. */
 function readWritten(userId: string, id: string): PlanStoreEffect<Option.Option<Automation>> {
   return findAutomation({ userId, id, access: AUTOMATION_ACCESS.READ });
@@ -1147,6 +1196,19 @@ export function automationRunsSince(
  * firing later than the grace, a sweep that was down or a schedule just
  * resumed, is moved on without a run, so a backlog is never replayed.
  */
+/** One run that failed to start, as its automation's owner is told of it: the automation, why, and when. */
+export type OwnFailedRun = typeof FailedRunRowSchema.Type;
+
+/** The newest run of each of the account's own automations that failed to start since `since`, the latest failed first. */
+export function ownFailedAutomationRuns(
+  userId: string,
+  since: Date,
+): PlanStoreEffect<readonly OwnFailedRun[]> {
+  return Effect.map(findOwnFailedRuns({ userId, since }), (runs) =>
+    runs.toSorted((a, b) => b.failedAt.getTime() - a.failedAt.getTime()),
+  );
+}
+
 export function claimDueAutomations(claim: DueClaim): PlanStoreEffect<readonly ClaimedFiring[]> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(

@@ -177,7 +177,7 @@ export function initialAppState(
     voice: { avatar: AVATAR_OFF },
     planning: IDLE_PLANNING_VIEW,
     codingAgents: { unseen: [] },
-    inbox: { waiting: [], plans: [], planless: [], automations: [] },
+    inbox: { waiting: [], plans: [], planless: [], automations: [], failedRuns: [] },
     notifications: { status: NOTIFICATIONS_STATUS.UNKNOWN },
     sessionReplay: { permitted: runMode.sendsNetwork, halted: false },
   };

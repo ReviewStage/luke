@@ -1,4 +1,5 @@
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
+import type { AccountFailedRun } from "@luke/features/account-inbox-wire";
 import { PRODUCT_SURFACE_EVENT } from "@luke/features/analytics";
 import { FEEDBACK_KIND, type FeedbackKind } from "@luke/features/feedback";
 import type { ReadLink } from "@luke/features/luke-link";
@@ -45,6 +46,7 @@ import { useWindowFocused } from "./call/use-window-focused";
 import { useDraftsOwner } from "./composer-drafts";
 import { CommandPalette } from "./desktop/command-palette";
 import { DesktopShell } from "./desktop/desktop-shell";
+import { useFailedRunToasts } from "./desktop/failed-runs";
 import { ListedAutomations } from "./desktop/listed-automations";
 import { useSidebarCollapse } from "./desktop/sidebar-collapse";
 import { prefetchEditorBundle } from "./editor-bundle";
@@ -63,7 +65,7 @@ import { type AgentPlace, useAgentEndToasts } from "./planning/agent-end-toast";
 import { useInboxToasts } from "./planning/inbox-toast";
 import { type RepositoryRemedyDoors, RepositoryRemedyProvider } from "./planning/repository-remedy";
 import { OpenLinkProvider } from "./planning/use-open-link";
-import { useLeaveGuard, usePlansTab } from "./planning/use-plans-tab";
+import { AUTOMATIONS_PAGE, useLeaveGuard, usePlansTab } from "./planning/use-plans-tab";
 import { applySessionReplay } from "./session-replay";
 import { settingsRowsInput } from "./settings/settings-panel";
 import { followSettingsLink, useSettingsWorkspace } from "./settings-link";
@@ -86,6 +88,8 @@ const NOTHING_WAITING: readonly AppInboxPlan[] = [];
 const NO_PLANS_HOLDING: readonly AppInboxPlanHolding[] = [];
 /** Nothing waiting from agents with no plan, as one value across renders. */
 const NOTHING_PLANLESS: readonly AppInboxPlanlessItem[] = [];
+/** No automation's run failed, as one value across renders. */
+const NO_FAILED_RUNS: readonly AccountFailedRun[] = [];
 
 export function App(): React.JSX.Element {
   const { act, tell, updateSetting } = useAct();
@@ -284,6 +288,7 @@ export function App(): React.JSX.Element {
     inboxWaiting: state?.inbox.waiting ?? NOTHING_WAITING,
     inboxPlans: state?.inbox.plans ?? NO_PLANS_HOLDING,
     inboxPlanless: state?.inbox.planless ?? NOTHING_PLANLESS,
+    failedRuns: state?.inbox.failedRuns ?? NO_FAILED_RUNS,
     voice: { view: voiceView, listening, requestMicrophoneAccess },
     onOpenSettings: (link) => openSettings(link),
     onOpenIntegrations: () => openSettings({ page: SETTINGS_VIEW.INTEGRATIONS }),
@@ -328,6 +333,21 @@ export function App(): React.JSX.Element {
     [changeTab, guardLeave],
   );
   useEffect(() => window.luke.onShowAgent(openAgent), [openAgent]);
+  // A failed run's notification clicked, or its toast's View: the Plans tab, on that automation.
+  const openAutomations = useRef(plans.automationsView.onOpen);
+  openAutomations.current = plans.automationsView.onOpen;
+  const openAutomation = useCallback(
+    (automationId: string) =>
+      guardLeave(() => {
+        changeTab(PANEL_TAB.PLANS);
+        openAutomations.current({ kind: AUTOMATIONS_PAGE.EDIT, automationId });
+      })(),
+    [changeTab, guardLeave],
+  );
+  useEffect(
+    () => window.luke.onShowAutomation(({ automationId }) => openAutomation(automationId)),
+    [openAutomation],
+  );
   // A Luke link, handed by the system or pressed in the window, opens where its place stands (`@luke/ui/link-route`).
   const factoryOn = useExperiment(EXPERIMENT.FACTORY);
   const automationsOn = useExperiment(EXPERIMENT.AUTOMATIONS);
@@ -390,6 +410,8 @@ export function App(): React.JSX.Element {
   // goes where the notification's click would, and it goes with the agent's
   // unseen dot.
   useAgentEndToasts(openAgent, state?.codingAgents.unseen ?? NO_UNSEEN_AGENTS);
+  // A run that failed to start, said in the toast while the window was focused: its View opens the automation.
+  useFailedRunToasts(openAutomation);
   // An inbox notification clicked, or an item's toast's View: the Plans tab, on that plan's Inbox.
   const showInbox = useRef(plans.onShowInbox);
   showInbox.current = plans.onShowInbox;

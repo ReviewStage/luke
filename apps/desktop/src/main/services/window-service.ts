@@ -5,7 +5,12 @@ import { APP_LINK_SCHEME, appLinkClaim } from "@luke/features/app-links";
 import type { ReadLink } from "@luke/features/luke-link";
 import { PAGE_SCHEME } from "@luke/features/page-frame";
 import { WINDOW_ROLE } from "@luke/gateway/window-session";
-import type { AgentEndToast, AgentPlace, InboxItemToast } from "@luke/host/agent-notices";
+import type {
+  AgentEndToast,
+  AgentPlace,
+  FailedRunToast,
+  InboxItemToast,
+} from "@luke/host/agent-notices";
 import type { AppHotkeysSlice, AppStateSnapshot, AppWindowFacts } from "@luke/host/app-state";
 import { applyThemePreference, followAppearance, NativeTheme } from "@luke/host/appearance";
 import type { DesktopService } from "@luke/host/desktop-service";
@@ -104,6 +109,10 @@ export interface WindowService extends DesktopService {
   showSettings: () => void;
   /** Asks the panels to say an inbox item opened in their toast: one that opened while the window is focused. */
   toastInboxItem: (item: InboxItemToast) => void;
+  /** Asks the panels to open an automation: a failed run's notification's click. */
+  showAutomation: (automationId: string) => void;
+  /** Asks the panels to say a run failed to start in their toast: one that failed while the window is focused. */
+  toastFailedRun: (run: FailedRunToast) => void;
   /**
    * The panel window coming forward or going behind, for as long as the
    * subscription stands. The hidden voice window is never the key window, so
@@ -293,6 +302,14 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     panels.broadcast(channels.onInboxItemOpened, item);
   }
 
+  function showAutomation(automationId: string): void {
+    panels.broadcast(channels.onShowAutomation, { automationId });
+  }
+
+  function toastFailedRun(run: FailedRunToast): void {
+    panels.broadcast(channels.onRunFailed, run);
+  }
+
   function onPanelFocusChanged(listener: (focused: boolean) => void): () => void {
     const focused = (_event: Electron.Event, window: BrowserWindow) => {
       if (panels.owns(window.webContents)) listener(true);
@@ -436,6 +453,8 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     showInboxItem,
     showSettings,
     toastInboxItem,
+    showAutomation,
+    toastFailedRun,
     toastAgentEnd,
     onPanelFocusChanged,
     reporterOf,

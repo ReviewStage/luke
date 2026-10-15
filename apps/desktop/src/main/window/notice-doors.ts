@@ -1,6 +1,7 @@
 import type {
   AgentEndToast,
   AgentNoticeDoorsSurface,
+  FailedRunToast,
   InboxItemToast,
 } from "@luke/host/agent-notices";
 import { NOTIFICATIONS_STATUS, type NotificationsStatus } from "@luke/voice/settings-controls";
@@ -43,11 +44,12 @@ export interface ElectronNoticeDoors extends AgentNoticeDoorsSurface {
 export function electronNoticeDoors(dependencies: {
   toPanels: (end: AgentEndToast) => void;
   inboxToPanels: (item: InboxItemToast) => void;
+  failedRunToPanels: (run: FailedRunToast) => void;
   /** macOS showed a notification, or refused one: whether notifications are on for Luke. */
   onAnswered: (status: NotificationsStatus) => void;
   report: (line: string) => void;
 }): ElectronNoticeDoors {
-  const { toPanels, inboxToPanels, onAnswered, report } = dependencies;
+  const { toPanels, inboxToPanels, failedRunToPanels, onAnswered, report } = dependencies;
   const standing = new Set<Notification>();
   const post: AgentNoticeDoorsSurface["post"] = (notice) => {
     if (!Notification.isSupported()) return;
@@ -72,6 +74,7 @@ export function electronNoticeDoors(dependencies: {
     postTest: (onClick) => post({ ...TEST_NOTICE, onClick }),
     toast: toPanels,
     toastInbox: inboxToPanels,
+    toastFailedRun: failedRunToPanels,
     badge: (count) => {
       app.setBadgeCount(count);
     },

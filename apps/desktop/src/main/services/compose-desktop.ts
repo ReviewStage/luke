@@ -14,7 +14,7 @@ import {
 } from "@luke/host/effect";
 import { confirmingHold, type DesktopQuit } from "@luke/host/quit";
 import { effectServiceLayer, serviceLayer } from "@luke/host/service-layer";
-import { APP_SETTING_SCHEMA, NO_EXPERIMENTS } from "@luke/settings";
+import { APP_SETTING_SCHEMA, EXPERIMENT, experimentOn, NO_EXPERIMENTS } from "@luke/settings";
 import { callInProgress } from "@luke/voice/voice-view";
 import { Context, Effect, Layer, Stream } from "effect";
 import { AppStateStore, initialAppState } from "../app-state";
@@ -239,6 +239,7 @@ export function composeDesktop(
       const noticeDoors = electronNoticeDoors({
         toPanels: windows.toastAgentEnd,
         inboxToPanels: windows.toastInboxItem,
+        failedRunToPanels: windows.toastFailedRun,
         onAnswered: (status) => {
           if (state.snapshot().notifications.status !== status) {
             state.update({ notifications: { status } });
@@ -282,6 +283,15 @@ export function composeDesktop(
           windows.panels.focusExpanded();
           windows.showInboxItem(item);
         },
+        openAutomation: (automationId) => {
+          windows.panels.focusExpanded();
+          windows.showAutomation(automationId);
+        },
+        automationsOn: () =>
+          experimentOn(
+            state.snapshot().settings?.experiments ?? NO_EXPERIMENTS,
+            EXPERIMENT.AUTOMATIONS,
+          ),
         report: config.report,
       }).pipe(Effect.provideService(AgentNoticeDoors, noticeDoors));
       // The agents with no plan each list read carries are the notices' to

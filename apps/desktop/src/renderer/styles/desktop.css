@@ -500,6 +500,27 @@ body,
   display: inline-flex;
 }
 
+/* The Automations row's failed mark stands where the Inbox's count does on
+   its row, and gives way to the chord as that count does. */
+.sidebar-automations-failed {
+  display: inline-flex;
+  margin-left: auto;
+}
+
+.sidebar-automations-failed ~ .row-shortcut,
+.sidebar-automations:hover > .sidebar-automations-failed,
+:root[data-keyboard="true"] .sidebar-automations:focus-visible > .sidebar-automations-failed {
+  display: none;
+}
+
+.sidebar-automations:hover > .sidebar-automations-failed ~ .row-shortcut,
+:root[data-keyboard="true"]
+  .sidebar-automations:focus-visible
+  > .sidebar-automations-failed
+  ~ .row-shortcut {
+  display: inline-flex;
+}
+
 /* A workspace's tile: a square of its hue with its first letter as its text,
    at a row's glyph size. A loaded picture drops the hue (`data-hue`) and the
    letter, so the square has no fill of its own and a transparent photo shows
