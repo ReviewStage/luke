@@ -1981,7 +1981,7 @@ body,
   font-weight: 500;
 }
 
-.chip:where([data-look="field"]) .chip-name {
+.chip:where([data-look="field"]) :is(.chip-name, .model-label) {
   flex: 1;
   text-align: left;
 }
@@ -2851,6 +2851,13 @@ body,
 }
 
 .repository-chip[data-place="toolbar"] .searchable-menu {
+  right: 0;
+  left: auto;
+}
+
+/* A form row's chip is a Settings picker (`settings/picker-row.tsx`), so its
+   menu hangs from the chip's trailing edge, where the column is. */
+.repository-chip[data-place="field"] .searchable-menu {
   right: 0;
   left: auto;
 }
@@ -4115,158 +4122,125 @@ body:has(.app-stage[data-capture="true"])
   gap: var(--space-12);
 }
 
+/* Its name is written where a Settings page's title stands, at that title's
+   size and weight. */
 .automation-editor-name {
   padding: 0;
   border: 0;
   background: none;
   color: var(--text-primary);
-  font-size: 20px;
-  font-weight: 650;
-  outline: none;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  outline: none; /* no ring: the caret in the title's own words shows focus */
 }
 
 .automation-editor-name::placeholder {
   color: var(--text-tertiary);
 }
 
+/* The line under the name, in a Settings row's detail type: who owns it, by
+   glyph and name, then who sees it. */
 .automation-owner-line {
   display: flex;
   align-items: center;
   gap: var(--space-8);
   margin: 0;
   color: var(--text-tertiary);
-  font-size: 12.5px;
+  font-size: 12px;
 }
 
 .automation-owner-line .automation-owner {
   width: auto;
-  padding: var(--space-2) var(--space-8) var(--space-2) var(--space-6);
-  border: 1px solid var(--hairline-strong);
-  border-radius: 999px;
+  font-size: 12px;
 }
 
 .automation-crumbs .automation-owner {
   width: auto;
 }
 
-.automation-save-refusal,
-.automation-form-problem {
-  margin: 0;
-  font-size: 12px;
-}
-
-/* The form: a label column on the left, each control and its problem on the
-   right, divided by the card's hairlines. */
-.automation-form-row {
+/* The form, drawn as a Settings page: each group's name over a card of
+   Settings rows, the groups a section apart. */
+.automation-form {
   display: flex;
-  align-items: flex-start;
-  gap: var(--space-16);
-  padding: var(--space-12) var(--space-16);
+  flex-direction: column;
+  gap: var(--section-gap);
 }
 
-.automation-form-row + .automation-form-row {
-  border-top: 1px solid var(--hairline);
-}
-
-.automation-form-label {
-  width: 120px; /* off-scale */
-  flex: none;
-  padding-top: var(--space-6);
-  color: var(--text-primary);
-  font-size: 13px;
-  font-weight: 500;
-}
-
-.automation-form-control {
+/* A row holding two controls, a day and its time or an address and its
+   copy, stands them a control's gap apart at the row's end. */
+.automation-row-controls {
   display: flex;
   min-width: 0;
-  flex: 1;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--space-8);
-}
-
-.automation-form-note {
-  margin: 0;
-  color: var(--text-tertiary);
-  font-size: 12px;
-  line-height: 1.45;
-}
-
-.automation-form-row[data-invalid="true"] .settings-input {
-  border-color: var(--danger);
-}
-
-.automation-schedule,
-.automation-schedule-at {
-  display: flex;
-  flex-wrap: wrap;
+  flex: 0 1 auto;
   align-items: center;
-  gap: var(--space-8);
+  gap: var(--control-gap);
 }
 
-.automation-schedule {
-  flex-direction: column;
-  align-items: flex-start;
+/* A field beside the pickers stands at their height and corner, so a row's
+   controls read as one set. */
+.automation-row-controls > .settings-input,
+.settings-row > .automation-cron {
+  height: var(--control-height);
+  padding-block: 0;
+  border-radius: var(--control-radius);
 }
 
-.automation-select,
-.automation-time {
+/* Note that the time's own clock is hidden, because what it opens is the
+   engine's picker rather than the window's menu; the hour and minute are
+   typed or stepped with the arrows. */
+.automation-time::-webkit-calendar-picker-indicator {
+  display: none;
+}
+
+/* A picker here grows from a Settings picker's width to name its whole
+   value, an event's or a zone's, rather than cut it short; the time stands
+   at that same width beside them. Where the window leaves the form narrow,
+   beside the sidebar and the runs, a row's controls drop under its name and
+   wrap, as a wrapping Settings row's do, and a picker gives way to the room
+   rather than run past its card. */
+.automation-form .settings-row {
+  flex-wrap: wrap;
+}
+
+.automation-form .settings-row > .settings-copy {
+  flex: 1 1 200px;
+}
+
+.automation-row-controls {
+  flex-wrap: wrap;
+}
+
+.automation-form .settings-picker {
+  max-width: 100%;
+}
+
+.automation-form .settings-picker-chip {
   width: auto;
-  padding-block: var(--space-6);
+  min-width: min(200px, 100%);
 }
 
-.automation-zone {
-  max-width: 240px; /* off-scale */
+.automation-time {
+  width: 200px;
+  max-width: 100%;
 }
 
 .automation-cron {
-  width: 200px; /* off-scale */
+  width: 200px;
   font-family: var(--font-mono, ui-monospace, monospace);
-}
-
-.automation-model {
-  display: flex;
-  align-items: center;
-  gap: var(--space-8);
-}
-
-/* The trigger said as one sentence under its segments. */
-.automation-trigger-sentence {
-  margin: 0;
-  color: var(--text-secondary);
-  font-size: 13px;
-  line-height: 1.45;
-}
-
-/* A webhook's address with its copy, its fresh-secret button, and what to send. */
-.automation-webhook {
-  display: flex;
-  width: 100%;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--space-8);
-}
-
-.automation-webhook-address {
-  display: flex;
-  width: 100%;
-  align-items: center;
-  gap: var(--space-6);
-}
-
-/* A webhook's secret, shown once: its field, its copy, and its Done, over a line saying so. */
-.automation-webhook-secret {
-  display: flex;
-  width: 100%;
-  flex-direction: column;
-  gap: var(--space-6);
 }
 
 .automation-webhook-url {
-  min-width: 0;
-  flex: 1;
+  width: 240px;
   font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+}
+
+/* What stops a save stands under its row inside the card, as a Settings
+   row's refusal does. */
+.automation-save-refusal,
+.automation-form-problem {
+  margin: 0;
   font-size: 12px;
 }
 
@@ -4275,26 +4249,6 @@ body:has(.app-stage[data-capture="true"])
   position: relative;
   display: flex;
   min-width: 0;
-}
-
-.automation-agent {
-  max-width: 420px; /* off-scale */
-}
-
-/* Archive successful runs: a box, then its name over what it does. */
-.automation-check {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-8);
-}
-
-.automation-check > input {
-  margin-top: 3px; /* off-scale */
-}
-
-.automation-check small {
-  color: var(--text-tertiary);
-  font-size: 12px;
 }
 
 /* An automation's page: its setup at the measure a plan is read at, centred
@@ -4347,11 +4301,22 @@ button.automation-run:hover {
   background: var(--raised);
 }
 
-.automation-prompt {
+/* The task is its card: the words written on the card's own ground, the
+   card's corner the field's, ringed while it holds the caret as any field is. */
+.settings-card > .automation-prompt {
   min-height: 120px; /* off-scale */
-  resize: vertical;
-  letter-spacing: 0;
+  padding: var(--space-12) var(--space-16);
+  border: 0;
+  border-radius: inherit;
+  background: none;
+  color: var(--text-primary);
+  font: inherit;
   line-height: 1.5;
+  resize: vertical;
+}
+
+.settings-card > .automation-prompt::placeholder {
+  color: var(--text-tertiary);
 }
 
 /* Settings ------------------------------------------------------------------- */
@@ -4610,8 +4575,10 @@ button.automation-run:hover {
   scroll-margin-top: calc(var(--space-32) + 3 * var(--control-height));
 }
 
-/* The measure a Settings page's head and rows read at, and a row's height. */
-.settings-page {
+/* The measure a Settings page's head and rows read at, and a row's height,
+   which an automation's page, drawn as a Settings page, takes its rows' from. */
+.settings-page,
+.automation-editor {
   --settings-width: 640px;
   --settings-row-height: 52px;
 }

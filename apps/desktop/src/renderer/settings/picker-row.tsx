@@ -68,26 +68,11 @@ function roomAround(chip: HTMLElement) {
   return { top: 0, bottom: window.innerHeight };
 }
 
-export function PickerRow({
-  label,
-  copy,
-  describedBy,
-  value,
-  valueLabel,
-  valueIcon,
-  rows,
-  placeholder,
-  noMatch,
-  note,
-  anchor,
-  disabled,
-  onPick,
-}: {
+/** What a picker is handed: the value it names and the menu it drops. */
+interface PickerProps {
   /** The control's name for a reader: the row's own name, or a fuller one where that is too short. */
   label: string;
-  /** The row's name and why, drawn before the chip. */
-  copy: React.ReactNode;
-  /** The id of the why drawn in `copy`, which describes the chip. */
+  /** The id of the why drawn beside it, which describes the chip. */
   describedBy?: string | undefined;
   /** The id of the value chosen now, checked in the menu. */
   value: string;
@@ -104,8 +89,31 @@ export function PickerRow({
   /** The id a pressed search result lands on: marked on the chip, which takes the keyboard. */
   anchor?: string | undefined;
   disabled?: boolean | undefined;
+  /** Reads what the menu lists now, as it opens, so a list that failed to read is asked for again. */
+  onOpen?: (() => void) | undefined;
   onPick: (id: string) => void;
-}): React.JSX.Element {
+}
+
+/**
+ * The chip and its menu alone, for a row that stands it beside another
+ * control of its own, a time beside its zone; a row holding nothing else is
+ * a `PickerRow`.
+ */
+export function Picker({
+  label,
+  describedBy,
+  value,
+  valueLabel,
+  valueIcon,
+  rows,
+  placeholder,
+  noMatch,
+  note,
+  anchor,
+  disabled,
+  onOpen,
+  onPick,
+}: PickerProps): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const drawn = useDisclosure(open);
   const [placement, setPlacement] = useState<ReturnType<typeof pickerPlacement>>();
@@ -141,58 +149,74 @@ export function PickerRow({
   };
 
   return (
+    <span
+      className="settings-picker"
+      ref={row}
+      data-side={placement?.side ?? PICKER_SIDE.BELOW}
+      style={
+        placement === undefined
+          ? undefined
+          : cssCustomProperties({ "--settings-picker-list-max": `${placement.listMax}px` })
+      }
+    >
+      <Chip
+        ref={chip}
+        look={CHIP_LOOK.FIELD}
+        chevron
+        className="settings-picker-chip"
+        {...(anchor ? searchAnchorProps(anchor) : undefined)}
+        aria-label={`${label}: ${valueLabel}`}
+        aria-describedby={describedBy}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-controls={open ? menuId : undefined}
+        disabled={disabled}
+        onClick={() => {
+          if (!open) onOpen?.();
+          setOpen(!open);
+        }}
+      >
+        {valueIcon}
+        <span className="chip-name">{valueLabel}</span>
+      </Chip>
+      {drawn.mounted ? (
+        <SearchableMenu
+          leaving={drawn.leaving}
+          ref={drawn.ref}
+          id={menuId}
+          label={label}
+          className="settings-picker-menu"
+          placeholder={placeholder}
+          rows={rows}
+          value={value}
+          note={note}
+          noMatch={noMatch}
+          onPick={(id) => {
+            close();
+            onPick(id);
+          }}
+          onClose={close}
+          onLeave={(left) => {
+            if (!(left instanceof Node && row.current?.contains(left))) setOpen(false);
+          }}
+        />
+      ) : null}
+    </span>
+  );
+}
+
+/** A settings row picking one value: its name and why, then the picker. */
+export function PickerRow({
+  copy,
+  ...picker
+}: PickerProps & {
+  /** The row's name and why, drawn before the chip. */
+  copy: React.ReactNode;
+}): React.JSX.Element {
+  return (
     <div className="settings-row">
       <span className="settings-copy">{copy}</span>
-      <span
-        className="settings-picker"
-        ref={row}
-        data-side={placement?.side ?? PICKER_SIDE.BELOW}
-        style={
-          placement === undefined
-            ? undefined
-            : cssCustomProperties({ "--settings-picker-list-max": `${placement.listMax}px` })
-        }
-      >
-        <Chip
-          ref={chip}
-          look={CHIP_LOOK.FIELD}
-          chevron
-          className="settings-picker-chip"
-          {...(anchor ? searchAnchorProps(anchor) : undefined)}
-          aria-label={`${label}: ${valueLabel}`}
-          aria-describedby={describedBy}
-          aria-haspopup="dialog"
-          aria-expanded={open}
-          aria-controls={open ? menuId : undefined}
-          disabled={disabled}
-          onClick={() => setOpen(!open)}
-        >
-          {valueIcon}
-          <span className="chip-name">{valueLabel}</span>
-        </Chip>
-        {drawn.mounted ? (
-          <SearchableMenu
-            leaving={drawn.leaving}
-            ref={drawn.ref}
-            id={menuId}
-            label={label}
-            className="settings-picker-menu"
-            placeholder={placeholder}
-            rows={rows}
-            value={value}
-            note={note}
-            noMatch={noMatch}
-            onPick={(id) => {
-              close();
-              onPick(id);
-            }}
-            onClose={close}
-            onLeave={(left) => {
-              if (!(left instanceof Node && row.current?.contains(left))) setOpen(false);
-            }}
-          />
-        ) : null}
-      </span>
+      <Picker {...picker} />
     </div>
   );
 }

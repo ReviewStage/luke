@@ -71,14 +71,17 @@ export interface RepositoryChooser {
 export const CHIP_PLACE = {
   COMPOSER: "composer",
   TOOLBAR: "toolbar",
+  /** A form row's value, as a Settings picker's chip is drawn. */
+  FIELD: "field",
 } as const;
 
 export type ChipPlace = (typeof CHIP_PLACE)[keyof typeof CHIP_PLACE];
 
-/** The chip's look in each place: the composer's pill, or the toolbar chip the toolbar's buttons beside it are drawn as. */
+/** The chip's look in each place: the composer's pill, the toolbar chip the toolbar's buttons beside it are drawn as, or a form row's field. */
 const PLACE_LOOK = {
   [CHIP_PLACE.COMPOSER]: CHIP_LOOK.PILL,
   [CHIP_PLACE.TOOLBAR]: CHIP_LOOK.TOOLBAR,
+  [CHIP_PLACE.FIELD]: CHIP_LOOK.FIELD,
 } as const satisfies Record<ChipPlace, ChipLook>;
 
 /** The chip's words while it waits on a pick. */
@@ -285,6 +288,8 @@ export function RepositoryChip(props: {
         <Chip
           ref={trigger}
           look={PLACE_LOOK[props.place]}
+          chevron={props.place === CHIP_PLACE.FIELD}
+          className={props.place === CHIP_PLACE.FIELD ? "settings-picker-chip" : undefined}
           aria-haspopup="dialog"
           aria-expanded={open}
           aria-controls={open ? menuId : undefined}
