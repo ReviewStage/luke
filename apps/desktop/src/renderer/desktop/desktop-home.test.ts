@@ -153,8 +153,11 @@ const MEMBERS: readonly WorkspaceMember[] = [
 ];
 
 let root: Root | undefined;
+/** Every workspace whose automations were read, in order. */
+let automationReads: string[] = [];
 
 beforeEach(() => {
+  automationReads = [];
   Object.defineProperty(window, "luke", {
     configurable: true,
     value: {
@@ -169,6 +172,7 @@ beforeEach(() => {
           return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
         }
         if (request.kind === ACT_KIND.AUTOMATIONS_LIST) {
+          automationReads.push(request.payload.workspaceId ?? "");
           return Promise.resolve({
             status: ACT_OUTCOME_STATUS.DONE,
             value: { automations: [SWEEP] },
@@ -550,4 +554,52 @@ test("a waiting row of an agent with no plan names the automation that started i
   });
   const card = document.querySelector(".tooltip-card [data-tab-card]");
   assert.match(card?.textContent ?? "", /Sweep the flaky tests.*Started by.*Nightly flake sweep/u);
+});
+
+test("a question of another workspace's automation, which Home does not list, reads none of the listed workspace's automations", async () => {
+  handState(experimentsOn(EXPERIMENT.AUTOMATIONS));
+  const plans = plansControl({
+    plans: [],
+    listed: { plans: [], archived: [], inbox: [], inboxPlans: [] },
+    inbox: [],
+    inboxPlans: [],
+    workspace: {
+      id: "workspace-personal",
+      name: "Personal",
+      role: WORKSPACE_ROLE.OWNER,
+      github: null,
+    },
+    inboxPlanless: [
+      {
+        id: QUARANTINE.id,
+        agentId: SWEEP_AGENT,
+        title: QUARANTINE.title,
+        postedAt: QUARANTINE.postedAt,
+        agentTitle: "Sweep the flaky tests",
+        agentModel: "anthropic/claude-opus-5.5",
+        automationId: SWEEP.id,
+        automationName: SWEEP.name,
+        repository: "acme/relay",
+        workspaceId: "workspace-acme",
+      },
+    ],
+  });
+  const container = document.createElement("div");
+  document.body.append(container);
+  root = createRoot(container);
+  act(() =>
+    root?.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(ListedAutomations, {
+          plans,
+          on: true,
+          children: createElement(DesktopHome, { plans, accountName: "Dean Stratakos" }),
+        }),
+      ),
+    ),
+  );
+  await settle();
+
+  assert.deepEqual(automationReads, []);
 });

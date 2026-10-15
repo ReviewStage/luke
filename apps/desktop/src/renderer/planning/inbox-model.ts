@@ -335,6 +335,23 @@ const NO_AUTOMATION_KEY = "no-automation";
 const NO_AUTOMATION_NAME = "Other agents";
 
 /**
+ * Whether a waiting item of an agent with no plan is listed in the workspace
+ * given: one of that workspace's agents', or one whose workspace the service
+ * does not name. Note that with no workspace listed every agent's items
+ * stand, as every plan's do.
+ */
+export function listedIn(
+  entry: Pick<AppInboxPlanlessItem, "workspaceId">,
+  workspaceId: string | undefined,
+): boolean {
+  return (
+    workspaceId === undefined ||
+    entry.workspaceId === undefined ||
+    entry.workspaceId === workspaceId
+  );
+}
+
+/**
  * The groups the items of agents with no plan stand in: one per automation
  * that started them, by its name, and one for the agents no automation the
  * reader may read names, each holding every item its agents' reads hold,
@@ -349,12 +366,7 @@ export function planlessGroups(
 ): readonly InboxGroup[] {
   const groups = new Map<string, { holder: InboxHolder; agents: Map<string, InboxAgentLine> }>();
   for (const entry of waiting) {
-    // Note that with no workspace listed every agent's items stand, as every plan's do.
-    const elsewhere =
-      workspaceId !== undefined &&
-      entry.workspaceId !== undefined &&
-      entry.workspaceId !== workspaceId;
-    if (elsewhere) continue;
+    if (!listedIn(entry, workspaceId)) continue;
     const key = entry.automationId ?? NO_AUTOMATION_KEY;
     const agents = groups.get(key)?.agents ?? new Map<string, InboxAgentLine>();
     agents.set(entry.agentId, {
