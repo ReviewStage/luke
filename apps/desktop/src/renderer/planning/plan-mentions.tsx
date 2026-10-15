@@ -1,3 +1,4 @@
+import type { MentionPlace } from "@luke/features/mention-link";
 import {
   createContext,
   type ReactNode,
@@ -91,31 +92,42 @@ const NO_ANCHORS: ReadonlySet<string> = new Set();
 /** What a press on a plan's chip does with no opener at hand, as in a test of one surface: nothing. */
 const OPEN_NOTHING = (): void => undefined;
 
+/** A plan a place off its page draws the words of, as the plan's version history does: its id, where its mentions are written, and its sections' anchors as they stand. */
+export interface MentionedPlan {
+  readonly planId: string;
+  readonly place: MentionPlace;
+  readonly anchors: ReadonlySet<string>;
+}
+
 /**
  * The doors a mention's chip opens through where it is drawn: the plan's
- * page's, or, off one, as in the workspace's Inbox, the window's own: a
- * plan or a section opened by the window's opener, no file, since no
- * repository is at hand, so a GitHub page is drawn as GitHub's.
+ * page's, or, off one, the window's own: a plan or a section opened by the
+ * window's opener, and no file, since no File tab stands there. A place
+ * off the page drawing one plan's words, as its version history does,
+ * names the plan, so a file of its repository is still the file and a
+ * section the plan no longer holds is drawn gone; with none, as in the
+ * workspace's Inbox, no repository is at hand, so a GitHub page is drawn as
+ * GitHub's.
  */
-export function useMentionDoors(): MentionDoors {
+export function useMentionDoors(plan?: MentionedPlan): MentionDoors {
   const page = useContext(PlanMentionsContext)?.doors;
   const openPlan = useOpenPlan();
   const windowDoors = useMemo<MentionDoors>(
     () => ({
-      planId: NO_PLAN,
-      place: { workspace: "", repository: null },
-      anchors: NO_ANCHORS,
+      planId: plan?.planId ?? NO_PLAN,
+      place: plan?.place ?? { workspace: "", repository: null },
+      anchors: plan?.anchors ?? NO_ANCHORS,
       onOpenPlan: openPlan ?? OPEN_NOTHING,
       onOpenFile: undefined,
     }),
-    [openPlan],
+    [openPlan, plan],
   );
   return page ?? windowDoors;
 }
 
-/** What draws a link in Markdown drawn here as its mention's chip, through the doors `useMentionDoors` hands. */
-export function useMentionLink(): LinkDrawer {
-  const doors = useMentionDoors();
+/** What draws a link in Markdown drawn here as its mention's chip, through the doors `useMentionDoors` hands for the plan given. */
+export function useMentionLink(plan?: MentionedPlan): LinkDrawer {
+  const doors = useMentionDoors(plan);
   return useMemo(() => mentionLinkDrawer(doors), [doors]);
 }
 

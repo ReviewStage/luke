@@ -1,5 +1,7 @@
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
 import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import { sectionAnchors } from "@luke/features/mention-link";
+import { planSections } from "@luke/features/plan-document";
 import type { PlanRevisionLine } from "@luke/features/plan-wire";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { BackIcon, EllipsisIcon } from "@luke/ui";
@@ -26,6 +28,7 @@ import {
   VERSION_CHANGE,
   versionDiff,
 } from "../planning/plan-history-model";
+import type { MentionedPlan } from "../planning/plan-mentions";
 import { useMinute } from "../planning/plan-time";
 import { RelativeTime } from "../planning/relative-time";
 import {
@@ -116,6 +119,8 @@ export interface VersionSubject {
   readonly own: boolean;
   /** The workspace whose members wrote the revisions, whose pictures their rows wear; none for the account's own template. */
   readonly workspace: Pick<Workspace, "id" | "memberCount"> | undefined;
+  /** The plan the versions are of, which their mentions are read against; none for the account's own template. */
+  readonly plan?: MentionedPlan | undefined;
 }
 
 /** What the page says while the subject has no revision yet. */
@@ -512,6 +517,7 @@ function VersionPage({
         title={subject.title}
         noun={subject.noun}
         section={section}
+        plan={subject.plan}
       />
     );
   }
@@ -556,8 +562,20 @@ function VersionPage({
 export function planVersionSubject(plans: PlansControl): VersionSubject {
   const { region, boundFor } = plans;
   const plan = region.kind === DOCUMENT_REGION.READY ? region.plan : undefined;
+  const workspace = plans.workspaces.find((each) => each.id === plan?.workspaceId);
   return {
-    workspace: plans.workspaces.find((each) => each.id === plan?.workspaceId),
+    workspace,
+    // A version's mentions are read against the plan as it stands, as its page reads them.
+    plan:
+      plan === undefined
+        ? undefined
+        : {
+            planId: plan.id,
+            place: { workspace: workspace?.slug ?? plan.workspaceId, repository: plan.repository },
+            anchors: new Set(
+              sectionAnchors(planSections(plan.document.body).map((section) => section.heading)),
+            ),
+          },
     versions: plans.history,
     noun: "plan",
     title: plan?.name,

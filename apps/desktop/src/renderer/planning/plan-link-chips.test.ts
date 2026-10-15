@@ -1,17 +1,20 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { Plan } from "@luke/features/plan-wire";
+import { PLAN_ACTOR, type Plan } from "@luke/features/plan-wire";
 import { ACT_OUTCOME_STATUS, type ActOutcome } from "@luke/host/acts";
+import { CONFIRM_STAGE } from "@luke/ui/confirm-state";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { installEditorBundle, installEditorLayout } from "#testing/composer";
 import { DOCUMENT_PLAN } from "#testing/document-plan";
-import { MARKDOWN_MARK, MarkdownMessage } from "../markdown-message";
+import { MARKDOWN_MARK, type MarkdownMark, MarkdownMessage } from "../markdown-message";
 import { notesBefore } from "./file-note";
 import { PlanBody } from "./plan-body";
 import { PlanMentions, type PlanMentionsValue, useMentionLink } from "./plan-mentions";
+import { HISTORY_READ } from "./use-plan-history";
+import { VersionView } from "./version-view";
 
 /**
  * plan-link-chips.test.ts -- a link in the plan's words, or in Luke's
@@ -98,15 +101,9 @@ const THREE_CHIPS = [
 ];
 
 /** Words drawn as Markdown with the page's mentions, as a version and a note draw them. */
-function PageWords({ words, marks }: { words: string; marks?: boolean }): ReactNode {
+function PageWords({ words, marks }: { words: string; marks: MarkdownMark[] }): ReactNode {
   const link = useMentionLink();
-  const end = words.length;
-  return createElement(MarkdownMessage, {
-    words,
-    link,
-    edit:
-      marks === true ? { marks: [{ kind: MARKDOWN_MARK.INSERTED, from: 0, to: end }] } : undefined,
-  });
+  return createElement(MarkdownMessage, { words, link, edit: { marks } });
 }
 
 test("the plan read on its page draws a plan's link, a file's lines, and a Linear page as chips, any other link a link, and code as code", () => {
@@ -169,7 +166,10 @@ test("a version's diff draws a mention written in as its chip, still marked as w
   const container = drawn(
     createElement(PlanMentions, {
       value: PAGE,
-      children: createElement(PageWords, { words: LINKS, marks: true }),
+      children: createElement(PageWords, {
+        words: LINKS,
+        marks: [{ kind: MARKDOWN_MARK.INSERTED, from: 0, to: LINKS.length }],
+      }),
     }),
   );
 
@@ -196,4 +196,56 @@ test("Luke's note on a File tab's lines draws its links as a transcript does", (
     [...container.querySelectorAll(".markdown-link")].map((link) => link.textContent),
     ["the docs"],
   );
+});
+
+test("a link whose label a version changed in part is drawn as words with the change marked, not as one chip", () => {
+  const words = `Read [the new store](https://github.com/${REPOSITORY}/blob/HEAD/store.ts).`;
+  const from = words.indexOf("new");
+  const container = drawn(
+    createElement(PlanMentions, {
+      value: PAGE,
+      children: createElement(PageWords, {
+        words,
+        marks: [{ kind: MARKDOWN_MARK.INSERTED, from, to: from + "new ".length }],
+      }),
+    }),
+  );
+
+  assert.equal(container.querySelector(".mention-chip"), null);
+  assert.equal(
+    container.querySelector(".markdown-link ins.markdown-inserted")?.textContent,
+    "new ",
+  );
+});
+
+test("the plan's version history, off the plan's page, reads a version's mentions against the plan it is of", () => {
+  const document = { body: `## Rollout\n\n${LINKS}\n`, assumptions: [] };
+  const container = drawn(
+    createElement(VersionView, {
+      viewing: {
+        line: {
+          seq: 2,
+          lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: 0, duringCall: true },
+          startedAt: 0,
+          changes: 1,
+        },
+        current: true,
+        read: { kind: HISTORY_READ.READY, document, previous: document },
+      },
+      restore: {
+        stage: CONFIRM_STAGE.RESTING,
+        rejection: undefined,
+        busy: false,
+        standing: false,
+        ask: () => undefined,
+        keep: () => undefined,
+        run: () => undefined,
+        clear: () => undefined,
+      },
+      restorable: false,
+      plan: { planId: PLAN_ID, place: PAGE.doors.place, anchors: PAGE.doors.anchors },
+    }),
+  );
+
+  assert.deepEqual(chips(container), THREE_CHIPS);
 });

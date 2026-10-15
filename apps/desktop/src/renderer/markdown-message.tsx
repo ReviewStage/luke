@@ -302,28 +302,57 @@ function plainLink(href: string | undefined, children: ReactNode): ReactNode {
  */
 export type LinkDrawer = (href: string, label: string) => ReactNode | undefined;
 
-/** The change mark every word of a link wears, drawn mid-edit; nothing where its words wear none, or more than one. */
-function markOf(link: HastParent | undefined): (typeof MARK_DRAWN)[MarkdownMarkKind] | undefined {
+/** The marks a link's words wear, drawn mid-edit: none, one over every word, or a change inside its label. */
+const LINK_MARKS = {
+  NONE: "none",
+  MIXED: "mixed",
+} as const;
+
+type LinkMarks =
+  | (typeof LINK_MARKS)[keyof typeof LINK_MARKS]
+  | (typeof MARK_DRAWN)[MarkdownMarkKind];
+
+/** Whether a node is a change mark drawn over words. */
+function isMark(node: HastNode): boolean {
+  return (
+    node.type === "element" &&
+    Object.values(MARK_DRAWN).some((mark) => mark.tagName === node.tagName)
+  );
+}
+
+/** The marks a link's words wear: none, the one every word wears, or a change inside the label. */
+function marksOf(link: HastParent | undefined): LinkMarks {
   const drawn = (link?.children ?? []).filter((child) => !isBlockBreak(child));
+  if (!drawn.some(isMark)) return LINK_MARKS.NONE;
   const first = drawn[0];
-  if (first?.type !== "element") return undefined;
-  const mark = Object.values(MARK_DRAWN).find((each) => each.tagName === first.tagName);
-  return mark !== undefined &&
-    drawn.every((child) => child.type === "element" && child.tagName === mark.tagName)
-    ? mark
-    : undefined;
+  const mark = Object.values(MARK_DRAWN).find(
+    (each) => first?.type === "element" && each.tagName === first.tagName,
+  );
+  const whole =
+    mark !== undefined &&
+    drawn.every((child) => child.type === "element" && child.tagName === mark.tagName);
+  return whole ? mark : LINK_MARKS.MIXED;
 }
 
 /**
- * A link the place drew its own way, a mention's chip say, in the change
- * mark its words wore, so a mention written in or struck out in a version
- * still reads as the change it is.
+ * A link the place knows how to draw, a mention's chip say, drawn with the
+ * change marks its words wore: a chip in the mark every word wore, so a
+ * mention written in or struck out in a version reads as the change it is;
+ * and, where the change is inside its label, the link drawn as words with
+ * its marks, since one chip would join the words struck out and written in
+ * into one name and hide what changed.
  */
-function marked(drawn: ReactNode, link: HastParent | undefined): ReactNode {
-  const mark = markOf(link);
-  if (mark === undefined) return drawn;
-  const Mark = mark.tagName;
-  return <Mark className={mark.className}>{drawn}</Mark>;
+function drawnMarked(
+  drawn: ReactNode,
+  link: HastParent | undefined,
+  href: string,
+  children: ReactNode,
+): ReactNode {
+  const marks = marksOf(link);
+  if (marks === LINK_MARKS.NONE) return drawn;
+  if (marks === LINK_MARKS.MIXED) return plainLink(href, children);
+  const Mark = marks.tagName;
+  return <Mark className={marks.className}>{drawn}</Mark>;
 }
 
 /** The words under a node of the tree, however they are formatted: a heading's emphasis copied into a label still reads as its words. */
@@ -392,7 +421,9 @@ export function MarkdownMessage({
             ...COMPONENTS,
             a: ({ href, children, node }) => {
               const drawn = href === undefined ? undefined : link(href, labelOf(node));
-              return drawn === undefined ? plainLink(href, children) : marked(drawn, node);
+              return drawn === undefined || href === undefined
+                ? plainLink(href, children)
+                : drawnMarked(drawn, node, href, children);
             },
           },
     [link],

@@ -11,7 +11,7 @@ import { Skeleton, SkeletonRegion } from "../skeleton";
 import { TOAST_HOLD, TOAST_TONE, type ToastNotice, UNDO_LABEL } from "../toast";
 import { Tooltip } from "../tooltip";
 import { VERSION_CHANGE, type VersionDiff, versionDiff } from "./plan-history-model";
-import { useMentionLink } from "./plan-mentions";
+import { type MentionedPlan, useMentionLink } from "./plan-mentions";
 import { dayAndTimeText, momentText } from "./plan-time";
 import { PlanTitle } from "./plan-title";
 import { HISTORY_READ, type PlanHistoryControl, type ViewedVersion } from "./use-plan-history";
@@ -84,13 +84,15 @@ function VersionBody({
   diff,
   title,
   section,
+  plan,
 }: {
   diff: VersionDiff;
   title: string | undefined;
   section: number | undefined;
+  plan: MentionedPlan | undefined;
 }): React.JSX.Element {
   const units = section === undefined ? diff.units : diff.units.slice(section, section + 1);
-  const link = useMentionLink();
+  const link = useMentionLink(plan);
   return (
     <div className="plan-body">
       {title === undefined || section !== undefined ? null : <PlanTitle name={title} />}
@@ -131,10 +133,12 @@ function VersionContent({
   viewing,
   title,
   section,
+  plan,
 }: {
   viewing: ViewedVersion;
   title: string | undefined;
   section: number | undefined;
+  plan: MentionedPlan | undefined;
 }): React.JSX.Element {
   const { read } = viewing;
   if (read.kind === HISTORY_READ.READING) return <VersionSkeleton />;
@@ -151,7 +155,7 @@ function VersionContent({
   return (
     <>
       {unchanged ? <p className="version-note">{NO_CHANGE_LINE}</p> : null}
-      <VersionBody diff={diff} title={title} section={section} />
+      <VersionBody diff={diff} title={title} section={section} plan={plan} />
     </>
   );
 }
@@ -224,6 +228,7 @@ export function VersionView({
   title,
   noun = "plan",
   section,
+  plan,
 }: {
   viewing: ViewedVersion;
   /** The restore's question, held by the history around the page (`useVersionRestore`). */
@@ -236,6 +241,8 @@ export function VersionView({
   noun?: string;
   /** The one unit of the version to draw, alone and without the plan's title, as a section opened from its revision's list; the whole version without one. */
   section?: number | undefined;
+  /** The plan the versions are of, which their mentions are read against; none for the account's template. */
+  plan?: MentionedPlan | undefined;
 }): React.JSX.Element {
   const { line } = viewing;
   return (
@@ -267,7 +274,7 @@ export function VersionView({
       </header>
       <div className="desktop-document">
         <div className="plan-document-scroll">
-          <VersionContent viewing={viewing} title={title} section={section} />
+          <VersionContent viewing={viewing} title={title} section={section} plan={plan} />
         </div>
       </div>
       <ConfirmDialog confirm={restore} question={restoreQuestion(line.lastEdit.at, noun)} />
