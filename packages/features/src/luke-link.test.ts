@@ -138,6 +138,16 @@ test("a task's places are read under the name the unit of work is taking, /task/
   });
 });
 
+test("a picture in a plan's address names its task, and nothing of the picture", () => {
+  const picture = "0b6f6b52-2c1e-4f8e-9a4d-7f1c2e9d5a01";
+
+  assert.deepEqual(readLink(`${HOME}/plan/${PLAN}/files/${picture}`), {
+    workspace: "acme",
+    place: { kind: LINK_PLACE.TASK, planId: PLAN },
+  });
+  assert.equal(readLink(`${HOME}/plan/${PLAN}/files/not-an-id`), undefined);
+});
+
 test("an address that names no place in Luke names nothing", () => {
   for (const target of [
     `https://example.com/acme/agent/${AGENT}`,
