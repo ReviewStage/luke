@@ -28,6 +28,7 @@ import { type InboxCodeDoors, InboxPane } from "../planning/inbox-pane";
 import { PlanBody, type SectionLinks } from "../planning/plan-body";
 import { PlanCrumb } from "../planning/plan-crumb";
 import { PlanMentions, type PlanMentionsValue } from "../planning/plan-mentions";
+import { planLinkPlace } from "../planning/plan-menu-items";
 import { useMinute } from "../planning/plan-time";
 import { CallBar } from "../planning/planning-parts";
 import { CHIP_PLACE, RepositoryChip } from "../planning/repository-chip";
@@ -395,8 +396,8 @@ function PlanDocument({
   const { plan } = region;
   const { mainTabs, sidePanel, agents } = plans;
   const home = plans.workspaces.find((each) => each.id === plan.workspaceId);
-  // The slug the plan's links are written under; only the plan's id finds it, so its workspace's id stands in until the workspaces are read.
-  const workspace = home?.slug ?? plan.workspaceId;
+  // The slug the plan's links are written under, as its ⋯ menu's Copy link to plan writes it.
+  const { workspace } = planLinkPlace(plans.workspaces, plan);
   const archived = plan.archivedAt !== undefined;
   const listed = listedOpen ?? plan;
   const unarchive = () => plans.onMarkPlan(plan.id, PLAN_MARK.UNARCHIVE);

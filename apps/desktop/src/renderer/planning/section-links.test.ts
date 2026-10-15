@@ -19,7 +19,7 @@ import { PlanBody, type SectionLinks } from "./plan-body";
  * A plan's sections' links on its own page: a mention of a section drawn as
  * the chip that opens it, one of a heading the plan no longer holds struck
  * through and opening the plan at its top, a section's ⋯ copying its link,
- * an ask to show a section scrolling the document to it, and nothing a
+ * the title's ⋯ copying the plan's, an ask to show a section scrolling the document to it, and nothing a
  * mention names riding on an attribute. Mentions are read in the form
  * written before the link was settled as well as the settled one.
  * Synthetic plan.
@@ -49,6 +49,9 @@ const PLAN: Plan = {
     assumptions: [],
   },
 };
+
+/** A section's ⋯, as against the title's beside it. */
+const SECTION_MORE = '.plan-unit-more[aria-label="Section actions"]';
 
 const roots: Root[] = [];
 const copied: string[] = [];
@@ -142,7 +145,7 @@ test("a section's ⋯ copies the section's link, which reads back as its mention
 test("the plan's first words, under no heading, offer no link", () => {
   const { container } = drawn();
 
-  const mores = container.querySelectorAll(".plan-unit-more");
+  const mores = container.querySelectorAll(SECTION_MORE);
 
   assert.equal(mores.length, 3, "one ⋯ for each of the three headed sections");
 });
@@ -296,7 +299,7 @@ test("only the ⋯ beside the document's one Tab stop is a Tab stop", () => {
 test("on a plan that cannot be edited, where no block is a Tab stop, every section's ⋯ is one", () => {
   const { container } = drawn();
 
-  const mores = [...container.querySelectorAll<HTMLElement>(".plan-unit-more")];
+  const mores = [...container.querySelectorAll<HTMLElement>(SECTION_MORE)];
 
   assert.equal(mores.length, 3);
   assert.ok(mores.every((more) => more.tabIndex === 0));
@@ -401,7 +404,7 @@ test("a heading the plan bears twice: a mention of the second opens the second, 
   );
 
   act(() => chipNamed(container, "Notes").click());
-  for (const more of container.querySelectorAll<HTMLButtonElement>(".plan-unit-more")) {
+  for (const more of container.querySelectorAll<HTMLButtonElement>(SECTION_MORE)) {
     act(() => more.click());
     const item = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
       (each) => each.textContent === "Copy link to section",
@@ -459,4 +462,104 @@ test("a click on a folder's chip in a plan that can be edited opens no editor", 
   act(() => folder.dispatchEvent(new MouseEvent("click", { bubbles: true })));
 
   assert.equal(container.querySelector(".plan-document-editor"), null);
+});
+
+/** The plan's page drawn as a plan's own page is, its title renamed and its versions opened, each kept. */
+function drawnTitled() {
+  const renamed: string[] = [];
+  const histories: (number | undefined)[] = [];
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  act(() =>
+    root.render(
+      createElement(PlanBody, {
+        plan: PLAN,
+        live: false,
+        onEdit: () => Promise.reject(new Error("Nothing is saved in this test.")),
+        onRename: (name) => {
+          renamed.push(name);
+          return Promise.resolve(true);
+        },
+        onShowHistory: (save) => histories.push(save),
+        sectionLinks: { workspace: WORKSPACE, onOpen: () => undefined, reveal: undefined },
+      }),
+    ),
+  );
+  const block = container.querySelector<HTMLElement>('[role="group"][aria-label="Title"]');
+  const more = container.querySelector<HTMLButtonElement>('[aria-label="Title actions"]');
+  assert.ok(block, "the title is a block");
+  assert.ok(more, "the title has a ⋯");
+  return { container, block, more, renamed, histories };
+}
+
+/** The open menu's items, by what each says. */
+function menuLabels(): string[] {
+  return [...document.querySelectorAll<HTMLElement>('[role="menu"] [role="menuitem"]')].map(
+    (item) => item.textContent ?? "",
+  );
+}
+
+function chooseItem(label: string): Promise<void> {
+  const item = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
+    (each) => each.textContent === label,
+  );
+  assert.ok(item, `the menu offers ${label}`);
+  return act(async () => item.click());
+}
+
+test("the title's ⋯ is a section's: in its row, shown while the keyboard is on the title, the Tab stop after it, and its menu takes focus and hands it back on Escape", () => {
+  const { block, more } = drawnTitled();
+  // The unit whose hover or focus shows its ⋯, as a section's does.
+  const unit = more.closest(".plan-unit-attributed");
+  assert.ok(unit, "the ⋯ stands in a unit");
+  assert.ok(unit.contains(block), "the ⋯ stands in the title's unit");
+  // Note that focus is read once, because jsdom's selector engine holds a `:focus-within` answer.
+  const before = unit.contains(document.activeElement);
+  act(() => block.focus());
+
+  assert.equal(before, false);
+  assert.equal(unit.matches(":focus-within"), true, "the ⋯ stands while the title is selected");
+  assert.equal(more.closest(".plan-unit-row")?.parentElement, block.parentElement);
+  assert.equal(block.tabIndex, 0);
+  assert.equal(more.tabIndex, 0);
+  assert.ok(block.compareDocumentPosition(more) & Node.DOCUMENT_POSITION_FOLLOWING);
+
+  act(() => more.click());
+  const first = document.querySelector<HTMLElement>('[role="menu"] [role="menuitem"]');
+  assert.deepEqual(menuLabels(), ["Copy link to plan", "Rename", "Version history"]);
+  assert.equal(document.activeElement, first, "the menu opens on its first item");
+  act(() => {
+    first?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+
+  assert.equal(document.activeElement, more, "Escape hands focus back to the ⋯");
+});
+
+test("the title's ⋯ copies the plan's link, its Rename puts the caret in the title, and its Version history opens the plan as it stands", async () => {
+  const { container, more, histories } = drawnTitled();
+
+  act(() => more.click());
+  await chooseItem("Copy link to plan");
+  act(() => more.click());
+  await chooseItem("Rename");
+  const typing = document.activeElement;
+  act(() => more.click());
+  await chooseItem("Version history");
+
+  assert.deepEqual(copied, [`https://tryluke.dev/acme/plan/${PLAN_ID}`]);
+  assert.equal(typing, container.querySelector('[role="textbox"][aria-label="Plan name"]'));
+  assert.deepEqual(histories, [undefined]);
+});
+
+test("on a plan that cannot be edited, the title's ⋯ is a Tab stop offering its link alone", () => {
+  const { container } = drawn();
+  const more = container.querySelector<HTMLButtonElement>('[aria-label="Title actions"]');
+  assert.ok(more);
+
+  act(() => more.click());
+
+  assert.equal(more.tabIndex, 0);
+  assert.deepEqual(menuLabels(), ["Copy link to plan"]);
 });

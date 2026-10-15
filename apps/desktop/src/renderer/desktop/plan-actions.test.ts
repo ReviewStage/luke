@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { PLAN_ACTOR, type Plan, type PlanSummary } from "@luke/features/plan-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
+import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { DOCUMENT_REGION, PLANS_PAGE, type PlanMark } from "@luke/ui/planning-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { act, createElement, type ReactElement } from "react";
@@ -403,4 +404,47 @@ test("no sidebar plan wears the attention mark where its own workspace reaches i
     marked,
     cases.map(() => [false, false]),
   );
+});
+
+/** Main's clipboard, keeping each copy the window asks of it. */
+function installClipboard(): string[] {
+  const copied: string[] = [];
+  Object.defineProperty(window, "luke", {
+    configurable: true,
+    value: {
+      act: (request: Act): Promise<ActOutcome> => {
+        if (request.kind !== ACT_KIND.WINDOW_COPY_TEXT) {
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
+        }
+        copied.push(request.payload.words);
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
+      },
+      recordSurfaceEvent: () => undefined,
+    },
+  });
+  return copied;
+}
+
+test("Copy link to plan copies the plan's address on tryluke.dev, alike from the toolbar's ⋯, the ⋯ beside its title, and its sidebar row", async () => {
+  const copied = installClipboard();
+  const opened = openTab();
+  const plans: PlansControl = { ...opened.plans, workspaces: [{ ...PERSONAL, slug: "dean" }] };
+  const link = `https://tryluke.dev/dean/plan/${PLAN.id}`;
+  const copyFromMenu = async () => {
+    const item = menuItems().find((candidate) => candidate.textContent === "Copy link to plan");
+    assert.ok(item, "the menu offers Copy link to plan");
+    await act(async () => item.click());
+  };
+
+  openMenu(mountToolbar(plans));
+  await copyFromMenu();
+  const title = document.querySelector<HTMLButtonElement>('[aria-label="Title actions"]');
+  assert.ok(title, "the title has a ⋯");
+  openMenu(title);
+  await copyFromMenu();
+  unmountAll();
+  rightClick(mountSidebarPlan(plans, PLAN, opened.asked), 40, 60);
+  await copyFromMenu();
+
+  assert.deepEqual(copied, [link, link, link]);
 });

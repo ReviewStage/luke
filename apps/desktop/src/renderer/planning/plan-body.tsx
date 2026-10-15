@@ -13,7 +13,7 @@ import { LinkIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ActorStack } from "../actor-ref";
 import { useCopyToast } from "../copy-feedback";
-import { ActionMenu, useActionMenu } from "../desktop/action-menu";
+import { ActionMenu, type MenuAction, useActionMenu } from "../desktop/action-menu";
 import { type LinkDrawer, MarkdownMessage } from "../markdown-message";
 import { Tooltip } from "../tooltip";
 import { prefersReducedMotion } from "../use-reduced-motion";
@@ -32,6 +32,7 @@ import {
   EditableTitle,
   PlanDocumentEditor,
 } from "./plan-document-editor";
+import { copyPlanLinkItem, renamePlanItem, versionHistoryItem } from "./plan-menu-items";
 import {
   type ChaseState,
   chaseBehind,
@@ -76,8 +77,11 @@ import { NO_LOOKS, type PlanLooks } from "./use-plan-looks";
  * pointer or the keyboard is on it, copies the section's mention
  * (`[@Heading](…)`, `@luke/features/mention-link`), and a mention in the
  * plan's words is drawn as its chip (`mention-chip.tsx`), which opens the
- * section it names. Asked to show a section, the document scrolls its own
- * scroller to it, never `scrollIntoView`, which would scroll every box
+ * section it names. The title has a ⋯ of its own, drawn as a section's is,
+ * which copies the plan's link and offers Rename, where the title can be
+ * edited, and Version history, where the window opens it
+ * (`plan-menu-items.tsx`). Asked to show a section, the document scrolls
+ * its own scroller to it, never `scrollIntoView`, which would scroll every box
  * around it too; a section the plan no longer holds leaves it at its top.
  */
 
@@ -109,6 +113,9 @@ const SECTION_MENU = {
   COPY_LINK: "Copy link to section",
   COPIED: "Link to section copied",
 } as const;
+
+/** What the title's ⋯ is called. */
+const TITLE_MENU_LABEL = "Title actions";
 
 /** The room left above a section scrolled to, so its heading does not stand flush against the document's top edge. */
 const REVEAL_MARGIN = 16;
@@ -457,38 +464,29 @@ function attributed(
   );
 }
 
-/** A section's ⋯: the window's own menu, holding the one item that copies the section's link. */
-function SectionMenu({
-  linked,
-  anchor,
-  heading,
+/**
+ * A unit's ⋯ at its row's end, a section's or the title's: the window's own
+ * menu over `items`, shown while the pointer or the keyboard is on its unit.
+ */
+function UnitMenu({
+  label,
+  items,
   tabbable,
 }: {
-  linked: LinkedPlan;
-  anchor: string;
-  heading: string;
-  /** Whether it is a Tab stop: only beside the document's one, its section's block. */
+  label: string;
+  items: readonly MenuAction[];
+  /** Whether it is a Tab stop: only beside the document's one, its unit's block. */
   tabbable: boolean;
 }): React.JSX.Element {
   const menu = useActionMenu(true);
-  const copy = useCopyToast();
   const trigger = menu.trigger();
-  const copyLink = () =>
-    copy(
-      mentionMarkdown(
-        { kind: MENTION_KIND.SECTION, planId: linked.planId, anchor },
-        heading,
-        linked.place,
-      ),
-      SECTION_MENU.COPIED,
-    );
   return (
     <>
-      <Tooltip label={SECTION_MENU.LABEL}>
+      <Tooltip label={label}>
         <button
           type="button"
           className="icon-button plan-unit-more"
-          aria-label={SECTION_MENU.LABEL}
+          aria-label={label}
           tabIndex={tabbable ? 0 : -1}
           {...trigger}
           onClick={(event) => {
@@ -501,23 +499,66 @@ function SectionMenu({
         </button>
       </Tooltip>
       {menu.drawn === undefined ? null : (
-        <ActionMenu
-          label={SECTION_MENU.LABEL}
-          menu={menu.drawn}
-          groups={[
-            [
-              {
-                label: SECTION_MENU.COPY_LINK,
-                icon: <LinkIcon aria-hidden="true" />,
-                onSelect: copyLink,
-              },
-            ],
-          ]}
-          onClose={menu.close}
-        />
+        <ActionMenu label={label} menu={menu.drawn} groups={[items]} onClose={menu.close} />
       )}
     </>
   );
+}
+
+/** A section's ⋯, holding the one item that copies the section's link. */
+function SectionMenu({
+  linked,
+  anchor,
+  heading,
+  tabbable,
+}: {
+  linked: LinkedPlan;
+  anchor: string;
+  heading: string;
+  tabbable: boolean;
+}): React.JSX.Element {
+  const copy = useCopyToast();
+  const copyLink = () =>
+    copy(
+      mentionMarkdown(
+        { kind: MENTION_KIND.SECTION, planId: linked.planId, anchor },
+        heading,
+        linked.place,
+      ),
+      SECTION_MENU.COPIED,
+    );
+  const item: MenuAction = {
+    label: SECTION_MENU.COPY_LINK,
+    icon: <LinkIcon aria-hidden="true" />,
+    onSelect: copyLink,
+  };
+  return <UnitMenu label={SECTION_MENU.LABEL} items={[item]} tabbable={tabbable} />;
+}
+
+/**
+ * The title's ⋯, drawn as a section's is: Copy link to plan, as the plan's
+ * own ⋯ menu offers it, then Rename where the title can be edited and
+ * Version history where the window opens it, and nothing more, since the
+ * plan's menu holds the rest.
+ */
+function TitleMenu({
+  linked,
+  tabbable,
+  onRename,
+  onShowHistory,
+}: {
+  linked: LinkedPlan;
+  tabbable: boolean;
+  onRename: (() => void) | undefined;
+  onShowHistory: ShowHistory | undefined;
+}): React.JSX.Element {
+  const copy = useCopyToast();
+  const items = [
+    copyPlanLinkItem(copy, linked.planId, linked.place),
+    ...(onRename === undefined ? [] : [renamePlanItem(onRename)]),
+    ...(onShowHistory === undefined ? [] : [versionHistoryItem(() => onShowHistory(undefined))]),
+  ];
+  return <UnitMenu label={TITLE_MENU_LABEL} items={items} tabbable={tabbable} />;
 }
 
 /**
@@ -625,6 +666,8 @@ export function PlanBody({
     onShowHistory,
   };
   const scroller = useRef<HTMLDivElement>(null);
+  // How many times Rename was chosen from the title's ⋯, each putting the caret in the title.
+  const [renaming, setRenaming] = useState(0);
   const anchors = sectionAnchors(views.map((view) => view.heading));
   const linked: LinkedPlan | undefined =
     sectionLinks === undefined
@@ -764,24 +807,40 @@ export function PlanBody({
     edited === undefined ? null : (
       <EditedLine edit={edited} place={place} onShowHistory={onShowHistory} />
     );
+  const titled = editable && onRename !== undefined;
+  const titleMenu =
+    linked === undefined || page !== undefined ? null : (
+      <TitleMenu
+        linked={linked}
+        // Note that a document that cannot be edited has no block Tab stop, so the ⋯ is one.
+        tabbable={editable ? entry === EDITOR_PLACE.TITLE : true}
+        onRename={titled ? () => setRenaming((count) => count + 1) : undefined}
+        onShowHistory={onShowHistory}
+      />
+    );
   return (
     <div ref={scroller} className="plan-document-scroll">
       {page === undefined ? crumb : null}
       {page === undefined ? editedNote : null}
       <ChangedLine looks={looks} marks={marks} />
       <div className="plan-body">
-        {editable && onRename !== undefined ? (
-          // Keyed by the plan, so words typed for one are saved to it as another opens.
-          <EditableTitle
-            key={plan.id}
-            name={plan.name}
-            entry={entry === EDITOR_PLACE.TITLE}
-            editing={editing}
-            onRename={onRename}
-            onDraft={onDraftName}
-          />
+        {titled ? (
+          attributed(
+            // Keyed by the plan, so words typed for one are saved to it as another opens.
+            <EditableTitle
+              key={plan.id}
+              name={plan.name}
+              entry={entry === EDITOR_PLACE.TITLE}
+              editing={editing}
+              renaming={renaming}
+              onRename={onRename}
+              onDraft={onDraftName}
+            />,
+            null,
+            titleMenu,
+          )
         ) : page === undefined ? (
-          <PlanTitle name={plan.name} />
+          attributed(<PlanTitle name={plan.name} />, null, titleMenu)
         ) : (
           <header className="plan-page-head">
             <div className="plan-title-line">

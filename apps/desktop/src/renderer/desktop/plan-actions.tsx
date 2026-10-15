@@ -6,7 +6,6 @@ import {
   CopyIcon,
   EllipsisIcon,
   ExternalIcon,
-  PencilIcon,
   PinIcon,
   ProviderMark,
   TrashIcon,
@@ -16,13 +15,20 @@ import {
 import { accountActor, creatorActor } from "@luke/ui/actor-model";
 import { confirmAsked } from "@luke/ui/confirm-state";
 import { DOCUMENT_REGION, PLAN_MARK, type PlanMark } from "@luke/ui/planning-model";
-import { FolderInputIcon, HistoryIcon } from "lucide-react";
+import { FolderInputIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { ActorRef } from "../actor-ref";
 import { useAppCommand } from "../app-commands";
+import { useCopyToast } from "../copy-feedback";
 import { EditedBy, type EditPlace, useEditReader } from "../planning/edit-ref";
 import { lastEditOf } from "../planning/plan-body";
+import {
+  copyPlanLinkItem,
+  planLinkPlace,
+  renamePlanItem,
+  versionHistoryItem,
+} from "../planning/plan-menu-items";
 import { useMinute } from "../planning/plan-time";
 import { RelativeTime } from "../planning/relative-time";
 import type { PlansControl } from "../planning/use-plans-tab";
@@ -41,8 +47,10 @@ import { PlanNameField, usePlanRename } from "./plan-name-field";
  * be acted on without being opened first. The menu is the window's own (`action-menu.tsx`),
  * so both doors draw it the same way and Permanently delete can be drawn red.
  *
- * Rename edits the name where the door draws it: the sidebar's row turns
- * into a field, and the toolbar's ⋯ opens its title as one. Version history
+ * Copy link to plan copies the plan's address on tryluke.dev, as the ⋯
+ * beside the plan's title does (`plan-menu-items.tsx`). Rename edits the
+ * name where the door draws it: the sidebar's row turns into a field, and
+ * the toolbar's ⋯ opens its title as one. Version history
  * opens the plan's versions over the whole window, opening the plan first
  * where it is not the open one, the one item that moves it. Pin and Archive
  * move the plan in the sidebar at once, and each is undone from the same
@@ -152,30 +160,35 @@ function SidebarPlanMarks({
 /**
  * One plan's actions in the groups a rule divides, offering only those that
  * apply to it now. Copy formats the document drawn, so only the open plan
- * offers it, ahead of Rename and Version history; Pin and Archive follow; the repository is
- * changed from any plan and opened on GitHub where there is one, beside
- * Move to workspace… where the plan may be moved; Permanently delete is
- * last and alone. An archived plan takes nothing until it is brought back,
- * so it offers neither Rename, Change repository, nor a move, only what
- * reads it, its version history (which restores nothing), Unarchive, and
- * Permanently delete.
+ * offers it, ahead of Copy link to plan, Rename, and Version history; Pin
+ * and Archive follow; the repository is changed from any plan and opened on
+ * GitHub where there is one, beside Move to workspace… where the plan may be
+ * moved; Permanently delete is last and alone. An archived plan takes
+ * nothing until it is brought back, so it offers neither Rename, Change
+ * repository, nor a move, only what reads it, its link and its version
+ * history (which restores nothing), Unarchive, and Permanently delete.
  */
 function planActionGroups(
   plans: PlansControl,
   planId: string,
-  doors: { rename: () => void; askDelete: () => void; askMove: (() => void) | undefined },
+  doors: {
+    rename: () => void;
+    askDelete: () => void;
+    askMove: (() => void) | undefined;
+    copy: (words: string, label: string) => void;
+  },
 ): MenuAction[][] {
   const { region } = plans;
   const drawn = region.kind === DOCUMENT_REGION.READY && region.plan.id === planId;
   const plan = planOf(plans, planId);
   const archived = plan?.archivedAt !== undefined;
   const copy: MenuAction = { label: "Copy plan", icon: <CopyIcon />, onSelect: plans.copy.onPress };
-  const rename: MenuAction = { label: "Rename", icon: <PencilIcon />, onSelect: doors.rename };
-  const versions: MenuAction = {
-    label: "Version history",
-    icon: <HistoryIcon />,
-    onSelect: () => plans.history.onOpen(planId),
-  };
+  const link: MenuAction[] =
+    plan === undefined
+      ? []
+      : [copyPlanLinkItem(doors.copy, planId, planLinkPlace(plans.workspaces, plan))];
+  const rename = renamePlanItem(doors.rename);
+  const versions = versionHistoryItem(() => plans.history.onOpen(planId));
   const change: MenuAction = {
     label: "Change repository",
     icon: <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />,
@@ -191,7 +204,7 @@ function planActionGroups(
     onSelect: () => plans.onOpenOnGitHub(planId),
   };
   const groups: MenuAction[][] = [
-    [...(drawn ? [copy] : []), ...(archived ? [] : [rename]), versions],
+    [...(drawn ? [copy] : []), ...link, ...(archived ? [] : [rename]), versions],
     placeActions(plans, plan),
     [
       ...(archived ? [] : [change]),
@@ -296,6 +309,7 @@ function usePlanMenu(
     plans.onDeletePlan(planId),
   );
   const moving = useMovePlanDialog(plans, plan);
+  const copy = useCopyToast();
   const { open, drawn, close, trigger, contextMenu } = useActionMenu(plans.shown && doors.drawn);
   const menu =
     drawn === undefined ? null : (
@@ -307,6 +321,7 @@ function usePlanMenu(
           rename: doors.rename,
           askDelete: deletion.ask,
           askMove: moving.ask,
+          copy,
         })}
         onClose={close}
       />
