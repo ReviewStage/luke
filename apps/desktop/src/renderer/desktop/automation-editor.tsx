@@ -47,9 +47,7 @@ import type { Workspace } from "@luke/features/workspace-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import {
-  BuildingIcon,
   ChevronRightIcon,
-  LockIcon,
   PlayIcon,
   Trash2Icon,
   ZapIcon,
@@ -238,41 +236,6 @@ function ownerName(owner: AutomationScope, workspace: Workspace | undefined): st
   return owner === AUTOMATION_SCOPE.WORKSPACE ? (workspace?.name ?? "Workspace") : "Personal";
 }
 
-/** The line under the name that says who sees and changes it. */
-function ownerLine(
-  owner: AutomationScope,
-  workspace: Workspace | undefined,
-  offersOwner: boolean,
-): string {
-  if (owner === AUTOMATION_SCOPE.WORKSPACE) {
-    return `A workspace automation: everyone in ${workspace?.name ?? "the workspace"} sees and runs it.`;
-  }
-  return offersOwner
-    ? "A personal automation: only you see and change it."
-    : "Your automation, in your personal workspace.";
-}
-
-/** Who owns it, as a glyph and its name. */
-function OwnerMark({
-  owner,
-  workspace,
-}: {
-  owner: AutomationScope;
-  workspace: Workspace | undefined;
-}): React.JSX.Element {
-  const name = ownerName(owner, workspace);
-  return (
-    <span className="automation-owner" data-owner={owner} title={name}>
-      {owner === AUTOMATION_SCOPE.WORKSPACE ? (
-        <BuildingIcon aria-hidden="true" />
-      ) : (
-        <LockIcon aria-hidden="true" />
-      )}
-      <span className="automation-owner-name">{name}</span>
-    </span>
-  );
-}
-
 /**
  * Who owns it, the editor's first row: Personal under the account's own
  * picture, or the workspace under its photo, on the chip and in its menu
@@ -292,7 +255,7 @@ function OwnerRow({
   const mark = (scope: AutomationScope, inline: boolean) =>
     scope === AUTOMATION_SCOPE.WORKSPACE ? (
       workspace === undefined ? null : (
-        <WorkspaceTile workspace={workspace} size={inline ? TILE_SIZE.INLINE : undefined} />
+        <WorkspaceTile workspace={workspace} size={inline ? TILE_SIZE.INLINE : TILE_SIZE.ROW} />
       )
     ) : you === undefined ? null : (
       <ActorMark actor={you} size={inline ? ACTOR_SIZE.INLINE : ACTOR_SIZE.ROW} />
@@ -1180,11 +1143,6 @@ function EditorForm({
   savedAgentId: string | null;
   onDraft: (patch: Partial<AutomationDraft>) => void;
 }): React.JSX.Element {
-  const workspaceName = workspace?.name ?? "Workspace";
-  const owners = [
-    { value: AUTOMATION_SCOPE.PERSONAL, label: "Personal" },
-    { value: AUTOMATION_SCOPE.WORKSPACE, label: workspaceName },
-  ] as const;
   return (
     <div className="automation-form">
       {offersOwner ? (
@@ -1257,22 +1215,6 @@ function EditorForm({
         repositories={repositories}
         onDraft={onDraft}
       />
-      {offersOwner ? (
-        <SettingsGroup title="Sharing">
-          <SelectRow
-            label="Owner"
-            detail={
-              draft.owner === AUTOMATION_SCOPE.WORKSPACE
-                ? `Everyone in ${workspace?.name ?? "the workspace"} sees it, runs it, and turns it off. You, owners, and admins change it.`
-                : "Only you see and change it. Owners and admins can see it and turn it off."
-            }
-            value={draft.owner}
-            options={owners}
-            parse={optionValue(owners)}
-            onChange={(owner) => onDraft({ owner })}
-          />
-        </SettingsGroup>
-      ) : null}
     </div>
   );
 }
