@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { HTTP_METHOD } from "@luke/service/core";
+import { HostedEnvironment } from "@luke/service/environment";
 import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import {
   HOSTED_REFUSAL,
@@ -12,7 +13,6 @@ import { ANY_METHOD } from "@luke/service/route";
 import { Effect, Option } from "effect";
 import { HttpRouter, HttpServerRequest } from "effect/http";
 import { afterEach, beforeEach, test, vi } from "vitest";
-import { HostedEnvironment } from "../server/hosted/environment.js";
 import { routeFromHttpRouter } from "../server/route-effect.js";
 import { disposeWebRuntime } from "../server/runtime.js";
 

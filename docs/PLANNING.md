@@ -967,7 +967,7 @@ cannot be reached, answer `rejected` with why, and nothing goes on screen.
 
 ### Commands on the developer's Mac
 
-`run_on_mac` (`apps/web/server/hosted/mac-command.ts`) runs one shell
+`run_on_mac` (`packages/service/src/agents/mac-command.ts`) runs one shell
 command on the developer's own Mac and answers its exit code and output, for
 the planning model, its worker, coding agents, and their workers alike, with
 no approval: Dean's ruling of 2026-10-13. The call is queued under the

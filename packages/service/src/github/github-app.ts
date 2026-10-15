@@ -31,7 +31,7 @@
  *
  * Signing in with GitHub is also an authorization of the App, and the token
  * Better Auth leaves on the `account` row is read here for one reader alone,
- * GitHub's MCP server (`hosted/github-integration.ts`): refreshed when it is
+ * GitHub's MCP server (`integrations/github-integration.ts`): refreshed when it is
  * about to expire and re-sealed in place. No repository read takes it.
  *
  * Nothing here holds a client: the GitHub reads run on the ambient

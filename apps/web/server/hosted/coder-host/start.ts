@@ -33,13 +33,13 @@ import {
   hostedStoreOrArchived,
   hostedStoreOrUnavailable,
 } from "@luke/service/http/http-effect";
-import { Effect, Option } from "effect";
-import type * as HttpClient from "effect/http/HttpClient";
 import {
   acceptedModelChoice,
   type ModelCatalog,
   type ModelChoiceRefused,
-} from "../model-catalog.js";
+} from "@luke/service/providers/model-catalog";
+import { Effect, Option } from "effect";
+import type * as HttpClient from "effect/http/HttpClient";
 import { workspaceRepository } from "../workspace-repository.js";
 import { anthropicFastAccess } from "./account-keys.js";
 

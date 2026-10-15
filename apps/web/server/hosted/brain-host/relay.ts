@@ -48,9 +48,9 @@ import {
   isRemoteToolName,
   storedRemoteCall,
 } from "@luke/service/integrations/connection-tools";
+import { LOOK_AT_BOARD_TOOL, storedLookOutput } from "@luke/service/plans/board-look";
 import { Effect, Option, Result, Schema } from "effect";
 import type { MessageStreamEvent } from "eve/client";
-import { LOOK_AT_BOARD_TOOL, storedLookOutput } from "../board-look.js";
 
 /**
  * The relay from eve's stream into the brain's own, which both eve services

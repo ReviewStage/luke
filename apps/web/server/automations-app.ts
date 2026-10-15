@@ -49,6 +49,7 @@ import {
   readJsonBodyEffect,
   type UserIdResolver,
 } from "@luke/service/http/http-effect";
+import type { ModelCatalog } from "@luke/service/providers/model-catalog";
 import { ANY_METHOD, type WebRoutes } from "@luke/service/route";
 import { unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
@@ -59,7 +60,6 @@ import { executeAutomationRun } from "./hosted/automation-runs.js";
 import { acceptedAgentChoice } from "./hosted/coder-host/start.js";
 import { type AgentTurnStanding, codingAgentStatusOf } from "./hosted/coder-host/status.js";
 import { type EveReach, eveFor, standingsOf } from "./hosted/coder-host/stop.js";
-import type { ModelCatalog } from "./hosted/model-catalog.js";
 
 /**
  * automations-app.ts -- the account's automations: list and make them, change and delete one, run one now, and read its runs.

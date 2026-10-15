@@ -88,6 +88,12 @@ import {
   type UserIdResolver,
 } from "@luke/service/http/http-effect";
 import {
+  GITHUB_GRANT_REFUSAL,
+  githubIntegrationStatus,
+  githubOffered,
+  githubSignInGrant,
+} from "@luke/service/integrations/github-integration";
+import {
   accountIntegrationConnect,
   CONNECT_SIGN_IN_RESULT,
   type ConnectorService,
@@ -112,12 +118,6 @@ import { ANY_METHOD, type WebRoutes } from "@luke/service/route";
 import { Effect, Layer, Option, Redacted, Result } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import type * as HttpClient from "effect/http/HttpClient";
-import {
-  GITHUB_GRANT_REFUSAL,
-  githubIntegrationStatus,
-  githubOffered,
-  githubSignInGrant,
-} from "./hosted/github-integration.js";
 
 /** How long a sign-in may stay under way before its state no longer settles it: Connect's own requests last about as long. */
 const INTEGRATION_SIGN_IN_WINDOW_MS = 15 * 60 * 1000;

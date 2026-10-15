@@ -2,6 +2,14 @@ import { hostTurnId } from "@luke/database/models/ids";
 import type { ModelChoice } from "@luke/features/models-wire";
 import { AGENT_ROLE } from "@luke/service/agents/agent-runtime/role";
 import {
+  MAC_COMMAND_STATUS,
+  type MacCommandAnswer,
+  RUN_ON_MAC_TOOL,
+  runOnMacTool,
+} from "@luke/service/agents/mac-command";
+import { hostedEnvironment } from "@luke/service/environment";
+import { showPageRejected } from "@luke/service/plans/page-tool";
+import {
   ACTION_RESULT_STATUS,
   type UnparsedWireValue,
   unparsedWire,
@@ -25,14 +33,6 @@ import {
   productionCoderHostSeams,
 } from "../server/hosted/coder-host/production.js";
 import type { CODER_TOOL } from "../server/hosted/coder-host/tool-set.js";
-import { hostedEnvironment } from "../server/hosted/environment.js";
-import {
-  MAC_COMMAND_STATUS,
-  type MacCommandAnswer,
-  RUN_ON_MAC_TOOL,
-  runOnMacTool,
-} from "../server/hosted/mac-command.js";
-import { showPageRejected } from "../server/hosted/page-tool.js";
 import { runWeb } from "../server/runtime.js";
 import { scriptedModel } from "./scripted-model.js";
 
@@ -242,7 +242,7 @@ export function integrationConnectionsFor(
  * `run_on_mac` as the agent and its worker are offered it, each admitted on
  * its own terms (the worker's on ownership, as its resolvers are), and run
  * through the one door every agent's call goes through
- * (`server/hosted/mac-command.ts`). A session the host does not admit runs
+ * (`packages/service/src/agents/mac-command.ts`). A session the host does not admit runs
  * nothing.
  */
 export function runOnMacFor(admit: CoderHost["admit"]) {

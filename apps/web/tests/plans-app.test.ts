@@ -55,6 +55,7 @@ import { LINK_OUTCOME } from "@luke/service/github/github-installations";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import { DRAW_ON_BOARD_STATUS, runDrawOnBoard } from "@luke/service/plans/board-tool";
 import { PLAN_SAVE_STATUS, saveNotes } from "@luke/service/plans/plan-notes";
+import { modelCatalogOf } from "@luke/service/providers/model-catalog";
 import {
   connectWorkspaceGitHub,
   type FakeGitHub,
@@ -77,7 +78,6 @@ import { Clock, Duration, Effect, Layer, Option, Result, type Schema } from "eff
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
-import { modelCatalogOf } from "../server/hosted/model-catalog";
 import { plansApp } from "../server/plans-app";
 import { dispatched } from "./support/platform-landing";
 

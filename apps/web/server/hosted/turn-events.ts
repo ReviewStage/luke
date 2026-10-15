@@ -16,13 +16,13 @@ import {
   type TurnStatus,
   UI_PART_TYPE,
 } from "@luke/service/core";
-import { END_CALL_TOOL, endsCall } from "./end-call.js";
+import { END_CALL_TOOL, endsCall } from "@luke/service/plans/end-call";
 import {
   QUEUE_QUESTION_TOOL,
   queuedQuestionOf,
   WITHDRAW_QUESTION_TOOL,
   withdrawnQuestionOf,
-} from "./queue-question.js";
+} from "@luke/service/plans/queue-question";
 import { RUN_IN_REPOSITORY_TOOL } from "./repository-shell.js";
 import { SHOW_CODE_TOOL, shownCodeOf } from "./show-code.js";
 

@@ -35,6 +35,7 @@ import {
   type WireRecord,
 } from "@luke/service/core";
 import type { GitHubApp } from "@luke/service/github/github-app";
+import { type ModelCatalog, providerModelOf } from "@luke/service/providers/model-catalog";
 import { isTextUIPart } from "ai";
 import { Effect, Option, Result, type Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
@@ -46,7 +47,6 @@ import { type AgentSkill, repositorySkills } from "../agent-runtime/skills.js";
 import { HOSTED_TOOL_SET } from "../brain-tool-set.js";
 import type { CoderModelSelection } from "../coder-host/model.js";
 import { titleSubagent } from "../coder-host/title.js";
-import { type ModelCatalog, providerModelOf } from "../model-catalog.js";
 import { MeterUnavailable, ResearchBudget } from "../public-research.js";
 import type { RepositorySkill } from "../repository-skills.js";
 import { planWorkspace } from "../workspace-repository.js";

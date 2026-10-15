@@ -1,7 +1,7 @@
 import { DEPLOYMENT_PRESENCE } from "@luke/service/agents/brain-host/auth";
+import { hostedUserId } from "@luke/service/auth/bearer";
 import { Effect, Option } from "effect";
 import { eveChannel } from "eve/channels/eve";
-import { hostedUserId } from "../../server/hosted/bearer.js";
 import {
   CODER_DEPLOYMENT_TURNS,
   coderChannelInput,

@@ -1,14 +1,14 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import { webSqlClient } from "@luke/service/db/sql-client";
+import { hostedEnvironment } from "@luke/service/environment";
 import { type GitHubApp, githubAppFromEnvironment } from "@luke/service/github/github-app";
 import {
   type IntegrationConnect,
   integrationConnectFromEnvironment,
 } from "@luke/service/integrations/integration-connect";
+import { modelCatalogLayer } from "@luke/service/providers/model-catalog";
 import { ConfigProvider, Effect, Layer, Logger, ManagedRuntime } from "effect";
 import { FetchHttpClient, type HttpClient } from "effect/http";
-import { hostedEnvironment } from "./hosted/environment.js";
-import { modelCatalogLayer } from "./hosted/model-catalog.js";
 
 /**
  * The deployment's own environment, read as these services are built rather

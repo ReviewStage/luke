@@ -20,6 +20,13 @@ import { joinWorkspace, openHostedStoreTestDatabase, startPlan } from "@luke/dat
 import { ASK_ORIGIN } from "@luke/features";
 import { BRAIN_HOST_TURN } from "@luke/service/agents/brain-host/bounds";
 import {
+  ASK_REFUSAL,
+  type AskInput,
+  acceptAsk,
+  STOP_REFUSAL,
+  stopAsk,
+} from "@luke/service/agents/brain-host/brain-ask";
+import {
   EVE_CANCEL_OUTCOME,
   EVE_FIRST_TURN_ID,
   EVE_SEND_OUTCOME,
@@ -30,13 +37,6 @@ import { TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@luke/wire";
 import { eq } from "drizzle-orm";
 import { Effect, Option, PartitionedSemaphore, Result, Schema } from "effect";
 import { afterAll, test } from "vitest";
-import {
-  ASK_REFUSAL,
-  type AskInput,
-  acceptAsk,
-  STOP_REFUSAL,
-  stopAsk,
-} from "../server/hosted/brain-ask";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 
 /**

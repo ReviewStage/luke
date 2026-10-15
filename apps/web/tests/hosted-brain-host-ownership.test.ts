@@ -21,6 +21,8 @@ import {
   runtimeSessionReachableBy,
 } from "@luke/service/agents/brain-host/conversation";
 import { ACTION_RESULT_STATUS, BRAIN_TURN_TRIGGER } from "@luke/service/core";
+import { QUEUE_QUESTION_TOOL } from "@luke/service/plans/queue-question";
+import { modelCatalogOf } from "@luke/service/providers/model-catalog";
 import { NO_GITHUB } from "@luke/service/testing/github-app-fake";
 import { generateText } from "ai";
 import { Effect, Layer, Option, Redacted, Result } from "effect";
@@ -37,8 +39,6 @@ import {
 } from "../server/hosted/brain-host/host";
 import type { BrainHostSeams } from "../server/hosted/brain-host/production";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
-import { modelCatalogOf } from "../server/hosted/model-catalog";
-import { QUEUE_QUESTION_TOOL } from "../server/hosted/queue-question";
 
 /**
  * Session ownership is the host's alone: eve authenticates a request and

@@ -24,6 +24,12 @@ import {
 } from "@luke/service/agents/brain-host/conversation";
 import type { UnparsedWireValue, WireRecord } from "@luke/service/core";
 import { logStoreFailure } from "@luke/service/http/store-failure";
+import { runShowPage, SHOW_PAGE_REFUSAL, showPageRejected } from "@luke/service/plans/page-tool";
+import {
+  ModelCatalog,
+  type OfferedModel,
+  offeredToAccount,
+} from "@luke/service/providers/model-catalog";
 import { Effect, Option, type Redacted, Result, type Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { MessageStreamEvent } from "eve/client";
@@ -32,8 +38,6 @@ import { delegatedChildOf, type HostAdmission, hostAdmission } from "../agent-ru
 import type { AgentSkill } from "../agent-runtime/skills.js";
 import type { SessionPromptRecord } from "../brain-host/host.js";
 import { type RelayStanding, type RelayStateStore, StreamRelay } from "../brain-host/relay.js";
-import { ModelCatalog, type OfferedModel, offeredToAccount } from "../model-catalog.js";
-import { runShowPage, SHOW_PAGE_REFUSAL, showPageRejected } from "../page-tool.js";
 import {
   type ReadWebPageResult,
   ResearchBudget,

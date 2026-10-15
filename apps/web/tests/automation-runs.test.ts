@@ -35,6 +35,7 @@ import {
   type EveSessions,
 } from "@luke/service/agents/brain-host/eve-sessions";
 import { closeInboxItem, postInboxItem } from "@luke/service/inbox/inbox-store";
+import { modelCatalogOf, type OfferedModel } from "@luke/service/providers/model-catalog";
 import {
   connectWorkspaceGitHub,
   githubReaching,
@@ -46,7 +47,6 @@ import { eq } from "drizzle-orm";
 import { Clock, Effect, Layer, Option, Result } from "effect";
 import { executeAutomationRun, recoverStrandedRun } from "../server/hosted/automation-runs";
 import { sweepAutomations } from "../server/hosted/automation-sweep";
-import { modelCatalogOf, type OfferedModel } from "../server/hosted/model-catalog";
 
 /**
  * An automation's runs acted on, over a real dialect: a due schedule starts

@@ -16,7 +16,9 @@ import {
 } from "@luke/database/models/plan-template-revisions";
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB } from "@luke/database/testing";
+import { HostedEnvironment, type HostedEnvironmentValues } from "@luke/service/environment";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "@luke/service/http/http";
+import { modelCatalogOf } from "@luke/service/providers/model-catalog";
 import { noNetwork } from "@luke/service/testing/no-network";
 import { EXPERIMENT } from "@luke/settings";
 import {
@@ -31,8 +33,6 @@ import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { accountApp } from "../server/account-app";
 import { anthropicFastAccess } from "../server/hosted/coder-host/account-keys";
-import { HostedEnvironment, type HostedEnvironmentValues } from "../server/hosted/environment";
-import { modelCatalogOf } from "../server/hosted/model-catalog";
 import { CONNECTOR_ASKED_NOTHING, integrationConnectOf } from "./support/integration-connect";
 
 /**

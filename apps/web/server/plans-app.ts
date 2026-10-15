@@ -35,6 +35,7 @@ import {
   planRevisionSeqSchema,
   planTreeRequestSchema,
 } from "@luke/features/plan-wire";
+import { retireSessions } from "@luke/service/agents/retire-sessions";
 import {
   PLAN_LIST_ARCHIVED,
   PLAN_LIST_QUERY,
@@ -62,6 +63,7 @@ import {
   restoreRevision,
   saveDeveloperEdit,
 } from "@luke/service/plans/plan-notes";
+import type { ModelCatalog } from "@luke/service/providers/model-catalog";
 import { ANY_METHOD, type WebRoutes } from "@luke/service/route";
 import { readEither } from "@luke/wire/effect";
 import { Clock, Data, Effect, Layer, Option, Result } from "effect";
@@ -81,7 +83,6 @@ import {
   type TranscriptPage,
   transcriptPast,
 } from "./hosted/coder-host/transcript.js";
-import type { ModelCatalog } from "./hosted/model-catalog.js";
 import { withPlanAgents } from "./hosted/plan-agents.js";
 import { readPlanFile } from "./hosted/plan-file.js";
 import { readPlanSkills } from "./hosted/plan-skills.js";
@@ -96,7 +97,6 @@ import {
   plannerTurnsPage,
   plannerWorkerSession,
 } from "./hosted/planner-transcript.js";
-import { retireSessions } from "./hosted/retire-sessions.js";
 import { workspaceRepository } from "./hosted/workspace-repository.js";
 
 /**

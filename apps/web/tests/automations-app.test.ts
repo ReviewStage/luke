@@ -46,6 +46,7 @@ import {
   type EveSessions,
 } from "@luke/service/agents/brain-host/eve-sessions";
 import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
+import { modelCatalogOf, type OfferedModel } from "@luke/service/providers/model-catalog";
 import {
   connectWorkspaceGitHub,
   githubReaching,
@@ -59,7 +60,6 @@ import { Clock, Effect, Layer, Option, Result, type Schema } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { automationsApp } from "../server/automations-app";
-import { modelCatalogOf, type OfferedModel } from "../server/hosted/model-catalog";
 
 /**
  * The automation routes, answered by the group the way a function answers

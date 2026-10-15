@@ -5,7 +5,7 @@ import { wireUuidSchema } from "./service-wire.js";
  * mac-command-wire.ts -- a shell command an agent asked to run on the developer's Mac, as the Mac takes it from the service and hands back what it printed.
  *
  * An agent's `run_on_mac` call is queued on the service under the account
- * (`apps/web/server/hosted/mac-command.ts`). A signed-in Mac with the
+ * (`packages/service/src/agents/mac-command.ts`). A signed-in Mac with the
  * setting on holds `GET /api/mac-commands` open, and is answered with every
  * command waiting for the account, each claimed for that Mac as it goes; it
  * runs each in a login shell from the home folder and posts what it

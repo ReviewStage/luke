@@ -36,6 +36,11 @@ import type { GitHubApp } from "@luke/service/github/github-app";
 import type { HostedRefusal } from "@luke/service/http/http-effect";
 import { logStoreFailure, type StoreFailure } from "@luke/service/http/store-failure";
 import type { PlanDocumentBinding } from "@luke/service/plans/plan-notes";
+import {
+  ModelCatalog,
+  ModelChoiceRefused,
+  type OfferedModel,
+} from "@luke/service/providers/model-catalog";
 import { describeWire } from "@luke/wire/effect";
 import { isTextUIPart } from "ai";
 import { Clock, Effect, Option, Result, Schema } from "effect";
@@ -45,7 +50,6 @@ import { startCodingAgent } from "./coder-host/start.js";
 import { codingAgentFailureOf, codingAgentStatusOf } from "./coder-host/status.js";
 import { steerCodingAgent } from "./coder-host/steer.js";
 import { CODER_TOOL, CODER_TOOL_SET, RETIRED_CODER_TOOL } from "./coder-host/tool-set.js";
-import { ModelCatalog, ModelChoiceRefused, type OfferedModel } from "./model-catalog.js";
 
 /**
  * coding-agent-tools.ts -- the planning model's four tools about the plan's coding agents: list them, read one's recent progress, message one, start one.

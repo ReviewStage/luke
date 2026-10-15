@@ -1,5 +1,5 @@
+import { hostedUserInfo, userIdForAuthorization } from "@luke/service/auth/bearer";
 import { Effect } from "effect";
-import { hostedUserInfo, userIdForAuthorization } from "../hosted/bearer.js";
 import { runWeb } from "../runtime.js";
 import { relayDependencies } from "./production.js";
 import { standTerminalRelay, type TerminalRelayServer, terminalRelayServer } from "./service.js";

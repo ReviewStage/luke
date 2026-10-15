@@ -27,6 +27,8 @@ import {
 } from "@luke/service/core";
 import type { GitHubApp } from "@luke/service/github/github-app";
 import { LINK_OUTCOME } from "@luke/service/github/github-installations";
+import { END_CALL_TOOL } from "@luke/service/plans/end-call";
+import { modelCatalogOf, type OfferedModel } from "@luke/service/providers/model-catalog";
 import {
   connectWorkspaceGitHub,
   githubReaching,
@@ -50,8 +52,6 @@ import {
   START_CODING_AGENT_REFUSAL,
   START_CODING_AGENT_TOOL,
 } from "../server/hosted/coding-agent-tools";
-import { END_CALL_TOOL } from "../server/hosted/end-call";
-import { modelCatalogOf, type OfferedModel } from "../server/hosted/model-catalog";
 
 /**
  * The planning tools as eve runs them through the host's `runTool`, over the

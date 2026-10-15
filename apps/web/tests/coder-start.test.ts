@@ -12,6 +12,7 @@ import {
   type EveSessions,
 } from "@luke/service/agents/brain-host/eve-sessions";
 import { HOSTED_REFUSAL } from "@luke/service/http/http-effect";
+import { modelCatalogOf } from "@luke/service/providers/model-catalog";
 import {
   connectWorkspaceGitHub,
   githubReaching,
@@ -20,7 +21,6 @@ import {
 } from "@luke/service/testing/github-app-fake";
 import { Effect, Layer, Option, Result } from "effect";
 import { type StartAsk, startCodingAgent } from "../server/hosted/coder-host/start";
-import { modelCatalogOf } from "../server/hosted/model-catalog";
 
 /**
  * coder-start.test.ts -- an agent started in a workspace with no plan, as an automation's run starts one.

@@ -1,14 +1,14 @@
+import { SHOW_PAGE_TOOL } from "@luke/service/plans/page-tool";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { emitJsonSchema } from "@luke/wire/effect";
 import { defineTool } from "eve/tools";
-import { SHOW_PAGE_TOOL } from "../../server/hosted/page-tool.js";
 import { runShowPageTool } from "../host.js";
 
 /**
  * show_page.ts -- the agent shows the developer an interactive HTML page in the plan's side panel, or a new version of one.
  *
  * The planning model's tool too, one implementation for both
- * (`server/hosted/page-tool.ts`). The call reaches the store through the
+ * (`packages/service/src/plans/page-tool.ts`). The call reaches the store through the
  * host's door (`../host.ts`), as `post_to_inbox` does, and a page named by
  * its path is read from the session's sandbox through the same door eve
  * hands every file tool, opened on first use, so a page sent inline opens
