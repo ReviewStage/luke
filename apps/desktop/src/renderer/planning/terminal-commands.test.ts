@@ -297,17 +297,72 @@ test("the panel's + lists each agent's terminal under Terminal, says how it stan
   assert.equal(plan.asked(WORKING.id), 1);
 });
 
-test("an agent's Terminal chip always opens that agent's own terminal, adding no shell", async () => {
+/** The open menu's item named `label`: whether it shows a shortcut and what, and a press of it, the menu closing behind. */
+function menuItem(label: string) {
+  const menu = document.querySelector<HTMLElement>('[role="menu"]:not([data-leaving])');
+  assert.ok(menu, "a menu stands open");
+  const item = [...menu.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
+    (each) => each.querySelector(".plan-menu-label")?.textContent === label,
+  );
+  assert.ok(item, `the menu offers ${label}`);
+  return {
+    hint: item.querySelector(".menu-item-hint")?.textContent,
+    press: async () => {
+      await act(async () => item.click());
+      await settle();
+    },
+  };
+}
+
+/** Opens the right-click menu of the plan's column's tab named `name`. */
+function rightClickTab(name: string): void {
+  const tab = [
+    ...document.querySelectorAll<HTMLElement>('.desktop-plan-main .desktop-toolbar [role="tab"]'),
+  ].find((each) => each.textContent?.includes(name) === true);
+  assert.ok(tab, `the column has a tab named ${name}`);
+  act(() => {
+    tab.dispatchEvent(
+      new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 40, clientY: 20 }),
+    );
+  });
+}
+
+test("an agent's tab offers Open terminal on its right-click and its bar's ⋯, which opens that agent's own terminal, adding no shell, and its composer wears no Terminal chip", async () => {
   const plan = mount({
     agents: [WORKING, DONE],
     main: { agent: WORKING.id },
     lastTerminal: DONE.id,
   });
-  const chip = document.querySelector<HTMLButtonElement>('button[aria-label="Show terminal"]');
-  assert.ok(chip, "the agent's tab wears a Terminal chip");
-  await act(async () => chip.click());
+  assert.ok(document.querySelector(".agent-composer"), "the agent's composer is drawn");
+  assert.equal(
+    document.querySelector('.agent-composer button[aria-label="Show terminal"]'),
+    null,
+    "the composer wears no Terminal chip",
+  );
+  // The chosen tab's ⋯ in the column's bar says ⌘J, which opens the same terminal from here.
+  const more = document.querySelector<HTMLButtonElement>(
+    ".desktop-plan-main .desktop-toolbar .toolbar-tab-actions button",
+  );
+  assert.ok(more, "the bar shows the agent's tab's ⋯");
+  act(() => more.click());
+  const fromMore = menuItem("Open terminal");
+  assert.equal(fromMore.hint, "⌘J");
+  await fromMore.press();
   assert.deepEqual(plan.shown, [{ terminal: WORKING.id }]);
+  // The chosen tab's right-click says ⌘J too.
+  rightClickTab("Invite flow");
+  const fromChosen = menuItem("Open terminal");
+  assert.equal(fromChosen.hint, "⌘J");
+  await fromChosen.press();
+  assert.deepEqual(plan.shown.at(-1), { terminal: WORKING.id });
+  // Another agent's tab opens its own terminal, which ⌘J would not from here, so it says no shortcut.
+  rightClickTab("Expiry job");
+  const fromOther = menuItem("Open terminal");
+  assert.equal(fromOther.hint, undefined);
+  await fromOther.press();
+  assert.deepEqual(plan.shown.at(-1), { terminal: DONE.id });
   assert.equal(plan.asked(WORKING.id), 0);
+  assert.equal(plan.asked(DONE.id), 0);
 });
 
 test("where no agent can start, the picker says why beside the offer and starts nothing", async () => {

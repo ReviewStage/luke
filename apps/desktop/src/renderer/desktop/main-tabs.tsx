@@ -53,8 +53,9 @@ import { TabStrip } from "./tab-strip";
  * closed by ×, Delete, ⌘W, or the menu's Close and Close others, each tab's
  * menu on a right-click (`strip-tabs.tsx`). The toolbar's ⋯ acts on the
  * chosen tab: the plan's actions on the plan's tab, and on an agent's its
- * Rename, its transcript's copies, and its Archive, standing in the one slot
- * the toolbar keeps for it, left empty on a tab with nothing of the kind.
+ * Rename, its Open terminal, its transcript's copies, and its Archive,
+ * standing in the one slot the toolbar keeps for it, left empty on a tab
+ * with nothing of the kind.
  *
  * The plan's tab stands first, named for the plan, and hangs the plan's
  * card, as its sidebar row does (`plan-card.tsx`): its repository, its
@@ -78,10 +79,12 @@ import { TabStrip } from "./tab-strip";
  * works and an alert once it failed, and hangs a card naming it whole with
  * when it last moved and its latest step, read from what its tab last drew
  * and never from the service. Its menu offers Pin tab, which puts it in the
- * sidebar, Rename, which turns the tab into its name's field, and its
- * transcript's two copies. Closing it closes only the view: the agent goes
- * on as it was, and the "+" opens it again. A tab an agent ended on while no
- * one was looking at it reads in semibold until shown. The draft's tab,
+ * sidebar, Rename, which turns the tab into its name's field, Open
+ * terminal, which shows the agent's own Terminal tab in the side panel as
+ * ⌘J does from the tab, and its transcript's two copies. Closing it closes
+ * only the view: the agent goes on as it was, and the "+" opens it again. A
+ * tab an agent ended on while no one was looking at it reads in semibold
+ * until shown. The draft's tab,
  * named New coding agent as the "+" row that opens it is, stands after the
  * agents until its first message starts the agent, and closing it lets the
  * draft go. Every tab wears its kind's look (`tab-look.tsx`).
@@ -368,6 +371,7 @@ export function MainTabStrip({
   shown,
   inbox,
   actionsSlot,
+  onOpenTerminal,
 }: {
   plan: PlanSummary;
   /** The plan's card, as its sidebar row hangs it, which its tab hangs (`plan-card.tsx`). */
@@ -393,6 +397,8 @@ export function MainTabStrip({
   inbox: number;
   /** The toolbar's slot the chosen tab's ⋯ stands in, where the plan's own stands on its tab. */
   actionsSlot: HTMLElement | null;
+  /** Opens an agent's own Terminal tab in the side panel, adding no shell, by the agent. */
+  onOpenTerminal: (agentId: string) => void;
 }): React.JSX.Element {
   const copied = useTranscriptCopier();
   const pinnedOf = (tab: ColumnPinnableTab) =>
@@ -465,6 +471,7 @@ export function MainTabStrip({
             },
       pin: pinTab === undefined ? undefined : pinDoor(pinTab, entry.look.label, agent?.model),
       onCopy: entry.copy,
+      onOpenTerminal: agent === undefined ? undefined : () => onOpenTerminal(agent.id),
     };
   };
   return (
@@ -539,8 +546,7 @@ export function mainTabLabel(tab: MainTab, agents: CodingAgentsControl): string 
  * transcript and composer, or the draft's composer. A delegation's row in an
  * agent's transcript opens its worker in the side panel, through
  * `onOpenDelegation`, its Changes chip its pull request's changes,
- * through `onOpenChanges`, its Terminal chip its own Terminal tab, through
- * `onOpenTerminal`, and a call about something drawn in a tab of its
+ * through `onOpenChanges`, and a call about something drawn in a tab of its
  * own that tab, through `onOpenTarget`, each such row hanging that tab's
  * card (`cards`).
  */
@@ -551,7 +557,6 @@ export function MainTabContent({
   views,
   onOpenDelegation,
   onOpenChanges,
-  onOpenTerminal,
   onOpenTarget,
   cards,
 }: {
@@ -568,8 +573,6 @@ export function MainTabContent({
   ) => void;
   /** Opens the agent's changes in the side panel, by the agent. */
   onOpenChanges: (agentId: string) => void;
-  /** Opens the agent's own Terminal tab in the side panel, by the agent. */
-  onOpenTerminal: (agentId: string) => void;
   /** Opens what a call in the agent's transcript is about in the tab that draws it. */
   onOpenTarget: (target: ToolTarget) => void;
   /** The cards the transcript's rows that open a tab hang, as those tabs hang them. */
@@ -597,7 +600,6 @@ export function MainTabContent({
       shown={shown}
       onOpenSubagent={(callId, task, status) => onOpenDelegation(agent.id, callId, task, status)}
       onOpenChanges={() => onOpenChanges(agent.id)}
-      onOpenTerminal={() => onOpenTerminal(agent.id)}
       onOpenTarget={onOpenTarget}
       cards={cards.agent(agent.id)}
       onHeld={views.onAgentHeld}

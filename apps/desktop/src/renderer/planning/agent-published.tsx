@@ -36,8 +36,7 @@ import { PullRequestMark, pullRequestMarkLabel } from "./pull-request-mark";
  * the service has said what stands, so a tab on an agent still reading the
  * repository wears nothing yet. Beside the pull request's chip stands a
  * Changes chip, which opens the pull request's files and their diffs in
- * the side panel (`agent-changes-tab.tsx`), and beside both a Terminal chip,
- * which always opens this agent's own Terminal tab (`terminal-tab.tsx`).
+ * the side panel (`agent-changes-tab.tsx`).
  */
 
 /** The doors the chip and the row open: a page of GitHub's in the browser, and the clipboard, its toast reading `label`. */
@@ -46,8 +45,6 @@ export interface PublishedDoors {
   copy: (words: string, label: string) => void;
   /** Opens the agent's changes in a tab of the side panel's own; none where the view stands in no panel. */
   openChanges?: (() => void) | undefined;
-  /** Opens the agent's own Terminal tab in the side panel; none where the view stands in no panel. */
-  openTerminal?: (() => void) | undefined;
 }
 
 const MENU_LABEL = "Branch actions";
@@ -150,20 +147,6 @@ export function ChangesChip({
       <Chip look={CHIP_LOOK.PILL} aria-label="Show changes" onClick={openChanges}>
         <FileDiffIcon className="size-3.5 shrink-0" aria-hidden="true" />
         <span className="chip-name">Changes</span>
-      </Chip>
-    </Tooltip>
-  );
-}
-
-/** The chip that opens the agent's own Terminal tab in the side panel, whatever it has published; nothing where no panel takes the tab. */
-export function TerminalChip({ doors }: { doors: PublishedDoors }): ReactNode {
-  const { openTerminal } = doors;
-  if (openTerminal === undefined) return null;
-  return (
-    <Tooltip label="Show terminal">
-      <Chip look={CHIP_LOOK.PILL} aria-label="Show terminal" onClick={openTerminal}>
-        <TerminalIcon className="size-3.5 shrink-0" aria-hidden="true" />
-        <span className="chip-name">Terminal</span>
       </Chip>
     </Tooltip>
   );
