@@ -70,11 +70,28 @@ function mount(workspace: {
   return container;
 }
 
-/** What the tile shows: an image's address once it has loaded, or else its letter. */
-function drawn(container: HTMLElement): { src: string } | { letter: string } {
+/** What a tile shows: the address of an image once it has loaded, the letter it draws, and whether it is filled with its hue. */
+interface Face {
+  readonly picture: string | undefined;
+  readonly letter: string;
+  readonly hue: boolean;
+}
+
+/** The letter tile: the letter given on the workspace's hue, and no picture. */
+const letterTile = (letter: string): Face => ({ picture: undefined, letter, hue: true });
+
+/** A picture alone, with no letter or hue under it for a transparent photo to show through. */
+const pictureTile = (picture: string): Face => ({ picture, letter: "", hue: false });
+
+/** What the tile shows. */
+function drawn(container: HTMLElement): Face {
+  const tile = container.querySelector(".workspace-tile");
   const image = container.querySelector('img[data-loaded="true"]');
-  if (image !== null) return { src: image.getAttribute("src") ?? "" };
-  return { letter: container.querySelector(".workspace-tile")?.textContent ?? "" };
+  return {
+    picture: image?.getAttribute("src") ?? undefined,
+    letter: tile?.textContent ?? "",
+    hue: tile?.hasAttribute("data-hue") ?? false,
+  };
 }
 
 /** The tile's image finishes loading, as the browser says it has. */
@@ -82,16 +99,16 @@ function load(container: HTMLElement): void {
   act(() => container.querySelector("img")?.dispatchEvent(new Event("load")));
 }
 
-test("a workspace with a photo draws its letter while it loads, then the photo the host read for its id", async () => {
+test("a workspace with a photo draws its letter while it loads, then the photo the host read for its id alone, with no letter or hue under it", async () => {
   const tile = mount({ id: "workspace-photo", name: "acme", photoVersion: "1a2b3c4d5e6f7a8b" });
 
-  assert.deepEqual(drawn(tile), { letter: "A" });
+  assert.deepEqual(drawn(tile), letterTile("A"));
   await settle();
   const read = drawn(tile);
   load(tile);
 
-  assert.deepEqual(read, { letter: "A" }, "the letter stands until the photo has loaded");
-  assert.deepEqual(drawn(tile), { src: `data:image/png;base64,${PHOTO.base64}` });
+  assert.deepEqual(read, letterTile("A"), "the letter stands until the photo has loaded");
+  assert.deepEqual(drawn(tile), pictureTile(`data:image/png;base64,${PHOTO.base64}`));
   assert.deepEqual(sent, [
     { kind: ACT_KIND.WORKSPACE_PHOTO_READ, payload: { workspaceId: "workspace-photo" } },
   ]);
@@ -110,28 +127,28 @@ test("a photo the host has none of, or that fails to load, leaves the letter", a
   await settle();
   act(() => broken.querySelector("img")?.dispatchEvent(new Event("error")));
 
-  assert.deepEqual(drawn(missing), { letter: "R" });
-  assert.deepEqual(drawn(broken), { letter: "Z" });
+  assert.deepEqual(drawn(missing), letterTile("R"));
+  assert.deepEqual(drawn(broken), letterTile("Z"));
 });
 
-test("a personal workspace with no photo draws its letter while its owner's picture loads, then the picture, and its letter where the picture fails to load", () => {
+test("a personal workspace with no photo draws its letter while its owner's picture loads, then the picture alone, and its letter where the picture fails to load", () => {
   const tile = mount({ id: "workspace-personal", name: "Personal", pictureUrl: PICTURE_URL });
 
-  assert.deepEqual(drawn(tile), { letter: "P" });
+  assert.deepEqual(drawn(tile), letterTile("P"));
   load(tile);
-  assert.deepEqual(drawn(tile), { src: PICTURE_URL });
+  assert.deepEqual(drawn(tile), pictureTile(PICTURE_URL));
   assert.deepEqual(sent, []);
 
   act(() => tile.querySelector("img")?.dispatchEvent(new Event("error")));
 
-  assert.deepEqual(drawn(tile), { letter: "P" });
+  assert.deepEqual(drawn(tile), letterTile("P"));
 });
 
 test("a workspace with neither a photo nor a picture draws its letter and reads nothing", async () => {
   const tile = mount({ id: "workspace-plain", name: "plain" });
   await settle();
 
-  assert.deepEqual(drawn(tile), { letter: "P" });
+  assert.deepEqual(drawn(tile), letterTile("P"));
   assert.deepEqual(sent, []);
 });
 
@@ -170,5 +187,5 @@ test("a read of a version asked for again lands though an earlier read of it fai
   await settle();
   load(container);
 
-  assert.deepEqual(drawn(container), { src: `data:image/png;base64,${PHOTO.base64}` });
+  assert.deepEqual(drawn(container), pictureTile(`data:image/png;base64,${PHOTO.base64}`));
 });
