@@ -399,6 +399,62 @@ test("a settled choice keeps every option its agent offered with the developer's
   assert.ok(reply.querySelector(".actor-ref[data-kind='person']"), "the answerer by their disc");
 });
 
+/** An item's options as a reader meets them: each label, then its Recommended badge's words, and whether the badge has gone quiet, where it wears one. */
+function optionHeads(page: HTMLElement, option: string): (string | null | undefined)[][] {
+  const pane = page.querySelector<HTMLElement>(".inbox-view-items");
+  assert.ok(pane, "the pane is drawn");
+  return [...pane.querySelectorAll<HTMLElement>(option)].map((each) => {
+    const badge = each.querySelector<HTMLElement>(".inbox-option-head > .inbox-recommended");
+    return [
+      each.querySelector(".font-medium")?.textContent,
+      badge?.textContent ?? null,
+      badge?.dataset.settled ?? null,
+    ];
+  });
+}
+
+test("a waiting choice wears a Recommended badge at the head of the option its agent recommends and of no other, and a choice recommending nothing wears none", async () => {
+  const { page } = mount();
+  await settle();
+  assert.deepEqual(optionHeads(page, "button.inbox-option"), [
+    ["Retry 3 times over an hour", "Recommended", "false"],
+    ["Retry once", null, null],
+  ]);
+
+  act(() => root?.unmount());
+  root = undefined;
+  const response = {
+    type: INBOX_RESPONSE.CHOICE,
+    options: [{ label: "Retry 3 times over an hour" }, { label: "Retry once" }],
+  };
+  inboxes.set(BILLING.id, [{ ...THRESHOLD, response }, RETRY]);
+  const again = mount();
+  await settle();
+  assert.deepEqual(optionHeads(again.page, "button.inbox-option"), [
+    ["Retry 3 times over an hour", null, null],
+    ["Retry once", null, null],
+  ]);
+});
+
+test("a settled choice whose pick is not the one recommended marks each apart: the pick by whose it was, and the recommended option by its badge, gone quiet", async () => {
+  inboxes.set(BILLING.id, [
+    THRESHOLD,
+    { ...RETRY, answer: { reply: INBOX_REPLY.CHOSE, choices: ["Retry once"] } },
+  ]);
+  const { page } = mount();
+  await settle();
+  act(() => rowNamed(page, "How is a failed email retried?").click());
+  await settle();
+
+  assert.deepEqual(optionHeads(page, "li.inbox-option"), [
+    ["Retry 3 times over an hour", "Recommended", "true"],
+    ["Retry once", null, null],
+  ]);
+  const picked = page.querySelector<HTMLElement>('li.inbox-option[data-picked="true"]');
+  assert.equal(picked?.querySelector(".font-medium")?.textContent, "Retry once");
+  assert.equal(wordsOf(picked?.querySelector(".inbox-picked")), "Your pick");
+});
+
 test("a teammate's answer names them by their disc and name, beside their pick and over what they chose, and their name hangs their card", async () => {
   const CHARLES = { userId: "user-charles", name: "Charles Pan" };
   inboxes.set(BILLING.id, [THRESHOLD, { ...RETRY, answeredBy: CHARLES }]);

@@ -432,7 +432,42 @@ function Blocks({
   );
 }
 
-/** A choice's options, each pressed to pick it, the agent's recommendation said after its label; several stay pressed where the choice allows. */
+/**
+ * An option's head: its label, what is said of it beside the label, and,
+ * where the agent recommended it, a badge at the option's top right, so it
+ * stands in one place however the label wraps. The badge is filled with
+ * the accent while the item waits and steps back to the quiet badge once
+ * it is settled, when the recommendation is history rather than a call to
+ * act. It is drawn inside the option alone, so wherever an option is drawn
+ * it wears it.
+ */
+function OptionHead({
+  label,
+  recommended,
+  settled,
+  children,
+}: {
+  label: string;
+  recommended: boolean;
+  settled: boolean;
+  children?: React.ReactNode;
+}): React.JSX.Element {
+  return (
+    <span className="inbox-option-head">
+      <span>
+        <span className="font-medium">{label}</span>
+        {children}
+      </span>
+      {recommended ? (
+        <span className="inbox-recommended" data-settled={String(settled)}>
+          Recommended
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
+/** A choice's options, each pressed to pick it, the one the agent recommends wearing its badge; several stay pressed where the choice allows. */
 function ChoiceOptions({
   choice,
   draft,
@@ -456,12 +491,11 @@ function ChoiceOptions({
           disabled={disabled}
           onClick={() => onDraft(withChoice(draft, option.label, multiple))}
         >
-          <span>
-            <span className="font-medium">{option.label}</span>
-            {choice.recommended === option.label ? (
-              <span className="text-muted-foreground"> · Recommended</span>
-            ) : null}
-          </span>
+          <OptionHead
+            label={option.label}
+            recommended={choice.recommended === option.label}
+            settled={false}
+          />
           {option.detail === undefined ? null : (
             <span className="text-muted-foreground">{option.detail}</span>
           )}
@@ -688,7 +722,8 @@ function Delivered({ item, by }: { item: InboxItem; by: ItemAgent }): React.JSX.
  * developer's pick in the look of a picked option, a check and whose pick
  * it was, "[disc] Your pick" or "[disc] Charles Pan’s pick", beside its
  * label, and the rest stepped back to an outline, so what was offered and
- * what was chosen read together.
+ * what was chosen read together. The option the agent recommended keeps
+ * its badge, gone quiet.
  */
 function Proposal({ item }: { item: InboxItem }): React.JSX.Element | null {
   const answerer = usePerson(item.answeredBy);
@@ -698,11 +733,7 @@ function Proposal({ item }: { item: InboxItem }): React.JSX.Element | null {
     <ul className="m-0 flex list-none flex-col gap-1 p-0" aria-label="What the agent offered">
       {options.map((option) => (
         <li key={option.label} className="inbox-option" data-picked={String(option.picked)}>
-          <span>
-            <span className="font-medium">{option.label}</span>
-            {option.recommended ? (
-              <span className="text-muted-foreground"> · Recommended</span>
-            ) : null}
+          <OptionHead label={option.label} recommended={option.recommended} settled>
             {option.picked ? (
               <span className="inbox-picked">
                 <CheckIcon aria-hidden="true" />
@@ -712,7 +743,7 @@ function Proposal({ item }: { item: InboxItem }): React.JSX.Element | null {
                 </ActorLine>
               </span>
             ) : null}
-          </span>
+          </OptionHead>
           {option.detail === undefined ? null : (
             <span className="text-muted-foreground">{option.detail}</span>
           )}
