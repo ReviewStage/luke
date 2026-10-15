@@ -721,12 +721,16 @@ const updateAgentPublished = SqlSchema.void({
 });
 
 const findAgentsOfPlans = SqlSchema.findAll({
-  Request: Schema.Struct({ userId: Schema.String, planIds: Schema.Array(Schema.String) }),
+  Request: Schema.Struct({
+    userId: Schema.String,
+    planIds: Schema.Array(Schema.String),
+    includeArchived: Schema.Boolean,
+  }),
   Result: Schema.Struct({
     ...CodingAgentRowSchema.fields,
     published: Schema.NullOr(codingAgentPullRequestSchema),
   }),
-  execute: ({ userId, planIds }) =>
+  execute: ({ userId, planIds, includeArchived }) =>
     Database.use((db) =>
       db
         .select({ ...CODING_AGENT_COLUMNS, published: codingAgent.published })
@@ -736,7 +740,7 @@ const findAgentsOfPlans = SqlSchema.findAll({
           and(
             inArray(plan.id, [...planIds]),
             planReachableBy(userId),
-            isNull(codingAgent.archivedAt),
+            includeArchived ? undefined : isNull(codingAgent.archivedAt),
           ),
         )
         .orderBy(asc(codingAgent.createdAt), asc(codingAgent.id)),
@@ -925,13 +929,15 @@ export interface PublishedCodingAgent {
   readonly published: CodingAgentPullRequest | null;
 }
 
-/** Every agent standing on the plans named, by any member, each with what it published, in the order they were started, an archived one left out; a plan of a workspace the account is not in names none. */
+/** Every agent standing on the plans named, by any member, each with what it published, in the order they were started, an archived one left out unless `includeArchived` asks for it; a plan of a workspace the account is not in names none. */
 export function listPublishedCodingAgents(
   userId: string,
   planIds: readonly string[],
+  options: { readonly includeArchived?: boolean } = {},
 ): CodingAgentStoreEffect<readonly PublishedCodingAgent[]> {
   if (planIds.length === 0) return Effect.succeed([]);
-  return Effect.map(findAgentsOfPlans({ userId, planIds }), (rows) =>
+  const includeArchived = options.includeArchived === true;
+  return Effect.map(findAgentsOfPlans({ userId, planIds, includeArchived }), (rows) =>
     rows.map(({ published, ...agent }) => ({ agent, published })),
   );
 }

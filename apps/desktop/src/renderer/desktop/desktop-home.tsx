@@ -4,6 +4,7 @@ import { ACT_KIND } from "@luke/host/acts";
 import { FolderIcon, WingFace } from "@luke/ui";
 import { teammateCreator } from "@luke/ui/actor-model";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
+import { orderTasks, TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
 import { useAct } from "../act";
@@ -65,9 +66,9 @@ function greeting(name: string | undefined): string {
   return first === undefined || first === "" ? "Welcome back" : `Welcome back, ${first}`;
 }
 
-/** The workspace's plans saved latest, the archived left out. */
+/** The workspace's plans with the latest activity, their own saves and their agents' alike, the archived left out. */
 function recentPlans(plans: readonly PlanSummary[]): PlanSummary[] {
-  return plans.toSorted((a, b) => b.updatedAt - a.updatedAt).slice(0, RECENT_COUNT);
+  return orderTasks(plans, TASK_ORDER.UPDATED).slice(0, RECENT_COUNT);
 }
 
 /**
@@ -192,7 +193,7 @@ function RecentRow({
           <span className="sidebar-plan-time">
             {creator === undefined ? null : <ActorMark actor={creator} size={ACTOR_SIZE.MARK} />}
             <PlanStatusMark plan={plan} />
-            <RelativeTime at={plan.updatedAt} now={now} />
+            <RelativeTime at={taskTime(plan, TASK_ORDER.UPDATED)} now={now} />
           </span>
         </span>
       </button>

@@ -302,6 +302,13 @@ export const planAgentsSummarySchema = EffectSchema.Struct({
   total: countedNumber,
   /** The agents starting or running now. */
   working: countedNumber,
+  /**
+   * Epoch milliseconds the plan's agents last did something settled, every
+   * agent's counted and not only those named: one started, handed a
+   * message, or its turn ended. It holds still while a turn streams. Absent
+   * from a service before it.
+   */
+  activityAt: EffectSchema.optionalKey(countedNumber),
   agents: EffectSchema.Array(planAgentLineSchema).check(
     EffectSchema.isMaxLength(PLAN_AGENTS_BOUNDS.MAX_AGENTS),
   ),

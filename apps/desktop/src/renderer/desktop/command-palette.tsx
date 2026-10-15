@@ -51,6 +51,7 @@ import { GearIcon, SearchIcon } from "@luke/ui";
 import { teammateCreator } from "@luke/ui/actor-model";
 import { DOCUMENT_REGION } from "@luke/ui/planning-model";
 import { matchesTokens, matchRanges, searchTokens } from "@luke/ui/search-tokens";
+import { orderTasks, TASK_ORDER } from "@luke/ui/task-list-model";
 import { Command, defaultFilter } from "cmdk";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -375,7 +376,8 @@ function planDetail(plan: PlanSummary, archived: boolean): string | undefined {
 }
 
 /**
- * Every plan, the sidebar's first in its order, then the archived ones, each
+ * Every plan, the pinned first, then the rest by their last activity
+ * (`taskTime`), then the archived ones, each
  * in its tab's look, an archived one saying so in its detail. Within each,
  * the listed workspace's plans come first and every other workspace's after
  * them, naming its workspace and found by its name, since opening one
@@ -423,8 +425,17 @@ function planRows(
     ...list.filter((plan) => listedId === undefined || plan.workspaceId === listedId),
     ...list.filter((plan) => listedId !== undefined && plan.workspaceId !== listedId),
   ];
+  // The pinned stand first, as the sidebar's; the rest by their last
+  // activity, as the sidebar, Home's Recent, and the row's time read it.
+  const standing = [
+    ...plans.plans.filter((plan) => plan.pinnedAt !== undefined),
+    ...orderTasks(
+      plans.plans.filter((plan) => plan.pinnedAt === undefined),
+      TASK_ORDER.UPDATED,
+    ),
+  ];
   return [
-    ...listedFirst(plans.plans).map((plan) => row(plan, false)),
+    ...listedFirst(standing).map((plan) => row(plan, false)),
     ...listedFirst(plans.archived).map((plan) => row(plan, true)),
   ];
 }

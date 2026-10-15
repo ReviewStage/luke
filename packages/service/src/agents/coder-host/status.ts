@@ -147,6 +147,28 @@ export function codingAgentRunStartedAt(
   return (turn === undefined ? standing.createdAt : (turn.startedAt ?? turn.queuedAt)).getTime();
 }
 
+/**
+ * When the agent last did something settled, in epoch milliseconds: the
+ * latest of when it was started, when its newest turn was handed a message
+ * (queued, then begun), and when that turn settled. None of them moves while
+ * a turn streams, so a list ordered by it holds still while the agent works,
+ * and moves once, when the turn ends. Note that a subagent's turns run inside
+ * its parent's, and that an item the agent posts to the Inbox or a pull
+ * request it opens is posted inside a turn, so the parent's turn already
+ * brackets them, and none is read apart.
+ */
+export function codingAgentActivityAt(
+  turn: CodingAgentLatestTurn | undefined,
+  standing: Pick<AgentStanding, "createdAt">,
+): number {
+  const begun = turn === undefined ? undefined : (turn.startedAt ?? turn.queuedAt);
+  return Math.max(
+    standing.createdAt.getTime(),
+    begun?.getTime() ?? 0,
+    turn?.settledAt?.getTime() ?? 0,
+  );
+}
+
 /** What every read of one agent says of it but its plan, its status read at `now`. */
 function summaryFields(
   agent: CodingAgent,
