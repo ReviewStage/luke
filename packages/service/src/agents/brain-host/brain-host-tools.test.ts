@@ -417,7 +417,7 @@ test("Luke starts an agent on the call's plan as the deployment acting for the a
 
   const tasked = await call(
     START_CODING_AGENT_TOOL.name,
-    { task: TASK, model: SOL, effort: "low" },
+    { prompt: TASK, model: SOL, effort: "low" },
     "call-2",
   );
   assert.equal(tasked.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(tasked));

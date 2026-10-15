@@ -548,7 +548,13 @@ function planningToolView(
     case AGENT_TOOL.MESSAGE_CODING_AGENT:
       return namedCall(CALL_KIND.MESSAGE_AGENT, input, output, "text");
     case AGENT_TOOL.START_CODING_AGENT:
-      return namedCall(CALL_KIND.START_AGENT, input, output, "task");
+      // Note that a start journaled before the prompt had its name carries it as `task`.
+      return namedCall(
+        CALL_KIND.START_AGENT,
+        input,
+        output,
+        stringAt(input, "prompt") === undefined ? "task" : "prompt",
+      );
     case AGENT_TOOL.END_CALL:
       return namedCall(CALL_KIND.END_CALL, input, output, undefined);
     case EVE_TOOL.TASK_WAIT:
