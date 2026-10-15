@@ -22,6 +22,14 @@ import { useDisclosure } from "../use-disclosure";
  * scroller's and not the window's.
  */
 
+/** Which of the chip's edges the menu hangs from: its trailing edge, where a settings column is, or its leading edge, where a chip leads its line. */
+export const PICKER_ALIGN = {
+  START: "start",
+  END: "end",
+} as const;
+
+export type PickerAlign = (typeof PICKER_ALIGN)[keyof typeof PICKER_ALIGN];
+
 /** How the menu stands against the chip: below it, or above it where the window leaves more room there. */
 const PICKER_SIDE = {
   BELOW: "below",
@@ -89,6 +97,8 @@ interface PickerProps {
   /** The id a pressed search result lands on: marked on the chip, which takes the keyboard. */
   anchor?: string | undefined;
   disabled?: boolean | undefined;
+  /** The chip's edge the menu hangs from; the trailing one where none is named. */
+  align?: PickerAlign | undefined;
   /** Reads what the menu lists now, as it opens, so a list that failed to read is asked for again. */
   onOpen?: (() => void) | undefined;
   onPick: (id: string) => void;
@@ -111,6 +121,7 @@ export function Picker({
   note,
   anchor,
   disabled,
+  align = PICKER_ALIGN.END,
   onOpen,
   onPick,
 }: PickerProps): React.JSX.Element {
@@ -153,6 +164,7 @@ export function Picker({
       className="settings-picker"
       ref={row}
       data-side={placement?.side ?? PICKER_SIDE.BELOW}
+      data-align={align}
       style={
         placement === undefined
           ? undefined

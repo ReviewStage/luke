@@ -316,6 +316,11 @@
   width: 280px;
 }
 
+.settings-picker[data-align="start"] .settings-picker-menu {
+  right: auto;
+  left: 0;
+}
+
 .settings-picker[data-side="above"] .settings-picker-menu {
   top: auto;
   bottom: calc(100% + 6px);

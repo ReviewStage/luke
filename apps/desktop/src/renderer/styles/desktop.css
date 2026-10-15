@@ -3119,10 +3119,16 @@ ul.actor-stack {
 }
 
 /* A form row's chip is a Settings picker (`settings/picker-row.tsx`), so its
-   menu hangs from the chip's trailing edge, where the column is. */
+   menu hangs from the chip's trailing edge, where the column is, or from its
+   leading edge where the chip leads its line. */
 .repository-chip[data-place="field"] .searchable-menu {
   right: 0;
   left: auto;
+}
+
+.repository-chip[data-place="field"][data-align="start"] .searchable-menu {
+  right: auto;
+  left: 0;
 }
 
 /* A harness's or a provider's mark keeps its box in a row however tight the
@@ -6981,9 +6987,17 @@ button.automation-run:hover {
   gap: var(--space-6);
 }
 
-.new-plan-workspace {
-  position: relative;
+/* New task's chips are Settings pickers (`settings/picker-row.tsx`) standing
+   alone at the head of their lines, not in a column, so each is as wide as
+   its value and gives way, ellipsized, to a long one. */
+.new-plan-dialog .settings-picker {
   min-width: 0;
+  flex-shrink: 1;
+}
+
+.new-plan-dialog .settings-picker-chip {
+  width: auto;
+  max-width: 100%;
 }
 
 .dialog-name-field {
