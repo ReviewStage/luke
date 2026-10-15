@@ -13,6 +13,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { onRegistry } from "#testing/copy-feedback";
+import { MemberDirectory } from "../member-directory";
 import { OpenSettingsProvider } from "../open-settings";
 import { PlanCrumb } from "./plan-crumb";
 
@@ -98,11 +99,10 @@ async function crumb(
           createElement(
             OpenSettingsProvider,
             { value: (link: SettingsLink) => links.push(link) },
-            createElement(PlanCrumb, {
+            createElement(MemberDirectory, {
               workspace: shown,
-              repository,
-              archived,
               readerId: "user-sam",
+              children: createElement(PlanCrumb, { workspace: shown, repository, archived }),
             }),
           ),
         ),

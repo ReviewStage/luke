@@ -5,9 +5,9 @@ import { ChevronRightIcon, LockIcon } from "lucide-react";
 import { ACTOR_SIZE, ActorMark, ActorStack, YouBadge } from "../actor-ref";
 import { TILE_SIZE, WorkspaceTile } from "../desktop/workspace-tile";
 import { CardHead, CardNote, CardRule, HoverCard } from "../hover-card";
+import { useMemberDirectory } from "../member-directory";
 import { useOpenSettings } from "../open-settings";
 import { Tooltip } from "../tooltip";
-import { useWorkspaceMembers } from "./use-workspace-members";
 
 /**
  * plan-crumb.tsx -- the line over a plan's title that says where it lives and who can edit it: "Acme › relay", then "5 can edit".
@@ -24,10 +24,9 @@ import { useWorkspaceMembers } from "./use-workspace-members";
  * members in Settings. Each face is drawn as the window draws any person
  * (`actor-ref.tsx`): the member's sign-in picture where the members read
  * lists one, their letter on its hue otherwise, and the reader's own row
- * wears You. The members are read
- * once per workspace the crumb stands in (`use-workspace-members.ts`); until
- * they answer, or if they never do, the count stands alone, from the
- * workspace's own count.
+ * wears You. The members are the plan's directory's (`member-directory.tsx`),
+ * read once for the plan; until they answer, or if they never do, the count
+ * stands alone, from the workspace's own count.
  */
 
 /** How many faces the crumb's end draws before the count says the rest. */
@@ -152,17 +151,14 @@ export function PlanCrumb({
   workspace,
   repository,
   archived,
-  readerId,
 }: {
   workspace: Workspace;
   /** The repository the plan is about, `owner/name`, or none. */
   repository: string | null;
   archived: boolean;
-  /** The reader's account id, whose own face and row are drawn as theirs. */
-  readerId: string | undefined;
 }): React.JSX.Element {
   const openSettings = useOpenSettings();
-  const members = useWorkspaceMembers(workspace);
+  const { members, readerId } = useMemberDirectory();
   const count = editorsOf(workspace, members);
   const page = { page: SETTINGS_VIEW.WORKSPACE, workspaceId: workspace.id };
   return (
