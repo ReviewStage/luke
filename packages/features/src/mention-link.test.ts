@@ -681,6 +681,18 @@ test("a plain place reads a link as markdown does: balanced parentheses and a ti
     "See [Docs](<https://example.com/a b) now",
   );
   assert.equal(
+    linkLabels("See [Docs](<https://example.com/a b) and [B](https://example.com/b)"),
+    "See [Docs](<https://example.com/a b) and B",
+  );
+  assert.equal(
+    linkLabels("See [Docs](<https://example.com/a\\\nb>)"),
+    "See [Docs](<https://example.com/a\\\nb>)",
+  );
+  assert.equal(
+    linkLabels("See [Docs](<https://example.com/a\rb>)"),
+    "See [Docs](<https://example.com/a\rb>)",
+  );
+  assert.equal(
     linkLabels('[See](https://example.com/( "note")'),
     '[See](https://example.com/( "note")',
   );

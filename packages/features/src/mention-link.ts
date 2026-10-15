@@ -874,15 +874,27 @@ const TITLE_QUOTES: ReadonlySet<string> = new Set(['"', "'"]);
 /** Where a destination read so far stands: its target and the place after it, or where the read stopped, past which no link's destination can reach. */
 type DestinationRead = { readonly target: string; readonly at: number } | { readonly stop: number };
 
-/** A destination between angle brackets, which may hold spaces, read from its `<` to just past its `>` on the same line. */
+/** The characters that end a line, which no destination between angle brackets spans. */
+const LINE_ENDS: ReadonlySet<string> = new Set(["\n", "\r"]);
+
+/**
+ * A destination between angle brackets, which may hold spaces, read from
+ * its `<` to just past its `>` on the same line. Note that one left open
+ * stops the read just after its `<`, so a link later on the line is still
+ * read as one, and the read stays one pass, since a later read reaches no
+ * further than the next `<`.
+ */
 function angledDestination(words: string, open: number): DestinationRead {
   for (let at = open + 1; at < words.length; at += 1) {
-    const character = words[at];
-    if (character === "\\") at += 1;
-    else if (character === ">") return { target: words.slice(open + 1, at), at: at + 1 };
-    else if (character === "<" || character === "\n") return { stop: at };
+    const character = words[at] ?? "";
+    if (character === ">") return { target: words.slice(open + 1, at), at: at + 1 };
+    if (character === "<" || LINE_ENDS.has(character)) break;
+    if (character === "\\") {
+      if (LINE_ENDS.has(words[at + 1] ?? "")) break;
+      at += 1;
+    }
   }
-  return { stop: words.length };
+  return { stop: open + 1 };
 }
 
 /** A destination with no angle brackets: up to a space or the `)` that closes it, its parentheses balanced. */
