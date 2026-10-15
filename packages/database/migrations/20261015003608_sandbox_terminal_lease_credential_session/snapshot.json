@@ -1,8 +1,8 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "28651665-50a0-47f1-b2a0-4765a3906c5e",
-  "prevIds": ["230ad9b3-9c33-4829-b4ce-ad78dd351ed3"],
+  "id": "a5735f80-1dfa-4d51-8425-861e572ff5ed",
+  "prevIds": ["4a492703-41a0-464c-80a4-63a88d3353a6"],
   "ddl": [
     {
       "isRlsEnabled": false,
@@ -4845,6 +4845,19 @@
       "generated": null,
       "identity": null,
       "name": "plan_template",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "account_preference"
+    },
+    {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "experiments",
       "entityType": "columns",
       "schema": "public",
       "table": "account_preference"
