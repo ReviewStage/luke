@@ -82,8 +82,9 @@ import { TabStrip } from "./tab-strip";
  * sidebar, Rename, which turns the tab into its name's field, Open
  * terminal, which shows the agent's own Terminal tab in the side panel as
  * ⌘J does from the tab, and its transcript's two copies. Closing it closes
- * only the view: the agent goes on as it was, and the "+" opens it again. A tab an agent ended on while no
- * one was looking at it reads in semibold until shown. The draft's tab,
+ * only the view: the agent goes on as it was, and the "+" opens it again. A
+ * tab an agent ended on while no one was looking at it reads in semibold
+ * until shown. The draft's tab,
  * named New coding agent as the "+" row that opens it is, stands after the
  * agents until its first message starts the agent, and closing it lets the
  * draft go. Every tab wears its kind's look (`tab-look.tsx`).
