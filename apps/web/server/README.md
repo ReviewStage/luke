@@ -127,9 +127,11 @@ refuses adopts the workspace under the slug. `listWorkspaces` answers every
 workspace the account is a member of, its first one first and the rest by
 name. Every read names an account's first workspace by its owner's name as
 it stands now (`workspace-store.ts`'s `WORKSPACE_NAME`), to a teammate in it
-too, so a renamed account renames it and the name it was made under, the
-account's or, for one made on 2026-10-15, "Personal", stands only once the
-account is gone. `tests/workspace-store.test.ts` holds the three. Beyond its name, that row is only how a
+too, so a renamed account renames it, and the account's name it was made
+under stands only once the account is gone. One made as "Personal" on
+2026-10-15 holds its owner's name too
+(`migrations/20261015131300_personal_workspace_owner_name`), because Better
+Auth's own invitation read says the name the organization holds. `tests/workspace-store.test.ts` holds the three. Beyond its name, that row is only how a
 plan start or a repository listing that names no workspace finds the
 account's default; the workspace is otherwise one like any other, but that
 it is never renamed: it takes
