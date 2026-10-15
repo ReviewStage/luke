@@ -13,8 +13,10 @@ import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "../act";
 import { useAppCommand } from "../app-commands";
 import { AutomationDirectory } from "../automation-directory";
+import { LinkWorkspaceProvider } from "../copy-link-item";
 import { EmptyState } from "../empty-state";
 import { MemberDirectory } from "../member-directory";
+import { NOT_FOUND_THING, NotFound } from "../not-found";
 import { INBOX_COLUMNS, useInboxColumns } from "../planning/inbox-columns";
 import { InboxList, ItemMark } from "../planning/inbox-list";
 import {
@@ -27,6 +29,7 @@ import {
   inboxList,
   listedItems,
   NEEDS_YOU,
+  type PlanlessAgent,
   planHolder,
   planlessGroups,
 } from "../planning/inbox-model";
@@ -73,6 +76,9 @@ import { planCardOf } from "./plan-card";
  * person, an answer and an agent's starter, reads them against the listed
  * workspace's members (`member-directory.tsx`).
  */
+
+/** What leads back to the list from a missing item's notice, where the Inbox shows one column. */
+const BACK_TO_INBOX = "Back to Inbox";
 
 /** What the list says where a plan's read did not answer. */
 const NOT_READ = "Some items could not be read.";
@@ -199,9 +205,28 @@ export function DesktopInbox({ plans }: { plans: PlansControl }): React.JSX.Elem
     holdsLive && chosenAgentId !== undefined
       ? new Map(planless.items).set(chosenAgentId, liveItems)
       : planless.items;
+  // An agent with no plan that a link names, none of whose items waits any longer, is grouped by its own read, which the account's list of waiting agents leaves out, in its own workspace's list alone.
+  const pageAgent = agents.agents?.[0] ?? agents.archived?.[0];
+  const settledAgent: PlanlessAgent[] =
+    chosenAgentId !== undefined &&
+    holdsLive &&
+    pageAgent !== undefined &&
+    !plans.inboxPlanless.some((each) => each.agentId === chosenAgentId)
+      ? [
+          {
+            agentId: pageAgent.id,
+            agentTitle: pageAgent.title,
+            agentModel: pageAgent.model,
+            automationId: pageAgent.automationId ?? null,
+            automationName: null,
+            repository: "",
+            ...(agents.workspaceId === undefined ? undefined : { workspaceId: agents.workspaceId }),
+          },
+        ]
+      : [];
   const entries = [
     ...planEntries,
-    ...planlessGroups(plans.inboxPlanless, planlessRead, plans.workspace?.id),
+    ...planlessGroups([...plans.inboxPlanless, ...settledAgent], planlessRead, plans.workspace?.id),
   ];
   const list = inboxList(entries, {
     grouping: choices.grouping,
@@ -217,7 +242,21 @@ export function DesktopInbox({ plans }: { plans: PlansControl }): React.JSX.Elem
       !read.items.has(planId) &&
       !live.read) ||
     (chosenAgentId !== undefined && !planless.items.has(chosenAgentId) && !live.read);
-  const standIn = chosen === undefined && !chosenWaits ? firstChoice(list) : undefined;
+  const reading =
+    holdings.some((holding) => !read.items.has(holding.planId)) ||
+    plans.inboxPlanless.some((each) => !planless.items.has(each.agentId));
+  // An item asked for by a link or a notification that no read holds once every read has landed is
+  // not there for the reader, whether it was deleted or is of a task they cannot read, and its pane
+  // says so rather than giving way to the first item.
+  // Note that only the asked holder's own reads are waited on, since another's that failed says nothing of this item.
+  const holderRead =
+    planId !== undefined
+      ? read.items.has(planId) || live.read
+      : chosenAgentId !== undefined
+        ? live.read || planless.items.has(chosenAgentId)
+        : true;
+  const missing = asked?.opened === true && chosen === undefined && !chosenWaits && holderRead;
+  const standIn = chosen === undefined && !chosenWaits && !missing ? firstChoice(list) : undefined;
   const { onChoose } = view;
   const choose = useCallback(
     ({ holder, item }: InboxListed) =>
@@ -231,10 +270,8 @@ export function DesktopInbox({ plans }: { plans: PlansControl }): React.JSX.Elem
   useEffect(() => {
     if (standIn !== undefined) choose(standIn);
   }, [standIn, choose]);
-  const reading =
-    holdings.some((holding) => !read.items.has(holding.planId)) ||
-    plans.inboxPlanless.some((each) => !planless.items.has(each.agentId));
-  const columns = useInboxColumns(chosen?.item.id, true);
+  // A missing item's pane stands where its item would, so a narrow Inbox shows the notice rather than the list.
+  const columns = useInboxColumns(chosen?.item.id ?? (missing ? asked?.itemId : undefined), true);
   // A row's press and Next's open their item alike, the keyboard following it.
   const open = (listed: InboxListed) => {
     choose(listed);
@@ -267,63 +304,83 @@ export function DesktopInbox({ plans }: { plans: PlansControl }): React.JSX.Elem
     read.onRetry();
     planless.onRetry();
   };
+  const listedWorkspace = plans.workspace;
   return (
-    <MemberDirectory workspace={plans.workspace} readerId={plans.me}>
-      <AutomationDirectory
-        workspace={plans.workspace}
-        on={automationsOn}
-        wanted
-        onOpen={openAutomation}
-      >
-        <div className="inbox-view" ref={columns.ref} data-columns={columns.shown}>
-          <InboxList
-            view={list}
-            chosen={chosen?.item.id}
-            columns={columns.shown}
-            head={{
-              shown: plans.shown,
-              needsYou: choices,
-              view: { choices, folds },
-              waiting: anyNeedsYou(entries),
-            }}
-            models={named.models}
-            readerId={plans.me}
-            note={
-              <ListNote
-                failed={read.failed || planless.failed}
-                reading={reading}
-                empty={listedItems(list).length === 0}
-                alone={columns.shown === INBOX_COLUMNS.LIST}
-                onRetry={onRetry}
-              />
-            }
-            onChoose={open}
-          />
-          {chosen === undefined ? (
-            <section
-              className="inbox-view-items"
-              aria-label="Inbox"
-              hidden={columns.shown !== INBOX_COLUMNS.BOTH}
-            >
-              <header className="desktop-toolbar" />
-              {reading ? null : <EmptyState icon={<InboxIcon />}>{NEEDS_YOU.NONE}</EmptyState>}
-            </section>
-          ) : (
-            <InboxPane
-              holder={chosen.holder}
-              item={chosen.item}
-              control={live}
-              agents={named}
-              hidden={columns.shown === INBOX_COLUMNS.LIST}
-              onBack={columns.onBack}
-              pager={columns.shown === INBOX_COLUMNS.ITEM ? pager : undefined}
-              next={next}
-              doors={paneDoors(plans, chosen.holder, { act, openLink, now, automationsOn })}
+    <LinkWorkspaceProvider value={listedWorkspace?.slug ?? listedWorkspace?.id}>
+      <MemberDirectory workspace={plans.workspace} readerId={plans.me}>
+        <AutomationDirectory
+          workspace={plans.workspace}
+          on={automationsOn}
+          wanted
+          onOpen={openAutomation}
+        >
+          <div className="inbox-view" ref={columns.ref} data-columns={columns.shown}>
+            <InboxList
+              view={list}
+              chosen={chosen?.item.id}
+              columns={columns.shown}
+              head={{
+                shown: plans.shown,
+                needsYou: choices,
+                view: { choices, folds },
+                waiting: anyNeedsYou(entries),
+              }}
+              models={named.models}
+              readerId={plans.me}
+              note={
+                <ListNote
+                  failed={read.failed || planless.failed}
+                  reading={reading}
+                  empty={listedItems(list).length === 0}
+                  alone={columns.shown === INBOX_COLUMNS.LIST}
+                  onRetry={onRetry}
+                />
+              }
+              onChoose={open}
             />
-          )}
-        </div>
-      </AutomationDirectory>
-    </MemberDirectory>
+            {chosen === undefined ? (
+              <section
+                className="inbox-view-items"
+                aria-label="Inbox"
+                hidden={
+                  missing
+                    ? columns.shown === INBOX_COLUMNS.LIST
+                    : columns.shown !== INBOX_COLUMNS.BOTH
+                }
+              >
+                <header className="desktop-toolbar" />
+                {missing ? (
+                  <NotFound
+                    thing={NOT_FOUND_THING.INBOX_ITEM}
+                    action={
+                      columns.onBack === undefined ? undefined : (
+                        <button type="button" className="toolbar-button" onClick={columns.onBack}>
+                          {BACK_TO_INBOX}
+                        </button>
+                      )
+                    }
+                  />
+                ) : reading ? null : (
+                  <EmptyState icon={<InboxIcon />}>{NEEDS_YOU.NONE}</EmptyState>
+                )}
+              </section>
+            ) : (
+              <InboxPane
+                holder={chosen.holder}
+                item={chosen.item}
+                control={live}
+                agents={named}
+                hidden={columns.shown === INBOX_COLUMNS.LIST}
+                onBack={columns.onBack}
+                pager={columns.shown === INBOX_COLUMNS.ITEM ? pager : undefined}
+                next={next}
+                doors={paneDoors(plans, chosen.holder, { act, openLink, now, automationsOn })}
+              />
+            )}
+          </div>
+        </AutomationDirectory>
+      </MemberDirectory>
+    </LinkWorkspaceProvider>
   );
 }
 

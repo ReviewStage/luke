@@ -1,10 +1,12 @@
 import { INBOX_STATUS } from "@luke/features/inbox-wire";
+import { LINK_PLACE } from "@luke/features/luke-link";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { CodingAgentsIcon, DocumentIcon } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE } from "@luke/ui/actor-model";
 import { ArrowDownNarrowWideIcon, InboxIcon, SlidersHorizontalIcon } from "lucide-react";
 import { ActorMark, AutomationCard, automationActor } from "../actor-ref";
 import { useAutomation } from "../automation-directory";
+import { useCopyLinkItem } from "../copy-link-item";
 import { ActionMenu, type MenuAction, useActionMenu } from "../desktop/action-menu";
 import { SidebarResizeEdge } from "../desktop/desktop-sidebar";
 import {
@@ -70,6 +72,9 @@ import { cardTitle } from "./tool-call-model";
  * draws its list the whole Inbox wide, with no edge, and hides it while an
  * item stands in its place (`inbox-columns.ts`).
  */
+
+/** What an item's row's right-click menu is called. */
+const ITEM_ACTIONS = "Inbox item actions";
 
 /** What the head's menu button is called. */
 const VIEW_OPTIONS = "View options";
@@ -163,7 +168,9 @@ export function ItemMark({
  * One item as a sidebar row: the agent's mark, the title, and how long ago it
  * changed; one that needs the developer in the unread weight with a dot past
  * its time. The home page's Needs you names the item's plan after its title,
- * in `context`, since its rows stand under no plan's header.
+ * in `context`, since its rows stand under no plan's header. Its right-click offers
+ * Copy link, the item's link under the task or the agent that holds it, where
+ * the list hands down a workspace to write it under.
  */
 export function InboxItemRow({
   listed,
@@ -186,6 +193,12 @@ export function InboxItemRow({
   const { holder, item } = listed;
   const title = cardTitle(item.title);
   const needsYou = item.status === INBOX_STATUS.OPEN;
+  const menu = useActionMenu(true);
+  const copyLink = useCopyLinkItem()(
+    holder.kind === INBOX_HOLDER.PLAN
+      ? { kind: LINK_PLACE.INBOX_ITEM, planId: holder.plan.id, itemId: item.id }
+      : { kind: LINK_PLACE.INBOX_ITEM, agentId: item.agentId, itemId: item.id },
+  );
   return (
     <li className="sidebar-plan-item inbox-row">
       <Tooltip label={title}>
@@ -196,6 +209,7 @@ export function InboxItemRow({
           data-unread={String(needsYou)}
           data-item-id={item.id}
           onClick={() => onChoose(listed)}
+          onContextMenu={copyLink === undefined ? undefined : menu.contextMenu()}
         >
           <span className="sidebar-plan-line">
             <span className="inbox-row-mark">
@@ -222,6 +236,14 @@ export function InboxItemRow({
           </span>
         </button>
       </Tooltip>
+      {menu.drawn === undefined || copyLink === undefined ? null : (
+        <ActionMenu
+          label={ITEM_ACTIONS}
+          menu={menu.drawn}
+          groups={[[copyLink]]}
+          onClose={menu.close}
+        />
+      )}
     </li>
   );
 }
