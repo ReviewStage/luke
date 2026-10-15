@@ -141,13 +141,15 @@ function creatorIdOf(plan: PlanSummary): string | undefined {
 /**
  * The plans grouped by who created them, in the order chosen: the reader's
  * own first, then each teammate's, under Last updated or Created the one
- * holding the latest plan first, under Name by the creator's name, and the
- * plans nobody is named for last.
+ * holding the latest plan first, under Name by the creator's name as
+ * `nameOf` says it, the name the group's header says, and the plans nobody
+ * is named for last.
  */
 export function creatorGroups(
   plans: readonly PlanSummary[],
   order: TaskOrder,
   readerId: string | undefined,
+  nameOf: (plan: PlanSummary) => string,
 ): readonly CreatorGroup[] {
   const groups = [...grouped(orderTasks(plans, order), creatorIdOf)].map(
     ([creatorId, members]) => ({
@@ -157,7 +159,10 @@ export function creatorGroups(
   );
   const rank = (group: CreatorGroup) =>
     group.creatorId === undefined ? 2 : group.creatorId === readerId ? 0 : 1;
-  const nameIn = (group: CreatorGroup) => group.plans[0]?.createdBy?.name ?? "";
+  const nameIn = (group: CreatorGroup) => {
+    const first = group.plans[0];
+    return first === undefined ? "" : nameOf(first);
+  };
   return groups.sort(
     (a, b) =>
       rank(a) - rank(b) ||

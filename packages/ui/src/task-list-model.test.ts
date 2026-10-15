@@ -39,6 +39,9 @@ function task(
   };
 }
 
+/** A creator's name as the wire carries it. */
+const nameOnWire = (plan: PlanSummary) => plan.createdBy?.name ?? "";
+
 const names = (groups: readonly { plans: readonly PlanSummary[] }[]) =>
   groups.map((group) => group.plans.map((plan) => plan.name));
 
@@ -107,6 +110,7 @@ test("grouped by creator, the reader's own come first, then each teammate's by t
     ],
     TASK_ORDER.UPDATED,
     DEAN,
+    nameOnWire,
   );
   expect(groups.map((group) => group.creatorId)).toEqual([DEAN, MAYA, CHARLES, undefined]);
   expect(names(groups)[1]).toEqual(["Maya's latest", "Maya's older"]);
@@ -121,6 +125,18 @@ test("grouped by creator and ordered by name, teammates run by their names after
     ],
     TASK_ORDER.NAME,
     DEAN,
+    nameOnWire,
   );
   expect(groups.map((group) => group.creatorId)).toEqual([DEAN, CHARLES, MAYA]);
+});
+
+test("ordered by name, a creator's group sorts by the name its header says, even where the wire names nobody", () => {
+  const older = { ...task("Zoe's older", "acme/relay", 1, 1), ownerId: "user-zoe" };
+  const groups = creatorGroups(
+    [older, task("Amy's", "acme/relay", 1, 1, MAYA)],
+    TASK_ORDER.NAME,
+    DEAN,
+    (plan) => (plan.ownerId === "user-zoe" ? "Zoe Quinn" : "Amy Ng"),
+  );
+  expect(groups.map((group) => group.plans[0]?.name)).toEqual(["Amy's", "Zoe's older"]);
 });

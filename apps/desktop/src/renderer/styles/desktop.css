@@ -1219,10 +1219,18 @@ button.sidebar-section-head-name:hover {
 }
 
 /* Where its group does not say it, a row names its repository, muted,
-   before its mark and time, and steps it out with them while hovered. */
+   before its mark and time, and steps it out with them while hovered. A
+   long name is cut short, so the task's own name keeps its room at the
+   sidebar's least width; the row's card names it whole. */
 .sidebar-plan-repository {
+  display: inline-block;
+  max-width: 7em;
+  overflow: hidden;
   margin-right: var(--space-6);
   color: var(--text-tertiary);
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+  white-space: nowrap;
 }
 
 /* A teammate's task wears its creator's face before its mark and time, in

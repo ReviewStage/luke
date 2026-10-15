@@ -500,9 +500,10 @@ function taskSections(
   grouping: TaskSections["grouping"],
   order: TaskOrder,
   plans: PlansControl,
+  creatorName: (plan: PlanSummary) => string,
 ): TaskSections {
   if (grouping === TASK_GROUPING.CREATOR) {
-    return { grouping, groups: creatorGroups(tasks, order, plans.me) };
+    return { grouping, groups: creatorGroups(tasks, order, plans.me, creatorName) };
   }
   if (grouping === TASK_GROUPING.NONE) return { grouping, plans: orderTasks(tasks, order) };
   const grouped = repositoryGroups(tasks, order);
@@ -885,6 +886,23 @@ function SidebarAutomationsRow({
   );
 }
 
+/** What the sidebar is drawn from. */
+interface DesktopSidebarProps {
+  sidebar: SidebarCollapse;
+  history: NavigationHistory;
+  plans: PlansControl;
+  tab: PanelTab;
+  onTabChange: (tab: PanelTab) => void;
+  account: AccountSnapshot;
+  updates: UpdateControl;
+  /** Signs the account out, once the account menu's Log out is answered. */
+  onSignOut: () => Promise<void>;
+  /** The call card, at the column's foot above the account row, while one is to be drawn here. */
+  call: CallCardInput | undefined;
+  /** Hears every press in the sidebar, which a press outside it would put away while it floats. */
+  onPressWithin: () => void;
+}
+
 /**
  * The window's left column: at its head the workspace chosen, by its tile
  * and name and who shares it, with the menu that chooses another
@@ -921,7 +939,7 @@ function SidebarAutomationsRow({
  * keyboard back where it was. Floating, it has no edge to drag, since only a
  * pinned sidebar is resized.
  */
-export function DesktopSidebar({
+function SidebarColumn({
   sidebar,
   history,
   plans,
@@ -932,21 +950,7 @@ export function DesktopSidebar({
   onSignOut,
   call,
   onPressWithin,
-}: {
-  sidebar: SidebarCollapse;
-  history: NavigationHistory;
-  plans: PlansControl;
-  tab: PanelTab;
-  onTabChange: (tab: PanelTab) => void;
-  account: AccountSnapshot;
-  updates: UpdateControl;
-  /** Signs the account out, once the account menu's Log out is answered. */
-  onSignOut: () => Promise<void>;
-  /** The call card, at the column's foot above the account row, while one is to be drawn here. */
-  call: CallCardInput | undefined;
-  /** Hears every press in the sidebar, which a press outside it would put away while it floats. */
-  onPressWithin: () => void;
-}): React.JSX.Element {
+}: DesktopSidebarProps): React.JSX.Element {
   const onPlans = tab === PANEL_TAB.PLANS;
   const overlay = useFloatingSidebar(sidebar);
   // The window's Inbox, an agent's page, Factory, and the Automations page stand in the plan's place, so while one does no plan is the place shown.
@@ -997,6 +1001,7 @@ export function DesktopSidebar({
   };
   const folds = useFoldedGroups(sidebar.staged);
   const taskView = useTaskListView(plans.workspace?.id, sidebar.staged);
+  const reader = useMemberDirectory();
   // Only a workspace somebody shares has creators to group by.
   const shared = (plans.workspace?.memberCount ?? 1) > 1;
   const unread = useUnreadPlans([...plans.plans, ...plans.archived], {
@@ -1052,6 +1057,8 @@ export function DesktopSidebar({
     grouping === TASK_GROUPING.CREATOR && !shared ? TASK_GROUPING.REPOSITORY : grouping,
     order,
     plans,
+    // A creator's group is ordered by the name its header says.
+    (plan) => actorName(creatorActor(plan, reader, undefined)),
   );
   // A row names its repository as its group's header would, owner and all where two share a name.
   const named = repositoryGroups(tasks);
@@ -1147,54 +1154,51 @@ export function DesktopSidebar({
       <hr className="sidebar-rule" />
 
       {/* One scroller for both sections, so the pinned plans scroll away
-          with the rest rather than holding half the column. The rows read a
-          teammate's task's creator against the listed workspace's members. */}
-      <MemberDirectory workspace={plans.workspace} readerId={plans.me}>
-        <div className="sidebar-section">
-          {plans.signedIn && pinnedSection.length > 0 ? (
-            <PinnedSection
-              rows={pinnedSection}
-              folds={folds}
-              shown={pinnedShown}
-              context={context}
-              onOpenTab={chosen(openPinnedTab)}
-            />
+          with the rest rather than holding half the column. */}
+      <div className="sidebar-section">
+        {plans.signedIn && pinnedSection.length > 0 ? (
+          <PinnedSection
+            rows={pinnedSection}
+            folds={folds}
+            shown={pinnedShown}
+            context={context}
+            onOpenTab={chosen(openPinnedTab)}
+          />
+        ) : null}
+        <nav className="sidebar-group" aria-label="Tasks">
+          {plans.signedIn ? (
+            <SidebarSectionHead name="Tasks">
+              <TaskViewOptions
+                shown={plans.shown && overlay.inSight}
+                control={taskView}
+                shared={shared}
+              />
+            </SidebarSectionHead>
           ) : null}
-          <nav className="sidebar-group" aria-label="Tasks">
-            {plans.signedIn ? (
-              <SidebarSectionHead name="Tasks">
-                <TaskViewOptions
-                  shown={plans.shown && overlay.inSight}
-                  control={taskView}
-                  shared={shared}
-                />
-              </SidebarSectionHead>
-            ) : null}
-            {plans.listFailed ? (
-              <div className="sidebar-note">
-                <ReadFailure line="Your tasks could not be read." onRetry={plans.onRetryList} />
-              </div>
-            ) : null}
-            {/* The list is empty before its first read lands, so that it
+          {plans.listFailed ? (
+            <div className="sidebar-note">
+              <ReadFailure line="Your tasks could not be read." onRetry={plans.onRetryList} />
+            </div>
+          ) : null}
+          {/* The list is empty before its first read lands, so that it
               holds none says nothing until the service has answered. */}
-            {plans.signedIn && unlisted && !plans.listRead && !plans.listFailed ? (
-              <ListSkeleton />
-            ) : null}
-            {plans.signedIn && unlisted && plans.listRead && !plans.listFailed ? (
-              <p className="sidebar-note">No tasks yet.</p>
-            ) : null}
-            {plans.signedIn ? null : <p className="sidebar-note">Sign in to start a task.</p>}
-            <TaskGroups
-              sections={sections}
-              repositoryOf={repositoryOf}
-              folds={folds}
-              onNewPlanIn={chosen(newPlanIn)}
-              context={context}
-            />
-            {plans.signedIn ? <ArchivedPlans context={context} /> : null}
-          </nav>
-        </div>
-      </MemberDirectory>
+          {plans.signedIn && unlisted && !plans.listRead && !plans.listFailed ? (
+            <ListSkeleton />
+          ) : null}
+          {plans.signedIn && unlisted && plans.listRead && !plans.listFailed ? (
+            <p className="sidebar-note">No tasks yet.</p>
+          ) : null}
+          {plans.signedIn ? null : <p className="sidebar-note">Sign in to start a task.</p>}
+          <TaskGroups
+            sections={sections}
+            repositoryOf={repositoryOf}
+            folds={folds}
+            onNewPlanIn={chosen(newPlanIn)}
+            context={context}
+          />
+          {plans.signedIn ? <ArchivedPlans context={context} /> : null}
+        </nav>
+      </div>
 
       <ColumnFoot call={call}>
         <SidebarFoot
@@ -1209,5 +1213,18 @@ export function DesktopSidebar({
       {/* Last, so the drag strip above Luke does not take the edge's top from it. */}
       {sidebar.collapsed ? null : <SidebarResizeEdge edge={edge} />}
     </aside>
+  );
+}
+
+/**
+ * The sidebar, read against the listed workspace's members: a teammate's
+ * face on a row, a creator's group's header, and the order of those groups
+ * by the names their headers say.
+ */
+export function DesktopSidebar(props: DesktopSidebarProps): React.JSX.Element {
+  return (
+    <MemberDirectory workspace={props.plans.workspace} readerId={props.plans.me}>
+      <SidebarColumn {...props} />
+    </MemberDirectory>
   );
 }
