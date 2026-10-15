@@ -71,7 +71,9 @@ import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { AgentCard, agentSubject, NOTHING_HELD } from "../planning/agent-ref";
 import { FileCard, fileLook, newestFileNote } from "../planning/file-ref";
 import { refusalLine } from "../planning/file-tab-model";
+import { markReadItem } from "../planning/plan-menu-items";
 import { TAB_KIND, tabLook } from "../planning/tab-look";
+import { type ReadMarks, useReadMarks } from "../planning/use-plan-looks";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { SIDE_PANEL_TABS } from "../planning/use-side-panel";
 import { useWorkspaceMembers } from "../planning/use-workspace-members";
@@ -510,6 +512,32 @@ function panelTabRows(
   });
 }
 
+/**
+ * Mark as unread for the plan drawn, or Mark as read once it is marked so,
+ * as the plan's menus offer it; none while no plan is drawn. No chord
+ * reaches it, since Mail's ⇧⌘U is Automations' here.
+ */
+function readMarkRows(
+  plans: PlansControl,
+  reads: ReadMarks,
+  choose: (run: () => void) => void,
+): readonly PaletteRow[] {
+  if (plans.region.kind !== DOCUMENT_REGION.READY) return [];
+  const { plan } = plans.region;
+  const item = markReadItem({
+    unread: reads.markedUnread(plan.id),
+    onMark: (unread) => reads.mark(plan, unread),
+  });
+  return [
+    {
+      icon: item.icon,
+      label: item.label,
+      terms: [item.label],
+      onChoose: () => choose(item.onSelect),
+    },
+  ];
+}
+
 /** Every Settings page, in the sidebar's order, under its own glyph and name. */
 function settingsPageRows(open: (page: SettingsView) => void): readonly PaletteRow[] {
   return SETTINGS_PAGE_LIST.map((page) => {
@@ -791,6 +819,7 @@ export function CommandPalette({
   const tokens = searchTokens(query);
   // The listed workspace's members, read once for it, name a teammate's task's creator by face.
   const members = useWorkspaceMembers(plans.workspace);
+  const reads = useReadMarks();
   const limit = filter === PALETTE_FILTER.ALL ? KIND_ROWS.ALL : KIND_ROWS.FILTERED;
   const planId = plans.activePlanId;
   const repository =
@@ -846,6 +875,7 @@ export function CommandPalette({
       [
         ...actionRows((command) => choose(() => runAppCommand(command))),
         ...panelTabRows(plans, onPlans),
+        ...readMarkRows(plans, reads, choose),
       ],
     ],
     [PALETTE_FILTER.SETTINGS]: () => [settingsPageRows(openPage), settingRows(settings.rows, land)],
