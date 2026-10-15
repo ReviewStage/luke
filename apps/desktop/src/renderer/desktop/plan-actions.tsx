@@ -55,7 +55,7 @@ import { PlanNameField, usePlanRename } from "./plan-name-field";
  * where it is not the open one, the one item that moves it. Pin and Archive
  * move the plan in the sidebar at once, and each is undone from the same
  * menu; a sidebar row also offers both as buttons at its end on hover.
- * Move to workspace… opens a dialog listing the account's other workspaces
+ * Move to workspace opens a dialog listing the account's other workspaces
  * and what the move does (`move-plan-dialog.tsx`), offered on a plan the
  * reader started.
  * Permanently delete cannot be undone, so choosing it asks first in a dialog
@@ -162,7 +162,7 @@ function SidebarPlanMarks({
  * apply to it now. Copy formats the document drawn, so only the open plan
  * offers it, ahead of Copy link to plan, Rename, and Version history; Pin
  * and Archive follow; the repository is changed from any plan and opened on
- * GitHub where there is one, beside Move to workspace… where the plan may be
+ * GitHub where there is one, beside Move to workspace where the plan may be
  * moved; Permanently delete is last and alone. An archived plan takes
  * nothing until it is brought back, so it offers neither Rename, Change
  * repository, nor a move, only what reads it, its link and its version
@@ -197,7 +197,7 @@ function planActionGroups(
   const move: MenuAction[] =
     doors.askMove === undefined
       ? []
-      : [{ label: "Move to workspace…", icon: <FolderInputIcon />, onSelect: doors.askMove }];
+      : [{ label: "Move to workspace", icon: <FolderInputIcon />, onSelect: doors.askMove }];
   const open: MenuAction = {
     label: "Open on GitHub",
     icon: <ExternalIcon />,

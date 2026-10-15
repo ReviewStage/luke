@@ -8,6 +8,7 @@ import { DOCUMENT_REGION, PLANS_PAGE } from "@luke/ui/planning-model";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
+import { ellipsized } from "#testing/action-label";
 import { codingAgentsControl, plansControl, UNPINNED_SUMMARY } from "#testing/plans-control";
 import { relayout } from "#testing/resize-observer";
 import { installScrollIntoView } from "#testing/scroll-into-view";
@@ -18,7 +19,7 @@ import { SIDE_PANEL_TAB } from "../planning/use-side-panel";
 import { DesktopPlans } from "./desktop-plans";
 
 /**
- * move-plan-dialog.test.ts -- Move to workspace… in the open plan's ⋯: offered
+ * move-plan-dialog.test.ts -- Move to workspace in the open plan's ⋯: offered
  * to the plan's owner while the account has another workspace, it lists the
  * other workspaces, disables one whose GitHub cannot reach the plan's
  * repository with the reason, says who loses and gains the plan, and moves
@@ -150,13 +151,13 @@ function dialog(): HTMLElement | null {
   return document.querySelector<HTMLElement>('[role="dialog"]');
 }
 
-/** Opens Move to workspace… from the menu standing. */
+/** Opens Move to workspace from the menu standing. */
 function chooseMove(): HTMLElement {
   const item = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
-    (candidate) => candidate.textContent === "Move to workspace…",
+    (candidate) => candidate.textContent === "Move to workspace",
   );
-  act(() => (item ?? assert.fail("the menu offers Move to workspace…")).click());
-  return dialog() ?? assert.fail("Move to workspace… opens a dialog");
+  act(() => (item ?? assert.fail("the menu offers Move to workspace")).click());
+  return dialog() ?? assert.fail("Move to workspace opens a dialog");
 }
 
 /** The dialog's button with these words. */
@@ -168,7 +169,7 @@ function button(within: HTMLElement, words: string): HTMLButtonElement {
   );
 }
 
-test("the ⋯ offers Move to workspace… on the reader's own plan while the account has another workspace, and on no teammate's plan nor with one workspace", () => {
+test("the ⋯ offers Move to workspace on the reader's own plan while the account has another workspace, and on no teammate's plan nor with one workspace", () => {
   openMenu(openTab(PLAN, [STUDIO, ACME]));
   const own = menuLabels();
   unmountAll();
@@ -178,9 +179,10 @@ test("the ⋯ offers Move to workspace… on the reader's own plan while the acc
   openMenu(openTab(PLAN, [STUDIO]));
   const alone = menuLabels();
 
-  assert.ok(own.includes("Move to workspace…"), "the owner is offered the move");
-  assert.ok(!teammates.includes("Move to workspace…"), "a teammate's plan is not theirs to move");
-  assert.ok(!alone.includes("Move to workspace…"), "a single workspace has nowhere to move to");
+  assert.ok(own.includes("Move to workspace"), "the owner is offered the move");
+  assert.deepEqual(ellipsized(own), [], "no item of the ⋯ ends with an ellipsis");
+  assert.ok(!teammates.includes("Move to workspace"), "a teammate's plan is not theirs to move");
+  assert.ok(!alone.includes("Move to workspace"), "a single workspace has nowhere to move to");
 });
 
 test("the dialog lists the other workspaces, disables one whose GitHub cannot reach the repository with why, chooses the first that can, says what the move does, and moves the plan there", async () => {
@@ -332,7 +334,7 @@ test("a plan whose repository its workspace cannot reach and another of the acco
   }
 
   act(() => button(banner, "Move to Acme").click());
-  const moving = dialog() ?? assert.fail("the press opens Move to workspace…");
+  const moving = dialog() ?? assert.fail("the press opens Move to workspace");
   assert.equal(
     moving.querySelector('[aria-checked="true"]')?.textContent?.includes("Acme"),
     true,

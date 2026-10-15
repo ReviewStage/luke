@@ -11,7 +11,7 @@ import { BusyLabel } from "../spinner";
 import { sharedWords, WORKSPACE_REF_SIZE, WorkspaceRef } from "./workspace-ref";
 
 /**
- * move-plan-dialog.tsx -- Move to workspace…, from a plan's ⋯: the account's other workspaces to move the plan to, and what the move does.
+ * move-plan-dialog.tsx -- Move to workspace, from a plan's ⋯: the account's other workspaces to move the plan to, and what the move does.
  *
  * The menu offers it on a plan the reader started, while the account is in
  * another workspace, because the service lets only a plan's owner move it.
@@ -255,7 +255,7 @@ export function strandedHome(
   return strandedPlanHome(plan, plans.workspaces);
 }
 
-/** One plan's Move to workspace… as a door holds it. */
+/** One plan's Move to workspace as a door holds it. */
 interface MovePlanDoor {
   /** The menu item's press; absent where the menu does not offer the move. */
   ask: (() => void) | undefined;
@@ -263,7 +263,7 @@ interface MovePlanDoor {
   dialog: React.JSX.Element | null;
 }
 
-/** One plan's Move to workspace…, held for whichever door offers its menu. */
+/** One plan's Move to workspace, held for whichever door offers its menu. */
 export function useMovePlanDialog(
   plans: PlansControl,
   plan: PlanSummary | undefined,

@@ -4,13 +4,15 @@ import { experimentsOn } from "@luke/settings/testing";
 import type { MenuItemConstructorOptions } from "electron";
 import { describe, test } from "vitest";
 import { APP_COMMAND, shortcutShown, shownShortcutGroups } from "#shared/shortcuts";
-import { appMenuTemplate, menuBarDrawer } from "./app-menu";
+import { ellipsized } from "#testing/action-label";
+import { appMenuTemplate, menuBarDrawer, UPDATE_MENU_ACT } from "./app-menu";
 
 /**
  * The menu bar as a gated feature's experiment decides it: an item whose
  * command does not stand is not in its menu, and leaves no separator
  * stranded where it stood; and the one drawer redraws when the update item
- * or the account's experiments move, and only then.
+ * or the account's experiments move, and only then; and no item a reader
+ * can choose ends its name with an ellipsis.
  */
 
 /** The labels of one top-level menu's items, a separator as a dash. */
@@ -123,5 +125,27 @@ describe("the menu bar's drawer", () => {
     show({ experiments: {} });
     assert.equal(drawn.length, 4);
     assert.ok(labelsOf(drawn[3] ?? [], "Luke").includes("Restart to Update"));
+  });
+});
+
+/** The labels of every item a reader can choose, every submenu walked; a disabled item is a status, not a choice. */
+function choosableLabels(items: readonly MenuItemConstructorOptions[]): string[] {
+  return items.flatMap((item) => [
+    ...(item.label === undefined || item.enabled === false ? [] : [item.label]),
+    ...(Array.isArray(item.submenu) ? choosableLabels(item.submenu) : []),
+  ]);
+}
+
+describe("the menu bar's names", () => {
+  test("no item a reader can choose ends with an ellipsis, in any state of the update item", () => {
+    for (const act of Object.values(UPDATE_MENU_ACT)) {
+      const update = {
+        act,
+        onCheck: () => undefined,
+        onInstall: () => undefined,
+        onOpenLatest: () => undefined,
+      };
+      assert.deepEqual(ellipsized(choosableLabels(appMenuTemplate("Luke", update))), [], act);
+    }
   });
 });
