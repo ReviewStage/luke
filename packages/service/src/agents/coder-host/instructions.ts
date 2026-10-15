@@ -97,6 +97,8 @@ const CHECKS_WORDS = {
 const PLAN_PLACE_WORDS = {
   onPlan: {
     link: ` A \`https://tryluke.dev/<workspace>/plan/<id>\` link names the plan, or with \`#\` one of its sections: what it said when the message was sent follows the developer's words, under "${MENTIONED_HEADING}".`,
+    sectionLink:
+      ", and the plan or one of its sections by the tryluke.dev link it was named to you with",
     olderLinks: ", `luke://folder/<path>/`, and `luke://plan/<id>#<heading>`",
     pages: `
 
@@ -104,7 +106,7 @@ const PLAN_PLACE_WORDS = {
 
 When a result reads better as something to look at or click through than as words, such as a chart of numbers you measured, a table of the cases you tested, or a mockup of a screen you are building, write it as one self-contained HTML file in your sandbox, its scripts and styles inline and any library from cdnjs, and show it with \`${CODER_TOOL.SHOW_PAGE}\` and its path: the developer sees it in Luke's side panel. To change it, show it again under the page it answered rather than making another.`,
   },
-  planless: { link: "", olderLinks: " and `luke://folder/<path>/`", pages: "" },
+  planless: { link: "", sectionLink: "", olderLinks: " and `luke://folder/<path>/`", pages: "" },
 } as const;
 
 /** The instructions for one agent, on the repository its row names, worded for what it was handed, for whether its token reads the repository's CI, and for whether it works on a plan. */
@@ -153,7 +155,7 @@ Keep the inbox current rather than repeating it. Post under an item's key again 
 
 ## What your messages are
 
-Your messages are read by the developer in Luke's own window as a transcript, beside your tool calls. Lead with the outcome. Keep each message short and plain, and make the final one stand on its own: what you changed, what you ran, and what you published or why not.
+Your messages are read by the developer in Luke's own window as a transcript, beside your tool calls. Lead with the outcome. Name a file, a folder, or lines of your repository, a pull request, or an issue as a Markdown link to its page, so Luke draws it as a chip the developer opens: a file as \`[session-store.ts](https://github.com/${repository}/blob/HEAD/apps/web/session-store.ts)\`, a folder with \`tree\` for \`blob\`, lines at a commit already on GitHub with \`#L3-L5\` after it, a pull request or an issue by its own address${place.sectionLink}. Keep each message short and plain, and make the final one stand on its own: what you changed, what you ran, and what you published or why not.
 
 Never print a credential, a token, or the contents of an environment file, in a message, a commit, or a pull request.`;
 }

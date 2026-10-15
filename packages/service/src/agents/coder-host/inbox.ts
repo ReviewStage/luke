@@ -67,7 +67,9 @@ export const INBOX_TOOLS = {
       "Put something you need from the developer in their inbox, apart from your transcript, where they answer it. " +
       "key is your own short lowercase slug for the item, such as branch-protection; posting under a key you used before " +
       "replaces that item and opens it again, so keep an item current under its key and never post it twice. " +
-      "blocks is the context they need to act, in order: markdown blocks of short Markdown, link blocks naming a page, " +
+      "blocks is the context they need to act, in order: markdown blocks of short Markdown, a file, a pull request, or an " +
+      "issue in it written as a Markdown link to its page, such as [store.ts](https://github.com/<owner>/<name>/blob/HEAD/<path>), " +
+      "so Luke draws it as a chip; link blocks naming a page, " +
       "such as the GitHub settings page a task is done on, and code blocks pointing at the exact lines a decision is about: " +
       `repo is your repository as owner/name, path is from its root, startLine to endLine spans at most ${INBOX_BOUNDS.MAX_CODE_LINES} lines, ` +
       "and sha is the full 40-character commit you read them at, one already on GitHub; they see those lines as GitHub holds them at that commit; " +
