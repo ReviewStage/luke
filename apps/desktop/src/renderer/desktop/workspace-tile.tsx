@@ -7,13 +7,23 @@ import type { Workspace } from "@luke/features/workspace-wire";
  * square and a person round. The hue is read off the workspace's id rather
  * than its name, so a rename keeps the mark the members know it by, and two
  * workspaces of one name still read apart more often than not. The letter is
- * drawn by the stylesheet from the tile's own attribute, because the tile is
- * decoration beside the name its row already says: it adds nothing a screen
- * reader or a row's text should repeat.
+ * the tile's own text, the name's first character as a reader sees it, an
+ * emoji's whole, because text is what session replay masks
+ * (`session-replay.ts`), and is hidden from a screen reader, since the row
+ * beside it already says the name.
  */
 
 /** How many hues a tile is drawn in: `--workspace-hue-1` through `--workspace-hue-6`. */
 const WORKSPACE_HUES = 6;
+
+/** Splits a name into the characters a reader sees, an emoji's parts as one. */
+const CHARACTERS = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+
+/** The name's first character as a reader sees it, upper-cased; none for a blank name. */
+function letterOf(name: string): string {
+  const [first] = CHARACTERS.segment(name.trim());
+  return first === undefined ? "" : first.segment.toUpperCase();
+}
 
 /** The hue a workspace is drawn in, from 1, read off its id alone. */
 function hueOf(id: string): number {
@@ -29,11 +39,8 @@ export function WorkspaceTile({
   workspace: Pick<Workspace, "id" | "name">;
 }): React.JSX.Element {
   return (
-    <span
-      className="workspace-tile"
-      data-hue={hueOf(workspace.id)}
-      data-letter={workspace.name.trim().slice(0, 1).toUpperCase()}
-      aria-hidden="true"
-    />
+    <span className="workspace-tile" data-hue={hueOf(workspace.id)} aria-hidden="true">
+      {letterOf(workspace.name)}
+    </span>
   );
 }

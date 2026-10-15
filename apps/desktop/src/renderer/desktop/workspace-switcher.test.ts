@@ -86,9 +86,14 @@ function open(switcher: HTMLButtonElement | null): void {
   act(() => switcher.click());
 }
 
+/** An item's label, the words beside its glyph. */
+function labelOf(item: HTMLElement): string | null {
+  return item.querySelector(".plan-menu-label")?.textContent ?? null;
+}
+
 /** Chooses the open menu's item by its label. */
 function choose(label: string): void {
-  const item = menuItems().find((candidate) => candidate.textContent === label);
+  const item = menuItems().find((candidate) => labelOf(candidate) === label);
   assert.ok(item, `the menu offers ${label}`);
   act(() => item.click());
 }
@@ -103,7 +108,7 @@ test("the menu offers the workspaces, the listed one checked, New workspace, and
   });
 
   open(page.switcher());
-  const offered = menuItems().map((item) => [item.textContent, item.getAttribute("aria-checked")]);
+  const offered = menuItems().map((item) => [labelOf(item), item.getAttribute("aria-checked")]);
   choose("Personal");
   open(page.switcher());
   choose("Workspace settings");
@@ -122,10 +127,12 @@ test("a member of a team is offered the same three kinds of item as its admin", 
   const member = mount({ workspaces: [PERSONAL, ACME], workspace: ACME });
   open(member.switcher());
 
-  assert.deepEqual(
-    menuItems().map((item) => item.textContent),
-    ["Personal", "acme", "New workspace", "Workspace settings"],
-  );
+  assert.deepEqual(menuItems().map(labelOf), [
+    "Personal",
+    "acme",
+    "New workspace",
+    "Workspace settings",
+  ]);
 });
 
 test("New workspace asks a name and creates it, and a refusal is said on the card with the name kept", async () => {
@@ -141,7 +148,7 @@ test("New workspace asks a name and creates it, and a refusal is said on the car
   });
 
   open(page.switcher());
-  const offered = menuItems().map((item) => item.textContent);
+  const offered = menuItems().map(labelOf);
   choose("New workspace");
   const field =
     document.querySelector<HTMLInputElement>('input[aria-label="Workspace name"]') ??
@@ -258,7 +265,7 @@ test("each workspace in the menu wears its tile, its first letter, and a rename 
     const drawn = menuItems()
       .map((item) => item.querySelector(".workspace-tile"))
       .filter((tile) => tile !== null)
-      .map((tile) => [tile.getAttribute("data-letter"), tile.getAttribute("data-hue")]);
+      .map((tile) => [tile.textContent, tile.getAttribute("data-hue")]);
     // Each reading stands alone, so the next finds only its own menu.
     for (const root of roots.splice(0)) act(() => root.unmount());
     document.body.innerHTML = "";
@@ -274,4 +281,6 @@ test("each workspace in the menu wears its tile, its first letter, and a rename 
   const renamed = tiles([PERSONAL, { ...CONNECTED, name: "Zenith" }]);
   assert.equal(renamed[1]?.[0], "Z");
   assert.equal(renamed[1]?.[1], before[1]?.[1], "the hue is the workspace's, not its name's");
+  // An emoji is one character to a reader, though two to a string.
+  assert.equal(tiles([{ ...PERSONAL, name: "🐙 Octo" }])[0]?.[0], "🐙");
 });

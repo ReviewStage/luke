@@ -470,8 +470,8 @@ body,
   display: inline-flex;
 }
 
-/* A workspace's tile: a square of its hue with its first letter, drawn from
-   the tile's own attribute, at a row's glyph size. */
+/* A workspace's tile: a square of its hue with its first letter as its text,
+   at a row's glyph size. */
 .workspace-tile {
   display: inline-grid;
   width: var(--menu-glyph);
@@ -484,10 +484,6 @@ body,
   font-size: 10px;
   font-weight: 650;
   line-height: 1;
-}
-
-.workspace-tile::before {
-  content: attr(data-letter);
 }
 
 .workspace-tile[data-hue="2"] {
