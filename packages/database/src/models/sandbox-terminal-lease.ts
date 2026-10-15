@@ -226,8 +226,12 @@ export function releaseLapsedLease(conversationId: string, lapsedBefore: Date): 
 }
 
 const unclaimCredential = SqlSchema.void({
-  Request: Schema.Struct({ conversationId: Schema.String, claimedAt: Schema.Date }),
-  execute: ({ conversationId, claimedAt }) =>
+  Request: Schema.Struct({
+    conversationId: Schema.String,
+    sandboxSessionId: Schema.String,
+    claimedAt: Schema.Date,
+  }),
+  execute: ({ conversationId, sandboxSessionId, claimedAt }) =>
     Database.use((db) =>
       db
         .update(sandboxTerminalLease)
@@ -236,6 +240,7 @@ const unclaimCredential = SqlSchema.void({
           and(
             eq(sandboxTerminalLease.conversationId, conversationId),
             eq(sandboxTerminalLease.credentialAt, claimedAt),
+            eq(sandboxTerminalLease.credentialSession, sandboxSessionId),
           ),
         ),
     ),
@@ -261,10 +266,11 @@ export function claimCredentialRenewal(
   );
 }
 
-/** Gives back a renewal this caller claimed at the instant given and could not finish, so the next check claims it again; a later claim stands. */
+/** Gives back a renewal this caller claimed on the session and at the instant given and could not finish, so the next check claims it again; a later claim, or another session's at the same instant, stands. */
 export function releaseCredentialRenewal(
   conversationId: string,
+  sandboxSessionId: string,
   claimedAt: Date,
 ): LeaseEffect<void> {
-  return unclaimCredential({ conversationId, claimedAt });
+  return unclaimCredential({ conversationId, sandboxSessionId, claimedAt });
 }

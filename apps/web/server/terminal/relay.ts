@@ -115,7 +115,11 @@ export interface RelayDependencies {
     renewedBefore: Date,
   ) => Effect.Effect<boolean>;
   /** Gives back a renewal claimed at the instant given that did not finish. */
-  readonly releaseRenewal: (conversationId: string, claimedAt: Date) => Effect.Effect<void>;
+  readonly releaseRenewal: (
+    conversationId: string,
+    sandboxSessionId: string,
+    claimedAt: Date,
+  ) => Effect.Effect<void>;
 }
 
 /** How the relay ends its own socket to the PTY, whatever ended the pipe: the shell goes on in tmux. */
@@ -171,7 +175,7 @@ function renewCredential(
       deps.sandbox.setGitHubToken(sandboxSessionId, token),
     ).pipe(
       // Note that a connection closing mid-renewal interrupts it, and the claim goes back then too.
-      Effect.onError(() => deps.releaseRenewal(agent.conversationId, at)),
+      Effect.onError(() => deps.releaseRenewal(agent.conversationId, sandboxSessionId, at)),
       Effect.catch(() => Effect.logWarning("a terminal's GitHub credential was not renewed")),
     );
   });
@@ -283,7 +287,12 @@ export function relayTerminal(
     const attachedAt = yield* now;
     const lastTyped = yield* Ref.make(attachedAt.getTime());
     yield* deps.hold(agent.conversationId, heldFrom(attachedAt));
-    yield* renewCredential(deps, agent, sandbox.sandboxSessionId);
+    // Note that the renewals run beside the connection rather than ahead of it, because one GitHub left unanswered must still end when the desktop leaves.
+    yield* Effect.forkScoped(
+      Effect.repeat(renewCredential(deps, agent, sandbox.sandboxSessionId), {
+        schedule: Schedule.spaced(TERMINAL_RELAY_BOUNDS.CREDENTIAL_CHECK_EVERY),
+      }),
+    );
     const pty = yield* Effect.result(deps.connect(sandbox.shell));
     if (Result.isFailure(pty)) return yield* device.close(TERMINAL_RELAY_CLOSE.UNAVAILABLE);
     const start = attachTerminal(ask.terminalId);
@@ -299,11 +308,6 @@ export function relayTerminal(
       }),
     });
     yield* device.send({ text: JSON.stringify({ type: TERMINAL_RELAY_FRAME.ATTACHED }) });
-    yield* Effect.forkScoped(
-      Effect.repeat(renewCredential(deps, agent, sandbox.sandboxSessionId), {
-        schedule: Schedule.spaced(TERMINAL_RELAY_BOUNDS.CREDENTIAL_CHECK_EVERY),
-      }),
-    );
     const end = yield* Effect.raceAll([
       deviceToPty(deps, agent, lastTyped, device, pty.success),
       ptyToDevice(device, pty.success),

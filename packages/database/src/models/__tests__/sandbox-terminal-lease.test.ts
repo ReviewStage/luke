@@ -237,9 +237,9 @@ it.layer(getTestDB())("the sandbox terminal lease", (it) => {
         yield* holdSandbox(conversationId, at(5));
 
         yield* claimCredentialRenewal(conversationId, "sbs_1", at(0), at(-50));
-        yield* releaseCredentialRenewal(conversationId, at(0));
+        yield* releaseCredentialRenewal(conversationId, "sbs_1", at(0));
         const retried = yield* claimCredentialRenewal(conversationId, "sbs_1", at(5), at(-45));
-        yield* releaseCredentialRenewal(conversationId, at(0));
+        yield* releaseCredentialRenewal(conversationId, "sbs_1", at(0));
         const stillClaimed = yield* claimCredentialRenewal(
           conversationId,
           "sbs_1",
@@ -281,5 +281,23 @@ it.layer(getTestDB())("the sandbox terminal lease", (it) => {
 
         assert.deepEqual([sameSession, resumed, resumedAgain], [false, true, false]);
       }),
+  );
+
+  it.effect("a give-back from another session at the same instant leaves the standing claim", () =>
+    Effect.gen(function* () {
+      const { conversationId } = yield* openAgent();
+      yield* holdSandbox(conversationId, at(5));
+
+      yield* claimCredentialRenewal(conversationId, "sbs_resumed", at(0), at(-50));
+      yield* releaseCredentialRenewal(conversationId, "sbs_before_stop", at(0));
+      const claimedAgain = yield* claimCredentialRenewal(
+        conversationId,
+        "sbs_resumed",
+        at(1),
+        at(-49),
+      );
+
+      assert.equal(claimedAgain, false, "the resumed session's claim still stands");
+    }),
   );
 });

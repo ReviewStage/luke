@@ -129,7 +129,7 @@ function world(options: {
         credentialAt = now.getTime();
         return true;
       }),
-    releaseRenewal: (_conversation, claimedAt) =>
+    releaseRenewal: (_conversation, _session, claimedAt) =>
       Effect.sync(() => {
         asked.released += 1;
         if (credentialAt === claimedAt.getTime()) credentialAt = undefined;
@@ -137,6 +137,11 @@ function world(options: {
   };
   return { deps, asked, heldUntil: () => heldUntil };
 }
+
+/** Lets every fiber the last step woke, the relay's own renewals among them, run to its next wait. */
+const settle = Effect.forEach(Array.from({ length: 20 }), () => Effect.yieldNow, {
+  discard: true,
+});
 
 const texts = (sent: readonly RelayFrame[]) =>
   sent.flatMap((frame) => ("text" in frame ? [JSON.parse(frame.text)] : []));
@@ -320,7 +325,7 @@ it.effect(
       const two = yield* Effect.forkChild(
         Effect.scoped(relayTerminal(second.socket, ASK, shared.deps)),
       );
-      yield* Effect.yieldNow;
+      yield* settle;
       yield* first.leave;
       yield* second.leave;
       yield* Fiber.join(one);
@@ -429,11 +434,32 @@ it.effect("a renewal cut off by its connection closing gives its claim back", ()
     const relay = yield* Effect.forkChild(
       Effect.scoped(relayTerminal(device.socket, ASK, hanging.deps)),
     );
-    yield* Effect.yieldNow;
+    yield* settle;
     const releasedWhileMinting = hanging.asked.released;
     yield* Fiber.interrupt(relay);
 
     assert.equal(releasedWhileMinting, 0);
     assert.equal(hanging.asked.released, 1);
   }),
+);
+
+it.effect(
+  "a first renewal GitHub never answers ends, and gives its claim back, when the desktop leaves",
+  () =>
+    Effect.gen(function* () {
+      const pty = yield* scriptedSocket;
+      const device = yield* scriptedSocket;
+      const hanging = world({ pty, tokensHang: true });
+
+      const relay = yield* Effect.forkChild(
+        Effect.scoped(relayTerminal(device.socket, ASK, hanging.deps)),
+      );
+      yield* settle;
+      const attachedWhileMinting = texts(device.sent);
+      yield* device.leave;
+      yield* Fiber.join(relay);
+
+      assert.deepEqual(attachedWhileMinting, [{ type: TERMINAL_RELAY_FRAME.ATTACHED }]);
+      assert.equal(hanging.asked.released, 1);
+    }),
 );

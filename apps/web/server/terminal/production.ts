@@ -115,8 +115,8 @@ export const relayDependencies: Effect.Effect<RelayDependencies, never, RelaySer
         run(claimCredentialRenewal(conversationId, sandboxSessionId, now, renewedBefore)).pipe(
           Effect.orElseSucceed(() => false),
         ),
-      releaseRenewal: (conversationId, claimedAt) =>
-        run(releaseCredentialRenewal(conversationId, claimedAt)).pipe(
+      releaseRenewal: (conversationId, sandboxSessionId, claimedAt) =>
+        run(releaseCredentialRenewal(conversationId, sandboxSessionId, claimedAt)).pipe(
           Effect.catch(() => Effect.logWarning("a terminal's credential claim was not given back")),
         ),
     };
