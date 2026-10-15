@@ -12,7 +12,7 @@
  * to the menu and from there to the same nothing.
  */
 
-import { type Experiment, type ExperimentChoices, experimentOn } from "@luke/settings";
+import { EXPERIMENT, type Experiment, type ExperimentChoices, experimentOn } from "@luke/settings";
 import { isWireString, type UnparsedWireValue } from "@luke/wire";
 
 /** What a shortcut does. A command is one entry here and one row in {@link APP_SHORTCUTS} or {@link MENU_COMMAND_LABELS}. */
@@ -54,6 +54,8 @@ export const APP_COMMAND = {
   INBOX: "inbox",
   EXIT_INBOX: "exit-inbox",
   EXIT_AGENT_PAGE: "exit-agent-page",
+  FACTORY: "factory",
+  EXIT_FACTORY: "exit-factory",
   BACK: "back",
   FORWARD: "forward",
   SEND_FEEDBACK: "send-feedback",
@@ -329,6 +331,16 @@ export const APP_SHORTCUTS = {
     label: "Exit agent page",
     chord: { key: SHORTCUT_KEY.ESCAPE, bare: true },
   },
+  [APP_COMMAND.FACTORY]: {
+    label: "Factory",
+    chord: { key: SHORTCUT_KEY.F, shift: true },
+    experiment: EXPERIMENT.FACTORY,
+  },
+  [APP_COMMAND.EXIT_FACTORY]: {
+    label: "Exit factory",
+    chord: { key: SHORTCUT_KEY.ESCAPE, bare: true },
+    experiment: EXPERIMENT.FACTORY,
+  },
   [APP_COMMAND.BACK]: { label: "Back", chord: { key: SHORTCUT_KEY.OPEN_BRACKET } },
   [APP_COMMAND.FORWARD]: { label: "Forward", chord: { key: SHORTCUT_KEY.CLOSE_BRACKET } },
   [APP_COMMAND.COMMAND_PALETTE]: { label: "Command palette", chord: { key: SHORTCUT_KEY.K } },
@@ -372,6 +384,8 @@ export const APP_SHORTCUT_GROUPS = [
       APP_COMMAND.INBOX,
       APP_COMMAND.EXIT_INBOX,
       APP_COMMAND.EXIT_AGENT_PAGE,
+      APP_COMMAND.FACTORY,
+      APP_COMMAND.EXIT_FACTORY,
     ],
   },
   {

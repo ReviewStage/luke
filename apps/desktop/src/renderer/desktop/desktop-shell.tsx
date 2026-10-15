@@ -1,6 +1,7 @@
 import type { FaceMotion } from "@luke/brand";
 import { ACCOUNT_STATUS, type AccountProvider } from "@luke/credentials/snapshot";
 import type { Plan } from "@luke/features/plan-wire";
+import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { ComposeIcon, SidebarIcon } from "@luke/ui";
 import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
@@ -19,8 +20,10 @@ import { SIDE_PANEL_TAB } from "../planning/use-side-panel";
 import type { SettingsPanelProps } from "../settings/settings-panel";
 import { SignInGate } from "../sign-in-gate";
 import { Tooltip } from "../tooltip";
+import { useExperiment } from "../use-app-state";
 import { useColumnDock } from "./column-dock";
 import { DesktopAgentPage } from "./desktop-agent-page";
+import { DesktopFactory } from "./desktop-factory";
 import { DesktopInbox } from "./desktop-inbox";
 import { DesktopPlans } from "./desktop-plans";
 import { DesktopSidebar } from "./desktop-sidebar";
@@ -137,6 +140,17 @@ function usePlaceCommands(
         }
       : undefined,
   );
+  // Factory is an experiment: offered nowhere, ⌘K, its chord, or the menu, while it is off.
+  const factoryOn = useExperiment(EXPERIMENT.FACTORY);
+  useAppCommand(
+    APP_COMMAND.FACTORY,
+    pastGate && plans.signedIn && factoryOn
+      ? () => {
+          if (tab !== PANEL_TAB.PLANS) onTabChange(PANEL_TAB.PLANS);
+          plans.factoryView.onOpen();
+        }
+      : undefined,
+  );
   const { onReopenClosedTab } = plans;
   useAppCommand(
     APP_COMMAND.REOPEN_CLOSED_TAB,
@@ -225,7 +239,7 @@ function transcriptStreaming(plans: PlansControl): boolean {
 /**
  * What the window's title names: Settings alone, whose pages are not one
  * workspace's; the Inbox in the listed workspace, whatever plan its item is
- * from; the plan on screen in its own workspace, or alone while that is not
+ * from; Factory in the listed workspace; the plan on screen in its own workspace, or alone while that is not
  * read; else the listed workspace.
  */
 function titleSubject(
@@ -239,6 +253,7 @@ function titleSubject(
   if (plans.agentView.agentId !== undefined) {
     return { signedIn, subject: "Agent", workspace: plans.workspace };
   }
+  if (plans.factoryView.open) return { signedIn, subject: "Factory", workspace: plans.workspace };
   if (shownPlan === undefined) return { signedIn, subject: undefined, workspace: plans.workspace };
   // Note that a plan whose workspace is not read yet is named alone, because the listed one may not be its.
   const workspace = plans.workspaces.find((each) => each.id === shownPlan.workspaceId);
@@ -301,16 +316,23 @@ export function DesktopShell({
   const summary = useSummaryPin(sidebar.staged);
   const gated = gates.accountRequired && account.status !== ACCOUNT_STATUS.SIGNED_IN;
   usePlaceCommands(!gated, tab, onTabChange, plans, settings, history);
+  // Factory switched off while it stands, here or on another Mac, gives the plan's place back.
+  const factoryOn = useExperiment(EXPERIMENT.FACTORY);
+  const { open: factoryShown, onClose: closeFactory } = plans.factoryView;
+  useEffect(() => {
+    if (factoryShown && !factoryOn) closeFactory();
+  }, [factoryShown, factoryOn, closeFactory]);
   const { region } = plans;
   // The folded sidebar's call card stands over the column's foot, clear of its dock.
   useColumnDock(
     shell,
     plans.sidePanel.fullScreen,
-    `${tab}:${plans.page}:${plans.history.open}:${plans.inboxView.open}:${plans.agentView.agentId}:${sidebar.collapsed}`,
+    `${tab}:${plans.page}:${plans.history.open}:${plans.inboxView.open}:${plans.agentView.agentId}:${plans.factoryView.open}:${sidebar.collapsed}`,
   );
   // The window's title names what stands in it, the plan only while it is on screen, and its workspace;
-  // the Inbox or an agent's page standing in its place is not the plan.
-  const standingIn = plans.inboxView.open || plans.agentView.agentId !== undefined;
+  // the Inbox, an agent's page, or Factory standing in its place is not the plan.
+  const standingIn =
+    plans.inboxView.open || plans.agentView.agentId !== undefined || plans.factoryView.open;
   const shownPlan =
     tab === PANEL_TAB.PLANS && !standingIn && region.kind === DOCUMENT_REGION.READY
       ? region.plan
@@ -375,9 +397,10 @@ export function DesktopShell({
   }
   // Note that the shell says whether the panel's toggle stands, because the
   // toolbar beneath it leaves the toggle room then and only then. The Inbox
-  // and an agent's page stand in the plan's place, so they draw no panel to toggle.
+  // an agent's page, and Factory stand in the plan's place, so they draw no panel to toggle.
   const inboxOpen = plans.inboxView.open;
   const pageAgent = plans.agentView.agentId;
+  const factoryOpen = plans.factoryView.open && factoryOn;
   const panelToggle = plans.page === PLANS_PAGE.DOCUMENT && !standingIn;
   const planDrawn = panelToggle && plans.region.kind === DOCUMENT_REGION.READY;
   // Note that a panel filling the window hides the plan's column, call bar
@@ -412,6 +435,8 @@ export function DesktopShell({
         ) : pageAgent !== undefined ? (
           // Keyed by the agent, so another agent's page is a page of its own, holding nothing of the last.
           <DesktopAgentPage key={pageAgent} plans={plans} agentId={pageAgent} />
+        ) : factoryOpen ? (
+          <DesktopFactory plans={plans} />
         ) : (
           <DesktopPlans
             plans={plans}
