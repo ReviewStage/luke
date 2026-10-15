@@ -481,17 +481,20 @@ export function Tooltip({
   // a press too, Escape among them, and the key is still the control's or
   // the window's: the pill is no layer of its own to take one. Only a card
   // the pointer is on lets a key other than Escape pass, since that key is
-  // most likely the copy of what was selected on it, and a card's own list
-  // scrolling within it leaves it standing, since that is the card being read.
+  // most likely the copy of what was selected on it, and a list scrolling
+  // within a standing card, this one or one stacked over it, leaves it
+  // standing, since that is the cards being read.
   const up = shown !== undefined;
   useEffect(() => {
     if (!up) return;
     const key = (event: KeyboardEvent) => {
       if (event.key === "Escape" || !overCard.current) hide();
     };
+    // Note that a card stacked over this one is portaled apart from it, so a scroll on any standing card is read as the cards being read.
     const scrolled = (event: Event) => {
-      const within = event.target instanceof Node && pillElement.current?.contains(event.target);
-      if (within !== true) hide();
+      const { target } = event;
+      const within = target instanceof Node && standing.some((each) => each.holds(target));
+      if (!within) hide();
     };
     window.addEventListener("keydown", key, true);
     window.addEventListener("scroll", scrolled, true);

@@ -19,6 +19,7 @@ import { afterEach, beforeEach, test } from "vitest";
 import { onRegistry } from "#testing/copy-feedback";
 import { codingAgentsControl } from "#testing/plans-control";
 import { MemberDirectory } from "../member-directory";
+import { Tooltip } from "../tooltip";
 import { AgentChangesTab, ChangesCard, peopleOf } from "./agent-changes-tab";
 import { agentSubject, NOTHING_HELD } from "./agent-ref";
 
@@ -357,4 +358,41 @@ test("the count's card naming many reviewers scrolls within itself and stands, a
     null,
     "the window scrolling takes it down",
   );
+});
+
+test("the count's card hung from a Changes card that itself hangs over its tab scrolls within itself, and both cards stand", async () => {
+  const many = Array.from({ length: 50 }, (_, at) => ({
+    by: { login: `reviewer${at}`, bot: false },
+    state: REVIEW_STATE.APPROVED,
+  }));
+  const changesCard = createElement(ChangesCard, {
+    subject: agentSubject(control, AGENT.id, NOTHING_HELD, false),
+    models: [],
+    pullRequest: PULL_REQUEST,
+    people: { reviewers: many },
+    onOpenAgent: () => undefined,
+  });
+  const tab = await draw(
+    createElement(Tooltip, {
+      label: "Changes: Expiry job",
+      card: changesCard,
+      children: createElement(
+        "button",
+        { type: "button", "aria-describedby": undefined },
+        "Changes: Expiry job",
+      ),
+    }),
+  );
+  hover(tab.querySelector("button") ?? assert.fail("the tab stands"));
+  hover(
+    document.querySelector('.tooltip-card [aria-label="Reviewers"] .actor-stack-more') ??
+      assert.fail("the Changes card counts the rest"),
+  );
+  const list = document.querySelector('.tooltip-card [data-actor-card="more"] .actor-more-list');
+  assert.ok(list, "the count's card hangs over the Changes card");
+  act(() => {
+    list.dispatchEvent(new Event("scroll"));
+  });
+  assert.ok(document.querySelector('.tooltip-card:not([data-leaving]) [data-actor-card="more"]'));
+  assert.ok(document.querySelector(".tooltip-card:not([data-leaving]) [data-tab-card]"));
 });
