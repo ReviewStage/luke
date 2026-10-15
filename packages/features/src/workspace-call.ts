@@ -18,6 +18,8 @@ export const WORKSPACE_CALL_FAILURE = {
   NOT_FOUND: "not-found",
   /** The address is already a member of the workspace, or already holds a pending invitation to it. */
   ALREADY_INVITED: "already-invited",
+  /** The workspace's Linear could not be read: none is connected, Linear refused its grant, or it reaches no such issue. */
+  LINEAR_UNAVAILABLE: "linear-unavailable",
 } as const;
 
 export type WorkspaceCallFailure =

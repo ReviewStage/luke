@@ -291,6 +291,7 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
       repositoriesIn: () => NO_REPOSITORIES,
       start: () => Promise.resolve(undefined),
       onClose: ignore,
+      linear: undefined,
     },
     onLeavePlan: ignore,
     onGoHome: ignore,

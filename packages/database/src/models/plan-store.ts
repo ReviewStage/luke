@@ -1,4 +1,5 @@
 import { AUTOMATION_SCOPE } from "@luke/features/automation-wire";
+import { type PlanLinearIssue, planLinearIssueSchema } from "@luke/features/linear-wire";
 import { planAttachmentIdsIn } from "@luke/features/plan-attachment-link";
 import type { PlanSectionWriter } from "@luke/features/plan-document";
 import { DEFAULT_PLAN_TEMPLATE } from "@luke/features/plan-document-template";
@@ -109,17 +110,22 @@ export interface StoredPlan {
   readonly saved: boolean;
   /** Who last changed each section, by heading, as its revisions read (`readSectionWriters`). */
   readonly sectionWriters: readonly PlanSectionWriter[];
+  /** The Linear issue the plan was started from, as it was read then; nothing for a plan started from none. */
+  readonly linearIssue: PlanLinearIssue | undefined;
 }
 
 /**
  * A plan to start: the workspace it starts in, its name where one is given,
- * and the repository it is about where one is chosen. A plan started with no
- * name, or a blank one, stands as `UNTITLED_PLAN_NAME` until it is renamed.
+ * the repository it is about where one is chosen, and the Linear issue it
+ * starts from, as the service read it, where one was picked. A plan started
+ * with no name, or a blank one, stands as `UNTITLED_PLAN_NAME` until it is
+ * renamed.
  */
 export interface NewPlan {
   readonly organizationId: string;
   readonly name?: string;
   readonly repository?: string | null;
+  readonly linearIssue?: PlanLinearIssue;
 }
 
 /**
@@ -160,6 +166,7 @@ const PLAN_COLUMNS = {
   agentEdits: plan.agentEdits,
   document: plan.document,
   conversationId: plan.conversationId,
+  linearIssue: plan.linearIssue,
 };
 
 const PlanSummaryRowSchema = Schema.Struct({
@@ -187,6 +194,7 @@ const PlanRowSchema = Schema.Struct({
   // Every plan is one document since the backfill, so a row with none is the store breaking its own contract.
   document: Schema.String,
   conversationId: Schema.NullOr(Schema.String),
+  linearIssue: Schema.NullOr(planLinearIssueSchema),
 });
 
 type PlanRow = typeof PlanRowSchema.Type;
@@ -351,6 +359,7 @@ function storedPlanOf(userId: string, row: PlanRow): PlanStoreEffect<StoredPlan>
       conversationId: row.conversationId ?? undefined,
       saved: row.updatedAt.getTime() > row.createdAt.getTime(),
       sectionWriters,
+      linearIssue: row.linearIssue ?? undefined,
     };
   });
 }
@@ -398,6 +407,7 @@ const insertPlan = SqlSchema.findOne({
     name: Schema.String,
     repository: Schema.NullOr(Schema.String),
     document: Schema.String,
+    linearIssue: Schema.NullOr(planLinearIssueSchema),
     now: Schema.Date,
   }),
   Result: PlanRowSchema,
@@ -411,6 +421,7 @@ const insertPlan = SqlSchema.findOne({
           name: write.name,
           repository: write.repository,
           document: write.document,
+          linearIssue: write.linearIssue,
           createdAt: write.now,
           updatedAt: write.now,
         })
@@ -683,6 +694,7 @@ export function createPlan(userId: string, started: NewPlan): PlanStoreEffect<Pl
       name: named.length > 0 ? named : UNTITLED_PLAN_NAME,
       repository: started.repository ?? null,
       document: template ?? DEFAULT_PLAN_TEMPLATE,
+      linearIssue: started.linearIssue ?? null,
       now,
     }).pipe(
       // An insert that returned no row is the database breaking its own contract, not an outcome.

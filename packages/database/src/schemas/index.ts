@@ -27,3 +27,4 @@ export * from "./session-sandbox.js";
 export * from "./storage.js";
 export * from "./usage.js";
 export * from "./voice.js";
+export * from "./workspace-integration.js";

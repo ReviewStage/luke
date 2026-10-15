@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { pinnedPictureUrl } from "@luke/features/account-picture";
+import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import {
   RESERVED_WORKSPACE_SLUGS,
   type Workspace as WireWorkspace,
@@ -19,11 +20,13 @@ import {
   queryBuilder,
 } from "../core/query.js";
 import { GITHUB_INSTALLATION_STATUS } from "../github-installation-vocabulary.js";
+import { INTEGRATION_ROW_STATUS } from "../integration-vocabulary.js";
 import { member, organization, user } from "../schemas/auth.js";
 import { codingAgent } from "../schemas/coding-agent.js";
 import { githubInstallation } from "../schemas/github-installation.js";
 import { personalWorkspace } from "../schemas/personal-workspace.js";
 import { plan } from "../schemas/plan.js";
+import { workspaceIntegrationConnection } from "../schemas/workspace-integration.js";
 import {
   PERSONAL_WORKSPACE_METADATA,
   type WorkspaceCreation,
@@ -106,6 +109,8 @@ const WorkspaceRowSchema = Schema.Struct({
   personal: Schema.Boolean,
   /** The plugin's role text, which may list several roles comma-separated. */
   role: Schema.String,
+  /** The status of the workspace's Linear row, or null where it holds none. */
+  linearStatus: Schema.NullOr(Schema.String),
   /** How many members the workspace has, the account among them. */
   memberCount: Schema.Number,
   /** The plugin's `logo` text, which holds the workspace's photo as a `data:` URL where it has one. */
@@ -255,6 +260,7 @@ function workspaceRows(db: DatabaseShape, userId: string, organizationId?: strin
       personalOf: personalWorkspace.userId,
       personal: sql<boolean>`exists(select 1 from ${personalWorkspace} as "first" where "first"."organization_id" = ${organization.id})`,
       role: member.role,
+      linearStatus: workspaceIntegrationConnection.status,
       memberCount: sql<number>`(select count(*)::int from ${member} as "members" where "members"."organization_id" = ${organization.id})`,
       logo: organization.logo,
       ownerImage: user.image,
@@ -269,6 +275,13 @@ function workspaceRows(db: DatabaseShape, userId: string, organizationId?: strin
       ),
     )
     .leftJoin(user, eq(user.id, personalWorkspace.userId))
+    .leftJoin(
+      workspaceIntegrationConnection,
+      and(
+        eq(workspaceIntegrationConnection.organizationId, organization.id),
+        eq(workspaceIntegrationConnection.provider, INTEGRATION_PROVIDER.LINEAR),
+      ),
+    )
     .where(
       and(
         eq(member.userId, userId),
@@ -366,6 +379,17 @@ function faceOfRow(
 }
 
 /**
+ * The workspace's Linear as the wire carries it: active while its row
+ * stands connected, inactive once Connect refused the grant, and absent for
+ * no row or a first sign-in still under way.
+ */
+function linearOfRow(status: string | null): Pick<Workspace, "linear"> {
+  if (status === INTEGRATION_ROW_STATUS.CONNECTED) return { linear: { active: true } };
+  if (status === INTEGRATION_ROW_STATUS.EXPIRED) return { linear: { active: false } };
+  return {};
+}
+
+/**
  * One row as the wire carries the workspace, with its installations: every
  * one, and again the first linked that is still active, else the first
  * linked, as the one a desktop from before several reads.
@@ -389,6 +413,7 @@ function workspaceOfRow(
     role: roleOf(row.role),
     github: first === undefined ? null : { login: first.login, active: first.active },
     githubInstallations,
+    ...linearOfRow(row.linearStatus),
     memberCount: row.memberCount,
     ...faceOfRow(row),
   };

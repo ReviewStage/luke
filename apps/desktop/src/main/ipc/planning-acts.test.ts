@@ -20,6 +20,7 @@ import {
   ACT_OUTCOME_STATUS,
   ALREADY_INVITED_REFUSAL,
   GITHUB_LAST_SIGN_IN_REFUSAL,
+  LINEAR_UNAVAILABLE_REFUSAL,
   WORKSPACE_NOT_PERMITTED_REFUSAL,
 } from "@luke/host/acts";
 import { Effect } from "effect";
@@ -62,6 +63,13 @@ const GRACE = {
   role: WORKSPACE_ROLE.MEMBER,
 };
 const CONNECT_PAGE = `${SERVICE}/connect-github.html?intent=intent-1`;
+const LINEAR_SIGN_IN_URL = "https://vercel.com/connect/authorize/fixture";
+const LINEAR_ISSUE = {
+  id: "issue-1",
+  identifier: "ENG-1",
+  title: "Start a plan from Linear",
+  url: "https://linear.app/acme/issue/ENG-1",
+};
 
 /** The plan the host has open, as the fixture's main process reads it. */
 interface OpenPlan {
@@ -98,6 +106,7 @@ function fixture() {
     alreadyInvited: false,
     lastSignIn: false,
     connectUrl: INSTALL_URL,
+    linearConnectUrl: LINEAR_SIGN_IN_URL,
     githubUnanswered: false,
     connectPage: CONNECT_PAGE,
   };
@@ -262,6 +271,23 @@ function fixture() {
         Effect.sync(() => {
           asked.push(`disconnect:${params.workspaceId}`);
           return host.notPermitted ? refusal() : { workspace: ACME };
+        }),
+      workspaceLinearConnect: (params) =>
+        Effect.sync((): PlanningWorkspaceGitHubConnectAnswer => {
+          asked.push(`linear-connect:${params.workspaceId}`);
+          return host.notPermitted ? refusal() : { url: host.linearConnectUrl };
+        }),
+      workspaceLinearDisconnect: (params) =>
+        Effect.sync(() => {
+          asked.push(`linear-disconnect:${params.workspaceId}`);
+          return host.notPermitted ? refusal() : { workspace: ACME };
+        }),
+      workspaceLinearIssues: (params) =>
+        Effect.sync(() => {
+          asked.push(`linear-issues:${params.workspaceId}`);
+          return params.workspaceId === ACME.id
+            ? { issues: [LINEAR_ISSUE] }
+            : ({ failure: WORKSPACE_CALL_FAILURE.LINEAR_UNAVAILABLE } as const);
         }),
       workspaceMembers: (params) =>
         Effect.sync(() => {
@@ -739,6 +765,44 @@ it.effect("a connection's install address opens only where it is GitHub's", () =
     });
     assert.deepEqual(f.opened, []);
   }),
+);
+
+it.effect(
+  "a workspace's Linear sign-in opens only an https address, and its issues are answered or refused in words that say how to mend it",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+
+      const connected = yield* f.router.performAct(
+        { kind: ACT_KIND.WORKSPACE_LINEAR_CONNECT, payload: { workspaceId: ACME.id } },
+        PANEL,
+      );
+      f.host.linearConnectUrl = "http://vercel.test/connect";
+      const plain = yield* f.router.performAct(
+        { kind: ACT_KIND.WORKSPACE_LINEAR_CONNECT, payload: { workspaceId: ACME.id } },
+        PANEL,
+      );
+      const issues = yield* f.router.performAct(
+        { kind: ACT_KIND.WORKSPACE_LINEAR_ISSUES, payload: { workspaceId: ACME.id } },
+        PANEL,
+      );
+      const none = yield* f.router.performAct(
+        { kind: ACT_KIND.WORKSPACE_LINEAR_ISSUES, payload: { workspaceId: "workspace-other" } },
+        PANEL,
+      );
+
+      assert.equal(connected.status, ACT_OUTCOME_STATUS.DONE);
+      assert.deepEqual(plain, {
+        status: ACT_OUTCOME_STATUS.REFUSED,
+        reason: ACT[ACT_KIND.WORKSPACE_LINEAR_CONNECT].refusal,
+      });
+      assert.deepEqual(f.opened, [LINEAR_SIGN_IN_URL]);
+      assert.deepEqual(issues, { status: ACT_OUTCOME_STATUS.DONE, value: [LINEAR_ISSUE] });
+      assert.deepEqual(none, {
+        status: ACT_OUTCOME_STATUS.REFUSED,
+        reason: LINEAR_UNAVAILABLE_REFUSAL,
+      });
+    }),
 );
 
 it.effect(

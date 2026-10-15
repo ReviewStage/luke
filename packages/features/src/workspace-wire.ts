@@ -1,6 +1,7 @@
 import { Schema as EffectSchema, Result } from "effect";
 import { Base64 } from "effect/encoding";
 import { sniffImageType } from "./image-signature.js";
+import { LINEAR_BOUNDS } from "./linear-wire.js";
 import { workspaceIdSchema } from "./plan-wire.js";
 import { countedNumber } from "./service-wire.js";
 
@@ -201,6 +202,11 @@ export const workspaceGithubInstallationSchema = EffectSchema.Struct({
 
 export type WorkspaceGithubInstallation = typeof workspaceGithubInstallationSchema.Type;
 
+/** A workspace's Linear connection: whether Connect still holds a grant for it; false once Linear refused it, which an owner or admin mends by connecting again. */
+export const workspaceLinearSchema = EffectSchema.Struct({
+  active: EffectSchema.Boolean,
+});
+
 /**
  * One workspace the account is a member of. The name is held to no bound
  * here, because a name the service already holds must not make the whole
@@ -222,6 +228,12 @@ export const workspaceSchema = EffectSchema.Struct({
   githubInstallations: EffectSchema.optionalKey(
     EffectSchema.Array(workspaceGithubInstallationSchema),
   ),
+  /**
+   * The workspace's one Linear connection, which an owner or admin made for
+   * every member (`linear-wire.ts`); absent where none is connected, and
+   * from a service before it.
+   */
+  linear: EffectSchema.optionalKey(workspaceLinearSchema),
   /** How many members it has, the account among them, which the window says as who shares it; absent from a service before it. */
   memberCount: EffectSchema.optionalKey(countedNumber),
   /**
@@ -290,6 +302,26 @@ export const workspaceGithubRequestSchema = EffectSchema.Struct({
 export const workspaceGithubConnectAnswerSchema = EffectSchema.Struct({
   url: EffectSchema.String.check(EffectSchema.isNonEmpty()),
 });
+
+/** The workspace whose Linear is connected or disconnected (POST), by an owner or admin of it (`linear-wire.ts`). */
+export const workspaceLinearRequestSchema = EffectSchema.Struct({
+  workspaceId: workspaceIdSchema,
+});
+
+/** Where the browser goes to connect Linear: Vercel Connect's sign-in address, for the workspace. */
+export const workspaceLinearConnectAnswerSchema = EffectSchema.Struct({
+  url: EffectSchema.String.check(EffectSchema.isNonEmpty()),
+});
+
+/** The Linear issues a member asks for (POST): the workspace, and a search where one is typed. */
+export const linearIssuesRequestSchema = EffectSchema.Struct({
+  workspaceId: workspaceIdSchema,
+  query: EffectSchema.optionalKey(
+    EffectSchema.String.check(EffectSchema.isMaxLength(LINEAR_BOUNDS.MAX_QUERY_CHARS)),
+  ),
+});
+
+export type LinearIssuesRequest = typeof linearIssuesRequestSchema.Type;
 
 /** One member of a workspace: the account, its name and email, its role, and its sign-in picture. */
 export const workspaceMemberSchema = EffectSchema.Struct({

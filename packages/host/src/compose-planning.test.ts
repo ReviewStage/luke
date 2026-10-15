@@ -19,6 +19,7 @@ import {
   type CodingAgentStatus,
 } from "@luke/features/coding-agent-wire";
 import type { GitHubConnection } from "@luke/features/github-connection-wire";
+import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import type { PageLine, PageVersion } from "@luke/features/page-wire";
 import { PICTURE_TYPE, type PictureType } from "@luke/features/picture-wire";
 import type { PlanEditAnswer } from "@luke/features/plan-edit";
@@ -166,6 +167,8 @@ interface FakeService extends PlanningClient {
   workspacesGate: Effect.Effect<void>;
   /** Each workspace's members, by its id. */
   members: Record<string, WorkspaceMember[]>;
+  /** The Linear issues each workspace's connection reaches; a workspace absent has no Linear to read. */
+  linearIssues: Record<string, LinearIssueSummary[]>;
   /** Each workspace's pending invitations, by its id. */
   invitations: Record<string, WorkspaceInvitation[]>;
   /** Each workspace's photo, by its id: its type and its bytes in base64; one with none is not found. */
@@ -204,6 +207,7 @@ const RELAY: Workspace = {
   github: null,
 };
 const INSTALL_URL = "https://github.com/apps/luke/installations/new?state=intent-1";
+const LINEAR_SIGN_IN_URL = "https://vercel.com/connect/authorize/fixture";
 const ADA: WorkspaceMember = {
   userId: "user-ada",
   name: "Ada Lovelace",
@@ -293,6 +297,7 @@ function fakeService(plans: Plan[]): FakeService {
     renamedAgain: undefined,
     workspacesGate: Effect.void,
     members: {},
+    linearIssues: {},
     invitations: {},
     photos: {},
     notPermitted: false,
@@ -389,6 +394,33 @@ function fakeService(plans: Plan[]): FakeService {
             each.id === workspaceId ? now : each,
           );
           return { ok: true, answer: now } as const;
+        }),
+      linearConnect: (workspaceId) =>
+        Effect.sync(() => {
+          service.reads.push(`linear-connect:${workspaceId}`);
+          return service.notPermitted
+            ? NOT_PERMITTED_WORKSPACE
+            : ({ ok: true, answer: LINEAR_SIGN_IN_URL } as const);
+        }),
+      linearDisconnect: (workspaceId) =>
+        Effect.sync(() => {
+          service.reads.push(`linear-disconnect:${workspaceId}`);
+          if (service.notPermitted) return NOT_PERMITTED_WORKSPACE;
+          const found = service.memberships.find((each) => each.id === workspaceId);
+          if (found === undefined) return UNANSWERED_WORKSPACE;
+          const { linear: _gone, ...now } = found;
+          service.memberships = service.memberships.map((each) =>
+            each.id === workspaceId ? now : each,
+          );
+          return { ok: true, answer: now } as const;
+        }),
+      linearIssues: ({ workspaceId, query }) =>
+        Effect.sync(() => {
+          service.reads.push(`linear-issues:${workspaceId}:${query ?? ""}`);
+          const issues = service.linearIssues[workspaceId];
+          return issues === undefined
+            ? ({ ok: false, failure: WORKSPACE_CALL_FAILURE.LINEAR_UNAVAILABLE } as const)
+            : ({ ok: true, answer: issues } as const);
         }),
       members: (workspaceId) =>
         Effect.sync(() => {

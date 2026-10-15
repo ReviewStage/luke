@@ -524,6 +524,26 @@ and asks Vercel Connect to revoke the grant in the same way; if Vercel Connect
 cannot be reached then, your account is deleted all the same and the grant
 stays until you revoke Luke in Linear's own settings.
 
+**Linear for a whole workspace, if an owner or admin connects it.** An owner
+or admin can also connect Linear once for everyone in a workspace, in Settings
+› Workspace › Integrations. That signs them in to Linear in their browser
+through Vercel Connect, which stores the Linear token under the workspace
+rather than under their account, and our service handles the token as it
+does an account's, sending it only to Linear. We keep the workspace
+connection's state, who last began its sign-in, when it last changed and last
+finished signing in, and, while a sign-in is under way, when it began and a
+one-time value that matches its return. While it is connected, every member
+of the workspace can list the issues that Linear account can see, private
+teams' issues included, and start a plan from one, and Luke's agents working
+on that workspace's plans and coding agents use this connection for Linear in
+place of a member's own, so what they change in Linear shows as made by the
+person who connected it. Starting a plan from an issue copies the issue's
+key, title, address, and description onto the plan, where it stays with the
+plan, is shown to the planning model on every turn of its call, and is
+deleted with the plan. Disconnecting stops every read through it at once,
+removes the connection's record, and asks Vercel Connect to revoke the grant;
+what plans already copied of an issue stays with them.
+
 **Notion, if you connect it.** Connecting Notion in Settings › Integrations
 signs you in to Notion in your browser through Vercel Connect, which stores
 Notion's token for your account, encrypted, and renews it. Our service

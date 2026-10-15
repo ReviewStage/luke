@@ -109,6 +109,7 @@ import {
   openGithubUser,
   type RepositoryScript,
 } from "../testing/github-app-fake.js";
+import { CONNECTOR_ASKED_NOTHING, integrationConnectOf } from "../testing/integration-connect.js";
 import { BRAIN_HOST_TURN } from "./brain-host/bounds.js";
 import {
   EVE_CANCEL_OUTCOME,
@@ -329,6 +330,7 @@ const standing = (
       }),
       github.layer,
       modelCatalogOf(CATALOG),
+      integrationConnectOf(() => CONNECTOR_ASKED_NOTHING),
     );
     const seams = {
       resolveUserId: (incoming: Request) =>

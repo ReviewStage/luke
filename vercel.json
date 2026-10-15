@@ -345,6 +345,22 @@
           "dest": "/api/default.js?route=workspaces/leave"
         },
         {
+          "src": "/api/workspaces/linear/connect",
+          "dest": "/api/default.js?route=workspaces/linear/connect"
+        },
+        {
+          "src": "/api/workspaces/linear/connected",
+          "dest": "/api/default.js?route=workspaces/linear/connected"
+        },
+        {
+          "src": "/api/workspaces/linear/disconnect",
+          "dest": "/api/default.js?route=workspaces/linear/disconnect"
+        },
+        {
+          "src": "/api/workspaces/linear/issues",
+          "dest": "/api/default.js?route=workspaces/linear/issues"
+        },
+        {
           "src": "/api/workspaces/members",
           "dest": "/api/default.js?route=workspaces/members"
         },

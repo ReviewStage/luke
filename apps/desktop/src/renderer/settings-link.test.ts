@@ -88,7 +88,7 @@ test("a link lists its workspace, turns to Settings and its page, and lands on i
   );
 
   assert.deepEqual(turned, [ACME.id, PANEL_TAB.SETTINGS, SETTINGS_VIEW.WORKSPACE]);
-  assert.equal(landed.on?.querySelector("h2")?.textContent, "GitHub");
+  assert.equal(landed.on?.querySelector("h2")?.textContent, "Integrations");
   assert.ok(
     [...(landed.on?.querySelectorAll(".settings-row strong") ?? [])].some(
       (name) => name.textContent === "GitHub",

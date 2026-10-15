@@ -35,6 +35,7 @@ import {
   type PlanningFileAnswer,
   type PlanningGitHubDisconnectAnswer,
   type PlanningGitHubPageAnswer,
+  type PlanningLinearIssuesAnswer,
   type PlanningMoveAnswer,
   type PlanningPageAnswer,
   type PlanningPictureAnswer,
@@ -59,6 +60,7 @@ import {
   planningBoardSaveParamsSchema,
   planningEditParamsSchema,
   planningFileParamsSchema,
+  planningLinearIssuesParamsSchema,
   planningMessagesParamsSchema,
   planningMoveParamsSchema,
   planningPageParamsSchema,
@@ -302,6 +304,9 @@ export type PlanningClient = Pick<
     | "setPhoto"
     | "githubConnect"
     | "githubDisconnect"
+    | "linearConnect"
+    | "linearDisconnect"
+    | "linearIssues"
     | "members"
     | "photo"
     | "removeMember"
@@ -1621,6 +1626,53 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
         );
         return carried<PlanningWorkspaceAnswer>(
           disconnected.ok ? { workspace: disconnected.answer } : { failure: disconnected.failure },
+        );
+      }),
+    // Vercel Connect's address is answered to the caller that opens it and
+    // held nowhere: the grant lands in the browser, and the workspaces read
+    // after it, as the panel comes forward, carry the connection.
+    [GATEWAY_METHOD.WORKSPACES_LINEAR_CONNECT]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(planningWorkspaceParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) return yield* invalid("connecting Linear names a workspace");
+        if (!gate()) return carried<PlanningWorkspaceGitHubConnectAnswer>(WORKSPACE_UNANSWERED);
+        const begun = yield* Effect.provide(
+          client.workspaces.linearConnect(read.success.workspaceId),
+          FetchHttpClient.layer,
+        );
+        // The sign-in finishes in the browser, so the panel coming forward again reads the workspaces whatever the bound says.
+        workspacesAskedAt = undefined;
+        return carried<PlanningWorkspaceGitHubConnectAnswer>(
+          begun.ok ? { url: begun.answer } : { failure: begun.failure },
+        );
+      }),
+    [GATEWAY_METHOD.WORKSPACES_LINEAR_DISCONNECT]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(planningWorkspaceParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) return yield* invalid("disconnecting Linear names a workspace");
+        if (!gate()) return carried<PlanningWorkspaceAnswer>(WORKSPACE_UNANSWERED);
+        const disconnected = yield* workspaceCall(
+          client.workspaces.linearDisconnect(read.success.workspaceId),
+          { plans: false },
+        );
+        return carried<PlanningWorkspaceAnswer>(
+          disconnected.ok ? { workspace: disconnected.answer } : { failure: disconnected.failure },
+        );
+      }),
+    // The issues are answered to the window that asked and held nowhere: a
+    // picker reads them as it opens and as its search changes.
+    [GATEWAY_METHOD.WORKSPACES_LINEAR_ISSUES]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(planningLinearIssuesParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read))
+          return yield* invalid("reading Linear issues names a workspace");
+        if (!gate()) return carried<PlanningLinearIssuesAnswer>(WORKSPACE_UNANSWERED);
+        const listed = yield* Effect.provide(
+          client.workspaces.linearIssues(read.success),
+          FetchHttpClient.layer,
+        );
+        return carried<PlanningLinearIssuesAnswer>(
+          listed.ok ? { issues: listed.answer } : { failure: listed.failure },
         );
       }),
     // The members are answered to the window that asked and held nowhere:

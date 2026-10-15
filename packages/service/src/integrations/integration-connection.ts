@@ -27,6 +27,12 @@
  * eve opens a connection's client once a model step and reuses it for the
  * rest of that step, so the account's row is read at each opening: a
  * Disconnect takes effect from the next step, whatever the SDK cached.
+ *
+ * Linear is the one provider a workspace may connect for every member
+ * (`linear-issues.ts`): where the conversation's plan or coding agent
+ * belongs to a workspace whose Linear stands connected, every member's
+ * Linear tools run on that grant, and the account's own is read only where
+ * the workspace has none.
  */
 
 import type { DatabaseServices, QueryError } from "@luke/database/core/query";
@@ -34,6 +40,7 @@ import {
   INTEGRATION_GRANT,
   INTEGRATION_GRANT_OF,
   INTEGRATION_NAME,
+  INTEGRATION_PROVIDER,
   type IntegrationProvider,
 } from "@luke/features/integration-wire";
 import { causeKind } from "@luke/runtime/effect";
@@ -55,6 +62,8 @@ import {
   readIntegrationConnection,
 } from "./integration-store.js";
 import { INTEGRATION, type IntegrationDefinition } from "./integrations.js";
+import { LINEAR_READ_FAILURE, workspaceLinearToken } from "./linear-issues.js";
+import { readConversationWorkspace } from "./workspace-integration-store.js";
 
 /** Why a provider's call ran nothing, in words the model can act on and say. */
 interface UnavailableSentences {
@@ -63,6 +72,7 @@ interface UnavailableSentences {
   readonly NOT_CONFIGURED: string;
   readonly UNREACHABLE: string;
   readonly NO_ACCOUNT: string;
+  readonly WORKSPACE_EXPIRED: string;
 }
 
 /** One provider's fixed sentences, which are the whole of what a refused call says. */
@@ -77,6 +87,7 @@ export function integrationUnavailable(provider: IntegrationProvider): Unavailab
     NOT_CONFIGURED: `${name} is not set up on this deployment of Luke; carry on without it.`,
     UNREACHABLE: `Luke could not reach ${name}'s sign-in service just now. Try once more later, or carry on without it.`,
     NO_ACCOUNT: `This session stands for no account that can use ${name}.`,
+    WORKSPACE_EXPIRED: `The workspace's ${name} connection has expired. An owner or admin can connect it again in Luke's Settings › Workspace › Integrations; carry on without it.`,
   };
 }
 
@@ -169,6 +180,37 @@ const connectedToken = /* @__PURE__ */ Effect.fnUntraced(function* (
 });
 
 /**
+ * The workspace's Linear token for the conversation, where its plan or
+ * coding agent belongs to a workspace whose Linear stands connected, or
+ * the sentence saying why that grant could not be used; nothing where the
+ * workspace has no Linear of its own, so the account's own is read.
+ */
+const workspaceToken = /* @__PURE__ */ Effect.fnUntraced(function* (
+  provider: IntegrationProvider,
+  conversationId: string,
+) {
+  if (provider !== INTEGRATION_PROVIDER.LINEAR) return undefined;
+  const organizationId = yield* readConversationWorkspace(conversationId);
+  if (organizationId === undefined) return undefined;
+  const read = yield* workspaceLinearToken(organizationId);
+  if (Result.isSuccess(read)) {
+    return Result.succeed({
+      token: Redacted.value(read.success.token),
+      expiresAt: read.success.expiresAt,
+    });
+  }
+  const sentences = integrationUnavailable(provider);
+  switch (read.failure) {
+    case LINEAR_READ_FAILURE.EXPIRED:
+      return Result.fail(sentences.WORKSPACE_EXPIRED);
+    case LINEAR_READ_FAILURE.UNAVAILABLE:
+      return Result.fail(sentences.UNREACHABLE);
+    default:
+      return undefined;
+  }
+});
+
+/**
  * The provider's token for the account the session was admitted for, or
  * the sentence saying why there is none. The account is the admitted
  * caller, the member acting in the conversation, whoever opened it, so a
@@ -189,6 +231,8 @@ export function integrationAccessToken(
     if (Result.isFailure(admitted)) {
       return Result.fail(integrationUnavailable(provider).NO_ACCOUNT);
     }
+    const workspace = yield* workspaceToken(provider, admitted.success.target.conversationId);
+    if (workspace !== undefined) return workspace;
     return yield* connectedToken(provider, admitted.success.caller);
   }).pipe(
     Effect.catchCause((cause) =>

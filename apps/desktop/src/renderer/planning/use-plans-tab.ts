@@ -1,6 +1,7 @@
 import type { Board } from "@luke/features/board-wire";
 import { dictationKeywords } from "@luke/features/dictation-keywords";
 import type { GitHubConnection } from "@luke/features/github-connection-wire";
+import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import { MENTION_KIND, type PlanMention } from "@luke/features/mention-link";
 import type { PlanEditRequest } from "@luke/features/plan-edit";
 import { planMarkdown } from "@luke/features/plan-markdown";
@@ -40,6 +41,7 @@ import {
   type PlansPage,
   pendingMark,
   pinnedRepositories,
+  planNameOfIssue,
   plansPage,
   REPOSITORY_PIN_FAILED_NOTES,
   recentRepositories,
@@ -47,6 +49,7 @@ import {
   repositoryFailureNote,
   repositoryPageUrl,
   sidebarPlans,
+  startFailureNote,
   unsettledMarks,
   unsettledRenames,
   unsettledRepositoryPins,
@@ -449,6 +452,20 @@ export interface PlansControl {
     ) => Promise<string | undefined>;
     /** Puts the dialog away with nothing started. */
     onClose: () => void;
+    /**
+     * The listed workspace's Linear, where it stands connected: its issues
+     * read for the picker New plan opens, and a plan started from one, named
+     * by its title, on the repository the dialog would start on, in the
+     * listed workspace; answers why it did not start, or nothing once it
+     * has. Absent where the workspace has no Linear connected, which leaves
+     * New plan to the dialog alone.
+     */
+    linear:
+      | {
+          readonly issues: () => Promise<readonly LinearIssueSummary[]>;
+          readonly start: (issue: LinearIssueSummary) => Promise<string | undefined>;
+        }
+      | undefined;
   };
   /** Leaves the open plan for the home page; a call on it stands, as opening another plan leaves one. */
   onLeavePlan: () => void;
@@ -1593,14 +1610,16 @@ export function usePlansTab(input: {
     name: string,
     repository: string | null,
     workspaceId: string | undefined,
+    linearIssueId?: string,
   ): Promise<string | undefined> =>
     act(ACT_KIND.PLANNING_START, {
       ...(name.length === 0 ? undefined : { name }),
       ...(repository === null ? undefined : { repository }),
       ...(workspaceId === undefined ? undefined : { workspaceId }),
+      ...(linearIssueId === undefined ? undefined : { linearIssueId }),
     }).then(
       (answer) => {
-        if ("failure" in answer) return repositoryFailureNote(answer.failure);
+        if ("failure" in answer) return startFailureNote(answer.failure);
         setNewPlanAsk(undefined);
         setStandIn(undefined);
         setHistoryFor(undefined);
@@ -1612,6 +1631,25 @@ export function usePlansTab(input: {
       },
       (refused: Error) => refused.message,
     );
+
+  // A plan started from a Linear issue is named by its title, cut to a
+  // name's bound, and starts where the dialog would have: the listed
+  // workspace, on the newest repository its plans were about that its
+  // GitHub reaches.
+  const listedLinear = listedWorkspace?.linear?.active === true ? listedWorkspace : undefined;
+  const linearPicker: PlansControl["newPlan"]["linear"] =
+    listedLinear === undefined
+      ? undefined
+      : {
+          issues: () => act(ACT_KIND.WORKSPACE_LINEAR_ISSUES, { workspaceId: listedLinear.id }),
+          start: (issue) =>
+            startPlan(
+              planNameOfIssue(issue),
+              repositoriesIn(listedLinear.id).recent[0] ?? null,
+              listedLinear.id,
+              issue.id,
+            ),
+        };
 
   // New plan opens the dialog over whatever stands, an open plan and its
   // call included, which stay until a plan is started. Note that a press
@@ -2033,6 +2071,7 @@ export function usePlansTab(input: {
       repositoriesIn,
       start: startPlan,
       onClose: () => setNewPlanAsk(undefined),
+      linear: linearPicker,
     },
     onLeavePlan: guard(() => leavePlan()),
     // Home is the page with no plan open, so where none is, only the Inbox, an

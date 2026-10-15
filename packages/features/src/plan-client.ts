@@ -76,6 +76,7 @@ import {
   planWorkAnswerSchema,
   type RepositoryCallFailure,
   type RepositoryListFailure,
+  type StartCallFailure,
 } from "./planning-view.js";
 import {
   HOSTED_SERVICE_PATH,
@@ -141,6 +142,12 @@ function succeeded<Answer>(answer: Answer) {
 /** The refusals a call that names a repository can answer with, by the service's own word for each. */
 const REPOSITORY_REFUSALS = {
   [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE]: PLAN_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
+} as const;
+
+/** The refusals a start can answer with: a repository out of reach, or the Linear issue it was to start from unread. */
+const START_REFUSALS = {
+  ...REPOSITORY_REFUSALS,
+  [HOSTED_API_ERROR.LINEAR_UNAVAILABLE]: PLAN_CALL_FAILURE.LINEAR_UNAVAILABLE,
 } as const;
 
 /** The refusals a move can answer with: the plan or the workspace not the account's, the plan archived, or the workspace not reaching its repository. */
@@ -648,7 +655,7 @@ export class HostedPlanClient {
    */
   create(
     request: PlanCreateRequest,
-  ): Effect.Effect<PlanCallResult<Plan, RepositoryCallFailure>, never, HttpClient.HttpClient> {
+  ): Effect.Effect<PlanCallResult<Plan, StartCallFailure>, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(planCreateRequestSchema)(request));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
     const call = this.#call;
@@ -664,7 +671,7 @@ export class HostedPlanClient {
         const started = Result.getOrUndefined(readServiceAnswer(planAnswerSchema)(payload));
         return started === undefined ? UNANSWERED : succeeded(started.plan);
       }
-      return refusedAs(payload, REPOSITORY_REFUSALS);
+      return refusedAs(payload, START_REFUSALS);
     });
   }
 }

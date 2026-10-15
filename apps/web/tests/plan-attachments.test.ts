@@ -21,6 +21,10 @@ import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import { plansApp } from "@luke/service/plans/plans-app";
 import { modelCatalogOf } from "@luke/service/providers/model-catalog";
 import { NO_GITHUB } from "@luke/service/testing/github-app-fake";
+import {
+  CONNECTOR_ASKED_NOTHING,
+  integrationConnectOf,
+} from "@luke/service/testing/integration-connect";
 import { unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Clock, Effect, Layer, Option, Result } from "effect";
@@ -71,6 +75,7 @@ const ask = (request: Request) =>
       Layer.succeed(Clock.Clock, yield* Clock.Clock),
       NO_GITHUB,
       modelCatalogOf([]),
+      integrationConnectOf(() => CONNECTOR_ASKED_NOTHING),
     );
     const { handler, dispose } = HttpRouter.toWebHandler(
       plansApp({
