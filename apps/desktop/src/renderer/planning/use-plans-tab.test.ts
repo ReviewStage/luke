@@ -1073,6 +1073,10 @@ test("the new-plan page's recent repositories are the chosen workspace's own, an
     shown: true,
     planning: {
       ...TWO_WORKSPACES,
+      workspaces: [
+        { ...PERSONAL, github: { login: "alice", active: true } },
+        { ...ACME, github: { login: "acme", active: true } },
+      ],
       plans: [
         { ...row("notes", 4), repository: "alice/private" },
         { ...row("alerts", 3), workspaceId: ACME.id, repository: "acme/relay" },
@@ -1086,6 +1090,63 @@ test("the new-plan page's recent repositories are the chosen workspace's own, an
 
   assert.deepEqual([personal.recent, personal.scope], [["alice/private"], PERSONAL.id]);
   assert.deepEqual([acme.recent, acme.scope], [["acme/relay"], ACME.id]);
+});
+
+test("a workspace's recent repositories are only those its GitHub reaches, so a plan stranded there by #2524 offers its repository to none", () => {
+  const tab = mount({
+    shown: true,
+    planning: {
+      ...TWO_WORKSPACES,
+      workspaces: [PERSONAL, { ...ACME, github: { login: "ReviewStage", active: true } }],
+      plans: [
+        { ...row("stranded", 5), repository: "ReviewStage/luke" },
+        { ...row("alerts", 4), workspaceId: ACME.id, repository: "reviewstage/luke" },
+        { ...row("elsewhere", 3), workspaceId: ACME.id, repository: "octo/site" },
+      ],
+    },
+  });
+
+  const personal = tab.control().repositories.recent;
+  act(() => tab.control().onChooseWorkspace(ACME.id));
+
+  assert.deepEqual(personal, [], "a workspace with no GitHub connected reaches none");
+  assert.deepEqual(tab.control().repositories.recent, ["reviewstage/luke"]);
+});
+
+test("newer plans on repositories a workspace does not reach crowd out none it does, and a suspended GitHub reaches nothing", () => {
+  const stranded = [5, 6, 7, 8, 9].map((at) => ({
+    ...row(`stranded-${at}`, at),
+    workspaceId: ACME.id,
+    repository: `octo/site-${at}`,
+  }));
+  const plans = [
+    ...stranded,
+    { ...row("relay", 1), workspaceId: ACME.id, repository: "acme/relay" },
+  ];
+  const active = mount({
+    shown: true,
+    planning: {
+      ...TWO_WORKSPACES,
+      workspaces: [PERSONAL, { ...ACME, github: { login: "acme", active: true } }],
+      plans,
+    },
+  });
+  act(() => active.control().onChooseWorkspace(ACME.id));
+  const reached = active.control().repositories.recent;
+  document.body.innerHTML = "";
+
+  const suspended = mount({
+    shown: true,
+    planning: {
+      ...TWO_WORKSPACES,
+      workspaces: [PERSONAL, { ...ACME, github: { login: "acme", active: false } }],
+      plans,
+    },
+  });
+  act(() => suspended.control().onChooseWorkspace(ACME.id));
+
+  assert.deepEqual(reached, ["acme/relay"]);
+  assert.deepEqual(suspended.control().repositories.recent, []);
 });
 
 test("a workspace chosen is chosen again on the next launch, and one the account is no longer in gives way to the first one", () => {

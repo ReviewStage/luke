@@ -45,15 +45,18 @@ import {
 
 /**
  * The fixture account's workspaces: its first one, which the sidebar
- * lists, and Acme, a team's it administers, whose GitHub organization is
- * connected, so the captures draw the sidebar's switcher with every item.
+ * lists, with the account's own GitHub connected, and Acme, a team's it
+ * administers, whose GitHub organization is connected, so the captures
+ * draw the sidebar's switcher with every item. Each workspace's plans are
+ * about repositories its own GitHub reaches, as the service keeps them, so
+ * no plan here is one stranded in a workspace that cannot reach it.
  */
 const FIXTURE_FIRST: Workspace = {
   id: "workspace-personal",
   name: "Personal",
   slug: "personal",
   role: WORKSPACE_ROLE.OWNER,
-  github: null,
+  github: { login: "ada", active: true },
 };
 const FIXTURE_TEAM: Workspace = {
   id: "workspace-acme",
@@ -113,7 +116,7 @@ const FIXTURE_PLAN: Plan = {
   name: "Teammate invitations",
   createdAt: 1,
   updatedAt: 2,
-  repository: "acme/relay",
+  repository: "ada/relay",
   document: { body: `${FIXTURE_TEXT}\n`, assumptions: [] },
 };
 
@@ -124,7 +127,7 @@ const FIXTURE_OTHER_PLANS: readonly PlanSummary[] = [
     name: "Billing export",
     createdAt: 1,
     updatedAt: 1,
-    repository: "acme/ledger",
+    repository: "ada/ledger",
   },
   {
     id: "2b8c4e6a-0d3f-4a51-9c79-3e4f5a6b7c82",
@@ -136,35 +139,39 @@ const FIXTURE_OTHER_PLANS: readonly PlanSummary[] = [
   },
 ];
 
-/** The repositories the fixture account reaches: the two its plans are about, as the service would list them. */
-const FIXTURE_REPOSITORIES: PlanningRepositoriesAnswer = {
-  repositories: {
-    installed: true,
-    repositories: [
-      {
-        owner: "acme",
-        name: "relay",
-        fullName: "acme/relay",
-        defaultBranch: "main",
-        private: true,
-        updatedAt: Date.parse("2026-10-07T16:20:00Z"),
-      },
-      {
-        owner: "acme",
-        name: "ledger",
-        fullName: "acme/ledger",
-        defaultBranch: "main",
-        private: true,
-        updatedAt: Date.parse("2026-10-01T09:00:00Z"),
-      },
-    ],
-    installationUrl: "https://github.com/apps/luke/installations/new",
-  },
-};
+/** A repository a fixture workspace's GitHub reaches, as the service would list it. */
+function fixtureRepository(owner: string, name: string, updatedAt: string) {
+  return {
+    owner,
+    name,
+    fullName: `${owner}/${name}`,
+    defaultBranch: "main",
+    private: true,
+    updatedAt: Date.parse(updatedAt),
+  };
+}
 
-/** The repositories a fixture run's chip lists, read from nowhere. */
-export function fixtureRepositories(): PlanningRepositoriesAnswer {
-  return FIXTURE_REPOSITORIES;
+/** The repositories each fixture workspace's GitHub reaches: the ones its plans are about. */
+const FIXTURE_REPOSITORIES = new Map([
+  [
+    FIXTURE_FIRST.id,
+    [
+      fixtureRepository("ada", "relay", "2026-10-07T16:20:00Z"),
+      fixtureRepository("ada", "ledger", "2026-10-01T09:00:00Z"),
+    ],
+  ],
+  [FIXTURE_TEAM.id, [fixtureRepository("acme", "relay", "2026-10-06T11:00:00Z")]],
+]);
+
+/** The repositories a fixture run's chip lists for a workspace, read from nowhere; the first workspace's before one is chosen. */
+export function fixtureRepositories(workspaceId: string | undefined): PlanningRepositoriesAnswer {
+  return {
+    repositories: {
+      installed: true,
+      repositories: FIXTURE_REPOSITORIES.get(workspaceId ?? FIXTURE_FIRST.id) ?? [],
+      installationUrl: "https://github.com/apps/luke/installations/new",
+    },
+  };
 }
 
 const FIXTURE_PLAN_LIST: PlanningView = {
@@ -212,7 +219,7 @@ function fixtureLine(...runs: readonly (string | CodeToken)[]): CodeToken[] {
  */
 const FIXTURE_CODE: PlanCode = {
   ref: { path: "src/members/invite.ts", startLine: 6, endLine: 9 },
-  repository: "acme/relay",
+  repository: "ada/relay",
   firstLine: 1,
   lineCount: 14,
   lines: [

@@ -52,6 +52,7 @@ import { usePlanRename } from "./plan-name-field";
 import { PlanSummary, SummaryButton, type SummaryPin, useSummaryLayout } from "./plan-summary";
 import { changesTabOf, planCards, SidePanel, useSidePanelDrawing } from "./side-panel";
 import { StartAgentButton } from "./start-agent-button";
+import { StrandedPlanBanner } from "./stranded-plan-banner";
 import { useTabViews } from "./strip-tabs";
 
 /**
@@ -554,6 +555,10 @@ function PlanDocument({
               subject={{ plan: plan.id, tab }}
             >
               {archived ? <ArchivedBanner onUnarchive={unarchive} /> : null}
+              {/* The stranded plan's banner is the plan's own, so it stands over the plan's tab alone. */}
+              {archived || tab !== MAIN_TAB.PLAN ? null : (
+                <StrandedPlanBanner plans={plans} plan={listed} />
+              )}
               <section
                 className="desktop-document"
                 role="tabpanel"

@@ -1,6 +1,7 @@
 import type { PlanSummary } from "@luke/features/plan-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { CONFIRM_STAGE, confirmAsked } from "@luke/ui/confirm-state";
+import { workspaceReaches } from "@luke/ui/planning-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useId, useRef, useState } from "react";
 import { ModalShell } from "../modal-shell";
@@ -53,15 +54,9 @@ function ownsPlan(plans: PlansControl, plan: PlanSummary): boolean {
   return plan.ownerId === undefined || plans.me === undefined || plan.ownerId === plans.me;
 }
 
-/**
- * Whether the workspace's GitHub reaches the plan's repository, read as the
- * service reads it: the installation's account is the repository's owner. A
- * plan with no repository goes anywhere.
- */
+/** Whether the workspace's GitHub reaches the plan's repository (`workspaceReaches`); a plan with no repository goes anywhere. */
 function reaches(workspace: Workspace, repository: string | null): boolean {
-  if (repository === null) return true;
-  const [owner] = repository.split("/");
-  return workspace.github?.login.toLowerCase() === owner?.toLowerCase();
+  return repository === null || workspaceReaches(workspace, repository);
 }
 
 /** A row's line: who shares the workspace, or why it cannot take the plan. */

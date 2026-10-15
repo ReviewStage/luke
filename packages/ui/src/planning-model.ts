@@ -8,6 +8,7 @@ import {
   VOICE_PHASE,
   type VoicePhase,
 } from "@luke/features/planning-view";
+import type { Workspace } from "@luke/features/workspace-wire";
 import { LIVE_STATUS, type LiveStatus } from "@luke/live";
 import { MICROPHONE_STATUS, type MicrophoneStatus } from "@luke/voice/audio";
 import { microphoneAccessRow, VOICE_KEYLESS_NOTE } from "@luke/voice/microphone-access";
@@ -94,6 +95,43 @@ export function recentRepositories(plans: PlanningView["plans"]): string[] {
     if (recent.length === RECENT_REPOSITORY_LIMIT) break;
   }
   return recent;
+}
+
+/**
+ * Whether a workspace's GitHub reaches a repository, as far as the window can
+ * tell before the service is asked: its installation is active and on the
+ * repository's owner. Since #2524 a workspace reaches only its own installation's
+ * repositories, so one with no GitHub connected reaches none, whatever its
+ * plans still name. The service's read is the last word, since an
+ * installation on the owner may not have been given the repository.
+ */
+export function workspaceReaches(
+  workspace: Pick<Workspace, "github">,
+  repository: string,
+): boolean {
+  const { github } = workspace;
+  const [owner] = repository.split("/");
+  return github != null && github.active && github.login.toLowerCase() === owner?.toLowerCase();
+}
+
+/**
+ * The other workspace a plan's repository belongs to, where its own
+ * workspace's GitHub does not reach it and one of the account's other
+ * workspaces' does: the plan stranded there by #2524, which moving it to
+ * that workspace mends. None for a plan with no repository, one its own
+ * workspace reaches, or one no workspace of the account's reaches.
+ */
+export function strandedPlanHome(
+  plan: Pick<PlanSummary, "workspaceId" | "repository">,
+  workspaces: readonly Workspace[],
+): Workspace | undefined {
+  const { repository } = plan;
+  if (repository === null) return undefined;
+  const own = workspaces.find((workspace) => workspace.id === plan.workspaceId);
+  if (own === undefined || workspaceReaches(own, repository)) return undefined;
+  return workspaces.find(
+    (workspace) => workspace.id !== plan.workspaceId && workspaceReaches(workspace, repository),
+  );
 }
 
 /** The page of a repository on GitHub, which Open on GitHub opens. */

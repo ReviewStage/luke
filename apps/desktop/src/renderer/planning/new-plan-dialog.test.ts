@@ -303,3 +303,65 @@ test("a member of a workspace with no GitHub connected is told only to ask an ow
     false,
   );
 });
+
+test("in a workspace with no GitHub connected, a repository its plans still name is neither offered nor chosen, the chip reads No repository, and Create starts the plan with none", async () => {
+  const dialog = await mount(undefined, undefined, {
+    scope: "workspace-personal",
+    workspaceName: "Dean Stratakos",
+    recent: ["ReviewStage/luke"],
+    read: NOWHERE_INSTALLED,
+  });
+
+  const buttons = await openChip();
+  const notes = [...document.querySelectorAll(".plan-compose-menu-note")].map(
+    (note) => note.textContent,
+  );
+  const offered = buttons.map((button) => button.textContent);
+  const search =
+    document.querySelector<HTMLInputElement>('input[aria-label="Search repositories"]') ??
+    assert.fail("the chip's menu opens");
+  await dialog.press("Escape", search);
+  dialog.type("Tmp");
+  await dialog.press("Enter", dialog.field());
+
+  assert.deepEqual(notes, ["Dean Stratakos has no GitHub connected yet."]);
+  assert.equal(
+    offered.includes("ReviewStage/luke"),
+    false,
+    "the stranded repository is not offered",
+  );
+  assert.equal(dialog.button("No repository").textContent, "No repository");
+  assert.deepEqual(dialog.starts, [["Tmp", null]]);
+});
+
+test("a pick the workspace's GitHub turns out not to list is let go, while one it lists stays chosen", async () => {
+  const listing = () =>
+    Promise.resolve({
+      repositories: {
+        installed: true,
+        repositories: [
+          {
+            owner: "acme",
+            name: "api",
+            fullName: "acme/api",
+            defaultBranch: "main",
+            private: true,
+            updatedAt: 1,
+          },
+        ],
+        installationUrl: "https://github.com/apps/luke/installations/new",
+      },
+    });
+  const unlisted = await mount(undefined, undefined, { read: listing });
+  unlisted.type("Dark mode");
+  await unlisted.press("Enter", unlisted.field());
+  for (const root of roots.splice(0)) act(() => root.unmount());
+  document.body.innerHTML = "";
+
+  const listed = await mount(undefined, "acme/api", { read: listing });
+  listed.type("Rate limits");
+  await listed.press("Enter", listed.field());
+
+  assert.deepEqual(unlisted.starts, [["Dark mode", null]]);
+  assert.deepEqual(listed.starts, [["Rate limits", "acme/api"]]);
+});
