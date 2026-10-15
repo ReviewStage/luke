@@ -13,7 +13,10 @@ import { useAct } from "../act";
  * host once per workspace and version, and keeps them for the window's life.
  * The account's own first workspace with no photo shows the account's
  * sign-in picture, which the list carries as an address. Until either loads,
- * and where one fails to, the tile draws its letter. The hue is read off the
+ * and where one fails to, the tile draws its letter. A picture that loaded
+ * replaces the letter and its hue rather than covering them, so a photo
+ * with a transparent ground sits on the surface around the tile, in the light
+ * and the dark alike. The hue is read off the
  * workspace's id rather than its name, so a rename keeps the mark the members
  * know it by, and two workspaces of one name still read apart more often than
  * not. The letter is the tile's own text, the name's first character as a
@@ -127,19 +130,20 @@ export function WorkspaceTile({
   const [loadedUrl, setLoadedUrl] = useState<string | undefined>(undefined);
   const url = workspace.photoVersion === undefined ? workspace.pictureUrl : photo;
   const drawn = url !== undefined && url !== failedUrl ? url : undefined;
-  // Note that the letter stands under the picture until it has loaded, because an avatar on the network may take a while.
+  const shown = drawn !== undefined && drawn === loadedUrl;
+  // Note that the letter and its hue stand until the picture has loaded, because an avatar on the network may take a while, and go once it has, because a transparent photo would show them through.
   return (
     <span
       className="workspace-tile"
       data-size={size}
-      data-hue={hueOf(workspace.id)}
+      data-hue={shown ? undefined : hueOf(workspace.id)}
       aria-hidden="true"
     >
-      {letterOf(workspace.name)}
+      {shown ? null : letterOf(workspace.name)}
       {drawn === undefined ? null : (
         <img
           className="workspace-tile-picture"
-          data-loaded={String(drawn === loadedUrl)}
+          data-loaded={String(shown)}
           src={drawn}
           alt=""
           referrerPolicy="no-referrer"

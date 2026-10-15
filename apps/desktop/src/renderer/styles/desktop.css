@@ -479,7 +479,9 @@ body,
 }
 
 /* A workspace's tile: a square of its hue with its first letter as its text,
-   at a row's glyph size. */
+   at a row's glyph size. A loaded picture drops the hue (`data-hue`) and the
+   letter, so the square has no fill of its own and a transparent photo shows
+   the surface it sits on. */
 .workspace-tile {
   display: inline-grid;
   width: var(--menu-glyph);
@@ -487,16 +489,15 @@ body,
   flex: 0 0 auto;
   place-items: center;
   border-radius: 4px;
-  background: var(--workspace-hue-1);
   color: var(--workspace-tile-ink);
   font-size: 10px;
   font-weight: 650;
   line-height: 1;
 }
 
-/* A photo or a picture fills the tile's square, cropped rather than stretched. */
-/* A workspace's picture over its letter, shown once it has loaded, so the
-   letter stands while it loads and where it fails (workspace-tile.tsx). */
+/* A photo or a picture fills the tile's square, cropped rather than
+   stretched, hidden until it has loaded, so the letter stands while it loads
+   and where it fails (workspace-tile.tsx). */
 .workspace-tile:has(.workspace-tile-picture) {
   position: relative;
   overflow: hidden;
@@ -512,6 +513,10 @@ body,
 
 .workspace-tile-picture[data-loaded="false"] {
   visibility: hidden;
+}
+
+.workspace-tile[data-hue="1"] {
+  background: var(--workspace-hue-1);
 }
 
 .workspace-tile[data-hue="2"] {
