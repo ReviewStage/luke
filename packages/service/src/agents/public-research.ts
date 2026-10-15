@@ -23,6 +23,7 @@ import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import { providerModelOf } from "../providers/model-catalog.js";
 import { HOSTED_OPENAI_DEFAULTS } from "../providers/openai.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
+import { TurnBudget } from "./turn-budget.js";
 
 /**
  * public-research.ts -- the planning model's two public reads: a cited web search and one page's text, each bounded and each answered as data.
@@ -261,37 +262,27 @@ export const HostResolver = Context.Reference<ResolveHost>(
 );
 
 /**
- * How many research calls each turn has made, per tool, in this instance.
- * A plan conversation's turn runs its calls on the instance that runs the
- * turn, so this is the bound a turn meets; the oldest turn is forgotten past
- * `TRACKED_TURNS`, long after it ended.
+ * How many research calls each turn has made, per tool, in this instance
+ * (`turn-budget.ts`). A plan conversation's turn runs its calls on the
+ * instance that runs the turn, so this is the bound a turn meets.
  */
 export class ResearchBudget {
-  private readonly used = new Map<PublicResearchTool, Map<string, number>>();
+  private readonly budgets = {
+    [PUBLIC_RESEARCH_TOOL.SEARCH_WEB]: new TurnBudget(
+      PUBLIC_RESEARCH_BOUNDS.SEARCHES_PER_TURN,
+      PUBLIC_RESEARCH_BOUNDS.TRACKED_TURNS,
+    ),
+    [PUBLIC_RESEARCH_TOOL.READ_WEB_PAGE]: new TurnBudget(
+      PUBLIC_RESEARCH_BOUNDS.PAGE_READS_PER_TURN,
+      PUBLIC_RESEARCH_BOUNDS.TRACKED_TURNS,
+    ),
+  } as const satisfies Record<PublicResearchTool, TurnBudget>;
 
   /** Spends one call of `tool` for `turnId`; answers whether the bound still admitted it. */
   take(tool: PublicResearchTool, turnId: string): boolean {
-    const limit = BUDGET_OF_TOOL[tool];
-    let turns = this.used.get(tool);
-    if (!turns) {
-      turns = new Map();
-      this.used.set(tool, turns);
-    }
-    const spent = turns.get(turnId) ?? 0;
-    if (spent >= limit) return false;
-    turns.delete(turnId);
-    turns.set(turnId, spent + 1);
-    const oldest = turns.keys().next();
-    if (turns.size > PUBLIC_RESEARCH_BOUNDS.TRACKED_TURNS && !oldest.done)
-      turns.delete(oldest.value);
-    return true;
+    return this.budgets[tool].take(turnId);
   }
 }
-
-const BUDGET_OF_TOOL = {
-  [PUBLIC_RESEARCH_TOOL.SEARCH_WEB]: PUBLIC_RESEARCH_BOUNDS.SEARCHES_PER_TURN,
-  [PUBLIC_RESEARCH_TOOL.READ_WEB_PAGE]: PUBLIC_RESEARCH_BOUNDS.PAGE_READS_PER_TURN,
-} as const satisfies Record<PublicResearchTool, number>;
 
 // ---------------------------------------------------------------------------
 // Search.

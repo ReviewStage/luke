@@ -40,6 +40,7 @@ import {
 } from "../../core.js";
 import { isRemoteToolName, storedRemoteCall } from "../../integrations/connection-tools.js";
 import { LOOK_AT_BOARD_TOOL, storedLookOutput } from "../../plans/board-look.js";
+import { LOOK_AT_PICTURE_TOOL, storedPictureLookOutput } from "../../plans/picture-look.js";
 import { type ReceivedMessage, receivedMessage } from "../attached-files.js";
 import {
   BRAIN_HOST_TURN,
@@ -456,6 +457,23 @@ function heldCallName(state: RelayState, eveTurnId: string, callId: string): str
   return undefined;
 }
 
+/**
+ * A look's result as the conversation keeps it, a look at the board or at
+ * one of the plan's pictures without the image; nothing for any other call.
+ * Note that a look's image went to the model once and is not kept, because
+ * it is no record of the plan.
+ */
+function storedLook(toolName: string, output: UnparsedWireValue): UnparsedWireValue | undefined {
+  switch (toolName) {
+    case LOOK_AT_BOARD_TOOL.name:
+      return storedLookOutput(output);
+    case LOOK_AT_PICTURE_TOOL.name:
+      return storedPictureLookOutput(output);
+    default:
+      return undefined;
+  }
+}
+
 /** The steps in index order, so a message is told in the order the model produced it whatever order the events arrived. */
 function orderedSteps(turn: RelayTurnState): readonly RelayStep[] {
   return Object.entries(turn.steps)
@@ -543,15 +561,13 @@ export class StreamRelay {
         // A nested call the record left out leaves its result out with it.
         const held = heldCallName(standing.state.get(), event.data.turnId, result.callId);
         if (held === undefined && isRemoteToolName(result.toolName)) return Effect.void;
-        // Note that a look's image went to the model once and is not kept, because it is no
-        // record of the plan, and that any other picture a tool answered is kept beside the
-        // conversation and named by id, because the record carries every byte it holds into
-        // each read of the transcript.
+        // Note that a look's image is not kept (`storedLook`), and that any other picture a tool
+        // answered is kept beside the conversation and named by id, because the record carries
+        // every byte it holds into each read of the transcript.
         const output = unparsedWire(result.output);
+        const looked = storedLook(result.toolName, output);
         const kept =
-          result.toolName === LOOK_AT_BOARD_TOOL.name
-            ? Effect.succeed(storedLookOutput(output))
-            : keptPictures(standing.target, output);
+          looked === undefined ? keptPictures(standing.target, output) : Effect.succeed(looked);
         return Effect.flatMap(kept, (stored) =>
           this.#toolResult(
             event.data.turnId,

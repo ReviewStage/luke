@@ -26,6 +26,7 @@ import {
 } from "@luke/service/agents/mac-command";
 import { hostedEnvironment } from "@luke/service/environment";
 import { showPageRejected } from "@luke/service/plans/page-tool";
+import { type PictureLookResult, pictureNotLooked } from "@luke/service/plans/picture-look";
 import { scriptedModel } from "@luke/service/testing/coder-scripted-model";
 import {
   ACTION_RESULT_STATUS,
@@ -194,6 +195,22 @@ export function runInboxTool(
       const admitted = yield* host.admit(auth, sessionId);
       if (Result.isFailure(admitted)) return inboxRejected(admitted.failure);
       return yield* host.inbox(admitted.success, call);
+    }),
+  );
+}
+
+/** One `look_at_picture` call run under the agent's session, in the turn eve names, for the tool, which runs here rather than at an edge of its own. */
+export function lookAtPlanPicture(
+  auth: SessionAuth,
+  sessionId: string,
+  eveTurnId: string,
+  input: UnparsedWireValue,
+): Promise<PictureLookResult> {
+  return runAgent(
+    Effect.gen(function* () {
+      const admitted = yield* host.admit(auth, sessionId);
+      if (Result.isFailure(admitted)) return pictureNotLooked(admitted.failure);
+      return yield* host.lookAtPicture(admitted.success, { sessionId, eveTurnId }, input);
     }),
   );
 }

@@ -519,7 +519,9 @@ function stoppedTask(input: WireValue | undefined, jobs: WorkerJobs | undefined)
  * A call of one of the planning model's own tools, or one eve gives a
  * planning session, drawn from its part as a coding agent's call is: its
  * kind and the one input a reader looks for first. A look at the board
- * answers with an image of it, which is nothing to read, so it shows none.
+ * answers with an image of it, which is nothing to read, so it shows none;
+ * a look at one of the plan's pictures is kept as whether it looked alone,
+ * and shows that.
  */
 function planningToolView(
   tool: string,
@@ -548,6 +550,8 @@ function planningToolView(
       return namedCall(CALL_KIND.DRAW_ON_BOARD, input, output, undefined);
     case AGENT_TOOL.LOOK_AT_BOARD:
       return namedCall(CALL_KIND.LOOK_AT_BOARD, input, undefined, undefined);
+    case AGENT_TOOL.LOOK_AT_PICTURE:
+      return namedCall(CALL_KIND.LOOK_AT_PICTURE, input, output, undefined);
     case AGENT_TOOL.QUEUE_QUESTION:
       return namedCall(CALL_KIND.QUEUE_QUESTION, input, output, "question");
     case AGENT_TOOL.WITHDRAW_QUESTION:
@@ -730,6 +734,7 @@ const TOOL_TARGETS: ReadonlyMap<string, (call: TargetedCall) => ToolTarget | und
   [AGENT_TOOL.MESSAGE_CODING_AGENT, namedAgent],
   [AGENT_TOOL.START_CODING_AGENT, startedAgent],
   [AGENT_TOOL.EDIT_PLAN, () => PLAN_TARGET],
+  [AGENT_TOOL.LOOK_AT_PICTURE, () => PLAN_TARGET],
   [AGENT_TOOL.SHOW_CODE, shownCode],
   [AGENT_TOOL.POST_TO_INBOX, () => INBOX_TARGET],
   [AGENT_TOOL.CLOSE_INBOX_ITEM, () => INBOX_TARGET],

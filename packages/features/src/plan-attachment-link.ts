@@ -87,3 +87,8 @@ export function planAttachmentIdsIn(text: string, planId: string): readonly stri
   }
   return [...named];
 }
+
+/** Every picture address a text holds, of any plan, in order, each copy apart. */
+export function planAttachmentAddressesIn(text: string): readonly string[] {
+  return [...text.matchAll(ADDRESS_IN_TEXT)].map(([address]) => address);
+}

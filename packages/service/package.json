@@ -160,6 +160,7 @@
     "./plans/child-models": "./src/plans/child-models.js",
     "./plans/end-call": "./src/plans/end-call.js",
     "./plans/page-tool": "./src/plans/page-tool.js",
+    "./plans/picture-look": "./src/plans/picture-look.js",
     "./plans/plan-file": "./src/plans/plan-file.js",
     "./plans/plan-notes": "./src/plans/plan-notes.js",
     "./plans/plan-scribe": "./src/plans/plan-scribe.js",

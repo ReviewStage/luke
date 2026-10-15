@@ -25,6 +25,7 @@ import {
 import type { GitHubApp } from "../../github/github-app.js";
 import { planWorkspace } from "../../github/workspace-repository.js";
 import { HOSTED_TOOL_SET } from "../../plans/brain-tool-set.js";
+import { pictureLooks } from "../../plans/picture-look.js";
 import { type ModelCatalog, providerModelOf } from "../../providers/model-catalog.js";
 import { delegatedChildOf, type HostAdmission, hostAdmission } from "../agent-runtime/host-core.js";
 import { type AgentSkill, repositorySkills } from "../agent-runtime/skills.js";
@@ -239,9 +240,10 @@ function firstTaskOf(child: ConversationTarget): HostEffect<string | undefined> 
   );
 }
 
-/** The host over the deployment's seams; the research budget it keeps stands for the host's life. */
+/** The host over the deployment's seams; the research budget and the count of looks at pictures it keeps stand for the host's life. */
 export function brainHost(seams: BrainHostSeams): BrainHost {
   const research = new ResearchBudget();
+  const looks = pictureLooks();
 
   /** The caller's metered model and its effort, or why none runs. */
   const modelFor = (admitted: AdmittedConversation): Result.Result<CoderModelSelection, string> => {
@@ -413,6 +415,11 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
                   plan: { userId: caller, planId: plan.plan.id },
                   repository: plan.plan.repository,
                   sandbox: () => context.getSandbox(),
+                },
+                pictures: {
+                  plan: { userId: caller, planId: plan.plan.id },
+                  turnId: binding.turn.turnId,
+                  looks,
                 },
                 research: {
                   turnId: binding.turn.turnId,

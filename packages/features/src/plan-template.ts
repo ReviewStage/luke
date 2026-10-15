@@ -8,6 +8,7 @@ import {
 import { describeWire, readEither } from "@luke/wire/effect";
 import { Schema as EffectSchema, Result } from "effect";
 import { mentionLinksIn } from "./mention-link.js";
+import { planAttachmentAddressesIn } from "./plan-attachment-link.js";
 import { openFenceAt, type PlanSection, planSections } from "./plan-document.js";
 import { PLAN_BOUNDS, PLAN_SECTION_BOUNDS, type PlanField } from "./plan-wire.js";
 
@@ -468,7 +469,23 @@ function applyNoteToText(
   // A correction inside a fence is code, written as given rather than contained as prose.
   const words = openFenceAt(text, at.from) === undefined ? contained(note.text) : note.text;
   const corrected = text.slice(0, at.from) + words + text.slice(at.to);
-  return keepsMentions(text, corrected) ? corrected : undefined;
+  return keepsMentions(text, corrected) && keepsPictures(text, corrected) ? corrected : undefined;
+}
+
+/** Whether a text after a change holds every address `addressesIn` finds in it before, each copy counted. */
+function keepsAddresses(
+  before: string,
+  after: string,
+  addressesIn: (text: string) => readonly string[],
+): boolean {
+  // Note that every copy is counted, each alike, however many the plan holds.
+  const counted = (text: string) => {
+    const counts = new Map<string, number>();
+    for (const address of addressesIn(text)) counts.set(address, (counts.get(address) ?? 0) + 1);
+    return counts;
+  };
+  const kept = counted(after);
+  return [...counted(before)].every(([address, count]) => (kept.get(address) ?? 0) >= count);
 }
 
 /**
@@ -482,16 +499,19 @@ function applyNoteToText(
  * them, is kept as surely as one it can.
  */
 function keepsMentions(before: string, after: string): boolean {
-  // Note that every mention is counted, each copy of one alike, however many the plan holds.
-  const counted = (text: string) => {
-    const counts = new Map<string, number>();
-    for (const { target } of mentionLinksIn(text)) {
-      counts.set(target, (counts.get(target) ?? 0) + 1);
-    }
-    return counts;
-  };
-  const kept = counted(after);
-  return [...counted(before)].every(([target, count]) => (kept.get(target) ?? 0) >= count);
+  return keepsAddresses(before, after, (text) => mentionLinksIn(text).map(({ target }) => target));
+}
+
+/**
+ * Whether a correction keeps every picture the text held, by its address
+ * (`plan-attachment-link.ts`), on the same terms as a mention: a correction
+ * may reword a picture's alt text or caption, or move it within the phrase
+ * it corrects, but one that drops its address is not taken; striking the
+ * line a picture stands on is a retraction, and is. A picture of another
+ * plan is kept as surely as one of this plan.
+ */
+function keepsPictures(before: string, after: string): boolean {
+  return keepsAddresses(before, after, planAttachmentAddressesIn);
 }
 
 /** Notes taken over a document's text: the text after, and the notes that could not be taken. */
