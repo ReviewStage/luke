@@ -378,7 +378,7 @@ export function DesktopShell({
       ? region.plan
       : undefined;
   useWindowTitle(titleSubject(tab, plans, shownPlan));
-  // The plan is looked at only while it is on screen.
+  // The plan is looked at the moment it is on screen, whichever of its column's tabs is chosen.
   const looks = usePlanLooks(shownPlan, plans.me);
   if (gated) {
     return (
