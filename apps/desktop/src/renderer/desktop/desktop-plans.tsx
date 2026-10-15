@@ -306,7 +306,7 @@ function PlanDocument({
   }, [planId, inbox.read, waiting, onInboxRead]);
   const rename = usePlanRename(planId, plans.onRenamePlan);
   // A terminal shown hands the keys to the side panel, where it stands; an
-  // agent's Terminal chip always opens that agent's own.
+  // agent's tab's Open terminal always opens that agent's own.
   const showSide = () => setFocus(COLUMN.SIDE);
   const openTerminal = useOpenTerminal(plans.sidePanel, showSide);
   // A refusal is said beside the chip, under the plan it was about and no
@@ -510,6 +510,7 @@ function PlanDocument({
                   shown={plans.shown}
                   inbox={inbox.board.open.length}
                   actionsSlot={actionsSlot}
+                  onOpenTerminal={(agentId) => openTerminal(agentId, TERMINAL_ASK.SHOW)}
                 />
               }
             >
@@ -639,7 +640,6 @@ function PlanDocument({
                       views={views}
                       onOpenDelegation={openDelegation}
                       onOpenChanges={openChanges}
-                      onOpenTerminal={(agentId) => openTerminal(agentId, TERMINAL_ASK.SHOW)}
                       onOpenTarget={openTarget}
                       cards={cards}
                     />

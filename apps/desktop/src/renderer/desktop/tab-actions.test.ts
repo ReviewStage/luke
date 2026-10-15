@@ -192,7 +192,16 @@ test("an agent's tab and a subagent's put their right-click's content actions, a
   const container = mountEveryTab({ main: { agent: AGENT.id }, side: SUBAGENT });
   const { main, side } = bars(container);
   for (const [bar, expected] of [
-    [main, ["Rename", "Copy concise transcript", "Copy full transcript", "Archive agent"]],
+    [
+      main,
+      [
+        "Rename",
+        "Open terminal",
+        "Copy concise transcript",
+        "Copy full transcript",
+        "Archive agent",
+      ],
+    ],
     [side, ["Copy concise transcript", "Copy full transcript"]],
   ] as const) {
     const fromRightClick = rightClickChosen(bar);

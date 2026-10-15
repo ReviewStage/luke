@@ -8,7 +8,7 @@ import {
   PlusIcon,
   UnpinIcon,
 } from "@luke/ui";
-import { ListXIcon, ScrollTextIcon } from "lucide-react";
+import { ListXIcon, ScrollTextIcon, TerminalIcon } from "lucide-react";
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { APP_COMMAND } from "#shared/shortcuts";
@@ -33,12 +33,12 @@ import { MenuTab } from "./tab-strip";
  * Both strips are the one `TabStrip` (tab-strip.tsx), each of its tabs a
  * `MenuTab` whose right-click offers the actions `tabActionGroups` lists:
  * Close and Close others; Pin tab or Unpin tab, and an agent's Rename,
- * beside it; a transcript's two copies; and an agent's Archive. Those that
- * act on what the chosen tab shows, an agent's Rename, copies, and Archive,
- * and a subagent's copies, its strip's toolbar also offers from a ⋯
- * (`ToolbarTabActions`). Each strip ends in a "+" that
- * drops the shared searchable menu over what the strip may open. The
- * columns' own modules say which tabs and rows those are
+ * beside it; an agent's Open terminal; a transcript's two copies; and an
+ * agent's Archive. Those that act on what the chosen tab shows, an agent's
+ * Rename, Open terminal, copies, and Archive, and a subagent's copies, its
+ * strip's toolbar also offers from a ⋯ (`ToolbarTabActions`). Each strip
+ * ends in a "+" that drops the shared searchable menu over what the strip
+ * may open. The columns' own modules say which tabs and rows those are
  * (`main-tabs.tsx`, `side-panel.tsx`).
  *
  * What an agent's or a delegated worker's tab last drew is held here for as
@@ -83,6 +83,8 @@ export interface TabDoors {
   onCopy?: ((copy: TranscriptCopy) => void) | undefined;
   /** Renames what the tab shows, for the plan's and an agent's. */
   onRename?: (() => void) | undefined;
+  /** Opens the agent's own Terminal tab in the side panel, adding no shell, for an agent's where a panel takes the tab. */
+  onOpenTerminal?: (() => void) | undefined;
   /** Archives the agent the tab shows, for an agent's (`agent-archive.tsx`). */
   archive?: MenuAction | undefined;
 }
@@ -90,20 +92,33 @@ export interface TabDoors {
 /** What a tab's menu offers on what the tab shows, each empty where the tab has none. */
 interface ContentActions {
   rename: MenuAction[];
+  terminal: MenuAction[];
   copies: MenuAction[];
   archive: MenuAction[];
 }
 
 /**
  * What a tab's menu offers on what the tab shows, rather than on the tab
- * itself: an agent's Rename, a transcript's two copies, and an agent's
- * Archive, which takes the tab with it.
+ * itself: an agent's Rename, its Open terminal, a transcript's two copies,
+ * and an agent's Archive, which takes the tab with it.
  */
 function contentActions(doors: TabDoors): ContentActions {
-  const { onCopy, onRename, archive } = doors;
+  const { onCopy, onRename, onOpenTerminal, archive } = doors;
   return {
     rename:
       onRename === undefined ? [] : [{ label: "Rename", icon: <PencilIcon />, onSelect: onRename }],
+    terminal:
+      onOpenTerminal === undefined
+        ? []
+        : [
+            {
+              label: "Open terminal",
+              icon: <TerminalIcon />,
+              onSelect: onOpenTerminal,
+              // ⌘J opens the chosen agent tab's terminal, so only the chosen tab's item says it.
+              ...(doors.chosen ? { command: APP_COMMAND.SHOW_TERMINAL } : undefined),
+            },
+          ],
     copies:
       onCopy === undefined
         ? []
@@ -127,9 +142,9 @@ function contentActions(doors: TabDoors): ContentActions {
  * A tab's actions in the groups a rule divides, as an editor's tab offers
  * them on a right-click: Close and Close others, the plan's tab offering
  * only the second; Pin tab or Unpin tab, which puts it in the sidebar or
- * takes it out, and a Rename beside it; for a transcript's tab, its two
- * copies; and last, for an agent's, its Archive. Close others stands dimmed
- * where nothing else would close.
+ * takes it out, and a Rename beside it; for an agent's, its Open terminal;
+ * for a transcript's tab, its two copies; and last, for an agent's, its
+ * Archive. Close others stands dimmed where nothing else would close.
  */
 function tabActionGroups(doors: TabDoors): MenuAction[][] {
   const { onClose } = doors;
@@ -153,7 +168,7 @@ function tabActionGroups(doors: TabDoors): MenuAction[][] {
             ? { label: "Unpin tab", icon: <UnpinIcon />, onSelect: doors.pin.onToggle }
             : { label: "Pin tab", icon: <PinIcon />, onSelect: doors.pin.onToggle },
         ];
-  const { rename, copies, archive } = contentActions(doors);
+  const { rename, terminal, copies, archive } = contentActions(doors);
   return [
     [
       ...close,
@@ -164,7 +179,7 @@ function tabActionGroups(doors: TabDoors): MenuAction[][] {
         disabled: doors.onCloseOthers === undefined,
       },
     ],
-    ...[[...pin, ...rename], copies, archive].filter((group) => group.length > 0),
+    ...[[...pin, ...rename], terminal, copies, archive].filter((group) => group.length > 0),
   ];
 }
 
@@ -175,8 +190,8 @@ function tabActionGroups(doors: TabDoors): MenuAction[][] {
  * tab, which stay on the right-click alone.
  */
 function contentActionGroups(doors: TabDoors): MenuAction[][] {
-  const { rename, copies, archive } = contentActions(doors);
-  return [rename, copies, archive].filter((group) => group.length > 0);
+  const { rename, terminal, copies, archive } = contentActions(doors);
+  return [rename, terminal, copies, archive].filter((group) => group.length > 0);
 }
 
 /**
