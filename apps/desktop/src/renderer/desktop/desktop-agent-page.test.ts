@@ -18,8 +18,10 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { APP_COMMAND } from "#shared/shortcuts";
 import { onRegistry } from "#testing/copy-feedback";
 import { plansControl } from "#testing/plans-control";
+import { runAppCommand } from "../app-commands";
 import { archiveWords } from "../planning/coding-agent-model";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { ToastHost } from "../toast";
@@ -141,6 +143,34 @@ test("the page reads the agent by its id and titles it as its tab would", async 
 
   assert.deepEqual(read, [AGENT_ID]);
   assert.equal(page.querySelector("h1")?.textContent, "Sweep the flaky tests");
+});
+
+test("the page draws the task column's agent pane, at its reading width, and ⌘F finds in the agent's transcript", async () => {
+  transcript = {
+    messages: [
+      { id: "brief", role: MESSAGE_ROLE.USER, parts: [{ type: "text", text: "Sweep the tests." }] },
+      {
+        id: "answer",
+        role: MESSAGE_ROLE.ASSISTANT,
+        parts: [{ type: "text", text: "The flaky retry is gone." }],
+      },
+    ],
+    cursor: "1:0",
+    status: CODING_AGENT_STATUS.COMPLETED,
+    title: null,
+  };
+  const page = mount();
+  await settle();
+
+  let offered = false;
+  act(() => {
+    offered = runAppCommand(APP_COMMAND.FIND);
+  });
+
+  assert.ok(page.querySelector(".desktop-agent [role='log']"), "the transcript is the pane's");
+  assert.equal(offered, true);
+  assert.ok(page.querySelector(".desktop-agent")?.closest(".find-scope"), "the pane finds");
+  assert.ok(page.querySelector("search[aria-label='Find']"), "⌘F opens the find bar");
 });
 
 test("a read that did not land says so, and Retry reads the agent again and draws it", async () => {

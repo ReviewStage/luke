@@ -1,31 +1,44 @@
+import { dictationKeywords } from "@luke/features/dictation-keywords";
+import { sameTab } from "@luke/ui/tab-strip-model";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
+import { useMemo } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "../act";
 import { useAppCommand } from "../app-commands";
+import { FindScope } from "../find-in-tab";
 import { MemberDirectory } from "../member-directory";
-import { AgentTab } from "../planning/agent-tab";
 import { agentTabLabel } from "../planning/coding-agent-model";
+import { PlanMentions, type PlanMentionsValue, planlessMentions } from "../planning/plan-mentions";
+import { TOOL_TARGET, type ToolTarget } from "../planning/tool-call-model";
 import { useCodingAgents } from "../planning/use-coding-agents";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { ReadFailure } from "../read-failure";
 import { SPINNER_SIZE, Spinner } from "../spinner";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
+import { AgentPane } from "./main-tabs";
+import { planCards } from "./side-panel";
+import { useTabViews } from "./strip-tabs";
 
 /**
- * desktop-agent-page.tsx -- one agent's page: an agent an automation started with no plan, drawn as its tab would be, in the plan's place.
+ * desktop-agent-page.tsx -- one agent's page: an agent an automation started with no plan, drawn in the plan's place as the task column draws an agent's tab.
  *
  * An agent an automation's run starts belongs to the workspace rather than
  * to a plan, so there is no plan's column for its tab to stand in. Its page
  * stands where the plan would, beside the sidebar, as the Inbox does, and
- * draws the agent's tab whole: its transcript, its composer, its model and
- * servers, and what it published, each through the same control a plan's
- * agents are driven by, here holding the one agent read by its id
- * (`use-coding-agents.ts`'s `agentId`). Its title names the agent as its tab
- * would. An archived agent takes no message, so its composer gives way to
- * its own Unarchive. Whoever sent it a message is read against its
- * workspace's members, as on a plan. Its workers open nowhere yet, since a worker opens in
- * the side panel a plan's column keeps. Escape leaves it for wherever it
- * was opened from, and so does any row of the sidebar.
+ * draws the task column's own agent pane (`main-tabs.tsx`'s `AgentPane`):
+ * its transcript, its composer, its model and servers, and what it
+ * published, at the document's reading width, each through the same
+ * control a plan's agents are driven by, here holding the one agent read by
+ * its id (`use-coding-agents.ts`'s `agentId`). ⌘F finds in it as in a
+ * plan's column. An `@` in its box offers its repository's files, its
+ * skills, and the servers, read through its workspace since no plan names
+ * them (`planlessMentions`), and a dictation listens for its repository and
+ * its title. A row of its inbox calls opens the window's Inbox, since the
+ * agent's items stand there and no plan's Inbox tab does. Its title names the agent as
+ * its tab would. An archived agent takes no message, so its composer gives
+ * way to its own Unarchive. Whoever sent it a message is read against its
+ * workspace's members, as on a plan. Escape leaves it for wherever it was
+ * opened from, and so does any row of the sidebar.
  */
 
 /** What the page says where the agent could not be read. */
@@ -34,7 +47,22 @@ const NOT_READ = "This agent could not be read.";
 /** Nothing to do, for the doors a plan's column opens and this page does not have. */
 const nothing = (): void => undefined;
 
-/** One agent's page, in the plan's place: the agent read by its id, drawn as its tab. */
+/** The page's mentions, once there are any to hand; until then the box takes an `@` as the letter it is. */
+function AgentMentions({
+  value,
+  children,
+}: {
+  value: PlanMentionsValue | undefined;
+  children: React.ReactNode;
+}): React.JSX.Element {
+  return value === undefined ? (
+    <>{children}</>
+  ) : (
+    <PlanMentions value={value}>{children}</PlanMentions>
+  );
+}
+
+/** One agent's page, in the plan's place: the agent read by its id, drawn as the task column's agent pane. */
 export function DesktopAgentPage({
   plans,
   agentId,
@@ -44,6 +72,7 @@ export function DesktopAgentPage({
 }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_AGENT_PAGE, plans.agentView.onClose);
   const { act } = useAct();
+  const views = useTabViews();
   const agents = useCodingAgents({
     acts: { act },
     planId: undefined,
@@ -71,16 +100,47 @@ export function DesktopAgentPage({
     }, nothing);
   };
   // The agent's workspace as the account lists it, whose count reads its members again; by its id alone where the list does not hold it yet.
-  const { workspaceId } = agents;
-  const workspace =
-    workspaceId === undefined
-      ? undefined
-      : (plans.workspaces.find((each) => each.id === workspaceId) ?? { id: workspaceId });
+  const { workspaceId, agentRepository } = agents;
+  const listed = plans.workspaces.find((each) => each.id === workspaceId);
+  const workspace = workspaceId === undefined ? undefined : (listed ?? { id: workspaceId });
+  // The words a dictation into the agent's box listens for: its repository and its title.
+  const keywords = useMemo(
+    () =>
+      dictationKeywords({
+        repository: agentRepository ?? null,
+        title: agent?.title ?? undefined,
+        body: undefined,
+      }),
+    [agentRepository, agent?.title],
+  );
+  // The pane draws the agent as the column's tab would: archived or not, it is the list's one agent.
   const control = {
     ...agents,
+    agents: agent === undefined ? agents.agents : [agent],
     models: agents.models ?? plans.agents.models,
+    keywords,
     onUnarchive: agent?.archivedAt === undefined ? undefined : unarchive,
   };
+  const tab = { agent: agentId };
+  // Note that an inbox call is the one row of a coding agent's own that opens a tab, a worker's opening through its delegation.
+  const openTarget = (target: ToolTarget) => {
+    if (target.kind === TOOL_TARGET.INBOX) plans.inboxView.onOpen();
+  };
+  const cards = planCards({
+    agents: control,
+    workRows: [],
+    held: views.held,
+    chosen: (opened) => sameTab(opened, tab),
+    shownCode: [],
+  });
+  // What an `@` offers once the read named the agent's workspace and repository, which its files are read through.
+  const mentions =
+    workspaceId === undefined || agentRepository === undefined
+      ? undefined
+      : planlessMentions(
+          { workspace: listed?.slug ?? workspaceId, workspaceId, repository: agentRepository },
+          plans.onShowMention,
+        );
   return (
     <section className="agent-page" aria-label="Agent">
       <header className="desktop-toolbar">
@@ -92,13 +152,21 @@ export function DesktopAgentPage({
       </header>
       {agent !== undefined ? (
         <MemberDirectory workspace={workspace} readerId={plans.me}>
-          <AgentTab
-            agent={agent}
-            control={control}
-            shown
-            onOpenSubagent={nothing}
-            onHeld={nothing}
-          />
+          <AgentMentions value={mentions}>
+            <FindScope className="desktop-plan-column" active={plans.shown} subject={tab}>
+              <AgentPane
+                label={agentTabLabel(agent, control.models)}
+                tabbed={false}
+                tab={tab}
+                agents={control}
+                shown={plans.shown}
+                views={views}
+                onOpenDelegation={nothing}
+                onOpenTarget={openTarget}
+                cards={cards}
+              />
+            </FindScope>
+          </AgentMentions>
         </MemberDirectory>
       ) : agents.listFailed ? (
         <div className="agent-page-note">

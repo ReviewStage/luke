@@ -109,6 +109,8 @@ export interface CodingAgentsControl {
   archived: readonly CodingAgentSummary[] | undefined;
   /** The workspace the one agent read as its page belongs to; none on a plan, where the plan says it, and before the page's read lands. */
   workspaceId?: string | undefined;
+  /** The repository of the one agent read as its page, `owner/name`, on the same terms as its workspace. */
+  agentRepository?: string | undefined;
   /** The agent tabs the panel may show, by agent id; nothing before the first read lands. */
   agentIds: readonly string[] | undefined;
   /** Every agent of the plan by id, an archived one among them, which its Inbox stands on, since an archived agent's items still stand; nothing before the first read lands. */
@@ -206,7 +208,7 @@ export interface CodingAgentsControl {
   changesPeople: ReadonlyMap<string, HeldPeople>;
   /** The words a dictation into an agent's box is likely to say, read off the open plan. */
   keywords: readonly string[];
-  /** The skills of the open plan's repository a `/` in an agent's box offers, read once for the plan (`repository-skills.ts`); nothing while the plan names no repository. */
+  /** The skills of the open plan's repository a `/` in an agent's box offers, read once for the plan (`repository-skills.ts`), or of the agent's own where no plan is open; nothing while neither names a repository. */
   readSkills: SkillSource | undefined;
   /** One read of a plan's inbox past a cursor, as the Inbox tab's loop asks it. */
   readInbox: InboxReader;
@@ -252,18 +254,26 @@ function listRead(
   act: ActHandle["act"],
   planId: string | undefined,
   agentId: string | undefined,
-): Promise<CodingAgentListAnswer & { readonly workspaceId?: string }> {
+): Promise<
+  CodingAgentListAnswer & { readonly workspaceId?: string; readonly repository?: string }
+> {
   if (planId !== undefined) {
     return act(ACT_KIND.CODING_AGENTS_LIST, { planId, includeArchived: true });
   }
   // Note that a page names no automation by null where a summary leaves the key out.
   return act(ACT_KIND.CODING_AGENTS_PAGE, { agentId: agentId ?? "" }).then(
-    (answer): CodingAgentListAnswer & { readonly workspaceId?: string } => {
+    (
+      answer,
+    ): CodingAgentListAnswer & {
+      readonly workspaceId?: string;
+      readonly repository?: string;
+    } => {
       if ("failure" in answer) return answer;
       const { automationId, ...agent } = answer.agent;
       return {
         agents: [automationId === null ? agent : { ...agent, automationId }],
         workspaceId: answer.agent.workspaceId,
+        repository: answer.agent.repository,
       };
     },
   );
@@ -318,6 +328,7 @@ export function useCodingAgents(input: {
     agents: readonly CodingAgentSummary[] | undefined;
     failed: boolean;
     workspaceId?: string | undefined;
+    repository?: string | undefined;
   }>({ planId: undefined, agentId: undefined, agents: undefined, failed: false });
   const listOf = planId === undefined ? agentId : undefined;
   const ours = (was: { planId: string | undefined; agentId: string | undefined }) =>
@@ -365,6 +376,7 @@ export function useCodingAgents(input: {
                 agents: ours(was) ? was.agents : undefined,
                 failed: true,
                 workspaceId: ours(was) ? was.workspaceId : undefined,
+                repository: ours(was) ? was.repository : undefined,
               }
             : {
                 planId,
@@ -372,6 +384,7 @@ export function useCodingAgents(input: {
                 agents: answer.agents,
                 failed: false,
                 workspaceId: answer.workspaceId,
+                repository: answer.repository,
               },
         );
       },
@@ -384,6 +397,7 @@ export function useCodingAgents(input: {
             agents: ours(was) ? was.agents : undefined,
             failed: true,
             workspaceId: ours(was) ? was.workspaceId : undefined,
+            repository: ours(was) ? was.repository : undefined,
           }));
       },
     );
@@ -791,14 +805,22 @@ export function useCodingAgents(input: {
   );
 
   // Note that the skills are kept for the plan and its repository as they
-  // stand, so another plan, or the plan moved to another repository, reads afresh.
-  const readSkills = useMemo(
-    () =>
-      planId === undefined || repository === null
+  // stand, so another plan, or the plan moved to another repository, reads
+  // afresh; an agent no plan holds reads its repository's through the
+  // workspace it belongs to, once the read of it has named that workspace.
+  const workspaceId = ours(list) ? list.workspaceId : undefined;
+  const agentRepository = ours(list) ? list.repository : undefined;
+  const readSkills = useMemo(() => {
+    if (planId !== undefined) {
+      return repository === null
         ? undefined
-        : keptSkills(() => act(ACT_KIND.PLANNING_SKILLS, { planId })),
-    [act, planId, repository],
-  );
+        : keptSkills(() => act(ACT_KIND.PLANNING_SKILLS, { planId }));
+    }
+    if (workspaceId === undefined || agentRepository === undefined) return undefined;
+    return keptSkills(() =>
+      act(ACT_KIND.PLANNING_SKILLS, { workspaceId, repository: agentRepository }),
+    );
+  }, [act, planId, workspaceId, agentRepository, repository]);
 
   const readInboxImage = useCallback<InboxImageReader>(
     (params) => act(ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT, params),
@@ -808,7 +830,8 @@ export function useCodingAgents(input: {
   return {
     agents,
     archived: archivedAgents,
-    workspaceId: ours(list) ? list.workspaceId : undefined,
+    workspaceId,
+    agentRepository,
     agentIds: agents?.map((agent) => agent.id),
     heldIds: held?.map((agent) => agent.id),
     draft,

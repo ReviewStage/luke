@@ -54,7 +54,7 @@ import { SPINNER_SIZE, Spinner } from "../spinner";
 import { useExperiment } from "../use-app-state";
 import { DesktopHome } from "./desktop-home";
 import { useTaskInboxWaitingOnly } from "./folded-groups";
-import { MainTabContent, MainTabStrip, mainTabLabel } from "./main-tabs";
+import { AgentPane, MainTabStrip, mainTabLabel } from "./main-tabs";
 import { PlanActions } from "./plan-actions";
 import { planCardOf } from "./plan-card";
 import { usePlanRename } from "./plan-name-field";
@@ -724,23 +724,18 @@ function PlanDocument({
                     />
                   ) : null}
                   {tab === MAIN_TAB.PLAN || tab === MAIN_TAB.INBOX ? null : (
-                    <section
-                      className="desktop-agent"
-                      role="tabpanel"
-                      aria-label={mainTabLabel(tab, agents)}
-                      data-popover-room=""
-                    >
-                      <MainTabContent
-                        tab={tab}
-                        agents={agents}
-                        shown={plans.shown && !sidePanel.fullScreen}
-                        views={views}
-                        onOpenDelegation={openDelegation}
-                        onOpenChanges={openChanges}
-                        onOpenTarget={openTarget}
-                        cards={cards}
-                      />
-                    </section>
+                    <AgentPane
+                      label={mainTabLabel(tab, agents)}
+                      tabbed
+                      tab={tab}
+                      agents={agents}
+                      shown={plans.shown && !sidePanel.fullScreen}
+                      views={views}
+                      onOpenDelegation={openDelegation}
+                      onOpenChanges={openChanges}
+                      onOpenTarget={openTarget}
+                      cards={cards}
+                    />
                   )}
                 </FindScope>
                 <PlanSummary

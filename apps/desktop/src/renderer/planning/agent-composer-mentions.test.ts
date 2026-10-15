@@ -33,7 +33,7 @@ import {
 import { markdownHtmlParserLanded } from "#testing/markdown";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { AgentComposer } from "./agent-composer";
-import { PlanMentions, type PlanMentionsValue } from "./plan-mentions";
+import { PlanMentions, type PlanMentionsValue, planlessMentions } from "./plan-mentions";
 import type { SkillSource } from "./skill-picker";
 import { TranscriptWords } from "./transcript-blocks";
 import { type MessageSender, useAgentComposer } from "./use-agent-composer";
@@ -265,6 +265,23 @@ test("an @ typed in the box on a plan's page offers the plan's sections, and the
     ["Rollout"],
   );
   assert.deepEqual(sent, [`Follow ${mentionMarkdown(ROLLOUT, "Rollout", PLACE)}`]);
+});
+
+test("on the page of an agent no plan holds an @ offers its repository's files, read through its workspace, and no plan's sections", async () => {
+  const page = planlessMentions(
+    { workspace: "acme", workspaceId: "workspace-1", repository: "acme/relay" },
+    ignore,
+  );
+  const { container } = await box(page);
+
+  typeInComposer(container, "Follow @roll");
+  await settle();
+
+  assert.deepEqual(listed(container), ["rollout-store.ts"]);
+  assert.deepEqual(
+    told.filter((each) => each.kind === ACT_KIND.PLANNING_TREE).map((each) => each.payload),
+    [{ workspaceId: "workspace-1", repository: "acme/relay", path: "", recursive: true }],
+  );
 });
 
 test("off a plan's page an @ in the box opens nothing and is sent as the letter it is", async () => {
