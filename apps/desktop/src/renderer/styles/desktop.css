@@ -1085,12 +1085,15 @@ ul.actor-stack {
 }
 
 /* The rest a pile's count stands for, each by their mark and what their face would say. */
+/* However many it counts, the list stays inside the window and scrolls within the card. */
 .actor-more-list {
   display: flex;
+  max-height: min(240px, 40vh);
   flex-direction: column;
   gap: var(--space-6);
   margin: 0;
   padding: 0;
+  overflow-y: auto;
   list-style: none;
 }
 

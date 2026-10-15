@@ -321,3 +321,40 @@ test("reviewers past the pile's last face are counted, and the count hangs a car
     [["github", "reviewer5 · Changes requested"]],
   );
 });
+
+test("the count's card naming many reviewers scrolls within itself and stands, and the window scrolling takes it down", async () => {
+  const many = Array.from({ length: 50 }, (_, at) => ({
+    by: { login: `reviewer${at}`, bot: false },
+    state: REVIEW_STATE.APPROVED,
+  }));
+  const card = await draw(
+    createElement(ChangesCard, {
+      subject: agentSubject(control, AGENT.id, NOTHING_HELD, false),
+      models: [],
+      pullRequest: PULL_REQUEST,
+      people: { reviewers: many },
+      onOpenAgent: () => undefined,
+    }),
+  );
+  hover(
+    card.querySelector('[aria-label="Reviewers"] .actor-stack-more') ??
+      assert.fail("the rest are counted"),
+  );
+  const list = document.querySelector('.tooltip-card [data-actor-card="more"] .actor-more-list');
+  assert.equal(list?.children.length, 45);
+  act(() => {
+    list?.dispatchEvent(new Event("scroll"));
+  });
+  assert.ok(
+    document.querySelector('[data-actor-card="more"]'),
+    "scrolling the card's own list leaves it standing",
+  );
+  act(() => {
+    document.dispatchEvent(new Event("scroll"));
+  });
+  assert.equal(
+    document.querySelector('.tooltip-card:not([data-leaving]) [data-actor-card="more"]'),
+    null,
+    "the window scrolling takes it down",
+  );
+});
