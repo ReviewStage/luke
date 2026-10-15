@@ -10,6 +10,7 @@ import { CHIP_LOOK, Chip, type ChipLook } from "../chip";
 import { OPEN_SETTINGS_LABEL, useOpenSettings } from "../open-settings";
 import { RepositoryPicture } from "../repository-picture";
 import { type MenuRow, SearchableMenu } from "../searchable-menu";
+import { PICKER_ALIGN, type PickerAlign } from "../settings/picker-row";
 import { Spinner } from "../spinner";
 import { useDisclosure } from "../use-disclosure";
 
@@ -166,6 +167,8 @@ export function RepositoryChip(props: {
   /** Counts the asks from elsewhere to open the menu, each opening it. */
   openRequest?: number | undefined;
   place: ChipPlace;
+  /** A form row's chip: the edge its menu hangs from, the trailing one where none is named, as a Settings picker's does. */
+  align?: PickerAlign | undefined;
 }): React.JSX.Element {
   const { chooser, openRequest, onUnreached, value } = props;
   const openSettings = useOpenSettings();
@@ -278,7 +281,12 @@ export function RepositoryChip(props: {
     ) : undefined;
 
   return (
-    <div className="repository-chip" data-place={props.place} ref={chip}>
+    <div
+      className="repository-chip"
+      data-place={props.place}
+      data-align={props.align ?? PICKER_ALIGN.END}
+      ref={chip}
+    >
       {triggerDrawn ? (
         <Chip
           ref={trigger}
