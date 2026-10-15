@@ -47,7 +47,7 @@ test("an actor is named as the reader says them, in a sentence and as whose", ()
     [
       actorName(you),
       actorName(you, { sentence: true }),
-      actorName(you, { sentence: true, possessive: true }),
+      actorName(you, { possessive: true }),
       actorName(sam, { possessive: true }),
       actorName(LUKE_ACTOR, { sentence: true }),
       actorName(agent, { sentence: true }),

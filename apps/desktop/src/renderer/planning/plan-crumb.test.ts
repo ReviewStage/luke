@@ -191,3 +191,13 @@ test("a member leaving, as the workspace's count says, reads the members again, 
 
   assert.equal(page.current().textContent, "AAcmerelayDS2 can edit");
 });
+
+test("a member joining while the members read again fails leaves the new count standing alone, rather than the earlier faces as if nobody joined", async () => {
+  const page = await crumb(ACME, "acme-corp/relay", MEMBERS);
+
+  held = undefined;
+  await page.redraw({ ...ACME, memberCount: 4 });
+
+  assert.equal(page.current().textContent, "AAcmerelay4 can edit");
+  assert.equal(page.current().querySelector(".actor-stack"), null);
+});

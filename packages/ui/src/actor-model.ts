@@ -129,15 +129,15 @@ function inSentence(words: string, sentence: boolean): string {
  * What an actor is called: the reader's own account "You", or "you" inside
  * a sentence, a person or a former member by name, Luke, an agent or an
  * automation by its title, and someone unnamed as "Someone". `possessive`
- * says whose: "your", "Charles Pan’s".
+ * says whose: "your", always in lower case, or "Charles Pan’s".
  */
 export function actorName(
   actor: Actor,
   { sentence = false, possessive = false }: { sentence?: boolean; possessive?: boolean } = {},
 ): string {
+  // Note that whose is the reader's is always "your", since it always stands inside a line: "your Mac", "your call".
   if (actor.kind === ACTOR_KIND.PERSON && actor.you) {
-    const words = possessive ? "Your" : "You";
-    return inSentence(words, sentence);
+    return possessive ? "your" : inSentence("You", sentence);
   }
   const name = (() => {
     switch (actor.kind) {

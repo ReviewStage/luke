@@ -896,6 +896,13 @@ body,
   margin-left: 0;
 }
 
+/* Someone unnamed keeps their outline inside the ring that cuts them from the ground. */
+.actor-stack > .actor-mark[data-kind="someone"] {
+  box-shadow:
+    inset 0 0 0 1px var(--hairline-strong),
+    0 0 0 2px var(--actor-stack-ground, var(--desktop-ground));
+}
+
 .actor-stack-more {
   display: inline-grid;
   height: 18px;
