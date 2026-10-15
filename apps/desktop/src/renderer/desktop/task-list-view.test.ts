@@ -8,9 +8,11 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { APP_COMMAND } from "#shared/shortcuts";
 import { onRegistry } from "#testing/copy-feedback";
 import { sidebarProps } from "#testing/desktop-sidebar";
 import { plansControl } from "#testing/plans-control";
+import { appCommandOffered, runAppCommand } from "../app-commands";
 import { DesktopSidebar } from "./desktop-sidebar";
 
 /**
@@ -534,4 +536,48 @@ test("with every task archived, the list says so and offers the archived tasks",
   assert.ok(show, "the note offers Show archived");
   act(() => show.click());
   assert.equal(headName(sidebar), "Archived tasks");
+});
+
+test("⌘K offers each view choice only while it would change the list, and running one changes it as the menu would", async () => {
+  const sidebar = await mountRead(ACME);
+  assert.equal(appCommandOffered(APP_COMMAND.GROUP_TASKS_BY_REPOSITORY), false);
+  assert.equal(appCommandOffered(APP_COMMAND.SHOW_EVERYONES_TASKS), false);
+  assert.equal(appCommandOffered(APP_COMMAND.HIDE_ARCHIVED_TASKS), false);
+
+  act(() => {
+    runAppCommand(APP_COMMAND.GROUP_TASKS_BY_CREATOR);
+  });
+  assert.deepEqual(groupNames(sidebar), ["You", "Charles Pan"]);
+  assert.equal(appCommandOffered(APP_COMMAND.GROUP_TASKS_BY_CREATOR), false);
+  assert.equal(appCommandOffered(APP_COMMAND.GROUP_TASKS_BY_REPOSITORY), true);
+
+  act(() => {
+    runAppCommand(APP_COMMAND.SHOW_MY_TASKS);
+  });
+  assert.equal(chipWords(sidebar), "Created by me");
+  assert.equal(appCommandOffered(APP_COMMAND.SHOW_EVERYONES_TASKS), true);
+
+  act(() => {
+    runAppCommand(APP_COMMAND.SHOW_ARCHIVED_TASKS);
+  });
+  assert.equal(headName(sidebar), "Archived tasks");
+  assert.equal(appCommandOffered(APP_COMMAND.HIDE_ARCHIVED_TASKS), true);
+});
+
+test("a workspace nobody shares offers ⌘K no grouping or filtering by creator", async () => {
+  await mountRead(PERSONAL);
+  assert.equal(appCommandOffered(APP_COMMAND.GROUP_TASKS_BY_CREATOR), false);
+  assert.equal(appCommandOffered(APP_COMMAND.SHOW_MY_TASKS), false);
+  assert.equal(appCommandOffered(APP_COMMAND.LIST_TASKS_UNGROUPED), true);
+});
+
+test("a creator grouping kept for a workspace nobody shares now reads as by repository, so ⌘K offers no grouping it already draws", async () => {
+  window.localStorage.setItem(
+    "luke.sidebarTaskViews",
+    JSON.stringify({ [PERSONAL.id]: { grouping: "creator", order: "updated" } }),
+  );
+  const sidebar = await mountRead(PERSONAL);
+  assert.deepEqual(groupNames(sidebar), ["console", "relay"]);
+  assert.equal(appCommandOffered(APP_COMMAND.GROUP_TASKS_BY_REPOSITORY), false);
+  assert.equal(appCommandOffered(APP_COMMAND.LIST_TASKS_UNGROUPED), true);
 });

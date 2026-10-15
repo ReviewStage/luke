@@ -14,7 +14,9 @@ import {
   XIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
+import { APP_COMMAND } from "#shared/shortcuts";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
+import { useAppCommand } from "../app-commands";
 import { useMemberDirectory } from "../member-directory";
 import { Tooltip } from "../tooltip";
 import { ActionMenu, type MenuAction, type MenuEntry, useActionMenu } from "./action-menu";
@@ -330,5 +332,67 @@ export function ViewChips({
         />
       ) : null}
     </div>
+  );
+}
+
+/** Each choice's command offered only where taking it changes the view; nothing where `offered` is false. */
+function offer(offered: boolean, changes: boolean, run: () => void): (() => void) | undefined {
+  return offered && changes ? run : undefined;
+}
+
+/**
+ * The view's choices as ⌘K offers them, each only while it would change
+ * the list: Group tasks by repository, by creator in a shared workspace, or
+ * in one list; Order tasks by last updated, created, or name; Show my tasks
+ * and Show everyone's tasks in a shared workspace; and Show or Hide archived
+ * tasks. They act as the View options menu's choices do.
+ */
+export function useTaskViewCommands({
+  offered,
+  control,
+  shared,
+  readerId,
+  archive,
+}: {
+  /** Whether the list stands to be changed: signed in, a workspace listed. */
+  offered: boolean;
+  control: TaskListViewControl;
+  shared: boolean;
+  readerId: string | undefined;
+  archive: ArchivedView;
+}): void {
+  const { order, createdBy } = control.view;
+  // A grouping by creator kept for a workspace nobody shares now is drawn by
+  // repository, so that is the grouping the commands read as standing.
+  const grouping =
+    !shared && control.view.grouping === TASK_GROUPING.CREATOR
+      ? TASK_GROUPING.REPOSITORY
+      : control.view.grouping;
+  const group = (to: typeof grouping, allowed = true) =>
+    offer(offered && allowed, grouping !== to, () => control.onGrouping(to));
+  const orderBy = (to: typeof order) => offer(offered, order !== to, () => control.onOrder(to));
+  useAppCommand(APP_COMMAND.GROUP_TASKS_BY_REPOSITORY, group(TASK_GROUPING.REPOSITORY));
+  useAppCommand(APP_COMMAND.GROUP_TASKS_BY_CREATOR, group(TASK_GROUPING.CREATOR, shared));
+  useAppCommand(APP_COMMAND.LIST_TASKS_UNGROUPED, group(TASK_GROUPING.NONE));
+  useAppCommand(APP_COMMAND.ORDER_TASKS_BY_UPDATED, orderBy(TASK_ORDER.UPDATED));
+  useAppCommand(APP_COMMAND.ORDER_TASKS_BY_CREATED, orderBy(TASK_ORDER.CREATED));
+  useAppCommand(APP_COMMAND.ORDER_TASKS_BY_NAME, orderBy(TASK_ORDER.NAME));
+  useAppCommand(
+    APP_COMMAND.SHOW_MY_TASKS,
+    offer(offered && shared && readerId !== undefined, createdBy !== readerId, () =>
+      control.onCreatedBy(readerId),
+    ),
+  );
+  useAppCommand(
+    APP_COMMAND.SHOW_EVERYONES_TASKS,
+    offer(offered && shared, createdBy !== undefined, () => control.onCreatedBy(undefined)),
+  );
+  useAppCommand(
+    APP_COMMAND.SHOW_ARCHIVED_TASKS,
+    offer(offered, !archive.shown, () => archive.onShown(true)),
+  );
+  useAppCommand(
+    APP_COMMAND.HIDE_ARCHIVED_TASKS,
+    offer(offered, archive.shown, () => archive.onShown(false)),
   );
 }

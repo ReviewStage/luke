@@ -25,7 +25,7 @@ import { afterEach, beforeEach, test } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { codingAgentsControl, plansControl } from "#testing/plans-control";
 import { installScrollIntoView } from "#testing/scroll-into-view";
-import { runAppCommand } from "../app-commands";
+import { runAppCommand, useAppCommand } from "../app-commands";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import type { PlansControl } from "../planning/use-plans-tab";
 import type { SidePanelControl } from "../planning/use-side-panel";
@@ -648,4 +648,26 @@ test("a teammate's task wears its creator's face at its row's end, and is found 
   // A query running from the task's name into its creator's names them too.
   type("budgetch");
   assert.deepEqual(rows(), ["Retry budget · acme/relay · Charles Pan"]);
+});
+
+/** Offers ⌘K's own Show my tasks, as the sidebar does while it would change the list, and records each run. */
+function OffersMyTasks({ ran }: { ran: string[] }): null {
+  useAppCommand(APP_COMMAND.SHOW_MY_TASKS, () => ran.push("show my tasks"));
+  return null;
+}
+
+test("a command ⌘K alone offers, the sidebar's Show my tasks, is listed by its name with no chord and runs from its row", () => {
+  const ran: string[] = [];
+  const host = document.createElement("div");
+  document.body.append(host);
+  const root = createRoot(host);
+  roots.push(root);
+  act(() => root.render(createElement(OffersMyTasks, { ran })));
+  openPalette();
+  type("my tasks");
+  assert.ok(rows().includes("Show my tasks"), "Show my tasks is listed");
+  const row = [...document.querySelectorAll(".menu-item")][rows().indexOf("Show my tasks")];
+  assert.equal(row?.querySelector(".menu-item-hint"), null, "no chord is printed");
+  press("Show my tasks");
+  assert.deepEqual(ran, ["show my tasks"]);
 });
