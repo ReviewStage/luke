@@ -1102,6 +1102,18 @@ test("Next hands the keyboard to the item it opens, its way back one column wide
   );
 });
 
+test("a press on the row already chosen hands the keyboard nowhere, so a later narrowing leaves it where the developer put it", async () => {
+  const { page } = mount();
+  await settle();
+  act(() => rowNamed(page, "Alert at 80%?").click());
+  const elsewhere = document.body.appendChild(document.createElement("button"));
+  elsewhere.focus();
+  layOut(page, 800);
+  assert.deepEqual(columnsShown(page), ["item"]);
+  assert.ok(document.activeElement === elsewhere, "the keyboard stays outside the Inbox");
+  elsewhere.remove();
+});
+
 /** An answer the act gives the renderer, the view it carries settled now. */
 function answered(value: CodingAgentInboxAnswerView): Promise<ReadOutcome> {
   return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });

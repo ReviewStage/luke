@@ -137,8 +137,9 @@ export function useInboxColumns(chosen: string | undefined, backable: boolean): 
   return {
     ref,
     shown,
-    onOpen: () => {
-      pressed.current = true;
+    onOpen: (itemId) => {
+      // Note that only a press that changes what stands is kept, since one that changes nothing draws nothing to hand the keyboard to, and a later resize would take it.
+      pressed.current = itemId !== chosen || shown === INBOX_COLUMNS.LIST;
       setListAsked(false);
     },
     onBack: back,
