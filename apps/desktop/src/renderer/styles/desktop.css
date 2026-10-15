@@ -13,12 +13,11 @@
   --workspace-hue-5: #6c55b3;
   --workspace-hue-6: #477a3a;
   --workspace-tile-ink: #fff;
-  /* An actor's square (`actor-ref.tsx`): Luke's face on his own blue, and an
-     agent's harness or an automation's clock on a neutral, each solid, so a
-     tile reads as one object on any ground beneath it. */
+  /* An actor's square (`actor-ref.tsx`): Luke's face in his own blue, an
+     agent's harness, or an automation's clock, each on one solid neutral, so
+     a tile reads as one object on any ground beneath it. */
   --actor-tile: #2a2a30;
   --actor-tile-ink: rgba(255, 255, 255, 0.92);
-  --actor-luke-ink: #04222e;
   --desktop-ground: #0c0c0e;
   --desktop-sidebar: #111114;
   /* A sidebar row's words at rest, a step under the primary ink and clear of
@@ -170,7 +169,6 @@
     --workspace-hue-6: #3f7434;
     --actor-tile: #e8e8ec;
     --actor-tile-ink: rgba(0, 0, 0, 0.82);
-    --actor-luke-ink: #fff;
   }
 }
 
@@ -864,9 +862,11 @@ body,
   border-radius: calc(var(--actor-size) * 0.36);
 }
 
+/* Luke wears his blue on his face, not his tile, the colour his voice and
+   the Transcript's face already answer in: 8.4:1 on the dark tile and 4.3:1
+   on the light one. */
 .actor-mark[data-kind="luke"] {
-  background: var(--voice-luke);
-  color: var(--actor-luke-ink);
+  color: var(--voice-luke);
 }
 
 /* A person's picture keeps its edge on a ground of its own colour. */

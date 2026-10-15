@@ -26,10 +26,10 @@ import { Tooltip } from "./tooltip";
  * letter of their name on the hue read off their id until then and where it
  * fails, as a workspace's tile does; a member who left, or someone the
  * service names nobody for, stands on a quiet outline. Luke's square holds
- * his face on his own blue, an agent's its harness, swapped for the working
+ * his face in his own blue, an agent's its harness, swapped for the working
  * mark while it writes as its tab's glyph is, and an automation's its clock,
- * each on a solid fill, never the ground showing through, so a tile reads as
- * the same object on any surface. A disc is one size per place
+ * each on one solid neutral fill, never the ground showing through, so a
+ * tile reads as the same object on any surface. A disc is one size per place
  * (`ACTOR_SIZE`), so a byline, a facepile, and a list row read level
  * whoever is in them. Named in a line, an actor is its mark and its name as
  * one target that hangs its card (`ActorRef`); a press opens what has a
