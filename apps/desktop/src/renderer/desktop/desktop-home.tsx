@@ -276,11 +276,12 @@ export function DesktopHome({
   useRowKeys(column, plans.shown);
   const { listed } = plans;
   if (!plans.listRead && !plans.listFailed) return null;
-  // Only an account with no plan in any workspace is new; a workspace of
-  // its own with none still says what needs it elsewhere.
-  if (!plans.listFailed && plans.plans.length === 0 && plans.archived.length === 0) {
-    return <Welcome plans={plans} />;
-  }
+  // Only an account with no plan in any workspace, and nothing an agent with
+  // no plan waits on, is new; a workspace of its own with none still says
+  // what needs it elsewhere.
+  const fresh =
+    plans.plans.length === 0 && plans.archived.length === 0 && plans.inboxPlanless.length === 0;
+  if (!plans.listFailed && fresh) return <Welcome plans={plans} />;
   const recent = recentPlans(listed.plans);
   return (
     <div className="home-scroll">

@@ -139,6 +139,8 @@ let setPlans: (plans: readonly PlanSummary[]) => void = () => undefined;
 let setPlanless: (planless: readonly AppInboxPlanlessItem[]) => void = () => undefined;
 /** Whether an agent's own inbox read answers that it could not be read. */
 let agentReadFails = false;
+/** Holds the next agent read's answer, handing the test what lands it, where a test asks. */
+let holdAgentRead: ((respond: () => void) => void) | undefined;
 /** A read of a plan's inbox as the act answers it: done, carrying the view the service answered. */
 interface ReadOutcome {
   readonly status: typeof ACT_OUTCOME_STATUS.DONE;
@@ -166,6 +168,7 @@ beforeEach(() => {
   agentInboxes = new Map();
   agentReads = [];
   agentReadFails = false;
+  holdAgentRead = undefined;
   Object.defineProperty(window, "luke", {
     configurable: true,
     value: {
@@ -180,7 +183,16 @@ beforeEach(() => {
           if (after !== INBOX_CURSOR_START) return new Promise(() => undefined);
           agentReads.push(agentId);
           if (agentReadFails) return done({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
-          return done({ items: agentInboxes.get(agentId) ?? [], cursor: "1" });
+          const items = agentInboxes.get(agentId) ?? [];
+          const hold = holdAgentRead;
+          if (hold !== undefined) {
+            return new Promise((resolve) =>
+              hold(() =>
+                resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { items, cursor: "1" } }),
+              ),
+            );
+          }
+          return done({ items, cursor: "1" });
         }
         if (request.kind === ACT_KIND.CODING_AGENTS_INBOX) {
           const { planId, after } = request.payload;
@@ -986,4 +998,27 @@ test("a read of an agent with no plan that fails is said with Retry, which reads
 
   assert.ok(agentReads.filter((agentId) => agentId === SECOND_AGENT).length > before);
   assert.doesNotMatch(page.querySelector(".inbox-plans")?.textContent ?? "", /could not be read/u);
+});
+
+test("an agent whose waiting items come back to what it was read for lets go of the read asked between, so its late answer draws nothing", async () => {
+  agentInboxes = new Map([[SECOND_AGENT, [SECOND_ASK, THIRD_ASK]]]);
+  const { page } = mount([QUARANTINE, SECOND_ASK, THIRD_ASK].map(waitingPlanless));
+  await settle();
+  // The read asked for the items between is held, to land only after they came back.
+  let landBetween: () => void = () => undefined;
+  const answered = agentInboxes;
+  agentInboxes = new Map([[SECOND_AGENT, []]]);
+  holdAgentRead = (respond) => {
+    landBetween = respond;
+  };
+  act(() => setPlanless([QUARANTINE, THIRD_ASK].map(waitingPlanless)));
+  await settle();
+  holdAgentRead = undefined;
+  agentInboxes = answered;
+  act(() => setPlanless([QUARANTINE, SECOND_ASK, THIRD_ASK].map(waitingPlanless)));
+  await settle();
+  act(() => landBetween());
+  await settle();
+
+  assert.ok(listed(page).includes("*Skip the slow suite?"), listed(page).join(" | "));
 });

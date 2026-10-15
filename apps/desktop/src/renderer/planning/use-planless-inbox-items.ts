@@ -76,7 +76,12 @@ export function usePlanlessInboxItems(
   useEffect(() => {
     void attempt;
     for (const [agentId, items] of standing) {
-      if (sameItems(readFor.current.get(agentId), items)) continue;
+      // Note that an agent whose items came back to what its read answered for lets go of an ask
+      // still out for the items between, so that ask's late answer draws nothing over it.
+      if (sameItems(readFor.current.get(agentId), items)) {
+        asking.current.delete(agentId);
+        continue;
+      }
       if (sameItems(asking.current.get(agentId)?.items, items)) continue;
       asks.current += 1;
       const seq = asks.current;

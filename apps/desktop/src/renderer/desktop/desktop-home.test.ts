@@ -364,3 +364,29 @@ test("Home lists an item an automation's agent with no plan waits on, by its aut
 
   assert.deepEqual(opened.inbox, ["inbox", { agentId: SWEEP_AGENT, itemId: QUARANTINE.id }]);
 });
+
+test("an account with no plan yet but an automation's question waiting on it is shown the question rather than welcomed as new", async () => {
+  const { page } = mount({
+    plans: [],
+    listed: { plans: [], archived: [], inbox: [], inboxPlans: [] },
+    inbox: [],
+    inboxPlans: [],
+    inboxPlanless: [
+      {
+        id: QUARANTINE.id,
+        agentId: SWEEP_AGENT,
+        title: QUARANTINE.title,
+        postedAt: QUARANTINE.postedAt,
+        agentTitle: null,
+        agentModel: "anthropic/claude-opus-5.5",
+        automationId: "5a0c4d2e-8f1b-4c3a-9e7d-2b6f1a8c9d04",
+        automationName: "Nightly flake sweep",
+        repository: "acme/relay",
+      },
+    ],
+  });
+  await settle();
+
+  assert.equal(page.querySelector("[aria-label='Welcome']") === null, true, "no welcome stands");
+  assert.deepEqual(rows(page, "home-inbox"), ["Quarantine the flaky test? · Nightly flake sweep"]);
+});
