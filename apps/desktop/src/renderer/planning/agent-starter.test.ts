@@ -48,6 +48,9 @@ test("a teammate's agent is named as started by them, and the reader's own is no
   assert.equal(teammateStarter(AGENT.startedBy, DEAN.userId), "Charles Pan");
   assert.equal(teammateStarter(AGENT.startedBy, CHARLES.userId), undefined);
   assert.equal(teammateStarter(undefined, DEAN.userId), undefined);
+  // With no account id, whose agent it is cannot be told, so nobody is named and the reader's own key keeps its Settings.
+  assert.equal(teammateStarter(AGENT.startedBy, undefined), undefined);
+  assert.doesNotMatch(cardFor(undefined), /Started by/u);
 
   assert.match(cardFor(DEAN.userId), /Started by Charles Pan/u);
   assert.doesNotMatch(cardFor(CHARLES.userId), /Started by/u);

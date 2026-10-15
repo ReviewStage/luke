@@ -116,15 +116,19 @@ const AGENT_FAILURE_WORDS = {
 
 /**
  * The teammate who started an agent, by name, whose key pays for it and whose
- * Mac its commands run on; none for the reader's own agent, or one whose
- * starter the service names nobody for. Read with no account id, every named
- * starter is named, since nothing says the agent is the reader's.
+ * Mac its commands run on; none for the reader's own agent, one whose starter
+ * the service names nobody for, or one read with no account id. Note that an
+ * agent read with no id names nobody, because whose it is cannot be told,
+ * and taking the reader's own for a teammate's would hide the Settings that
+ * mend the reader's own key.
  */
 export function teammateStarter(
   startedBy: PlanEditor | undefined,
   readerId: string | undefined,
 ): string | undefined {
-  if (startedBy === undefined || startedBy.userId === readerId) return undefined;
+  if (startedBy === undefined || readerId === undefined || startedBy.userId === readerId) {
+    return undefined;
+  }
   return startedBy.name;
 }
 
