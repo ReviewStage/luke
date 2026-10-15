@@ -33,6 +33,7 @@ import { DesktopPlans } from "./desktop-plans";
 import { DesktopSidebar } from "./desktop-sidebar";
 import { DesktopVersionHistory, planVersionSubject } from "./desktop-version-history";
 import { PaneGlide } from "./pane-motion";
+import { PersonPage } from "./person-page";
 import { useSummaryPin } from "./plan-summary";
 import { SidePanelToggle } from "./side-panel";
 import { SIDEBAR_OVERLAY, type SidebarCollapse } from "./sidebar-collapse";
@@ -287,6 +288,9 @@ function titleSubject(
   if (plans.agentView.agentId !== undefined) {
     return { signedIn, subject: "Agent", workspace: plans.workspace };
   }
+  if (plans.personView.userId !== undefined) {
+    return { signedIn, subject: "Profile", workspace: plans.workspace };
+  }
   if (plans.factoryView.open) return { signedIn, subject: "Factory", workspace: plans.workspace };
   if (plans.automationsView.open) {
     return { signedIn, subject: "Automations", workspace: plans.workspace };
@@ -374,13 +378,14 @@ export function DesktopShell({
   useColumnDock(
     shell,
     plans.sidePanel.fullScreen,
-    `${tab}:${plans.page}:${plans.history.open}:${plans.inboxView.open}:${plans.agentView.agentId}:${plans.factoryView.open}:${plans.automationsView.open}:${sidebar.collapsed}`,
+    `${tab}:${plans.page}:${plans.history.open}:${plans.inboxView.open}:${plans.agentView.agentId}:${plans.personView.userId}:${plans.factoryView.open}:${plans.automationsView.open}:${sidebar.collapsed}`,
   );
   // The window's title names what stands in it, the plan only while it is on screen, and its workspace;
-  // the Inbox, an agent's page, Factory, or the Automations page standing in its place is not the plan.
+  // the Inbox, an agent's or a person's page, Factory, or the Automations page standing in its place is not the plan.
   const standingIn =
     plans.inboxView.open ||
     plans.agentView.agentId !== undefined ||
+    plans.personView.userId !== undefined ||
     plans.factoryView.open ||
     plans.automationsView.open;
   const shownPlan =
@@ -450,6 +455,7 @@ export function DesktopShell({
   // no panel to toggle; an agent's page draws the agent's own.
   const inboxOpen = plans.inboxView.open;
   const pageAgent = plans.agentView.agentId;
+  const pagePerson = plans.personView.userId;
   const factoryOpen = plans.factoryView.open && factoryOn;
   const automationsOpen = plans.automationsView.open && automationsOn;
   const planToggle = plans.page === PLANS_PAGE.DOCUMENT && !standingIn;
@@ -489,6 +495,9 @@ export function DesktopShell({
         ) : pageAgent !== undefined ? (
           // Keyed by the agent, so another agent's page is a page of its own, holding nothing of the last.
           <DesktopAgentPage key={pageAgent} plans={plans} agentId={pageAgent} />
+        ) : pagePerson !== undefined ? (
+          // Keyed by the person, so another person's page holds nothing of the last.
+          <PersonPage key={pagePerson} plans={plans} userId={pagePerson} />
         ) : factoryOpen ? (
           <PageFind page={FIND_PAGE.FACTORY} active={plans.shown}>
             <DesktopFactory plans={plans} />

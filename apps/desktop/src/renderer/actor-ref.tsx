@@ -54,7 +54,7 @@ import { Tooltip } from "./tooltip";
  * its card; a picture's address is masked by session replay as its text is.
  */
 
-/** How large an actor is drawn: a sidebar task's creator at its time, a line's, a facepile's, a list row's, the sidebar's account, or a card head's and a Settings row's. */
+/** How large an actor is drawn: a sidebar task's creator at its time, a line's, a facepile's, a list row's, the sidebar's account, a card head's and a Settings row's, or a person's page's head. */
 export const ACTOR_SIZE = {
   MARK: "mark",
   INLINE: "inline",
@@ -62,6 +62,7 @@ export const ACTOR_SIZE = {
   ROW: "row",
   ACCOUNT: "account",
   CARD: "card",
+  PAGE: "page",
 } as const;
 
 type ActorSize = (typeof ACTOR_SIZE)[keyof typeof ACTOR_SIZE];

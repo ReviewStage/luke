@@ -79,7 +79,7 @@ function recentPlans(plans: readonly PlanSummary[]): PlanSummary[] {
  * member's Inbox lists them, and each agent with no plan main says
  * something waits on.
  */
-function useWaitingItems(plans: PlansControl) {
+export function useWaitingItems(plans: PlansControl) {
   const { act } = useAct();
   const readInbox = useCallback(
     (params: CodingAgentInboxParams) => act(ACT_KIND.CODING_AGENTS_INBOX, params),
@@ -160,18 +160,22 @@ export function NewPlanButton({ plans }: { plans: PlansControl }): React.JSX.Ele
 }
 
 /** A plan as the sidebar draws it, its repository after its name: the owner's picture, the name, the repository, and its mark and time, led by its creator's face where a teammate created it. */
-function RecentRow({
+export function RecentRow({
   plan,
   pictures,
   now,
+  face = true,
   onOpen,
 }: {
   plan: PlanSummary;
   pictures: boolean;
   now: number;
+  /** Whether a teammate's task wears its creator's face, which a person's own page says once in its head instead. */
+  face?: boolean;
   onOpen: () => void;
 }): React.JSX.Element {
-  const creator = teammateCreator(plan, useMemberDirectory());
+  const teammate = teammateCreator(plan, useMemberDirectory());
+  const creator = face ? teammate : undefined;
   return (
     <li className="sidebar-plan-item home-row">
       <button type="button" className="sidebar-plan" onClick={onOpen}>

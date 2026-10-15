@@ -976,6 +976,10 @@ button.sidebar-section-head-name:hover {
   --actor-size: 32px;
 }
 
+.actor-mark[data-size="page"] {
+  --actor-size: 48px;
+}
+
 /* An App's bot on GitHub stands on the same square, its avatar on the neutral tile. */
 .actor-mark:is(
   [data-kind="luke"],
@@ -7028,6 +7032,53 @@ button.automation-run:hover {
   width: 16px;
   height: 16px;
   border-radius: 4px;
+}
+
+/* A person's page (`person-page.tsx`): Home's column, headed by their face
+   at the page's size beside their name and who they are here. */
+.person-column {
+  margin-top: 0;
+  gap: var(--space-24);
+}
+
+.person-head {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-12);
+  padding: 0 var(--row-inset);
+}
+
+.person-head-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.person-head-name {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-8);
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+
+.person-head-line {
+  margin: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.person-empty {
+  padding: 0 var(--row-inset);
 }
 
 /* A new account's welcome: Luke's face on a tile, a title, a line, and New plan, centred. */

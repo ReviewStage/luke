@@ -58,6 +58,7 @@ export const APP_COMMAND = {
   PREVIOUS_INBOX_ITEM: "previous-inbox-item",
   NEXT_INBOX_ITEM: "next-inbox-item",
   EXIT_AGENT_PAGE: "exit-agent-page",
+  EXIT_PERSON_PAGE: "exit-person-page",
   FACTORY: "factory",
   EXIT_FACTORY: "exit-factory",
   AUTOMATIONS: "automations",
@@ -391,6 +392,10 @@ export const APP_SHORTCUTS = {
     label: "Exit agent page",
     chord: { key: SHORTCUT_KEY.ESCAPE, bare: true },
   },
+  [APP_COMMAND.EXIT_PERSON_PAGE]: {
+    label: "Exit profile",
+    chord: { key: SHORTCUT_KEY.ESCAPE, bare: true },
+  },
   [APP_COMMAND.FACTORY]: {
     label: "Factory",
     chord: { key: SHORTCUT_KEY.F, shift: true },
@@ -460,6 +465,7 @@ export const APP_SHORTCUT_GROUPS = [
       APP_COMMAND.PREVIOUS_INBOX_ITEM,
       APP_COMMAND.NEXT_INBOX_ITEM,
       APP_COMMAND.EXIT_AGENT_PAGE,
+      APP_COMMAND.EXIT_PERSON_PAGE,
       APP_COMMAND.FACTORY,
       APP_COMMAND.EXIT_FACTORY,
       APP_COMMAND.AUTOMATIONS,

@@ -208,10 +208,23 @@ interface AgentViewControl {
   readonly onClose: () => void;
 }
 
+/**
+ * One person's page, standing in the plan's place as an agent's does: a
+ * member of the listed workspace, the reader among them, or someone who left
+ * it, by their account id (`person-page.tsx`).
+ */
+interface PersonViewControl {
+  /** The person whose page stands, none while none does. */
+  readonly userId: string | undefined;
+  readonly onOpen: (userId: string) => void;
+  readonly onClose: () => void;
+}
+
 /** What may stand in the plan's place, the window's own rather than the plan's. */
 const STAND_IN = {
   INBOX: "inbox",
   AGENT: "agent",
+  PERSON: "person",
   FACTORY: "factory",
   AUTOMATIONS: "automations",
 } as const;
@@ -220,6 +233,7 @@ const STAND_IN = {
 type StandIn =
   | { readonly kind: typeof STAND_IN.INBOX; readonly chosen: InboxChoice | undefined }
   | { readonly kind: typeof STAND_IN.AGENT; readonly agentId: string }
+  | { readonly kind: typeof STAND_IN.PERSON; readonly userId: string }
   | { readonly kind: typeof STAND_IN.FACTORY }
   | { readonly kind: typeof STAND_IN.AUTOMATIONS; readonly place: AutomationsPlace };
 
@@ -390,6 +404,8 @@ export interface PlansControl {
   inboxView: InboxViewControl;
   /** One agent's page: which agent's stands in the plan's place, if any, and its presses. */
   agentView: AgentViewControl;
+  /** One person's page: whose stands in the plan's place, if anyone's, and its presses (`person-page.tsx`). */
+  personView: PersonViewControl;
   /** The window's Factory: whether it stands in the plan's place, and its presses (`desktop-factory.tsx`). */
   factoryView: FactoryViewControl;
   /** The window's Automations page: whether it stands in the plan's place, and its presses (`automations-page.tsx`). */
@@ -1114,6 +1130,8 @@ export function usePlansTab(input: {
     (workspaceId: string) => {
       navigations.current += 1;
       const mine = navigations.current;
+      // A person's page is theirs in the workspace it was opened in, so it gives way to the one chosen.
+      setStandIn((held) => (held?.kind === STAND_IN.PERSON ? undefined : held));
       chooseListed(workspaceId);
       if (openWorkspaceId === undefined || openWorkspaceId === workspaceId) return;
       const last = lastOpenIn.current.get(workspaceId);
@@ -1980,6 +1998,15 @@ export function usePlansTab(input: {
       onOpen: guard((agentId: string) => {
         setHistoryFor(undefined);
         setStandIn({ kind: STAND_IN.AGENT, agentId });
+      }),
+      onClose: guard(() => setStandIn(undefined)),
+    },
+    // A person's page stands over the plan's place as an agent's does, so a version history there gives way.
+    personView: {
+      userId: standIn?.kind === STAND_IN.PERSON ? standIn.userId : undefined,
+      onOpen: guard((userId: string) => {
+        setHistoryFor(undefined);
+        setStandIn({ kind: STAND_IN.PERSON, userId });
       }),
       onClose: guard(() => setStandIn(undefined)),
     },

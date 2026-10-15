@@ -101,3 +101,24 @@ test("a step back cancelled at the leave ask leaves the trail where the window s
   act(() => asked[0]?.());
   assert.deepEqual(homes, ["home"], "Leave takes the step it asked about");
 });
+
+test("a person's page is a step of its own, which Back from a plan opened after it returns to, and another person's is another step", () => {
+  const reopened: string[] = [];
+  // Every control the window stands on opens a person's page the same way, recorded.
+  const standing = (userId: string | undefined, rest: Partial<PlansControl> = {}) =>
+    plansControl({
+      ...rest,
+      personView: { userId, onOpen: (id) => reopened.push(id), onClose: () => undefined },
+    });
+  const window = mount(standing("user-charles"));
+  window.stand(standing("user-maya"));
+  window.stand(
+    standing(undefined, { page: PLANS_PAGE.DOCUMENT, activePlanId: PLAN_ID, boundFor: PLAN_ID }),
+  );
+
+  act(() => window.history().onBack());
+  window.stand(standing("user-maya"));
+  act(() => window.history().onBack());
+
+  assert.deepEqual(reopened, ["user-maya", "user-charles"]);
+});
