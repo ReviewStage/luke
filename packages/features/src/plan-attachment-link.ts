@@ -33,6 +33,17 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 const ADDRESS_IN_TEXT =
   /(?:https|tryluke):\/\/tryluke\.dev\/[^\s/()]{1,200}\/plan\/([0-9a-f-]{36})\/files\/([0-9a-f-]{36})(?![\w-])/gu;
 
+/**
+ * Every picture a text draws by an address of a plan's picture: an image's
+ * opening, its alt text (any run without a line break or an unescaped
+ * bracket, bounded as the address's steps are), then the address that
+ * opens its link. The address is the one group.
+ */
+const PICTURE_IN_TEXT = new RegExp(
+  `!\\[(?:\\\\.|[^\\]\\\\\\n]){0,1000}\\]\\((${ADDRESS_IN_TEXT.source})`,
+  "gu",
+);
+
 /** The most characters an address is read from; past this no picture's address is that long. */
 const MAX_ADDRESS_CHARS = 512;
 
@@ -88,7 +99,13 @@ export function planAttachmentIdsIn(text: string, planId: string): readonly stri
   return [...named];
 }
 
-/** Every picture address a text holds, of any plan, in order, each copy apart. */
-export function planAttachmentAddressesIn(text: string): readonly string[] {
-  return [...text.matchAll(ADDRESS_IN_TEXT)].map(([address]) => address);
+/**
+ * The address of every picture a text draws, `![alt](<address>`, of any
+ * plan, in order, each copy apart; an address standing as a link or as
+ * bare words draws no picture and is not among them.
+ */
+export function planPicturesIn(text: string): readonly string[] {
+  return [...text.matchAll(PICTURE_IN_TEXT)].flatMap(([, address]) =>
+    address === undefined ? [] : [address],
+  );
 }

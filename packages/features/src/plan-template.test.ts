@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { unparsedWire } from "@luke/wire";
 import { test } from "vitest";
+import { planPicturesIn } from "./plan-attachment-link.js";
 import {
   applyNotesToText,
   NOTE_KIND,
@@ -209,6 +210,16 @@ test("a correction that drops a picture the plan held is not taken", () => {
   assert.deepEqual(taken.missed, [note]);
 });
 
+test("a correction that leaves a picture's address as a link, drawing no picture, is not taken", () => {
+  const note: PlanNote = {
+    kind: NOTE_KIND.REPLACE,
+    find: PICTURE_LINE,
+    text: `[Members page with two pending invites](${PICTURE_ADDRESS})`,
+  };
+
+  assert.deepEqual(applyNotesToText(PICTURED, [note]).missed, [note]);
+});
+
 test("a correction that rewords a picture's alt text and caption, or moves it within the phrase it corrects, keeping its address, is taken", () => {
   const rewordedLine = `![Members page: one member, two pending invites](${PICTURE_ADDRESS})`;
   const reworded = applyNotesToText(PICTURED, [
@@ -223,7 +234,7 @@ test("a correction that rewords a picture's alt text and caption, or moves it wi
   ]);
 
   assert.deepEqual(reworded.missed, []);
-  assert.ok(reworded.text.includes(rewordedLine));
+  assert.ok(reworded.text.split("\n").includes(rewordedLine));
   assert.deepEqual(moved.missed, []);
   assert.ok(
     moved.text.startsWith(
@@ -237,6 +248,6 @@ test("striking the line a picture stands on is a retraction, and is taken", () =
     { kind: NOTE_KIND.REMOVE, find: "Members page with two pending invites" },
   ]);
 
-  assert.equal(taken.text.includes(PICTURE_ADDRESS), false);
+  assert.deepEqual(planPicturesIn(taken.text), []);
   assert.deepEqual(taken.missed, []);
 });

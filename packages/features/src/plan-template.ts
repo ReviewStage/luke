@@ -8,7 +8,7 @@ import {
 import { describeWire, readEither } from "@luke/wire/effect";
 import { Schema as EffectSchema, Result } from "effect";
 import { mentionLinksIn } from "./mention-link.js";
-import { planAttachmentAddressesIn } from "./plan-attachment-link.js";
+import { planPicturesIn } from "./plan-attachment-link.js";
 import { openFenceAt, type PlanSection, planSections } from "./plan-document.js";
 import { PLAN_BOUNDS, PLAN_SECTION_BOUNDS, type PlanField } from "./plan-wire.js";
 
@@ -503,15 +503,16 @@ function keepsMentions(before: string, after: string): boolean {
 }
 
 /**
- * Whether a correction keeps every picture the text held, by its address
- * (`plan-attachment-link.ts`), on the same terms as a mention: a correction
+ * Whether a correction keeps every picture the text held, counted by its
+ * address (`planPicturesIn`), on the same terms as a mention: a correction
  * may reword a picture's alt text or caption, or move it within the phrase
- * it corrects, but one that drops its address is not taken; striking the
+ * it corrects, but one that drops it, or leaves its address as a link that
+ * draws no picture, is not taken; striking the
  * line a picture stands on is a retraction, and is. A picture of another
  * plan is kept as surely as one of this plan.
  */
 function keepsPictures(before: string, after: string): boolean {
-  return keepsAddresses(before, after, planAttachmentAddressesIn);
+  return keepsAddresses(before, after, planPicturesIn);
 }
 
 /** Notes taken over a document's text: the text after, and the notes that could not be taken. */

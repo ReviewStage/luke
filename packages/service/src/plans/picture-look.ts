@@ -121,8 +121,8 @@ function looked(picture: Picture): PictureLookResult {
 /**
  * One call of `look_at_picture`: the picture the address names, where it is
  * a picture of the plan the call is bound to that the account reads, and
- * the turn has looks left; `not-looked` and why otherwise. A call whose
- * address is no picture address of the plan spends no look.
+ * the turn has looks left; `not-looked` and why otherwise. Only a look that
+ * answers a picture spends one of the turn's looks.
  */
 export function runLookAtPicture(
   call: PictureLookCall,
@@ -135,16 +135,13 @@ export function runLookAtPicture(
   if (named === undefined || named.planId !== call.plan.planId) {
     return Effect.succeed(pictureNotLooked(PICTURE_LOOK_REFUSAL.ELSEWHERE));
   }
-  if (!call.looks.take(call.turnId)) {
-    return Effect.succeed(pictureNotLooked(PICTURE_LOOK_REFUSAL.TOO_MANY));
-  }
   return readPlanAttachment(call.plan.userId, call.plan.planId, named.attachmentId).pipe(
-    Effect.map((picture) =>
-      Option.match(picture, {
-        onNone: () => pictureNotLooked(PICTURE_LOOK_REFUSAL.NO_PICTURE),
-        onSome: looked,
-      }),
-    ),
+    Effect.map((picture) => {
+      if (Option.isNone(picture)) return pictureNotLooked(PICTURE_LOOK_REFUSAL.NO_PICTURE);
+      // Spent once the picture is in hand and before it is answered, in one step, so calls run at once never pass the bound.
+      if (!call.looks.take(call.turnId)) return pictureNotLooked(PICTURE_LOOK_REFUSAL.TOO_MANY);
+      return looked(picture.value);
+    }),
     Effect.tapError(logStoreFailure),
     Effect.catch(() => Effect.succeed(pictureNotLooked(PICTURE_LOOK_REFUSAL.UNAVAILABLE))),
   );

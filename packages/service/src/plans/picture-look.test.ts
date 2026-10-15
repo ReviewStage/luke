@@ -130,12 +130,17 @@ it.layer(getTestDB())("look_at_picture", (it) => {
   );
 
   it.effect(
-    "a turn looks at so many pictures and is refused the next, while another turn looks again",
+    "a turn looks at so many pictures and is refused the next, a look that found no picture spending none, while another turn looks again",
     () =>
       Effect.gen(function* () {
         const { owner, planId, address } = yield* openPicturedPlans;
         const looks = pictureLooks();
+        const missing = planAttachmentAddress({ planId, attachmentId: randomUUID() }, "acme");
 
+        const misses = [
+          yield* look(lookCall(owner, planId, looks), missing),
+          yield* look(lookCall(owner, planId, looks), missing),
+        ];
         const statuses: string[] = [];
         for (let at = 0; at <= PICTURE_LOOK.MAX_PER_TURN; at += 1) {
           statuses.push((yield* look(lookCall(owner, planId, looks), address)).status);
@@ -146,6 +151,10 @@ it.layer(getTestDB())("look_at_picture", (it) => {
         assert.deepEqual(statuses, [
           ...Array.from({ length: PICTURE_LOOK.MAX_PER_TURN }, () => PICTURE_LOOK_STATUS.LOOKED),
           PICTURE_LOOK_STATUS.NOT_LOOKED,
+        ]);
+        assert.deepEqual(misses, [
+          pictureNotLooked(PICTURE_LOOK_REFUSAL.NO_PICTURE),
+          pictureNotLooked(PICTURE_LOOK_REFUSAL.NO_PICTURE),
         ]);
         assert.deepEqual(past, pictureNotLooked(PICTURE_LOOK_REFUSAL.TOO_MANY));
         assert.equal(next.status, PICTURE_LOOK_STATUS.LOOKED);
