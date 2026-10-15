@@ -11,12 +11,13 @@
 
 import { useAtomMount, useAtomSet, useAtomValue } from "@effect/atom-react/Hooks";
 import { ACT_KIND } from "@luke/host/acts";
+import { EXPERIMENT } from "@luke/settings";
 import { callTabVideoStatus } from "@luke/ui/call-card-model";
 import { AVATAR_OFF } from "@luke/voice/avatar";
 import { Option } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { useAct } from "../act";
-import { useAppState } from "../use-app-state";
+import { useAppState, useExperiment } from "../use-app-state";
 import { useVoiceView } from "../use-voice-view";
 import {
   type CallAvatarTracks,
@@ -25,7 +26,6 @@ import {
   callAvatarPlaybackAtom,
   NO_AVATAR_TRACKS,
 } from "./call-avatar";
-import { callControls } from "./call-card";
 import { AvatarVoice, CallVideoTile } from "./call-video-tile";
 
 /** The avatar's tracks as published so far, none before a session stands. */
@@ -48,23 +48,23 @@ export function PanelAvatarVoice(): React.JSX.Element {
 }
 
 /**
- * The video tile on one plan's Call tab: drawn while that plan's call is in
- * progress and its avatar is starting, live, or ended for a reason it offers
- * to restart from. Video off and Restart video ask main to take the avatar
- * down or put it up again on the call standing.
+ * The video at the top of one plan's Call tab: drawn while that plan's call
+ * is in progress and the Video calls experiment is on, as the tile while the
+ * avatar stands and as the strip once video is off. Video off, Video on, and
+ * Restart video ask main to take the avatar down or put it up again on the
+ * call standing.
  */
 export function CallTabVideo({ planId }: { planId: string }): React.JSX.Element | null {
   const { tell } = useAct();
   const state = useAppState();
   const { view } = useVoiceView();
   const avatar = state?.voice.avatar ?? AVATAR_OFF;
+  const videoCalls = useExperiment(EXPERIMENT.VIDEO_CALLS);
   return (
     <CallVideoTile
       video={useAvatarTracks().video}
-      status={callTabVideoStatus({ view, avatar, planId })}
-      onVideoOff={() => tell(ACT_KIND.VOICE_SET_VIDEO, { on: false })}
-      onRestart={() => tell(ACT_KIND.VOICE_SET_VIDEO, { on: true })}
-      onHangUp={callControls(tell, view.speakerMuted).onEnd}
+      status={callTabVideoStatus({ view, avatar, planId, videoCalls })}
+      onSetVideo={(on) => tell(ACT_KIND.VOICE_SET_VIDEO, { on })}
     />
   );
 }

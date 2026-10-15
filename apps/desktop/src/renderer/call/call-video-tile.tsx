@@ -7,16 +7,17 @@
  * Luke's face as a still frame where no video track is handed, which is what
  * a fixture run draws, since it reaches no avatar; once it has ended it
  * offers Restart video. Video off puts the avatar away and leaves the call
- * going as voice, and End call ends the call, in every state. No word of the
- * conversation is drawn here. The avatar's lip-synced voice is played apart
+ * going as voice, in every state, and the tile collapses to a compact strip
+ * whose Video on puts a fresh avatar up again; ending the call is the call
+ * bar's, which the tile does not repeat. No word of the conversation is drawn
+ * here. The avatar's lip-synced voice is played apart
  * from the tile (`AvatarVoice`), because the tile is drawn only while the
  * Call tab is, and the voice is what the developer hears whatever is shown.
  */
 
-import { CloseIcon, ResetIcon, VideoOffIcon, WingFace } from "@luke/ui";
+import { ResetIcon, VideoIcon, VideoOffIcon, WingFace } from "@luke/ui";
 import { AVATAR_STATUS, type AvatarStatus } from "@luke/voice/avatar";
 import { useCallback, useEffect, useRef } from "react";
-import { CALL_CONTROL_LABEL } from "../planning/planning-parts";
 import { ThinkingDots } from "../thinking-dots";
 
 /** What the tile says, for a reader and on screen. */
@@ -25,6 +26,8 @@ export const CALL_VIDEO_LABEL = {
   CONNECTING: "Connecting video",
   ENDED: "Video ended",
   VIDEO_OFF: "Turn video off",
+  VIDEO_ON: "Turn video on",
+  TURNED_OFF: "Video off",
   RESTART: "Restart video",
 } as const;
 
@@ -129,46 +132,57 @@ export function AvatarVoice({
   return <audio ref={soundElement} autoPlay hidden />;
 }
 
+/** Video off or Video on: one button that says which the press will do. */
+function VideoToggle({
+  on,
+  onSetVideo,
+}: {
+  on: boolean;
+  onSetVideo: (on: boolean) => void;
+}): React.JSX.Element {
+  const label = on ? CALL_VIDEO_LABEL.VIDEO_OFF : CALL_VIDEO_LABEL.VIDEO_ON;
+  return (
+    <button
+      type="button"
+      className="icon-button call-video-toggle"
+      aria-label={label}
+      title={label}
+      onClick={() => onSetVideo(!on)}
+    >
+      {on ? <VideoOffIcon /> : <VideoIcon />}
+    </button>
+  );
+}
+
 /**
- * The tile, drawn at the top of the Call tab while the avatar stands or has
- * just ended, at the tab's width, and nothing while it is off.
+ * The top of the Call tab: the tile at the tab's width while the avatar
+ * stands or has just ended, the compact strip once the developer turned
+ * video off, and nothing where the status is `undefined`.
  */
 export function CallVideoTile({
   video,
   status,
-  onVideoOff,
-  onRestart,
-  onHangUp,
+  onSetVideo,
 }: {
   video: MediaStreamTrack | undefined;
-  status: AvatarStatus;
-  onVideoOff: () => void;
-  onRestart: () => void;
-  onHangUp: () => void;
+  status: AvatarStatus | undefined;
+  /** Asks main to put the avatar up, a fresh session, or take it down with the developer's own reason. */
+  onSetVideo: (on: boolean) => void;
 }): React.JSX.Element | null {
-  if (status === AVATAR_STATUS.OFF) return null;
+  if (status === undefined) return null;
+  if (status === AVATAR_STATUS.OFF) {
+    return (
+      <section className="call-video-strip" aria-label={CALL_VIDEO_LABEL.TILE} data-status={status}>
+        <span className="call-video-note">{CALL_VIDEO_LABEL.TURNED_OFF}</span>
+        <VideoToggle on={false} onSetVideo={onSetVideo} />
+      </section>
+    );
+  }
   return (
     <section className="call-video-tile" aria-label={CALL_VIDEO_LABEL.TILE} data-status={status}>
-      <TileGround status={status} video={video} onRestart={onRestart} />
+      <TileGround status={status} video={video} onRestart={() => onSetVideo(true)} />
       <div className="call-video-controls">
-        <button
-          type="button"
-          className="icon-button call-video-off"
-          aria-label={CALL_VIDEO_LABEL.VIDEO_OFF}
-          title={CALL_VIDEO_LABEL.VIDEO_OFF}
-          onClick={onVideoOff}
-        >
-          <VideoOffIcon />
-        </button>
-        <button
-          type="button"
-          className="call-end"
-          aria-label={CALL_CONTROL_LABEL.END_CALL}
-          title={CALL_CONTROL_LABEL.END_CALL}
-          onClick={onHangUp}
-        >
-          <CloseIcon />
-        </button>
+        <VideoToggle on onSetVideo={onSetVideo} />
       </div>
     </section>
   );

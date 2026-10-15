@@ -214,8 +214,8 @@ html.call-window[data-pointer-stale="true"] .call-card button {
   font-size: 12px;
 }
 
-/* Video off and End call, in the tile's bottom-right corner over whatever
-   it draws, on the card's ground so they read over any frame of video. */
+/* Video off, in the tile's bottom-right corner over whatever it draws, on
+   the card's ground so it reads over any frame of video. */
 .call-video-controls {
   position: absolute;
   right: var(--space-8);
@@ -225,4 +225,22 @@ html.call-window[data-pointer-stale="true"] .call-card button {
   padding: var(--space-4);
   border-radius: 999px;
   background: var(--surface-popover);
+}
+
+/* The strip the tile collapses to once the developer turns video off: one
+   line on the tile's ground, border, and margins, saying so beside the
+   button that turns it on again, so the call keeps its video's place
+   without a picture's height. */
+.call-video-strip {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  box-sizing: border-box;
+  margin: var(--space-4) var(--space-16) var(--space-8);
+  padding: var(--space-4) var(--space-4) var(--space-4) var(--space-12);
+  border: 1px solid var(--hairline-strong);
+  border-radius: 12px;
+  background: var(--surface-popover);
+  color: var(--text-primary);
 }

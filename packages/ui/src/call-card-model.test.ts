@@ -130,10 +130,10 @@ test("the call bar is on screen only on a plan's document, and not under its ver
   assert.equal(callBarPlanId({ ...onPlan, plansTab: false }), undefined);
 });
 
-test("the Call tab draws the video on the call's own plan alone, while the call is in progress and the tile is up", () => {
+test("the Call tab draws the video on the call's own plan alone, while the call is in progress and the experiment is on", () => {
   const live: AvatarState = { status: AVATAR_STATUS.LIVE };
-  const drawn = (view: VoiceView, avatar: AvatarState, planId: string) =>
-    callTabVideoStatus({ view, avatar, planId });
+  const drawn = (view: VoiceView, avatar: AvatarState, planId: string, videoCalls = true) =>
+    callTabVideoStatus({ view, avatar, planId, videoCalls });
   assert.equal(drawn(LISTENING, live, INVITES), AVATAR_STATUS.LIVE);
   assert.equal(
     drawn(LISTENING, { status: AVATAR_STATUS.STARTING }, INVITES),
@@ -141,10 +141,18 @@ test("the Call tab draws the video on the call's own plan alone, while the call 
   );
   const restartable = { status: AVATAR_STATUS.ENDED, endReason: AVATAR_END_REASON.SERVER_CLOSED };
   assert.equal(drawn(LISTENING, restartable, INVITES), AVATAR_STATUS.ENDED);
-  // Another plan's Call tab, a call that is over, an avatar turned off, or none asked for draws nothing.
-  assert.equal(drawn(LISTENING, live, BILLING), AVATAR_STATUS.OFF);
-  assert.equal(drawn(IDLE_VOICE_VIEW, live, INVITES), AVATAR_STATUS.OFF);
+  // Another plan's Call tab, a call that is over, or the experiment off draws nothing.
+  assert.equal(drawn(LISTENING, live, BILLING), undefined);
+  assert.equal(drawn(IDLE_VOICE_VIEW, live, INVITES), undefined);
+  assert.equal(drawn(LISTENING, live, INVITES, false), undefined);
+  assert.equal(drawn(LISTENING, AVATAR_OFF, INVITES, false), undefined);
+});
+
+test("video the developer turned off stays offered to turn on again for as long as the call stands", () => {
   const turnedOff = { status: AVATAR_STATUS.ENDED, endReason: AVATAR_END_REASON.USER };
-  assert.equal(drawn(LISTENING, turnedOff, INVITES), AVATAR_STATUS.OFF);
-  assert.equal(drawn(LISTENING, AVATAR_OFF, INVITES), AVATAR_STATUS.OFF);
+  const drawn = (view: VoiceView, avatar: AvatarState) =>
+    callTabVideoStatus({ view, avatar, planId: INVITES, videoCalls: true });
+  assert.equal(drawn(LISTENING, turnedOff), AVATAR_STATUS.OFF);
+  assert.equal(drawn(LISTENING, AVATAR_OFF), AVATAR_STATUS.OFF);
+  assert.equal(drawn(IDLE_VOICE_VIEW, turnedOff), undefined);
 });

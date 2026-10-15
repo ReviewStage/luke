@@ -86,16 +86,21 @@ export function callCardShown(input: {
 }
 
 /**
- * What the video tile at the top of one plan's Call tab draws: the avatar's
- * status while that plan's call is in progress and the tile is up, and
- * `OFF`, which draws nothing, on any other plan or once the call is over.
+ * What the top of one plan's Call tab draws while that plan's call is in
+ * progress and the Video calls experiment is on: the avatar's tile while it
+ * is starting, live, or ended for a reason it offers to restart from, and
+ * `OFF` otherwise, which is the compact strip that offers to turn video on,
+ * because the developer's own off is not the end of video on the call.
+ * `undefined`, which draws nothing, on any other plan, once the call is
+ * over, or while the experiment is off.
  */
 export function callTabVideoStatus(input: {
   view: Pick<VoiceView, "voiceStatus" | "callPlanId">;
   avatar: AvatarState;
   planId: string;
-}): AvatarStatus {
-  const { view, avatar, planId } = input;
-  const tiled = callInProgress(view) && view.callPlanId === planId && avatarTiled(avatar);
-  return tiled ? avatar.status : AVATAR_STATUS.OFF;
+  videoCalls: boolean;
+}): AvatarStatus | undefined {
+  const { view, avatar, planId, videoCalls } = input;
+  if (!videoCalls || !callInProgress(view) || view.callPlanId !== planId) return undefined;
+  return avatarTiled(avatar) ? avatar.status : AVATAR_STATUS.OFF;
 }
