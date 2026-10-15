@@ -79,8 +79,12 @@ export const SETTINGS_PAGE_GROUPS: readonly {
  * stands on.
  */
 export const SETTINGS_SECTION = {
-  /** A workspace's members, its invite, and the leave. */
+  /** A workspace's members. */
   MEMBERS: "workspace-members",
+  /** A workspace's invite and the invitations still pending, an owner's or an admin's. */
+  INVITATIONS: "workspace-invitations",
+  /** The way out of a workspace, for anyone but its owner. */
+  LEAVE: "workspace-leave",
   /** A workspace's GitHub, the group once called GitHub repositories and still anchored by its name: GitHub's connect, Manage, and disconnect, and the repositories chosen on GitHub. */
   GITHUB_REPOSITORIES: "workspace-github-repositories",
 } as const;

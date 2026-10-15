@@ -114,7 +114,9 @@ const READ_FAILED = {
 
 /**
  * What the leave says: the row's line, and the dialog's body and what it
- * names as staying and stopping. Plans and agents are the workspace's, and a
+ * names as staying and stopping. Plans and agents are the workspace's; an
+ * agent's every step runs as its starter, read through their membership, so
+ * one still working when its starter leaves stops at its next step, and a
  * run of an automation starts as its creator, so one whose creator left
  * fails as `creator-left`.
  */
@@ -122,7 +124,8 @@ const LEAVE_WORDS = {
   LINE: "You lose its plans, agents, and Inbox until someone invites you again.",
   BODY: "You lose access to its plans, agents, and Inbox until someone invites you again.",
   PLANS: (name: string) => `Plans you wrote stay in ${name}, for its members to keep.`,
-  AGENTS: "Agents you started stay in its history, named as a former member.",
+  AGENTS:
+    "Agents you started stay in its history, named as a former member, and any still working stop.",
   AUTOMATIONS: "Automations you created stop running.",
   OWN: (name: string | undefined) =>
     name === undefined
@@ -282,7 +285,7 @@ function LeaveGroup({
     }, refusedWith),
   );
   return (
-    <SettingsGroup>
+    <SettingsGroup anchor={SETTINGS_SECTION.LEAVE}>
       <div className="settings-row">
         <RowCopy name={`Leave ${workspace.name}`} line={LEAVE_WORDS.LINE} />
         <button
@@ -963,7 +966,7 @@ export function WorkspacePage({
         <TeamMembers workspace={workspace} readerId={readerId} />
       </SettingsGroup>
       {managesWorkspace(workspace) ? (
-        <SettingsGroup title="Invitations">
+        <SettingsGroup title="Invitations" anchor={SETTINGS_SECTION.INVITATIONS}>
           <Invitations workspaceId={workspace.id} alone={(workspace.memberCount ?? 2) <= 1} />
         </SettingsGroup>
       ) : null}

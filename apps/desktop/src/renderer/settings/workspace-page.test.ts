@@ -724,7 +724,7 @@ test("a member leaves after confirming, which names what stays and what stops, s
   assert.equal(line, "You lose its plans, agents, and Inbox until someone invites you again.");
   assert.deepEqual(named, [
     "Plans you wrote stay in acme, for its members to keep.",
-    "Agents you started stay in its history, named as a former member.",
+    "Agents you started stay in its history, named as a former member, and any still working stop.",
     "Automations you created stop running.",
     "Your own workspace, Dana, isn't affected.",
   ]);
