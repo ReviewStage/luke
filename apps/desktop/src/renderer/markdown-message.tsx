@@ -145,6 +145,23 @@ function editedText(text: HastText, start: number, walk: EditWalk): readonly Has
 }
 
 /**
+ * A picture inside the change mark that covers it whole, so a picture
+ * written in or struck out reads as the change it is; one no mark covers is
+ * left as it is, since a picture holds no words to cut.
+ */
+function markedPicture(picture: HastNode, start: number, end: number, walk: EditWalk): HastNode {
+  const mark = walk.edit.marks?.find((each) => each.from <= start && end <= each.to);
+  if (mark === undefined || picture.type !== "element") return picture;
+  const drawn = MARK_DRAWN[mark.kind];
+  return {
+    type: "element",
+    tagName: drawn.tagName,
+    properties: { className: [drawn.className] },
+    children: [picture],
+  };
+}
+
+/**
  * Draws an edit over a parent's children in place. Every node carries its
  * place in the words, so the edit is made on the drawn tree rather than on
  * the Markdown, and a half-typed emphasis or list is still drawn whole. The
@@ -179,6 +196,10 @@ function editChildren(
         ...editedText(child, start, { ...walk, caretPlaced: walk.caretPlaced || !reaches }),
       );
       if (reaches) walk.caretPlaced = true;
+      return;
+    }
+    if (child.type === "element" && child.tagName === "img") {
+      kept.push(markedPicture(child, start, end, walk));
       return;
     }
     if (child.type === "element") {
