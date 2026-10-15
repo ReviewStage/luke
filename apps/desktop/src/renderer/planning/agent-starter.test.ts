@@ -229,6 +229,19 @@ async function stacked() {
   return { card, theirs, gap };
 }
 
+test("the pointer resting on a starter's card keeps both it and the agent's card beneath standing, however long it rests", async () => {
+  try {
+    await stacked();
+    pass(PAST_ANY_WAIT);
+    const standing = cards();
+    assert.equal(standing.length, 2, "both cards stand while the pointer rests on the upper");
+    assert.ok(standing[0]?.querySelector("[data-tab-card]"), "the agent's card");
+    assert.ok(standing[1]?.querySelector("[data-actor-card='person']"), "the starter's card");
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 test("the pointer leaving a starter's card for outside both cards takes both down once they have lingered", async () => {
   try {
     const { theirs } = await stacked();
