@@ -1,8 +1,8 @@
 import { INBOX_TOOL } from "@luke/features/inbox-wire";
+import { INBOX_TOOLS } from "@luke/service/agents/coder-host/inbox";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { emitJsonSchema } from "@luke/wire/effect";
 import { defineTool } from "eve/tools";
-import { INBOX_TOOLS } from "../../server/hosted/coder-host/inbox.js";
 import { runInboxTool } from "../host.js";
 
 /**
@@ -10,7 +10,7 @@ import { runInboxTool } from "../host.js";
  *
  * The call reaches the store through the host's door (`../host.ts`), as
  * `edit_plan` does, and answers with the agent's whole inbox as it stands
- * (`server/hosted/coder-host/inbox.ts`).
+ * (`packages/service/src/agents/coder-host/inbox.ts`).
  */
 export default defineTool({
   description: INBOX_TOOLS.CLOSE.description,

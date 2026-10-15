@@ -11,24 +11,24 @@ import type { StoreWriter } from "@luke/database/models/writer";
 import { STORE_WRITE_REFUSAL } from "@luke/database/models/writer";
 import { CODING_AGENT_STATUS, type CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import { causeKind } from "@luke/runtime/effect";
-import { eveContent } from "@luke/service/agents/attached-files";
-import { BRAIN_HOST_TURN } from "@luke/service/agents/brain-host/bounds";
-import {
-  describeUnreachable,
-  EVE_SEND_OUTCOME,
-  type EveSessions,
-} from "@luke/service/agents/brain-host/eve-sessions";
-import { mentionedContext, mentionedServers } from "@luke/service/agents/mentioned-context";
-import type { GitHubApp } from "@luke/service/github/github-app";
-import { agentWorkspace, workspaceRepository } from "@luke/service/github/workspace-repository";
-import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
+import { Clock, Effect, Option, Result } from "effect";
+import type * as HttpClient from "effect/http/HttpClient";
+import type { GitHubApp } from "../../github/github-app.js";
+import { agentWorkspace, workspaceRepository } from "../../github/workspace-repository.js";
+import { HOSTED_HTTP_STATUS } from "../../http/http.js";
 import {
   HOSTED_REFUSAL,
   type HostedRefusal,
   hostedStoreOrUnavailable,
-} from "@luke/service/http/http-effect";
-import { Clock, Effect, Option, Result } from "effect";
-import type * as HttpClient from "effect/http/HttpClient";
+} from "../../http/http-effect.js";
+import { eveContent } from "../attached-files.js";
+import { BRAIN_HOST_TURN } from "../brain-host/bounds.js";
+import {
+  describeUnreachable,
+  EVE_SEND_OUTCOME,
+  type EveSessions,
+} from "../brain-host/eve-sessions.js";
+import { mentionedContext, mentionedServers } from "../mentioned-context.js";
 import { codingAgentStatusOf } from "./status.js";
 
 /**

@@ -18,6 +18,7 @@ import {
   conversationReachableBy,
   runtimeSessionReachableBy,
 } from "@luke/service/agents/brain-host/conversation";
+import { STEER_OUTCOME } from "@luke/service/agents/coder-host/steer";
 import {
   ACTION_RESULT_STATUS,
   BRAIN_TURN_TRIGGER,
@@ -44,7 +45,6 @@ import { type BrainHost, brainHost } from "../server/hosted/brain-host/host";
 import { planningToolDeclarations } from "../server/hosted/brain-host/planning";
 import type { BrainHostSeams } from "../server/hosted/brain-host/production";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
-import { STEER_OUTCOME } from "../server/hosted/coder-host/steer";
 import {
   CODING_AGENT_TOOL_REFUSAL,
   LIST_CODING_AGENTS_TOOL,

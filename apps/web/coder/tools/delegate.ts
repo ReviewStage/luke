@@ -1,3 +1,4 @@
+import { DELEGATE_TOOL, type DelegationAsk } from "@luke/service/agents/coder-host/delegation";
 import { emitJsonSchema } from "@luke/wire/effect";
 import { Result } from "effect";
 import {
@@ -5,7 +6,6 @@ import {
   type WorkflowServeReceive,
   type WorkflowStepToolContext,
 } from "eve/tools";
-import { DELEGATE_TOOL, type DelegationAsk } from "../../server/hosted/coder-host/delegation.js";
 import { makeDelegation } from "../host.js";
 
 /**

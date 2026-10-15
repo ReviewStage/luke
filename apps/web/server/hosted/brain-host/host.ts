@@ -37,6 +37,8 @@ import {
 } from "@luke/service/agents/brain-host/relay";
 import { rotationSeedText } from "@luke/service/agents/brain-host/seed";
 import { carryStop } from "@luke/service/agents/brain-host/stop-carrier";
+import type { CoderModelSelection } from "@luke/service/agents/coder-host/model";
+import { titleSubagent } from "@luke/service/agents/coder-host/title";
 import { MeterUnavailable, ResearchBudget } from "@luke/service/agents/public-research";
 import type { RepositorySkill } from "@luke/service/agents/repository-skills";
 import {
@@ -58,8 +60,6 @@ import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionContext } from "eve/context";
 import type { ToolContext as EveToolContext } from "eve/tools";
 import { HOSTED_TOOL_SET } from "../brain-tool-set.js";
-import type { CoderModelSelection } from "../coder-host/model.js";
-import { titleSubagent } from "../coder-host/title.js";
 import { brainModelSelection } from "./model.js";
 import {
   EVE_DELEGATION_TOOL,

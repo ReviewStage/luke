@@ -10,6 +10,14 @@ import { recordedRuntimeSession } from "@luke/database/models/recorded-session";
 import { readAccountNames } from "@luke/database/models/workspace-store";
 import type { StoreWriter } from "@luke/database/models/writer";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import { Clock, DateTime, Effect, Redacted, Result } from "effect";
+import type { HttpClient } from "effect/http";
+import { HOSTED_HTTP_STATUS } from "../../http/http.js";
+import {
+  HOSTED_REFUSAL,
+  type HostedRefusal,
+  hostedStoreOrUnavailable,
+} from "../../http/http-effect.js";
 import {
   describeUnreachable,
   EVE_CANCEL_OUTCOME,
@@ -17,15 +25,7 @@ import {
   type EveMount,
   type EveSessions,
   eveSessions,
-} from "@luke/service/agents/brain-host/eve-sessions";
-import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
-import {
-  HOSTED_REFUSAL,
-  type HostedRefusal,
-  hostedStoreOrUnavailable,
-} from "@luke/service/http/http-effect";
-import { Clock, DateTime, Effect, Redacted, Result } from "effect";
-import type { HttpClient } from "effect/http";
+} from "../brain-host/eve-sessions.js";
 import { type AgentTurnStanding, codingAgentSummary, plannedAgent } from "./status.js";
 
 /**

@@ -37,6 +37,12 @@ import {
   automationCreateRequestSchema,
   automationRunRequestSchema,
 } from "@luke/features/automation-wire";
+import { acceptedAgentChoice } from "@luke/service/agents/coder-host/start";
+import {
+  type AgentTurnStanding,
+  codingAgentStatusOf,
+} from "@luke/service/agents/coder-host/status";
+import { type EveReach, eveFor, standingsOf } from "@luke/service/agents/coder-host/stop";
 import type { GitHubApp } from "@luke/service/github/github-app";
 import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import {
@@ -57,9 +63,6 @@ import { Clock, Effect, Layer, Option, Result } from "effect";
 import { HttpRouter, HttpServerRequest, type HttpServerResponse } from "effect/http";
 import type * as HttpClient from "effect/http/HttpClient";
 import { executeAutomationRun } from "./hosted/automation-runs.js";
-import { acceptedAgentChoice } from "./hosted/coder-host/start.js";
-import { type AgentTurnStanding, codingAgentStatusOf } from "./hosted/coder-host/status.js";
-import { type EveReach, eveFor, standingsOf } from "./hosted/coder-host/stop.js";
 
 /**
  * automations-app.ts -- the account's automations: list and make them, change and delete one, run one now, and read its runs.

@@ -279,9 +279,6 @@ importers:
 
   apps/web:
     dependencies:
-      '@ai-sdk/anthropic':
-        specifier: 4.0.78
-        version: 4.0.78(zod@4.5.4)
       '@ai-sdk/openai':
         specifier: 4.0.91
         version: 4.0.91(zod@4.5.4)
@@ -743,6 +740,12 @@ importers:
 
   packages/service:
     dependencies:
+      '@ai-sdk/anthropic':
+        specifier: 4.0.78
+        version: 4.0.78(zod@4.5.4)
+      '@ai-sdk/openai':
+        specifier: 4.0.91
+        version: 4.0.91(zod@4.5.4)
       '@better-auth/drizzle-adapter':
         specifier: 1.7.7
         version: 1.7.7(@better-auth/core@1.7.7(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.2)(@opentelemetry/api@1.9.1)(better-call@1.4.0(zod@4.5.4))(jose@6.2.9)(kysely@0.29.5)(nanostores@1.5.0))(@better-auth/utils@0.4.2)(drizzle-orm@1.0.0-rc.4(patch_hash=7eca027493ea68b0777e0306d382bf89cdd6217b8c3377c6d44e7911303f9f5b)(@effect/sql-pg@4.0.4(effect@4.0.4))(@effect/sql-pglite@4.0.4(effect@4.0.4))(@electric-sql/pglite@0.5.8)(@opentelemetry/api@1.9.1)(@types/pg@8.21.0)(effect@4.0.4)(pg@8.23.0)(zod@4.5.4))

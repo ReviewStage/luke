@@ -1278,7 +1278,7 @@ changes when a check is run, not when one is planned.
     refusal (no repository, not reachable, sign-in required, no sandbox or
     firewall) checking nothing out (`packages/service/src/agents/repository-shell.test.ts`);
     a coding agent's checkout on the same terms
-    (`apps/web/tests/coder-host-checkout.test.ts`); and the Start, list,
+    (`packages/service/src/agents/coder-host/checkout.test.ts`); and the Start, list,
     messages, and Stop routes over a fake eve
     (`apps/web/tests/coding-agents-app.test.ts`);
   - the notetaker saves what the developer said once they are quiet a beat,

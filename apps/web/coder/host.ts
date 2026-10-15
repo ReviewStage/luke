@@ -3,8 +3,15 @@ import type { ModelChoice } from "@luke/features/models-wire";
 import { edgeKit } from "@luke/service/agents/agent-runtime/edge";
 import { AGENT_ROLE } from "@luke/service/agents/agent-runtime/role";
 import type { AgentSkill } from "@luke/service/agents/agent-runtime/skills";
+import type { DelegationAsk } from "@luke/service/agents/coder-host/delegation";
+import { type InboxToolResult, inboxRejected } from "@luke/service/agents/coder-host/inbox";
 import type { InboxSandboxDoor } from "@luke/service/agents/coder-host/inbox-image";
+import type { CoderModelSelection } from "@luke/service/agents/coder-host/model";
 import { type PlanEditResult, planEditRejected } from "@luke/service/agents/coder-host/plan-edit";
+import {
+  type CoderHostSeams,
+  productionCoderHostSeams,
+} from "@luke/service/agents/coder-host/production";
 import type { CODER_TOOL } from "@luke/service/agents/coder-host/tool-set";
 import {
   MAC_COMMAND_STATUS,
@@ -25,14 +32,7 @@ import { emitJsonSchema } from "@luke/wire/effect";
 import { Effect, Result, Schema } from "effect";
 import type { SessionAuth } from "eve/context";
 import { defineTool } from "eve/tools";
-import type { DelegationAsk } from "../server/hosted/coder-host/delegation.js";
 import { type CoderHost, coderHost, type InboxCall } from "../server/hosted/coder-host/host.js";
-import { type InboxToolResult, inboxRejected } from "../server/hosted/coder-host/inbox.js";
-import type { CoderModelSelection } from "../server/hosted/coder-host/model.js";
-import {
-  type CoderHostSeams,
-  productionCoderHostSeams,
-} from "../server/hosted/coder-host/production.js";
 import { runWeb } from "../server/runtime.js";
 import { scriptedModel } from "./scripted-model.js";
 

@@ -45,7 +45,45 @@ import {
   inboxReplyRefusal,
 } from "@luke/features/inbox-wire";
 import { modelChoiceSchema } from "@luke/features/models-wire";
+import {
+  reachedAgent,
+  reachedAnyAgent,
+  resolvedUserId,
+  uuidOf,
+} from "@luke/service/agents/agent-reach";
+import { accountInboxPast, planInboxPast } from "@luke/service/agents/coder-host/inbox-page";
+import {
+  agentPullRequestReach,
+  type PublishedCache,
+  PublishedKey,
+  withPublishedCache,
+} from "@luke/service/agents/coder-host/published";
+import { acceptedAgentChoice, startCodingAgent } from "@luke/service/agents/coder-host/start";
+import {
+  codingAgentPage,
+  codingAgentSummary,
+  plannedAgent,
+} from "@luke/service/agents/coder-host/status";
+import { steerCodingAgent } from "@luke/service/agents/coder-host/steer";
+import {
+  type EveReach,
+  eveFor,
+  standingsOf,
+  stoppedForGood,
+  stoppedTurn,
+  summaryOf,
+} from "@luke/service/agents/coder-host/stop";
 import { CODER_TOOL_SET } from "@luke/service/agents/coder-host/tool-set";
+import {
+  cursorOfWire,
+  cursorToWire,
+  delegationPast,
+  NO_TITLE_AWAITED,
+  type TitleAwaited,
+  type TranscriptPage,
+  titleMayLand,
+  transcriptPast,
+} from "@luke/service/agents/coder-host/transcript";
 import { isRecord, isWireString, type UnparsedWireValue, unparsedWire } from "@luke/service/core";
 import { HostedEnvironment } from "@luke/service/environment";
 import type { GitHubApp } from "@luke/service/github/github-app";
@@ -75,35 +113,6 @@ import { ANY_METHOD, type WebRoutes } from "@luke/service/route";
 import { readEither } from "@luke/wire/effect";
 import { Cache, Clock, Effect, Layer, Option, Result } from "effect";
 import { type HttpClient, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
-import { reachedAgent, reachedAnyAgent, resolvedUserId, uuidOf } from "./hosted/agent-reach.js";
-import { accountInboxPast, planInboxPast } from "./hosted/coder-host/inbox-page.js";
-import {
-  agentPullRequestReach,
-  type PublishedCache,
-  PublishedKey,
-  withPublishedCache,
-} from "./hosted/coder-host/published.js";
-import { acceptedAgentChoice, startCodingAgent } from "./hosted/coder-host/start.js";
-import { codingAgentPage, codingAgentSummary, plannedAgent } from "./hosted/coder-host/status.js";
-import { steerCodingAgent } from "./hosted/coder-host/steer.js";
-import {
-  type EveReach,
-  eveFor,
-  standingsOf,
-  stoppedForGood,
-  stoppedTurn,
-  summaryOf,
-} from "./hosted/coder-host/stop.js";
-import {
-  cursorOfWire,
-  cursorToWire,
-  delegationPast,
-  NO_TITLE_AWAITED,
-  type TitleAwaited,
-  type TranscriptPage,
-  titleMayLand,
-  transcriptPast,
-} from "./hosted/coder-host/transcript.js";
 
 /**
  * coding-agents-app.ts -- a plan's coding agents: start one, list them, read one's transcript and its workers', message one, change one's model, and stop one.
@@ -115,7 +124,7 @@ import {
  * a teammate started, its conversation read and written under that teammate,
  * whose conversation it is. A Start
  * (`POST /api/plans/{id}/agents`) takes the one path a start takes
- * (`hosted/coder-host/start.ts`), which the voice brain's tool shares: the
+ * (`packages/service/src/agents/coder-host/start.ts`), which the voice brain's tool shares: the
  * model and effort checked against the catalog, the account's default where
  * the request names none, the plan's repository confirmed reachable through
  * the Luke GitHub App, the agent and its conversation made, and its eve
@@ -125,11 +134,11 @@ import {
  * the same agent, and opens nothing again. The list (`GET /api/plans/{id}/agents`) reads each agent's
  * status from its newest turn. The transcript
  * (`GET /api/agents/{id}/messages?after=`) is the conversation's rows past a
- * cursor, held open while the agent runs (`hosted/coder-host/transcript.ts`).
+ * cursor, held open while the agent runs (`packages/service/src/agents/coder-host/transcript.ts`).
  * A message (`POST /api/agents/{id}/messages`) is the developer's words
  * handed to the session the agent runs in, under the developer's own
  * bearer, with the client's own key for the send, through the one steer
- * path the voice brain's tool shares (`hosted/coder-host/steer.ts`): the
+ * path the voice brain's tool shares (`packages/service/src/agents/coder-host/steer.ts`): the
  * words steer the turn under way, or open a turn where none runs, and are
  * written as a user row awaiting its turn, so the transcript shows the
  * line at once and the agent reads as running until the turn that receives
@@ -158,7 +167,7 @@ import {
  * anything the agent pushed stays.
  * What the agent published (`GET /api/agents/{id}/pull-request`) is the
  * branch and pull request its own transcript names, as GitHub holds them
- * now (`hosted/coder-host/published.ts`), kept per agent for a short while
+ * now (`packages/service/src/agents/coder-host/published.ts`), kept per agent for a short while
  * so a tab asking beside every held page does not ask GitHub as often.
  * The agent's changes (`GET /api/agents/{id}/changes`) are the files of
  * the pull request that answer names, read from GitHub afresh on each ask
@@ -328,7 +337,7 @@ const choiceOrInvalid = <A, E, R>(
 
 /**
  * POST: an agent started on the plan, or the one a retry under the same key
- * already started, on the one start path (`hosted/coder-host/start.ts`),
+ * already started, on the one start path (`packages/service/src/agents/coder-host/start.ts`),
  * reaching eve as the developer.
  */
 const startEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (

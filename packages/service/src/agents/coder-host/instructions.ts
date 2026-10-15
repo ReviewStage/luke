@@ -4,13 +4,13 @@ import {
   CODING_AGENT_DELEGATE_TOOL,
   type CodingAgentBrief,
 } from "@luke/features/coding-agent-wire";
-import { CODER } from "@luke/service/agents/coder-host/bounds";
-import { EDIT_PLAN_TOOL } from "@luke/service/agents/coder-host/plan-edit";
-import { TODOS_TOOL } from "@luke/service/agents/coder-host/todos";
-import { CODER_TOOL } from "@luke/service/agents/coder-host/tool-set";
-import { COMMAND_DESCRIPTION_INSTRUCTION } from "@luke/service/agents/command-description";
-import { INTEGRATION_NAMES_SAID } from "@luke/service/integrations/integrations";
+import { INTEGRATION_NAMES_SAID } from "../../integrations/integrations.js";
+import { COMMAND_DESCRIPTION_INSTRUCTION } from "../command-description.js";
+import { CODER } from "./bounds.js";
 import { INBOX_TOOLS } from "./inbox.js";
+import { EDIT_PLAN_TOOL } from "./plan-edit.js";
+import { TODOS_TOOL } from "./todos.js";
+import { CODER_TOOL } from "./tool-set.js";
 
 const CODING_AGENT_EDIT_PLAN_TOOL = EDIT_PLAN_TOOL.name;
 

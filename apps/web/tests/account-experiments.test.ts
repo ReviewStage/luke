@@ -16,6 +16,7 @@ import {
 } from "@luke/database/models/plan-template-revisions";
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB } from "@luke/database/testing";
+import { anthropicFastAccess } from "@luke/service/agents/coder-host/account-keys";
 import { HostedEnvironment, type HostedEnvironmentValues } from "@luke/service/environment";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import { modelCatalogOf } from "@luke/service/providers/model-catalog";
@@ -36,7 +37,6 @@ import { Clock, Effect, Layer, Option } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { accountApp } from "../server/account-app";
-import { anthropicFastAccess } from "../server/hosted/coder-host/account-keys";
 
 /**
  * The experiments part of the account's preferences snapshot, answered by

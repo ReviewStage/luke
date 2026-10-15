@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { getTestDB, startPlan } from "@luke/database/testing";
-import { REPOSITORY_SANDBOX_CONTRACT } from "@luke/service/agents/repository-shell";
-import { LINK_OUTCOME } from "@luke/service/github/github-installations";
+import { Effect, Option, Redacted } from "effect";
+import { LINK_OUTCOME } from "../../github/github-installations.js";
 import {
   connectWorkspaceGitHub,
   GITHUB_FIXTURE_BOT,
@@ -11,10 +11,10 @@ import {
   githubReaching,
   type InstallationFixture,
   openGithubUser,
-} from "@luke/service/testing/github-app-fake";
-import { sandboxDouble } from "@luke/service/testing/repository-sandbox";
-import { Effect, Option, Redacted } from "effect";
-import { checkOutAgentRepository } from "../server/hosted/coder-host/checkout";
+} from "../../testing/github-app-fake.js";
+import { sandboxDouble } from "../../testing/repository-sandbox.js";
+import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-shell.js";
+import { checkOutAgentRepository } from "./checkout.js";
 
 /**
  * A coding agent's checkout: the repository cloned whole into its sandbox
