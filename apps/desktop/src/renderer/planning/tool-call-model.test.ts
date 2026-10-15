@@ -276,6 +276,15 @@ test("a plan edit's row sums its notes by what each did, and shows them as JSON"
   });
   assert.equal(view.kind, CALL_KIND.EDIT_PLAN);
   assert.equal(view.subject, "2 added, 1 corrected");
+  const pictured = toolCallView({
+    tool: "edit_plan",
+    input: {
+      notes: notes.slice(0, 1),
+      pictures: [{ section: "Approach", path: "shot.png", alt: "The members page" }],
+    },
+    output: undefined,
+  });
+  assert.equal(pictured.subject, "1 added, 1 picture added");
   assert.equal(view.input.kind, TOOL_BLOCK.JSON);
   assert.equal(
     toolCallView({ tool: "edit_plan", input: undefined, output: undefined }).subject,

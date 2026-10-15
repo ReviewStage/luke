@@ -4,6 +4,8 @@ import {
   planAttachmentAddress,
   planAttachmentIdsIn,
   planAttachmentOf,
+  planPictureMarkdown,
+  planPicturesIn,
 } from "./plan-attachment-link.js";
 
 /**
@@ -51,4 +53,18 @@ test("the pictures a text names are its plan's own, each once, in the order firs
   ].join("\n\n");
 
   assert.deepEqual(planAttachmentIdsIn(text, PLAN_ID), [SECOND, PICTURE]);
+});
+
+test("a picture's line holds its alt text and caption on one line, escaped so neither closes its part early, and the caption left out where there is none", () => {
+  const address = planAttachmentAddress({ planId: PLAN_ID, attachmentId: PICTURE }, "acme");
+
+  assert.equal(
+    planPictureMarkdown(address, "The [new]\n  members page", 'Says "pending" \\ twice'),
+    `![The \\[new\\] members page](${address} "Says \\"pending\\" \\\\ twice")`,
+  );
+  assert.equal(planPictureMarkdown(address, "Members page"), `![Members page](${address})`);
+  // The line written is a picture the plan's text draws, escaped alt text and all, so a correction must keep it.
+  assert.deepEqual(planPicturesIn(planPictureMarkdown(address, "The [new] page", 'Says "hi"')), [
+    address,
+  ]);
 });

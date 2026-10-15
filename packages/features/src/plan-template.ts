@@ -238,7 +238,8 @@ const MAX_NOTES = 40;
 /** The longest phrase a note may name to correct or strike. */
 const MAX_FIND_CHARS = 500;
 
-const SECTION = describeWire(
+/** The heading a point goes under, as a note names one: the notetaker's and a coding agent's alike. */
+export const planNoteSectionSchema = describeWire(
   trimmedText(PLAN_SECTION_BOUNDS.MAX_HEADING_CHARS),
   "The heading the point goes under, copied exactly from the plan's text, without its #s. " +
     "A heading the text does not hold opens a new section at its end.",
@@ -252,7 +253,7 @@ const FIND = describeWire(
 
 const addNoteSchema = EffectSchema.Struct({
   kind: EffectSchema.Literal(NOTE_KIND.ADD),
-  section: SECTION,
+  section: planNoteSectionSchema,
   text: describeWire(
     trimmedText(PLAN_BOUNDS.MAX_BODY_CHARS),
     "The new point, added at the end of the section: Markdown, a bullet where the section " +

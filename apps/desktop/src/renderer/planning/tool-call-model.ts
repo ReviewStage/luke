@@ -200,15 +200,18 @@ const NOTE_VERB = {
   remove: "struck",
 } as const satisfies Record<PlanNote["kind"], string>;
 
-/** The notes a plan edit took, summed by what each did: "2 added, 1 corrected". */
+/** The notes a plan edit took, summed by what each did, and the pictures it added: "2 added, 1 corrected, 1 picture added". */
 function planEditSummary(input: WireValue | undefined): string {
   const notes = isRecord(input) ? input.notes : undefined;
   if (notes === undefined || !isWireArray(notes)) return "";
+  const pictured = isRecord(input) ? input.pictures : undefined;
+  const pictures = pictured !== undefined && isWireArray(pictured) ? pictured.length : 0;
   return Object.entries(NOTE_VERB)
     .flatMap(([kind, verb]) => {
       const count = notes.filter((note) => stringAt(note, "kind") === kind).length;
       return count === 0 ? [] : [`${count} ${verb}`];
     })
+    .concat(pictures === 0 ? [] : [`${pictures} ${pictures === 1 ? "picture" : "pictures"} added`])
     .join(", ");
 }
 

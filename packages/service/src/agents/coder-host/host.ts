@@ -247,6 +247,7 @@ export interface CoderHost extends HostAdmission {
     admitted: AdmittedConversation,
     input: UnparsedWireValue,
     takenInTurn: number,
+    sandbox: InboxSandboxDoor,
   ): Effect.Effect<PlanEditResult, never, DatabaseServices>;
   /** Runs one of the agent's inbox tools (`inbox.ts`): a post, a close, or a read of its own items. */
   inbox(
@@ -560,7 +561,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
           state,
         });
       }),
-    editPlan: (admitted, input, takenInTurn) =>
+    editPlan: (admitted, input, takenInTurn, sandbox) =>
       Effect.gen(function* () {
         const found = yield* agentOf(admitted);
         if (Result.isFailure(found)) return planEditRejected(found.failure);
@@ -570,7 +571,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         if (planId === null) return planEditRejected(PLAN_EDIT_REFUSAL.NO_PLAN);
         // The plan is written as the member whose turn this is, whoever started the agent.
         const binding = { userId: admitted.caller, planId };
-        return yield* recordPlanEdit(binding, { agentId }, input, takenInTurn);
+        return yield* recordPlanEdit(binding, { agentId }, input, takenInTurn, sandbox);
       }).pipe(
         Effect.tapError(logStoreFailure),
         Effect.catch(() => Effect.succeed(planEditRejected(PLAN_EDIT_REFUSAL.UNAVAILABLE))),

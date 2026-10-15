@@ -169,18 +169,19 @@ export function offeredPlanTools(
   );
 }
 
-/** One `edit_plan` call's notes taken into the agent's plan, for the tool, which runs here rather than at an edge of its own. */
+/** One `edit_plan` call's notes taken into the agent's plan, its pictures read through the session's sandbox door, for the tool, which runs here rather than at an edge of its own. */
 export function editPlanNotes(
   auth: SessionAuth,
   sessionId: string,
   input: UnparsedWireValue,
   takenInTurn: number,
+  sandbox: InboxSandboxDoor,
 ): Promise<PlanEditResult> {
   return runAgent(
     Effect.gen(function* () {
       const admitted = yield* host.admit(auth, sessionId);
       if (Result.isFailure(admitted)) return planEditRejected(admitted.failure);
-      return yield* host.editPlan(admitted.success, input, takenInTurn);
+      return yield* host.editPlan(admitted.success, input, takenInTurn, sandbox);
     }),
   );
 }
