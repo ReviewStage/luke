@@ -169,6 +169,7 @@ function mount(
       unseenAgents: held.unseenAgents,
       inboxWaiting: held.inboxWaiting,
       inboxPlans: held.inboxPlans,
+      inboxPlanless: [],
       voice: { view: held.voice, listening: false, requestMicrophoneAccess: () => undefined },
       onOpenIntegrations: () => undefined,
       onOpenApiKeys: () => undefined,

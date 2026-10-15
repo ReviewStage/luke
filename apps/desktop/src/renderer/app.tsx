@@ -7,6 +7,7 @@ import { ACT_KIND } from "@luke/host/acts";
 import {
   type AppInboxPlan,
   type AppInboxPlanHolding,
+  type AppInboxPlanlessItem,
   RUN_PROFILE,
   sessionReplayBootstrap,
 } from "@luke/host/app-state";
@@ -79,6 +80,8 @@ const NOTHING_WAITING: readonly AppInboxPlan[] = [];
 
 /** No plan holds an inbox item, as the document reads before main has answered. */
 const NO_PLANS_HOLDING: readonly AppInboxPlanHolding[] = [];
+/** Nothing waiting from agents with no plan, as one value across renders. */
+const NOTHING_PLANLESS: readonly AppInboxPlanlessItem[] = [];
 
 export function App(): React.JSX.Element {
   const { act, tell, updateSetting } = useAct();
@@ -268,22 +271,27 @@ export function App(): React.JSX.Element {
     unseenAgents: state?.codingAgents.unseen ?? NO_UNSEEN_AGENTS,
     inboxWaiting: state?.inbox.waiting ?? NOTHING_WAITING,
     inboxPlans: state?.inbox.plans ?? NO_PLANS_HOLDING,
+    inboxPlanless: state?.inbox.planless ?? NOTHING_PLANLESS,
     voice: { view: voiceView, listening, requestMicrophoneAccess },
     onOpenSettings: (link) => openSettings(link),
     // Through the one opener, so a workspace an earlier link chose is not left showing.
     onOpenIntegrations: () => openSettings({ page: SETTINGS_VIEW.INTEGRATIONS }),
     onOpenApiKeys: () => openSettings({ page: SETTINGS_VIEW.CODING_AGENTS }),
   });
-  // A coding agent's notification clicked: the Plans tab, on that agent.
-  // Read through a ref, because the tab hands a new closure each render and
-  // the subscription is owed to the window, not to a render.
+  // A coding agent's notification clicked: the Plans tab, on that agent,
+  // its plan's tab or its own page where it has no plan. Read through refs,
+  // because the tab hands new closures each render and the subscription is
+  // owed to the window, not to a render.
   const showAgent = useRef(plans.onShowAgent);
   showAgent.current = plans.onShowAgent;
+  const showAgentPage = useRef(plans.agentView.onOpen);
+  showAgentPage.current = plans.agentView.onOpen;
   useEffect(
     () =>
       window.luke.onShowAgent(({ planId, agentId }) => {
         changeTab(PANEL_TAB.PLANS);
-        showAgent.current(planId, agentId);
+        if (planId === null) showAgentPage.current(agentId);
+        else showAgent.current(planId, agentId);
       }),
     [changeTab],
   );

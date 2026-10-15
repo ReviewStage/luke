@@ -203,3 +203,31 @@ test("a repository's header folds on its name, says its pin, counts its plans fo
   const ellipsis = sidebar.querySelector('button[aria-label="Actions for relay"]');
   assert.equal(ellipsis?.getAttribute("aria-expanded"), "true");
 });
+
+test("the Inbox row counts what waits on a plan and what waits from an agent with no plan alike", () => {
+  const page = mountSidebar(
+    plansControl({
+      inbox: [
+        {
+          planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
+          items: [{ id: "item-1", agentId: "agent-1", title: "Retry?", postedAt: 1 }],
+        },
+      ],
+      inboxPlanless: [
+        {
+          id: "item-2",
+          agentId: "agent-2",
+          title: "Quarantine the flaky test?",
+          postedAt: 2,
+          agentTitle: null,
+          agentModel: "anthropic/claude-opus-5.5",
+          automationId: null,
+          automationName: null,
+          repository: "acme/relay",
+        },
+      ],
+    }),
+  );
+
+  assert.equal(page.querySelector(".sidebar-inbox-waiting")?.firstChild?.textContent, "2");
+});

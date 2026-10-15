@@ -14,7 +14,7 @@ import {
 import { managesWorkspace } from "@luke/features/workspace-role";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import type { AppInboxPlan, AppInboxPlanHolding } from "@luke/host/app-state";
+import type { AppInboxPlan, AppInboxPlanHolding, AppInboxPlanlessItem } from "@luke/host/app-state";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { callCard } from "@luke/ui/call-card-model";
 import {
@@ -340,6 +340,8 @@ export interface PlansControl {
   inboxShown: string | null;
   /** Every plan holding an inbox item, waiting or settled, the plan whose item changed latest first: what the window's Inbox lists. */
   inboxPlans: readonly AppInboxPlanHolding[];
+  /** What waits on the developer from agents with no plan, as main's read last answered: what the window's Inbox lists beside the plans' and counts with them. */
+  inboxPlanless: readonly AppInboxPlanlessItem[];
   /** The window's Inbox: whether it stands in the plan's place, the plan chosen in it, and its presses. */
   inboxView: InboxViewControl;
   /** One agent's page: which agent's stands in the plan's place, if any, and its presses. */
@@ -558,6 +560,8 @@ export function usePlansTab(input: {
   inboxWaiting: readonly AppInboxPlan[];
   /** Every plan main says holds an inbox item, waiting or settled. */
   inboxPlans: readonly AppInboxPlanHolding[];
+  /** What main says waits on the developer from agents with no plan. */
+  inboxPlanless: readonly AppInboxPlanlessItem[];
   voice: {
     view: VoiceView;
     listening: boolean;
@@ -1613,6 +1617,7 @@ export function usePlansTab(input: {
     inbox: input.inboxWaiting,
     inboxShown: shownInbox,
     inboxPlans: input.inboxPlans,
+    inboxPlanless: input.inboxPlanless,
     // The window's Inbox stands over the plan's place, so a version history there gives way.
     inboxView: {
       open: inboxView !== undefined,

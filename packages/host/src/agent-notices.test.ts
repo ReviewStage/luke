@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import type { AccountInboxEntry } from "@luke/features/account-inbox-wire";
+import type { AccountInboxEntry, AccountPlanlessEntry } from "@luke/features/account-inbox-wire";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAccountInboxAnswerView,
@@ -23,7 +23,7 @@ import {
   createAgentNotices,
   type InboxItemToast,
 } from "./agent-notices.js";
-import type { AppInboxPlan, AppInboxPlanHolding } from "./app-state.js";
+import type { AppInboxPlan, AppInboxPlanHolding, AppInboxSlice } from "./app-state.js";
 
 const PLAN_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
@@ -85,6 +85,7 @@ function fixture() {
   const inboxReads: string[] = [];
   const waiting: (readonly AppInboxPlan[])[] = [];
   const holding: (readonly AppInboxPlanHolding[])[] = [];
+  const planless: AppInboxSlice["planless"][] = [];
   const openedInboxes: string[] = [];
   let inboxAnswers: Queue.Queue<CodingAgentAccountInboxAnswerView> | undefined;
   let accounts: Queue.Queue<string | undefined> | undefined;
@@ -143,6 +144,7 @@ function fixture() {
       onInboxChanged: (next) => {
         waiting.push(next.waiting);
         holding.push(next.plans);
+        planless.push(next.planless);
       },
       openInbox: (planId) => openedInboxes.push(planId),
       watchInterval: WATCH,
@@ -182,6 +184,7 @@ function fixture() {
     inboxReads,
     waiting,
     holding,
+    planless,
     badges,
     inboxToasted,
     openedInboxes,
@@ -351,5 +354,84 @@ it.effect(
       assert.equal(f.listReads(), 0);
       assert.deepEqual(f.listed, []);
       assert.deepEqual(f.posted, []);
+    }),
+);
+/** An item of an agent with no plan waiting on the developer, as the account's inbox read carries it. */
+function planlessItem(id: string, patch: Partial<AccountPlanlessEntry> = {}): AccountPlanlessEntry {
+  return {
+    id,
+    agentId: AGENT_ID,
+    agentTitle: "Sweep the flaky tests",
+    agentModel: MODEL,
+    automationId: "5a0c4d2e-8f1b-4c3a-9e7d-2b6f1a8c9d04",
+    automationName: "Nightly flake sweep",
+    repository: "acme/relay",
+    title: "Quarantine the flaky test?",
+    revision: 1,
+    postedAt: READ_AT,
+    updatedAt: READ_AT,
+    ...patch,
+  };
+}
+it.effect(
+  "an item of an agent with no plan waits beside the plans' and counts on the badge, and one opened since is announced by its automation, its click opening the agent's own page",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      yield* f.notices;
+      f.focus(false);
+      f.answerInbox({ items: [waitingItem(ITEM_A)], cursor: "1", readAt: READ_AT });
+      yield* settled;
+
+      f.answerInbox({
+        items: [waitingItem(ITEM_A)],
+        planless: [planlessItem(ITEM_B, { updatedAt: READ_AT + 1 })],
+        automations: [
+          {
+            automationId: "5a0c4d2e-8f1b-4c3a-9e7d-2b6f1a8c9d04",
+            items: 1,
+            updatedAt: READ_AT + 1,
+          },
+        ],
+        cursor: "2",
+        readAt: READ_AT + 2,
+      });
+      yield* settled;
+
+      assert.equal(
+        f.badges.at(-1),
+        2,
+        "the badge counts a plan's item and an agent's with no plan alike",
+      );
+      assert.deepEqual(f.said(), [
+        { title: "Nightly flake sweep", body: "Sweep the flaky tests: Quarantine the flaky test?" },
+      ]);
+      f.posted.at(-1)?.onClick();
+      assert.deepEqual(f.opened, [{ planId: null, agentId: AGENT_ID }]);
+    }),
+);
+it.effect(
+  "an automation renamed with nothing waiting moving is written as the item's new name, its cursor the same",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      yield* f.notices;
+      const answer = (automationName: string) => ({
+        items: [],
+        planless: [planlessItem(ITEM_A, { automationName })],
+        automations: [],
+        cursor: "4",
+        readAt: READ_AT,
+      });
+      f.answerInbox(answer("Nightly flake sweep"));
+      yield* settled;
+
+      f.answerInbox(answer("Flake sweep, nightly"));
+      yield* settled;
+
+      assert.deepEqual(
+        f.planless.at(-1)?.map((item) => item.automationName),
+        ["Flake sweep, nightly"],
+      );
     }),
 );

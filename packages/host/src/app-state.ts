@@ -141,6 +141,28 @@ export interface AppInboxPlanHolding {
 }
 
 /**
+ * One inbox item of an agent an automation started with no plan, waiting on
+ * the developer: the item as a plan's are, the agent as its row names it
+ * now, and the automation and repository standing where a plan would; the
+ * automation, and its name, null where the reader may not read it or none
+ * stands.
+ */
+export interface AppInboxPlanlessItem extends AppInboxWaitingItem {
+  agentTitle: string | null;
+  agentModel: string;
+  automationId: string | null;
+  automationName: string | null;
+  repository: string;
+}
+
+/** One automation holding items of its runs' agents with no plan, waiting or settled, as a plan holding items is listed: how many, and when the latest changed; null for the agents no automation the reader may read names. */
+interface AppInboxAutomationHolding {
+  automationId: string | null;
+  items: number;
+  updatedAt: number;
+}
+
+/**
  * What waits on the developer across the account's plans, as main's own
  * read of it last answered (`@luke/host/agent-notices`): each plan with an
  * open inbox item, the plan whose item changed latest first. What the
@@ -152,6 +174,10 @@ export interface AppInboxSlice {
   waiting: readonly AppInboxPlan[];
   /** Every plan holding an inbox item, waiting or settled, the plan whose item changed latest first: what the window's Inbox lists. */
   plans: readonly AppInboxPlanHolding[];
+  /** The open items of agents with no plan, the latest changed first, which wait beside the plans' and count with them. */
+  planless: readonly AppInboxPlanlessItem[];
+  /** Every automation holding items of its agents with no plan, as `plans` lists the plans. */
+  automations: readonly AppInboxAutomationHolding[];
 }
 
 /**
