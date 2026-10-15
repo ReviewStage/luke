@@ -1,5 +1,6 @@
 import type { AdminDayAccount, AdminDayDetail } from "@luke/service/admin/admin-day";
 import { accountLabel } from "@luke/ui/account-initials";
+import { formatDayHeading, formatNumber } from "@luke/ui/admin-format";
 import { partialDayKey } from "@luke/ui/daily-series";
 import { SectionHeading, StatCard } from "../charts/stat-card";
 import { AdminErrorCard, ForbiddenCard, SignInCard } from "../chrome/cards";
@@ -7,7 +8,6 @@ import { HideAdminsToggle, RefreshFailureNotice } from "../chrome/controls";
 import { DayNote } from "../chrome/notes";
 import { AccountAvatar, PageHeader, type ViewerAccount } from "../chrome/page-header";
 import { PageSkeleton } from "../chrome/page-skeleton";
-import { formatDayHeading, formatNumber } from "../format";
 import { accountHref, dayReadPath, plainLeftClick, tabHref } from "../routing";
 import { SKELETON_SHAPE, type SkeletonShape } from "../skeleton";
 import { type AdminReader, adminReadFailure, useAdminRead } from "../use-admin-read";

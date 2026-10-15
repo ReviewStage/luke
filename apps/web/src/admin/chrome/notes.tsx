@@ -1,4 +1,4 @@
-import { formatNumber } from "../format";
+import { formatNumber } from "@luke/ui/admin-format";
 
 export function RetentionNote(): React.JSX.Element {
   return (

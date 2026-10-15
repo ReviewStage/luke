@@ -21,6 +21,7 @@
     "./inbox-wire": "./src/inbox-wire.js",
     "./mac-command-wire": "./src/mac-command-wire.js",
     "./mention-link": "./src/mention-link.js",
+    "./open-address": "./src/open-address.js",
     "./integration-view": "./src/integration-view.js",
     "./integration-wire": "./src/integration-wire.js",
     "./model-label": "./src/model-label.js",

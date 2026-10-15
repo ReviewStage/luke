@@ -1,8 +1,8 @@
 import type { AdminDailyUsage } from "@luke/service/admin/admin-metrics";
 import { calendarWeeks, DAYS_PER_WEEK, lastWeeks, monthLabels } from "@luke/ui/activity-calendar";
+import { formatNumber, formatTooltipDay } from "@luke/ui/admin-format";
 import { partialDayKey } from "@luke/ui/daily-series";
 import { Fragment, useCallback, useLayoutEffect, useRef, useState } from "react";
-import { formatNumber, formatTooltipDay } from "../format";
 import { USAGE_CHART } from "./usage-chart";
 
 /**
