@@ -3,7 +3,7 @@ import { EXPERIMENT } from "@luke/settings";
 import { experimentsOn } from "@luke/settings/testing";
 import type { MenuItemConstructorOptions } from "electron";
 import { describe, test } from "vitest";
-import { APP_COMMAND } from "#shared/shortcuts";
+import { APP_COMMAND, shortcutShown, shownShortcutGroups } from "#shared/shortcuts";
 import { appMenuTemplate, menuBarDrawer } from "./app-menu";
 
 /**
@@ -27,6 +27,7 @@ describe("the menu bar's gate", () => {
     assert.deepEqual(labelsOf(appMenuTemplate("Luke"), "Go"), [
       "Home",
       "Inbox",
+      "Factory",
       "-",
       "Back",
       "Forward",
@@ -39,14 +40,37 @@ describe("the menu bar's gate", () => {
       undefined,
       (command) => command !== APP_COMMAND.INBOX,
     );
-    assert.deepEqual(labelsOf(withoutInbox, "Go"), ["Home", "-", "Back", "Forward"]);
+    assert.deepEqual(labelsOf(withoutInbox, "Go"), ["Home", "Factory", "-", "Back", "Forward"]);
 
     const withoutPlaces = appMenuTemplate(
       "Luke",
       undefined,
-      (command) => command !== APP_COMMAND.HOME && command !== APP_COMMAND.INBOX,
+      (command) =>
+        command !== APP_COMMAND.HOME &&
+        command !== APP_COMMAND.INBOX &&
+        command !== APP_COMMAND.FACTORY,
     );
     assert.deepEqual(labelsOf(withoutPlaces, "Go"), ["Back", "Forward"]);
+  });
+});
+
+describe("Factory's item", () => {
+  test("stands under Go only while the account has Factory's experiment on", () => {
+    const off = appMenuTemplate("Luke", undefined, (command) => shortcutShown(command, {}));
+    assert.ok(!labelsOf(off, "Go").includes("Factory"));
+    const on = appMenuTemplate("Luke", undefined, (command) =>
+      shortcutShown(command, experimentsOn(EXPERIMENT.FACTORY)),
+    );
+    assert.ok(labelsOf(on, "Go").includes("Factory"));
+  });
+
+  test("Factory's chord is listed only while its experiment is on", () => {
+    const listed = (groups: ReturnType<typeof shownShortcutGroups>) =>
+      groups.flatMap((group) => group.commands);
+    assert.ok(!listed(shownShortcutGroups({})).includes(APP_COMMAND.FACTORY));
+    assert.ok(
+      listed(shownShortcutGroups(experimentsOn(EXPERIMENT.FACTORY))).includes(APP_COMMAND.FACTORY),
+    );
   });
 });
 

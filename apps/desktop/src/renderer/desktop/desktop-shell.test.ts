@@ -2,8 +2,12 @@
 
 import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
+import { IDLE_PLANNING_VIEW } from "@luke/features/planning-view";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
+import { WINDOW_ROLE } from "@luke/gateway/window-session";
+import { EXPERIMENT, type ExperimentChoices } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
+import { appSettingsWire, experimentsOn, settingsView } from "@luke/settings/testing";
 import { UPDATE_STATUS } from "@luke/settings/update";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
@@ -12,6 +16,7 @@ import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { ACT_OUTCOME_STATUS } from "#shared/messages/acts";
+import type { AppStateSnapshot } from "#shared/messages/app-state";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { onRegistry } from "#testing/copy-feedback";
 import { DOCUMENT_NAME, DOCUMENT_PLAN } from "#testing/document-plan";
@@ -22,7 +27,7 @@ import { DOCUMENT_REGION, PLANS_PAGE } from "../planning/planning-model";
 import type { PlansControl } from "../planning/use-plans-tab";
 import type { SettingsPanelProps } from "../settings/settings-panel";
 import { DesktopShell } from "./desktop-shell";
-import { SIDEBAR_OVERLAY } from "./sidebar-collapse";
+import { SIDEBAR_OVERLAY, type SidebarCollapse } from "./sidebar-collapse";
 
 const ignore = () => undefined;
 const accepted = () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
@@ -109,6 +114,7 @@ function mount(
   overrides: Partial<PlansControl> = {},
   tab: PanelTab = PANEL_TAB.PLANS,
   onTabChange: (tab: PanelTab) => void = ignore,
+  sidebarPatch: Partial<SidebarCollapse> = {},
 ): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
@@ -155,6 +161,7 @@ function mount(
         onOverlay: ignore,
         onResize: ignore,
         staged: false,
+        ...sidebarPatch,
       },
       call: undefined,
       captions: {
@@ -254,7 +261,7 @@ const ACME: Workspace = {
   github: null,
 };
 
-test("the window is called by what stands in it: the plan on screen in its own workspace, else the Inbox or Settings, and Luke once signed out", () => {
+test("the window is called by what stands in it: the plan on screen in its own workspace, else the Inbox, Factory, or Settings, and Luke once signed out", () => {
   const titled = (inboxOpen: boolean, tab: PanelTab, signedIn = true, workspaces = [ACME]) => {
     mount(
       inboxOpen,
@@ -282,4 +289,96 @@ test("the window is called by what stands in it: the plan on screen in its own w
     ],
     [`${DOCUMENT_NAME} — Acme`, "Inbox — Acme", "Settings", "Luke", DOCUMENT_NAME],
   );
+
+  mount(false, false, {
+    workspaces: [ACME],
+    workspace: ACME,
+    factoryView: { open: true, onOpen: ignore, onClose: ignore },
+    region: { kind: DOCUMENT_REGION.READY, plan: DOCUMENT_PLAN },
+  });
+  assert.equal(document.title, "Factory — Acme");
+});
+
+/** The panel's snapshot of main's document with the account's experiments as given, everything else as a launch begins it. */
+function snapshotWith(experiments: ExperimentChoices): AppStateSnapshot {
+  return {
+    version: 1,
+    run: {
+      profile: "test",
+      packaged: false,
+      platform: "darwin",
+      appVersion: "1.0.0",
+      captureMode: false,
+      fixtureMode: false,
+      accountRequired: false,
+      agentTraceEnabled: false,
+    },
+    settings: appSettingsWire(settingsView({ experiments })),
+    account: SETTINGS.account,
+    update: {
+      status: UPDATE_STATUS.IDLE,
+      currentVersion: "1.0.0",
+      installSupported: true,
+      upToDate: false,
+    },
+    audio: { microphoneStatus: MICROPHONE_STATUS.GRANTED },
+    hotkeys: { talkHeld: true },
+    voice: {},
+    planning: IDLE_PLANNING_VIEW,
+    codingAgents: { unseen: [] },
+    inbox: { waiting: [], plans: [] },
+    notifications: { refused: false },
+    sessionReplay: { permitted: false, halted: false },
+    window: { role: WINDOW_ROLE.PANEL, fullScreen: false },
+  };
+}
+
+/** Main's document as the bridge hands it, with the account's experiments as given. */
+function handState(experiments: ExperimentChoices): void {
+  const snapshot = snapshotWith(experiments);
+  Object.defineProperty(window, "luke", {
+    configurable: true,
+    value: {
+      ...window.luke,
+      onAppState: () => () => undefined,
+      requestAppState: () => Promise.resolve(snapshot),
+    },
+  });
+}
+
+/** Lets every promise settled so far run its continuations. */
+async function settle(): Promise<void> {
+  await act(async () => {
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
+}
+
+test("Factory's sidebar row and its command stand only while the account has its experiment on", async () => {
+  handState({});
+  const off = mount(false);
+  await settle();
+  assert.equal(off.querySelector(".sidebar-factory"), null);
+  assert.equal(runAppCommand(APP_COMMAND.FACTORY), false);
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  handState(experimentsOn(EXPERIMENT.FACTORY));
+  const on = mount(false);
+  await settle();
+  assert.ok(on.querySelector(".sidebar-factory"));
+  assert.equal(runAppCommand(APP_COMMAND.FACTORY), true);
+});
+
+test("a press on Factory's row in a floating sidebar puts the sidebar away, as every row's does", async () => {
+  handState(experimentsOn(EXPERIMENT.FACTORY));
+  const told: SidebarCollapse["overlay"][] = [];
+  const page = mount(false, false, {}, PANEL_TAB.PLANS, ignore, {
+    overlay: SIDEBAR_OVERLAY.OPEN,
+    onOverlay: (next) => told.push(next),
+  });
+  await settle();
+  const row = page.querySelector<HTMLButtonElement>(".sidebar-factory");
+  assert.ok(row);
+  act(() => row.click());
+  assert.deepEqual(told, [SIDEBAR_OVERLAY.CLOSED]);
 });

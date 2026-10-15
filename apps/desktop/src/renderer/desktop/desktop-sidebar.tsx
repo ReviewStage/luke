@@ -1,6 +1,7 @@
 import type { AccountSnapshot } from "@luke/credentials/snapshot";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import type { PlanSummary } from "@luke/features/plan-wire";
+import { EXPERIMENT } from "@luke/settings";
 import {
   ArchiveIcon,
   ArrowLeftIcon,
@@ -16,7 +17,7 @@ import {
 } from "@luke/ui";
 import { sameTab } from "@luke/ui/tab-strip-model";
 import type { UpdateControl } from "@luke/voice/settings-controls";
-import { HouseIcon, InboxIcon } from "lucide-react";
+import { FactoryIcon, HouseIcon, InboxIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
 import { runAppCommand, useAppCommand } from "../app-commands";
@@ -40,6 +41,7 @@ import { RepositoryPicture } from "../repository-picture";
 import { Shortcut } from "../shortcut";
 import { Skeleton, SkeletonRegion } from "../skeleton";
 import { commandKeyshortcuts, Tooltip } from "../tooltip";
+import { useExperiment } from "../use-app-state";
 import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
 import { type FoldedGroups, useFoldedGroups } from "./folded-groups";
 import { LukeIdentity } from "./luke-identity";
@@ -639,15 +641,47 @@ function useFloatingSidebar(sidebar: SidebarCollapse): FloatingSidebar {
 }
 
 /**
+ * Factory's row, after the Inbox's and drawn as it is: the factory, its
+ * name, and its chord at its end while the row is hovered or reached from
+ * the keyboard. A press opens the window's Factory (`desktop-factory.tsx`),
+ * and the row is the place shown while it stands.
+ */
+function SidebarFactoryRow({
+  current,
+  disabled,
+  onOpen,
+}: {
+  current: boolean;
+  disabled: boolean;
+  onOpen: () => void;
+}): React.JSX.Element {
+  return (
+    <button
+      type="button"
+      className="sidebar-search sidebar-factory"
+      aria-current={current ? "page" : undefined}
+      aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.FACTORY)}
+      disabled={disabled}
+      onClick={onOpen}
+    >
+      <FactoryIcon />
+      Factory
+      <Shortcut chord={APP_SHORTCUTS[APP_COMMAND.FACTORY].chord} className="row-shortcut" />
+    </button>
+  );
+}
+
+/**
  * The window's left column: at its head the workspace chosen, by its tile
  * and name and who shares it, with the menu that chooses another
  * (`workspace-switcher.tsx`), or Luke while no workspace is read; the way to
  * a new plan, Search, which opens the command palette, every plan of the
  * workspace chosen, and the account's
- * row, whose menu and gear lead to Settings and the rest. Home's row and
- * then the Inbox's follow Search above the rule: Home's goes to the home
- * page, and the Inbox's counts what waits on the developer and opens the
- * window's Inbox. The pinned plans, and the side panel tabs
+ * row, whose menu and gear lead to Settings and the rest. Home's row, the
+ * Inbox's, and Factory's follow Search above the rule: Home's goes to the
+ * home page, the Inbox's counts what waits on the developer and opens the
+ * window's Inbox, and Factory's, while its experiment is on, opens the
+ * window's Factory. The pinned plans, and the side panel tabs
  * pinned to the sidebar, stand in a section of their own above the rest
  * while any are pinned, newest pinned first, under a header that folds as
  * a repository's does, every row one line whose hover card says the rest;
@@ -699,9 +733,12 @@ export function DesktopSidebar({
 }): React.JSX.Element {
   const onPlans = tab === PANEL_TAB.PLANS;
   const overlay = useFloatingSidebar(sidebar);
-  // The window's Inbox stands in the plan's place, so while it does no plan is the place shown, nor while an agent's page does.
+  // The window's Inbox, an agent's page, and Factory stand in the plan's place, so while one does no plan is the place shown.
   const inInbox = onPlans && plans.inboxView.open;
-  const standingIn = inInbox || (onPlans && plans.agentView.agentId !== undefined);
+  const inFactory = onPlans && plans.factoryView.open;
+  const standingIn = inInbox || inFactory || (onPlans && plans.agentView.agentId !== undefined);
+  // Factory is an experiment: its row stands only while the account has it on.
+  const factoryOn = useExperiment(EXPERIMENT.FACTORY);
   // A press in the list is always about plans, so it brings the Plans tab
   // forward from Settings as well as choosing.
   const openPlan = (planId: string) => {
@@ -719,6 +756,10 @@ export function DesktopSidebar({
   const openInbox = () => {
     if (!onPlans) onTabChange(PANEL_TAB.PLANS);
     plans.inboxView.onOpen();
+  };
+  const openFactory = () => {
+    if (!onPlans) onTabChange(PANEL_TAB.PLANS);
+    plans.factoryView.onOpen();
   };
   const goHome = () => {
     if (!onPlans) onTabChange(PANEL_TAB.PLANS);
@@ -863,6 +904,13 @@ export function DesktopSidebar({
         disabled={!plans.signedIn}
         onOpen={chosen(openInbox)}
       />
+      {factoryOn ? (
+        <SidebarFactoryRow
+          current={inFactory}
+          disabled={!plans.signedIn}
+          onOpen={chosen(openFactory)}
+        />
+      ) : null}
       <hr className="sidebar-rule" />
 
       {/* One scroller for both sections, so the pinned plans scroll away

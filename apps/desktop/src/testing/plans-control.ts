@@ -251,6 +251,8 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
       onChoose: ignore,
     },
     agentView: { agentId: undefined, onOpen: ignore, onClose: ignore },
+    factoryView: { open: false, onOpen: ignore, onClose: ignore },
+    callPlanId: undefined,
     onShowFile: ignore,
     onOpenPinnedTab: ignore,
     onReopenClosedTab: undefined,

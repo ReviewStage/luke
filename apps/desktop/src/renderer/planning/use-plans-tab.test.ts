@@ -1233,6 +1233,26 @@ test("another account signing in after a sign-out keeps its own plan, and has it
   assert.deepEqual(selected(tab), [PLAN.id]);
 });
 
+test("Factory and the Inbox stand in the plan's place in turn: opening one puts the other away, and Home or a plan's press puts Factory away", () => {
+  const tab = mount({ shown: true, planning: listRead([listed()]) });
+  act(() => tab.control().inboxView.onOpen());
+  act(() => tab.control().factoryView.onOpen());
+  assert.equal(tab.control().factoryView.open, true);
+  assert.equal(tab.control().inboxView.open, false);
+
+  act(() => tab.control().inboxView.onOpen());
+  assert.equal(tab.control().factoryView.open, false);
+  assert.equal(tab.control().inboxView.open, true);
+
+  act(() => tab.control().factoryView.onOpen());
+  act(() => tab.control().onGoHome());
+  assert.equal(tab.control().factoryView.open, false);
+
+  act(() => tab.control().factoryView.onOpen());
+  act(() => tab.control().onSelect(PLAN.id));
+  assert.equal(tab.control().factoryView.open, false);
+});
+
 test("Home from an open plan leaves it, and from the home page only puts the Inbox away, asking the host nothing", () => {
   const tab = mount(
     { shown: true, planning: OPEN },

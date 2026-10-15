@@ -440,17 +440,20 @@ body,
 
 .sidebar-new-plan:disabled,
 .sidebar-home:disabled,
-.sidebar-inbox:disabled {
+.sidebar-inbox:disabled,
+.sidebar-factory:disabled {
   opacity: 0.45;
 }
 
-/* The Home row is the place shown while the home page stands, and the Inbox
-   row while the window's Inbox does, each filled as the open plan's row is.
+/* The Home row is the place shown while the home page stands, the Inbox
+   row while the window's Inbox does, and Factory's while Factory does, each
+   filled as the open plan's row is.
    The Inbox's count of what waits on the developer stands at its end in a
    group count's ink, and gives way to its chord while the row is hovered
    or reached from the keyboard, as the rows above show theirs. */
 .sidebar-home[aria-current="page"],
-.sidebar-inbox[aria-current="page"] {
+.sidebar-inbox[aria-current="page"],
+.sidebar-factory[aria-current="page"] {
   background: var(--raised-strong);
 }
 
@@ -3146,6 +3149,246 @@ body:has(.app-stage[data-capture="true"])
   .inbox-view-items
   .desktop-toolbar {
   padding-left: var(--sidebar-toggle-clearance);
+}
+
+/* Factory -------------------------------------------------------------------- */
+
+/* Factory stands in the plan's place as the Inbox does: the toolbar, the
+   summary line, then the line of steps, each a card on the sidebar's ground
+   holding sidebar rows. The steps share one grid row each for their work and
+   their wait, so what waits on the developer lines up as one band across the
+   line, under the step it holds up. */
+/* An experiment's toolbar: a quiet badge after its title, as a tool's
+   annotation is drawn, and Send feedback as a quiet text button. */
+.desktop-toolbar-heading:has(.experiment-badge) {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+.experiment-feedback {
+  padding: var(--space-2) var(--space-6);
+  border-radius: var(--menu-row-radius);
+  background: none;
+  color: var(--text-secondary);
+  font-size: 12px;
+  transition: background-color var(--duration-hover) ease;
+  -webkit-app-region: no-drag;
+}
+
+.experiment-feedback:hover {
+  background: var(--raised);
+  color: var(--text-primary);
+}
+
+.factory-view {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.factory-scroll {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 var(--content-inset) var(--space-32);
+}
+
+.factory-summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  margin: 0;
+  padding: var(--space-12) 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.factory-needs {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-6);
+  margin: calc(-1 * var(--space-2)) calc(-1 * var(--space-6));
+  padding: var(--space-2) var(--space-6);
+  border-radius: var(--menu-row-radius);
+  background: none;
+  color: var(--text-primary);
+  font-weight: 600;
+  transition: background-color var(--duration-hover) ease;
+}
+
+.factory-needs:hover {
+  background: var(--raised);
+}
+
+.factory-sep {
+  color: var(--text-tertiary);
+}
+
+.factory-line-up {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  align-items: start;
+  column-gap: var(--space-8);
+  max-width: 1080px; /* off-scale */
+}
+
+.factory-step {
+  display: grid;
+  grid-row: span 2;
+  grid-template-rows: subgrid;
+  min-width: 0;
+  padding: var(--space-8) var(--space-4) var(--space-4);
+  border: 1px solid var(--hairline);
+  border-radius: var(--menu-radius);
+  background: var(--desktop-sidebar);
+}
+
+.factory-work,
+.factory-wait {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.factory-wait {
+  margin: var(--space-12) calc(-1 * var(--space-4)) calc(-1 * var(--space-4));
+  padding: var(--space-8) var(--space-4) var(--space-4);
+  border-top: 1px solid var(--hairline);
+  border-radius: 0 0 var(--menu-radius) var(--menu-radius);
+  background: var(--desktop-ground);
+}
+
+.factory-arrow {
+  display: flex;
+  align-self: start;
+  margin-top: var(--space-6);
+  color: var(--selected-edge);
+}
+
+.factory-arrow svg {
+  width: var(--control-glyph);
+  height: var(--control-glyph);
+}
+
+.factory-head {
+  display: flex;
+  align-items: center;
+  gap: var(--glyph-gap);
+  min-height: 24px;
+  margin: 0;
+  padding: 0 var(--row-inset);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.factory-glyph {
+  width: var(--control-glyph);
+  height: var(--control-glyph);
+  flex: none;
+  color: var(--text-secondary);
+}
+
+.factory-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.factory-count {
+  margin-left: auto;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+
+.factory-head-dot {
+  --inbox-dot: 7px;
+  position: static;
+  flex: none;
+  transform: none;
+}
+
+.factory-over {
+  margin: 0 0 var(--space-4);
+  padding: 0 var(--row-inset);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.factory-line {
+  margin: 0;
+  padding: var(--space-2) var(--row-inset) var(--space-6);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+/* A step's rows read whole on two lines, and a question on up to five,
+   rather than cut short; the time and the dot stand at the first line. */
+.factory-rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.factory-row .sidebar-plan-line {
+  align-items: flex-start;
+}
+
+.factory-row .sidebar-plan-name {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-height: 1.35;
+  white-space: normal;
+}
+
+.factory-rows[data-wait] .sidebar-plan-name {
+  -webkit-line-clamp: 5;
+}
+
+/* The dot stands centred on the first line, beside the time. */
+.factory-row .inbox-row-dot {
+  top: 0.675em; /* off-scale: half the line's height */
+}
+
+.factory-more {
+  padding: var(--space-4) var(--row-inset) var(--space-6);
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+/* An agent stopped on a question wears the question, in full ink, not the
+   working mark; what just shipped wears the finished mark, its name muted. */
+.factory-asking {
+  color: var(--text-primary);
+}
+
+.factory-shipped {
+  color: var(--state-complete);
+}
+
+.factory-row:has(.factory-shipped) .sidebar-plan-name {
+  color: var(--text-secondary);
+}
+
+.factory-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-12);
+  max-width: 1080px; /* off-scale */
+  margin-top: var(--space-48);
+  color: var(--text-secondary);
+  font-size: 13px;
 }
 
 /* Settings ------------------------------------------------------------------- */

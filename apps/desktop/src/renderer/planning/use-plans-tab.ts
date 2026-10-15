@@ -204,12 +204,21 @@ interface AgentViewControl {
 const STAND_IN = {
   INBOX: "inbox",
   AGENT: "agent",
+  FACTORY: "factory",
 } as const;
 
-/** The window's Inbox with the item chosen in it, or one agent's page. */
+/** The window's Inbox with the item chosen in it, one agent's page, or Factory. */
 type StandIn =
   | { readonly kind: typeof STAND_IN.INBOX; readonly chosen: InboxChoice | undefined }
-  | { readonly kind: typeof STAND_IN.AGENT; readonly agentId: string };
+  | { readonly kind: typeof STAND_IN.AGENT; readonly agentId: string }
+  | { readonly kind: typeof STAND_IN.FACTORY };
+
+/** The window's Factory: whether it stands in the plan's place, and the presses that open and leave it. */
+interface FactoryViewControl {
+  readonly open: boolean;
+  readonly onOpen: () => void;
+  readonly onClose: () => void;
+}
 
 /** Everything the Plans tab draws and presses, handed to the panel body whole. */
 export interface PlansControl {
@@ -335,6 +344,10 @@ export interface PlansControl {
   inboxView: InboxViewControl;
   /** One agent's page: which agent's stands in the plan's place, if any, and its presses. */
   agentView: AgentViewControl;
+  /** The window's Factory: whether it stands in the plan's place, and its presses (`desktop-factory.tsx`). */
+  factoryView: FactoryViewControl;
+  /** The plan the call in progress on this Mac is about, or none: what Factory marks as being planned. */
+  callPlanId: string | undefined;
   /** Opens a plan's file in its side panel at the commit named, the reference's lines lit, opening the plan first where it is not the open one: what an inbox item's code opens. */
   onShowFile: (planId: string, ref: CodeRef, commit: string) => void;
   /** Opens a tab pinned to the sidebar: its plan, where it is not the open one, and the tab in its column, opening the side panel for one of its own. */
@@ -1625,6 +1638,16 @@ export function usePlansTab(input: {
       },
       onClose: () => setStandIn(undefined),
     },
+    // Factory stands over the plan's place as the Inbox and an agent's page do, each giving way to the others.
+    factoryView: {
+      open: standIn?.kind === STAND_IN.FACTORY,
+      onOpen: () => {
+        setHistoryFor(undefined);
+        setStandIn({ kind: STAND_IN.FACTORY });
+      },
+      onClose: () => setStandIn(undefined),
+    },
+    callPlanId: callInProgress(reported) ? reported.callPlanId : undefined,
     onShowFile: showFile,
     // A version's Open lands where its writer wrote it: an agent's tab as a
     // notification opens it, or the side panel's Call tab, asked to
@@ -1711,8 +1734,8 @@ export function usePlansTab(input: {
       onClose: () => setNewPlanAsk(undefined),
     },
     onLeavePlan: leavePlan,
-    // Home is the page with no plan open, so where none is, only the Inbox
-    // standing over it is put away, and the host is asked nothing.
+    // Home is the page with no plan open, so where none is, only the Inbox, an
+    // agent's page, or Factory standing over it is put away, and the host is asked nothing.
     onGoHome: () => (boundFor === undefined ? setStandIn(undefined) : leavePlan()),
     onRenamePlan: renamePlan,
     onDraftName: draftName,
