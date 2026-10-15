@@ -112,7 +112,6 @@
     "./automations/automation-runs": "./src/automations/automation-runs.js",
     "./automations/automation-sweep": "./src/automations/automation-sweep.js",
     "./automations/automations-app": "./src/automations/automations-app.js",
-    "./core": "./src/core.js",
     "./db": "./src/db/index.js",
     "./db/sql-client": "./src/db/sql-client.js",
     "./dictation/dictation-app": "./src/dictation/dictation-app.js",
@@ -148,7 +147,9 @@
     "./integrations/integrations-app": "./src/integrations/integrations-app.js",
     "./integrations/mcp-tool-parameters": "./src/integrations/mcp-tool-parameters.js",
     "./integrations/mcp-tools": "./src/integrations/mcp-tools.js",
+    "./maintenance/maintenance-app": "./src/maintenance/maintenance-app.js",
     "./maintenance/maintenance-bounds": "./src/maintenance/maintenance-bounds.js",
+    "./maintenance/maintenance-sweep": "./src/maintenance/maintenance-sweep.js",
     "./maintenance/terminal-lease-sweep": "./src/maintenance/terminal-lease-sweep.js",
     "./plans/board-layout": "./src/plans/board-layout.js",
     "./plans/board-look": "./src/plans/board-look.js",
@@ -176,6 +177,9 @@
     "./providers/provider-key-check": "./src/providers/provider-key-check.js",
     "./route": "./src/route.js",
     "./run": "./src/run.js",
+    "./terminal/production": "./src/terminal/production.js",
+    "./terminal/relay": "./src/terminal/relay.js",
+    "./terminal/service": "./src/terminal/service.js",
     "./testing/clock-driven": "./src/testing/clock-driven.js",
     "./testing/eve-events": "./src/testing/eve-events.js",
     "./testing/eve-scripted-model": "./src/testing/eve-scripted-model.js",
@@ -189,7 +193,24 @@
     "./testing/plan-documents": "./src/testing/plan-documents.js",
     "./testing/repository-sandbox": "./src/testing/repository-sandbox.js",
     "./testing/scribe-model": "./src/testing/scribe-model.js",
-    "./testing/workspace-plugin": "./src/testing/workspace-plugin.js"
+    "./testing/settle": "./src/testing/settle.js",
+    "./testing/voice-fakes": "./src/testing/voice-fakes.js",
+    "./testing/workspace-plugin": "./src/testing/workspace-plugin.js",
+    "./voice/accounts": "./src/voice/accounts.js",
+    "./voice/deployment-exchange": "./src/voice/deployment-exchange.js",
+    "./voice/exchange-attachment": "./src/voice/exchange-attachment.js",
+    "./voice/frames": "./src/voice/frames.js",
+    "./voice/live-brain": "./src/voice/live-brain.js",
+    "./voice/live-exchange": "./src/voice/live-exchange.js",
+    "./voice/live-record": "./src/voice/live-record.js",
+    "./voice/live-sideband": "./src/voice/live-sideband.js",
+    "./voice/log": "./src/voice/log.js",
+    "./voice/openai": "./src/voice/openai.js",
+    "./voice/opening": "./src/voice/opening.js",
+    "./voice/orphan-sweep": "./src/voice/orphan-sweep.js",
+    "./voice/relay": "./src/voice/relay.js",
+    "./voice/service": "./src/voice/service.js",
+    "./voice/socket": "./src/voice/socket.js"
   },
   "scripts": {
     "test:vitest:1": "vitest run --shard=1/3",
@@ -218,13 +239,16 @@
     "drizzle-orm": "catalog:",
     "effect": "catalog:",
     "eve": "0.74.0",
-    "pg": "8.23.0"
+    "pg": "8.23.0",
+    "ws": "catalog:"
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
     "@types/node": "catalog:",
     "@types/pg": "8.21.0",
+    "@types/ws": "8.18.1",
     "typescript": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "zod": "4.5.4"
   }
 }

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { TERMINAL_RELAY } from "@luke/features/terminal-wire";
 import { test } from "vitest";
-import { admitRelayUpgrade, RELAY_UPGRADE_STATUS } from "../server/terminal/service";
+import { admitRelayUpgrade, RELAY_UPGRADE_STATUS } from "./service.js";
 
 /**
  * Which upgrades the terminal relay takes, before any socket stands: only

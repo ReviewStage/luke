@@ -24,15 +24,6 @@ import { EXCESS_KEYS, isRecord, unparsedWire, type WireRecord } from "@luke/wire
 import { readEither } from "@luke/wire/effect";
 import { Effect, Exit, Result, Scope } from "effect";
 import { onTestFinished, test } from "vitest";
-import type { LogEntry } from "../server/voice/log";
-import {
-  listening,
-  UPGRADE_STATUS,
-  VoiceService,
-  type VoiceServiceOptions,
-  voiceServer,
-} from "../server/voice/service";
-import { SOCKET_CLOSE_CODE } from "../server/voice/socket";
 import {
   connect,
   FAKE_BEARER,
@@ -46,7 +37,16 @@ import {
   readSocket,
   send,
   startFakeOpenAi,
-} from "./support/voice-fakes";
+} from "../testing/voice-fakes.js";
+import type { LogEntry } from "./log.js";
+import {
+  listening,
+  UPGRADE_STATUS,
+  VoiceService,
+  type VoiceServiceOptions,
+  voiceServer,
+} from "./service.js";
+import { SOCKET_CLOSE_CODE } from "./socket.js";
 
 const API_KEY = "sk-test-project-key";
 const BEARER = FAKE_BEARER;

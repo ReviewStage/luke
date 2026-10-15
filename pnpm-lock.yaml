@@ -119,7 +119,7 @@ importers:
         version: 4.0.4(effect@4.0.4)(redis@6.2.1(@opentelemetry/api@1.9.1))
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.0.4(effect@4.0.4)(vitest@5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@7.3.1(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.12)(yaml@2.9.0)))
+        version: 4.0.4(effect@4.0.4)(vitest@5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@7.3.1(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.32.0)(sass@1.51.0)(tsx@4.23.12)(yaml@2.9.0)))
       '@excalidraw/excalidraw':
         specifier: 0.18.1
         version: 0.18.1(@types/react-dom@19.2.4(@types/react@19.2.18))(@types/react@19.2.18)(immer@11.1.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -318,9 +318,6 @@ importers:
       '@luke/ui':
         specifier: workspace:*
         version: link:../../packages/ui
-      '@luke/voice':
-        specifier: workspace:*
-        version: link:../../packages/voice
       '@luke/wire':
         specifier: workspace:*
         version: link:../../packages/wire
@@ -339,9 +336,6 @@ importers:
       effect:
         specifier: 'catalog:'
         version: 4.0.4
-      eve:
-        specifier: 0.74.0
-        version: 0.74.0(@opentelemetry/api@1.9.1)(ai@7.0.135(zod@4.5.4))
       marked:
         specifier: 18.0.9
         version: 18.0.9
@@ -363,16 +357,13 @@ importers:
       tailwindcss:
         specifier: 4.3.3
         version: 4.3.3
-      ws:
-        specifier: 'catalog:'
-        version: 8.21.3
     devDependencies:
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.4(effect@4.0.4)(redis@6.2.1(@opentelemetry/api@1.9.1))
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.0.4(effect@4.0.4)(vitest@5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@7.3.1(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.12)(yaml@2.9.0)))
+        version: 4.0.4(effect@4.0.4)(vitest@5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@7.3.1(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.32.0)(sass@1.51.0)(tsx@4.23.12)(yaml@2.9.0)))
       '@electric-sql/pglite':
         specifier: 0.5.8
         version: 0.5.8
@@ -388,9 +379,6 @@ importers:
       '@types/react-dom':
         specifier: 19.2.4
         version: 19.2.4(@types/react@19.2.18)
-      '@types/ws':
-        specifier: 8.18.1
-        version: 8.18.1
       '@vitejs/plugin-react':
         specifier: 5.1.2
         version: 5.1.2(vite@7.3.1(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.32.0)(sass@1.51.0)(tsx@4.23.12)(yaml@2.9.0))
@@ -571,7 +559,7 @@ importers:
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.0.4(effect@4.0.4)(vitest@5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@7.3.1(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.12)(yaml@2.9.0)))
+        version: 4.0.4(effect@4.0.4)(vitest@5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@7.3.1(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.32.0)(sass@1.51.0)(tsx@4.23.12)(yaml@2.9.0)))
       '@types/node':
         specifier: 'catalog:'
         version: 26.2.0
@@ -617,7 +605,7 @@ importers:
         version: 4.0.4(effect@4.0.4)
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.0.4(effect@4.0.4)(vitest@5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@7.3.1(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.12)(yaml@2.9.0)))
+        version: 4.0.4(effect@4.0.4)(vitest@5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@7.3.1(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.32.0)(sass@1.51.0)(tsx@4.23.12)(yaml@2.9.0)))
       '@electric-sql/pglite':
         specifier: 0.5.8
         version: 0.5.8
@@ -666,7 +654,7 @@ importers:
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.0.4(effect@4.0.4)(vitest@5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@7.3.1(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.12)(yaml@2.9.0)))
+        version: 4.0.4(effect@4.0.4)(vitest@5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@7.3.1(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.32.0)(sass@1.51.0)(tsx@4.23.12)(yaml@2.9.0)))
       '@types/node':
         specifier: 'catalog:'
         version: 26.2.0
@@ -746,7 +734,7 @@ importers:
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.0.4(effect@4.0.4)(vitest@5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@7.3.1(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.12)(yaml@2.9.0)))
+        version: 4.0.4(effect@4.0.4)(vitest@5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@7.3.1(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.32.0)(sass@1.51.0)(tsx@4.23.12)(yaml@2.9.0)))
       '@types/node':
         specifier: 'catalog:'
         version: 26.2.0
@@ -790,7 +778,7 @@ importers:
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.0.4(effect@4.0.4)(vitest@5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@7.3.1(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.12)(yaml@2.9.0)))
+        version: 4.0.4(effect@4.0.4)(vitest@5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@7.3.1(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.32.0)(sass@1.51.0)(tsx@4.23.12)(yaml@2.9.0)))
       '@types/node':
         specifier: 'catalog:'
         version: 26.2.0
@@ -866,22 +854,31 @@ importers:
       pg:
         specifier: 8.23.0
         version: 8.23.0
+      ws:
+        specifier: 'catalog:'
+        version: 8.21.3
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.0.4(effect@4.0.4)(vitest@5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@7.3.1(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.12)(yaml@2.9.0)))
+        version: 4.0.4(effect@4.0.4)(vitest@5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@7.3.1(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.32.0)(sass@1.51.0)(tsx@4.23.12)(yaml@2.9.0)))
       '@types/node':
         specifier: 'catalog:'
         version: 26.2.0
       '@types/pg':
         specifier: 8.21.0
         version: 8.21.0
+      '@types/ws':
+        specifier: 8.18.1
+        version: 8.18.1
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
       vitest:
         specifier: 'catalog:'
         version: 5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@7.3.1(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.32.0)(sass@1.51.0)(tsx@4.23.12)(yaml@2.9.0))
+      zod:
+        specifier: 4.5.4
+        version: 4.5.4
 
   packages/settings:
     dependencies:
@@ -983,7 +980,7 @@ importers:
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.0.4(effect@4.0.4)(vitest@5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@7.3.1(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.12)(yaml@2.9.0)))
+        version: 4.0.4(effect@4.0.4)(vitest@5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@7.3.1(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.32.0)(sass@1.51.0)(tsx@4.23.12)(yaml@2.9.0)))
       '@types/node':
         specifier: 'catalog:'
         version: 26.2.0
@@ -7900,7 +7897,7 @@ snapshots:
       '@electric-sql/pglite': 0.5.8
       effect: 4.0.4
 
-  '@effect/vitest@4.0.4(effect@4.0.4)(vitest@5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@7.3.1(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.12)(yaml@2.9.0)))':
+  '@effect/vitest@4.0.4(effect@4.0.4)(vitest@5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@7.3.1(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.32.0)(sass@1.51.0)(tsx@4.23.12)(yaml@2.9.0)))':
     dependencies:
       effect: 4.0.4
       vitest: 5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@7.3.1(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.32.0)(sass@1.51.0)(tsx@4.23.12)(yaml@2.9.0))

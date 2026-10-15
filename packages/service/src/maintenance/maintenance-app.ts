@@ -4,41 +4,34 @@ import { hostedStore } from "@luke/database/models/hosted-store";
 import { recordVoiceSeconds } from "@luke/database/models/quota";
 import { voiceSessionRecord } from "@luke/database/models/voice-session-record";
 import { storeWriter } from "@luke/database/models/writer";
-import { deploymentEveOrigin } from "@luke/service/agents/brain-host/eve-origin";
-import { EVE_MOUNT, eveSessions } from "@luke/service/agents/brain-host/eve-sessions";
-import {
-  sessionSandboxesLayer,
-  sweepSessionSandboxes,
-} from "@luke/service/agents/session-sandboxes";
-import type { EveForAccount } from "@luke/service/automations/automation-runs";
-import { sweepAutomations } from "@luke/service/automations/automation-sweep";
-import { HostedEnvironment } from "@luke/service/environment";
-import type { GitHubApp } from "@luke/service/github/github-app";
-import {
-  effectPassthrough,
-  HOSTED_REFUSAL,
-  hostedNotFoundRoute,
-} from "@luke/service/http/http-effect";
-import { MAINTENANCE_SWEEP_PATH } from "@luke/service/maintenance/maintenance-bounds";
-import { sweepTerminalLeases } from "@luke/service/maintenance/terminal-lease-sweep";
-import { HOSTED_TOOL_SET } from "@luke/service/plans/brain-tool-set";
-import type { ModelCatalog } from "@luke/service/providers/model-catalog";
-import { ANY_METHOD, type WebRoutes } from "@luke/service/route";
 import { Effect, Layer, Redacted } from "effect";
 import { HttpClient, HttpRouter } from "effect/http";
-import { handleMaintenanceSweep } from "./hosted/maintenance-sweep.js";
-import { createLiveUpstream } from "./voice/openai.js";
+import { deploymentEveOrigin } from "../agents/brain-host/eve-origin.js";
+import { EVE_MOUNT, eveSessions } from "../agents/brain-host/eve-sessions.js";
+import { sessionSandboxesLayer, sweepSessionSandboxes } from "../agents/session-sandboxes.js";
+import type { EveForAccount } from "../automations/automation-runs.js";
+import { sweepAutomations } from "../automations/automation-sweep.js";
+import { HostedEnvironment } from "../environment.js";
+import type { GitHubApp } from "../github/github-app.js";
+import { effectPassthrough, HOSTED_REFUSAL, hostedNotFoundRoute } from "../http/http-effect.js";
+import { HOSTED_TOOL_SET } from "../plans/brain-tool-set.js";
+import type { ModelCatalog } from "../providers/model-catalog.js";
+import { ANY_METHOD, type WebRoutes } from "../route.js";
+import { createLiveUpstream } from "../voice/openai.js";
 import {
   NOTHING_ORPHANED,
   sweepVoiceOrphans,
   VOICE_ORPHAN_SWEEP,
   VOICE_SESSION_LIMIT_MS,
-} from "./voice/orphan-sweep.js";
+} from "../voice/orphan-sweep.js";
+import { MAINTENANCE_SWEEP_PATH } from "./maintenance-bounds.js";
+import { handleMaintenanceSweep } from "./maintenance-sweep.js";
+import { sweepTerminalLeases } from "./terminal-lease-sweep.js";
 
 /**
  * The maintenance group: the scheduled sweep's one entry, called by Vercel's
  * cron on the cadence `vercel.json` fixes. The logic lives in
- * `server/hosted/maintenance-sweep.ts`; this hands it the deployment's real
+ * `maintenance/maintenance-sweep.ts`; this hands it the deployment's real
  * seams and the database queries behind them, each answering an Effect over
  * the group's own `SqlClient.SqlClient`. A deployment without the voice key
  * sweeps no detached voice session, since it opened none; one with it ends

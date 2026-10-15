@@ -13,38 +13,6 @@ import {
   startPlan,
 } from "@luke/database/testing";
 import type { PlanWorkTurn } from "@luke/features/planning-view";
-import { DEPLOYMENT_PRESENCE, deploymentActor } from "@luke/service/agents/brain-host/auth";
-import {
-  BRAIN_HOST_HEADER,
-  BRAIN_HOST_TURN,
-  RELAY_TURN,
-} from "@luke/service/agents/brain-host/bounds";
-import { askStanding } from "@luke/service/agents/brain-host/brain-ask";
-import { DEPLOYMENT_TURNS } from "@luke/service/agents/brain-host/channel";
-import { openChildConversation } from "@luke/service/agents/brain-host/conversation";
-import { ownedAuth } from "@luke/service/agents/brain-host/door";
-import {
-  EVE_CANCEL_OUTCOME,
-  EVE_SEND_OUTCOME,
-  type EveMessage,
-  type EveSessions,
-  eveSessions,
-} from "@luke/service/agents/brain-host/eve-sessions";
-import { PLANNER_DELEGATE_TOOL } from "@luke/service/agents/brain-host/planning";
-import {
-  memoryRelayState,
-  type RelayStanding,
-  StreamRelay,
-} from "@luke/service/agents/brain-host/relay";
-import {
-  SEARCH_WEB_REFUSAL,
-  SEARCH_WEB_STATUS,
-  SEARCH_WEB_TOOL,
-} from "@luke/service/agents/public-research";
-import { ASK_ORIGIN, TURN_SLOW_STEP } from "@luke/service/core";
-import { HOSTED_TOOL_SET } from "@luke/service/plans/brain-tool-set";
-import { stampedEveEvent } from "@luke/service/testing/eve-events";
-import { FIRST_EVE_TURN, spokenTurn } from "@luke/service/testing/eve-turns";
 import {
   LIVE_BRAIN_CANCEL,
   LIVE_BRAIN_RUN_END,
@@ -59,11 +27,35 @@ import { Duration, Effect, Exit, Option, Redacted, Scope } from "effect";
 import { type AuthFn, ForbiddenError } from "eve/channels/auth";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll } from "vitest";
+import { DEPLOYMENT_PRESENCE, deploymentActor } from "../agents/brain-host/auth.js";
+import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN, RELAY_TURN } from "../agents/brain-host/bounds.js";
+import { askStanding } from "../agents/brain-host/brain-ask.js";
+import { DEPLOYMENT_TURNS } from "../agents/brain-host/channel.js";
+import { openChildConversation } from "../agents/brain-host/conversation.js";
+import { ownedAuth } from "../agents/brain-host/door.js";
+import {
+  EVE_CANCEL_OUTCOME,
+  EVE_SEND_OUTCOME,
+  type EveMessage,
+  type EveSessions,
+  eveSessions,
+} from "../agents/brain-host/eve-sessions.js";
+import { PLANNER_DELEGATE_TOOL } from "../agents/brain-host/planning.js";
+import { memoryRelayState, type RelayStanding, StreamRelay } from "../agents/brain-host/relay.js";
+import {
+  SEARCH_WEB_REFUSAL,
+  SEARCH_WEB_STATUS,
+  SEARCH_WEB_TOOL,
+} from "../agents/public-research.js";
+import { ASK_ORIGIN, TURN_SLOW_STEP } from "../core.js";
+import { HOSTED_TOOL_SET } from "../plans/brain-tool-set.js";
+import { stampedEveEvent } from "../testing/eve-events.js";
+import { FIRST_EVE_TURN, spokenTurn } from "../testing/eve-turns.js";
 import {
   type HostedLiveBrain,
   type HostedLiveBrainOptions,
   hostedLiveBrain,
-} from "../server/voice/live-brain";
+} from "./live-brain.js";
 
 /**
  * The hosted live brain over the real ask door and the real store on PGlite:

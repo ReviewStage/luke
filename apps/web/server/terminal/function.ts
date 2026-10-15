@@ -1,8 +1,12 @@
 import { hostedUserInfo, userIdForAuthorization } from "@luke/service/auth/bearer";
+import { relayDependencies } from "@luke/service/terminal/production";
+import {
+  standTerminalRelay,
+  type TerminalRelayServer,
+  terminalRelayServer,
+} from "@luke/service/terminal/service";
 import { Effect } from "effect";
 import { runWeb } from "../runtime.js";
-import { relayDependencies } from "./production.js";
-import { standTerminalRelay, type TerminalRelayServer, terminalRelayServer } from "./service.js";
 
 /**
  * function.ts -- the terminal relay's one runtime edge: the service stood on the server the `api/terminal/sessions` function exports, once per instance.

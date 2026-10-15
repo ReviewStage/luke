@@ -124,7 +124,7 @@ code already acts as one runtime split across two folders.
 
 | Difference | Fundamental? | Why |
 | --- | --- | --- |
-| **A live voice call vs unattended work** | **Fundamental for the front end, not for the agent.** | The planner's turn is an ordinary eve turn. What is special is the layer in front of it: GPT Live delegating asks (`packages/voice/.../live-session-service.ts:1095, 1314`), the voice following the turn row and journal every 250 ms (`voice/live-brain.ts`), `queue_question`/`end_call` carried by the journal, and the notetaker. That layer stays separate (§4); the agent behind it needn't. |
+| **A live voice call vs unattended work** | **Fundamental for the front end, not for the agent.** | The planner's turn is an ordinary eve turn. What is special is the layer in front of it: GPT Live delegating asks (`packages/voice/.../live-session-service.ts:1095, 1314`), the voice following the turn row and journal every 250 ms (`packages/service/src/voice/live-brain.ts`), `queue_question`/`end_call` carried by the journal, and the notetaker. That layer stays separate (§4); the agent behind it needn't. |
 | **Latency** | **Fundamental, as configuration.** | The planner must answer at conversational speed. Delegation must not block (eve background tasks), effort stays at medium, the tool list stays short and stable for the prompt cache, and sentences are released one at a time. All of this is profile data (model policy, `delegation: background`, tool allow-list), not a second runtime. |
 | **Writing the plan vs editing a repo** | **Mostly accidental.** | Neither agent's loop writes the plan. The notetaker writes it during a call, and a coder's `edit_plan` writes through the same `saveNotes`. What really differs is repository access: a read token and a depth-1 clone vs a write token, a full clone and a branch. That is sandbox policy. |
 | **Models and keys** | **Accidental.** | The brain is pinned to GPT-6.1-sol on Luke's key and already goes through `coderModel`. BYOK for the planner, or a catalog choice, is a product decision, not an architectural one. Metering only the brain is an accident of order: the meter predates coders. |
@@ -558,7 +558,7 @@ PR 3.
    - **The planner gets background only.** A foreground call would hold the
      spoken turn silent for the worker's whole run, and the voice already
      follows a turn parked on a background task (`PARKED_FOLLOW`,
-     `voice/live-brain.ts`). Offering the planner no flag at all is the
+     `packages/service/src/voice/live-brain.ts`). Offering the planner no flag at all is the
      simplest way to keep the voice fast: it is one fewer choice for the
      model to get wrong mid-call.
 4. **Brain skills now** (the profile flag plus `load_skill`, read during

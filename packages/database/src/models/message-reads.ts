@@ -943,7 +943,7 @@ const earlierDelegation = alias(asks, "earlier_delegation");
  * the delegation it was attached to. An ask made after the turn started is
  * a follow-up only where the turn already had a delegation before it: the
  * call's explore ask opens a turn that the developer's first ask is steered
- * into (`voice/live-brain.ts`), and that ask is the turn's, not a follow-up
+ * into (`packages/service/src/voice/live-brain.ts`), and that ask is the turn's, not a follow-up
  * to the explore, which names no line and no voice session. Delegations are
  * ordered by when they were made, and by the voice's revision of them where
  * two were made in one instant.

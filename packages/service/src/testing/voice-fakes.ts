@@ -9,7 +9,7 @@ import { LIVE_CLIENT_EVENT, LIVE_SESSIONS_PATH, LIVE_TRANSPORT_TYPE } from "@luk
 import { isRecord, unparsedWire, type WireRecord } from "@luke/wire";
 import { Effect, Option } from "effect";
 import { type RawData, WebSocket, WebSocketServer } from "ws";
-import type { VoiceAccounts } from "../../server/voice/accounts";
+import type { VoiceAccounts } from "../voice/accounts.js";
 
 /**
  * What the voice service talks to, stood up for a test: an OpenAI on this

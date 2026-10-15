@@ -26,21 +26,6 @@ import {
   type TranscriptSpeaker,
   UTTERANCE_GAP_MS,
 } from "@luke/live";
-import {
-  ASK_ORIGIN,
-  BRAIN_RUN_EVENT,
-  BRAIN_TURN_ORIGIN,
-  BRAIN_TURN_TRIGGER,
-  sessionKey,
-  UI_PART_TYPE,
-} from "@luke/service/core";
-import {
-  delegated,
-  heard,
-  said,
-  sessionStarted,
-  thinkingAppended,
-} from "@luke/service/testing/live-events";
 import { liveBrainLayer, liveRecordLayer } from "@luke/voice/effect";
 import {
   LIVE_BRAIN_CANCEL,
@@ -61,8 +46,23 @@ import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { afterAll } from "vitest";
 import { z } from "zod";
-import { hostedLiveRecord } from "../server/voice/live-record";
-import { observedSideband } from "../server/voice/live-sideband";
+import {
+  ASK_ORIGIN,
+  BRAIN_RUN_EVENT,
+  BRAIN_TURN_ORIGIN,
+  BRAIN_TURN_TRIGGER,
+  sessionKey,
+  UI_PART_TYPE,
+} from "../core.js";
+import {
+  delegated,
+  heard,
+  said,
+  sessionStarted,
+  thinkingAppended,
+} from "../testing/live-events.js";
+import { hostedLiveRecord } from "./live-record.js";
+import { observedSideband } from "./live-sideband.js";
 
 /**
  * The segments-to-rows word invariant, which is the property that failed on

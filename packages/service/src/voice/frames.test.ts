@@ -2,11 +2,7 @@ import assert from "node:assert/strict";
 import { VOICE_SERVICE_FRAME } from "@luke/features";
 import { LIVE_CLIENT_EVENT, LIVE_SERVER_EVENT } from "@luke/live";
 import { test } from "vitest";
-import {
-  deviceFrameDecision,
-  FRAME_DECISION,
-  SESSIONS_REPORT_FRAMES,
-} from "../server/voice/frames";
+import { deviceFrameDecision, FRAME_DECISION, SESSIONS_REPORT_FRAMES } from "./frames.js";
 
 test("a signed-in device forwards nothing, is read for its hang-up, its idle report, and its stop, and is refused on anything else", () => {
   assert.deepEqual(SESSIONS_REPORT_FRAMES, [

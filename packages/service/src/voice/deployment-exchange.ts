@@ -1,16 +1,16 @@
 import { randomUUID } from "node:crypto";
 import { storeWriter } from "@luke/database/models/writer";
+import { Data, Effect, type Layer, type Redacted } from "effect";
+import { FetchHttpClient } from "effect/http";
+import type * as HttpClient from "effect/http/HttpClient";
 import {
   type EveSessions,
   type EveSessionsComposer,
   eveSessionsComposer,
-} from "@luke/service/agents/brain-host/eve-sessions";
-import { openAiBrainModel } from "@luke/service/agents/brain-host/model";
-import { HOSTED_TOOL_SET } from "@luke/service/plans/brain-tool-set";
-import { PLAN_SCRIBE } from "@luke/service/plans/plan-scribe";
-import { Data, Effect, type Layer, type Redacted } from "effect";
-import { FetchHttpClient } from "effect/http";
-import type * as HttpClient from "effect/http/HttpClient";
+} from "../agents/brain-host/eve-sessions.js";
+import { openAiBrainModel } from "../agents/brain-host/model.js";
+import { HOSTED_TOOL_SET } from "../plans/brain-tool-set.js";
+import { PLAN_SCRIBE } from "../plans/plan-scribe.js";
 import { exchangeAttachment } from "./exchange-attachment.js";
 import type { ExchangeAttachment } from "./live-exchange.js";
 

@@ -54,6 +54,6 @@
     "apps/desktop/src/renderer/sign-in-gate.tsx",
     "apps/desktop/src/renderer/use-caption-presentation.ts",
     "apps/web/src/admin/use-admin-read.ts",
-    "apps/web/tests/support/voice-fakes.ts"
+    "packages/service/src/testing/voice-fakes.ts"
   ]
 }
