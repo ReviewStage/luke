@@ -1,5 +1,8 @@
 import type { DatabaseServices } from "@luke/database/core/query";
-import type { CodingAgent } from "@luke/database/models/coding-agent-store";
+import {
+  type CodingAgent,
+  dispatchMentioningServers,
+} from "@luke/database/models/coding-agent-store";
 import { sentLineId } from "@luke/database/models/ids";
 import { sentLineStands } from "@luke/database/models/message-reads";
 import { readPlan } from "@luke/database/models/plan-store";
@@ -7,6 +10,7 @@ import { recordedRuntimeSession } from "@luke/database/models/recorded-session";
 import type { StoreWriter } from "@luke/database/models/writer";
 import { STORE_WRITE_REFUSAL } from "@luke/database/models/writer";
 import { CODING_AGENT_STATUS, type CodingAgentAttachment } from "@luke/features/coding-agent-wire";
+import { causeKind } from "@luke/runtime/effect";
 import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import {
   HOSTED_REFUSAL,
@@ -23,7 +27,7 @@ import {
   EVE_SEND_OUTCOME,
   type EveSessions,
 } from "../brain-host/eve-sessions.js";
-import { mentionedContext } from "../mentioned-context.js";
+import { mentionedContext, mentionedServers } from "../mentioned-context.js";
 import { agentWorkspace, workspaceRepository } from "../workspace-repository.js";
 import { codingAgentStatusOf } from "./status.js";
 
@@ -134,10 +138,10 @@ export const steerCodingAgent = /* @__PURE__ */ Effect.fn("web/steerCodingAgent"
   const sessionId = yield* hostedStoreOrUnavailable(recordedRuntimeSession(target));
   if (sessionId === undefined) return yield* Effect.fail(yield* unstartedRefusal(agent));
   // What the words mention of the plan goes with them, read off the plan this send read as its sender.
-  const mentioned = plan === undefined ? undefined : mentionedContext(line.text, plan.plan);
+  const mentioned = mentionedContext(line.text, plan?.plan);
   // eve's refusal is kept beside the dispatch, since the write answers only whether a row landed.
   let refused: HostedRefusal | undefined;
-  const dispatch = eve
+  const handOver = eve
     .send(sessionId, {
       conversationId: agent.conversationId,
       turn: BRAIN_HOST_TURN.TYPED,
@@ -158,6 +162,26 @@ export const steerCodingAgent = /* @__PURE__ */ Effect.fn("web/steerCodingAgent"
         return false;
       }),
     );
+  // The servers the words mention stand for the agent's next turn from just before eve hears them, and
+  // only where eve took them; a store failure on the way is read as eve hearing nothing, which writes
+  // nothing and is answered as an outage, since what failed may have been before the hand-over.
+  const services = yield* Effect.context<DatabaseServices>();
+  const dispatch = dispatchMentioningServers(
+    userId,
+    agent.id,
+    mentionedServers(line.text),
+    handOver,
+  ).pipe(
+    Effect.catchCause((cause) =>
+      Effect.as(
+        Effect.logWarning(
+          `a message mentioning servers was not handed over, its servers unwritten: ${causeKind(cause)}`,
+        ),
+        false,
+      ),
+    ),
+    Effect.provide(services),
+  );
   const written = yield* hostedStoreOrUnavailable(
     Effect.flatMap(writer, (write) =>
       write.writeAwaitingLine(target, { ...line, mentioned }, dispatch),

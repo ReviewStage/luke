@@ -55,6 +55,10 @@ import { conversations } from "./storage.js";
  * turns are not handed; null, like an empty list, switches none off, so a
  * server connected later is on for every agent. A provider no longer
  * offered may stand in the list and is ignored where it is read.
+ * `mentioned_servers` is the MCP servers a message to the agent mentioned
+ * since its last turn started (`@Linear`), which its next turn is handed
+ * whatever `disabled_servers` says and then takes back to null, so a mention
+ * turns a server on for the one turn and never touches the switch.
  * There is no commit column: the
  * checkout's own output is in the transcript, and the pull request on
  * GitHub records its base.
@@ -134,6 +138,8 @@ export const codingAgent = pgTable(
     archivedAt: timestamptz("archived_at"),
     /** The MCP servers switched off for this agent, by integration provider; null switches none off. */
     disabledServers: jsonb("disabled_servers").$type<readonly IntegrationProvider[]>(),
+    /** The MCP servers mentioned since the agent's last turn started, by integration provider; null for none. */
+    mentionedServers: jsonb("mentioned_servers").$type<readonly IntegrationProvider[]>(),
     idempotencyKey: text("idempotency_key").notNull(),
     createdAt: createdAt(),
   },

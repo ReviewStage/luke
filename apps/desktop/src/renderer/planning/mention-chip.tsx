@@ -1,3 +1,4 @@
+import { INTEGRATION_NAME } from "@luke/features/integration-wire";
 import {
   decodeMention,
   encodeMention,
@@ -8,7 +9,7 @@ import {
   type PlanMention,
   sectionAnchors,
 } from "@luke/features/mention-link";
-import { DocumentIcon } from "@luke/ui";
+import { DocumentIcon, ProviderMark } from "@luke/ui";
 import { fileName } from "@luke/voice/code-pane-model";
 import { FolderIcon, HashIcon } from "lucide-react";
 import { CardHead, CardNote, HoverCard } from "../hover-card";
@@ -29,9 +30,10 @@ import { FileTypeIcon } from "./file-type-icon";
  * at its top; a file, its tab, through the side panel's one door for a file
  * (`file-ref.tsx`). A folder opens nothing, since the window has no door to
  * one, and is a chip that hangs its card alone, as is a file where the
- * place can open none. Its card, hung while the pointer rests on it, names
- * it whole: a file's is the card every place naming the file hangs, and a
- * file's lines open at the commit the mention pins them to.
+ * place can open none. An MCP server or one of its tools opens nothing
+ * either, wearing its server's mark. Its card, hung while the pointer rests
+ * on it, names it whole: a file's is the card every place naming the file
+ * hangs, and a file's lines open at the commit the mention pins them to.
  *
  * A section is known by its heading's anchor, so a section of the plan
  * drawn here whose anchor no heading of the plan spells any longer is gone:
@@ -91,6 +93,9 @@ export function retargetedMention(
 /** What a gone section's card says of it. */
 const GONE_WORDS = "No longer in the plan";
 
+/** What a server's card says of it. */
+const SERVER_WORDS = "An MCP server";
+
 /** Whether what the mention names is there to open: a section of this plan is there while a heading of the plan spells its anchor. */
 function mentionState(mention: Mention, doors: MentionDoors): MentionState {
   if (mention.kind !== MENTION_KIND.SECTION || mention.planId !== doors.planId) {
@@ -111,6 +116,8 @@ function pressOf(
       return onOpenFile === undefined ? undefined : () => onOpenFile(mention.path, mention.lines);
     }
     case MENTION_KIND.FOLDER:
+    case MENTION_KIND.SERVER:
+    case MENTION_KIND.TOOL:
       return undefined;
     case MENTION_KIND.PLAN:
       return () => doors.onOpenPlan(mention);
@@ -135,7 +142,19 @@ function MentionGlyph({ mention }: { mention: Mention }): React.JSX.Element {
       return <FileTypeIcon name={fileName(mention.path)} />;
     case MENTION_KIND.FOLDER:
       return <FolderIcon aria-hidden="true" />;
+    case MENTION_KIND.SERVER:
+    case MENTION_KIND.TOOL:
+      return <ProviderMark provider={mention.provider} />;
   }
+}
+
+/** What a chip's card says of what it names, beside its name, where the name alone does not say it. */
+function noteOf(mention: Mention, state: MentionState): string | undefined {
+  if (state === MENTION_STATE.GONE) return GONE_WORDS;
+  if (mention.kind === MENTION_KIND.SERVER) return SERVER_WORDS;
+  if (mention.kind === MENTION_KIND.TOOL)
+    return `A tool of ${INTEGRATION_NAME[mention.provider]}'s MCP server`;
+  return undefined;
 }
 
 /** The card a chip hangs: a file's own card, or its glyph and whole name, and why it is gone where it is. */
@@ -150,10 +169,11 @@ function MentionCard({
 }): React.JSX.Element {
   if (mention.kind === MENTION_KIND.FILE) return <FileCard path={mention.path} note={undefined} />;
   const whole = mention.kind === MENTION_KIND.FOLDER ? `${mention.path}/` : name;
+  const note = noteOf(mention, state);
   return (
     <HoverCard data-mention-card="">
       <CardHead glyph={<MentionGlyph mention={mention} />} name={whole} />
-      {state === MENTION_STATE.GONE ? <CardNote>{GONE_WORDS}</CardNote> : null}
+      {note === undefined ? null : <CardNote>{note}</CardNote>}
     </HoverCard>
   );
 }

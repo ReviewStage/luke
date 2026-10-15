@@ -5,6 +5,7 @@ import {
   receivedPartsOf,
 } from "@luke/database/models/attached-file-parts";
 import { COALESCED_LINE_SEPARATOR } from "@luke/database/models/message-reads";
+import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import {
   MENTION_KIND,
   type MentionPlace,
@@ -14,7 +15,11 @@ import {
 import type { Plan } from "@luke/features/plan-wire";
 import { test } from "vitest";
 import { eveContent, receivedMessage } from "../server/hosted/attached-files";
-import { MENTIONED_BOUNDS, mentionedContext } from "../server/hosted/mentioned-context";
+import {
+  MENTIONED_BOUNDS,
+  mentionedContext,
+  mentionedServers,
+} from "../server/hosted/mentioned-context";
 
 /**
  * What a coding agent's message mentions of its plan, handed beside its
@@ -257,4 +262,49 @@ test("a cut plan with many long headings past the cut is still handed, its list 
   assert.match(part, /The whole plan, cut short/u);
   assert.match(part, /and \d+ more\./u);
   assert.ok(part.length <= MENTIONED_BOUNDS.PART_CHARS, `${part.length} characters`);
+});
+
+const LINEAR = mentionMarkdown(
+  { kind: MENTION_KIND.SERVER, provider: INTEGRATION_PROVIDER.LINEAR },
+  "Linear",
+  PLACE,
+);
+
+const LIST_ISSUES = mentionMarkdown(
+  { kind: MENTION_KIND.TOOL, provider: INTEGRATION_PROVIDER.LINEAR, tool: "list_issues" },
+  "Linear · list_issues",
+  PLACE,
+);
+
+test("a server or a tool the words mention is handed as one note naming its connection, in the order mentioned, each once", () => {
+  const part = mentionedContext(
+    `Use ${LINEAR} and ${LIST_ISSUES} for ${section("Rollout")}, then ${LINEAR} again.`,
+    PLAN,
+  );
+
+  const words = part ?? "";
+  const server = words.indexOf(
+    "The developer pointed you at the Linear MCP server (connection `linear`)",
+  );
+  const tool = words.indexOf(
+    "The developer pointed you at the tool `list_issues` of the Linear MCP server (connection `linear`)",
+  );
+  const rollout = words.indexOf('The plan\'s section "Rollout":');
+  assert.ok(server > 0 && server < tool && tool < rollout, words);
+  assert.equal(words.split("The developer pointed you at").length - 1, 2, words);
+  assert.match(words, /`connection_search`/u);
+});
+
+test("the servers the words mention, by themselves or by a tool, are named each once, and nothing else is", () => {
+  assert.deepEqual(mentionedServers(`See ${LIST_ISSUES}, ${LINEAR}, and ${section("Rollout")}.`), [
+    INTEGRATION_PROVIDER.LINEAR,
+  ]);
+  assert.deepEqual(mentionedServers(`See ${section("Rollout")}.`), []);
+});
+
+test("an agent with no plan is handed a server's note, and nothing for a mention of a plan", () => {
+  const part = mentionedContext(`Use ${LINEAR} for ${section("Rollout")}.`, undefined) ?? "";
+
+  assert.equal(part.split("The developer pointed you at").length - 1, 1, part);
+  assert.ok(!part.includes("The plan's section"), part);
 });

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
+import { INTEGRATION_PROVIDER } from "./integration-wire.js";
 import {
   appLinkOf,
   decodeMention,
@@ -429,5 +430,42 @@ test("a plan's address, by either scheme and on any page that reads it, is spell
     `https://tryluke.dev/acme/plan/${PLAN_ID}#a%20b`,
   ]) {
     assert.equal(appLinkOf(target), undefined, target);
+  }
+});
+
+test("an MCP server and one of its tools read back as the mention they were written from", () => {
+  for (const mention of [
+    { kind: MENTION_KIND.SERVER, provider: INTEGRATION_PROVIDER.LINEAR },
+    { kind: MENTION_KIND.TOOL, provider: INTEGRATION_PROVIDER.LINEAR, tool: "list_issues" },
+  ] as const) {
+    assert.deepEqual(
+      decodeMention(encodeMention(mention, PLACE), REPOSITORY),
+      mention,
+      mention.kind,
+    );
+  }
+  assert.equal(
+    encodeMention(
+      {
+        kind: MENTION_KIND.TOOL,
+        provider: INTEGRATION_PROVIDER.SENTRY,
+        tool: "get_issue",
+      },
+      PLACE,
+    ),
+    "luke://mcp/sentry/get_issue",
+  );
+});
+
+test("a server no integration offers, a tool no server could list, or a step past the tool names nothing", () => {
+  for (const target of [
+    "luke://mcp/jira",
+    "luke://mcp/",
+    "luke://mcp/linear/list issues",
+    "luke://mcp/linear/list%2Fissues",
+    "luke://mcp/linear/list_issues/more",
+    "luke://mcp/linear#list_issues",
+  ]) {
+    assert.equal(decodeMention(target, REPOSITORY), undefined, target);
   }
 });
