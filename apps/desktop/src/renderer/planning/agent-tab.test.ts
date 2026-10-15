@@ -535,3 +535,21 @@ test("a connection_execute with no integration's call under it keeps its own row
   const row = container.querySelector('[data-call-id="call-connection_execute"] summary');
   assert.match(row?.textContent ?? "", /^Used\s*connection_execute/u);
 });
+
+test("a connection_execute that failed keeps its own row beside the call it ran, so its error is read", () => {
+  const [execute, remote] = LINEAR_RUN;
+  assert.ok(execute && remote);
+  const failed = { ...execute, state: "output-error", errorText: "Linear stopped answering." };
+  const { container } = drawn(assistant([failed, remote]), true);
+  const row = container.querySelector<HTMLElement>(
+    '[data-call-id="call-connection_execute"] summary',
+  );
+  assert.ok(row, "the failed wrapper's row stands");
+  act(() => row.click());
+  const body = container.querySelector('[data-call-id="call-connection_execute"]')?.textContent;
+  assert.ok(body?.includes("Linear stopped answering."), "its error is read under it");
+  assert.ok(
+    container.querySelector('[data-call-id="call-linear_remote"]') !== null,
+    "the call it ran keeps its row too",
+  );
+});

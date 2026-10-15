@@ -1130,8 +1130,8 @@ function runConnectionCalls(parts: readonly AgentPart[]): ReadonlySet<string> {
  * boundary, a kind this build does not draw, and a `connection_execute`
  * whose integration's own call stands in the message. Note that such a
  * wrapper is left out, because the call it ran is the same call told
- * twice, and that one with no such call keeps its row, because there is
- * nothing else to read it by.
+ * twice, and that one with no such call, or one that failed, keeps its
+ * row, because its row is where it, or its error, is read.
  */
 function drawnParts(message: CodingAgentMessage): readonly AgentPart[] {
   const parts = agentParts(message);
@@ -1143,6 +1143,7 @@ function drawnParts(message: CodingAgentMessage): readonly AgentPart[] {
       !(
         part.kind === AGENT_PART.TOOL &&
         part.tool === CONNECTION_TOOL.EXECUTE &&
+        part.state !== TOOL_STATE.OUTPUT_ERROR &&
         ran.has(part.callId)
       ),
   );
