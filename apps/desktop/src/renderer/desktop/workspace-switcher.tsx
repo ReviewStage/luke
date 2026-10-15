@@ -47,7 +47,7 @@ function workspaceMenuGroups(
       label: workspace.name,
       icon: <WorkspaceTile workspace={workspace} />,
       checked: workspace.id === listed.id,
-      waiting: plans.waitingIn.get(workspace.id),
+      waiting: plans.waitingIn.get(workspace.id) ?? 0,
       onSelect: () => plans.onChooseWorkspace(workspace.id),
     }),
   );
