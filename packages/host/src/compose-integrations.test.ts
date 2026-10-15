@@ -64,6 +64,18 @@ function fakeService(script: ServiceScript) {
         script.status = INTEGRATION_STATUS.DISCONNECTED;
         return { status: script.status };
       }),
+    rename: (provider, connection, label) =>
+      Effect.sync(() => {
+        asked.push(provider);
+        return {
+          account: { provider, connection, label, primary: false, status: script.status },
+        };
+      }),
+    primary: (provider, connection) =>
+      Effect.sync(() => {
+        asked.push(provider);
+        return { account: { provider, connection, primary: true, status: script.status } };
+      }),
   };
   return { client, opened, asked };
 }

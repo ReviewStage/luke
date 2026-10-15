@@ -1,4 +1,3 @@
-import { INTEGRATION_NAME, type IntegrationProvider } from "@luke/features/integration-wire";
 import {
   encodeMention,
   isMentionableTool,
@@ -11,6 +10,7 @@ import { planSections } from "@luke/features/plan-document";
 import { PLAN_TREE_ENTRY } from "@luke/features/plan-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { DocumentIcon, ProviderMark } from "@luke/ui";
+import type { NamedServer } from "@luke/ui/agent-servers-model";
 import type { SkillOption } from "@luke/ui/skill-mention";
 import { fileFolder, fileName } from "@luke/voice/code-pane-model";
 import { defaultFilter } from "cmdk";
@@ -79,7 +79,7 @@ export interface MentionSkills {
 }
 
 /** The servers of a list that offers none. */
-const NO_SERVERS: readonly IntegrationProvider[] = [];
+const NO_SERVERS: readonly NamedServer[] = [];
 
 /** The most rows one group lists. */
 const PER_GROUP = 4;
@@ -175,23 +175,24 @@ function planRows(planId: string, planName: string, text: string): MentionRow[] 
 
 /** Each connected server's row, and once a word is typed each of its tools' rows as far as its read answered, found by the server's name and the tool's. */
 function serverRows(
-  servers: readonly IntegrationProvider[],
+  servers: readonly NamedServer[],
   reads: IntegrationToolsReads,
   query: string,
 ): MentionRow[] {
-  return servers.flatMap((provider) => {
-    const name = INTEGRATION_NAME[provider];
+  return servers.flatMap(({ provider, connection, name }) => {
+    // An account past its provider's first is named by its connection; the first by the provider alone, as it always was.
+    const account = connection === provider ? undefined : { connection };
     const server: MentionRow = {
-      mention: { kind: MENTION_KIND.SERVER, provider },
+      mention: { kind: MENTION_KIND.SERVER, provider, ...account },
       name,
       detail: SERVER_DETAIL,
       terms: name,
     };
-    const read = reads[provider];
+    const read = reads[connection];
     if (query.trim() === "" || read === undefined || !("tools" in read)) return [server];
     // Note that a tool whose name no mention can carry is left out, since its pick would name nothing.
     const tools = read.tools.flatMap((tool): MentionRow[] => {
-      const mention: Mention = { kind: MENTION_KIND.TOOL, provider, tool: tool.name };
+      const mention: Mention = { kind: MENTION_KIND.TOOL, provider, ...account, tool: tool.name };
       if (!isMentionableTool(tool.name)) return [];
       return [
         {
@@ -397,7 +398,7 @@ export function useMentionPicker({
   /** The repository's skills, where the words go to an agent; none for the plan's own words. */
   skills?: MentionSkills | undefined;
   /** The account's connected MCP servers, where the words go to an agent; none for the plan's own words. */
-  servers?: readonly IntegrationProvider[];
+  servers?: readonly NamedServer[];
   /** The element the list is placed in, by the word. */
   room: RefObject<HTMLElement | null>;
   side: MentionMenuSide;
@@ -466,7 +467,9 @@ export function useMentionPicker({
   }, [askedAt, askSkills]);
 
   // Each server's tools are read while the list stands open, and forgotten once it closes.
-  const tools = useIntegrationTools(open ? servers : NO_SERVERS);
+  const tools = useIntegrationTools(
+    (open ? servers : NO_SERVERS).map((server) => server.connection),
+  );
   const groups = open
     ? groupsFor(
         trigger.query,

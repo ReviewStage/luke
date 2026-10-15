@@ -82,11 +82,15 @@ import {
 } from "@luke/features/coding-agent-view";
 import {
   INTEGRATION_CALL_FAILURE,
+  type IntegrationAccountParams,
+  type IntegrationAccountView,
   type IntegrationConnectView,
   type IntegrationProviderParams,
+  type IntegrationRenameParams,
   type IntegrationStatusesView,
   type IntegrationStatusView,
   type IntegrationToolsView,
+  integrationAccountViewSchema,
   integrationConnectViewSchema,
   integrationStatusesViewSchema,
   integrationStatusViewSchema,
@@ -367,8 +371,12 @@ export interface HostOperator {
   integrationsTools(params: IntegrationProviderParams): Effect.Effect<IntegrationToolsView>;
   /** The account's sign-in to one provider under way ended, revoking nothing; where it then stands, or why there is no answer. */
   integrationsCancel(params: IntegrationProviderParams): Effect.Effect<IntegrationStatusView>;
-  /** The account's connection to one provider ended; where it then stands, or why there is no answer. */
+  /** The account's connection to one account at a provider ended; where it then stands, or why there is no answer. */
   integrationsDisconnect(params: IntegrationProviderParams): Effect.Effect<IntegrationStatusView>;
+  /** One account at a provider named as the developer calls it; the account as it then stands, or why there is no answer. */
+  integrationsRename(params: IntegrationRenameParams): Effect.Effect<IntegrationAccountView>;
+  /** One account made its provider's primary; the account as it then stands, or why there is no answer. */
+  integrationsPrimary(params: IntegrationAccountParams): Effect.Effect<IntegrationAccountView>;
   /** The page that connects the account's GitHub, asked of the service; its address, or why there is none. */
   githubConnect(): Effect.Effect<PlanningGitHubPageAnswer>;
   /** The account's GitHub disconnected under the Mac's session; the connection as it then stands, or why it is not. */
@@ -704,6 +712,13 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         ? Result.getOrUndefined(readEither(schema, { excess: EXCESS_KEYS.DROP })(answer.result))
         : undefined) ?? AUTOMATION_UNANSWERED;
 
+  /** The account an integration ask is about, as the gateway carries it: the provider, and the account and an add where the window named them. */
+  const integrationTarget = (params: IntegrationProviderParams) => ({
+    provider: params.provider,
+    ...(params.connection !== undefined ? { connection: params.connection } : undefined),
+    ...(params.add !== undefined ? { add: params.add } : undefined),
+  });
+
   /** An integration answer as the host's method documents it, or unanswered, on the same terms as a coding-agent answer. */
   const integrationAnswer =
     <Answer, Encoded>(schema: EffectSchema.Codec<Answer, Encoded>) =>
@@ -720,23 +735,40 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       ),
     integrationsConnect: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.INTEGRATIONS_CONNECT, { provider: params.provider }),
+        client.call(GATEWAY_METHOD.INTEGRATIONS_CONNECT, integrationTarget(params)),
         integrationAnswer(integrationConnectViewSchema),
       ),
     integrationsTools: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.INTEGRATIONS_TOOLS, { provider: params.provider }),
+        client.call(GATEWAY_METHOD.INTEGRATIONS_TOOLS, integrationTarget(params)),
         integrationAnswer(integrationToolsViewSchema),
       ),
     integrationsCancel: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.INTEGRATIONS_CANCEL, { provider: params.provider }),
+        client.call(GATEWAY_METHOD.INTEGRATIONS_CANCEL, integrationTarget(params)),
         integrationAnswer(integrationStatusViewSchema),
       ),
     integrationsDisconnect: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.INTEGRATIONS_DISCONNECT, { provider: params.provider }),
+        client.call(GATEWAY_METHOD.INTEGRATIONS_DISCONNECT, integrationTarget(params)),
         integrationAnswer(integrationStatusViewSchema),
+      ),
+    integrationsRename: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.INTEGRATIONS_RENAME, {
+          provider: params.provider,
+          connection: params.connection,
+          label: params.label,
+        }),
+        integrationAnswer(integrationAccountViewSchema),
+      ),
+    integrationsPrimary: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.INTEGRATIONS_PRIMARY, {
+          provider: params.provider,
+          connection: params.connection,
+        }),
+        integrationAnswer(integrationAccountViewSchema),
       ),
     bootstrap: () =>
       Effect.map(client.call(GATEWAY_METHOD.CLIENT_BOOTSTRAP), (answer) =>

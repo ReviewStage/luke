@@ -10,15 +10,10 @@ import {
   hasWordsOrFiles,
 } from "@luke/features/coding-agent-wire";
 import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
-import {
-  INTEGRATION_NAME,
-  INTEGRATION_PROVIDER_LIST,
-  INTEGRATION_STATUS,
-  type IntegrationProvider,
-} from "@luke/features/integration-wire";
+import { INTEGRATION_STATUS } from "@luke/features/integration-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { EllipsisIcon, McpIcon, MicrophoneIcon, PlusIcon } from "@luke/ui";
-import { lapsedServer } from "@luke/ui/agent-servers-model";
+import { lapsedServer, namedServers } from "@luke/ui/agent-servers-model";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { FileDiffIcon } from "lucide-react";
 import { type RefObject, useEffect, useRef, useState } from "react";
@@ -315,18 +310,20 @@ export function AgentComposer({
   const statuses = useIntegrationStatuses();
   const grant = useIntegrationGrant(statuses);
   // A reconnect that could not begin says so in the note, as Settings' row does.
-  const [reconnectFailed, setReconnectFailed] = useState<IntegrationProvider | undefined>(
-    undefined,
-  );
-  const reconnect = (provider: IntegrationProvider) => {
+  const [reconnectFailed, setReconnectFailed] = useState<string | undefined>(undefined);
+  const reconnect = (server: string) => {
     setReconnectFailed(undefined);
-    void grant.begin(provider).then((outcome) => {
+    void grant.begin(server).then((outcome) => {
       if (outcome === GRANT_OUTCOME.NOT_OPENED || outcome === GRANT_OUTCOME.REFUSED) {
-        setReconnectFailed(provider);
+        setReconnectFailed(server);
       }
     });
   };
-  const lapsed = lapsedServer({ statusOf: statuses.statusOf, disabled: servers.disabled });
+  const lapsed = lapsedServer({
+    statusOf: statuses.statusOf,
+    accountsOf: statuses.accountsOf,
+    disabled: servers.disabled,
+  });
   const unloaded = AsyncResult.isFailure(bundle) ? EDITOR_LOAD_FAILED : undefined;
   const words =
     composer.closed ??
@@ -342,10 +339,13 @@ export function AgentComposer({
           : {
               reason: FAILURE_REASON.RECONNECT_INTEGRATION,
               text:
-                reconnectFailed === lapsed
-                  ? `${INTEGRATION_NAME[lapsed]}'s sign-in expired, and Luke could not start reconnecting it. Try again in a moment.`
-                  : `${INTEGRATION_NAME[lapsed]}'s sign-in expired.`,
-              provider: lapsed,
+                reconnectFailed === lapsed.connection
+                  ? `${lapsed.name}'s sign-in expired, and Luke could not start reconnecting it. Try again in a moment.`
+                  : `${lapsed.name}'s sign-in expired.`,
+              provider: lapsed.provider,
+              ...(lapsed.connection === lapsed.provider
+                ? undefined
+                : { connection: lapsed.connection, name: lapsed.name }),
             }));
   // Retry is the composer's own: a change of model that did not take is made again from the chip.
   const retries = note !== undefined && note === composer.note;
@@ -354,7 +354,7 @@ export function AgentComposer({
     note === undefined
       ? undefined
       : note.reason === FAILURE_REASON.RECONNECT_INTEGRATION
-        ? () => reconnect(note.provider)
+        ? () => reconnect(note.connection ?? note.provider)
         : // Note that a move's retry is the box's as the move lands, and only while the refusal it
           // was pressed for still stands, so an edit or a later send meanwhile is never sent over.
           repositoryRemedy(note, () => {
@@ -389,9 +389,11 @@ export function AgentComposer({
             onChoose: (name) => editor.current?.chooseSkillAtMention(name),
           },
     // The servers the account connected, each one a mention hands the agent's next turn.
-    servers: INTEGRATION_PROVIDER_LIST.filter(
-      (provider) => statuses.statusOf(provider) === INTEGRATION_STATUS.CONNECTED,
-    ),
+    servers: namedServers({
+      statusOf: statuses.statusOf,
+      accountsOf: statuses.accountsOf,
+      standing: (status) => status === INTEGRATION_STATUS.CONNECTED,
+    }),
     room,
     side: MENTION_MENU_SIDE.ABOVE,
     onChoose: (mention) => editor.current?.chooseMention(mention),
