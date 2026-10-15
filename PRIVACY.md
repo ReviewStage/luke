@@ -100,7 +100,8 @@ planning conversation. A fixture or evidence run keeps no conversation at all.
 
 **Feature plans.** When you start a named plan, our service stores it in a
 workspace: the first workspace made for your account unless you start it in
-another workspace you are a member of, and the plan records which. Every member of that
+another workspace you are a member of, and the plan records which, and who
+started it, named by their account's name to every member of the workspace. Every member of that
 workspace can read, change, and delete the plan, its board, its pages, and
 its history, read what was said on its calls, yours included, and read,
 message, rename, and stop the coding agents any member started on it. Each

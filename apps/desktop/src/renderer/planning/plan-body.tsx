@@ -124,7 +124,7 @@ interface PlanChase {
  * The plan's last edit: its newest revision, or, from a service before
  * history, the newest save a coding agent made, which was all it could name.
  */
-function lastEditOf(plan: Plan): PlanLastEdit | undefined {
+export function lastEditOf(plan: Plan): PlanLastEdit | undefined {
   if (plan.lastEdit !== undefined) return plan.lastEdit;
   // The journal is oldest first, so the newest save is its last.
   const journaled = plan.agentEdits?.at(-1);
@@ -174,12 +174,17 @@ function callOf(edit: PlanLastEdit, reader: EditReader): string {
   return edit.by === undefined ? " during a call" : ` during ${edit.by.name}'s call`;
 }
 
+/** What follows "Edited" in a line naming an edit: " by Luke during your call", or nothing for a revision from before history. */
+export function editedByText(edit: PlanLastEdit, reader: EditReader): string {
+  const editor = editorOf(edit, reader);
+  const by = editor === undefined ? "" : ` by ${editor}`;
+  const call = edit.duringCall ? callOf(edit, reader) : "";
+  return `${by}${call}`;
+}
+
 /** The line over the document, and each section's: "Edited by Luke during your call · 2h ago". */
 function editedLine(edit: PlanLastEdit, now: number, reader: EditReader): string {
-  const editor = editorOf(edit, reader);
-  const by = editor === undefined ? "Edited" : `Edited by ${editor}`;
-  const call = edit.duringCall ? callOf(edit, reader) : "";
-  return `${by}${call} · ${agoText(edit.at, now)}`;
+  return `Edited${editedByText(edit, reader)} · ${agoText(edit.at, now)}`;
 }
 
 /** Opens the plan's version history on the revision that made the save at a moment, or on the plan as it stands. */

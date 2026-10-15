@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { Plan, PlanSummary } from "@luke/features/plan-wire";
+import { PLAN_ACTOR, type Plan, type PlanSummary } from "@luke/features/plan-wire";
 import { DOCUMENT_REGION, PLANS_PAGE, type PlanMark } from "@luke/ui/planning-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { act, createElement, type ReactElement } from "react";
@@ -9,6 +9,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { plansControl, UNPINNED_SUMMARY } from "#testing/plans-control";
 import { installScrollIntoView } from "#testing/scroll-into-view";
+import { MAIN_TAB, type MainTab } from "../planning/use-main-tabs";
 import { NO_LOOKS } from "../planning/use-plan-looks";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { DesktopPlans } from "./desktop-plans";
@@ -34,6 +35,19 @@ const OTHER: PlanSummary = {
 };
 
 const DIALOG = '[role="alertdialog"]';
+
+const CHARLES = { userId: "user-charles", name: "Charles Pan" };
+const DEAN = { userId: "user-dean", name: "Dean Stratakos" };
+
+/** `PLAN` as Charles started it and Dean last edited it, the minute after. */
+const SHARED_PLAN: Plan = {
+  ...PLAN,
+  createdAt: 60_000,
+  updatedAt: 120_000,
+  ownerId: CHARLES.userId,
+  createdBy: CHARLES,
+  lastEdit: { actor: PLAN_ACTOR.DEVELOPER, by: DEAN, at: 120_000, duringCall: false },
+};
 
 /** What the plan actions asked of the tab, by the plan each named. */
 interface Asked {
@@ -242,4 +256,64 @@ test("the plan's name reaches the recording only as masked text, never in an att
       assert.doesNotMatch(attribute.value, /Teammate invitations/u, attribute.name);
     }
   }
+});
+
+/** The open plan's tab on `tab`, `SHARED_PLAN` open as `me` reads it and `OTHER` beside it in the list. */
+function sharedTab(me: string, tab: MainTab = MAIN_TAB.PLAN): PlansControl {
+  const base = plansControl();
+  return plansControl({
+    page: PLANS_PAGE.DOCUMENT,
+    me,
+    plans: [SHARED_PLAN, OTHER],
+    activePlanId: SHARED_PLAN.id,
+    region: { kind: DOCUMENT_REGION.READY, plan: SHARED_PLAN },
+    mainTabs: { ...base.mainTabs, tabs: [MAIN_TAB.PLAN, MAIN_TAB.INBOX], tab },
+  });
+}
+
+/** The lines under the open menu's items, each with its time left off. */
+function menuFooter(): string[] {
+  const notes = document.querySelectorAll('[role="menu"] .plan-menu-footer p');
+  return [...notes].map((note) => (note.textContent ?? "").replace(/ · .*$/u, ""));
+}
+
+test("the plan's ⋯ menu ends with who created the plan and who last edited it, the reader's own as you and a teammate's by name", () => {
+  openMenu(mountToolbar(sharedTab(DEAN.userId)));
+  assert.deepEqual(menuFooter(), ["Created by Charles Pan", "Last edited by you"]);
+  const times = document.querySelectorAll('[role="menu"] .plan-menu-footer time');
+  assert.deepEqual(
+    [...times].map((time) => time.getAttribute("datetime")),
+    [new Date(60_000).toISOString(), new Date(120_000).toISOString()],
+  );
+  unmountAll();
+
+  openMenu(mountToolbar(sharedTab(CHARLES.userId)));
+  assert.deepEqual(menuFooter(), ["Created by you", "Last edited by Dean Stratakos"]);
+  unmountAll();
+
+  // A plan the window has not opened, from a service that named no creator, says only when it was saved.
+  const { asked } = openTab();
+  rightClick(mountSidebarPlan(sharedTab(DEAN.userId), OTHER, asked), 40, 60);
+  assert.deepEqual(menuFooter(), ["Created by someone", "Last edited"]);
+});
+
+test("Start and the plan's ⋯ stand in the toolbar on the Plan tab alone", () => {
+  const drawn = (tab: MainTab) => {
+    const container = mount(
+      createElement(DesktopPlans, {
+        summary: UNPINNED_SUMMARY,
+        looks: NO_LOOKS,
+        plans: sharedTab(DEAN.userId, tab),
+      }),
+    );
+    const toolbar = container.querySelector(".desktop-toolbar");
+    const shown = ["Start a coding agent", "Plan actions"].filter(
+      (label) => toolbar?.querySelector(`[aria-label="${label}"]`) !== null,
+    );
+    unmountAll();
+    return shown;
+  };
+
+  assert.deepEqual(drawn(MAIN_TAB.PLAN), ["Start a coding agent", "Plan actions"]);
+  assert.deepEqual(drawn(MAIN_TAB.INBOX), []);
 });

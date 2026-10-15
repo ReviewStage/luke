@@ -225,6 +225,12 @@ const planSummaryFields = {
    * another workspace; absent from a service before it was sent.
    */
   ownerId: EffectSchema.optionalKey(EffectSchema.String),
+  /**
+   * The owner by id and the name their account holds now, as the plan's ⋯
+   * menu says who created it; absent once their account is gone, and from a
+   * service before it was sent.
+   */
+  createdBy: EffectSchema.optionalKey(memberRefSchema),
 };
 
 /** How much of a plan's coding agents and their pull requests one row of the list names; its counts say how many stand in all. */

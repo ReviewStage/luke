@@ -75,6 +75,7 @@ import {
 } from "@luke/service/testing/plan-documents";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
+import { eq } from "drizzle-orm";
 import { Clock, Duration, Effect, Layer, Option, Result, type Schema } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
@@ -451,29 +452,43 @@ it.layer(getTestDB())("the plan routes", (it) => {
     }),
   );
 
-  it.effect("a shared plan names the account that started it, to every member alike", () =>
-    Effect.gen(function* () {
-      const { owner, other, ask } = yield* openAccounts();
-      const shared = yield* openWorkspace(other);
-      yield* joinWorkspace(shared, owner);
-      const planId = startedId(
-        yield* ask(
-          request(PLANS, owner, { method: "POST", body: { ...RELAY, workspaceId: shared } }),
-        ),
-      );
-
-      const ownersOf = (bearer: string) =>
-        Effect.map(ask(request(PLANS, bearer)), (listed) =>
-          readAnswer(planListAnswerSchema, HOSTED_HTTP_STATUS.OK, listed).plans.map(
-            (plan) => plan.ownerId,
+  it.effect(
+    "a shared plan names the account that started it, by the name it holds now, to every member alike",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, ask } = yield* openAccounts();
+        const shared = yield* openWorkspace(other);
+        yield* joinWorkspace(shared, owner);
+        const planId = startedId(
+          yield* ask(
+            request(PLANS, owner, { method: "POST", body: { ...RELAY, workspaceId: shared } }),
           ),
         );
-      const opened = yield* ask(request(ONE_PLAN, other, { id: planId }));
+        const db = yield* Database;
+        yield* db.update(user).set({ name: "Charles Pan" }).where(eq(user.id, owner));
 
-      assert.deepEqual(yield* ownersOf(owner), [owner]);
-      assert.deepEqual(yield* ownersOf(other), [owner], "the teammate reads who started it");
-      assert.equal(readAnswer(planAnswerSchema, HOSTED_HTTP_STATUS.OK, opened).plan.ownerId, owner);
-    }),
+        const ownersOf = (bearer: string) =>
+          Effect.map(ask(request(PLANS, bearer)), (listed) =>
+            readAnswer(planListAnswerSchema, HOSTED_HTTP_STATUS.OK, listed).plans.map((plan) => [
+              plan.ownerId,
+              plan.createdBy,
+            ]),
+          );
+        const opened = readAnswer(
+          planAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(ONE_PLAN, other, { id: planId })),
+        ).plan;
+        const creator = { userId: owner, name: "Charles Pan" };
+
+        assert.deepEqual(yield* ownersOf(owner), [[owner, creator]]);
+        assert.deepEqual(
+          yield* ownersOf(other),
+          [[owner, creator]],
+          "the teammate reads who started it",
+        );
+        assert.deepEqual([opened.ownerId, opened.createdBy], [owner, creator]);
+      }),
   );
 
   it.effect(
