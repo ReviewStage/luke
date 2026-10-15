@@ -78,9 +78,7 @@ function mentionLinkLook(namesMention: (target: string) => boolean) {
               default: null,
               parseHTML: () => null,
               renderHTML: (attributes) =>
-                typeof attributes.href === "string" && namesMention(attributes.href)
-                  ? { class: MENTION_LINK_CLASS }
-                  : {},
+                namesMention(String(attributes.href ?? "")) ? { class: MENTION_LINK_CLASS } : {},
             },
           },
         },
