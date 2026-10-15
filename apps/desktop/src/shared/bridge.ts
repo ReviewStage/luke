@@ -259,6 +259,23 @@ export const BRIDGE = {
     result: result<{ planId: string }>((value) => isRecord(value) && isWireString(value.planId)),
   }),
   /**
+   * A notification of an item of an agent with no plan clicked: the panel is
+   * to open the window's Inbox with that item chosen, where it is answered.
+   * An event, as an inbox notification's click is.
+   */
+  onShowInboxItem: entry({
+    kind: "subscribe",
+    channel: "app:show-inbox-item",
+    args: noArgs,
+    result: result<{ agentId: string; itemId: string; workspaceId?: string }>(
+      (value) =>
+        isRecord(value) &&
+        isWireString(value.agentId) &&
+        isWireString(value.itemId) &&
+        (value.workspaceId === undefined || isWireString(value.workspaceId)),
+    ),
+  }),
+  /**
    * The floating call window moved under a pointer that did not: a drag of
    * its own. The page is told so the hover its buttons were left with is not
    * believed, since the engine keeps the hover the pointer had before.
