@@ -834,6 +834,50 @@ test("opening a plan of another workspace lists that workspace once it opened, o
   );
 });
 
+/** A plan's inbox waiting on the developer: `count` open items, each asked by one agent. */
+function waitingIn(planId: string, count: number): AppInboxPlan {
+  return {
+    planId,
+    items: Array.from({ length: count }, (_, index) => ({
+      id: `${planId}-item-${index}`,
+      agentId: `${planId}-agent`,
+      title: "Which retry budget?",
+      postedAt: index,
+    })),
+  };
+}
+
+test("the Inbox lists the chosen workspace's share of what waits, and every workspace counts its own", () => {
+  const tab = mount({
+    shown: true,
+    planning: TWO_WORKSPACES,
+    inboxWaiting: [waitingIn("notes", 1), waitingIn("alerts", 2), waitingIn("unread", 3)],
+    inboxPlans: [
+      { planId: "notes", items: 1, updatedAt: 3 },
+      { planId: "alerts", items: 2, updatedAt: 2 },
+      { planId: "unread", items: 3, updatedAt: 1 },
+    ],
+  });
+  const share = () => ({
+    inbox: tab.control().listed.inbox.map((plan) => plan.planId),
+    inboxPlans: tab.control().listed.inboxPlans.map((holding) => holding.planId),
+  });
+
+  const personal = share();
+  act(() => tab.control().onChooseWorkspace(ACME.id));
+
+  assert.deepEqual(personal, { inbox: ["notes"], inboxPlans: ["notes"] });
+  assert.deepEqual(share(), { inbox: ["alerts"], inboxPlans: ["alerts"] });
+  assert.deepEqual(
+    [...tab.control().waitingIn],
+    [
+      [PERSONAL.id, 1],
+      [ACME.id, 2],
+    ],
+    "a plan the list has not read yet counts in no workspace",
+  );
+});
+
 test("the new-plan page's recent repositories are the chosen workspace's own, and the chip names its workspace", () => {
   const tab = mount({
     shown: true,

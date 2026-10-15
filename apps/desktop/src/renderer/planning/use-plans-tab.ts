@@ -127,6 +127,7 @@ import {
 } from "./use-side-panel";
 import { sayRestored } from "./version-view";
 import { startedAgentCallIds, workerCallIds, workRowsOf } from "./work-model";
+import { inWorkspace, waitingByWorkspace } from "./workspace-inbox";
 
 /**
  * use-plans-tab.ts -- the panel's Plans tab as one control: which page shows, the presses each page makes, and the host's read of the plans as the tab shows.
@@ -235,8 +236,19 @@ export interface PlansControl {
   plans: PlanningView["plans"];
   /** Every archived plan of every workspace, newest archived first. */
   archived: PlanningView["plans"];
-  /** The chosen workspace's share of `plans` and `archived`, which alone the sidebar lists; every plan while no workspace is chosen. */
-  listed: { plans: PlanningView["plans"]; archived: PlanningView["plans"] };
+  /**
+   * The chosen workspace's share of `plans` and `archived`, which alone the
+   * sidebar lists, and of `inbox` and `inboxPlans`, which alone the Inbox,
+   * its count, and Home list; everything while no workspace is chosen.
+   */
+  listed: {
+    plans: PlanningView["plans"];
+    archived: PlanningView["plans"];
+    inbox: readonly AppInboxPlan[];
+    inboxPlans: readonly AppInboxPlanHolding[];
+  };
+  /** How many inbox items wait in each workspace, by its id, which the switcher counts; one where none wait is absent. */
+  waitingIn: ReadonlyMap<string, number>;
   /** The workspaces the account is a member of, its first one first; none before the first read lands. */
   workspaces: readonly Workspace[];
   /** The workspace the sidebar lists and New plan starts in; absent while none is listed, when every plan is listed. */
@@ -671,6 +683,16 @@ export function usePlansTab(input: {
     listedWorkspace === undefined
       ? planning.plans
       : planning.plans.filter((plan) => plan.workspaceId === listedWorkspace.id),
+  );
+  const listedWorkspaceId = listedWorkspace?.id;
+  const { inboxWaiting, inboxPlans } = input;
+  const listedInbox = useMemo(
+    () => ({
+      inbox: inWorkspace(inboxWaiting, planning.plans, listedWorkspaceId),
+      inboxPlans: inWorkspace(inboxPlans, planning.plans, listedWorkspaceId),
+      waitingIn: waitingByWorkspace(inboxWaiting, planning.plans),
+    }),
+    [inboxWaiting, inboxPlans, planning.plans, listedWorkspaceId],
   );
   const signedIn = fixture !== undefined || input.signedIn;
   const page = plansPage(planning);
@@ -1523,7 +1545,10 @@ export function usePlansTab(input: {
     listed: {
       plans: [...listedSidebar.pinned, ...listedSidebar.rest],
       archived: listedSidebar.archived,
+      inbox: listedInbox.inbox,
+      inboxPlans: listedInbox.inboxPlans,
     },
+    waitingIn: listedInbox.waitingIn,
     workspaces: viewed.workspaces,
     workspace: listedWorkspace,
     onChooseWorkspace: chooseListed,

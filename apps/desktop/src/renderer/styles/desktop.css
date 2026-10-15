@@ -546,6 +546,16 @@ body,
   background: var(--raised);
 }
 
+/* Something waits in another workspace: a dot by the chevron, as the menu
+   counts it beside that workspace (workspace-switcher.tsx). */
+.sidebar-workspace-waiting {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--state-attention);
+}
+
 .sidebar-workspace-copy {
   display: flex;
   min-width: 0;
@@ -1790,6 +1800,16 @@ body,
   height: var(--menu-glyph);
   margin-left: auto;
   color: var(--text-tertiary);
+}
+
+/* How many wait behind an item, a workspace's in the switcher's menu. */
+.menu-item-waiting {
+  min-width: 18px;
+  color: var(--state-attention);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  text-align: right;
 }
 
 .menu-item-hint + .menu-item-end {
