@@ -21,7 +21,19 @@ import {
   type LiveBrainRunEvent,
   type LiveBrainSubmission,
 } from "@luke/voice/live-session";
-import { Cause, Clock, Duration, Effect, Result, Schedule, Schema, type Scope } from "effect";
+import {
+  Cause,
+  Clock,
+  Duration,
+  Effect,
+  type Fiber,
+  Option,
+  Queue,
+  Result,
+  Schema,
+  Scope,
+  Stream,
+} from "effect";
 import { SqlClient } from "effect/sql";
 import {
   ASK_REFUSAL,
@@ -73,9 +85,12 @@ import { VOICE_DETACH_GRACE_MS } from "./orphan-sweep.js";
  * itself — `acceptAsk` — and the store, so a spoken ask is admitted,
  * recorded, and handed to eve under the eve client the composition built for
  * the account. A turn's events are `projectTurnEvents` over the turn row and
- * its journal, read again on a schedule until the turn ends or the follow
- * bound is reached; there is no HTTP hop and so no function ceiling to
- * re-attach across. The bound is the plain one until the journal shows the
+ * its journal, read again the moment eve's own stream of the session says
+ * something happened, and on a schedule beside it, until the turn ends or the
+ * follow bound is reached. The stream is a wake and nothing more: what is
+ * told is read from the record, so the projection, its order, and its
+ * numbering are the record's whichever woke the read, and a stream eve
+ * refuses or drops leaves the schedule following as before. The bound is the plain one until the journal shows the
  * turn handed work to the worker, which eve runs as a task the turn parks
  * on (`turn.waiting`) and resumes from in the same turn, minutes or longer
  * later: from that call on the follow runs under the parked bound instead,
@@ -88,11 +103,15 @@ import { VOICE_DETACH_GRACE_MS } from "./orphan-sweep.js";
  * reply once it has finished forming and every call ahead of it has settled,
  * which is what the voice speaks meanwhile.
  *
- * How far each turn was told is written on the ask's row before it is told,
- * so a connection that re-attaches to the session on another function
- * instance takes the runs up again from the event after the last one told
- * (`recoverRuns`). Written first, a telling the socket's loss cut between
- * the write and the voice is lost rather than said twice.
+ * How far each turn was told is written on the ask's row beside the telling,
+ * never ahead of it: the events reach the voice first and the write follows
+ * on one ordered writer of the socket's scope, so a slow store holds back no
+ * reply. A connection that re-attaches to the session on another function
+ * instance takes the runs up again from the event after the last one the row
+ * says was told (`recoverRuns`); a telling the socket's loss cut between the
+ * voice and the write may be said again there, which is the price of a store
+ * that cannot delay the voice. Within one connection nothing is told twice,
+ * because each turn's told position is kept in memory as it is told.
  *
  * The brain is built in the socket's own scope and every follow an accepted
  * ask starts is a fiber in it, so the socket detaching interrupts each of
@@ -106,8 +125,18 @@ import { VOICE_DETACH_GRACE_MS } from "./orphan-sweep.js";
 const FOLLOW = Duration.minutes(10);
 
 const LIVE_BRAIN_FOLLOW_BOUNDS = {
-  /** How often the record is read again while an ask's turn runs: the measured step boundary hosted is about 300 ms. */
+  /** How often the record is read again while an ask's turn runs and eve's stream has said nothing: the measured step boundary hosted is about 300 ms. */
   POLL: Duration.millis(250),
+  /**
+   * How soon after a read the stream woke the record is read once more,
+   * stream or no: eve writes an event to the stream before Luke's hook writes
+   * its row, so the read it wakes may land a moment ahead of that row, and
+   * the next event, which eve publishes only once the hook is done, may be a
+   * long time coming at the end of a step.
+   */
+  SETTLE: Duration.millis(60),
+  /** How long after eve refused or ended a session's stream it is attached again. */
+  STREAM_RETRY: Duration.seconds(1),
   FOLLOW,
   /**
    * How long an ask whose turn handed work to a task is followed instead.
@@ -123,6 +152,18 @@ const LIVE_BRAIN_FOLLOW_BOUNDS = {
 } as const;
 
 type FollowBounds = Readonly<Record<keyof typeof LIVE_BRAIN_FOLLOW_BOUNDS, Duration.Duration>>;
+
+/**
+ * The stream events that wake no read: the deltas of text, reasoning, tool
+ * input, and partial output, which change nothing the record shows until the
+ * event that completes them, and which come many to the second.
+ */
+const EVE_DELTA_EVENTS: ReadonlySet<string> = new Set([
+  "message.appended",
+  "reasoning.appended",
+  "action.input.appended",
+  "action.partial",
+]);
 
 /**
  * What is said aloud for an ask the door refused, fixed by the build and
@@ -385,6 +426,29 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
   // end, because each sentence told per ask was said per ask.
   const toldOfTurn = new Map<string, TurnTold>();
   const reads: AskStandingReads = { store: options.store, asks: options.asks.asks };
+  /**
+   * The told positions still to be written, oldest first, run one at a time
+   * by the writer below so the row moves in the order the voice was told.
+   * The socket's close lets the write in hand finish and then writes what is
+   * left, so a detach loses no position it had already told.
+   */
+  const checkpoints = yield* Queue.unbounded<Effect.Effect<void, never, DatabaseServices>>();
+  yield* Scope.addFinalizer(
+    socket,
+    Effect.flatMap(Queue.clear(checkpoints), (left) => Effect.forEach(left, (write) => write)).pipe(
+      Effect.provideService(SqlClient.SqlClient, sql),
+      Effect.provideService(Database, database),
+    ),
+  );
+  yield* Effect.forkIn(
+    Effect.forever(Effect.flatMap(Queue.take(checkpoints), Effect.uninterruptible)),
+    socket,
+  );
+  /** Each eve session being listened to: the follows it wakes, and the fiber reading its stream while any does. */
+  const sessionStreams = new Map<
+    string,
+    { readonly wakes: Set<() => void>; readonly reading: Fiber.Fiber<void> }
+  >();
 
   function emit(event: LiveBrainRunEvent): void {
     for (const listener of [...listeners]) listener(event);
@@ -454,12 +518,59 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
   });
 
   /**
-   * Tells events under the ask, its row first moved past them, as one step
-   * the socket's close cannot cut: a telling is written down before it is
-   * told, so a connection that takes the run up again never tells it twice.
-   * A row the store could not move is reported and the events told all the
-   * same, since leaving the reply unsaid now is worse than a re-attach that
-   * might say it again.
+   * Wakes the follow each time eve's stream of the session tells an event
+   * past its deltas, until the answered stop. One stream is read per session
+   * however many follows listen, since asks folded into one turn share it,
+   * and it is attached again after eve refuses or ends it: the door refuses a
+   * session until its first event has been recorded, and eve ends a response
+   * at its own bound. The reading fiber is the socket scope's, and the last
+   * follow to stop listening interrupts it.
+   */
+  function listen(sessionId: string, wake: () => void): Effect.Effect<() => void> {
+    return Effect.gen(function* () {
+      const standing = sessionStreams.get(sessionId);
+      if (standing !== undefined) {
+        standing.wakes.add(wake);
+        return () => unlisten(sessionId, wake);
+      }
+      const wakes = new Set([wake]);
+      const once = Stream.runForEach(options.asks.eve.stream(sessionId), (event) =>
+        Effect.sync(() => {
+          if (EVE_DELTA_EVENTS.has(event.type)) return;
+          for (const each of [...wakes]) each();
+        }),
+      ).pipe(Effect.ignore);
+      const reading = yield* Effect.forkIn(
+        Effect.forever(Effect.andThen(once, Effect.sleep(bounds.STREAM_RETRY))),
+        socket,
+      );
+      sessionStreams.set(sessionId, { wakes, reading });
+      return () => unlisten(sessionId, wake);
+    });
+  }
+
+  function unlisten(sessionId: string, wake: () => void): void {
+    const standing = sessionStreams.get(sessionId);
+    if (standing === undefined) return;
+    standing.wakes.delete(wake);
+    if (standing.wakes.size > 0) return;
+    sessionStreams.delete(sessionId);
+    standing.reading.interruptUnsafe();
+  }
+
+  /** The eve session an accepted ask was dispatched to, where its row names one and can be read. */
+  const sessionOfAsk = (askId: string) =>
+    options.asks.asks.named(options.conversation.userId, askId).pipe(
+      Effect.map((ask) => ask?.sessionId),
+      Effect.tapError(logStoreFailure),
+      Effect.orElseSucceed(() => undefined),
+    );
+
+  /**
+   * Tells events under the ask and then hands the writer the row's move past
+   * them, so the voice hears them without waiting on the store. A row the
+   * store could not move is reported; the telling stands, since leaving the
+   * reply unsaid is worse than a re-attach that might say it again.
    */
   const tell = Effect.fnUntraced(function* (
     askId: string,
@@ -468,18 +579,15 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
   ) {
     if (events.length === 0) return;
     const at = told.ended ? new Date(yield* Clock.currentTimeMillis) : undefined;
-    yield* Effect.uninterruptible(
+    for (const event of events) emit(event);
+    Queue.offerUnsafe(
+      checkpoints,
       options.asks.asks
         .told(askId, at === undefined ? { seq: told.seq } : { seq: told.seq, endAt: at })
         .pipe(
           Effect.tapError(logStoreFailure),
           Effect.catch(() =>
             Effect.sync(() => options.report("How far a spoken ask was told could not be written")),
-          ),
-          Effect.andThen(
-            Effect.sync(() => {
-              for (const event of events) emit(event);
-            }),
           ),
         ),
     );
@@ -688,17 +796,35 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
       seeking: false,
       asked: [],
     };
-    const cadence = Schedule.spaced(bounds.POLL).pipe(
-      Schedule.setInputType<FollowLook>(),
-      Schedule.while(({ input }) => input === FOLLOW_LOOK.RUNNING),
-      // Whichever ends the follow — the turn saying it ended or its bound
-      // elapsing — the repeat answers with the last look's own word on it
-      // rather than the schedule's count.
-      Schedule.map(({ input }) => input),
-    );
-    const following = Effect.flatMap(Clock.currentTimeMillis, (since) =>
-      Effect.repeat(look(askId, told, since), cadence),
-    ).pipe(
+    // Note that the follow reads the record at once, then again the moment the stream wakes it,
+    // once more a settle after any read the stream woke, and on the poll whenever the stream is
+    // quiet, because the stream says only that something happened and the record says what.
+    const looking = Effect.gen(function* () {
+      const since = yield* Clock.currentTimeMillis;
+      const woken = yield* Queue.sliding<void>(1);
+      const sessionId = yield* sessionOfAsk(askId);
+      const stop =
+        sessionId === undefined
+          ? () => undefined
+          : yield* listen(sessionId, () => {
+              Queue.offerUnsafe(woken, undefined);
+            });
+      return yield* Effect.ensuring(
+        Effect.gen(function* () {
+          let last: FollowLook = yield* look(askId, told, since);
+          let settling = false;
+          while (last === FOLLOW_LOOK.RUNNING) {
+            const wait: Duration.Duration = settling ? bounds.SETTLE : bounds.POLL;
+            const wake: Option.Option<void> = yield* Effect.timeoutOption(Queue.take(woken), wait);
+            settling = Option.isSome(wake);
+            last = yield* look(askId, told, since);
+          }
+          return last;
+        }),
+        Effect.sync(stop),
+      );
+    });
+    const following = looking.pipe(
       Effect.flatMap((last) =>
         last === FOLLOW_LOOK.ENDED
           ? Effect.void

@@ -4,12 +4,10 @@ import {
   decodeLivePayload,
   LIVE_SERVER_EVENT,
   type LiveClientEvent,
-  type LiveServerEvent,
   type LiveSessionClosed,
-  liveErrorCommand,
   parseLiveServerEvent,
 } from "@luke/live";
-import { Deferred, Effect, type Fiber, type Scope, Stream } from "effect";
+import { Deferred, Effect, type Scope, Stream } from "effect";
 import { type SessionReportFrame, sessionReportFrameFromWire } from "../core.js";
 import { deviceFrameDecision, FRAME_DECISION, frameType, upstreamFrameDecision } from "./frames.js";
 import { FINALIZATION, type Finalization, type RelayCounts } from "./log.js";
@@ -30,12 +28,9 @@ import {
  * the hang-up, read as an ask for the close, its idle report, and its stop,
  * closing the socket on anything else. The two reports are the frames read
  * past their type: they are the service's own vocabulary, handed to the exchange that holds the
- * idle decision and the one instruction the stop appends, never to OpenAI. An opening command the service
- * sends of its own once `session.started` arrives follows the docs' order:
- * the command, then its acknowledgment or refusal matched by the id it was
- * sent with under a bounded wait, then whatever the service answers
- * that with; a caller who has hung up is sent none of it, whichever side of
- * the start they went. It ends the way the docs say a
+ * idle decision and the one instruction the stop appends, never to OpenAI.
+ * The relay sends nothing of its own as a session starts: a new call's
+ * opening is in the history it was created with. It ends the way the docs say a
  * session ends: `session.closed` is the finalization, reported once with the
  * seconds it named; a device that goes first after asking for the close, or
  * once its socket was closed on a refused frame, has `session.close` sent on
@@ -58,35 +53,7 @@ import {
 export const RELAY_DEFAULTS = {
   /** How long the sideband is held for `session.closed` after `session.close` was sent, the docs' 15 seconds. */
   CLOSE_TIMEOUT_MS: 15_000,
-  /** How long an opening command is waited on for its acknowledgment before it is reported unanswered. */
-  OPENING_TIMEOUT_MS: 15_000,
 } as const;
-
-/**
- * How the opening command the service sent on `session.started` was
- * answered. The docs' order is the append, its `session.instructions.appended`
- * matched by `client_event_id`, and only then whatever follows; an `error`
- * naming the same id is the refusal to handle before continuing, and silence
- * is neither, so each is reported as itself rather than assumed. An error
- * may name the id at its top level, inside `error` as `client_event_id`, or
- * inside `error` as `event_id`, and a refusal read from any of the three is
- * a refusal: one matched on fewer would be reported as silence instead.
- */
-export const OPENING_OUTCOME = {
-  ACKNOWLEDGED: "acknowledged",
-  REFUSED: "refused",
-  UNACKNOWLEDGED: "unacknowledged",
-} as const;
-
-/** A refusal carries the error's own kind and nothing of its free-text message. */
-export type OpeningSettled =
-  | { outcome: typeof OPENING_OUTCOME.ACKNOWLEDGED }
-  | {
-      outcome: typeof OPENING_OUTCOME.REFUSED;
-      errorType: string | undefined;
-      errorCode: string | undefined;
-    }
-  | { outcome: typeof OPENING_OUTCOME.UNACKNOWLEDGED };
 
 /** The reason a device socket is closed with when OpenAI's side ended before `session.closed`. */
 const UPSTREAM_CLOSED_REASON = "upstream-closed";
@@ -101,10 +68,6 @@ export interface RelayOptions<R = never> {
   onSessionClosed?: ((closed: LiveSessionClosed) => Effect.Effect<void, never, R>) | undefined;
   /** Runs on every `session.usage.updated`, with the seconds it named, on a fiber of its own. */
   onUsageUpdated?: ((seconds: number) => Effect.Effect<void, never, R>) | undefined;
-  /** Asked once, on the first `session.started`, for an event to send upstream from the service's own side. */
-  onSessionStarted?: (() => LiveClientEvent | undefined) | undefined;
-  /** Asked once, with how that event was answered; an event it answers is sent upstream in turn. */
-  onOpeningSettled?: ((settled: OpeningSettled) => LiveClientEvent | undefined) | undefined;
   /** Runs on every report the device sent in the service's vocabulary, which is read here and forwarded nowhere. */
   onDeviceReport?: ((report: SessionReportFrame) => void) | undefined;
   /** Runs once, when a device frame is refused and the socket closed on it, with the frame's type as far as it could be read. */
@@ -117,7 +80,6 @@ export interface RelayOptions<R = never> {
    */
   closeSession?: Effect.Effect<void> | undefined;
   closeTimeoutMs?: number;
-  openingTimeoutMs?: number;
 }
 
 export interface RelaySummary extends RelayCounts {
@@ -132,7 +94,6 @@ export function relaySession<R = never>(
 ): Effect.Effect<RelaySummary, never, R | Scope.Scope> {
   const { device, upstream } = options;
   const closeTimeoutMs = options.closeTimeoutMs ?? RELAY_DEFAULTS.CLOSE_TIMEOUT_MS;
-  const openingTimeoutMs = options.openingTimeoutMs ?? RELAY_DEFAULTS.OPENING_TIMEOUT_MS;
 
   return Effect.gen(function* () {
     const counts: RelayCounts = {
@@ -145,17 +106,11 @@ export function relaySession<R = never>(
       refusedUnpermitted: 0,
     };
     let closedSeen = false;
-    let startedSeen = false;
-    /** Whether the caller has gone: an opening command is for someone still listening. */
-    let hungUp = false;
     /** Whether the device forwarded its own `session.close`: its going after that is a hang-up, not a drop. */
     let deviceAskedClose = false;
     /** Whether the device's socket was closed here on a refused frame: the session ends with it. */
     let refusedByPolicy = false;
     let closed: LiveSessionClosed | undefined;
-    /** The `event_id` the opening command was sent with, until its acknowledgment settles it. */
-    let openingEventId: string | undefined;
-    let openingWait: Fiber.Fiber<void> | undefined;
     /** Whether the session's close was asked for, so it is asked once whoever asks. */
     let closeAsked = false;
 
@@ -182,66 +137,6 @@ export function relaySession<R = never>(
     });
 
     /**
-     * The opening command's answer, handled once: the acknowledgment, the
-     * refusal, or the wait running out. What the caller answers with goes up
-     * in turn, which is how the docs' cue follows the greeting rather than
-     * racing it.
-     */
-    const settleOpening = (opening: OpeningSettled): Effect.Effect<void> =>
-      Effect.suspend(() => {
-        if (openingEventId === undefined) return Effect.void;
-        openingEventId = undefined;
-        const waiting = openingWait;
-        openingWait = undefined;
-        const next = options.onOpeningSettled?.(opening);
-        const sending = next === undefined ? Effect.void : sendUpstream(next);
-        return waiting === undefined
-          ? sending
-          : Effect.andThen(
-              Effect.sync(() => waiting.interruptUnsafe()),
-              sending,
-            );
-      });
-
-    /** How a server event answers the opening command, or nothing when it is about something else. */
-    const openingAnswer = (event: LiveServerEvent): OpeningSettled | undefined => {
-      if (event.type === LIVE_SERVER_EVENT.ERROR) {
-        const about = liveErrorCommand(event);
-        return about === openingEventId
-          ? {
-              outcome: OPENING_OUTCOME.REFUSED,
-              errorType: event.error.type,
-              errorCode: event.error.code,
-            }
-          : undefined;
-      }
-      if (event.type !== LIVE_SERVER_EVENT.INSTRUCTIONS_APPENDED) return undefined;
-      return event.client_event_id === openingEventId
-        ? { outcome: OPENING_OUTCOME.ACKNOWLEDGED }
-        : undefined;
-    };
-
-    // Note that the four frame handlers below stay untraced, because a span per
-    // socket frame would open one on every audio chunk the relay passes.
-    const armOpening = Effect.fnUntraced(function* (
-      opening: LiveClientEvent,
-    ): Effect.fn.Return<void, never, Scope.Scope> {
-      openingEventId = opening.event_id;
-      openingWait = yield* Effect.forkScoped(
-        Effect.sleep(openingTimeoutMs).pipe(
-          // Cleared before the settle it runs, so the settle interrupts no
-          // fiber: the one it would interrupt is this one.
-          Effect.andThen(
-            Effect.sync(() => {
-              openingWait = undefined;
-            }),
-          ),
-          Effect.andThen(settleOpening({ outcome: OPENING_OUTCOME.UNACKNOWLEDGED })),
-        ),
-      );
-    });
-
-    /**
      * The finalization, which settles whatever the caller's own close write
      * came to: run to its `Exit` rather than awaited, because a write that
      * failed or died is still a session that ended, and a defect carried into
@@ -257,6 +152,8 @@ export function relaySession<R = never>(
         : settle(FINALIZATION.CONFIRMED),
     );
 
+    // Note that the frame handlers below stay untraced, because a span per
+    // socket frame would open one on every audio chunk the relay passes.
     const onUpstreamFrame = Effect.fnUntraced(function* (frame: VoiceFrame) {
       const text = frameText(frame);
       const type = frameType(text);
@@ -266,27 +163,6 @@ export function relaySession<R = never>(
         yield* device.send(frame);
         counts.framesToDevice += 1;
         counts.bytesToDevice += frameBytes(frame);
-      }
-      if (type === LIVE_SERVER_EVENT.SESSION_STARTED && !startedSeen) {
-        startedSeen = true;
-        const opening = hungUp ? undefined : options.onSessionStarted?.();
-        if (opening !== undefined && (yield* upstream.isOpen)) {
-          yield* upstream.send({ text: JSON.stringify(opening) });
-          yield* armOpening(opening);
-          // The caller may have gone while the command was going up, on the
-          // fiber reading their own socket: an opening armed behind a hangup
-          // is settled here rather than left to cue a session on its way out,
-          // which is what the hangup itself would have done had it run first.
-          if (hungUp) yield* settleOpening({ outcome: OPENING_OUTCOME.UNACKNOWLEDGED });
-        }
-      }
-      if (
-        openingEventId !== undefined &&
-        (type === LIVE_SERVER_EVENT.INSTRUCTIONS_APPENDED || type === LIVE_SERVER_EVENT.ERROR)
-      ) {
-        const event = parseLiveServerEvent(text);
-        const answer = event === undefined ? undefined : openingAnswer(event);
-        if (answer !== undefined) yield* settleOpening(answer);
       }
       if (type === LIVE_SERVER_EVENT.USAGE_UPDATED && options.onUsageUpdated) {
         const updated = parseLiveServerEvent(text);
@@ -339,12 +215,8 @@ export function relaySession<R = never>(
         return;
       }
       if (decision === FRAME_DECISION.HANG_UP) {
-        // The caller has hung up here rather than when its socket goes: no
-        // opening is sent to it from now, and one awaiting its answer is
-        // settled as unanswered, whichever reaches the relay first.
-        hungUp = true;
+        // The caller has hung up here rather than when its socket goes.
         deviceAskedClose = true;
-        yield* settleOpening({ outcome: OPENING_OUTCOME.UNACKNOWLEDGED });
         yield* askClose;
         return;
       }
@@ -379,14 +251,8 @@ export function relaySession<R = never>(
      * incomplete.
      */
     const onDeviceGone = Effect.gen(function* () {
-      hungUp = true;
       if (closedSeen || (yield* Deferred.isDone(settled))) return;
       const detached = !deviceAskedClose && !refusedByPolicy;
-      // The caller has hung up, so the opening command will never be answered
-      // to any purpose: it is settled as unanswered here rather than left
-      // armed, where an acknowledgment arriving during the graceful close
-      // would cue a session already on its way out.
-      yield* settleOpening({ outcome: OPENING_OUTCOME.UNACKNOWLEDGED });
       if (detached) {
         yield* settle(FINALIZATION.DETACHED);
         return;
@@ -413,7 +279,6 @@ export function relaySession<R = never>(
     );
 
     const finalization = yield* Deferred.await(settled);
-    openingEventId = undefined;
     if (yield* device.isOpen) {
       yield* finalization === FINALIZATION.CONFIRMED
         ? device.close(SOCKET_CLOSE_CODE.NORMAL)

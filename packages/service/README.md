@@ -1691,11 +1691,12 @@ session. Every call is a `/api/voice/sessions` session whose
 account holds before anything is spent; a create naming none is refused. It is created under
 the planning call's instructions (`sessionInstructions()` in
 `@luke/live`), whose delegation policy hands the developer's planning words to the backend and says back the
-finding and its one next question. A call just created speaks first: on
-`session.started` the service sends `planningOpeningInstruction()` and, once
-it is acknowledged, a cue to begin (`greetingCue`), so Luke
-opens the conversation rather than waiting for the developer, and a
-re-attach opens nothing again. The plan seed's first line says whether the
+finding and its one next question. A call just created speaks first: it is
+created with `planningOpeningHistory()` as the last developer message of its
+startup history, the Live conversations guide's way to greet before the
+caller speaks, so Luke opens the conversation with nothing appended,
+acknowledged, or cued after `session.started`, and a re-attach, which creates
+nothing, opens nothing again. The plan seed's first line says whether the
 plan is new (the untouched template and no assumption) or under way, which
 is what the opening picks its first question from. The exchange lands every spoken ask and
 the session's record in the plan's conversation (`openPlanConversation`),
@@ -2228,14 +2229,19 @@ under the deployment's `CRON_SECRET` as its bearer with the account in
 a principal of the deployment's own type — the deployment's one id, the
 account as its attribute — for a message naming a kind of turn its table,
 `DEPLOYMENT_TURNS` in `src/agents/brain-host/channel.ts`, admits (a spoken
-turn) and for a cancel of a turn in a session, which is how the stop key's
-`stopAsk` and the hook's carried Stop reach eve, and nothing else: any other
-route or kind of turn carrying the secret is refused outright rather than
-passed to the account authenticator behind it. Which account a request acts
+turn), for a cancel of a turn in a session, which is how the stop key's
+`stopAsk` and the hook's carried Stop reach eve, and for a GET of a session's
+event stream, which the live brain listens to from its tail so it reads a
+spoken ask's turn the moment eve tells an event rather than only on its
+250 ms poll (the poll stays, for a stream refused or dropped), and nothing
+else: any other route or kind of turn carrying the secret is refused outright
+rather than passed to the account authenticator behind it. The stream read is
+the planning channel's alone; the coder channel's deployment, which presents
+the account, is refused it. Which account a request acts
 for is one accessor over both principal types, and the door's ownership
 checks and the host's admission read that answer, so the deployment can open
-a turn only on a conversation the named account reaches and cancel one only
-in a session a conversation that account reaches recorded. Where eve answers is an
+a turn only on a conversation the named account reaches, and cancel one or
+read a stream only in a session a conversation that account reaches recorded. Where eve answers is an
 origin of this deployment's own, whose rewrites carry `/eve/v1/*` into the
 eve service (`deploymentEveOrigin` in `src/agents/brain-host/eve-origin.ts`):
 `LUKE_EVE_ORIGIN` where it is set, otherwise the project's production domain

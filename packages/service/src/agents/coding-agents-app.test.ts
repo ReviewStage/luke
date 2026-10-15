@@ -75,6 +75,7 @@ import {
   Redacted,
   Result,
   type Schema,
+  Stream,
 } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
@@ -287,6 +288,7 @@ function fakeEve(
         reset.push(sessionId);
         return { outcome: EVE_RESET_OUTCOME.RESET };
       }),
+    stream: () => Stream.empty,
   });
   return { eve, opened, sent, cancelled, reset };
 }

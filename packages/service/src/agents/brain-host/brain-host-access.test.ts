@@ -331,6 +331,30 @@ test("at the door the deployment is admitted for the named account's own convers
     ),
     BRAIN_HOST_REFUSAL.NOT_OWNER,
   );
+  // The voice hearing a spoken ask's turn: a read of the account's own recorded session's stream
+  // is admitted, another account's and one no record attributes are refused, and only a read.
+  const streamed = await auth(
+    scheduled("user-a", undefined, `/eve/v1/session/${SESSION_A}/stream`, "GET"),
+  );
+  assert.equal(actedForAccount(streamed ?? null), "user-a");
+  assert.equal(
+    await refusal(() =>
+      auth(scheduled("user-b", undefined, `/eve/v1/session/${SESSION_A}/stream`, "GET")),
+    ),
+    BRAIN_HOST_REFUSAL.NOT_OWNER,
+  );
+  assert.equal(
+    await refusal(() =>
+      auth(scheduled("user-a", undefined, `/eve/v1/session/${SESSION_NEW}/stream`, "GET")),
+    ),
+    BRAIN_HOST_REFUSAL.NOT_OWNER,
+  );
+  assert.equal(
+    await refusal(() =>
+      auth(scheduled("user-a", undefined, `/eve/v1/session/${SESSION_A}/stream`, "POST")),
+    ),
+    BRAIN_HOST_REFUSAL.NOT_DEPLOYMENT_ACT,
+  );
 });
 
 test("a session the deployment opened for an account admits that account's own bearer as the same initiator, and another account not at all", async () => {

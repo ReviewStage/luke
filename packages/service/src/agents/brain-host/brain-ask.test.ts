@@ -20,7 +20,7 @@ import { joinWorkspace, openHostedStoreTestDatabase, startPlan } from "@luke/dat
 import { ASK_ORIGIN } from "@luke/features";
 import { TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@luke/wire";
 import { eq } from "drizzle-orm";
-import { Effect, Option, PartitionedSemaphore, Result, Schema } from "effect";
+import { Effect, Option, PartitionedSemaphore, Result, Schema, Stream } from "effect";
 import { afterAll, test } from "vitest";
 import { HOSTED_TOOL_SET } from "../../plans/brain-tool-set.js";
 import { BRAIN_HOST_TURN } from "./bounds.js";
@@ -203,6 +203,7 @@ function fakeEve(): FakeEve {
         return { outcome: EVE_CANCEL_OUTCOME.ACCEPTED };
       }),
     reset: () => Effect.die(new Error("this suite retires no session")),
+    stream: () => Stream.empty,
   };
   return eve;
 }

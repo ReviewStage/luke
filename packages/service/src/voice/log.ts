@@ -16,15 +16,6 @@ export const LOG_EVENT = {
   SESSION_CREATED: "session-created",
   /** A fresh connection's sideband stands again on a session created earlier. */
   SESSION_ATTACHED: "session-attached",
-  GREETING_SENT: "greeting-sent",
-  /** The greeting's append was acknowledged by the id it was sent with. */
-  GREETING_ACKNOWLEDGED: "greeting-acknowledged",
-  /** An error named the greeting's append: its kind, never the sentence it came with. */
-  GREETING_REFUSED: "greeting-refused",
-  /** Neither acknowledgment nor error arrived inside the wait, so nothing followed the greeting. */
-  GREETING_UNACKNOWLEDGED: "greeting-unacknowledged",
-  /** The commentary that asks the model to begin, sent once the greeting stood. */
-  GREETING_CUED: "greeting-cued",
   USAGE_RECORDED: "usage-recorded",
   /** The hosted exchange stands on the session: the record and the brain run here for it. */
   EXCHANGE_ATTACHED: "exchange-attached",
@@ -74,15 +65,6 @@ export type LogEntry =
   | { event: typeof LOG_EVENT.SESSION_REFUSED; reason: HostedApiError }
   | { event: typeof LOG_EVENT.SESSION_CREATED }
   | { event: typeof LOG_EVENT.SESSION_ATTACHED }
-  | { event: typeof LOG_EVENT.GREETING_SENT }
-  | { event: typeof LOG_EVENT.GREETING_ACKNOWLEDGED }
-  | {
-      event: typeof LOG_EVENT.GREETING_REFUSED;
-      errorType: string | undefined;
-      errorCode: string | undefined;
-    }
-  | { event: typeof LOG_EVENT.GREETING_UNACKNOWLEDGED }
-  | { event: typeof LOG_EVENT.GREETING_CUED }
   | { event: typeof LOG_EVENT.USAGE_RECORDED; seconds: number; outcome: VoiceSecondsOutcome }
   | { event: typeof LOG_EVENT.EXCHANGE_ATTACHED }
   | { event: typeof LOG_EVENT.EXCHANGE_FAILED }
