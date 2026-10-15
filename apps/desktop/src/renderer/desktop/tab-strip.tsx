@@ -1,4 +1,4 @@
-import { CloseIcon, EllipsisIcon } from "@luke/ui";
+import { CloseIcon } from "@luke/ui";
 import { useLayoutEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { APP_COMMAND } from "#shared/shortcuts";
@@ -12,7 +12,6 @@ import {
   MENU_DROP,
   type MenuAction,
   type MenuPlacement,
-  type MenuTrigger,
   useActionMenu,
 } from "./action-menu";
 import { type TabMove, useTabDrag } from "./use-tab-drag";
@@ -44,11 +43,7 @@ import { type TabMove, useTabDrag } from "./use-tab-drag";
  * A tab with actions of its own offers them on a
  * right-click, or from the keyboard on the menu key or ⇧F10, hanging where
  * the pointer is or under the tab (`MenuTab`), and closing that menu hands
- * focus back to the tab. A tab whose menu holds more than its own keeping
- * also wears a ⋯ before its ×, which drops the same menu, so a developer
- * who never thinks to right-click a tab still finds it. The ⋯ stands as the
- * × does, on the chosen tab and on another under the pointer, and the
- * chosen tab's is the one stop Tab makes in the strip after the tab itself.
+ * focus back to the tab.
  *
  * Every tab stands whole, its glyph and its label, a long label cut short
  * and said whole in its hint, or in the card a tab with more to say hangs
@@ -170,6 +165,16 @@ function markOverflow(strip: HTMLElement): void {
 function focusTab(strip: HTMLElement | null, tab: HTMLElement | undefined | null): void {
   tab?.focus({ preventScroll: true });
   if (strip !== null && tab !== undefined && tab !== null) reveal(strip, tab);
+}
+
+/**
+ * Whether an event's target stands in the strip itself. Note that an event
+ * from what a tab draws elsewhere, its menu or its ⋯ in the toolbar's slot,
+ * reaches the strip's handlers too, because React bubbles it through the
+ * portal to the tab that drew it, and none of it is a tab to scroll or move.
+ */
+function within(strip: HTMLElement, target: EventTarget): boolean {
+  return target instanceof Node && strip.contains(target);
 }
 
 /** What the strip says aloud of a tab moved: its label and the place it now stands. */
@@ -303,6 +308,7 @@ export function TabStrip({
   // restarted, and cut short, by every step of a turning wheel.
   const wheel = (event: React.WheelEvent<HTMLDivElement>) => {
     const node = event.currentTarget;
+    if (!within(node, event.target)) return;
     if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
     if (node.scrollWidth <= node.clientWidth) return;
     const unit =
@@ -332,7 +338,9 @@ export function TabStrip({
         onPointerDown={onPointerDown}
         onWheel={wheel}
         onScroll={(event) => markOverflow(event.currentTarget)}
-        onFocus={() => setFocused(true)}
+        onFocus={(event) => {
+          if (within(event.currentTarget, event.target)) setFocused(true);
+        }}
         onBlur={(event) => {
           if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false);
         }}
@@ -359,8 +367,7 @@ export function TabStrip({
  * right-click or the keyboard's menu keys. A `quiet` tab draws no fill at
  * rest, chosen or not, and the hover fill under the pointer: a lone tab,
  * always the chosen one, need not be told from the others. An `anchored`
- * tab stands at the strip's start for good, never moved. `more`, while
- * given, is the ⋯ that drops the tab's menu, standing before the ×.
+ * tab stands at the strip's start for good, never moved.
  */
 export function Tab({
   icon,
@@ -379,7 +386,6 @@ export function Tab({
   onSelect,
   onClose,
   onMenu,
-  more,
 }: {
   icon: React.JSX.Element;
   label: string;
@@ -402,7 +408,6 @@ export function Tab({
   onSelect: () => void;
   onClose?: (() => void) | undefined;
   onMenu?: ((placement: MenuPlacement, opener: HTMLElement) => void) | undefined;
-  more?: MenuTrigger | undefined;
 }): React.JSX.Element {
   // Whether the label is cut short: a label renamed, or the plan's one tab
   // giving way to its toolbar.
@@ -465,7 +470,6 @@ export function Tab({
       data-anchored={String(anchored)}
       data-unread={String(unread)}
       data-marked={String(endMark !== undefined)}
-      data-more={String(more !== undefined)}
     >
       {editor === undefined ? (
         <Tooltip label={card === undefined ? hint : label} card={card}>
@@ -476,19 +480,6 @@ export function Tab({
           {glyph}
           {editor}
         </span>
-      )}
-      {more === undefined || editor !== undefined ? null : (
-        <Tooltip label="Tab actions">
-          <button
-            type="button"
-            className="tab-more"
-            aria-label={`Actions for ${label}`}
-            tabIndex={selected ? 0 : -1}
-            {...more}
-          >
-            <EllipsisIcon />
-          </button>
-        </Tooltip>
       )}
       {onClose === undefined || editor !== undefined ? null : (
         <button
@@ -509,17 +500,14 @@ export function Tab({
  * A tab with its own actions, in the groups a rule divides, on a right-click
  * or the keyboard's menu keys, hung where the pointer is or under the tab;
  * closing the menu hands focus back to the tab, and a press on the tab
- * closes it, as a press on a menu's own button does. With `more`, its ⋯
- * drops that one menu from under itself, handing focus back to the ⋯, so
- * the two doors cannot offer different things. Every other part is `Tab`'s.
+ * closes it, as a press on a menu's own button does. Every other part is
+ * `Tab`'s.
  */
 export function MenuTab({
   groups,
-  more,
   ...tab
-}: Omit<React.ComponentProps<typeof Tab>, "onMenu" | "more"> & {
+}: Omit<React.ComponentProps<typeof Tab>, "onMenu"> & {
   groups: MenuAction[][];
-  more: boolean;
 }): React.JSX.Element {
   const menu = useActionMenu(true);
   return (
@@ -531,7 +519,6 @@ export function MenuTab({
           tab.onSelect();
         }}
         onMenu={menu.show}
-        more={more ? menu.trigger() : undefined}
       />
       {menu.drawn === undefined ? null : (
         <ActionMenu

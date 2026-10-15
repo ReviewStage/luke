@@ -314,6 +314,10 @@ function PlanDocument({
   // a hook that only the ready page reached would be one more hook than
   // the reading page had, which React refuses by unmounting the window.
   const [refusal, setRefusal] = useState<{ planId: string; note: string } | undefined>(undefined);
+  // The one slot the toolbar keeps for a ⋯: the plan's on its tab, and on
+  // another the chosen tab's own, drawn there from the tab (`strip-tabs.tsx`).
+  // Held above the states with no document for the same reason.
+  const [actionsSlot, setActionsSlot] = useState<HTMLElement | null>(null);
   const openMention = plans.onShowMention;
   const revealed = plans.sectionReveal;
   // A file a mention names opens in its tab, its lines at the commit the mention pins them to.
@@ -401,7 +405,7 @@ function PlanDocument({
     sideFocused && sidePanel.tab !== undefined ? sidePanel.tab : mainTabs.tab,
   );
   const { tab } = mainTabs;
-  // Start and the ⋯ button are the plan's, not an agent's, so only the
+  // Start and the plan's ⋯ are the plan's, not an agent's, so only the
   // plan's own tab draws them; the plan's chords stand on every tab.
   const onPlanTab = tab === MAIN_TAB.PLAN;
   // A delegation's row in an agent's transcript opens its worker in the side
@@ -503,6 +507,7 @@ function PlanDocument({
                 keys={plans.shown && !sideFocused}
                 shown={plans.shown}
                 inbox={inbox.board.open.length}
+                actionsSlot={actionsSlot}
               />
             }
           >
@@ -542,7 +547,9 @@ function PlanDocument({
                   {onPlanTab ? <StartAgentButton control={agents} /> : null}
                 </>
               )}
-              <PlanActions plans={plans} plan={plan} button={onPlanTab} onRename={rename.begin} />
+              <span ref={setActionsSlot} className="toolbar-tab-actions">
+                <PlanActions plans={plans} plan={plan} button={onPlanTab} onRename={rename.begin} />
+              </span>
             </Fragment>
             <SummaryButton layout={summaryLayout} cardId={summaryCard} />
           </Toolbar>

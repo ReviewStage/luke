@@ -143,8 +143,8 @@ beneath it, the title bar over a sliding pane or the transcript's way back to
 its newest line, sets `--button-ground` and fills over that rather than over
 what passes. What is not one of these is a row, a tab, or a call control and
 says why where it is drawn: the call bar's round mutes, its solid End call
-disc, and its start pill, the new-plan composer's round start, and a tab's × and ⋯,
-which brighten without a fill.
+disc, and its start pill, the new-plan composer's round start, and a tab's ×,
+which brightens without a fill.
 
 The keyboard's ring is one rule in `base.css`. Every button, link, tab,
 switch, option, and menu item draws `--focus-ring` at `--focus-ring-width`,

@@ -20,8 +20,8 @@
  *
  * The drag is pointer events with the pointer captured, never the
  * browser's drag and drop: that draws a picture of its own under the
- * pointer and fights the window's drag region the tabs stand in. The ×
- * and the ⋯ on a tab are buttons of their own and start no drag.
+ * pointer and fights the window's drag region the tabs stand in. The × on
+ * a tab is a button of its own and starts no drag.
  */
 
 import type React from "react";
@@ -308,7 +308,7 @@ export function useTabDrag(
     const strip = event.currentTarget;
     const target = event.target instanceof Element ? event.target : null;
     if (event.button !== 0 || release.current !== undefined || target === null) return;
-    if (target.closest(".tab-close, .tab-more, [data-editing]") !== null) return;
+    if (target.closest(".tab-close, [data-editing]") !== null) return;
     const tabs = [...strip.querySelectorAll<HTMLElement>(TAB_PILL)];
     const at = tabs.findIndex((tab) => tab.contains(target));
     if (at < 0 || tabs.length < 2) return;

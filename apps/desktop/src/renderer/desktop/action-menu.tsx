@@ -199,9 +199,6 @@ export function useActionMenu(shown: boolean) {
   return { open: standing ? menu : undefined, drawn, show, close, trigger, contextMenu };
 }
 
-/** The props of the button a menu drops from (`useActionMenu`'s `trigger`). */
-export type MenuTrigger = ReturnType<ReturnType<typeof useActionMenu>["trigger"]>;
-
 function clamp(value: number, low: number, high: number): number {
   return Math.max(low, Math.min(value, high));
 }

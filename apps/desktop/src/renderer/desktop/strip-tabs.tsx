@@ -1,7 +1,16 @@
 import type { CodingAgentStatus, CodingAgentSummary } from "@luke/features/coding-agent-wire";
-import { CloseIcon, CopyIcon, PencilIcon, PinIcon, PlusIcon, UnpinIcon } from "@luke/ui";
+import {
+  CloseIcon,
+  CopyIcon,
+  EllipsisIcon,
+  PencilIcon,
+  PinIcon,
+  PlusIcon,
+  UnpinIcon,
+} from "@luke/ui";
 import { ListXIcon, ScrollTextIcon } from "lucide-react";
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useCopyToast } from "../copy-feedback";
 import type { HeldTranscript } from "../planning/agent-tab-card";
@@ -15,7 +24,7 @@ import { type MenuRow, SearchableMenu } from "../searchable-menu";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { Tooltip } from "../tooltip";
 import { useDisclosure } from "../use-disclosure";
-import type { MenuAction } from "./action-menu";
+import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
 import { MenuTab } from "./tab-strip";
 
 /**
@@ -24,9 +33,10 @@ import { MenuTab } from "./tab-strip";
  * Both strips are the one `TabStrip` (tab-strip.tsx), each of its tabs a
  * `MenuTab` whose right-click offers the actions `tabActionGroups` lists:
  * Close and Close others; Pin tab or Unpin tab, and an agent's Rename,
- * beside it; a transcript's two copies; and an agent's Archive. A tab whose
- * menu acts on what it shows, an agent's or a subagent's, also drops it from
- * a ⋯ (`offersMore`). Each strip ends in a "+" that
+ * beside it; a transcript's two copies; and an agent's Archive. Those that
+ * act on what the chosen tab shows, an agent's Rename, copies, and Archive,
+ * and a subagent's copies, its strip's toolbar also offers from a ⋯
+ * (`ToolbarTabActions`). Each strip ends in a "+" that
  * drops the shared searchable menu over what the strip may open. The
  * columns' own modules say which tabs and rows those are
  * (`main-tabs.tsx`, `side-panel.tsx`).
@@ -78,15 +88,48 @@ export interface TabDoors {
 }
 
 /**
+ * What a tab's menu offers on what the tab shows, rather than on the tab
+ * itself: an agent's Rename, a transcript's two copies, and an agent's
+ * Archive, which takes the tab with it. Each is empty where the tab has none.
+ */
+function contentActions(doors: TabDoors): {
+  rename: MenuAction[];
+  copies: MenuAction[];
+  archive: MenuAction[];
+} {
+  const { onCopy, onRename, archive } = doors;
+  return {
+    rename:
+      onRename === undefined ? [] : [{ label: "Rename", icon: <PencilIcon />, onSelect: onRename }],
+    copies:
+      onCopy === undefined
+        ? []
+        : [
+            {
+              label: "Copy concise transcript",
+              icon: <CopyIcon />,
+              onSelect: () => onCopy(TRANSCRIPT_COPY.CONCISE),
+            },
+            {
+              label: "Copy full transcript",
+              icon: <ScrollTextIcon />,
+              onSelect: () => onCopy(TRANSCRIPT_COPY.FULL),
+            },
+          ],
+    archive: archive === undefined ? [] : [archive],
+  };
+}
+
+/**
  * A tab's actions in the groups a rule divides, as an editor's tab offers
- * them: Close and Close others, the plan's tab offering only the second;
- * Pin tab or Unpin tab, which puts it in the sidebar or takes it out, and a
- * Rename beside it; for a transcript's tab, its two copies; and last, for
- * an agent's, its Archive, which takes the tab with it. Close others stands
- * dimmed where nothing else would close.
+ * them on a right-click: Close and Close others, the plan's tab offering
+ * only the second; Pin tab or Unpin tab, which puts it in the sidebar or
+ * takes it out, and a Rename beside it; for a transcript's tab, its two
+ * copies; and last, for an agent's, its Archive. Close others stands dimmed
+ * where nothing else would close.
  */
 function tabActionGroups(doors: TabDoors): MenuAction[][] {
-  const { onClose, onCopy, onRename, archive } = doors;
+  const { onClose } = doors;
   const close: MenuAction[] =
     onClose === undefined
       ? []
@@ -107,8 +150,7 @@ function tabActionGroups(doors: TabDoors): MenuAction[][] {
             ? { label: "Unpin tab", icon: <UnpinIcon />, onSelect: doors.pin.onToggle }
             : { label: "Pin tab", icon: <PinIcon />, onSelect: doors.pin.onToggle },
         ];
-  const rename: MenuAction[] =
-    onRename === undefined ? [] : [{ label: "Rename", icon: <PencilIcon />, onSelect: onRename }];
+  const { rename, copies, archive } = contentActions(doors);
   return [
     [
       ...close,
@@ -119,38 +161,53 @@ function tabActionGroups(doors: TabDoors): MenuAction[][] {
         disabled: doors.onCloseOthers === undefined,
       },
     ],
-    ...(pin.length + rename.length === 0 ? [] : [[...pin, ...rename]]),
-    ...(onCopy === undefined
-      ? []
-      : [
-          [
-            {
-              label: "Copy concise transcript",
-              icon: <CopyIcon />,
-              onSelect: () => onCopy(TRANSCRIPT_COPY.CONCISE),
-            },
-            {
-              label: "Copy full transcript",
-              icon: <ScrollTextIcon />,
-              onSelect: () => onCopy(TRANSCRIPT_COPY.FULL),
-            },
-          ],
-        ]),
-    ...(archive === undefined ? [] : [[archive]]),
+    ...[[...pin, ...rename], copies, archive].filter((group) => group.length > 0),
   ];
 }
 
 /**
- * Whether a tab's menu holds more than the tab's own keeping, and so wears a
- * ⋯ as well as answering a right-click: a transcript's copies or an agent's
- * Archive, which act on what the tab shows. Close is the ×, and Close others
- * and Pin tab are what every editor's and browser's tab offers on a
- * right-click alone, so a tab offering only those wears no ⋯. Note that a
- * Rename alone does not count either, because the one tab offering it alone
- * is the plan's, whose ⋯ already stands in the toolbar beside it.
+ * The chosen tab's actions as its toolbar's ⋯ offers them: those of its
+ * right-click that act on what it shows (`contentActions`), in the same
+ * groups, and none of the tab's own keeping, Close, Close others, and Pin
+ * tab, which stay on the right-click alone.
  */
-function offersMore(doors: TabDoors): boolean {
-  return doors.onCopy !== undefined || doors.archive !== undefined;
+function contentActionGroups(doors: TabDoors): MenuAction[][] {
+  const { rename, copies, archive } = contentActions(doors);
+  return [rename, copies, archive].filter((group) => group.length > 0);
+}
+
+/**
+ * The chosen tab's ⋯, drawn into its toolbar's slot (`slot`) rather than on
+ * the tab, as an editor's ⋯ acts on its active editor: it drops the tab's
+ * content actions (`contentActionGroups`) under itself and takes focus back
+ * when its menu closes by key. Note that it is portalled from the tab rather
+ * than lifted to the toolbar, because what its actions open, an agent's
+ * name field and its Archive's question, stands with the tab.
+ */
+function ToolbarTabActions({
+  label,
+  groups,
+  slot,
+}: {
+  label: string;
+  groups: MenuAction[][];
+  slot: HTMLElement;
+}): React.JSX.Element {
+  const menu = useActionMenu(true);
+  const named = `${label} actions`;
+  return createPortal(
+    <>
+      <Tooltip label={named}>
+        <button type="button" className="icon-button" aria-label={named} {...menu.trigger()}>
+          <EllipsisIcon />
+        </button>
+      </Tooltip>
+      {menu.drawn === undefined ? null : (
+        <ActionMenu label={named} menu={menu.drawn} groups={groups} onClose={menu.close} />
+      )}
+    </>,
+    slot,
+  );
 }
 
 /** What a tab of either strip draws, beyond its menu. */
@@ -173,27 +230,39 @@ export interface TabLook {
   onSelect: () => void;
 }
 
-/** One tab of either strip, whatever its kind, with its menu (`tabActionGroups`) and, where it holds more than the tab's keeping, its ⋯. */
+/**
+ * One tab of either strip, whatever its kind, with its menu
+ * (`tabActionGroups`), and, while it is the chosen one and acts on what it
+ * shows, its ⋯ in its toolbar's `slot`. A strip passes no slot for a tab
+ * whose toolbar draws a ⋯ of its own, as the plan's column does the plan's.
+ */
 export function DoorsTab({
   look,
   doors,
   editor,
   tabRef,
+  slot,
 }: {
   look: TabLook;
   doors: TabDoors;
   editor?: React.ReactNode;
   tabRef?: React.Ref<HTMLButtonElement> | undefined;
+  slot?: HTMLElement | null | undefined;
 }): React.JSX.Element {
+  const content = contentActionGroups(doors);
   return (
-    <MenuTab
-      {...look}
-      editor={editor}
-      tabRef={tabRef}
-      onClose={doors.onClose}
-      groups={tabActionGroups(doors)}
-      more={offersMore(doors)}
-    />
+    <>
+      <MenuTab
+        {...look}
+        editor={editor}
+        tabRef={tabRef}
+        onClose={doors.onClose}
+        groups={tabActionGroups(doors)}
+      />
+      {look.selected && content.length > 0 && slot !== undefined && slot !== null ? (
+        <ToolbarTabActions label={look.label} groups={content} slot={slot} />
+      ) : null}
+    </>
   );
 }
 
