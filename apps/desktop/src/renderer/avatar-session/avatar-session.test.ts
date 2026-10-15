@@ -17,7 +17,7 @@ import type {
 } from "./contract";
 
 /**
- * avatar-session.test.ts -- the call window's avatar over a fake Keyframe session: the tracks, the playback RPCs, and the closes, as the SDK's callbacks report them.
+ * avatar-session.test.ts -- the panel's avatar over a fake Keyframe session: the tracks, the playback RPCs, and the closes, as the SDK's callbacks report them.
  */
 
 const GRANT: AvatarGrant = {

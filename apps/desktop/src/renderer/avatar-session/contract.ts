@@ -1,10 +1,10 @@
 /**
- * contract.ts -- what the call window and the avatar session's bundle say to each other: the grant, the slice of Keyframe's session the window drives, and nothing that pulls LiveKit into the renderer.
+ * contract.ts -- what the panel and the avatar session's bundle say to each other: the grant, the slice of Keyframe's session the window drives, and nothing that pulls LiveKit into the renderer.
  *
  * Keyframe's SDK rides on LiveKit's client, which is too large for the
  * bundle every window parses and is needed only by a call with its video
  * on, so it ships as a bundle of its own (`avatar-session.js`, built from
- * `./index.ts`) that the call window loads the first time an avatar is
+ * `./index.ts`) that the panel loads the first time an avatar is
  * shown (`../call/avatar-session-bundle.ts`), as the whiteboard and a plan's
  * editor are. That bundle sets one global, `window.lukeAvatarSession`, and
  * this file is the whole of what the two share. Nothing here imports a
@@ -17,7 +17,7 @@
  * reaches this window and the session it opens, and nothing here logs it.
  */
 
-/** What the voice service minted for one call's avatar (`POST /v1/sessions`), as the call window is handed it. */
+/** What the voice service minted for one call's avatar (`POST /v1/sessions`), as the panel is handed it. */
 export interface AvatarGrant {
   readonly serverUrl: string;
   readonly participantToken: string;
@@ -64,5 +64,5 @@ declare global {
   }
 }
 
-/** The file the avatar session's bundle is, beside `call.html`. */
+/** The file the avatar session's bundle is, beside `index.html`. */
 export const AVATAR_SESSION_ASSET = { SCRIPT: "avatar-session.js" } as const;

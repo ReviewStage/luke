@@ -145,7 +145,7 @@ export const BRIDGE = {
   }),
   /**
    * One message of Luke's voice feed for his avatar, from the voice window
-   * alone, which main relays to the call window while the avatar is starting
+   * alone, which main relays to the panel while the avatar is starting
    * or live. A send rather than an act: it is 25 messages a second, and
    * nothing reads an answer.
    */
@@ -279,8 +279,8 @@ export const BRIDGE = {
     result: result<void>((v) => v === undefined),
   }),
   /**
-   * Keyframe's grant for the call's own avatar, sent to the floating call
-   * window alone, or nothing once the session is to close. A one-shot rather
+   * Keyframe's grant for the call's own avatar, sent to the panel window
+   * alone, or nothing once the session is to close. A one-shot rather
    * than a slice of the document, because the document reaches every window
    * and the grant may reach this one only.
    */
@@ -293,8 +293,8 @@ export const BRIDGE = {
     ),
   }),
   /**
-   * One message of Luke's voice feed, relayed to the floating call window
-   * alone for the avatar to lip-sync. A reading that expires as the next
+   * One message of Luke's voice feed, relayed to the panel window alone for
+   * the avatar to lip-sync. A reading that expires as the next
    * chunk arrives, so nothing bootstraps from it.
    */
   onAvatarFeed: entry({

@@ -154,33 +154,24 @@ html.call-window[data-pointer-stale="true"] .call-card button {
   mask-image: linear-gradient(to left, transparent, #000 var(--label-fade));
 }
 
-/* The video tile (`renderer/call/call-video-tile.tsx`): Luke's avatar alone
-   in the floating call window, at the 16:9 the avatar is rendered in, on the
-   card's own ground, border, and corner, so the tile reads as the card grown
-   into a picture. Like the card in that window it neither rises nor leaves,
-   and the whole tile drags the window but for its buttons. */
+/* The video tile (`renderer/call/call-video-tile.tsx`): Luke's avatar at
+   the top of the call's Call tab, at the tab's width less the transcript's
+   own gutter and at the 16:9 the avatar is rendered in, on the card's
+   ground, border, and corner, so the tile reads as the call card grown into
+   a picture. It keeps its height as the transcript under it scrolls. */
 .call-video-tile {
   position: relative;
+  flex: none;
   overflow: clip;
-  width: 320px;
   box-sizing: border-box;
+  margin: var(--space-4) var(--space-16) var(--space-8);
   aspect-ratio: 16 / 9;
   border: 1px solid var(--hairline-strong);
   border-radius: 12px;
   background: var(--surface-popover);
-  box-shadow: 0 2px 6px var(--shadow);
   color: var(--text-primary);
   font-size: 13px;
   line-height: 18px;
-  -webkit-app-region: drag;
-}
-
-.call-video-tile button {
-  -webkit-app-region: no-drag;
-}
-
-html.call-window[data-pointer-stale="true"] .call-video-tile button {
-  pointer-events: none;
 }
 
 .call-video-frame {

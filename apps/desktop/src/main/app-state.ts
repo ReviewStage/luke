@@ -136,7 +136,7 @@ export function windowAppState<State extends Pick<AppState, "planning">>(
 /**
  * The voice slice once the voice window that reported its view is gone: no
  * view, since an idle voice is what every panel draws in its place, and the
- * avatar as it stood, since the call window holds the avatar rather than
+ * avatar as it stood, since the panel holds the avatar rather than
  * that window.
  */
 export function voiceWindowGone(held: AppState["voice"]): AppState["voice"] {

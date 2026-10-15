@@ -366,6 +366,7 @@ export function PlanCall({
   shown,
   models,
   reveal,
+  video,
 }: {
   /** What was said on the plan's calls, as the transcript reads it. */
   region: TranscriptRegion;
@@ -387,6 +388,8 @@ export function PlanCall({
   models?: readonly CatalogModel[] | undefined;
   /** What a version's Open asked to bring into view, and the word that it has. */
   reveal?: CallReveal | undefined;
+  /** The call's video, drawn above the thread at the tab's width while Luke's avatar is up. */
+  video?: React.ReactNode;
 }): React.JSX.Element {
   const rows = workRowsOf(conversation, callLive);
   const earlier = conversation?.earlier;
@@ -422,6 +425,7 @@ export function PlanCall({
   const drawn = calls.length > 0 || rows.length > 0 || earlier !== undefined;
   return (
     <section ref={root} className="plan-call ph-no-capture" aria-label="Call">
+      {video}
       {drawn ? (
         <Conversation>
           {/* No top padding, because a sticky checkpoint would leave what scrolled under it showing in that band. */}

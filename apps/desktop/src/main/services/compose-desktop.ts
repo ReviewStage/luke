@@ -48,7 +48,7 @@ export interface DesktopServices {
   readonly windows: WindowService;
   /** Where every coding-agent answer is noted, and the notification an agent's end is announced in. */
   readonly notices: AgentNotices;
-  /** Luke's avatar as the host holds it, which the call window's acts reach. */
+  /** Luke's avatar as the host holds it, which the panel's acts reach. */
   readonly avatar: AvatarLink;
   /**
    * Every act's Effect, run here rather than under a context of its own: the
@@ -196,12 +196,12 @@ export function composeDesktop(
         run,
         launchStanding: quit.launchStanding,
       });
-      // The host's avatar, bound from the launch on: its grants to the call
-      // window alone and where it stands to the document.
+      // The host's avatar, bound from the launch on: its grants to the panel
+      // alone and where it stands to the document.
       const avatar = yield* linkAvatar({
         host: host.avatar,
         state,
-        callWindow: windows.callWindow,
+        panel: windows.panels,
         setVideo: (on) => operator.host.setVideo(on),
       });
       // A quit asked for while a call stands asks first, as a call app does,

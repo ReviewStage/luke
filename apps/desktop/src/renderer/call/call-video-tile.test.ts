@@ -6,9 +6,10 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { AVATAR_STATUS } from "#shared/messages/avatar";
 import { CALL_CONTROL_LABEL } from "../planning/planning-parts";
-import { CALL_VIDEO_LABEL, CallVideoTile } from "./call-video-tile";
+import { AvatarVoice, CALL_VIDEO_LABEL, CallVideoTile } from "./call-video-tile";
 
 type TileProps = Parameters<typeof CallVideoTile>[0];
+type VoiceProps = Parameters<typeof AvatarVoice>[0];
 
 /** The browser's stream, which jsdom has none of: it holds the tracks it was made from. */
 class FakeMediaStream {
@@ -37,12 +38,18 @@ afterEach(() => {
 function tile(props: Partial<TileProps> = {}): React.ReactElement<TileProps> {
   return createElement(CallVideoTile, {
     video: undefined,
-    audio: undefined,
     status: AVATAR_STATUS.STARTING,
-    speakerMuted: false,
     onVideoOff: () => undefined,
     onRestart: () => undefined,
     onHangUp: () => undefined,
+    ...props,
+  });
+}
+
+function voice(props: Partial<VoiceProps> = {}): React.ReactElement<VoiceProps> {
+  return createElement(AvatarVoice, {
+    audio: AUDIO,
+    speakerMuted: false,
     onAudioElement: () => undefined,
     ...props,
   });
@@ -116,21 +123,26 @@ test("video off and end call each answer their own press", () => {
   assert.equal(onHangUp.mock.calls.length, 1);
 });
 
-test("the avatar's audio plays, and follows the speaker toggle both ways", () => {
-  const { container, root } = mountRoot(tile({ status: AVATAR_STATUS.LIVE, audio: AUDIO }));
+test("the tile draws no sound of its own, which the panel plays apart from it", () => {
+  const { container } = mountRoot(tile({ status: AVATAR_STATUS.LIVE, video: VIDEO }));
+  assert.equal(container.querySelector("audio"), null);
+});
+
+test("the avatar's voice plays, and follows the speaker toggle both ways", () => {
+  const { container, root } = mountRoot(voice());
   const audio = container.querySelector("audio");
   assert.deepEqual(playing(audio), [AUDIO]);
   assert.equal(audio?.muted, false);
-  act(() => root.render(tile({ status: AVATAR_STATUS.LIVE, audio: AUDIO, speakerMuted: true })));
+  act(() => root.render(voice({ speakerMuted: true })));
   assert.equal(audio?.muted, true);
-  act(() => root.render(tile({ status: AVATAR_STATUS.LIVE, audio: AUDIO, speakerMuted: false })));
+  act(() => root.render(voice({ speakerMuted: false })));
   assert.equal(audio?.muted, false);
 });
 
-test("the audio keeps playing across the tile's change of state", () => {
-  const { container, root } = mountRoot(tile({ status: AVATAR_STATUS.STARTING, audio: AUDIO }));
+test("the avatar's voice is let go of once its track is", () => {
+  const { container, root } = mountRoot(voice());
   const audio = container.querySelector("audio");
-  act(() => root.render(tile({ status: AVATAR_STATUS.LIVE, audio: AUDIO, video: VIDEO })));
+  act(() => root.render(voice({ audio: undefined })));
   assert.equal(container.querySelector("audio"), audio);
-  assert.deepEqual(playing(audio), [AUDIO]);
+  assert.equal(playing(audio), undefined);
 });

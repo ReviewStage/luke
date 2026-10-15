@@ -1,17 +1,17 @@
 /**
- * call-avatar.ts -- Luke's avatar as the floating call window runs it: Keyframe's session for as long as main hands a grant, fed Luke's voice, and reported as starting, live, and ended.
+ * call-avatar.ts -- Luke's avatar as the panel runs it: Keyframe's session for as long as main hands a grant, fed Luke's voice, and reported as starting, live, and ended.
  *
- * Main hands this window the call's grant, or nothing once the session is to
+ * Main hands the panel the call's grant, or nothing once the session is to
  * close, on a one-shot channel of its own (`app:avatar-session`), and relays
  * the voice window's feed on another (`app:avatar-feed`). Each grant opens
  * one session into a scope of its own, and the next grant, or nothing,
  * closes that scope and with it the session: there is no other way a session
  * ends from this side. The feed is mapped exactly as Keyframe's own bridge
- * maps it, and the window reports the avatar to main with the act only it
+ * maps it, and the panel reports the avatar to main with the act only it
  * may send: `STARTING` once a grant stands, `LIVE` on the first frame of
  * video, and `ENDED` with the reason the session closed for.
  *
- * The grant's token reaches this window and the session it opens, and is
+ * The grant's token reaches the panel and the session it opens, and is
  * never reported, logged, or held anywhere but the scope it opened.
  */
 
@@ -179,7 +179,7 @@ const avatarOf = (grant: AvatarGrant, doors: CallAvatarDoors): Stream.Stream<Cal
   );
 
 /**
- * The call window's avatar over the grants main hands it: each grant runs
+ * The panel's avatar over the grants main hands it: each grant runs
  * its own session, and the next grant, or nothing, closes the one before.
  * A session reports only while its grant is the one standing. Note that a
  * withdrawn session still closing, which can take as long as Keyframe's
@@ -223,7 +223,7 @@ const subscription = <A>(subscribe: (deliver: (value: A) => void) => () => void)
     ),
   );
 
-/** The call window's own doors: main's two channels, the act it alone may send, and the SDK's bundle. */
+/** The panel's own doors: main's two channels, the act it alone may send, and the SDK's bundle. */
 const windowDoors: CallAvatarDoors = {
   feeds: subscription<AvatarFeed>((deliver) => window.luke.onAvatarFeed(deliver)),
   report: (avatar) => Effect.sync(() => tellAct(ACT_KIND.AVATAR_REPORT, avatar)),
@@ -231,10 +231,12 @@ const windowDoors: CallAvatarDoors = {
 };
 
 /**
- * The avatar this window runs, as its tracks. Kept alive and mounted at the
- * renderer's root before anything is drawn, because main hands a page the
- * standing grant once it has drawn its first frame, and a subscription made
- * later would miss it. Only the call window is ever handed a grant.
+ * The avatar the panel runs, as its tracks. Kept alive and mounted at the
+ * renderer's root before anything is drawn, whatever tab is shown and while
+ * the panel is hidden, because main hands a page the standing grant once it
+ * has drawn its first frame, a subscription made later would miss it, and
+ * the avatar's voice is what the developer hears. Only the panel is ever
+ * handed a grant.
  */
 export const callAvatarAtom = Atom.keepAlive(
   rendererRuntime.atom(
@@ -249,7 +251,7 @@ export const callAvatarAtom = Atom.keepAlive(
 export const callAvatarAudioElementAtom = Atom.keepAlive(Atom.make<HTMLAudioElement | null>(null));
 
 /**
- * The avatar's voice, played: the element autoplays, which the call window
+ * The avatar's voice, played: the element autoplays, which the panel
  * allows without a gesture, and a refused play is asked again for as long as
  * the track stands, as the voice window's own element is, because a refusal
  * is the one failure nobody would see: the avatar's lips move and nothing is

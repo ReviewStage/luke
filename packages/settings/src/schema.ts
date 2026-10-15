@@ -150,7 +150,7 @@ export const APP_SETTING_SCHEMA = {
     id: APP_SETTING_ID.VOICE_VIDEO,
     label: "Video calls",
     detail:
-      "Calls open with Luke on video in the call window. Keyframe Labs animates him from his " +
+      "Calls open with Luke on video at the top of the Call tab. Keyframe Labs animates him from his " +
       "voice, so what he says about your plan reaches Keyframe. Your own voice never does.",
     default: false,
     page: SETTINGS_PAGE.VOICE,

@@ -1,19 +1,20 @@
 /**
- * call-video-tile.tsx -- Luke's avatar on the call, as a 16:9 tile with its video's controls.
+ * call-video-tile.tsx -- Luke's avatar on the call, as a 16:9 tile with its video's controls, and the voice it plays.
  *
  * The tile draws what it is handed and decides nothing: the avatar's video
- * and its lip-synced audio as two tracks, the avatar's status, and the
- * speaker toggle the call bar already holds. While the avatar connects it
+ * track and its status. While the avatar connects it
  * draws Luke's face and says so; while it is live it plays the video, or
  * Luke's face as a still frame where no video track is handed, which is what
  * a fixture run draws, since it reaches no avatar; once it has ended it
  * offers Restart video. Video off puts the avatar away and leaves the call
  * going as voice, and End call ends the call, in every state. No word of the
- * conversation is drawn here.
+ * conversation is drawn here. The avatar's lip-synced voice is played apart
+ * from the tile (`AvatarVoice`), because the tile is drawn only while the
+ * Call tab is, and the voice is what the developer hears whatever is shown.
  */
 
 import { CloseIcon, ResetIcon, VideoOffIcon, WingFace } from "@sidecar/panel";
-import { type MouseEvent, useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { AVATAR_STATUS, type AvatarStatus } from "#shared/messages/avatar";
 import { CALL_CONTROL_LABEL } from "../planning/planning-parts";
 import { ThinkingDots } from "../thinking-dots";
@@ -96,31 +97,18 @@ function TileGround({
 }
 
 /**
- * The tile, drawn in the floating call window while the avatar stands or
- * has just ended, and nothing while it is off. The audio element is drawn
- * in every state, so the avatar's voice is never cut by the tile changing
- * state, and it is muted while the developer's speaker toggle is, as the
- * voice window's own element is. The window is dragged by the tile wherever it is held but
- * on a button, and a press on a button takes no focus, as the call card's do.
+ * The avatar's voice, on an element drawn for as long as the panel is, so
+ * no change of tab or of the tile's state cuts it, and muted while the
+ * developer's speaker toggle is, as the voice window's own element is.
  */
-export function CallVideoTile({
-  video,
+export function AvatarVoice({
   audio,
-  status,
   speakerMuted,
-  onVideoOff,
-  onRestart,
-  onHangUp,
   onAudioElement,
 }: {
-  video: MediaStreamTrack | undefined;
   audio: MediaStreamTrack | undefined;
-  status: AvatarStatus;
   speakerMuted: boolean;
-  onVideoOff: () => void;
-  onRestart: () => void;
-  onHangUp: () => void;
-  /** The audio element, once drawn and once gone, for whoever retries a refused play. */
+  /** The element, once drawn and once gone, for whoever retries a refused play. */
   onAudioElement: (element: HTMLAudioElement | null) => void;
 }): React.JSX.Element {
   const sound = useRef<HTMLAudioElement | null>(null);
@@ -137,43 +125,51 @@ export function CallVideoTile({
   useEffect(() => {
     if (sound.current) sound.current.muted = speakerMuted;
   }, [speakerMuted]);
-  const keepFocus = (event: MouseEvent<HTMLElement>) => {
-    if (event.target instanceof Element && event.target.closest("button")) event.preventDefault();
-  };
+  // biome-ignore lint/a11y/useMediaCaption: the avatar's voice is captioned in the Call tab's transcript.
+  return <audio ref={soundElement} autoPlay hidden />;
+}
+
+/**
+ * The tile, drawn at the top of the Call tab while the avatar stands or has
+ * just ended, at the tab's width, and nothing while it is off.
+ */
+export function CallVideoTile({
+  video,
+  status,
+  onVideoOff,
+  onRestart,
+  onHangUp,
+}: {
+  video: MediaStreamTrack | undefined;
+  status: AvatarStatus;
+  onVideoOff: () => void;
+  onRestart: () => void;
+  onHangUp: () => void;
+}): React.JSX.Element | null {
+  if (status === AVATAR_STATUS.OFF) return null;
   return (
-    <>
-      {/* biome-ignore lint/a11y/useMediaCaption: the avatar's voice is captioned in the panel, not here. */}
-      <audio ref={soundElement} autoPlay hidden />
-      {status === AVATAR_STATUS.OFF ? null : (
-        <section
-          className="call-video-tile"
-          aria-label={CALL_VIDEO_LABEL.TILE}
-          data-status={status}
-          onMouseDown={keepFocus}
+    <section className="call-video-tile" aria-label={CALL_VIDEO_LABEL.TILE} data-status={status}>
+      <TileGround status={status} video={video} onRestart={onRestart} />
+      <div className="call-video-controls">
+        <button
+          type="button"
+          className="icon-button call-video-off"
+          aria-label={CALL_VIDEO_LABEL.VIDEO_OFF}
+          title={CALL_VIDEO_LABEL.VIDEO_OFF}
+          onClick={onVideoOff}
         >
-          <TileGround status={status} video={video} onRestart={onRestart} />
-          <div className="call-video-controls">
-            <button
-              type="button"
-              className="icon-button call-video-off"
-              aria-label={CALL_VIDEO_LABEL.VIDEO_OFF}
-              title={CALL_VIDEO_LABEL.VIDEO_OFF}
-              onClick={onVideoOff}
-            >
-              <VideoOffIcon />
-            </button>
-            <button
-              type="button"
-              className="call-end"
-              aria-label={CALL_CONTROL_LABEL.END_CALL}
-              title={CALL_CONTROL_LABEL.END_CALL}
-              onClick={onHangUp}
-            >
-              <CloseIcon />
-            </button>
-          </div>
-        </section>
-      )}
-    </>
+          <VideoOffIcon />
+        </button>
+        <button
+          type="button"
+          className="call-end"
+          aria-label={CALL_CONTROL_LABEL.END_CALL}
+          title={CALL_CONTROL_LABEL.END_CALL}
+          onClick={onHangUp}
+        >
+          <CloseIcon />
+        </button>
+      </div>
+    </section>
   );
 }

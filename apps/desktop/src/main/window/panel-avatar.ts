@@ -1,11 +1,12 @@
 /**
- * call-window-avatar.ts -- the call's avatar grant and voice feed, relayed to the floating call window's page and no other.
+ * panel-avatar.ts -- the call's avatar grant and voice feed, relayed to the panel window's page and no other.
  *
  * Keyframe's session token can view the avatar and send it audio, so it
- * reaches one renderer: the call window's, which runs the session. It is
- * never written to the document, which every window reads, and never
- * broadcast. Nothing here calls Electron, so what reaches the page is read
- * and tested as the plain relay it is.
+ * reaches one renderer: the panel's, which runs the session and draws its
+ * video at the top of the Call tab. It is never written to the document,
+ * which every window reads, and never broadcast. Nothing here calls
+ * Electron, so what reaches the page is read and tested as the plain relay
+ * it is.
  */
 
 import type { AvatarGrant } from "@sidecar/features/avatar-grant";
@@ -13,24 +14,23 @@ import type { UnparsedWireValue } from "@sidecar/wire";
 import { channels } from "#shared/bridge";
 import type { AvatarFeed } from "#shared/messages/avatar";
 
-/** The call window's page as the relay reaches it: its own `webContents`, and nothing wider. */
-export interface CallWindowPage {
+/** The panel's page as the relay reaches it: its own `webContents`, and nothing wider. */
+export interface AvatarPage {
   send(channel: string, payload: UnparsedWireValue): void;
 }
 
 /**
  * The grant standing for the call, held so a page that draws after it was
- * handed over still receives it: the window opens on the first `STARTING`,
- * which can come before its renderer has loaded, and a renderer that died is
- * stood back up mid-call. The feed is not held, since a chunk that found no
+ * handed over still receives it: a grant can come before the panel's
+ * renderer has loaded. The feed is not held, since a chunk that found no
  * page has expired by the time one draws.
  */
-export class CallAvatarRelay {
-  readonly #page: () => CallWindowPage | undefined;
+export class PanelAvatarRelay {
+  readonly #page: () => AvatarPage | undefined;
   #grant: AvatarGrant | undefined;
 
-  /** `page` answers the call window's page once it has drawn, and nothing before. */
-  constructor(page: () => CallWindowPage | undefined) {
+  /** `page` answers the panel's page once it has drawn, and nothing before. */
+  constructor(page: () => AvatarPage | undefined) {
     this.#page = page;
   }
 

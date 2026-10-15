@@ -2,9 +2,9 @@
  * sentry-breadcrumbs.ts -- the breadcrumbs and events a renderer's crash reports may carry: none that carries a LiveKit access token.
  *
  * A renderer's `fetch`, XHR, and console become Sentry breadcrumbs, and the
- * call window's avatar session joins a LiveKit room whose failed join asks
+ * panel's avatar session joins a LiveKit room whose failed join asks
  * `https://<host>/rtc/v1/validate?access_token=…`, the grant's own token in
- * the query. That token may reach the call window and never a crash report,
+ * the query. That token may reach the panel and never a crash report,
  * so a breadcrumb that names one anywhere it carries text is dropped whole
  * rather than redacted: a URL or a console line is free text, and a pattern
  * that missed one spelling would send the rest. An event is held to the same

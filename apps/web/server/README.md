@@ -2305,10 +2305,10 @@ counts one call when it opens.
 ### Luke's avatar
 
 A call can show Luke on video: a Keyframe Labs avatar, lip-synced to his
-voice, in the Mac's floating call window, while the developer has
-`voiceVideo` on in Settings › Voice. The voice itself is untouched: GPT Live
-still runs over the Mac's WebRTC and this service's sideband, and the call
-window sends Keyframe Luke's synthesized audio straight from the Mac. What
+voice, at the top of the call's Call tab in the Mac's panel, while the
+developer has `voiceVideo` on in Settings › Voice. The voice itself is
+untouched: GPT Live still runs over the Mac's WebRTC and this service's
+sideband, and the panel sends Keyframe Luke's synthesized audio straight from the Mac. What
 crosses this service is the session alone, as four frames in the service's
 own vocabulary on the device socket (`live-contract.ts`), read here and never
 forwarded to OpenAI (`frames.ts`): the device's `avatar.start` and

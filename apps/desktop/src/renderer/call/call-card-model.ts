@@ -9,6 +9,12 @@
 
 import type { PlanningView } from "@sidecar/features/planning-view";
 import { LIVE_STATUS } from "@sidecar/live";
+import {
+  AVATAR_STATUS,
+  type AvatarState,
+  type AvatarStatus,
+  avatarTiled,
+} from "#shared/messages/avatar";
 import { callInProgress, type VoiceView } from "#shared/messages/voice-view";
 import { type CallStatus, standingCallStatus } from "../planning/planning-model";
 
@@ -74,4 +80,19 @@ export function callCardShown(input: {
 }): boolean {
   const { view, focused, planShown } = input;
   return focused && callInProgress(view) && planShown !== view.callPlanId;
+}
+
+/**
+ * What the video tile at the top of one plan's Call tab draws: the avatar's
+ * status while that plan's call is in progress and the tile is up, and
+ * `OFF`, which draws nothing, on any other plan or once the call is over.
+ */
+export function callTabVideoStatus(input: {
+  view: Pick<VoiceView, "voiceStatus" | "callPlanId">;
+  avatar: AvatarState;
+  planId: string;
+}): AvatarStatus {
+  const { view, avatar, planId } = input;
+  const tiled = callInProgress(view) && view.callPlanId === planId && avatarTiled(avatar);
+  return tiled ? avatar.status : AVATAR_STATUS.OFF;
 }
