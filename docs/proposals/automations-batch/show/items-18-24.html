@@ -1,0 +1,90 @@
+
+<section class="item" id="i18">
+  <h2><span class="n">18</span>Automation agents announce their turn's end, as task agents do</h2>
+  <p><b>Today</b> an automation's agent ends in silence: no OS notification, no toast, no unseen dot. The notices ledger (<code>@luke/host/agent-notices.ts</code>) keeps only agents with a plan (<code>onPlan</code>), and the toast's View takes a plan id. Yet <code>AgentPlace.planId</code> is already nullable, and its doc mentions "the agent's own page for one with no plan", so this was started and not finished.</p>
+  <p><b>After:</b> the same notification, toast and unseen dot as a task agent's. The second line names the automation, where a task agent's names its plan. View opens the agent's page.</p>
+  <div class="pair" data-shot="agent-end"></div>
+  <div class="note"><h4>How</h4><ul>
+    <li>The ledger watches the one-off agents the sidebar reads (item 9's read) as well as a plan's list.</li>
+    <li>The toast's View is handed an <code>AgentPlace</code> rather than a plan id.</li>
+    <li>Whoever started the agent hears it. For an automation, that's its owner, whose key the run used.</li>
+  </ul></div>
+</section>
+
+<section class="item" id="i19">
+  <h2><span class="n">19</span>A failed run is told</h2>
+  <p><b>Today</b> nothing in <code>packages/service/src/automations</code> reaches the Inbox or a notification. A run can fail to start (repository unreachable, creator left, a guard), or its agent can fail. Either way it's seen only if someone opens the automation's Runs panel.</p>
+  <p><b>After</b>, the owner is told, through doors the window already has:</p>
+  <ul>
+    <li>An agent that fails is covered by item 18: its turn-end notice reads <i>… failed</i>.</li>
+    <li>A run that fails to start gets the same OS notification and toast, in the failed tone. View opens the automation.</li>
+    <li>The sidebar's <b>Automations</b> row wears the failed mark until that automation is opened.</li>
+  </ul>
+  <div class="pair" data-shot="run-failed"></div>
+  <div class="note"><h4>What others do</h4><ul>
+    <li><b>GitHub Actions:</b> notifies whoever triggered the run, or for a schedule the user who last changed its cron line. It can be set to failed runs only. The run shows a red ✕.</li>
+    <li><b>Devin:</b> emails the schedule's owner on failure only by default. Automations offer Always, On failure or On success.</li>
+    <li><b>Zapier:</b> emails every error by default, with a digest option.</li>
+    <li><b>Cursor, Linear, Codex and Claude Code routines:</b> document a failed status on the run, and no alert.</li>
+    <li><b>Inbox:</b> no one puts a failed run in an inbox of asks.</li>
+  </ul></div>
+  <div class="note"><h4>Why not the Inbox</h4><ul><li>The Inbox is what agents ask of you, now carried by the task's chat. A failed run asks nothing, and an item per failure would fill it on a bad day. The run's row stays the record, and the notification is the alert (Decision 13).</li></ul></div>
+</section>
+
+<section class="item" id="i20">
+  <h2><span class="n">20</span>A failed run says why</h2>
+  <p><b>Today</b> the row says <i>Its agent failed</i>, though the service already knows the cause (<code>codingAgentFailureOf</code>, <code>coder-host/status.ts</code>). <b>After</b>, the run summary's agent carries the cause, and the row gives it in the words the agent's own end line uses: <i>Its agent failed: the sandbox or checkout failed</i>. The same picture shows item 23's icons; the failed run there was fired by GitHub.</p>
+  <div class="pair" data-shot="editor-review"></div>
+  <div class="note"><h4>How</h4><ul><li>The cause's words (<code>AGENT_FAILURE_WORDS</code>) move from the desktop's <code>coding-agent-model.ts</code> into <code>@luke/features</code>, so the run line and the agent's end line share one table.</li></ul></div>
+</section>
+
+<section class="item" id="i21">
+  <h2><span class="n">21</span><code>AUTOMATION_PAUSE.FAILURES</code>: delete it</h2>
+  <p>The value is declared and read (the list says <i>Paused</i>), but never written. <b>The usual practice is not to auto-pause on failures:</b></p>
+  <ul>
+    <li><b>GitHub Actions:</b> disables a schedule only after 60 days with no repository activity.</li>
+    <li><b>Claude Code routines:</b> turn off only after a broken GitHub connection has lasted 72 hours.</li>
+    <li><b>Cursor, Devin's automations, Codex and Linear:</b> document no auto-disable.</li>
+    <li><b>Zapier</b> is the exception. It turns a Zap off when it errors 95% of the time over more than 20 runs in 7 days, after warning the account owner.</li>
+  </ul>
+  <p>Item 19 tells the owner about every failure, and the guards already cap runs per day and at once, so I recommend deleting the dead value. The pictures below are the <b>alternative</b>, if Dean wants a pause: <i>Paused after 5 failed runs</i> in the list, and a note with Turn on in the Runs panel.</p>
+  <div class="pair" data-shot="list-paused"></div>
+  <div class="pair" data-shot="editor-paused"></div>
+</section>
+
+<section class="item" id="i22">
+  <h2><span class="n">22</span>An automation chooses its runs' MCP servers</h2>
+  <p><b>Today</b> a run's agent gets every server its owner has connected, because the automation has no <code>disabledServers</code>. A task agent's Start lets you switch servers off.</p>
+  <p><b>After:</b> an <i>MCP servers</i> row in the Runs card. It shows the logos of the servers left on, beside the composer's own servers button and popover: the same switches, search and <i>Manage in Settings</i>, not a new control. Every server starts on. The choice is saved with the automation and handed to each run's start.</p>
+  <div class="pair" data-shot="editor-servers"></div>
+</section>
+
+<section class="item" id="i23">
+  <h2><span class="n">23</span>Runs and automations wear what fires them</h2>
+  <p>Every run shows the schedule's clock whatever fired it (<code>automation-runs-panel.tsx</code>), and so does every Automations list row. <b>After:</b></p>
+  <ul>
+    <li>A GitHub event shows GitHub's mark.</li>
+    <li>A webhook shows a hook.</li>
+    <li>A schedule shows the clock.</li>
+    <li>Run now shows play.</li>
+  </ul>
+  <p>List rows show their trigger's icon the same way. The Runs panel is in item 20's picture, and the list is in item 19's.</p>
+</section>
+
+<section class="item" id="i24">
+  <h2><span class="n">24</span>An automation's agent has everything a task's agent has</h2>
+  <p><b>Today</b> the agent page mounts <code>AgentTab</code> without the doors the task column passes it:</p>
+  <ul>
+    <li>Workers don't open: <code>onOpenSubagent</code> does nothing.</li>
+    <li>There's no Changes (<code>onOpenChanges</code>).</li>
+    <li>What a call names can't be opened (<code>onOpenTarget</code>).</li>
+    <li>There are no PR cards (<code>cards</code>) and no dictation keywords.</li>
+  </ul>
+  <p>This has the same root as items 10–11. <b>After:</b> the agent page <i>is</i> the task column's agent pane, with the side panel that column keeps, so workers, Changes, links, cards and keywords all come with it. The pictures under items 10–11 show the first part.</p>
+  <div class="note"><h4>Tools, sandbox and keys (from the same read)</h4><ul>
+    <li><b>The same for both:</b> the tool list, the sandbox, the GitHub App token, and the owner's keys.</li>
+    <li><b>Different on purpose:</b> the instructions. A planless agent gets no plan or page sections, and is told "No one is watching it".</li>
+    <li><b>Automations only:</b> the concurrency, daily cap and pause guards.</li>
+    <li><b>One gap:</b> <code>edit_plan</code> and <code>show_page</code> refuse a planless agent by design, yet both are still offered to it. Not offering them saves a wasted call and a refusal in the transcript (Decision 17).</li>
+  </ul></div>
+</section>

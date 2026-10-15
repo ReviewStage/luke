@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Scene</title>
+    <script>
+      // The variant and theme pick the tree's stylesheet; the scene picks itself from the query.
+      const q = new URLSearchParams(location.search);
+      const v = q.get("v") === "after" ? "after" : "before";
+      const t = q.get("t") === "light" ? "light" : "dark";
+      document.write(`<link rel="stylesheet" href="out/${v}/styles-${t}.css" />`);
+      document.write(`<style>html,body{margin:0;height:100%;overflow:hidden;background:${t === "light" ? "#fcfcfc" : "#0c0c0e"}}#root{position:relative;height:100%}</style>`);
+      document.write(`<script type="module" src="out/${v}/scenes.js"><\/script>`);
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>

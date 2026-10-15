@@ -1,0 +1,434 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Automations, pickers, one-off agents: the show</title>
+<style>
+  :root { color-scheme: light dark; --ink: #1b1b1f; --muted: #66666e; --line: #e4e4e8; --ground: #fafafa; --card: #fff; --accent: #0071e3; --tag: #eef3ff; }
+  @media (prefers-color-scheme: dark) { :root { --ink: #ececf0; --muted: #9a9aa3; --line: #2a2a30; --ground: #0e0e11; --card: #16161a; --accent: #4c9cff; --tag: #16233b; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif; color: var(--ink); background: var(--ground); }
+  header.top { position: sticky; top: 0; z-index: 5; display: flex; gap: 16px; align-items: center; padding: 10px 28px; background: var(--card); border-bottom: 1px solid var(--line); }
+  header.top h1 { font-size: 15px; margin: 0; flex: 1; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button { border: 0; background: none; color: var(--muted); padding: 5px 12px; font: inherit; cursor: pointer; }
+  .seg button[aria-pressed="true"] { background: var(--tag); color: var(--ink); font-weight: 600; }
+  nav.toc { display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 12px 28px; border-bottom: 1px solid var(--line); font-size: 13px; }
+  nav.toc a { color: var(--muted); text-decoration: none; }
+  nav.toc a:hover { color: var(--accent); }
+  main { max-width: 1680px; margin: 0 auto; padding: 8px 28px 80px; }
+  section.item { padding: 28px 0; border-bottom: 1px solid var(--line); }
+  h2 { font-size: 19px; margin: 0 0 6px; }
+  h2 .n { display: inline-block; min-width: 30px; color: var(--accent); }
+  h3 { font-size: 14px; margin: 18px 0 6px; }
+  p, li { max-width: 980px; }
+  .muted { color: var(--muted); }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 14px; }
+  .pair.one { grid-template-columns: 1fr; max-width: 980px; }
+  figure { margin: 0; }
+  figcaption { font-size: 12.5px; color: var(--muted); margin-bottom: 6px; }
+  figcaption b { color: var(--ink); text-transform: uppercase; letter-spacing: .04em; font-size: 11.5px; margin-right: 6px; }
+  figure img { display: block; width: 100%; border: 1px solid var(--line); border-radius: 10px; }
+  .both figure img + img { margin-top: 10px; }
+  .note { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; margin-top: 14px; max-width: 980px; }
+  .note h4 { margin: 0 0 4px; font-size: 13px; }
+  .note ul { margin: 4px 0; padding-left: 18px; }
+  .conflict { border-left: 3px solid #e08a00; }
+  .decide { border-left: 3px solid var(--accent); }
+  table { border-collapse: collapse; margin-top: 10px; font-size: 13px; }
+  th, td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; vertical-align: top; }
+  th { background: var(--card); }
+  code { font: 12.5px ui-monospace, "SF Mono", Menlo, monospace; background: var(--tag); padding: 1px 4px; border-radius: 4px; }
+  .yes { color: #18794e; font-weight: 600; } .no { color: #c0392b; font-weight: 600; } .part { color: #a65400; font-weight: 600; }
+  ol.decisions > li { margin-bottom: 10px; }
+  .rec { font-weight: 600; }
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>Automations, pickers, one-off agents — one show for all 17 changes</h1>
+  <span class="muted">Theme</span>
+  <div class="seg" id="theme">
+    <button data-t="light" aria-pressed="true">Light</button>
+    <button data-t="dark" aria-pressed="false">Dark</button>
+    <button data-t="both" aria-pressed="false">Both</button>
+  </div>
+</header>
+<nav class="toc">
+  <a href="#how">How to read this</a>
+  <a href="#i1">1–4 Editor owner</a><a href="#i5">5 Leave guard</a><a href="#i6">6 Runs panel</a>
+  <a href="#i7">7 Repo heading</a><a href="#i8">8 New task pickers</a><a href="#i9">9 Sidebar</a>
+  <a href="#i10">10–11 One-off agent page</a><a href="#i12">12 ⌘F everywhere</a><a href="#i13">13 MCP logos</a>
+  <a href="#i14">14–15 Origins</a><a href="#i16">16 Special handling</a><a href="#i17">17 Naming</a>
+  <a href="#i18">18 Turn-end notices</a><a href="#i19">19 Failed runs</a><a href="#i20">20 Failure cause</a><a href="#i21">21 Pause on failures</a><a href="#i22">22 MCP servers</a><a href="#i23">23 Trigger icons</a><a href="#i24">24 Agent page parity</a>
+  <a href="#decisions">Decisions</a><a href="#split">PR split</a>
+</nav>
+<main>
+<section class="item" id="how">
+  <h2>How to read this</h2>
+  <p>Every picture is the real renderer: the app's own React components, mounted over a scripted bridge the way the repository's tests mount them, and drawn with the app's own compiled stylesheet, light and dark. <b>Before</b> is <code>main</code> at <code>15b0a4c2</code> with <b>#2780</b> (<code>bf88303a</code>, GitHub-trigger From / On / Skip drafts / Include forks) merged in locally. That's what <code>main</code> becomes when Dean merges it. <b>After</b> is a throwaway prototype of each change in a local worktree (not pushed, not a PR). It's there so the picture is the component, not a mock. Names, repositories, and pictures are synthetic. Fonts are Linux's stand-ins for SF Pro, so text runs slightly wider than on a Mac.</p>
+  <p>Items are numbered as in the request, so you can answer per number. Real choices are under <a href="#decisions">Decisions</a>, each with my recommendation first.</p>
+</section>
+
+<section class="item" id="i1">
+  <h2><span class="n">1–4</span>Automation editor: Owner first, with pictures; no owner line, no owner crumb</h2>
+  <ul>
+    <li><b>1</b>: the Sharing card with its Owner row moves from the bottom of the form to the top.</li>
+    <li><b>2</b>: the line under the name ("🔒 Personal  A personal automation: only you see and change it.") goes.</li>
+    <li><b>3</b>: the crumbs read <i>Automations › Flaky test sweep</i>, with no <i>🔒 Personal</i> between.</li>
+    <li><b>4</b>: the Owner picker is the shared Settings <code>Picker</code>. It shows your sign-in picture (<code>ActorMark</code> from <code>accountActor</code>) for Personal and the workspace's photo (<code>WorkspaceTile</code>) for the workspace, both on the chip and in its menu. These are the same marks the workspace switcher and Settings' heir picker draw.</li>
+  </ul>
+  <div class="pair" data-shot="editor"></div>
+  <div class="pair" data-shot="editor-review"></div>
+  <div class="pair" data-shot="editor-owner-open"></div>
+  <div class="note">
+    <h4>Notes</h4>
+    <ul>
+      <li>In the account's own personal workspace there's no Owner row, as today. With the owner line gone, nothing on the page names an owner there. Everything in that workspace is yours, so I think that's right.</li>
+      <li>The Automations list's Owner column still uses the lock and building glyphs. See Decision 3.</li>
+    </ul>
+  </div>
+  <div class="note conflict">
+    <h4>Where this meets other work</h4>
+    <ul>
+      <li><b>#2780</b>: every picture is drawn on top of it. The second pair is a GitHub-event automation with its From / On / Skip drafts / Include forks rows. The prototype was rebased onto main with #2780 merged in, and both the merge and the rebase were clean.</li>
+      <li><b>#2781</b> (held): the editor diff for items 1–6, applied onto #2781's head with a 3-way apply, conflicts on <b>one line</b>: the lucide import list. #2781 adds <code>GitPullRequestIcon</code> next to the <code>LockIcon</code> this change removes. The Owner picker reuses the editor's existing <code>owners</code> list instead of deleting it, so that block, just under #2781's <code>readCodeReviewSettings</code> line, is untouched. #2781's <i>Start from</i> card stands above the form on a new automation, and its order against Sharing is Decision 2.</li>
+      <li>Worker 329's Send feedback and Experimental restyle (#2903) has merged, and the toolbar in these pictures already shows it.</li>
+    </ul>
+  </div>
+</section>
+
+<section class="item" id="i5">
+  <h2><span class="n">5</span>Leaving a new automation that has input asks first</h2>
+  <p><b>Today the only guard</b> is the one on opening a run's agent from the Runs panel, which a new automation never has. Pressing <i>Automations</i> in the crumbs, a sidebar row, ⌘[ back, or ⌘K leaves at once and drops the draft. <b>That's true for an existing automation's unsaved edit too.</b> Escape is silently swallowed while there's unsaved input. <b>After:</b> every way out asks with the same dialog when something written would be lost, whether it's a new draft with input or an unsaved edit. A new draft with nothing typed still leaves silently.</p>
+  <div class="pair" data-shot="editor-leave-new"></div>
+  <div class="note"><h4>How</h4><ul><li>The editor registers a leave guard that <code>navigation-history.ts</code>'s <code>go</code>, the sidebar's opens, and ⌘K all consult. The prototype only wires the crumb, Escape, and opening a run, which is enough to show the dialog. Escape asks rather than doing nothing (Decision 4).</li></ul></div>
+</section>
+
+<section class="item" id="i6">
+  <h2><span class="n">6</span>The runs panel resizes and folds like the side panel</h2>
+  <p>The panel uses the side panel's own <code>useResizableEdge</code> and the same <code>.side-panel-resize</code> handle.</p>
+  <ul>
+    <li><b>Resize:</b> drag the edge between 280 and 560 px (default 340). Double-click returns it to the default, and the arrow keys step it.</li>
+    <li><b>Fold:</b> drag past the least width, or press ⌥⌘B. The toggle is the side panel's own <code>SidePanelIcon</code> button and tooltip.</li>
+    <li><b>Kept:</b> the width and whether it's open are stored in <code>localStorage</code> under <code>luke.automationRunsPanel</code>, the way <code>luke.sidePanel</code> keeps the plan's panel.</li>
+  </ul>
+  <div class="pair" data-shot="editor-runs-resize"></div>
+  <div class="pair" data-shot="editor-runs-hidden"></div>
+  <div class="note"><h4>Note</h4><ul><li>The prototype puts the toggle at the toolbar's end. The build puts it where the side panel's toggle stands (the window's top-right <code>title-bar-controls</code> slot), so it never moves between a plan and an automation.</li></ul></div>
+</section>
+
+<section class="item" id="i7">
+  <h2><span class="n">7</span>The repository picker loses its "ReviewStage on GitHub · Stage" line</h2>
+  <p>The heading is written in exactly one place: <code>use-plans-tab.ts</code>'s <code>repositoriesIn</code>, as the chooser's <code>source</code>. All three pickers that show it read from there: New task, the plan toolbar's repository chip (and the plan menu's <i>Change repository</i>), and the automation editor. Dropping it there fixes all three. The plan crumb's hover card has a separate <i>Through … on GitHub · …</i> line that isn't the picker, so it stays.</p>
+  <div class="pair" data-shot="editor-repo-open"></div>
+  <div class="pair" data-shot="new-task-repo"></div>
+</section>
+
+<section class="item" id="i8">
+  <h2><span class="n">8</span>New task's pickers are the app's shared picker</h2>
+  <p><b>Today</b> the two pickers in the New task dialog don't match each other or the rest of the app:</p>
+  <ul>
+    <li><b>Workspace:</b> a pill chip that opens an <code>ActionMenu</code>. That's a different menu, with no search and a different width.</li>
+    <li><b>Repository:</b> a pill with <b>no chevron</b>.</li>
+  </ul>
+  <p><b>After</b>, both are the shared Settings <code>Picker</code> look: a bordered chip with a chevron, and the searchable menu with its check, as on Settings and the automation editor. The workspace menu shows workspace tiles. Both menus open below and left-aligned inside the dialog.</p>
+  <div class="pair" data-shot="new-task-workspace"></div>
+  <div class="note conflict"><h4>Where this meets other work</h4><ul><li><b>#2888</b> (start a task without a name) changes the same dialog's name field. The overlap is a one-line conflict.</li></ul></div>
+</section>
+
+<section class="item" id="i9">
+  <h2><span class="n">9</span>One-off agents in the sidebar</h2>
+  <p><b>Today</b> an agent with no task can only be reached from its automation's Runs panel, the Inbox, or a notification. <b>Worker 324's answer for model A:</b> they're rows <i>inside Tasks</i>, grouped and filtered by the same view, not a group of their own. A separate group would bring back the kind-axis group Dean removed.</p>
+  <ul>
+    <li><b>Group by Repository:</b> an agent sits under its repository, or under <i>No repository</i>.</li>
+    <li><b>Group by Creator:</b> it sits under whoever started it.</li>
+    <li><b>Group by None:</b> it sits in the one run, in the chosen order.</li>
+  </ul>
+  <p>Created by filters it, and the Archived view shows archived ones. A one-off agent's row starts with its harness mark (the tab's own) so it reads apart from a task. Its end shows who started it (an automation's clock, or a teammate's face) and its last activity, so it sorts with tasks. A press opens the agent's page.</p>
+  <div class="pair" data-shot="sidebar"></div>
+  <div class="note">
+    <h4>Notes</h4>
+    <ul>
+      <li>In the prototype the rows follow the tasks in their group. The build sorts the two kinds of row together by last activity, using the model the PR on 324's stack is adding.</li>
+      <li>Pinning an agent needs an <code>agent_pin</code> like #2901's <code>plan_pin</code>, so it's left as a follow-up.</li>
+      <li>The service has no read of a workspace's one-off agents yet. The build adds one, readable by the same rule as tasks.</li>
+    </ul>
+  </div>
+  <div class="note conflict"><h4>Where this meets other work</h4><ul><li>This PR builds on 324's stack: #2899 (Created by), #2904 (Archived as a view), and #2905 (⌘K view commands). It generalises <code>@luke/ui/task-list-model</code> over a row that is a task or an agent, and adds a sibling <code>SidebarAgent</code> beside <code>SidebarPlan</code>.</li></ul></div>
+</section>
+
+<section class="item" id="i10">
+  <h2><span class="n">10–11</span>One-off agents use the regular agent pane: reading width, ⌘F, @-mentions</h2>
+  <p><b>The cause:</b> the transcript and composer are already shared (<code>AgentTab</code>). What differs is the wrapper. A task's agent stands in <code>.desktop-agent</code> (the 720 px reading width), inside the column's <code>FindScope</code> and the plan's <code>PlanMentions</code>. <code>DesktopAgentPage</code> mounts <code>AgentTab</code> bare, so it gets none of the three. <b>The fix at the root:</b> one agent pane component, used by both the plan column and the agent page, that brings all three along. Mentions with no plan offer the repository's files, MCP servers, and skills, and leave out the plan's sections.</p>
+  <div class="pair" data-shot="agent"></div>
+  <div class="pair" data-shot="agent-find"></div>
+  <div class="pair" data-shot="agent-mention"></div>
+  <div class="note"><h4>What it needs from the service</h4><ul><li>Two reads are keyed by plan today: the file list behind <code>@</code> (<code>PLANNING_TREE</code>, which takes a <code>planId</code>) and the <code>/</code> skills read. They gain a form keyed by workspace and repository. The prototype answers from a fixture.</li></ul></div>
+</section>
+
+<section class="item" id="i12">
+  <h2><span class="n">12</span>⌘F wherever there's text to read</h2>
+  <p>⌘F is the window's one <code>FindScope</code> (<code>find-in-tab.tsx</code>). Only three places mount it: the plan column, the side panel, and a page tab. Everywhere else ⌘F does nothing. The prototype mounts the Automations pages in one scope:</p>
+  <div class="pair" data-shot="list-find"></div>
+  <h3>Audit</h3>
+  <table>
+    <tr><th>Page or pane</th><th>Today</th><th>After</th><th>Note</th></tr>
+    <tr><td>Automations list</td><td class="no">No</td><td class="yes">Yes</td><td>Shown above.</td></tr>
+    <tr><td>An automation (editor) and its runs panel</td><td class="no">No</td><td class="yes">Yes</td><td>Labels, details, and run rows match. Typed field values (name, prompt) don't, because find reads the page's text, not the inside of inputs (Decision 7).</td></tr>
+    <tr><td>Factory</td><td class="no">No</td><td class="yes">Yes</td><td></td></tr>
+    <tr><td>Home</td><td class="no">No</td><td class="yes">Yes</td><td></td></tr>
+    <tr><td>Inbox (window)</td><td class="no">No</td><td class="yes">Yes</td><td>A plan's own Inbox tab already finds.</td></tr>
+    <tr><td>One-off agent</td><td class="no">No</td><td class="yes">Yes</td><td>Comes with item 11.</td></tr>
+    <tr><td>Version history (plan, template)</td><td class="no">No</td><td class="yes">Yes</td><td></td></tr>
+    <tr><td>Task agent tab, plan document, side-panel tabs (Call, Code, File, subagent, Terminal)</td><td class="yes">Yes</td><td class="yes">Yes</td><td>Unchanged.</td></tr>
+    <tr><td>Changes</td><td class="part">Diff only</td><td class="part">Diff only</td><td>The changed-file tree is a shadow root and isn't searched. It could hand its names through <code>useFindSource</code> in a later PR.</td></tr>
+    <tr><td>Settings</td><td class="part">Focuses Settings search</td><td class="part">Unchanged</td><td>A second find there would compete with the search that already filters every page (Decision 7).</td></tr>
+    <tr><td>Board</td><td class="no">No</td><td class="no">No</td><td>It's a canvas, with no text in the page to find.</td></tr>
+    <tr><td>Page tab</td><td class="part">View source only</td><td class="part">Unchanged</td><td>The page is a sandboxed frame.</td></tr>
+  </table>
+  <div class="note"><h4>How</h4><ul><li><code>FindScope</code>'s subject is plan-shaped (<code>{plan, tab}</code>). It becomes a place: a plan's tab, a page by name, or an agent. Then the shell mounts one scope around whichever page stands in the plan's place.</li></ul></div>
+</section>
+
+<section class="item" id="i13">
+  <h2><span class="n">13</span>An integration's tool call shows its connector's logo</h2>
+  <p>An MCP call is stored as <code>&lt;provider&gt;_remote</code>, with the real tool and its input inside (<code>{remoteTool, input}</code>). Today the row reads <i>🔧 Used <code>linear_remote</code></i>, and its body is that envelope. After, it reads <i>[Linear logo] Used <code>list_issues</code></i>, and its body is the tool's own input. The logo is the same <code>ProviderMark</code> that Settings › Integrations and the MCP popover draw.</p>
+  <div class="pair" data-shot="agent-tools"></div>
+  <div class="note"><h4>Notes</h4><ul><li>eve also records the wrapper call, <code>connection_execute</code>, as a row of its own. The build hides that row wherever its nested call stands, so one call reads as one row.</li><li>The renderer can't import the service's <code>REMOTE_TOOL</code> names, so the mapping from a stored name to its provider moves into <code>@luke/features/integration-wire</code>.</li></ul></div>
+</section>
+
+<section class="item" id="i14">
+  <h2><span class="n">14–15</span>Origins as the actor that sent them, at a message's width</h2>
+  <p>Today a task's agent opens on a full-width <i>Plan</i> fold that leads nowhere. An automation's agent opens on the raw prompt as if you had typed it, including the "Luke started this run…" line.</p>
+  <p>After, the origin is a sent message:</p>
+  <ul>
+    <li>It stands right-aligned at a user message's measure.</li>
+    <li>Above it is the sender line every teammate's message already has (<code>ActorRef</code>). <code>ACTOR_KIND.AUTOMATION</code> already exists, so the automation is just another actor.</li>
+    <li>The fold holds the prompt only, and ends in <b>Open automation</b>. Pressing the automation's name, or its hover card's own <i>Open automation</i>, also goes there.</li>
+    <li>A task's agent gets the same card, ending in <b>Open plan</b>.</li>
+    <li>A subagent's card ends in <b>Open task</b>, which goes to the parent agent's tab at the call that started it.</li>
+  </ul>
+  <div class="pair" data-shot="agent-origin-open"></div>
+  <div class="pair" data-shot="agent-plan-open"></div>
+  <p class="muted">The "before" automation picture is drawn at a plan column's reading width so the comparison is fair. Today's agent page is full width (item 10).</p>
+</section>
+
+<section class="item" id="i16">
+  <h2><span class="n">16</span>Special handling to watch for</h2>
+  <ul>
+    <li><b>Deleted automation:</b> <code>coding_agent.automation_id</code> is set to null when its automation is deleted, so today the agent forgets where it came from. Proposal: keep the automation's name on the agent when the run starts. Then the card still says <i>Flaky test sweep (deleted)</i>, with no Open (Decision 9).</li>
+    <li><b>Turned off, or paused by a guard:</b> nothing special. The card opens the automation, and its hover card already says it's off.</li>
+    <li><b>Someone else's personal automation:</b> you can read the agent but not the automation (<code>allowedTo</code> READ). The name is already in the prompt you can read, so the card names it. It offers no Open, and its hover card says <i>A teammate's personal automation</i>. It never reads the automation for you.</li>
+    <li><b>Automations experiment off:</b> the sender is named, but there's no Open, so there's no door to a page that doesn't stand.</li>
+    <li><b>GitHub event:</b> the sender line names the subject: <i>Code review · #2905 ⌘K view commands</i>, linking to the pull request. The service has to hand the run's <code>firing</code> to the agent page. Today only the run points at the agent.</li>
+    <li><b>Webhook:</b> the caller's body is allowed in the run's transcript (carve-out D10). It stays inside the fold under its own sub-fold, never in the sender line or the sidebar. The secret is never anywhere.</li>
+    <li><b>Run now:</b> the sender line reads <i>Flaky test sweep · Run by Dean</i>.</li>
+    <li><b>Same-agent automations:</b> later runs already arrive as messages sent by the automation (<code>CODING_AGENT_SENDER.AUTOMATION</code>), drawn with the same sender line. Only the agent's first message becomes the card.</li>
+    <li><b>Nested origins:</b> one hop only. A subagent of an automation's agent opens on <i>Subagent task</i> from its parent agent. The parent's own card is where the automation is named. No chains of cards.</li>
+    <li><b>Archived after success:</b> the origin still stands. ⌘F opens folded origin bodies to match inside them (<code>useFindOpen</code>), and Copy transcript keeps the prompt.</li>
+  </ul>
+</section>
+
+<section class="item" id="i17">
+  <h2><span class="n">17</span>Names for automation agents</h2>
+  <h3>Today</h3>
+  <p>Every agent is named by the title model (<code>coder-host/title.ts</code>), from its first message, its latest, and its last answer, over its first three turns. For an automation, the first message is the whole prompt plus the "Luke started this run…" line and any event block. Until a title lands, the row and tab show the model's name (<i>Opus 5.5</i>). A recurring automation's runs get similar names, told apart only by time.</p>
+  <h3>What others do (from their docs, and live PRs for Copilot)</h3>
+  <ul>
+    <li><b>Cursor:</b> when no name is given, it "auto-derives a name from the prompt". Slack agents are titled from the message that started them.</li>
+    <li><b>Devin:</b> the API takes an optional title. Otherwise the session title is generated. A schedule has its own name, and a <i>Past Sessions</i> list holds its runs.</li>
+    <li><b>Codex:</b> each scheduled run starts a new chat. Runs are told apart in a <i>Scheduled</i> inbox with unread dots. Titles aren't documented.</li>
+    <li><b>Copilot coding agent:</b> the PR is titled <code>[WIP] &lt;short LLM title&gt;</code> while it works, then rewritten to a descriptive title. The issue links both ways.</li>
+    <li><b>Linear agents:</b> a session has no title of its own. It's named by its issue.</li>
+  </ul>
+  <p>The pattern: none of them puts the automation's name or a date in a run's title. The run is titled from its prompt or its subject, the source appears as a link or badge, and recurring runs are told apart in a list on the automation.</p>
+  <h3>Recommendation</h3>
+  <ul>
+    <li><b>An event about a pull request or issue:</b> a fixed name, no model. For example <i>#2905 ⌘K view commands</i>, or <i>Review #2905 …</i> for Code review. That's how Linear and Copilot name it, it's stable across pushes, and it matches what you search for.</li>
+    <li><b>Schedule, webhook, Run now:</b> keep the model's name. Two changes:
+      <ul>
+        <li>The model reads the prompt without the boilerplate line, plus the event's subject.</li>
+        <li>Until it lands, the placeholder is the automation's name instead of the model's.</li>
+      </ul>
+    </li>
+    <li><b>The automation itself</b> shows as the row's face and as the origin card's sender, so the title doesn't need to carry it. The Runs panel tells recurring runs apart by time, as today.</li>
+  </ul>
+</section>
+
+
+<section class="item" id="i18">
+  <h2><span class="n">18</span>Automation agents announce their turn's end, as task agents do</h2>
+  <p><b>Today</b> an automation's agent ends in silence: no OS notification, no toast, no unseen dot. The notices ledger (<code>@luke/host/agent-notices.ts</code>) keeps only agents with a plan (<code>onPlan</code>), and the toast's View takes a plan id. Yet <code>AgentPlace.planId</code> is already nullable, and its doc mentions "the agent's own page for one with no plan", so this was started and not finished.</p>
+  <p><b>After:</b> the same notification, toast and unseen dot as a task agent's. The second line names the automation, where a task agent's names its plan. View opens the agent's page.</p>
+  <div class="pair" data-shot="agent-end"></div>
+  <div class="note"><h4>How</h4><ul>
+    <li>The ledger watches the one-off agents the sidebar reads (item 9's read) as well as a plan's list.</li>
+    <li>The toast's View is handed an <code>AgentPlace</code> rather than a plan id.</li>
+    <li>Whoever started the agent hears it. For an automation, that's its owner, whose key the run used.</li>
+  </ul></div>
+</section>
+
+<section class="item" id="i19">
+  <h2><span class="n">19</span>A failed run is told</h2>
+  <p><b>Today</b> nothing in <code>packages/service/src/automations</code> reaches the Inbox or a notification. A run can fail to start (repository unreachable, creator left, a guard), or its agent can fail. Either way it's seen only if someone opens the automation's Runs panel.</p>
+  <p><b>After</b>, the owner is told, through doors the window already has:</p>
+  <ul>
+    <li>An agent that fails is covered by item 18: its turn-end notice reads <i>… failed</i>.</li>
+    <li>A run that fails to start gets the same OS notification and toast, in the failed tone. View opens the automation.</li>
+    <li>The sidebar's <b>Automations</b> row wears the failed mark until that automation is opened.</li>
+  </ul>
+  <div class="pair" data-shot="run-failed"></div>
+  <div class="note"><h4>What others do</h4><ul>
+    <li><b>GitHub Actions:</b> notifies whoever triggered the run, or for a schedule the user who last changed its cron line. It can be set to failed runs only. The run shows a red ✕.</li>
+    <li><b>Devin:</b> emails the schedule's owner on failure only by default. Automations offer Always, On failure or On success.</li>
+    <li><b>Zapier:</b> emails every error by default, with a digest option.</li>
+    <li><b>Cursor, Linear, Codex and Claude Code routines:</b> document a failed status on the run, and no alert.</li>
+    <li><b>Inbox:</b> no one puts a failed run in an inbox of asks.</li>
+  </ul></div>
+  <div class="note"><h4>Why not the Inbox</h4><ul><li>The Inbox is what agents ask of you, now carried by the task's chat. A failed run asks nothing, and an item per failure would fill it on a bad day. The run's row stays the record, and the notification is the alert (Decision 13).</li></ul></div>
+</section>
+
+<section class="item" id="i20">
+  <h2><span class="n">20</span>A failed run says why</h2>
+  <p><b>Today</b> the row says <i>Its agent failed</i>, though the service already knows the cause (<code>codingAgentFailureOf</code>, <code>coder-host/status.ts</code>). <b>After</b>, the run summary's agent carries the cause, and the row gives it in the words the agent's own end line uses: <i>Its agent failed: the sandbox or checkout failed</i>. The same picture shows item 23's icons; the failed run there was fired by GitHub.</p>
+  <div class="pair" data-shot="editor-review"></div>
+  <div class="note"><h4>How</h4><ul><li>The cause's words (<code>AGENT_FAILURE_WORDS</code>) move from the desktop's <code>coding-agent-model.ts</code> into <code>@luke/features</code>, so the run line and the agent's end line share one table.</li></ul></div>
+</section>
+
+<section class="item" id="i21">
+  <h2><span class="n">21</span><code>AUTOMATION_PAUSE.FAILURES</code>: delete it</h2>
+  <p>The value is declared and read (the list says <i>Paused</i>), but never written. <b>The usual practice is not to auto-pause on failures:</b></p>
+  <ul>
+    <li><b>GitHub Actions:</b> disables a schedule only after 60 days with no repository activity.</li>
+    <li><b>Claude Code routines:</b> turn off only after a broken GitHub connection has lasted 72 hours.</li>
+    <li><b>Cursor, Devin's automations, Codex and Linear:</b> document no auto-disable.</li>
+    <li><b>Zapier</b> is the exception. It turns a Zap off when it errors 95% of the time over more than 20 runs in 7 days, after warning the account owner.</li>
+  </ul>
+  <p>Item 19 tells the owner about every failure, and the guards already cap runs per day and at once, so I recommend deleting the dead value. The pictures below are the <b>alternative</b>, if Dean wants a pause: <i>Paused after 5 failed runs</i> in the list, and a note with Turn on in the Runs panel.</p>
+  <div class="pair" data-shot="list-paused"></div>
+  <div class="pair" data-shot="editor-paused"></div>
+</section>
+
+<section class="item" id="i22">
+  <h2><span class="n">22</span>An automation chooses its runs' MCP servers</h2>
+  <p><b>Today</b> a run's agent gets every server its owner has connected, because the automation has no <code>disabledServers</code>. A task agent's Start lets you switch servers off.</p>
+  <p><b>After:</b> an <i>MCP servers</i> row in the Runs card. It shows the logos of the servers left on, beside the composer's own servers button and popover: the same switches, search and <i>Manage in Settings</i>, not a new control. Every server starts on. The choice is saved with the automation and handed to each run's start.</p>
+  <div class="pair" data-shot="editor-servers"></div>
+</section>
+
+<section class="item" id="i23">
+  <h2><span class="n">23</span>Runs and automations wear what fires them</h2>
+  <p>Every run shows the schedule's clock whatever fired it (<code>automation-runs-panel.tsx</code>), and so does every Automations list row. <b>After:</b></p>
+  <ul>
+    <li>A GitHub event shows GitHub's mark.</li>
+    <li>A webhook shows a hook.</li>
+    <li>A schedule shows the clock.</li>
+    <li>Run now shows play.</li>
+  </ul>
+  <p>List rows show their trigger's icon the same way. The Runs panel is in item 20's picture, and the list is in item 19's.</p>
+</section>
+
+<section class="item" id="i24">
+  <h2><span class="n">24</span>An automation's agent has everything a task's agent has</h2>
+  <p><b>Today</b> the agent page mounts <code>AgentTab</code> without the doors the task column passes it:</p>
+  <ul>
+    <li>Workers don't open: <code>onOpenSubagent</code> does nothing.</li>
+    <li>There's no Changes (<code>onOpenChanges</code>).</li>
+    <li>What a call names can't be opened (<code>onOpenTarget</code>).</li>
+    <li>There are no PR cards (<code>cards</code>) and no dictation keywords.</li>
+  </ul>
+  <p>This has the same root as items 10–11. <b>After:</b> the agent page <i>is</i> the task column's agent pane, with the side panel that column keeps, so workers, Changes, links, cards and keywords all come with it. The pictures under items 10–11 show the first part.</p>
+  <div class="note"><h4>Tools, sandbox and keys (from the same read)</h4><ul>
+    <li><b>The same for both:</b> the tool list, the sandbox, the GitHub App token, and the owner's keys.</li>
+    <li><b>Different on purpose:</b> the instructions. A planless agent gets no plan or page sections, and is told "No one is watching it".</li>
+    <li><b>Automations only:</b> the concurrency, daily cap and pause guards.</li>
+    <li><b>One gap:</b> <code>edit_plan</code> and <code>show_page</code> refuse a planless agent by design, yet both are still offered to it. Not offering them saves a wasted call and a refusal in the transcript (Decision 17).</li>
+  </ul></div>
+</section>
+<section class="item" id="decisions">
+  <h2>Decisions</h2>
+  <ol class="decisions">
+    <li><span class="rec">Item 1 heading: keep the "Sharing" title over the one Owner row (recommended)</span>, or draw the Owner row in an untitled first card.</li>
+    <li><span class="rec">Item 1 with #2781's Start from: Sharing first, then Start from (recommended, since Dean asked for Owner first)</span>, or Start from first, because it fills the whole draft.</li>
+    <li><span class="rec">Item 4 beyond the editor: the Automations list's Owner column uses the same pictures (recommended)</span>, or it keeps its lock and building glyphs.</li>
+    <li><span class="rec">Item 5 Escape: Escape asks with the same dialog (recommended)</span>, or it keeps doing nothing while there's input.</li>
+    <li><span class="rec">Item 8 look: the bordered Settings picker chip for both workspace and repository (recommended, as in the pictures)</span>, or both as the composer's quiet pill with a chevron.</li>
+    <li><span class="rec">Item 9 leading glyph: the agent's harness mark, as its tab wears it (recommended)</span>, or one generic agent glyph for every agent.</li>
+    <li><span class="rec">Item 12 scope: find matches the page's text, not typed field values, and Settings keeps ⌘F on its search (recommended)</span>, or find also searches inside fields and Settings gets find-in-page.</li>
+    <li><span class="rec">Item 14 for task agents: the Plan card gets the same sender line, the person who started the agent (recommended)</span>, or it stays without a sender and only moves to message width.</li>
+    <li><span class="rec">Item 16 deleted automation: keep the automation's name on the agent when the run starts, so a deleted one is still named (recommended; one nullable column)</span>, or the card falls back to a nameless "Automation".</li>
+    <li><span class="rec">Item 17: fixed names for pull-request and issue events, and model names with the automation's name as placeholder for the rest (recommended)</span>; or model names for everything as today; or always <i>&lt;automation&gt; · &lt;subject or date&gt;</i>.</li>
+    <li><span class="rec">Item 18 second line: the automation's name, where a task agent's names its plan (recommended)</span>, or the repository.</li>
+    <li><span class="rec">Item 19 who is told: the automation's owner, whose key runs it (recommended)</span>, or, for a workspace automation, also its last editor or every owner and admin.</li>
+    <li><span class="rec">Item 19 Inbox: no Inbox item; the notification, toast and Automations mark do it (recommended)</span>, or an Inbox item per failed run.</li>
+    <li><span class="rec">Item 21: delete <code>AUTOMATION_PAUSE.FAILURES</code> (recommended, the common practice)</span>, or pause after 5 failed runs in a row, tell the owner, and offer Turn on in the Runs panel (pictured).</li>
+    <li><span class="rec">Item 22: one MCP servers row reusing the composer's servers popover (recommended)</span>, or a card of per-server switch rows.</li>
+    <li><span class="rec">Item 24: the agent page gets the plan column's side panel, so workers and Changes open there as on a task (recommended)</span>, or workers open as pages of their own.</li>
+    <li><span class="rec">Stop offering <code>edit_plan</code> and <code>show_page</code> to agents without a plan (recommended)</span>, or keep offering them and let them refuse.</li>
+  </ol>
+</section>
+
+<section class="item" id="split">
+  <h2>Proposed PR split</h2>
+  <p>Chains share files, so each chain goes to one workspace. The rest are independent. Chain A is based on <code>main</code> after #2780 lands; against #2781 it conflicts on one import line, as tested.</p>
+  <table>
+    <tr><th>#</th><th>PR</th><th>Items</th><th>Stacks on / conflicts</th></tr>
+    <tr><td>A1</td><td><code>feat(desktop): an automation's editor opens on its owner, under the account's and workspace's pictures</code></td><td>1–4</td><td>Rebases with #2780/#2781 (<code>automation-editor.tsx</code>)</td></tr>
+    <tr><td>A2</td><td><code>feat(desktop): every way out of an automation with unsaved input asks first</code></td><td>5</td><td>On A1. Adds a leave guard to <code>navigation-history.ts</code></td></tr>
+    <tr><td>A3</td><td><code>feat(desktop): an automation's runs panel resizes and folds as the side panel does</code></td><td>6</td><td>On A2</td></tr>
+    <tr><td>A4</td><td><code>feat(desktop): runs and automations wear what fires them</code></td><td>23</td><td>On A3 (same runs panel file)</td></tr>
+    <tr><td>A5</td><td><code>feat(features,service,desktop): an automation chooses the MCP servers its runs are handed</code></td><td>22</td><td>On A4 (same editor file; adds <code>disabledServers</code> to the action)</td></tr>
+    <tr><td>A6</td><td><code>feat(features,service,desktop): a failed run says why</code></td><td>20</td><td>On A5</td></tr>
+    <tr><td>A7</td><td><code>refactor(features): an automation is never paused for its failures</code></td><td>21</td><td>On A6, or the pause, after Decision 14</td></tr>
+    <tr><td>B1</td><td><code>fix(desktop): the repository picker drops its "on GitHub" heading</code></td><td>7</td><td>none</td></tr>
+    <tr><td>B2</td><td><code>refactor(desktop): New task's pickers are the shared picker</code></td><td>8</td><td>On B1. One-line conflict with #2888</td></tr>
+    <tr><td>C1</td><td><code>feat(features,service): a repository's files and skills are read by workspace and repository, not only by plan</code></td><td>11</td><td>none</td></tr>
+    <tr><td>C2</td><td><code>refactor(desktop): a one-off agent's page is the plan column's agent pane and side panel: its reading width, find, mentions, workers, and Changes</code></td><td>10–11, 24</td><td>On C1</td></tr>
+    <tr><td>C3</td><td><code>feat(desktop): ⌘F finds on every page with words to read</code></td><td>12</td><td>On C2</td></tr>
+    <tr><td>C4</td><td><code>fix(service): an agent with no plan is not offered edit_plan or show_page</code></td><td>24</td><td>none</td></tr>
+    <tr><td>D1</td><td><code>feat(service,features): a workspace's one-off agents are read as tasks are</code></td><td>9</td><td>none</td></tr>
+    <tr><td>D2</td><td><code>feat(desktop,ui): one-off agents stand among the sidebar's tasks, grouped and filtered by its view</code></td><td>9</td><td>On D1 and 324's #2899 → #2904 → #2905</td></tr>
+    <tr><td>D3</td><td><code>feat(host): an automation's agent announces its turn's end as a task's agent does</code></td><td>18</td><td>On D1 (reads the one-off agents it watches)</td></tr>
+    <tr><td>D4</td><td><code>feat(service,host,desktop): a run that fails to start is told, and Automations marks it until seen</code></td><td>19</td><td>On D3</td></tr>
+    <tr><td>E1</td><td><code>feat(features,desktop): an integration's tool call wears its connector's logo</code></td><td>13</td><td>none</td></tr>
+    <tr><td>F1</td><td><code>feat(database,service): an agent keeps its automation's name and run firing</code></td><td>16</td><td>none (one migration)</td></tr>
+    <tr><td>F2</td><td><code>feat(desktop): a transcript opens on its origin, sent by the automation, task, or agent it came from</code></td><td>14–16</td><td>On F1</td></tr>
+    <tr><td>F3</td><td><code>feat(service): an automation's agent is named by its event's subject, or by the model from its prompt</code></td><td>17</td><td>On F1, after Decision 10</td></tr>
+  </table>
+</section>
+</main>
+<script>
+  // Each [data-shot] draws its before and after in the chosen theme, or both themes stacked.
+  const LABEL = { before: "Before (main)", after: "After (prototype)" };
+  function draw(theme) {
+    for (const pair of document.querySelectorAll("[data-shot]")) {
+      const scene = pair.dataset.shot;
+      pair.innerHTML = "";
+      pair.classList.toggle("both", theme === "both");
+      for (const variant of ["before", "after"]) {
+        const figure = document.createElement("figure");
+        const caption = document.createElement("figcaption");
+        caption.innerHTML = `<b>${variant}</b>${LABEL[variant]}`;
+        figure.append(caption);
+        for (const t of theme === "both" ? ["light", "dark"] : [theme]) {
+          const img = document.createElement("img");
+          img.loading = "lazy";
+          img.alt = `${scene}, ${variant}, ${t}`;
+          img.src = `shots/${scene}--${variant}--${t}.png`;
+          figure.append(img);
+        }
+        pair.append(figure);
+      }
+    }
+  }
+  for (const button of document.querySelectorAll("#theme button")) {
+    button.addEventListener("click", () => {
+      for (const each of document.querySelectorAll("#theme button")) each.setAttribute("aria-pressed", String(each === button));
+      draw(button.dataset.t);
+    });
+  }
+  draw("light");
+</script>
+</body>
+</html>
