@@ -206,6 +206,7 @@
     "./voice/deployment-exchange": "./src/voice/deployment-exchange.js",
     "./voice/exchange-attachment": "./src/voice/exchange-attachment.js",
     "./voice/frames": "./src/voice/frames.js",
+    "./voice/keyframe": "./src/voice/keyframe.js",
     "./voice/live-brain": "./src/voice/live-brain.js",
     "./voice/live-exchange": "./src/voice/live-exchange.js",
     "./voice/live-record": "./src/voice/live-record.js",

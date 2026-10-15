@@ -186,6 +186,7 @@ import {
   voiceEndLiveSessionParamsSchema,
   voiceReportLiveActivityParamsSchema,
   voiceReportLiveTransportParamsSchema,
+  voiceSetVideoParamsSchema,
 } from "@luke/gateway";
 import type { LiveDiagnostics } from "@luke/live";
 import {
@@ -199,6 +200,7 @@ import {
 import type { UpdateSnapshot } from "@luke/settings/update";
 import type { SettingsUpdateResult } from "@luke/settings/wire";
 import type { MicrophoneRoute, MicrophoneStatus } from "@luke/voice/audio";
+import { avatarStateSchema } from "@luke/voice/avatar";
 import { VOICE_COMMAND } from "@luke/voice/voice-view";
 import {
   EXCESS_KEYS,
@@ -457,6 +459,10 @@ export const ACT_KIND = {
   VOICE_COMMAND: "voice.command",
   /** The call card's way back: Luke's window brought forward on the call's own plan. */
   CALL_SHOW_PLAN: "call.showPlan",
+  /** The panel's word on Luke's avatar: starting, live on its first frame, or ended and why. Taken from the panel alone. */
+  AVATAR_REPORT: "avatar.report",
+  /** The video tile's Video off and Restart video: Luke's avatar asked for on the standing call, or taken down. Taken from the panel alone. */
+  VOICE_SET_VIDEO: "voice.setVideo",
   /**
    * The voice window as a GPT Live peer: its SDP offer handed to the host,
    * which creates the one session and answers the SDP; the hang-up it asks
@@ -1344,6 +1350,16 @@ export const ACT = {
   [ACT_KIND.CONTACT_EMAIL]: press("Could not open a new email on this system."),
   [ACT_KIND.WINDOW_FOCUS_PANEL]: press("Could not focus the panel on this system."),
   [ACT_KIND.CALL_SHOW_PLAN]: press("Could not bring the call's task forward on this system."),
+  [ACT_KIND.AVATAR_REPORT]: {
+    payload: actSchema(avatarStateSchema),
+    result: answersNothing,
+    refusal: "Could not report the video on this system.",
+  },
+  [ACT_KIND.VOICE_SET_VIDEO]: {
+    payload: actSchema(voiceSetVideoParamsSchema),
+    result: answersNothing,
+    refusal: "Could not turn the video on or off on this system.",
+  },
   [ACT_KIND.WINDOW_COPY_TEXT]: {
     // A plan's whole document and a File tab's whole file are copied
     // through this act, so it admits the longer of the two the service

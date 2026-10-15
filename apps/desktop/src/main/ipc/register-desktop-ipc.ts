@@ -14,6 +14,7 @@ import { type ReportHandlers, registerBridgeHost } from "../bridge-host";
 import type { DesktopServices } from "../services/compose-desktop";
 import { accountActRows } from "./account-session";
 import { automationActRows } from "./automation-acts";
+import { avatarActRows, avatarReports } from "./avatar-acts";
 import { codingAgentActRows } from "./coding-agent-acts";
 import { integrationActRows } from "./integration-acts";
 import { planningActRows } from "./planning-acts";
@@ -33,7 +34,8 @@ import { windowSurfaceActRows, windowSurfaceReports } from "./window-surface";
  * it. Nothing else registers IPC.
  */
 export function registerDesktopIpc(services: DesktopServices): void {
-  const { config, state, telemetry, native, updates, operator, windows, notices, run } = services;
+  const { config, state, telemetry, native, updates, operator, windows, notices, avatar, run } =
+    services;
   const { launch } = config;
   const { panels, voiceWindow, callWindow, hotkeys } = windows;
   const recordProductEvent = telemetry.recordProductEvent;
@@ -90,6 +92,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
       },
     }),
     ...voiceRuntimeActRows(voiceRuntime),
+    ...avatarActRows({ avatar }),
     ...planningActRows({
       host: operator.host,
       openExternal: config.openExternal,
@@ -140,6 +143,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
   const reports: ReportHandlers = {
     ...windowSurfaceReports({ recordProductEvent }),
     ...voiceRuntimeReports(voiceRuntime),
+    ...avatarReports({ state, panel: panels, voiceOwns: (sender) => voiceWindow.owns(sender) }),
     // The development trace is the host's: a tapped wire event crosses to its
     // writer, which alone knows whether this run records anything.
     recordAgentTrace: (_context, trace) => {

@@ -234,6 +234,27 @@ export function SpeakerOffIcon(): React.JSX.Element {
   );
 }
 
+/** A camera: a call's video, put up again where it was put away. */
+export function VideoIcon(): React.JSX.Element {
+  return (
+    <Glyph>
+      <rect x="3.2" y="6.6" width="12" height="10.8" rx="2" />
+      <path d="m15.2 10.6 5.6-3.2v9.2l-5.6-3.2" />
+    </Glyph>
+  );
+}
+
+/** The camera struck through: a call's video put away, the call itself going on. */
+export function VideoOffIcon(): React.JSX.Element {
+  return (
+    <Glyph>
+      <rect x="3.2" y="6.6" width="12" height="10.8" rx="2" />
+      <path d="m15.2 10.6 5.6-3.2v9.2l-5.6-3.2" />
+      <path d="M4 3.4 20 19.4" />
+    </Glyph>
+  );
+}
+
 /** The display Luke stands on: everything about where and how he is drawn. */
 export function DisplayIcon(): React.JSX.Element {
   return (

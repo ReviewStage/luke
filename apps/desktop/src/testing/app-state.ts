@@ -10,6 +10,7 @@ import type { ExperimentChoices } from "@luke/settings";
 import { appSettingsWire, settingsView } from "@luke/settings/testing";
 import { UPDATE_STATUS } from "@luke/settings/update";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
+import { AVATAR_OFF } from "@luke/voice/avatar";
 
 /** Main's document for a signed-in account in a panel, idle, its experiments as given. */
 function snapshotWith(experiments: ExperimentChoices): AppStateSnapshot {
@@ -40,7 +41,7 @@ function snapshotWith(experiments: ExperimentChoices): AppStateSnapshot {
     },
     audio: { microphoneStatus: MICROPHONE_STATUS.GRANTED },
     hotkeys: { talkHeld: true },
-    voice: {},
+    voice: { avatar: AVATAR_OFF },
     planning: IDLE_PLANNING_VIEW,
     codingAgents: { unseen: [] },
     inbox: { waiting: [], plans: [], planless: [], automations: [] },

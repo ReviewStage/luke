@@ -5,7 +5,7 @@ import type { DatabaseServices } from "@luke/database/core/query";
 import type { VoiceSessionRecord } from "@luke/database/models/voice-session-record";
 import { LIVE_CLIENT_EVENT } from "@luke/live";
 import { catchAllButInterrupt } from "@luke/runtime/effect";
-import { Effect, Exit, FiberSet, type Layer, Scope } from "effect";
+import { Context, Effect, Exit, FiberSet, Layer, Scope } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { type WebSocket, WebSocketServer } from "ws";
 import {
@@ -20,7 +20,9 @@ import {
   VOICE_SERVICE_FRAME,
 } from "../core.js";
 import type { VoiceAccounts } from "./accounts.js";
+import { type AvatarProvider, callAvatar } from "./avatar.js";
 import { isVoicePath } from "./frames.js";
+import { Keyframe } from "./keyframe.js";
 import {
   type AttachedSession,
   EXCHANGE_ENDING,
@@ -207,6 +209,12 @@ export interface VoiceServiceOptions {
    * may leave it, the service only pipes and nobody answers a spoken ask.
    */
   exchange?: ExchangeAttachment;
+  /**
+   * Luke's Keyframe client and the persona it mints, which the call's
+   * avatar is put up with; absent, as a deployment missing either leaves
+   * it, every avatar ask is answered not configured.
+   */
+  avatar?: { readonly keyframe: Layer.Layer<Keyframe>; readonly personaId: string } | undefined;
   /** The OpenAI `/v1` base; a test points it at a fake. */
   openAiBaseUrl?: string;
   httpClient?: Layer.Layer<HttpClient.HttpClient>;
@@ -247,6 +255,7 @@ export class VoiceService {
   readonly #accounts: VoiceAccounts;
   readonly #record: VoiceSessionRecord;
   readonly #upstream: LiveUpstream | undefined;
+  readonly #avatar: AvatarProvider | undefined;
   /** What a socket's first frame opens: the account admitted and spent, the session at OpenAI, the row registered. */
   readonly #opener: SessionOpener;
   readonly #sockets: WebSocketServer;
@@ -257,6 +266,7 @@ export class VoiceService {
   private constructor(
     options: VoiceServiceOptions,
     upstream: LiveUpstream | undefined,
+    avatar: AvatarProvider | undefined,
     sockets: WebSocketServer,
     fibers: FiberSet.FiberSet<void>,
     begin: (session: Effect.Effect<void, never, DatabaseServices>) => void,
@@ -266,6 +276,7 @@ export class VoiceService {
     this.#accounts = options.accounts;
     this.#record = options.record;
     this.#upstream = upstream;
+    this.#avatar = avatar;
     this.#opener = sessionOpener({
       accounts: options.accounts,
       record: options.record,
@@ -316,6 +327,13 @@ export class VoiceService {
           }),
       );
       const apiKey = options.apiKey?.trim();
+      const avatar =
+        options.avatar === undefined
+          ? undefined
+          : {
+              keyframe: Context.get(yield* Layer.build(options.avatar.keyframe), Keyframe),
+              personaId: options.avatar.personaId,
+            };
       const service = new VoiceService(
         options,
         apiKey
@@ -327,6 +345,7 @@ export class VoiceService {
               attachTimeoutMs: options.attachTimeoutMs,
             })
           : undefined,
+        avatar,
         sockets,
         fibers,
         (session) => {
@@ -581,6 +600,17 @@ export class VoiceService {
       yield* device.send({ text: JSON.stringify(opened.answer) });
       this.#log({ event: opened.logEvent });
 
+      // The call's avatar answers on the device socket, beside the pipe and
+      // never through it: its asks go nowhere near OpenAI.
+      const avatar = yield* callAvatar({
+        provider: this.#avatar,
+        userId: accountId,
+        voiceSessionId: opened.voiceSessionId,
+        deviceOpen: device.isOpen,
+        send: (frame) => Effect.ignore(device.send({ text: JSON.stringify(frame) })),
+        log: this.#log,
+      });
+
       const pipe = yield* voiceSocket(sideband);
       // Both consumers listen now: what the session spoke since the attach is read here, by both.
       yield* Effect.sync(() => sideband.resume());
@@ -597,6 +627,8 @@ export class VoiceService {
                 seconds: closed.usage.seconds,
                 reason: closed.reason,
               });
+              // After the voice row, so a start racing the close opens nothing.
+              yield* avatar.callClosed;
               yield* this.#recordUsage(accountId, sessionId, closed.usage.seconds);
             }),
           ),
@@ -621,6 +653,8 @@ export class VoiceService {
         // idle decision runs, so the device's hang-up and the relay's close on
         // its behalf both ask the exchange for it.
         closeSession: exchange === undefined ? undefined : exchange.service.endSession(),
+        onAvatarRequest: avatar.request,
+        onHangUp: avatar.hangUp,
         onFrameRefused: (type) => {
           this.#log({ event: LOG_EVENT.FRAME_REFUSED, type: knownFrameType(type) });
         },

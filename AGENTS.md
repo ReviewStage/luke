@@ -57,7 +57,10 @@ the check names. A component is placed by review under the same rule.
   body an automation's caller sends may reach that run's agent task, transcript
   and traces. And, approved by Dean on 2026-10-15, an automation webhook secret
   may be shown once, in the window that minted it, at creation or rotation;
-  never anywhere else.
+  never anywhere else. And, approved
+  on 2026-10-13: the Keyframe session token for a call's own avatar may reach
+  the panel window, which runs that session, and never the voice window,
+  a Gateway answer or event, app state, a counted event, a trace, or a fixture.
 - Session replay records the rendered panel with every word masked
   (`apps/desktop/src/renderer/session-replay.ts`), so what leaves the machine is
   layout, not text; an unmasked attribute or a new way of drawing words is what

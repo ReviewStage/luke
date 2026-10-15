@@ -74,6 +74,14 @@ function performTell<Kind extends ActKind>(
 }
 
 /**
+ * An act whose answer nothing reads, for a caller outside React: the call
+ * window's avatar reports from the fiber running it, not from a render.
+ */
+export function tellAct<Kind extends ActKind>(kind: Kind, ...[payload]: ActArguments<Kind>): void {
+  performTell(send, kind, payload);
+}
+
+/**
  * The settings write, generic in the field it names. It is the act a row's
  * own press mints — there is no second way to write a setting.
  */

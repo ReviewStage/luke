@@ -8,6 +8,7 @@ import {
 import type { BuildCommit, UpdateSnapshot } from "@luke/settings/update";
 import type { AppSettings } from "@luke/settings/wire";
 import type { MicrophoneRoute, MicrophoneStatus, OutputAudioState } from "@luke/voice/audio";
+import type { AvatarState } from "@luke/voice/avatar";
 import type { VoiceView } from "@luke/voice/voice-view";
 import {
   isRecord,
@@ -96,6 +97,12 @@ interface AppVoiceSlice {
    * one: it travels on `app:voice-level-changed` as the stream it is.
    */
   view?: VoiceView;
+  /**
+   * Luke's avatar on the call, as the panel reports it: what puts the video
+   * tile at the top of the Call tab and what the tile draws. Main's rather than
+   * the voice window's, so a replaced voice window leaves it standing.
+   */
+  avatar: AvatarState;
 }
 
 /**

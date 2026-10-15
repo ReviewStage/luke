@@ -12,6 +12,7 @@
     "./automation-schedule": "./src/automation-schedule.js",
     "./automation-wire": "./src/automation-wire.js",
     "./automation-view": "./src/automation-view.js",
+    "./avatar-grant": "./src/avatar-grant.js",
     "./board-text": "./src/board-text.js",
     "./image-signature": "./src/image-signature.js",
     "./agent-tools": "./src/agent-tools.js",

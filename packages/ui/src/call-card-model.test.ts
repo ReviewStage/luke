@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { IDLE_PLANNING_VIEW, PLANNING_READ, type PlanningView } from "@luke/features/planning-view";
 import { LIVE_STATUS } from "@luke/live";
+import { AVATAR_END_REASON, AVATAR_OFF, AVATAR_STATUS, type AvatarState } from "@luke/voice/avatar";
 import { IDLE_VOICE_VIEW, type VoiceView } from "@luke/voice/voice-view";
 import { test } from "vitest";
-import { callBarPlanId, callCard, callCardShown } from "./call-card-model.js";
+import { callBarPlanId, callCard, callCardShown, callTabVideoStatus } from "./call-card-model.js";
 
 const INVITES = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const BILLING = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
@@ -127,4 +128,43 @@ test("the call bar is on screen only on a plan's document, and not under its ver
   assert.equal(callBarPlanId({ ...onPlan, sidePanelFullScreen: true }), undefined);
   assert.equal(callBarPlanId({ ...onPlan, documentPage: false }), undefined);
   assert.equal(callBarPlanId({ ...onPlan, plansTab: false }), undefined);
+});
+
+test("the Call tab draws the video on the call's own plan alone, while the call is in progress and the experiment is on", () => {
+  const live: AvatarState = { status: AVATAR_STATUS.LIVE };
+  const drawn = (view: VoiceView, avatar: AvatarState, planId: string, videoCalls = true) =>
+    callTabVideoStatus({ view, avatar, planId, videoCalls });
+  assert.equal(drawn(LISTENING, live, INVITES), AVATAR_STATUS.LIVE);
+  assert.equal(
+    drawn(LISTENING, { status: AVATAR_STATUS.STARTING }, INVITES),
+    AVATAR_STATUS.STARTING,
+  );
+  const restartable = { status: AVATAR_STATUS.ENDED, endReason: AVATAR_END_REASON.SERVER_CLOSED };
+  assert.equal(drawn(LISTENING, restartable, INVITES), AVATAR_STATUS.ENDED);
+  // Another plan's Call tab, a call that is over, or no avatar standing with the experiment off draws nothing.
+  assert.equal(drawn(LISTENING, live, BILLING), undefined);
+  assert.equal(drawn(IDLE_VOICE_VIEW, live, INVITES), undefined);
+  assert.equal(drawn(LISTENING, AVATAR_OFF, INVITES, false), undefined);
+  assert.equal(drawn(LISTENING, restartable, INVITES, false), undefined);
+});
+
+test("an avatar still standing when the experiment is turned off keeps its tile, and with it Video off", () => {
+  const drawn = (avatar: AvatarState) =>
+    callTabVideoStatus({ view: LISTENING, avatar, planId: INVITES, videoCalls: false });
+  assert.equal(drawn({ status: AVATAR_STATUS.LIVE }), AVATAR_STATUS.LIVE);
+  assert.equal(drawn({ status: AVATAR_STATUS.STARTING }), AVATAR_STATUS.STARTING);
+  // Once it is down, nothing offers to put it up again.
+  assert.equal(
+    drawn({ status: AVATAR_STATUS.ENDED, endReason: AVATAR_END_REASON.USER }),
+    undefined,
+  );
+});
+
+test("video the developer turned off stays offered to turn on again for as long as the call stands", () => {
+  const turnedOff = { status: AVATAR_STATUS.ENDED, endReason: AVATAR_END_REASON.USER };
+  const drawn = (view: VoiceView, avatar: AvatarState) =>
+    callTabVideoStatus({ view, avatar, planId: INVITES, videoCalls: true });
+  assert.equal(drawn(LISTENING, turnedOff), AVATAR_STATUS.OFF);
+  assert.equal(drawn(LISTENING, AVATAR_OFF), AVATAR_STATUS.OFF);
+  assert.equal(drawn(IDLE_VOICE_VIEW, turnedOff), undefined);
 });

@@ -220,6 +220,8 @@ export const GATEWAY_METHOD = {
   VOICE_REPORT_LIVE_TRANSPORT: "voice.reportLiveTransport",
   VOICE_REPORT_LIVE_ACTIVITY: "voice.reportLiveActivity",
   VOICE_STOP_SPEAKING: "voice.stopSpeaking",
+  /** Luke's avatar on the standing call asked for or taken down; whether the service was asked. The grant it draws never crosses here. */
+  VOICE_SET_VIDEO: "voice.setVideo",
   /** One live event the renderer's tap saw cross the data channel, for the host's development trace; a no-op where no writer stands. */
   VOICE_RECORD_TRACE: "voice.recordTrace",
   ANALYTICS_RECORD: "analytics.record",
@@ -393,6 +395,17 @@ export const voiceReportLiveActivityParamsSchema = Schema.Struct({ idle: Schema.
  * and the mute carries none of its meaning.
  */
 export const voiceStopSpeakingResultSchema = Schema.Struct({ stopped: Schema.Boolean });
+
+/** `voice.setVideo`: the developer turning Luke's avatar on or off on the standing call. */
+export const voiceSetVideoParamsSchema = Schema.Struct({ on: Schema.Boolean });
+
+/**
+ * What `voice.setVideo` answers: whether the service was asked. The avatar's
+ * grant answers the ask on the voice socket and goes from the host to the
+ * call window in process alone, so this answer never carries it, and nor
+ * does any Gateway event.
+ */
+export const voiceSetVideoResultSchema = Schema.Struct({ requested: Schema.Boolean });
 
 /** `voiceLiveSession.changed`: the phase the host's one session moved to, the id once the provider named one, and the reason of a close. */
 export const voiceLiveSessionChangedSchema = Schema.Struct({

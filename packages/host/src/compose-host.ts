@@ -331,6 +331,11 @@ export const hostAssemblyLayer: Layer.Layer<
         yield* Effect.forkScoped(Effect.ignore(account.session.refreshOnce()));
       }),
       drain,
+      avatar: {
+        states: live.service.avatarStates,
+        grants: live.service.avatarGrants,
+        closed: (reason) => live.service.closed(reason),
+      },
     };
     return assembly;
   }),

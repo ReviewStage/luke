@@ -236,6 +236,9 @@ function preloadRemoteConfig(key: string): void {
  * that the canvas option is set here rather than left to the library's
  * default, because the library reads it before the remote configuration and a
  * project that switched canvas recording on would otherwise turn it on here.
+ * The console and the network are kept out on the same terms, because this
+ * page runs Luke's avatar, whose LiveKit room names its session token in a
+ * refused join's address and in the console line that reports it.
  */
 const WORDS = new Set([
   "title",
@@ -250,6 +253,8 @@ const LAYOUT_HREFS = new Set(["link", "use"]);
 const SESSION_REPLAY_MASKING = {
   autocapture: false,
   capture_dead_clicks: false,
+  capture_performance: false,
+  enable_recording_console_log: false,
   mask_all_text: true,
   session_recording: {
     captureCanvas: { recordCanvas: false },

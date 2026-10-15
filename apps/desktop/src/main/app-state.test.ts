@@ -6,6 +6,7 @@ import { runModeFor } from "@luke/host";
 import { type AppState, sessionReplayBootstrap } from "@luke/host/app-state";
 import type { HostBootstrap } from "@luke/host/host-operator";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
+import { AVATAR_END_REASON, AVATAR_OFF, AVATAR_STATUS } from "@luke/voice/avatar";
 import { IDLE_VOICE_VIEW } from "@luke/voice/voice-view";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { Context, Effect, Fiber, Stream } from "effect";
@@ -13,6 +14,7 @@ import {
   AppStateStore,
   bootstrapPatch,
   initialAppState,
+  voiceWindowGone,
   voiceWindowState,
   windowAppState,
 } from "./app-state";
@@ -94,7 +96,7 @@ it.effect("a patch that says nothing new announces nothing on `changes`", () =>
     const seen = yield* watchChanges(app, 2, () => {
       app.update({});
       app.update({ audio: { microphoneStatus: MICROPHONE_STATUS.NOT_DETERMINED } });
-      app.update({ voice: {} });
+      app.update({ voice: { avatar: AVATAR_OFF } });
       // The one real patch is the second document `changes` ever carries; the
       // three no-ops before it wrote nothing for a collector to see.
       app.update({ audio: { microphoneStatus: MICROPHONE_STATUS.GRANTED } });
@@ -109,7 +111,7 @@ it("two slices in one patch are one version", () => {
   const app = store();
   app.update({
     audio: { microphoneStatus: MICROPHONE_STATUS.GRANTED },
-    voice: { view: IDLE_VOICE_VIEW },
+    voice: { view: IDLE_VOICE_VIEW, avatar: AVATAR_OFF },
   });
   assert.equal(app.snapshot().version, 1);
   assert.equal(app.snapshot().voice.view, IDLE_VOICE_VIEW);
@@ -130,11 +132,14 @@ it.effect("a touch re-announces the document without numbering it again", () =>
   }),
 );
 
-it("a voice window that went away leaves the document holding no view", () => {
+it("a voice window that went away leaves the document holding no view, and the avatar standing", () => {
   const app = store();
-  app.update({ voice: { view: { ...IDLE_VOICE_VIEW, talkOpening: true } } });
-  app.update({ voice: {} });
+  assert.deepEqual(app.snapshot().voice.avatar, AVATAR_OFF);
+  const ended = { status: AVATAR_STATUS.ENDED, endReason: AVATAR_END_REASON.SERVER_CLOSED };
+  app.update({ voice: { view: { ...IDLE_VOICE_VIEW, talkOpening: true }, avatar: ended } });
+  app.update({ voice: voiceWindowGone(app.snapshot().voice) });
   assert.equal(app.snapshot().voice.view, undefined);
+  assert.deepEqual(app.snapshot().voice.avatar, ended);
 });
 
 const BOOT: HostBootstrap = {

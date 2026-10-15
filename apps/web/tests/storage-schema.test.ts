@@ -86,6 +86,7 @@ const DECLARED_TABLES = [
   "turns",
   "user",
   "verification",
+  "voice_avatar_sessions",
   "voice_session_usage",
   "voice_sessions",
   "voice_transcript_segments",

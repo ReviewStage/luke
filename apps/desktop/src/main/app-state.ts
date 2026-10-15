@@ -5,6 +5,7 @@ import type { AppState } from "@luke/host/app-state";
 import type { HostBootstrap } from "@luke/host/host-operator";
 import { idleUpdateSnapshot } from "@luke/host/update-service";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
+import { AVATAR_OFF } from "@luke/voice/avatar";
 import { type Context, Effect, type Stream, SubscriptionRef } from "effect";
 import type { DesktopConfig } from "./services/desktop-config";
 
@@ -133,6 +134,16 @@ export function windowAppState<State extends Pick<AppState, "planning">>(
 }
 
 /**
+ * The voice slice once the voice window that reported its view is gone: no
+ * view, since an idle voice is what every panel draws in its place, and the
+ * avatar as it stood, since the panel holds the avatar rather than
+ * that window.
+ */
+export function voiceWindowGone(held: AppState["voice"]): AppState["voice"] {
+  return { avatar: held.avatar };
+}
+
+/**
  * The document as a launch begins it: this process's own facts, and an empty
  * standing for everything the host has not answered yet. Nothing here reads
  * a device or the host — the first bootstrap and the events after it are
@@ -162,7 +173,7 @@ export function initialAppState(
     update: idleUpdateSnapshot(config.appVersion, installSupported),
     audio: { microphoneStatus: MICROPHONE_STATUS.NOT_DETERMINED },
     hotkeys: { talkHeld: true },
-    voice: {},
+    voice: { avatar: AVATAR_OFF },
     planning: IDLE_PLANNING_VIEW,
     codingAgents: { unseen: [] },
     inbox: { waiting: [], plans: [], planless: [], automations: [] },

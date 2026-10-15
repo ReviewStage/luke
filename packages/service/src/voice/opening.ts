@@ -90,6 +90,8 @@ type Opened =
       planId: string;
       /** This connection's own name on the session's row, which a detach it writes must still match. */
       attachId: string;
+      /** The store's own id for the session's row, which its avatar rows name; none where the row is another account's. */
+      voiceSessionId: string | undefined;
       /**
        * Whether the session is already running: false for one just created
        * from a WebRTC offer, whose peer has yet to connect; true for one
@@ -415,6 +417,7 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
         accountId: account.accountId,
         planId: frame.planId,
         attachId,
+        voiceSessionId,
         started: false,
         sideband,
         answer,
@@ -464,6 +467,7 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
         accountId,
         planId: owned.planId,
         attachId,
+        voiceSessionId: owned.voiceSessionId,
         started: true,
         sideband,
         answer,

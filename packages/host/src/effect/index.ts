@@ -1,7 +1,7 @@
 export { hostAssemblyLayer } from "../compose-host.js";
 export { DuplicateGatewayMethod } from "../composer.js";
 export { layersInOrder } from "./composer.js";
-export { HostAssemblyTag, HostTag, hostStandingLayer } from "./host.js";
+export { HostAssemblyTag, type HostAvatar, HostTag, hostStandingLayer } from "./host.js";
 export { hostKernelLayer } from "./kernel.js";
 export {
   AppIdentity,

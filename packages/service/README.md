@@ -2380,6 +2380,47 @@ function and the maintenance sweep write `voice_sessions`; the seconds ledger an
 the user row. The seconds ledger meters nothing on its own: a session still
 counts one call when it opens.
 
+### Luke's avatar
+
+A call can show Luke on video: a Keyframe Labs avatar, lip-synced to his
+voice, at the top of the call's Call tab in the Mac's panel, while the
+developer has the Video calls experiment on in Settings › Experimental.
+The voice itself is untouched: GPT Live still runs over the Mac's WebRTC and this service's
+sideband, and the panel sends Keyframe Luke's synthesized audio straight from the Mac. What
+crosses this service is the session alone, as four frames in the service's
+own vocabulary on the device socket (`live-contract.ts`), read here and never
+forwarded to OpenAI (`frames.ts`): the device's `avatar.start` and
+`avatar.stop {reason}`, each naming the request id the Mac's host minted, and
+the service's answer to a start, `avatar.started {serverUrl,
+participantToken, agentIdentity}` or `avatar.unavailable {reason}`, the id
+echoed. `src/voice/avatar.ts` answers them in turn on one fiber of the
+session's scope, so a stop right behind its start closes what that start
+opened. A start mints a session through `src/voice/keyframe.ts`, one
+`POST /v1/sessions` on Keyframe's API under `KEYFRAME_API_KEY` naming the
+persona `LUKE_KEYFRAME_PERSONA_ID` (a stock persona), and hands its grant to
+the device socket and nowhere else: a grant joins once, so each start mints
+its own and none is kept, and the log keeps only the room's host. The key is
+the bearer of that one request. A failure is a fixed kind and Keyframe's
+status, never its body: 429 and 503 answer `no_capacity` (every session the
+plan allows is standing, and the call goes on as voice), anything else
+`error`, and a deployment missing either variable answers `not_configured`
+to every start and leaves the voice as it was.
+
+Each session minted is a `voice_avatar_sessions` row (the call's
+`voice_sessions` row, the account, the persona, when it started and ended,
+whole seconds rounded up, and why it ended), opened only on a voice row the
+account owns that is still open, and cascading with either. Keyframe answers
+no session id, so the seconds are this side's estimate from start to close,
+not Keyframe's meter. A row closes once, whichever close comes first: the
+device's stop (`user`, `server_closed`, or `error`, as the Mac reports
+it), the next start on the call, since a call holds one avatar, and the
+call's end (`call_ended`), at the hang-up or when the voice row closes,
+which is written first so a start racing it opens nothing. A close that
+missed is the maintenance sweep's to repair: when `orphan-sweep.ts` closes an
+orphaned voice row, the avatar rows open on it close behind it as
+`orphaned`, and every sweep then closes any avatar row still open on a call
+already closed, as of that call's own close.
+
 ### How a refusal looks
 
 Before any socket stands, an HTTP status on the upgrade: `401` for

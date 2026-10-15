@@ -30,6 +30,8 @@
         "src/renderer/session-recorder/index.ts",
         "src/renderer/terminal/index.ts",
         "src/renderer/terminal/index.css",
+        "src/renderer/avatar-feed/pcm-tee-worklet.ts",
+        "src/renderer/avatar-session/index.ts",
         "scripts/*.mjs",
         "electron-builder.ts"
       ],

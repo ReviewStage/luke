@@ -1,6 +1,6 @@
 import type { VoiceSecondsOutcome } from "@luke/database/models/quota";
 import type { LiveSessionTrace } from "@luke/voice/live-session";
-import type { HostedApiError } from "../core.js";
+import type { AvatarUnavailableReason, HostedApiError } from "../core.js";
 
 /**
  * What the service writes down about itself: status codes, close codes,
@@ -25,6 +25,10 @@ export const LOG_EVENT = {
   EXCHANGE_REPORTED: "exchange-reported",
   /** Luke asked the device to end the call once his goodbye has played; the event is all it says. */
   CALL_ENDING: "call-ending",
+  /** An avatar came up for the call: the host of the room Keyframe named, never the grant that joins it. */
+  AVATAR_STARTED: "avatar-started",
+  /** An avatar ask answered unavailable: the reason the device was sent, and Keyframe's status where it answered one. */
+  AVATAR_UNAVAILABLE: "avatar-unavailable",
   /** The device sent a frame the service does not admit; its socket was closed on it. */
   FRAME_REFUSED: "frame-refused",
   SESSION_ENDED: "session-ended",
@@ -54,7 +58,7 @@ export interface RelayCounts {
   bytesToDevice: number;
   /** Reflected audio frames dropped by type, never forwarded. */
   droppedAudio: number;
-  /** Reports in the service's own vocabulary the device sent after the handshake, read here and never forwarded. */
+  /** Reports and avatar asks in the service's own vocabulary the device sent after the handshake, read here and never forwarded. */
   reportsRead: number;
   /** Device frames the service refused, closing the socket; at most one, since the first ends the socket. */
   refusedUnpermitted: number;
@@ -70,6 +74,12 @@ export type LogEntry =
   | { event: typeof LOG_EVENT.EXCHANGE_FAILED }
   | { event: typeof LOG_EVENT.EXCHANGE_REPORTED; reason: string }
   | { event: typeof LOG_EVENT.CALL_ENDING }
+  | { event: typeof LOG_EVENT.AVATAR_STARTED; host: string }
+  | {
+      event: typeof LOG_EVENT.AVATAR_UNAVAILABLE;
+      reason: AvatarUnavailableReason;
+      status: number | undefined;
+    }
   | { event: typeof LOG_EVENT.FRAME_REFUSED; type: string | undefined }
   | ({
       event: typeof LOG_EVENT.SESSION_ENDED;

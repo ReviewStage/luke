@@ -6,11 +6,13 @@ import {
   type ProductSurfaceEventName,
   productEventFromWire,
 } from "@luke/features/analytics";
+import { type AvatarGrant, avatarGrantFromWire } from "@luke/features/avatar-grant";
 import { type VoiceLiveSessionChanged, voiceLiveSessionChangedSchema } from "@luke/gateway";
 import { type AgentWireTrace, isAgentWireTrace } from "@luke/gateway/devtrace";
 import { type Act, type ActOutcome, isActOutcome, parsedAct } from "@luke/host/acts";
 import { type AppStateSnapshot, isAppStateSnapshot } from "@luke/host/app-state";
 import { liveExchangeActive } from "@luke/live";
+import { type AvatarFeed, avatarFeedFromWire } from "@luke/voice/avatar";
 import {
   isVoiceCommand,
   isVoiceView,
@@ -140,6 +142,17 @@ export const BRIDGE = {
     kind: "send",
     channel: "app:record-agent-trace",
     args: args<[AgentWireTrace]>((v) => v.length === 1 && isAgentWireTrace(v[0])),
+  }),
+  /**
+   * One message of Luke's voice feed for his avatar, from the voice window
+   * alone, which main relays to the panel while the avatar is starting
+   * or live. A send rather than an act: it is 25 messages a second, and
+   * nothing reads an answer.
+   */
+  feedAvatar: entry({
+    kind: "send",
+    channel: "app:feed-avatar",
+    args: args<[AvatarFeed]>((v) => v.length === 1 && avatarFeedFromWire(v[0]) !== undefined),
   }),
   notifyReady: entry({ kind: "send", channel: "app:renderer-ready", args: noArgs }),
   recordSurfaceEvent: entry({
@@ -285,6 +298,31 @@ export const BRIDGE = {
     channel: "app:call-window-moved",
     args: noArgs,
     result: result<void>((v) => v === undefined),
+  }),
+  /**
+   * Keyframe's grant for the call's own avatar, sent to the panel window
+   * alone, or nothing once the session is to close. A one-shot rather
+   * than a slice of the document, because the document reaches every window
+   * and the grant may reach this one only.
+   */
+  onAvatarSession: entry({
+    kind: "subscribe",
+    channel: "app:avatar-session",
+    args: noArgs,
+    result: result<AvatarGrant | undefined>(
+      (value) => value === undefined || avatarGrantFromWire(value) !== undefined,
+    ),
+  }),
+  /**
+   * One message of Luke's voice feed, relayed to the panel window alone for
+   * the avatar to lip-sync. A reading that expires as the next
+   * chunk arrives, so nothing bootstraps from it.
+   */
+  onAvatarFeed: entry({
+    kind: "subscribe",
+    channel: "app:avatar-feed",
+    args: noArgs,
+    result: result<AvatarFeed>((value) => avatarFeedFromWire(value) !== undefined),
   }),
   /**
    * The call card's way back pressed, in the floating window or a panel's

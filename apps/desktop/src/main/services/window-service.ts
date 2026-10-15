@@ -24,7 +24,7 @@ import {
 } from "electron";
 import { channels } from "#shared/bridge";
 import { APP_COMMAND } from "#shared/shortcuts";
-import { type AppStateStore, voiceWindowState } from "../app-state";
+import { type AppStateStore, voiceWindowGone, voiceWindowState } from "../app-state";
 import { CallWindow } from "../window/call-window";
 import { CallWindowPresence } from "../window/call-window-presence";
 import { followDockIcon } from "../window/dock-icon";
@@ -181,8 +181,8 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       config.report(`Voice window replaced: ${reason}`);
       // The window that held the exchange is gone, so what every panel draws
       // in its place is an idle voice; the document says so by holding no
-      // view at all.
-      state.update({ voice: {} });
+      // view at all, and keeps the avatar, which the host and the panel say.
+      state.update({ voice: voiceWindowGone(state.snapshot().voice) });
       panels.setVoiceExchange(false);
     },
     onGaveUp: (reason) => {

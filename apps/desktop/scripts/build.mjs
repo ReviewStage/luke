@@ -348,6 +348,39 @@ await Promise.all([
     sourcemap: true,
     logLevel: "info",
   }),
+  // The avatar feed's AudioWorklet, its own bundle because a worklet loads a
+  // module by URL into a scope of its own on the audio thread; the voice
+  // window adds it from beside `voice.html`, whose `script-src 'self'` is the
+  // policy a worklet module answers to (`@luke/voice/avatar-pcm`).
+  build({
+    entryPoints: [path.join(appRoot, "src/renderer/avatar-feed/pcm-tee-worklet.ts")],
+    outfile: path.join(outputRoot, "renderer/pcm-tee-worklet.js"),
+    bundle: true,
+    platform: "browser",
+    format: "esm",
+    target: "chrome140",
+    minify: true,
+    sourcemap: true,
+    logLevel: "info",
+  }),
+  // A call's avatar, its own bundle so the bundle every window parses never
+  // carries Keyframe's SDK or the LiveKit client under it; the panel
+  // loads it the first time an avatar is shown
+  // (`@luke/ui/avatar-session-contract`).
+  build({
+    entryPoints: [path.join(appRoot, "src/renderer/avatar-session/index.ts")],
+    outfile: path.join(outputRoot, "renderer/avatar-session.js"),
+    bundle: true,
+    platform: "browser",
+    format: "iife",
+    target: "chrome140",
+    minify: true,
+    conditions: ["production"],
+    plugins: sentryPlugins(),
+    sourcemap: true,
+    logLevel: "info",
+    define: { "process.env.NODE_ENV": '"production"' },
+  }),
   build({
     entryPoints: [path.join(appRoot, "src/renderer/whiteboard/index.css")],
     outfile: path.join(outputRoot, "renderer/whiteboard.css"),

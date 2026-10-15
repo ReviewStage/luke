@@ -11,6 +11,9 @@
  * stops every composer in the reverse of the order it started. That close is
  * the whole quit, and there is no other order to run it in.
  */
+
+import type { AvatarStopReason } from "@luke/features";
+import type { AvatarGrant } from "@luke/features/avatar-grant";
 import {
   type GatewayHost,
   type GatewayShutdownOptions,
@@ -19,7 +22,8 @@ import {
   type NodeRegistry,
   shutdownGatewayEffect,
 } from "@luke/gateway";
-import { Context, Data, Deferred, Effect, Layer, Ref, type Scope } from "effect";
+import type { LiveAvatarState } from "@luke/voice/live-session";
+import { Context, Data, Deferred, Effect, Layer, Ref, type Scope, type Stream } from "effect";
 import type { Composer } from "../composer.js";
 import { layersInOrder } from "./composer.js";
 
@@ -79,6 +83,20 @@ export const hostDrain = /* @__PURE__ */ Effect.fn("host/hostDrain")(function* (
     });
 });
 
+/**
+ * Luke's avatar on the standing call, for the desktop's own process and
+ * nothing wider: no Gateway method or event carries any of it, because a
+ * grant carries the session's token and may reach the call window alone.
+ */
+export interface HostAvatar {
+  /** Where the avatar stands now, and then each time it moves. */
+  readonly states: Stream.Stream<LiveAvatarState>;
+  /** Each grant to the subscribers standing as it arrives, and nothing as the avatar it joined goes down; kept for no one. */
+  readonly grants: Stream.Stream<AvatarGrant | undefined>;
+  /** The call window's session closed while granted, and not by this side; answers whether the avatar was asked for again. */
+  readonly closed: (reason: AvatarStopReason) => boolean;
+}
+
 /** Everything constructed and linked, and nothing yet begun. */
 export interface HostAssembly {
   /** The one boundary a client reaches this host through. */
@@ -95,6 +113,7 @@ export interface HostAssembly {
    */
   readonly armed: Effect.Effect<void, never, Scope.Scope>;
   readonly drain: HostDrain;
+  readonly avatar: HostAvatar;
 }
 
 export class HostAssemblyTag extends Context.Service<HostAssemblyTag, HostAssembly>()(
