@@ -510,21 +510,59 @@ test("a task's card says who created it where others share its workspace, the re
   assert.deepEqual(details(OTHER, STAGE), []);
 });
 
-test("a task's card says you of the reader's own task outside a member directory, and treats a workspace the service counts no members of as shared unless it is the account's first", () => {
+test("a task's card says you of the reader's own task outside a member directory, and, where the service counts no members, says who created it only once the members read lists someone else", async () => {
   const { memberCount: _uncounted, ...stage } = STAGE;
-  const { memberCount: _alone, ...personal } = PERSONAL;
-  const lines = (plan: PlanSummary, workspaces: readonly Workspace[]) => {
-    const plans = plansControl({ me: DEAN.userId, workspaces: [...workspaces] });
-    const card = mount(planCardOf(plans, plan, plan.updatedAt));
+  const mine = { ...OTHER, workspaceId: STAGE.id, ownerId: DEAN.userId, createdBy: DEAN };
+  const lines = async (
+    workspace: Workspace,
+    members: readonly { userId: string; name: string }[] | undefined,
+  ) => {
+    installMembers(members);
+    const plans = plansControl({ me: DEAN.userId, workspaces: [PERSONAL, workspace] });
+    const card = mount(
+      members === undefined
+        ? planCardOf(plans, mine, mine.updatedAt)
+        : createElement(MemberDirectory, {
+            workspace,
+            readerId: DEAN.userId,
+            children: planCardOf(plans, mine, mine.updatedAt),
+          }),
+    );
+    await act(async () => {
+      for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+    });
     const said = [...card.querySelectorAll(".plan-card-detail")].map((line) =>
       heard(line).replace(/ · .*$/u, ""),
     );
     unmountAll();
     return said;
   };
-  const mine = { ...OTHER, workspaceId: STAGE.id, ownerId: DEAN.userId, createdBy: DEAN };
 
-  assert.deepEqual(lines(mine, [PERSONAL, STAGE]), ["Created by you"]);
-  assert.deepEqual(lines(mine, [PERSONAL, stage]), ["Created by you"]);
-  assert.deepEqual(lines({ ...mine, workspaceId: PERSONAL.id }, [personal, stage]), []);
+  assert.deepEqual(await lines(STAGE, undefined), ["Created by you"]);
+  assert.deepEqual(await lines(stage, [DEAN, CHARLES]), ["Created by you"]);
+  assert.deepEqual(await lines(stage, [DEAN]), []);
+  assert.deepEqual(await lines(stage, undefined), []);
 });
+
+/** The bridge answering the members read with `members`, each a member of the workspace. */
+function installMembers(members: readonly { userId: string; name: string }[] | undefined): void {
+  Object.defineProperty(window, "luke", {
+    configurable: true,
+    value: {
+      ...window.luke,
+      act: (request: Act): Promise<ActOutcome> =>
+        Promise.resolve(
+          request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ && members !== undefined
+            ? {
+                status: ACT_OUTCOME_STATUS.DONE,
+                value: members.map((member) => ({
+                  ...member,
+                  email: `${member.userId}@example.com`,
+                  role: WORKSPACE_ROLE.MEMBER,
+                })),
+              }
+            : { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Could not read." },
+        ),
+    },
+  });
+}

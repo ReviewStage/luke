@@ -9,7 +9,7 @@ import { repositoryPageUrl } from "@luke/ui/planning-model";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
 import { AttentionMark } from "../attention-mark";
 import { CardHead, CardRule, HoverCard } from "../hover-card";
-import { useCreator } from "../member-directory";
+import { useCreator, useMemberDirectory } from "../member-directory";
 import { agentTabLabel, pullRequestNumberLabel } from "../planning/coding-agent-model";
 import { PullRequestMark } from "../planning/pull-request-mark";
 import { RelativeTime } from "../planning/relative-time";
@@ -269,12 +269,16 @@ export function PlanCard({
   onOpenGitHub,
   onShowAgent,
   stranded,
-  shared = false,
+  shared,
   readerId,
 }: {
   plan: PlanSummary;
-  /** Whether others share the plan's workspace, where the card says who created it. */
-  shared?: boolean;
+  /**
+   * Whether others share the plan's workspace, where the card says who
+   * created it; unknown, it is whether the members read around the card
+   * lists anyone else.
+   */
+  shared?: boolean | undefined;
   /** The reader's account id, which says "you" of their own task outside a member directory. */
   readerId?: string | undefined;
   /** The catalog as last read, which names each agent's model; empty before the first read. */
@@ -291,6 +295,7 @@ export function PlanCard({
   stranded?: Workspace | undefined;
 }): React.JSX.Element {
   const { agents, repository } = plan;
+  const { members } = useMemberDirectory();
   const agentRows = agents?.agents.slice(0, CARD_ROWS.AGENTS) ?? [];
   const pullRequestRows = agents?.pullRequests.slice(0, CARD_ROWS.PULL_REQUESTS) ?? [];
   return (
@@ -302,7 +307,8 @@ export function PlanCard({
       {repository === null ? null : (
         <RepositoryDetail repository={repository} pictures={pictures} onOpenGitHub={onOpenGitHub} />
       )}
-      {shared && (plan.createdBy !== undefined || plan.ownerId !== undefined) ? (
+      {(shared ?? (members !== undefined && members.length > 1)) &&
+      (plan.createdBy !== undefined || plan.ownerId !== undefined) ? (
         <CreatorDetail plan={plan} readerId={readerId} now={now} />
       ) : null}
       {stranded === undefined ? null : (
@@ -350,17 +356,13 @@ export function PlanCard({
   );
 }
 
-/**
- * Whether others share a plan's workspace: more than one member counted, or,
- * from a service that counts none, any workspace but the account's first.
- */
+/** Whether others share a plan's workspace, as the service counts its members; unknown from a service that counts none. */
 function sharedWorkspace(
   plans: Pick<PlansControl, "workspaces">,
   plan: Pick<PlanSummary, "workspaceId">,
-): boolean {
-  const workspace = plans.workspaces.find((each) => each.id === plan.workspaceId);
-  if (workspace?.memberCount !== undefined) return workspace.memberCount > 1;
-  return workspace !== undefined && plans.workspaces[0]?.id !== workspace.id;
+): boolean | undefined {
+  const count = plans.workspaces.find((each) => each.id === plan.workspaceId)?.memberCount;
+  return count === undefined ? undefined : count > 1;
 }
 
 /**
