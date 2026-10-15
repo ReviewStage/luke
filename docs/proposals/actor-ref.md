@@ -1,6 +1,12 @@
 # Proposal: one look for whoever did it (ActorRef)
 
-Status: **design, awaiting Dean's decisions** (§6). Nothing is built.
+Status: **decided by Dean on 2026-10-15** and being built in the PR order in
+§5. Dean: "I agree with everything in the w2209 show except I want to go with
+B for shapes: circles for people and rounded squares for others. Also we
+should not use transparent backgrounds for Luke/agent squares." Decisions
+2–12 went as recommended (§6). Shipped: teammate photos (#2779) and the
+component with its first surfaces (#2784). In review: the rest (#2796,
+#2793, #2794, #2799).
 
 The design show lives at `docs/proposals/actor-ref/index.html`. It is one
 self-contained file that fetches nothing. It is built from the desktop
@@ -32,17 +38,21 @@ window anywhere:
 Only the reader's own sign-in picture travels (the sidebar, Settings, and
 their own versions).
 
-**The pick:** one round disc for every actor, at one size per place.
+**Decided (B):** a circle for every person, and a solid rounded square for
+Luke, a coding agent, and an automation, at one size per place.
 
-| Actor | On its disc |
+| Actor | Its mark |
 |---|---|
-| A person | Their sign-in photo, or the first letter of their name on one of the workspace tile's six hues, chosen from their id |
-| Luke | His face in his own blue, on a wash of it |
-| A coding agent | Its harness mark, swapped for the working mark while it writes, as its tab does |
-| An automation | Its clock, as its list row wears it |
-| A former member, or someone the service can't name | A quiet outline |
+| A person | A circle: their sign-in photo, or the first letter of their name on one of the workspace tile's six hues, chosen from their id |
+| Luke | A square: his face on his own blue (`--voice-luke`), in an ink that reads in both themes |
+| A coding agent | A square: its harness mark, swapped for the working mark while it writes, as its tab does, on a solid neutral tile (`--actor-tile`) |
+| An automation | A square: its clock, as its list row wears it, on the same tile |
+| A former member, or someone the service can't name | A quiet outline circle |
 
-The square stays the workspace tile's.
+No square is transparent. The workspace tile is a rounded square too, so an
+actor's square is kept apart from it three ways: it never holds a letter,
+its corner is 36% of its side against the tile's 25–28%, and the two stand
+in different places (a workspace tile only where a workspace is named).
 
 Every actor hangs a card on the shared card parts. A press opens what has a
 page, an agent or an automation. A person's card is for reading only.
@@ -184,7 +194,7 @@ padding, so the words around it keep their spacing.
 | 4 | Call tab: keep the caller's id through `transcript-model.ts`; the divider and senders | S–M, ~200 |
 | 5 | Agents and Inbox: "Started by" as an actor, picks and answers, the Mac place, and the account-wide Inbox's `startedBy` through the directory | M, ~300 |
 | 6 | Automations: `automationId` on the agent's summary and line, `AutomationCard`, "Started by [automation]" (experiment-gated) | M, ~300 |
-| 7 | Swap worker 292's agent chat senders and worker 293's ⋯ footer from name-only to `ActorRef`, once both land | S, ~80 |
+| 7 | Swap worker 292's agent chat senders and worker 293's ⋯ footer from name-only to `ActorRef`. Both landed (#2774, #2775) before PR 3 and 4 started, so the footer moved into PR 3 and the chat senders into PR 4, which already draw the same lines | (folded) |
 
 PR 1 ships alone. PRs 3–6 each stand on PR 2 and on nothing else, so they
 can run in parallel. PR 7 waits for 292 and 293. Each PR ships its tests
@@ -198,33 +208,35 @@ Nothing they do needs to wait. Their names should come from one helper
 (`teammateStarter`, or the `memberRef` they read), so PR 7 is a swap of the
 element and not a rewrite of the data.
 
-## 6. Decisions for Dean
+## 6. Decisions (Dean, 2026-10-15)
 
-1. **Shape.** A, one round disc for every actor (pick). B, tiles for
-   machines (GitHub's Primer). C, a corner badge on machines. Luke already
-   spends the square on the workspace, so B would make an agent read as one.
+Decision 1 went to B; 2–12 went as recommended.
+
+1. **Shape: B.** Circles for people, solid rounded squares for Luke, agents
+   and automations, kept distinct from the workspace tile (§1). (A, one disc
+   for every actor, was the first recommendation; C was a corner badge.)
 2. **A person with no photo.** The first letter of their name on one of the
-   workspace tile's six hues, chosen from their id (pick). Alternatives: two
+   workspace tile's six hues, chosen from their id (decided). Alternatives: two
    initials, or today's grey.
 3. **The person card.** Photo, name, "You", email, role, and latest
-   activity in this plan, with no press (pick, per Dean).
+   activity in this plan, with no press (decided, per Dean).
 4. **The "Edited by" line's press.** The actor hangs its card (an agent's
-   also opens its tab) and the time opens the version history (pick). Today
+   also opens its tab) and the time opens the version history (decided). Today
    the whole line opens the history.
-5. **Section bylines** drop "Edited by" and lead with the disc (pick).
+5. **Section bylines** drop "Edited by" and lead with the disc (decided).
 6. **"Changed since you last looked"** gains a facepile of who changed the
-   sections (pick).
+   sections (decided).
 7. **Luke's blue** stays on his disc only. Version history's blue name
-   reads in the same ink as everyone else's (pick).
+   reads in the same ink as everyone else's (decided).
 8. **Luke on the Call tab** is named over his lines only on a teammate's
-   call, where the teammate is named too (pick).
+   call, where the teammate is named too (decided).
 9. **An automation's agent** says "Started by [automation]", which needs
-   `automationId` on the agent's summary (pick).
+   `automationId` on the agent's summary (decided).
 10. **Former members** keep their name with a quiet outline and a "Former
     member" card, not a letter on a hue that looks like a current
-    teammate's (pick).
+    teammate's (decided).
 11. **A facepile counts "+N"** only where no words beside it count already
-    (pick).
+    (decided).
 12. **A person page:** not yet (§8).
 
 ## 7. How others draw mixed authors
