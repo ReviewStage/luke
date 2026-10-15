@@ -194,7 +194,7 @@ test("the dialog lists the other workspaces, disables one whose GitHub cannot re
   assert.deepEqual(
     [...moving.querySelectorAll(".move-effects li")].map((line) => line.textContent),
     [
-      "2 people in Studio lose access to it, its calls, and its agents.",
+      "Members of Studio who aren't in Acme lose access to it, its calls, and its agents.",
       "5 people in Acme can read and edit it.",
       "Its agents keep running, now in Acme.",
     ],

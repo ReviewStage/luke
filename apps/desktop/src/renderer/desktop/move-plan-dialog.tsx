@@ -72,17 +72,19 @@ function rowLine(workspace: Workspace, repository: string | null): string | unde
   return `${github} · can’t reach ${repository}`;
 }
 
-/** Who in the plan's workspace loses it: the others counted, nobody where the reader is alone, or its members where they are not counted. */
-function lossLine(from: Workspace | undefined): string {
+/**
+ * Who in the plan's workspace loses it: nobody where the reader is alone,
+ * else its members who are not in the workspace chosen too. Note that they
+ * are not counted, because the window knows how many each workspace holds
+ * but not who is in both, and one in both keeps the plan.
+ */
+function lossLine(from: Workspace | undefined, to: Workspace): string {
   const losing = "lose access to it, its calls, and its agents.";
-  if (from === undefined) return `Members of its workspace ${losing}`;
-  const { memberCount, name } = from;
-  if (memberCount === undefined) return `Members of ${name} ${losing}`;
-  if (memberCount <= 1) return `Nobody loses access: only you are in ${name}.`;
-  const others = memberCount - 1;
-  return others === 1
-    ? `1 person in ${name} loses access to it, its calls, and its agents.`
-    : `${others} people in ${name} ${losing}`;
+  if (from === undefined) return `Members of its workspace who aren't in ${to.name} ${losing}`;
+  if (from.memberCount !== undefined && from.memberCount <= 1) {
+    return `Nobody loses access: only you are in ${from.name}.`;
+  }
+  return `Members of ${from.name} who aren't in ${to.name} ${losing}`;
 }
 
 /** Who in the workspace chosen gains it: its members counted, or named as its members where they are not. */
@@ -201,7 +203,7 @@ function MovePlanCard({
       />
       {chosen === undefined ? null : (
         <ul className="move-effects">
-          <li>{lossLine(from)}</li>
+          <li>{lossLine(from, chosen)}</li>
           <li>{gainLine(chosen)}</li>
           <li>{`Its agents keep running, now in ${chosen.name}.`}</li>
         </ul>
