@@ -332,7 +332,8 @@ test("a path that climbs out of the repository names nothing", () => {
 test("every @ link outside code is one a writer keeps, whatever its target names", () => {
   const words = [
     "See [@Rollout](https://tryluke.dev/acme/plan/x#rollout), [@Linear](https://linear.app/a)",
-    "and `[@code](luke://file/a.ts)`, but not [plain](https://example.com).",
+    "and `[@code](luke://file/a.ts)`, but not [plain](https://example.com)",
+    "or the picture ![@Rollout mock](https://tryluke.dev/acme/plan/x/files/y).",
   ].join("\n");
 
   assert.deepEqual(

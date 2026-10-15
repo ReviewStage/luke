@@ -824,15 +824,22 @@ export function mentionMarkdown(mention: Mention, name: string, place: MentionPl
   return `[${label}](${encodeMention(mention, place)})`;
 }
 
+/** Whether the bracket at `at` opens a picture, `![…](…)`, rather than a link: its `!` stands before it, unescaped. */
+function opensPicture(text: string, at: number): boolean {
+  return text[at - 1] === "!" && text[at - 2] !== "\\";
+}
+
 /**
  * Every link whose label starts with `@` written into the words, in order,
  * standing outside code, where markdown draws no link, whatever its target
- * names: what a developer placed, which a writer must keep as it stands.
+ * names: what a developer placed, which a writer must keep as it stands. A
+ * picture whose alt text starts with `@` is a picture, never a mention.
  */
 export function mentionLinksIn(text: string): readonly MentionLink[] {
   const found: MentionLink[] = [];
   const opener = `[${MENTION_SIGIL}`;
   for (let at = text.indexOf(opener); at !== -1; at = text.indexOf(opener, at + 1)) {
+    if (opensPicture(text, at)) continue;
     const close = labelEnd(text, at);
     if (close === undefined || text[close + 1] !== "(" || insideCode(text, at)) continue;
     const targetEnd = text.indexOf(")", close + 2);
