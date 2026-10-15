@@ -11,12 +11,17 @@ import {
   type AutomationRunSummary,
 } from "@luke/features/automation-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import { LINK_PLACE } from "@luke/features/luke-link";
 import { ProviderMark } from "@luke/ui";
 import { ClockIcon, PlayIcon, WebhookIcon } from "lucide-react";
+import { useEffect, useRef } from "react";
+import { useCopyLinkItem } from "../copy-link-item";
 import { EmptyState } from "../empty-state";
+import { centreWithin, scrollerOf } from "../planning/code-pane";
 import { momentText, sinceText, useMinute } from "../planning/plan-time";
 import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { GLYPH_STATE, type GlyphState, StateGlyph, stateEndMark } from "../state-glyph";
+import { ActionMenu, useActionMenu } from "./action-menu";
 import { RUNS_PANEL_WIDTH, type RunsPanel } from "./folded-groups";
 import type { RunsRead } from "./use-automation-runs";
 import { EDGE_SIDE, useResizableEdge } from "./use-resizable-edge";
@@ -39,6 +44,9 @@ type AutomationFiringKind = AutomationFiring["kind"];
 
 /** Whose key a run ran on where the automation is another's, as its line names it. */
 const CREATOR = "its creator";
+
+/** What a run's right-click menu is called. */
+const RUN_ACTIONS = "Run actions";
 
 /** What the panel says while the automation has no run, over how to have one. */
 const NO_RUNS_TITLE = "No runs yet";
@@ -64,21 +72,32 @@ export function FiringGlyph({ kind }: { kind: AutomationFiringKind }): React.JSX
   }
 }
 
-/** One run's row, a press opening its agent where it started one. */
+/** One run's row, a press opening its agent where it started one, and its right-click there offering its Copy link; a run that started none is words alone. */
 function RunRow({
   run,
   keyHolder,
+  automationId,
+  linked,
   now,
   onOpenAgent,
 }: {
   run: AutomationRunSummary;
   keyHolder: string | undefined;
+  automationId: string | undefined;
+  /** Whether a link named this run, which marks it and brings it into view. */
+  linked: boolean;
   now: number;
   onOpenAgent: (agentId: string) => void;
 }): React.JSX.Element {
   const state = STANDING_GLYPH[automationRunStanding(run)];
   const line = automationRunLine(run, keyHolder);
   const glyph = <FiringGlyph kind={run.firing.kind} />;
+  const menu = useActionMenu(true);
+  const linkItem = useCopyLinkItem();
+  const copyLink =
+    automationId === undefined
+      ? undefined
+      : linkItem({ kind: LINK_PLACE.AUTOMATION_RUN, automationId, runId: run.id });
   const words = (
     <>
       <StateGlyph glyph={glyph} state={state} />
@@ -94,13 +113,51 @@ function RunRow({
       {stateEndMark(state, true)}
     </>
   );
+  const onContextMenu = copyLink === undefined ? undefined : menu.contextMenu();
+  // A run a link named is brought into the middle of the box that scrolls it, once, as it is drawn.
+  const row = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    const drawn = row.current;
+    const scroller = drawn === null ? undefined : scrollerOf(drawn);
+    if (linked && drawn !== null && scroller !== undefined) centreWithin(scroller, drawn);
+  }, [linked]);
+  const mark = linked ? { "aria-current": "true" as const, "data-run-linked": "" } : undefined;
   const { agent } = run;
-  return agent === null ? (
-    <div className="automation-run">{words}</div>
-  ) : (
-    <button type="button" className="automation-run" onClick={() => onOpenAgent(agent.id)}>
-      {words}
-    </button>
+  return (
+    <>
+      {agent === null ? (
+        <div
+          ref={(node) => {
+            row.current = node;
+          }}
+          className="automation-run"
+          {...mark}
+        >
+          {words}
+        </div>
+      ) : (
+        <button
+          ref={(node) => {
+            row.current = node;
+          }}
+          type="button"
+          className="automation-run"
+          onClick={() => onOpenAgent(agent.id)}
+          onContextMenu={onContextMenu}
+          {...mark}
+        >
+          {words}
+        </button>
+      )}
+      {menu.drawn === undefined || copyLink === undefined ? null : (
+        <ActionMenu
+          label={RUN_ACTIONS}
+          menu={menu.drawn}
+          groups={[[copyLink]]}
+          onClose={menu.close}
+        />
+      )}
+    </>
   );
 }
 
@@ -116,6 +173,8 @@ export function AutomationRunsPanel({
   panel,
   mine,
   created,
+  automationId,
+  linkedRun,
   runs,
   onRetry,
   onOpenAgent,
@@ -126,6 +185,10 @@ export function AutomationRunsPanel({
   mine: boolean;
   /** Whether the automation exists yet, so has runs to read. */
   created: boolean;
+  /** The automation's id, which a run's Copy link writes its link under; none before it is created. */
+  automationId: string | undefined;
+  /** The run a link named, marked and brought into view; none where no link named one. */
+  linkedRun?: string | undefined;
   runs: RunsRead;
   onRetry: () => void;
   onOpenAgent: (agentId: string) => void;
@@ -167,6 +230,8 @@ export function AutomationRunsPanel({
                 key={run.id}
                 run={run}
                 keyHolder={mine ? undefined : CREATOR}
+                automationId={automationId}
+                linked={run.id === linkedRun}
                 now={now}
                 onOpenAgent={onOpenAgent}
               />

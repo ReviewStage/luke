@@ -77,6 +77,17 @@ export function centreWithin(lines: HTMLElement, target: HTMLElement): void {
   lines.scrollTop += line.top + line.height / 2 - (box.top + box.height / 2);
 }
 
+/** The nearest box around an element that scrolls, which a reveal scrolls rather than every box around it; none where nothing around it scrolls. */
+export function scrollerOf(element: HTMLElement): HTMLElement | undefined {
+  for (let box = element.parentElement; box !== null; box = box.parentElement) {
+    const { overflowY } = window.getComputedStyle(box);
+    if ((overflowY === "auto" || overflowY === "scroll") && box.scrollHeight > box.clientHeight) {
+      return box;
+    }
+  }
+  return undefined;
+}
+
 /**
  * What a blank line's text holds, here and in a diff. Note that it is a
  * newline rather than nothing, because the gutter's number is left out of a

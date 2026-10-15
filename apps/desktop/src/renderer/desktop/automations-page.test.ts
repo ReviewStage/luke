@@ -11,6 +11,7 @@ import {
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
+  AUTOMATION_FIRING,
   AUTOMATION_RUN_STATUS,
   AUTOMATION_SCOPE,
   AUTOMATION_TARGET,
@@ -677,6 +678,28 @@ function button(name: string): HTMLButtonElement {
   return found;
 }
 
+/** The item of the menu standing open whose words are `name`. */
+function menuItem(name: string): HTMLButtonElement {
+  const found = [
+    ...document.querySelectorAll<HTMLButtonElement>(
+      '[role="menu"]:not([data-leaving]) [role="menuitem"]',
+    ),
+  ].find((each) => each.textContent === name);
+  assert.ok(found, `no menu item ${name}`);
+  return found;
+}
+
+/** The button of the dialog standing whose words are `name`. */
+function dialogButton(name: string): HTMLButtonElement {
+  const found = [
+    ...document.querySelectorAll<HTMLButtonElement>(
+      "[role=dialog] button, [role=alertdialog] button",
+    ),
+  ].find((each) => each.textContent === name);
+  assert.ok(found, `no dialog button ${name}`);
+  return found;
+}
+
 /** Types into a field as a developer would, so React hears the change. */
 function type(field: HTMLInputElement | HTMLTextAreaElement | null, value: string): void {
   assert.ok(field, "the field is drawn");
@@ -838,10 +861,11 @@ test("a deletion asks first, then goes back to the list without the automation",
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
   await settle();
 
-  act(() => button(`Delete ${SWEEP.name}`).click());
+  act(() => button("Automation actions").click());
+  act(() => menuItem("Delete").click());
   await settle();
   assert.deepEqual(deletes, []);
-  act(() => button("Delete").click());
+  act(() => dialogButton("Delete").click());
   await settle();
 
   assert.deepEqual(deletes, [SWEEP.id]);
@@ -1729,4 +1753,77 @@ test("a webhook not yet saved as one says it gets its address once it is saved",
   assert.equal(page.querySelector("input[aria-label='Webhook address']"), null);
   assert.match(page.textContent ?? "", /Save it as a webhook to get its address/u);
   assert.equal(pickerDetail(page, "Type"), "When its webhook is called");
+});
+
+test("an automation's ⋯ in its editor, its row's right-click in the list, and the right-click of a run that started an agent each offer Copy link, copying its link under the listed workspace", async () => {
+  runs = [
+    {
+      id: "6a1b2c3d-4e5f-4a6b-8c7d-8e9f0a1b2c3d",
+      firing: { kind: AUTOMATION_FIRING.MANUAL },
+      status: AUTOMATION_RUN_STATUS.STARTED,
+      reason: null,
+      agent: { id: CI_DIGEST.id, title: "Fix the flaky test", status: "running" },
+      firedAt: 1,
+      settledAt: 1,
+    },
+  ];
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+  act(() => button("Automation actions").click());
+  await act(async () => menuItem("Copy link").click());
+  const run = page.querySelector<HTMLElement>(".automation-run");
+  assert.ok(run, "the run is listed");
+  act(() => {
+    run.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+  });
+  await act(async () => menuItem("Copy link").click());
+  act(() => button("Automations").click());
+  await settle();
+  act(() => {
+    rowOf(page, SWEEP.name)
+      .querySelector(".automation-row-open")
+      ?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+  });
+  await act(async () => menuItem("Copy link").click());
+
+  const automationLink = `https://tryluke.dev/${WORKSPACE.id}/automation/${SWEEP.id}`;
+  assert.deepEqual(copied.slice(-3), [
+    automationLink,
+    `${automationLink}/run/6a1b2c3d-4e5f-4a6b-8c7d-8e9f0a1b2c3d`,
+    automationLink,
+  ]);
+});
+
+test("a link to a run opens its automation's editor with that run marked current among its runs", async () => {
+  runs = [
+    {
+      id: "1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f",
+      firing: { kind: AUTOMATION_TRIGGER.SCHEDULE, dueAt: 3 },
+      status: AUTOMATION_RUN_STATUS.STARTED,
+      reason: null,
+      agent: { id: CI_DIGEST.id, title: "Fix the flaky test", status: "running" },
+      firedAt: 3,
+      settledAt: 3,
+    },
+    {
+      id: "2d3e4f5a-6b7c-4d8e-9f0a-1b2c3d4e5f60",
+      firing: { kind: AUTOMATION_TRIGGER.SCHEDULE, dueAt: 2 },
+      status: AUTOMATION_RUN_STATUS.FAILED,
+      reason: "creator-left",
+      agent: null,
+      firedAt: 2,
+      settledAt: 2,
+    },
+  ];
+  const page = mountPages({
+    kind: AUTOMATIONS_PAGE.EDIT,
+    automationId: SWEEP.id,
+    runId: "2d3e4f5a-6b7c-4d8e-9f0a-1b2c3d4e5f60",
+  });
+  await settle();
+
+  assert.deepEqual(
+    [...page.querySelectorAll(".automation-run")].map((row) => row.getAttribute("aria-current")),
+    [null, "true"],
+  );
 });
