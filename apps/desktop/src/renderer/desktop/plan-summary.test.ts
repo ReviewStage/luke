@@ -1,0 +1,175 @@
+// @vitest-environment jsdom
+
+import assert from "node:assert/strict";
+import {
+  CHECK_SUMMARY,
+  CODING_AGENT_STATUS,
+  type CodingAgentPullRequest,
+  type CodingAgentSummary,
+  PULL_REQUEST_STATE,
+} from "@luke/features/coding-agent-wire";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
+import { act, createElement } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, test } from "vitest";
+import { onRegistry } from "#testing/copy-feedback";
+import { codingAgentsControl, plansControl } from "#testing/plans-control";
+import { PlanSummary, type SummaryLayout } from "./plan-summary";
+import type { HeldTranscripts } from "./strip-tabs";
+
+/**
+ * plan-summary.test.ts -- the summary's pull request row hangs the Changes
+ * card, whose agent opens through the door the plan hands it, the one that
+ * gives the plan's column the keys, and whose card previews the running
+ * agent's latest step while the plan's column shows that agent. Synthetic
+ * agents and pull requests throughout.
+ */
+
+const RUN_STARTED = 5_000;
+
+const AGENT: CodingAgentSummary = {
+  id: "1e3c5a7b-9d2f-4b6e-8a1c-3e5f7a9b1d2c",
+  planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
+  model: "anthropic/claude-opus-5.5",
+  effort: "high",
+  title: "Expiry job",
+  createdAt: 1,
+  status: CODING_AGENT_STATUS.RUNNING,
+  turnId: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c99",
+  runStartedAt: RUN_STARTED,
+};
+
+const PULL_REQUEST: CodingAgentPullRequest = {
+  number: 42,
+  title: "Expire invitations",
+  url: "https://github.com/acme/relay/pull/42",
+  state: PULL_REQUEST_STATE.OPEN,
+  checks: CHECK_SUMMARY.PASSING,
+  additions: 210,
+  deletions: 14,
+  changedFiles: 6,
+};
+
+/** What the agent's tab last drew: its run's one step so far. */
+const HELD: HeldTranscripts = {
+  agents: new Map([
+    [
+      AGENT.id,
+      {
+        messages: [
+          {
+            id: "m1",
+            role: "assistant",
+            parts: [{ type: "text", text: "Writing the expiry tests." }],
+          },
+        ],
+        status: CODING_AGENT_STATUS.RUNNING,
+        runStartedAt: RUN_STARTED,
+        title: undefined,
+        subagentTitles: new Map(),
+      },
+    ],
+  ]),
+  workers: new Map(),
+};
+
+/** The summary pinned beside the document, its card hung by nothing. */
+const PINNED: SummaryLayout = {
+  mode: "column",
+  wide: true,
+  card: undefined,
+  onToggle: () => undefined,
+  onExpand: () => undefined,
+  onDismiss: () => undefined,
+};
+
+let root: Root | undefined;
+
+afterEach(() => {
+  act(() => root?.unmount());
+  root = undefined;
+  document.body.innerHTML = "";
+});
+
+/** The summary of a plan whose running agent opened the pull request, the plan's column showing `shown`; every agent it opens recorded. */
+function mount(shown: "agent" | "plan") {
+  const opened: string[] = [];
+  const base = plansControl();
+  const plans = plansControl({
+    agents: codingAgentsControl({
+      agents: [AGENT],
+      agentIds: [AGENT.id],
+      models: [],
+      pullRequests: new Map([[AGENT.id, PULL_REQUEST]]),
+    }),
+    mainTabs: {
+      ...base.mainTabs,
+      tabs: [base.mainTabs.tab, { agent: AGENT.id }],
+      tab: shown === "agent" ? { agent: AGENT.id } : base.mainTabs.tab,
+    },
+  });
+  const page = document.createElement("div");
+  document.body.append(page);
+  root = createRoot(page);
+  act(() =>
+    root?.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(PlanSummary, {
+          plans,
+          layout: PINNED,
+          cardId: "summary-card",
+          inbox: { open: [], settled: [] },
+          held: HELD,
+          repository: "acme/relay",
+          onOpenAgent: (agentId) => opened.push(agentId),
+        }),
+      ),
+    ),
+  );
+  return { page, opened };
+}
+
+/** Rests the pointer on a control, which hangs its card. */
+function hover(control: Element): void {
+  act(() => {
+    control.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+  });
+}
+
+/** The agent named in the Changes card the pull request's row hangs. */
+function cardAgent(page: HTMLElement): HTMLButtonElement {
+  const row = [...page.querySelectorAll("button")].find((each) =>
+    each.textContent?.includes("Changes: Expiry job"),
+  );
+  assert.ok(row, "the pull request has a row");
+  hover(row);
+  const named = document.querySelector<HTMLButtonElement>(
+    '.tooltip-card .card-sub button.actor-ref[data-kind="agent"]',
+  );
+  assert.ok(named, "the Changes card names the agent");
+  return named;
+}
+
+test("the agent a pull request row's card names opens through the plan's door, which hands its column the keys", () => {
+  const { page, opened } = mount("plan");
+  const named = cardAgent(page);
+  act(() => named.click());
+  assert.deepEqual(opened, [AGENT.id]);
+});
+
+test("the agent's card hung from a Changes card previews its running step while the plan's column shows the agent, and says none while it shows another tab", () => {
+  const latestStep = (shown: "agent" | "plan") => {
+    const { page } = mount(shown);
+    hover(cardAgent(page));
+    const words = [...document.querySelectorAll(".tooltip-card [data-tab-card]")]
+      .map((card) => card.textContent ?? "")
+      .join(" | ");
+    act(() => root?.unmount());
+    root = undefined;
+    document.body.innerHTML = "";
+    return words;
+  };
+  assert.match(latestStep("agent"), /Writing the expiry tests\./u);
+  assert.doesNotMatch(latestStep("plan"), /Writing the expiry tests\./u);
+});

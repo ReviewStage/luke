@@ -14,6 +14,7 @@ import { test } from "vitest";
 import { PullRequestLine } from "../desktop/plan-card";
 import { ChangesCard } from "./agent-changes-tab";
 import { PublishedChip, PublishedRow } from "./agent-published";
+import { agentSubject, NOTHING_HELD } from "./agent-ref";
 
 /**
  * pull-request-mark.test.ts -- a pull request reads the same wherever the
@@ -66,7 +67,17 @@ function places(drawn: CodingAgentPullRequest): ReadonlyMap<string, ReactElement
     ["transcript row", createElement(PublishedRow, { pullRequest: drawn, openGitHub: ignore })],
     [
       "Changes card",
-      createElement(ChangesCard, { agent: AGENT, agentLabel: "Invite flow", pullRequest: drawn }),
+      createElement(ChangesCard, {
+        subject: agentSubject(
+          { agents: [AGENT], archived: [], models: [], me: undefined, pullRequests: new Map() },
+          AGENT.id,
+          NOTHING_HELD,
+          false,
+        ),
+        models: [],
+        pullRequest: drawn,
+        onOpenAgent: ignore,
+      }),
     ],
   ]);
 }
