@@ -60,7 +60,7 @@ import { OpenPlanProvider } from "./planning/use-open-link";
 import { usePlansTab } from "./planning/use-plans-tab";
 import { applySessionReplay } from "./session-replay";
 import { settingsRowsInput } from "./settings/settings-panel";
-import { followSettingsLink } from "./settings-link";
+import { followSettingsLink, useSettingsWorkspace } from "./settings-link";
 import { useSignInFaceCycle } from "./sign-in-gate";
 import { ToastHost } from "./toast";
 import { useUpdatedToast } from "./update-toast";
@@ -93,8 +93,6 @@ export function App(): React.JSX.Element {
   const outputAudio = state?.audio.outputAudio;
   const [tab, setTab] = useStateWithRef<PanelTab>(PANEL_TAB.PLANS);
   const [settingsView, setSettingsView] = useStateWithRef<SettingsView>(SETTINGS_VIEW.ACCOUNT);
-  /** The workspace Settings' Workspace page shows, where a link or its picker named one; the sidebar's otherwise. */
-  const [settingsWorkspaceId, setSettingsWorkspaceId] = useState<string>();
   /** The settings the panel is drawing: the document's own. */
   const settings = useMemo(
     () => (state?.settings ? appSettingsView(state.settings) : undefined),
@@ -138,7 +136,7 @@ export function App(): React.JSX.Element {
   const changeTab = useCallback(
     (next: PanelTab) => {
       setTab(next);
-      // Arriving at the tab is arriving at its first page, Account: a page
+      // Arriving at the tab is arriving at its first page, Profile: a page
       // left open behind a tab switch would greet the next visit with a
       // corner of the settings rather than the settings. A flow that needs
       // another page sets it right after this reset.
@@ -151,17 +149,20 @@ export function App(): React.JSX.Element {
     },
     [setSettingsView, setTab],
   );
+  // Where a link's workspace is handed, read through a ref, because the
+  // workspace Settings shows is held beside the Plans tab, built after the opener.
+  const linkWorkspace = useRef<(workspaceId: string) => void>(() => undefined);
   /**
-   * Opens Settings at the place a link names: its page, the workspace the
-   * Workspace page shows, and its section, which is looked for once drawn
-   * and given up on by itself.
+   * Opens Settings at the place a link names: the workspace it names, which
+   * the Workspace page shows while Settings stays open; its page; and its
+   * section, which is looked for once drawn and given up on by itself.
    */
   const openSettings = useCallback(
     (link: SettingsLink) => {
       followSettingsLink(link, {
         changeTab,
         changeView: setSettingsView,
-        changeWorkspace: setSettingsWorkspaceId,
+        chooseWorkspace: (workspaceId) => linkWorkspace.current(workspaceId),
       });
     },
     [changeTab, setSettingsView],
@@ -274,10 +275,16 @@ export function App(): React.JSX.Element {
     inboxPlanless: state?.inbox.planless ?? NOTHING_PLANLESS,
     voice: { view: voiceView, listening, requestMicrophoneAccess },
     onOpenSettings: (link) => openSettings(link),
-    // Through the one opener, so a workspace an earlier link chose is not left showing.
     onOpenIntegrations: () => openSettings({ page: SETTINGS_VIEW.INTEGRATIONS }),
     onOpenApiKeys: () => openSettings({ page: SETTINGS_VIEW.CODING_AGENTS }),
   });
+  // The workspace Settings shows: the sidebar's, or one a link named while Settings stays open.
+  const settingsWorkspace = useSettingsWorkspace({
+    listedId: plans.workspace?.id,
+    workspaces: plans.workspaces,
+    settingsShown: tab === PANEL_TAB.SETTINGS,
+  });
+  linkWorkspace.current = settingsWorkspace.link;
   // A coding agent's notification clicked: the Plans tab, on that agent,
   // its plan's tab or its own page where it has no plan. Read through refs,
   // because the tab hands new closures each render and the subscription is
@@ -516,15 +523,11 @@ export function App(): React.JSX.Element {
     onStopHotkeyChange: changeStopHotkey,
     onCapture: changeShortcutCapture,
   };
-  // The Workspace page shows the workspace a link or its picker chose, the sidebar's otherwise.
+  // The Workspace page shows the workspace the sidebar lists, or one a link named.
   const workspace = {
     workspaces: plans.workspaces,
-    workspaceId: settingsWorkspaceId ?? plans.workspace?.id,
-    onChooseWorkspace: setSettingsWorkspaceId,
-    onLeft: (workspaceId: string) => {
-      plans.onLeftWorkspace(workspaceId);
-      setSettingsWorkspaceId(undefined);
-    },
+    workspaceId: settingsWorkspace.shownId,
+    onLeft: plans.onLeftWorkspace,
     listFailed: plans.listFailed,
     onRetryList: plans.onRetryList,
   };

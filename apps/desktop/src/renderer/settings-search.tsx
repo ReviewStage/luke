@@ -261,11 +261,11 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
     input.workspace
       ? {
           id: SETTINGS_SECTION.GITHUB_REPOSITORIES,
-          label: "Integrations",
+          label: "GitHub",
           page: SETTINGS_VIEW.WORKSPACE,
           haystack: [
-            "Integrations",
-            "GitHub repositories connect choose manage disconnect organization",
+            "GitHub",
+            "Integrations repositories connect choose manage disconnect organization",
           ],
         }
       : undefined,

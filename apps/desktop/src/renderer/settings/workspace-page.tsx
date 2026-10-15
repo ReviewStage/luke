@@ -28,21 +28,21 @@ import { Segmented } from "../segmented";
 import { SpinnerRegion } from "../spinner";
 import { ConfirmDialog, useConfirmDialog } from "./confirm-dialog";
 import { MenuRow } from "./menu-row";
-import { SelectRow } from "./select-row";
 import { ReadFailed, SettingsGroup } from "./settings-group";
 
 /**
- * workspace-page.tsx -- Settings' Workspace page: one workspace the account is in, its members, and its GitHub integration.
+ * workspace-page.tsx -- Settings' Workspace page: the workspace the sidebar lists, its members, and its GitHub.
  *
- * A picker at the page's head chooses the workspace, the one the sidebar
- * lists until another is chosen or a link names one, and says the account's
- * role in it; under it an owner or an admin renames the workspace in place
- * and uploads or removes its photo.
+ * The page shows the workspace the plans' sidebar lists and no other, so
+ * there is one choice of workspace in the window: a Settings link that names
+ * another lists it in the sidebar first. Its head says the account's role in
+ * it, and under it an owner or an admin renames the workspace in place and
+ * uploads or removes its photo.
  * The workspace then lists its members as the service holds
  * them now, each with its email and role. An owner or an admin invites
  * people by address and role, sees the invitations still pending with each
  * one's accept link to copy and send, and cancels one; removes a member who
- * is not an owner; and anyone but an owner leaves. Integrations, the one
+ * is not an owner; and anyone but an owner leaves. GitHub, the one
  * place a workspace's repositories are set, connects one GitHub account's
  * installation of the Luke GitHub App to the workspace for an owner or an
  * admin, or says GitHub is connected with Manage, whose menu holds Choose
@@ -547,14 +547,12 @@ function WorkspaceGitHub({ workspace }: { workspace: Workspace }): React.JSX.Ele
   );
 }
 
-/** What Settings' Workspace page is handed: the workspaces, the one the page shows, the picker, and the fall back after a leave. */
+/** What Settings' Workspace page is handed: the workspaces, the one the sidebar lists, and the fall back after a leave. */
 export interface WorkspaceSettingsControl {
   /** Every workspace the account is a member of, its first one first. */
   workspaces: readonly Workspace[];
-  /** The workspace the page shows, absent before the workspaces are read. */
+  /** The workspace the sidebar lists, which the page shows; absent before the workspaces are read. */
   workspaceId: string | undefined;
-  /** Shows another workspace on the page, as its picker chose it. */
-  onChooseWorkspace: (workspaceId: string) => void;
   /** Lists the first other workspace where the workspace left was the one listed. */
   onLeft: (workspaceId: string) => void;
   /** Whether the read the workspaces arrive with failed, so none will arrive until it is asked again. */
@@ -563,7 +561,7 @@ export interface WorkspaceSettingsControl {
   onRetryList: () => void;
 }
 
-/** The workspace the page shows: the one named, else the first; none before the workspaces are read. */
+/** The workspace the page shows: the one the sidebar lists, else the first; none before the workspaces are read. */
 export function shownWorkspace(
   control: Pick<WorkspaceSettingsControl, "workspaces" | "workspaceId">,
 ): Workspace | undefined {
@@ -759,24 +757,13 @@ function WorkspacePhoto({ workspace }: { workspace: Workspace }): React.JSX.Elem
   );
 }
 
-/** The page's head: the picker, saying under its name the account's role in the workspace chosen, and for an owner or an admin the workspace's name to rename and its photo to set. */
-function WorkspaceHead({
-  control,
-  workspace,
-}: {
-  control: WorkspaceSettingsControl;
-  workspace: Workspace;
-}): React.JSX.Element {
+/** The page's head: the account's role in the workspace, and for an owner or an admin the workspace's name to rename and its photo to set. */
+function WorkspaceHead({ workspace }: { workspace: Workspace }): React.JSX.Element {
   return (
     <SettingsGroup>
-      <SelectRow
-        label="Workspace"
-        detail={`Your role: ${ROLE_WORDS[workspace.role]}`}
-        value={workspace.id}
-        options={control.workspaces.map((each) => ({ value: each.id, label: each.name }))}
-        parse={(raw) => control.workspaces.find((each) => each.id === raw)?.id}
-        onChange={control.onChooseWorkspace}
-      />
+      <div className="settings-row">
+        <RowCopy name="Your role" line={ROLE_WORDS[workspace.role]} />
+      </div>
       {managesWorkspace(workspace) ? (
         <Fragment key={workspace.id}>
           <WorkspaceName workspace={workspace} />
@@ -788,8 +775,8 @@ function WorkspaceHead({
 }
 
 /**
- * The page for one workspace: its head, its members, and its integrations,
- * GitHub's row under the anchor its links have always named; held back, as a
+ * The page for the listed workspace: its head, its members, and its GitHub,
+ * under the anchor its links have always named; held back, as a
  * page still reading is, before the workspaces are read, and Retry where that
  * read failed.
  */
@@ -812,14 +799,14 @@ export function WorkspacePage({
   }
   return (
     <>
-      <WorkspaceHead control={control} workspace={workspace} />
+      <WorkspaceHead workspace={workspace} />
       <SettingsGroup title="Members" anchor={SETTINGS_SECTION.MEMBERS}>
         <Fragment key={workspace.id}>
           {managesWorkspace(workspace) ? <Invitations workspaceId={workspace.id} /> : null}
           <TeamMembers workspace={workspace} onLeft={() => control.onLeft(workspace.id)} />
         </Fragment>
       </SettingsGroup>
-      <SettingsGroup title="Integrations" anchor={SETTINGS_SECTION.GITHUB_REPOSITORIES}>
+      <SettingsGroup title="GitHub" anchor={SETTINGS_SECTION.GITHUB_REPOSITORIES}>
         <WorkspaceGitHub key={workspace.id} workspace={workspace} />
       </SettingsGroup>
     </>

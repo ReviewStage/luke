@@ -251,7 +251,6 @@ test("Settings says a page's failed read alike in its card's place, the keys and
       control: {
         workspaces: [],
         workspaceId: undefined,
-        onChooseWorkspace: ignore,
         onLeft: ignore,
         listFailed: true,
         onRetryList: () => {

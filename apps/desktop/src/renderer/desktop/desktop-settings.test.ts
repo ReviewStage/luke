@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
+import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
 import { settingsView } from "@luke/settings/testing";
@@ -16,41 +17,70 @@ import { APP_COMMAND } from "#shared/shortcuts";
 import { onRegistry } from "#testing/copy-feedback";
 import { runAppCommand } from "../app-commands";
 import type { SettingsPanelProps } from "../settings/settings-panel";
+import type { WorkspaceSettingsControl } from "../settings/workspace-page";
 import { DesktopSettings } from "./desktop-settings";
 import { SIDEBAR_OVERLAY } from "./sidebar-collapse";
 
 /**
  * Settings as the desktop draws it: the sidebar is the one list of pages,
- * Account first, and every option moved by the one-home layout is drawn on
- * its new page and on no other, as the search finds it there too. The
- * Integrations page's own search stands beside the sidebar's: Command-F
- * lands in the nearer one, and a sidebar result that opens an integration
- * hands its query down.
+ * grouped under the workspace the plans' sidebar lists, Account, and This
+ * Mac, opening on Profile, and every option moved by the one-home layout is
+ * drawn on its new page and on no other, as the search finds it there too.
+ * The Workspace page is titled with the listed workspace and follows the
+ * sidebar. The Integrations page's own search stands beside the sidebar's:
+ * Command-F lands in the nearer one, and a sidebar result that opens an
+ * integration hands its query down.
  */
 
 const ignore = () => undefined;
 const accepted = () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
 
-/** The sidebar's pages, in the order the approved layout lists them. */
-const PAGE_TITLES = [
-  "Account",
-  "Workspace",
-  "Coding agents",
-  "Integrations",
-  "Plan template",
-  "Voice",
-  "Appearance",
-  "Notifications",
-  "This Mac",
-  "Experimental",
-  "About",
-  "Keyboard shortcuts",
+/** The sidebar's groups and their rows, in the order the approved layout lists them, where no workspace is listed to head the first. */
+const PAGE_GROUPS = [
+  { heading: "Workspace", rows: ["Members and GitHub"] },
+  {
+    heading: "Account",
+    rows: ["Profile", "Coding agents", "Integrations", "Plan template", "Experimental"],
+  },
+  {
+    heading: "This Mac",
+    rows: ["Voice", "Appearance", "Notifications", "This Mac", "About", "Keyboard shortcuts"],
+  },
 ];
+
+/** Every row the sidebar lists, which is also each page's title but the Workspace page's. */
+const PAGE_TITLES = PAGE_GROUPS.flatMap((group) => group.rows);
+
+const ACME: Workspace = {
+  id: "workspace-acme",
+  name: "Acme",
+  slug: "acme",
+  role: WORKSPACE_ROLE.ADMIN,
+  github: null,
+};
+const PERSONAL: Workspace = {
+  id: "workspace-personal",
+  name: "Dana Reyes",
+  slug: "dana-reyes",
+  role: WORKSPACE_ROLE.OWNER,
+  github: null,
+};
+
+/** The Workspace page's control with `listed` the workspace the plans' sidebar lists. */
+function listing(listed: Workspace): WorkspaceSettingsControl {
+  return {
+    workspaces: [PERSONAL, ACME],
+    workspaceId: listed.id,
+    onLeft: ignore,
+    listFailed: false,
+    onRetryList: ignore,
+  };
+}
 
 /** Each moved option's words, the one page that holds it, and the name the search finds its row by where that differs. */
 const HOMES = [
-  { words: "Sign out", page: "Account" },
-  { words: "Delete account", page: "Account" },
+  { words: "Sign out", page: "Profile" },
+  { words: "Delete account", page: "Profile" },
   { words: "Talk to Luke", page: "Voice" },
   { words: "Stop Luke", page: "Voice" },
   { words: "Notify me when a coding agent finishes or needs me", page: "Notifications" },
@@ -109,8 +139,12 @@ function settingsProps(view: SettingsView, onViewChange: (view: SettingsView) =>
   } satisfies SettingsPanelProps;
 }
 
-/** Settings holding its own page, as the app holds it, opened on Account. */
-function SettingsHarness(): React.JSX.Element {
+/** Settings holding its own page, as the app holds it, opened on Profile, over the workspaces the plans' sidebar lists where it is handed them. */
+function SettingsHarness({
+  workspace,
+}: {
+  workspace?: WorkspaceSettingsControl;
+}): React.JSX.Element {
   const [view, setView] = useState<SettingsView>(SETTINGS_VIEW.ACCOUNT);
   return createElement(DesktopSettings, {
     sidebar: {
@@ -129,13 +163,14 @@ function SettingsHarness(): React.JSX.Element {
       onBack: ignore,
       onForward: ignore,
     },
-    settings: settingsProps(view, setView),
+    settings: { ...settingsProps(view, setView), ...(workspace ? { workspace } : undefined) },
     call: undefined,
     onExit: ignore,
   });
 }
 
 let root: Root | undefined;
+let registry = AtomRegistry.make();
 
 beforeEach(() => {
   Object.defineProperty(window, "matchMedia", {
@@ -166,8 +201,32 @@ function mount(element: React.ReactElement): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
-  act(() => root?.render(onRegistry(AtomRegistry.make(), element)));
+  registry = AtomRegistry.make();
+  act(() => root?.render(onRegistry(registry, element)));
   return container;
+}
+
+/** Draws the mounted root again over `element`, as a new render of the app hands Settings new props. */
+function redraw(element: React.ReactElement): void {
+  act(() => root?.render(onRegistry(registry, element)));
+}
+
+/** An element's words as a reader hears them, what is hidden from a screen reader left out. */
+function spoken(element: Element): string {
+  const copy = element.cloneNode(true);
+  assert.ok(copy instanceof Element);
+  for (const hidden of copy.querySelectorAll('[aria-hidden="true"]')) hidden.remove();
+  return copy.textContent ?? "";
+}
+
+/** The sidebar's groups as they read: each heading and the rows under it. */
+function pageGroups(page: HTMLElement): { heading: string; rows: string[] }[] {
+  return [...page.querySelectorAll('nav[aria-label="Settings pages"] .settings-nav-group')].map(
+    (group) => ({
+      heading: spoken(group.querySelector("h2") ?? assert.fail("a group without a heading")),
+      rows: [...group.querySelectorAll("li button")].map((each) => each.textContent ?? ""),
+    }),
+  );
 }
 
 /** The sidebar's pages, by name. */
@@ -187,15 +246,33 @@ function openPage(page: HTMLElement, title: string): HTMLElement {
   return drawn;
 }
 
-test("Settings opens on Account, and its sidebar lists every page once, in the approved order", () => {
+test("Settings opens on Profile, and its sidebar lists every page once under Workspace, Account, and This Mac where no workspace is listed", () => {
   const page = mount(createElement(SettingsHarness));
-  assert.deepEqual(
-    pageButtons(page).map((each) => each.textContent),
-    PAGE_TITLES,
-  );
+  assert.deepEqual(pageGroups(page), PAGE_GROUPS);
   const current = pageButtons(page).find((each) => each.getAttribute("aria-current") === "page");
-  assert.equal(current?.textContent, "Account");
-  assert.equal(page.querySelector(".settings-page-title")?.textContent, "Account");
+  assert.equal(current?.textContent, "Profile");
+  assert.equal(page.querySelector(".settings-page-title")?.textContent, "Profile");
+});
+
+test("the sidebar's first group is headed by the listed workspace's name, over its Members and GitHub", () => {
+  const page = mount(createElement(SettingsHarness, { workspace: listing(ACME) }));
+  assert.deepEqual(
+    pageGroups(page).map((group) => group.heading),
+    ["Acme", "Account", "This Mac"],
+  );
+  assert.deepEqual(pageGroups(page)[0]?.rows, ["Members and GitHub"]);
+});
+
+test("the Workspace page is titled with the workspace the sidebar lists, and follows the sidebar when it lists another", () => {
+  const page = mount(createElement(SettingsHarness, { workspace: listing(PERSONAL) }));
+  openPage(page, "Members and GitHub");
+  const first = page.querySelector(".settings-page-title")?.textContent;
+
+  redraw(createElement(SettingsHarness, { workspace: listing(ACME) }));
+
+  assert.equal(first, "Dana Reyes");
+  assert.equal(page.querySelector(".settings-page-title")?.textContent, "Acme");
+  assert.equal(pageGroups(page)[0]?.heading, "Acme");
 });
 
 test("every moved option is drawn on its one page and on no other", () => {
