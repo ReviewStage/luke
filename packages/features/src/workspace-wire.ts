@@ -1,5 +1,6 @@
 import { Schema as EffectSchema } from "effect";
 import { workspaceIdSchema } from "./plan-wire.js";
+import { countedNumber } from "./service-wire.js";
 
 /**
  * workspace-wire.ts -- the workspaces an account is a member of, a workspace it creates, and the GitHub organization an admin connects to one, as the desktop reads and asks for them.
@@ -118,6 +119,8 @@ export const workspaceSchema = EffectSchema.Struct({
   role: EffectSchema.Literals(Object.values(WORKSPACE_ROLE)),
   /** The GitHub account its connected installation is on, or null where none is connected. */
   github: EffectSchema.NullOr(workspaceGithubSchema),
+  /** How many members it has, the account among them, which the window says as who shares it; absent from a service before it. */
+  memberCount: EffectSchema.optionalKey(countedNumber),
 });
 
 export type Workspace = typeof workspaceSchema.Type;

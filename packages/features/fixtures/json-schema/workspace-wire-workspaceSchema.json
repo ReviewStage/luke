@@ -42,6 +42,10 @@
           "type": "null"
         }
       ]
+    },
+    "memberCount": {
+      "type": "number",
+      "minimum": 0
     }
   },
   "required": [

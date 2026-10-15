@@ -83,6 +83,8 @@ const WorkspaceRowSchema = Schema.Struct({
   login: Schema.NullOr(Schema.String),
   /** The workspace's installation's status, or null where none is connected. */
   status: Schema.NullOr(Schema.String),
+  /** How many members the workspace has, the account among them. */
+  memberCount: Schema.Number,
 });
 
 const findPersonalWorkspace = SqlSchema.findOneOption({
@@ -179,7 +181,7 @@ const findMemberWorkspace = SqlSchema.findOneOption({
     ),
 });
 
-/** The workspaces the account is a member of, or the one named among them, as rows. */
+/** The workspaces the account is a member of, or the one named among them, as rows, each with how many members it has, counted apart from the account's own row the read joins. */
 function workspaceRows(db: DatabaseShape, userId: string, organizationId?: string) {
   return db
     .select({
@@ -190,6 +192,7 @@ function workspaceRows(db: DatabaseShape, userId: string, organizationId?: strin
       role: member.role,
       login: githubInstallation.accountLogin,
       status: githubInstallation.status,
+      memberCount: sql<number>`(select count(*)::int from ${member} as "members" where "members"."organization_id" = ${organization.id})`,
     })
     .from(member)
     .innerJoin(organization, eq(organization.id, member.organizationId))
@@ -234,6 +237,7 @@ function workspaceOfRow(row: typeof WorkspaceRowSchema.Type): Workspace {
       row.login === null
         ? null
         : { login: row.login, active: row.status === GITHUB_INSTALLATION_STATUS.ACTIVE },
+    memberCount: row.memberCount,
   };
 }
 

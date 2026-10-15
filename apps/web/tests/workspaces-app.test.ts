@@ -9,6 +9,7 @@ import {
 } from "@luke/database/models/workspace-seams";
 import { ensurePersonalWorkspace } from "@luke/database/models/workspace-store";
 import { member, organization, user } from "@luke/database/schemas/auth";
+import { joinWorkspace } from "@luke/database/testing";
 import { GITHUB_INSTALL_STATUS, HOSTED_SERVICE_PATH } from "@luke/features";
 import {
   workspaceInvitationAnswerSchema,
@@ -285,6 +286,7 @@ it.effect(
             slug: `personal-${ada}`,
             role: WORKSPACE_ROLE.OWNER,
             github: null,
+            memberCount: 1,
           },
         ]);
         assert.deepEqual(second, first);
@@ -318,6 +320,7 @@ it.effect(
             slug: "acme-platform",
             role: WORKSPACE_ROLE.OWNER,
             github: null,
+            memberCount: 1,
           },
         );
         assert.notEqual(again.id, acme.id);
@@ -1142,4 +1145,25 @@ it.effect(
         assert.deepEqual({ status: made.status, body: made.body }, unauthenticated);
       }).pipe(Effect.provide(plugin.database));
     }),
+);
+
+it.effect("each workspace says how many members it has, to every member alike", () =>
+  Effect.gen(function* () {
+    const { seams, database } = yield* openWorkspacePlugin;
+    yield* Effect.gen(function* () {
+      const ada = yield* openGithubAccount("Ada Lovelace");
+      const grace = yield* openGithubAccount("Grace Hopper");
+      const github = githubReaching([]);
+      const acme = yield* createAs(seams, github, ada, "Acme");
+      yield* joinWorkspace(acme.id, grace);
+
+      const countOf = (workspaces: readonly { id: string; memberCount?: number }[]) =>
+        workspaces.find((each) => each.id === acme.id)?.memberCount;
+      assert.equal(countOf(yield* workspacesOf(seams, github, ada)), 2);
+      assert.equal(countOf(yield* workspacesOf(seams, github, grace)), 2);
+      // The account's first workspace holds the account alone.
+      const [first] = yield* workspacesOf(seams, github, grace);
+      assert.equal(first?.memberCount, 1);
+    }).pipe(Effect.provide(database));
+  }),
 );
