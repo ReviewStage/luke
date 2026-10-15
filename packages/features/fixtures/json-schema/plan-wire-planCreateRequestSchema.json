@@ -3,7 +3,6 @@
   "properties": {
     "name": {
       "type": "string",
-      "minLength": 1,
       "maxLength": 200
     },
     "workspaceId": {
@@ -23,8 +22,6 @@
       ]
     }
   },
-  "required": [
-    "name"
-  ],
+  "required": [],
   "additionalProperties": false
 }

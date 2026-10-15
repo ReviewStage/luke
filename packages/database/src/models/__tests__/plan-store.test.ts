@@ -141,3 +141,24 @@ it.layer(getTestDB())("a plan's pin", (it) => {
     }),
   );
 });
+
+it.layer(getTestDB())("a plan's starting name", (it) => {
+  it.effect("a plan started with no name, or a blank one, stands as Untitled", () =>
+    Effect.gen(function* () {
+      const owner = yield* openAccount;
+      const organizationId = yield* openWorkspace(owner);
+      const unnamed = yield* createPlan(owner, { organizationId });
+      const blank = yield* createPlan(owner, { organizationId, name: "   " });
+      const named = yield* createPlan(owner, { organizationId, name: "  Rate limits  " });
+
+      assert.deepEqual(
+        [unnamed.name, blank.name, named.name],
+        ["Untitled", "Untitled", "Rate limits"],
+      );
+      assert.equal(
+        Option.getOrUndefined(yield* readPlan(owner, unnamed.id))?.plan.name,
+        "Untitled",
+      );
+    }),
+  );
+});

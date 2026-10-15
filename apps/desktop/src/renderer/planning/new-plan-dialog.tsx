@@ -24,8 +24,9 @@ import type { PlansControl } from "./use-plans-tab";
  * repositories, under where they come from. The chip leads the card's foot with Cancel and Create task at its
  * end, as the feedback dialog's screenshot button leads its own. The field
  * takes focus, Tab stays inside the card, and focus goes back to whatever
- * opened it. The name is one line, so Return creates the plan with any
- * modifier held; Escape, Cancel, and a press on the dimmed window put the
+ * opened it. The name is optional: a plan started with none stands as
+ * "Untitled" until the developer renames it. The name is one
+ * line, so Return creates the plan with any modifier held; Escape, Cancel, and a press on the dimmed window put the
  * card away with nothing started, its words with it. Nothing typed here
  * reaches the model as conversation. The repository starts on the one the
  * press chose (a repository group's +), else the one the newest plan in the
@@ -119,7 +120,7 @@ function NewPlanCard({ newPlan }: { newPlan: PlansControl["newPlan"] }): React.J
       ? null
       : chosen;
   const repository = pick === undefined ? (repositories.recent[0] ?? null) : pick;
-  const canStart = name.trim().length > 0 && !starting;
+  const canStart = !starting;
 
   const start = () => {
     if (!canStart) return;
@@ -167,7 +168,7 @@ function NewPlanCard({ newPlan }: { newPlan: PlansControl["newPlan"] }): React.J
         className="dialog-name-field"
         aria-label="Task name"
         aria-keyshortcuts={shortcutAria(CREATE_CHORD)}
-        placeholder="Task name"
+        placeholder="Task name (optional)"
         maxLength={PLAN_BOUNDS.MAX_NAME_CHARS}
         spellCheck
         value={name}

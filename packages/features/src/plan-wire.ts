@@ -49,6 +49,9 @@ export const PLAN_BOUNDS = {
   MAX_WORKSPACE_ID_CHARS: 200,
 } as const;
 
+/** The name a plan started without one stands under until the developer renames it. */
+export const UNTITLED_PLAN_NAME = "Untitled";
+
 /** A text settled with its ends trimmed, refused when nothing but whitespace stands, and bounded. */
 function trimmedText(maximumChars: number) {
   return EffectSchema.Trim.check(EffectSchema.isNonEmpty(), EffectSchema.isMaxLength(maximumChars));
@@ -104,13 +107,16 @@ export type PlanDocument = typeof planDocumentSchema.Type;
 const repositoryChoiceSchema = EffectSchema.NullOr(githubRepositoryFullNameSchema);
 
 /**
- * Starting a plan (POST): its name, the repository it is about where one is
- * chosen, and the workspace it starts in where one is named, the account's
- * first workspace where none is; the document starts as the untouched
- * template.
+ * Starting a plan (POST): its name where one is given, the repository it is
+ * about where one is chosen, and the workspace it starts in where one is
+ * named, the account's first workspace where none is; the document starts as
+ * the untouched template. A name left out, or nothing but whitespace, starts
+ * the plan as `UNTITLED_PLAN_NAME` until it is renamed.
  */
 export const planCreateRequestSchema = EffectSchema.Struct({
-  name: trimmedText(PLAN_BOUNDS.MAX_NAME_CHARS),
+  name: EffectSchema.optionalKey(
+    EffectSchema.Trim.check(EffectSchema.isMaxLength(PLAN_BOUNDS.MAX_NAME_CHARS)),
+  ),
   workspaceId: EffectSchema.optionalKey(workspaceIdSchema),
   repository: EffectSchema.optionalKey(repositoryChoiceSchema),
 });

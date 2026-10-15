@@ -8,6 +8,7 @@ import {
   type PlanLastEdit,
   type PlanSectionEdit,
   type PlanSummary,
+  UNTITLED_PLAN_NAME,
 } from "@luke/features/plan-wire";
 import { and, desc, eq, exists, inArray, isNotNull, isNull, type SQL, sql } from "drizzle-orm";
 import { Data, DateTime, Effect, Option, Schema } from "effect";
@@ -108,10 +109,14 @@ export interface StoredPlan {
   readonly sectionWriters: readonly PlanSectionWriter[];
 }
 
-/** A plan to start: the workspace it starts in, its name, and the repository it is about where one is chosen. */
+/**
+ * A plan to start: the workspace it starts in, its name where one is given,
+ * and the repository it is about where one is chosen. A plan started with no
+ * name, or a blank one, stands as `UNTITLED_PLAN_NAME` until it is renamed.
+ */
 export interface NewPlan {
   readonly organizationId: string;
-  readonly name: string;
+  readonly name?: string;
   readonly repository?: string | null;
 }
 
@@ -660,17 +665,20 @@ export function readStartedText(userId: string, createdAt: number): PlanStoreEff
  * Starts a plan under the account, in the workspace it was handed, as one
  * document, a copy of the account's own template or the default where it
  * keeps none, with the repository it was handed; it stands first in the
- * list. Note that the template is copied, not referred to, because an edit
- * of the template must leave every plan started from it as it stands.
+ * list. A plan handed no name, or a blank one, starts as
+ * `UNTITLED_PLAN_NAME`. Note that the template is copied, not referred to,
+ * because an edit of the template must leave every plan started from it as
+ * it stands.
  */
 export function createPlan(userId: string, started: NewPlan): PlanStoreEffect<Plan> {
   return Effect.gen(function* () {
     const now = yield* DateTime.nowAsDate;
     const template = yield* readPlanTemplate(userId);
+    const named = started.name?.trim() ?? "";
     const row = yield* insertPlan({
       userId,
       organizationId: started.organizationId,
-      name: started.name,
+      name: named.length > 0 ? named : UNTITLED_PLAN_NAME,
       repository: started.repository ?? null,
       document: template ?? DEFAULT_PLAN_TEMPLATE,
       now,
