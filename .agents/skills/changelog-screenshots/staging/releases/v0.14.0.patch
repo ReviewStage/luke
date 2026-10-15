@@ -22,7 +22,7 @@ index 6fe9302e8..8a207c832 100644
  async function performAct<Kind extends ActKind>(
    send: (request: Act) => Promise<ActOutcome>,
 diff --git a/apps/desktop/src/renderer/app.tsx b/apps/desktop/src/renderer/app.tsx
-index 2a9bea48b..f2ad28d0a 100644
+index c5f8c6423..b74c30532 100644
 --- a/apps/desktop/src/renderer/app.tsx
 +++ b/apps/desktop/src/renderer/app.tsx
 @@ -62,6 +62,9 @@ import { usePlansTab } from "./planning/use-plans-tab";
@@ -32,10 +32,10 @@ index 2a9bea48b..f2ad28d0a 100644
 +import { shotAccount } from "./shots/account";
 +import { shotSpec, shotUpdate } from "./shots/shot-profiles";
 +import { useShotStaging } from "./shots/use-shot-staging";
- import { useSignInFaceCycle } from "./sign-in-gate";
  import { ToastHost } from "./toast";
  import { useUpdatedToast } from "./update-toast";
-@@ -90,7 +93,9 @@ export function App(): React.JSX.Element {
+ import { useAppState, useExperiment } from "./use-app-state";
+@@ -88,7 +91,9 @@ export function App(): React.JSX.Element {
    // window's own facts beside it. There is no second reading to reconcile
    // against: what arrives is the whole document at a version that only rises.
    const state = useAppState();
@@ -46,7 +46,7 @@ index 2a9bea48b..f2ad28d0a 100644
    const outputAudio = state?.audio.outputAudio;
    const [tab, setTab] = useStateWithRef<PanelTab>(PANEL_TAB.PLANS);
    const [settingsView, setSettingsView] = useStateWithRef<SettingsView>(SETTINGS_VIEW.ACCOUNT);
-@@ -107,7 +112,7 @@ export function App(): React.JSX.Element {
+@@ -105,7 +110,7 @@ export function App(): React.JSX.Element {
      setFeedbackAbout(about);
      setFeedbackKind(FEEDBACK_KIND.FEEDBACK);
    }, []);
@@ -55,7 +55,7 @@ index 2a9bea48b..f2ad28d0a 100644
    /**
     * Which stretch of unbroken silence is on screen, advanced each time one
     * begins. A "Got it" is remembered against the stretch it answered, so it
-@@ -271,8 +276,8 @@ export function App(): React.JSX.Element {
+@@ -262,8 +267,8 @@ export function App(): React.JSX.Element {
      microphoneStatus: state?.audio.microphoneStatus ?? MICROPHONE_STATUS.NOT_DETERMINED,
      shown: tab === PANEL_TAB.PLANS,
      unseenAgents: state?.codingAgents.unseen ?? NO_UNSEEN_AGENTS,
@@ -66,7 +66,7 @@ index 2a9bea48b..f2ad28d0a 100644
      inboxPlanless: state?.inbox.planless ?? NOTHING_PLANLESS,
      voice: { view: voiceView, listening, requestMicrophoneAccess },
      onOpenSettings: (link) => openSettings(link),
-@@ -407,6 +412,18 @@ export function App(): React.JSX.Element {
+@@ -398,6 +403,18 @@ export function App(): React.JSX.Element {
    // and the sign-in gate draws no sidebar at all.
    const automationsOn = useExperiment(EXPERIMENT.AUTOMATIONS);
    const sidebar = useSidebarCollapse(state?.run.fixtureMode === true);
@@ -85,7 +85,7 @@ index 2a9bea48b..f2ad28d0a 100644
  
    const caption = useCaptionPresentation({
      lukeCaptions,
-@@ -515,7 +532,7 @@ export function App(): React.JSX.Element {
+@@ -506,7 +523,7 @@ export function App(): React.JSX.Element {
      onOpenSettings: () => tell(ACT_KIND.MICROPHONE_OPEN_SETTINGS),
    };
    const updates: UpdateControl = {
@@ -94,7 +94,7 @@ index 2a9bea48b..f2ad28d0a 100644
      build: {
        packaged: state.run.packaged,
        ...(state.run.commit ? { commit: state.run.commit } : undefined),
-@@ -619,7 +636,7 @@ export function App(): React.JSX.Element {
+@@ -609,7 +626,7 @@ export function App(): React.JSX.Element {
                          },
                        }}
                        settings={{
@@ -103,7 +103,7 @@ index 2a9bea48b..f2ad28d0a 100644
                          onSignOut: async () => {
                            await act(ACT_KIND.ACCOUNT_SIGN_OUT);
                          },
-@@ -673,7 +690,7 @@ export function App(): React.JSX.Element {
+@@ -663,7 +680,7 @@ export function App(): React.JSX.Element {
                        rows: settingsRowsInput({
                          settings,
                          microphone,
@@ -113,10 +113,10 @@ index 2a9bea48b..f2ad28d0a 100644
                        }),
                        onViewChange: setSettingsView,
 diff --git a/apps/desktop/src/renderer/desktop/desktop-plans.tsx b/apps/desktop/src/renderer/desktop/desktop-plans.tsx
-index ce23565ac..9ef2c8a5a 100644
+index 42c8eef03..f01122a46 100644
 --- a/apps/desktop/src/renderer/desktop/desktop-plans.tsx
 +++ b/apps/desktop/src/renderer/desktop/desktop-plans.tsx
-@@ -52,6 +52,7 @@ import { SIDE_PANEL_TAB } from "../planning/use-side-panel";
+@@ -47,6 +47,7 @@ import { SIDE_PANEL_TAB } from "../planning/use-side-panel";
  import { workRowsOf } from "../planning/work-model";
  import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
  import { ConfirmDialog } from "../settings/confirm-dialog";
@@ -124,7 +124,7 @@ index ce23565ac..9ef2c8a5a 100644
  import { Skeleton } from "../skeleton";
  import { SPINNER_SIZE, Spinner } from "../spinner";
  import { useExperiment } from "../use-app-state";
-@@ -716,7 +717,9 @@ function PlanDocument({
+@@ -712,7 +713,9 @@ function PlanDocument({
                </div>
                {/* Note that a call of the plan's own still stands, so it can be
              ended, when only a race left one on a plan just archived. */}
@@ -136,10 +136,10 @@ index ce23565ac..9ef2c8a5a 100644
                    {captions}
                    <CallBar
 diff --git a/apps/desktop/src/renderer/desktop/desktop-sidebar.tsx b/apps/desktop/src/renderer/desktop/desktop-sidebar.tsx
-index 58a65141e..4ee0c69cc 100644
+index 73d6b78fc..6d2828a06 100644
 --- a/apps/desktop/src/renderer/desktop/desktop-sidebar.tsx
 +++ b/apps/desktop/src/renderer/desktop/desktop-sidebar.tsx
-@@ -39,6 +39,7 @@ import { inColumn, type PinnedTab } from "../planning/use-side-panel";
+@@ -47,6 +47,7 @@ import { inColumn, type PinnedTab } from "../planning/use-side-panel";
  import { ReadFailure } from "../read-failure";
  import { RepositoryPicture } from "../repository-picture";
  import { Shortcut } from "../shortcut";
@@ -147,10 +147,10 @@ index 58a65141e..4ee0c69cc 100644
  import { Skeleton, SkeletonRegion } from "../skeleton";
  import { commandKeyshortcuts, Tooltip } from "../tooltip";
  import { useExperiment } from "../use-app-state";
-@@ -817,10 +818,16 @@ export function DesktopSidebar({
-     plans.onNewPlanIn(repository);
-   };
-   const folds = useFoldedGroups(sidebar.staged);
+@@ -1004,10 +1005,16 @@ function SidebarColumn({
+   const reader = useMemberDirectory();
+   // Only a workspace somebody shares has creators to group by.
+   const shared = (plans.workspace?.memberCount ?? 1) > 1;
 -  const unread = useUnreadPlans([...plans.plans, ...plans.archived], {
 +  const unreadPlans = useUnreadPlans([...plans.plans, ...plans.archived], {
      listRead: plans.listRead,
@@ -166,7 +166,7 @@ index 58a65141e..4ee0c69cc 100644
    const edge = useSidebarEdge(sidebar, sidebar.onToggle);
    const current = (planId: string) => onPlans && !standingIn && planId === plans.activePlanId;
 diff --git a/apps/desktop/src/renderer/desktop/plan-summary.tsx b/apps/desktop/src/renderer/desktop/plan-summary.tsx
-index da7e74880..7f3e0d13f 100644
+index 73bc80039..e2a12a0f9 100644
 --- a/apps/desktop/src/renderer/desktop/plan-summary.tsx
 +++ b/apps/desktop/src/renderer/desktop/plan-summary.tsx
 @@ -14,6 +14,7 @@ import type { CodingAgentsControl } from "../planning/use-coding-agents";
@@ -240,27 +240,27 @@ index d03d3f624..60d2b0478 100644
  /**
   * The call a fixture run's status row and transcript read: listening, about
 diff --git a/apps/desktop/src/renderer/planning/use-plan-looks.ts b/apps/desktop/src/renderer/planning/use-plan-looks.ts
-index 037f14dbd..d8aa0a4fa 100644
+index 6d4706535..1df7745dd 100644
 --- a/apps/desktop/src/renderer/planning/use-plan-looks.ts
 +++ b/apps/desktop/src/renderer/planning/use-plan-looks.ts
-@@ -9,6 +9,7 @@ import { Duration, Effect, Option, Schema } from "effect";
- import { AsyncResult, Atom } from "effect/reactivity";
+@@ -8,6 +8,7 @@ import {
+ import { Option, Schema } from "effect";
+ import { Atom } from "effect/reactivity";
  import { useEffect, useState } from "react";
- import { rendererRuntime } from "../renderer-runtime";
 +import { currentShot } from "../shots/shot-profiles";
  
  /**
   * use-plan-looks.ts -- what changed since the developer last looked at a plan on this Mac: the open plan's sections, and the sidebar's unread plans.
-@@ -232,7 +233,8 @@ export function usePlanLooks(plan: Plan | undefined, readerId: string | undefine
-   }, [looked, planId, watch]);
+@@ -243,7 +244,8 @@ export function usePlanLooks(plan: Plan | undefined, readerId: string | undefine
+   }, [planId, watch]);
  
    return {
 -    changed: current.changed,
 +    // Throwaway: a changelog shot never lights sections changed since a look (`shots/`).
 +    changed: currentShot() === undefined ? current.changed : NOTHING_CHANGED,
      dismiss: () => {
-       setVisit((held) => (held.planId === planId ? { ...held, changed: NOTHING_CHANGED } : held));
-       if (planId !== undefined && newest !== undefined)
+       setVisit((held) =>
+         held.planId === planId ? { ...held, mark: held.opened, changed: NOTHING_CHANGED } : held,
 diff --git a/apps/desktop/src/renderer/planning/use-plans-tab.ts b/apps/desktop/src/renderer/planning/use-plans-tab.ts
 index bd3514860..6add14e3a 100644
 --- a/apps/desktop/src/renderer/planning/use-plans-tab.ts
