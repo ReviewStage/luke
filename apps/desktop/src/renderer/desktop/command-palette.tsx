@@ -45,11 +45,12 @@
 
 import { PLAN_TREE_BOUNDS, PLAN_TREE_ENTRY, type PlanSummary } from "@luke/features/plan-wire";
 import type { PlanCodeShowing, PlanningTreeAnswer } from "@luke/features/planning-view";
-import type { Workspace } from "@luke/features/workspace-wire";
+import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { SETTINGS_PAGE_LIST, type SettingsView } from "@luke/settings/settings-views";
 import { GearIcon, SearchIcon } from "@luke/ui";
+import { teammateCreator } from "@luke/ui/actor-model";
 import { DOCUMENT_REGION } from "@luke/ui/planning-model";
-import { matchesTokens, searchTokens } from "@luke/ui/search-tokens";
+import { matchesTokens, matchRanges, searchTokens } from "@luke/ui/search-tokens";
 import { Command, defaultFilter } from "cmdk";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -64,6 +65,7 @@ import {
   SHORTCUT_KEY,
   type ShortcutChord,
 } from "#shared/shortcuts";
+import { ACTOR_SIZE, ActorMark } from "../actor-ref";
 import { appCommandOffered, runAppCommand, useAppCommand } from "../app-commands";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { AgentCard, agentSubject, NOTHING_HELD } from "../planning/agent-ref";
@@ -72,6 +74,7 @@ import { refusalLine } from "../planning/file-tab-model";
 import { TAB_KIND, tabLook } from "../planning/tab-look";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { SIDE_PANEL_TABS } from "../planning/use-side-panel";
+import { useWorkspaceMembers } from "../planning/use-workspace-members";
 import { workRowsOf } from "../planning/work-model";
 import { Highlighted } from "../search-field";
 import { settingsPageOf } from "../settings/pages";
@@ -223,8 +226,10 @@ interface PaletteRow {
   detail?: string | undefined;
   /** The workspace a plan is in where that is not the one listed, named by its tile and name before the detail. */
   workspace?: Workspace | undefined;
-  /** The mark at the row's end: a failed agent's. */
+  /** The mark at the row's end: a failed agent's, or a teammate's task's creator's face. */
   endMark?: React.JSX.Element | undefined;
+  /** A task's creator's name, said after the detail where the query found it. */
+  creator?: string | undefined;
   /** The card the row hangs beside it while the pointer rests on it: an agent's tab's. */
   card?: React.ReactNode;
   /** The chord an action's row draws as keys. */
@@ -374,19 +379,36 @@ function planDetail(plan: PlanSummary, archived: boolean): string | undefined {
  * them, naming its workspace and found by its name, since opening one
  * switches the window to it.
  */
-function planRows(plans: PlansControl, open: (planId: string) => void): readonly PaletteRow[] {
+function planRows(
+  plans: PlansControl,
+  members: readonly WorkspaceMember[] | undefined,
+  open: (planId: string) => void,
+): readonly PaletteRow[] {
   const listedId = plans.workspace?.id;
+  // Note that only the listed workspace's members are read, so another workspace's creator stands by the wire's name, never as having left.
+  const creatorOf = (plan: PlanSummary) =>
+    teammateCreator(plan, {
+      members: plan.workspaceId === listedId ? members : undefined,
+      readerId: plans.me,
+    });
   const elsewhereOf = (plan: PlanSummary): Workspace | undefined =>
     listedId === undefined || plan.workspaceId === listedId
       ? undefined
       : plans.workspaces.find((each) => each.id === plan.workspaceId);
   const row = (plan: PlanSummary, archived: boolean): PaletteRow => {
     const elsewhere = elsewhereOf(plan);
+    const creator = creatorOf(plan);
+    const createdBy = plan.createdBy?.name ?? null;
     return {
       ...tabLook({ kind: TAB_KIND.PLAN, name: plan.name }),
       detail: planDetail(plan, archived),
       workspace: elsewhere,
-      terms: [plan.name, plan.repository, elsewhere?.name ?? null].filter((term) => term !== null),
+      endMark:
+        creator === undefined ? undefined : <ActorMark actor={creator} size={ACTOR_SIZE.MARK} />,
+      creator: createdBy ?? undefined,
+      terms: [plan.name, plan.repository, elsewhere?.name ?? null, createdBy].filter(
+        (term) => term !== null,
+      ),
       onChoose: () => open(plan.id),
     };
   };
@@ -522,13 +544,18 @@ function PaletteItem({
   value: string;
   tokens: readonly string[];
 }): React.JSX.Element {
+  // A task found by its creator's name says the name after its detail, so the match is in sight.
+  const named = row.creator !== undefined && matchRanges(row.creator, tokens).length > 0;
+  const detail = named
+    ? [row.detail, row.creator].filter((words) => words !== undefined).join(" · ")
+    : row.detail;
   const item = (
     <Command.Item className="menu-item" value={value} onSelect={row.onChoose}>
       {row.icon === undefined ? null : <span className="menu-item-glyph">{row.icon}</span>}
       <span className="command-palette-name">
         <Highlighted text={row.label} tokens={tokens} />
       </span>
-      {row.detail === undefined && row.workspace === undefined ? null : (
+      {detail === undefined && row.workspace === undefined ? null : (
         <span className="command-palette-detail">
           {row.workspace === undefined ? null : (
             <WorkspaceRef
@@ -536,8 +563,8 @@ function PaletteItem({
               name={<Highlighted text={row.workspace.name} tokens={tokens} />}
             />
           )}
-          {row.workspace === undefined || row.detail === undefined ? null : " · "}
-          {row.detail === undefined ? null : <Highlighted text={row.detail} tokens={tokens} />}
+          {row.workspace === undefined || detail === undefined ? null : " · "}
+          {detail === undefined ? null : <Highlighted text={detail} tokens={tokens} />}
         </span>
       )}
       {/* Spoken, since a palette row is an option, which carries no
@@ -742,6 +769,8 @@ export function CommandPalette({
   };
 
   const tokens = searchTokens(query);
+  // The listed workspace's members, read once for it, name a teammate's task's creator by face.
+  const members = useWorkspaceMembers(plans.workspace);
   const limit = filter === PALETTE_FILTER.ALL ? KIND_ROWS.ALL : KIND_ROWS.FILTERED;
   const planId = plans.activePlanId;
   const repository =
@@ -789,7 +818,7 @@ export function CommandPalette({
   const byRow = (row: PaletteRow, words: readonly string[]) => rowScore(row, query, words);
   const tiersOf = {
     [PALETTE_FILTER.PLANS]: () => [
-      plans.signedIn ? planRows(plans, (id) => onPlans(() => plans.onSelect(id))) : [],
+      plans.signedIn ? planRows(plans, members, (id) => onPlans(() => plans.onSelect(id))) : [],
     ],
     [PALETTE_FILTER.AGENTS]: () => [agentRows(plans, onPlans)],
     [PALETTE_FILTER.FILES]: () => [],

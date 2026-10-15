@@ -12,13 +12,13 @@ import {
   UnarchiveIcon,
   UnpinIcon,
 } from "@luke/ui";
-import { accountActor, actorName, creatorActor, teammateCreator } from "@luke/ui/actor-model";
+import { accountActor, creatorActor, teammateCreator } from "@luke/ui/actor-model";
 import { confirmAsked } from "@luke/ui/confirm-state";
 import { DOCUMENT_REGION, PLAN_MARK, type PlanMark } from "@luke/ui/planning-model";
 import { FolderInputIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
-import { ACTOR_SIZE, ActorMark, ActorRef } from "../actor-ref";
+import { ACTOR_SIZE, ActorMark, ActorRef, CreatorHeard } from "../actor-ref";
 import { useAppCommand } from "../app-commands";
 import { useCopyToast } from "../copy-feedback";
 import { useMemberDirectory } from "../member-directory";
@@ -474,10 +474,7 @@ export function SidebarPlan({
             <span className="sidebar-plan-line">
               <span className="sidebar-plan-name">{plan.name}</span>
               {unread ? <span className="visually-hidden">(unread)</span> : null}
-              {/* Note that the creator is said outside the time, because the time steps out while the row holds the keyboard. */}
-              {creator === undefined ? null : (
-                <span className="visually-hidden">{`(created by ${actorName(creator)})`}</span>
-              )}
+              {creator === undefined ? null : <CreatorHeard actor={creator} />}
               <span className="sidebar-plan-time">
                 {creator === undefined ? null : (
                   <ActorMark actor={creator} size={ACTOR_SIZE.MARK} />

@@ -310,3 +310,21 @@ test("more pull requests shipping at once than Ship lists are counted after its 
     "1 more",
   );
 });
+
+test("a task a teammate created wears their face before its time, wherever it stands, and the reader's own wears none", () => {
+  const charles = { userId: "user-charles", name: "Charles Pan" };
+  const dean = { userId: "user-dean", name: "Dean Stratakos" };
+  const { page } = mount(
+    [
+      { ...DRAFT, ownerId: charles.userId, createdBy: charles },
+      { ...SEARCH, ownerId: dean.userId, createdBy: dean },
+    ],
+    { me: dean.userId },
+  );
+
+  const face = (words: string) =>
+    row(page, words).querySelector(".sidebar-plan-time .actor-mark")?.textContent ?? null;
+  assert.equal(face(DRAFT.name), "C");
+  assert.equal(face(SEARCH.name), null);
+  assert.match(row(page, DRAFT.name).textContent ?? "", /\(created by Charles Pan\)/u);
+});

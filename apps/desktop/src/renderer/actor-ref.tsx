@@ -198,6 +198,16 @@ export function ActorMark({
   );
 }
 
+/**
+ * What a screen reader hears of a teammate's task's creator, whose face the
+ * row draws at its time: "(created by Charles Pan)". Note that a row says it
+ * outside its time's slot, because the slot steps out while the row is
+ * hovered or holds the keyboard.
+ */
+export function CreatorHeard({ actor }: { actor: Actor }): React.JSX.Element {
+  return <span className="visually-hidden">{`(created by ${actorName(actor)})`}</span>;
+}
+
 /** The quiet badge the reader's own account wears beside its name. */
 export function YouBadge(): React.JSX.Element {
   return <span className="actor-you">You</span>;

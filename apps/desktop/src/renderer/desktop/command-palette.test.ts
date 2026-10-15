@@ -605,3 +605,34 @@ test("Search lists the listed workspace's plans first, then every other workspac
     "the other workspace is named by its tile and its name",
   );
 });
+
+test("a teammate's task wears its creator's face at its row's end, and is found by their name, which the row then says", () => {
+  const charles = { userId: "user-charles", name: "Charles Pan" };
+  const dean = { userId: "user-dean", name: "Dean Stratakos" };
+  const task = (id: string, by: typeof dean) => ({
+    id,
+    workspaceId: "workspace-personal",
+    name: id,
+    createdAt: 1,
+    updatedAt: 1,
+    repository: "acme/relay",
+    ownerId: by.userId,
+    createdBy: by,
+  });
+  openPalette(
+    plansControl({
+      me: dean.userId,
+      plans: [task("Retry budget", charles), task("Rate limits", dean)],
+    }),
+  );
+  chooseFilter("Tasks");
+  const faces = () =>
+    [...document.querySelectorAll(".menu-item")].map(
+      (row) => row.querySelector(".menu-item-end .actor-mark")?.textContent ?? null,
+    );
+
+  assert.deepEqual(rows(), ["Retry budget · acme/relay", "Rate limits · acme/relay"]);
+  assert.deepEqual(faces(), ["C", null]);
+  type("charles");
+  assert.deepEqual(rows(), ["Retry budget · acme/relay · Charles Pan"]);
+});
