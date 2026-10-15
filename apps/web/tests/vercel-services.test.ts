@@ -33,11 +33,11 @@ interface Rewrite {
   readonly destination: { readonly service: string };
 }
 
-const SERVICE = { WEB: "web", EVE: "eve", CODER: "coder" } as const;
+const SERVICE = { WEB: "web", LUKE: "luke", CODER: "coder" } as const;
 
 interface Services {
   readonly [SERVICE.WEB]: Service;
-  readonly [SERVICE.EVE]: Service;
+  readonly [SERVICE.LUKE]: Service;
   readonly [SERVICE.CODER]: Service;
 }
 

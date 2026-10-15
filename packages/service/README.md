@@ -1,7 +1,7 @@
 # @luke/service
 
 The hosted service's logic: what the web deployment's functions and its two eve
-services (`apps/web/eve`, `apps/web/coder`) compose and run. The deployment
+services (`apps/luke`, `apps/web/coder`) compose and run. The deployment
 keeps only its shell in `apps/web/server` — the Vercel function entries under
 `routes/`, the runtime edge `runtime.ts`, the function layout and bundling, and
 the voice function's edge — and reaches everything else here.
@@ -307,7 +307,7 @@ groups are handed as their `resolveUserId`, and the voice function's own
 resolver are Effect-shaped, so each reads the bearer on its own fiber instead
 of wrapping a promise in `Effect.promise`. One caller is a
 promise of somebody else's: eve's `AuthFn`, which
-`apps/web/eve/channels/eve.ts` satisfies by running the resolution once at
+`apps/luke/channels/eve.ts` satisfies by running the resolution once at
 that authored file — eve's own edge — rather than keeping a promise-shaped
 door beside the effect in `src/auth/`. `lukeAccount` takes the
 resolved account as a `BearerAccount` promise and reaches no userinfo
@@ -754,7 +754,7 @@ Then set the provider's variable (`EXECUTOR_CONNECTOR_UID`, `GRANOLA_CONNECTOR_U
 `NOTION_CONNECTOR_UID`, `POSTHOG_CONNECTOR_UID`, `SENTRY_CONNECTOR_UID`,
 `SLACK_CONNECTOR_UID`, `SUPABASE_CONNECTOR_UID`, `VERCEL_CONNECTOR_UID`,
 `YCOMBINATOR_CONNECTOR_UID`) to that UID in the `luke-web` project for
-production, preview, and development. The web, `eve`, and `coder` are services of that
+production, preview, and development. The web, `luke`, and `coder` are services of that
 one project (the root `vercel.json`'s `services`), so its variables and the
 connector's link reach all three, which matters because the agents read
 tokens too. Asking Connect about an arbitrary user id needs the deployment's
@@ -874,7 +874,7 @@ for it. Disconnect and deleting the account still revoke its grant.
 ## The coding-agent service
 
 `apps/web/coder/` is the second eve app root, built and deployed as the `coder`
-service beside `eve` on the same terms (the root `vercel.json`): its own
+service beside `luke` on the same terms (the root `vercel.json`): its own
 `package.json` (`@luke/coder`, whose one dependency is `eve`), a flat layout
 eve resolves as an app root, and a build that prewarms its sandbox snapshot
 under the same Vercel Sandbox credentials. It stands at eve's named mount:
@@ -900,7 +900,7 @@ developer's own principal with the deployment named as its carrier. The agent (`
 tools and authors its own under `apps/web/coder/tools/`, which is exactly the set the
 store writer registers (`src/agents/coder-host/tool-set.ts`): eve's `bash`, `read_file`,
 `write_file`, and `glob`, the code extension's `apply_patch` and `grep` from
-`apps/web/eve/extensions/code/tools`, Luke's own `search_web` and
+`apps/luke/extensions/code/tools`, Luke's own `search_web` and
 `read_web_page` (`public-research.ts`: the search screened, cited, and
 budgeted per turn on Luke's key and counted on the account's meter, the page
 read refusing any address off the public internet), and two of Luke's own: `delegate`, the hand-off to a worker (below), and
@@ -920,7 +920,7 @@ Gateway model and its `gh` tool on Vercel Connect, and Luke runs neither.
 session's input tokens are uncapped and compaction is eve's default.
 
 The worker (`apps/web/coder/subagents/worker/`) is Luke's own declared subagent, in
-the shape of Luke's own worker (`apps/web/eve/subagents/worker/`): read-only in the
+the shape of Luke's own worker (`apps/luke/subagents/worker/`): read-only in the
 agent's own sandbox and checkout, uncommitted edits included
 (`defineParentSandbox`), authored exactly the agent's reads
 (`WORKER_TOOL_NAMES`: `bash`, `read_file`, `glob`, `grep`, `search_web`,
@@ -938,7 +938,7 @@ delegation in eve's terms, and a developer's message during the wait reaches
 the agent at once without stopping the worker. Several calls in one step run
 at once, and a call with the subagent task's id sends the worker more, into the same
 session. Luke delegates through the same shape
-(`apps/web/eve/tools/delegate.ts`, `PLANNER_DELEGATE_TOOL`), always in the background
+(`apps/luke/tools/delegate.ts`, `PLANNER_DELEGATE_TOOL`), always in the background
 and on its own model, its worker declared hidden too; the Work tab reads its
 calls as worker calls under either name, eve's `worker` in earlier
 transcripts (`PLANNER_DELEGATION_TOOLS`). A worker's row in an agent's tab
@@ -1677,7 +1677,7 @@ every module may import it. eve's own injected tools (`task_wait`,
 listed.
 
 Luke's session is offered the skills the task's repository keeps
-(`apps/web/eve/skills/repository.ts`, `src/agents/agent-runtime/skills.ts`), read
+(`apps/luke/skills/repository.ts`, `src/agents/agent-runtime/skills.ts`), read
 from GitHub on a read token for that repository as the session starts, which
 is the call's warm-up ask, and loaded with eve's own `load_skill`; each body
 says where the skill stands in the repository, so its files are read with
@@ -1744,13 +1744,13 @@ tasks and the re-attach over the real store.
 Luke reads source through one tool,
 `run_in_repository({ command })` (`src/agents/repository-shell.ts`), which
 runs the command in Luke's session's own Vercel Sandbox, the one eve
-opens per session from `apps/web/eve/sandbox.ts` and hands a tool through
+opens per session from `apps/luke/sandbox.ts` and hands a tool through
 `ctx.getSandbox()`, on a checkout of the task's repository. The first call
 that finds no checkout of the task's repository makes one, at the
 repository's current default branch and one commit deep, and later calls
 reuse it; a task whose repository changed meanwhile is checked out again,
 and the worker subagent shares the session's sandbox
-(`apps/web/eve/subagents/worker/sandbox.ts`), so its reads see the same checkout. The
+(`apps/luke/subagents/worker/sandbox.ts`), so its reads see the same checkout. The
 checkout reads through the Luke GitHub App: `repositoryReadToken` confirms
 the installation of the task's workspace still reaches the repository and
 mints a token for that one

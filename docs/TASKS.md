@@ -938,7 +938,7 @@ Luke reads the task's repository, not a folder on the Mac,
 and so does the code he puts on the developer's screen. What only the Mac
 has, he reaches with `run_on_mac` (below).
 `run_in_repository` runs one bash command in a Vercel Sandbox the task
-conversation's eve session owns (`apps/web/eve/sandbox.ts`), on a checkout of
+conversation's eve session owns (`apps/luke/sandbox.ts`), on a checkout of
 the task's GitHub repository (`packages/service/src/agents/repository-shell.ts`).
 The first call that finds no checkout of the task's repository makes one, at
 the repository's current default branch and one commit deep, and later calls

@@ -6,7 +6,7 @@ import { defineWorkflowTool, type WorkflowServeReceive } from "eve/tools";
  * delegate.ts -- the planning model hands one job to the worker, which always runs in the background.
  *
  * The one delegation every agent of Luke's makes, a resumable task (`serve`),
- * as a coding agent's is (`../../coder/tools/delegate.ts`): the call answers
+ * as a coding agent's is (`apps/web/coder/tools/delegate.ts`): the call answers
  * with a receipt at once and the worker's summary reaches the model as a
  * task result, so the planning turn stays open while it works and the voice
  * follows it there. The planning model is offered no foreground wait, since

@@ -513,7 +513,7 @@ const PLANNING_TOOLS_BY_NAME = new Map(PLANNING_TOOLS.map((tool) => [tool.name, 
 
 /**
  * The tools eve puts beside the planning tools: one per declared subagent,
- * named by its directory under `eve/subagents/`, and the two task controls
+ * named by its directory under `apps/luke/subagents/`, and the two task controls
  * eve adds beside any agent tool, `task_wait` and `task_cancel`. eve runs
  * them, so they are no planning tool, but a turn's rows name them, and the
  * writer holds every row to the hosted tool set. Their tasks are eve's
@@ -535,7 +535,7 @@ const SUBAGENT_CALL_INPUT = Schema.Struct({
 });
 
 /**
- * The planning model's own delegation (`eve/tools/delegate.ts`): one job
+ * The planning model's own delegation (`apps/luke/tools/delegate.ts`): one job
  * handed to the worker, which always runs in the background, because a
  * foreground wait would hold the spoken turn silent for the worker's whole
  * run; and what a stored call carries, the task and the id eve adds to a
