@@ -219,7 +219,98 @@ const pausedByAnOlderBuild = (id: string) =>
       .where(eq(automationTable.id, id)),
   );
 
+/** The weekday triage made on a workspace with the repositories named, no plan between. */
+const onWorkspace = (workspaceId: string, repositories: readonly string[]) => {
+  const { planId: _planId, ...rest } = weekdays("");
+  return { ...rest, workspaceId, repositories };
+};
+
 it.layer(getTestDB())("the automation routes", (it) => {
+  it.effect(
+    "an automation is made on a workspace with its repositories and no plan, listed by its workspace, and given other repositories, each read through the workspace's installation",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, plan, ask } = yield* openAccounts;
+        const relay = `${RELAY.owner}/${RELAY.name}`;
+
+        const made = readAnswer(
+          automationAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(HOSTED_SERVICE_PATH.AUTOMATIONS, owner, {
+            method: "POST",
+            body: onWorkspace(plan.workspaceId, [relay.toLowerCase()]),
+          }),
+        );
+        const { automation } = made;
+        assert.deepEqual(
+          [automation.planId, automation.planName, automation.workspaceId, automation.repositories],
+          [null, null, plan.workspaceId, [relay]],
+          "no plan, the workspace, and the repository as GitHub spells it",
+        );
+
+        const listed = readAnswer(
+          automationListAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(`${HOSTED_SERVICE_PATH.AUTOMATIONS}?workspaceId=${plan.workspaceId}`, owner),
+        );
+        assert.deepEqual(
+          listed.automations.map((each) => each.id),
+          [automation.id],
+        );
+        const othersRead = yield* ask(automationPath(automation.id), other);
+        assert.equal(othersRead.status, HOSTED_HTTP_STATUS.NOT_FOUND);
+
+        const unreached = yield* ask(automationPath(automation.id), owner, {
+          method: "PATCH",
+          body: { repositories: ["acme/elsewhere"] },
+        });
+        assert.equal(
+          unreached.status,
+          HOSTED_HTTP_STATUS.FORBIDDEN,
+          JSON.stringify(unreached.body),
+        );
+        const kept = readAnswer(
+          automationAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(automationPath(automation.id), owner, {
+            method: "PATCH",
+            body: { repositories: [relay] },
+          }),
+        );
+        assert.deepEqual(kept.automation.repositories, [relay]);
+      }),
+  );
+
+  it.effect(
+    "an automation on a workspace is refused for an account outside it, with a plan beside it, with no repositories, or on a repository its installation does not reach",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, plan, ask } = yield* openAccounts;
+        const relay = `${RELAY.owner}/${RELAY.name}`;
+        const post = (by: string, body: WireBoundaryInput) =>
+          ask(HOSTED_SERVICE_PATH.AUTOMATIONS, by, { method: "POST", body });
+
+        const outside = yield* post(other, onWorkspace(plan.workspaceId, [relay]));
+        const both = yield* post(owner, {
+          ...onWorkspace(plan.workspaceId, [relay]),
+          planId: plan.id,
+        });
+        const { repositories: _none, ...bare } = onWorkspace(plan.workspaceId, [relay]);
+        const noRepositories = yield* post(owner, bare);
+        const unreached = yield* post(owner, onWorkspace(plan.workspaceId, ["acme/elsewhere"]));
+
+        assert.deepEqual(
+          [outside.status, both.status, noRepositories.status, unreached.status],
+          [
+            HOSTED_HTTP_STATUS.NOT_FOUND,
+            HOSTED_HTTP_STATUS.BAD_REQUEST,
+            HOSTED_HTTP_STATUS.BAD_REQUEST,
+            HOSTED_HTTP_STATUS.FORBIDDEN,
+          ],
+        );
+      }),
+  );
+
   it.effect(
     "an automation is made with its schedule's first due instant and read, changed, and deleted by its own account alone",
     () =>

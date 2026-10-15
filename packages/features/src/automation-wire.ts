@@ -1,5 +1,6 @@
 import { Schema as EffectSchema } from "effect";
 import { CODING_AGENT_STATUS } from "./coding-agent-wire.js";
+import { githubRepositoryFullNameSchema } from "./github-repositories-wire.js";
 import { modelChoiceSchema } from "./models-wire.js";
 import { countedNumber, wireUuidSchema } from "./service-wire.js";
 
@@ -33,6 +34,8 @@ export const AUTOMATION_BOUNDS = {
   MAX_FILTER_VALUES: 10,
   /** The most characters of one label or branch a filter names. */
   MAX_FILTER_VALUE_CHARS: 100,
+  /** The most repositories one automation's runs work in; a run starts in the first until full multi-repo. */
+  MAX_REPOSITORIES: 10,
   /** The most agents one automation may have at work at once. */
   MAX_CONCURRENT_RUNS: 5,
   /** The most runs one automation may start in a day. */
@@ -306,7 +309,7 @@ export const automationRunReasonSchema = EffectSchema.Literals(
 export const automationPauseSchema = EffectSchema.Literals(Object.values(AUTOMATION_PAUSE));
 
 /** The query an automation list may narrow by: one plan's automations alone. */
-export const AUTOMATION_LIST_QUERY = { PLAN_ID: "planId" } as const;
+export const AUTOMATION_LIST_QUERY = { PLAN_ID: "planId", WORKSPACE_ID: "workspaceId" } as const;
 
 /**
  * One run as the history shows it: what fired it, where it stands, why
@@ -339,8 +342,11 @@ export type AutomationRunSummary = typeof automationRunSummarySchema.Type;
  */
 const automationSummarySchema = EffectSchema.Struct({
   id: wireUuidSchema,
-  planId: wireUuidSchema,
-  planName: EffectSchema.String,
+  /** The plan it was made on; null for an automation made on its workspace with no plan, which its repositories stand in for. */
+  planId: EffectSchema.NullOr(wireUuidSchema),
+  planName: EffectSchema.NullOr(EffectSchema.String),
+  /** The workspace it belongs to, whose members its scope lets reach it; absent from a service before it. */
+  workspaceId: EffectSchema.optionalKey(EffectSchema.String),
   name: EffectSchema.String,
   enabled: EffectSchema.Boolean,
   pausedReason: EffectSchema.NullOr(automationPauseSchema),
@@ -381,9 +387,23 @@ export const automationAnswerSchema = EffectSchema.Struct({
   webhookSecret: EffectSchema.optionalKey(EffectSchema.String),
 });
 
-/** An automation to make (POST): its plan, name, trigger, and action, and its guards or the defaults. */
+/** The repositories an automation's runs work in, `owner/name` each, the first where a run starts: at least one, and a handful at most. */
+const automationRepositoriesSchema = EffectSchema.Array(githubRepositoryFullNameSchema).check(
+  EffectSchema.isMinLength(1),
+  EffectSchema.isMaxLength(AUTOMATION_BOUNDS.MAX_REPOSITORIES),
+);
+
+/**
+ * An automation to make (POST): where it stands, its name, trigger, and
+ * action, and its guards or the defaults. It stands on a plan, whose
+ * workspace and repository it takes, or on a workspace with the
+ * repositories its runs work in, which is how an automation is made with no
+ * plan; a request naming both, or neither, is refused.
+ */
 export const automationCreateRequestSchema = EffectSchema.Struct({
-  planId: wireUuidSchema,
+  planId: EffectSchema.optionalKey(wireUuidSchema),
+  workspaceId: EffectSchema.optionalKey(EffectSchema.NonEmptyString),
+  repositories: EffectSchema.optionalKey(automationRepositoriesSchema),
   name: nameSchema,
   trigger: automationTriggerSchema,
   action: automationActionSchema,
@@ -396,6 +416,7 @@ export const automationCreateRequestSchema = EffectSchema.Struct({
 /** A change to an automation (PATCH): any of its fields, a field left out standing as it was. */
 export const automationChangeRequestSchema = EffectSchema.Struct({
   name: EffectSchema.optionalKey(nameSchema),
+  repositories: EffectSchema.optionalKey(automationRepositoriesSchema),
   enabled: EffectSchema.optionalKey(EffectSchema.Boolean),
   trigger: EffectSchema.optionalKey(automationTriggerSchema),
   action: EffectSchema.optionalKey(automationActionSchema),

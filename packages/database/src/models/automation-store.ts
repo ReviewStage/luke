@@ -52,7 +52,7 @@ import { plan } from "../schemas/plan.js";
 import { conversations } from "../schemas/storage.js";
 import { InstantColumnSchema } from "./columns.js";
 import type { PlanStoreEffect, PlanStoreFailure } from "./plan-store.js";
-import { AGENT_WORKSPACE, reachablePlan } from "./workspace-store.js";
+import { AGENT_WORKSPACE, isWorkspaceMember, reachablePlan } from "./workspace-store.js";
 
 /**
  * automation-store.ts -- an account's automations and their runs: made, listed, changed, and deleted by the account, and a run recorded once per firing.
@@ -78,9 +78,10 @@ const MAX_RUNS_READ = 100;
 const AutomationRowSchema = Schema.Struct({
   id: Schema.String,
   userId: Schema.String,
-  planId: Schema.String,
-  planName: Schema.String,
-  /** The plan's repository as `owner/name`, or null where it names none. */
+  /** The plan it was made on; null for one made on its workspace with no plan. */
+  planId: Schema.NullOr(Schema.String),
+  planName: Schema.NullOr(Schema.String),
+  /** The plan's repository as `owner/name`, or null where it names none or there is no plan. */
   planRepository: Schema.NullOr(Schema.String),
   name: Schema.String,
   enabled: Schema.Boolean,
@@ -101,6 +102,9 @@ const AutomationRowSchema = Schema.Struct({
 
 /** One automation as its account reads it, with the name of the plan it works on. */
 export type Automation = typeof AutomationRowSchema.Type;
+
+/** An automation row's workspace: its own, or its plan's on a row an older build wrote, its workspace still null. */
+const AUTOMATION_WORKSPACE = sql<string>`coalesce(${automation.organizationId}, (select ${plan.organizationId} from ${plan} where ${plan.id} = ${automation.planId}))`;
 
 const AUTOMATION_COLUMNS = {
   id: automation.id,
@@ -133,7 +137,12 @@ const AUTOMATION_COLUMNS = {
 
 /** What making an automation takes: the plan, what fires it and what it starts, its guards, when a schedule is first due, and a webhook's secret hash. */
 export interface NewAutomation {
-  readonly planId: string;
+  /** The plan it stands on, whose workspace and repository it takes; null for one made on a workspace with repositories of its own. */
+  readonly planId: string | null;
+  /** The workspace an automation with no plan stands on, which the account must be a member of; read off the plan otherwise. */
+  readonly organizationId?: string | undefined;
+  /** The repositories an automation with no plan works in; read off the plan otherwise. */
+  readonly repositories?: readonly string[] | undefined;
   readonly name: string;
   readonly trigger: AutomationTrigger;
   readonly action: AutomationAction;
@@ -163,6 +172,7 @@ export interface AutomationChanges {
   readonly nextRunAt?: Date | null;
   readonly webhookSecretHash?: string | null;
   readonly scope?: AutomationScope;
+  readonly repositories?: readonly string[];
   readonly targetKind?: AutomationTargetKind;
   readonly targetAgentId?: string | null;
   readonly archiveSuccessful?: boolean;
@@ -244,10 +254,7 @@ function memberOfAutomationWorkspace(
       .where(
         and(
           // A row an older build wrote, its workspace still null, is its plan's workspace's.
-          eq(
-            member.organizationId,
-            sql`coalesce(${automation.organizationId}, (select ${plan.organizationId} from ${plan} where ${plan.id} = ${automation.planId}))`,
-          ),
+          eq(member.organizationId, AUTOMATION_WORKSPACE),
           eq(member.userId, userId),
           // The plugin's role text may name several roles, comma-separated, as `roleOf` reads it.
           roles === undefined
@@ -333,7 +340,7 @@ const findReachablePlan = SqlSchema.findOneOption({
 const insertAutomation = SqlSchema.findAll({
   Request: Schema.Struct({
     userId: Schema.String,
-    planId: Schema.String,
+    planId: Schema.NullOr(Schema.String),
     name: Schema.String,
     trigger: automationTriggerSchema,
     action: automationActionSchema,
@@ -375,18 +382,23 @@ const insertAutomation = SqlSchema.findAll({
 });
 
 const findAutomations = SqlSchema.findAll({
-  Request: Schema.Struct({ userId: Schema.String, planId: Schema.NullOr(Schema.String) }),
+  Request: Schema.Struct({
+    userId: Schema.String,
+    planId: Schema.NullOr(Schema.String),
+    organizationId: Schema.NullOr(Schema.String),
+  }),
   Result: AutomationRowSchema,
-  execute: ({ userId, planId }) =>
+  execute: ({ userId, planId, organizationId }) =>
     Database.use((db) =>
       db
         .select(AUTOMATION_COLUMNS)
         .from(automation)
-        .innerJoin(plan, eq(plan.id, automation.planId))
+        .leftJoin(plan, eq(plan.id, automation.planId))
         .where(
           and(
             allowedTo(userId, AUTOMATION_ACCESS.READ),
             planId === null ? undefined : eq(automation.planId, planId),
+            organizationId === null ? undefined : eq(AUTOMATION_WORKSPACE, organizationId),
           ),
         )
         .orderBy(desc(automation.createdAt), desc(automation.id)),
@@ -401,7 +413,7 @@ const findAutomation = SqlSchema.findOneOption({
       db
         .select(AUTOMATION_COLUMNS)
         .from(automation)
-        .innerJoin(plan, eq(plan.id, automation.planId))
+        .leftJoin(plan, eq(plan.id, automation.planId))
         .where(allowedTo(userId, access, id)),
     ),
 });
@@ -419,6 +431,7 @@ const writeAutomation = SqlSchema.findAll({
     nextRunAt: Schema.optionalKey(Schema.NullOr(Schema.Date)),
     webhookSecretHash: Schema.optionalKey(Schema.NullOr(Schema.String)),
     scope: Schema.optionalKey(automationScopeSchema),
+    repositories: Schema.optionalKey(Schema.Array(Schema.String)),
     targetKind: Schema.optionalKey(automationTargetKindSchema),
     targetAgentId: Schema.optionalKey(Schema.NullOr(Schema.String)),
     archiveSuccessful: Schema.optionalKey(Schema.Boolean),
@@ -643,7 +656,7 @@ const findAutomationToRun = SqlSchema.findOneOption({
       db
         .select(AUTOMATION_COLUMNS)
         .from(automation)
-        .innerJoin(plan, eq(plan.id, automation.planId))
+        .leftJoin(plan, eq(plan.id, automation.planId))
         .where(eq(automation.id, id)),
     ),
 });
@@ -953,20 +966,41 @@ function readWritten(userId: string, id: string): PlanStoreEffect<Option.Option<
 }
 
 /** Makes the account's automation on the plan, enabled; nothing where the account does not reach the plan. */
+/**
+ * Where a new automation stands, read as the account: its plan's workspace
+ * and repository, or the workspace it names with the repositories it names,
+ * where the account is a member of it; nothing where it reaches neither.
+ */
+const placeOf = Effect.fnUntraced(function* (userId: string, made: NewAutomation) {
+  if (made.planId !== null) {
+    const reached = yield* findReachablePlan({ userId, planId: made.planId });
+    return Option.map(reached, (held) => ({
+      organizationId: held.organizationId,
+      repositories: held.repository === null ? [] : [held.repository],
+    }));
+  }
+  const { organizationId } = made;
+  if (organizationId === undefined) return Option.none();
+  const member = yield* isWorkspaceMember(userId, organizationId);
+  return member
+    ? Option.some({ organizationId, repositories: made.repositories ?? [] })
+    : Option.none();
+});
+
 export function createAutomation(
   userId: string,
   made: NewAutomation,
 ): PlanStoreEffect<Option.Option<Automation>> {
   return Effect.gen(function* () {
-    const reached = yield* findReachablePlan({ userId, planId: made.planId });
+    const reached = yield* placeOf(userId, made);
     if (Option.isNone(reached)) return Option.none();
     const now = yield* DateTime.nowAsDate;
-    const { repository, organizationId } = reached.value;
+    const { repositories, organizationId } = reached.value;
     const [row] = yield* insertAutomation({
       ...made,
       userId,
       organizationId,
-      repositories: repository === null ? [] : [repository],
+      repositories,
       scope: made.scope ?? AUTOMATION_SCOPE.PERSONAL,
       targetKind: made.targetKind ?? AUTOMATION_TARGET.NEW_AGENT,
       targetAgentId: made.targetAgentId ?? null,
@@ -977,12 +1011,22 @@ export function createAutomation(
   });
 }
 
-/** The automations the account may read, newest first, or those of one plan where it names one. */
+/** Which automations a list reads: one plan's, one workspace's, or every one the account may read where it names neither. */
+export interface AutomationListFilter {
+  readonly planId?: string | undefined;
+  readonly organizationId?: string | undefined;
+}
+
+/** The automations the account may read, newest first, narrowed to one plan's or one workspace's where the filter names it. */
 export function listAutomations(
   userId: string,
-  planId?: string,
+  filter: AutomationListFilter = {},
 ): PlanStoreEffect<readonly Automation[]> {
-  return findAutomations({ userId, planId: planId ?? null });
+  return findAutomations({
+    userId,
+    planId: filter.planId ?? null,
+    organizationId: filter.organizationId ?? null,
+  });
 }
 
 /** One automation the account may do `access` with, reading by default; nothing for any other id. */
