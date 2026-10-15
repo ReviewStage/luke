@@ -131,10 +131,10 @@ export interface CodingAgent {
   readonly model: string;
   readonly effort: string;
   readonly contextWindow: ContextWindow;
-  /** The plan text the agent was handed; null where it was handed a task instead. */
+  /** The plan text the agent was handed; null where it was handed a prompt instead. */
   readonly planSnapshot: string | null;
   /** The developer's words the agent was handed in the plan's place; null where it was handed the plan. */
-  readonly task: string | null;
+  readonly prompt: string | null;
   readonly repository: string;
   /** The branch checked out in the sandbox as the last turn ended; null before one ends or where the checkout stood detached. */
   readonly branch: string | null;
@@ -164,15 +164,15 @@ export {
   turnUsagesOf,
 };
 
-/** What a Start hands the agent as its first message: the plan's text as it stands now, or the developer's task in its place. */
+/** What a Start hands the agent as its first message: the plan's text as it stands now, or the developer's prompt in its place. */
 export type CodingAgentBriefText =
-  | { readonly planSnapshot: string; readonly task: null }
-  | { readonly planSnapshot: null; readonly task: string };
+  | { readonly planSnapshot: string; readonly prompt: null }
+  | { readonly planSnapshot: null; readonly prompt: string };
 
 /**
  * Where a Start puts the agent: on a plan, whose workspace it joins and
- * whose text or the developer's task it is handed, or in a workspace with
- * no plan, as an automation's run puts one, handed a task, since there is
+ * whose text or the developer's prompt it is handed, or in a workspace with
+ * no plan, as an automation's run puts one, handed a prompt, since there is
  * no plan to hand it.
  */
 export type CodingAgentPlace =
@@ -181,7 +181,7 @@ export type CodingAgentPlace =
       readonly planId: null;
       readonly organizationId: string;
       readonly planSnapshot: null;
-      readonly task: string;
+      readonly prompt: string;
     };
 
 /** A Start: where it goes, the request's own key, what to run on, what the agent is handed, and the repository as it stands now. */
@@ -196,7 +196,7 @@ export type NewCodingAgent = CodingAgentPlace & {
   readonly repository: string;
   /** The MCP servers the draft switched off before it started; none where the Start names none. */
   readonly disabledServers?: readonly IntegrationProvider[] | undefined;
-  /** The MCP servers the task mentions, which the first turn is handed whatever the switches say; none where it mentions none. */
+  /** The MCP servers the prompt mentions, which the first turn is handed whatever the switches say; none where it mentions none. */
   readonly mentionedServers?: readonly IntegrationProvider[] | undefined;
 };
 
@@ -212,7 +212,7 @@ const CODING_AGENT_COLUMNS = {
   effort: codingAgent.effort,
   contextWindow: codingAgent.contextWindow,
   planSnapshot: codingAgent.planSnapshot,
-  task: codingAgent.task,
+  prompt: codingAgent.prompt,
   repository: codingAgent.repository,
   branch: codingAgent.branch,
   title: codingAgent.title,
@@ -255,7 +255,7 @@ const CodingAgentRowSchema = Schema.Struct({
   effort: Schema.String,
   contextWindow: contextWindowSchema,
   planSnapshot: Schema.NullOr(Schema.String),
-  task: Schema.NullOr(Schema.String),
+  prompt: Schema.NullOr(Schema.String),
   repository: Schema.String,
   branch: Schema.NullOr(Schema.String),
   title: Schema.NullOr(Schema.String),
@@ -363,7 +363,7 @@ const insertAgent = SqlSchema.findOne({
     effort: Schema.String,
     contextWindow: contextWindowSchema,
     planSnapshot: Schema.NullOr(Schema.String),
-    task: Schema.NullOr(Schema.String),
+    prompt: Schema.NullOr(Schema.String),
     repository: Schema.String,
     disabledServers: Schema.NullOr(Schema.Array(Schema.Literals(INTEGRATION_PROVIDER_LIST))),
     mentionedServers: Schema.NullOr(Schema.Array(Schema.Literals(INTEGRATION_PROVIDER_LIST))),
@@ -384,7 +384,7 @@ const insertAgent = SqlSchema.findOne({
           effort: write.effort,
           contextWindow: write.contextWindow,
           planSnapshot: write.planSnapshot,
-          task: write.task,
+          prompt: write.prompt,
           repository: write.repository,
           repositories: [write.repository],
           disabledServers: write.disabledServers,
@@ -792,7 +792,7 @@ const deleteConversationRow = SqlSchema.void({
  * Starts an agent on a plan of the account's workspace, or in a workspace
  * of the account's with no plan: a `coding_agent` conversation of the
  * account's and the row that binds it to the plan or the workspace, with
- * the plan text or the task, the repository, and the automation whose run
+ * the plan text or the prompt, the repository, and the automation whose run
  * started it, as handed. A Start whose key the account has already used answers the agent
  * that Start made, whatever else the retry carries, and writes nothing.
  * Nothing where the account reaches no such plan or is no member of the
@@ -837,7 +837,7 @@ export function createCodingAgent(
           effort: started.effort,
           contextWindow: started.contextWindow ?? CONTEXT_WINDOW.LONG,
           planSnapshot: started.planSnapshot,
-          task: started.task,
+          prompt: started.prompt,
           repository: started.repository,
           disabledServers: storedServers(started.disabledServers ?? []),
           mentionedServers: storedServers(started.mentionedServers ?? []),

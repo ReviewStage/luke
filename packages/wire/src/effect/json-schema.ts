@@ -1,4 +1,14 @@
-import { Array as Arr, Data, Effect, Option, Result, Schema, SchemaAST, SchemaIssue } from "effect";
+import {
+  Array as Arr,
+  Data,
+  Effect,
+  Option,
+  Result,
+  Schema,
+  SchemaAST,
+  SchemaIssue,
+  SchemaTransformation,
+} from "effect";
 import type { UnparsedWireValue } from "../json.js";
 import {
   EXCESS_KEYS,
@@ -62,6 +72,55 @@ export const verbatimJsonSchema = <S extends Schema.Top>(
   schema: S,
   node: JsonSchemaNode,
 ): S["Rebuild"] => schema.annotate({ [WIRE_ANNOTATION.JSON_SCHEMA]: node });
+
+/** A struct's fields with the keys a mapping names travelling under the names it gives them. */
+type WireKeyedFields<F extends Schema.Struct.Fields, M extends WireKeyMapping<F>> = {
+  [K in keyof F as K extends keyof M ? (M[K] extends string ? M[K] : K) : K]: F[K];
+};
+
+/** Which of a struct's keys travel under another name, and that name. */
+type WireKeyMapping<F extends Schema.Struct.Fields> = { readonly [K in keyof F]?: string };
+
+/** A record with each key the names give a name to under that name, its values untouched. */
+const renamed =
+  <From extends object, To>(names: Readonly<Record<string, string | undefined>>) =>
+  (value: From): To =>
+    // SAFETY: the caller's names are the ones that make a `From` a `To`, renaming keys and leaving every value as it was.
+    Object.fromEntries(
+      Object.entries(value).map(([key, field]) => [names[key] ?? key, field]),
+    ) as To;
+
+/**
+ * A struct read under the keys its code names, travelling under the wire's
+ * own name for each key the mapping names. Note that the wire side is the
+ * struct's own fields under the wire's keys, rather than Effect's
+ * `encodeKeys`, because that encodes each field as its encoded form alone,
+ * which carries no bound, so the node a model or a golden is shown would lose
+ * them; here a field is decoded once, on the wire side, and the code's side
+ * is its type.
+ */
+export const wireKeys =
+  <F extends Schema.Struct.Fields, const M extends WireKeyMapping<F>>(mapping: M) =>
+  (self: Schema.Struct<F>) => {
+    const toWire: Record<string, string | undefined> = mapping;
+    const fromWire: Record<string, string> = {};
+    for (const [key, wireKey] of Object.entries(toWire)) {
+      if (wireKey !== undefined) fromWire[wireKey] = key;
+    }
+    const onWire = Object.fromEntries(
+      Object.entries(self.fields).map(([key, field]) => [toWire[key] ?? key, field]),
+    );
+    // SAFETY: `onWire` is `self.fields` with each key the mapping names under its wire name, which is `WireKeyedFields` spelled out.
+    const wire = Schema.Struct(onWire as WireKeyedFields<F, M>);
+    type Read = Schema.Struct<F>["Type"];
+    type OnWire = (typeof wire)["Type"];
+    // Note that renaming a `Read` by `toWire` makes an `OnWire`, and renaming one back by `fromWire` makes the `Read` again.
+    const renaming = SchemaTransformation.transform<Read, OnWire>({
+      decode: renamed<OnWire, Read>(fromWire),
+      encode: renamed<Read, OnWire>(toWire),
+    });
+    return wire.pipe(Schema.decodeTo(Schema.toType(self), renaming));
+  };
 
 /** Every bound a recognized check can add to the node beneath it. */
 interface Bounds {

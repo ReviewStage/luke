@@ -43,7 +43,7 @@ const openAgent = Effect.gen(function* () {
     effort: "high",
     repository: "acme/relay",
     planSnapshot: "# Teammate invitations\n",
-    task: null,
+    prompt: null,
   });
   assert.ok(Option.isSome(started));
   const agent = {
@@ -77,7 +77,7 @@ const SETTINGS = {
       label: "Branch rules",
     },
   ],
-  response: { type: INBOX_RESPONSE.TASK },
+  response: { type: INBOX_RESPONSE.TODO },
   needsReply: false,
 };
 

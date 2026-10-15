@@ -232,7 +232,7 @@ const toSameAgent = (automation: Automation, agentId: string) =>
 
 it.layer(getTestDB())("an automation's runs", (it) => {
   it.effect(
-    "an automation that hands every run to the same agent sends that agent the run's task under the run's key and starts none, and a run whose agent is archived fails as agent-gone",
+    "an automation that hands every run to the same agent sends that agent the run's prompt under the run's key and starts none, and a run whose agent is archived fails as agent-gone",
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
@@ -346,7 +346,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
           model: SOL,
           effort: "low",
           planSnapshot: null,
-          task: "Keep the flaky tests quarantined.",
+          prompt: "Keep the flaky tests quarantined.",
           repository: `${RELAY.owner}/${RELAY.name}`,
         });
         const theirs = Option.getOrThrow(made).agent;
@@ -418,7 +418,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
           model: SOL,
           effort: "low",
           planSnapshot: null,
-          task: "Watch the nightly build.",
+          prompt: "Watch the nightly build.",
           repository: `${RELAY.owner}/${RELAY.name}`,
         });
         const other = Option.getOrThrow(made).agent.id;
@@ -591,8 +591,8 @@ it.layer(getTestDB())("an automation's runs", (it) => {
           [null, workspaceId, `${RELAY.owner}/${RELAY.name}`],
           "the run's agent stands in the automation's workspace on no plan, on its repository",
         );
-        assert.ok(agent.task?.startsWith(PROMPT), "the prompt is the agent's task");
-        assert.match(agent.task ?? "", /the automation "Flaky-test sweep"/u);
+        assert.ok(agent.prompt?.startsWith(PROMPT), "the automation's prompt opens the agent's");
+        assert.match(agent.prompt ?? "", /the automation "Flaky-test sweep"/u);
         assert.deepEqual(
           eve.opened
             .filter((each) => each.account === owner)
@@ -902,7 +902,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
 
         const agentId =
           outcome?.status === AUTOMATION_RUN_STATUS.STARTED ? outcome.codingAgentId : "";
-        const task = Option.getOrThrow(yield* readCodingAgent(owner, agentId)).task ?? "";
+        const task = Option.getOrThrow(yield* readCodingAgent(owner, agentId)).prompt ?? "";
         assert.ok(task.startsWith(PROMPT), "the developer's prompt comes first");
         assert.match(task, /because a pull request was opened on GitHub\./u);
         const fenced = /<github-event>\n([\s\S]*?)\n<\/github-event>/u.exec(task)?.[1];
@@ -969,7 +969,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
         const agent = Option.getOrThrow(yield* readCodingAgent(owner, agentId));
         assert.equal(agent.repository, "Acme/Relay", "spelled as the automation names it");
         assert.match(
-          agent.task ?? "",
+          agent.prompt ?? "",
           /because a pull request was opened or pushed to on GitHub\./u,
         );
       }),
@@ -998,7 +998,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
             );
             const agentId =
               outcome?.status === AUTOMATION_RUN_STATUS.STARTED ? outcome.codingAgentId : "";
-            return Option.getOrThrow(yield* readCodingAgent(owner, agentId)).task ?? "";
+            return Option.getOrThrow(yield* readCodingAgent(owner, agentId)).prompt ?? "";
           });
 
         const task = yield* taskOf(

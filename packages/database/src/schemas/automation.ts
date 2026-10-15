@@ -120,7 +120,7 @@ export const automationRun = pgTable(
       .references(() => user.id, { onDelete: "cascade" }),
     dedupeKey: text("dedupe_key").notNull(),
     firing: jsonb("firing").$type<AutomationFiring>().notNull(),
-    /** A webhook firing's body as its caller sent it, bounded, for the agent's task; null for every other firing. */
+    /** A webhook firing's body as its caller sent it, bounded, for the agent's prompt; null for every other firing. */
     payload: text("payload"),
     status: text("status").$type<AutomationRunStatus>().notNull(),
     /** Why it was skipped or failed; null while queued and once started. */

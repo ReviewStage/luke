@@ -263,7 +263,7 @@ const planlessAgent = (
       conversationId,
       model: "anthropic/claude-opus-5.5",
       effort: "high",
-      task: "Sweep the flaky tests.",
+      prompt: "Sweep the flaky tests.",
       repository: patch.repository ?? "acme/api",
       repositories: [patch.repository ?? "acme/api"],
       idempotencyKey: randomUUID(),

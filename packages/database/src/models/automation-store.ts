@@ -225,7 +225,7 @@ export interface NewAutomationRun {
   readonly dedupeKey: string;
   readonly firing: AutomationFiring;
   readonly firedAt: Date;
-  /** A webhook firing's body as its caller sent it, for the agent's task. */
+  /** A webhook firing's body as its caller sent it, for the agent's prompt. */
   readonly payload?: string;
 }
 

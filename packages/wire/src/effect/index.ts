@@ -6,5 +6,6 @@ export {
   readEither,
   SchemaRefusalError,
   verbatimJsonSchema,
+  wireKeys,
   wireRefusal,
 } from "./json-schema.js";

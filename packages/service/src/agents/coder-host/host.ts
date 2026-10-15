@@ -345,7 +345,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
 
   /** The instructions the agent's session runs under, composed on what its row names and whether its token reads the repository's CI. */
   const promptOf = (agent: CodingAgent, ciReadable: boolean): CoderSessionPrompt => {
-    const brief = agent.task === null ? CODING_AGENT_BRIEF.PLAN : CODING_AGENT_BRIEF.TASK;
+    const brief = agent.prompt === null ? CODING_AGENT_BRIEF.PLAN : CODING_AGENT_BRIEF.PROMPT;
     const text = coderInstructions(agent.repository, brief, ciReadable, agent.planId !== null);
     return { text, hash: promptHashOf(text), ciReadable };
   };
@@ -370,7 +370,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
             event.data.usage,
             {
               instructions: promptOf(agent, prompt.ciReadable ?? false).text,
-              brief: agent.task ?? agent.planSnapshot ?? "",
+              brief: agent.prompt ?? agent.planSnapshot ?? "",
             },
             seams.now(),
           );
@@ -533,8 +533,8 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
       Effect.gen(function* () {
         const found = yield* agentOf(admitted);
         if (Result.isFailure(found)) return planEditRejected(found.failure);
-        // An agent handed a task never saw the plan, so it has none to take notes on.
-        if (found.success.task !== null) return planEditRejected(PLAN_EDIT_REFUSAL.NO_PLAN);
+        // An agent handed a prompt never saw the plan, so it has none to take notes on.
+        if (found.success.prompt !== null) return planEditRejected(PLAN_EDIT_REFUSAL.NO_PLAN);
         const { id: agentId, planId } = found.success;
         if (planId === null) return planEditRejected(PLAN_EDIT_REFUSAL.NO_PLAN);
         // The plan is written as the member whose turn this is, whoever started the agent.

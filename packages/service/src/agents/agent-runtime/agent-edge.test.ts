@@ -91,7 +91,7 @@ async function openAgent(host: CoderHost) {
         model: "anthropic/claude-opus-5.5",
         effort: "high",
         planSnapshot: "# Invitations\n",
-        task: null,
+        prompt: null,
         repository: "acme/relay",
       });
       assert.ok(Option.isSome(started));

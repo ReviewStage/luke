@@ -166,7 +166,7 @@ function summaryFields(
       lineAwaits: standing.lineAwaits,
     }),
     turnId: standing.turn?.id ?? null,
-    brief: agent.task === null ? CODING_AGENT_BRIEF.PLAN : CODING_AGENT_BRIEF.TASK,
+    brief: agent.prompt === null ? CODING_AGENT_BRIEF.PLAN : CODING_AGENT_BRIEF.PROMPT,
     ...(agent.archivedAt === null ? undefined : { archivedAt: agent.archivedAt.getTime() }),
     ...(agent.disabledServers.length === 0
       ? undefined

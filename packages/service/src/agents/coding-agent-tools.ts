@@ -68,7 +68,7 @@ import { CODER_TOOL, CODER_TOOL_SET, RETIRED_CODER_TOOL } from "./coder-host/too
  * A start takes the one path the Start button's does
  * (`coder-host/start.ts`), on the call's plan and no other, under the same
  * key, so a call run again starts no second agent: the plan's document as
- * the agent's brief, or the developer's task in its place, on the model and
+ * the agent's brief, or the developer's prompt in its place, on the model and
  * effort the developer named or else the account's default, checked against
  * the catalog, whose choices the refusal lists so Luke can ask or try again.
  * Every answer is data the model reads, never a credential: a call's input
@@ -165,7 +165,7 @@ const MESSAGE_CODING_AGENT_INPUT = Schema.Struct({
   ),
 });
 
-/** A start names a task at most, and a model with its effort or neither; the catalog decides whether the two name anything. */
+/** A start names a prompt at most, and a model with its effort or neither; the catalog decides whether the two name anything. */
 const START_CODING_AGENT_INPUT = Schema.Struct({
   task: Schema.optionalKey(
     describeWire(
@@ -560,7 +560,8 @@ export function runStartCodingAgent(
   ) {
     return Effect.succeed(rejected(START_CODING_AGENT_REFUSAL.UNREADABLE));
   }
-  const { task, model, effort } = asked.success;
+  // Note that the model names the prompt `task`, the key its tool has always taken.
+  const { task: prompt, model, effort } = asked.success;
   const choice = model !== undefined && effort !== undefined ? { model, effort } : undefined;
   const eve = call.eve;
   if (eve === undefined) return Effect.succeed(rejected(START_CODING_AGENT_REFUSAL.NO_SERVICE));
@@ -571,7 +572,7 @@ export function runStartCodingAgent(
         planId,
         idempotencyKey: call.clientKey,
         choice,
-        task,
+        prompt,
       }).pipe(Effect.result);
       if (Result.isFailure(started)) {
         const refusal = started.failure;

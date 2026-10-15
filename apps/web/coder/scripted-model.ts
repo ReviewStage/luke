@@ -64,7 +64,7 @@ const readDelegationOutput = Schema.decodeUnknownOption(
 /** What `load_skill` answers: the skill's body. */
 const readSkillBody = Schema.decodeUnknownOption(Schema.String);
 
-/** eve's own tool that parks a turn until a task it started answers. */
+/** eve's own tool that parks a turn until a task it started answers: eve's subagent task, not a Luke task. */
 const TASK_WAIT = "task_wait";
 
 /** The line eve puts ahead of the agent's own words when it hands a worker its task. */

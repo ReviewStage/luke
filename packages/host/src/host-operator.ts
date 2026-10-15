@@ -1166,7 +1166,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           ...("model" in params ? { model: params.model } : undefined),
           ...("effort" in params ? { effort: params.effort } : undefined),
           ...("contextWindow" in params ? { contextWindow: params.contextWindow } : undefined),
-          ...("task" in params ? { task: params.task } : undefined),
+          ...("prompt" in params ? { prompt: params.prompt } : undefined),
           ...("attachments" in params ? { attachments: params.attachments } : undefined),
           ...("disabledServers" in params
             ? { disabledServers: params.disabledServers }

@@ -65,7 +65,7 @@ const openAgent = (repository: string, installation: InstallationFixture) =>
       model: "anthropic/claude-opus-5.5",
       effort: "high",
       planSnapshot: "# Teammate invitations\n",
-      task: null,
+      prompt: null,
       repository,
     });
     assert.ok(Option.isSome(started));

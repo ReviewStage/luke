@@ -61,7 +61,7 @@ const openPlan = Effect.gen(function* () {
 /** What a Start hands the agent where the test names nothing: the plan's text. */
 const PLAN_BRIEF: CodingAgentBriefText = {
   planSnapshot: "# Teammate invitations\n\nAny member may invite by email.\n",
-  task: null,
+  prompt: null,
 };
 
 function start(
@@ -209,7 +209,7 @@ it.layer(getTestDB())("the coding agents of an account's plans", (it) => {
       assert.equal(agent.model, asked.model);
       assert.equal(agent.effort, asked.effort);
       assert.equal(agent.planSnapshot, asked.planSnapshot);
-      assert.equal(agent.task, null);
+      assert.equal(agent.prompt, null);
       assert.equal(agent.repository, asked.repository);
       assert.deepEqual(yield* conversationKind(agent.conversationId), {
         kind: CONVERSATION_KIND.CODING_AGENT,

@@ -9,7 +9,7 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
  *
  * An automation belongs to the account that made it and works on one of its
  * plans: when its trigger fires, the service starts a coding agent on the
- * plan's repository with the automation's prompt as the agent's task, the
+ * plan's repository with the automation's prompt as the agent's prompt, the
  * firing described beneath it, exactly as a developer's own Start with a
  * task would. A trigger is a schedule, a cron expression read in an IANA
  * time zone, or an event of the plan's repository the Luke GitHub App is
@@ -24,7 +24,7 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
 export const AUTOMATION_BOUNDS = {
   /** The most characters an automation's name may spell. */
   MAX_NAME_CHARS: 80,
-  /** The most characters of a prompt: under a coding agent's task bound, with room for what Luke adds about the firing. */
+  /** The most characters of a prompt: under a coding agent's prompt bound, with room for what Luke adds about the firing. */
   MAX_PROMPT_CHARS: 12_000,
   /** The most characters of a cron expression. */
   MAX_CRON_CHARS: 120,
@@ -227,7 +227,7 @@ export const AUTOMATION_FIRING = {
  * What fired a run, in brief: the instant a schedule was due, the GitHub
  * event with the issue or pull request it names, or a webhook call with how
  * large its body was. Only what the run's history shows is kept; a
- * webhook's body reaches the agent's task and is kept nowhere else here.
+ * webhook's body reaches the agent's prompt and is kept nowhere else here.
  */
 export const automationFiringSchema = EffectSchema.Union([
   EffectSchema.Struct({

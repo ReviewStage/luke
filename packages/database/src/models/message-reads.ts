@@ -973,7 +973,7 @@ const noSteeredAsk = () =>
                     lt(earlierDelegation.createdAt, namingAsk.createdAt),
                     and(
                       eq(earlierDelegation.createdAt, namingAsk.createdAt),
-                      lt(earlierDelegation.taskRevision, namingAsk.taskRevision),
+                      lt(earlierDelegation.askRevision, namingAsk.askRevision),
                     ),
                   ),
                 ),

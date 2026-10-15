@@ -571,7 +571,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         const stored = yield* readCodingAgent(owner, agent.id);
         assert.ok(Option.isSome(stored));
         assert.equal(stored.value.planSnapshot, SNAPSHOT);
-        assert.equal(stored.value.task, null);
+        assert.equal(stored.value.prompt, null);
         assert.equal(stored.value.repository, RELAY_FULL_NAME);
         assert.deepEqual(eve.opened, [
           {
@@ -1370,7 +1370,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   );
 
   it.effect(
-    "an agent started on a task mentioning a switched-off MCP server leaves the server for its first turn to take, its switch left off",
+    "an agent started on a prompt mentioning a switched-off MCP server leaves the server for its first turn to take, its switch left off",
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();

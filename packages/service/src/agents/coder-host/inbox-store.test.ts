@@ -70,7 +70,7 @@ const openAgentIn = Effect.gen(function* () {
     effort: "high",
     repository: "acme/relay",
     planSnapshot: "# Teammate invitations\n",
-    task: null,
+    prompt: null,
   });
   assert.ok(Option.isSome(started));
   const agent = { userId, planId: plan.id, agentId: started.value.agent.id };
@@ -82,7 +82,7 @@ const openAgent = Effect.map(openAgentIn, ({ agent }) => agent);
 const SETTINGS: InboxPost = {
   key: "branch-protection",
   title: "Require a review on main",
-  response: { type: INBOX_RESPONSE.TASK },
+  response: { type: INBOX_RESPONSE.TODO },
   needsReply: false,
 };
 
@@ -122,7 +122,7 @@ const openPlanlessAgentOf = (byAutomation: boolean) =>
       effort: "high",
       repository: "acme/relay",
       planSnapshot: null,
-      task: "Sweep the flaky tests.",
+      prompt: "Sweep the flaky tests.",
     });
     assert.ok(Option.isSome(started));
     const agent: InboxAgent = { userId, planId: null, agentId: started.value.agent.id };

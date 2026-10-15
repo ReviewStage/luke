@@ -155,7 +155,7 @@ export const INBOX_PRESSES = {
     back: { reply: INBOX_REPLY.DECLINED, label: "Decline" },
     ahead: { reply: INBOX_REPLY.APPROVED, label: "Approve" },
   },
-  [INBOX_RESPONSE.TASK]: {
+  [INBOX_RESPONSE.TODO]: {
     back: { reply: INBOX_REPLY.NOT_DONE, label: "Can't do this" },
     ahead: { reply: INBOX_REPLY.DONE, label: "Done" },
   },
@@ -172,7 +172,7 @@ export function pressesOf(
   if (!knownResponse(response)) return undefined;
   switch (response.type) {
     case INBOX_RESPONSE.APPROVAL:
-    case INBOX_RESPONSE.TASK:
+    case INBOX_RESPONSE.TODO:
     case INBOX_RESPONSE.NONE:
       return INBOX_PRESSES[response.type];
     default:

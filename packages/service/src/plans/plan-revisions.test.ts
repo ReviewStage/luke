@@ -65,7 +65,7 @@ const startAgent = (userId: string, planId: string) =>
       model: AGENT_MODEL,
       effort: "high",
       planSnapshot: "# Teammate invitations",
-      task: null,
+      prompt: null,
       repository: "acme/relay",
     }),
     (started) => Option.getOrThrow(started).agent.id,

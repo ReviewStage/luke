@@ -58,7 +58,7 @@ import type { ModelChoiceRefused } from "../providers/model-catalog.js";
 /**
  * automation-runs.ts -- one queued automation run acted on: its guards read, its coding agent started as the deployment acting for the owner, and the run settled.
  *
- * A run is a Start with a task, on the one path a Start takes
+ * A run is a Start with a prompt, on the one path a Start takes
  * (`coder-host/start.ts`), in the automation's workspace on no plan: the
  * owner's membership of the workspace, the reach of the automation's
  * repository through the workspace's installation, and the model are
@@ -92,13 +92,13 @@ const AUTOMATION_RUNS = {
 /** A run as it is acted on: a webhook's body beside it where the read that found it carried one. */
 type ActedRun = AutomationRun & { readonly payload?: string | null };
 
-/** The most the agent's task spells, the bound a message to an agent is held to. */
-const TASK_BOUND = CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS;
+/** The most the agent's prompt spells, the bound a message to an agent is held to. */
+const PROMPT_BOUND = CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS;
 
 /** What a webhook body's fence and lead line spell, with room. */
 const WEBHOOK_FRAME_CHARS = 256;
 
-/** What a body cut to fit the task's bound ends with. */
+/** What a body cut to fit the prompt's bound ends with. */
 const CUT_MARK = "\n… (cut to fit; the full body is the caller's to send again)";
 
 /** The statuses under which an agent counts against the concurrency guard. */
@@ -112,7 +112,7 @@ export type EveForAccount = (
   userId: string,
 ) => Effect.Effect<EveSessions, HostedRefusal, HttpClient.HttpClient>;
 
-/** Each GitHub event as the agent's task names it. */
+/** Each GitHub event as the agent's prompt names it. */
 const GITHUB_EVENT_WORDS = {
   [GITHUB_TRIGGER_EVENT.PULL_REQUEST_OPENED]: "a pull request was opened",
   [GITHUB_TRIGGER_EVENT.PULL_REQUEST_LABELED]: "a pull request was labelled",
@@ -123,7 +123,7 @@ const GITHUB_EVENT_WORDS = {
   [GITHUB_TRIGGER_EVENT.PUSH]: "commits were pushed",
 } as const satisfies Record<GitHubTriggerEvent, string>;
 
-/** Why this run was fired, in the words the agent's task closes with. */
+/** Why this run was fired, in the words the agent's prompt closes with. */
 function firingSentence(automation: Automation, run: ActedRun): string {
   const { firing } = run;
   switch (firing.kind) {
@@ -177,7 +177,7 @@ function githubEventLines(run: ActedRun): readonly string[] {
 /**
  * What the agent is told of a webhook call: its body as the caller sent it,
  * fenced as the caller's own text to read as data, never as instructions,
- * and cut with a note where it would not fit the task's bound.
+ * and cut with a note where it would not fit the prompt's bound.
  */
 function webhookLines(run: ActedRun, room: number): readonly string[] {
   if (run.firing.kind !== AUTOMATION_FIRING.WEBHOOK || run.payload == null) return [];
@@ -191,20 +191,20 @@ function webhookLines(run: ActedRun, room: number): readonly string[] {
 }
 
 /**
- * The task the run's agent is handed: the automation's prompt, then a line
+ * The prompt the run's agent is handed: the automation's prompt, then a line
  * saying which automation started it and why, so the agent and the
  * developer reading its tab both know it was not typed by hand, and what it
  * is told of the event that fired it.
  */
-function automationTask(automation: Automation, run: ActedRun): string {
+function automationPrompt(automation: Automation, run: ActedRun): string {
   const lines = [
     automation.action.prompt,
     "---",
     `Luke started this run for the automation "${automation.name}" because ${firingSentence(automation, run)}. No one is watching it as it runs: decide on your own, and post to the inbox only what needs the developer.`,
     ...githubEventLines(run),
   ];
-  // Note that the body takes what room the rest leaves under the task's bound, less its own fence and lead line.
-  const room = TASK_BOUND - lines.join("\n\n").length - WEBHOOK_FRAME_CHARS;
+  // Note that the body takes what room the rest leaves under the prompt's bound, less its own fence and lead line.
+  const room = PROMPT_BOUND - lines.join("\n\n").length - WEBHOOK_FRAME_CHARS;
   return [...lines, ...webhookLines(run, room)].join("\n\n");
 }
 
@@ -288,7 +288,7 @@ const failedRun = Effect.fnUntraced(function* (run: ActedRun, reason: Automation
 
 /**
  * A claimed run of an automation that hands every run to the same agent:
- * the run's task sent to that agent as a message of the creator's, under
+ * the run's prompt sent to that agent as a message of the creator's, under
  * the run's own key, as the developer's own message is sent
  * (`coder-host/steer.ts`), so a run acted on twice sends it once; the run
  * settled with that agent, or failed in one fixed word. An agent gone or
@@ -313,7 +313,7 @@ const steerClaimed = Effect.fnUntraced(function* (
       automation.userId,
       found.value,
       {
-        text: automationTask(automation, run),
+        text: automationPrompt(automation, run),
         clientKey: run.id,
         sender: { kind: MESSAGE_SENDER.AUTOMATION, name: automation.name },
       },
@@ -504,7 +504,7 @@ const startClaimed = Effect.fnUntraced(function* (
       repository,
       idempotencyKey: run.id,
       choice: automation.action.choice,
-      task: automationTask(automation, run),
+      prompt: automationPrompt(automation, run),
       rememberChoice: false,
       automationId: automation.id,
     }),

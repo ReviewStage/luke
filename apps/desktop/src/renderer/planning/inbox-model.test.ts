@@ -186,7 +186,7 @@ test("a form is answered by its fields in the form's own order whatever order th
 });
 
 test("an approval, a task, and an item asking nothing are answered by their presses alone, and words by words", () => {
-  const task = item({ id: "task", response: { type: INBOX_RESPONSE.TASK } });
+  const task = item({ id: "task", response: { type: INBOX_RESPONSE.TODO } });
   assert.equal(inboxReply(task, { ...EMPTY_INBOX_DRAFT, note: "done it" }), undefined);
   assert.deepEqual(inboxReply(task, EMPTY_INBOX_DRAFT, INBOX_REPLY.DONE), {
     reply: INBOX_REPLY.DONE,

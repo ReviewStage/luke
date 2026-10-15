@@ -134,7 +134,7 @@ function mintSession(): string {
 const unclaimedAgent = (
   model = "anthropic/claude-opus-5.5",
   effort = "high",
-  brief: CodingAgentBriefText = { planSnapshot: PLAN_TEXT, task: null },
+  brief: CodingAgentBriefText = { planSnapshot: PLAN_TEXT, prompt: null },
 ) =>
   Effect.gen(function* () {
     const userId = yield* openGithubUser();
@@ -161,7 +161,7 @@ const openAgent = (
   host: CoderHost,
   model = "anthropic/claude-opus-5.5",
   effort = "high",
-  brief: CodingAgentBriefText = { planSnapshot: PLAN_TEXT, task: null },
+  brief: CodingAgentBriefText = { planSnapshot: PLAN_TEXT, prompt: null },
 ) =>
   Effect.gen(function* () {
     const { userId, agent, target, auth } = yield* unclaimedAgent(model, effort, brief);

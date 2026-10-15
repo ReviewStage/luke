@@ -205,7 +205,7 @@ const openAgent = (pull: PullRequestFixture) =>
       model: "anthropic/claude-opus-5.5",
       effort: "high",
       planSnapshot: "# Teammate invitations\n",
-      task: null,
+      prompt: null,
       repository: RELAY_FULL_NAME,
     });
     const agent: CodingAgent = Option.getOrElse(started, () =>

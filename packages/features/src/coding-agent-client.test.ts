@@ -78,6 +78,26 @@ it.effect(
 );
 
 it.effect(
+  "a Start's prompt travels under the key a released service reads, task, trimmed as it is bounded",
+  () =>
+    Effect.gen(function* () {
+      const api = fakeCloudApi({
+        [`POST /api/plans/${PLAN_ID}/agents`]: { answer: () => ({ agent: AGENT }), status: 201 },
+      });
+
+      yield* Effect.provide(
+        client().start(PLAN_ID, { idempotencyKey: "press-1", prompt: "  Fix the flaky test.  " }),
+        api.layer,
+      );
+
+      assert.deepEqual(JSON.parse(api.requests()[0]?.body ?? "{}"), {
+        idempotencyKey: "press-1",
+        task: "Fix the flaky test.",
+      });
+    }),
+);
+
+it.effect(
   "a Start refused for a repository out of reach carries why, and a reason this build cannot read is the bare refusal",
   () =>
     Effect.gen(function* () {
