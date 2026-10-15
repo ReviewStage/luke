@@ -1,3 +1,4 @@
+import { isLinkHome, LINK_HOME } from "./link-home.js";
 import { encodeMention, MENTION_KIND } from "./mention-link.js";
 
 /**
@@ -15,12 +16,6 @@ import { encodeMention, MENTION_KIND } from "./mention-link.js";
 /** The step the picture's id follows in its address. */
 const FILES_STEP = "files";
 
-/** The address's host, and the schemes it is read under: the web's, and the desktop app's own. */
-const ADDRESS = {
-  HOST: "tryluke.dev",
-  PROTOCOLS: new Set(["https:", "tryluke:"]),
-} as const;
-
 /** An id as the service mints one: a UUID in lower case. */
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 
@@ -30,8 +25,10 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
  * the scan stays linear over any text, and the picture's id ends the
  * address, so a broken one that only begins with an id names nothing.
  */
-const ADDRESS_IN_TEXT =
-  /(?:https|tryluke):\/\/tryluke\.dev\/[^\s/()]{1,200}\/plan\/([0-9a-f-]{36})\/files\/([0-9a-f-]{36})(?![\w-])/gu;
+const ADDRESS_IN_TEXT = new RegExp(
+  `(?:https|${LINK_HOME.APP_SCHEME}):\\/\\/${LINK_HOME.HOST.replaceAll(".", "\\.")}\\/[^\\s/()]{1,200}\\/plan\\/([0-9a-f-]{36})\\/files\\/([0-9a-f-]{36})(?![\\w-])`,
+  "gu",
+);
 
 /** The most characters an address is read from; past this no picture's address is that long. */
 const MAX_ADDRESS_CHARS = 512;
@@ -63,8 +60,7 @@ export function planAttachmentAddress(ref: PlanAttachmentRef, workspace: string)
 /** The picture an address names, by either scheme; nothing for any other address, a plan's or a section's among them. */
 export function planAttachmentOf(address: string): PlanAttachmentRef | undefined {
   const url = address.length > MAX_ADDRESS_CHARS ? undefined : parsedUrl(address);
-  if (url === undefined || !ADDRESS.PROTOCOLS.has(url.protocol) || url.host !== ADDRESS.HOST)
-    return undefined;
+  if (url === undefined || !isLinkHome(url)) return undefined;
   if (url.search !== "" || url.hash !== "") return undefined;
   const [first, workspace, step, planId, files, attachmentId, ...rest] = url.pathname.split("/");
   const shaped =

@@ -56,6 +56,15 @@ the proposal, "What shipped" below says so.
   internal form: it has no page of its own on the web to link to, and nothing
   outside the app opens `luke:`, which is a different scheme from the
   desktop's registered `tryluke:`.
+- **Every other place has a link too (L6, copy-link-anything)**:
+  `@luke/features/luke-link` writes and reads a link to a task's version,
+  page, call, turn, agent, worker, Changes, and message, an agent with no
+  task, the Inbox and an item in it, Automations, an automation and its
+  run, Factory, and a Settings page, each under `/<workspace>/` by its ids
+  alone; a task's own link and a section's stay `mention-link`'s. The host
+  and the scheme are spelled once (`@luke/features/link-home`), with aliases
+  every reader takes, so a rename of the product is one line. The Open in
+  Luke page is served at each and names its kind.
 - **Existing slugs were not checked against the reserved list**: no query
   of production was run. The list keeps new workspaces off Luke's own path
   steps, and a link never resolves by its slug, so a workspace already

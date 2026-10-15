@@ -91,7 +91,7 @@ test("no workspace's slug can be the first step of a page the web app serves und
   );
 });
 
-test("a plan's link, a section's and a picture's among them, is served the Open in Luke page, and no page of Luke's own is", () => {
+test("a link to any place in Luke, a plan's, a section's and a picture's among them, is served the Open in Luke page, and no page of Luke's own is", () => {
   const opens = (vercel.services[SERVICE.WEB].routes ?? []).flatMap((route) =>
     "dest" in route && route.dest === "/open.html" ? [new RegExp(`^${route.src}$`, "u")] : [],
   );
@@ -107,11 +107,27 @@ test("a plan's link, a section's and a picture's among them, is served the Open 
     true,
   );
   for (const path of [
+    "/acme/plan/p1/agent/a1/worker/toolu_1",
+    "/acme/task/p1/version/3",
+    "/acme/agent/a1",
+    "/acme/inbox",
+    "/acme/plan/p1/inbox/i1/",
+    "/acme/automations",
+    "/acme/automation/x1/run/r1",
+    "/acme/factory",
+    "/acme/settings/coding-agents",
+  ]) {
+    assert.equal(served(path), true, path);
+  }
+  for (const path of [
     "/about",
     "/changelog/page/2",
     "/api/plans/x/board",
+    "/api/inbox/i1",
+    "/api/automations/x1/runs",
+    "/api/agents/a1",
     "/acme/plans/x",
-    "/acme/plan/x/files",
+    "/acme",
     "/",
   ]) {
     assert.equal(served(path), false, path);

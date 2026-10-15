@@ -80,3 +80,28 @@ test("the way to Luke is the landing page, never a download, on a plan's page an
     );
   }
 });
+
+test("a link to an agent, an Inbox item, or an automation is named by its kind, and its press opens it in the app", () => {
+  const AGENT_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
+  for (const [address, title] of [
+    [`/acme/agent/${AGENT_ID}`, "Open this agent in Luke"],
+    [`/acme/agent/${AGENT_ID}/inbox/${AGENT_ID}`, "Open this Inbox item in Luke"],
+    [`/acme/automation/${AGENT_ID}`, "Open this automation in Luke"],
+  ] as const) {
+    const page = pageAt(address);
+
+    assert.equal(page.querySelector("h1")?.textContent, title, address);
+    assert.equal(
+      linkNamed(page, "Open in Luke")?.getAttribute("href"),
+      `tryluke://tryluke.dev${address}`,
+      address,
+    );
+  }
+});
+
+test("an address naming nothing in Luke says so, and offers nothing to open", () => {
+  const page = pageAt("/acme/agent/Fix%20billing");
+
+  assert.equal(page.querySelector("h1")?.textContent, "This isn't a link to anything in Luke");
+  assert.equal(linkNamed(page, "Open in Luke"), undefined);
+});
