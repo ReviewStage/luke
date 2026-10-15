@@ -82,8 +82,10 @@ function keptPhoto(
         () => undefined,
       )
       .then((url) => {
-        if (url === undefined) versions.delete(version);
-        else kept.url = url;
+        // Note that a failure lets go only of its own read, because the version may have been asked for again since.
+        if (url === undefined) {
+          if (versions.get(version) === kept) versions.delete(version);
+        } else kept.url = url;
         return url;
       }),
   };
@@ -121,21 +123,10 @@ export function WorkspaceTile({
 }): React.JSX.Element {
   const photo = useWorkspacePhoto(workspace.id, workspace.photoVersion);
   const [failedUrl, setFailedUrl] = useState<string | undefined>(undefined);
+  const [loadedUrl, setLoadedUrl] = useState<string | undefined>(undefined);
   const url = workspace.photoVersion === undefined ? workspace.pictureUrl : photo;
-  if (url !== undefined && url !== failedUrl) {
-    return (
-      <img
-        className="workspace-tile"
-        data-size={size}
-        src={url}
-        alt=""
-        aria-hidden="true"
-        referrerPolicy="no-referrer"
-        draggable={false}
-        onError={() => setFailedUrl(url)}
-      />
-    );
-  }
+  const drawn = url !== undefined && url !== failedUrl ? url : undefined;
+  // Note that the letter stands under the picture until it has loaded, because an avatar on the network may take a while.
   return (
     <span
       className="workspace-tile"
@@ -144,6 +135,18 @@ export function WorkspaceTile({
       aria-hidden="true"
     >
       {letterOf(workspace.name)}
+      {drawn === undefined ? null : (
+        <img
+          className="workspace-tile-picture"
+          data-loaded={String(drawn === loadedUrl)}
+          src={drawn}
+          alt=""
+          referrerPolicy="no-referrer"
+          draggable={false}
+          onLoad={() => setLoadedUrl(drawn)}
+          onError={() => setFailedUrl(drawn)}
+        />
+      )}
     </span>
   );
 }

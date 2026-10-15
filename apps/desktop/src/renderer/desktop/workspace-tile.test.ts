@@ -70,11 +70,16 @@ function mount(workspace: {
   return container;
 }
 
-/** What the tile draws: an image's address, or its letter. */
+/** What the tile shows: an image's address once it has loaded, or else its letter. */
 function drawn(container: HTMLElement): { src: string } | { letter: string } {
-  const image = container.querySelector("img");
+  const image = container.querySelector('img[data-loaded="true"]');
   if (image !== null) return { src: image.getAttribute("src") ?? "" };
   return { letter: container.querySelector(".workspace-tile")?.textContent ?? "" };
+}
+
+/** The tile's image finishes loading, as the browser says it has. */
+function load(container: HTMLElement): void {
+  act(() => container.querySelector("img")?.dispatchEvent(new Event("load")));
 }
 
 test("a workspace with a photo draws its letter while it loads, then the photo the host read for its id", async () => {
@@ -82,7 +87,10 @@ test("a workspace with a photo draws its letter while it loads, then the photo t
 
   assert.deepEqual(drawn(tile), { letter: "A" });
   await settle();
+  const read = drawn(tile);
+  load(tile);
 
+  assert.deepEqual(read, { letter: "A" }, "the letter stands until the photo has loaded");
   assert.deepEqual(drawn(tile), { src: `data:image/png;base64,${PHOTO.base64}` });
   assert.deepEqual(sent, [
     { kind: ACT_KIND.WORKSPACE_PHOTO_READ, payload: { workspaceId: "workspace-photo" } },
@@ -106,9 +114,11 @@ test("a photo the host has none of, or that fails to load, leaves the letter", a
   assert.deepEqual(drawn(broken), { letter: "Z" });
 });
 
-test("a personal workspace with no photo draws its owner's picture, and its letter where the picture fails to load", () => {
+test("a personal workspace with no photo draws its letter while its owner's picture loads, then the picture, and its letter where the picture fails to load", () => {
   const tile = mount({ id: "workspace-personal", name: "Personal", pictureUrl: PICTURE_URL });
 
+  assert.deepEqual(drawn(tile), { letter: "P" });
+  load(tile);
   assert.deepEqual(drawn(tile), { src: PICTURE_URL });
   assert.deepEqual(sent, []);
 
@@ -123,4 +133,42 @@ test("a workspace with neither a photo nor a picture draws its letter and reads 
 
   assert.deepEqual(drawn(tile), { letter: "P" });
   assert.deepEqual(sent, []);
+});
+
+test("a read of a version asked for again lands though an earlier read of it failed after the second was asked", async () => {
+  // Each photo read waits until the test answers it, in the order it was asked.
+  const answers: ((value: PlanningWorkspacePhotoAnswer) => void)[] = [];
+  Object.defineProperty(window, "luke", {
+    configurable: true,
+    value: {
+      act: () =>
+        new Promise((resolve) =>
+          answers.push((value) => resolve({ status: ACT_OUTCOME_STATUS.DONE, value })),
+        ),
+    },
+  });
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const draw = (photoVersion: string) =>
+    act(() =>
+      root.render(
+        createElement(WorkspaceTile, {
+          workspace: { id: "workspace-flip", name: "flip", photoVersion },
+        }),
+      ),
+    );
+
+  draw("aaaaaaaaaaaaaaaa");
+  draw("bbbbbbbbbbbbbbbb");
+  draw("aaaaaaaaaaaaaaaa");
+  await settle();
+  answers[0]?.({ failure: WORKSPACE_CALL_FAILURE.NOT_FOUND });
+  await settle();
+  answers[2]?.(PHOTO);
+  await settle();
+  load(container);
+
+  assert.deepEqual(drawn(container), { src: `data:image/png;base64,${PHOTO.base64}` });
 });

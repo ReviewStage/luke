@@ -492,8 +492,23 @@ body,
 }
 
 /* A photo or a picture fills the tile's square, cropped rather than stretched. */
-img.workspace-tile {
+/* A workspace's picture over its letter, shown once it has loaded, so the
+   letter stands while it loads and where it fails (workspace-tile.tsx). */
+.workspace-tile:has(.workspace-tile-picture) {
+  position: relative;
+  overflow: hidden;
+}
+
+.workspace-tile-picture {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   object-fit: cover;
+}
+
+.workspace-tile-picture[data-loaded="false"] {
+  visibility: hidden;
 }
 
 .workspace-tile[data-hue="2"] {
