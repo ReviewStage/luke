@@ -380,7 +380,7 @@ function planlessNoticeText(
 /** What an answer of the inbox read carries that the window and the Dock are told of. */
 type InboxAnswered = Pick<AccountInboxAnswer, "items" | "plans" | "planless" | "automations">;
 
-/** Whether two answers say alike everything the window draws of each item of an agent with no plan: its agent's title and the automation and repository standing in a plan's place, which change without the item's stamp moving. */
+/** Whether two answers say alike everything the window draws of each item of an agent with no plan: its agent's title and model and the automation and repository standing in a plan's place, which change without the item's stamp moving. */
 function samePlanless(
   one: readonly AccountPlanlessEntry[],
   other: readonly AccountPlanlessEntry[],
@@ -393,6 +393,7 @@ function samePlanless(
         was !== undefined &&
         was.id === item.id &&
         was.agentTitle === item.agentTitle &&
+        was.agentModel === item.agentModel &&
         was.automationId === item.automationId &&
         was.automationName === item.automationName &&
         was.repository === item.repository
