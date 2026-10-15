@@ -1,8 +1,8 @@
+import { useSettingWrite } from "@luke/ui/use-setting-write";
 import type { ActionResult } from "@luke/wire";
 import { useId } from "react";
 import { Switch } from "../switch";
 import { ChangedMark } from "./marks";
-import { useSettingWrite } from "./use-setting-write";
 
 /**
  * A settings switch: its name, optional why, and the thumb. The visible name is

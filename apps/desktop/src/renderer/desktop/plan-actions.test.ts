@@ -2,13 +2,13 @@
 
 import assert from "node:assert/strict";
 import type { Plan, PlanSummary } from "@luke/features/plan-wire";
+import { DOCUMENT_REGION, PLANS_PAGE, type PlanMark } from "@luke/ui/planning-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { plansControl, UNPINNED_SUMMARY } from "#testing/plans-control";
 import { installScrollIntoView } from "#testing/scroll-into-view";
-import { DOCUMENT_REGION, PLANS_PAGE, type PlanMark } from "../planning/planning-model";
 import { NO_LOOKS } from "../planning/use-plan-looks";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { DesktopPlans } from "./desktop-plans";

@@ -3,8 +3,10 @@
 import assert from "node:assert/strict";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import type { Plan, PlanSummary } from "@luke/features/plan-wire";
+import { shellsAsked } from "@luke/features/terminal-store";
 import { SANDBOX_STATE } from "@luke/features/terminal-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { DOCUMENT_REGION, PLANS_PAGE } from "@luke/ui/planning-model";
 import type { StripTab } from "@luke/ui/tab-strip-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -16,8 +18,6 @@ import { codingAgentsControl, plansControl, UNPINNED_SUMMARY } from "#testing/pl
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { runAppCommand } from "../app-commands";
 import { DesktopPlans } from "../desktop/desktop-plans";
-import { DOCUMENT_REGION, PLANS_PAGE } from "./planning-model";
-import { shellsAsked } from "./terminal-store";
 import { MAIN_TAB, type MainTab } from "./use-main-tabs";
 import { NO_LOOKS } from "./use-plan-looks";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "./use-side-panel";

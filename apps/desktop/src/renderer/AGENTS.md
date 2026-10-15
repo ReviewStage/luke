@@ -78,7 +78,7 @@ Read it first. What it does not cover is the Electron window under the surface:
 
 ## Confirms
 
-Any action that cannot be undone asks first, over `confirm-state.ts`. In the
+Any action that cannot be undone asks first, over `@luke/ui/confirm-state`. In the
 desktop window it asks through `<ConfirmDialog>`, a modal over the window held by
 `useConfirmDialog`: title, what goes, Cancel focused and the act in red.
 Settings asks the same way, from a row's button or its ⋯ menu. A question does not

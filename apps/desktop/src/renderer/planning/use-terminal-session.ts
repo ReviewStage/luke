@@ -10,6 +10,14 @@ import {
   type TerminalRefusal,
   terminalPortOutboundSchema,
 } from "@luke/features/terminal-acts";
+import {
+  TERMINAL_ACTION,
+  TERMINAL_STATE,
+  type TerminalAction,
+  type TerminalState,
+  terminalLook,
+} from "@luke/features/terminal-model";
+import { sandboxRead, shellsAsked } from "@luke/features/terminal-store";
 import { SANDBOX_STATE, type TerminalsAnswer } from "@luke/features/terminal-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
@@ -22,14 +30,6 @@ import type { TerminalFind, TerminalHandle } from "../terminal/contract";
 import { onTerminalPort } from "../terminal/terminal-port";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { terminalModuleAtom } from "./terminal-bundle";
-import {
-  TERMINAL_ACTION,
-  TERMINAL_STATE,
-  type TerminalAction,
-  type TerminalState,
-  terminalLook,
-} from "./terminal-model";
-import { sandboxRead, shellsAsked } from "./terminal-store";
 import { useOpenLink } from "./use-open-link";
 
 /**

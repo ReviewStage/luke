@@ -10,6 +10,7 @@ import type { ModelChoice } from "@luke/features/models-wire";
 import type { PageLine } from "@luke/features/page-wire";
 import type { CodeRef } from "@luke/features/plan-wire";
 import { PLAN_WORK_STATE, type PlanCodeShowing } from "@luke/features/planning-view";
+import { TERMINAL_ASK, TERMINAL_TARGET, terminalTarget } from "@luke/features/terminal-entry";
 import { ACT_KIND } from "@luke/host/acts";
 import { CollapseIcon, ExpandIcon, SidePanelIcon } from "@luke/ui";
 import {
@@ -63,7 +64,6 @@ import { PlanBoard } from "../planning/plan-board";
 import { PlanCall } from "../planning/plan-call";
 import { type KindLook, TAB_KIND, tabLook } from "../planning/tab-look";
 import { useOpenTerminal } from "../planning/terminal-commands";
-import { TERMINAL_ASK, TERMINAL_TARGET, terminalTarget } from "../planning/terminal-entry";
 import { TerminalCardFoot, TerminalStanding } from "../planning/terminal-shells";
 import { TerminalTab } from "../planning/terminal-tab";
 import { cardTitle, TOOL_TARGET, type ToolTarget } from "../planning/tool-call-model";

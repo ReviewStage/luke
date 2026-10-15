@@ -12,15 +12,15 @@ import {
   UnarchiveIcon,
   UnpinIcon,
 } from "@luke/ui";
+import { confirmAsked } from "@luke/ui/confirm-state";
+import { DOCUMENT_REGION, PLAN_MARK, type PlanMark } from "@luke/ui/planning-model";
 import { HistoryIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
-import { DOCUMENT_REGION, PLAN_MARK, type PlanMark } from "../planning/planning-model";
 import { RelativeTime } from "../planning/relative-time";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { ConfirmDialog, type DialogQuestion, useConfirmDialog } from "../settings/confirm-dialog";
-import { confirmAsked } from "../settings/confirm-state";
 import { Tooltip } from "../tooltip";
 import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
 import { PlanStatusMark, planCardOf } from "./plan-card";

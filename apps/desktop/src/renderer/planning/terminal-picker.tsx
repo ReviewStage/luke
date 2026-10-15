@@ -1,5 +1,6 @@
 import { useAtomValue } from "@effect/atom-react";
 import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import { sandboxRead } from "@luke/features/terminal-store";
 import { SANDBOX_STATE, type SandboxState } from "@luke/features/terminal-wire";
 import { PlusIcon, SearchIcon } from "@luke/ui";
 import { Command } from "cmdk";
@@ -8,7 +9,6 @@ import { SHORTCUT_KEY } from "#shared/shortcuts";
 import { Shortcut } from "../shortcut";
 import { agentStillWriting, agentTabLabel } from "./coding-agent-model";
 import { AgentGlyph } from "./tab-look";
-import { sandboxRead } from "./terminal-store";
 import type { CodingAgentsControl } from "./use-coding-agents";
 
 /**

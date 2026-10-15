@@ -9,6 +9,7 @@ import {
 } from "@luke/features/coding-agent-wire";
 import type { Plan, PlanSummary } from "@luke/features/plan-wire";
 import { PLAN_WORK_STATE } from "@luke/features/planning-view";
+import { DOCUMENT_REGION, PLANS_PAGE } from "@luke/ui/planning-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -17,7 +18,6 @@ import { onRegistry } from "#testing/copy-feedback";
 import { conversationOf, worker, workerCall, workTurn } from "#testing/plan-work";
 import { codingAgentsControl, plansControl, UNPINNED_SUMMARY } from "#testing/plans-control";
 import { installScrollIntoView } from "#testing/scroll-into-view";
-import { DOCUMENT_REGION, PLANS_PAGE } from "../planning/planning-model";
 import { MAIN_TAB } from "../planning/use-main-tabs";
 import { NO_LOOKS } from "../planning/use-plan-looks";
 import { SIDE_PANEL_TAB } from "../planning/use-side-panel";

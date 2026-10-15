@@ -12,6 +12,7 @@ import {
 } from "@luke/settings";
 import { SETTINGS_SEARCH_ROW } from "@luke/settings/settings-anchors";
 import { PencilIcon, ResetIcon, TrashIcon } from "@luke/ui";
+import { actionRejection } from "@luke/ui/use-setting-write";
 import { VOICE_KEYLESS_NOTE } from "@luke/voice/microphone-access";
 import type { ShortcutControl } from "@luke/voice/settings-controls";
 import type { ActionResult } from "@luke/wire";
@@ -28,7 +29,6 @@ import { Shortcut } from "../shortcut";
 import { AttentionMark, ChangedMark } from "./marks";
 import { MenuRow } from "./menu-row";
 import { SettingsGroup } from "./settings-group";
-import { actionRejection } from "./use-setting-write";
 
 /* What a talk key may be: offered the moment recording starts, and restated
    in the error line for the keystroke that was not one. */

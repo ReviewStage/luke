@@ -3,7 +3,7 @@ import { IDLE_PLANNING_VIEW, PLANNING_READ, type PlanningView } from "@luke/feat
 import { LIVE_STATUS } from "@luke/live";
 import { IDLE_VOICE_VIEW, type VoiceView } from "@luke/voice/voice-view";
 import { test } from "vitest";
-import { callBarPlanId, callCard, callCardShown } from "./call-card-model";
+import { callBarPlanId, callCard, callCardShown } from "./call-card-model.js";
 
 const INVITES = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const BILLING = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";

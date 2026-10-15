@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import type { Plan } from "@luke/features/plan-wire";
 import type { PlanCodeShowing } from "@luke/features/planning-view";
+import { DOCUMENT_REGION, PLANS_PAGE } from "@luke/ui/planning-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -11,7 +12,6 @@ import { onRegistry } from "#testing/copy-feedback";
 import { plansControl, UNPINNED_SUMMARY } from "#testing/plans-control";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { DesktopPlans } from "../desktop/desktop-plans";
-import { DOCUMENT_REGION, PLANS_PAGE } from "./planning-model";
 import { NO_LOOKS } from "./use-plan-looks";
 import { SIDE_PANEL_TAB } from "./use-side-panel";
 

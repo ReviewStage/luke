@@ -5,7 +5,7 @@ import { MENTION_KIND, type PlanMention } from "@luke/features/mention-link";
 import { act, createElement, useLayoutEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
-import { useLinkOpener } from "./held-link";
+import { useLinkOpener } from "./held-link.js";
 
 /**
  * A Luke link handed while sign-in stands opens once the account is signed

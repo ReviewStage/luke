@@ -36,6 +36,7 @@ import {
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENTS, type Experiment } from "@luke/settings";
 import { ImageIcon, RemoveIcon } from "@luke/ui";
+import { useStateWithRef } from "@luke/ui/use-state-with-ref";
 import { Duration } from "effect";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutAria } from "#shared/shortcuts";
@@ -46,7 +47,6 @@ import { Shortcut } from "./shortcut";
 import { BusyLabel } from "./spinner";
 import { TOAST_TONE, type ToastNotice, useToast } from "./toast";
 import { Tooltip } from "./tooltip";
-import { useStateWithRef } from "./use-state-with-ref";
 
 /**
  * Each kind in its own words: the title its dialog carries, the field's

@@ -1,12 +1,17 @@
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
+import {
+  TERMINAL_ASK,
+  TERMINAL_TARGET,
+  type TerminalAsk,
+  terminalTarget,
+} from "@luke/features/terminal-entry";
+import { sandboxRead, shellsAsked } from "@luke/features/terminal-store";
 import { ACT_KIND } from "@luke/host/acts";
 import { useCallback, useContext, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "../act";
 import { useAppCommand } from "../app-commands";
-import { TERMINAL_ASK, TERMINAL_TARGET, type TerminalAsk, terminalTarget } from "./terminal-entry";
 import { TerminalPicker } from "./terminal-picker";
-import { sandboxRead, shellsAsked } from "./terminal-store";
 import type { CodingAgentsControl } from "./use-coding-agents";
 import type { SidePanelControl } from "./use-side-panel";
 

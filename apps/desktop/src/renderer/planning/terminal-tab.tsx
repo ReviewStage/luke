@@ -1,3 +1,4 @@
+import { type TerminalAction, type TerminalBar, terminalLook } from "@luke/features/terminal-model";
 import { useMemo } from "react";
 import { SHORTCUT_KEY } from "#shared/shortcuts";
 import { FIND_STEP, type FindSource, useFindSource } from "../find-in-tab";
@@ -7,7 +8,6 @@ import { AgentRef, agentSubject, NOTHING_HELD } from "./agent-ref";
 import { TreeToggle, useTreeSlide } from "./file-view";
 import { AgentGlyph } from "./tab-look";
 import { TERMINAL_LOAD_FAILED } from "./terminal-bundle";
-import { type TerminalAction, type TerminalBar, terminalLook } from "./terminal-model";
 import { TerminalShells } from "./terminal-shells";
 import type { CodingAgentsControl } from "./use-coding-agents";
 import { useTerminalSession } from "./use-terminal-session";

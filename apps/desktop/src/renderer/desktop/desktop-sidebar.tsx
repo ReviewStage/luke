@@ -15,6 +15,13 @@ import {
   SearchIcon,
   UnpinIcon,
 } from "@luke/ui";
+import {
+  PLANS_PAGE,
+  type RepositoryGroup,
+  repositoryGroups,
+  repositoryLabel,
+  repositoryPageUrl,
+} from "@luke/ui/planning-model";
 import { sameTab } from "@luke/ui/tab-strip-model";
 import type { UpdateControl } from "@luke/voice/settings-controls";
 import { FactoryIcon, HouseIcon, InboxIcon } from "lucide-react";
@@ -26,13 +33,6 @@ import type { NavigationHistory } from "../navigation-history";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { NEEDS_YOU } from "../planning/inbox-model";
 import { useMinute } from "../planning/plan-time";
-import {
-  PLANS_PAGE,
-  type RepositoryGroup,
-  repositoryGroups,
-  repositoryLabel,
-  repositoryPageUrl,
-} from "../planning/planning-model";
 import { useUnreadPlans } from "../planning/use-plan-looks";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { inColumn, type PinnedTab } from "../planning/use-side-panel";

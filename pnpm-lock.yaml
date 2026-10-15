@@ -910,6 +910,15 @@ importers:
       '@luke/features':
         specifier: workspace:*
         version: link:../features
+      '@luke/live':
+        specifier: workspace:*
+        version: link:../live
+      '@luke/voice':
+        specifier: workspace:*
+        version: link:../voice
+      '@luke/wire':
+        specifier: workspace:*
+        version: link:../wire
       clsx:
         specifier: 2.1.1
         version: 2.1.1

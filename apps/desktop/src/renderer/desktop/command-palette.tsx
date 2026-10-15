@@ -47,6 +47,7 @@ import { PLAN_TREE_BOUNDS, PLAN_TREE_ENTRY, type PlanSummary } from "@luke/featu
 import type { PlanCodeShowing, PlanningTreeAnswer } from "@luke/features/planning-view";
 import { SETTINGS_PAGE_LIST, type SettingsView } from "@luke/settings/settings-views";
 import { GearIcon, SearchIcon } from "@luke/ui";
+import { DOCUMENT_REGION } from "@luke/ui/planning-model";
 import { matchesTokens, searchTokens } from "@luke/ui/search-tokens";
 import { Command, defaultFilter } from "cmdk";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -67,7 +68,6 @@ import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { AgentCard, agentSubject, NOTHING_HELD } from "../planning/agent-ref";
 import { FileCard, fileLook, newestFileNote } from "../planning/file-ref";
 import { refusalLine } from "../planning/file-tab-model";
-import { DOCUMENT_REGION } from "../planning/planning-model";
 import { TAB_KIND, tabLook } from "../planning/tab-look";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { SIDE_PANEL_TABS } from "../planning/use-side-panel";

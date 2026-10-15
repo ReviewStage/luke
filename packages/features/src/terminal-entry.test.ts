@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { TERMINAL_ASK, TERMINAL_TARGET, terminalTarget } from "./terminal-entry";
+import { TERMINAL_ASK, TERMINAL_TARGET, terminalTarget } from "./terminal-entry.js";
 
 /**
  * The new-terminal rules, row by row (`docs/proposals/terminal-tab.md`):

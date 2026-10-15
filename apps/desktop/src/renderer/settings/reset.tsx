@@ -8,9 +8,9 @@ import type {
 } from "@luke/settings/wire";
 import { appSettingsView, SETTINGS_RESET_SCOPE } from "@luke/settings/wire";
 import { ResetIcon } from "@luke/ui";
+import { useSettingWrite } from "@luke/ui/use-setting-write";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast";
-import { useSettingWrite } from "./use-setting-write";
 import type { SettingsWrites } from "./writes";
 
 /** What the toast says once a page's reset landed, by the group it reset. */

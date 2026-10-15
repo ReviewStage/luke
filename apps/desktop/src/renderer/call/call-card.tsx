@@ -13,6 +13,7 @@
 import { IDLE_PLANNING_VIEW } from "@luke/features/planning-view";
 import { ACT_KIND } from "@luke/host/acts";
 import { ReturnIcon } from "@luke/ui";
+import { type CallCardModel, callCard } from "@luke/ui/call-card-model";
 import { VOICE_COMMAND, type VoiceCommand } from "@luke/voice/voice-view";
 import { type AnimationEvent, type MouseEvent, useRef, useState } from "react";
 import { type ActHandle, useAct } from "../act";
@@ -22,7 +23,6 @@ import { Tooltip } from "../tooltip";
 import { useAppState } from "../use-app-state";
 import { useClipped } from "../use-clipped";
 import { useVoiceView } from "../use-voice-view";
-import { type CallCardModel, callCard } from "./call-card-model";
 import { useStaleHoverAfterMove } from "./window-pointer";
 
 /** The way back's name, for a reader and its hover: the plan it opens. */

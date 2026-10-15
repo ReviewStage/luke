@@ -5,10 +5,10 @@ import {
   SpeakerIcon,
   SpeakerOffIcon,
 } from "@luke/ui";
+import type { CallStatus } from "@luke/ui/planning-model";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { ThinkingDots } from "../thinking-dots";
 import { Tooltip } from "../tooltip";
-import type { CallStatus } from "./planning-model";
 
 /**
  * planning-parts.tsx -- the open plan's call bar, as a pure layout.
