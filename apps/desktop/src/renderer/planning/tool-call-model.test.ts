@@ -239,6 +239,7 @@ test("a card's title says each link by its name, as markdown reads the link, and
   assert.equal(cardTitle("Read [Plan](https://www.notion.so/Plan-(draft)) now"), "Read Plan now");
   assert.equal(cardTitle("See [the \\[draft\\]](https://example.com/a)"), "See the [draft]");
   assert.equal(cardTitle("outer [inner](https://example.com/b) end"), "outer inner end");
+  assert.equal(cardTitle("Read [Docs](<https://example.com/the docs>)"), "Read Docs");
   assert.equal(cardTitle("Keep [a](b c d) as written"), "Keep [a](b c d) as written");
 });
 
