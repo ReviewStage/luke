@@ -142,6 +142,24 @@ it.effect("a grant reports starting, then live on the video's first frame, not o
     yield* Effect.yieldNow;
     assert.ok(Option.isNone(yield* Queue.poll(avatar.reports)), "live before any frame drew");
     video.firstFrame();
+    const audio = new FakeTrack();
+    persona.options.onAudioTrack(asTrack(audio));
+    assert.deepEqual(yield* Queue.take(avatar.reports), { status: AVATAR_STATUS.LIVE });
+  }).pipe(Effect.scoped),
+);
+
+it.effect("a first frame drawn before the avatar's voice arrives is not yet live", () =>
+  Effect.gen(function* () {
+    const avatar = yield* harness();
+    yield* Queue.offer(avatar.grants, GRANT);
+    assert.deepEqual(yield* Queue.take(avatar.reports), { status: AVATAR_STATUS.STARTING });
+    const persona = yield* avatar.joined;
+    const video = new FakeTrack();
+    persona.options.onVideoTrack(asTrack(video));
+    video.firstFrame();
+    for (let turn = 0; turn < 20; turn += 1) yield* Effect.yieldNow;
+    assert.ok(Option.isNone(yield* Queue.poll(avatar.reports)), "live before the voice arrived");
+    persona.options.onAudioTrack(asTrack(new FakeTrack()));
     assert.deepEqual(yield* Queue.take(avatar.reports), { status: AVATAR_STATUS.LIVE });
   }).pipe(Effect.scoped),
 );

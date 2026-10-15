@@ -91,7 +91,15 @@ export function startAvatarFeed(
     yield* Effect.tryPromise(() => context.audioWorklet.addModule(PCM_TEE.SCRIPT));
     yield* acquireTee(context, options);
     // A suspended context pulls nothing, and no gesture in a hidden window has vouched for it.
-    yield* Effect.ignore(Effect.tryPromise(() => context.resume()));
+    // Note that a context still not running pulls nothing, so it answers as a
+    // tee that did not start and Luke stays on his own element.
+    yield* Effect.tryPromise(() => context.resume());
+    if (context.state !== "running") {
+      yield* Effect.logWarning("avatar feed: the audio context would not run", {
+        state: context.state,
+      });
+      return false;
+    }
     return true;
   }).pipe(
     Effect.catch((error) =>
