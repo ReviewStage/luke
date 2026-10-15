@@ -26,8 +26,10 @@ each pin with its label (a coding agent's title or a file's path), which
 inbox items you have seen, and which groups you folded and how you sorted
 the Inbox; and the words of a message you typed to a coding agent and have
 not sent, mentions and skills among them, kept per agent until you send it
-or empty its box, and shown only while the account that wrote them is signed
-in. The files attached to such a message stay in memory only.
+or empty its box, and an inbox answer you have not sent, kept per item until
+you send it or the agent changes the item, each shown only while the account
+that wrote it is signed in. The files attached to such a message stay in
+memory only.
 None of it is sent anywhere.
 
 **Commands agents run on your Mac.** Luke, the workers he

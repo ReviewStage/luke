@@ -2,6 +2,13 @@
 
 import assert from "node:assert/strict";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import {
+  INBOX_CURSOR_START,
+  INBOX_RESPONSE,
+  INBOX_STATUS,
+  INBOX_WIRE_VERSION,
+  type InboxItem,
+} from "@luke/features/inbox-wire";
 import type { Plan } from "@luke/features/plan-wire";
 import { DOCUMENT_REGION, PLANS_PAGE } from "@luke/ui/planning-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -22,8 +29,13 @@ import { useDraftsOwner } from "./composer-drafts";
 import { DesktopPlans } from "./desktop/desktop-plans";
 import { SidebarPlan } from "./desktop/plan-actions";
 import { DRAFT_WORD } from "./draft-mark";
-import type { MessageSender } from "./planning/use-agent-composer";
+import {
+  type AgentComposerControl,
+  type MessageSender,
+  useAgentComposer,
+} from "./planning/use-agent-composer";
 import { MAIN_TAB } from "./planning/use-main-tabs";
+import { type PlanInboxControl, usePlanInbox } from "./planning/use-plan-inbox";
 import { NO_LOOKS } from "./planning/use-plan-looks";
 
 /**
@@ -31,7 +43,8 @@ import { NO_LOOKS } from "./planning/use-plan-looks";
  * wait there while another task is open and while the agent's tab is away,
  * which its tab and its task's sidebar row mark with the Draft pencil
  * meanwhile, outlast a reload of the window, and go with the message that
- * sends them.
+ * sends them; and an inbox card's answer, kept the same way, until the
+ * agent changes the item it answers.
  */
 
 /** A task with one agent of its own, open on its agent's tab. */
@@ -360,4 +373,229 @@ test("where an account kept a draft for one place under its id and a later one u
   const app = windowOn(AtomRegistry.make());
   await app.show(INVITES, { account: DEAN });
   assert.equal(app.box(), "Expire invites after a week");
+});
+
+/** An item of the Teammate invitations agent's, open and asking for an approval, at `revision`. */
+function approval(revision: number): InboxItem {
+  return {
+    id: "a1b2c3d4-0000-4000-8000-000000000001",
+    agentId: INVITES.agent.id,
+    key: "0001",
+    revision,
+    version: INBOX_WIRE_VERSION,
+    title: "Expire after 7 days?",
+    blocks: [],
+    response: { type: INBOX_RESPONSE.APPROVAL },
+    needsReply: true,
+    status: INBOX_STATUS.OPEN,
+    postedAt: 1_000,
+    updatedAt: 1_000,
+  };
+}
+
+/** The window on its own registry, open on the Teammate invitations task's Inbox tab, whose read answers `item`. */
+async function inboxOn(item: InboxItem) {
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    value: () => ({
+      matches: false,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    }),
+  });
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  const plans = plansControl({
+    page: PLANS_PAGE.DOCUMENT,
+    plans: [INVITES.plan],
+    activePlanId: INVITES.plan.id,
+    region: { kind: DOCUMENT_REGION.READY, plan: INVITES.plan },
+    mainTabs: {
+      ...plansControl().mainTabs,
+      tabs: [MAIN_TAB.PLAN, MAIN_TAB.INBOX],
+      tab: MAIN_TAB.INBOX,
+    },
+    agents: codingAgentsControl({
+      agents: [INVITES.agent],
+      agentIds: [INVITES.agent.id],
+      readInbox: ({ after }) =>
+        after === INBOX_CURSOR_START
+          ? Promise.resolve({ items: [item], cursor: "1" })
+          : new Promise(() => undefined),
+    }),
+  });
+  await act(async () =>
+    root.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(
+          Fragment,
+          null,
+          createElement(
+            "ul",
+            null,
+            createElement(SidebarPlan, {
+              plans,
+              plan: INVITES.plan,
+              current: true,
+              unread: false,
+              now: 3,
+              onOpen: () => undefined,
+            }),
+          ),
+          createElement(DesktopPlans, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, plans }),
+        ),
+      ),
+    ),
+  );
+  await settle();
+  const note = () =>
+    container.querySelector<HTMLTextAreaElement>(".inbox-view textarea") ??
+    assert.fail("the card's answer box");
+  return {
+    note,
+    /** Types the words into the card's note, as the field's own input does. */
+    type: async (words: string) => {
+      const field = note();
+      act(() => {
+        Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set?.call(
+          field,
+          words,
+        );
+        field.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+      await settle();
+    },
+    drafted: () =>
+      container.querySelector(`.sidebar-plan [role="img"][aria-label="${DRAFT_WORD}"]`) !== null,
+    reload: () => {
+      for (const each of roots.splice(0)) act(() => each.unmount());
+      container.remove();
+    },
+  };
+}
+
+test("an inbox card's note outlasts a reload, its task's row marked meanwhile, and is let go once the agent changes the item", async () => {
+  const before = await inboxOn(approval(1));
+  await before.type("Only for teammates, not guests");
+  assert.equal(before.drafted(), true);
+  before.reload();
+
+  const after = await inboxOn(approval(1));
+  assert.equal(after.note().value, "Only for teammates, not guests");
+  assert.equal(after.drafted(), true);
+  after.reload();
+
+  const changed = await inboxOn(approval(2));
+  assert.equal(changed.note().value, "", "the agent's change starts the card afresh");
+  assert.equal(changed.drafted(), false, "and the draft it outdated is let go");
+});
+
+/** One item of an agent's with no plan, open and asking for an approval, at `revision`. */
+function planlessItem(agentId: string, id: string, revision: number): InboxItem {
+  return { ...approval(revision), id, agentId };
+}
+
+/** An agent's own inbox with no plan, read through its reader as the Inbox page reads it, answering `items`. */
+async function planlessInbox(agentId: string, items: readonly InboxItem[]) {
+  let control: PlanInboxControl | undefined;
+  function Probe(): null {
+    control = usePlanInbox({
+      planId: agentId,
+      reader: (after) =>
+        after === INBOX_CURSOR_START
+          ? Promise.resolve({ items, cursor: "1" })
+          : new Promise(() => undefined),
+      shown: true,
+      waiting: true,
+      agents: {
+        heldIds: [agentId],
+        readInbox: () => new Promise(() => undefined),
+        answerInbox: () => new Promise(() => undefined),
+        readInboxImage: () => new Promise(() => undefined),
+        onRetryList: () => undefined,
+      },
+    });
+    return null;
+  }
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(root);
+  await act(async () => root.render(onRegistry(AtomRegistry.make(), createElement(Probe))));
+  await settle();
+  return control ?? assert.fail("the inbox is held");
+}
+
+test("an agent with no plan lets go of its own outdated answers as its inbox is read, and never another agent's", async () => {
+  const mine = planlessItem(INVITES.agent.id, "b1b2c3d4-0000-4000-8000-000000000001", 1);
+  const theirs = planlessItem(BILLING.agent.id, "b1b2c3d4-0000-4000-8000-000000000002", 1);
+  const first = await planlessInbox(INVITES.agent.id, [mine]);
+  act(() => first.onDraft(mine, { choices: [], values: [], note: "Only teammates" }));
+  const other = await planlessInbox(BILLING.agent.id, [theirs]);
+  act(() => other.onDraft(theirs, { choices: [], values: [], note: "Weekly" }));
+
+  await planlessInbox(INVITES.agent.id, [{ ...mine, revision: 2 }]);
+  const reread = await planlessInbox(INVITES.agent.id, [mine]);
+  assert.equal(reread.draftOf(mine).note, "", "the answer its agent outdated is let go");
+  const kept = await planlessInbox(BILLING.agent.id, [theirs]);
+  assert.equal(kept.draftOf(theirs).note, "Weekly");
+});
+
+test("words another panel's window writes for a box reach this window's box as they are written", async () => {
+  const app = windowOn(AtomRegistry.make());
+  await app.show(INVITES, { account: DEAN });
+  typeInComposer(app.container, "Fix login");
+  await settle();
+
+  // The other window's write, as storage hands it to this one.
+  window.localStorage.setItem(
+    "luke.composerDrafts",
+    JSON.stringify([keptEntry(DEAN.id, INVITES.plan.id, INVITES.agent.id, "Fix logout")]),
+  );
+  act(() => {
+    window.dispatchEvent(new StorageEvent("storage", { key: "luke.composerDrafts" }));
+  });
+  await settle();
+  assert.equal(app.box(), "Fix logout");
+});
+
+test("an account's drafts moved from its address reach a window that read its id's before", async () => {
+  const app = windowOn(AtomRegistry.make());
+  await app.show(INVITES, { account: DEAN });
+  await app.show(INVITES, { account: { email: DEAN.email } });
+  typeInComposer(app.container, "Check the export");
+  await settle();
+
+  await app.show(INVITES, { account: DEAN });
+  assert.equal(app.box(), "Check the export");
+});
+
+test("files attached in this window stay as its draft when another window lets the words beside them go", async () => {
+  const notes = { name: "notes.md", mediaType: "text/plain", data: "IyBOb3Rlcw==" } as const;
+  let composer: AgentComposerControl | undefined;
+  function Box(): null {
+    useDraftsOwner(DEAN);
+    composer = useAgentComposer({
+      agentId: INVITES.agent.id,
+      planId: INVITES.plan.id,
+      messages: [],
+      send: NEVER_ANSWERED,
+      onStatus: () => undefined,
+    });
+    return null;
+  }
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(root);
+  await act(async () => root.render(onRegistry(AtomRegistry.make(), createElement(Box))));
+  const box = () => composer ?? assert.fail("the box is drawn");
+  act(() => box().setDraft("Review this"));
+  act(() => box().setAttachments((held) => [...held, notes]));
+
+  // The other window let the words go, which is all of the draft storage holds.
+  window.localStorage.setItem("luke.composerDrafts", JSON.stringify([]));
+  act(() => {
+    window.dispatchEvent(new StorageEvent("storage", { key: "luke.composerDrafts" }));
+  });
+  await settle();
+  assert.deepEqual([box().draft, box().attachments], ["", [notes]]);
 });
