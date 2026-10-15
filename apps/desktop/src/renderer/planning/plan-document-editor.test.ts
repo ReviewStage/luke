@@ -181,6 +181,24 @@ test("the editor's preview of a Mermaid block is the picture the diagram bundle 
   assert.equal(under.querySelector("img"), null);
 });
 
+test("a press on a diagram's Show code shows its code and opens no editor", async () => {
+  const { container, render } = mount();
+  const code = "flowchart LR\n  Invite --> Join";
+  render({
+    ...DOCUMENT_PLAN,
+    document: { body: `## Flow\n\n\`\`\`mermaid\n${code}\n\`\`\`\n`, assumptions: [] },
+  });
+  await settle();
+  const toggle = container.querySelector<HTMLButtonElement>(".plan-diagram-head button");
+  assert.ok(toggle, "the diagram has its Show code");
+
+  act(() => toggle.click());
+
+  assert.equal(container.querySelector(".plan-diagram pre")?.textContent, `${code}\n`);
+  // Note that the check is a boolean, because a failing comparison would print the whole editor's DOM.
+  assert.ok(container.querySelector(".plan-document-editor") === null, "no editor opened");
+});
+
 test("a press on the name in a section's byline opens no editor, while a press on the section's words still does", () => {
   const { container, render } = mount();
   const edit = { actor: PLAN_ACTOR.DEVELOPER, by: CHARLES, at: Date.now(), duringCall: false };
