@@ -35,6 +35,7 @@ import {
   automationListAnswerSchema,
   automationRunAnswerSchema,
   automationRunsAnswerSchema,
+  GITHUB_TRIGGER_EVENT,
 } from "@luke/features/automation-wire";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
@@ -282,7 +283,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
   );
 
   it.effect(
-    "an automation on a workspace is refused for an account outside it, with a plan beside it, with no repositories, or on a repository its installation does not reach",
+    "an automation on a workspace is refused for an account outside it, with a plan beside it, with no repositories, on a repository its installation does not reach, or on a GitHub event, and one on a plan takes no other repository",
     () =>
       Effect.gen(function* () {
         const { owner, other, plan, ask } = yield* openAccounts;
@@ -298,14 +299,37 @@ it.layer(getTestDB())("the automation routes", (it) => {
         const { repositories: _none, ...bare } = onWorkspace(plan.workspaceId, [relay]);
         const noRepositories = yield* post(owner, bare);
         const unreached = yield* post(owner, onWorkspace(plan.workspaceId, ["acme/elsewhere"]));
+        const onGitHub = yield* post(owner, {
+          ...onWorkspace(plan.workspaceId, [relay]),
+          trigger: { kind: AUTOMATION_TRIGGER.GITHUB, event: GITHUB_TRIGGER_EVENT.ISSUE_OPENED },
+        });
+        // One standing on a plan takes the plan's repository and no other.
+        const onPlan = readAnswer(
+          automationAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* post(owner, weekdays(plan.id)),
+        );
+        const elsewhere = yield* ask(automationPath(onPlan.automation.id), owner, {
+          method: "PATCH",
+          body: { repositories: [relay] },
+        });
 
         assert.deepEqual(
-          [outside.status, both.status, noRepositories.status, unreached.status],
+          [
+            outside.status,
+            both.status,
+            noRepositories.status,
+            unreached.status,
+            onGitHub.status,
+            elsewhere.status,
+          ],
           [
             HOSTED_HTTP_STATUS.NOT_FOUND,
             HOSTED_HTTP_STATUS.BAD_REQUEST,
             HOSTED_HTTP_STATUS.BAD_REQUEST,
             HOSTED_HTTP_STATUS.FORBIDDEN,
+            HOSTED_HTTP_STATUS.BAD_REQUEST,
+            HOSTED_HTTP_STATUS.BAD_REQUEST,
           ],
         );
       }),

@@ -352,7 +352,8 @@ interface Standing {
  * Where the request puts a new automation, read as the account: on a plan
  * that names a repository, or on a workspace the account is a member of with
  * repositories its installation reaches; a request naming both, or neither,
- * or a workspace with no repositories, is refused as no request at all.
+ * or a workspace with no repositories, or with a GitHub trigger, which is
+ * heard only on a plan's repository, is refused as no request at all.
  */
 const standingOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
@@ -373,7 +374,13 @@ const standingOf = /* @__PURE__ */ Effect.fnUntraced(function* (
       repositories: undefined,
     };
   }
-  if (made.workspaceId === undefined || made.repositories === undefined) {
+  // Note that a GitHub event is heard only on a plan's repository while GitHub triggers stay
+  // dormant, so an automation with no plan fires on its schedule alone.
+  if (
+    made.workspaceId === undefined ||
+    made.repositories === undefined ||
+    made.trigger.kind === AUTOMATION_TRIGGER.GITHUB
+  ) {
     return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   }
   const member = yield* hostedStoreOrUnavailable(isWorkspaceMember(userId, made.workspaceId));
@@ -482,7 +489,11 @@ const changesOf = /* @__PURE__ */ Effect.fnUntraced(function* (
       : yield* checkedScope(userId, standing.organizationId, asked.scope);
   const target =
     asked.target === undefined ? undefined : yield* checkedTarget(userId, asked.target);
-  // Note that new repositories are read through the automation's own workspace, as its runs will reach them.
+  // Note that new repositories are read through the automation's own workspace, as its runs will
+  // reach them, and that one standing on a plan takes its plan's repository and no other.
+  if (asked.repositories !== undefined && standing.planId !== null) {
+    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  }
   const repositories =
     asked.repositories === undefined || standing.organizationId === null
       ? undefined
