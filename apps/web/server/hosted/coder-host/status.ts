@@ -5,6 +5,7 @@ import {
   CODING_AGENT_STATUS,
   CONTEXT_WINDOW,
   type CodingAgentFailure,
+  type CodingAgentPage,
   type CodingAgentStatus,
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
@@ -148,27 +149,22 @@ export type PlannedCodingAgent = CodingAgent & { readonly planId: string };
 
 /**
  * Whether the agent works on a plan. Note that an agent with no plan has no
- * summary on the wire yet, since the wire's summary names a plan; it gains
- * one when the wire learns of agents with none.
+ * summary on the wire, since the summary names a plan; it is read whole as
+ * its own page instead (`codingAgentPage`).
  */
 export function plannedAgent(agent: CodingAgent): agent is PlannedCodingAgent {
   return agent.planId !== null;
 }
 
-/**
- * One agent as the tabs draw it, its status read at `now`, and the member who
- * started it named by `names`, the accounts' names by id, where theirs stands.
- */
-export function codingAgentSummary(
-  agent: PlannedCodingAgent,
+/** What every read of one agent says of it but its plan, its status read at `now`, and the member who started it named by `names` where theirs stands. */
+function summaryFields(
+  agent: CodingAgent,
   standing: AgentTurnStanding,
   now: number,
   names: ReadonlyMap<string, string>,
-): CodingAgentSummary {
+): Omit<CodingAgentSummary, "id" | "planId"> {
   const starter = names.get(agent.userId);
-  const summary: CodingAgentSummary = {
-    id: agent.id,
-    planId: agent.planId,
+  const summary: Omit<CodingAgentSummary, "id" | "planId"> = {
     model: agent.model,
     effort: agent.effort,
     ...(agent.contextWindow === CONTEXT_WINDOW.STANDARD
@@ -194,4 +190,34 @@ export function codingAgentSummary(
     lineAwaits: standing.lineAwaits,
   });
   return started === undefined ? summary : { ...summary, runStartedAt: started };
+}
+
+/**
+ * One agent as the tabs draw it, its status read at `now`, and the member who
+ * started it named by `names`, the accounts' names by id, where theirs stands.
+ */
+export function codingAgentSummary(
+  agent: PlannedCodingAgent,
+  standing: AgentTurnStanding,
+  now: number,
+  names: ReadonlyMap<string, string>,
+): CodingAgentSummary {
+  return { id: agent.id, planId: agent.planId, ...summaryFields(agent, standing, now, names) };
+}
+
+/** One agent as its own page reads it, on a plan or with none, its status read at `now`. */
+export function codingAgentPage(
+  agent: CodingAgent,
+  standing: AgentTurnStanding,
+  now: number,
+  names: ReadonlyMap<string, string>,
+): CodingAgentPage {
+  return {
+    id: agent.id,
+    planId: agent.planId,
+    ...summaryFields(agent, standing, now, names),
+    automationId: agent.automationId,
+    workspaceId: agent.organizationId,
+    repository: agent.repository,
+  };
 }
