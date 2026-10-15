@@ -24,7 +24,7 @@ import {
   automationTriggerSchema,
   type GitHubTriggerEvent,
 } from "@luke/features/automation-wire";
-import { INBOX_STATUS } from "@luke/features/inbox-wire";
+import { ASK_STATUS } from "@luke/features/chat-wire";
 import { WORKSPACE_ROLE, type WorkspaceRole } from "@luke/features/workspace-wire";
 import {
   and,
@@ -46,8 +46,9 @@ import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, queryBuilder } from "../core/query.js";
 import { member } from "../schemas/auth.js";
 import { automation, automationRun } from "../schemas/automation.js";
+import { chatMember, chatMessage } from "../schemas/chat.js";
 import { codingAgent } from "../schemas/coding-agent.js";
-import { inboxItem } from "../schemas/inbox.js";
+
 import { plan } from "../schemas/plan.js";
 import { conversations } from "../schemas/storage.js";
 import { InstantColumnSchema } from "./columns.js";
@@ -760,14 +761,16 @@ const findArchivableAgents = SqlSchema.findAll({
                   ),
                 ),
             ),
+            // An inbox item is an ask in chat, so an agent waits on one while an ask of its member's stands open.
             notExists(
               queryBuilder
-                .select({ one: inboxItem.id })
-                .from(inboxItem)
+                .select({ one: chatMessage.id })
+                .from(chatMessage)
+                .innerJoin(chatMember, eq(chatMember.id, chatMessage.authorMemberId))
                 .where(
                   and(
-                    eq(inboxItem.agentId, codingAgent.id),
-                    eq(inboxItem.status, INBOX_STATUS.OPEN),
+                    eq(chatMember.agentId, codingAgent.id),
+                    eq(chatMessage.askStatus, ASK_STATUS.OPEN),
                   ),
                 ),
             ),

@@ -3,12 +3,13 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { createAutomation } from "@luke/database/models/automation-store";
+import { ensureGeneral, ensureMember, openAsksOf, postAsk } from "@luke/database/models/chat-store";
 import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { updatePlan } from "@luke/database/models/plan-store";
 import { organization, user } from "@luke/database/schemas/auth";
 import { automation as automationTable } from "@luke/database/schemas/automation";
+import { chatMessage } from "@luke/database/schemas/chat";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
-import { inboxItem } from "@luke/database/schemas/inbox";
 import { getTestDB, joinWorkspace, openWorkspace, startPlan } from "@luke/database/testing";
 import {
   AUTOMATION_ACTION,
@@ -16,7 +17,9 @@ import {
   AUTOMATION_SCOPE,
   AUTOMATION_TRIGGER,
 } from "@luke/features/automation-wire";
+import { CHAT_ASK, CHAT_BLOCK, MEMBER_KIND } from "@luke/features/chat-wire";
 import {
+  INBOX_BOUNDS,
   INBOX_CURSOR_START,
   INBOX_REPLY,
   INBOX_RESPONSE,
@@ -266,14 +269,19 @@ it.layer(getTestDB())("the inbox store", (it) => {
             .from(codingAgent)
             .where(eq(codingAgent.id, agent.agentId)),
         );
+        // The item is an ask in the plan's chat, which moved with the plan.
         const items = yield* Database.use((db) =>
           db
-            .select({ organizationId: inboxItem.organizationId })
-            .from(inboxItem)
-            .where(eq(inboxItem.id, posted.success.id)),
+            .select({ organizationId: chatMessage.organizationId })
+            .from(chatMessage)
+            .where(eq(chatMessage.id, posted.success.id)),
         );
         assert.deepEqual(agents, [{ organizationId: destination }]);
         assert.deepEqual(items, [{ organizationId: destination }]);
+        assert.deepEqual(
+          (yield* planInboxItems(agent.userId, agent.planId)).map((each) => each.id),
+          [posted.success.id],
+        );
       }),
   );
 
@@ -294,11 +302,12 @@ it.layer(getTestDB())("the inbox store", (it) => {
             .from(codingAgent)
             .where(eq(codingAgent.id, agent.agentId)),
         );
+        // The item is an ask in the plan's chat, in the plan's workspace.
         const [itemRow] = yield* Database.use((db) =>
           db
-            .select({ organizationId: inboxItem.organizationId })
-            .from(inboxItem)
-            .where(eq(inboxItem.id, posted.success.id)),
+            .select({ organizationId: chatMessage.organizationId })
+            .from(chatMessage)
+            .where(eq(chatMessage.id, posted.success.id)),
         );
 
         assert.deepEqual(agentRow, { organizationId: workspaceId, repositories: ["acme/relay"] });
@@ -377,6 +386,39 @@ it.layer(getTestDB())("the inbox store", (it) => {
         assert.deepEqual(yield* planInboxItems(stranger, agent.planId), []);
         assert.ok(Option.isNone(yield* readInboxItem(stranger, id)));
         assert.ok(Option.isNone(yield* answerInboxItem(stranger, id, 1, done, randomUUID())));
+      }),
+  );
+  it.effect(
+    "an ask an agent posted elsewhere in chat is no item: it counts against no bound, and closing its key closes no item and leaves it open",
+    () =>
+      Effect.gen(function* () {
+        const { agent, workspaceId } = yield* openAgentIn;
+        const member = Option.getOrThrow(
+          yield* ensureMember(agent.userId, workspaceId, {
+            kind: MEMBER_KIND.AGENT,
+            agentId: agent.agentId,
+          }),
+        );
+        const general = Option.getOrThrow(yield* ensureGeneral(agent.userId, workspaceId));
+        for (let at = 0; at < INBOX_BOUNDS.MAX_OPEN_PER_AGENT; at += 1) {
+          yield* postAsk(agent.userId, workspaceId, {
+            authorMemberId: member.id,
+            to: { channelId: general.id },
+            blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: `Question ${at}?` }],
+            mentions: [],
+            clientKey: randomUUID(),
+            key: `elsewhere-${at}`,
+            ask: { response: { type: CHAT_ASK.TEXT } },
+          });
+        }
+        assert.ok(Result.isSuccess(yield* postInboxItem(agent, SETTINGS)));
+
+        assert.deepEqual(
+          yield* closeInboxItem(agent, "elsewhere-0", "Not an item."),
+          Option.none(),
+        );
+        const open = yield* openAsksOf(agent.userId, workspaceId, { channelId: general.id });
+        assert.equal(open.length, INBOX_BOUNDS.MAX_OPEN_PER_AGENT);
       }),
   );
 });
