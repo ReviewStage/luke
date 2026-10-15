@@ -1013,7 +1013,9 @@ export function AutomationEditor({
     }
     // Note that the draft is kept rather than replaced by the answer, so what was typed while the save was out stands, unsaved.
     setShownProblems(false);
-    if (answer.webhookSecret !== undefined) setShownSecret(answer.webhookSecret);
+    // A save that leaves it no webhook lets go of any secret shown, since that secret no longer admits anything.
+    if (answer.automation.trigger.kind !== AUTOMATION_TRIGGER.WEBHOOK) setShownSecret(undefined);
+    else if (answer.webhookSecret !== undefined) setShownSecret(answer.webhookSecret);
     if (automation === undefined) onCreated(answer.automation.id);
   };
   const save = () => {

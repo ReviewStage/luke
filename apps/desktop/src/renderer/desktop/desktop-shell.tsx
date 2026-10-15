@@ -21,7 +21,6 @@ import type { SettingsPanelProps } from "../settings/settings-panel";
 import { SignInGate } from "../sign-in-gate";
 import { Tooltip } from "../tooltip";
 import { useExperiment } from "../use-app-state";
-import { AutomationsPage } from "./automations-page";
 import { useColumnDock } from "./column-dock";
 import { DesktopAgentPage } from "./desktop-agent-page";
 import { DesktopFactory } from "./desktop-factory";
@@ -44,6 +43,17 @@ import { useWindowTitle } from "./window-title";
  */
 const DesktopSettings = lazy(() =>
   import("./desktop-settings").then((loaded) => ({ default: loaded.DesktopSettings })),
+);
+
+/**
+ * The Automations pages, loaded as a chunk of their own the first time
+ * they open, as Settings is and for the same reason: the renderer bundle is
+ * parsed at every window open, and the pages, their editor and its triggers
+ * among them, are opened seldom (`bundle-budget.json`). What stands while
+ * the chunk loads is the pages' own empty frame, for a frame.
+ */
+const AutomationsPage = lazy(() =>
+  import("./automations-page").then((loaded) => ({ default: loaded.AutomationsPage })),
 );
 
 /**
@@ -462,7 +472,9 @@ export function DesktopShell({
         ) : factoryOpen ? (
           <DesktopFactory plans={plans} />
         ) : automationsOpen ? (
-          <AutomationsPage plans={plans} />
+          <Suspense fallback={<section className="automations-view" aria-label="Automations" />}>
+            <AutomationsPage plans={plans} />
+          </Suspense>
         ) : (
           <DesktopPlans
             plans={plans}

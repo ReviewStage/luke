@@ -1161,6 +1161,28 @@ test("a webhook made in the window shows its secret once, read-only with Copy, l
   assert.ok(button("New secret"), "a new secret is the only way to another");
 });
 
+test("a shown secret is let go of once the automation is saved as anything but a webhook", async () => {
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
+  await settle();
+  act(() => button("Webhook").click());
+  type(page.querySelector("input[aria-label='Automation name']"), "Fix Sentry alerts");
+  type(page.querySelector("textarea[aria-label='Task']"), "Fix the error the alert names.");
+  act(() => button("Create").click());
+  await settle();
+  assert.equal(
+    page.querySelector<HTMLInputElement>("input[aria-label='Secret']")?.value,
+    MADE_SECRET,
+  );
+
+  act(() => button("Schedule").click());
+  act(() => button("Save").click());
+  await settle();
+  act(() => button("Webhook").click());
+
+  assert.equal(page.querySelector("input[aria-label='Secret']"), null);
+  assert.ok(!(page.ownerDocument.body.innerHTML ?? "").includes(MADE_SECRET));
+});
+
 test("a new secret, asked for first, is shown once on the page that asked, and is gone once the page is left", async () => {
   const hooked = automation(8, {
     name: "Fix Sentry alerts",
