@@ -220,6 +220,39 @@ it.layer(getTestDB())("who a pull request names", (it) => {
   );
 
   it.effect(
+    "a pull request reviewed past many pages is read to its newest review, which is where its reviewer stands and the comment it ends on",
+    () =>
+      Effect.gen(function* () {
+        const workspace = yield* openWorkspace(yield* linkedAccount(CHARLES.id));
+        const NEWEST_PAGE = 7;
+        const people = yield* peopleOf(workspace, (sent) => {
+          const { pathname, searchParams } = new URL(sent.url);
+          const page = Number(searchParams.get("page") ?? 1);
+          if (pathname === PULL) return Response.json({ user: LUKE });
+          if (pathname === `${PULL}/commits`) return Response.json([]);
+          if (pathname !== `${PULL}/reviews`) return undefined;
+          if (page === NEWEST_PAGE) {
+            return Response.json([
+              review(CHARLES, "CHANGES_REQUESTED", "Not yet.", "2026-10-16T09:00:00Z"),
+            ]);
+          }
+          const notes = Array.from({ length: 100 }, (_, at) =>
+            review(DEVIN, "COMMENTED", `Note ${page}.${at}.`, "2026-10-15T09:00:00Z"),
+          );
+          if (page === 1)
+            notes[0] = review(CHARLES, "APPROVED", "Ship it.", "2026-10-15T08:00:00Z");
+          return Response.json(notes);
+        });
+
+        assert.equal(
+          people.reviewers?.find((reviewer) => reviewer.by.login === CHARLES.login)?.state,
+          REVIEW_STATE.CHANGES_REQUESTED,
+        );
+        assert.equal(people.comments?.at(-1)?.excerpt, "Not yet.");
+      }),
+  );
+
+  it.effect(
     "an avatar off GitHub's own avatar host is left out, and a review's words are cut at the bound",
     () =>
       Effect.gen(function* () {
