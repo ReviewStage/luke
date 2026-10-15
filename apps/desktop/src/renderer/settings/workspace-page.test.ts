@@ -31,7 +31,8 @@ import { WorkspacePage, type WorkspaceSettingsControl } from "./workspace-page";
 
 /**
  * Settings' Workspace page over a bridge answering as the host would: the
- * picker chooses the workspace the page shows, a team workspace's members
+ * picker chooses the workspace the page shows, an owner or an admin renames
+ * it in place while a member is offered no rename, a team workspace's members
  * are read and listed, the page holding itself back while they are, an
  * owner or an admin is offered Remove in a row's ⋯ for anyone but an owner,
  * a member leaves, a refusal the role earns says so, an owner or admin
@@ -93,6 +94,8 @@ let inviteHeld: Promise<void> | undefined;
 let refuseGitHubOpen = false;
 /** Whether the service refuses the next GitHub disconnect for the account's role. */
 let refuseGitHubDisconnect = false;
+/** Whether the service refuses a rename for the account's role. */
+let refuseRename = false;
 
 const done = (value: ActResultFor<ActKind>): ActOutcome => ({
   status: ACT_OUTCOME_STATUS.DONE,
@@ -171,6 +174,14 @@ function answer(request: Act): Promise<ActOutcome> {
         });
       }
       return Promise.resolve(done(undefined));
+    case ACT_KIND.WORKSPACE_RENAME:
+      if (refuseRename) {
+        return Promise.resolve({
+          status: ACT_OUTCOME_STATUS.REFUSED,
+          reason: WORKSPACE_NOT_PERMITTED_REFUSAL,
+        });
+      }
+      return Promise.resolve(done({ ...ACME, name: request.payload.name }));
     case ACT_KIND.WORKSPACE_LEAVE:
     case ACT_KIND.WINDOW_COPY_TEXT:
       return Promise.resolve(done(undefined));
@@ -195,6 +206,7 @@ beforeEach(() => {
   inviteHeld = undefined;
   refuseGitHubOpen = false;
   refuseGitHubDisconnect = false;
+  refuseRename = false;
   Object.defineProperty(window, "luke", {
     configurable: true,
     value: { act: answer, recordSurfaceEvent: () => undefined },
@@ -306,6 +318,55 @@ async function confirm(verb: string): Promise<void> {
 /** What the Workspace picker says under its name: the account's role. */
 const pickerLine = (page: HTMLElement) =>
   rowNamed(page, "Workspace").querySelector("small")?.textContent;
+
+/** The renames the page asked for, by their payloads. */
+const renames = () =>
+  sent.flatMap((request) => (request.kind === ACT_KIND.WORKSPACE_RENAME ? [request.payload] : []));
+
+/** Opens the Name row's field with Rename, types `typed` over the name, and ends the edit with `key`. */
+async function renameTo(page: HTMLElement, typed: string, key: string): Promise<void> {
+  act(() => button(rowNamed(page, "Name"), "Rename").click());
+  const field =
+    page.querySelector<HTMLInputElement>('input[aria-label="Workspace name"]') ??
+    assert.fail("no name field");
+  act(() => {
+    field.value = typed;
+    field.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+  });
+  await settle();
+}
+
+test("an owner renames the workspace in place with its ends trimmed, and Escape or the same name sends nothing", async () => {
+  const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
+
+  assert.equal(rowNamed(page, "Name").querySelector("small")?.textContent, ACME.name);
+  await renameTo(page, "  Acme Labs  ", "Escape");
+  await renameTo(page, ACME.name, "Enter");
+  await renameTo(page, "  Acme Labs  ", "Enter");
+
+  assert.deepEqual(renames(), [{ workspaceId: ACME.id, name: "Acme Labs" }]);
+  assert.equal(page.querySelector('input[aria-label="Workspace name"]') === null, true);
+  // Note that the elements are compared as a yes or no, because a failure's
+  // diff of two would print the whole document.
+  assert.equal(document.activeElement === button(rowNamed(page, "Name"), "Rename"), true);
+});
+
+test("an admin's rename the service refuses says so under the row, and a member is offered no rename", async () => {
+  refuseRename = true;
+  const admin = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
+  await renameTo(admin.page, "Acme Labs", "Enter");
+
+  assert.deepEqual(renames(), [{ workspaceId: ACME.id, name: "Acme Labs" }]);
+  assert.equal(
+    admin.page.querySelector('.workspace-name + [role="alert"]')?.textContent,
+    WORKSPACE_NOT_PERMITTED_REFUSAL,
+  );
+
+  const member = await mount(ACME);
+  assert.ok(rowNamed(member.page, "Workspace").textContent?.includes(ACME.name));
+  assert.equal(buttons(member.page, "Rename").length, 0);
+  assert.equal(member.page.querySelector(".workspace-name") === null, true);
+});
 
 test("the chosen team workspace's members are listed with their email and role, and a member is offered no Remove", async () => {
   const { page } = await mount(ACME);

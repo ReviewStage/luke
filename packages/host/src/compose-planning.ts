@@ -77,6 +77,7 @@ import {
   planningWorkspaceMemberRemoveParamsSchema,
   planningWorkspaceMembersParamsSchema,
   planningWorkspaceParamsSchema,
+  planningWorkspaceRenameParamsSchema,
 } from "@luke/features/planning-view";
 import { EMPTY_TRANSCRIPT } from "@luke/features/transcript-wire";
 import {
@@ -287,6 +288,7 @@ export type PlanningClient = Pick<
     HostedWorkspaceClient,
     | "list"
     | "create"
+    | "rename"
     | "githubConnect"
     | "githubDisconnect"
     | "members"
@@ -1506,6 +1508,23 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
         });
         return carried<PlanningWorkspaceAnswer>(
           made.ok ? { workspace: made.answer } : { failure: made.failure },
+        );
+      }),
+    // A rename moves no plan, so the workspaces alone are read again, and
+    // the new name arrives on the document with them.
+    [GATEWAY_METHOD.WORKSPACES_RENAME]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(planningWorkspaceRenameParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) {
+          return yield* invalid("renaming a workspace names it and its new name");
+        }
+        if (!gate()) return carried<PlanningWorkspaceAnswer>(WORKSPACE_UNANSWERED);
+        const { workspaceId, name } = read.success;
+        const renamed = yield* workspaceCall(client.workspaces.rename(workspaceId, name), {
+          plans: false,
+        });
+        return carried<PlanningWorkspaceAnswer>(
+          renamed.ok ? { workspace: renamed.answer } : { failure: renamed.failure },
         );
       }),
     // The install address is answered to the caller that opens it and held

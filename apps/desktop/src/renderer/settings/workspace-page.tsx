@@ -5,6 +5,7 @@ import {
 } from "@luke/features/workspace-invitation-wire";
 import { managesWorkspace } from "@luke/features/workspace-role";
 import {
+  WORKSPACE_BOUNDS,
   WORKSPACE_ROLE,
   type Workspace,
   type WorkspaceMember,
@@ -17,6 +18,7 @@ import { ExternalLinkIcon, UserMinusIcon, XIcon } from "lucide-react";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { useAct } from "../act";
 import { useCopyToast } from "../copy-feedback";
+import { type NameEdit, PlanNameField } from "../desktop/plan-name-field";
 import { Segmented } from "../segmented";
 import { SpinnerRegion } from "../spinner";
 import { ConfirmDialog, useConfirmDialog } from "./confirm-dialog";
@@ -29,7 +31,8 @@ import { ReadFailed, SettingsGroup } from "./settings-group";
  *
  * A picker at the page's head chooses the workspace, the one the sidebar
  * lists until another is chosen or a link names one, and says the account's
- * role in it. The workspace then lists its members as the service holds
+ * role in it; under it an owner or an admin renames the workspace in place.
+ * The workspace then lists its members as the service holds
  * them now, each with its email and role. An owner or an admin invites
  * people by address and role, sees the invitations still pending with each
  * one's accept link to copy and send, and cancels one; removes a member who
@@ -547,7 +550,80 @@ export function shownWorkspace(
   );
 }
 
-/** The page's head: the picker, saying under its name the account's role in the workspace chosen. */
+/**
+ * The workspace's name, for an owner or an admin: Rename at the row's end
+ * opens the name in place, as the sidebar renames a plan, and Return or a
+ * press elsewhere sends what was typed with its ends trimmed, while Escape,
+ * an empty name, or the same one renames nothing. The new name arrives with
+ * the workspaces the host reads again after it; a refusal is said under the
+ * row until the next Rename.
+ */
+function WorkspaceName({ workspace }: { workspace: Workspace }): React.JSX.Element {
+  const { act } = useAct();
+  const workspaceId = workspace.id;
+  const [editing, setEditing] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [refusal, setRefusal] = useState<string>();
+  const button = useRef<HTMLButtonElement | null>(null);
+  const refocus = useRef(false);
+  // Note that focus goes back to Rename once the rename has settled, because
+  // the button is disabled while it is out and a disabled one takes no focus.
+  useEffect(() => {
+    if (editing || busy || !refocus.current) return;
+    refocus.current = false;
+    button.current?.focus();
+  }, [editing, busy]);
+  const end = ({ name, byKey }: NameEdit) => {
+    refocus.current = byKey;
+    setEditing(false);
+    if (name === undefined) return;
+    setBusy(true);
+    act(ACT_KIND.WORKSPACE_RENAME, { workspaceId, name })
+      .then(
+        () => undefined,
+        (refused: Error) => setRefusal(refused.message),
+      )
+      .finally(() => setBusy(false));
+  };
+  return (
+    <>
+      <div className="settings-row workspace-name">
+        {editing ? (
+          <PlanNameField
+            name={workspace.name}
+            className="settings-input"
+            label="Workspace name"
+            maxLength={WORKSPACE_BOUNDS.MAX_NAME_CHARS}
+            onEnd={end}
+          />
+        ) : (
+          <>
+            <RowCopy name="Name" line={workspace.name} />
+            <button
+              ref={button}
+              type="button"
+              className="toolbar-button bordered-button"
+              disabled={busy}
+              onClick={() => {
+                setRefusal(undefined);
+                setEditing(true);
+              }}
+            >
+              Rename
+            </button>
+          </>
+        )}
+      </div>
+      {refusal === undefined ? null : (
+        <p className="error-message" role="alert">
+          {refusal}
+        </p>
+      )}
+    </>
+  );
+}
+
+/** The page's head: the picker, saying under its name the account's role in the workspace chosen, and for an owner or an admin the workspace's name to rename. */
 function WorkspaceHead({
   control,
   workspace,
@@ -565,6 +641,9 @@ function WorkspaceHead({
         parse={(raw) => control.workspaces.find((each) => each.id === raw)?.id}
         onChange={control.onChooseWorkspace}
       />
+      {managesWorkspace(workspace) ? (
+        <WorkspaceName key={workspace.id} workspace={workspace} />
+      ) : null}
     </SettingsGroup>
   );
 }

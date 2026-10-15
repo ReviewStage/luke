@@ -11,9 +11,11 @@ import { Cause, Data, Effect, Option, Schema } from "effect";
  * plugin's `removeMember` and `leaveOrganization`, called with the headers
  * of the request that asked, which carry the Mac's own Better Auth session
  * as a signed bearer token, so the plugin checks the caller's role and
- * membership itself. An invitation is made, listed, and canceled the same
- * way, through `createInvitation`, `listInvitations`, and
- * `cancelInvitation`. Each call is the auth service's promise, wrapped once
+ * membership itself. A rename is the plugin's `updateOrganization` under
+ * the same headers, given the name alone, so the plugin checks that the
+ * caller may update the workspace and leaves its slug as it was. An
+ * invitation is made, listed, and canceled the same way, through
+ * `createInvitation`, `listInvitations`, and `cancelInvitation`. Each call is the auth service's promise, wrapped once
  * here the way `bearer.ts` wraps `oauth2UserInfo`. The auth service is
  * handed in rather than imported, so a route hands it `auth.api` and a test
  * the API of a Better Auth over its own database.
@@ -64,6 +66,13 @@ interface WorkspaceLeaving {
   readonly organizationId: string;
 }
 
+/** A workspace given a new name under the session the headers carry. */
+interface WorkspaceRenaming {
+  readonly headers: Headers;
+  readonly organizationId: string;
+  readonly name: string;
+}
+
 /** The plugin's write the workspace store makes. */
 export interface WorkspaceSeams {
   readonly createOrganization: (
@@ -102,6 +111,7 @@ export interface MemberSeams {
   }) => Effect.Effect<void, MemberFailure>;
   readonly removeMember: (removal: MemberRemoval) => Effect.Effect<void, MemberFailure>;
   readonly leaveOrganization: (leaving: WorkspaceLeaving) => Effect.Effect<void, MemberFailure>;
+  readonly updateOrganization: (renaming: WorkspaceRenaming) => Effect.Effect<void, MemberFailure>;
 }
 
 /** The part of a Better Auth `api` with the organization plugin that the workspace seam calls. */
@@ -132,6 +142,10 @@ export interface MemberAuthApi {
   readonly leaveOrganization: (input: {
     headers: Headers;
     body: { organizationId: string };
+  }) => Promise<object | null>;
+  readonly updateOrganization: (input: {
+    headers: Headers;
+    body: { data: { name: string }; organizationId: string };
   }) => Promise<object | null>;
 }
 
@@ -237,6 +251,15 @@ export function memberSeams(api: MemberAuthApi): MemberSeams {
           api.leaveOrganization({
             headers: leaving.headers,
             body: { organizationId: leaving.organizationId },
+          }),
+        ),
+      ),
+    updateOrganization: (renaming) =>
+      Effect.asVoid(
+        pluginCall(() =>
+          api.updateOrganization({
+            headers: renaming.headers,
+            body: { data: { name: renaming.name }, organizationId: renaming.organizationId },
           }),
         ),
       ),

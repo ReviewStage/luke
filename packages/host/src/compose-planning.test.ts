@@ -323,6 +323,18 @@ function fakeService(plans: Plan[]): FakeService {
           service.memberships = [...service.memberships, RELAY];
           return { ok: true, answer: RELAY } as const;
         }),
+      rename: (workspaceId, name) =>
+        Effect.sync(() => {
+          service.reads.push(`rename:${workspaceId}:${name}`);
+          if (service.notPermitted) return NOT_PERMITTED_WORKSPACE;
+          const renamed = service.memberships.find((each) => each.id === workspaceId);
+          if (renamed === undefined) return UNANSWERED_WORKSPACE;
+          const now = { ...renamed, name };
+          service.memberships = service.memberships.map((each) =>
+            each.id === workspaceId ? now : each,
+          );
+          return { ok: true, answer: now } as const;
+        }),
       githubConnect: (workspaceId) =>
         Effect.sync(() => {
           service.reads.push(`connect:${workspaceId}`);
@@ -1183,6 +1195,38 @@ it.effect(
 );
 
 it.effect(
+  "a workspace renamed reaches the service and the view then holds its new name, the plans not read again, and a rename the role does not allow moves nothing",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      service.memberships = [PERSONAL, ACME];
+      const { call, last } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+      const before = service.reads.length;
+
+      const renamed = yield* call(GATEWAY_METHOD.WORKSPACES_RENAME, {
+        workspaceId: ACME.id,
+        name: "Acme Labs",
+      });
+      service.notPermitted = true;
+      const refused = yield* call(GATEWAY_METHOD.WORKSPACES_RENAME, {
+        workspaceId: ACME.id,
+        name: "Acme Research",
+      });
+
+      assert.deepEqual(renamed, { workspace: { ...ACME, name: "Acme Labs" } });
+      assert.deepEqual(refused, { failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED });
+      assert.deepEqual(last()?.workspaces, [PERSONAL, { ...ACME, name: "Acme Labs" }]);
+      assert.deepEqual(service.reads.slice(before), [
+        `rename:${ACME.id}:Acme Labs`,
+        "workspaces",
+        `rename:${ACME.id}:Acme Research`,
+        "workspaces",
+      ]);
+    }),
+);
+
+it.effect(
   "connecting GitHub answers the service's install address and reads nothing, and disconnecting draws the workspace without its organization",
   () =>
     Effect.gen(function* () {
@@ -1627,6 +1671,10 @@ it.effect("behind a closed account gate no workspace call reaches the service", 
 
     assert.deepEqual(
       yield* call(GATEWAY_METHOD.WORKSPACES_CREATE, { name: RELAY.name }),
+      unanswered,
+    );
+    assert.deepEqual(
+      yield* call(GATEWAY_METHOD.WORKSPACES_RENAME, { workspaceId: ACME.id, name: "Acme Labs" }),
       unanswered,
     );
     assert.deepEqual(

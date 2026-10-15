@@ -293,6 +293,7 @@ const EFFECT_MODULE_SCHEMAS = {
     workspacesAnswerSchema: workspaceWire.workspacesAnswerSchema,
     workspaceAnswerSchema: workspaceWire.workspaceAnswerSchema,
     workspaceCreateRequestSchema: workspaceWire.workspaceCreateRequestSchema,
+    workspaceRenameRequestSchema: workspaceWire.workspaceRenameRequestSchema,
     workspaceGithubRequestSchema: workspaceWire.workspaceGithubRequestSchema,
     workspaceGithubConnectAnswerSchema: workspaceWire.workspaceGithubConnectAnswerSchema,
     workspaceMemberSchema: workspaceWire.workspaceMemberSchema,

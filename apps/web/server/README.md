@@ -169,17 +169,20 @@ plan's one conversation, which `openPlanConversation` answers with its
 opener. A coding agent still runs on its starter's provider keys and GitHub
 token, and its steps are its starter's spend, whichever member messages it.
 
-A workspace's members are read, removed, and left through
+A workspace's members are read, removed, and left, and a workspace renamed, through
 `packages/service/src/accounts/workspaces-app.ts`. `GET /api/workspaces/members?workspaceId=`
 answers a workspace's members to a member under the Mac's OAuth token, read
 through Drizzle (`packages/service/src/accounts/workspace-members.ts`), owners first, then admins,
 then members, since the plugin's own `listMembers` takes a session.
 `POST /api/workspaces/members/remove` lets an owner or an admin remove a
-member who is not an owner, and `POST /api/workspaces/leave` lets anyone but
-an owner leave. Both are the plugin's own `removeMember` and
-`leaveOrganization` (`memberSeams` in `workspace-seams.ts`), called with the
+member who is not an owner, `POST /api/workspaces/leave` lets anyone but
+an owner leave, and `POST /api/workspaces/rename { workspaceId, name }` lets
+an owner or an admin rename a workspace, answering `{ workspace }` under its
+new name and the slug it already had. They are the plugin's own
+`removeMember`, `leaveOrganization`, and `updateOrganization` (`memberSeams`
+in `workspace-seams.ts`, the last handed the name alone), called with the
 request's headers, which carry the Mac's own Better Auth session as a signed
-bearer token that the bearer plugin reads as the session cookie. So these two
+bearer token that the bearer plugin reads as the session cookie. So these three
 paths take the session, not the OAuth token, and the plugin checks the
 caller's role and membership again behind Luke's own rules. A workspace the
 account is not in is `not-found`; a role that does not allow it,

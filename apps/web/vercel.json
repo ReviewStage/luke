@@ -321,6 +321,10 @@
           "dest": "/api/default.js?route=workspaces/members/remove"
         },
         {
+          "src": "/api/workspaces/rename",
+          "dest": "/api/default.js?route=workspaces/rename"
+        },
+        {
           "src": "/api/maintenance/sweep",
           "dest": "/api/maintenance-sweep.js?route=maintenance/sweep"
         },

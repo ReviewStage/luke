@@ -64,6 +64,8 @@ export const GATEWAY_METHOD = {
   WORKSPACES_REFRESH: "workspaces.refresh",
   /** A workspace made on the service under a name, owned by the account; the view's workspaces are read again. */
   WORKSPACES_CREATE: "workspaces.create",
+  /** A workspace renamed on the service by an owner or admin; the view's workspaces are read again. */
+  WORKSPACES_RENAME: "workspaces.rename",
   /** A GitHub organization's connection to a workspace begun on the service: the Luke GitHub App's install address, for the caller to open. */
   WORKSPACES_GITHUB_CONNECT: "workspaces.githubConnect",
   /** A workspace's GitHub organization disconnected on the service; the view's workspaces are read again. */

@@ -139,6 +139,7 @@ import {
   planningWorkspaceMemberRemoveParamsSchema,
   planningWorkspaceMembersParamsSchema,
   planningWorkspaceParamsSchema,
+  planningWorkspaceRenameParamsSchema,
 } from "@luke/features/planning-view";
 import {
   type TerminalCreatedActAnswer,
@@ -305,7 +306,8 @@ export const ACT_KIND = {
   PLANNING_PAGE_SOURCE: "planning.pageSource",
   /**
    * The account's workspaces: one made under a name, answered as made, which
-   * the account owns; one's pending invitations read, one made, answered
+   * the account owns; one renamed by its owners and admins, answered under
+   * its new name; one's pending invitations read, one made, answered
    * with its accept link, and one canceled, for its owners and admins; a GitHub
    * organization connected to one, the Luke GitHub App's install address the
    * service answers opened in the browser, or disconnected from it; one
@@ -315,6 +317,7 @@ export const ACT_KIND = {
    * not allow is refused in words that say so.
    */
   WORKSPACE_CREATE: "workspace.create",
+  WORKSPACE_RENAME: "workspace.rename",
   WORKSPACE_INVITATIONS_READ: "workspace.invitationsRead",
   WORKSPACE_INVITE: "workspace.invite",
   WORKSPACE_INVITATION_CANCEL: "workspace.invitationCancel",
@@ -524,8 +527,8 @@ function actSchema<Value, Encoded>(schema: EffectSchema.Codec<Value, Encoded>): 
 
 /**
  * What a workspace act whose role does not allow it is refused with, in place
- * of its kind's own sentence: a member removing someone, or an owner removed
- * or leaving.
+ * of its kind's own sentence: a member renaming the workspace or removing
+ * someone, or an owner removed or leaving.
  */
 export const WORKSPACE_NOT_PERMITTED_REFUSAL =
   "Your role in this workspace does not allow that." as const;
@@ -825,6 +828,11 @@ export const ACT = {
     payload: actSchema(planningWorkspaceCreateParamsSchema),
     result: wireResult<Workspace>(isReadable(workspaceSchema)),
     refusal: "Could not make that workspace on this system.",
+  },
+  [ACT_KIND.WORKSPACE_RENAME]: {
+    payload: actSchema(planningWorkspaceRenameParamsSchema),
+    result: wireResult<Workspace>(isReadable(workspaceSchema)),
+    refusal: "Could not rename that workspace on this system.",
   },
   [ACT_KIND.WORKSPACE_INVITATIONS_READ]: {
     payload: actSchema(planningWorkspaceParamsSchema),

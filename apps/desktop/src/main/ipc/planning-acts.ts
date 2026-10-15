@@ -46,6 +46,7 @@ import type {
   PlanningWorkspaceMembersAnswer,
   PlanningWorkspaceMembersParams,
   PlanningWorkspaceParams,
+  PlanningWorkspaceRenameParams,
 } from "@luke/features/planning-view";
 import { GITHUB_DISCONNECT_FAILURE } from "@luke/features/planning-view";
 import {
@@ -101,6 +102,7 @@ export interface PlanningActsDependencies {
     githubConnect(): Effect.Effect<PlanningGitHubPageAnswer>;
     githubDisconnect(): Effect.Effect<PlanningGitHubDisconnectAnswer>;
     workspaceCreate(params: PlanningWorkspaceCreateParams): Effect.Effect<PlanningWorkspaceAnswer>;
+    workspaceRename(params: PlanningWorkspaceRenameParams): Effect.Effect<PlanningWorkspaceAnswer>;
     workspaceGitHubConnect(
       params: PlanningWorkspaceParams,
     ): Effect.Effect<PlanningWorkspaceGitHubConnectAnswer>;
@@ -174,6 +176,7 @@ type PlanningActKind =
   | typeof ACT_KIND.PLANNING_RESTORE
   | typeof ACT_KIND.PLANNING_PAGE_SOURCE
   | typeof ACT_KIND.WORKSPACE_CREATE
+  | typeof ACT_KIND.WORKSPACE_RENAME
   | typeof ACT_KIND.WORKSPACE_INVITATIONS_READ
   | typeof ACT_KIND.WORKSPACE_INVITE
   | typeof ACT_KIND.WORKSPACE_INVITATION_CANCEL
@@ -185,6 +188,7 @@ type PlanningActKind =
 
 type WorkspaceActKind =
   | typeof ACT_KIND.WORKSPACE_CREATE
+  | typeof ACT_KIND.WORKSPACE_RENAME
   | typeof ACT_KIND.WORKSPACE_INVITATIONS_READ
   | typeof ACT_KIND.WORKSPACE_INVITE
   | typeof ACT_KIND.WORKSPACE_INVITATION_CANCEL
@@ -430,6 +434,14 @@ export function planningActRows(
         "workspace" in answer
           ? Effect.succeed(answer.workspace)
           : refusedWorkspace(ACT_KIND.WORKSPACE_CREATE, answer.failure),
+      );
+    },
+    [ACT_KIND.WORKSPACE_RENAME]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.WORKSPACE_RENAME, sender);
+      return Effect.flatMap(host.workspaceRename(params), (answer) =>
+        "workspace" in answer
+          ? Effect.succeed(answer.workspace)
+          : refusedWorkspace(ACT_KIND.WORKSPACE_RENAME, answer.failure),
       );
     },
     [ACT_KIND.WORKSPACE_INVITATIONS_READ]: (params, sender) => {

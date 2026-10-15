@@ -3,7 +3,7 @@ import { workspaceIdSchema } from "./plan-wire.js";
 import { countedNumber } from "./service-wire.js";
 
 /**
- * workspace-wire.ts -- the workspaces an account is a member of, a workspace it creates, and the GitHub organization an admin connects to one, as the desktop reads and asks for them.
+ * workspace-wire.ts -- the workspaces an account is a member of, a workspace it creates or renames, and the GitHub organization an admin connects to one, as the desktop reads and asks for them.
  *
  * A workspace is a team in Luke: the first one, made for the account when it
  * first signs in, or one a member created; either way teammates join by
@@ -22,8 +22,10 @@ import { countedNumber } from "./service-wire.js";
  * is not. A workspace's id is the one a plan's summary names, `plan-wire.ts`'s
  * `workspaceIdSchema`.
  *
- * A member of a workspace reads its members; an owner or an admin removes
- * one who is not an owner, and anyone but an owner leaves.
+ * A member of a workspace reads its members; an owner or an admin renames
+ * it and removes a member who is not an owner, and anyone but an owner
+ * leaves. A rename moves the name alone: the slug stays the one the
+ * workspace was made under.
  *
  * A workspace's slug is the first step of a Luke link's path
  * (`https://tryluke.dev/<slug>/plan/<id>`, `mention-link.ts`), so no workspace
@@ -132,7 +134,7 @@ export const workspacesAnswerSchema = EffectSchema.Struct({
 
 export type WorkspacesAnswer = typeof workspacesAnswerSchema.Type;
 
-/** One workspace: the one created, or the one whose GitHub organization was disconnected. */
+/** One workspace: the one created or renamed, or the one whose GitHub organization was disconnected. */
 export const workspaceAnswerSchema = EffectSchema.Struct({ workspace: workspaceSchema });
 
 /** A workspace created (POST): its name, its ends trimmed; the account creating it is its owner. */
@@ -141,6 +143,12 @@ export const workspaceCreateRequestSchema = EffectSchema.Struct({
     EffectSchema.isNonEmpty(),
     EffectSchema.isMaxLength(WORKSPACE_BOUNDS.MAX_NAME_CHARS),
   ),
+});
+
+/** A workspace renamed (POST) by an owner or admin of it: the workspace, and its new name held as a created one's is; answered with the workspace. */
+export const workspaceRenameRequestSchema = EffectSchema.Struct({
+  workspaceId: workspaceIdSchema,
+  name: workspaceCreateRequestSchema.fields.name,
 });
 
 /** The workspace a GitHub organization is connected to or disconnected from (POST), by an owner or admin of it. */

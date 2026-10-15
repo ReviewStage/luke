@@ -533,8 +533,10 @@
 
 /* Settings › Workspace › Members: the invite form, an address field taking
    the row's room, then the role's segments and Invite, the field drawn as
-   API keys' is. */
-.workspace-invite .settings-input {
+   API keys' is. The workspace's name, renamed in place at the page's head,
+   draws its field the same way. */
+.workspace-invite .settings-input,
+.workspace-name .settings-input {
   min-width: 0;
   height: var(--control-height);
   flex: 1;
