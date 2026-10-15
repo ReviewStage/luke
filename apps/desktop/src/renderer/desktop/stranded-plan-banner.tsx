@@ -40,7 +40,7 @@ export function useStrandedPlanBanner(
   const personal = plans.workspaces[0]?.id === home.id;
   return {
     banner: (
-      <PlanBanner action={{ label: `Move to ${home.name}…`, onPress: ask }}>
+      <PlanBanner action={{ label: `Move to ${home.name}`, onPress: ask }}>
         This plan's repository belongs to{" "}
         <WorkspaceRef
           workspace={home}

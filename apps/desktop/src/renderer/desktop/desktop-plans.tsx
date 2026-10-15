@@ -399,6 +399,12 @@ function PlanDocument({
   const workspace = home?.slug ?? plan.workspaceId;
   const archived = plan.archivedAt !== undefined;
   const listed = listedOpen ?? plan;
+  // What the crumb opens is the plan's own workspace's, so the window lists
+  // that workspace first where another is listed. Note that the switch
+  // reopens nothing, because the plan open is that workspace's own.
+  const listHome = () => {
+    if (home !== undefined && plans.workspace?.id !== home.id) plans.onChooseWorkspace(home.id);
+  };
   const unarchive = () => plans.onMarkPlan(plan.id, PLAN_MARK.UNARCHIVE);
   const repositoryNote = refusal?.planId === plan.id ? refusal.note : undefined;
   const chooseRepository = (repository: string) => {
@@ -618,6 +624,25 @@ function PlanDocument({
                           workspace={home}
                           repository={plan.repository}
                           archived={archived}
+                          doors={{
+                            personal: plans.workspaces[0]?.id === home.id,
+                            onOpenWorkspace: () => {
+                              listHome();
+                              plans.onGoHome();
+                            },
+                            repository: {
+                              pictures: plans.repositories.pictures,
+                              read: plans.newPlan.repositoriesIn(home.id).read,
+                              onOpenGitHub: () => plans.onOpenOnGitHub(plan.id),
+                              onNewPlanIn: (repository) => {
+                                listHome();
+                                plans.onNewPlanIn(repository);
+                              },
+                              onChange: archived
+                                ? undefined
+                                : () => plans.onChangeRepository(plan.id),
+                            },
+                          }}
                         />
                       )
                     }
