@@ -143,7 +143,7 @@ function experimentalFound(query: string, accountDrawn: boolean): readonly strin
 }
 
 test("an experiment is found by its name, what it brings, and what other apps call the page, while signed in", () => {
-  for (const query of ["Factory", "Plan to Build to Ship"]) {
+  for (const query of ["Factory", "Talk to Build to Ship"]) {
     assert.deepEqual(experimentalFound(query, true), ["Factory"], query);
   }
   for (const query of ["Automations", "on a schedule"]) {

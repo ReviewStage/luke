@@ -13,18 +13,14 @@ import type {
 import type { AppInboxPlan } from "@luke/host/app-state";
 import { test } from "vitest";
 import {
-  EMPTY_MERGED,
   FACTORY_BLOCK,
   FACTORY_STOP,
   FACTORY_WORK,
-  FAILED_WINDOW_MS,
   type FactoryInput,
   type FactoryStop,
   type FactoryWork,
   factoryBoard,
-  noteMerged,
-  PLANNING_WINDOW_MS,
-  SHIPPED_LINGER_MS,
+  LOOKBACK_MS,
 } from "./factory-model";
 
 const NOW = 1_800_000_000_000;
@@ -87,7 +83,6 @@ function board(patch: Partial<FactoryInput>) {
     plans: [],
     waiting: [],
     callPlanId: undefined,
-    merged: EMPTY_MERGED,
     now: NOW,
     ...patch,
   });
@@ -109,7 +104,7 @@ const stops = (rows: readonly FactoryStop[]) =>
     row.kind === FACTORY_STOP.QUESTION ? row.item.title : `${row.agent.title} failed`,
   );
 
-test("a plan stands in the station its own state puts it in: drafted lately in Plan, its agents at work in Build each on a row of its own, and an old draft, an archived plan, or a finished one nowhere", () => {
+test("a task's agents at work stand in Build each on a row of their own, the latest moved first; a draft, an archived task, or a finished one stands nowhere", () => {
   const drawn = board({
     plans: [
       plan(1, "Usage alerts", 2 * HOUR),
@@ -123,12 +118,11 @@ test("a plan stands in the station its own state puts it in: drafted lately in P
           agent(3, CODING_AGENT_STATUS.STARTING, NOW - MINUTE),
         ]),
       ),
-      plan(3, "Old dashboard", PLANNING_WINDOW_MS + MINUTE),
       { ...plan(4, "Shelved", MINUTE), archivedAt: NOW - MINUTE },
       plan(5, "Finished research", HOUR, agents([agent(4, CODING_AGENT_STATUS.COMPLETED)])),
     ],
   });
-  assert.deepEqual(names(drawn.planning), ["Usage alerts"]);
+  assert.deepEqual(drawn.talking, []);
   assert.deepEqual(work(drawn.working), [
     "Agent 3 (Search across plans)",
     "Agent 1 (Search across plans)",
@@ -136,18 +130,19 @@ test("a plan stands in the station its own state puts it in: drafted lately in P
   assert.equal(drawn.agentsWorking, 2);
   assert.deepEqual(drawn.stopped, []);
   assert.deepEqual(drawn.blocked, []);
+  assert.deepEqual(drawn.shipped, []);
 });
 
-test("the plan on the call is being planned however long ago it was saved, and stands first", () => {
-  const call = plan(1, "Factory tab", 3 * PLANNING_WINDOW_MS);
-  const drawn = board({ plans: [plan(2, "Usage alerts", MINUTE), call], callPlanId: call.id });
-  assert.deepEqual(
-    drawn.planning.map((row) => [row.plan.name, row.onCall]),
-    [
-      ["Factory tab", true],
-      ["Usage alerts", false],
-    ],
+test("the task on this Mac's call stands in Talk however long ago it was saved, even while its agents build it", () => {
+  const call = plan(
+    1,
+    "Factory tab",
+    3 * LOOKBACK_MS,
+    agents([agent(1, CODING_AGENT_STATUS.RUNNING)]),
   );
+  const drawn = board({ plans: [plan(2, "Usage alerts", MINUTE), call], callPlanId: call.id });
+  assert.deepEqual(names(drawn.talking.map((each) => ({ plan: each }))), ["Factory tab"]);
+  assert.deepEqual(work(drawn.working), ["Agent 1 (Factory tab)"]);
 });
 
 test("what stops an agent leads Build: each open Inbox item with its plan, the latest first, then each agent whose turn failed in the last day, the latest first", () => {
@@ -169,8 +164,8 @@ test("what stops an agent leads Build: each open Inbox item with its plan, the l
   const stale = plan(
     5,
     "Old retry",
-    2 * FAILED_WINDOW_MS,
-    agents([agent(7, CODING_AGENT_STATUS.FAILED, NOW - FAILED_WINDOW_MS - MINUTE)]),
+    2 * LOOKBACK_MS,
+    agents([agent(7, CODING_AGENT_STATUS.FAILED, NOW - LOOKBACK_MS - MINUTE)]),
   );
   const waiting: AppInboxPlan[] = [
     {
@@ -262,82 +257,38 @@ test("what stops a merge leads Ship: failing checks, then pull requests ready to
   assert.deepEqual(work(drawn.working), ["#2516 (Board export)", "#2511 (Draft)"]);
 });
 
-test("a pull request seen turning merged stands in Ship for a minute, then leaves; one already merged when first read never stands", () => {
-  const open = plan(
-    1,
-    "Invitations",
-    HOUR,
-    agents(
-      [agent(9, CODING_AGENT_STATUS.COMPLETED)],
-      [pullRequest(2505, PULL_REQUEST_STATE.OPEN, CHECK_SUMMARY.PASSING)],
-    ),
-  );
-  const merged = plan(
-    1,
-    "Invitations",
-    HOUR,
-    agents(
-      [agent(9, CODING_AGENT_STATUS.COMPLETED)],
-      [pullRequest(2505, PULL_REQUEST_STATE.MERGED, CHECK_SUMMARY.PASSING)],
-    ),
-  );
-  const long = plan(
-    2,
-    "Transcript search",
-    4 * HOUR,
-    agents(
-      [agent(9, CODING_AGENT_STATUS.COMPLETED)],
-      [pullRequest(2502, PULL_REQUEST_STATE.MERGED, CHECK_SUMMARY.PASSING)],
-    ),
-  );
-
-  const first = noteMerged(EMPTY_MERGED, undefined, [open, long], NOW);
-  const seen = noteMerged(first, [open, long], [merged, long], NOW);
-  const now = board({ plans: [merged, long], merged: seen });
+test("a pull request merged in the last day stands in Ship at its task's last activity, the latest first; one merged longer ago stands nowhere", () => {
+  const merged = (n: number, name: string, ago: number) =>
+    plan(
+      n,
+      name,
+      ago,
+      agents(
+        [agent(n, CODING_AGENT_STATUS.COMPLETED, NOW - ago)],
+        [pullRequest(2500 + n, PULL_REQUEST_STATE.MERGED, CHECK_SUMMARY.PASSING)],
+      ),
+    );
+  const drawn = board({
+    plans: [
+      merged(1, "CSV export", 5 * HOUR),
+      merged(2, "Tax IDs", 40 * MINUTE),
+      merged(3, "Old export", LOOKBACK_MS + MINUTE),
+    ],
+  });
   assert.deepEqual(
-    now.shipped.map((row) => [row.pullRequest.number, row.at]),
-    [[2505, NOW]],
+    drawn.shipped.map((row) => [row.pullRequest.number, row.plan.name, row.at]),
+    [
+      [2502, "Tax IDs", NOW - 40 * MINUTE],
+      [2501, "CSV export", NOW - 5 * HOUR],
+    ],
   );
-  assert.deepEqual(now.blocked, []);
-
-  const later = NOW + SHIPPED_LINGER_MS;
-  const kept = noteMerged(seen, [merged, long], [merged, long], later);
-  assert.deepEqual(board({ plans: [merged, long], merged: kept, now: later }).shipped, []);
-});
-
-test("two repositories' pull requests sharing a number are told apart by their pages, so only the one seen merging ships", () => {
-  const old = {
-    ...pullRequest(12, PULL_REQUEST_STATE.MERGED, CHECK_SUMMARY.PASSING),
-    url: "https://github.com/acme/a/pull/12",
-  };
-  const open = {
-    ...pullRequest(12, PULL_REQUEST_STATE.OPEN, CHECK_SUMMARY.PASSING),
-    url: "https://github.com/acme/b/pull/12",
-  };
-  const done = agent(1, CODING_AGENT_STATUS.COMPLETED);
-  const before = plan(1, "Moved repositories", HOUR, agents([done], [open, old]));
-  const after = plan(
-    1,
-    "Moved repositories",
-    HOUR,
-    agents([done], [{ ...open, state: PULL_REQUEST_STATE.MERGED }, old]),
-  );
-  const seen = noteMerged(
-    noteMerged(EMPTY_MERGED, undefined, [before], NOW),
-    [before],
-    [after],
-    NOW,
-  );
-  assert.deepEqual(
-    board({ plans: [after], merged: seen }).shipped.map((row) => row.pullRequest.url),
-    ["https://github.com/acme/b/pull/12"],
-  );
+  assert.deepEqual(drawn.blocked, []);
 });
 
 test("with nothing standing anywhere, the board is empty", () => {
-  const drawn = board({ plans: [plan(1, "Old dashboard", 10 * PLANNING_WINDOW_MS)] });
+  const drawn = board({ plans: [plan(1, "Old dashboard", 10 * LOOKBACK_MS)] });
   assert.deepEqual(drawn, {
-    planning: [],
+    talking: [],
     stopped: [],
     working: [],
     blocked: [],
@@ -354,8 +305,8 @@ test("an agent that failed before its first turn waits in Build as recent as its
     effort: "high",
     status: CODING_AGENT_STATUS.FAILED,
   };
-  const old = plan(1, "Old billing", 3 * FAILED_WINDOW_MS, agents([turnless]));
-  const started = plan(1, "Old billing", 3 * FAILED_WINDOW_MS, {
+  const old = plan(1, "Old billing", 3 * LOOKBACK_MS, agents([turnless]));
+  const started = plan(1, "Old billing", 3 * LOOKBACK_MS, {
     ...agents([turnless]),
     activityAt: NOW - 5 * MINUTE,
   });
