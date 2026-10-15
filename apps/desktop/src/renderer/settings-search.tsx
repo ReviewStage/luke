@@ -1,6 +1,7 @@
 import { PRODUCT_SEARCH_SURFACE, PRODUCT_SURFACE_EVENT } from "@luke/features/analytics";
 import { INTEGRATION_NAME, INTEGRATION_PROVIDER_LIST } from "@luke/features/integration-wire";
-import type { Workspace } from "@luke/features/workspace-wire";
+import { managesWorkspace } from "@luke/features/workspace-role";
+import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import {
   APP_SETTING_SCHEMA,
   describedSettings,
@@ -249,13 +250,31 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           ],
         }
       : undefined,
-    // The Workspace page's groups, as it draws them for the workspace it shows.
+    // The Workspace page's groups, as it draws them for the workspace it
+    // shows: the invite only where the reader may invite, and the leave
+    // only where the reader may leave.
     input.workspace
       ? {
           id: SETTINGS_SECTION.MEMBERS,
           label: "Members",
           page: SETTINGS_VIEW.WORKSPACE,
-          haystack: ["Members", "invite people team remove leave"],
+          haystack: ["Members", "people team remove role"],
+        }
+      : undefined,
+    input.workspace !== undefined && managesWorkspace(input.workspace)
+      ? {
+          id: SETTINGS_SECTION.INVITATIONS,
+          label: "Invitations",
+          page: SETTINGS_VIEW.WORKSPACE,
+          haystack: ["Invitations", "invite people add teammate link pending"],
+        }
+      : undefined,
+    input.workspace !== undefined && input.workspace.role !== WORKSPACE_ROLE.OWNER
+      ? {
+          id: SETTINGS_SECTION.LEAVE,
+          label: `Leave ${input.workspace.name}`,
+          page: SETTINGS_VIEW.WORKSPACE,
+          haystack: [`Leave ${input.workspace.name}`, "leave quit exit workspace"],
         }
       : undefined,
     input.workspace

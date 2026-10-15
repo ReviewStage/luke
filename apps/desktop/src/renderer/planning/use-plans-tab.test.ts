@@ -1380,18 +1380,28 @@ test("a workspace chosen while a move is out, even the first chosen after the wo
   assert.equal(tab.control().workspace?.id, PERSONAL.id);
 });
 
-test("the listed workspace left lists the first one again, and another workspace left keeps the one listed", () => {
-  const tab = mount({ shown: true, planning: TWO_WORKSPACES });
+test("a workspace left lists the account's own workspace, whichever was listed, and turns to the home page", () => {
+  const own = { ...PERSONAL, personal: true as const };
+  const tab = mount({
+    shown: true,
+    planning: { ...TWO_WORKSPACES, workspaces: [ACME, own], activePlanId: "billing" },
+  });
   act(() => tab.control().onChooseWorkspace(ACME.id));
   const chosen = tab.control().workspace?.id;
 
-  act(() => tab.control().onLeftWorkspace("workspace-elsewhere"));
-  const keptOnAnother = tab.control().workspace?.id;
   act(() => tab.control().onLeftWorkspace(ACME.id));
+  const afterListed = tab.control().workspace?.id;
+  act(() => tab.control().onChooseWorkspace(ACME.id));
+  act(() => tab.control().onLeftWorkspace("workspace-elsewhere"));
 
   assert.equal(chosen, ACME.id);
-  assert.equal(keptOnAnother, ACME.id);
+  assert.equal(afterListed, PERSONAL.id);
   assert.equal(tab.control().workspace?.id, PERSONAL.id);
+  assert.equal(
+    tab.told.includes(ACT_KIND.PLANNING_CLOSE),
+    true,
+    "the open plan is left for the home page",
+  );
 });
 
 test("a fixture run lists its first workspace's plans under the switcher, and a choice there is kept nowhere", () => {

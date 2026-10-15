@@ -284,7 +284,7 @@ export interface PlansControl {
   workspace: Workspace | undefined;
   /** Lists another of the account's workspaces, and starts the next new plan in it. */
   onChooseWorkspace: (workspaceId: string) => void;
-  /** Lists the first other workspace where the workspace left is the one listed. */
+  /** Lists the account's own workspace, else the first other, once one is left, and turns to the home page. */
   onLeftWorkspace: (workspaceId: string) => void;
   /** Creates a workspace of that name and lists it; answers why it was not created, or nothing once it was. */
   onCreateWorkspace: (name: string) => Promise<string | undefined>;
@@ -1742,9 +1742,18 @@ export function usePlansTab(input: {
         page: SETTINGS_VIEW.WORKSPACE,
         ...(listedWorkspace === undefined ? undefined : { workspaceId: listedWorkspace.id }),
       }),
+    // A workspace left lands the window on the account's own workspace's
+    // Home, since nothing of the one left is the reader's to show any more.
+    // Note that it lists the workspace rather than switching to it, because a
+    // switch reopens the plan last open there, and a leave goes Home; the
+    // navigation it counts passes over any open still on its way.
     onLeftWorkspace: (workspaceId) => {
-      const next = viewed.workspaces.find((each) => each.id !== workspaceId);
-      if (next !== undefined && listedWorkspace?.id === workspaceId) switchWorkspace(next.id);
+      const others = viewed.workspaces.filter((each) => each.id !== workspaceId);
+      const next = others.find((each) => each.personal === true) ?? others[0];
+      navigations.current += 1;
+      if (next !== undefined) chooseListed(next.id);
+      if (boundFor === undefined) setStandIn(undefined);
+      else leavePlan();
     },
     github: viewed.github,
     onConnectAccountGitHub: () => accountGitHub(ACT_KIND.GITHUB_CONNECT),

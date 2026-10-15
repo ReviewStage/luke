@@ -239,7 +239,7 @@ export function DesktopSettings({
                           onClick={() => open(view)}
                         >
                           {page.icon}
-                          {page.row ?? page.title}
+                          {page.title}
                           {view === SETTINGS_VIEW.VOICE && voiceNote ? (
                             <AttentionMark note={voiceNote} />
                           ) : null}

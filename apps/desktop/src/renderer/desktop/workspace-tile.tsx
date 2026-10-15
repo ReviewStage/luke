@@ -40,12 +40,11 @@ interface KeptPhoto {
  */
 const keptPhotos = new Map<string, Map<string, KeptPhoto>>();
 
-/** The tile's sizes: a line of words', a row's glyph, the sidebar's head, or the photo's row on Settings › Workspace. */
+/** The tile's sizes: a line of words', a row's glyph, or the sidebar's head and Settings › Workspace's first row. */
 export const TILE_SIZE = {
   INLINE: "inline",
   ROW: "row",
   HEAD: "head",
-  SETTINGS: "settings",
 } as const;
 
 type TileSize = (typeof TILE_SIZE)[keyof typeof TILE_SIZE];

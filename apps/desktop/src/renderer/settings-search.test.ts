@@ -42,9 +42,26 @@ function workspaceFound(query: string, workspace: Workspace): readonly string[] 
     .flatMap((group) => group.items.map((entry) => entry.id));
 }
 
-test("Invite people finds Members for every workspace, the account's first one too", () => {
-  assert.deepEqual(workspaceFound("Invite people", TEAM), [SETTINGS_SECTION.MEMBERS]);
-  assert.deepEqual(workspaceFound("Invite people", FIRST), [SETTINGS_SECTION.MEMBERS]);
+test("Invite people finds Invitations where the reader may invite, the account's first workspace too, and nothing for a member", () => {
+  assert.deepEqual(workspaceFound("Invite people", { ...TEAM, role: WORKSPACE_ROLE.ADMIN }), [
+    SETTINGS_SECTION.INVITATIONS,
+  ]);
+  assert.deepEqual(workspaceFound("Invite people", FIRST), [SETTINGS_SECTION.INVITATIONS]);
+  assert.deepEqual(workspaceFound("Invite people", TEAM), []);
+});
+
+test("Leave finds the workspace's leave where the reader may leave, and nothing for its owner", () => {
+  assert.deepEqual(workspaceFound("Leave", TEAM), [SETTINGS_SECTION.LEAVE]);
+  assert.deepEqual(workspaceFound("Leave", { ...TEAM, role: WORKSPACE_ROLE.ADMIN }), [
+    SETTINGS_SECTION.LEAVE,
+  ]);
+  assert.deepEqual(workspaceFound("Leave", FIRST), []);
+});
+
+test("Members finds the members for every workspace", () => {
+  for (const workspace of [FIRST, TEAM]) {
+    assert.deepEqual(workspaceFound("Members", workspace), [SETTINGS_SECTION.MEMBERS]);
+  }
 });
 
 test("Integrations, and every word GitHub repositories was found by, find the Workspace page's group for every workspace, a member's and the account's first one's too", () => {

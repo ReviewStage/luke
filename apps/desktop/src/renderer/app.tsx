@@ -544,7 +544,11 @@ export function App(): React.JSX.Element {
   const workspace = {
     workspaces: plans.workspaces,
     workspaceId: settingsWorkspace.shownId,
-    onLeft: plans.onLeftWorkspace,
+    // A leave closes Settings onto the Plans tab, whose Home the tab turns to.
+    onLeft: (workspaceId: string) => {
+      plans.onLeftWorkspace(workspaceId);
+      changeTab(PANEL_TAB.PLANS);
+    },
     listFailed: plans.listFailed,
     onRetryList: plans.onRetryList,
   };
