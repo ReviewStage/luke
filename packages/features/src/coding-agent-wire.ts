@@ -382,10 +382,17 @@ export const CODING_AGENT_LIST_ARCHIVED = {
   INCLUDE: "include",
 } as const;
 
-/** One agent as the tabs draw it: its title, what it runs on, when it started, where it stands, which turn that is, and when that run began. */
+/**
+ * One agent as the tabs draw it: the plan it works on, its title, what it
+ * runs on, when it started, where it stands, which turn that is, and when
+ * that run began. The plan is null for an agent an automation started with
+ * no plan, which only a read naming that agent answers: a plan's list holds
+ * the plan's own, so a build that predates agents with no plan never meets
+ * one.
+ */
 export const codingAgentSummarySchema = EffectSchema.Struct({
   id: wireUuidSchema,
-  planId: wireUuidSchema,
+  planId: EffectSchema.NullOr(wireUuidSchema),
   /** AI Gateway's catalog id, such as `anthropic/claude-opus-5.5`. */
   model: EffectSchema.String,
   effort: EffectSchema.String,
@@ -440,14 +447,12 @@ export const codingAgentAnswerSchema = EffectSchema.Struct({ agent: codingAgentS
 /**
  * One agent as its own page reads it, which is how an agent an automation
  * started with no plan is read, having no plan's tab to stand in: the
- * summary the tabs draw, with the plan it works on or none in place of the
- * plan the summary must name, the automation whose run started it or none,
- * the workspace it belongs to, and the repository it works in. An agent on
- * a plan reads so too, by the same id.
+ * summary the tabs draw, the automation whose run started it or none, the
+ * workspace it belongs to, and the repository it works in. An agent on a
+ * plan reads so too, by the same id.
  */
 export const codingAgentPageSchema = EffectSchema.Struct({
   ...codingAgentSummarySchema.fields,
-  planId: EffectSchema.NullOr(wireUuidSchema),
   automationId: EffectSchema.NullOr(wireUuidSchema),
   workspaceId: EffectSchema.String,
   repository: EffectSchema.String,

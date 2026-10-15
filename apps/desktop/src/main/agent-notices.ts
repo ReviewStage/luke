@@ -255,6 +255,13 @@ export function noticePlanTitle(
   return workspace === undefined ? plan.name : `${workspace.name} · ${plan.name}`;
 }
 
+/** Whether the agent works on a plan, which every read this ledger keeps names. */
+function onPlan(
+  agent: CodingAgentSummary,
+): agent is CodingAgentSummary & { readonly planId: string } {
+  return agent.planId !== null;
+}
+
 /** One turn's end as the ledger saw it, waiting to be announced, and whether the window was focused as it ended. */
 interface TurnEnd {
   agentId: string;
@@ -624,7 +631,12 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       return [...plans];
     }
 
-    function heldOf(agent: CodingAgentSummary): HeldAgent {
+    /**
+     * The agent as the ledger holds it, where it works on a plan. Note that an
+     * agent with no plan is held by none of the plan reads this ledger keeps,
+     * so the answers that name one are passed over here.
+     */
+    function heldOf(agent: CodingAgentSummary & { readonly planId: string }): HeldAgent {
       return {
         planId: agent.planId,
         model: agent.model,
@@ -638,9 +650,10 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
 
     const notices: AgentNotices = {
       observeAgents: (agents) => {
-        for (const agent of agents) observe(agent.id, heldOf(agent));
+        for (const agent of agents) if (onPlan(agent)) observe(agent.id, heldOf(agent));
       },
       observeMessaged: (agent) => {
+        if (!onPlan(agent)) return;
         observe(agent.id, heldOf(agent));
         // The line awaits the turn it opens: the plan is watched until that turn names itself.
         const held = ledger.get(agent.id);

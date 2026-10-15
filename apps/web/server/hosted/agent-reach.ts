@@ -19,7 +19,6 @@ import {
 } from "@luke/service/http/http-effect";
 import { readEither } from "@luke/wire/effect";
 import { Effect, Option, Result } from "effect";
-import { plannedAgent } from "./coder-host/status.js";
 
 /** What resolves a request's bearer to the account it answers for. */
 export interface AccountResolving {
@@ -65,10 +64,9 @@ export const uuidOf = /* @__PURE__ */ Effect.fnUntraced(function* (
  * The agent the path names, on a plan or with none, where the account is a
  * member of its workspace, or not found; its conversation is targeted
  * under the member who started it, which is whom the conversation belongs
- * to. Only a route that answers an agent with no plan as its own page
- * reads through this; every other reads through `reachedAgent`.
+ * to.
  */
-export const reachedAnyAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
+export const reachedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: AccountResolving,
   request: Request,
 ): Effect.fn.Return<ReachedAgent, HostedRefusal, DatabaseServices> {
@@ -81,19 +79,4 @@ export const reachedAnyAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
     agent: agent.value,
     target: { userId: agent.value.userId, conversationId: agent.value.conversationId },
   };
-});
-
-/**
- * The agent the path names as `reachedAnyAgent` reads it, where it works on
- * a plan. Note that an agent with no plan reads as not found here, before
- * any route acts on it, because these routes answer with the agent's
- * summary and the summary names a plan.
- */
-export const reachedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
-  seams: AccountResolving,
-  request: Request,
-): Effect.fn.Return<ReachedAgent, HostedRefusal, DatabaseServices> {
-  const reached = yield* reachedAnyAgent(seams, request);
-  if (!plannedAgent(reached.agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  return reached;
 });

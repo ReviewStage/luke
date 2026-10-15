@@ -34,9 +34,11 @@ import { runAppCommand } from "../app-commands";
 import type { InboxChoice } from "../planning/use-plans-tab";
 import { DesktopInbox } from "./desktop-inbox";
 
+const PLAN_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
+
 const AGENT: CodingAgentSummary = {
   id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
-  planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
+  planId: PLAN_ID,
   model: "anthropic/claude-opus-5.5",
   effort: "high",
   title: "Alerts",
@@ -46,7 +48,7 @@ const AGENT: CodingAgentSummary = {
 };
 
 const BILLING: PlanSummary = {
-  id: AGENT.planId,
+  id: PLAN_ID,
   workspaceId: "workspace-personal",
   name: "Billing usage alerts",
   createdAt: 1,

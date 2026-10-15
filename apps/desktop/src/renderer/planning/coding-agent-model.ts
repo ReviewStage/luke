@@ -392,9 +392,13 @@ function startFailureWords(failure: CodingAgentCallFailure): string {
   }
 }
 
-/** What a message that did not reach the agent says under the composer, and what mends it. */
-export function messageFailureNote(refused: RefusedCall, planId: string): Failure {
-  return refused.failure === CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE
+/**
+ * What a message that did not reach the agent says under the composer, and
+ * what mends it. Note that an agent with no plan says its words alone,
+ * because every remedy of a repository out of reach is pressed on the plan.
+ */
+export function messageFailureNote(refused: RefusedCall, planId: string | null): Failure {
+  return refused.failure === CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE && planId !== null
     ? unreachedFailure(refused.unreached, planId)
     : callFailure(messageFailureWords(refused.failure));
 }

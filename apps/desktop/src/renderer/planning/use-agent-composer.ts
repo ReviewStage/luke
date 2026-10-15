@@ -113,8 +113,8 @@ const UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
 
 export function useAgentComposer(input: {
   agentId: string;
-  /** The agent's plan, whose repository a refusal's remedy mends. */
-  planId: string;
+  /** The agent's plan, whose repository a refusal's remedy mends; null for an agent with no plan, whose refusal says its words alone. */
+  planId: string | null;
   /** The transcript as the tab holds it, which a sent line is read back from. */
   messages: readonly CodingAgentMessage[];
   send: MessageSender;

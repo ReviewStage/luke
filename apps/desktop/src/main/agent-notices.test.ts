@@ -337,3 +337,19 @@ it.effect(
       ]);
     }),
 );
+it.effect(
+  "an agent with no plan, named by a message's answer, is passed over: no plan's list is read for it and nothing is announced of it",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const notices = yield* f.notices;
+      f.focus(false);
+
+      notices.observeMessaged({ ...agent(CODING_AGENT_STATUS.RUNNING), planId: null });
+      yield* TestClock.adjust(WATCH);
+
+      assert.equal(f.listReads(), 0);
+      assert.deepEqual(f.listed, []);
+      assert.deepEqual(f.posted, []);
+    }),
+);

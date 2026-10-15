@@ -14,9 +14,16 @@
                 "maxLength": 36
               },
               "planId": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 36
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 36
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               },
               "model": {
                 "type": "string"
