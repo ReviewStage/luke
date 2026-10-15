@@ -1,8 +1,8 @@
 import { CONVERSATION_PICTURE_BOUNDS } from "@luke/features/conversation-picture-wire";
 import type { InboxImageType } from "@luke/features/inbox-wire";
 import { sql } from "drizzle-orm";
-import { check, customType, integer, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
-import { timestamptz } from "./_helpers.js";
+import { check, integer, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { bytea, timestamptz } from "./_helpers.js";
 import { user } from "./auth.js";
 import { conversations } from "./storage.js";
 
@@ -25,10 +25,6 @@ import { conversations } from "./storage.js";
  * before its bytes arrive. A row goes with its conversation, which goes
  * with its parent and its account.
  */
-const bytea = customType<{ data: Uint8Array; driverData: Uint8Array }>({
-  dataType: () => "bytea",
-});
-
 export const conversationAttachment = pgTable(
   "conversation_attachment",
   {
