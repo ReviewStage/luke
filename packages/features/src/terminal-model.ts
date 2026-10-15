@@ -11,7 +11,9 @@
  * Most states are the host's, said on the shell's port
  * (`TERMINAL_CONNECTION`); "resuming" is the tab's own, between the click on
  * Resume and its answer, and "unreachable" is the tab's own too, for a read
- * the service could not answer.
+ * the service could not answer or a relay the deployment does not serve. Its
+ * bar names which it was, where that is known, so a developer knows whether
+ * to wait, retry, or tell whoever runs the deployment.
  */
 
 /** Where a Terminal tab's connection stands. */
@@ -37,15 +39,32 @@ export const TERMINAL_STATE = {
 
 type TerminalStateKind = (typeof TERMINAL_STATE)[keyof typeof TERMINAL_STATE];
 
+/** Why the tab could not reach its shell. */
+export const TERMINAL_UNREACHED = {
+  /** Luke's service could not be reached, or did not answer. */
+  SERVICE: "service",
+  /** The service answered, and the agent's sandbox did not: Vercel Sandbox's API, or tmux in the sandbox. */
+  SANDBOX: "sandbox",
+  /** The service holds no such agent or shell for this account. */
+  NOT_FOUND: "not-found",
+  /** The deployment serves no terminal relay. */
+  RELAY: "relay",
+} as const;
+
+type TerminalUnreached = (typeof TERMINAL_UNREACHED)[keyof typeof TERMINAL_UNREACHED];
+
 export type TerminalState =
   | {
       readonly kind: Exclude<
         TerminalStateKind,
-        typeof TERMINAL_STATE.EXITED | typeof TERMINAL_STATE.RESUMING
+        | typeof TERMINAL_STATE.EXITED
+        | typeof TERMINAL_STATE.RESUMING
+        | typeof TERMINAL_STATE.UNREACHABLE
       >;
     }
   | { readonly kind: typeof TERMINAL_STATE.EXITED; readonly code: number | undefined }
-  | { readonly kind: typeof TERMINAL_STATE.RESUMING; readonly since: number };
+  | { readonly kind: typeof TERMINAL_STATE.RESUMING; readonly since: number }
+  | { readonly kind: typeof TERMINAL_STATE.UNREACHABLE; readonly why: TerminalUnreached };
 
 /** What the bar's one action does. */
 export const TERMINAL_ACTION = {
@@ -81,6 +100,14 @@ const RESUME_TAKES = "~5 s";
 
 const RETRY = { kind: TERMINAL_ACTION.RETRY, label: "Retry now" } as const;
 const RESUME = { kind: TERMINAL_ACTION.RESUME, label: "Resume sandbox" } as const;
+
+/** What the unreachable bar says, by why. */
+const UNREACHED_WORDS = {
+  [TERMINAL_UNREACHED.SERVICE]: "Couldn’t reach Luke’s service.",
+  [TERMINAL_UNREACHED.SANDBOX]: "The agent’s sandbox didn’t answer.",
+  [TERMINAL_UNREACHED.NOT_FOUND]: "Couldn’t find this agent’s shell.",
+  [TERMINAL_UNREACHED.RELAY]: "The terminal service isn’t set up on this deployment.",
+} as const satisfies Record<TerminalUnreached, string>;
 
 /** The line a shell that ended leaves, its status where the host said it. */
 function exitedLine(code: number | undefined): string {
@@ -146,7 +173,7 @@ export function terminalLook(state: TerminalState): TerminalLook {
     case TERMINAL_STATE.UNREACHABLE:
       return {
         words: "unreachable",
-        bar: { words: "Couldn’t reach the sandbox.", action: RETRY, busy: false, late: false },
+        bar: { words: UNREACHED_WORDS[state.why], action: RETRY, busy: false, late: false },
         line: undefined,
         dim: true,
       };

@@ -499,11 +499,11 @@ test("a sandbox that refuses a shell because it stopped meanwhile shows the stop
   assert.deepEqual(tab.kinds(), ["terminal.list", "terminal.create"]);
 });
 
-test("a service it cannot reach shows a bar whose action asks again", async () => {
+test("a service it cannot reach shows a bar that says so, whose action asks again", async () => {
   main.down.add(ACT_KIND.TERMINAL_LIST);
   const tab = await mount();
   assert.equal(tab.standing(), "· sandbox · unreachable");
-  assert.equal(tab.bar(), "Couldn’t reach the sandbox.");
+  assert.equal(tab.bar(), "Couldn’t reach Luke’s service.");
   main.down.clear();
   await act(async () => tab.action()?.click());
   await settle();
@@ -563,7 +563,26 @@ test("an agent archived or retired closes its Terminal tab, as its Changes tab c
 test("a shell or agent the service cannot find shows the bar that asks again, and leaves the tab open", async () => {
   main.listRefused = TERMINAL_REFUSAL.NOT_FOUND;
   const tab = await mount();
-  assert.equal(tab.bar(), "Couldn’t reach the sandbox.");
+  assert.equal(tab.bar(), "Couldn’t find this agent’s shell.");
+  assert.equal(tab.closed(), 0);
+});
+
+test("a sandbox that did not answer says it was the agent's sandbox, and its action asks again", async () => {
+  main.listRefused = TERMINAL_REFUSAL.SANDBOX_UNANSWERED;
+  const tab = await mount();
+  assert.equal(tab.standing(), "· sandbox · unreachable");
+  assert.equal(tab.bar(), "The agent’s sandbox didn’t answer.");
+  main.listRefused = undefined;
+  await act(async () => tab.action()?.click());
+  await settle();
+  assert.deepEqual(tab.kinds(), ["terminal.list", "terminal.list", "terminal.attach"]);
+});
+
+test("a deployment that serves no terminal relay says so, and leaves the tab open", async () => {
+  const tab = await mount();
+  const port = main.post(OLDEST);
+  port.say({ type: "state", state: "unavailable" });
+  assert.equal(tab.bar(), "The terminal service isn’t set up on this deployment.");
   assert.equal(tab.closed(), 0);
 });
 

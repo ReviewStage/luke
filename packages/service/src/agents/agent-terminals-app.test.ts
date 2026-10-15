@@ -18,6 +18,7 @@ import { openGithubUser } from "../testing/github-app-fake.js";
 import { noNetwork } from "../testing/no-network.js";
 import { AGENT_TERMINALS_PATH, agentTerminalsApp } from "./agent-terminals-app.js";
 import { AgentSandbox, type AgentSandboxService, SHELL_REFUSAL } from "./terminal/agent-sandbox.js";
+import { SandboxUnavailable } from "./vercel-sandbox-api.js";
 
 /**
  * A coding agent's terminals as its tab reaches them, over a real dialect and
@@ -25,7 +26,8 @@ import { AgentSandbox, type AgentSandboxService, SHELL_REFUSAL } from "./termina
  * every agent route keeps, so another account reads it as none, an archived
  * agent is gone, and a list answers the sandbox's shells and where it
  * stands; a shell is refused in a stopped sandbox, and only the resume path
- * wakes one. Synthetic accounts, plans, and sessions throughout.
+ * wakes one; and a sandbox that did not answer is the upstream's
+ * failure, apart from the service's own. Synthetic accounts, plans, and sessions throughout.
  */
 
 const ORIGIN = "https://luke.test";
@@ -64,7 +66,7 @@ function scriptedSandbox(state: SandboxState) {
     attach: () => Effect.die("the routes attach nothing"),
     setGitHubToken: () => Effect.die("the routes set no credential"),
   };
-  return { layer: Layer.succeed(AgentSandbox, service), asked };
+  return { layer: Layer.succeed(AgentSandbox, service), service, asked };
 }
 
 /** An account with an agent on a plan, its session claimed, as a started agent stands. */
@@ -196,6 +198,33 @@ it.layer(getTestDB())("the agent terminals routes", (it) => {
       assert.equal(started.status, 201);
       assert.notEqual(started.body.terminal.id, SHELL.id);
     }),
+  );
+
+  it.effect(
+    "a sandbox that did not answer is refused as the upstream's failure, not the service's own",
+    () =>
+      Effect.gen(function* () {
+        const { userId, agent } = yield* openAgent;
+        const unanswered = new SandboxUnavailable({ status: 400 });
+        const sandbox = Layer.succeed(AgentSandbox, {
+          ...scriptedSandbox(SANDBOX_STATE.RUNNING).service,
+          terminals: () => Effect.fail(unanswered),
+          start: () => Effect.fail(unanswered),
+          resume: () => Effect.fail(unanswered),
+        });
+        const call = yield* standing(new Map([["Bearer owner", userId]]), sandbox);
+
+        const answers = [
+          yield* call(terminalsOf(agent.id), "Bearer owner"),
+          yield* call(terminalsOf(agent.id), "Bearer owner", { method: "POST", body: {} }),
+          yield* call(resumeOf(agent.id), "Bearer owner", { method: "POST" }),
+        ];
+
+        for (const answer of answers) {
+          assert.equal(answer.status, 502);
+          assert.deepEqual(answer.body, { error: HOSTED_API_ERROR.UPSTREAM_ERROR });
+        }
+      }),
   );
 
   it.effect("an archived agent's terminals are gone", () =>

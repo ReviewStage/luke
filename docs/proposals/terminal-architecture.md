@@ -403,11 +403,16 @@ wire (`@luke/features/terminal-wire`): a shell is `id` and `title`.
 - `agent-not-ready`: `create` before the agent opened its sandbox.
 - `not-found`: no such agent or shell, or another workspace's.
 - `gone`: an archived agent.
+- `sandbox-unanswered`: the service answered and the agent's sandbox did not,
+  Vercel Sandbox's API or tmux in it (the route's `upstream-error`, 502), so
+  the caller may retry.
 
 So `list`, `rename` and `kill` answer `TerminalsAnswer | { refused }`,
 `create` answers `{ terminal } | { refused }`, and `resume` answers
-`{ sandbox } | { refused }`. An outage (the service or Vercel could not be
-reached, so the caller may retry) is the act's own refusal sentence instead.
+`{ sandbox } | { refused }`. An outage of the service itself (it could not be
+reached, or did not answer, so the caller may retry) is the act's own refusal
+sentence instead. The tab's "unreachable" bar names which of the three it was:
+Luke's service, the agent's sandbox, or no such agent or shell.
 
 ### The port (`terminal:port`)
 
@@ -436,6 +441,7 @@ first message on a new port is `connecting`.
 | `starting` | The agent hasn't opened its sandbox yet | **Yes**: the host re-asks every 5 s while the port is open, and posts `attached` once it exists | The "Waiting for the agent to open its sandbox…" bar |
 | `exited` | The shell ended (`code` carries its exit status). The tmux session is gone | No | The inline `[Process exited with code N …]` line. A key press sends `terminal.create`, then `terminal.attach` |
 | `gone` | The agent was archived, or the shell was killed elsewhere | No | Drops the shell (or closes the tab, for an archived agent) |
+| `unavailable` | The relay's upgrade was answered 404: this deployment serves no terminal relay | No | The "The terminal service isn't set up on this deployment · Retry now ⏎" bar |
 
 "Resuming" is the renderer's own state, between sending `terminal.resume`
 and its answer. No port carries it.

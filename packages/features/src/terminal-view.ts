@@ -25,6 +25,8 @@ export const TERMINAL_REFUSAL = {
   AGENT_NOT_READY: "agent-not-ready",
   /** No such agent or shell, or another workspace's. */
   NOT_FOUND: "not-found",
+  /** The service answered, and the agent's sandbox did not, Vercel Sandbox's API or tmux in it; asking again may be answered. */
+  SANDBOX_UNANSWERED: "sandbox-unanswered",
   /** The agent was archived. */
   GONE: "gone",
 } as const;
@@ -49,6 +51,8 @@ export const TERMINAL_CONNECTION = {
   EXITED: "exited",
   /** The agent was archived, or the shell was ended elsewhere. */
   GONE: "gone",
+  /** The deployment serves no terminal relay: its upgrade path answered not found, so asking again later is the developer's to do. */
+  UNAVAILABLE: "unavailable",
 } as const;
 
 export type TerminalConnection = (typeof TERMINAL_CONNECTION)[keyof typeof TERMINAL_CONNECTION];
