@@ -134,6 +134,7 @@ export function TemplateVersionHistory({
     summary: templateRevisionSummary,
     onShowSource: undefined,
     own: true,
+    workspace: undefined,
   };
   return (
     <DesktopVersionHistory

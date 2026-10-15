@@ -1,15 +1,13 @@
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
-import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SECTION, SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { ChevronRightIcon, LockIcon } from "lucide-react";
-import { useEffect, useState } from "react";
-import { useAct } from "../act";
 import { TILE_SIZE, WorkspaceTile } from "../desktop/workspace-tile";
 import { CardHead, CardNote, CardRule, HoverCard } from "../hover-card";
 import { useOpenSettings } from "../open-settings";
 import { PersonAvatar } from "../person-avatar";
 import { ROLE_WORDS } from "../settings/workspace-page";
 import { Tooltip } from "../tooltip";
+import { useWorkspaceMembers } from "./use-workspace-members";
 
 /**
  * plan-crumb.tsx -- the line over a plan's title that says where it lives and who can edit it: "Acme › relay", then "5 can edit".
@@ -23,40 +21,15 @@ import { Tooltip } from "../tooltip";
  * stands who can edit: the first few members' faces and "5 can edit", or a
  * lock and "Only you" for a workspace of one. Resting on it hangs a card
  * listing everyone by name and role, and pressing it opens the workspace's
- * members in Settings. The members are read once per workspace the crumb
- * stands in; until they answer, or if they never do, the count stands
- * alone, from the workspace's own count.
+ * members in Settings. Each face is the member's sign-in picture where the
+ * members read lists one, and their letter otherwise. The members are read
+ * once per workspace the crumb stands in (`use-workspace-members.ts`); until
+ * they answer, or if they never do, the count stands alone, from the
+ * workspace's own count.
  */
 
 /** How many faces the crumb's end draws before the count says the rest. */
 const FACES_DRAWN = 4;
-
-/** A workspace's members as the crumb holds them, read again whenever the workspace's own count changes, as a member joining or leaving changes it; none while unread or refused. */
-function useWorkspaceMembers(
-  workspaceId: string,
-  memberCount: number | undefined,
-): readonly WorkspaceMember[] | undefined {
-  const { act } = useAct();
-  const [read, setRead] = useState<{
-    workspaceId: string;
-    members: readonly WorkspaceMember[];
-  }>();
-  // A changed count reads the members again by standing among the effect's dependencies.
-  useEffect(() => {
-    let live = true;
-    act(ACT_KIND.WORKSPACE_MEMBERS_READ, { workspaceId }).then(
-      (members) => {
-        if (live) setRead({ workspaceId, members });
-      },
-      // Note that a refused read leaves the count alone, because the crumb says where the plan is either way.
-      () => undefined,
-    );
-    return () => {
-      live = false;
-    };
-  }, [act, workspaceId, memberCount]);
-  return read?.workspaceId === workspaceId ? read.members : undefined;
-}
 
 /** How many can edit: the workspace's own count, the newer word, else the members read; none where neither is known. */
 function editorsOf(
@@ -98,7 +71,7 @@ function PeopleCard({
           <ul className="plan-crumb-people-list">
             {members.map((member) => (
               <li key={member.userId}>
-                <PersonAvatar name={member.name} pictureUrl={undefined} />
+                <PersonAvatar name={member.name} pictureUrl={member.pictureUrl} />
                 <span className="plan-crumb-person">{member.name}</span>
                 <span className="plan-crumb-role">{ROLE_WORDS[member.role]}</span>
               </li>
@@ -143,7 +116,11 @@ function People({
             {members === undefined ? null : (
               <span className="plan-crumb-faces" aria-hidden="true">
                 {members.slice(0, FACES_DRAWN).map((member) => (
-                  <PersonAvatar key={member.userId} name={member.name} pictureUrl={undefined} />
+                  <PersonAvatar
+                    key={member.userId}
+                    name={member.name}
+                    pictureUrl={member.pictureUrl}
+                  />
                 ))}
               </span>
             )}
@@ -172,7 +149,7 @@ export function PlanCrumb({
   archived: boolean;
 }): React.JSX.Element {
   const openSettings = useOpenSettings();
-  const members = useWorkspaceMembers(workspace.id, workspace.memberCount);
+  const members = useWorkspaceMembers(workspace);
   const count = editorsOf(workspace, members);
   const page = { page: SETTINGS_VIEW.WORKSPACE, workspaceId: workspace.id };
   return (

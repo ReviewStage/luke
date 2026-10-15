@@ -822,6 +822,63 @@ it.effect("a member reads the workspace's members, owners first, then admins, th
   }),
 );
 
+/** Gives the account a sign-in picture at an address, as its provider's profile would. */
+const pictured = (userId: string, image: string) =>
+  Database.use((db) => db.update(user).set({ image }).where(eq(user.id, userId)));
+
+it.effect(
+  "a member's sign-in picture is listed where the window may draw it, and one on any other host is left out",
+  () =>
+    Effect.gen(function* () {
+      const { api, seams, database } = yield* openWorkspacePlugin;
+      yield* Effect.gen(function* () {
+        const ada = yield* openGithubAccount("Ada Lovelace");
+        const grace = yield* openGithubAccount("Grace Hopper");
+        const alan = yield* openGithubAccount("Alan Turing");
+        const linus = yield* openGithubAccount("Linus Torvalds");
+        const acme = yield* openTeam(api, ada, [
+          { userId: grace, role: "member" },
+          { userId: alan, role: "member" },
+          { userId: linus, role: "member" },
+        ]);
+        yield* pictured(ada, "https://lh3.googleusercontent.com/a/ada=s96-c");
+        yield* pictured(grace, "https://avatars.githubusercontent.com/u/1?v=4");
+        yield* pictured(alan, "https://tracker.example/alan.png");
+
+        const answered = yield* readMembers(seams, grace, membersAt(acme));
+
+        assert.deepEqual(answered, {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: {
+            members: [
+              {
+                userId: ada,
+                name: "Ada Lovelace",
+                email: `${ada}@luke.test`,
+                role: "owner",
+                pictureUrl: "https://lh3.googleusercontent.com/a/ada=s96-c",
+              },
+              { userId: alan, name: "Alan Turing", email: `${alan}@luke.test`, role: "member" },
+              {
+                userId: grace,
+                name: "Grace Hopper",
+                email: `${grace}@luke.test`,
+                role: "member",
+                pictureUrl: "https://avatars.githubusercontent.com/u/1?v=4",
+              },
+              {
+                userId: linus,
+                name: "Linus Torvalds",
+                email: `${linus}@luke.test`,
+                role: "member",
+              },
+            ],
+          },
+        });
+      }).pipe(Effect.provide(database));
+    }),
+);
+
 it.effect(
   "an account outside the workspace, or naming no workspace, reads none of its members",
   () =>

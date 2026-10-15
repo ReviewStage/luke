@@ -252,12 +252,18 @@ export const workspaceGithubConnectAnswerSchema = EffectSchema.Struct({
   url: EffectSchema.String.check(EffectSchema.isNonEmpty()),
 });
 
-/** One member of a workspace: the account, its name and email, and its role. */
+/** One member of a workspace: the account, its name and email, its role, and its sign-in picture. */
 export const workspaceMemberSchema = EffectSchema.Struct({
   userId: EffectSchema.String,
   name: EffectSchema.String,
   email: EffectSchema.String,
   role: workspaceSchema.fields.role,
+  /**
+   * The member's sign-in picture, present only where it is an address the
+   * renderer may draw (`account-picture.ts`); absent for a member with none,
+   * and from a service before it.
+   */
+  pictureUrl: EffectSchema.optionalKey(EffectSchema.String),
 });
 
 export type WorkspaceMember = typeof workspaceMemberSchema.Type;

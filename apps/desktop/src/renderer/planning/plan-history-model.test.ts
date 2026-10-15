@@ -349,6 +349,39 @@ test("two members of a plan each see the other's revisions under the other's nam
   assert.equal(authorName(revisionAuthorOf(edit(DEAN), asCharles, [])), "Dean Stratakos");
 });
 
+test("a teammate's revision wears the picture the workspace's members read lists for them, and the reader's their own account's", () => {
+  const edit = (by: typeof DEAN) => ({
+    lastEdit: { actor: PLAN_ACTOR.DEVELOPER, at: NOW, duringCall: false, by },
+  });
+  const charlesPicture = "https://avatars.githubusercontent.com/u/2";
+  const reader = {
+    id: DEAN.userId,
+    name: "Dean Stratakos",
+    pictureUrl: "https://avatars.githubusercontent.com/u/1",
+    pictures: new Map([[CHARLES.userId, charlesPicture]]),
+  };
+
+  assert.deepEqual(revisionAuthorOf(edit(CHARLES), reader, []), {
+    kind: REVISION_AUTHOR.PERSON,
+    you: false,
+    name: "Charles Pan",
+    pictureUrl: charlesPicture,
+  });
+  assert.deepEqual(revisionAuthorOf(edit(DEAN), reader, []), {
+    kind: REVISION_AUTHOR.PERSON,
+    you: true,
+    name: "Dean Stratakos",
+    pictureUrl: reader.pictureUrl,
+  });
+  // Before the members are read, a teammate is drawn by their letter.
+  assert.deepEqual(revisionAuthorOf(edit(CHARLES), { ...reader, pictures: new Map() }, []), {
+    kind: REVISION_AUTHOR.PERSON,
+    you: false,
+    name: "Charles Pan",
+    pictureUrl: undefined,
+  });
+});
+
 test("a person's revision the service names nobody for, or read with no account id, is never You", () => {
   const unnamed = { lastEdit: { actor: PLAN_ACTOR.DEVELOPER, at: NOW, duringCall: false } };
   const named = { lastEdit: { ...unnamed.lastEdit, by: DEAN } };
