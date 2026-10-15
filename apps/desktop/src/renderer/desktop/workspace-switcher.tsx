@@ -1,22 +1,28 @@
 import type { Workspace } from "@luke/features/workspace-wire";
 import { ChevronDownIcon, GearIcon, PlusIcon } from "@luke/ui";
+import { LockIcon, UsersIcon } from "lucide-react";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { ActionMenu, dropBelowStart, type MenuAction, useActionMenu } from "./action-menu";
 import { useNewWorkspaceDialog } from "./new-workspace-dialog";
-import { WorkspaceTile } from "./workspace-tile";
+import { TILE_SIZE, WorkspaceTile } from "./workspace-tile";
 
 /**
- * workspace-switcher.tsx -- the head of the sidebar's plans: which of the account's workspaces they are, and the menu that lists another.
+ * workspace-switcher.tsx -- the sidebar's head: the workspace listed, by its tile and name and who shares it, and the menu that lists another.
  *
  * A workspace is a team's shared plans, the first one made for the account
- * among them, and the sidebar lists one at a time. Its head names the workspace listed,
- * and a press drops the menu of every workspace the account is a member of
- * from its left edge, the listed one checked, then New workspace, which asks
- * a name and lists the workspace made, and Workspace settings, which opens Settings on the
- * listed workspace's page, where its members and its Integrations, GitHub
- * among them, are managed. Nothing else stands in the menu. The head
- * stands whenever an account is signed in, its first workspace alone
- * included, because its menu is where a workspace is made.
+ * among them, and the sidebar lists one at a time. Its head stands at the
+ * sidebar's top left, where Slack, Linear, and Vercel name the scope
+ * everything under it belongs to (`docs/proposals/workspace-clarity.md`,
+ * variant A): the workspace's tile, its name, and under it who shares it,
+ * "5 members", or "Only you" for a workspace of one. A press drops the menu
+ * of every workspace the account is a member of from its left edge, each by
+ * its tile, the listed one checked, then New workspace, which asks a name
+ * and lists the workspace made, and Workspace settings, which opens Settings
+ * on the listed workspace's page, where its members and its GitHub are
+ * managed. Nothing else stands in the menu. The head stands whenever an
+ * account is signed in and its workspaces are read, its first workspace
+ * alone included, because its menu is where a workspace is made; before
+ * then the sidebar's head is Luke's.
  */
 
 /** The menu's items: every workspace by its tile, the listed one checked; then New workspace and Workspace settings. */
@@ -42,7 +48,18 @@ function workspaceMenuGroups(
   ];
 }
 
-/** The plans' head while an account is signed in and its workspaces are read. */
+/** Who shares a workspace, as the head's line says it: "Only you" for a workspace of one, its members counted otherwise, nothing from a service that does not count them. */
+function SharedLine({ count }: { count: number | undefined }): React.JSX.Element | null {
+  if (count === undefined) return null;
+  return (
+    <span className="sidebar-workspace-shared">
+      {count <= 1 ? <LockIcon aria-hidden="true" /> : <UsersIcon aria-hidden="true" />}
+      {count <= 1 ? "Only you" : `${count} members`}
+    </span>
+  );
+}
+
+/** The sidebar's head while an account is signed in and its workspaces are read. */
 export function WorkspaceSwitcher({
   plans,
   inSight,
@@ -66,7 +83,11 @@ export function WorkspaceSwitcher({
         aria-label={`Workspace: ${listed.name}`}
         {...menu.trigger(dropBelowStart)}
       >
-        <span className="sidebar-workspace-name">{listed.name}</span>
+        <WorkspaceTile workspace={listed} size={TILE_SIZE.HEAD} />
+        <span className="sidebar-workspace-copy">
+          <span className="sidebar-workspace-name">{listed.name}</span>
+          <SharedLine count={listed.memberCount} />
+        </span>
         <ChevronDownIcon />
       </button>
       {menu.drawn === undefined ? null : (

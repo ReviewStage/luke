@@ -506,49 +506,77 @@ body,
   background: var(--workspace-hue-6);
 }
 
-/* The workspace the plans are, drawn as a repository's header is, in the
-   headings' voice, with a chevron after its name for the menu it drops
-   (`workspace-switcher.tsx`). It stands over the scroller, a list's gap
-   above the first group. */
+.workspace-tile[data-size="head"] {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  font-size: 15px;
+}
+
+/* The sidebar's head: the workspace listed, its tile, its name in the head's
+   weight, and under it who shares it in the meta voice, with a chevron at the
+   row's end for the menu it drops (`workspace-switcher.tsx`). It stands where
+   Luke's own head stands until a workspace is read, the same section gap
+   above New plan. */
 .sidebar-workspace {
   flex: 0 0 auto;
-  margin-bottom: var(--list-gap);
+  padding-bottom: var(--space-12);
 }
 
 .sidebar-workspace-toggle {
   display: flex;
   width: 100%;
   align-items: center;
-  gap: var(--space-4);
-  padding: var(--space-8) var(--row-inset);
-  border-radius: 9px;
+  gap: var(--space-12);
+  padding: var(--space-6) var(--row-inset);
+  border-radius: 10px;
   background: none;
-  color: var(--text-secondary);
-  font-size: 12px;
-  font-weight: 500;
   text-align: left;
-  transition:
-    background-color var(--duration-hover) ease,
-    color var(--duration-hover) ease;
+  transition: background-color var(--duration-hover) ease;
   -webkit-app-region: no-drag;
 }
 
 .sidebar-workspace-toggle:hover,
 .sidebar-workspace-toggle[aria-expanded="true"] {
   background: var(--raised);
-  color: var(--text-primary);
+}
+
+.sidebar-workspace-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-2);
 }
 
 .sidebar-workspace-name {
   overflow: hidden;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: -0.005em;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.sidebar-workspace-shared {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  color: var(--text-secondary);
+  font-size: 11.5px;
+}
+
+.sidebar-workspace-shared > svg {
+  width: 11px;
+  height: 11px;
 }
 
 .sidebar-workspace-toggle > svg {
   width: 12px;
   height: 12px;
   flex: none;
+  color: var(--text-secondary);
 }
 
 .sidebar-new-plan svg,

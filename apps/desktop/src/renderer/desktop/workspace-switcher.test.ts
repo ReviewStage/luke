@@ -12,9 +12,9 @@ import type { PlansControl } from "../planning/use-plans-tab";
 import { WorkspaceSwitcher } from "./workspace-switcher";
 
 /**
- * The head of the sidebar's plans as the developer meets it: the workspace
- * listed, and the menu of every workspace, New workspace, and Workspace
- * settings, whoever the account is in the workspace. Each press is written
+ * The sidebar's head as the developer meets it: the workspace listed, by its
+ * tile and name and who shares it, and the menu of every workspace, New
+ * workspace, and Workspace settings, whoever the account is in the workspace. Each press is written
  * down where the sidebar would hand it on.
  */
 
@@ -113,7 +113,7 @@ test("the menu offers the workspaces, the listed one checked, New workspace, and
   open(page.switcher());
   choose("Workspace settings");
 
-  assert.equal(page.switcher()?.textContent, "acme");
+  assert.equal(page.switcher()?.querySelector(".sidebar-workspace-name")?.textContent, "acme");
   assert.deepEqual(offered, [
     ["Personal", "false"],
     ["acme", "true"],
@@ -283,4 +283,20 @@ test("each workspace in the menu wears its tile, its first letter, and a rename 
   assert.equal(renamed[1]?.[1], before[1]?.[1], "the hue is the workspace's, not its name's");
   // An emoji is one character to a reader, though two to a string.
   assert.equal(tiles([{ ...PERSONAL, name: "🐙 Octo" }])[0]?.[0], "🐙");
+});
+
+test("the head says who shares the workspace: its members counted, only you for a workspace of one, and nothing where the service counts none", () => {
+  const shared = (memberCount?: number) => {
+    const workspace = memberCount === undefined ? ACME : { ...ACME, memberCount };
+    const page = mount({ workspaces: [workspace], workspace });
+    const head = page.switcher();
+    const said = head?.querySelector(".sidebar-workspace-shared")?.textContent ?? null;
+    for (const root of roots.splice(0)) act(() => root.unmount());
+    document.body.innerHTML = "";
+    return [head?.querySelector(".workspace-tile")?.textContent, said];
+  };
+
+  assert.deepEqual(shared(5), ["A", "5 members"]);
+  assert.deepEqual(shared(1), ["A", "Only you"]);
+  assert.deepEqual(shared(undefined), ["A", null]);
 });
