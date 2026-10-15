@@ -425,13 +425,12 @@ export interface RepositoryGroup {
 /**
  * The plans grouped by their repository, the group whose plan was updated
  * most recently first and the plans with none last whatever their age.
- * Within a group the plans keep the order they were handed in, newest
- * started first, so a row never moves while Luke writes its plan; only a
- * group moves, and only past another.
+ * Within a group the plans run newest updated first, the time each row
+ * shows, so the order and the label never disagree.
  */
 export function repositoryGroups(plans: readonly PlanSummary[]): readonly RepositoryGroup[] {
   const grouped = new Map<string | null, PlanSummary[]>();
-  for (const plan of plans) {
+  for (const plan of plans.toSorted((a, b) => b.updatedAt - a.updatedAt)) {
     const group = grouped.get(plan.repository);
     if (group === undefined) grouped.set(plan.repository, [plan]);
     else group.push(plan);

@@ -5,12 +5,12 @@ import { LIVE_STATUS } from "@luke/live";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { VOICE_KEYLESS_NOTE } from "@luke/voice/microphone-access";
 import { test } from "vitest";
-import { MICROPHONE_PRESS, microphoneButton } from "./planning-model.js";
+import { MICROPHONE_PRESS, microphoneButton, repositoryGroups } from "./planning-model.js";
 
 const INVITES = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const _BILLING = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 
-const _PLAN: Plan = {
+const PLAN: Plan = {
   id: INVITES,
   workspaceId: "workspace-personal",
   name: "Teammate invitations",
@@ -105,3 +105,19 @@ test("the microphone asks for the permission first, then for a plan, and then ta
 function _onRepository(name: string, repository: string | null, updatedAt: number) {
   return { id: name, workspaceId: "workspace-personal", name, createdAt: 1, updatedAt, repository };
 }
+
+test("a repository group lists its plans newest updated first, the time each row shows", () => {
+  const plan = (id: string, createdAt: number, updatedAt: number) => ({
+    ...PLAN,
+    id,
+    name: id,
+    repository: "acme/relay",
+    createdAt,
+    updatedAt,
+  });
+  const groups = repositoryGroups([plan("old", 3, 10), plan("touched", 1, 30), plan("new", 2, 20)]);
+  assert.deepEqual(
+    groups.map((group) => group.plans.map((each) => each.name)),
+    [["touched", "new", "old"]],
+  );
+});
