@@ -106,6 +106,11 @@ export type Automation = typeof AutomationRowSchema.Type;
 /** An automation row's workspace: its own, or its plan's on a row an older build wrote, its workspace still null. */
 const AUTOMATION_WORKSPACE = sql<string>`coalesce(${automation.organizationId}, (select ${plan.organizationId} from ${plan} where ${plan.id} = ${automation.planId}))`;
 
+/** An automation row's repositories: its own, or its plan's on a row an older build wrote, its list still empty. */
+const AUTOMATION_REPOSITORIES = sql<
+  readonly string[]
+>`case when ${automation.repositories} = '[]'::jsonb and ${plan.repository} is not null then jsonb_build_array(${plan.repository}) else ${automation.repositories} end`;
+
 const AUTOMATION_COLUMNS = {
   id: automation.id,
   userId: automation.userId,
@@ -125,9 +130,7 @@ const AUTOMATION_COLUMNS = {
     string | null
   >`coalesce(${automation.organizationId}, ${plan.organizationId})`,
   scope: automation.scope,
-  repositories: sql<
-    readonly string[]
-  >`case when ${automation.repositories} = '[]'::jsonb and ${plan.repository} is not null then jsonb_build_array(${plan.repository}) else ${automation.repositories} end`,
+  repositories: AUTOMATION_REPOSITORIES,
   targetKind: automation.targetKind,
   targetAgentId: automation.targetAgentId,
   archiveSuccessful: automation.archiveSuccessful,
@@ -594,21 +597,6 @@ export interface DueClaim {
 }
 
 /**
- * The condition that the automation's owner still reaches its plan, read
- * per row, since the sweep claims every account's automations at once.
- */
-const OWNER_REACHES_PLAN = exists(
-  queryBuilder
-    .select({ id: plan.id })
-    .from(plan)
-    .innerJoin(
-      member,
-      and(eq(member.organizationId, plan.organizationId), eq(member.userId, automation.userId)),
-    )
-    .where(eq(plan.id, automation.planId)),
-);
-
-/**
  * The enabled schedules due, soonest first, of owners who still reach
  * their plans, locked for this claim. Note that a row another claim holds is
  * skipped rather than waited on, because the cron may call twice in one
@@ -941,15 +929,16 @@ const findGithubAutomations = SqlSchema.findAll({
       db
         .select({ id: automation.id, userId: automation.userId, trigger: automation.trigger })
         .from(automation)
-        .innerJoin(plan, eq(plan.id, automation.planId))
+        .leftJoin(plan, eq(plan.id, automation.planId))
         .where(
           and(
             eq(automation.enabled, true),
             eq(automation.triggerKind, AUTOMATION_TRIGGER.GITHUB),
-            // GitHub folds a repository's name; a plan keeps it as GitHub spelled it when it was named.
-            sql`lower(${plan.repository}) = lower(${repository})`,
+            // GitHub folds a repository's name; an automation keeps each as GitHub spelled it when it was named.
+            sql`exists (select 1 from jsonb_array_elements_text(${AUTOMATION_REPOSITORIES}) as listed(name) where lower(listed.name) = lower(${repository}))`,
             sql`${automation.trigger}->>'event' = ${event}`,
-            OWNER_REACHES_PLAN,
+            // The owner still reaches the automation's workspace, read per row, since a delivery fires every account's automations at once.
+            memberOfAutomationWorkspace(automation.userId),
           ),
         )
         .orderBy(asc(automation.createdAt), asc(automation.id))
@@ -1303,10 +1292,10 @@ export function strandedAutomationRuns(
 }
 
 /**
- * The enabled automations listening for the GitHub event on plans of the
- * repository, whoever owns them, of owners who still reach those plans,
- * oldest first, at most `limit`: what a delivery about the repository may
- * fire, its filters still to read.
+ * The enabled automations listening for the GitHub event that work in the
+ * repository, among any of their repositories, whoever owns them, of owners
+ * still members of their workspaces, oldest first, at most `limit`: what a
+ * delivery about the repository may fire, its filters still to read.
  */
 export function githubAutomationsOn(
   repository: string,

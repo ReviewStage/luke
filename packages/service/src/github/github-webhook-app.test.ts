@@ -16,7 +16,7 @@ import {
 import { listWorkspaces } from "@luke/database/models/workspace-store";
 import { account, user } from "@luke/database/schemas/auth";
 import { githubInstallation } from "@luke/database/schemas/github-installation";
-import { fakeWorkspaceSeams, getTestDB, startPlan } from "@luke/database/testing";
+import { fakeWorkspaceSeams, getTestDB, leaveWorkspace, startPlan } from "@luke/database/testing";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -24,6 +24,7 @@ import {
   AUTOMATION_TRIGGER,
   type AutomationTrigger,
   GITHUB_TRIGGER_EVENT,
+  type GitHubTriggerEvent,
 } from "@luke/features/automation-wire";
 import type { CodingAgentPullRequest } from "@luke/features/coding-agent-wire";
 import type { WireBoundaryInput } from "@luke/wire";
@@ -488,6 +489,81 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
           ],
         );
         assert.deepEqual(github.sent, [], "nothing is asked of GitHub to queue a run");
+      }),
+  );
+
+  it.effect(
+    "a pull request opened, pushed to, or marked ready queues a run for a workspace automation listening for updates in any of its repositories, and a draft, a bot's push, a close, or an owner who left the workspace queues none",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openGithubUser();
+        const repositoryName = `Acme/review-${randomUUID()}`;
+        const plan = yield* startPlan(owner, { name: "Reviews", repository: null });
+        const onWorkspace = (event: GitHubTriggerEvent, name: string) =>
+          Effect.map(
+            createAutomation(owner, {
+              planId: null,
+              organizationId: plan.workspaceId,
+              repositories: ["Acme/elsewhere", repositoryName],
+              name,
+              trigger: { kind: AUTOMATION_TRIGGER.GITHUB, event },
+              action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: "Review this pull request." },
+              guards: AUTOMATION_DEFAULT_GUARDS,
+              nextRunAt: null,
+              webhookSecretHash: null,
+            }),
+            Option.getOrThrow,
+          );
+        const review = yield* onWorkspace(GITHUB_TRIGGER_EVENT.PULL_REQUEST_UPDATED, "Code review");
+        const greet = yield* onWorkspace(GITHUB_TRIGGER_EVENT.PULL_REQUEST_OPENED, "Greet");
+        const github = githubReaching([]);
+        const pull = (action: string, options: { draft?: boolean; sender?: string } = {}) => ({
+          action,
+          repository: { full_name: repositoryName.toLowerCase() },
+          sender: { type: options.sender ?? "User" },
+          pull_request: {
+            number: 7,
+            title: "Teammate invitations",
+            html_url: `https://github.com/${repositoryName}/pull/7`,
+            labels: [],
+            base: { ref: "main" },
+            head: { ref: "teammate-invitations" },
+            draft: options.draft ?? false,
+          },
+        });
+        const queued = (payload: WireBoundaryInput) =>
+          Effect.map(answer(github, SECRET, delivery("pull_request", payload)), (got) => got.body);
+
+        const answers = [
+          yield* queued(pull("opened")),
+          yield* queued(pull("synchronize")),
+          yield* queued(pull("ready_for_review")),
+          yield* queued(pull("opened", { draft: true })),
+          yield* queued(pull("synchronize", { sender: "Bot" })),
+          yield* queued(pull("closed")),
+        ];
+
+        assert.deepEqual(
+          answers,
+          [2, 1, 1, 1, 0, 0].map((queued) => ({ read: 0, queued })),
+          "an opened pull request fires both automations; a draft fires only the one listening for opened",
+        );
+        const runs = yield* listAutomationRuns(owner, review.id);
+        assert.equal(runs.length, 3);
+        assert.deepEqual(runs[0]?.firing, {
+          kind: AUTOMATION_FIRING.GITHUB,
+          event: GITHUB_TRIGGER_EVENT.PULL_REQUEST_UPDATED,
+          repository: repositoryName.toLowerCase(),
+          number: 7,
+          title: "Teammate invitations",
+          branch: "main",
+          url: `https://github.com/${repositoryName}/pull/7`,
+        });
+        assert.equal((yield* listAutomationRuns(owner, greet.id)).length, 2);
+
+        // Its owner gone from the workspace, the automation hears nothing more.
+        yield* leaveWorkspace(plan.workspaceId, owner);
+        assert.deepEqual(yield* queued(pull("synchronize")), { read: 0, queued: 0 });
       }),
   );
 

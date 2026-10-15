@@ -283,7 +283,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
   );
 
   it.effect(
-    "an automation on a workspace is refused for an account outside it, with a plan beside it, with no repositories, on a repository its installation does not reach, or on a GitHub event, and one on a plan takes no other repository",
+    "an automation on a workspace is refused for an account outside it, with a plan beside it, with no repositories, or on a repository its installation does not reach, is made on a GitHub event, and one on a plan takes no other repository",
     () =>
       Effect.gen(function* () {
         const { owner, other, plan, ask } = yield* openAccounts;
@@ -328,7 +328,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
             HOSTED_HTTP_STATUS.BAD_REQUEST,
             HOSTED_HTTP_STATUS.BAD_REQUEST,
             HOSTED_HTTP_STATUS.FORBIDDEN,
-            HOSTED_HTTP_STATUS.BAD_REQUEST,
+            HOSTED_HTTP_STATUS.CREATED,
             HOSTED_HTTP_STATUS.BAD_REQUEST,
           ],
         );
@@ -336,7 +336,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
   );
 
   it.effect(
-    "an automation on a workspace is refused a change to a GitHub event, as it is refused one when made, and keeps its schedule, while one on a plan may take one",
+    "an automation on a workspace changes to a GitHub event, as it may be made on one, and so does one on a plan",
     () =>
       Effect.gen(function* () {
         const { owner, plan, ask } = yield* openAccounts;
@@ -353,22 +353,20 @@ it.layer(getTestDB())("the automation routes", (it) => {
         const onWorkspaceMade = yield* made(onWorkspace(plan.workspaceId, [relay]));
         const onPlanMade = yield* made(weekdays(plan.id));
 
-        const refused = yield* ask(automationPath(onWorkspaceMade.id), owner, {
-          method: "PATCH",
-          body: onGitHub,
-        });
-        const kept = readAnswer(
+        const changed = readAnswer(
           automationAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
-          yield* ask(automationPath(onWorkspaceMade.id), owner),
+          yield* ask(automationPath(onWorkspaceMade.id), owner, {
+            method: "PATCH",
+            body: onGitHub,
+          }),
         );
         const onPlanChanged = yield* ask(automationPath(onPlanMade.id), owner, {
           method: "PATCH",
           body: onGitHub,
         });
 
-        assert.equal(refused.status, HOSTED_HTTP_STATUS.BAD_REQUEST, JSON.stringify(refused.body));
-        assert.deepEqual(kept.automation.trigger, onWorkspaceMade.trigger);
+        assert.deepEqual(changed.automation.trigger, onGitHub.trigger);
         assert.equal(
           onPlanChanged.status,
           HOSTED_HTTP_STATUS.OK,

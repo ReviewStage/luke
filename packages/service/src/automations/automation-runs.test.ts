@@ -919,6 +919,113 @@ it.layer(getTestDB())("an automation's runs", (it) => {
       }),
   );
 
+  it.effect(
+    "a GitHub event starts the agent of a workspace automation in the repository it named, though that is not the automation's first",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openGithubUser();
+        const plan = yield* startPlan(owner, { name: "Reviews", repository: null });
+        const installation = INSTALLATIONS[installationsConnected++];
+        assert.ok(installation);
+        yield* connectWorkspaceGitHub(plan.workspaceId, installation);
+        const automation = Option.getOrThrow(
+          yield* createAutomation(owner, {
+            planId: null,
+            organizationId: plan.workspaceId,
+            repositories: ["Acme/Elsewhere", `${RELAY.owner}/${RELAY.name}`],
+            name: "Code review",
+            trigger: {
+              kind: AUTOMATION_TRIGGER.GITHUB,
+              event: GITHUB_TRIGGER_EVENT.PULL_REQUEST_UPDATED,
+            },
+            action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: PROMPT },
+            guards: AUTOMATION_DEFAULT_GUARDS,
+            nextRunAt: null,
+            webhookSecretHash: null,
+          }),
+        );
+        const eve = fakeEve();
+        const run = Option.getOrThrow(
+          yield* recordAutomationRun(automation, {
+            dedupeKey: randomUUID(),
+            firing: {
+              kind: AUTOMATION_FIRING.GITHUB,
+              event: GITHUB_TRIGGER_EVENT.PULL_REQUEST_UPDATED,
+              repository: "acme/relay",
+              number: 41,
+              title: "Teammate invitations",
+              branch: "main",
+              url: "https://github.com/Acme/Relay/pull/41",
+            },
+            firedAt: new Date(),
+          }),
+        );
+
+        const outcome = yield* executeAutomationRun(eve.eveFor, run).pipe(Effect.provide(services));
+
+        const agentId =
+          outcome?.status === AUTOMATION_RUN_STATUS.STARTED ? outcome.codingAgentId : "";
+        const agent = Option.getOrThrow(yield* readCodingAgent(owner, agentId));
+        assert.equal(agent.repository, "Acme/Relay", "spelled as the automation names it");
+        assert.match(
+          agent.task ?? "",
+          /because a pull request was opened or pushed to on GitHub\./u,
+        );
+      }),
+  );
+
+  it.effect(
+    "an automation that hands every run to the same agent takes a GitHub event only from that agent's repository among its own",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, automation } = yield* openAutomation({
+          guards: { ...AUTOMATION_DEFAULT_GUARDS, maxConcurrentRuns: 5 },
+        });
+        const first = yield* startedNow(eve, automation);
+        const agent = Option.getOrThrow(yield* readCodingAgent(owner, first));
+        yield* claimRuntimeSession(
+          { userId: owner, conversationId: agent.conversationId },
+          "wrun_reviews",
+          new Date("2026-10-15T12:00:00Z"),
+        );
+        const same = yield* toSameAgent(automation, first);
+        yield* Database.use((db) =>
+          db
+            .update(automationTable)
+            .set({ repositories: ["Acme/Elsewhere", `${RELAY.owner}/${RELAY.name}`] })
+            .where(eq(automationTable.id, automation.id)),
+        );
+        const pushedTo = (repository: string) =>
+          Effect.flatMap(
+            recordAutomationRun(same, {
+              dedupeKey: randomUUID(),
+              firing: {
+                kind: AUTOMATION_FIRING.GITHUB,
+                event: GITHUB_TRIGGER_EVENT.PULL_REQUEST_UPDATED,
+                repository,
+                number: 7,
+              },
+              firedAt: new Date(),
+            }),
+            (run) =>
+              executeAutomationRun(eve.eveFor, Option.getOrThrow(run)).pipe(
+                Effect.provide(services),
+              ),
+          );
+
+        const elsewhere = yield* pushedTo("acme/elsewhere");
+        const own = yield* pushedTo("acme/relay");
+
+        assert.deepEqual(elsewhere, {
+          status: AUTOMATION_RUN_STATUS.SKIPPED,
+          reason: AUTOMATION_RUN_REASON.REPOSITORY_CHANGED,
+        });
+        assert.deepEqual(own, { status: AUTOMATION_RUN_STATUS.STARTED, codingAgentId: first });
+        assert.equal(eve.sent.length, 1, "only the event of the agent's own repository reached it");
+      }),
+  );
+
   it.effect("a GitHub event about a repository the plan has moved off since starts nothing", () =>
     Effect.gen(function* () {
       const { owner, automation } = yield* openAutomation();

@@ -352,8 +352,7 @@ interface Standing {
  * Where the request puts a new automation, read as the account: on a plan
  * that names a repository, or on a workspace the account is a member of with
  * repositories its installation reaches; a request naming both, or neither,
- * or a workspace with no repositories, or with a GitHub trigger, which is
- * heard only on a plan's repository, is refused as no request at all.
+ * or a workspace with no repositories, is refused as no request at all.
  */
 const standingOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
@@ -374,13 +373,7 @@ const standingOf = /* @__PURE__ */ Effect.fnUntraced(function* (
       repositories: undefined,
     };
   }
-  // Note that a GitHub event is heard only on a plan's repository while GitHub triggers stay
-  // dormant, so an automation with no plan fires on its schedule alone.
-  if (
-    made.workspaceId === undefined ||
-    made.repositories === undefined ||
-    made.trigger.kind === AUTOMATION_TRIGGER.GITHUB
-  ) {
+  if (made.workspaceId === undefined || made.repositories === undefined) {
     return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   }
   const member = yield* hostedStoreOrUnavailable(isWorkspaceMember(userId, made.workspaceId));
@@ -451,8 +444,7 @@ const automationsEndpoint = /* @__PURE__ */ Effect.fn("web/automationsEndpoint")
 
 /**
  * The store's changes for a request against the automation as it stands:
- * the trigger and model checked, a GitHub event refused one with no plan,
- * the due instant computed afresh whenever
+ * the trigger and model checked, the due instant computed afresh whenever
  * the automation ends up enabled with a schedule and either was resumed or
  * given a new trigger, cleared while paused, and the owner's pause or resume
  * clearing why the service paused it. A webhook sent again is no change; a
@@ -475,11 +467,6 @@ const changesOf = /* @__PURE__ */ Effect.fnUntraced(function* (
     standing.trigger.kind === AUTOMATION_TRIGGER.WEBHOOK
       ? undefined
       : asked.trigger;
-  // Note that an automation with no plan fires on its schedule alone while GitHub triggers stay
-  // dormant, as one is refused a GitHub event when made, so a change cannot give it one either.
-  if (newTrigger?.kind === AUTOMATION_TRIGGER.GITHUB && standing.planId === null) {
-    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  }
   const trigger = newTrigger ?? standing.trigger;
   const enabled = asked.enabled ?? standing.enabled;
   const due = yield* firstDue(trigger, now);
