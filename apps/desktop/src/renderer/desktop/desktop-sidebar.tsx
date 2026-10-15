@@ -34,6 +34,8 @@ import { FactoryIcon, HouseIcon, InboxIcon, ZapIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
+import { RelativeTime } from "../planning/relative-time";
+import { AgentMark } from "../planning/tab-look";
 import { runAppCommand, useAppCommand } from "../app-commands";
 import { type CallCardInput, ColumnFoot } from "../call/call-card";
 import { MemberDirectory, useMemberDirectory } from "../member-directory";
@@ -438,8 +440,57 @@ function RepositorySection({
           onClose={menu.close}
         />
       )}
-      {rows.length === 0 ? null : <PlanRows rows={rows} context={context} />}
+      {rows.length === 0 && agentsIn(repository).length === 0 ? null : (
+        <>
+          {rows.length === 0 ? null : <PlanRows rows={rows} context={context} />}
+          <ul className="sidebar-plans">
+            {agentsIn(repository).map((agent) => (
+              <SidebarAgent key={agent.id} agent={agent} now={context.now} />
+            ))}
+          </ul>
+        </>
+      )}
     </div>
+  );
+}
+
+/** SHOW PROTOTYPE: the one-off agents the scene hands the window, by repository. */
+interface ShownAgent {
+  readonly id: string;
+  readonly title: string;
+  readonly repository: string | null;
+  readonly at: number;
+  readonly automation: string | undefined;
+  readonly unread: boolean;
+}
+function agentsIn(repository: string | null): readonly ShownAgent[] {
+  const shown = (window as unknown as { __showAgents?: readonly ShownAgent[] }).__showAgents ?? [];
+  return shown.filter((agent) => agent.repository === repository);
+}
+
+/**
+ * A one-off agent's row among the tasks: the agent's harness mark before its
+ * title, so it reads apart from a task, and the face of who started it
+ * (an automation's clock, or a teammate) and its last activity at its end.
+ */
+function SidebarAgent({ agent, now }: { agent: ShownAgent; now: number }): React.JSX.Element {
+  return (
+    <li className="sidebar-plan-item">
+      <button type="button" className="sidebar-plan sidebar-agent" data-unread={String(agent.unread)}>
+        <span className="sidebar-plan-line">
+          <span className="sidebar-agent-glyph" aria-hidden="true">
+            <AgentMark provider="anthropic" />
+          </span>
+          <span className="sidebar-plan-name">{agent.title}</span>
+          <span className="sidebar-plan-time">
+            {agent.automation === undefined ? null : (
+              <ActorMark actor={{ kind: "automation", name: agent.automation, state: "rest" } as never} size={ACTOR_SIZE.MARK} />
+            )}
+            <RelativeTime at={agent.at} now={now} hint={false} />
+          </span>
+        </span>
+      </button>
+    </li>
   );
 }
 

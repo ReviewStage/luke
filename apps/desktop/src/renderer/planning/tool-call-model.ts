@@ -1,3 +1,4 @@
+import { type IntegrationProvider, integrationProviderFromWire } from "@luke/features/integration-wire";
 import { AGENT_TOOL, type AgentTool, EVE_TOOL, RETIRED_TOOL } from "@luke/features/agent-tools";
 import {
   CODING_AGENT_TODO_STATUS,
@@ -54,6 +55,8 @@ export interface ToolCallView {
   readonly input: ToolBlock;
   /** Nothing while the call has not answered. */
   readonly output: ToolBlock | undefined;
+  /** The integration whose MCP tool this was, which draws its logo in the wrench's place. */
+  readonly provider?: IntegrationProvider;
 }
 
 /** The escape every terminal colour and cursor sequence starts with. */
@@ -576,6 +579,18 @@ export function toolCallView(input: {
   readonly output: WireValue | undefined;
   readonly jobs?: WorkerJobs | undefined;
 }): ToolCallView {
+  // An integration's MCP call is stored as `<provider>_remote`, its own tool and input inside.
+  const remote = /^(.+)_remote$/.exec(input.tool);
+  const provider = remote === null ? undefined : integrationProviderFromWire(remote[1] ?? null);
+  if (provider !== undefined && isRecord(input.input)) {
+    return {
+      kind: CALL_KIND.OTHER,
+      subject: isWireString(input.input.remoteTool) ? input.input.remoteTool : input.tool,
+      provider,
+      input: jsonBlock(input.input.input ?? {}),
+      output: input.output === undefined ? undefined : jsonBlock(input.output),
+    };
+  }
   return (
     knownToolView(input.tool, input.input, input.output) ??
     planningToolView(input.tool, input.input, input.output, input.jobs) ?? {

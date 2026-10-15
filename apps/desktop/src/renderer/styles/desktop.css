@@ -7287,3 +7287,22 @@ body:has(.confirm-dialog-backdrop) .toast[data-action="true"] {
   margin: 0;
   font-variant-numeric: tabular-nums;
 }
+
+/* SHOW PROTOTYPE: the New task dialog's pickers as the app's one picker. */
+.new-plan-dialog .settings-picker-chip { width: auto; min-width: 0; }
+.new-plan-dialog .repository-chip[data-place="field"] .searchable-menu { left: 0; right: auto; }
+.new-plan-dialog .settings-picker .settings-picker-menu { left: 0; right: auto; }
+
+/* SHOW PROTOTYPE: an origin card stands as a sent message does, right-aligned at its measure. */
+.origin-message > .origin-card { width: min(420px, 100%); }
+.origin-card .origin-open { background: none; padding: 0; border: 0; text-decoration: none; display: inline-flex; align-items: center; gap: 2px; margin-top: var(--space-8); font-size: 12.5px; color: var(--text-secondary); }
+.origin-card .origin-open:hover { color: var(--text-primary); }
+.origin-card .origin-open svg { width: 13px; height: 13px; }
+
+/* SHOW PROTOTYPE: the Automations pages inside their find scope fill the place as before. */
+.automations-find { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; }
+.automations-find > .find-bar { top: calc(var(--desktop-bar-height) + var(--space-8)); }
+
+/* SHOW PROTOTYPE: a one-off agent's row leads with its harness mark. */
+.sidebar-agent .sidebar-agent-glyph { display: inline-flex; flex: none; width: 14px; height: 14px; margin-right: 6px; color: var(--text-secondary); }
+.sidebar-agent .sidebar-agent-glyph svg { width: 14px; height: 14px; }

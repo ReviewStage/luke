@@ -1,3 +1,4 @@
+import { FindScope } from "../find-in-tab";
 import {
   AUTOMATION_NEXT,
   type AutomationGroup,
@@ -300,6 +301,19 @@ function GonePage({ onBack }: { onBack: () => void }): React.JSX.Element {
  * edit is in the list the moment it lands.
  */
 export function AutomationsPage({ plans }: { plans: PlansControl }): React.JSX.Element {
+  // ⌘F finds in whichever Automations page stands, as it does in a plan's column.
+  return (
+    <FindScope
+      active={plans.automationsView.open}
+      subject={{ plan: "automations", tab: plans.automationsView.place.kind as never }}
+      className="automations-find"
+    >
+      <AutomationsPages plans={plans} />
+    </FindScope>
+  );
+}
+
+function AutomationsPages({ plans }: { plans: PlansControl }): React.JSX.Element {
   const view = plans.automationsView;
   const workspace = plans.workspace;
   const automations = useAutomations(workspace?.id);

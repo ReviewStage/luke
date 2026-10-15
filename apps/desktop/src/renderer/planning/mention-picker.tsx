@@ -147,6 +147,8 @@ function pathRow(entry: RepositoryPath): MentionRow {
 
 /** The plan's rows: each section by its heading, a heading borne twice once for each section, then the plan itself. */
 function planRows(planId: string, planName: string, text: string): MentionRow[] {
+  // An agent with no plan offers no plan to mention.
+  if (planId === "") return [];
   const headings = planSections(text).map((section) => section.heading);
   const anchors = sectionAnchors(headings);
   return [

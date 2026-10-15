@@ -1,3 +1,5 @@
+import type { IntegrationProvider } from "@luke/features/integration-wire";
+import { ProviderMark } from "@luke/ui";
 import {
   CODING_AGENT_TODO_STATUS,
   type CodingAgentTodoStatus,
@@ -389,6 +391,7 @@ export const MacOwnerProvider = MacOwnerContext.Provider;
 export type TranscriptToolProps = Omit<ComponentProps<typeof Tool>, "children"> &
   Pick<ToolHeaderProps, "state" | "subject"> & {
     kind: CallKind;
+    provider?: IntegrationProvider | undefined;
     /** For a command, the plain words the model said it is for, which the row says in its verb's place; the closed row previews the command's first line after them, and the body holds it whole. */
     description?: string | undefined;
     input: ToolBlock;
@@ -407,6 +410,7 @@ export type TranscriptToolProps = Omit<ComponentProps<typeof Tool>, "children"> 
 export function TranscriptTool({
   state,
   kind,
+  provider,
   subject,
   description,
   input,
@@ -422,7 +426,7 @@ export function TranscriptTool({
     <Tool {...props}>
       <ToolHeader
         state={state}
-        icon={<Icon aria-hidden="true" />}
+        icon={provider === undefined ? <Icon aria-hidden="true" /> : <ProviderMark provider={provider} />}
         label={line.verb}
         subject={line.subject}
         subjectIsCode={line.code}

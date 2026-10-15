@@ -3,10 +3,8 @@ import type { Workspace } from "@luke/features/workspace-wire";
 import { workspaceReaches } from "@luke/ui/planning-model";
 import { useId, useRef, useState } from "react";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutAria } from "#shared/shortcuts";
-import { CHIP_LOOK, Chip } from "../chip";
-import { ActionMenu, dropBelowStart, type MenuAction, useActionMenu } from "../desktop/action-menu";
-import { WORKSPACE_REF_SIZE, WorkspaceRef } from "../desktop/workspace-ref";
-import { WorkspaceTile } from "../desktop/workspace-tile";
+import { TILE_SIZE, WorkspaceTile } from "../desktop/workspace-tile";
+import { Picker } from "../settings/picker-row";
 import { ModalShell } from "../modal-shell";
 import { Shortcut } from "../shortcut";
 import { BusyLabel } from "../spinner";
@@ -58,29 +56,21 @@ function WorkspaceChip({
   disabled: boolean;
   onChoose: (workspaceId: string) => void;
 }): React.JSX.Element | null {
-  const menu = useActionMenu(true);
   const workspace = workspaces.find((each) => each.id === chosen);
   if (workspace === undefined) return null;
-  const choices: MenuAction[] = workspaces.map((each) => ({
-    label: each.name,
-    icon: <WorkspaceTile workspace={each} />,
-    checked: each.id === workspace.id,
-    onSelect: () => onChoose(each.id),
-  }));
+  // The app's one picker: the chip with its chevron, and the searchable menu every other choice drops.
   return (
-    <div className="new-plan-workspace">
-      <Chip
-        look={CHIP_LOOK.PILL}
-        aria-label={`Workspace: ${workspace.name}`}
+    <div className="new-plan-workspace settings-picker-plain">
+      <Picker
+        label="Workspace"
+        value={workspace.id}
+        valueLabel={workspace.name}
+        valueIcon={<WorkspaceTile workspace={workspace} size={TILE_SIZE.INLINE} />}
+        rows={workspaces.map((each) => ({ id: each.id, label: each.name, icon: <WorkspaceTile workspace={each} /> }))}
+        noMatch="No workspaces match"
         disabled={disabled}
-        chevron
-        {...menu.trigger(dropBelowStart)}
-      >
-        <WorkspaceRef workspace={workspace} size={WORKSPACE_REF_SIZE.ROW} />
-      </Chip>
-      {menu.drawn === undefined ? null : (
-        <ActionMenu label="Workspace" menu={menu.drawn} groups={[choices]} onClose={menu.close} />
-      )}
+        onPick={onChoose}
+      />
     </div>
   );
 }
@@ -183,7 +173,7 @@ function NewPlanCard({ newPlan }: { newPlan: PlansControl["newPlan"] }): React.J
       <div className="confirm-dialog-actions">
         <RepositoryChip
           key={repositories.scope}
-          place={CHIP_PLACE.COMPOSER}
+          place={CHIP_PLACE.FIELD}
           value={repository}
           chooser={repositories}
           onChoose={setChosen}

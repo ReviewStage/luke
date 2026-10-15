@@ -2,7 +2,9 @@ import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "../act";
 import { useAppCommand } from "../app-commands";
+import { FindScope } from "../find-in-tab";
 import { MemberDirectory } from "../member-directory";
+import { PlanMentions } from "../planning/plan-mentions";
 import { AgentTab } from "../planning/agent-tab";
 import { agentTabLabel } from "../planning/coding-agent-model";
 import { useCodingAgents } from "../planning/use-coding-agents";
@@ -92,13 +94,27 @@ export function DesktopAgentPage({
       </header>
       {agent !== undefined ? (
         <MemberDirectory workspace={workspace} readerId={plans.me}>
-          <AgentTab
-            agent={agent}
-            control={control}
-            shown
-            onOpenSubagent={nothing}
-            onHeld={nothing}
-          />
+          {/* The plan's own agent column: its reading width, its find, and its mentions, over the agent's repository. */}
+          <FindScope active subject={{ plan: agentId, tab: "agent-page" as never }} className="desktop-agent">
+            <PlanMentions
+              value={{
+                planId: "",
+                planName: "",
+                workspace: "stage",
+                repository: agents.repository ?? "ReviewStage/luke",
+                text: () => "",
+                doors: { planId: "", place: { workspace: "stage", repository: null }, anchors: new Set(), onOpenPlan: nothing, onOpenFile: undefined },
+              }}
+            >
+              <AgentTab
+                agent={agent}
+                control={control}
+                shown
+                onOpenSubagent={nothing}
+                onHeld={nothing}
+              />
+            </PlanMentions>
+          </FindScope>
         </MemberDirectory>
       ) : agents.listFailed ? (
         <div className="agent-page-note">

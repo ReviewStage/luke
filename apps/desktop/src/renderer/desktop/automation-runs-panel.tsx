@@ -12,6 +12,7 @@ import { momentText, sinceText, useMinute } from "../planning/plan-time";
 import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { GLYPH_STATE, type GlyphState, StateGlyph, stateEndMark } from "../state-glyph";
 import type { RunsRead } from "./use-automation-runs";
+import { EDGE_SIDE, useResizableEdge } from "./use-resizable-edge";
 
 /**
  * automation-runs-panel.tsx -- the panel on an automation's page's right: its runs, newest first, each opening its agent.
@@ -72,11 +73,19 @@ function RunRow({
 
 /** The runs panel: the runs, or that there are none yet, or that they could not be read. */
 export function AutomationRunsPanel({
+  width,
+  open,
+  onResize,
+  onToggle,
   created,
   runs,
   onRetry,
   onOpenAgent,
 }: {
+  width: number;
+  open: boolean;
+  onResize: (width: number) => void;
+  onToggle: () => void;
   /** Whether the automation exists yet, so has runs to read. */
   created: boolean;
   runs: RunsRead;
@@ -84,8 +93,20 @@ export function AutomationRunsPanel({
   onOpenAgent: (agentId: string) => void;
 }): React.JSX.Element {
   const now = useMinute();
+  // The panel's left edge, as the side panel's: dragged to resize it, past its least width to fold it away.
+  const edge = useResizableEdge({
+    side: EDGE_SIDE.LEFT,
+    width,
+    bounds: { MIN: 280, DEFAULT: 340, MAX: 560 },
+    reserve: () => 480,
+    label: "Resize runs",
+    onResize,
+    onToggleCollapsed: onToggle,
+  });
+  if (!open) return <></>;
   return (
-    <aside className="automation-runs" aria-label="Runs">
+    <aside className="automation-runs" aria-label="Runs" style={{ width, position: "relative", overflow: "visible" }}>
+      <div className="side-panel-resize" {...edge} />
       <h2 className="settings-group-title">Runs</h2>
       {!created ? (
         <EmptyState icon={<ClockIcon />} title={NO_RUNS_TITLE}>

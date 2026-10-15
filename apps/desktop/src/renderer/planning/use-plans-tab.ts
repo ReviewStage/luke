@@ -1398,9 +1398,6 @@ export function usePlansTab(input: {
       manages: workspace === undefined || managesWorkspace(workspace),
       ...(workspace === undefined ? undefined : { workspaceName: workspace.name }),
       ...(workspace?.github == null ? undefined : { connected: true }),
-      ...(workspace?.github == null
-        ? undefined
-        : { source: `${workspace.github.login} on GitHub · ${workspace.name}` }),
     };
   };
   // A fixture's GitHub is connected nowhere. Connecting opens the service's

@@ -55,6 +55,14 @@ import {
   ZapIcon,
 } from "lucide-react";
 import { useId, useRef, useState } from "react";
+import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
+import { accountActor } from "@luke/ui/actor-model";
+import { SidePanelIcon } from "@luke/ui";
+import { ACTOR_SIZE, ActorMark } from "../actor-ref";
+import { Tooltip } from "../tooltip";
+import { useAppState } from "../use-app-state";
+import { TILE_SIZE, WorkspaceTile } from "./workspace-tile";
+import { EDGE_SIDE, useResizableEdge } from "./use-resizable-edge";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { AnchoredPopover, POPOVER_ALIGN } from "../anchored-popover";
 import { useAppCommand } from "../app-commands";
@@ -265,6 +273,87 @@ function OwnerMark({
   );
 }
 
+/**
+ * Who owns it, the editor's first row: Personal under the account's own
+ * picture, or the workspace under its photo, on the chip and in its menu
+ * alike, as the workspace switcher and Settings' heir picker draw them.
+ */
+function OwnerRow({
+  owner,
+  workspace,
+  onOwner,
+}: {
+  owner: AutomationScope;
+  workspace: Workspace | undefined;
+  onOwner: (owner: AutomationScope) => void;
+}): React.JSX.Element {
+  const account = useAppState()?.account;
+  const you = account?.status === ACCOUNT_STATUS.SIGNED_IN ? accountActor(account) : undefined;
+  const mark = (scope: AutomationScope, inline: boolean) =>
+    scope === AUTOMATION_SCOPE.WORKSPACE ? (
+      workspace === undefined ? null : (
+        <WorkspaceTile workspace={workspace} size={inline ? TILE_SIZE.INLINE : undefined} />
+      )
+    ) : you === undefined ? null : (
+      <ActorMark actor={you} size={inline ? ACTOR_SIZE.INLINE : ACTOR_SIZE.ROW} />
+    );
+  const rows = [
+    { id: AUTOMATION_SCOPE.PERSONAL, label: "Personal", icon: mark(AUTOMATION_SCOPE.PERSONAL, false) },
+    {
+      id: AUTOMATION_SCOPE.WORKSPACE,
+      label: workspace?.name ?? "Workspace",
+      icon: mark(AUTOMATION_SCOPE.WORKSPACE, false),
+    },
+  ];
+  return (
+    <PickerRow
+      copy={
+        <>
+          <strong>Owner</strong>
+          <small>
+            {owner === AUTOMATION_SCOPE.WORKSPACE
+              ? `Everyone in ${workspace?.name ?? "the workspace"} sees it, runs it, and turns it off. You, owners, and admins change it.`
+              : "Only you see and change it. Owners and admins can see it and turn it off."}
+          </small>
+        </>
+      }
+      label="Owner"
+      value={owner}
+      valueLabel={ownerName(owner, workspace)}
+      valueIcon={mark(owner, true)}
+      rows={rows}
+      noMatch="No owners match"
+      onPick={(id) => onOwner(id === AUTOMATION_SCOPE.WORKSPACE ? AUTOMATION_SCOPE.WORKSPACE : AUTOMATION_SCOPE.PERSONAL)}
+    />
+  );
+}
+
+/** The runs panel's widths: its least, its default, and its most, as the side panel's are bounded. */
+const RUNS_PANEL_WIDTH = { MIN: 280, DEFAULT: 340, MAX: 560 } as const;
+
+/** What a window keeps of the runs panel: its width and whether it stands. */
+const RUNS_PANEL_KEY = "luke.automationRunsPanel";
+
+/** The runs panel's width and fold, kept by the window as the side panel's are. */
+function useRunsPanel() {
+  const [kept, setKept] = useState<{ width: number; open: boolean }>(() => {
+    try {
+      const read = JSON.parse(localStorage.getItem(RUNS_PANEL_KEY) ?? "null");
+      if (read && typeof read.width === "number") return read;
+    } catch {}
+    return { width: RUNS_PANEL_WIDTH.DEFAULT, open: true };
+  });
+  const keep = (next: { width: number; open: boolean }) => {
+    setKept(next);
+    localStorage.setItem(RUNS_PANEL_KEY, JSON.stringify(next));
+  };
+  return {
+    ...kept,
+    onResize: (width: number) => keep({ ...kept, width }),
+    onToggle: () => keep({ ...kept, open: !kept.open }),
+  };
+}
+
 /** What stops a save, said under the row it belongs to once a save was pressed. */
 function Problem({ problem }: { problem: string | undefined }): React.JSX.Element | null {
   if (problem === undefined) return null;
@@ -404,6 +493,8 @@ function EditorToolbar({
   onDelete,
   running,
   onRunNow,
+  runsOpen,
+  onToggleRuns,
 }: {
   draft: AutomationDraft;
   automation: AutomationSummary | undefined;
@@ -417,6 +508,8 @@ function EditorToolbar({
   /** Whether a Run now is out. */
   running: boolean;
   onRunNow: () => void;
+  runsOpen: boolean;
+  onToggleRuns: () => void;
 }): React.JSX.Element {
   const status =
     automation === undefined
@@ -434,8 +527,6 @@ function EditorToolbar({
             <ZapIcon />
             Automations
           </button>
-          <ChevronRightIcon aria-hidden="true" />
-          <OwnerMark owner={draft.owner} workspace={workspace} />
           <ChevronRightIcon aria-hidden="true" />
           <span className="automation-crumb">
             {automation === undefined ? "New automation" : automation.name}
@@ -490,6 +581,18 @@ function EditorToolbar({
             </button>
           </>
         )}
+        <Tooltip label={runsOpen ? "Hide runs" : "Show runs"} command={APP_COMMAND.TOGGLE_SIDE_PANEL}>
+          <button
+            type="button"
+            className="icon-button side-panel-toggle"
+            aria-label={runsOpen ? "Hide runs" : "Show runs"}
+            aria-expanded={runsOpen}
+            data-open={String(runsOpen)}
+            onClick={onToggleRuns}
+          >
+            <SidePanelIcon />
+          </button>
+        </Tooltip>
       </div>
     </header>
   );
@@ -1084,6 +1187,15 @@ function EditorForm({
   ] as const;
   return (
     <div className="automation-form">
+      {offersOwner ? (
+        <SettingsGroup title="Sharing">
+          <OwnerRow
+            owner={draft.owner}
+            workspace={workspace}
+            onOwner={(owner) => onDraft({ owner })}
+          />
+        </SettingsGroup>
+      ) : null}
       <SettingsGroup title="Trigger">
         <SelectRow
           label="Type"
@@ -1220,8 +1332,20 @@ export function AutomationEditor({
     saved !== undefined && saved.repository === draft.repository ? saved.agentId : null;
   // Note that a new draft nothing was changed in is no work to lose, so Escape may leave it.
   const written = automation === undefined ? !sameDraft(draft, start) : dirty;
-  // Escape goes back to the list while nothing written would be lost, and is kept, doing nothing, while it would.
-  useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, written ? keepEscape : onBack);
+  // Note that leaving asks first wherever something written would be lost: a new draft typed into, or an edit unsaved.
+  const [leavingTo, setLeavingTo] = useState<(() => void) | undefined>(undefined);
+  const guarded = (go: () => void) => () => {
+    if (!written) {
+      go();
+      return;
+    }
+    setLeavingTo(() => go);
+    leaving.ask();
+  };
+  const back = guarded(onBack);
+  useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, back);
+  const runsPanel = useRunsPanel();
+  useAppCommand(APP_COMMAND.TOGGLE_SIDE_PANEL, runsPanel.onToggle);
   const problems = draftProblems(draft, planBacked, new Date());
   const editDraft = (patch: Partial<AutomationDraft>) => {
     setDraft((was) => ({ ...was, ...patch }));
@@ -1265,19 +1389,11 @@ export function AutomationEditor({
     });
   };
   // Note that opening a run's agent leaves the page and its draft with it, so unsaved changes ask first.
-  const [leavingFor, setLeavingFor] = useState<string | undefined>(undefined);
-  const leaving = useConfirmDialog({ subject: leavingFor !== undefined, surfaceOpen: true }, () => {
-    if (leavingFor !== undefined) onOpenAgent(leavingFor);
+  const leaving = useConfirmDialog({ subject: leavingTo !== undefined, surfaceOpen: true }, () => {
+    leavingTo?.();
     return Promise.resolve(ACCEPTED);
   });
-  const openRun = (agentId: string) => {
-    if (!dirty) {
-      onOpenAgent(agentId);
-      return;
-    }
-    setLeavingFor(agentId);
-    leaving.ask();
-  };
+  const openRun = (agentId: string) => guarded(() => onOpenAgent(agentId))();
   const toggle = (enabled: boolean) => {
     if (automation === undefined) return;
     writes.toggle(automation.id, enabled).then((answer) => {
@@ -1308,8 +1424,10 @@ export function AutomationEditor({
         workspace={workspace}
         dirty={dirty}
         saving={saving}
-        onBack={onBack}
+        onBack={back}
         onSave={save}
+        runsOpen={runsPanel.open}
+        onToggleRuns={runsPanel.onToggle}
         onToggle={toggle}
         onDelete={deletion.ask}
         running={running}
@@ -1331,10 +1449,6 @@ export function AutomationEditor({
                 {problems[DRAFT_FIELD.NAME]}
               </p>
             ) : null}
-            <p className="automation-owner-line">
-              <OwnerMark owner={draft.owner} workspace={workspace} />
-              {ownerLine(draft.owner, workspace, offersOwner)}
-            </p>
             {refusal === undefined ? null : (
               <p className="error-message automation-save-refusal" role="alert">
                 {refusal}
@@ -1357,6 +1471,10 @@ export function AutomationEditor({
           </div>
         </div>
         <AutomationRunsPanel
+          width={runsPanel.width}
+          open={runsPanel.open}
+          onResize={runsPanel.onResize}
+          onToggle={runsPanel.onToggle}
           created={automation !== undefined}
           runs={runs.read}
           onRetry={runs.reload}
@@ -1367,7 +1485,10 @@ export function AutomationEditor({
         confirm={leaving}
         question={{
           title: "Leave with unsaved changes?",
-          body: "Opening the run's agent leaves this page, and what you changed here is lost.",
+          body:
+            automation === undefined
+              ? "This automation hasn't been created, and what you wrote here is lost."
+              : "What you changed here is lost.",
           verb: "Leave",
           running: "Leaving",
         }}

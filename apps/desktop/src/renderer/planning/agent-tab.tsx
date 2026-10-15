@@ -16,10 +16,11 @@ import { ACT_KIND } from "@luke/host/acts";
 import { DocumentIcon } from "@luke/ui";
 import type { Actor } from "@luke/ui/actor-model";
 import { MESSAGE_ROLE } from "@luke/wire";
-import { BotIcon } from "lucide-react";
+import { ArrowUpRightIcon, BotIcon, ZapIcon } from "lucide-react";
 import { Fragment, type ReactNode, useEffect, useRef } from "react";
 import { useAct } from "../act";
-import { ActorRef } from "../actor-ref";
+import { ActorRef, automationActor } from "../actor-ref";
+import { type KnownAutomation, useAutomation } from "../automation-directory";
 import {
   Conversation,
   ConversationContent,
@@ -237,6 +238,7 @@ function ToolCallView({
       data-call-id={part.callId}
       state={part.state}
       kind={view.kind}
+      provider={view.provider}
       subject={view.subject}
       description={view.description}
       input={view.input}
@@ -466,30 +468,52 @@ function PlanCard({
   text,
   lead,
   title = cardTitle(text),
+  sender,
+  onOpenSender,
+  open,
 }: {
   text: string;
   lead: TranscriptLead;
+  sender?: Actor | undefined;
+  onOpenSender?: (() => void) | undefined;
+  open?: { label: string; onOpen: () => void } | undefined;
   /** The card's line: the text's first line as plain words, unless the transcript names it otherwise. */
   title?: string | undefined;
 }): ReactNode {
   return (
-    <Plan data-plan-card="" aria-label={lead.label}>
-      <PlanHeader>
-        {lead.icon}
-        <PlanTitle label={lead.label}>{title}</PlanTitle>
-      </PlanHeader>
-      <PlanContent>
-        <TranscriptWords text={text} />
-      </PlanContent>
-    </Plan>
+    <Message from={MESSAGE_ROLE.USER} className="origin-message">
+      {sender === undefined ? null : <MessageSender actor={sender} onOpen={onOpenSender} />}
+      <Plan data-plan-card="" aria-label={lead.label} className="origin-card">
+        <PlanHeader>
+          {lead.icon}
+          <PlanTitle label={lead.label}>{title}</PlanTitle>
+        </PlanHeader>
+        <PlanContent>
+          <TranscriptWords text={text} />
+          {open === undefined ? null : (
+            <button type="button" className="text-link origin-open" onClick={open.onOpen}>
+              {open.label}
+              <ArrowUpRightIcon aria-hidden="true" />
+            </button>
+          )}
+        </PlanContent>
+      </Plan>
+    </Message>
   );
 }
 
+/** An automation's run, as its origin card leads: the automation's bolt, under the automation as its sender. */
+const AUTOMATION_LEAD: TranscriptLead = {
+  label: "Prompt",
+  icon: <ZapIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />,
+  startingLine: "The agent is starting.",
+};
+
 /** Who wrote or said a message, over it: their mark and their name, hanging their card. */
-function MessageSender({ actor }: { actor: Actor }): React.JSX.Element {
+function MessageSender({ actor, onOpen }: { actor: Actor; onOpen?: (() => void) | undefined }): React.JSX.Element {
   return (
     <span className="message-sender">
-      <ActorRef actor={actor} />
+      <ActorRef actor={actor} onOpen={onOpen} />
     </span>
   );
 }
@@ -510,7 +534,10 @@ export function AgentMessage({
   briefTitle,
   said = false,
   sender,
+  origin,
 }: {
+  /** The automation whose run handed the agent this message, which it is drawn as coming from. */
+  origin?: KnownAutomation | undefined;
   message: CodingAgentMessage;
   /** Whether this is the plan the agent was handed, which is the first of the developer's messages. */
   plan: boolean;
@@ -527,7 +554,20 @@ export function AgentMessage({
   sender?: Actor | undefined;
 }): ReactNode {
   const words = messageWords(message);
-  if (plan) return <PlanCard text={words} lead={lead} title={briefTitle} />;
+  if (plan) return <PlanCard text={words} lead={lead} title={briefTitle} sender={sender} open={{ label: lead === AGENT_LEAD ? "Open plan" : "Open task", onOpen: () => undefined }} />;
+  if (origin !== undefined && message.role === MESSAGE_ROLE.USER) {
+    // An automation's run opens on the prompt it was handed, from the automation, which opens its page.
+    const prompt = words.split("\n\n---\n\n")[0] ?? words;
+    return (
+      <PlanCard
+        text={prompt}
+        lead={AUTOMATION_LEAD}
+        sender={automationActor(origin.automation)}
+        onOpenSender={origin.onOpen}
+        open={{ label: "Open automation", onOpen: origin.onOpen }}
+      />
+    );
+  }
   const named = sender === undefined ? null : <MessageSender actor={sender} />;
   if (message.role === MESSAGE_ROLE.USER) {
     return (
@@ -599,7 +639,9 @@ function AgentTranscriptView({
   briefTitle,
   briefSender,
   readerId,
+  origin,
 }: {
+  origin?: KnownAutomation | undefined;
   messages: readonly CodingAgentMessage[];
   /** What the agent was handed first: the plan, drawn as the plan's card, or a prompt, drawn as the developer's message; nothing reads as the plan. */
   brief?: CodingAgentBrief | undefined;
@@ -662,6 +704,7 @@ function AgentTranscriptView({
                 delegation={delegation}
                 todos={todos}
                 briefTitle={briefTitle}
+                origin={message === task ? origin : undefined}
                 sender={
                   message === task ? briefSender : lineSender(message.sentBy, readerId, members)
                 }
@@ -783,6 +826,7 @@ function AgentTabView({
   const working = agentStillWriting(agent.status);
   const starterActor = usePerson(agent.startedBy);
   const { members } = useMemberDirectory();
+  const origin = useAutomation(agent.automationId);
   return (
     <section className="agent-tab ph-no-capture" aria-label={agentTabLabel(agent, models)}>
       <MacOwnerProvider value={macOwnerOf(agent.startedBy, members, readerId)}>
@@ -790,6 +834,7 @@ function AgentTabView({
           messages={lines}
           brief={agent.brief}
           briefSender={starter === undefined ? undefined : starterActor}
+          origin={origin}
           readerId={readerId}
           delegation={{
             models,
