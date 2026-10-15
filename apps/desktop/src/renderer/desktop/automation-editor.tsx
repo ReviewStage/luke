@@ -439,13 +439,27 @@ function ModelControl({
   choices: RunChoices;
   onDraft: (patch: Partial<AutomationDraft>) => void;
 }): React.JSX.Element {
-  // Note that a default that could not be read still lets a model be chosen once the catalog is
-  // read, drawing the service's own default in its place, so the picker is never out of reach.
-  const shown =
-    draft.choice ??
-    choices.defaultChoice ??
-    (choices.models === undefined ? undefined : CODING_AGENT_DEFAULT_CHOICE);
-  if (shown === undefined) return <p className="automation-form-note">Your default model.</p>;
+  const shown = draft.choice ?? choices.defaultChoice;
+  if (shown === undefined) {
+    // Note that a default that could not be read is said as unknown rather than drawn as some
+    // model it may not be, and a model can still be chosen, which the chip then names.
+    return choices.defaultFailed ? (
+      <div className="automation-model">
+        <span className="automation-form-note">
+          It runs on your default model, which could not be read.
+        </span>
+        <button
+          type="button"
+          className="toolbar-button bordered-button"
+          onClick={() => onDraft({ choice: CODING_AGENT_DEFAULT_CHOICE })}
+        >
+          Choose a model
+        </button>
+      </div>
+    ) : (
+      <p className="automation-form-note">Your default model.</p>
+    );
+  }
   return (
     <div className="automation-model">
       <AgentModelChip
@@ -454,13 +468,9 @@ function ModelControl({
         readModels={choices.readModels}
         usage={undefined}
       />
-      {draft.choice !== null ? null : (
-        <span className="automation-form-note">
-          {choices.defaultChoice === undefined
-            ? "It runs on your default model until you choose one."
-            : "Your default, until you choose one."}
-        </span>
-      )}
+      {draft.choice === null ? (
+        <span className="automation-form-note">Your default, until you choose one.</span>
+      ) : null}
     </div>
   );
 }

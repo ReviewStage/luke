@@ -1010,11 +1010,16 @@ test("a Run now that settles reads the list again, so its newest run stands ther
   assert.ok(listed.length > before);
 });
 
-test("a default model that could not be read still offers the model chip once the catalog is read", async () => {
+test("a default model that could not be read is said as unknown, and a model can still be chosen", async () => {
   defaultRefused = true;
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
   await settle();
 
+  assert.equal(page.querySelector(".agent-model-chip"), null, "no model is drawn as the default");
+  assert.match(page.textContent ?? "", /It runs on your default model, which could not be read\./u);
+  act(() => button("Choose a model").click());
+  await settle();
+
   assert.ok(page.querySelector(".agent-model-chip"));
-  assert.match(page.textContent ?? "", /It runs on your default model until you choose one\./u);
+  assert.equal(page.querySelector(".automation-editor-status")?.textContent, "Unsaved changes");
 });

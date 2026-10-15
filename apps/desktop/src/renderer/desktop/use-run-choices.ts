@@ -31,6 +31,8 @@ export interface RunChoices {
   readonly readModels: () => void;
   /** The account's default a new agent runs on until a model is chosen; nothing before it is read. */
   readonly defaultChoice: ModelChoice | undefined;
+  /** Whether the read of the default did not answer, so it is not known. */
+  readonly defaultFailed: boolean;
   /** The workspace's agents on the repository, newest first, where the picker asks for them. */
   readonly agents: AgentsRead;
 }
@@ -45,6 +47,7 @@ export function useRunChoices(input: {
   const { workspaceId, repository, wantsAgents } = input;
   const [models, setModels] = useState<readonly CatalogModel[] | undefined>(undefined);
   const [defaultChoice, setDefaultChoice] = useState<ModelChoice | undefined>(undefined);
+  const [defaultFailed, setDefaultFailed] = useState(false);
   const [agents, setAgents] = useState<AgentsRead>(undefined);
   const readModels = useCallback(() => {
     act(ACT_KIND.CODING_AGENTS_MODELS).then(
@@ -58,9 +61,10 @@ export function useRunChoices(input: {
     readModels();
     act(ACT_KIND.CODING_AGENTS_DEFAULT_READ).then(
       (answer) => {
-        if (!("failure" in answer)) setDefaultChoice(answer.choice);
+        if ("failure" in answer) setDefaultFailed(true);
+        else setDefaultChoice(answer.choice);
       },
-      () => undefined,
+      () => setDefaultFailed(true),
     );
   }, [act, readModels]);
   useEffect(() => {
@@ -83,5 +87,5 @@ export function useRunChoices(input: {
       live = false;
     };
   }, [act, workspaceId, repository, wantsAgents]);
-  return { models, readModels, defaultChoice, agents };
+  return { models, readModels, defaultChoice, defaultFailed, agents };
 }
