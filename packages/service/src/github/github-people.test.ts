@@ -177,6 +177,49 @@ it.layer(getTestDB())("who a pull request names", (it) => {
   );
 
   it.effect(
+    "every page of reviews and commits is read, so a reviewer stands by their newest decision and a later commit's author is named, and only the newest comments are kept past the bound",
+    () =>
+      Effect.gen(function* () {
+        const workspace = yield* openWorkspace(yield* linkedAccount(CHARLES.id));
+        const early = Array.from({ length: 100 }, (_, at) =>
+          review(DEVIN, "COMMENTED", `Note ${at}.`, "2026-10-15T09:00:00Z"),
+        );
+        early[0] = review(CHARLES, "CHANGES_REQUESTED", "Rename the flag.", "2026-10-15T08:00:00Z");
+        const pages = (url: string) => Number(new URL(url).searchParams.get("page") ?? 1);
+        const people = yield* peopleOf(workspace, (sent) => {
+          const { pathname } = new URL(sent.url);
+          if (pathname === PULL) return Response.json({ user: LUKE });
+          if (pathname === `${PULL}/reviews`) {
+            return Response.json(
+              pages(sent.url) === 1
+                ? early
+                : [review(CHARLES, "APPROVED", "Ship it.", "2026-10-15T10:00:00Z")],
+            );
+          }
+          if (pathname === `${PULL}/commits`) {
+            return Response.json(
+              pages(sent.url) === 1
+                ? Array.from({ length: 100 }, () => ({ author: LUKE }))
+                : [{ author: PRIYA }],
+            );
+          }
+          return undefined;
+        });
+
+        assert.equal(
+          people.reviewers?.find((reviewer) => reviewer.by.login === CHARLES.login)?.state,
+          REVIEW_STATE.APPROVED,
+        );
+        assert.deepEqual(
+          people.commitAuthors?.map((author) => author.login),
+          [LUKE.login, PRIYA.login],
+        );
+        assert.equal(people.comments?.length, CHANGES_BOUNDS.MAX_PEOPLE);
+        assert.equal(people.comments?.at(-1)?.excerpt, "Ship it.");
+      }),
+  );
+
+  it.effect(
     "an avatar off GitHub's own avatar host is left out, and a review's words are cut at the bound",
     () =>
       Effect.gen(function* () {

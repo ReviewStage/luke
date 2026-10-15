@@ -181,8 +181,17 @@ const GITHUB_BOT_TYPE = "Bot";
 /** The suffix GitHub gives an App's bot's login. */
 const BOT_LOGIN_SUFFIX = "[bot]";
 
-/** How many reviews and commits a read asks for: GitHub's one full page. */
-const PEOPLE_PER_PAGE = "100";
+/** How many reviews and commits a page asks for: GitHub's most. */
+const PEOPLE_PER_PAGE = 100;
+
+/**
+ * The most pages of reviews or of commits a read takes. GitHub lists at
+ * most 250 commits of a pull request, so three pages hold every one; a
+ * pull request reviewed past this many pages is read as far as the bound,
+ * its newer reviews left unread, rather than holding the changes on a
+ * history that does not end.
+ */
+const PEOPLE_MAX_PAGES = 5;
 
 /** A path segment as GitHub takes it, so a branch spelled with a slash stays one branch. */
 function segment(value: string): string {
@@ -504,7 +513,7 @@ function reviewersOf(
   return [...standing.values()].slice(0, CHANGES_BOUNDS.MAX_PEOPLE);
 }
 
-/** The reviews that said something, oldest first, up to the bound; a draft review and one by nobody GitHub names are left out. */
+/** The newest reviews that said something, up to the bound, oldest first; a draft review and one by nobody GitHub names are left out. */
 function commentsOf(reviews: typeof ReviewsSchema.Type): readonly GitHubReviewComment[] {
   return reviews
     .flatMap((review) => {
@@ -521,7 +530,7 @@ function commentsOf(reviews: typeof ReviewsSchema.Type): readonly GitHubReviewCo
         },
       ];
     })
-    .slice(0, CHANGES_BOUNDS.MAX_PEOPLE);
+    .slice(-CHANGES_BOUNDS.MAX_PEOPLE);
 }
 
 /** No one: what a pull request the repository no longer holds names. */
@@ -532,11 +541,31 @@ const NOBODY: PullRequestPeople = {
   comments: [],
 };
 
+/** Every page of a listing, oldest first, until one comes back short or the bound is reached; none where the pull request is not found. */
+const everyPage = /* @__PURE__ */ Effect.fnUntraced(function* <A>(
+  token: Redacted.Redacted,
+  path: string,
+  schema: Schema.Codec<readonly A[], unknown>,
+) {
+  const listed: A[] = [];
+  for (let page = 1; page <= PEOPLE_MAX_PAGES; page += 1) {
+    const request = githubRead(path, token).pipe(
+      HttpClientRequest.setUrlParams({ per_page: String(PEOPLE_PER_PAGE), page: String(page) }),
+    );
+    const read = Option.getOrElse(yield* readOptional(request, schema), () => []);
+    listed.push(...read);
+    if (read.length < PEOPLE_PER_PAGE) break;
+  }
+  return listed;
+});
+
 /**
  * Who the pull request names, read on the token in three asks at once: the
  * pull request itself, for who opened it and who it still asks for a
- * review; its reviews; and its commits. Nobody where the repository holds
- * no such pull request.
+ * review; every page of its reviews, since a reviewer stands by their
+ * newest; and every page of its commits, since a later commit may be by
+ * someone new. Each list is cut at the bound only once read whole. Nobody
+ * where the repository holds no such pull request.
  */
 export const pullRequestPeople = /* @__PURE__ */ Effect.fn("web/pullRequestPeople")(function* (
   token: Redacted.Redacted,
@@ -544,26 +573,22 @@ export const pullRequestPeople = /* @__PURE__ */ Effect.fn("web/pullRequestPeopl
   number: number,
 ): Effect.fn.Return<PullRequestPeople, PullRequestReadFailure, HttpClient.HttpClient> {
   const path = `${repositoryPath(fullName)}/pulls/${number}`;
-  const page = HttpClientRequest.setUrlParams({ per_page: PEOPLE_PER_PAGE });
   const [pull, reviews, commits] = yield* Effect.all(
     [
       readOptional(githubRead(path, token), PullRequestPeopleSchema),
-      readOptional(githubRead(`${path}/reviews`, token).pipe(page), ReviewsSchema),
-      readOptional(githubRead(`${path}/commits`, token).pipe(page), CommitsSchema),
+      everyPage(token, `${path}/reviews`, ReviewsSchema),
+      everyPage(token, `${path}/commits`, CommitsSchema),
     ],
     { concurrency: "unbounded" },
   );
   if (Option.isNone(pull)) return NOBODY;
-  const listed = Option.getOrElse(reviews, () => []);
   const requested = (pull.value.requested_reviewers ?? []).map(accountOf);
   return {
     author: pull.value.user === null ? undefined : accountOf(pull.value.user),
-    reviewers: reviewersOf(listed, requested),
+    reviewers: reviewersOf(reviews, requested),
     commitAuthors: distinctAccounts(
-      Option.getOrElse(commits, () => []).flatMap((commit) =>
-        commit.author === null ? [] : [accountOf(commit.author)],
-      ),
+      commits.flatMap((commit) => (commit.author === null ? [] : [accountOf(commit.author)])),
     ),
-    comments: commentsOf(listed),
+    comments: commentsOf(reviews),
   };
 });
