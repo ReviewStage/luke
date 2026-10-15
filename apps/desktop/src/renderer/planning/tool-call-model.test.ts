@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { CALL_KIND } from "@luke/features/turn-rows";
 import { test } from "vitest";
 import { TOOL_BLOCK } from "../ai-elements/tool";
-import { cardTitle, toolCallView } from "./tool-call-model";
+import { cardTitle, TOOL_TARGET, toolCallView, toolTarget } from "./tool-call-model";
 
 const ESCAPE = String.fromCharCode(27);
 
@@ -405,4 +405,13 @@ test("the planning model's own calls draw from their parts as a coding agent's d
     output: "Stopped delegate-7k2m9q.",
   });
   assert.deepEqual([stopped.kind, stopped.subject], [CALL_KIND.WORKER_CANCEL, "delegate-7k2m9q"]);
+});
+
+test("a chat tool's call opens the plan's Chat tab, where what it posted or read stands", () => {
+  assert.deepEqual(
+    ["post_chat", "read_chat", "resolve_ask"].map((tool) =>
+      toolTarget({ tool, callId: "call", input: { text: "hi" }, output: { status: "accepted" } }),
+    ),
+    [{ kind: TOOL_TARGET.CHAT }, { kind: TOOL_TARGET.CHAT }, { kind: TOOL_TARGET.CHAT }],
+  );
 });

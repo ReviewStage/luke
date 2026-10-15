@@ -44,6 +44,7 @@ import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { ConfirmDialog } from "../settings/confirm-dialog";
 import { Skeleton } from "../skeleton";
 import { SPINNER_SIZE, Spinner } from "../spinner";
+import { PlanChatTab } from "./desktop-chat";
 import { DesktopHome } from "./desktop-home";
 import { MainTabContent, MainTabStrip, mainTabLabel } from "./main-tabs";
 import { PlanActions } from "./plan-actions";
@@ -436,6 +437,8 @@ function PlanDocument({
         return openColumnTab(MAIN_TAB.PLAN);
       case TOOL_TARGET.INBOX:
         return openColumnTab(MAIN_TAB.INBOX);
+      case TOOL_TARGET.CHAT:
+        return openColumnTab(MAIN_TAB.CHAT);
       case TOOL_TARGET.BOARD:
         return sidePanel.onChoose(SIDE_PANEL_TAB.BOARD);
       case TOOL_TARGET.PAGE:
@@ -512,6 +515,7 @@ function PlanDocument({
                 keys={plans.shown && !sideFocused}
                 shown={plans.shown}
                 inbox={inbox.board.open.length}
+                chat={plans.chatView.available}
               />
             }
           >
@@ -615,7 +619,12 @@ function PlanDocument({
                   }}
                 />
               ) : null}
-              {tab === MAIN_TAB.PLAN || tab === MAIN_TAB.INBOX ? null : (
+              {tab === MAIN_TAB.CHAT ? (
+                <section className="desktop-plan-chat" role="tabpanel" aria-label="Chat">
+                  <PlanChatTab plans={plans} planId={plan.id} />
+                </section>
+              ) : null}
+              {tab === MAIN_TAB.PLAN || tab === MAIN_TAB.INBOX || tab === MAIN_TAB.CHAT ? null : (
                 <section
                   className="desktop-agent"
                   role="tabpanel"

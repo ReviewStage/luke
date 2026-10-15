@@ -228,6 +228,7 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
     sectionReveal: undefined,
     onSectionRevealed: ignore,
     onShowInbox: ignore,
+    onShowChat: ignore,
     secondCall: {
       confirm: {
         stage: CONFIRM_STAGE.RESTING,

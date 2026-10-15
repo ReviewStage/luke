@@ -1,3 +1,4 @@
+import { CHANNEL_KIND } from "@luke/features/chat-wire";
 import { AtSignIcon, HashIcon, MessagesSquareIcon } from "lucide-react";
 import { useMemo } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
@@ -185,5 +186,60 @@ export function DesktopChat({
         onAnswer={view.onAnswer}
       />
     </div>
+  );
+}
+
+/** What the plan's Chat tab says where its plan has no channel yet. */
+const NO_PLAN_CHANNEL = "Nothing is posted in this plan's channel yet.";
+
+/**
+ * The plan's own Chat tab, in the plan's column: its channel of the
+ * workspace's chat, at reading size, as the window's Chat shows it, its
+ * composer posting there. A plan whose channel is not opened yet, which
+ * its first post opens, says so; a chat not read yet waits on the read.
+ */
+export function PlanChatTab({
+  plans,
+  planId,
+}: {
+  plans: PlansControl;
+  planId: string;
+}): React.JSX.Element {
+  const view = plans.chatView;
+  const now = useMinute();
+  const openLink = useOpenLink();
+  const read = view.chat;
+  const listed = plans.plans;
+  const names = useMemo(() => chatNames(listed, read?.agents ?? [], undefined), [listed, read]);
+  const channel = read?.answer.channels.find(
+    (each) => each.kind === CHANNEL_KIND.PLAN && each.planId === planId,
+  );
+  if (read === undefined || channel === undefined) {
+    return (
+      <section className="chat-stream plan-chat" aria-label="Chat">
+        {view.failed ? (
+          <ReadFailure
+            line={CHAT_FAILED}
+            onRetry={view.onRetry}
+            place={READ_FAILURE_PLACE.CENTRED}
+          />
+        ) : read === undefined && view.available ? (
+          <Spinner label="Loading chat" size={SPINNER_SIZE.REGION} />
+        ) : (
+          <EmptyState icon={<MessagesSquareIcon />}>{NO_PLAN_CHANNEL}</EmptyState>
+        )}
+      </section>
+    );
+  }
+  return (
+    <ChatPane
+      chat={read.answer}
+      names={names}
+      place={{ kind: CHAT_PLACE.CHANNEL, channelId: channel.id }}
+      now={now}
+      openLink={openLink}
+      onPost={view.onPost}
+      onAnswer={view.onAnswer}
+    />
   );
 }
