@@ -776,6 +776,30 @@ function backToList(page: HTMLElement): HTMLButtonElement {
   return back;
 }
 
+/** The empty state a column stands, as it reads: its line, or none where the column stands none. */
+function emptyStateIn(page: HTMLElement, column: string): string | null {
+  const shown = page.querySelector(column);
+  assert.ok(shown, "the column is drawn");
+  const empty = shown.querySelector(".empty-state");
+  return empty === null || shown.hasAttribute("hidden") ? null : (empty.textContent ?? "");
+}
+
+test("an Inbox with nothing in it stands its empty state in the pane beside the list, and in the list itself once the list stands alone", async () => {
+  inboxes = new Map();
+  listedAgents = [];
+  const { page } = mount();
+  await settle();
+  assert.deepEqual(columnsShown(page), ["list", "item"]);
+  assert.deepEqual(
+    [emptyStateIn(page, ".inbox-plans"), emptyStateIn(page, ".inbox-view-items")],
+    [null, "Nothing needs you"],
+  );
+
+  layOut(page, 800);
+  assert.deepEqual(columnsShown(page), ["list"]);
+  assert.equal(emptyStateIn(page, ".inbox-plans"), "Nothing needs you");
+});
+
 test("an Inbox too narrow for the list and the item side by side shows its list alone, the whole Inbox wide; a press opens the item alone under a way back, which, Back's chord, and Escape each take, the keyboard landing on the item's row, before Escape leaves the Inbox", async () => {
   const { page, asked } = mount();
   await settle();

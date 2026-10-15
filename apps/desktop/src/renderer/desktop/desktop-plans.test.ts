@@ -160,6 +160,12 @@ test("a plan's Inbox tab whose read holds nothing says nothing needs you under t
     (column) => !column.hasAttribute("hidden"),
   );
   assert.match(shown.map((column) => column.textContent).join(""), /Nothing needs you/u);
+  assert.equal(
+    shown.find((column) => column.classList.contains("inbox-plans"))?.querySelector(".empty-state")
+      ?.textContent,
+    "Nothing needs you",
+    "the list standing alone stands the Inbox's empty state",
+  );
   act(() => root.unmount());
   container.remove();
 });

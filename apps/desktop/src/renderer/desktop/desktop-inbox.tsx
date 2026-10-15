@@ -82,16 +82,19 @@ function listedHoldings(
   return holdings.filter((holding) => listed.some((plan) => plan.id === holding.planId));
 }
 
-/** What stands under the list's rows: a read that did not answer, the spinner while nothing is read, or the filter's empty line. */
+/** What stands under the list's rows: a read that did not answer, the spinner while nothing is read, or the filter's empty line, the Inbox's empty state where the list stands alone. */
 function ListNote({
   failed,
   reading,
   empty,
+  alone,
   onRetry,
 }: {
   failed: boolean;
   reading: boolean;
   empty: boolean;
+  /** Whether the list stands alone, the Inbox too narrow for the pane beside it. */
+  alone: boolean;
   onRetry: () => void;
 }): React.JSX.Element | null {
   if (failed) {
@@ -103,6 +106,8 @@ function ListNote({
   }
   if (!empty) return null;
   if (reading) return <Spinner label="Loading inbox" size={SPINNER_SIZE.INLINE} />;
+  // Note that the list standing alone is the whole Inbox, so it says so as the hidden pane would.
+  if (alone) return <EmptyState icon={<InboxIcon />}>{NEEDS_YOU.NONE}</EmptyState>;
   return <p className="sidebar-note">{NEEDS_YOU.NONE}</p>;
 }
 
@@ -250,6 +255,7 @@ export function DesktopInbox({ plans }: { plans: PlansControl }): React.JSX.Elem
               failed={read.failed || planless.failed}
               reading={reading}
               empty={listedItems(list).length === 0}
+              alone={columns.shown === INBOX_COLUMNS.LIST}
               onRetry={onRetry}
             />
           }
