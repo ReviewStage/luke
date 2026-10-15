@@ -267,8 +267,10 @@ read-only board of every task, from Plan to Build to Ship, beside the Inbox.
 - Start a task without a name: it stands as Untitled until you name it
   ([#2888](https://github.com/ReviewStage/luke/pull/2888))
 - An Inbox item standing alone says where it stands, 2 of 8, and steps through
-  the list by its arrows, J, and K
-  ([#2882](https://github.com/ReviewStage/luke/pull/2882))
+  the list by its arrows, J, and K, and a settled one offers the next that
+  needs you where its box stood
+  ([#2882](https://github.com/ReviewStage/luke/pull/2882),
+  [#2885](https://github.com/ReviewStage/luke/pull/2885))
 - A task counts as read the moment it opens, on whichever of its tabs
   ([#2900](https://github.com/ReviewStage/luke/pull/2900))
 - A pinned task is pinned for you alone, not for the whole workspace
