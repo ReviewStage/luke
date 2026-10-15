@@ -7,7 +7,7 @@ import {
   PICTURE_OMISSION,
   type PictureOmission,
 } from "@luke/features/conversation-picture-wire";
-import { imageDimensions, sniffImageType } from "@luke/features/image-signature";
+import { imageDimensions, SIGNATURE_BYTES, sniffImageType } from "@luke/features/image-signature";
 import { isRecord, isWireString, type UnparsedWireValue, type WireRecord } from "@luke/wire";
 import { Effect, Option } from "effect";
 
@@ -67,6 +67,21 @@ function decodedLength(base64: string): number {
   return Math.floor((base64.length * 3) / 4) - padding;
 }
 
+/** How many base64 characters spell a picture's signature, read before anything else of a blob is. */
+const SIGNATURE_CHARS = Math.ceil(SIGNATURE_BYTES / 3) * 4;
+
+/**
+ * Whether a resource's blob is a picture: one its type names an image, or,
+ * where it names no type, which MCP allows, one whose first bytes are a
+ * picture's signature. Note that a blob of another type stands as the tool
+ * wrote it, because the record keeps what it cannot name otherwise.
+ */
+function isPictureBlob(blob: string, mimeType: UnparsedWireValue): boolean {
+  if (isWireString(mimeType)) return mimeType.startsWith(IMAGE_MEDIA_PREFIX);
+  const head = new Uint8Array(Buffer.from(blob.slice(0, SIGNATURE_CHARS), "base64"));
+  return sniffImageType(head) !== undefined;
+}
+
 /** The record without one of its keys. */
 function without(record: WireRecord, key: string): WireRecord {
   return Object.fromEntries(Object.entries(record).filter(([held]) => held !== key));
@@ -112,8 +127,7 @@ function keptBlock(target: ConversationTarget, block: WireRecord): PictureEffect
     block.type === MCP_BLOCK.RESOURCE &&
     isRecord(resource) &&
     isWireString(resource.blob) &&
-    isWireString(resource.mimeType) &&
-    resource.mimeType.startsWith(IMAGE_MEDIA_PREFIX)
+    isPictureBlob(resource.blob, resource.mimeType)
   ) {
     const blob = resource.blob;
     return Effect.map(pictureNote(target, blob), (note) => ({

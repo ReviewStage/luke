@@ -1,8 +1,8 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "c5e36d86-bd3f-43af-bc54-13700f4f64c6",
-  "prevIds": ["34f83773-5663-49e6-b6bc-9bda48c92e40"],
+  "id": "dc97b863-34e0-44c1-a6c0-fdd2de602205",
+  "prevIds": ["44526a45-ccb5-4d9b-8eef-7b86a0d91562"],
   "ddl": [
     {
       "isRlsEnabled": false,
@@ -205,6 +205,12 @@
     {
       "isRlsEnabled": false,
       "name": "plan_page_version",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "plan_pin",
       "entityType": "tables",
       "schema": "public"
     },
@@ -3647,19 +3653,6 @@
       "table": "github_install_intent"
     },
     {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "organization_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "github_installation"
-    },
-    {
       "type": "bigint",
       "typeSchema": null,
       "notNull": true,
@@ -3668,6 +3661,19 @@
       "generated": null,
       "identity": null,
       "name": "installation_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "github_installation"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "organization_id",
       "entityType": "columns",
       "schema": "public",
       "table": "github_installation"
@@ -4711,6 +4717,45 @@
       "entityType": "columns",
       "schema": "public",
       "table": "plan_page_version"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "user_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "plan_pin"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "plan_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "plan_pin"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "pinned_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "plan_pin"
     },
     {
       "type": "uuid",
@@ -7150,6 +7195,27 @@
       "nameExplicit": true,
       "columns": [
         {
+          "value": "organization_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "github_installation_organization_id_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "github_installation"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
           "value": "agent_id",
           "isExpression": false,
           "asc": true,
@@ -7411,6 +7477,27 @@
       "entityType": "indexes",
       "schema": "public",
       "table": "plan_page_version"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "plan_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "plan_pin_plan",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "plan_pin"
     },
     {
       "nameExplicit": true,
@@ -8586,6 +8673,32 @@
     },
     {
       "nameExplicit": false,
+      "columns": ["user_id"],
+      "schemaTo": "public",
+      "tableTo": "user",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "plan_pin_user_id_user_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "plan_pin"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["plan_id"],
+      "schemaTo": "public",
+      "tableTo": "plan",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "plan_pin_plan_id_plan_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "plan_pin"
+    },
+    {
+      "nameExplicit": false,
       "columns": ["plan_id"],
       "schemaTo": "public",
       "tableTo": "plan",
@@ -8882,6 +8995,14 @@
       "table": "integration_connection"
     },
     {
+      "columns": ["user_id", "plan_id"],
+      "nameExplicit": false,
+      "name": "plan_pin_pkey",
+      "entityType": "pks",
+      "schema": "public",
+      "table": "plan_pin"
+    },
+    {
       "columns": ["plan_id", "seq"],
       "nameExplicit": false,
       "name": "plan_revision_plan_id_seq_pk",
@@ -9098,7 +9219,7 @@
       "entityType": "pks"
     },
     {
-      "columns": ["organization_id"],
+      "columns": ["installation_id"],
       "nameExplicit": false,
       "name": "github_installation_pkey",
       "schema": "public",
@@ -9329,15 +9450,6 @@
       "name": "user_email_unique",
       "schema": "public",
       "table": "user",
-      "entityType": "uniques"
-    },
-    {
-      "nameExplicit": false,
-      "columns": ["installation_id"],
-      "nullsNotDistinct": false,
-      "name": "github_installation_installation_id_key",
-      "schema": "public",
-      "table": "github_installation",
       "entityType": "uniques"
     },
     {

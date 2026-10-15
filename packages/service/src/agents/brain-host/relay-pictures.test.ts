@@ -59,12 +59,15 @@ const stamped = <Event extends Omit<MessageStreamEvent, "meta">>(event: Event) =
 
 const LINEAR_REMOTE = INTEGRATION.linear.REMOTE_TOOL;
 
+/** The first bytes of a PDF, a blob no picture, which the record keeps as the tool wrote it. */
+const PDF_HEAD = Buffer.from("%PDF-1.7\n").toString("base64");
+
 /** Base64 whose bytes would be one more than a picture may be, never decoded by the relay. */
 const TOO_LARGE_BASE64 = "A".repeat(
   Math.ceil(((CONVERSATION_PICTURE_BOUNDS.MAX_BYTES + 1) * 4) / 3) + 4,
 );
 
-/** What Linear's tool answered: words, a picture, a picture too large to keep, and the picture again as a resource. */
+/** What Linear's tool answered: words, a picture, a picture too large to keep, the picture again as a resource with a type and as one without, and a resource that is no picture. */
 const ANSWER: readonly WireValue[] = [
   { type: "text", text: "2 images extracted from NW-482" },
   { type: "image", data: PNG_37_BY_23, mimeType: "image/png" },
@@ -77,6 +80,11 @@ const ANSWER: readonly WireValue[] = [
       blob: PNG_37_BY_23,
     },
   },
+  {
+    type: "resource",
+    resource: { uri: "https://uploads.linear.app/unlabelled", blob: PNG_37_BY_23 },
+  },
+  { type: "resource", resource: { uri: "https://uploads.linear.app/spec.pdf", blob: PDF_HEAD } },
 ];
 
 /** One typed turn whose one step runs Linear's tool through `connection_execute`, both answering the same blocks. */
@@ -178,7 +186,7 @@ it.effect(
       const execute = outputs.get(`tool-${CONNECTION_TOOL.EXECUTE}`);
       assert.deepEqual(execute, nested, "the call eve ran and the nested call name the same rows");
       assert.ok(Array.isArray(nested));
-      const [words, kept, tooLarge, resource] = nested;
+      const [words, kept, tooLarge, resource, unlabelled, pdf] = nested;
       assert.deepEqual(words, ANSWER[0], "words stand as the tool wrote them");
       assert.ok(isRecord(kept) && isRecord(kept.picture));
       const picture = kept.picture;
@@ -214,6 +222,12 @@ it.effect(
         },
         "the same picture as a resource is the same row",
       );
+      assert.deepEqual(
+        unlabelled,
+        { type: "resource", resource: { uri: "https://uploads.linear.app/unlabelled", picture } },
+        "a resource that names no type is a picture where its bytes are one",
+      );
+      assert.deepEqual(pdf, ANSWER[5], "a blob that is no picture stands as the tool wrote it");
       assert.ok(!JSON.stringify(nested).includes(PNG_37_BY_23.slice(0, 40)), "no base64 is stored");
 
       const read = await database.run(readConversationPicture(conversationId, String(picture.id)));
