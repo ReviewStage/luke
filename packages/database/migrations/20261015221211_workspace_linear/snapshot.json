@@ -1,8 +1,8 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "85c1b856-b9cb-4c65-bc3f-37de033b64df",
-  "prevIds": ["dc97b863-34e0-44c1-a6c0-fdd2de602205"],
+  "id": "9ab34f59-231f-4d22-9950-ca0e2b1d84f2",
+  "prevIds": ["945c6174-ebde-416b-a9b3-4f767546714a"],
   "ddl": [
     {
       "isRlsEnabled": false,
@@ -199,6 +199,12 @@
     {
       "isRlsEnabled": false,
       "name": "plan_board",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "plan_attachment",
       "entityType": "tables",
       "schema": "public"
     },
@@ -4657,6 +4663,110 @@
       "name": "id",
       "entityType": "columns",
       "schema": "public",
+      "table": "plan_attachment"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "plan_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "plan_attachment"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "user_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "plan_attachment"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "content_type",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "plan_attachment"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "byte_count",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "plan_attachment"
+    },
+    {
+      "type": "bytea",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "bytes",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "plan_attachment"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "plan_attachment"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "saved_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "plan_attachment"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
       "table": "plan_page_version"
     },
     {
@@ -7609,6 +7719,48 @@
       "with": "",
       "method": "btree",
       "concurrently": false,
+      "name": "plan_attachment_plan",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "plan_attachment"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "created_at",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": "\"saved_at\" is null",
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "plan_attachment_unsaved",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "plan_attachment"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "plan_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
       "name": "plan_page_version_plan",
       "entityType": "indexes",
       "schema": "public",
@@ -8823,6 +8975,32 @@
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
+      "name": "plan_attachment_plan_id_plan_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "plan_attachment"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["user_id"],
+      "schemaTo": "public",
+      "tableTo": "user",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "SET NULL",
+      "name": "plan_attachment_user_id_user_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "plan_attachment"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["plan_id"],
+      "schemaTo": "public",
+      "tableTo": "plan",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
       "name": "plan_page_version_plan_id_plan_id_fk",
       "entityType": "fks",
       "schema": "public",
@@ -9476,6 +9654,14 @@
     {
       "columns": ["id"],
       "nameExplicit": false,
+      "name": "plan_attachment_pkey",
+      "schema": "public",
+      "table": "plan_attachment",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["id"],
+      "nameExplicit": false,
       "name": "plan_page_version_pkey",
       "schema": "public",
       "table": "plan_page_version",
@@ -9683,6 +9869,13 @@
       "entityType": "checks",
       "schema": "public",
       "table": "inbox_attachment"
+    },
+    {
+      "value": "octet_length(\"bytes\") <= 1500000",
+      "name": "plan_attachment_bytes_bound",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "plan_attachment"
     }
   ],
   "renames": []
