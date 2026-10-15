@@ -143,6 +143,11 @@ function sameChoice(one: ModelChoice | null, other: ModelChoice | null): boolean
   );
 }
 
+/** The agent a draft's runs land in: the one chosen where runs land in the same agent, and none where a new agent takes each, whatever was chosen before. */
+function landingAgent(draft: AutomationDraft): string | null {
+  return draft.target === AUTOMATION_TARGET.SAME_AGENT ? draft.agentId : null;
+}
+
 /** The action a draft's runs take: its task, on its model where it names one. */
 function actionOf(draft: AutomationDraft): AutomationAction {
   const action = { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: draft.prompt.trim() } as const;
@@ -333,7 +338,7 @@ export function sameDraft(one: AutomationDraft, other: AutomationDraft): boolean
     one.repository === other.repository &&
     one.owner === other.owner &&
     one.target === other.target &&
-    one.agentId === other.agentId &&
+    landingAgent(one) === landingAgent(other) &&
     sameChoice(one.choice, other.choice) &&
     one.archiveSuccessful === other.archiveSuccessful
   );
@@ -355,7 +360,7 @@ export function changeOf(
   const scheduleMoved =
     draft.scheduled && (cron !== cronOf(was.schedule) || draft.timezone !== was.timezone);
   const actionMoved = draft.prompt.trim() !== was.prompt || !sameChoice(draft.choice, was.choice);
-  const targetMoved = draft.target !== was.target || draft.agentId !== was.agentId;
+  const targetMoved = draft.target !== was.target || landingAgent(draft) !== landingAgent(was);
   const repositoryMoved = automation.planId === null && draft.repository !== was.repository;
   const change: ChangeDraft = {};
   if (draft.name.trim() !== was.name) change.name = draft.name.trim();
@@ -372,4 +377,15 @@ export function changeOf(
   if (repositoryMoved && draft.repository !== null) change.repositories = repositoriesOf(draft);
   if (draft.owner !== was.owner) change.scope = draft.owner;
   return Object.keys(change).length === 0 ? undefined : change;
+}
+
+/**
+ * A draft moved to another repository. An agent works in its own
+ * repository, so a same-agent draft lets go of the agent it had chosen,
+ * which the picker then offers again from the new repository's agents,
+ * rather than send its runs to an agent working elsewhere.
+ */
+export function withRepository(draft: AutomationDraft, repository: string): AutomationDraft {
+  if (repository === draft.repository) return draft;
+  return { ...draft, repository, agentId: null };
 }

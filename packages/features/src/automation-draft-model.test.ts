@@ -11,6 +11,7 @@ import {
   SCHEDULE_KIND,
   sameDraft,
   scheduleDraftOf,
+  withRepository,
 } from "./automation-draft-model.js";
 import {
   AUTOMATION_ACTION,
@@ -321,4 +322,24 @@ test("a saved automation opens on where its runs land, and a save sends only the
     null,
     "an agent since deleted reads as none chosen",
   );
+});
+
+test("a move to another repository lets go of the agent chosen, and a hidden choice of agent changes nothing while a new agent takes each run", () => {
+  const onAgent = {
+    ...SAVED,
+    target: { kind: AUTOMATION_TARGET.SAME_AGENT, agentId: AGENT_ID },
+  } as const;
+  const opened = automationDraft(onAgent, DEFAULTS);
+
+  assert.equal(withRepository(opened, "acme/web").agentId, null);
+  assert.equal(
+    withRepository(opened, "acme/ledger").agentId,
+    AGENT_ID,
+    "the same repository keeps it",
+  );
+
+  const fresh = automationDraft(SAVED, DEFAULTS);
+  const chosenThenLeft = { ...fresh, agentId: AGENT_ID };
+  assert.ok(sameDraft(chosenThenLeft, fresh));
+  assert.equal(changeOf(chosenThenLeft, SAVED, DEFAULTS), undefined);
 });

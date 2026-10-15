@@ -12,6 +12,7 @@ import {
   type ScheduleDraft,
   type ScheduleKind,
   sameDraft,
+  withRepository,
 } from "@luke/features/automation-draft-model";
 import {
   AUTOMATION_CALL_FAILURE,
@@ -574,7 +575,7 @@ function EditorForm({
               place={CHIP_PLACE.COMPOSER}
               value={draft.repository}
               chooser={repositories}
-              onChoose={(repository) => onDraft({ repository })}
+              onChoose={(repository) => onDraft(withRepository(draft, repository))}
             />
             {also.length === 0 ? null : (
               <p className="automation-form-note">
