@@ -565,6 +565,8 @@ const startClaimed = Effect.fnUntraced(function* (
       repository,
       idempotencyKey: run.id,
       choice: automation.action.choice,
+      // The servers its owner switched off for it, as a Start switches them off for its agent.
+      disabledServers: automation.action.disabledServers,
       prompt: handed.prompt,
       rememberChoice: false,
       automationId: automation.id,

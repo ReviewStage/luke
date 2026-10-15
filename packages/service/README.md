@@ -1339,6 +1339,9 @@ coder channel already admits for the voice brain. The prompt is the
 automation's own prompt with a closing line naming the automation and why it
 fired. The run's id is the Start's key, so a run two sweeps both act on
 starts one agent, and a named model does not become the account's default.
+The MCP servers the action switches off (`disabledServers`) are switched off
+for the run's new agent, as a Start's draft switches them off; every other
+server the owner connected is handed to it.
 A refused start is a failed run with one fixed word
 (`AUTOMATION_RUN_REASON`), and nothing pauses an automation for failing:
 the next firing tries again. A `paused_reason` an older build wrote still

@@ -1,5 +1,5 @@
 import { Schema as EffectSchema } from "effect";
-import { CODING_AGENT_STATUS } from "./coding-agent-wire.js";
+import { CODING_AGENT_STATUS, disabledServersSchema } from "./coding-agent-wire.js";
 import { githubRepositoryFullNameSchema } from "./github-repositories-wire.js";
 import { modelChoiceSchema } from "./models-wire.js";
 import { countedNumber, wireUuidSchema } from "./service-wire.js";
@@ -179,7 +179,7 @@ export const automationTriggerSchema = EffectSchema.Union([
 
 export type AutomationTrigger = typeof automationTriggerSchema.Type;
 
-/** A coding agent handed the prompt as its task, on the model and effort named, or the account's default. */
+/** A coding agent handed the prompt as its task, on the model and effort named, or the account's default, with the MCP servers named switched off. */
 const codingAgentActionSchema = EffectSchema.Struct({
   kind: EffectSchema.Literal(AUTOMATION_ACTION.CODING_AGENT),
   prompt: EffectSchema.Trim.check(
@@ -187,11 +187,16 @@ const codingAgentActionSchema = EffectSchema.Struct({
     EffectSchema.isMaxLength(AUTOMATION_BOUNDS.MAX_PROMPT_CHARS),
   ),
   choice: EffectSchema.optionalKey(modelChoiceSchema),
+  /** The owner's connected MCP servers a run's new agent is not handed; every one is, where none are named. */
+  disabledServers: EffectSchema.optionalKey(disabledServersSchema),
 });
 
 export const automationActionSchema = codingAgentActionSchema;
 
 export type AutomationAction = typeof automationActionSchema.Type;
+
+/** An action as JSON holds it, before its servers are read against the providers this build knows. */
+export type AutomationActionJson = typeof automationActionSchema.Encoded;
 
 /**
  * How far one automation may go: how many of its agents may be at work at

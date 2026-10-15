@@ -25,6 +25,7 @@ import {
   GITHUB_TRIGGER_EVENT,
   PULL_REQUEST_MOMENT,
 } from "./automation-wire.js";
+import { INTEGRATION_PROVIDER } from "./integration-wire.js";
 
 /**
  * An automation as its editor holds it: a schedule read into the picker's
@@ -215,6 +216,44 @@ test("a save changes only what moved, the task keeping its model, and a draft th
     changeOf({ ...automationDraft(onPlan, DEFAULTS), repository: "acme/web" }, onPlan, DEFAULTS),
     undefined,
     "a plan's automation works in its plan's repository",
+  );
+});
+
+test("the servers a draft switches off are saved with its task, opened as saved, and a change of them in any order is a change of the task only once they differ", () => {
+  const opened = automationDraft(SAVED, DEFAULTS);
+  assert.deepEqual(opened.disabledServers, []);
+  const switched = {
+    ...opened,
+    disabledServers: [INTEGRATION_PROVIDER.SENTRY, INTEGRATION_PROVIDER.LINEAR],
+  };
+
+  assert.deepEqual(changeOf(switched, SAVED, DEFAULTS), {
+    action: {
+      ...SAVED.action,
+      disabledServers: [INTEGRATION_PROVIDER.SENTRY, INTEGRATION_PROVIDER.LINEAR],
+    },
+  });
+  const saved = {
+    ...SAVED,
+    action: {
+      ...SAVED.action,
+      disabledServers: [INTEGRATION_PROVIDER.LINEAR, INTEGRATION_PROVIDER.SENTRY],
+    },
+  };
+  assert.deepEqual(automationDraft(saved, DEFAULTS).disabledServers, [
+    INTEGRATION_PROVIDER.LINEAR,
+    INTEGRATION_PROVIDER.SENTRY,
+  ]);
+  assert.equal(changeOf(switched, saved, DEFAULTS), undefined, "the same servers in another order");
+  assert.deepEqual(changeOf({ ...switched, disabledServers: [] }, saved, DEFAULTS), {
+    action: SAVED.action,
+  });
+  assert.equal(
+    createRequestOf(
+      { ...switched, name: "Sweep", prompt: "Sweep.", repository: "acme/ledger" },
+      "workspace-acme",
+    ).action.disabledServers?.length,
+    2,
   );
 });
 

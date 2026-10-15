@@ -17,6 +17,11 @@ import {
   type AutomationSummary,
   GITHUB_TRIGGER_EVENT,
 } from "@luke/features/automation-wire";
+import {
+  INTEGRATION_PROVIDER,
+  INTEGRATION_PROVIDER_LIST,
+  INTEGRATION_STATUS,
+} from "@luke/features/integration-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import { EXPERIMENT, type Experiment } from "@luke/settings";
@@ -237,6 +242,18 @@ beforeEach(() => {
             ? { automation: made, webhookSecret: MADE_SECRET }
             : { automation: made };
           return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+        }
+        if (request.kind === ACT_KIND.INTEGRATIONS_STATUS) {
+          // Linear and Sentry are connected; the rest are not.
+          const integrations = Object.fromEntries(
+            INTEGRATION_PROVIDER_LIST.map((provider) => [
+              provider,
+              provider === INTEGRATION_PROVIDER.LINEAR || provider === INTEGRATION_PROVIDER.SENTRY
+                ? INTEGRATION_STATUS.CONNECTED
+                : INTEGRATION_STATUS.DISCONNECTED,
+            ]),
+          );
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { integrations } });
         }
         if (request.kind === ACT_KIND.CODING_AGENTS_MODELS) {
           catalogReads += 1;
@@ -961,6 +978,28 @@ test("the list's Owner column draws the workspace by its tile, the account's own
   assert.equal(markOf(SWEEP.name), "tile");
   assert.equal(markOf(DIGEST.name), "person");
   assert.equal(markOf(FAILING.name), "someone");
+});
+
+test("a new agent's MCP servers are the owner's connected ones until switched off, and a switch saves with the task", async () => {
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+  assert.match(page.textContent ?? "", /2 of 2 on\./u);
+
+  act(() => button("MCP servers").click());
+  await settle();
+  const sentry = document.querySelector<HTMLButtonElement>(
+    "[role=switch][aria-label='Sentry for this agent']",
+  );
+  assert.ok(sentry, "the agent box's own switches stand");
+  act(() => sentry.click());
+  assert.match(page.textContent ?? "", /1 of 2 on\./u);
+  act(() => button("Save").click());
+  await settle();
+
+  assert.deepEqual(changes.at(-1), {
+    automationId: SWEEP.id,
+    change: { action: { ...SWEEP.action, disabledServers: [INTEGRATION_PROVIDER.SENTRY] } },
+  });
 });
 
 test("the Runs panel hides and shows by its toggle and by the side panel's chord, and stays as it was left", async () => {

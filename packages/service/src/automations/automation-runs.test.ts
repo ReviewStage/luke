@@ -41,6 +41,7 @@ import {
 } from "@luke/features/automation-wire";
 import { CODING_AGENT_BOUNDS } from "@luke/features/coding-agent-wire";
 import { INBOX_RESPONSE } from "@luke/features/inbox-wire";
+import { INTEGRATION_PROVIDER, type IntegrationProvider } from "@luke/features/integration-wire";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@luke/wire";
 import { eq, inArray } from "drizzle-orm";
@@ -143,6 +144,7 @@ const openAutomation = (
     readonly repository?: string | null;
     readonly guards?: AutomationGuards;
     readonly archiveSuccessful?: boolean;
+    readonly disabledServers?: readonly IntegrationProvider[];
   } = {},
 ) =>
   Effect.gen(function* () {
@@ -163,6 +165,9 @@ const openAutomation = (
         kind: AUTOMATION_ACTION.CODING_AGENT,
         prompt: PROMPT,
         choice: { model: SOL, effort: "low" },
+        ...(options.disabledServers === undefined
+          ? undefined
+          : { disabledServers: options.disabledServers }),
       },
       guards: options.guards ?? AUTOMATION_DEFAULT_GUARDS,
       nextRunAt: new Date(now - 60_000),
@@ -234,6 +239,24 @@ const toSameAgent = (automation: Automation, agentId: string) =>
   });
 
 it.layer(getTestDB())("an automation's runs", (it) => {
+  it.effect(
+    "a run's new agent is handed its owner's MCP servers but the ones the automation switched off",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, automation } = yield* openAutomation({
+          disabledServers: [INTEGRATION_PROVIDER.LINEAR, INTEGRATION_PROVIDER.SENTRY],
+        });
+        const started = yield* startedNow(eve, automation);
+
+        const agent = Option.getOrThrow(yield* readCodingAgent(owner, started));
+        assert.deepEqual(agent.disabledServers, [
+          INTEGRATION_PROVIDER.LINEAR,
+          INTEGRATION_PROVIDER.SENTRY,
+        ]);
+      }),
+  );
+
   it.effect(
     "an automation that hands every run to the same agent sends that agent the run's prompt under the run's key and starts none, and a run whose agent is archived fails as agent-gone",
     () =>
