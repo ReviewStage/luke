@@ -68,6 +68,30 @@
       "type": "object",
       "additionalProperties": true
     },
+    "sentBy": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "userId": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "member",
+            "former",
+            "luke",
+            "automation"
+          ]
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false
+    },
     "startedAt": {
       "type": "number",
       "minimum": 0

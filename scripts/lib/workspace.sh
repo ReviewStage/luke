@@ -1,46 +1,46 @@
 #!/usr/bin/env bash
 
-SIDECAR_SCRIPT_DIRECTORY=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
-SIDECAR_REPO_ROOT=$(CDPATH= cd -- "$SIDECAR_SCRIPT_DIRECTORY/../.." && pwd)
-SIDECAR_DESKTOP_APP_ROOT="$SIDECAR_REPO_ROOT/apps/desktop"
-SIDECAR_BUILD_ROOT="$SIDECAR_REPO_ROOT/.build"
-SIDECAR_ARTIFACT_ROOT="$SIDECAR_REPO_ROOT/artifacts"
-SIDECAR_FIXTURE_SCENARIO=smoke
-SIDECAR_EVIDENCE_ROOT="$SIDECAR_ARTIFACT_ROOT/evidence"
-SIDECAR_EXPANDED_EVIDENCE_PATH="$SIDECAR_EVIDENCE_ROOT/app-smoke-expanded.png"
-SIDECAR_SPEAKING_EVIDENCE_PATH="$SIDECAR_EVIDENCE_ROOT/app-smoke-speaking.png"
-SIDECAR_MUTED_EVIDENCE_PATH="$SIDECAR_EVIDENCE_ROOT/app-smoke-muted.png"
-SIDECAR_DUPLEX_EVIDENCE_PATH="$SIDECAR_EVIDENCE_ROOT/app-smoke-duplex.png"
-SIDECAR_PLANNING_EVIDENCE_PATH="$SIDECAR_EVIDENCE_ROOT/app-smoke-planning.png"
-SIDECAR_PLANNING_BOARD_EVIDENCE_PATH="$SIDECAR_EVIDENCE_ROOT/app-smoke-planning-board.png"
-SIDECAR_PLANNING_TRANSCRIPT_EVIDENCE_PATH="$SIDECAR_EVIDENCE_ROOT/app-smoke-planning-transcript.png"
-SIDECAR_PLANNING_WORK_EVIDENCE_PATH="$SIDECAR_EVIDENCE_ROOT/app-smoke-planning-work.png"
-SIDECAR_ELECTRON_BIN="$SIDECAR_DESKTOP_APP_ROOT/node_modules/.bin/electron"
+LUKE_SCRIPT_DIRECTORY=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+LUKE_REPO_ROOT=$(CDPATH= cd -- "$LUKE_SCRIPT_DIRECTORY/../.." && pwd)
+LUKE_DESKTOP_APP_ROOT="$LUKE_REPO_ROOT/apps/desktop"
+LUKE_BUILD_ROOT="$LUKE_REPO_ROOT/.build"
+LUKE_ARTIFACT_ROOT="$LUKE_REPO_ROOT/artifacts"
+LUKE_FIXTURE_SCENARIO=smoke
+LUKE_EVIDENCE_ROOT="$LUKE_ARTIFACT_ROOT/evidence"
+LUKE_EXPANDED_EVIDENCE_PATH="$LUKE_EVIDENCE_ROOT/app-smoke-expanded.png"
+LUKE_SPEAKING_EVIDENCE_PATH="$LUKE_EVIDENCE_ROOT/app-smoke-speaking.png"
+LUKE_MUTED_EVIDENCE_PATH="$LUKE_EVIDENCE_ROOT/app-smoke-muted.png"
+LUKE_DUPLEX_EVIDENCE_PATH="$LUKE_EVIDENCE_ROOT/app-smoke-duplex.png"
+LUKE_PLANNING_EVIDENCE_PATH="$LUKE_EVIDENCE_ROOT/app-smoke-planning.png"
+LUKE_PLANNING_BOARD_EVIDENCE_PATH="$LUKE_EVIDENCE_ROOT/app-smoke-planning-board.png"
+LUKE_PLANNING_TRANSCRIPT_EVIDENCE_PATH="$LUKE_EVIDENCE_ROOT/app-smoke-planning-transcript.png"
+LUKE_PLANNING_WORK_EVIDENCE_PATH="$LUKE_EVIDENCE_ROOT/app-smoke-planning-work.png"
+LUKE_ELECTRON_BIN="$LUKE_DESKTOP_APP_ROOT/node_modules/.bin/electron"
 
-export SIDECAR_REPO_ROOT
-export SIDECAR_DESKTOP_APP_ROOT
-export SIDECAR_BUILD_ROOT
-export SIDECAR_ARTIFACT_ROOT
-export SIDECAR_FIXTURE_SCENARIO
-export SIDECAR_EVIDENCE_ROOT
-export SIDECAR_EXPANDED_EVIDENCE_PATH
-export SIDECAR_SPEAKING_EVIDENCE_PATH
-export SIDECAR_MUTED_EVIDENCE_PATH
-export SIDECAR_DUPLEX_EVIDENCE_PATH
-export SIDECAR_PLANNING_EVIDENCE_PATH
-export SIDECAR_PLANNING_BOARD_EVIDENCE_PATH
-export SIDECAR_PLANNING_TRANSCRIPT_EVIDENCE_PATH
-export SIDECAR_PLANNING_WORK_EVIDENCE_PATH
-export SIDECAR_ELECTRON_BIN
+export LUKE_REPO_ROOT
+export LUKE_DESKTOP_APP_ROOT
+export LUKE_BUILD_ROOT
+export LUKE_ARTIFACT_ROOT
+export LUKE_FIXTURE_SCENARIO
+export LUKE_EVIDENCE_ROOT
+export LUKE_EXPANDED_EVIDENCE_PATH
+export LUKE_SPEAKING_EVIDENCE_PATH
+export LUKE_MUTED_EVIDENCE_PATH
+export LUKE_DUPLEX_EVIDENCE_PATH
+export LUKE_PLANNING_EVIDENCE_PATH
+export LUKE_PLANNING_BOARD_EVIDENCE_PATH
+export LUKE_PLANNING_TRANSCRIPT_EVIDENCE_PATH
+export LUKE_PLANNING_WORK_EVIDENCE_PATH
+export LUKE_ELECTRON_BIN
 
-sidecar_require_command() {
+luke_require_command() {
     if ! command -v "$1" >/dev/null 2>&1; then
         printf 'error: required command not found: %s\n' "$1" >&2
         return 1
     fi
 }
 
-sidecar_wait_for_exit() {
+luke_wait_for_exit() {
     local deadline=$((SECONDS + $1))
     local pid=$2
     while ((SECONDS < deadline)); do
@@ -60,13 +60,13 @@ sidecar_wait_for_exit() {
 # The app chooses its own name at launch — the product name for a Developer ID
 # release, "<product name> Dev" for an unpackaged run, and "<product name> Test"
 # for an ad-hoc package, so differently signed builds never share a Keychain
-# entry (see apps/desktop/src/main/app-identity.ts). Each name keeps a lock of its own,
+# entry (see packages/host/src/app-identity.ts). Each name keeps a lock of its own,
 # so a caller replacing "the running instance" asks about all three. The product
 # name is still derived the way Electron derives its default, from the manifest:
 # `productName` when it sets one, the package name otherwise.
-sidecar_app_names() {
+luke_app_names() {
     local app_name
-    if ! app_name=$(cd "$SIDECAR_DESKTOP_APP_ROOT" &&
+    if ! app_name=$(cd "$LUKE_DESKTOP_APP_ROOT" &&
         node -p 'const manifest = require("./package.json"); manifest.productName ?? manifest.name'); then
         printf 'error: could not read the desktop app name\n' >&2
         return 1
@@ -74,7 +74,7 @@ sidecar_app_names() {
     printf '%s Dev\n%s Test\n%s\n' "$app_name" "$app_name" "$app_name"
 }
 
-sidecar_app_lock_holder_pid() {
+luke_app_lock_holder_pid() {
     local app_name=$1
 
     local lock_target
@@ -105,13 +105,13 @@ sidecar_app_lock_holder_pid() {
 # as that process goes away rather than when it is signalled. Development, test,
 # and release instances hold separate locks, so all are stopped: a launch means
 # "this build owns the screen now", whichever build was there before.
-sidecar_stop_running_app() {
+luke_stop_running_app() {
     local app_names
-    app_names=$(sidecar_app_names) || return 1
+    app_names=$(luke_app_names) || return 1
 
     local app_name pid
     while IFS= read -r app_name; do
-        pid=$(sidecar_app_lock_holder_pid "$app_name") || return 1
+        pid=$(luke_app_lock_holder_pid "$app_name") || return 1
         if [[ -z $pid ]]; then
             continue
         fi
@@ -119,12 +119,12 @@ sidecar_stop_running_app() {
         # The path tells you which checkout the older instance came from.
         printf 'Stopping the running %s instance (pid %s: %s)\n' "$app_name" "$pid" "$(ps -o comm= -p "$pid")"
         kill "$pid" 2>/dev/null || true
-        if sidecar_wait_for_exit 5 "$pid"; then
+        if luke_wait_for_exit 5 "$pid"; then
             continue
         fi
 
         kill -KILL "$pid" 2>/dev/null || true
-        if sidecar_wait_for_exit 3 "$pid"; then
+        if luke_wait_for_exit 3 "$pid"; then
             continue
         fi
 
@@ -133,27 +133,26 @@ sidecar_stop_running_app() {
     done <<<"$app_names"
 }
 
-sidecar_require_macos() {
+luke_require_macos() {
     if [[ $(uname -s) != Darwin ]]; then
         printf 'error: this command requires macOS\n' >&2
         return 1
     fi
 }
 
-sidecar_require_node() {
-    sidecar_require_command node
-    sidecar_require_command pnpm
+luke_require_node() {
+    luke_require_command node
+    luke_require_command pnpm
     if ! node -e 'process.exit(Number(process.versions.node.split(".")[0]) >= 24 ? 0 : 1)'; then
         printf 'error: Node.js 24 or newer is required (found %s)\n' "$(node --version)" >&2
         return 1
     fi
 }
 
-# A script that launches Electron is not useful until the workspace has been
-# bootstrapped; running bootstrap here keeps `run.sh` and `evidence.sh` from
-# each restating that guard.
-sidecar_ensure_dependencies() {
-    if [[ ! -x "$SIDECAR_ELECTRON_BIN" ]]; then
-        "$SIDECAR_REPO_ROOT/scripts/bootstrap.sh"
-    fi
+# A script that launches Electron runs bootstrap first, every time. Note that
+# we do not guard on the Electron binary, because it survives a pull that
+# changes the lockfile and the launch then runs on stale dependencies; a
+# frozen install with nothing to change is quick.
+luke_ensure_dependencies() {
+    "$LUKE_REPO_ROOT/scripts/bootstrap.sh"
 }

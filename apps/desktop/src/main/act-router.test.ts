@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import { ACT_KIND, type Act, type ActKind, type ActOutcome } from "@luke/host/acts";
 import { Effect } from "effect";
 import type { WebContents } from "electron";
-import { ACT_KIND, type Act, type ActKind, type ActOutcome } from "#shared/messages/acts";
 import { type ActRouter, type ActRows, type ActSender, createActRouter } from "./act-router";
 
 // SAFETY: the router reads the sender by identity alone; one inert object is one window.

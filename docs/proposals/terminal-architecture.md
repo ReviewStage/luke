@@ -34,11 +34,11 @@ proposal's questions (`docs/proposals/terminal-tab.md`). No code yet.
 | 4 | **Host terminal client** | `packages/host/src/terminal/` (new), run by desktop main | See below |
 | 5 | **Terminal relay** | `apps/web/server/terminal/function.ts` (new Vercel Function, WebSocket) | See below |
 | 6 | **Terminal routes** | `apps/web/server/routes/agents/terminals.ts`, `…/sandbox.ts` | Short JSON routes that list (`tmux ls -F`), create, rename (`@luke_title`), kill (`kill-session`) and resume (`Sandbox.get({ resume: true })`). |
-| 7 | **Sandbox resolver** | `apps/web/server/hosted/session-sandboxes.ts` (grown) | Goes from conversation to `runtime_session_id` to the sandbox tagged `sessionId:<id>`, under the function's OIDC token. This is the REST lookup the sweep already makes. |
+| 7 | **Sandbox resolver** | `packages/service/src/agents/session-sandboxes.ts` (grown) | Goes from conversation to `runtime_session_id` to the sandbox tagged `sessionId:<id>`, under the function's OIDC token. This is the REST lookup the sweep already makes. |
 | 8 | **Vercel sandbox shell API** | `@vercel/sandbox`, pinned exactly | Session-level `openInteractive()` mints `{url, token}` for the controller's PTY WebSocket and does **not** resume. Behind one `InteractiveShell` `Context.Tag`; the fallback layer is `runCommand({ stdin: true, detached: true })` plus `writeStdin` plus `logs()` under `script -qfc`. |
 | 9 | **tmux in the image** | `PREPARE_SCRIPT` in `agent-runtime/sandbox.ts` | One tmux session per terminal, which outlives any socket. |
 | 10 | **Lease** | `packages/database/src/schemas/` + `models/sandbox-terminal-lease.ts` (new) | A row per agent conversation: `held_until`, `credential_at`. Written by the relay; read by the store hook and the sweep. |
-| 11 | **Lifecycle hooks** | `apps/web/coder/hooks/store.ts`, `hosted/maintenance-sweep.ts` | The turn's-end stop skips a held sandbox, and the sweep stops a lapsed one (§3). |
+| 11 | **Lifecycle hooks** | `apps/web/coder/hooks/store.ts`, `packages/service/src/maintenance/maintenance-sweep.ts` | The turn's-end stop skips a held sandbox, and the sweep stops a lapsed one (§3). |
 | 12 | **GitHub credential refresher** | in the relay, through `coder-host` | While a terminal is connected, it renews the firewall token once it is 50 minutes old, using the same rule and policy shape as the store hook's `renewCredential`. |
 
 More on the three components with the most moving parts:
@@ -191,9 +191,9 @@ Everything else is an act or a JSON route.
 
 - **In the relay,** it pauses reading upstream above 1 MB buffered
   (`bufferedAmount`).
-- **On the Mac,** the host acks every 5,000 characters xterm has written and
-  pauses the socket above 100,000 unacked characters. These are VS Code's
-  constants.
+- **On the Mac,** the tab acks every 5,000 bytes xterm has written, and the
+  host pauses the socket above 100,000 unacked bytes. These are VS Code's
+  constants. Both ends count the port's `Uint8Array` bytes, not characters.
 
 **Resize:** fit computes `cols` and `rows`, debounced to 100 ms. The resize
 goes over the port to the relay as `{ type: "resize" }`, then to the PTY's
@@ -369,9 +369,9 @@ one chain, since they touch `side-panel.tsx`, `use-side-panel.ts` and
 The renderer reaches terminals through acts, which carry ids, sizes and
 names, never bytes, and through one `MessagePort` per attached shell, which
 carries only bytes and connection state. Field names follow the service's
-wire (`@sidecar/features/terminal-wire`): a shell is `id` and `title`.
+wire (`@luke/features/terminal-wire`): a shell is `id` and `title`.
 
-### Vocabulary (`@sidecar/features/terminal-wire`)
+### Vocabulary (`@luke/features/terminal-wire`)
 
 - `SANDBOX_STATE`: `running` | `stopped` | `starting`.
   - `starting` covers an agent that hasn't opened its sandbox yet (its
@@ -403,11 +403,16 @@ wire (`@sidecar/features/terminal-wire`): a shell is `id` and `title`.
 - `agent-not-ready`: `create` before the agent opened its sandbox.
 - `not-found`: no such agent or shell, or another workspace's.
 - `gone`: an archived agent.
+- `sandbox-unanswered`: the service answered and the agent's sandbox did not,
+  Vercel Sandbox's API or tmux in it (the route's `upstream-error`, 502), so
+  the caller may retry.
 
 So `list`, `rename` and `kill` answer `TerminalsAnswer | { refused }`,
 `create` answers `{ terminal } | { refused }`, and `resume` answers
-`{ sandbox } | { refused }`. An outage (the service or Vercel could not be
-reached, so the caller may retry) is the act's own refusal sentence instead.
+`{ sandbox } | { refused }`. An outage of the service itself (it could not be
+reached, or did not answer, so the caller may retry) is the act's own refusal
+sentence instead. The tab's "unreachable" bar names which of the three it was:
+Luke's service, the agent's sandbox, or no such agent or shell.
 
 ### The port (`terminal:port`)
 
@@ -421,7 +426,7 @@ preload's port entry. Every message on it is an object.
 | main → renderer | `{ type: "state", state, code? }`: the connection state, below |
 | renderer → main | `{ type: "input", data: string }`: xterm's `onData` |
 | renderer → main | `{ type: "resize", cols, rows }`: the fit addon, debounced to 100 ms |
-| renderer → main | `{ type: "ack", chars }`: sent every 5,000 characters xterm has written. Main pauses the socket above 100,000 unacked |
+| renderer → main | `{ type: "ack", bytes }`: sent every 5,000 bytes of output xterm has written (bytes, as the port's `Uint8Array` carries them). Main pauses the socket above 100,000 unacked bytes |
 
 **Connection states** (`TERMINAL_CONNECTION`, the `state` message). The
 first message on a new port is `connecting`.
@@ -436,6 +441,7 @@ first message on a new port is `connecting`.
 | `starting` | The agent hasn't opened its sandbox yet | **Yes**: the host re-asks every 5 s while the port is open, and posts `attached` once it exists | The "Waiting for the agent to open its sandbox…" bar |
 | `exited` | The shell ended (`code` carries its exit status). The tmux session is gone | No | The inline `[Process exited with code N …]` line. A key press sends `terminal.create`, then `terminal.attach` |
 | `gone` | The agent was archived, or the shell was killed elsewhere | No | Drops the shell (or closes the tab, for an archived agent) |
+| `unavailable` | The relay's upgrade was answered 404: this deployment serves no terminal relay | No | The "The terminal service isn't set up on this deployment · Retry now ⏎" bar |
 
 "Resuming" is the renderer's own state, between sending `terminal.resume`
 and its answer. No port carries it.

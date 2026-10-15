@@ -1,21 +1,25 @@
+import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { highlightSnippet } from "@sidecar/host";
-import { BrowserWindow, clipboard, dialog, ipcMain } from "electron";
+import { TERMINAL_PORT_CHANNEL } from "@luke/features/terminal-acts";
+import { highlightSnippet } from "@luke/host";
+import { ACT_KIND } from "@luke/host/acts";
+import type { AppStateSnapshot } from "@luke/host/app-state";
+import { MICROPHONE_STATUS } from "@luke/voice/audio";
+import { callInProgress, IDLE_VOICE_VIEW } from "@luke/voice/voice-view";
+import { BrowserWindow, clipboard, dialog, ipcMain, MessageChannelMain } from "electron";
 import { channels } from "#shared/bridge";
-import { ACT_KIND } from "#shared/messages/acts";
-import type { AppStateSnapshot } from "#shared/messages/app-state";
-import { MICROPHONE_STATUS } from "#shared/messages/audio";
-import { callInProgress, IDLE_VOICE_VIEW } from "#shared/messages/voice-view";
 import { type ActRows, createActRouter } from "../act-router";
 import { type ReportHandlers, registerBridgeHost } from "../bridge-host";
 import type { DesktopServices } from "../services/compose-desktop";
 import { accountActRows } from "./account-session";
+import { automationActRows } from "./automation-acts";
 import { avatarActRows, avatarReports } from "./avatar-acts";
 import { codingAgentActRows } from "./coding-agent-acts";
 import { integrationActRows } from "./integration-acts";
 import { planningActRows } from "./planning-acts";
 import { settingsActRows } from "./settings-rows";
+import { terminalActRows, whenPageGone } from "./terminal-acts";
 import { voiceRuntimeActRows, voiceRuntimeReports } from "./voice-runtime";
 import { windowSurfaceActRows, windowSurfaceReports } from "./window-surface";
 
@@ -108,7 +112,26 @@ export function registerDesktopIpc(services: DesktopServices): void {
       colourCode: highlightSnippet,
     }),
     ...codingAgentActRows({ host: operator.host, notices }),
+    ...terminalActRows({
+      host: operator.host,
+      ports: {
+        open: (sender, ticket) => {
+          const { port1, port2 } = new MessageChannelMain();
+          sender.postMessage(TERMINAL_PORT_CHANNEL, ticket, [port2]);
+          port1.start();
+          return {
+            post: (message) => port1.postMessage(message),
+            onMessage: (listener) => port1.on("message", (event) => listener(event.data)),
+            close: () => port1.close(),
+          };
+        },
+        whenGone: whenPageGone,
+      },
+      createId: randomUUID,
+      run,
+    }),
     ...integrationActRows({ host: operator.host }),
+    ...automationActRows({ host: operator.host }),
     [ACT_KIND.UPDATE_CHECK]: () => updates.check(),
     [ACT_KIND.UPDATE_INSTALL]: () => updates.install(),
     [ACT_KIND.UPDATE_OPEN_RELEASE]: () => updates.openLatestRelease(),
@@ -127,6 +150,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
       void run(operator.host.recordAgentTrace(trace));
     },
     notifyReady: async (context) => {
+      windows.panelReady();
       if (!launch.captureOutput) return;
       const window = BrowserWindow.fromWebContents(context.sender);
       if (!window || window.isDestroyed()) return;

@@ -1,14 +1,14 @@
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAgentAnswer,
-} from "@sidecar/features/coding-agent-view";
+} from "@luke/features/coding-agent-view";
 import {
   type CodingAgentAttachment,
   type CodingAgentMessage,
   hasWordsOrFiles,
-} from "@sidecar/features/coding-agent-wire";
+} from "@luke/features/coding-agent-wire";
+import type { Failure } from "@luke/features/failure-remedy";
 import { useEffect, useRef, useState } from "react";
-import type { Failure } from "../failure-remedy";
 import {
   type AgentRun,
   closesComposer,
@@ -113,8 +113,8 @@ const UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
 
 export function useAgentComposer(input: {
   agentId: string;
-  /** The agent's plan, whose repository a refusal's remedy mends. */
-  planId: string;
+  /** The agent's plan, whose repository a refusal's remedy mends; null for an agent with no plan, whose refusal says its words alone. */
+  planId: string | null;
   /** The transcript as the tab holds it, which a sent line is read back from. */
   messages: readonly CodingAgentMessage[];
   send: MessageSender;

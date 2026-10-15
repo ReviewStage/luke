@@ -2,11 +2,18 @@
 
 import assert from "node:assert/strict";
 import {
+  AUTOMATION_ACTION,
+  AUTOMATION_DEFAULT_GUARDS,
+  AUTOMATION_SCOPE,
+  AUTOMATION_TRIGGER,
+  type AutomationSummary,
+} from "@luke/features/automation-wire";
+import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentInboxAnswerView,
   type CodingAgentListAnswer,
-} from "@sidecar/features/coding-agent-view";
-import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@sidecar/features/coding-agent-wire";
+} from "@luke/features/coding-agent-view";
+import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import {
   INBOX_CURSOR_START,
   INBOX_FIELD,
@@ -15,25 +22,34 @@ import {
   INBOX_STATUS,
   INBOX_WIRE_VERSION,
   type InboxItem,
-} from "@sidecar/features/inbox-wire";
-import type { PlanSummary } from "@sidecar/features/plan-wire";
-import { DocumentIcon } from "@sidecar/panel";
+} from "@luke/features/inbox-wire";
+import type { PlanSummary } from "@luke/features/plan-wire";
+import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
+import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import type { AppInboxPlanHolding, AppInboxPlanlessItem } from "@luke/host/app-state";
+import { EXPERIMENT } from "@luke/settings";
+import { experimentsOn } from "@luke/settings/testing";
+import { DocumentIcon } from "@luke/ui";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, beforeEach, test } from "vitest";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "#shared/messages/acts";
-import type { AppInboxPlanHolding } from "#shared/messages/app-state";
+import { afterEach, beforeEach, test, vi } from "vitest";
+import { APP_COMMAND } from "#shared/shortcuts";
+import { handState } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { plansControl, waitingOf } from "#testing/plans-control";
+import { relayout } from "#testing/resize-observer";
 import { readSegmented, segment, segmentedGroup } from "#testing/segmented";
+import { runAppCommand } from "../app-commands";
 import type { InboxChoice } from "../planning/use-plans-tab";
 import { DesktopInbox } from "./desktop-inbox";
 
+const PLAN_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
+
 const AGENT: CodingAgentSummary = {
   id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
-  planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
+  planId: PLAN_ID,
   model: "anthropic/claude-opus-5.5",
   effort: "high",
   title: "Alerts",
@@ -43,7 +59,7 @@ const AGENT: CodingAgentSummary = {
 };
 
 const BILLING: PlanSummary = {
-  id: AGENT.planId,
+  id: PLAN_ID,
   workspaceId: "workspace-personal",
   name: "Billing usage alerts",
   createdAt: 1,
@@ -101,9 +117,13 @@ function item(id: string, title: string, updatedAt: number): InboxItem {
 }
 
 const THRESHOLD = item("a1b2c3d4-0000-4000-8000-000000000001", "Alert at 80%?", 3_000);
+/** The account reading the Inbox, who answered the retry question themselves. */
+const READER = { userId: "user-reader", name: "Dana Reyes" };
+
 const RETRY: InboxItem = {
   ...item("a1b2c3d4-0000-4000-8000-000000000002", "How is a failed email retried?", 5_000),
   status: INBOX_STATUS.ANSWERED,
+  answeredBy: READER,
   answer: {
     reply: INBOX_REPLY.CHOSE,
     choices: ["Retry 3 times over an hour"],
@@ -126,6 +146,14 @@ let inboxes = new Map<string, readonly InboxItem[]>();
 let setHolding: (holding: readonly AppInboxPlanHolding[]) => void = () => undefined;
 /** Moves the account's list of plans, as an archive on another Mac would. */
 let setPlans: (plans: readonly PlanSummary[]) => void = () => undefined;
+/** Chooses an item from outside the list, as a notification's click does. */
+let chooseFromOutside: (chosen: InboxChoice) => void = () => undefined;
+/** Moves main's read of what waits on the agents with no plan, as main does when an item opens or is answered. */
+let setPlanless: (planless: readonly AppInboxPlanlessItem[]) => void = () => undefined;
+/** Whether an agent's own inbox read answers that it could not be read. */
+let agentReadFails = false;
+/** Holds the next agent read's answer, handing the test what lands it, where a test asks. */
+let holdAgentRead: ((respond: () => void) => void) | undefined;
 /** A read of a plan's inbox as the act answers it: done, carrying the view the service answered. */
 interface ReadOutcome {
   readonly status: typeof ACT_OUTCOME_STATUS.DONE;
@@ -136,6 +164,13 @@ interface ReadOutcome {
 let heldRead: (planId: string) => Promise<ReadOutcome> = () => new Promise(() => undefined);
 /** How a read of a plan from the start answers, where a test holds it in its own hands. */
 let startRead: ((planId: string) => Promise<ReadOutcome> | undefined) | undefined;
+/** Each agent with no plan's items, as its own inbox read answers them. */
+let agentInboxes = new Map<string, readonly InboxItem[]>();
+/** Every agent whose own inbox was read from the start, in order. */
+let agentReads: string[] = [];
+/** The workspace the Inbox lists, and its automations as a read of them answers. */
+let listedWorkspace: Workspace | undefined;
+let automations: readonly AutomationSummary[] = [];
 
 beforeEach(() => {
   window.localStorage.clear();
@@ -146,6 +181,12 @@ beforeEach(() => {
   heldRead = () => new Promise(() => undefined);
   startRead = undefined;
   listedAgents = [AGENT];
+  agentInboxes = new Map();
+  agentReads = [];
+  agentReadFails = false;
+  holdAgentRead = undefined;
+  listedWorkspace = undefined;
+  automations = [];
   Object.defineProperty(window, "luke", {
     configurable: true,
     value: {
@@ -155,6 +196,25 @@ beforeEach(() => {
         const done = (value: CodingAgentListAnswer | CodingAgentInboxAnswerView) =>
           Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
         if (request.kind === ACT_KIND.CODING_AGENTS_LIST) return done({ agents: listedAgents });
+        if (request.kind === ACT_KIND.AUTOMATIONS_LIST) {
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { automations } });
+        }
+        if (request.kind === ACT_KIND.CODING_AGENTS_AGENT_INBOX) {
+          const { agentId, after } = request.payload;
+          if (after !== INBOX_CURSOR_START) return new Promise(() => undefined);
+          agentReads.push(agentId);
+          if (agentReadFails) return done({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+          const items = agentInboxes.get(agentId) ?? [];
+          const hold = holdAgentRead;
+          if (hold !== undefined) {
+            return new Promise((resolve) =>
+              hold(() =>
+                resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { items, cursor: "1" } }),
+              ),
+            );
+          }
+          return done({ items, cursor: "1" });
+        }
         if (request.kind === ACT_KIND.CODING_AGENTS_INBOX) {
           const { planId, after } = request.payload;
           // A read past the cursor is held open while nothing changes, as the service holds it.
@@ -171,36 +231,47 @@ afterEach(() => {
   act(() => root?.unmount());
   root = undefined;
   document.body.innerHTML = "";
+  vi.restoreAllMocks();
 });
 
 /** What the Inbox was asked to open, leaving it. */
 interface Asked {
   readonly shownPlans: string[];
   readonly shownAgents: [string, string][];
+  /** How many times it was asked to close. */
+  closed: number;
 }
 
-/** The Inbox over the two plans, its own view real, as the plans tab holds it, and every press that leaves it recorded. */
-function mount() {
-  const asked: Asked = { shownPlans: [], shownAgents: [] };
+/** The Inbox over the two plans, and the items of agents with no plan given, its own view real, as the plans tab holds it, and every press that leaves it recorded. */
+function mount(firstPlanless: readonly AppInboxPlanlessItem[] = []) {
+  const asked: Asked = { shownPlans: [], shownAgents: [], closed: 0 };
   function Page() {
     const [chosen, setChosen] = useState<InboxChoice | undefined>(undefined);
+    chooseFromOutside = setChosen;
     const [holding, setHeld] = useState(HOLDING);
     const [listed, setListed] = useState<readonly PlanSummary[]>([BILLING, INVITES]);
     setHolding = setHeld;
+    const [planless, setWaiting] = useState(firstPlanless);
+    setPlanless = setWaiting;
     setPlans = setListed;
     return createElement(DesktopInbox, {
       plans: plansControl({
+        me: READER.userId,
+        workspace: listedWorkspace,
         plans: listed,
         inbox: [
           { planId: BILLING.id, items: [waitingOf(THRESHOLD)] },
           { planId: INVITES.id, items: [waitingOf(EXPIRY)] },
         ],
         inboxPlans: holding,
+        inboxPlanless: planless,
         inboxView: {
           open: true,
           chosen,
           onOpen: () => undefined,
-          onClose: () => undefined,
+          onClose: () => {
+            asked.closed += 1;
+          },
           onChoose: setChosen,
         },
         onShowPlan: (planId) => asked.shownPlans.push(planId),
@@ -245,6 +316,15 @@ function listed(page: HTMLElement): string[] {
     const name = node.querySelector(".sidebar-plan-name")?.textContent ?? "";
     return `${node.getAttribute("aria-current") === "page" ? "▸ " : ""}${needsYouMark(node)}${name}`;
   });
+}
+
+/** What an element says to a reader, the discs beside the names in it left out; nothing for no element. */
+function wordsOf(element: Element | null | undefined): string | null {
+  if (element === null || element === undefined) return null;
+  const copy = element.cloneNode(true);
+  assert.ok(copy instanceof Element);
+  for (const disc of copy.querySelectorAll(".actor-mark")) disc.remove();
+  return copy.textContent;
 }
 
 function rowNamed(page: HTMLElement, title: string): HTMLButtonElement {
@@ -304,7 +384,7 @@ test("a settled choice keeps every option its agent offered with the developer's
     [...pane.querySelectorAll<HTMLElement>("li.inbox-option")].map((option) => [
       option.dataset.picked,
       option.querySelector(".font-medium")?.textContent,
-      option.querySelector(".inbox-picked")?.textContent ?? null,
+      wordsOf(option.querySelector(".inbox-picked")),
     ]),
     [
       ["true", "Retry 3 times over an hour", "Your pick"],
@@ -315,10 +395,32 @@ test("a settled choice keeps every option its agent offered with the developer's
   const reply = pane.querySelector<HTMLElement>(".is-user");
   assert.ok(reply, "the developer's reply is their own bubble");
   assert.equal(reply.querySelector("p")?.textContent, "And page on-call if all three fail.");
-  assert.match(
-    reply.textContent ?? "",
-    /You chose Retry 3 times over an hour · .+ · Sent to Alerts/u,
-  );
+  assert.match(wordsOf(reply) ?? "", /You chose Retry 3 times over an hour · .+ · Sent to Alerts/u);
+  assert.ok(reply.querySelector(".actor-ref[data-kind='person']"), "the answerer by their disc");
+});
+
+test("a teammate's answer names them by their disc and name, beside their pick and over what they chose, and their name hangs their card", async () => {
+  const CHARLES = { userId: "user-charles", name: "Charles Pan" };
+  inboxes.set(BILLING.id, [THRESHOLD, { ...RETRY, answeredBy: CHARLES }]);
+  const { page } = mount();
+  await settle();
+  act(() => rowNamed(page, "How is a failed email retried?").click());
+  await settle();
+
+  const pane = page.querySelector<HTMLElement>(".inbox-view-items");
+  assert.ok(pane, "the pane is drawn");
+  const picked = pane.querySelector(".inbox-picked") ?? assert.fail("the pick is marked");
+  assert.equal(wordsOf(picked), "Charles Pan’s pick");
+  assert.equal(picked.querySelector<HTMLElement>(".actor-mark")?.dataset.kind, "person");
+  const reply = pane.querySelector<HTMLElement>(".is-user") ?? assert.fail("their reply");
+  assert.match(wordsOf(reply) ?? "", /Charles Pan chose Retry 3 times over an hour · /u);
+
+  const answerer = reply.querySelector(".actor-ref") ?? assert.fail("the answerer is named");
+  act(() => {
+    answerer.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+  });
+  const card = document.querySelector(".tooltip-card [data-actor-card='person']");
+  assert.match(card?.textContent ?? "", /Charles Pan/u);
 });
 
 test("a form's select fields are radio groups, an optional one's pick taken back by pressing it again and a required one's kept, and its yes-or-no field a switch", async () => {
@@ -401,9 +503,16 @@ function reach(control: HTMLElement): void {
   act(() => control.focus());
 }
 
-/** The agent's references in the pane's thread, each as its words. */
+/** The agent's references in the pane's thread, each its tile and its name as one button. */
 function threadRefs(page: HTMLElement): HTMLButtonElement[] {
-  return [...page.querySelectorAll<HTMLButtonElement>(".inbox-board button[data-agent-ref]")];
+  return [
+    ...page.querySelectorAll<HTMLButtonElement>('.inbox-board button.actor-ref[data-kind="agent"]'),
+  ];
+}
+
+/** Whether a reference wears an agent's tile, the solid rounded square every agent is drawn on. */
+function wearsAgentTile(element: Element): boolean {
+  return element.querySelector('.actor-mark[data-kind="agent"]') !== null;
 }
 
 test("the thread names its agent as one button wherever it does, its byline and the line saying an answer was sent to it: each hangs the agent's tab's card and opens its tab, leaving the Inbox", async () => {
@@ -412,6 +521,7 @@ test("the thread names its agent as one button wherever it does, its byline and 
   const [byline] = threadRefs(page);
   assert.ok(byline, "the byline names the agent");
   assert.equal(byline.textContent, "Alerts");
+  assert.ok(wearsAgentTile(byline), "the byline wears the agent's tile");
   reach(byline);
   assert.deepEqual(standingCard(), ["Alerts", "Working…"]);
   act(() => byline.click());
@@ -419,9 +529,12 @@ test("the thread names its agent as one button wherever it does, its byline and 
 
   act(() => rowNamed(page, "How is a failed email retried?").click());
   await settle();
-  const sent = page.querySelector<HTMLButtonElement>("[data-inbox-answer] button[data-agent-ref]");
+  const sent = page.querySelector<HTMLButtonElement>(
+    '[data-inbox-answer] button.actor-ref[data-kind="agent"]',
+  );
   assert.ok(sent, "the line saying the answer was sent names the agent");
   assert.equal(sent.textContent, "Alerts");
+  assert.ok(wearsAgentTile(sent), "the line names the agent by its tile too");
   reach(sent);
   assert.deepEqual(standingCard(), ["Alerts", "Working…"]);
   act(() => sent.click());
@@ -466,6 +579,7 @@ test("an item's mark in the list hangs its agent's card where its plan's row nam
   const row = rowNamed(page, "How is a failed email retried?");
   const mark = row.querySelector<HTMLElement>("[data-agent-ref]");
   assert.ok(mark, "the row's mark is the agent's reference");
+  assert.ok(wearsAgentTile(mark), "the row's mark is the agent's tile");
   act(() => {
     mark.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
@@ -487,6 +601,35 @@ test("an item's mark in the list hangs its agent's card where its plan's row nam
     null,
     "a plan whose row names no agent leaves the mark bare",
   );
+  assert.ok(wearsAgentTile(other), "a bare mark is still an agent's tile");
+});
+
+test("an item's mark hangs a card naming the teammate who started its agent, as the plan's row names them, and no starter on the reader's own agent", async () => {
+  const CHARLES = { userId: "user-charles", name: "Charles Pan" };
+  /** The words of the card the row's mark hangs, the plan's row naming its agent as started by `starter`. */
+  const markCard = async (starter: typeof CHARLES): Promise<string | null | undefined> => {
+    const { page } = mount();
+    await settle();
+    const line = BILLING.agents?.agents[0];
+    assert.ok(line && BILLING.agents, "the plan's row names its agent");
+    const agents = { ...BILLING.agents, agents: [{ ...line, startedBy: starter }] };
+    act(() => setPlans([{ ...BILLING, agents }, INVITES]));
+    const mark = rowNamed(page, "How is a failed email retried?").querySelector("[data-agent-ref]");
+    assert.ok(mark, "the row's mark is the agent's reference");
+    act(() => {
+      mark.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+    });
+    const words = wordsOf(document.querySelector(".tooltip-card [data-tab-card]"));
+    act(() => root?.unmount());
+    root = undefined;
+    document.body.innerHTML = "";
+    return words;
+  };
+
+  assert.match((await markCard(CHARLES)) ?? "", /Started by Charles Pan/u);
+  const own = await markCard(READER);
+  assert.match(own ?? "", /Alerts/u, "the reader's own agent still hangs its card");
+  assert.doesNotMatch(own ?? "", /Started by/u);
 });
 
 test("a plan main says changed is read again, so an item answered on another Mac lists as settled; Needs you then lists only what still needs you until pressed again, and outlives a relaunch", async () => {
@@ -599,11 +742,24 @@ test("a folded plan counts what in it needs you, and one where nothing does coun
   );
 });
 
+/** Lays the Inbox out this wide, as the window would, and tells it so. */
+function layOut(page: HTMLElement, width: number): void {
+  const view = page.querySelector<HTMLElement>(".inbox-view");
+  assert.ok(view, "the Inbox is drawn");
+  vi.spyOn(view, "getBoundingClientRect").mockReturnValue(DOMRect.fromRect({ width, height: 800 }));
+  act(() => relayout());
+}
+
+/** The edge the list is resized by, while it stands. */
+function listEdge(page: HTMLElement): HTMLElement | null {
+  return page.querySelector<HTMLElement>('.inbox-plans [role="separator"]');
+}
+
 test("the list is resized from its edge between its bounds, and keeps its width across a relaunch", async () => {
   let { page } = mount();
   await settle();
   const edge = () => {
-    const separator = page.querySelector<HTMLElement>('.inbox-plans [role="separator"]');
+    const separator = listEdge(page);
     assert.ok(separator, "the list has an edge to resize it by");
     return separator;
   };
@@ -613,27 +769,134 @@ test("the list is resized from its edge between its bounds, and keeps its width 
       edge().dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
     });
   };
-  assert.equal(
-    width(),
-    360,
-    "wide enough to centre the Inbox's name past the folded sidebar's buttons",
-  );
+  assert.equal(width(), 320, "a mail app's list, narrower than the item it reads");
   press("ArrowRight");
-  assert.equal(width(), 376);
+  assert.equal(width(), 336);
   press("End");
-  assert.equal(width(), 520);
+  assert.equal(width(), 440);
   press("ArrowRight");
-  assert.equal(width(), 520, "no wider than its greatest width");
+  assert.equal(width(), 440, "no wider than its greatest width");
 
   act(() => root?.unmount());
   root = undefined;
   ({ page } = mount());
   await settle();
-  assert.equal(width(), 520);
+  assert.equal(width(), 440);
   press("Home");
   assert.equal(width(), 300);
   press("ArrowLeft");
   assert.equal(width(), 300, "no narrower than its least width");
+
+  layOut(page, 900);
+  press("End");
+  assert.equal(width(), 340, "no wider than leaves the item its room");
+});
+
+/** Which of the Inbox's columns a reader finds standing: the list, the item, or both. */
+function columnsShown(page: HTMLElement): string[] {
+  const list = page.querySelector(".inbox-plans");
+  const item = page.querySelector(".inbox-view-items");
+  return [
+    ...(list === null || list.hasAttribute("hidden") ? [] : ["list"]),
+    ...(item === null || item.hasAttribute("hidden") ? [] : ["item"]),
+  ];
+}
+
+/** The way back from the item standing alone to the list. */
+function backToList(page: HTMLElement): HTMLButtonElement {
+  const back = page.querySelector<HTMLButtonElement>(".inbox-view-items button.inbox-back");
+  assert.ok(back, "the item standing alone has a way back");
+  return back;
+}
+
+/** The empty state a column stands, as it reads: its line, or none where the column stands none. */
+function emptyStateIn(page: HTMLElement, column: string): string | null {
+  const shown = page.querySelector(column);
+  assert.ok(shown, "the column is drawn");
+  const empty = shown.querySelector(".empty-state");
+  return empty === null || shown.hasAttribute("hidden") ? null : (empty.textContent ?? "");
+}
+
+test("an Inbox with nothing in it stands its empty state in the pane beside the list, and in the list itself once the list stands alone", async () => {
+  inboxes = new Map();
+  listedAgents = [];
+  const { page } = mount();
+  await settle();
+  assert.deepEqual(columnsShown(page), ["list", "item"]);
+  assert.deepEqual(
+    [emptyStateIn(page, ".inbox-plans"), emptyStateIn(page, ".inbox-view-items")],
+    [null, "Nothing needs you"],
+  );
+
+  layOut(page, 800);
+  assert.deepEqual(columnsShown(page), ["list"]);
+  assert.equal(emptyStateIn(page, ".inbox-plans"), "Nothing needs you");
+});
+
+test("an Inbox too narrow for the list and the item side by side shows its list alone, the whole Inbox wide; a press opens the item alone under a way back, which, Back's chord, and Escape each take, the keyboard landing on the item's row, before Escape leaves the Inbox", async () => {
+  const { page, asked } = mount();
+  await settle();
+  layOut(page, 800);
+  assert.deepEqual(columnsShown(page), ["list"]);
+  assert.equal(listEdge(page), null, "a list standing alone has no edge to drag");
+
+  act(() => rowNamed(page, "Alert at 80%?").click());
+  assert.deepEqual(columnsShown(page), ["item"]);
+  assert.equal(page.querySelector("[data-inbox-title]")?.textContent, "Alert at 80%?");
+  assert.equal(backToList(page).textContent, "Inbox");
+  assert.ok(document.activeElement === backToList(page), "the keyboard lands on the way back");
+
+  act(() => backToList(page).click());
+  assert.deepEqual(columnsShown(page), ["list"]);
+  assert.ok(
+    document.activeElement === rowNamed(page, "Alert at 80%?"),
+    "the keyboard is on its row",
+  );
+
+  act(() => rowNamed(page, "Expire after 7 days?").click());
+  act(() => runAppCommand(APP_COMMAND.BACK));
+  assert.deepEqual(columnsShown(page), ["list"]);
+  assert.ok(
+    document.activeElement === rowNamed(page, "Expire after 7 days?"),
+    "the keyboard is on its row",
+  );
+
+  act(() => rowNamed(page, "Expire after 7 days?").click());
+  act(() => runAppCommand(APP_COMMAND.EXIT_INBOX));
+  assert.deepEqual([columnsShown(page), asked.closed], [["list"], 0]);
+  act(() => runAppCommand(APP_COMMAND.EXIT_INBOX));
+  assert.equal(asked.closed, 1, "from the list, Escape leaves the Inbox");
+});
+
+test("the Inbox splits again only once widened past the band, an item a press opened standing beside the list, and joins again only once narrowed past it; narrowed with nothing pressed, it lands on its list, the keyboard on the chosen row where the item held it", async () => {
+  const { page } = mount();
+  await settle();
+  layOut(page, 900);
+  assert.deepEqual(columnsShown(page), ["list", "item"]);
+  layOut(page, 860);
+  assert.deepEqual(columnsShown(page), ["list", "item"], "within the band it stays split");
+  const option = page.querySelector<HTMLElement>(".inbox-view-items button");
+  assert.ok(option, "the item offers a press");
+  option.focus();
+  layOut(page, 850);
+  assert.deepEqual(columnsShown(page), ["list"], "the item it chose for itself is not opened");
+  assert.ok(
+    document.activeElement === rowNamed(page, "Alert at 80%?"),
+    "the keyboard leaves the hidden item for its row",
+  );
+
+  act(() => rowNamed(page, "Expire after 7 days?").click());
+  layOut(page, 880);
+  assert.deepEqual(columnsShown(page), ["item"], "within the band it stays one column");
+  layOut(page, 900);
+  assert.deepEqual(columnsShown(page), ["list", "item"]);
+  assert.deepEqual(
+    listed(page).filter((row) => row.startsWith("▸")),
+    ["▸ *Expire after 7 days?"],
+  );
+  assert.equal(page.querySelector(".inbox-view-items button.inbox-back"), null);
+  layOut(page, 800);
+  assert.deepEqual(columnsShown(page), ["item"], "an item a press opened stays open");
 });
 
 /** An answer the act gives the renderer, the view it carries settled now. */
@@ -719,5 +982,256 @@ test("an answer to a plan's read that a newer one overtook moves nothing: the ne
     listed(page).includes("*Expire after 7 days?"),
     false,
     "the overtaken read lists nothing",
+  );
+});
+
+/** An agent with no plan an automation started, and the question it asked. */
+const SWEEP_AGENT = "5e6f7081-92a3-4b4c-8d5e-6f708192a3b4";
+const QUARANTINE: InboxItem = {
+  ...item("a1b2c3d4-0000-4000-8000-000000000009", "Quarantine the flaky test?", 6_000),
+  agentId: SWEEP_AGENT,
+};
+
+test("an item of an agent with no plan stands under the automation that started it, and opens on its agent's own read under the automation's crumb", async () => {
+  agentInboxes = new Map([[SWEEP_AGENT, [QUARANTINE]]]);
+  const { page, asked } = mount([
+    {
+      id: QUARANTINE.id,
+      agentId: SWEEP_AGENT,
+      title: QUARANTINE.title,
+      postedAt: QUARANTINE.postedAt,
+      agentTitle: "Sweep the flaky tests",
+      agentModel: "anthropic/claude-opus-5.5",
+      automationId: "5a0c4d2e-8f1b-4c3a-9e7d-2b6f1a8c9d04",
+      automationName: "Nightly flake sweep",
+      repository: "acme/relay",
+    },
+  ]);
+  await settle();
+
+  assert.ok(agentReads.length > 0 && agentReads.every((agentId) => agentId === SWEEP_AGENT));
+  const rows = listed(page);
+  assert.ok(rows.includes("# Nightly flake sweep"), rows.join(" | "));
+  assert.equal(rows[rows.indexOf("# Nightly flake sweep") + 1], "▸ *Quarantine the flaky test?");
+
+  act(() => rowNamed(page, "Quarantine the flaky test?").click());
+  await settle();
+
+  const crumbs = page.querySelector(".inbox-crumbs")?.textContent ?? "";
+  assert.match(crumbs, /Nightly flake sweep/u);
+  assert.equal(page.querySelector("[data-inbox-title]")?.textContent, "Quarantine the flaky test?");
+  assert.deepEqual(asked.shownPlans, [], "the automation's crumb opens no plan");
+});
+
+/** The automation that started the agent with no plan, as its workspace's list reads it. */
+const SWEEP: AutomationSummary = {
+  id: "5a0c4d2e-8f1b-4c3a-9e7d-2b6f1a8c9d04",
+  planId: null,
+  planName: null,
+  workspaceId: "workspace-acme",
+  name: "Nightly flake sweep",
+  enabled: true,
+  pausedReason: null,
+  trigger: { kind: AUTOMATION_TRIGGER.SCHEDULE, cron: "0 3 * * *", timezone: "UTC" },
+  action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: "Sweep the flaky tests." },
+  guards: AUTOMATION_DEFAULT_GUARDS,
+  nextRunAt: null,
+  lastRun: null,
+  createdAt: 1,
+  scope: AUTOMATION_SCOPE.WORKSPACE,
+};
+
+/** An agent with no plan no automation the reader may read names, and its question. */
+const STRAY_AGENT = "7a8b9c0d-1e2f-4a3b-8c4d-5e6f7a8b9c0d";
+const BUMP: InboxItem = {
+  ...item("a1b2c3d4-0000-4000-8000-00000000000c", "Bump the Node image?", 1_500),
+  agentId: STRAY_AGENT,
+};
+
+/** The header of a group in the list, by its name. */
+function headerNamed(page: HTMLElement, name: string): HTMLButtonElement {
+  const header = [
+    ...page.querySelectorAll<HTMLButtonElement>(".inbox-plans .sidebar-repository-toggle"),
+  ].find((each) => each.querySelector(".sidebar-repository-name")?.textContent === name);
+  assert.ok(header, `no header for ${name}`);
+  return header;
+}
+
+/** Hovers a control as a resting pointer does, and answers the words of the card it hangs, its discs left out. */
+function hoveredCard(control: Element, card: string): string | null {
+  act(() => {
+    control.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+  });
+  return wordsOf(document.querySelector(`.tooltip-card ${card}`));
+}
+
+test("an automation's group wears its clock tile and hangs its card, as its crumb does; its agent's row wears the agent's tile and hangs a card naming the agent and the automation that started it; the agents no automation names stand under no actor", async () => {
+  handState(experimentsOn(EXPERIMENT.AUTOMATIONS));
+  listedWorkspace = {
+    id: "workspace-acme",
+    name: "Acme",
+    role: WORKSPACE_ROLE.OWNER,
+    github: null,
+  };
+  automations = [SWEEP];
+  agentInboxes = new Map([
+    [SWEEP_AGENT, [QUARANTINE]],
+    [STRAY_AGENT, [BUMP]],
+  ]);
+  const { page } = mount([
+    { ...waitingPlanless(QUARANTINE), agentTitle: "Sweep the flaky tests" },
+    { ...waitingPlanless(BUMP), automationId: null, automationName: null },
+  ]);
+  await settle();
+
+  const sweep = headerNamed(page, "Nightly flake sweep");
+  assert.ok(
+    sweep.querySelector('.sidebar-repository-glyph .actor-mark[data-kind="automation"]'),
+    "the automation's group wears its clock tile",
+  );
+  assert.match(
+    hoveredCard(sweep, '[data-actor-card="automation"]') ?? "",
+    /Nightly flake sweep.*Open automation/u,
+  );
+
+  const others = headerNamed(page, "Other agents");
+  assert.ok(others.querySelector(".actor-mark") === null, "a group of agents names no actor");
+
+  const mark = rowNamed(page, "Quarantine the flaky test?").querySelector("[data-agent-ref]");
+  assert.ok(mark, "the planless agent's row hangs its card");
+  assert.ok(wearsAgentTile(mark), "the planless agent's row wears its tile");
+  assert.match(
+    hoveredCard(mark, "[data-tab-card]") ?? "",
+    /Sweep the flaky tests.*Started by Nightly flake sweep/u,
+  );
+
+  act(() => rowNamed(page, "Quarantine the flaky test?").click());
+  await settle();
+  const crumb = page.querySelector<HTMLButtonElement>('nav[aria-label="Path"] button');
+  assert.ok(crumb, "the automation's crumb is drawn");
+  assert.ok(crumb.querySelector(".lucide-clock"), "the automation's crumb wears its clock");
+  assert.match(hoveredCard(crumb, '[data-actor-card="automation"]') ?? "", /Nightly flake sweep/u);
+
+  act(() => rowNamed(page, "Bump the Node image?").click());
+  await settle();
+  const stray = page.querySelector<HTMLButtonElement>('nav[aria-label="Path"] button');
+  assert.equal(stray?.textContent, "Other agents");
+  assert.ok(
+    stray?.querySelector(".lucide-clock") === null,
+    "the crumb of the agents no automation names wears no automation's clock",
+  );
+});
+
+/** Another agent with no plan the same automation started, whose two questions wait. */
+const SECOND_AGENT = "6f708192-a3b4-4c5d-8e6f-708192a3b4c5";
+const SECOND_ASK: InboxItem = {
+  ...item("a1b2c3d4-0000-4000-8000-00000000000a", "Skip the slow suite?", 2_000),
+  agentId: SECOND_AGENT,
+};
+const THIRD_ASK: InboxItem = {
+  ...item("a1b2c3d4-0000-4000-8000-00000000000b", "Retry the flaky job?", 2_500),
+  agentId: SECOND_AGENT,
+};
+
+/** One waiting item of an agent with no plan, as main's read lists it. */
+function waitingPlanless(asked: InboxItem): AppInboxPlanlessItem {
+  return {
+    id: asked.id,
+    agentId: asked.agentId,
+    title: asked.title,
+    postedAt: asked.postedAt,
+    agentTitle: null,
+    agentModel: "anthropic/claude-opus-5.5",
+    automationId: "5a0c4d2e-8f1b-4c3a-9e7d-2b6f1a8c9d04",
+    automationName: "Nightly flake sweep",
+    repository: "acme/relay",
+  };
+}
+
+test("an agent with no plan whose waiting items move, one answered on another Mac, is read again, the answered item no longer needing you", async () => {
+  agentInboxes = new Map([
+    [SWEEP_AGENT, [QUARANTINE]],
+    [SECOND_AGENT, [SECOND_ASK, THIRD_ASK]],
+  ]);
+  const { page } = mount([QUARANTINE, SECOND_ASK, THIRD_ASK].map(waitingPlanless));
+  await settle();
+  assert.ok(listed(page).includes("*Skip the slow suite?"));
+
+  agentInboxes.set(SECOND_AGENT, [{ ...SECOND_ASK, status: INBOX_STATUS.ANSWERED }, THIRD_ASK]);
+  act(() => setPlanless([QUARANTINE, THIRD_ASK].map(waitingPlanless)));
+  await settle();
+
+  assert.ok(listed(page).includes("Skip the slow suite?"), listed(page).join(" | "));
+});
+
+test("a read of an agent with no plan that fails is said with Retry, which reads it again though it was read before", async () => {
+  agentInboxes = new Map([[SECOND_AGENT, [SECOND_ASK, THIRD_ASK]]]);
+  const { page } = mount([QUARANTINE, SECOND_ASK, THIRD_ASK].map(waitingPlanless));
+  await settle();
+
+  agentReadFails = true;
+  act(() => setPlanless([QUARANTINE, THIRD_ASK].map(waitingPlanless)));
+  await settle();
+  assert.match(
+    page.querySelector(".inbox-plans")?.textContent ?? "",
+    /Some items could not be read\./u,
+  );
+  const before = agentReads.filter((agentId) => agentId === SECOND_AGENT).length;
+
+  agentReadFails = false;
+  act(() =>
+    [...page.querySelectorAll<HTMLButtonElement>(".inbox-plans button")]
+      .find((button) => button.textContent === "Retry")
+      ?.click(),
+  );
+  await settle();
+
+  assert.ok(agentReads.filter((agentId) => agentId === SECOND_AGENT).length > before);
+  assert.doesNotMatch(page.querySelector(".inbox-plans")?.textContent ?? "", /could not be read/u);
+});
+
+test("an agent whose waiting items come back to what it was read for lets go of the read asked between, so its late answer draws nothing", async () => {
+  agentInboxes = new Map([[SECOND_AGENT, [SECOND_ASK, THIRD_ASK]]]);
+  const { page } = mount([QUARANTINE, SECOND_ASK, THIRD_ASK].map(waitingPlanless));
+  await settle();
+  // The read asked for the items between is held, to land only after they came back.
+  let landBetween: () => void = () => undefined;
+  const answered = agentInboxes;
+  agentInboxes = new Map([[SECOND_AGENT, []]]);
+  holdAgentRead = (respond) => {
+    landBetween = respond;
+  };
+  act(() => setPlanless([QUARANTINE, THIRD_ASK].map(waitingPlanless)));
+  await settle();
+  holdAgentRead = undefined;
+  agentInboxes = answered;
+  act(() => setPlanless([QUARANTINE, SECOND_ASK, THIRD_ASK].map(waitingPlanless)));
+  await settle();
+  act(() => landBetween());
+  await settle();
+
+  assert.ok(listed(page).includes("*Skip the slow suite?"), listed(page).join(" | "));
+});
+
+test("an item chosen by a notification's click, in an Inbox showing one column, is shown itself rather than the list", async () => {
+  agentInboxes = new Map([[SECOND_AGENT, [SECOND_ASK, THIRD_ASK]]]);
+  const { page } = mount([QUARANTINE, SECOND_ASK, THIRD_ASK].map(waitingPlanless));
+  await settle();
+  layOut(page, 700);
+  await settle();
+  assert.equal(page.querySelector(".inbox-view")?.getAttribute("data-columns"), "list");
+
+  act(() => chooseFromOutside({ agentId: SECOND_AGENT, itemId: SECOND_ASK.id, opened: true }));
+  await settle();
+
+  assert.equal(page.querySelector(".inbox-view")?.getAttribute("data-columns"), "item");
+  assert.equal(page.querySelector("[data-inbox-title]")?.textContent, "Skip the slow suite?");
+
+  act(() => page.querySelector<HTMLButtonElement>(".inbox-back")?.click());
+  await settle();
+  assert.equal(
+    page.querySelector(".inbox-view")?.getAttribute("data-columns"),
+    "list",
+    "Back stands on the list, the notification's ask taken once",
   );
 });

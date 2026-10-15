@@ -1,0 +1,17 @@
+{
+  "type": "object",
+  "properties": {
+    "workspaceId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "repository": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "workspaceId"
+  ],
+  "additionalProperties": false
+}

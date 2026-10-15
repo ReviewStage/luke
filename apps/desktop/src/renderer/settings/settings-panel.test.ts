@@ -1,23 +1,25 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
-import { ACTION_RESULT_STATUS } from "@sidecar/wire";
+import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
+import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
+import { SETTINGS_PAGE_LIST, SETTINGS_VIEW } from "@luke/settings/settings-views";
+import { UPDATE_STATUS } from "@luke/settings/update";
+import { MICROPHONE_STATUS } from "@luke/voice/audio";
+import { ACTION_RESULT_STATUS } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { ACT_OUTCOME_STATUS } from "#shared/messages/acts";
-import { MICROPHONE_STATUS } from "#shared/messages/audio";
-import { UPDATE_STATUS } from "#shared/messages/update";
+import { ellipsized } from "#testing/action-label";
 import { onRegistry } from "#testing/copy-feedback";
-import { SETTINGS_PAGE_LIST, SETTINGS_VIEW } from "../settings-views";
 import { settingsPageOf } from "./pages";
 import { SettingsPanel, type SettingsPanelProps } from "./settings-panel";
 
 /**
  * Settings' Account page as the panel draws it: its own groups and no list of
- * the other pages, which the Settings sidebar alone lists.
+ * the other pages, which the Settings sidebar alone lists; and no page's
+ * buttons end their words with an ellipsis.
  */
 
 const ignore = () => undefined;
@@ -121,4 +123,22 @@ test("a signed-out Workspace page says to sign in rather than drawing nothing", 
   );
 
   assert.equal(container.textContent, "Sign in to see your workspaces.");
+});
+
+test("no Settings page draws a button whose words end with an ellipsis", () => {
+  for (const view of SETTINGS_PAGE_LIST) {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    roots.push(root);
+
+    act(() =>
+      root.render(
+        onRegistry(AtomRegistry.make(), createElement(SettingsPanel, { ...SETTINGS, view })),
+      ),
+    );
+
+    const pressed = [...container.querySelectorAll("button")].map((button) => button.textContent);
+    assert.deepEqual(ellipsized(pressed), [], `the ${settingsPageOf(view).title} page`);
+  }
 });

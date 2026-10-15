@@ -1,4 +1,6 @@
-import type { UnparsedWireValue } from "@sidecar/wire";
+import { type Act, parsedAct } from "@luke/host/acts";
+import type { AppStateSnapshot } from "@luke/host/app-state";
+import type { UnparsedWireValue } from "@luke/wire";
 import type { Effect } from "effect";
 import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent, WebContents } from "electron";
 import {
@@ -8,8 +10,6 @@ import {
   type BridgeMethod,
   type BridgeResultFor,
 } from "#shared/bridge";
-import { type Act, parsedAct } from "#shared/messages/acts";
-import type { AppStateSnapshot } from "#shared/messages/app-state";
 import type { ActRouter, ActSender } from "./act-router";
 import { windowAppState } from "./app-state";
 

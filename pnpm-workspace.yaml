@@ -30,7 +30,7 @@ catalog:
 # too, at 22.x, on the stated ground that it matched Vercel's own runtime; it
 # did not, because `apps/web`'s `engines.node` says 24.x and that is what Vercel
 # takes the runtime from. The pin bought no safety either, since every
-# `@sidecar/*` package the functions import is already checked against the
+# `@luke/*` package the functions import is already checked against the
 # catalog's types, so the deployed graph was never held to 22.x. What it did buy
 # was a second `vitest`: `@types/node` is a peer of `vitest`, so pnpm stood one
 # copy up per version, `@effect/vitest` read the collector out of whichever copy

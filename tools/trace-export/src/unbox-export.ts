@@ -21,13 +21,13 @@ import {
   TRACE_ENTRY_KIND,
   TRACE_LIVE_EVENT,
   TraceEntryKindSchema,
-} from "@sidecar/gateway/devtrace";
+} from "@luke/gateway/devtrace";
 import {
   LIVE_DEFAULTS,
   TRANSCRIPT_SPEAKER,
   TranscriptLedger,
   type TranscriptSpeaker,
-} from "@sidecar/live";
+} from "@luke/live";
 import {
   isWireNumber,
   isWireString,
@@ -36,7 +36,7 @@ import {
   type WireRecord,
   wholeNumber,
   wireRecord,
-} from "@sidecar/wire";
+} from "@luke/wire";
 import { Schema } from "effect";
 
 export interface UnboxExportOptions {

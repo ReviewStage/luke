@@ -1,9 +1,24 @@
-import type { CodingAgentMessage } from "@sidecar/features/coding-agent-wire";
-import type { CatalogModel } from "@sidecar/features/models-wire";
-import { PLAN_WORK_STATE } from "@sidecar/features/planning-view";
-import { TRANSCRIPT_PART_TYPE } from "@sidecar/features/transcript-wire";
-import { CallIcon } from "@sidecar/panel";
-import { isRecord, isWireString, MESSAGE_ROLE } from "@sidecar/wire";
+import type { CodingAgentMessage } from "@luke/features/coding-agent-wire";
+import type { CatalogModel } from "@luke/features/models-wire";
+import type { PlanEditor } from "@luke/features/plan-wire";
+import { PLAN_WORK_STATE } from "@luke/features/planning-view";
+import { TRANSCRIPT_PART_TYPE } from "@luke/features/transcript-wire";
+import { CallIcon } from "@luke/ui";
+import { LUKE_ACTOR } from "@luke/ui/actor-model";
+import {
+  type CallTurn,
+  callThread,
+  THREAD_ITEM,
+  type ThreadSection,
+} from "@luke/voice/call-thread";
+import {
+  callEndedLine,
+  TRANSCRIPT_EMPTY_LINE,
+  TRANSCRIPT_REGION,
+  type TranscriptCallRow,
+  type TranscriptRegion,
+} from "@luke/voice/transcript-model";
+import { isRecord, isWireString, MESSAGE_ROLE } from "@luke/wire";
 import type { UIMessage } from "ai";
 import { Fragment, useEffect, useRef, useState } from "react";
 import {
@@ -13,21 +28,14 @@ import {
   ConversationScrollButton,
 } from "../ai-elements/conversation";
 import { EmptyState } from "../empty-state";
+import { usePerson } from "../member-directory";
 import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { RetryRowLabel } from "../retry-button";
 import { BusyLabel, SPINNER_SIZE, Spinner } from "../spinner";
 import { AGENT_LEAD, AgentMessage, type DelegationDoors } from "./agent-tab";
 import { CallCheckpoint, CallEnded } from "./call-card";
-import { type CallTurn, callThread, THREAD_ITEM, type ThreadSection } from "./call-thread";
 import { REVEAL_MARK, useRevealInLog } from "./reveal-in-log";
 import { TranscriptNote } from "./transcript-blocks";
-import {
-  callEndedLine,
-  TRANSCRIPT_EMPTY_LINE,
-  TRANSCRIPT_REGION,
-  type TranscriptCallRow,
-  type TranscriptRegion,
-} from "./transcript-model";
 import {
   type PlanConversation,
   type WorkTurnRow,
@@ -56,7 +64,10 @@ import { WorkingLine } from "./working-time";
  * draws nothing; what the voice and the brain hand each
  * other is never drawn. Each call begins at a divider saying when it
  * started, the standing one marked live, and one that ended closes on how
- * long it ran, its card on hover. The list keeps to its newest line while it
+ * long it ran, its card on hover. A teammate's call is named for them at
+ * its divider, and over each run of lines, theirs under their face and
+ * Luke's under his, so the thread reads as two named parties; the reader's
+ * own call names nobody. The list keeps to its newest line while it
  * is scrolled there, so a live call reads like a chat, and the turns before
  * the oldest drawn are read a page at a time as the developer scrolls up to
  * them. Every word here is the developer's, Luke's, or the developer's
@@ -208,20 +219,28 @@ function TurnWork({
 function CallEntries({
   entries,
   doors,
+  caller,
 }: {
   entries: Extract<ThreadSection<WorkTurnRow>, { kind: typeof THREAD_ITEM.CALL }>["entries"];
   doors: WorkDoors;
+  /** The teammate whose call it was, whose lines are drawn under their name and Luke's under his; none for the reader's own. */
+  caller: PlanEditor | undefined;
 }): React.JSX.Element {
+  const teammate = usePerson(caller);
   const drawn: React.JSX.Element[] = [];
   let run: UIMessage[] = [];
   const flush = () => {
     const first = run[0];
     if (first === undefined) return;
+    const said = spokenMessage(run);
     drawn.push(
       <AgentMessage
         key={first.id}
-        message={spokenMessage(run)}
+        message={said}
         plan={false}
+        sender={
+          caller === undefined ? undefined : said.role === MESSAGE_ROLE.USER ? teammate : LUKE_ACTOR
+        }
         lead={AGENT_LEAD}
         moving={false}
         delegation={undefined}
@@ -264,8 +283,8 @@ function CallSection({
     <>
       {/* Before the checkpoint rather than on it, since a sticky checkpoint stands at the top however far it has scrolled. */}
       {revealed ? <span {...{ [REVEAL_MARK]: "" }} /> : null}
-      <CallCheckpoint startedAt={call.startedAt} live={call.live} now={now} />
-      <CallEntries entries={entries} doors={doors} />
+      <CallCheckpoint startedAt={call.startedAt} live={call.live} now={now} caller={call.caller} />
+      <CallEntries entries={entries} doors={doors} caller={call.caller} />
       {ended === undefined ? null : (
         <CallEnded line={ended} startedAt={call.startedAt} record={call.record} />
       )}

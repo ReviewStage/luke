@@ -49,8 +49,13 @@ import {
   workspaceGithubRequestSchema,
   workspaceLeaveRequestSchema,
   workspaceMemberRemovalSchema,
+  workspaceMemberRoleSchema,
   workspaceMemberSchema,
+  workspacePhotoSetRequestSchema,
+  workspacePhotoTypeSchema,
+  workspaceRenameRequestSchema,
   workspaceSchema,
+  workspaceTransferSchema,
 } from "./workspace-wire.js";
 
 /**
@@ -177,7 +182,7 @@ const workText = EffectSchema.String.check(EffectSchema.isMaxLength(PLAN_WORK_BO
  * answer, under the tool's own name), the newest kept and every string in
  * them cut to the text bound, so a turn that read a large file still travels
  * small. The desktop reads each call by its tool's name
- * (`@sidecar/features/agent-tools`), as it reads a coding agent's.
+ * (`@luke/features/agent-tools`), as it reads a coding agent's.
  */
 const planWorkJournalSchema = EffectSchema.Array(storedObjectSchema).check(
   EffectSchema.isMaxLength(PLAN_WORK_BOUNDS.PARTS),
@@ -630,11 +635,12 @@ export const planningFileParamsSchema = EffectSchema.Struct({
 
 export type PlanningFileParams = typeof planningFileParamsSchema.Type;
 
-/** A window of a file as the File tab draws it: its place and the branch it was read on, how long the whole file is, and its lines as this Mac coloured them. */
+/** A window of a file as the File tab draws it: its place, the branch it was read on and the commit where the service named it, how long the whole file is, and its lines as this Mac coloured them. */
 const planFileShownSchema = EffectSchema.Struct({
   path: EffectSchema.String,
   repository: EffectSchema.String,
   branch: EffectSchema.String,
+  commit: EffectSchema.optionalKey(EffectSchema.String),
   firstLine: EffectSchema.Int,
   lineCount: EffectSchema.Int,
   lines: codeLinesSchema,
@@ -751,12 +757,22 @@ export const planningWorkspaceCreateParamsSchema = workspaceCreateRequestSchema;
 
 export type PlanningWorkspaceCreateParams = typeof planningWorkspaceCreateParamsSchema.Type;
 
+/** Renaming a workspace, as the window asks it: the workspace and its new name, as the service takes them. */
+export const planningWorkspaceRenameParamsSchema = workspaceRenameRequestSchema;
+
+export type PlanningWorkspaceRenameParams = typeof planningWorkspaceRenameParamsSchema.Type;
+
+/** Setting or removing a workspace's photo, as the window asks it: the workspace and the photo as a `data:` URL, or null, as the service takes them. */
+export const planningWorkspacePhotoSetParamsSchema = workspacePhotoSetRequestSchema;
+
+export type PlanningWorkspacePhotoSetParams = typeof planningWorkspacePhotoSetParamsSchema.Type;
+
 /** One workspace, as the window names it to read its invitations, or to connect or disconnect its GitHub organization. */
 export const planningWorkspaceParamsSchema = workspaceGithubRequestSchema;
 
 export type PlanningWorkspaceParams = typeof planningWorkspaceParamsSchema.Type;
 
-/** A workspace made or its GitHub organization disconnected, as the window hears it: the workspace as it then stands, or why it does not. */
+/** A workspace made, renamed, or given a photo, or its GitHub organization disconnected, as the window hears it: the workspace as it then stands, or why it does not. */
 export const planningWorkspaceAnswerSchema = EffectSchema.Union([
   EffectSchema.Struct({ workspace: workspaceSchema }),
   workspaceCallFailureSchema,
@@ -784,13 +800,42 @@ export const planningWorkspaceMemberRemoveParamsSchema = workspaceMemberRemovalS
 export type PlanningWorkspaceMemberRemoveParams =
   typeof planningWorkspaceMemberRemoveParamsSchema.Type;
 
-/** A workspace's members, as the window hears them after a read or a removal: the members as they then stand, or why there are none. */
+/** Giving another member of a workspace a role, as the window asks it: the workspace, the member's account, and admin or member. */
+export const planningWorkspaceMemberRoleParamsSchema = workspaceMemberRoleSchema;
+
+export type PlanningWorkspaceMemberRoleParams = typeof planningWorkspaceMemberRoleParamsSchema.Type;
+
+/** Handing a workspace to one of its admins, as the window asks it: the workspace and the admin's account. */
+export const planningWorkspaceTransferParamsSchema = workspaceTransferSchema;
+
+export type PlanningWorkspaceTransferParams = typeof planningWorkspaceTransferParamsSchema.Type;
+
+/** A workspace's members, as the window hears them after a read, a removal, a role changed, or a handover: the members as they then stand, or why there are none. */
 export const planningWorkspaceMembersAnswerSchema = EffectSchema.Union([
   EffectSchema.Struct({ members: EffectSchema.Array(workspaceMemberSchema) }),
   workspaceCallFailureSchema,
 ]);
 
 export type PlanningWorkspaceMembersAnswer = typeof planningWorkspaceMembersAnswerSchema.Type;
+
+/** A workspace's photo, as a window's tile asks for it: the workspace. */
+export const planningWorkspacePhotoParamsSchema = workspaceLeaveRequestSchema;
+
+export type PlanningWorkspacePhotoParams = typeof planningWorkspacePhotoParamsSchema.Type;
+
+/**
+ * A workspace's photo, as the window hears it: its bytes in base64 under
+ * its media type, which the window draws from a `data:` URL of its own
+ * making, or why there is none: not a member, no photo, or no answer. The
+ * host fetched it under the account, so the window holds no bearer and no
+ * address.
+ */
+export const planningWorkspacePhotoAnswerSchema = EffectSchema.Union([
+  EffectSchema.Struct({ contentType: workspacePhotoTypeSchema, base64: EffectSchema.String }),
+  workspaceCallFailureSchema,
+]);
+
+export type PlanningWorkspacePhotoAnswer = typeof planningWorkspacePhotoAnswerSchema.Type;
 
 /** Leaving a workspace, as the window asks it: the workspace. */
 export const planningWorkspaceLeaveParamsSchema = workspaceLeaveRequestSchema;

@@ -373,9 +373,9 @@ const MOTIONS = {
     eyes: { kind: "lids" },
     sleepZ: true,
   },
-  // Awake but voiceless: the day's spoken allowance is spent, and the sidecar
+  // Awake but voiceless: the day's spoken allowance is spent, and Luke
   // keeps watching. The eyes stay open on a slow single blink — a hush that
-  // closed them would read as a sidecar that stopped watching, which is the
+  // closed them would read as a Luke that stopped watching, which is the
   // one thing this state must not say — the head holds a shade of the
   // sleeper's droop, and the whole face dims to the grayed-out idiom's ink.
   hushed: {
@@ -1463,9 +1463,7 @@ put(join(APP_RENDERER, "styles", "generated", "face-motion.css"), faceMotionCss(
 
 if (!CHECK_ONLY) {
   process.stdout.write(`${written.length} SVGs written to packages/brand/assets/\n`);
-  process.stdout.write(
-    "face-art.ts written to @sidecar/brand and face-motion.css to the renderer\n",
-  );
+  process.stdout.write("face-art.ts written to @luke/brand and face-motion.css to the renderer\n");
 } else if (stale.length > 0) {
   process.stderr.write(
     `${stale.length} generated file(s) no longer match this script:\n${stale.join("\n")}\n` +

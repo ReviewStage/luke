@@ -1,17 +1,14 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CODING_AGENT_CALL_FAILURE } from "@sidecar/features/coding-agent-view";
-import { CONTEXT_WINDOW } from "@sidecar/features/coding-agent-wire";
-import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@sidecar/features/models-wire";
+import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
+import { CONTEXT_WINDOW } from "@luke/features/coding-agent-wire";
+import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@luke/features/models-wire";
 import {
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_STATUS,
   type ProviderKeySummary,
-} from "@sidecar/features/provider-key-wire";
-import { act, createElement } from "react";
-import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+} from "@luke/features/provider-key-wire";
 import {
   ACT_KIND,
   ACT_OUTCOME_STATUS,
@@ -19,7 +16,10 @@ import {
   type ActKind,
   type ActOutcome,
   type ActResultFor,
-} from "#shared/messages/acts";
+} from "@luke/host/acts";
+import { act, createElement } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, test } from "vitest";
 import {
   focusedSegment,
   pressKeyIn,

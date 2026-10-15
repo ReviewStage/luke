@@ -7,8 +7,8 @@
  * `avatar.started` frame is this grant with its type and request id.
  */
 
-import { SCHEMA_REFUSAL, type UnparsedWireValue } from "@sidecar/wire";
-import { readEither, wireRefusal } from "@sidecar/wire/effect";
+import { SCHEMA_REFUSAL, type UnparsedWireValue } from "@luke/wire";
+import { readEither, wireRefusal } from "@luke/wire/effect";
 import { Result, Schema } from "effect";
 
 /** The longest each of the grant's strings may be: the server address, the participant token, and the avatar's identity. */

@@ -1,7 +1,8 @@
+import type { Route, WebRoutes } from "@luke/service/route";
+import type { WebServices } from "@luke/service/runtime";
 import { Effect } from "effect";
 import { HttpRouter } from "effect/http";
-import type { Route, WebRoutes } from "./route.js";
-import { runWeb, type WebServices } from "./runtime.js";
+import { runWeb } from "./runtime.js";
 
 type WebHandler = (request: Request) => Promise<Response>;
 

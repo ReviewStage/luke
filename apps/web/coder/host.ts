@@ -1,39 +1,39 @@
-import { hostTurnId } from "@sidecar/database/models/ids";
-import type { ModelChoice } from "@sidecar/features/models-wire";
-import { emitJsonSchema } from "@sidecar/wire/effect";
-import { Effect, Result, Schema } from "effect";
-import type { SessionAuth } from "eve/context";
-import { defineTool } from "eve/tools";
+import { hostTurnId } from "@luke/database/models/ids";
+import type { ModelChoice } from "@luke/features/models-wire";
+import { edgeKit } from "@luke/service/agents/agent-runtime/edge";
+import { AGENT_ROLE } from "@luke/service/agents/agent-runtime/role";
+import type { AgentSkill } from "@luke/service/agents/agent-runtime/skills";
+import type { DelegationAsk } from "@luke/service/agents/coder-host/delegation";
+import { type CoderHost, coderHost, type InboxCall } from "@luke/service/agents/coder-host/host";
+import { type InboxToolResult, inboxRejected } from "@luke/service/agents/coder-host/inbox";
+import type { InboxSandboxDoor } from "@luke/service/agents/coder-host/inbox-image";
+import type { CoderModelSelection } from "@luke/service/agents/coder-host/model";
+import { type PlanEditResult, planEditRejected } from "@luke/service/agents/coder-host/plan-edit";
+import {
+  type CoderHostSeams,
+  productionCoderHostSeams,
+} from "@luke/service/agents/coder-host/production";
+import type { CODER_TOOL } from "@luke/service/agents/coder-host/tool-set";
+import {
+  MAC_COMMAND_STATUS,
+  type MacCommandAnswer,
+  RUN_ON_MAC_TOOL,
+  runOnMacTool,
+} from "@luke/service/agents/mac-command";
+import { hostedEnvironment } from "@luke/service/environment";
+import { showPageRejected } from "@luke/service/plans/page-tool";
 import {
   ACTION_RESULT_STATUS,
   type UnparsedWireValue,
   unparsedWire,
   type WireBoundaryInput,
   type WireRecord,
-} from "../server/core.js";
-import { edgeKit } from "../server/hosted/agent-runtime/edge.js";
-import { AGENT_ROLE } from "../server/hosted/agent-runtime/role.js";
-import type { AgentSkill } from "../server/hosted/agent-runtime/skills.js";
-import type { DelegationAsk } from "../server/hosted/coder-host/delegation.js";
-import { type CoderHost, coderHost, type InboxCall } from "../server/hosted/coder-host/host.js";
-import { type InboxToolResult, inboxRejected } from "../server/hosted/coder-host/inbox.js";
-import type { InboxSandboxDoor } from "../server/hosted/coder-host/inbox-image.js";
-import type { CoderModelSelection } from "../server/hosted/coder-host/model.js";
-import { type PlanEditResult, planEditRejected } from "../server/hosted/coder-host/plan-edit.js";
-import {
-  type CoderHostSeams,
-  productionCoderHostSeams,
-} from "../server/hosted/coder-host/production.js";
-import type { CODER_TOOL } from "../server/hosted/coder-host/tool-set.js";
-import { hostedEnvironment } from "../server/hosted/environment.js";
-import {
-  MAC_COMMAND_STATUS,
-  type MacCommandAnswer,
-  RUN_ON_MAC_TOOL,
-  runOnMacTool,
-} from "../server/hosted/mac-command.js";
-import { showPageRejected } from "../server/hosted/page-tool.js";
-import { runWeb } from "../server/runtime.js";
+} from "@luke/wire";
+import { emitJsonSchema } from "@luke/wire/effect";
+import { Effect, Result, Schema } from "effect";
+import type { SessionAuth } from "eve/context";
+import { defineTool } from "eve/tools";
+import { runAgent } from "./runtime.js";
 import { scriptedModel } from "./scripted-model.js";
 
 /**
@@ -50,7 +50,7 @@ import { scriptedModel } from "./scripted-model.js";
  * planning worker's do through `../eve/host.ts`.
  */
 export const seams: CoderHostSeams = Effect.runSync(
-  Effect.provide(productionCoderHostSeams(runWeb), hostedEnvironment),
+  Effect.provide(productionCoderHostSeams(runAgent), hostedEnvironment),
 );
 
 export const host: CoderHost = coderHost(seams);
@@ -73,11 +73,11 @@ export function stepTurnId(sessionId: string, started: typeof StepStartedSchema.
 
 /**
  * The doors this project's authored files open onto the agent runtime
- * (`server/hosted/agent-runtime/edge.ts`), run here on the edge's runner. A
+ * (`packages/service/src/agents/agent-runtime/edge.ts`), run here on the edge's runner. A
  * session is offered skills only once its conversation is read as an
  * agent's, whose repository they are read from.
  */
-const edge = edgeKit(runWeb, {
+const edge = edgeKit(runAgent, {
   host,
   skills: (admitted) =>
     Effect.gen(function* () {
@@ -101,7 +101,7 @@ export function makeDelegation(
   task: string,
   asked: DelegationAsk,
 ): Promise<Result.Result<ModelChoice, string>> {
-  return runWeb(
+  return runAgent(
     Effect.gen(function* () {
       const admitted = yield* host.admit(auth, sessionId);
       if (Result.isFailure(admitted)) return Result.fail(admitted.failure);
@@ -123,7 +123,7 @@ export async function selectDelegatedModel(
   turnId: string,
 ): Promise<CoderModelSelection> {
   const scripted = seams.scriptedModel() ? { model: scriptedModel() } : undefined;
-  const selected = await runWeb(
+  const selected = await runAgent(
     Effect.gen(function* () {
       const admitted = yield* host.admitDelegated(auth, sessionId);
       if (Result.isFailure(admitted)) return Result.fail(admitted.failure);
@@ -150,7 +150,7 @@ export function editPlanNotes(
   input: UnparsedWireValue,
   takenInTurn: number,
 ): Promise<PlanEditResult> {
-  return runWeb(
+  return runAgent(
     Effect.gen(function* () {
       const admitted = yield* host.admit(auth, sessionId);
       if (Result.isFailure(admitted)) return planEditRejected(admitted.failure);
@@ -165,7 +165,7 @@ export function runInboxTool(
   sessionId: string,
   call: InboxCall,
 ): Promise<InboxToolResult> {
-  return runWeb(
+  return runAgent(
     Effect.gen(function* () {
       const admitted = yield* host.admit(auth, sessionId);
       if (Result.isFailure(admitted)) return inboxRejected(admitted.failure);
@@ -181,7 +181,7 @@ export function runShowPageTool(
   input: UnparsedWireValue,
   sandbox: InboxSandboxDoor,
 ): Promise<WireRecord> {
-  return runWeb(
+  return runAgent(
     Effect.gen(function* () {
       const admitted = yield* host.admit(auth, sessionId);
       if (Result.isFailure(admitted)) return showPageRejected(admitted.failure);
@@ -202,7 +202,7 @@ export function runResearchTool(
   context: { readonly auth: SessionAuth; readonly sessionId: string; readonly turnId: string },
   input: UnparsedWireValue,
 ): Promise<UnparsedWireValue> {
-  return runWeb(
+  return runAgent(
     Effect.gen(function* () {
       const admitted = yield* admit(context.auth, context.sessionId);
       if (Result.isFailure(admitted)) {
@@ -230,7 +230,7 @@ export function sessionSkills(
 /**
  * Every integration one of this project's agents is handed, for that
  * agent's own `connections/integrations.ts`: a turn is handed only the
- * servers the agent has switched on (`server/hosted/agent-runtime/servers.ts`).
+ * servers the agent has switched on (`packages/service/src/agents/agent-runtime/servers.ts`).
  */
 export function integrationConnectionsFor(
   role: typeof AGENT_ROLE.CODER | typeof AGENT_ROLE.CODER_WORKER,
@@ -242,7 +242,7 @@ export function integrationConnectionsFor(
  * `run_on_mac` as the agent and its worker are offered it, each admitted on
  * its own terms (the worker's on ownership, as its resolvers are), and run
  * through the one door every agent's call goes through
- * (`server/hosted/mac-command.ts`). A session the host does not admit runs
+ * (`packages/service/src/agents/mac-command.ts`). A session the host does not admit runs
  * nothing.
  */
 export function runOnMacFor(admit: CoderHost["admit"]) {
@@ -250,7 +250,7 @@ export function runOnMacFor(admit: CoderHost["admit"]) {
     description: RUN_ON_MAC_TOOL.description,
     inputSchema: emitJsonSchema(RUN_ON_MAC_TOOL.inputSchema),
     execute: (input, ctx): Promise<MacCommandAnswer> =>
-      runWeb(
+      runAgent(
         Effect.gen(function* () {
           const admitted = yield* admit(ctx.session.auth, ctx.session.id);
           if (Result.isFailure(admitted)) {

@@ -1,6 +1,6 @@
-import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@sidecar/features/coding-agent-wire";
-import type { PlanAgentLine, PlanPullRequestLine, PlanSummary } from "@sidecar/features/plan-wire";
-import type { AppInboxPlan, AppInboxWaitingItem } from "#shared/messages/app-state";
+import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
+import type { PlanAgentLine, PlanPullRequestLine, PlanSummary } from "@luke/features/plan-wire";
+import type { AppInboxPlan, AppInboxWaitingItem } from "@luke/host/app-state";
 import { agentStillWriting } from "../planning/coding-agent-model";
 
 /**
@@ -29,7 +29,7 @@ export const FACTORY_STEP = {
   SHIP: "ship",
 } as const;
 
-type FactoryStep = (typeof FACTORY_STEP)[keyof typeof FACTORY_STEP];
+export type FactoryStep = (typeof FACTORY_STEP)[keyof typeof FACTORY_STEP];
 
 /** How long after its last save a plan with no agents still counts as being planned. */
 export const PLANNING_WINDOW_MS = 24 * 3_600_000;
@@ -38,32 +38,32 @@ export const PLANNING_WINDOW_MS = 24 * 3_600_000;
 export const SHIPPED_LINGER_MS = 60_000;
 
 /** A plan being planned: drafted lately, or the one on the call. */
-interface FactoryPlanning {
+export interface FactoryPlanning {
   readonly plan: PlanSummary;
   readonly onCall: boolean;
 }
 
 /** A plan being built: the agent at work on it, or else the pull request still in checks. */
-interface FactoryBuilding {
+export interface FactoryBuilding {
   readonly plan: PlanSummary;
   readonly agent: PlanAgentLine | undefined;
   readonly pullRequest: PlanPullRequestLine | undefined;
 }
 
 /** An open Inbox item and its plan: the agent that posted it is stopped until it is answered. */
-interface FactoryQuestion {
+export interface FactoryQuestion {
   readonly plan: PlanSummary;
   readonly item: AppInboxWaitingItem;
 }
 
 /** A pull request waiting on the developer to merge it. */
-interface FactoryMerge {
+export interface FactoryMerge {
   readonly plan: PlanSummary;
   readonly pullRequest: PlanPullRequestLine;
 }
 
 /** A pull request seen turning merged, and when. */
-interface FactoryShipped {
+export interface FactoryShipped {
   readonly plan: PlanSummary;
   readonly pullRequest: PlanPullRequestLine;
   readonly at: number;

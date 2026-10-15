@@ -1,4 +1,9 @@
 import { Schema as EffectSchema, Option } from "effect";
+import {
+  INTEGRATION_NAME,
+  integrationOfHost,
+  integrationProviderSchema,
+} from "./integration-wire.js";
 import { PLAN_SECTION_BOUNDS } from "./plan-wire.js";
 
 /**
@@ -11,17 +16,56 @@ import { PLAN_SECTION_BOUNDS } from "./plan-wire.js";
  * What the target looks like is decided here and nowhere else: every
  * caller holds a `Mention`, which names its subject and nothing of the
  * form, and goes through `encodeMention` and `decodeMention` to write and
- * read one. The form is provisional until the link format is settled
- * (`docs/proposals/at-mentions.md`, "Pending: the link format"); changing
- * it changes this file and its tests alone.
+ * read one.
  *
- * A plan is named by its id, and one of its sections by the plan and the
- * heading's own words, as the plan's sections are known by their headings
- * everywhere else (`planSections`): a mention of a heading two sections
- * share names the first, and one of a heading since renamed or deleted
- * names nothing, which its reader says. A file or a folder of the plan's
- * repository is named by its path from the repository's root, which never
- * climbs out of it: no leading `/`, no `..` step, no backslash.
+ * Drawn, the `@` is not asked for: wherever Luke draws words a person,
+ * Luke, or an agent wrote, any link whose target names a mention is drawn
+ * as its chip (`linkMention`), a bare address among them, so an agent that
+ * writes a file's GitHub page or a Linear issue's address is drawn as a
+ * developer's mention of it is. The `@` still says which links a developer
+ * placed, which a writer must keep and an agent is handed (`mentionsIn`).
+ *
+ * The target is the address the thing has on the web, so a mention copied
+ * out of Luke, into Slack, a pull request or a mail, still leads somewhere
+ * (`docs/proposals/web-and-links.md`):
+ *
+ * - A plan is `https://tryluke.dev/<workspace>/plan/<id>`, and one of its
+ *   sections that with `#<anchor>` after it. Only the id finds the plan: the
+ *   workspace's slug reads well and is never trusted, so a slug spelled
+ *   another way later breaks no link. The desktop's own scheme is the same
+ *   address with `tryluke:` for `https:`, which reads as the same mention.
+ * - A section's anchor is its heading as GitHub spells a Markdown heading's
+ *   (`sectionAnchors`): lower case, its punctuation dropped, a space a
+ *   hyphen, and `-1`, `-2` after a heading the plan already held, so the
+ *   anchor names one section, and one of a heading since renamed or
+ *   deleted names nothing, which its reader says.
+ * - A file or a folder of the plan's repository is its GitHub page on the
+ *   default branch, `https://github.com/<owner>/<name>/blob/HEAD/<path>`
+ *   (`/tree/` for a folder), and a file's lines are pinned to the commit
+ *   they were read at, `/blob/<commit>/<path>#L3-L5`, since lines drift and
+ *   a branch's would point at whatever moved into them. Its path is from
+ *   the repository's root and never climbs out of it: no leading `/`, no
+ *   `..` step, no backslash. A GitHub page is a file of the plan only when
+ *   it is of the plan's own repository, which a reader is handed, and only
+ *   on `HEAD` or a commit, since a branch's name may hold a slash and leave
+ *   no telling where it ends and the path begins; it is read as that before
+ *   anything else a GitHub address might name.
+ *
+ * The forms written before the link was settled, `luke://plan/<id>`
+ * (`#<heading>` after it, the heading's own words), `luke://file/<path>`,
+ * and `luke://folder/<path>/`, stand in plans and messages already, so
+ * they are read forever, as the same mention the settled form names. A
+ * thing with no page of its own on the web keeps the `luke:` form, which
+ * nothing outside the app opens: an MCP server, `luke://mcp/<provider>`,
+ * and one of its tools, `luke://mcp/<provider>/<tool>`, the tool's own name
+ * as the server lists it.
+ *
+ * A page of one of the integrations, a Linear issue or a pull request, is
+ * named by its own web address, which a host of the integration's
+ * (`INTEGRATION_HOSTS`) says it is the integration's. It is read last, after
+ * every form above, so a GitHub page that is a file of the plan stays one;
+ * a link to any other page is a link, never a mention, whatever its label
+ * says.
  */
 
 export const MENTION_KIND = {
@@ -29,15 +73,24 @@ export const MENTION_KIND = {
   SECTION: "section",
   FILE: "file",
   FOLDER: "folder",
+  SERVER: "server",
+  TOOL: "tool",
+  LINK: "link",
 } as const;
 
 const MENTION_BOUNDS = {
-  /** The most characters a mention's target may spell: a heading or a path at its bound, every character encoded as UTF-8's widest, and the plan's id. */
-  MAX_TARGET_CHARS: 12_000,
+  /** The most characters a mention's target may spell: an anchor or a path at its bound, every character encoded as UTF-8's widest, and the plan's id. */
+  MAX_TARGET_CHARS: 24_000,
+  /** The most characters an anchor may spell: a heading at its bound, each character lowered into as many as two, and a suffix telling it from an earlier one. */
+  MAX_ANCHOR_CHARS: PLAN_SECTION_BOUNDS.MAX_HEADING_CHARS * 2 + 16,
   /** The most characters a plan's id may spell; the service mints them far shorter. */
   MAX_PLAN_ID_CHARS: 200,
   /** The most characters a repository path may spell. */
   MAX_PATH_CHARS: 1_000,
+  /** The most characters a page's web address may spell. */
+  MAX_URL_CHARS: 2_000,
+  /** The most characters of a page's address its readable name keeps, from its end. */
+  MAX_LINK_NAME_CHARS: 60,
   /** The most mentions one message is read for; any past them stay words. */
   MAX_MENTIONS: 20,
 } as const;
@@ -45,16 +98,62 @@ const MENTION_BOUNDS = {
 /** What marks a link's label as a mention's. */
 const MENTION_SIGIL = "@";
 
-/** The provisional form: `luke://plan/<planId>` (`#<heading>` after it for a section), `luke://file/<path>`, and `luke://folder/<path>/`, each part percent-encoded. */
+/** The desktop's own scheme, which spells a plan's address with its scheme swapped. */
+const LUKE_APP_PROTOCOL = "tryluke:";
+
+/** The settled form: a plan's address on tryluke.dev, by the web's scheme or the desktop's. */
 const LINK = {
+  ORIGIN: "https://tryluke.dev",
+  HOST: "tryluke.dev",
+  PROTOCOLS: new Set(["https:", LUKE_APP_PROTOCOL]),
+  PLAN_STEP: "plan",
+} as const;
+
+/** A file's or a folder's page on GitHub: the default branch for the thing itself, a commit for its lines. */
+const GITHUB = {
+  ORIGIN: "https://github.com",
+  FILE_STEP: "blob",
+  FOLDER_STEP: "tree",
+  DEFAULT_BRANCH: "HEAD",
+} as const;
+
+/** The form written before the link was settled, read forever: `luke://plan/<planId>` (`#<heading>` after it), `luke://file/<path>`, and `luke://folder/<path>/`. */
+const LEGACY = {
   PROTOCOL: "luke:",
   HOST: {
     [MENTION_KIND.PLAN]: "plan",
     [MENTION_KIND.FILE]: "file",
     [MENTION_KIND.FOLDER]: "folder",
+    [MENTION_KIND.SERVER]: "mcp",
   },
 } as const;
 
+/** A tool's name as an MCP server lists it, which is the name the agent's connection runs it by. */
+const TOOL_NAME = /^[A-Za-z0-9_.-]{1,128}$/u;
+
+/** A path's steps an address resolves away, which no tool's name can be, since its link would lose it. */
+const DOT_STEPS: ReadonlySet<string> = new Set([".", ".."]);
+
+/** The schemes a page of an integration's is addressed by. */
+const WEB_PROTOCOLS: ReadonlySet<string> = new Set(["https:", "http:"]);
+
+/** A query parameter whose name says it may carry a credential, which a page's address is never kept with. */
+const SECRET_PARAM = /token|secret|key|sig|auth|pass|code|session|credential/iu;
+
+/** A step of a page's path that says what kind of page the next one is (`pull`, `issues`), read with the step before it. */
+const KIND_STEP = /^[a-z]{1,8}$/u;
+
+/** An anchor as `sectionAnchors` spells one: letters, marks, digits, underscores, and hyphens. */
+const ANCHOR = /^[\p{L}\p{M}\p{N}\p{Pc}-]+$/u;
+
+/** What a heading's anchor drops, as GitHub's does: everything but letters, marks, digits, connector punctuation, spaces, and hyphens. */
+const ANCHOR_DROPPED = /[^\p{L}\p{M}\p{N}\p{Pc} -]/gu;
+
+/** A commit as a link pins one: seven to forty hexadecimal digits. */
+const COMMIT = /^[0-9a-f]{7,40}$/u;
+
+/** A GitHub page's lines: `#L3`, or `#L3-L5`. */
+const LINES_FRAGMENT = /^#L(\d{1,9})(?:-L(\d{1,9}))?$/u;
 /** The characters a markdown link's label must escape to stay one label. */
 const LABEL_SPECIAL = /[[\]\\]/gu;
 
@@ -117,6 +216,16 @@ const pathSchema = EffectSchema.String.check(
   ),
 );
 
+/** A line of a file, counted from one. */
+const lineSchema = EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(1));
+
+/** A file's lines, the first through the last, at the commit they were read at, named as a `CodeRef` names them. */
+const linesSchema = EffectSchema.Struct({
+  commit: EffectSchema.String.check(EffectSchema.isPattern(COMMIT)),
+  startLine: lineSchema,
+  endLine: lineSchema,
+}).check(EffectSchema.makeFilter(({ startLine, endLine }) => startLine <= endLine));
+
 const mentionSchema = EffectSchema.Union([
   EffectSchema.Struct({
     kind: EffectSchema.Literal(MENTION_KIND.PLAN),
@@ -125,13 +234,37 @@ const mentionSchema = EffectSchema.Union([
   EffectSchema.Struct({
     kind: EffectSchema.Literal(MENTION_KIND.SECTION),
     planId: planIdSchema,
-    heading: EffectSchema.String.check(
-      EffectSchema.isNonEmpty(),
-      EffectSchema.isMaxLength(PLAN_SECTION_BOUNDS.MAX_HEADING_CHARS),
+    anchor: EffectSchema.String.check(
+      EffectSchema.isMaxLength(MENTION_BOUNDS.MAX_ANCHOR_CHARS),
+      EffectSchema.isPattern(ANCHOR),
     ),
   }),
-  EffectSchema.Struct({ kind: EffectSchema.Literal(MENTION_KIND.FILE), path: pathSchema }),
+  EffectSchema.Struct({
+    kind: EffectSchema.Literal(MENTION_KIND.FILE),
+    path: pathSchema,
+    lines: EffectSchema.optionalKey(linesSchema),
+  }),
   EffectSchema.Struct({ kind: EffectSchema.Literal(MENTION_KIND.FOLDER), path: pathSchema }),
+  EffectSchema.Struct({
+    kind: EffectSchema.Literal(MENTION_KIND.SERVER),
+    provider: integrationProviderSchema,
+  }),
+  EffectSchema.Struct({
+    kind: EffectSchema.Literal(MENTION_KIND.TOOL),
+    provider: integrationProviderSchema,
+    tool: EffectSchema.String.check(
+      EffectSchema.isPattern(TOOL_NAME),
+      EffectSchema.makeFilter((name) => !DOT_STEPS.has(name)),
+    ),
+  }),
+  EffectSchema.Struct({
+    kind: EffectSchema.Literal(MENTION_KIND.LINK),
+    provider: integrationProviderSchema,
+    url: EffectSchema.String.check(
+      EffectSchema.isNonEmpty(),
+      EffectSchema.isMaxLength(MENTION_BOUNDS.MAX_URL_CHARS),
+    ),
+  }),
 ]);
 
 export type Mention = typeof mentionSchema.Type;
@@ -139,11 +272,33 @@ export type Mention = typeof mentionSchema.Type;
 /** A mention of the plan or one of its sections. */
 export type PlanMention = Extract<Mention, { readonly planId: string }>;
 
-/** A mention written into words: where its link stands, the label it was written with, `@` and all, and what it names. */
-export interface MentionInWords {
+/** A mention of an MCP server or one of its tools. */
+export type ServerMention = Extract<Mention, { readonly provider: string }>;
+
+/** Whether a tool's name, as an MCP server lists it, is one a mention of the tool can carry. */
+export function isMentionableTool(name: string): boolean {
+  return TOOL_NAME.test(name) && !DOT_STEPS.has(name);
+}
+
+/** A file's lines a mention names, at the commit they were read at. */
+export type MentionLines = typeof linesSchema.Type;
+
+/** Where a mention is written: the plan's workspace, by its slug, and the repository the plan is about, `owner/name`, or null before one is chosen. */
+export interface MentionPlace {
+  readonly workspace: string;
+  readonly repository: string | null;
+}
+
+/** A link whose label starts with `@`, written into words: where it stands, its label, `@` and all, and its target as written. */
+export interface MentionLink {
   readonly start: number;
   readonly end: number;
   readonly label: string;
+  readonly target: string;
+}
+
+/** A mention written into words: its link, and what it names. */
+export interface MentionInWords extends MentionLink {
   readonly mention: Mention;
 }
 
@@ -171,31 +326,146 @@ function decodedPart(part: string): string | undefined {
   }
 }
 
-/** A target's path read back from its steps, its leading slash and, for a folder, its trailing one taken off. */
-function decodedPath(pathname: string): string | undefined {
-  const steps = pathname.replace(/^\//u, "").replace(/\/$/u, "").split("/").map(decodedPart);
-  return steps.every((step) => step !== undefined) ? steps.join("/") : undefined;
+/** Steps of a path read back and joined, or nothing where one's encoding is broken. */
+function decodedSteps(steps: readonly string[]): string | undefined {
+  const read = steps.map(decodedPart);
+  return read.every((step) => step !== undefined) ? read.join("/") : undefined;
 }
 
-/** The fields a target spells, for the schema to read; nothing where it is no target of this form. */
-function fieldsOf(target: string) {
-  const url = URL.parse(target);
-  if (url === null || url.protocol !== LINK.PROTOCOL) return undefined;
+/** A target's path read back from its steps, its leading slash and, for a folder, its trailing one taken off. */
+function decodedPath(pathname: string): string | undefined {
+  return decodedSteps(pathname.replace(/^\//u, "").replace(/\/$/u, "").split("/"));
+}
+
+/**
+ * A target read as an address, or nothing where it is none. Note that it is
+ * `new URL` caught rather than `URL.parse`, because the "Open in Luke" page
+ * reads a link in whatever browser opened it, and Safari before 18 has no
+ * `URL.parse`.
+ */
+function parsedUrl(target: string): URL | undefined {
+  try {
+    return new URL(target);
+  } catch {
+    return undefined;
+  }
+}
+
+/** A heading's anchor before it is told apart from an earlier heading's: GitHub's spelling of it. */
+function headingAnchor(heading: string): string {
+  return heading.toLowerCase().replace(ANCHOR_DROPPED, "").replace(/ /gu, "-");
+}
+
+/** The fields a legacy `luke:` target spells, for the schema to read; nothing where it is none. */
+function legacyFields(url: URL) {
   switch (url.host) {
-    case LINK.HOST[MENTION_KIND.FILE]:
+    case LEGACY.HOST[MENTION_KIND.FILE]:
       return { kind: MENTION_KIND.FILE, path: decodedPath(url.pathname) };
-    case LINK.HOST[MENTION_KIND.FOLDER]:
+    case LEGACY.HOST[MENTION_KIND.FOLDER]:
       return { kind: MENTION_KIND.FOLDER, path: decodedPath(url.pathname) };
-    case LINK.HOST[MENTION_KIND.PLAN]: {
+    case LEGACY.HOST[MENTION_KIND.SERVER]: {
+      const [provider, tool, ...rest] = url.pathname.replace(/^\//u, "").split("/");
+      if (rest.length > 0 || url.hash !== "" || url.search !== "") return undefined;
+      if (tool === undefined) return { kind: MENTION_KIND.SERVER, provider };
+      return { kind: MENTION_KIND.TOOL, provider, tool: decodedPart(tool) };
+    }
+    case LEGACY.HOST[MENTION_KIND.PLAN]: {
       const planId = decodedPart(url.pathname.replace(/^\//u, ""));
       if (url.hash === "") return { kind: MENTION_KIND.PLAN, planId };
-      return { kind: MENTION_KIND.SECTION, planId, heading: decodedPart(url.hash.slice(1)) };
+      // Note that a heading's words name the first section under them, as its anchor without a suffix does.
+      const heading = decodedPart(url.hash.slice(1));
+      if (heading === undefined || heading === "") return undefined;
+      return { kind: MENTION_KIND.SECTION, planId, anchor: headingAnchor(heading) };
     }
     default:
       return undefined;
   }
 }
 
+/** The fields a plan's address on tryluke.dev spells, by either scheme: `/<workspace>/plan/<id>`, perhaps `#<anchor>`. */
+function planFields(url: URL) {
+  const [first, workspace, step, id, ...rest] = url.pathname.split("/");
+  if (first !== "" || workspace === "" || step !== LINK.PLAN_STEP || id === undefined) {
+    return undefined;
+  }
+  if (rest.length > 0) return undefined;
+  const planId = decodedPart(id);
+  if (url.hash === "" || url.hash === "#") return { kind: MENTION_KIND.PLAN, planId };
+  const anchor = decodedPart(url.hash.slice(1))?.toLowerCase();
+  return { kind: MENTION_KIND.SECTION, planId, anchor };
+}
+
+/** The lines a GitHub page's fragment names at a commit; nothing where it names none, or the page is a branch's. */
+function linesOf(ref: string, hash: string): MentionLines | undefined {
+  const lines = LINES_FRAGMENT.exec(hash);
+  if (lines === null || !COMMIT.test(ref)) return undefined;
+  const startLine = Number(lines[1]);
+  const endLine = lines[2] === undefined ? startLine : Number(lines[2]);
+  return { commit: ref, startLine, endLine };
+}
+
+/** The fields a page of the plan's repository on GitHub spells, a file's or a folder's on `HEAD` or a commit; nothing for any other page. */
+function repositoryFields(url: URL, repository: string | null) {
+  const [first, owner, name, step, ref, ...path] = url.pathname.split("/");
+  if (first !== "" || repository === null || ref === undefined) return undefined;
+  // Note that a branch's page is no file of the plan, since `feature/rollout` spells two steps and the path's first is not to be told from its last.
+  if (ref !== GITHUB.DEFAULT_BRANCH && !COMMIT.test(ref)) return undefined;
+  // GitHub reads an owner and a name in any case, so a link spelled in another names the same repository.
+  if (`${owner}/${name}`.toLowerCase() !== repository.toLowerCase()) return undefined;
+  if (step === GITHUB.FOLDER_STEP) {
+    const folder = path.at(-1) === "" ? path.slice(0, -1) : path;
+    return { kind: MENTION_KIND.FOLDER, path: decodedSteps(folder) };
+  }
+  if (step !== GITHUB.FILE_STEP) return undefined;
+  const lines = linesOf(ref, url.hash);
+  const file = { kind: MENTION_KIND.FILE, path: decodedSteps(path) };
+  return lines === undefined ? file : { ...file, lines };
+}
+
+/**
+ * A page's address with nothing in it that may be a credential: no user or
+ * password before its host, and no query parameter whose name says it holds
+ * one. Note that the rest of the query stays, since a thread or a view is
+ * often named there (`?thread_ts=`).
+ */
+function withoutCredentials(url: URL): string {
+  const kept = new URL(url.href);
+  kept.username = "";
+  kept.password = "";
+  for (const name of [...kept.searchParams.keys()]) {
+    if (SECRET_PARAM.test(name)) kept.searchParams.delete(name);
+  }
+  return kept.href;
+}
+
+/** A page's address as a mention holds it: a parenthesis it keeps encoded, so it stays one markdown link's target, and reads back the same. */
+function linkAddress(href: string): string {
+  return href.replace(/[()]/gu, (special) => (special === "(" ? "%28" : "%29"));
+}
+
+/** The fields a page of an integration's spells, its address kept without credentials; nothing for a page of no integration's. */
+function linkFields(url: URL) {
+  if (!WEB_PROTOCOLS.has(url.protocol)) return undefined;
+  const provider = integrationOfHost(url.hostname);
+  if (provider === undefined) return undefined;
+  return { kind: MENTION_KIND.LINK, provider, url: linkAddress(withoutCredentials(url)) };
+}
+
+/**
+ * The fields a target spells, for the schema to read; nothing where it is
+ * no target of a mention. A GitHub page is read as a file or a folder of
+ * the plan's repository first, so a page of it is never read as anything
+ * else a GitHub address names.
+ */
+function fieldsOf(target: string, repository: string | null) {
+  const url = parsedUrl(target);
+  if (url === undefined) return undefined;
+  if (url.protocol === LEGACY.PROTOCOL) return legacyFields(url);
+  if (LINK.PROTOCOLS.has(url.protocol) && url.host === LINK.HOST) return planFields(url);
+  // Note that a page of an integration's is read last, so a GitHub page that is a file of the plan stays one.
+  const fields = url.origin === GITHUB.ORIGIN ? repositoryFields(url, repository) : undefined;
+  return fields ?? linkFields(url);
+}
 /** Whether the line holding the index stands inside a fenced block, its fence lines included. */
 function insideFence(text: string, at: number): boolean {
   let open: string | undefined;
@@ -317,25 +587,151 @@ function labelEnd(text: string, open: number): number | undefined {
   return undefined;
 }
 
-/** The target a mention is written with. */
-export function encodeMention(mention: Mention): string {
+/**
+ * Each heading's anchor, in the order the headings stand: GitHub's spelling
+ * of it, with `-1`, `-2` after one an earlier heading already took, so each
+ * names one section. A heading that spells no anchor, the words before the
+ * first heading among them, has an empty one, which names no section.
+ */
+export function sectionAnchors(headings: readonly string[]): readonly string[] {
+  const taken = new Map<string, number>();
+  return headings.map((heading) => {
+    const spelled = headingAnchor(heading);
+    if (spelled === "") return "";
+    let anchor = spelled;
+    while (taken.has(anchor)) {
+      const count = (taken.get(spelled) ?? 0) + 1;
+      taken.set(spelled, count);
+      anchor = `${spelled}-${count}`;
+    }
+    taken.set(anchor, 0);
+    return anchor;
+  });
+}
+
+/** A plan's address, a section's with its anchor; the plan's own where the anchor is empty. */
+function planTarget(planId: string, place: MentionPlace, anchor: string): string {
+  const plan = `${LINK.ORIGIN}/${encodedPart(place.workspace)}/${LINK.PLAN_STEP}/${encodedPart(planId)}`;
+  return anchor === "" ? plan : `${plan}#${encodedPart(anchor)}`;
+}
+
+/** A file's or a folder's page on GitHub, or the legacy form where the plan has no repository to name it under. */
+function repositoryTarget(
+  kind: typeof MENTION_KIND.FILE | typeof MENTION_KIND.FOLDER,
+  path: string,
+  place: MentionPlace,
+  lines: MentionLines | undefined,
+): string {
+  if (place.repository === null) {
+    const folder = kind === MENTION_KIND.FOLDER ? "/" : "";
+    return `${LEGACY.PROTOCOL}//${LEGACY.HOST[kind]}/${encodedPath(path)}${folder}`;
+  }
+  const repository = place.repository.split("/").map(encodedPart).join("/");
+  const step = kind === MENTION_KIND.FOLDER ? GITHUB.FOLDER_STEP : GITHUB.FILE_STEP;
+  const ref = lines === undefined ? GITHUB.DEFAULT_BRANCH : lines.commit;
+  const page = `${GITHUB.ORIGIN}/${repository}/${step}/${ref}/${encodedPath(path)}`;
+  if (lines === undefined) return page;
+  return lines.startLine === lines.endLine
+    ? `${page}#L${lines.startLine}`
+    : `${page}#L${lines.startLine}-L${lines.endLine}`;
+}
+
+/** The target a mention is written with, in the plan's workspace and of its repository. */
+export function encodeMention(mention: Mention, place: MentionPlace): string {
   switch (mention.kind) {
     case MENTION_KIND.FILE:
-      return `${LINK.PROTOCOL}//${LINK.HOST[MENTION_KIND.FILE]}/${encodedPath(mention.path)}`;
+      return repositoryTarget(mention.kind, mention.path, place, mention.lines);
     case MENTION_KIND.FOLDER:
-      return `${LINK.PROTOCOL}//${LINK.HOST[MENTION_KIND.FOLDER]}/${encodedPath(mention.path)}/`;
+      return repositoryTarget(mention.kind, mention.path, place, undefined);
     case MENTION_KIND.PLAN:
-    case MENTION_KIND.SECTION: {
-      const plan = `${LINK.PROTOCOL}//${LINK.HOST[MENTION_KIND.PLAN]}/${encodedPart(mention.planId)}`;
-      return mention.kind === MENTION_KIND.PLAN ? plan : `${plan}#${encodedPart(mention.heading)}`;
-    }
+      return planTarget(mention.planId, place, "");
+    case MENTION_KIND.SECTION:
+      return planTarget(mention.planId, place, mention.anchor);
+    // An MCP server has no page of its own, so it keeps the app's own form, wherever it is written.
+    case MENTION_KIND.SERVER:
+      return `${LEGACY.PROTOCOL}//${LEGACY.HOST[MENTION_KIND.SERVER]}/${mention.provider}`;
+    case MENTION_KIND.TOOL:
+      return `${LEGACY.PROTOCOL}//${LEGACY.HOST[MENTION_KIND.SERVER]}/${mention.provider}/${encodedPart(mention.tool)}`;
+    case MENTION_KIND.LINK:
+      return linkAddress(mention.url);
   }
 }
 
-/** The mention a link's target names; nothing where it names none, or is no target of a mention. */
-export function decodeMention(target: string): Mention | undefined {
+/**
+ * The mention a link's target names, a GitHub page read as a file or a
+ * folder only of `repository`, the plan's; nothing where it names none, or
+ * is no target of a mention.
+ */
+export function decodeMention(target: string, repository: string | null): Mention | undefined {
   if (target.length > MENTION_BOUNDS.MAX_TARGET_CHARS) return undefined;
-  return Option.getOrUndefined(readMention(fieldsOf(target)));
+  return Option.getOrUndefined(readMention(fieldsOf(target, repository)));
+}
+
+/**
+ * A plan's address on tryluke.dev, or a section's, spelled in the desktop's
+ * own scheme (`tryluke://tryluke.dev/<workspace>/plan/<id>#<anchor>`), which
+ * the system hands the app: written again from what the address names, so
+ * nothing else it carried reaches the app; nothing for any other address.
+ */
+export function appLinkOf(target: string): string | undefined {
+  if (target.length > MENTION_BOUNDS.MAX_TARGET_CHARS) return undefined;
+  const url = parsedUrl(target);
+  if (url === undefined || !LINK.PROTOCOLS.has(url.protocol) || url.host !== LINK.HOST) {
+    return undefined;
+  }
+  const mention = Option.getOrUndefined(readMention(planFields(url)));
+  const workspace = decodedPart(url.pathname.split("/")[1] ?? "");
+  if (mention === undefined || workspace === undefined) return undefined;
+  if (mention.kind !== MENTION_KIND.PLAN && mention.kind !== MENTION_KIND.SECTION) return undefined;
+  const address = encodeMention(mention, { workspace, repository: null });
+  return `${LUKE_APP_PROTOCOL}${address.slice(address.indexOf("//"))}`;
+}
+
+/** Words with each control character, a line break among them, made a space, so a name stays one line of a link's label. */
+function withoutControls(words: string): string {
+  return [...words]
+    .map((character) => {
+      const code = character.codePointAt(0) ?? 0;
+      return code < SPACE_CODE || code === DELETE_CODE ? " " : character;
+    })
+    .join("");
+}
+
+/**
+ * A page's web address as a mention's name reads it: the last steps of its
+ * path, the step before a kind's word kept with it (`relay/pull/123`,
+ * `LUKE-142/fix-the-thing`), cut from the front to its bound; the host
+ * where the path has no step. Note that the name is read off the address
+ * alone, since the page's own title is the provider's to answer and no
+ * search here asks it.
+ */
+function readableLink(href: string): string {
+  const url = new URL(href);
+  const steps = url.pathname
+    .split("/")
+    .filter((step) => step !== "")
+    .map((step) => withoutControls(decodedPart(step) ?? step));
+  const kind = steps.length >= 3 && KIND_STEP.test(steps.at(-2) ?? "");
+  const kept = steps.slice(kind ? -3 : -2);
+  const name = kept.length === 0 ? url.hostname : kept.join("/");
+  const bound = MENTION_BOUNDS.MAX_LINK_NAME_CHARS;
+  return name.length <= bound ? name : `…${name.slice(-(bound - 1))}`;
+}
+
+/**
+ * Words pasted whole that are one page of an integration's, as the mention
+ * they become and its readable name; nothing for any other words, a file of
+ * the plan's repository among them, which `repository` names.
+ */
+export function pastedLinkMention(
+  words: string,
+  repository: string | null,
+): { readonly mention: Mention; readonly name: string } | undefined {
+  const address = words.trim();
+  if (address === "" || /\s/u.test(address)) return undefined;
+  const mention = decodeMention(address, repository);
+  if (mention?.kind !== MENTION_KIND.LINK) return undefined;
+  return { mention, name: readableLink(mention.url) };
 }
 
 /** Whether a link's label is a mention's: it starts with `@`. */
@@ -348,38 +744,234 @@ export function mentionName(label: string): string {
   return isMentionLabel(label) ? label.slice(MENTION_SIGIL.length) : label;
 }
 
-/** The mention written into markdown as a link: `[@label](target)`, its label's brackets and backslashes escaped. */
-export function mentionMarkdown(mention: Mention, name: string): string {
-  const label = `${MENTION_SIGIL}${name}`.replace(LABEL_SPECIAL, (special) => `\\${special}`);
-  return `[${label}](${encodeMention(mention)})`;
+/** What a bare link's chip names a plan by, since its address holds no name of the plan's. */
+const BARE_PLAN_NAME = "Plan";
+
+/** A file's lines as a chip names them, `app.ts:12–20`, as a mention of them picked from a File tab is named. */
+function linesName(path: string, lines: MentionLines | undefined): string {
+  const name = path.split("/").at(-1) ?? path;
+  if (lines === undefined) return name;
+  const span =
+    lines.startLine === lines.endLine
+      ? String(lines.startLine)
+      : `${lines.startLine}–${lines.endLine}`;
+  return `${name}:${span}`;
+}
+
+/** What a mention written as its bare address is named: what the address itself says of the thing. */
+function bareName(mention: Mention): string {
+  switch (mention.kind) {
+    case MENTION_KIND.PLAN:
+      return BARE_PLAN_NAME;
+    case MENTION_KIND.SECTION:
+      return mention.anchor;
+    case MENTION_KIND.FILE:
+      return linesName(mention.path, mention.lines);
+    case MENTION_KIND.FOLDER:
+      return mention.path.split("/").at(-1) ?? mention.path;
+    case MENTION_KIND.SERVER:
+      return INTEGRATION_NAME[mention.provider];
+    case MENTION_KIND.TOOL:
+      return mention.tool;
+    case MENTION_KIND.LINK:
+      return readableLink(mention.url);
+  }
+}
+
+/** Whether a link's label is its target spelled out, as a bare address's is: the same address, however its characters are encoded. */
+function isBareLabel(label: string, target: string): boolean {
+  if (label === "" || label === target) return true;
+  const spelled = parsedUrl(label);
+  return spelled !== undefined && spelled.href === parsedUrl(target)?.href;
 }
 
 /**
- * Every mention written into the words, in order: a link whose label
- * starts with `@`, whose target names a mention, standing outside code,
- * where markdown draws no link. A link of another kind, or one whose target
- * names nothing, is words. At most `limit` are read, a message's
- * `MAX_MENTIONS` unless the caller reads a whole plan; any past them stay
- * words.
+ * Whether a link's target may name a mention for some plan, so a reader
+ * who does not yet know the plan's repository knows to read it again when
+ * it does: one that names a mention with no repository, or any page of
+ * GitHub's, which may be a file or a folder of the plan's.
  */
-export function mentionsIn(
-  text: string,
-  limit: number = MENTION_BOUNDS.MAX_MENTIONS,
-): readonly MentionInWords[] {
-  const found: MentionInWords[] = [];
+export function mayNameMention(target: string): boolean {
+  if (decodeMention(target, null) !== undefined) return true;
+  return parsedUrl(target)?.origin === GITHUB.ORIGIN;
+}
+
+/**
+ * A link in written words as the mention its chip draws, whoever wrote it:
+ * any link whose target names a mention, a GitHub page as a file or a
+ * folder only of `repository`, the plan's, is one, whatever its label says,
+ * so an agent's `[the store](<GitHub page>)` reads as the developer's
+ * `[@store.ts](<GitHub page>)` does. Its name is its label, without its `@`;
+ * a bare address, its label the address spelled out, is named by what the
+ * address says of the thing. Nothing for a link whose target names none,
+ * which stays a link.
+ */
+export function linkMention(
+  label: string,
+  target: string,
+  repository: string | null,
+): { readonly mention: Mention; readonly name: string } | undefined {
+  const mention = decodeMention(target, repository);
+  if (mention === undefined) return undefined;
+  const words = label.trim();
+  if (isBareLabel(words, target)) return { mention, name: bareName(mention) };
+  return { mention, name: mentionName(words) };
+}
+
+/** The mention written into markdown as a link: `[@label](target)`, its label's brackets and backslashes escaped. */
+export function mentionMarkdown(mention: Mention, name: string, place: MentionPlace): string {
+  const label = `${MENTION_SIGIL}${name}`.replace(LABEL_SPECIAL, (special) => `\\${special}`);
+  return `[${label}](${encodeMention(mention, place)})`;
+}
+
+/**
+ * Every link whose label starts with `@` written into the words, in order,
+ * standing outside code, where markdown draws no link, whatever its target
+ * names: what a developer placed, which a writer must keep as it stands.
+ */
+export function mentionLinksIn(text: string): readonly MentionLink[] {
+  const found: MentionLink[] = [];
   const opener = `[${MENTION_SIGIL}`;
   for (let at = text.indexOf(opener); at !== -1; at = text.indexOf(opener, at + 1)) {
-    if (found.length === limit) break;
     const close = labelEnd(text, at);
     if (close === undefined || text[close + 1] !== "(" || insideCode(text, at)) continue;
     const targetEnd = text.indexOf(")", close + 2);
     if (targetEnd === -1) continue;
     const target = text.slice(close + 2, targetEnd);
-    const mention = /\s/u.test(target) ? undefined : decodeMention(target);
-    if (mention === undefined) continue;
+    if (/\s/u.test(target)) continue;
     const label = text.slice(at + 1, close).replace(LABEL_ESCAPE, "$1");
-    found.push({ start: at, end: targetEnd + 1, label, mention });
+    found.push({ start: at, end: targetEnd + 1, label, target });
     at = targetEnd;
   }
   return found;
+}
+
+/**
+ * Every mention written into the words, in order: a link whose label
+ * starts with `@`, whose target names a mention, a GitHub page only as a
+ * file or a folder of `repository`, standing outside code. A link of
+ * another kind, or one whose target names nothing, is words. At most
+ * `limit` are read, a message's `MAX_MENTIONS` unless the caller reads a
+ * whole plan; any past them stay words.
+ */
+export function mentionsIn(
+  text: string,
+  repository: string | null,
+  limit: number = MENTION_BOUNDS.MAX_MENTIONS,
+): readonly MentionInWords[] {
+  const found: MentionInWords[] = [];
+  for (const link of mentionLinksIn(text)) {
+    if (found.length === limit) break;
+    const mention = decodeMention(link.target, repository);
+    if (mention !== undefined) found.push({ ...link, mention });
+  }
+  return found;
+}
+
+/** The quotes a link's title may stand between, after its destination. */
+const TITLE_QUOTES: ReadonlySet<string> = new Set(['"', "'"]);
+
+/** Where a destination read so far stands: its target and the place after it, or where the read stopped, past which no link's destination can reach. */
+type DestinationRead = { readonly target: string; readonly at: number } | { readonly stop: number };
+
+/** The characters that end a line, which no destination between angle brackets spans. */
+const LINE_ENDS: ReadonlySet<string> = new Set(["\n", "\r"]);
+
+/**
+ * A destination between angle brackets, which may hold spaces, read from
+ * its `<` to just past its `>` on the same line. Note that one left open
+ * stops the read just after its `<`, so a link later on the line is still
+ * read as one, and the read stays one pass, since a later read reaches no
+ * further than the next `<`.
+ */
+function angledDestination(words: string, open: number): DestinationRead {
+  for (let at = open + 1; at < words.length; at += 1) {
+    const character = words[at] ?? "";
+    if (character === ">") return { target: words.slice(open + 1, at), at: at + 1 };
+    if (character === "<" || LINE_ENDS.has(character)) break;
+    if (character === "\\") {
+      if (LINE_ENDS.has(words[at + 1] ?? "")) break;
+      at += 1;
+    }
+  }
+  return { stop: open + 1 };
+}
+
+/** A destination with no angle brackets: up to a space or the `)` that closes it, its parentheses balanced. */
+function bareDestination(words: string, open: number): DestinationRead {
+  let depth = 0;
+  let at = open;
+  for (; at < words.length; at += 1) {
+    const character = words[at] ?? "";
+    if (character === "\\") at += 1;
+    else if (character === "(") depth += 1;
+    else if (character === ")" && depth > 0) depth -= 1;
+    else if (character === ")" || /\s/u.test(character)) break;
+  }
+  return depth > 0 ? { stop: at } : { target: words.slice(open, at), at };
+}
+
+/**
+ * An inline link's destination read from just after its `(`: the
+ * destination, between angle brackets or with its parentheses balanced,
+ * perhaps a title in quotes after a space, and the `)` that closes it; or,
+ * where the words hold no such link, where the read stopped, which no
+ * link's destination can reach past.
+ */
+function destinationEnd(
+  words: string,
+  open: number,
+): { readonly target: string; readonly end: number } | { readonly stop: number } {
+  const read = words[open] === "<" ? angledDestination(words, open) : bareDestination(words, open);
+  if ("stop" in read) return read;
+  const { target, at } = read;
+  if (words[at] === ")") return { target, end: at };
+  // A title in quotes may follow the destination, after a space, and before its `)`.
+  let titleAt = at;
+  while (words[titleAt] === " " || words[titleAt] === "\t") titleAt += 1;
+  const quote = words[titleAt] ?? "";
+  // A quote no later one closes opens no title, said without reading on to the end.
+  if (titleAt === at || !TITLE_QUOTES.has(quote) || words.lastIndexOf(quote) <= titleAt) {
+    return { stop: at };
+  }
+  const closing = words.indexOf(quote, titleAt + 1);
+  if (words[closing + 1] !== ")") return { stop: at };
+  return { target, end: closing + 1 };
+}
+
+/**
+ * Words with each Markdown link written as its name, as a place that draws
+ * plain words says it, a notification or a list's title: a link naming a
+ * mention by the name its chip says (`linkMention`, read with no
+ * repository, as a place off a plan's page draws it), and any other link
+ * by its label, never its address. A bare address is words, and stays as
+ * written. The words are read once, front to back: a label is the words
+ * since the last `[` on its line, so of nested brackets the inner link is
+ * the link, as markdown reads them. Note that code is not told apart,
+ * since such a place says one line of words.
+ */
+export function linkLabels(words: string): string {
+  let said = "";
+  let from = 0;
+  let open: number | undefined;
+  for (let at = 0; at < words.length; at += 1) {
+    const character = words[at];
+    if (character === "\\") at += 1;
+    else if (character === "\n") open = undefined;
+    else if (character === "[") open = at;
+    else if (character === "]" && open !== undefined) {
+      const link = words[at + 1] === "(" ? destinationEnd(words, at + 2) : undefined;
+      if (link !== undefined && "end" in link) {
+        const label = words.slice(open + 1, at).replace(LABEL_ESCAPE, "$1");
+        said += words.slice(from, open) + (linkMention(label, link.target, null)?.name ?? label);
+        from = link.end + 1;
+        at = link.end;
+      } else if (link !== undefined) {
+        // Note that the read goes on from where the destination's stopped, so no stretch of the words is read twice.
+        at = link.stop - 1;
+      }
+      open = undefined;
+    }
+  }
+  return said + words.slice(from);
 }

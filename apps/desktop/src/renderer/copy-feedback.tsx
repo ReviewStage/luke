@@ -14,10 +14,10 @@
  */
 
 import { useAtom } from "@effect/atom-react";
+import { ACT_KIND } from "@luke/host/acts";
 import { Duration, Effect } from "effect";
 import { CheckIcon, CircleAlertIcon, CopyIcon } from "lucide-react";
 import { useRef, useState } from "react";
-import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "./act";
 import { rendererRuntime } from "./renderer-runtime";
 import { TOAST_TONE, useToast } from "./toast";

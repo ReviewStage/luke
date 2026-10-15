@@ -1,5 +1,6 @@
+import { TERMINAL_PORT_CHANNEL } from "@luke/features/terminal-acts";
+import type { UnparsedWireValue } from "@luke/wire";
 import * as Sentry from "@sentry/electron/renderer";
-import type { UnparsedWireValue } from "@sidecar/wire";
 import { contextBridge, ipcRenderer } from "electron";
 import { type AppBridge, bridgeEntries } from "#shared/bridge";
 import { eventWithoutAccessTokens, withoutAccessTokens } from "#shared/sentry-breadcrumbs";
@@ -41,3 +42,10 @@ function exposedBridge(): AppBridge {
 }
 
 contextBridge.exposeInMainWorld("luke", exposedBridge());
+
+// An attached shell's port cannot cross the context bridge, so it is handed
+// into the page as Electron hands a port to an isolated world; the page reads
+// it back by the channel and checks the ticket (`renderer/terminal/terminal-port.ts`).
+ipcRenderer.on(TERMINAL_PORT_CHANNEL, (event, ticket: UnparsedWireValue) => {
+  window.postMessage({ channel: TERMINAL_PORT_CHANNEL, ticket }, "*", [...event.ports]);
+});

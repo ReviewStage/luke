@@ -12,9 +12,16 @@
             "maxLength": 36
           },
           "planId": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 36
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 36
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "model": {
             "type": "string"
@@ -87,6 +94,27 @@
               "maxLength": 64
             },
             "maxItems": 32
+          },
+          "startedBy": {
+            "type": "object",
+            "properties": {
+              "userId": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "userId",
+              "name"
+            ],
+            "additionalProperties": false
+          },
+          "automationId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 36
           }
         },
         "required": [

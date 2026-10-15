@@ -21,10 +21,10 @@
  * it by `voice/use-voice-session.ts`.
  */
 
+import type { AvatarFeed } from "@luke/voice/avatar";
+import { PCM_SAMPLE_RATE, PCM_TEE } from "@luke/voice/avatar-pcm";
+import { closeTurnGate, stepTurnGate, TURN_GATE_IDLE } from "@luke/voice/avatar-turn-gate";
 import { Effect, type Scope } from "effect";
-import type { AvatarFeed } from "#shared/messages/avatar";
-import { PCM_SAMPLE_RATE, PCM_TEE } from "./contract";
-import { closeTurnGate, stepTurnGate, TURN_GATE_IDLE } from "./turn-gate";
 
 export interface AvatarFeedOptions {
   /** Luke's remote WebRTC stream, the one his `<audio>` element plays. */

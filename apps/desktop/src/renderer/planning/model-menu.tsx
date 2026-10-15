@@ -1,5 +1,5 @@
-import { CONTEXT_WINDOW } from "@sidecar/features/coding-agent-wire";
-import type { CatalogModel, ModelChoice } from "@sidecar/features/models-wire";
+import { CONTEXT_WINDOW } from "@luke/features/coding-agent-wire";
+import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
 import { HarnessMark } from "../harness-marks";
 import { type FootRow, type MenuRow, SearchableMenu } from "../searchable-menu";
 import { Spinner } from "../spinner";

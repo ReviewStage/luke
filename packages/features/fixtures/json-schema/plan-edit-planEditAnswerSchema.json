@@ -52,6 +52,25 @@
               "type": "number",
               "minimum": 0
             },
+            "ownerId": {
+              "type": "string"
+            },
+            "createdBy": {
+              "type": "object",
+              "properties": {
+                "userId": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "userId",
+                "name"
+              ],
+              "additionalProperties": false
+            },
             "document": {
               "type": "object",
               "properties": {
@@ -146,6 +165,11 @@
                   "minLength": 1,
                   "maxLength": 200
                 },
+                "agentId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 36
+                },
                 "at": {
                   "type": "number",
                   "minimum": 0
@@ -199,6 +223,11 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 200
+                  },
+                  "agentId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 36
                   },
                   "at": {
                     "type": "number",

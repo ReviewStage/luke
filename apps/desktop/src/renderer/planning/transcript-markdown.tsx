@@ -1,4 +1,5 @@
-import type { CodeLines } from "@sidecar/features/planning-view";
+import type { CodeLines } from "@luke/features/planning-view";
+import { ACT_KIND, COLOURED_CODE_MAX_CHARS, FENCE_LANGUAGE_MAX_CHARS } from "@luke/host/acts";
 import {
   type ComponentProps,
   createContext,
@@ -9,7 +10,6 @@ import {
   useState,
 } from "react";
 import type { Components, ExtraProps } from "streamdown";
-import { ACT_KIND, COLOURED_CODE_MAX_CHARS, FENCE_LANGUAGE_MAX_CHARS } from "#shared/messages/acts";
 import { type ActHandle, useAct } from "../act";
 import { CopyGlyph, copyHint, useCopyFeedback } from "../copy-feedback";
 import { Tooltip } from "../tooltip";

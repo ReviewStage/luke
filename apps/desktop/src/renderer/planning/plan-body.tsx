@@ -1,28 +1,38 @@
 import {
-  decodeMention,
-  isMentionLabel,
   MENTION_KIND,
+  type MentionLines,
+  type MentionPlace,
   mentionMarkdown,
-  mentionName,
   type PlanMention,
-} from "@sidecar/features/mention-link";
-import { PLAN_ACTOR, type Plan, type PlanLastEdit } from "@sidecar/features/plan-wire";
-import { EllipsisIcon } from "@sidecar/panel";
+  sectionAnchors,
+} from "@luke/features/mention-link";
+import { PLAN_ACTOR, type Plan, type PlanLastEdit } from "@luke/features/plan-wire";
+import { EllipsisIcon } from "@luke/ui";
+import { actorName } from "@luke/ui/actor-model";
 import { LinkIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { ActorStack } from "../actor-ref";
 import { useCopyToast } from "../copy-feedback";
-import { ActionMenu, useActionMenu } from "../desktop/action-menu";
+import { ActionMenu, type MenuAction, useActionMenu } from "../desktop/action-menu";
 import { type LinkDrawer, MarkdownMessage } from "../markdown-message";
 import { Tooltip } from "../tooltip";
 import { prefersReducedMotion } from "../use-reduced-motion";
-import { MentionChip, type MentionDoors } from "./mention-chip";
+import {
+  type EditAgents,
+  EditedBy,
+  type EditPlace,
+  editorsOf,
+  type PlanReader,
+  useEditReader,
+} from "./edit-ref";
+import { type MentionDoors, mentionLinkDrawer } from "./mention-chip";
 import {
   DOCUMENT_BLOCK_CLASS,
   DocumentBlock,
   EditableTitle,
   PlanDocumentEditor,
 } from "./plan-document-editor";
-import { UNNAMED_MEMBER } from "./plan-history-model";
+import { copyPlanLinkItem, renamePlanItem, versionHistoryItem } from "./plan-menu-items";
 import {
   type ChaseState,
   chaseBehind,
@@ -34,6 +44,7 @@ import {
 } from "./plan-reveal";
 import { agoText, useMinute } from "./plan-time";
 import { PlanTitle } from "./plan-title";
+import { useOpenLink } from "./use-open-link";
 import { EDITOR_PLACE, type PlanEditDoor, usePlanEditing } from "./use-plan-editing";
 import { NO_LOOKS, type PlanLooks } from "./use-plan-looks";
 
@@ -47,38 +58,53 @@ import { NO_LOOKS, type PlanLooks } from "./use-plan-looks";
  * developer has scrolled the document themselves, and lights each unit as it settles. Opening
  * a plan draws it whole, and reduced motion draws each document at once. The
  * typing grows the scrolled document and never the surface. A plan anyone has written
- * says who last did in one muted line above the document: the developer,
- * Luke (the notetaker), or a coding agent named as its row names it now,
- * whether it was on a call, and how long ago, moved on once a minute. The
- * line opens the plan's version history, where each earlier version is. Each
- * section says the same of the save that last changed it, quietly, while the
- * pointer or the keyboard is on it, and its line opens the version history on
- * the revision that save made. The sections changed since the developer
- * last looked at the plan on this Mac wear a still tint, counted under that
- * line, until they dismiss them or leave the plan (`use-plan-looks.ts`).
+ * says who last did in one muted line above the document: a member, Luke
+ * (the notetaker), or a coding agent, each on their own face hanging their
+ * card (`edit-ref.tsx`), whose call it was on where Luke wrote it on one,
+ * and how long ago, moved on once a minute. The time opens the plan's
+ * version history, where each earlier version is. Each section says the
+ * same of the save that last changed it, quietly, while the pointer or the
+ * keyboard is on it, leading with the writer's face, and its time opens the
+ * version history on the revision that save made. The sections changed since
+ * the developer last looked at the plan on this Mac wear a still tint,
+ * counted under that line beside a face for each who changed them, until
+ * they dismiss them or leave the plan (`use-plan-looks.ts`).
  * The plan's name is drawn as the title over its text (`plan-title.tsx`),
- * and each section is known by its heading.
+ * and each section is known by its heading, and its link by the heading's
+ * anchor (`sectionAnchors`).
  *
  * On a plan's own page each section has a link: its ⋯, shown while the
  * pointer or the keyboard is on it, copies the section's mention
- * (`[@Heading](…)`, `@sidecar/features/mention-link`), and a mention in the
+ * (`[@Heading](…)`, `@luke/features/mention-link`), and a mention in the
  * plan's words is drawn as its chip (`mention-chip.tsx`), which opens the
- * section it names. Asked to show a section, the document scrolls its own
- * scroller to it, never `scrollIntoView`, which would scroll every box
+ * section it names. The title has a ⋯ of its own, drawn as a section's is,
+ * which copies the plan's link and offers Rename, where the title can be
+ * edited, and Version history, where the window opens it
+ * (`plan-menu-items.tsx`). Asked to show a section, the document scrolls
+ * its own scroller to it, never `scrollIntoView`, which would scroll every box
  * around it too; a section the plan no longer holds leaves it at its top.
  */
 
-/** What a plan's own page does with its sections' links and its mentions: opens the plan or a section a mention names, or a file's tab, and the section it was last asked to show. */
+/** What a plan's own page does with its sections' links and its mentions: the slug of the workspace its links are written under, what opens the plan or a section a mention names, or a file's tab, and the section it was last asked to show. */
 export interface SectionLinks {
+  readonly workspace: string;
   readonly onOpen: (mention: PlanMention) => void;
-  readonly onOpenFile?: ((path: string) => void) | undefined;
+  readonly onOpenFile?: ((path: string, lines: MentionLines | undefined) => void) | undefined;
   readonly reveal: SectionReveal | undefined;
+  /** The document showed the section `reveal` asked for, so the ask can be let go. */
+  readonly onRevealed?: ((ask: number) => void) | undefined;
 }
 
-/** One ask to show a section, or the plan's top where it names none; each ask is its own, so the same section asked twice scrolls twice. */
+/** One ask to show a section by its anchor, or the plan's top where it names none; each ask is its own, so the same section asked twice scrolls twice. */
 export interface SectionReveal {
-  readonly heading: string | undefined;
+  readonly anchor: string | undefined;
   readonly ask: number;
+}
+
+/** The plan a page's sections link to, and where its links are written. */
+interface LinkedPlan {
+  readonly planId: string;
+  readonly place: MentionPlace;
 }
 
 /** What a section's ⋯ and its one item are called. */
@@ -87,6 +113,9 @@ const SECTION_MENU = {
   COPY_LINK: "Copy link to section",
   COPIED: "Link to section copied",
 } as const;
+
+/** What the title's ⋯ is called. */
+const TITLE_MENU_LABEL = "Title actions";
 
 /** The room left above a section scrolled to, so its heading does not stand flush against the document's top edge. */
 const REVEAL_MARGIN = 16;
@@ -111,105 +140,131 @@ interface PlanChase {
  * The plan's last edit: its newest revision, or, from a service before
  * history, the newest save a coding agent made, which was all it could name.
  */
-function lastEditOf(plan: Plan): PlanLastEdit | undefined {
+export function lastEditOf(plan: Plan): PlanLastEdit | undefined {
   if (plan.lastEdit !== undefined) return plan.lastEdit;
   // The journal is oldest first, so the newest save is its last.
   const journaled = plan.agentEdits?.at(-1);
   if (journaled === undefined) return undefined;
-  return { actor: PLAN_ACTOR.AGENT, label: journaled.label, at: journaled.at, duringCall: false };
+  return {
+    actor: PLAN_ACTOR.AGENT,
+    label: journaled.label,
+    agentId: journaled.agentId,
+    at: journaled.at,
+    duringCall: false,
+  };
 }
 
-/**
- * Who reads the plan, as its edits are named for them: the signed-in
- * account's id, whose own edits read as "you", and whether every edit is
- * theirs, as the account's own template's are. Nobody, as a capture or a
- * test draws it, reads no edit as theirs.
- */
-export interface EditReader {
-  readonly id: string | undefined;
-  readonly own: boolean;
-}
+/** Nobody, as a capture or a test draws the plan, who reads no edit as theirs. */
+const NO_READER: PlanReader = { readerId: undefined };
 
-const NO_READER: EditReader = { id: undefined, own: false };
-
-/** Whether the member an edit names is the reader. */
-function isReader(edit: PlanLastEdit, reader: EditReader): boolean {
-  return reader.own || (reader.id !== undefined && edit.by?.userId === reader.id);
-}
-
-/**
- * Who wrote an edit, in the reader's words: "you" only for the reader's own,
- * a teammate by name, and "someone" where the service names no member; nobody
- * for a revision from before history.
- */
-function editorOf(edit: PlanLastEdit, reader: EditReader): string | undefined {
-  switch (edit.actor) {
-    case PLAN_ACTOR.DEVELOPER:
-      return isReader(edit, reader) ? "you" : (edit.by?.name ?? UNNAMED_MEMBER.toLowerCase());
-    case PLAN_ACTOR.NOTETAKER:
-      return "Luke";
-    case PLAN_ACTOR.AGENT:
-      return edit.label ?? "a coding agent";
-    case PLAN_ACTOR.EARLIER:
-      return undefined;
-  }
-}
-
-/** Whose call Luke wrote an edit on: the reader's, a teammate's by name, or a call nobody can be named for. */
-function callOf(edit: PlanLastEdit, reader: EditReader): string {
-  if (isReader(edit, reader)) return " during your call";
-  return edit.by === undefined ? " during a call" : ` during ${edit.by.name}'s call`;
-}
-
-/** The line over the document, and each section's: "Edited by Luke during your call · 2h ago". */
-function editedLine(edit: PlanLastEdit, now: number, reader: EditReader): string {
-  const editor = editorOf(edit, reader);
-  const by = editor === undefined ? "Edited" : `Edited by ${editor}`;
-  const call = edit.duringCall ? callOf(edit, reader) : "";
-  return `${by}${call} · ${agoText(edit.at, now)}`;
+/** Whether the reader wrote an edit: theirs where every edit is, as the template's are, or where it names their account. */
+function isReader(edit: PlanLastEdit, reader: PlanReader): boolean {
+  if (reader.owner !== undefined) return true;
+  return reader.readerId !== undefined && edit.by?.userId === reader.readerId;
 }
 
 /** Opens the plan's version history on the revision that made the save at a moment, or on the plan as it stands. */
 type ShowHistory = (save: number | undefined) => void;
 
-/** The line over the document, which opens the plan's history where the window offers it. */
+/**
+ * How long ago an edit was, in a line naming it, as the press that opens the
+ * version history on it where the window offers one, and as words otherwise.
+ * `label` is what the press is called. Note that the press stops there,
+ * because a click into a section opens its editor.
+ */
+function EditTime({
+  at,
+  now,
+  label,
+  onShow,
+}: {
+  at: number;
+  now: number;
+  label: string;
+  onShow: (() => void) | undefined;
+}): React.JSX.Element {
+  const ago = agoText(at, now);
+  if (onShow === undefined) return <span>{ago}</span>;
+  return (
+    <button
+      type="button"
+      className="plan-edit-link"
+      aria-label={label}
+      onClick={(event) => {
+        event.stopPropagation();
+        onShow();
+      }}
+    >
+      {ago}
+    </button>
+  );
+}
+
+/**
+ * The line over the document: "Edited by [Charles] Charles Pan · 2h ago".
+ * The writer hangs their card, and the time opens the plan's history where
+ * the window offers it.
+ */
 function EditedLine({
   edit,
-  reader,
+  place,
   onShowHistory,
 }: {
   edit: PlanLastEdit;
-  reader: EditReader;
+  place: EditPlace;
   onShowHistory: ShowHistory | undefined;
 }): React.JSX.Element {
-  const now = useMinute();
-  const line = editedLine(edit, now, reader);
-  if (onShowHistory === undefined) return <p className="plan-edit-note">{line}</p>;
+  const ago = agoText(edit.at, place.now);
   return (
-    <p className="plan-edit-note">
-      <button
-        type="button"
-        className="plan-edit-link"
-        aria-label={`${line}. Show version history`}
-        onClick={() => onShowHistory(undefined)}
-      >
-        {line}
-      </button>
+    <p className="plan-edit-note actor-line">
+      {edit.actor === PLAN_ACTOR.EARLIER ? "Edited" : "Edited by "}
+      <EditedBy edit={edit} place={place} sentence />
+      {" · "}
+      <EditTime
+        at={edit.at}
+        now={place.now}
+        label={`Edited ${ago}. Show version history`}
+        onShow={onShowHistory === undefined ? undefined : () => onShowHistory(undefined)}
+      />
     </p>
   );
 }
 
-/** How many sections changed since the last look, as the line under "Edited by" counts them. */
-function changedLine(count: number): string {
-  return `Changed since you last looked · ${count} ${count === 1 ? "section" : "sections"}`;
+/** How many sections changed since the last look, as the line under "Edited by" counts them, and by whom where any is named. */
+function changedLine(count: number, named: boolean): string {
+  const sections = `${count} ${count === 1 ? "section" : "sections"}`;
+  return `Changed since you last looked · ${sections}${named ? " by " : ""}`;
 }
 
-/** The line under "Edited by" while sections changed since the last look stand lit, with their dismissal. */
-function ChangedLine({ looks }: { looks: PlanLooks }): React.JSX.Element | null {
+/**
+ * The line under "Edited by" while sections changed since the last look
+ * stand lit, a face for each who last changed them, with their dismissal.
+ * Note that the faces are named in words a screen reader reads, since a
+ * facepile is hidden from it.
+ */
+function ChangedLine({
+  looks,
+  marks,
+}: {
+  looks: PlanLooks;
+  marks: SectionMarks;
+}): React.JSX.Element | null {
   if (looks.changed.size === 0) return null;
+  const edits = [...looks.changed].flatMap((heading) => marks.edits.get(heading) ?? []);
+  const editors = editorsOf(edits, marks.place);
   return (
     <p className="plan-changed-note">
-      <span>{changedLine(looks.changed.size)}</span>
+      <span className="actor-line">
+        {changedLine(looks.changed.size, editors.length > 0)}
+        {editors.length === 0 ? null : (
+          <>
+            <ActorStack actors={editors} />
+            <span className="visually-hidden">
+              {editors.map((actor) => actorName(actor, { sentence: true })).join(", ")}
+            </span>
+          </>
+        )}
+      </span>
       <span aria-hidden="true">·</span>
       <button type="button" className="toolbar-button quiet-button" onClick={looks.dismiss}>
         Dismiss
@@ -220,43 +275,40 @@ function ChangedLine({ looks }: { looks: PlanLooks }): React.JSX.Element | null 
 
 /**
  * What each unit says of its section: the save that last changed each, which
- * changed since the last look, the minute it counts from, and the way into
- * the version history where the window offers one, each by its heading.
+ * changed since the last look, what names who made it, and the way into the
+ * version history where the window offers one, each by its heading.
  */
 interface SectionMarks {
   readonly edits: ReadonlyMap<string, PlanLastEdit>;
   readonly changed: ReadonlySet<string>;
-  readonly now: number;
-  readonly reader: EditReader;
+  readonly place: EditPlace;
   readonly onShowHistory: ShowHistory | undefined;
 }
 
 /**
  * The section's quiet line: who last changed the section under `heading`,
- * and when, shown while the pointer or the keyboard is on it; none where no
- * save has. Where the window offers the version history, it opens it on the
+ * on their face, and when, "[Luke] Luke during Charles Pan’s call · 2h ago",
+ * shown while the pointer or the keyboard is on it; none where no save has.
+ * Where the window offers the version history, the time opens it on the
  * revision that save made.
  */
 function bylineOf(marks: SectionMarks, heading: string): React.JSX.Element | null {
   const edit = marks.edits.get(heading);
   if (edit === undefined) return null;
-  const line = editedLine(edit, marks.now, marks.reader);
-  const { onShowHistory } = marks;
-  if (onShowHistory === undefined) return <span className="plan-unit-byline">{line}</span>;
-  const named = heading === "" ? line : `${heading}: ${line}`;
+  const { onShowHistory, place } = marks;
+  const ago = agoText(edit.at, place.now);
+  const named = heading === "" ? `Edited ${ago}` : `${heading}: edited ${ago}`;
   return (
-    <button
-      type="button"
-      className="plan-unit-byline"
-      aria-label={`${named}. Show version history`}
-      onClick={(event) => {
-        // Note that the press stops here, because a click into the section opens its editor.
-        event.stopPropagation();
-        onShowHistory(edit.at);
-      }}
-    >
-      {line}
-    </button>
+    <span className="plan-unit-byline actor-line">
+      {edit.actor === PLAN_ACTOR.EARLIER ? "Edited" : <EditedBy edit={edit} place={place} />}
+      {" · "}
+      <EditTime
+        at={edit.at}
+        now={place.now}
+        label={`${named}. Show version history`}
+        onShow={onShowHistory === undefined ? undefined : () => onShowHistory(edit.at)}
+      />
+    </span>
   );
 }
 
@@ -293,7 +345,7 @@ function opened(plan: Plan): Chase {
  * plan, a fresh start for another. Note that only the reader's own edit lands
  * at once, because a teammate's arrives unseen and types in as Luke's does.
  */
-function aimed(chase: Chase, plan: Plan, reader: EditReader): Chase {
+function aimed(chase: Chase, plan: Plan, reader: PlanReader): Chase {
   if (chase.planId !== plan.id) return opened(plan);
   const { body } = plan.document;
   // The reader's own edit lands at once: they watched it being typed already.
@@ -314,7 +366,7 @@ function aimed(chase: Chase, plan: Plan, reader: EditReader): Chase {
  * behind. A document arriving mid-typing is aimed at from what is shown, so
  * the typing carries on toward it without a jump.
  */
-function usePlanChase(plan: Plan, live: boolean, reader: EditReader): PlanChase {
+function usePlanChase(plan: Plan, live: boolean, reader: PlanReader): PlanChase {
   const [chase, setChase] = useState(() => opened(plan));
   let current = chase;
   if (chase.planId !== plan.id || chase.body !== plan.document.body) {
@@ -353,38 +405,37 @@ function unitClass(view: UnitView, changed: boolean): string {
 
 /**
  * What draws the plan's mentions as chips, on a plan's own page: a link
- * whose label starts with `@` and whose destination names a mention, drawn
- * against the plan's headings as they stand; nothing off a plan's page,
- * where mentions stay words. Note that it is made again only when a
- * heading changes, since every unit's words are drawn again when it is,
- * and that what opening one does is read as it is pressed.
+ * whose destination names a mention, whoever wrote it (`linkMention`),
+ * drawn against the anchors of the plan's headings as they stand; nothing
+ * off a plan's page, where mentions stay words. Note that it is made again
+ * only when a heading changes, since every unit's words are drawn again
+ * when it is, and that what opening one does is read as it is pressed.
  */
 function useMentionChips(
-  planId: string,
-  views: readonly UnitView[],
+  linked: LinkedPlan | undefined,
+  anchors: readonly string[],
   links: SectionLinks | undefined,
 ): { readonly link: LinkDrawer | undefined; readonly doors: MentionDoors | undefined } {
   const latest = useRef(links);
   latest.current = links;
-  const offered = links !== undefined;
   const opensFiles = links?.onOpenFile !== undefined;
-  const headingKey = views.map((view) => view.heading).join("\n");
+  const planId = linked?.planId;
+  const workspace = linked?.place.workspace ?? "";
+  const repository = linked?.place.repository ?? null;
+  const anchorKey = anchors.join("\n");
   return useMemo(() => {
-    if (!offered) return { link: undefined, doors: undefined };
+    if (planId === undefined) return { link: undefined, doors: undefined };
     const doors: MentionDoors = {
       planId,
-      headings: new Set(headingKey.split("\n").filter((heading) => heading !== "")),
+      place: { workspace, repository },
+      anchors: new Set(anchorKey.split("\n").filter((anchor) => anchor !== "")),
       onOpenPlan: (mention) => latest.current?.onOpen(mention),
-      onOpenFile: opensFiles ? (path) => latest.current?.onOpenFile?.(path) : undefined,
+      onOpenFile: opensFiles
+        ? (path, lines) => latest.current?.onOpenFile?.(path, lines)
+        : undefined,
     };
-    const link = (href: string, label: string) => {
-      if (!isMentionLabel(label)) return undefined;
-      const mention = decodeMention(href);
-      if (mention === undefined) return undefined;
-      return <MentionChip mention={mention} name={mentionName(label)} doors={doors} />;
-    };
-    return { link, doors };
-  }, [offered, opensFiles, planId, headingKey]);
+    return { link: mentionLinkDrawer(doors), doors };
+  }, [opensFiles, planId, workspace, repository, anchorKey]);
 }
 
 /** The door of a document nothing is edited through: every edit answered as unanswered. */
@@ -400,41 +451,42 @@ function attributed(
   menu: React.JSX.Element | null,
 ): React.JSX.Element {
   if (byline === null && menu === null) return drawn;
+  // Note that the byline and the ⋯ share one row, because a row centres the
+  // line on the button's box where two separately placed boxes never quite do.
   return (
     <div className="plan-unit-attributed">
       {drawn}
-      {byline}
-      {menu}
+      <div className="plan-unit-row">
+        {byline}
+        {menu}
+      </div>
     </div>
   );
 }
 
-/** A section's ⋯: the window's own menu, holding the one item that copies the section's link. */
-function SectionMenu({
-  planId,
-  heading,
+/**
+ * A unit's ⋯ at its row's end, a section's or the title's: the window's own
+ * menu over `items`, shown while the pointer or the keyboard is on its unit.
+ */
+function UnitMenu({
+  label,
+  items,
   tabbable,
 }: {
-  planId: string;
-  heading: string;
-  /** Whether it is a Tab stop: only beside the document's one, its section's block. */
+  label: string;
+  items: readonly MenuAction[];
+  /** Whether it is a Tab stop: only beside the document's one, its unit's block. */
   tabbable: boolean;
 }): React.JSX.Element {
   const menu = useActionMenu(true);
-  const copy = useCopyToast();
   const trigger = menu.trigger();
-  const copyLink = () =>
-    copy(
-      mentionMarkdown({ kind: MENTION_KIND.SECTION, planId, heading }, heading),
-      SECTION_MENU.COPIED,
-    );
   return (
     <>
-      <Tooltip label={SECTION_MENU.LABEL}>
+      <Tooltip label={label}>
         <button
           type="button"
           className="icon-button plan-unit-more"
-          aria-label={SECTION_MENU.LABEL}
+          aria-label={label}
           tabIndex={tabbable ? 0 : -1}
           {...trigger}
           onClick={(event) => {
@@ -447,23 +499,66 @@ function SectionMenu({
         </button>
       </Tooltip>
       {menu.drawn === undefined ? null : (
-        <ActionMenu
-          label={SECTION_MENU.LABEL}
-          menu={menu.drawn}
-          groups={[
-            [
-              {
-                label: SECTION_MENU.COPY_LINK,
-                icon: <LinkIcon aria-hidden="true" />,
-                onSelect: copyLink,
-              },
-            ],
-          ]}
-          onClose={menu.close}
-        />
+        <ActionMenu label={label} menu={menu.drawn} groups={[items]} onClose={menu.close} />
       )}
     </>
   );
+}
+
+/** A section's ⋯, holding the one item that copies the section's link. */
+function SectionMenu({
+  linked,
+  anchor,
+  heading,
+  tabbable,
+}: {
+  linked: LinkedPlan;
+  anchor: string;
+  heading: string;
+  tabbable: boolean;
+}): React.JSX.Element {
+  const copy = useCopyToast();
+  const copyLink = () =>
+    copy(
+      mentionMarkdown(
+        { kind: MENTION_KIND.SECTION, planId: linked.planId, anchor },
+        heading,
+        linked.place,
+      ),
+      SECTION_MENU.COPIED,
+    );
+  const item: MenuAction = {
+    label: SECTION_MENU.COPY_LINK,
+    icon: <LinkIcon aria-hidden="true" />,
+    onSelect: copyLink,
+  };
+  return <UnitMenu label={SECTION_MENU.LABEL} items={[item]} tabbable={tabbable} />;
+}
+
+/**
+ * The title's ⋯, drawn as a section's is: Copy link to plan, as the plan's
+ * own ⋯ menu offers it, then Rename where the title can be edited and
+ * Version history where the window opens it, and nothing more, since the
+ * plan's menu holds the rest.
+ */
+function TitleMenu({
+  linked,
+  tabbable,
+  onRename,
+  onShowHistory,
+}: {
+  linked: LinkedPlan;
+  tabbable: boolean;
+  onRename: (() => void) | undefined;
+  onShowHistory: ShowHistory | undefined;
+}): React.JSX.Element {
+  const copy = useCopyToast();
+  const items = [
+    copyPlanLinkItem(copy, linked.planId, linked.place),
+    ...(onRename === undefined ? [] : [renamePlanItem(onRename)]),
+    ...(onShowHistory === undefined ? [] : [versionHistoryItem(() => onShowHistory(undefined))]),
+  ];
+  return <UnitMenu label={TITLE_MENU_LABEL} items={items} tabbable={tabbable} />;
 }
 
 /**
@@ -475,7 +570,8 @@ function DocumentUnit({
   view,
   marks,
   link,
-  planId,
+  linked,
+  anchor,
   entry,
 }: {
   view: UnitView;
@@ -483,22 +579,26 @@ function DocumentUnit({
   /** Draws the plan's mentions as chips; links are drawn as words without it. */
   link: LinkDrawer | undefined;
   /** The plan whose sections have links, which each section's ⋯ copies; none off a plan's own page. */
-  planId: string | undefined;
+  linked: LinkedPlan | undefined;
+  /** The section's anchor, empty where its heading spells none. */
+  anchor: string;
   /** Whether its ⋯ is a Tab stop: beside the document's one, its section's block, or on a document that cannot be edited. */
   entry: boolean;
 }): React.JSX.Element {
   const changed = marks.changed.has(view.heading);
+  const openLink = useOpenLink();
   const drawn = (
     <MarkdownMessage
       words={view.words}
       className={unitClass(view, changed)}
       edit={view.edit}
       link={link}
+      openLink={openLink}
     />
   );
   const menu =
-    planId === undefined || view.heading === "" ? null : (
-      <SectionMenu planId={planId} heading={view.heading} tabbable={entry} />
+    linked === undefined || anchor === "" ? null : (
+      <SectionMenu linked={linked} anchor={anchor} heading={view.heading} tabbable={entry} />
     );
   return attributed(drawn, bylineOf(marks, view.heading), menu);
 }
@@ -515,7 +615,8 @@ function DocumentUnit({
  * as the plan template is: the page's actions end the title's line, and the
  * "Edited by" line and the page's note stand under the title. `looks` are the sections changed since the developer last
  * looked, which the plan's region keeps (`use-plan-looks.ts`); without them
- * none are.
+ * none are. `crumb`, where given, stands over the "Edited by" line and
+ * says where the plan lives (`plan-crumb.tsx`).
  */
 export function PlanBody({
   plan,
@@ -528,6 +629,8 @@ export function PlanBody({
   page,
   sectionLinks,
   reader = NO_READER,
+  agents,
+  crumb,
 }: {
   plan: Plan;
   live: boolean;
@@ -543,23 +646,37 @@ export function PlanBody({
   /** What the plan's own page does with its sections' links; without it, sections have none and mentions are words. */
   sectionLinks?: SectionLinks;
   /** Who reads it, whose own edits are named "you"; without it, no edit is. */
-  reader?: EditReader;
+  reader?: PlanReader;
+  /** The plan's coding agents, among which an agent's edit is found and opened; without them, an agent is named alone. */
+  agents?: EditAgents;
+  /** Where the plan lives and who can edit it, over the "Edited by" line; a Settings page draws none. */
+  crumb?: React.ReactNode;
 }): React.JSX.Element {
   const { views, behind, jumps } = usePlanChase(plan, live, reader);
   const editable = onEdit !== undefined;
   const text = editable ? plan.document.body : undefined;
   const editing = usePlanEditing(plan.id, text, onEdit ?? NO_EDIT);
+  const editReader = useEditReader(reader);
   const now = useMinute();
+  const place: EditPlace = { reader: editReader, sections: plan.sectionEdits ?? [], agents, now };
   const marks: SectionMarks = {
-    edits: new Map((plan.sectionEdits ?? []).map(({ section, ...edit }) => [section, edit])),
+    edits: new Map(place.sections.map(({ section, ...edit }) => [section, edit])),
     changed: looks.changed,
-    now,
-    reader,
+    place,
     onShowHistory,
   };
   const scroller = useRef<HTMLDivElement>(null);
-  const { link, doors: mentionDoors } = useMentionChips(plan.id, views, sectionLinks);
-  const linkedPlan = sectionLinks === undefined ? undefined : plan.id;
+  // How many times Rename was chosen from the title's ⋯, each putting the caret in the title.
+  const [renaming, setRenaming] = useState(0);
+  const anchors = sectionAnchors(views.map((view) => view.heading));
+  const linked: LinkedPlan | undefined =
+    sectionLinks === undefined
+      ? undefined
+      : {
+          planId: plan.id,
+          place: { workspace: sectionLinks.workspace, repository: plan.repository },
+        };
+  const { link, doors: mentionDoors } = useMentionChips(linked, anchors, sectionLinks);
   /** Whether the developer has scrolled since the typing last began, which stops the caret being followed. */
   const scrolledAway = useRef(false);
   /** The caret's jumps when the view last followed it. */
@@ -613,7 +730,7 @@ export function PlanBody({
     if (reveal === undefined || element === null || revealed.current === reveal.ask) return;
     revealed.current = reveal.ask;
     scrolledAway.current = true;
-    const at = views.findIndex((view) => view.heading !== "" && view.heading === reveal.heading);
+    const at = reveal.anchor === undefined ? -1 : anchors.indexOf(reveal.anchor);
     const unit =
       at === -1 ? undefined : element.querySelectorAll<HTMLElement>(`.${UNIT_CLASS}`)[at];
     element.scrollTop =
@@ -623,6 +740,7 @@ export function PlanBody({
           unit.getBoundingClientRect().top -
           element.getBoundingClientRect().top -
           REVEAL_MARGIN;
+    sectionLinks?.onRevealed?.(reveal.ask);
   });
 
   // A pause in the typing hands the view back: the next burst is followed again.
@@ -667,7 +785,8 @@ export function PlanBody({
           view={view}
           marks={marks}
           link={link}
-          planId={linkedPlan}
+          linked={linked}
+          anchor={anchors[section] ?? ""}
           entry={entry === view.id}
         />
       </DocumentBlock>
@@ -677,7 +796,8 @@ export function PlanBody({
         view={view}
         marks={marks}
         link={link}
-        planId={linkedPlan}
+        linked={linked}
+        anchor={anchors[section] ?? ""}
         // Note that a document that cannot be edited has no block Tab stop, so each ⋯ is one.
         entry
       />
@@ -685,25 +805,42 @@ export function PlanBody({
   );
   const editedNote =
     edited === undefined ? null : (
-      <EditedLine edit={edited} reader={reader} onShowHistory={onShowHistory} />
+      <EditedLine edit={edited} place={place} onShowHistory={onShowHistory} />
+    );
+  const titled = editable && onRename !== undefined;
+  const titleMenu =
+    linked === undefined || page !== undefined ? null : (
+      <TitleMenu
+        linked={linked}
+        // Note that a document that cannot be edited has no block Tab stop, so the ⋯ is one.
+        tabbable={editable ? entry === EDITOR_PLACE.TITLE : true}
+        onRename={titled ? () => setRenaming((count) => count + 1) : undefined}
+        onShowHistory={onShowHistory}
+      />
     );
   return (
     <div ref={scroller} className="plan-document-scroll">
+      {page === undefined ? crumb : null}
       {page === undefined ? editedNote : null}
-      <ChangedLine looks={looks} />
+      <ChangedLine looks={looks} marks={marks} />
       <div className="plan-body">
-        {editable && onRename !== undefined ? (
-          // Keyed by the plan, so words typed for one are saved to it as another opens.
-          <EditableTitle
-            key={plan.id}
-            name={plan.name}
-            entry={entry === EDITOR_PLACE.TITLE}
-            editing={editing}
-            onRename={onRename}
-            onDraft={onDraftName}
-          />
+        {titled ? (
+          attributed(
+            // Keyed by the plan, so words typed for one are saved to it as another opens.
+            <EditableTitle
+              key={plan.id}
+              name={plan.name}
+              entry={entry === EDITOR_PLACE.TITLE}
+              editing={editing}
+              renaming={renaming}
+              onRename={onRename}
+              onDraft={onDraftName}
+            />,
+            null,
+            titleMenu,
+          )
         ) : page === undefined ? (
-          <PlanTitle name={plan.name} />
+          attributed(<PlanTitle name={plan.name} />, null, titleMenu)
         ) : (
           <header className="plan-page-head">
             <div className="plan-title-line">

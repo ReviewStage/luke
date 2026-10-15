@@ -20,12 +20,12 @@ import {
   type DesktopSessionPageQuery,
   desktopSessionPageQuery,
   desktopSessionReturnUrl,
-} from "@sidecar/features/desktop-session-wire";
+} from "@luke/features/desktop-session-wire";
+import { AUTH_CARD, AUTH_SHELL, AUTH_TITLE } from "@luke/ui/auth-surface";
 import { createAuthClient } from "better-auth/react";
 import { Schema } from "effect";
 import { StrictMode, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { AUTH_CARD, AUTH_SHELL, AUTH_TITLE } from "./auth-surface";
 import { SignInChoices } from "./sign-in-choices";
 import "./styles.css";
 

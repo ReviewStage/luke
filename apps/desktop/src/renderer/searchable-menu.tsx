@@ -1,4 +1,4 @@
-import { CheckIcon, ChevronRightIcon, SearchIcon } from "@sidecar/panel";
+import { CheckIcon, ChevronRightIcon, SearchIcon } from "@luke/ui";
 import { Fragment, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { APP_SHORTCUTS, type KeyedCommand } from "#shared/shortcuts";
 import { Shortcut } from "./shortcut";

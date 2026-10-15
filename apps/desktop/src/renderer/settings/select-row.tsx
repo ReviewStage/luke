@@ -1,8 +1,8 @@
-import type { ActionResult } from "@sidecar/wire";
+import { useSettingWrite } from "@luke/ui/use-setting-write";
+import type { ActionResult } from "@luke/wire";
 import { useId } from "react";
 import { ChangedMark } from "./marks";
 import { PickerRow } from "./picker-row";
-import { useSettingWrite } from "./use-setting-write";
 
 /** What the menu says when a search over a short fixed set matches nothing, which it has no search to say. */
 const NO_MATCH = "Nothing matches.";

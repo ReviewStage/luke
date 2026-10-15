@@ -5,10 +5,10 @@ import type {
   PlanCallEndingFrame,
   PlanCodeFrame,
   PlanWorkFrame,
-} from "@sidecar/features";
-import { LIVE_SESSION_PHASE, type VoiceLiveSessionChanged } from "@sidecar/gateway";
-import { LIVE_SERVER_EVENT, type LiveClientEvent, parseLiveServerEvent } from "@sidecar/live";
-import type { WireRecord } from "@sidecar/wire";
+} from "@luke/features";
+import { LIVE_SESSION_PHASE, type VoiceLiveSessionChanged } from "@luke/gateway";
+import { LIVE_SERVER_EVENT, type LiveClientEvent, parseLiveServerEvent } from "@luke/live";
+import type { WireRecord } from "@luke/wire";
 import { Effect, type Scope, type Stream } from "effect";
 import { holdSocket, type SocketHold } from "../held-socket.js";
 import type { LiveSessionOpened, LiveSessionSource } from "../live-session-source.js";

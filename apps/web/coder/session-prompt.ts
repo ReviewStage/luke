@@ -1,7 +1,7 @@
+import type { SandboxRecord } from "@luke/service/agents/agent-runtime/sandbox";
+import type { CoderSessionPromptRecord } from "@luke/service/agents/coder-host/host";
+import { NO_NOTES_TAKEN, type NotesTaken } from "@luke/service/agents/coder-host/plan-edit";
 import { defineState } from "eve/context";
-import type { SandboxRecord } from "../server/hosted/agent-runtime/sandbox.js";
-import type { CoderSessionPromptRecord } from "../server/hosted/coder-host/host.js";
-import { NO_NOTES_TAKEN, type NotesTaken } from "../server/hosted/coder-host/plan-edit.js";
 
 /**
  * The session's prompt as its content address, and whether it said the
@@ -12,7 +12,7 @@ import { NO_NOTES_TAKEN, type NotesTaken } from "../server/hosted/coder-host/pla
  */
 export const sessionPrompt = defineState<CoderSessionPromptRecord>("luke.coder.prompt", () => ({}));
 
-/** What the session's sandbox has been told, in eve's durable session state (`server/hosted/agent-runtime/sandbox.ts`). */
+/** What the session's sandbox has been told, in eve's durable session state (`packages/service/src/agents/agent-runtime/sandbox.ts`). */
 export const sandboxRecord = defineState<SandboxRecord>("luke.coder.sandbox", () => ({}));
 
 /**
@@ -31,7 +31,7 @@ export const delegationRecord = defineState<DelegationRecord>("luke.coder.delega
 /**
  * How many notes the turn under way has taken on the plan, in eve's durable
  * session state, which is what holds a turn to its cap
- * (`server/hosted/coder-host/plan-edit.ts`): the tool reads it before saving
+ * (`packages/service/src/agents/coder-host/plan-edit.ts`): the tool reads it before saving
  * and counts what was taken once saved.
  */
 export const planNotesTaken = defineState<NotesTaken>(

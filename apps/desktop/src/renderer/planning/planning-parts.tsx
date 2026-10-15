@@ -4,11 +4,11 @@ import {
   MicrophoneOffIcon,
   SpeakerIcon,
   SpeakerOffIcon,
-} from "@sidecar/panel";
+} from "@luke/ui";
+import type { CallStatus } from "@luke/ui/planning-model";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { ThinkingDots } from "../thinking-dots";
 import { Tooltip } from "../tooltip";
-import type { CallStatus } from "./planning-model";
 
 /**
  * planning-parts.tsx -- the open plan's call bar, as a pure layout.
@@ -23,8 +23,8 @@ import type { CallStatus } from "./planning-model";
 /** What a reader is told while the backend works; the sighted read the dots and the line. */
 const PLAN_WORKING_LABEL = "Luke is working on it";
 
-/** The backend line's names for its two parts, and what the planning model says with no command pending. */
-const PLANNER_NAME = "Planning model";
+/** The backend line's names for its two parts, and what Luke says with no command pending. */
+const PLANNER_NAME = "Luke";
 const PLANNER_THINKING = "Thinking";
 const NOTETAKER_WRITING = "Notetaker · Writing notes";
 

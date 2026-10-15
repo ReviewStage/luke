@@ -1,16 +1,16 @@
 import assert from "node:assert/strict";
-import { VOICE_DELEGATION_MODE, VOICE_SEGMENT_ROLE } from "@sidecar/database/voice-vocabulary";
-import { afterAll, test } from "vitest";
-import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import {
   deleteUser,
   insertVoiceSession,
   insertVoiceTranscriptSegment,
+  openHostedStoreTestDatabase,
   readVoiceSessionsByUserTyped,
   readVoiceTranscriptSegmentsBySession,
   type VoiceSegmentInsertRow,
   type VoiceSessionInsertRow,
-} from "./support/store-rows";
+} from "@luke/database/testing";
+import { VOICE_DELEGATION_MODE, VOICE_SEGMENT_ROLE } from "@luke/database/voice-vocabulary";
+import { afterAll, test } from "vitest";
 
 /**
  * The voice tables have no reader yet, so what these tests hold to is the

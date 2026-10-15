@@ -1,6 +1,7 @@
-import type { PlanningPageAnswer, PlanningPageParams } from "@sidecar/features/planning-view";
+import { framedPageOf, PAGE_SCHEME } from "@luke/features/page-frame";
+import type { PlanningPageAnswer, PlanningPageParams } from "@luke/features/planning-view";
 import { Effect } from "effect";
-import { framedPageOf, PAGE_SCHEME } from "#shared/page-frame";
+import type { CustomScheme } from "electron";
 
 /**
  * page-protocol.ts -- the `luke-page:` scheme: one version of one plan's page, served to the frame that draws it.
@@ -45,7 +46,7 @@ const PAGE_HEADERS = {
 } as const;
 
 /** The scheme as Electron must be told of it before the app is ready. */
-export const PAGE_SCHEME_PRIVILEGES: Electron.CustomScheme = {
+export const PAGE_SCHEME_PRIVILEGES: CustomScheme = {
   scheme: PAGE_SCHEME,
   privileges: { standard: true, secure: true },
 };

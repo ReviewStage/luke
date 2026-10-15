@@ -1,13 +1,13 @@
 import { isDeepStrictEqual } from "node:util";
-import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
-import { IDLE_PLANNING_VIEW } from "@sidecar/features/planning-view";
+import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
+import { IDLE_PLANNING_VIEW } from "@luke/features/planning-view";
+import type { AppState } from "@luke/host/app-state";
+import type { HostBootstrap } from "@luke/host/host-operator";
+import { idleUpdateSnapshot } from "@luke/host/update-service";
+import { MICROPHONE_STATUS } from "@luke/voice/audio";
+import { AVATAR_OFF } from "@luke/voice/avatar";
 import { type Context, Effect, type Stream, SubscriptionRef } from "effect";
-import type { AppState } from "#shared/messages/app-state";
-import { MICROPHONE_STATUS } from "#shared/messages/audio";
-import { AVATAR_OFF } from "#shared/messages/avatar";
-import type { HostBootstrap } from "./gateway/host-operator";
 import type { DesktopConfig } from "./services/desktop-config";
-import { idleUpdateSnapshot } from "./update-service";
 
 type AppStateSlice = Exclude<keyof AppState, "version">;
 
@@ -176,7 +176,7 @@ export function initialAppState(
     voice: { avatar: AVATAR_OFF },
     planning: IDLE_PLANNING_VIEW,
     codingAgents: { unseen: [] },
-    inbox: { waiting: [], plans: [] },
+    inbox: { waiting: [], plans: [], planless: [], automations: [] },
     notifications: { refused: false },
     sessionReplay: { permitted: runMode.sendsNetwork, halted: false },
   };

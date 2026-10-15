@@ -1,5 +1,4 @@
-import type { FaceMotion } from "@sidecar/brand";
-import { useEffect, useRef } from "react";
+import type { FaceMotion } from "@luke/brand";
 import {
   ANIMATION_ROSTER,
   ANIMATION_SWATCH,
@@ -8,7 +7,8 @@ import {
   type AnimationVariant,
   formatCycleSeconds,
   indexAnimationAssets,
-} from "../../admin-animations";
+} from "@luke/ui/admin-animations";
+import { useEffect, useRef } from "react";
 import { PageHeader, type ViewerAccount } from "../chrome/page-header";
 
 /**

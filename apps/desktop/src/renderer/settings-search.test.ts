@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import { INTEGRATION_PROVIDER } from "@sidecar/features/integration-wire";
-import { WORKSPACE_ROLE, type Workspace } from "@sidecar/features/workspace-wire";
-import { settingsView } from "@sidecar/settings/testing";
+import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
+import { SETTINGS_SECTION, SETTINGS_VIEW } from "@luke/settings/settings-views";
+import { settingsView } from "@luke/settings/testing";
 import { test } from "vitest";
 import { type SettingsSearchInput, searchSettings, settingsSearchEntries } from "./settings-search";
-import { SETTINGS_SECTION, SETTINGS_VIEW } from "./settings-views";
 
 /**
  * Settings search over what the pages draw: a Workspace group is found only where
@@ -16,12 +16,14 @@ import { SETTINGS_SECTION, SETTINGS_VIEW } from "./settings-views";
 const TEAM: Workspace = {
   id: "workspace-acme",
   name: "acme",
+  slug: "acme",
   role: WORKSPACE_ROLE.MEMBER,
   github: null,
 };
 const FIRST: Workspace = {
   id: "workspace-personal",
   name: "Dana",
+  slug: "dana",
   role: WORKSPACE_ROLE.OWNER,
   github: null,
 };
@@ -40,9 +42,26 @@ function workspaceFound(query: string, workspace: Workspace): readonly string[] 
     .flatMap((group) => group.items.map((entry) => entry.id));
 }
 
-test("Invite people finds Members for every workspace, the account's first one too", () => {
-  assert.deepEqual(workspaceFound("Invite people", TEAM), [SETTINGS_SECTION.MEMBERS]);
-  assert.deepEqual(workspaceFound("Invite people", FIRST), [SETTINGS_SECTION.MEMBERS]);
+test("Invite people finds Invitations where the reader may invite, the account's first workspace too, and nothing for a member", () => {
+  assert.deepEqual(workspaceFound("Invite people", { ...TEAM, role: WORKSPACE_ROLE.ADMIN }), [
+    SETTINGS_SECTION.INVITATIONS,
+  ]);
+  assert.deepEqual(workspaceFound("Invite people", FIRST), [SETTINGS_SECTION.INVITATIONS]);
+  assert.deepEqual(workspaceFound("Invite people", TEAM), []);
+});
+
+test("Leave finds the workspace's leave where the reader may leave, and nothing for its owner", () => {
+  assert.deepEqual(workspaceFound("Leave", TEAM), [SETTINGS_SECTION.LEAVE]);
+  assert.deepEqual(workspaceFound("Leave", { ...TEAM, role: WORKSPACE_ROLE.ADMIN }), [
+    SETTINGS_SECTION.LEAVE,
+  ]);
+  assert.deepEqual(workspaceFound("Leave", FIRST), []);
+});
+
+test("Members finds the members for every workspace", () => {
+  for (const workspace of [FIRST, TEAM]) {
+    assert.deepEqual(workspaceFound("Members", workspace), [SETTINGS_SECTION.MEMBERS]);
+  }
 });
 
 test("Integrations, and every word GitHub repositories was found by, find the Workspace page's group for every workspace, a member's and the account's first one's too", () => {
@@ -64,7 +83,7 @@ test("Integrations, and every word GitHub repositories was found by, find the Wo
   }
 });
 
-test("the Workspace page's group reads Integrations, under its Workspace page apart from the Integrations page's rows", () => {
+test("the Workspace page's group reads GitHub, found by Integrations too, under its Workspace page apart from the Integrations page's rows", () => {
   const groups =
     searchSettings(
       settingsSearchEntries({
@@ -79,7 +98,7 @@ test("the Workspace page's group reads Integrations, under its Workspace page ap
 
   assert.deepEqual(
     workspaceGroup?.items.map((entry) => [entry.id, entry.label]),
-    [[SETTINGS_SECTION.GITHUB_REPOSITORIES, "Integrations"]],
+    [[SETTINGS_SECTION.GITHUB_REPOSITORIES, "GitHub"]],
   );
   assert.equal(
     groups
@@ -106,5 +125,44 @@ test("searching GitHub while signed in finds Integrations' GitHub row and nothin
   assert.equal(
     groups.some((group) => group.page === SETTINGS_VIEW.ACCOUNT),
     false,
+  );
+});
+
+/** Where `query` leads on the Experimental page, signed in or not. */
+function experimentalFound(query: string, accountDrawn: boolean): readonly string[] {
+  const input: SettingsSearchInput = {
+    settings: settingsView(),
+    voiceControlsDrawn: false,
+    accountDrawn,
+  };
+  const found = searchSettings(settingsSearchEntries(input), query);
+  return (found?.groups ?? [])
+    .filter((group) => group.page === SETTINGS_VIEW.EXPERIMENTAL)
+    .flatMap((group) => group.items.map((entry) => entry.label));
+}
+
+test("an experiment is found by its name, what it brings, and what other apps call the page, while signed in", () => {
+  for (const query of ["Factory", "Plan to Build to Ship"]) {
+    assert.deepEqual(experimentalFound(query, true), ["Factory"], query);
+  }
+  for (const query of ["Automations", "on a schedule"]) {
+    assert.deepEqual(experimentalFound(query, true), ["Automations"], query);
+  }
+  for (const query of ["Experimental", "beta", "labs"]) {
+    assert.deepEqual(experimentalFound(query, true), ["Automations", "Factory"], query);
+  }
+  assert.deepEqual(experimentalFound("Factory", false), []);
+});
+
+test("no two rows the search can land on wear the same id", () => {
+  const ids = settingsSearchEntries({
+    settings: settingsView(),
+    voiceControlsDrawn: true,
+    accountDrawn: true,
+    workspace: TEAM,
+  }).map((entry) => entry.id);
+  assert.deepEqual(
+    ids.filter((id, at) => ids.indexOf(id) !== at),
+    [],
   );
 });

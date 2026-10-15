@@ -3,8 +3,9 @@ import {
   type CodingAgentBrief,
   type CodingAgentStatus,
   type CodingAgentSummary,
-} from "@sidecar/features/coding-agent-wire";
-import type { PlanSummary } from "@sidecar/features/plan-wire";
+} from "@luke/features/coding-agent-wire";
+import type { PlanSummary } from "@luke/features/plan-wire";
+import { inPlanOrder, isDraftTab, type StripTab, sameTab, tabKey } from "@luke/ui/tab-strip-model";
 import { useEffect, useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
@@ -15,13 +16,6 @@ import { agentTabLabel } from "../planning/coding-agent-model";
 import { DraftAgentTab } from "../planning/draft-agent-tab";
 import { NEEDS_YOU } from "../planning/inbox-model";
 import { agentEndMark, TAB_KIND, tabLook } from "../planning/tab-look";
-import {
-  inPlanOrder,
-  isDraftTab,
-  type StripTab,
-  sameTab,
-  tabKey,
-} from "../planning/tab-strip-model";
 import type { ToolTarget } from "../planning/tool-call-model";
 import {
   agentTranscript,
@@ -57,7 +51,11 @@ import { TabStrip } from "./tab-strip";
  * to it. The strip is the side panel's in every way but its first tab: the
  * same pills, the same hover and chosen fills, dragged and stepped along,
  * closed by ×, Delete, ⌘W, or the menu's Close and Close others, each tab's
- * menu on a right-click (`strip-tabs.tsx`).
+ * menu on a right-click (`strip-tabs.tsx`). The toolbar's ⋯ acts on the
+ * chosen tab: the plan's actions on the plan's tab, and on an agent's its
+ * Rename, its Open terminal, its transcript's copies, and its Archive,
+ * standing in the one slot the toolbar keeps for it, left empty on a tab
+ * with nothing of the kind.
  *
  * The plan's tab stands first, named for the plan, and hangs the plan's
  * card, as its sidebar row does (`plan-card.tsx`): its repository, its
@@ -81,10 +79,12 @@ import { TabStrip } from "./tab-strip";
  * works and an alert once it failed, and hangs a card naming it whole with
  * when it last moved and its latest step, read from what its tab last drew
  * and never from the service. Its menu offers Pin tab, which puts it in the
- * sidebar, Rename, which turns the tab into its name's field, and its
- * transcript's two copies. Closing it closes only the view: the agent goes
- * on as it was, and the "+" opens it again. A tab an agent ended on while no
- * one was looking at it reads in semibold until shown. The draft's tab,
+ * sidebar, Rename, which turns the tab into its name's field, Open
+ * terminal, which shows the agent's own Terminal tab in the side panel as
+ * ⌘J does from the tab, and its transcript's two copies. Closing it closes
+ * only the view: the agent goes on as it was, and the "+" opens it again. A
+ * tab an agent ended on while no one was looking at it reads in semibold
+ * until shown. The draft's tab,
  * named New coding agent as the "+" row that opens it is, stands after the
  * agents until its first message starts the agent, and closing it lets the
  * draft go. Every tab wears its kind's look (`tab-look.tsx`).
@@ -134,6 +134,7 @@ function RenamableTab({
   doors,
   rename,
   field,
+  slot,
 }: {
   look: TabLook;
   doors: TabDoors;
@@ -141,6 +142,8 @@ function RenamableTab({
   rename: ReturnType<typeof usePlanRename> | undefined;
   /** What the field is called for a reader and how long a name it takes; a plan's where absent. */
   field?: { label: string; maxLength: number } | undefined;
+  /** The toolbar's slot the chosen tab's ⋯ stands in; none for the plan's, whose ⋯ the toolbar draws itself. */
+  slot?: HTMLElement | null | undefined;
 }): React.JSX.Element {
   const tab = useRef<HTMLButtonElement | null>(null);
   const refocus = useRef(false);
@@ -168,6 +171,7 @@ function RenamableTab({
       doors={rename === undefined ? doors : { ...doors, onRename: rename.begin }}
       editor={editor}
       tabRef={tab}
+      slot={slot}
     />
   );
 }
@@ -179,12 +183,14 @@ function AgentMenuTab({
   look,
   doors,
   shown,
+  slot,
 }: {
   agent: CodingAgentSummary;
   agents: CodingAgentsControl;
   look: TabLook;
   doors: TabDoors;
   shown: boolean;
+  slot: HTMLElement | null;
 }): React.JSX.Element {
   const rename = usePlanRename(agent.id, agents.onRename);
   const archive = useAgentArchive(agent, agents, shown);
@@ -196,6 +202,7 @@ function AgentMenuTab({
         // A rename still open when the plan is archived elsewhere is let go unsaved.
         rename={agents.onUnarchive === undefined ? rename : undefined}
         field={{ label: "Agent name", maxLength: CODING_AGENT_BOUNDS.MAX_TITLE_CHARS }}
+        slot={slot}
       />
       {archive.dialog}
     </>
@@ -239,7 +246,7 @@ function agentTabs(input: {
     const tab = { agent: agent.id };
     const label = agentTabLabel(agent, agents.models);
     const read = agentTranscriptRead(agents.readTranscript, agent.id, label, agent.brief);
-    const readCard = agentCardReading(agent, label, views.held, chosen(tab));
+    const readCard = agentCardReading(agent, label, views.held, chosen(tab), agents);
     return {
       tab,
       agent,
@@ -363,6 +370,8 @@ export function MainTabStrip({
   keys,
   shown,
   inbox,
+  actionsSlot,
+  onOpenTerminal,
 }: {
   plan: PlanSummary;
   /** The plan's card, as its sidebar row hangs it, which its tab hangs (`plan-card.tsx`). */
@@ -386,6 +395,10 @@ export function MainTabStrip({
   shown: boolean;
   /** How many of the plan's inbox items wait on the developer, which its Inbox tab counts. */
   inbox: number;
+  /** The toolbar's slot the chosen tab's ⋯ stands in, where the plan's own stands on its tab. */
+  actionsSlot: HTMLElement | null;
+  /** Opens an agent's own Terminal tab in the side panel, adding no shell, by the agent. */
+  onOpenTerminal: (agentId: string) => void;
 }): React.JSX.Element {
   const copied = useTranscriptCopier();
   const pinnedOf = (tab: ColumnPinnableTab) =>
@@ -458,6 +471,7 @@ export function MainTabStrip({
             },
       pin: pinTab === undefined ? undefined : pinDoor(pinTab, entry.look.label, agent?.model),
       onCopy: entry.copy,
+      onOpenTerminal: agent === undefined ? undefined : () => onOpenTerminal(agent.id),
     };
   };
   return (
@@ -479,7 +493,12 @@ export function MainTabStrip({
                 rename={rename}
               />
             ) : (
-              <DoorsTab key={tabKey(entry.tab)} look={entry.look} doors={doorsOf(entry)} />
+              <DoorsTab
+                key={tabKey(entry.tab)}
+                look={entry.look}
+                doors={doorsOf(entry)}
+                slot={actionsSlot}
+              />
             )
           ) : (
             <AgentMenuTab
@@ -489,6 +508,7 @@ export function MainTabStrip({
               look={entry.look}
               doors={doorsOf(entry)}
               shown={shown}
+              slot={actionsSlot}
             />
           ),
         )}

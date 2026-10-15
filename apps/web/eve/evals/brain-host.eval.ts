@@ -1,40 +1,39 @@
 import assert from "node:assert/strict";
-import { Database, type DatabaseServices } from "@sidecar/database/core/query";
-import { sqlClientOverUrl } from "@sidecar/database/core/sql-client";
-import { toolSetHashOf } from "@sidecar/database/models/content-addressed";
-import { hostTurnId } from "@sidecar/database/models/ids";
-import { openPlanConversation, readPlan, savePlanText } from "@sidecar/database/models/plan-store";
-import { user } from "@sidecar/database/schemas/auth";
-import { conversations } from "@sidecar/database/schemas/storage";
-import { EXCESS_KEYS } from "@sidecar/wire";
-import { readEither } from "@sidecar/wire/effect";
-import { isTextUIPart, isToolUIPart } from "ai";
-import { eq } from "drizzle-orm";
-import { Effect, ManagedRuntime, Option, Result, Schema } from "effect";
-import { defineEval } from "eve/evals";
-import {
-  MESSAGE_AUTHOR,
-  MESSAGE_CHANNEL,
-  MESSAGE_ROLE,
-  TOOL_PART_STATE,
-  TURN_ORIGIN,
-  TURN_STATUS,
-  unparsedWire,
-} from "../../server/core";
-import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "../../server/hosted/brain-host/bounds";
+import { Database, type DatabaseServices } from "@luke/database/core/query";
+import { sqlClientOverUrl } from "@luke/database/core/sql-client";
+import { toolSetHashOf } from "@luke/database/models/content-addressed";
+import { hostTurnId } from "@luke/database/models/ids";
+import { openPlanConversation, readPlan, savePlanText } from "@luke/database/models/plan-store";
+import { user } from "@luke/database/schemas/auth";
+import { conversations } from "@luke/database/schemas/storage";
+import { readMessagesByConversationTyped, readTurnById, startPlan } from "@luke/database/testing";
+import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "@luke/service/agents/brain-host/bounds";
 import {
   PLANNER_DELEGATE_TOOL,
   planningToolDeclarations,
-} from "../../server/hosted/brain-host/planning";
-import { REPOSITORY_SHELL_REFUSAL } from "../../server/hosted/repository-shell";
-import { readMessagesByConversationTyped, readTurnById } from "../../tests/support/store-rows";
-import { startPlan } from "../../tests/support/workspaces";
+} from "@luke/service/agents/brain-host/planning";
+import { REPOSITORY_SHELL_REFUSAL } from "@luke/service/agents/repository-shell";
 import {
   SCRIPTED_DELEGATE,
   SCRIPTED_NOT_READ_REPLY,
   SCRIPTED_PLANNING_REPLY,
   SCRIPTED_READ,
-} from "../scripted-model";
+} from "@luke/service/testing/eve-scripted-model";
+import {
+  EXCESS_KEYS,
+  MESSAGE_AUTHOR,
+  MESSAGE_CHANNEL,
+  MESSAGE_ROLE,
+  TURN_ORIGIN,
+  TURN_STATUS,
+  unparsedWire,
+} from "@luke/wire";
+import { readEither } from "@luke/wire/effect";
+import { TOOL_PART_STATE } from "@luke/wire/ui-messages";
+import { isTextUIPart, isToolUIPart } from "ai";
+import { eq } from "drizzle-orm";
+import { Effect, ManagedRuntime, Option, Result, Schema } from "effect";
+import { defineEval } from "eve/evals";
 
 /**
  * The whole host under eve, end to end: eve's runtime runs a typed ask in a

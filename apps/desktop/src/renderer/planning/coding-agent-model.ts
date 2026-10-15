@@ -1,11 +1,12 @@
-import { AGENT_TOOL, EVE_TOOL } from "@sidecar/features/agent-tools";
+import { AGENT_TOOL, EVE_TOOL } from "@luke/features/agent-tools";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentCallFailure,
-} from "@sidecar/features/coding-agent-view";
+} from "@luke/features/coding-agent-view";
 import {
   CODING_AGENT_DELEGATE_TOOL,
   CODING_AGENT_FAILURE,
+  CODING_AGENT_SENDER,
   CODING_AGENT_STATUS,
   CODING_AGENT_TODO_STATUS,
   CONTEXT_WINDOW,
@@ -14,6 +15,7 @@ import {
   type CodingAgentMessage,
   type CodingAgentPullRequest,
   type CodingAgentPullRequestAnswer,
+  type CodingAgentSender,
   type CodingAgentStatus,
   type CodingAgentSummary,
   type CodingAgentTodos,
@@ -21,25 +23,36 @@ import {
   type ContextWindow,
   PULL_REQUEST_STATE,
   type PullRequestState,
-} from "@sidecar/features/coding-agent-wire";
-import { CATALOG_ID_SEPARATOR, modelLabel } from "@sidecar/features/model-label";
+} from "@luke/features/coding-agent-wire";
+import { FAILURE_REASON, type Failure, type FailureReason } from "@luke/features/failure-remedy";
+import { CATALOG_ID_SEPARATOR, modelLabel } from "@luke/features/model-label";
 import {
   type CatalogModel,
   type ContextWindows,
   MODEL_PROVIDER,
   type ModelChoice,
   type ModelProvider,
-} from "@sidecar/features/models-wire";
+} from "@luke/features/models-wire";
+import type { PlanEditor } from "@luke/features/plan-wire";
 import {
   REPOSITORY_UNREACHED,
   type RepositoryUnreached,
-} from "@sidecar/features/repository-reach-wire";
-import { isRecord, isWireString, MESSAGE_ROLE, type WireValue } from "@sidecar/wire";
+} from "@luke/features/repository-reach-wire";
+import { ROW_PART, type RowReading, type TurnRow, turnRows } from "@luke/features/turn-rows";
+import type { WorkspaceMember } from "@luke/features/workspace-wire";
+import {
+  ACTOR_KIND,
+  ACTOR_STATE,
+  type Actor,
+  type ActorState,
+  LUKE_ACTOR,
+  personActor,
+  SOMEONE_REASON,
+} from "@luke/ui/actor-model";
+import { isRecord, isWireString, MESSAGE_ROLE, type WireValue } from "@luke/wire";
 import { TOOL_STATE, type ToolState } from "../ai-elements/tool";
-import { FAILURE_REASON, type Failure, type FailureReason } from "../failure-remedy";
 import { GLYPH_STATE, type GlyphState, glyphStateWords } from "../state-glyph";
 import { TOOL_TARGET, todosView, toolTarget } from "./tool-call-model";
-import { ROW_PART, type RowReading, type TurnRow, turnRows } from "./turn-rows";
 
 /**
  * coding-agent-model.ts -- what the agent tabs, the Start button, and an agent's transcript draw, decided from what the service answered.
@@ -113,17 +126,134 @@ const AGENT_FAILURE_WORDS = {
   [CODING_AGENT_FAILURE.OTHER]: undefined,
 } as const satisfies Record<CodingAgentFailure, string | undefined>;
 
-/** The quiet line a transcript ends on once its turn failed or was stopped, with what the turn cost where known; nothing for an agent still writing or one that completed. */
+/**
+ * The teammate who started an agent, by name, whose key pays for it and whose
+ * Mac its commands run on; none for the reader's own agent, one whose starter
+ * the service names nobody for, or one read with no account id. Note that an
+ * agent read with no id names nobody, because whose it is cannot be told,
+ * and taking the reader's own for a teammate's would hide the Settings that
+ * mend the reader's own key.
+ */
+export function teammateStarter(
+  startedBy: PlanEditor | undefined,
+  readerId: string | undefined,
+): string | undefined {
+  return teammateRef(startedBy, readerId)?.name;
+}
+
+/** The teammate who started an agent, as the wire names them, for a card to draw; none where `teammateStarter` names nobody. */
+export function teammateRef(
+  startedBy: PlanEditor | undefined,
+  readerId: string | undefined,
+): PlanEditor | undefined {
+  if (startedBy === undefined || readerId === undefined || startedBy.userId === readerId) {
+    return undefined;
+  }
+  return startedBy;
+}
+
+/**
+ * Whose Mac an agent's Mac commands ran on, as their row names it: its
+ * starter, the reader's own among them; none where the service names
+ * nobody or the reader's id is not known, when the row says the reader's
+ * own as it always has, for the reason `teammateStarter` gives.
+ */
+export function macOwnerOf(
+  startedBy: PlanEditor | undefined,
+  members: readonly WorkspaceMember[] | undefined,
+  readerId: string | undefined,
+): Actor | undefined {
+  if (startedBy === undefined || readerId === undefined) return undefined;
+  return personActor(startedBy, members, readerId);
+}
+
+/** Where an actor's work stands, as a tab's glyph state says it. */
+const ACTOR_STATE_OF_GLYPH = {
+  [GLYPH_STATE.WORKING]: ACTOR_STATE.WORKING,
+  [GLYPH_STATE.FAILED]: ACTOR_STATE.FAILED,
+  [GLYPH_STATE.REST]: ACTOR_STATE.REST,
+} as const satisfies Record<GlyphState, ActorState>;
+
+/** An agent as its tile draws it: its harness, read off its model, wearing where it stands, under the name it goes by. */
+export function agentActor(
+  agent: { readonly model: string; readonly status: CodingAgentStatus },
+  name: string,
+): Actor {
+  return {
+    kind: ACTOR_KIND.AGENT,
+    name,
+    provider: providerOf(agent.model),
+    state: ACTOR_STATE_OF_GLYPH[agentGlyphState(agent.status)],
+  };
+}
+
+/**
+ * What sent one of the developer's messages to an agent, as the actor named
+ * over it: a teammate read against the workspace's `members` for their
+ * face, a former member, Luke, or an automation; none for the reader's own,
+ * a message whose sender was not kept, or a member's read with no account
+ * id, for the reason `teammateStarter` gives. A service older than the
+ * sender's kind names Luke, an automation, and a former member alike by a
+ * name with no account, which the window cannot tell apart, so such a
+ * sender stands by its name on the outline of someone it cannot place.
+ */
+export function lineSender(
+  sentBy: CodingAgentSender | undefined,
+  readerId: string | undefined,
+  members: readonly WorkspaceMember[] | undefined,
+): Actor | undefined {
+  if (sentBy === undefined) return undefined;
+  if (sentBy.userId !== undefined && (readerId === undefined || sentBy.userId === readerId)) {
+    return undefined;
+  }
+  switch (sentBy.kind) {
+    case CODING_AGENT_SENDER.LUKE:
+      return LUKE_ACTOR;
+    case CODING_AGENT_SENDER.AUTOMATION:
+      return { kind: ACTOR_KIND.AUTOMATION, name: sentBy.name, state: ACTOR_STATE.REST };
+    case CODING_AGENT_SENDER.FORMER:
+      return { kind: ACTOR_KIND.SOMEONE, reason: SOMEONE_REASON.FORMER };
+    case CODING_AGENT_SENDER.MEMBER:
+    case undefined:
+      return sentBy.userId === undefined
+        ? { kind: ACTOR_KIND.SOMEONE, reason: SOMEONE_REASON.UNNAMED, name: sentBy.name }
+        : personActor({ userId: sentBy.userId, name: sentBy.name }, members, readerId);
+  }
+}
+
+/** What a failed turn's end line says of a teammate's key, which the reader has no Settings to mend. */
+function teammateKeyWords(failure: CodingAgentFailure, starter: string): string | undefined {
+  if (failure === CODING_AGENT_FAILURE.PROVIDER_KEY) {
+    return `${starter}'s API key was refused or can't be read`;
+  }
+  if (failure === CODING_AGENT_FAILURE.FAST_ON_OWN_KEY) {
+    return `Fast isn't available on ${starter}'s own API key; choose the model with Fast off`;
+  }
+  return AGENT_FAILURE_WORDS[failure];
+}
+
+/**
+ * The quiet line a transcript ends on once its turn failed or was stopped,
+ * with what the turn cost where known; nothing for an agent still writing or
+ * one that completed. A teammate's agent names its starter's key, since it
+ * runs on theirs and not the reader's.
+ */
 export function endLine(
   status: CodingAgentStatus,
   failure: CodingAgentFailure | undefined,
   turnUsage?: CodingAgentUsage,
+  starter?: string,
 ): string | undefined {
   switch (status) {
     case CODING_AGENT_STATUS.CANCELLED:
       return withCost("Stopped", turnUsage);
     case CODING_AGENT_STATUS.FAILED: {
-      const words = failure === undefined ? undefined : AGENT_FAILURE_WORDS[failure];
+      const words =
+        failure === undefined
+          ? undefined
+          : starter === undefined
+            ? AGENT_FAILURE_WORDS[failure]
+            : teammateKeyWords(failure, starter);
       return withCost(words === undefined ? "Failed" : `Failed: ${words}`, turnUsage);
     }
     case CODING_AGENT_STATUS.STARTING:
@@ -134,8 +264,12 @@ export function endLine(
 }
 
 /** What mends a failed turn from its end line: the API keys' page for a key refused; nothing else there is the developer's to mend. */
-export function endLineReason(failure: CodingAgentFailure | undefined): FailureReason {
-  return failure === CODING_AGENT_FAILURE.PROVIDER_KEY
+export function endLineReason(
+  failure: CodingAgentFailure | undefined,
+  starter?: string,
+): FailureReason {
+  // A teammate's key is theirs to mend, so the reader is offered no Settings of their own.
+  return failure === CODING_AGENT_FAILURE.PROVIDER_KEY && starter === undefined
     ? FAILURE_REASON.API_KEY
     : FAILURE_REASON.OTHER;
 }
@@ -179,18 +313,18 @@ export function followsAgent(input: { shown: boolean; status: CodingAgentStatus 
 export const START_NEEDS_REPOSITORY = "Choose a repository first.";
 
 /** Why Start, and a draft's first message, cannot run on an archived plan. */
-export const START_ARCHIVED = "Unarchive the plan to start a coding agent.";
+export const START_ARCHIVED = "Unarchive the task to start a coding agent.";
 
 /** What the refusals a Start and a message meet alike say, worded once. */
 const SHARED_FAILURE_NOTE = {
   [CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE]:
-    "Luke can't reach this plan's repository on GitHub.",
+    "Luke can't reach this task's repository on GitHub.",
   [CODING_AGENT_CALL_FAILURE.GITHUB_UNANSWERED]: "GitHub didn't answer. Try again.",
   [CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG]: "That message is too long.",
   [CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY]:
     "The agent is still starting. Try again in a moment.",
   [CODING_AGENT_CALL_FAILURE.AGENT_RETIRED]: "This agent has ended. Start a new one.",
-  [CODING_AGENT_CALL_FAILURE.PLAN_ARCHIVED]: "This plan is archived. Unarchive it first.",
+  [CODING_AGENT_CALL_FAILURE.PLAN_ARCHIVED]: "This task is archived. Unarchive it first.",
 } as const;
 
 /** Said beside Start when the model or effort the menu chose could not be kept as the default. */
@@ -274,10 +408,22 @@ function callFailure(text: string): Failure {
  * Settings; the repository given to Luke on GitHub; another repository
  * chosen; or the plan moved to the workspace whose GitHub reaches it. A
  * service that said nothing more says the bare sentence, which Retry
- * answers.
+ * answers, and so does an agent with no plan wherever the remedy is pressed
+ * on the plan: only giving the repository to Luke on GitHub is not.
  */
-function unreachedFailure(unreached: RepositoryUnreached | undefined, planId: string): Failure {
-  if (unreached === undefined) {
+function unreachedFailure(
+  unreached: RepositoryUnreached | undefined,
+  planId: string | null,
+): Failure {
+  if (unreached?.reason === REPOSITORY_UNREACHED.NOT_SELECTED) {
+    return {
+      reason: FAILURE_REASON.ADD_REPOSITORY,
+      text: `Luke on GitHub doesn't have access to ${unreached.repository}.`,
+      repository: unreached.repository,
+      settingsUrl: unreached.settingsUrl,
+    };
+  }
+  if (unreached === undefined || planId === null) {
     return callFailure(SHARED_FAILURE_NOTE[CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE]);
   }
   const { repository } = unreached;
@@ -303,13 +449,6 @@ function unreachedFailure(unreached: RepositoryUnreached | undefined, planId: st
             : `${repository} isn't under ${unreached.connectedTo}, the GitHub account this workspace is connected to.`,
         planId,
       };
-    case REPOSITORY_UNREACHED.NOT_SELECTED:
-      return {
-        reason: FAILURE_REASON.ADD_REPOSITORY,
-        text: `Luke on GitHub doesn't have access to ${repository}.`,
-        repository,
-        settingsUrl: unreached.settingsUrl,
-      };
     case REPOSITORY_UNREACHED.GONE:
       return {
         reason: FAILURE_REASON.CHOOSE_REPOSITORY,
@@ -334,7 +473,7 @@ function startFailureWords(failure: CodingAgentCallFailure): string {
     case CODING_AGENT_CALL_FAILURE.INVALID_CHOICE:
       return "That model isn't offered any more. Choose another.";
     case CODING_AGENT_CALL_FAILURE.NOT_FOUND:
-      return "This plan no longer exists.";
+      return "This task no longer exists.";
     case CODING_AGENT_CALL_FAILURE.UNANSWERED:
       return "The agent could not be started. Try again.";
     case CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE:
@@ -347,8 +486,8 @@ function startFailureWords(failure: CodingAgentCallFailure): string {
   }
 }
 
-/** What a message that did not reach the agent says under the composer, and what mends it. */
-export function messageFailureNote(refused: RefusedCall, planId: string): Failure {
+/** What a message that did not reach the agent says under the composer, and what mends it, on a plan or, for an agent with none, where the remedy needs no plan. */
+export function messageFailureNote(refused: RefusedCall, planId: string | null): Failure {
   return refused.failure === CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE
     ? unreachedFailure(refused.unreached, planId)
     : callFailure(messageFailureWords(refused.failure));
@@ -383,7 +522,7 @@ export function closesComposer(failure: CodingAgentCallFailure): boolean {
 
 /**
  * A model as a tab or a menu names it, shared with the main process's
- * notifications so one model is never named two ways (`@sidecar/features/model-label`).
+ * notifications so one model is never named two ways (`@luke/features/model-label`).
  */
 export { modelLabel };
 

@@ -1,84 +1,5 @@
-import type { DatabaseServices } from "@sidecar/database/core/query";
-import { ConfigProvider, Effect, Layer, Logger, ManagedRuntime } from "effect";
-import { FetchHttpClient, type HttpClient } from "effect/http";
-import { webSqlClient } from "./db/sql-client.js";
-import { type GitHubApp, githubAppFromEnvironment } from "./github/github-app.js";
-import { hostedEnvironment } from "./hosted/environment.js";
-import {
-  type IntegrationConnect,
-  integrationConnectFromEnvironment,
-} from "./hosted/integration-connect.js";
-import { modelCatalogLayer } from "./hosted/model-catalog.js";
-
-/**
- * The deployment's own environment, read as these services are built rather
- * than once for the process. The default `ConfigProvider` is a
- * `Context.Reference` whose default value is computed once and then kept on
- * the reference itself, so the record `ConfigProvider.fromEnv()` copies out of
- * `process.env` would be the record every later instance still read. An
- * instance builds its services from the environment it was started with, and
- * a test that sets one and disposes the runtime gets the environment it set.
- */
-const webConfigProvider = ConfigProvider.layer(Effect.sync(() => ConfigProvider.fromEnv()));
-
-/**
- * Where an `Effect.log*` on this runtime goes: one JSON object per line on the
- * console, which Vercel's log drain parses into a structured entry, with the
- * level, the annotations, the enclosing spans, and the cause a log line was
- * handed rendered as fields rather than folded into the message. v4 states the
- * whole active set of loggers rather than swapping one out of it, so the
- * tracer's logger is named beside the JSON one: it is what puts a line on the
- * span it was written under, the one trace surface the service keeps.
- */
-const webLogger = Logger.layer([Logger.consoleJson, Logger.tracerLogger]);
-
-/**
- * The services every web function's effects run against. A function reaches
- * this layer only through the runtime below, so a service added here is built
- * once per instance rather than once per invocation.
- *
- * What the deployment's environment says about the hosted tier is read here
- * too, once per instance rather than at each invocation: `HostedEnvironment`
- * is the one place `OPENAI_API_KEY`, the brain model override, and the
- * analytics processor's own deletion key and project are read, and
- * `GitHubApp` the one place the Luke GitHub App's id, slug, client, and
- * private key are.
- *
- * `IntegrationConnect` is the one place each integration's connector UID and
- * allowlist are read, for the account routes that connect and disconnect an account and
- * the agents that read its tokens alike.
- *
- * `ModelCatalog` is here for the same reason: its read of AI Gateway's
- * public catalog is cached on the service, so one instance reads the catalog
- * once an hour for every route that offers or checks a model.
- *
- * `@effect/platform-node` has no entry: a Vercel function's platform is the
- * Web `fetch` its runtime already carries, and a Node-reaching companion
- * behind this door would have to be traced into every bundle. `@effect/sql-pg`
- * does have one: a web function's database is the platform Vercel gives it, and
- * `repository-checks.sh` keeps that specifier out of `api/`, where the stubs
- * that re-export a bundle stand, rather than out of the bundle itself.
- */
-const webServices = Layer.mergeAll(
-  FetchHttpClient.layer,
-  webSqlClient,
-  hostedEnvironment,
-  githubAppFromEnvironment,
-  integrationConnectFromEnvironment,
-  webLogger,
-  modelCatalogLayer.pipe(Layer.provide(Layer.merge(FetchHttpClient.layer, hostedEnvironment))),
-).pipe(Layer.provide(webConfigProvider));
-
-/** What an effect run at this edge may require. */
-export type WebServices = Layer.Success<typeof webServices>;
-
-/**
- * How building those services can fail, which is a missing `DATABASE_URL`: the
- * runtime names the database every deployed function reaches, so an invocation
- * on an instance configured without one is refused at the edge rather than at
- * whichever query ran first.
- */
-type WebServicesError = Layer.Error<typeof webServices>;
+import { type WebServices, type WebServicesError, webServices } from "@luke/service/runtime";
+import { type Effect, ManagedRuntime } from "effect";
 
 /**
  * Module scope is the memoization: Vercel keeps a warm instance's module
@@ -99,30 +20,6 @@ function webRuntime(): ManagedRuntime.ManagedRuntime<WebServices, WebServicesErr
 export function runWeb<A, E>(effect: Effect.Effect<A, E, WebServices>): Promise<A> {
   return webRuntime().runPromise(effect);
 }
-
-/**
- * The edge's own runner as a composition below it is handed one: a
- * collaborator driven by something other than a request — a socket's
- * callbacks, a stream's reader — has no request fiber to compose into, so the
- * function that composes it hands it `runWeb` itself, and a test hands it the
- * runner over its own test database. It is not a second runtime and not a
- * fiber's own face: the runner it names is always one built at an edge.
- */
-export type WebStoreRun = <A, E>(effect: Effect.Effect<A, E, DatabaseServices>) => Promise<A>;
-
-/** What the doors an eve root opens onto the agent runtime may require (`hosted/agent-runtime/edge.ts`). */
-export type WebAgentServices =
-  | DatabaseServices
-  | HttpClient.HttpClient
-  | GitHubApp
-  | IntegrationConnect;
-
-/**
- * The edge's own runner as an eve root's doors are handed one, on the same
- * terms as `WebStoreRun`: the root's `host.ts` hands it `runWeb`, and a test
- * the runner over its own test database and fakes of the rest.
- */
-export type WebAgentRun = <A, E>(effect: Effect.Effect<A, E, WebAgentServices>) => Promise<A>;
 
 /**
  * Releases what the layer acquired and leaves the next call to build it again.

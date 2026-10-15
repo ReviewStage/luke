@@ -1,20 +1,20 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import type { AvatarGrant } from "@sidecar/features/avatar-grant";
-import { Deferred, Effect, Option, Queue, Stream } from "effect";
-import { Base64 } from "effect/encoding";
-import {
-  AVATAR_END_REASON,
-  AVATAR_FEED_KIND,
-  AVATAR_STATUS,
-  type AvatarFeed,
-} from "#shared/messages/avatar";
+import type { AvatarGrant } from "@luke/features/avatar-grant";
 import type {
   AvatarSessionModule,
   PersonaCloseReason,
   PersonaSessionOptions,
   PersonaSessionSlice,
-} from "../avatar-session/contract";
+} from "@luke/ui/avatar-session-contract";
+import {
+  AVATAR_END_REASON,
+  AVATAR_FEED_KIND,
+  AVATAR_STATUS,
+  type AvatarFeed,
+} from "@luke/voice/avatar";
+import { Deferred, Effect, Option, Queue, Stream } from "effect";
+import { Base64 } from "effect/encoding";
 import {
   type AvatarReport,
   type CallAvatarDoors,

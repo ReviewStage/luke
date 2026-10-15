@@ -1,12 +1,19 @@
 import { FitAddon } from "@xterm/addon-fit";
+import { SearchAddon } from "@xterm/addon-search";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { Terminal } from "@xterm/xterm";
 import { adoptInlineStyles } from "./adopted-styles";
-import type { TerminalHandle, TerminalProps } from "./contract";
+import {
+  TERMINAL_FIND,
+  type TerminalFind,
+  type TerminalFindWay,
+  type TerminalHandle,
+  type TerminalProps,
+} from "./contract";
 import { TERMINAL_KEY, terminalKey } from "./terminal-keys";
-import { LIGHT_APPEARANCE, terminalTheme } from "./terminal-theme";
+import { LIGHT_APPEARANCE, terminalFindTints, terminalTheme } from "./terminal-theme";
 
 /**
  * terminal-surface.ts -- a terminal's screen: xterm.js fitted to its box, coloured from the window's tokens, its keys sorted between the shell and the window.
@@ -84,6 +91,59 @@ function drawWithWebgl(terminal: Terminal): void {
   });
 }
 
+/**
+ * A find over the scrollback through the search addon: every match tinted
+ * in the find's tokens, the current one brightest, both marked in the
+ * scrollbar's ruler, and each step bringing its match into view. A query
+ * typed further keeps to the match it was at, as the window's own find
+ * does. Note that the tints are read as the find runs, so a find after the
+ * appearance flips draws in the new one's.
+ */
+function scrollbackFind(terminal: Terminal, host: Element): TerminalFind {
+  const search = new SearchAddon({ highlightLimit: FIND_LIMIT });
+  terminal.loadAddon(search);
+  // The query found last, which a query typed further keeps to the match of.
+  let last = "";
+  const options = (way: TerminalFindWay) => {
+    const { match, current } = terminalFindTints(host);
+    return {
+      incremental: way === TERMINAL_FIND.TYPED,
+      decorations: {
+        matchBackground: match,
+        matchOverviewRuler: match,
+        activeMatchBackground: current,
+        activeMatchColorOverviewRuler: current,
+      },
+    };
+  };
+  return {
+    // Note that a query typed afresh is found from the newest output up,
+    // as a terminal's recent lines are what a find is after, and one typed
+    // further keeps to the match it was at.
+    find: (query, way) => {
+      const fresh = way === TERMINAL_FIND.TYPED && (last === "" || !query.startsWith(last));
+      last = query;
+      if (way === TERMINAL_FIND.PREVIOUS || fresh) search.findPrevious(query, options(way));
+      else search.findNext(query, options(way));
+    },
+    clear: () => {
+      last = "";
+      search.clearDecorations();
+      terminal.clearSelection();
+    },
+    onTally: (listener) => {
+      const heard = search.onDidChangeResults(({ resultIndex, resultCount }) =>
+        listener({ count: resultCount, at: resultIndex, more: resultCount >= FIND_LIMIT }),
+      );
+      return () => heard.dispose();
+    },
+    selection: () => terminal.getSelection(),
+  };
+}
+
+/** The most matches a find tints and counts; past it the tally says there are more. */
+const FIND_LIMIT = 1_000;
+
 /** The typeface the terminal draws in: the window's one monospace stack. */
 function monospaceFont(host: Element): string {
   return getComputedStyle(host).getPropertyValue(FONT_TOKEN).trim() || FALLBACK_FONT;
@@ -121,6 +181,7 @@ export function mountTerminal(host: HTMLElement, props: TerminalProps): Terminal
   );
   terminal.open(host);
   drawWithWebgl(terminal);
+  const find = scrollbackFind(terminal, host);
   const heard = [terminal.onData(props.onInput), terminal.onResize(props.onResize)];
   fit.fit();
 
@@ -146,6 +207,8 @@ export function mountTerminal(host: HTMLElement, props: TerminalProps): Terminal
     write: (data, written) => terminal.write(data, written),
     size: () => ({ cols: terminal.cols, rows: terminal.rows }),
     focus: () => terminal.focus(),
+    reset: () => terminal.reset(),
+    find,
     unmount: () => {
       resized.disconnect();
       if (frame !== undefined) cancelAnimationFrame(frame);

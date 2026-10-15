@@ -6,21 +6,21 @@ import {
   type PlanCallResult,
   VOICE_SERVICE_FRAME,
   WORKSPACE_CALL_FAILURE,
-} from "@sidecar/features";
-import type { Board } from "@sidecar/features/board-wire";
+} from "@luke/features";
+import type { Board } from "@luke/features/board-wire";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentMessagesAnswerView,
-} from "@sidecar/features/coding-agent-view";
+} from "@luke/features/coding-agent-view";
 import {
   CODING_AGENT_STATUS,
   type CodingAgentMessage,
   type CodingAgentMessagesAnswer,
   type CodingAgentStatus,
-} from "@sidecar/features/coding-agent-wire";
-import type { GitHubConnection } from "@sidecar/features/github-connection-wire";
-import type { PageLine, PageVersion } from "@sidecar/features/page-wire";
-import type { PlanEditAnswer } from "@sidecar/features/plan-edit";
+} from "@luke/features/coding-agent-wire";
+import type { GitHubConnection } from "@luke/features/github-connection-wire";
+import type { PageLine, PageVersion } from "@luke/features/page-wire";
+import type { PlanEditAnswer } from "@luke/features/plan-edit";
 import {
   PLAN_ACTOR,
   type Plan,
@@ -32,7 +32,7 @@ import {
   type PlanSummary,
   type PlanTreeAnswer,
   type RepositoryPin,
-} from "@sidecar/features/plan-wire";
+} from "@luke/features/plan-wire";
 import {
   GITHUB_DISCONNECT_FAILURE,
   PLAN_CALL_FAILURE,
@@ -42,23 +42,25 @@ import {
   type PlanWorkAnswer,
   planningViewSchema,
   type RepositoryCallFailure,
-} from "@sidecar/features/planning-view";
-import type { PlanTranscript } from "@sidecar/features/transcript-wire";
-import type { WorkspaceInvitation } from "@sidecar/features/workspace-invitation-wire";
+} from "@luke/features/planning-view";
+import type { PlanTranscript } from "@luke/features/transcript-wire";
+import type { WorkspaceInvitation } from "@luke/features/workspace-invitation-wire";
 import {
+  WORKSPACE_PHOTO_TYPE,
   WORKSPACE_ROLE,
   type Workspace,
   type WorkspaceMember,
-} from "@sidecar/features/workspace-wire";
+  type WorkspacePhotoType,
+} from "@luke/features/workspace-wire";
 import {
   GATEWAY_CLIENT_ROLE,
   GATEWAY_EVENT,
   GATEWAY_METHOD,
   type GatewayMethod,
-} from "@sidecar/gateway";
-import { MESSAGE_ROLE, type WireRecord } from "@sidecar/wire";
-import { readEither } from "@sidecar/wire/effect";
-import { Deferred, Duration, Effect, Fiber, Queue, Result } from "effect";
+} from "@luke/gateway";
+import { MESSAGE_ROLE, type WireRecord } from "@luke/wire";
+import { readEither } from "@luke/wire/effect";
+import { Deferred, Duration, Effect, Exit, Fiber, Queue, Result } from "effect";
 import { TestClock } from "effect/testing";
 import {
   composePlanning,
@@ -155,12 +157,16 @@ interface FakeService extends PlanningClient {
   installUrl: string;
   /** Whether the workspaces list is refused, as a service that did not answer refuses it. */
   workspacesFail: boolean;
+  /** The name another Mac renames a workspace to just after this one's rename answers, where one does. */
+  renamedAgain: string | undefined;
   /** Where a workspaces read waits after reading the table and before answering, so a test can hold one on the wire. */
   workspacesGate: Effect.Effect<void>;
   /** Each workspace's members, by its id. */
   members: Record<string, WorkspaceMember[]>;
   /** Each workspace's pending invitations, by its id. */
   invitations: Record<string, WorkspaceInvitation[]>;
+  /** Each workspace's photo, by its id: its type and its bytes in base64; one with none is not found. */
+  photos: Record<string, { contentType: WorkspacePhotoType; base64: string }>;
   /** Whether a write is refused as the account's role not allowing it. */
   notPermitted: boolean;
   /** The account's GitHub as the service last says it; none answers nothing, as a service that did not answer. */
@@ -174,18 +180,23 @@ interface FakeService extends PlanningClient {
 const PERSONAL: Workspace = {
   id: "workspace-personal",
   name: "Ada Lovelace",
+  slug: "ada-lovelace",
   role: WORKSPACE_ROLE.OWNER,
   github: null,
 };
 const ACME: Workspace = {
   id: "workspace-acme",
   name: "acme",
+  slug: "acme",
   role: WORKSPACE_ROLE.ADMIN,
   github: { login: "acme", active: true },
 };
+/** A workspace's photo as the window sends it: a WebP's `data:` URL. */
+const PHOTO_URL = "data:image/webp;base64,UklGRgAAAABXRUJQ";
 const RELAY: Workspace = {
   id: "workspace-relay",
   name: "Relay Labs",
+  slug: "relay-labs",
   role: WORKSPACE_ROLE.OWNER,
   github: null,
 };
@@ -268,9 +279,11 @@ function fakeService(plans: Plan[]): FakeService {
     memberships: [PERSONAL],
     installUrl: INSTALL_URL,
     workspacesFail: false,
+    renamedAgain: undefined,
     workspacesGate: Effect.void,
     members: {},
     invitations: {},
+    photos: {},
     notPermitted: false,
     connection: { connected: false, login: null },
     githubGate: Effect.void,
@@ -320,6 +333,33 @@ function fakeService(plans: Plan[]): FakeService {
           service.memberships = [...service.memberships, RELAY];
           return { ok: true, answer: RELAY } as const;
         }),
+      rename: (workspaceId, name) =>
+        Effect.sync(() => {
+          service.reads.push(`rename:${workspaceId}:${name}`);
+          if (service.notPermitted) return NOT_PERMITTED_WORKSPACE;
+          const renamed = service.memberships.find((each) => each.id === workspaceId);
+          if (renamed === undefined) return UNANSWERED_WORKSPACE;
+          const now = { ...renamed, name };
+          const again = service.renamedAgain;
+          service.memberships = service.memberships.map((each) =>
+            each.id !== workspaceId ? each : again === undefined ? now : { ...now, name: again },
+          );
+          return { ok: true, answer: now } as const;
+        }),
+      // A photo set stands as its version, the photo's own text, and null takes the version away.
+      setPhoto: (workspaceId, photo) =>
+        Effect.sync(() => {
+          service.reads.push(`photoSet:${workspaceId}:${photo ?? "none"}`);
+          if (service.notPermitted) return NOT_PERMITTED_WORKSPACE;
+          const found = service.memberships.find((each) => each.id === workspaceId);
+          if (found === undefined) return UNANSWERED_WORKSPACE;
+          const { photoVersion: _replaced, ...rest } = found;
+          const now = photo === null ? rest : { ...rest, photoVersion: photo };
+          service.memberships = service.memberships.map((each) =>
+            each.id === workspaceId ? now : each,
+          );
+          return { ok: true, answer: now } as const;
+        }),
       githubConnect: (workspaceId) =>
         Effect.sync(() => {
           service.reads.push(`connect:${workspaceId}`);
@@ -347,6 +387,14 @@ function fakeService(plans: Plan[]): FakeService {
             ? UNANSWERED_WORKSPACE
             : ({ ok: true, answer: members } as const);
         }),
+      photo: (workspaceId) =>
+        Effect.sync(() => {
+          service.reads.push(`photo:${workspaceId}`);
+          const photo = service.photos[workspaceId];
+          return photo === undefined
+            ? ({ ok: false, failure: WORKSPACE_CALL_FAILURE.NOT_FOUND } as const)
+            : ({ ok: true, answer: photo } as const);
+        }),
       removeMember: (workspaceId, userId) =>
         Effect.sync(() => {
           service.reads.push(`remove:${workspaceId}:${userId}`);
@@ -356,6 +404,33 @@ function fakeService(plans: Plan[]): FakeService {
           );
           service.members[workspaceId] = remaining;
           return { ok: true, answer: remaining } as const;
+        }),
+      changeRole: (workspaceId, userId, role) =>
+        Effect.sync(() => {
+          service.reads.push(`role:${workspaceId}:${userId}:${role}`);
+          if (service.notPermitted) return NOT_PERMITTED_WORKSPACE;
+          const given =
+            role === WORKSPACE_ROLE.ADMIN ? WORKSPACE_ROLE.ADMIN : WORKSPACE_ROLE.MEMBER;
+          const changed = (service.members[workspaceId] ?? []).map((member) =>
+            member.userId === userId ? { ...member, role: given } : member,
+          );
+          service.members[workspaceId] = changed;
+          return { ok: true, answer: changed } as const;
+        }),
+      // A handover makes the heir the owner and the account, the owner until then, an admin.
+      transfer: (workspaceId, userId) =>
+        Effect.sync(() => {
+          service.reads.push(`transfer:${workspaceId}:${userId}`);
+          if (service.notPermitted) return NOT_PERMITTED_WORKSPACE;
+          const handedOver = (service.members[workspaceId] ?? []).map((member) => ({
+            ...member,
+            role: member.userId === userId ? WORKSPACE_ROLE.OWNER : member.role,
+          }));
+          service.members[workspaceId] = handedOver;
+          service.memberships = service.memberships.map((each) =>
+            each.id === workspaceId ? { ...each, role: WORKSPACE_ROLE.ADMIN } : each,
+          );
+          return { ok: true, answer: handedOver } as const;
         }),
       invitations: (workspaceId) =>
         Effect.sync(() => {
@@ -1180,6 +1255,147 @@ it.effect(
 );
 
 it.effect(
+  "a workspace renamed reaches the service and the view then holds its new name, the plans not read again, and a rename the role does not allow moves nothing",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      service.memberships = [PERSONAL, ACME];
+      const { call, last } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+      const before = service.reads.length;
+
+      const renamed = yield* call(GATEWAY_METHOD.WORKSPACES_RENAME, {
+        workspaceId: ACME.id,
+        name: "Acme Labs",
+      });
+      service.notPermitted = true;
+      const refused = yield* call(GATEWAY_METHOD.WORKSPACES_RENAME, {
+        workspaceId: ACME.id,
+        name: "Acme Research",
+      });
+
+      assert.deepEqual(renamed, { workspace: { ...ACME, name: "Acme Labs" } });
+      assert.deepEqual(refused, { failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED });
+      assert.deepEqual(last()?.workspaces, [PERSONAL, { ...ACME, name: "Acme Labs" }]);
+      assert.deepEqual(service.reads.slice(before), [
+        `rename:${ACME.id}:Acme Labs`,
+        "workspaces",
+        `rename:${ACME.id}:Acme Research`,
+        "workspaces",
+      ]);
+    }),
+);
+
+it.effect(
+  "a rename whose read after it fails still draws the new name the service answered, and the next refresh reads the workspaces again",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      service.memberships = [PERSONAL, ACME];
+      const { call, last } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+      service.workspacesFail = true;
+
+      yield* call(GATEWAY_METHOD.WORKSPACES_RENAME, { workspaceId: ACME.id, name: "Acme Labs" });
+      const drawn = last()?.workspaces;
+      service.workspacesFail = false;
+      const before = service.reads.length;
+      yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+
+      assert.deepEqual(drawn, [PERSONAL, { ...ACME, name: "Acme Labs" }]);
+      assert.ok(
+        service.reads.slice(before).includes("workspaces"),
+        "the failed read is not taken as fresh",
+      );
+    }),
+);
+
+it.effect(
+  "a rename another Mac renames again before the read after it draws the newer name the read answers",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      service.memberships = [PERSONAL, ACME];
+      const { call, last } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+      service.renamedAgain = "Acme Research";
+
+      yield* call(GATEWAY_METHOD.WORKSPACES_RENAME, { workspaceId: ACME.id, name: "Acme Labs" });
+
+      assert.deepEqual(last()?.workspaces, [PERSONAL, { ...ACME, name: "Acme Research" }]);
+    }),
+);
+
+it.effect(
+  "a workspace's photo set reaches the service and the view then holds its version, removing it takes the version away, and a photo the role does not allow moves nothing",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      service.memberships = [PERSONAL, ACME];
+      const { call, last } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+      const before = service.reads.length;
+
+      const set = yield* call(GATEWAY_METHOD.WORKSPACES_PHOTO_SET, {
+        workspaceId: ACME.id,
+        photo: PHOTO_URL,
+      });
+      const drawn = last()?.workspaces;
+      const removed = yield* call(GATEWAY_METHOD.WORKSPACES_PHOTO_SET, {
+        workspaceId: ACME.id,
+        photo: null,
+      });
+      service.notPermitted = true;
+      const refused = yield* call(GATEWAY_METHOD.WORKSPACES_PHOTO_SET, {
+        workspaceId: ACME.id,
+        photo: PHOTO_URL,
+      });
+
+      assert.deepEqual(set, { workspace: { ...ACME, photoVersion: PHOTO_URL } });
+      assert.deepEqual(drawn, [PERSONAL, { ...ACME, photoVersion: PHOTO_URL }]);
+      assert.deepEqual(removed, { workspace: ACME });
+      assert.deepEqual(refused, { failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED });
+      assert.deepEqual(last()?.workspaces, [PERSONAL, ACME]);
+      assert.deepEqual(service.reads.slice(before), [
+        `photoSet:${ACME.id}:${PHOTO_URL}`,
+        "workspaces",
+        `photoSet:${ACME.id}:none`,
+        "workspaces",
+        `photoSet:${ACME.id}:${PHOTO_URL}`,
+        "workspaces",
+      ]);
+    }),
+);
+
+it.effect(
+  "a photo whose read after it fails still draws the version the service answered, and an SVG is refused before the service",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      service.memberships = [PERSONAL, ACME];
+      const { call, last } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+      service.workspacesFail = true;
+      const before = service.reads.length;
+
+      yield* call(GATEWAY_METHOD.WORKSPACES_PHOTO_SET, { workspaceId: ACME.id, photo: PHOTO_URL });
+      const svg = yield* Effect.exit(
+        call(GATEWAY_METHOD.WORKSPACES_PHOTO_SET, {
+          workspaceId: ACME.id,
+          photo: "data:image/svg+xml;base64,PHN2Zy8+",
+        }),
+      );
+
+      assert.deepEqual(last()?.workspaces, [PERSONAL, { ...ACME, photoVersion: PHOTO_URL }]);
+      assert.ok(Exit.isFailure(svg), "an SVG is no photo");
+      assert.deepEqual(service.reads.slice(before), [
+        `photoSet:${ACME.id}:${PHOTO_URL}`,
+        "workspaces",
+      ]);
+    }),
+);
+
+it.effect(
   "connecting GitHub answers the service's install address and reads nothing, and disconnecting draws the workspace without its organization",
   () =>
     Effect.gen(function* () {
@@ -1248,6 +1464,74 @@ it.effect(
         `remove:${ACME.id}:${GRACE.userId}`,
         "workspaces",
       ]);
+    }),
+);
+
+it.effect(
+  "a role changed and a handover each read the workspaces again and not the plans, so the account's own role after a handover arrives on the view",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      const owned = { ...ACME, role: WORKSPACE_ROLE.OWNER };
+      const owner = { ...ADA, role: WORKSPACE_ROLE.OWNER };
+      service.memberships = [PERSONAL, owned];
+      service.members[ACME.id] = [owner, GRACE];
+      const { call, last } = yield* subject(service);
+
+      const changed = yield* call(GATEWAY_METHOD.WORKSPACES_MEMBER_ROLE, {
+        workspaceId: ACME.id,
+        userId: GRACE.userId,
+        role: WORKSPACE_ROLE.ADMIN,
+      });
+      const roleAfterChange = last()?.workspaces.find((each) => each.id === ACME.id)?.role;
+      const handedOver = yield* call(GATEWAY_METHOD.WORKSPACES_TRANSFER, {
+        workspaceId: ACME.id,
+        userId: GRACE.userId,
+      });
+      const toOwner = yield* Effect.exit(
+        call(GATEWAY_METHOD.WORKSPACES_MEMBER_ROLE, {
+          workspaceId: ACME.id,
+          userId: GRACE.userId,
+          role: WORKSPACE_ROLE.OWNER,
+        }),
+      );
+
+      const admin = { ...GRACE, role: WORKSPACE_ROLE.ADMIN };
+      assert.deepEqual(changed, { members: [owner, admin] });
+      assert.equal(roleAfterChange, WORKSPACE_ROLE.OWNER);
+      assert.deepEqual(handedOver, {
+        members: [owner, { ...GRACE, role: WORKSPACE_ROLE.OWNER }],
+      });
+      assert.equal(
+        last()?.workspaces.find((each) => each.id === ACME.id)?.role,
+        WORKSPACE_ROLE.ADMIN,
+      );
+      assert.ok(Exit.isFailure(toOwner), "an owner's role is no role a change gives");
+      assert.deepEqual(service.reads, [
+        `role:${ACME.id}:${GRACE.userId}:${WORKSPACE_ROLE.ADMIN}`,
+        "workspaces",
+        `transfer:${ACME.id}:${GRACE.userId}`,
+        "workspaces",
+      ]);
+    }),
+);
+
+it.effect(
+  "a workspace's photo is read on the service with nothing else, answered as its bytes or as none where it has none",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      service.memberships = [PERSONAL, ACME];
+      const photo = { contentType: WORKSPACE_PHOTO_TYPE.PNG, base64: "iVBORw0KGgo=" };
+      service.photos[ACME.id] = photo;
+      const { call } = yield* subject(service);
+
+      const read = yield* call(GATEWAY_METHOD.WORKSPACES_PHOTO, { workspaceId: ACME.id });
+      const none = yield* call(GATEWAY_METHOD.WORKSPACES_PHOTO, { workspaceId: PERSONAL.id });
+
+      assert.deepEqual(read, photo);
+      assert.deepEqual(none, { failure: WORKSPACE_CALL_FAILURE.NOT_FOUND });
+      assert.deepEqual(service.reads, [`photo:${ACME.id}`, `photo:${PERSONAL.id}`]);
     }),
 );
 
@@ -1624,6 +1908,14 @@ it.effect("behind a closed account gate no workspace call reaches the service", 
 
     assert.deepEqual(
       yield* call(GATEWAY_METHOD.WORKSPACES_CREATE, { name: RELAY.name }),
+      unanswered,
+    );
+    assert.deepEqual(
+      yield* call(GATEWAY_METHOD.WORKSPACES_RENAME, { workspaceId: ACME.id, name: "Acme Labs" }),
+      unanswered,
+    );
+    assert.deepEqual(
+      yield* call(GATEWAY_METHOD.WORKSPACES_PHOTO_SET, { workspaceId: ACME.id, photo: null }),
       unanswered,
     );
     assert.deepEqual(

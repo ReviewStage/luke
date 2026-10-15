@@ -1,6 +1,7 @@
-import type { AvatarGrant } from "@sidecar/features/avatar-grant";
-import type { RunMode } from "@sidecar/host";
-import type { UnparsedWireValue } from "@sidecar/wire";
+import type { AvatarGrant } from "@luke/features/avatar-grant";
+import type { RunMode } from "@luke/host";
+import type { AvatarFeed } from "@luke/voice/avatar";
+import type { UnparsedWireValue } from "@luke/wire";
 import {
   app,
   BrowserWindow,
@@ -10,7 +11,6 @@ import {
   screen,
   type WebContents,
 } from "electron";
-import type { AvatarFeed } from "#shared/messages/avatar";
 import { hardenedWebPreferences, refuseForeignNavigation } from "./hardened-window";
 import { PanelAvatarRelay } from "./panel-avatar";
 import {

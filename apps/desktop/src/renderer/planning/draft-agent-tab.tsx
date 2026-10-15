@@ -1,9 +1,9 @@
-import { CODING_AGENT_STATUS, hasWordsOrFiles } from "@sidecar/features/coding-agent-wire";
+import { CODING_AGENT_STATUS, hasWordsOrFiles } from "@luke/features/coding-agent-wire";
+import type { Failure } from "@luke/features/failure-remedy";
+import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { useEffect, useRef, useState } from "react";
-import type { Failure } from "../failure-remedy";
 import { AgentComposer } from "./agent-composer";
 import { ArchivedComposerNote } from "./archived-plan";
-import { TAB_WORDS } from "./tab-strip-model";
 import type { AgentComposerControl } from "./use-agent-composer";
 import type { AgentDraft, CodingAgentsControl } from "./use-coding-agents";
 
@@ -16,7 +16,7 @@ import type { AgentDraft, CodingAgentsControl } from "./use-coding-agents";
  * composer, focused as the tab opens, with the model
  * chip on the account's default once that is read. Nothing reaches the
  * service until the first send, which starts the agent with those words, the
- * files attached, or both as its task, never the plan, on the model
+ * files attached, or both as its prompt, never the plan, on the model
  * the chip names where the developer
  * changed it and else on the account's default, in the plan's repository;
  * the tab then gives way to the agent's own. The words and the choice are
@@ -63,20 +63,20 @@ export function DraftAgentTab({
   }, []);
 
   const send = () => {
-    const task = draft.task.trim();
-    if (!hasWordsOrFiles(task, draft.attachments) || sending) return;
+    const prompt = draft.prompt.trim();
+    if (!hasWordsOrFiles(prompt, draft.attachments) || sending) return;
     setSending(true);
     setNote(undefined);
     latest.current
-      .startTask(draft.id, task, draft.choice, draft.attachments, draft.disabledServers)
+      .startPrompt(draft.id, prompt, draft.choice, draft.attachments, draft.disabledServers)
       .then((failed) => {
         setSending(false);
         setNote(failed);
       });
   };
   const composer: AgentComposerControl = {
-    draft: draft.task,
-    setDraft: (task) => control.onDraftChange({ task }),
+    draft: draft.prompt,
+    setDraft: (prompt) => control.onDraftChange({ prompt }),
     attachments: draft.attachments,
     setAttachments: control.onDraftAttachments,
     sending: sending || control.start.busy,

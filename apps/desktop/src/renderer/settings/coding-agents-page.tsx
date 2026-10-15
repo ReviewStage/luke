@@ -1,18 +1,20 @@
-import { CONTEXT_WINDOW } from "@sidecar/features/coding-agent-wire";
+import { CONTEXT_WINDOW } from "@luke/features/coding-agent-wire";
 import {
   type CatalogModel,
   MODEL_PROVIDER,
   type ModelChoice,
   type ModelProvider,
-} from "@sidecar/features/models-wire";
+} from "@luke/features/models-wire";
 import {
   PROVIDER_KEY_STATUS,
   type ProviderKeyStatus,
   type ProviderKeySummary,
-} from "@sidecar/features/provider-key-wire";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
+} from "@luke/features/provider-key-wire";
+import { ACT_KIND } from "@luke/host/acts";
+import { SETTINGS_SEARCH_ROW } from "@luke/settings/settings-anchors";
+import { actionRejection } from "@luke/ui/use-setting-write";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useState } from "react";
-import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";
 import { HarnessMark } from "../harness-marks";
 import {
@@ -35,13 +37,11 @@ import {
 } from "../planning/coding-agent-model";
 import { useOpenLink } from "../planning/use-open-link";
 import { Segmented } from "../segmented";
-import { SETTINGS_SEARCH_ROW } from "../settings-anchors";
 import { SpinnerRegion } from "../spinner";
 import { ApiKeysSection } from "./api-keys-section";
 import { PickerRow } from "./picker-row";
 import { ReadFailed, SettingsGroup } from "./settings-group";
 import { SwitchRow } from "./switch-row";
-import { actionRejection } from "./use-setting-write";
 
 /**
  * coding-agents-page.tsx -- Settings › Coding agents: the model and effort a click on Start runs an agent on.

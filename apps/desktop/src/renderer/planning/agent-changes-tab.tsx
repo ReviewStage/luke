@@ -1,17 +1,18 @@
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentChangesAnswerView,
-} from "@sidecar/features/coding-agent-view";
+} from "@luke/features/coding-agent-view";
 import {
   CODING_AGENT_STATUS,
   type CodingAgentChangedFile,
   type CodingAgentPullRequest,
-  type CodingAgentSummary,
-} from "@sidecar/features/coding-agent-wire";
-import { CopyIcon, DownloadIcon } from "@sidecar/panel";
+} from "@luke/features/coding-agent-wire";
+import type { CatalogModel } from "@luke/features/models-wire";
+import { ACT_KIND } from "@luke/host/acts";
+import { CopyIcon, DownloadIcon } from "@luke/ui";
+import { fileName } from "@luke/voice/code-pane-model";
 import { ClipboardCopyIcon, FileDiffIcon, RotateCwIcon } from "lucide-react";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";
 import { useCopyToast } from "../copy-feedback";
 import { EmptyState } from "../empty-state";
@@ -20,6 +21,7 @@ import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { SpinnerRegion } from "../spinner";
 import { Tooltip } from "../tooltip";
 import { LinesChanged } from "./agent-published";
+import { AgentActorRef, type AgentSubject } from "./agent-ref";
 import {
   CHANGES_WORDS,
   changedFolders,
@@ -33,14 +35,12 @@ import {
   STATUS_WORDS,
 } from "./changes-model";
 import { BLANK_LINE_TEXT, CodeLineNumber } from "./code-pane";
-import { fileName } from "./code-pane-model";
 import { agentStillWriting, pullRequestNumberLabel } from "./coding-agent-model";
 import { LinesMenu, useSaveText } from "./file-menu";
 import { useLinesLook } from "./file-tab";
 import { FileTreePane } from "./file-tree-pane";
 import { FileViewBar, useTreeSlide } from "./file-view";
 import { PullRequestMark } from "./pull-request-mark";
-import { AgentGlyph } from "./tab-look";
 import type { CodingAgentsControl } from "./use-coding-agents";
 
 /**
@@ -258,32 +258,33 @@ function FileDiff({ file }: { file: CodingAgentChangedFile }): React.JSX.Element
 
 /**
  * The card a Changes tab hangs, and its row in the plan's summary, in a tab
- * card's look: the pull request's title with its mark and number at the right, the
- * coding agent whose pull request it is under the title, wearing its glyph
- * as its own tab does, and under them how many files it changes and the
- * lines it adds and removes, as GitHub counts them.
+ * card's look: the pull request's title with its mark and number at the
+ * right, the coding agent whose pull request it is under the title, by its
+ * tile and name as every place naming an agent draws it (`ActorRef`),
+ * which hang the agent's card and open its tab, and under them how many
+ * files it changes and the lines it adds and removes, as GitHub counts
+ * them.
  */
 export function ChangesCard({
-  agent,
-  agentLabel,
+  subject,
+  models,
   pullRequest,
+  onOpenAgent,
 }: {
-  agent: CodingAgentSummary;
-  /** The agent's name as its tab wears it. */
-  agentLabel: string;
+  /** The agent whose pull request it is, as the plan's list names it. */
+  subject: AgentSubject;
+  /** The catalog as last read, which names the agent's model on its card. */
+  models: readonly CatalogModel[] | undefined;
   pullRequest: CodingAgentPullRequest;
+  /** Opens the agent's tab in the plan's column. */
+  onOpenAgent: () => void;
 }): React.JSX.Element {
   const count = pullRequest.changedFiles;
   return (
     <HoverCard data-tab-card="">
       <CardHead
         name={pullRequest.title}
-        sub={
-          <>
-            <AgentGlyph agent={agent} />
-            <span>{agentLabel}</span>
-          </>
-        }
+        sub={<AgentActorRef subject={subject} models={models} onOpen={onOpenAgent} />}
         corner={
           <>
             <PullRequestMark pullRequest={pullRequest} />

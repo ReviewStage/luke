@@ -1,26 +1,26 @@
 import assert from "node:assert/strict";
-import { DRIZZLE_MIGRATIONS, EFFECT_MIGRATIONS_TABLE } from "@sidecar/database/core/migrator";
-import { conversations, messages, turns } from "@sidecar/database/schemas/storage";
-import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
-import {
-  MESSAGE_AUTHOR,
-  MESSAGE_CHANNEL,
-  MESSAGE_ROLE,
-  TURN_ORIGIN,
-  TURN_STATUS,
-} from "@sidecar/wire";
-import { getColumnTable, getTableName } from "drizzle-orm";
-import { Effect, Schema } from "effect";
-import * as SqlClient from "effect/sql/SqlClient";
-import { afterAll, test } from "vitest";
-import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
+import { DRIZZLE_MIGRATIONS, EFFECT_MIGRATIONS_TABLE } from "@luke/database/core/migrator";
+import { conversations, messages, turns } from "@luke/database/schemas/storage";
+import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
 import {
   countRowsWhere,
   deleteUser,
   insertConversation,
   insertMessage,
   insertTurn,
-} from "./support/store-rows";
+  openHostedStoreTestDatabase,
+} from "@luke/database/testing";
+import {
+  MESSAGE_AUTHOR,
+  MESSAGE_CHANNEL,
+  MESSAGE_ROLE,
+  TURN_ORIGIN,
+  TURN_STATUS,
+} from "@luke/wire";
+import { getColumnTable, getTableName } from "drizzle-orm";
+import { Effect, Schema } from "effect";
+import * as SqlClient from "effect/sql/SqlClient";
+import { afterAll, test } from "vitest";
 
 /**
  * What these tests hold to is the shape the migrations built: every row

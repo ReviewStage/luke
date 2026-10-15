@@ -1,14 +1,14 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
+import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { ACT_OUTCOME_STATUS } from "#shared/messages/acts";
 import { plansControl } from "#testing/plans-control";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { OpenSettingsProvider } from "../open-settings";
-import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "../settings-views";
 import { NewPlanDialog } from "./new-plan-dialog";
 import type { RepositoryChooser } from "./repository-chip";
 
@@ -65,15 +65,16 @@ async function mount(
     const [open, setOpen] = useState(true);
     const dialog = createElement(NewPlanDialog, {
       newPlan: {
+        ...control.newPlan,
         open,
         preset: preset === undefined ? undefined : { repository: preset },
+        repositoriesIn: () => repositories,
         start: (name: string, repository: string | null) => {
           starts.push([name, repository]);
           return Promise.resolve(answer);
         },
         onClose: () => setOpen(false),
       },
-      repositories,
     });
     return createElement(
       OpenSettingsProvider,
@@ -92,7 +93,7 @@ async function mount(
   await settle();
   const dialog = () => document.querySelector<HTMLElement>('[role="dialog"][aria-modal="true"]');
   const field = () => {
-    const found = document.querySelector<HTMLInputElement>('input[aria-label="Plan name"]');
+    const found = document.querySelector<HTMLInputElement>('input[aria-label="Task name"]');
     assert.ok(found, "the name field is drawn");
     return found;
   };
@@ -142,7 +143,7 @@ async function mount(
 
 test("the dialog holds the name, then the repository chip leading Cancel and Create plan, with the name taking focus", async () => {
   const card = await mount();
-  assert.deepEqual(card.controls(), ["Plan name", "acme/web", "Cancel", "Create plan⏎"]);
+  assert.deepEqual(card.controls(), ["Task name", "acme/web", "Cancel", "Create task⏎"]);
   assert.equal(document.activeElement, card.field());
   assert.equal(
     card.dialog()?.textContent?.includes("Repository"),
@@ -153,11 +154,11 @@ test("the dialog holds the name, then the repository chip leading Cancel and Cre
 
 test("Return creates the plan under the name as typed, trimmed, about the repository last used", async () => {
   const card = await mount();
-  assert.equal(card.button("Create plan").disabled, true, "nothing to create before a name");
+  assert.equal(card.button("Create task").disabled, true, "nothing to create before a name");
   await card.press("Enter", card.field());
   assert.deepEqual(card.starts, []);
   card.type("  Dark mode toggle  ");
-  assert.equal(card.button("Create plan").disabled, false);
+  assert.equal(card.button("Create task").disabled, false);
   await card.press("Enter", card.field());
   assert.deepEqual(card.starts, [["Dark mode toggle", "acme/web"]]);
 });
@@ -165,7 +166,7 @@ test("Return creates the plan under the name as typed, trimmed, about the reposi
 test("a repository group's + opens the dialog on its repository rather than the last used", async () => {
   const card = await mount(undefined, "acme/api");
   card.type("Rate limits");
-  act(() => card.button("Create plan").click());
+  act(() => card.button("Create task").click());
   await settle();
   assert.deepEqual(card.starts, [["Rate limits", "acme/api"]]);
 });
@@ -204,13 +205,13 @@ test("Escape in the repository menu closes the menu and leaves the dialog standi
 test("a refusal keeps the dialog and the name, says why under the field, and Create plan can be pressed again", async () => {
   const card = await mount("Luke can't reach acme/web.");
   card.type("Dark mode toggle");
-  act(() => card.button("Create plan").click());
+  act(() => card.button("Create task").click());
   await settle();
   assert.deepEqual(card.starts, [["Dark mode toggle", "acme/web"]]);
   assert.ok(card.dialog());
   assert.equal(card.note(), "Luke can't reach acme/web.");
   assert.equal(card.field().value, "Dark mode toggle");
-  assert.equal(card.button("Create plan").disabled, false);
+  assert.equal(card.button("Create task").disabled, false);
 });
 
 test("a workspace switch lets the pick go for the new workspace's recent repository", async () => {
@@ -301,4 +302,101 @@ test("a member of a workspace with no GitHub connected is told only to ask an ow
     buttons.some((button) => ["Open Settings", "Retry"].includes(button.textContent ?? "")),
     false,
   );
+});
+
+/** The notes the chip's menu draws, and whether it offers Open Settings, for a workspace with a GitHub connected whose read finds none installed. */
+async function lapsedMenu(manages: boolean) {
+  await mount(undefined, undefined, {
+    scope: "workspace-acme",
+    workspaceName: "Acme",
+    connected: true,
+    manages,
+    read: NOWHERE_INSTALLED,
+  });
+  const buttons = await openChip();
+  return {
+    notes: [...document.querySelectorAll(".plan-compose-menu-note")].map(
+      (note) => note.textContent,
+    ),
+    settings: buttons.some((button) => button.textContent === "Open Settings"),
+  };
+}
+
+test("an owner or admin of a workspace whose GitHub was removed or suspended on GitHub is told so, not that none is connected, and offered Open Settings", async () => {
+  assert.deepEqual(await lapsedMenu(true), {
+    notes: ["Acme's GitHub connection was removed or suspended on GitHub."],
+    settings: true,
+  });
+});
+
+test("a member of a workspace whose GitHub was removed or suspended on GitHub is told so and to ask an owner or admin to reconnect it", async () => {
+  assert.deepEqual(await lapsedMenu(false), {
+    notes: [
+      "Acme's GitHub connection was removed or suspended on GitHub.",
+      "Ask an owner or admin to reconnect GitHub.",
+    ],
+    settings: false,
+  });
+});
+
+test("in a workspace with no GitHub connected, a repository its plans still name is neither offered nor chosen, the chip reads No repository, and Create starts the plan with none", async () => {
+  const dialog = await mount(undefined, undefined, {
+    scope: "workspace-personal",
+    workspaceName: "Dean Stratakos",
+    recent: ["ReviewStage/luke"],
+    read: NOWHERE_INSTALLED,
+  });
+
+  const buttons = await openChip();
+  const notes = [...document.querySelectorAll(".plan-compose-menu-note")].map(
+    (note) => note.textContent,
+  );
+  const offered = buttons.map((button) => button.textContent);
+  const search =
+    document.querySelector<HTMLInputElement>('input[aria-label="Search repositories"]') ??
+    assert.fail("the chip's menu opens");
+  await dialog.press("Escape", search);
+  dialog.type("Tmp");
+  await dialog.press("Enter", dialog.field());
+
+  assert.deepEqual(notes, ["Dean Stratakos has no GitHub connected yet."]);
+  assert.equal(
+    offered.includes("ReviewStage/luke"),
+    false,
+    "the stranded repository is not offered",
+  );
+  assert.equal(dialog.button("No repository").textContent, "No repository");
+  assert.deepEqual(dialog.starts, [["Tmp", null]]);
+});
+
+test("a pick the workspace's GitHub turns out not to list is let go, while one it lists stays chosen", async () => {
+  const listing = () =>
+    Promise.resolve({
+      repositories: {
+        installed: true,
+        repositories: [
+          {
+            owner: "acme",
+            name: "api",
+            fullName: "acme/api",
+            defaultBranch: "main",
+            private: true,
+            updatedAt: 1,
+          },
+        ],
+        installationUrl: "https://github.com/apps/luke/installations/new",
+      },
+    });
+  const unlisted = await mount(undefined, undefined, { read: listing });
+  unlisted.type("Dark mode");
+  await unlisted.press("Enter", unlisted.field());
+  for (const root of roots.splice(0)) act(() => root.unmount());
+  document.body.innerHTML = "";
+
+  const listed = await mount(undefined, "acme/api", { read: listing });
+  listed.type("Rate limits");
+  await listed.press("Enter", listed.field());
+
+  assert.deepEqual(unlisted.starts, [["Dark mode", null]]);
+  assert.deepEqual(listed.starts, [["Rate limits", "acme/api"]]);
 });

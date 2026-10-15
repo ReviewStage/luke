@@ -12,8 +12,8 @@
  * the whole quit, and there is no other order to run it in.
  */
 
-import type { AvatarStopReason } from "@sidecar/features";
-import type { AvatarGrant } from "@sidecar/features/avatar-grant";
+import type { AvatarStopReason } from "@luke/features";
+import type { AvatarGrant } from "@luke/features/avatar-grant";
 import {
   type GatewayHost,
   type GatewayShutdownOptions,
@@ -21,8 +21,8 @@ import {
   type GatewayShutdownSteps,
   type NodeRegistry,
   shutdownGatewayEffect,
-} from "@sidecar/gateway";
-import type { LiveAvatarState } from "@sidecar/voice/live-session";
+} from "@luke/gateway";
+import type { LiveAvatarState } from "@luke/voice/live-session";
 import { Context, Data, Deferred, Effect, Layer, Ref, type Scope, type Stream } from "effect";
 import type { Composer } from "../composer.js";
 import { layersInOrder } from "./composer.js";
@@ -95,8 +95,6 @@ export interface HostAvatar {
   readonly grants: Stream.Stream<AvatarGrant | undefined>;
   /** The call window's session closed while granted, and not by this side; answers whether the avatar was asked for again. */
   readonly closed: (reason: AvatarStopReason) => boolean;
-  /** The avatar's first frame was drawn while granted: a greeting held for it is let go. */
-  readonly live: () => void;
 }
 
 /** Everything constructed and linked, and nothing yet begun. */
@@ -119,7 +117,7 @@ export interface HostAssembly {
 }
 
 export class HostAssemblyTag extends Context.Service<HostAssemblyTag, HostAssembly>()(
-  "@sidecar/host/HostAssembly",
+  "@luke/host/HostAssembly",
 ) {}
 
 /** The host with every composer started: what a client operates and what the quit drains. */
@@ -128,7 +126,7 @@ export interface StandingHost {
   readonly drain: HostDrain;
 }
 
-export class HostTag extends Context.Service<HostTag, StandingHost>()("@sidecar/host/Host") {}
+export class HostTag extends Context.Service<HostTag, StandingHost>()("@luke/host/Host") {}
 
 /**
  * The composers started in the assembly's order, the loops armed after the

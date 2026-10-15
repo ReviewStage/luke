@@ -4,8 +4,8 @@ import {
   positiveInteger,
   text,
   withoutTrailingSlash,
-} from "@sidecar/wire";
-import { webResponseFromClientResponse } from "@sidecar/wire/effect";
+} from "@luke/wire";
+import { webResponseFromClientResponse } from "@luke/wire/effect";
 import { Data, Duration, Effect, type Schema as EffectSchema, Result } from "effect";
 import * as HttpBody from "effect/http/HttpBody";
 import * as HttpClient from "effect/http/HttpClient";

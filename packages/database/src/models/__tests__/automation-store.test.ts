@@ -10,7 +10,7 @@ import {
   AUTOMATION_SCOPE,
   AUTOMATION_TARGET,
   AUTOMATION_TRIGGER,
-} from "@sidecar/features/automation-wire";
+} from "@luke/features/automation-wire";
 import { eq } from "drizzle-orm";
 import { DateTime, Effect, Option } from "effect";
 import { Database } from "../../core/query.js";
@@ -28,7 +28,9 @@ import {
   listAutomationRuns,
   listAutomations,
   type NewAutomation,
+  queuedAutomationRuns,
   readAutomation,
+  readWebhookAutomation,
   recordAutomationRun,
   settleAutomationRun,
   updateAutomation,
@@ -87,6 +89,93 @@ const nightly = (planId: string): NewAutomation => ({
 
 it.layer(getTestDB())("the automation store", (it) => {
   it.effect(
+    "a webhook automation reads for a call while its owner is a member of its workspace, and its run keeps the body for the sweep alone",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const planId = yield* openPlan(owner);
+        // Never due, so no other test's claim finds it.
+        const onPlan = Option.getOrThrow(
+          yield* createAutomation(owner, { ...nightly(planId), nextRunAt: null }),
+        );
+        const workspace = onPlan.organizationId ?? "";
+        const hooked = Option.getOrThrow(
+          yield* createAutomation(owner, {
+            ...nightly(planId),
+            planId: null,
+            organizationId: workspace,
+            repositories: ["acme/api"],
+            trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK },
+            nextRunAt: null,
+            webhookSecretHash: "ab".repeat(32),
+          }),
+        );
+
+        const read = yield* readWebhookAutomation(hooked.id);
+        const scheduled = yield* readWebhookAutomation(onPlan.id);
+        yield* recordAutomationRun(hooked, {
+          dedupeKey: randomUUID(),
+          firing: { kind: AUTOMATION_FIRING.WEBHOOK, bytes: 5 },
+          payload: "hello",
+          firedAt: new Date(),
+        });
+        const queued = (yield* queuedAutomationRuns(new Date(0), 100)).filter(
+          (run) => run.automationId === hooked.id,
+        );
+        const db = yield* Database;
+        yield* db.delete(member).where(eq(member.userId, owner));
+        const departed = yield* readWebhookAutomation(hooked.id);
+
+        assert.deepEqual(
+          Option.map(read, (row) => row.webhookSecretHash),
+          Option.some("ab".repeat(32)),
+        );
+        assert.ok(Option.isNone(scheduled), "an automation that is no webhook reads as none");
+        assert.deepEqual(
+          queued.map((run) => run.payload),
+          ["hello"],
+        );
+        assert.ok(Option.isNone(departed), "a departed owner's webhook reads as none");
+      }),
+  );
+
+  it.effect(
+    "an automation made on a workspace with no plan takes the workspace and repositories named, lists under that workspace, and is made by no account outside it",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const outsider = yield* openAccount;
+        const planId = yield* openPlan(owner);
+        const onPlan = Option.getOrThrow(yield* createAutomation(owner, nightly(planId)));
+        const workspace = onPlan.organizationId ?? "";
+        const made = (by: string) =>
+          createAutomation(by, {
+            ...nightly(planId),
+            planId: null,
+            organizationId: workspace,
+            repositories: ["acme/api", "acme/web"],
+          });
+
+        const planless = Option.getOrThrow(yield* made(owner));
+        const refused = yield* made(outsider);
+
+        assert.deepEqual(
+          [planless.planId, planless.planName, planless.organizationId, planless.repositories],
+          [null, null, workspace, ["acme/api", "acme/web"]],
+        );
+        assert.ok(Option.isNone(refused), "an account outside the workspace makes nothing there");
+        // Note that the two were made in one instant, so their order is their ids', and read as a set.
+        assert.deepEqual(
+          (yield* listAutomations(owner, { organizationId: workspace }))
+            .map((each) => each.id)
+            .toSorted(),
+          [planless.id, onPlan.id].toSorted(),
+        );
+        assert.deepEqual(yield* listAutomations(outsider, { organizationId: workspace }), []);
+      }),
+  );
+
+  it.effect(
     "a new automation takes its plan's workspace and repository, its owner's alone and a new agent each run where the maker names neither",
     () =>
       Effect.gen(function* () {
@@ -117,7 +206,7 @@ it.layer(getTestDB())("the automation store", (it) => {
   );
 
   it.effect(
-    "a plan given another repository or moved to another workspace takes its automations along, and a row an older build wrote reads its plan's",
+    "a plan given another repository or moved to another workspace takes its automations along",
     () =>
       Effect.gen(function* () {
         const owner = yield* openAccount;
@@ -145,21 +234,12 @@ it.layer(getTestDB())("the automation store", (it) => {
 
         yield* updatePlan(owner, planId, { repository: "acme/moved", organizationId: elsewhere });
         const followed = Option.getOrThrow(yield* readAutomation(owner, made.id));
-        // An older build's insert: no workspace and no repositories of its own.
-        yield* Database.use((db) =>
-          db
-            .update(automation)
-            .set({ organizationId: null, repositories: [] })
-            .where(eq(automation.id, made.id)),
-        );
-        const older = Option.getOrThrow(yield* readAutomation(owner, made.id));
 
         assert.deepEqual(
           [followed.organizationId, followed.repositories],
           [elsewhere, ["acme/moved"]],
           "the automation follows its plan",
         );
-        assert.deepEqual([older.organizationId, older.repositories], [elsewhere, ["acme/moved"]]);
       }),
   );
 

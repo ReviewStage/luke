@@ -1,12 +1,12 @@
-import { emitJsonSchema } from "@sidecar/wire/effect";
+import { CODER_TOOL } from "@luke/service/agents/coder-host/tool-set";
+import { READ_WEB_PAGE_TOOL } from "@luke/service/agents/public-research";
+import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
+import { emitJsonSchema } from "@luke/wire/effect";
 import { defineTool } from "eve/tools";
-import { unparsedWire, type WireBoundaryInput } from "../../server/core.js";
-import { CODER_TOOL } from "../../server/hosted/coder-host/tool-set.js";
-import { READ_WEB_PAGE_TOOL } from "../../server/hosted/public-research.js";
 import { host, runResearchTool } from "../host.js";
 
 /**
- * read_web_page.ts -- the planning model's own public page read, the agent's under the turn's budget (`server/hosted/public-research.ts`).
+ * read_web_page.ts -- the planning model's own public page read, the agent's under the turn's budget (`packages/service/src/agents/public-research.ts`).
  */
 export default defineTool({
   description: READ_WEB_PAGE_TOOL.description,

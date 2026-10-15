@@ -1,5 +1,5 @@
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
-import type { ProviderKeyProvider } from "@sidecar/features/provider-key-wire";
+import type { ProviderKeyProvider } from "@luke/features/provider-key-wire";
 import { Redacted, Result } from "effect";
 
 /**

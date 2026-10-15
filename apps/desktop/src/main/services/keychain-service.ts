@@ -1,7 +1,7 @@
-import type { HostSeams } from "@sidecar/host";
+import type { HostSeams } from "@luke/host";
+import type { EffectDesktopService } from "@luke/host/desktop-service";
 import { Effect } from "effect";
 import { safeStorage } from "electron";
-import type { EffectDesktopService } from "./service";
 
 export interface KeychainService extends EffectDesktopService {
   /** The one cipher the host encrypts a credential with, and the one place `safeStorage` is named. */

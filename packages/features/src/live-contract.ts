@@ -5,9 +5,9 @@ import {
   SEED_CONTENT_TYPE,
   SEED_ITEM_TYPE,
   SEED_ROLE,
-} from "@sidecar/live";
-import { EXCESS_KEYS, isWireString, SCHEMA_REFUSAL, type UnparsedWireValue } from "@sidecar/wire";
-import { declareReader, emitJsonSchema, readEither, wireRefusal } from "@sidecar/wire/effect";
+} from "@luke/live";
+import { EXCESS_KEYS, isWireString, SCHEMA_REFUSAL, type UnparsedWireValue } from "@luke/wire";
+import { declareReader, emitJsonSchema, readEither, wireRefusal } from "@luke/wire/effect";
 import { Result, Schema, SchemaGetter } from "effect";
 import { AVATAR_GRANT_BOUNDS, avatarGrantSchema } from "./avatar-grant.js";
 import { planDocumentSchema, planSectionEditSchema } from "./plan-wire.js";
@@ -113,7 +113,7 @@ export const VOICE_SERVICE_FRAME = {
   /** The service's answer once its sideband stands on that session again. */
   SESSION_ATTACHED: "session.attached",
   /**
-   * One of the four frames the desktop sends after the handshake in this
+   * One of the three frames the desktop sends after the handshake in this
    * vocabulary: whether its peer has gone quiet, as the renderer's own idle
    * window reads it. The service's exchange decides the idle close against
    * the appends it made itself, so the report crosses to it; the relay reads
@@ -136,15 +136,6 @@ export const VOICE_SERVICE_FRAME = {
    * so it is no report and nothing past its type is read.
    */
   SESSION_HANG_UP: "session.hangup",
-  /**
-   * The desktop's word that Luke may greet: sent once, on a call whose
-   * `session.create` asked for the greeting held, when the host says Luke's
-   * avatar is live or has ended. The service holds the cue that asks the
-   * model to begin until it arrives, so the first sentence plays through
-   * the avatar rather than ahead of it. The relay reads it by its type and
-   * forwards it nowhere.
-   */
-  SESSION_GREET: "session.greet",
   /**
    * The service's frame to the desktop after the handshake: the plan's
    * document as its notetaker is writing it,
@@ -290,7 +281,7 @@ function onlyPart<Part, Encoded>(
 }
 
 /**
- * One history message as `@sidecar/live` seeds it: the `message` type, a
+ * One history message as `@luke/live` seeds it: the `message` type, a
  * role, and exactly one text part of the type that role writes. The SDK's
  * `InitialItem` also allows an id, a status, and a plain `text` part; none
  * is admitted, because the service composes the request to OpenAI from this
@@ -328,8 +319,6 @@ export const sessionCreateFrameSchema = Schema.Struct({
   voice: Schema.Literals(LIVE_VOICE_LIST),
   input: Schema.Array(liveInitialItemSchema).check(Schema.isMaxLength(LIVE_INPUT_BOUNDS.MESSAGES)),
   planId: wireUuidSchema,
-  /** Present on a call that opens with Luke's avatar: the greeting waits for the desktop's `session.greet`. */
-  holdGreeting: Schema.optionalKey(Schema.Literal(true)),
 });
 
 export type SessionCreateFrame = typeof sessionCreateFrameSchema.Type;
@@ -377,18 +366,10 @@ export const sessionHangUpFrameSchema = Schema.Struct({
 
 export type SessionHangUpFrame = typeof sessionHangUpFrameSchema.Type;
 
-/** Luke may greet: the type alone, since what the cue says is the service's. */
-export const sessionGreetFrameSchema = Schema.Struct({
-  type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_GREET),
-});
-
-export type SessionGreetFrame = typeof sessionGreetFrameSchema.Type;
-
 /** Any frame the desktop sends after the handshake in this vocabulary, read by the service and forwarded nowhere. */
 export const sessionReportFrameSchema = Schema.Union([
   sessionActivityFrameSchema,
   sessionStopFrameSchema,
-  sessionGreetFrameSchema,
 ]).annotate(wireRefusal(SCHEMA_REFUSAL.MALFORMED));
 
 export type SessionReportFrame = typeof sessionReportFrameSchema.Type;

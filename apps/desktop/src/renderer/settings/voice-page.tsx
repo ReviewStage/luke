@@ -1,17 +1,17 @@
-import { CheckIcon, ExternalIcon } from "@sidecar/panel";
 import {
   SETTINGS_PAGE as SCHEMA_SETTINGS_PAGE,
   SETTING_SECTION,
   type SettingsRowsInput,
-} from "@sidecar/settings";
+} from "@luke/settings";
+import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
+import { CheckIcon, ExternalIcon } from "@luke/ui";
 import {
   MICROPHONE_UNGRANTED_NOTE,
   microphoneAccessRow,
   VOICE_KEYLESS_NOTE,
-} from "../microphone-access";
-import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "../settings-anchors";
+} from "@luke/voice/microphone-access";
+import type { MicrophoneControl } from "@luke/voice/settings-controls";
 import { Tooltip } from "../tooltip";
-import type { MicrophoneControl } from "./controls";
 import { AttentionMark } from "./marks";
 import { SchemaSettingRows } from "./schema-rows";
 import { SettingsGroup } from "./settings-group";

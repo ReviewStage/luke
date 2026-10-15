@@ -1,5 +1,6 @@
-import { APP_SHORTCUT_GROUPS, APP_SHORTCUTS } from "#shared/shortcuts";
-import { searchAnchorProps } from "../settings-anchors";
+import type { ExperimentChoices } from "@luke/settings";
+import { searchAnchorProps } from "@luke/settings/settings-anchors";
+import { APP_SHORTCUTS, shownShortcutGroups } from "#shared/shortcuts";
 import { Shortcut } from "../shortcut";
 import { SettingsGroup } from "./settings-group";
 
@@ -14,12 +15,17 @@ import { SettingsGroup } from "./settings-group";
  * The window's own shortcuts rather than keys taken from the machine: each
  * answers only while Luke's window has the keyboard, so they are fixed and
  * listed here to be found, not chosen, under the groups the table keeps —
- * the menu bar's own — each row the command's name and its chord.
+ * the menu bar's own — each row the command's name and its chord. A gated
+ * feature's shortcut is listed only while the account has its experiment on.
  */
-export function WindowShortcutSections(): React.JSX.Element {
+export function WindowShortcutSections({
+  experiments,
+}: {
+  experiments: ExperimentChoices;
+}): React.JSX.Element {
   return (
     <>
-      {APP_SHORTCUT_GROUPS.map((group) => (
+      {shownShortcutGroups(experiments).map((group) => (
         <SettingsGroup key={group.title} title={group.title}>
           {group.commands.map((command) => (
             <div

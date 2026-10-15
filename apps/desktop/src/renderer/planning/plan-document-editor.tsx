@@ -1,5 +1,11 @@
 import { useAtom, useAtomValue } from "@effect/atom-react";
-import { PLAN_ACTOR, PLAN_BOUNDS, type Plan } from "@sidecar/features/plan-wire";
+import { decodeMention } from "@luke/features/mention-link";
+import {
+  CONFLICT_NOTE,
+  DOCUMENT_EDITOR_STATE,
+  type DocumentEditor,
+} from "@luke/features/plan-edit-model";
+import { PLAN_ACTOR, PLAN_BOUNDS, type Plan } from "@luke/features/plan-wire";
 import { Duration, Effect } from "effect";
 import { AsyncResult } from "effect/reactivity";
 import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -13,9 +19,13 @@ import type {
 } from "../plan-editor/contract";
 import { rendererRuntime } from "../renderer-runtime";
 import { RetryButton } from "../retry-button";
-import { type MentionDoors, MentionNodeChip, retargetedMention } from "./mention-chip";
+import {
+  type MentionDoors,
+  MentionNodeChip,
+  pastedMentionNode,
+  retargetedMention,
+} from "./mention-chip";
 import { MENTION_MENU_SIDE, useMentionPicker } from "./mention-picker";
-import { CONFLICT_NOTE, DOCUMENT_EDITOR_STATE, type DocumentEditor } from "./plan-edit-model";
 import { EDITOR_PLACE, type EditorHost, type PlanEditing } from "./use-plan-editing";
 
 /**
@@ -77,12 +87,14 @@ function steppedByArrow(event: React.KeyboardEvent<HTMLElement>): boolean {
   return true;
 }
 
-/** Whether a click lands on words to edit: no selection made by the press, and not on a link. */
+/** Whether a click lands on words to edit: no selection made by the press, and not on a link or the section's byline. */
 function editsOnClick(target: EventTarget): boolean {
   const selection = window.getSelection();
   if (selection !== null && !selection.isCollapsed) return false;
-  // Note that a mention's chip is its own, a link's or a folder's that opens nothing alike.
-  return !(target instanceof Element && target.closest("a, .mention-chip") !== null);
+  // Note that a mention's chip is its own, a link's or a folder's that opens nothing alike, and so is the byline's row, whose writer and ⋯ are presses of their own.
+  return !(
+    target instanceof Element && target.closest("a, .mention-chip, .plan-unit-row") !== null
+  );
 }
 
 /** The block an editor closed from by the keyboard takes the keyboard back, once. */
@@ -190,12 +202,14 @@ function boundTitle(element: HTMLElement): void {
  * again. Its words are the name's own but while they are typed, so a
  * refused rename puts the saved name back here and everywhere, unless words
  * were typed since it was asked for, which are the newest and are kept for
- * the next pause to ask for again.
+ * the next pause to ask for again. Each Rename chosen from the title's ⋯
+ * puts the caret at its end, as ↑ from the text's first line does.
  */
 export function EditableTitle({
   name,
   entry,
   editing,
+  renaming = 0,
   onRename,
   onDraft,
 }: {
@@ -203,6 +217,8 @@ export function EditableTitle({
   /** Whether this block is where Tab enters the document. */
   entry: boolean;
   editing: PlanEditing;
+  /** How many times Rename was chosen; each change is an ask of its own. */
+  renaming?: number;
   /** Renames the plan, answering whether the name was taken. */
   onRename: (name: string) => Promise<boolean>;
   onDraft: (name: string | undefined) => void;
@@ -225,6 +241,13 @@ export function EditableTitle({
   const echo = useRef<string | undefined>(undefined);
   const doors = useRef({ onRename, onDraft });
   doors.current = { onRename, onDraft };
+  // The Rename last answered, so only a newer one puts the caret here.
+  const renamed = useRef(renaming);
+  useEffect(() => {
+    if (renaming === renamed.current || text.current === null) return;
+    renamed.current = renaming;
+    caretAtEnd(text.current);
+  }, [renaming]);
   useLayoutEffect(() => {
     const element = text.current;
     if (element === null || name === echo.current) return;
@@ -307,7 +330,7 @@ export function EditableTitle({
           contentEditable="plaintext-only"
           suppressContentEditableWarning
           role="textbox"
-          aria-label="Plan name"
+          aria-label="Task name"
           tabIndex={-1}
           spellCheck
           onFocus={() => {
@@ -435,6 +458,8 @@ function MountedPlanEditor({
               drawMention: (element, mention) =>
                 latest.current.mentions?.drawMention(element, mention) ?? (() => undefined),
               retarget: (target, renamed) => latest.current.mentions?.retarget(target, renamed),
+              pasted: (words) => latest.current.mentions?.pasted(words),
+              namesMention: (target) => latest.current.mentions?.namesMention(target) ?? false,
             },
     });
     handle.current = mounted;
@@ -543,7 +568,13 @@ export function PlanDocumentEditor({
   // Note that the editor's own text is read, since the draft is handed over only once typing pauses.
   const text = () => handle.current?.markdown() ?? editor.draft;
   const picker = useMentionPicker({
-    source: { planId: plan.id, planName: plan.name, repository: plan.repository, text },
+    source: {
+      planId: plan.id,
+      planName: plan.name,
+      workspace: mentions?.place.workspace ?? "",
+      repository: plan.repository,
+      text,
+    },
     room,
     side: MENTION_MENU_SIDE.BELOW,
     onChoose: (mention) => handle.current?.chooseMention(mention),
@@ -576,7 +607,11 @@ export function PlanDocumentEditor({
             onTrigger: picker.onTrigger,
             onKey: picker.onKey,
             drawMention: chips.draw,
-            retarget: (target, renamed) => retargetedMention(plan.id, target, renamed),
+            retarget: (target, change) =>
+              retargetedMention(plan.id, mentions.place, target, change),
+            pasted: (words) => pastedMentionNode(words, mentions.place),
+            namesMention: (target) =>
+              decodeMention(target, mentions.place.repository) !== undefined,
           },
   };
   return (

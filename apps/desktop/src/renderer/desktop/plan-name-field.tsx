@@ -1,16 +1,17 @@
-import { PLAN_BOUNDS } from "@sidecar/features/plan-wire";
+import { PLAN_BOUNDS } from "@luke/features/plan-wire";
+import { RENAME_FAILED_NOTE } from "@luke/ui/planning-model";
 import { useLayoutEffect, useRef, useState } from "react";
-import { RENAME_FAILED_NOTE } from "../planning/planning-model";
 
 /**
- * plan-name-field.tsx -- a name edited where it is drawn, in the sidebar's row, on the open plan's tab, or on an agent's, the way a desktop list renames in place.
+ * plan-name-field.tsx -- a name edited where it is drawn, in the sidebar's row, on the open plan's tab, on an agent's, or on Settings › Workspace, the way a desktop list renames in place.
  *
  * The field opens over the name with all of it selected. Return or a press
  * elsewhere keeps what was typed, and Escape keeps the name it opened on; a
  * name left empty or unchanged renames nothing. Its words are an input's
  * value, which session replay masks as it masks every input. The field and
  * the rename hook are a plan's by default and an agent's where the caller
- * says so: what differs is the name said for a reader and the bound.
+ * says so, and the field is a workspace's the same way: what differs is the
+ * name said for a reader and the bound.
  */
 
 /** How an edit ended: what to rename the plan to, if anything, and whether a key ended it, so focus goes back to the name. */
@@ -23,7 +24,7 @@ export interface NameEdit {
 export function PlanNameField({
   name,
   className,
-  label = "Plan name",
+  label = "Task name",
   maxLength = PLAN_BOUNDS.MAX_NAME_CHARS,
   onEnd,
 }: {

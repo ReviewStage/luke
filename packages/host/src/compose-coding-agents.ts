@@ -1,4 +1,4 @@
-import type { HostedCodingAgentClient } from "@sidecar/features";
+import type { HostedCodingAgentClient } from "@luke/features";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAccountInboxAnswerView,
@@ -11,8 +11,10 @@ import {
   type CodingAgentListAnswer,
   type CodingAgentMessagesAnswerView,
   type CodingAgentModelsAnswer,
+  type CodingAgentPageAnswerView,
   type CodingAgentPullRequestAnswerView,
   codingAgentAccountInboxParamsSchema,
+  codingAgentAgentInboxParamsSchema,
   codingAgentArchiveParamsSchema,
   codingAgentChooseParamsSchema,
   codingAgentDefaultWriteParamsSchema,
@@ -22,11 +24,13 @@ import {
   codingAgentListParamsSchema,
   codingAgentMessageParamsSchema,
   codingAgentMessagesParamsSchema,
+  codingAgentPageParamsSchema,
   codingAgentPullRequestParamsSchema,
   codingAgentRenameParamsSchema,
   codingAgentServersParamsSchema,
   codingAgentStartParamsSchema,
   codingAgentStopParamsSchema,
+  codingAgentWorkspaceListParamsSchema,
   type DictationTranscribeAnswerView,
   dictationTranscribeParamsSchema,
   type PlanTemplateAnswerView,
@@ -38,10 +42,10 @@ import {
   planTemplateWriteParamsSchema,
   providerKeyRemoveParamsSchema,
   providerKeySaveParamsSchema,
-} from "@sidecar/features/coding-agent-view";
-import { carried, GATEWAY_METHOD, type GatewayMethodTable, invalid } from "@sidecar/gateway";
-import { unparsedWire } from "@sidecar/wire";
-import { readEither } from "@sidecar/wire/effect";
+} from "@luke/features/coding-agent-view";
+import { carried, GATEWAY_METHOD, type GatewayMethodTable, invalid } from "@luke/gateway";
+import { unparsedWire } from "@luke/wire";
+import { readEither } from "@luke/wire/effect";
 import { Effect, Result, type Schema, type Scope } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import type * as HttpClient from "effect/http/HttpClient";
@@ -74,6 +78,7 @@ export type CodingAgentClient = Pick<
   | "readDefault"
   | "writeDefault"
   | "list"
+  | "listWorkspace"
   | "start"
   | "messages"
   | "message"
@@ -82,6 +87,8 @@ export type CodingAgentClient = Pick<
   | "switchServers"
   | "archive"
   | "stop"
+  | "agent"
+  | "agentInbox"
   | "pullRequest"
   | "changes"
   | "readProviderKeys"
@@ -243,6 +250,15 @@ function composed(dependencies: CodingAgentsDependencies): CodingAgentsComposer 
         const answer = yield* asked(client.list(planId, includeArchived));
         return carried<CodingAgentListAnswer>(answer);
       }),
+    [GATEWAY_METHOD.CODING_AGENTS_WORKSPACE_LIST]: (params) =>
+      Effect.gen(function* () {
+        const listed = yield* read(
+          codingAgentWorkspaceListParamsSchema,
+          params,
+          "listing a workspace's agents names one workspace",
+        );
+        return carried<CodingAgentListAnswer>(yield* asked(client.listWorkspace(listed)));
+      }),
     [GATEWAY_METHOD.CODING_AGENTS_START]: (params) =>
       Effect.gen(function* () {
         const { planId, ...request } = yield* read(
@@ -323,6 +339,16 @@ function composed(dependencies: CodingAgentsDependencies): CodingAgentsComposer 
         const answer = yield* asked(client.stop(agentId));
         return carried<CodingAgentAgentAnswer>(answer);
       }),
+    [GATEWAY_METHOD.CODING_AGENTS_PAGE]: (params) =>
+      Effect.gen(function* () {
+        const { agentId } = yield* read(
+          codingAgentPageParamsSchema,
+          params,
+          "reading an agent's page names one agent",
+        );
+        const answer = yield* asked(client.agent(agentId));
+        return carried<CodingAgentPageAnswerView>(answer);
+      }),
     [GATEWAY_METHOD.CODING_AGENTS_PULL_REQUEST]: (params) =>
       Effect.gen(function* () {
         const { agentId } = yield* read(
@@ -351,6 +377,16 @@ function composed(dependencies: CodingAgentsDependencies): CodingAgentsComposer 
           "reading a plan's inbox names the plan and a cursor",
         );
         const answer = yield* asked(client.inbox(planId, after));
+        return carried<CodingAgentInboxAnswerView>(answer);
+      }),
+    [GATEWAY_METHOD.CODING_AGENTS_AGENT_INBOX]: (params) =>
+      Effect.gen(function* () {
+        const { agentId, after } = yield* read(
+          codingAgentAgentInboxParamsSchema,
+          params,
+          "reading an agent's inbox names the agent and a cursor",
+        );
+        const answer = yield* asked(client.agentInbox(agentId, after));
         return carried<CodingAgentInboxAnswerView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_INBOX_ATTACHMENT]: (params) =>

@@ -1,10 +1,14 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+import { pinnedPictureUrl } from "@luke/features/account-picture";
 import {
+  RESERVED_WORKSPACE_SLUGS,
   type Workspace as WireWorkspace,
   WORKSPACE_ROLE,
+  type WorkspacePhoto,
   type WorkspaceRole,
-} from "@sidecar/features/workspace-wire";
-import { and, asc, eq, exists, type SQL, type SQLWrapper } from "drizzle-orm";
+  workspacePhotoOfDataUrl,
+} from "@luke/features/workspace-wire";
+import { and, asc, eq, exists, inArray, type SQL, type SQLWrapper, sql } from "drizzle-orm";
 import { type Cause, DateTime, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import {
@@ -16,6 +20,7 @@ import {
 } from "../core/query.js";
 import { GITHUB_INSTALLATION_STATUS } from "../github-installation-vocabulary.js";
 import { member, organization, user } from "../schemas/auth.js";
+import { codingAgent } from "../schemas/coding-agent.js";
 import { githubInstallation } from "../schemas/github-installation.js";
 import { personalWorkspace } from "../schemas/personal-workspace.js";
 import { plan } from "../schemas/plan.js";
@@ -34,10 +39,13 @@ import {
  * take. A workspace is made through the plugin's server-only
  * `createOrganization` (`workspace-seams.ts`), so the organization and its
  * owner are the plugin's own rows. The account's first workspace is made the
- * first time it is asked for, its metadata marked personal, and named the
- * account's in `personal_workspace`. The row is only how a start or a
- * listing finds the account's default and nothing reads the mark: it is
- * otherwise a workspace like any other. That write is no transaction: Better
+ * first time it is asked for, under the account's name, its metadata marked
+ * personal, and named the account's in `personal_workspace`. That row is
+ * how a start or a listing finds the account's default, and how every read
+ * names the workspace for its owner as the owner is called now
+ * (`WORKSPACE_NAME`) and lists it as personal, so it has no name of its own
+ * and is never renamed; nothing reads the mark, and it is otherwise a
+ * workspace like any other. That write is no transaction: Better
  * Auth writes over its own pool, outside the fiber's `SqlClient`, so two Macs
  * ensuring at once settle on unique keys instead, the workspace's slug and
  * the account's row, and the one that loses adopts what the other made.
@@ -46,21 +54,40 @@ import {
  * read and written by every member of the workspace it names, so a store
  * gates a plan through `planReachableBy` and `reachablePlan` rather than by
  * the account that started it.
+ * A workspace's photo is the plugin's own `organization.logo`, kept as a
+ * `data:` URL of one of `WORKSPACE_PHOTO_TYPE`; a list names only a digest of
+ * it, and its bytes are read apart, by a member alone. The account's own
+ * first workspace with no photo lists the account's sign-in picture, where
+ * the renderer may draw it.
  * Every function is an effect over the ambient `Database`.
  */
 
 /** The slug every account's first workspace is made under, one per account, which is what makes the plugin refuse a second. */
 const PERSONAL_SLUG_PREFIX = "personal-";
 
+/** How many hex characters of a photo's digest name its version: enough that two photos of one workspace never share one. */
+const PHOTO_VERSION_CHARS = 16;
+
 /**
  * One workspace as its members see it: the account's role in it and the
- * GitHub account its connected installation is on, if any.
+ * GitHub accounts its connected installations are on, the first linked
+ * first.
  */
 export type Workspace = WireWorkspace;
 
 const WORKSPACE_ROLES: readonly WorkspaceRole[] = Object.values(WORKSPACE_ROLE);
 
 /** What a workspace read answers: an effect over the ambient database. */
+/**
+ * A workspace's name as its members read it: an account's first workspace is
+ * called by that account's name as it stands now, so a renamed account
+ * renames it, and any other by its own. Note that the owner is read by the
+ * workspace alone, never the account asking, because a teammate in someone's
+ * first workspace reads it under the owner's name too; the workspace's own
+ * name is what stands once the account is gone.
+ */
+export const WORKSPACE_NAME = sql<string>`coalesce((select "owner"."name" from ${personalWorkspace} as "personal" inner join ${user} as "owner" on "owner"."id" = "personal"."user_id" where "personal"."organization_id" = ${organization.id}), ${organization.name})`;
+
 export type WorkspaceStoreEffect<A, E = never> = Effect.Effect<
   A,
   QueryError | Schema.SchemaError | E,
@@ -72,15 +99,31 @@ const OrganizationIdSchema = Schema.Struct({ organizationId: Schema.String });
 const WorkspaceRowSchema = Schema.Struct({
   id: Schema.String,
   name: Schema.String,
+  slug: Schema.String,
   /** The account's own id where this workspace is the first one made for it, else null. */
   personalOf: Schema.NullOr(Schema.String),
+  /** Whether this workspace is the first one made for any account, the asking one or another. */
+  personal: Schema.Boolean,
   /** The plugin's role text, which may list several roles comma-separated. */
   role: Schema.String,
-  /** The login of the GitHub account the workspace's installation is on, or null where none is connected. */
-  login: Schema.NullOr(Schema.String),
-  /** The workspace's installation's status, or null where none is connected. */
-  status: Schema.NullOr(Schema.String),
+  /** How many members the workspace has, the account among them. */
+  memberCount: Schema.Number,
+  /** The plugin's `logo` text, which holds the workspace's photo as a `data:` URL where it has one. */
+  logo: Schema.NullOr(Schema.String),
+  /** The account's own sign-in picture where this workspace is the first one made for it, else null. */
+  ownerImage: Schema.NullOr(Schema.String),
 });
+
+const InstallationRowSchema = Schema.Struct({
+  organizationId: Schema.String,
+  installationId: Schema.Number,
+  /** The login of the GitHub account the installation is on. */
+  login: Schema.String,
+  /** The installation's status as its webhook, or a read of GitHub, last wrote it. */
+  status: Schema.String,
+});
+
+type InstallationRow = typeof InstallationRowSchema.Type;
 
 const findPersonalWorkspace = SqlSchema.findOneOption({
   Request: Schema.String,
@@ -100,6 +143,18 @@ const findAccountName = SqlSchema.findOneOption({
   Result: Schema.Struct({ name: Schema.String }),
   execute: (userId) =>
     Database.use((db) => db.select({ name: user.name }).from(user).where(eq(user.id, userId))),
+});
+
+const findAccountNames = SqlSchema.findAll({
+  Request: Schema.Array(Schema.String),
+  Result: Schema.Struct({ id: Schema.String, name: Schema.String }),
+  execute: (ids) =>
+    Database.use((db) =>
+      db
+        .select({ id: user.id, name: user.name })
+        .from(user)
+        .where(inArray(user.id, [...ids])),
+    ),
 });
 
 const findOrganizationBySlug = SqlSchema.findOneOption({
@@ -176,16 +231,33 @@ const findMemberWorkspace = SqlSchema.findOneOption({
     ),
 });
 
-/** The workspaces the account is a member of, or the one named among them, as rows. */
+const findWorkspaceLogo = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, organizationId: Schema.String }),
+  Result: Schema.Struct({ logo: Schema.NullOr(Schema.String) }),
+  execute: ({ userId, organizationId }) =>
+    Database.use((db) =>
+      db
+        .select({ logo: organization.logo })
+        .from(organization)
+        .where(
+          and(eq(organization.id, organizationId), memberOfWorkspace(userId, organization.id)),
+        ),
+    ),
+});
+
+/** The workspaces the account is a member of, or the one named among them, as rows, each with how many members it has, counted apart from the account's own row the read joins. */
 function workspaceRows(db: DatabaseShape, userId: string, organizationId?: string) {
   return db
     .select({
       id: organization.id,
-      name: organization.name,
+      name: WORKSPACE_NAME,
+      slug: organization.slug,
       personalOf: personalWorkspace.userId,
+      personal: sql<boolean>`exists(select 1 from ${personalWorkspace} as "first" where "first"."organization_id" = ${organization.id})`,
       role: member.role,
-      login: githubInstallation.accountLogin,
-      status: githubInstallation.status,
+      memberCount: sql<number>`(select count(*)::int from ${member} as "members" where "members"."organization_id" = ${organization.id})`,
+      logo: organization.logo,
+      ownerImage: user.image,
     })
     .from(member)
     .innerJoin(organization, eq(organization.id, member.organizationId))
@@ -196,14 +268,67 @@ function workspaceRows(db: DatabaseShape, userId: string, organizationId?: strin
         eq(personalWorkspace.userId, userId),
       ),
     )
-    .leftJoin(githubInstallation, eq(githubInstallation.organizationId, organization.id))
+    .leftJoin(user, eq(user.id, personalWorkspace.userId))
     .where(
       and(
         eq(member.userId, userId),
         organizationId === undefined ? undefined : eq(organization.id, organizationId),
       ),
     )
-    .orderBy(asc(organization.name), asc(organization.id));
+    .orderBy(asc(WORKSPACE_NAME), asc(organization.id));
+}
+
+/**
+ * The installations connected to the workspaces the account is a member of,
+ * or to the one named among them, each workspace's first linked first. A
+ * read of its own rather than a join on the workspaces', because a
+ * workspace holding several would otherwise be listed once for each.
+ */
+function installationRows(db: DatabaseShape, userId: string, organizationId?: string) {
+  return db
+    .select({
+      organizationId: githubInstallation.organizationId,
+      installationId: githubInstallation.installationId,
+      login: githubInstallation.accountLogin,
+      status: githubInstallation.status,
+    })
+    .from(githubInstallation)
+    .innerJoin(member, eq(member.organizationId, githubInstallation.organizationId))
+    .where(
+      and(
+        eq(member.userId, userId),
+        organizationId === undefined
+          ? undefined
+          : eq(githubInstallation.organizationId, organizationId),
+      ),
+    )
+    .orderBy(asc(githubInstallation.createdAt), asc(githubInstallation.installationId));
+}
+
+const findAllInstallations = SqlSchema.findAll({
+  Request: Schema.String,
+  Result: InstallationRowSchema,
+  execute: (userId) => Database.use((db) => installationRows(db, userId)),
+});
+
+const findInstallations = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String, organizationId: Schema.String }),
+  Result: InstallationRowSchema,
+  execute: ({ userId, organizationId }) =>
+    Database.use((db) => installationRows(db, userId, organizationId)),
+});
+
+/** The installation rows by the workspace they stand for, each list in the order read. */
+function installationsByWorkspace(
+  rows: readonly InstallationRow[],
+): ReadonlyMap<string, readonly InstallationRow[]> {
+  const grouped = new Map<string, InstallationRow[]>();
+  for (const row of rows) {
+    const listed = grouped.get(row.organizationId);
+    if (listed === undefined) grouped.set(row.organizationId, [row]);
+    else listed.push(row);
+  }
+  return grouped;
 }
 
 const findWorkspaces = SqlSchema.findAll({
@@ -219,23 +344,61 @@ const findWorkspace = SqlSchema.findOneOption({
     Database.use((db) => workspaceRows(db, userId, organizationId)),
 });
 
-/** One row as the wire carries the workspace. */
-function workspaceOfRow(row: typeof WorkspaceRowSchema.Type): Workspace {
-  return {
+/** The photo a workspace's `logo` holds, where it is a `data:` URL of a photo's type whose bytes read; nothing for any other text. */
+function photoOfLogo(logo: string | null): WorkspacePhoto | undefined {
+  return logo === null ? undefined : workspacePhotoOfDataUrl(logo);
+}
+
+/**
+ * What a row shows of the workspace's face: a digest of its photo where it
+ * holds one, else, on the account's own first workspace, the account's
+ * sign-in picture where the renderer may draw it, else nothing.
+ */
+function faceOfRow(
+  row: typeof WorkspaceRowSchema.Type,
+): Pick<Workspace, "photoVersion" | "pictureUrl"> {
+  if (row.logo !== null && photoOfLogo(row.logo) !== undefined) {
+    const digest = createHash("sha256").update(row.logo).digest("hex");
+    return { photoVersion: digest.slice(0, PHOTO_VERSION_CHARS) };
+  }
+  const pictureUrl = row.personalOf === null ? undefined : pinnedPictureUrl(row.ownerImage);
+  return pictureUrl === undefined ? {} : { pictureUrl };
+}
+
+/**
+ * One row as the wire carries the workspace, with its installations: every
+ * one, and again the first linked that is still active, else the first
+ * linked, as the one a desktop from before several reads.
+ */
+function workspaceOfRow(
+  row: typeof WorkspaceRowSchema.Type,
+  installations: readonly InstallationRow[],
+): Workspace {
+  const githubInstallations = installations.map((installation) => ({
+    installationId: installation.installationId,
+    login: installation.login,
+    active: installation.status === GITHUB_INSTALLATION_STATUS.ACTIVE,
+  }));
+  // Note that a desktop from before several reads one account alone, so it reads the first one
+  // still active, because the first linked may have lapsed while another runs.
+  const first = githubInstallations.find((one) => one.active) ?? githubInstallations[0];
+  const workspace: Workspace = {
     id: row.id,
     name: row.name,
+    slug: row.slug,
     role: roleOf(row.role),
-    github:
-      row.login === null
-        ? null
-        : { login: row.login, active: row.status === GITHUB_INSTALLATION_STATUS.ACTIVE },
+    github: first === undefined ? null : { login: first.login, active: first.active },
+    githubInstallations,
+    memberCount: row.memberCount,
+    ...faceOfRow(row),
   };
+  return row.personal ? { ...workspace, personal: true } : workspace;
 }
 
 /** The longest slug spelled from a workspace's name, before any suffix. */
 const MAX_SLUG_CHARS = 48;
 
-/** A workspace's slug spelled from its name: lowercase letters and digits, a hyphen between runs of them, "workspace" where the name has none, and never one an account's first workspace is made under. */
+/** A workspace's slug spelled from its name: lowercase letters and digits, a hyphen between runs of them, "workspace" where the name has none, and never one an account's first workspace is made under or one Luke's own pages stand under. */
 function slugOf(name: string): string {
   const spelled = name
     .normalize("NFKD")
@@ -245,8 +408,9 @@ function slugOf(name: string): string {
     .slice(0, MAX_SLUG_CHARS)
     .replace(/-+$/u, "");
   if (spelled === "") return "workspace";
-  // Note that no workspace a member names takes the slug an account's first one is made under, so an ensure finds its own there.
-  return spelled.startsWith(PERSONAL_SLUG_PREFIX) ? `workspace-${spelled}` : spelled;
+  // Note that no workspace a member names takes the slug an account's first one is made under, so an ensure finds its own there, nor a step of Luke's own paths.
+  const own = spelled.startsWith(PERSONAL_SLUG_PREFIX) || RESERVED_WORKSPACE_SLUGS.has(spelled);
+  return own ? `workspace-${spelled}` : spelled;
 }
 
 /** The highest role the plugin's role text names, read as a member where it names none Luke knows. */
@@ -309,6 +473,19 @@ function isOwnPersonalOrganization(
   return Effect.map(findOwnedOrganization({ userId, organizationId }), Option.isSome);
 }
 
+/** The condition that the account is a member of the workspace a statement names, by its id or a column standing for it. */
+export function workspaceReachableBy(userId: string, organizationId: string | SQLWrapper): SQL {
+  return memberOfWorkspace(userId, organizationId);
+}
+
+/** A coding agent row's workspace: its own, or its plan's on a row the backfill has not reached yet. */
+export const AGENT_WORKSPACE = sql<string>`coalesce(${codingAgent.organizationId}, (select ${plan.organizationId} from ${plan} where ${plan.id} = ${codingAgent.planId}))`;
+
+/** The condition that the account may read and write the coding agent row a statement reads: it is a member of the agent's workspace, an agent with no plan as much as one on a plan. */
+export function agentReachableBy(userId: string): SQL {
+  return memberOfWorkspace(userId, AGENT_WORKSPACE);
+}
+
 /** The condition that the account may read and write the plan row a statement reads: it is a member of the plan's workspace. */
 export function planReachableBy(userId: string): SQL {
   return memberOfWorkspace(userId, plan.organizationId);
@@ -368,17 +545,20 @@ export function isWorkspaceMember(
 
 /**
  * Every workspace the account is a member of, its first one first and the
- * rest by name. A workspace whose installation was suspended or removed is
- * listed with its GitHub account inactive rather than left out, so its plans
- * stay reachable; GitHub refuses its repository work on its own.
+ * rest by name, each once however many installations it holds. An
+ * installation suspended or removed is listed inactive rather than left
+ * out, so its workspace's plans stay reachable; GitHub refuses its
+ * repository work on its own.
  */
 export function listWorkspaces(userId: string): WorkspaceStoreEffect<readonly Workspace[]> {
-  return Effect.map(findWorkspaces(userId), (rows) =>
-    [
+  return Effect.gen(function* () {
+    const rows = yield* findWorkspaces(userId);
+    const installations = installationsByWorkspace(yield* findAllInstallations(userId));
+    return [
       ...rows.filter((row) => row.personalOf !== null),
       ...rows.filter((row) => row.personalOf === null),
-    ].map(workspaceOfRow),
-  );
+    ].map((row) => workspaceOfRow(row, installations.get(row.id) ?? []));
+  });
 }
 
 /** One workspace the account is a member of, as its list carries it; nothing for one it is not in. */
@@ -386,7 +566,22 @@ export function workspaceOf(
   userId: string,
   organizationId: string,
 ): WorkspaceStoreEffect<Option.Option<Workspace>> {
-  return Effect.map(findWorkspace({ userId, organizationId }), Option.map(workspaceOfRow));
+  return Effect.gen(function* () {
+    const row = yield* findWorkspace({ userId, organizationId });
+    if (Option.isNone(row)) return Option.none();
+    const installations = yield* findInstallations({ userId, organizationId });
+    return Option.some(workspaceOfRow(row.value, installations));
+  });
+}
+
+/** One workspace's photo as its bytes, to a member of it alone; nothing for a workspace it is not in, or one that holds no photo. */
+export function readWorkspacePhoto(
+  userId: string,
+  organizationId: string,
+): WorkspaceStoreEffect<Option.Option<WorkspacePhoto>> {
+  return Effect.map(findWorkspaceLogo({ userId, organizationId }), (found) =>
+    Option.flatMap(found, (row) => Option.fromNullishOr(photoOfLogo(row.logo))),
+  );
 }
 
 /**
@@ -406,5 +601,21 @@ export function createWorkspace(
     [slug, `${slug}-${randomUUID().slice(0, 8)}`],
     () => Effect.succeed(false),
     seams,
+  );
+}
+
+/**
+ * The name each account named holds now, by its id, for the window to say
+ * who did a piece of work: a member who has since left a workspace is still
+ * named, and an account that is gone is left out.
+ */
+export function readAccountNames(
+  ids: readonly string[],
+): WorkspaceStoreEffect<ReadonlyMap<string, string>> {
+  const asked = [...new Set(ids)];
+  if (asked.length === 0) return Effect.succeed(new Map());
+  return Effect.map(
+    findAccountNames(asked),
+    (rows) => new Map(rows.map((row) => [row.id, row.name])),
   );
 }

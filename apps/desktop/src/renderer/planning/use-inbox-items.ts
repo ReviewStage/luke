@@ -1,8 +1,8 @@
-import type { CodingAgentInboxAnswerView } from "@sidecar/features/coding-agent-view";
-import { CODING_AGENT_CALL_FAILURE } from "@sidecar/features/coding-agent-view";
-import { INBOX_CURSOR_START, type InboxItem } from "@sidecar/features/inbox-wire";
+import type { CodingAgentInboxAnswerView } from "@luke/features/coding-agent-view";
+import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
+import { INBOX_CURSOR_START, type InboxItem } from "@luke/features/inbox-wire";
+import type { AppInboxPlanHolding } from "@luke/host/app-state";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { AppInboxPlanHolding } from "#shared/messages/app-state";
 import type { InboxReader } from "./use-plan-inbox";
 
 /**
@@ -98,5 +98,6 @@ export function useInboxItems(input: {
     () => new Map([...reads].map(([planId, read]) => [planId, read.items])),
     [reads],
   );
-  return { items, failed: failed.size > 0, onRetry };
+  // Note that only a plan still listed fails the list, because one another workspace listed is not drawn.
+  return { items, failed: holdings.some((holding) => failed.has(holding.planId)), onRetry };
 }

@@ -17,11 +17,11 @@ import type {
   CodingAgentMessagesAnswerView,
   CodingAgentModelsAnswer,
   CodingAgentPullRequestAnswerView,
-} from "@sidecar/features/coding-agent-view";
-import type { CodingAgentMessage, CodingAgentSummary } from "@sidecar/features/coding-agent-wire";
-import type { CatalogModel } from "@sidecar/features/models-wire";
-import type { WireRecord, WireValue } from "@sidecar/wire";
-import { ACT_KIND } from "#shared/messages/acts";
+} from "@luke/features/coding-agent-view";
+import type { CodingAgentMessage, CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import type { CatalogModel } from "@luke/features/models-wire";
+import type { WireRecord, WireValue } from "@luke/wire";
+import { ACT_KIND } from "@luke/host/acts";
 import { ago } from "./clock";
 import {
   AGENT_2_TITLE,

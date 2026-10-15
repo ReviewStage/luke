@@ -1,17 +1,14 @@
-import type {
-  CodingAgentAttachment,
-  CodingAgentMessage,
-} from "@sidecar/features/coding-agent-wire";
-import { RemoveIcon } from "@sidecar/panel";
-import { isRecord, isWireString } from "@sidecar/wire";
-import { type ReactNode, useState } from "react";
 import {
   ATTACHMENT_VIEW,
   attachmentView,
   chipBase64,
   type FileChip,
   sizeLabel,
-} from "./attachment-model";
+} from "@luke/features/attachment-model";
+import type { CodingAgentAttachment, CodingAgentMessage } from "@luke/features/coding-agent-wire";
+import { RemoveIcon } from "@luke/ui";
+import { isRecord, isWireString } from "@luke/wire";
+import { type ReactNode, useState } from "react";
 import { AttachmentViewer } from "./attachment-viewer";
 import { FileTypeIcon } from "./file-type-icon";
 

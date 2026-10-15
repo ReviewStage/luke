@@ -1,13 +1,8 @@
-import { FACE_MOTION, FACE_MOTION_CYCLE_MS, type FaceMotion } from "@sidecar/brand";
-import type { AccountSnapshot } from "@sidecar/credentials/snapshot";
-import {
-  ACCOUNT_PROVIDER,
-  ACCOUNT_STATUS,
-  type AccountProvider,
-} from "@sidecar/credentials/snapshot";
-import { WingFace } from "@sidecar/panel";
+import { FACE_MOTION, FACE_MOTION_CYCLE_MS, type FaceMotion } from "@luke/brand";
+import type { AccountSnapshot } from "@luke/credentials/snapshot";
+import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountProvider } from "@luke/credentials/snapshot";
+import { ProviderMark, WingFace } from "@luke/ui";
 import { useEffect, useId, useState } from "react";
-import { ProviderMark } from "./provider-marks";
 import { SpinnerRing } from "./spinner";
 
 /**
@@ -61,9 +56,9 @@ export function useSignInFaceCycle(still: boolean) {
 
 /**
  * A provider's button, which says so while it is the sign-in being waited on.
- * The one marked last used wears the chip beside its label, drawn over the
- * button's trailing edge rather than inside it, so the button is still named
- * by its label alone and the chip describes it.
+ * The one marked last used wears the badge on its top-right corner, a sibling
+ * hung over the button rather than a word inside it, so the button is still
+ * named by its label alone and the badge describes it.
  */
 function ProviderButton({
   provider,
@@ -84,7 +79,7 @@ function ProviderButton({
   disabled: boolean;
   onBegin: (provider: AccountProvider) => void;
 }): React.JSX.Element {
-  const chip = useId();
+  const badge = useId();
   return (
     <div className="sign-in-provider-slot">
       <button
@@ -94,7 +89,7 @@ function ProviderButton({
         data-primary={String(primary)}
         data-waiting={String(waiting)}
         disabled={disabled}
-        aria-describedby={lastUsed ? chip : undefined}
+        aria-describedby={lastUsed ? badge : undefined}
         onClick={() => onBegin(provider)}
       >
         {waiting ? (
@@ -107,7 +102,7 @@ function ProviderButton({
         {waiting ? "Waiting for browser…" : `Continue with ${name}`}
       </button>
       {lastUsed ? (
-        <span id={chip} className="sign-in-last-used">
+        <span id={badge} className="sign-in-last-used">
           Last used
         </span>
       ) : null}

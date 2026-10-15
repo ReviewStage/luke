@@ -1,8 +1,8 @@
-import { INBOX_TOOL } from "@sidecar/features/inbox-wire";
-import { emitJsonSchema } from "@sidecar/wire/effect";
+import { INBOX_TOOL } from "@luke/features/inbox-wire";
+import { INBOX_TOOLS } from "@luke/service/agents/coder-host/inbox";
+import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
+import { emitJsonSchema } from "@luke/wire/effect";
 import { defineTool } from "eve/tools";
-import { unparsedWire, type WireBoundaryInput } from "../../server/core.js";
-import { INBOX_TOOLS } from "../../server/hosted/coder-host/inbox.js";
 import { runInboxTool } from "../host.js";
 
 /**
@@ -10,7 +10,7 @@ import { runInboxTool } from "../host.js";
  *
  * The call reaches the store through the host's door (`../host.ts`), as
  * `edit_plan` does, and answers with the agent's whole inbox as it stands
- * (`server/hosted/coder-host/inbox.ts`). An image block's picture is read
+ * (`packages/service/src/agents/coder-host/inbox.ts`). An image block's picture is read
  * from the session's sandbox through the same door eve hands every file
  * tool, opened on first use, so a post with no image opens none.
  */

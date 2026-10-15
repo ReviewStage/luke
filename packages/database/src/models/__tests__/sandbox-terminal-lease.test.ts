@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@sidecar/wire";
+import { TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@luke/wire";
 import { eq } from "drizzle-orm";
 import { Effect } from "effect";
 import { Database } from "../../core/query.js";
@@ -10,9 +10,11 @@ import { conversations, turns } from "../../schemas/storage.js";
 import { CONVERSATION_KIND } from "../../storage-vocabulary.js";
 import { getTestDB } from "../../testing/index.js";
 import {
+  claimCredentialRenewal,
   claimLapsedLease,
   holdSandbox,
   lapsedSandboxLeases,
+  releaseCredentialRenewal,
   releaseLapsedLease,
   sandboxHeld,
 } from "../sandbox-terminal-lease.js";
@@ -202,6 +204,100 @@ it.layer(getTestDB())("the sandbox terminal lease", (it) => {
 
       assert.equal(yield* sandboxHeld(conversationId, at(0)), false);
       assert.deepEqual(yield* lapsedAmong(at(20), [conversationId]), []);
+    }),
+  );
+
+  it.effect(
+    "the GitHub token's renewal is claimed once per lease while due, so two windows mint one token",
+    () =>
+      Effect.gen(function* () {
+        const { conversationId } = yield* openAgent();
+        const unleased = yield* openAgent();
+        yield* holdSandbox(conversationId, at(5));
+
+        const first = yield* claimCredentialRenewal(conversationId, "sbs_1", at(0), at(-50));
+        const second = yield* claimCredentialRenewal(conversationId, "sbs_1", at(1), at(-49));
+        const due = yield* claimCredentialRenewal(conversationId, "sbs_1", at(51), at(1));
+        const none = yield* claimCredentialRenewal(
+          unleased.conversationId,
+          "sbs_1",
+          at(0),
+          at(-50),
+        );
+
+        assert.deepEqual([first, second, due, none], [true, false, true, false]);
+      }),
+  );
+
+  it.effect(
+    "a renewal given back is claimed again at the next check, and a later claim is not given back",
+    () =>
+      Effect.gen(function* () {
+        const { conversationId } = yield* openAgent();
+        yield* holdSandbox(conversationId, at(5));
+
+        yield* claimCredentialRenewal(conversationId, "sbs_1", at(0), at(-50));
+        yield* releaseCredentialRenewal(conversationId, "sbs_1", at(0));
+        const retried = yield* claimCredentialRenewal(conversationId, "sbs_1", at(5), at(-45));
+        yield* releaseCredentialRenewal(conversationId, "sbs_1", at(0));
+        const stillClaimed = yield* claimCredentialRenewal(
+          conversationId,
+          "sbs_1",
+          at(10),
+          at(-40),
+        );
+
+        assert.equal(retried, true, "the failed claim was given back");
+        assert.equal(stillClaimed, false, "a stale give-back leaves the later claim standing");
+      }),
+  );
+
+  it.effect(
+    "a resumed sandbox's new session claims its renewal at once, however lately the old one was renewed",
+    () =>
+      Effect.gen(function* () {
+        const { conversationId } = yield* openAgent();
+        yield* holdSandbox(conversationId, at(5));
+
+        yield* claimCredentialRenewal(conversationId, "sbs_before_stop", at(0), at(-50));
+        const sameSession = yield* claimCredentialRenewal(
+          conversationId,
+          "sbs_before_stop",
+          at(10),
+          at(-40),
+        );
+        const resumed = yield* claimCredentialRenewal(
+          conversationId,
+          "sbs_resumed",
+          at(10),
+          at(-40),
+        );
+        const resumedAgain = yield* claimCredentialRenewal(
+          conversationId,
+          "sbs_resumed",
+          at(11),
+          at(-39),
+        );
+
+        assert.deepEqual([sameSession, resumed, resumedAgain], [false, true, false]);
+      }),
+  );
+
+  it.effect("a give-back from another session at the same instant leaves the standing claim", () =>
+    Effect.gen(function* () {
+      const { conversationId } = yield* openAgent();
+      yield* holdSandbox(conversationId, at(5));
+
+      yield* claimCredentialRenewal(conversationId, "sbs_resumed", at(0), at(-50));
+      yield* releaseCredentialRenewal(conversationId, "sbs_before_stop", at(0));
+      const claimedAgain = yield* claimCredentialRenewal(
+        conversationId,
+        "sbs_resumed",
+        at(1),
+        at(-49),
+      );
+
+      assert.equal(claimedAgain, false, "the resumed session's claim still stands");
     }),
   );
 });

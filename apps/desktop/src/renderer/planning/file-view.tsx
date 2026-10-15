@@ -1,10 +1,7 @@
-import { INTEGRATION_PROVIDER } from "@sidecar/features/integration-wire";
-import type {
-  PlanCode,
-  PlanCodeShowing,
-  PlanningTreeAnswer,
-} from "@sidecar/features/planning-view";
-import { ArrowLeftIcon, ArrowRightIcon, SidePanelIcon } from "@sidecar/panel";
+import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import type { PlanCode, PlanCodeShowing, PlanningTreeAnswer } from "@luke/features/planning-view";
+import { ArrowLeftIcon, ArrowRightIcon, ProviderMark, SidePanelIcon } from "@luke/ui";
+import { shownFiles } from "@luke/voice/code-pane-model";
 import {
   Fragment,
   type ReactNode,
@@ -17,9 +14,7 @@ import {
 } from "react";
 import { paneTiming } from "../desktop/pane-motion";
 import type { ReadFolder } from "../file-tree/contract";
-import { ProviderMark } from "../provider-marks";
 import { Tooltip } from "../tooltip";
-import { shownFiles } from "./code-pane-model";
 import { FileBreadcrumbs } from "./file-breadcrumbs";
 import { FileMenu } from "./file-menu";
 import type { FileNotes } from "./file-note";
@@ -72,14 +67,25 @@ import { FILE_HISTORY_STEP, type FileHistoryStep, type OpenFile } from "./use-si
  */
 
 /** The bar's button that shows or hides the tree, which stands under it at the bar's end. */
-function TreeToggle({
+/** What a pane's toggle says while the pane is open, and while it is not. */
+interface ToggleWords {
+  readonly open: string;
+  readonly closed: string;
+}
+
+const FILES_TOGGLE: ToggleWords = { open: "Hide files", closed: "Show files" };
+
+/** The toggle at a bar's end that opens and closes the pane beside the tab: a File tab's tree, or a Terminal tab's shells. */
+export function TreeToggle({
   open,
   onToggle,
+  words = FILES_TOGGLE,
 }: {
   open: boolean;
   onToggle: () => void;
+  words?: ToggleWords;
 }): React.JSX.Element {
-  const label = open ? "Hide files" : "Show files";
+  const label = open ? words.open : words.closed;
   return (
     <Tooltip label={label}>
       <button

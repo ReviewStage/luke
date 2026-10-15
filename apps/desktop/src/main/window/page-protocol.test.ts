@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import type { PageVersion } from "@sidecar/features/page-wire";
-import { PLAN_CALL_FAILURE, type PlanningPageParams } from "@sidecar/features/planning-view";
+import { pageFrameUrl } from "@luke/features/page-frame";
+import type { PageVersion } from "@luke/features/page-wire";
+import { PLAN_CALL_FAILURE, type PlanningPageParams } from "@luke/features/planning-view";
 import { Effect } from "effect";
-import { pageFrameUrl } from "#shared/page-frame";
 import { pageResponse } from "./page-protocol";
 
 /**

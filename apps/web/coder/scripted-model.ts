@@ -2,7 +2,10 @@ import {
   CODING_AGENT_TODO_STATUS,
   type CodingAgentTodos,
   codingAgentDelegationOutputSchema,
-} from "@sidecar/features/coding-agent-wire";
+} from "@luke/features/coding-agent-wire";
+import type { AgentSkill } from "@luke/service/agents/agent-runtime/skills";
+import { CODER_MODEL_FIXTURE } from "@luke/service/agents/coder-host/bounds";
+import { CODER_TOOL } from "@luke/service/agents/coder-host/tool-set";
 import type { LanguageModel } from "ai";
 import { Option, Schema } from "effect";
 import {
@@ -11,9 +14,6 @@ import {
   type MockModelToolResult,
   mockModel,
 } from "eve/evals";
-import type { AgentSkill } from "../server/hosted/agent-runtime/skills.js";
-import { CODER_MODEL_FIXTURE } from "../server/hosted/coder-host/bounds.js";
-import { CODER_TOOL } from "../server/hosted/coder-host/tool-set.js";
 
 /**
  * The fixture model the end-to-end eval runs the coding agent under: a
@@ -64,7 +64,7 @@ const readDelegationOutput = Schema.decodeUnknownOption(
 /** What `load_skill` answers: the skill's body. */
 const readSkillBody = Schema.decodeUnknownOption(Schema.String);
 
-/** eve's own tool that parks a turn until a task it started answers. */
+/** eve's own tool that parks a turn until a task it started answers: eve's subagent task, not a Luke task. */
 const TASK_WAIT = "task_wait";
 
 /** The line eve puts ahead of the agent's own words when it hands a worker its task. */

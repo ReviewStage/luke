@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { it } from "@effect/vitest";
-import { Database, type DatabaseServices, type QueryError } from "@sidecar/database/core/query";
-import { getTestDB } from "@sidecar/database/testing";
-import { failureKind } from "@sidecar/runtime/effect";
+import { Database, type DatabaseServices, type QueryError } from "@luke/database/core/query";
+import { getTestDB } from "@luke/database/testing";
+import { failureKind } from "@luke/runtime/effect";
 import { eq } from "drizzle-orm";
 import type { EffectDrizzleQueryError } from "drizzle-orm/effect-core/errors";
 import { integer, pgTable, text } from "drizzle-orm/pg-core";

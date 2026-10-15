@@ -1,12 +1,14 @@
 {
-  "name": "@sidecar/gateway",
+  "name": "@luke/gateway",
   "version": "0.13.0",
   "private": true,
   "type": "module",
+  "description": "The Gateway: the one protocol between the desktop renderer and the host, and the trace record of what crosses it",
   "exports": {
     ".": "./src/index.js",
     "./devtrace": "./src/devtrace.js",
-    "./protocol": "./src/protocol.js"
+    "./protocol": "./src/protocol.js",
+    "./window-session": "./src/window-session.js"
   },
   "types": "./src/index.ts",
   "scripts": {
@@ -14,8 +16,8 @@
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
-    "@sidecar/live": "workspace:*",
-    "@sidecar/wire": "workspace:*",
+    "@luke/live": "workspace:*",
+    "@luke/wire": "workspace:*",
     "effect": "catalog:"
   },
   "devDependencies": {

@@ -1,8 +1,8 @@
-import type { AccountProvider } from "@sidecar/credentials/snapshot";
+import type { AccountProvider } from "@luke/credentials/snapshot";
+import { ACT_KIND } from "@luke/host/acts";
+import { useStateWithRef } from "@luke/ui/use-state-with-ref";
 import { useCallback, useRef, useState } from "react";
-import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "./act";
-import { useStateWithRef } from "./use-state-with-ref";
 
 export interface SignIn {
   signInWait: AccountProvider | undefined;

@@ -1,12 +1,12 @@
-import { MESSAGE_ROLE, TURN_ORIGIN, WireValueSchema } from "@sidecar/wire";
-import { verbatimJsonSchema } from "@sidecar/wire/effect";
-import { Schema as EffectSchema, SchemaTransformation } from "effect";
+import { MESSAGE_ROLE, TURN_ORIGIN, WireValueSchema } from "@luke/wire";
+import { readEither, verbatimJsonSchema, wireKeys } from "@luke/wire/effect";
+import { Schema as EffectSchema, Result, SchemaTransformation } from "effect";
 import {
   INTEGRATION_PROVIDER_LIST,
   type IntegrationProvider,
   integrationProviderFromWire,
 } from "./integration-wire.js";
-import { countedNumber, wireUuidSchema } from "./service-wire.js";
+import { countedNumber, memberRefSchema, wireUuidSchema } from "./service-wire.js";
 
 /**
  * coding-agent-wire.ts -- a plan's coding agents, as the desktop starts, lists, reads, messages, and stops them.
@@ -14,7 +14,7 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
  * A coding agent is one cloud session the service runs over a plan: it
  * checks the plan's repository out, implements the plan, and decides on a
  * pull request. Or, where the developer started it with words of their own,
- * it is handed those as its task in the plan's place, and never the plan.
+ * it is handed those as its prompt in the plan's place, and never the plan.
  * The desktop starts one with a key of its own, so a retry of the same
  * Start is the same agent, and names the model and effort it runs on or
  * leaves both to the account's default. What comes back is the
@@ -103,10 +103,11 @@ export type ContextWindow = (typeof CONTEXT_WINDOW)[keyof typeof CONTEXT_WINDOW]
 /** A context window as a choice names it. */
 export const contextWindowSchema = EffectSchema.Literals(Object.values(CONTEXT_WINDOW));
 
-/** What an agent was handed as its first message: the plan's document, or a task the developer wrote in its place. */
+/** What an agent was handed as its first message: the plan's document, or a prompt the developer wrote in its place. */
 export const CODING_AGENT_BRIEF = {
   PLAN: "plan",
-  TASK: "task",
+  // Note that the value says "task", because a released desktop decodes it.
+  PROMPT: "task",
 } as const;
 
 export type CodingAgentBrief = (typeof CODING_AGENT_BRIEF)[keyof typeof CODING_AGENT_BRIEF];
@@ -291,28 +292,52 @@ export const disabledServersSchema = EffectSchema.Array(
  * Starting an agent (POST): the request's own key, which a retry carries
  * again, and the model and effort to run on where the developer chose
  * them; both or neither, since a choice is one thing, and the context
- * window beside them where it is the standard one. A task, where the
+ * window beside them where it is the standard one. A prompt, where the
  * developer wrote one, is the agent's first message in the plan's place,
  * bounded as a message is: its words, the files the developer attached to
  * it, or both. With none, the agent is handed the plan, and files go only
- * with a task. The MCP servers its draft switched off go with it, and none
+ * with a prompt. The MCP servers its draft switched off go with it, and none
  * is off where the Start names none.
  */
-export const codingAgentStartRequestSchema = EffectSchema.Struct({
+export const codingAgentStartRequestFields = {
   idempotencyKey: trimmedText(CODING_AGENT_BOUNDS.MAX_KEY_CHARS),
   model: EffectSchema.optionalKey(trimmedText(CODING_AGENT_BOUNDS.MAX_CHOICE_CHARS)),
   effort: EffectSchema.optionalKey(trimmedText(CODING_AGENT_BOUNDS.MAX_CHOICE_CHARS)),
   contextWindow: EffectSchema.optionalKey(contextWindowSchema),
-  task: EffectSchema.optionalKey(messageWordsSchema),
+  prompt: EffectSchema.optionalKey(messageWordsSchema),
   attachments: EffectSchema.optionalKey(codingAgentAttachmentsSchema),
   disabledServers: EffectSchema.optionalKey(disabledServersSchema),
-}).check(
-  EffectSchema.makeFilter(({ task, attachments }) =>
-    task === undefined ? attachments === undefined : hasWordsOrFiles(task, attachments),
-  ),
+};
+
+/** A Start's words or files: none, or words, files, or both, since files go only with a prompt. */
+const startBrief = EffectSchema.makeFilter(
+  ({
+    prompt,
+    attachments,
+  }: {
+    readonly prompt?: string;
+    readonly attachments?: readonly CodingAgentAttachment[];
+  }) => (prompt === undefined ? attachments === undefined : hasWordsOrFiles(prompt, attachments)),
 );
 
+/** The Start request as a caller holds it, before it is put on the wire. */
+const codingAgentStartRequestValueSchema = EffectSchema.Struct(codingAgentStartRequestFields).check(
+  startBrief,
+);
+
+/** The Start request on the wire, where the prompt travels as `task`, because a released desktop sends that key. */
+export const codingAgentStartRequestSchema = EffectSchema.Struct(codingAgentStartRequestFields)
+  .pipe(wireKeys({ prompt: "task" }))
+  .check(startBrief);
+
 export type CodingAgentStartRequest = typeof codingAgentStartRequestSchema.Type;
+
+/** A Start request as it travels: read as a caller holds it, so it is trimmed and held to its bounds, then keyed as the wire spells it; a refusal where the service would refuse it by shape. */
+export const codingAgentStartRequestOnWire = (request: CodingAgentStartRequest) =>
+  Result.flatMap(
+    readEither(codingAgentStartRequestValueSchema)(request),
+    EffectSchema.encodeUnknownResult(codingAgentStartRequestSchema),
+  );
 
 /**
  * Messaging an agent (POST): the developer's words, trimmed and bounded,
@@ -377,15 +402,28 @@ export const CODING_AGENT_LIST_QUERY = {
   ARCHIVED: "archived",
 } as const;
 
+/** The query a workspace's agents are listed by: the workspace, and the repository they are narrowed to, where one is named. */
+export const CODING_AGENT_WORKSPACE_QUERY = {
+  WORKSPACE_ID: "workspaceId",
+  REPOSITORY: "repository",
+} as const;
+
 /** What the list's `archived` query may say. */
 export const CODING_AGENT_LIST_ARCHIVED = {
   INCLUDE: "include",
 } as const;
 
-/** One agent as the tabs draw it: its title, what it runs on, when it started, where it stands, which turn that is, and when that run began. */
+/**
+ * One agent as the tabs draw it: the plan it works on, its title, what it
+ * runs on, when it started, where it stands, which turn that is, and when
+ * that run began. The plan is null for an agent an automation started with
+ * no plan, which only a read naming that agent answers: a plan's list holds
+ * the plan's own, so a build that predates agents with no plan never meets
+ * one.
+ */
 export const codingAgentSummarySchema = EffectSchema.Struct({
   id: wireUuidSchema,
-  planId: wireUuidSchema,
+  planId: EffectSchema.NullOr(wireUuidSchema),
   /** AI Gateway's catalog id, such as `anthropic/claude-opus-5.5`. */
   model: EffectSchema.String,
   effort: EffectSchema.String,
@@ -424,12 +462,39 @@ export const codingAgentSummarySchema = EffectSchema.Struct({
   archivedAt: EffectSchema.optionalKey(countedNumber),
   /** The MCP servers switched off for the agent; absent where none is, and from a service before the switch. */
   disabledServers: EffectSchema.optionalKey(disabledServersSchema),
+  /**
+   * The member who started the agent, whose provider key pays for it and
+   * whose Mac its commands run on, whichever member messages it; absent once
+   * their account is gone, and from a service before it.
+   */
+  startedBy: EffectSchema.optionalKey(memberRefSchema),
+  /** The automation whose run started the agent; absent for one started by hand, once that automation is deleted, and from a service before it. */
+  automationId: EffectSchema.optionalKey(wireUuidSchema),
 });
 
 export type CodingAgentSummary = typeof codingAgentSummarySchema.Type;
 
 /** A started, stopped, or changed agent (POST, PATCH). */
 export const codingAgentAnswerSchema = EffectSchema.Struct({ agent: codingAgentSummarySchema });
+
+/**
+ * One agent as its own page reads it, which is how an agent an automation
+ * started with no plan is read, having no plan's tab to stand in: the
+ * summary the tabs draw, the automation whose run started it or none, the
+ * workspace it belongs to, and the repository it works in. An agent on a
+ * plan reads so too, by the same id.
+ */
+export const codingAgentPageSchema = EffectSchema.Struct({
+  ...codingAgentSummarySchema.fields,
+  automationId: EffectSchema.NullOr(wireUuidSchema),
+  workspaceId: EffectSchema.String,
+  repository: EffectSchema.String,
+});
+
+export type CodingAgentPage = typeof codingAgentPageSchema.Type;
+
+/** One agent read by its id (GET), on a plan or with none. */
+export const codingAgentPageAnswerSchema = EffectSchema.Struct({ agent: codingAgentPageSchema });
 
 /** The plan's agents (GET), in the order they were started. */
 export const codingAgentListAnswerSchema = EffectSchema.Struct({
@@ -510,6 +575,10 @@ export const CHANGES_BOUNDS = {
   MAX_FILES: 300,
   /** The most characters one file's patch may spell before it is left out as too large. */
   MAX_PATCH_CHARS: 100_000,
+  /** The most reviewers, commit authors, or review comments one read names; a pull request with more names its first. */
+  MAX_PEOPLE: 50,
+  /** The most characters of a review comment's words a read carries. */
+  MAX_EXCERPT_CHARS: 280,
 } as const;
 
 /**
@@ -531,10 +600,61 @@ const changedFileSchema = EffectSchema.Struct({
 export type CodingAgentChangedFile = typeof changedFileSchema.Type;
 
 /**
+ * Where a reviewer stands on a pull request, by their newest review that
+ * decides: approved, asked for changes, or that review dismissed; one who
+ * only commented, or one asked for a review not yet given.
+ */
+export const REVIEW_STATE = {
+  APPROVED: "approved",
+  CHANGES_REQUESTED: "changes-requested",
+  DISMISSED: "dismissed",
+  COMMENTED: "commented",
+  REQUESTED: "requested",
+} as const;
+
+/**
+ * Someone a pull request names on GitHub: their login, their avatar where
+ * GitHub's own avatar host serves it, whether they are an App's bot, and
+ * whether that bot is Luke's own App, whose commits and pull requests are
+ * its agents'; and the Luke account whose linked GitHub account it is,
+ * where that account is a member of the agent's workspace.
+ */
+const githubPersonSchema = EffectSchema.Struct({
+  login: EffectSchema.String,
+  avatarUrl: EffectSchema.optionalKey(EffectSchema.String),
+  bot: EffectSchema.Boolean,
+  luke: EffectSchema.optionalKey(EffectSchema.Boolean),
+  userId: EffectSchema.optionalKey(EffectSchema.String),
+});
+
+export type GitHubPerson = typeof githubPersonSchema.Type;
+
+export type ReviewState = (typeof REVIEW_STATE)[keyof typeof REVIEW_STATE];
+
+const reviewStateSchema = EffectSchema.Literals(Object.values(REVIEW_STATE));
+
+/** A reviewer of a pull request, and where they stand on it. */
+const pullRequestReviewerSchema = EffectSchema.Struct({
+  by: githubPersonSchema,
+  state: reviewStateSchema,
+});
+
+/** One review that said something: who, where it left them, the start of its words, and when. */
+const reviewCommentSchema = EffectSchema.Struct({
+  by: githubPersonSchema,
+  state: reviewStateSchema,
+  excerpt: EffectSchema.String.check(EffectSchema.isMaxLength(CHANGES_BOUNDS.MAX_EXCERPT_CHARS)),
+  at: countedNumber,
+});
+
+/**
  * One agent's changes (GET): the pull request it published, as its page on
  * GitHub, its files in the order GitHub lists them now, and whether the
  * list was cut short at the bound; or null where it has opened none yet,
- * which is not the same as a pull request that changes nothing.
+ * which is not the same as a pull request that changes nothing. Who opened
+ * it, its reviewers and where each stands, who authored its commits, and
+ * its reviews that said something ride beside the files, each absent from
+ * a service before them.
  */
 export const codingAgentChangesAnswerSchema = EffectSchema.Struct({
   pullRequest: EffectSchema.NullOr(
@@ -544,9 +664,29 @@ export const codingAgentChangesAnswerSchema = EffectSchema.Struct({
         EffectSchema.isMaxLength(CHANGES_BOUNDS.MAX_FILES),
       ),
       truncated: EffectSchema.Boolean,
+      author: EffectSchema.optionalKey(githubPersonSchema),
+      reviewers: EffectSchema.optionalKey(
+        EffectSchema.Array(pullRequestReviewerSchema).check(
+          EffectSchema.isMaxLength(CHANGES_BOUNDS.MAX_PEOPLE),
+        ),
+      ),
+      commitAuthors: EffectSchema.optionalKey(
+        EffectSchema.Array(githubPersonSchema).check(
+          EffectSchema.isMaxLength(CHANGES_BOUNDS.MAX_PEOPLE),
+        ),
+      ),
+      comments: EffectSchema.optionalKey(
+        EffectSchema.Array(reviewCommentSchema).check(
+          EffectSchema.isMaxLength(CHANGES_BOUNDS.MAX_PEOPLE),
+        ),
+      ),
     }),
   ),
 });
+
+export type CodingAgentChanges = NonNullable<
+  (typeof codingAgentChangesAnswerSchema.Type)["pullRequest"]
+>;
 
 /**
  * The tool an agent hands a slice of its work to a subagent with, by the
@@ -684,6 +824,31 @@ const turnRecordSchema = EffectSchema.Struct(turnRecordFields);
 
 export type TurnRecord = typeof turnRecordSchema.Type;
 
+/** What kind of thing sent one of the developer's messages to a coding agent: a member, a member whose account is gone, Luke from a call, or an automation's run. */
+export const CODING_AGENT_SENDER = {
+  MEMBER: "member",
+  FORMER: "former",
+  LUKE: "luke",
+  AUTOMATION: "automation",
+} as const;
+
+/**
+ * What sent one of the developer's messages to a coding agent, by the name
+ * a reader sees over it: a member by their account's id and the name it
+ * holds now, a member who has left among them, and with no id what sent it
+ * in a member's place or a member whose account is gone, each named as the
+ * service words it, and what kind of sender it is, so the window draws Luke
+ * as Luke and an automation as one; the kind is absent from a service older
+ * than it. The window names nobody over the reader's own.
+ */
+const codingAgentSenderSchema = EffectSchema.Struct({
+  name: EffectSchema.String,
+  userId: EffectSchema.optionalKey(EffectSchema.String),
+  kind: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(CODING_AGENT_SENDER))),
+});
+
+export type CodingAgentSender = typeof codingAgentSenderSchema.Type;
+
 /**
  * One message of an agent's transcript, as the conversation's row holds it:
  * an AI SDK `UIMessage`, its parts as the SDK shapes them (text, reasoning,
@@ -744,6 +909,8 @@ export const codingAgentMessageSchema = EffectSchema.Struct({
   role: EffectSchema.Literals(Object.values(MESSAGE_ROLE)),
   parts: EffectSchema.Array(storedObjectSchema),
   metadata: EffectSchema.optionalKey(storedObjectSchema),
+  /** What sent one of the developer's messages to a coding agent (`codingAgentSenderSchema`); absent on every other row, on a message written before senders were kept, and from a service older than it. */
+  sentBy: EffectSchema.optionalKey(codingAgentSenderSchema),
   /** Epoch milliseconds the turn began, as a working line counts it: its start, or its queueing where eve has not started it; absent on the developer's rows, and from a service older than it. */
   startedAt: EffectSchema.optionalKey(countedNumber),
   /** Epoch milliseconds the turn answered or ended; absent while it is still written, on the developer's rows, and from a service older than it. */

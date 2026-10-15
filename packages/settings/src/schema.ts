@@ -1,6 +1,6 @@
-import { isLiveVoice, LIVE_DEFAULTS, LIVE_VOICE_LIST, type LiveVoice } from "@sidecar/live";
-import type { UnparsedWireValue } from "@sidecar/wire";
-import { APP_SETTING_ID, isAppSettingId } from "@sidecar/wire/app-settings";
+import { isLiveVoice, LIVE_DEFAULTS, LIVE_VOICE_LIST, type LiveVoice } from "@luke/live";
+import type { UnparsedWireValue } from "@luke/wire";
+import { APP_SETTING_ID, isAppSettingId } from "@luke/wire/app-settings";
 import { choiceSetting, hotkeySetting, optional, toggleSetting } from "./schema-builders.js";
 import {
   SETTING_SECTION,

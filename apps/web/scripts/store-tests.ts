@@ -8,8 +8,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 /**
  * `test:store` runs the tests that open a database against a real Postgres
  * on CI, and this is how those tests are found. A test meets a database
- * through one of two doors, `tests/support/hosted-store-database` or
- * `@sidecar/database/testing`, and through nothing else:
+ * through one door, `@luke/database/testing`, and through nothing else:
  * `LUKE_STORE_TEST_DATABASE_URL` is read there alone, so a file that
  * imports no door cannot run against Postgres whatever it does, and a file
  * that imports one runs against Postgres the moment it exists. The set is
@@ -25,20 +24,18 @@ import { fileURLToPath, pathToFileURL } from "node:url";
  * but vitest does not run cannot pass silently.
  */
 
-/** The support modules whose import makes a test a store test, as a file writes them. */
-export const STORE_TEST_DOORS = {
-  HOSTED_STORE_DATABASE: "./support/hosted-store-database",
-  TEST_DB: "@sidecar/database/testing",
-} as const;
+/**
+ * Matches an import of the module that makes a test a store test,
+ * `@luke/database/testing`, and the `.js` spelling vitest resolves the same
+ * way. `no-database`, a client that refuses every statement, stands behind a
+ * subpath of its own so that importing it does not.
+ */
+const doorImport = /from\s+["']@luke\/database\/testing(?:\.js)?["']/;
+
+/** Where store tests live, from the repository root. */
+const STORE_TEST_ROOTS = ["apps/web/tests", "packages/service/src"];
 
 const TEST_FILE_SUFFIX = ".test.ts";
-
-const escaped = (door: string) => door.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
-
-/** Matches `from "<door>"` and the `.js` spelling vitest resolves the same way. */
-const doorImport = new RegExp(
-  `from\\s+["'](?:${Object.values(STORE_TEST_DOORS).map(escaped).join("|")})(?:\\.js)?["']`,
-);
 
 /** Whether one test file's source imports a database door. */
 export function importsStoreDoor(source: string): boolean {
@@ -46,15 +43,21 @@ export function importsStoreDoor(source: string): boolean {
 }
 
 /**
- * The store tests under `testsDirectory`, as paths relative to it, in path
- * order: every `.test.ts` whose source imports a door, wherever vitest's
- * `tests/**` include would find it.
+ * The store tests under each of `roots` in `repository`, as paths relative to
+ * it, in path order: every `.test.ts` whose source imports the door.
  */
-export function storeTestFiles(testsDirectory: string): ReadonlyArray<string> {
-  return readdirSync(testsDirectory, { recursive: true, encoding: "utf8" })
+export function storeTestFiles(
+  repository: string,
+  roots: ReadonlyArray<string>,
+): ReadonlyArray<string> {
+  return roots
+    .flatMap((root) =>
+      readdirSync(join(repository, root), { recursive: true, encoding: "utf8" }).map(
+        (entry) => `${root}/${entry.split(sep).join("/")}`,
+      ),
+    )
     .filter((entry) => entry.endsWith(TEST_FILE_SUFFIX))
-    .map((entry) => entry.split(sep).join("/"))
-    .filter((entry) => importsStoreDoor(readFileSync(join(testsDirectory, entry), "utf8")))
+    .filter((entry) => importsStoreDoor(readFileSync(join(repository, entry), "utf8")))
     .sort();
 }
 
@@ -82,19 +85,15 @@ interface VitestJsonReport {
   readonly testResults: ReadonlyArray<{ readonly name: string }>;
 }
 
-/** The files a vitest JSON report names, relative to `testsDirectory`. */
-export function filesRun(report: VitestJsonReport, testsDirectory: string): ReadonlyArray<string> {
-  return report.testResults.map((result) =>
-    relative(testsDirectory, result.name).split(sep).join("/"),
-  );
+/** The files a vitest JSON report names, relative to `repository`. */
+export function filesRun(report: VitestJsonReport, repository: string): ReadonlyArray<string> {
+  return report.testResults.map((result) => relative(repository, result.name).split(sep).join("/"));
 }
 
-const WEB = resolve(fileURLToPath(new URL(".", import.meta.url)), "..");
-const TESTS = "tests";
+const REPOSITORY = resolve(fileURLToPath(new URL(".", import.meta.url)), "../../..");
 
 function main(): number {
-  const testsDirectory = join(WEB, TESTS);
-  const selected = storeTestFiles(testsDirectory);
+  const selected = storeTestFiles(REPOSITORY, STORE_TEST_ROOTS);
   // biome-ignore lint/suspicious/noConsole: a script's output is its log.
   console.log(`test:store: ${selected.length} files import a database door`);
   const reportDirectory = mkdtempSync(join(tmpdir(), "luke-store-tests-"));
@@ -109,17 +108,17 @@ function main(): number {
         "--reporter=default",
         "--reporter=json",
         `--outputFile.json=${reportPath}`,
-        ...selected.map((file) => `${TESTS}/${file}`),
+        ...selected,
       ],
-      { cwd: WEB, stdio: "inherit" },
+      { cwd: REPOSITORY, stdio: "inherit" },
     );
     const report: VitestJsonReport = JSON.parse(readFileSync(reportPath, "utf8"));
-    const drift = coverageDrift(selected, filesRun(report, testsDirectory));
+    const drift = coverageDrift(selected, filesRun(report, REPOSITORY));
     for (const file of drift.notRun) {
-      console.error(`test:store: selected and not run: ${TESTS}/${file}`);
+      console.error(`test:store: selected and not run: ${file}`);
     }
     for (const file of drift.notSelected) {
-      console.error(`test:store: run and not selected: ${TESTS}/${file}`);
+      console.error(`test:store: run and not selected: ${file}`);
     }
     if (drift.notRun.length > 0 || drift.notSelected.length > 0) {
       console.error(

@@ -1,6 +1,8 @@
+import { matchRanges } from "@luke/ui/search-tokens";
 import { type ReactNode, useMemo } from "react";
 import Markdown, { type AllowElement, type Components, type Options } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { TextLink } from "./text-link";
 
 const SAFE_LINK = /^https?:\/\//i;
 
@@ -204,6 +206,50 @@ const drawEdit =
     }
   };
 
+/** An element of the tree, and what it may hold. */
+type HastElement = Extract<HastNode, { type: "element" }>;
+type HastElementChild = HastElement["children"][number];
+
+/** The class a search's words are marked with, as `search-field.tsx`'s `Highlighted` marks them. */
+const SEARCH_MATCH_CLASS = "search-match";
+
+/** One run of text with the words a search asks for marked where they landed. */
+function foundIn(text: HastText, tokens: readonly string[]): readonly HastElementChild[] {
+  const ranges = matchRanges(text.value, tokens);
+  if (ranges.length === 0) return [text];
+  const parts: HastElementChild[] = [];
+  let from = 0;
+  for (const range of ranges) {
+    if (range.start > from)
+      parts.push({ type: "text", value: text.value.slice(from, range.start) });
+    parts.push({
+      type: "element",
+      tagName: "mark",
+      properties: { className: [SEARCH_MATCH_CLASS] },
+      children: [{ type: "text", value: text.value.slice(range.start, range.end) }],
+    });
+    from = range.end;
+  }
+  if (from < text.value.length) parts.push({ type: "text", value: text.value.slice(from) });
+  return parts;
+}
+
+/** Marks a search's words in every run of text under an element. */
+function markFoundIn(element: HastElement, tokens: readonly string[]): void {
+  element.children = element.children.flatMap((child) => {
+    if (child.type === "text") return foundIn(child, tokens);
+    if (child.type === "element") markFoundIn(child, tokens);
+    return [child];
+  });
+}
+
+/** The rehype step that marks where a search's words landed, block by block; the breaks between blocks hold no words. */
+const markFound =
+  (tokens: readonly string[]) =>
+  (tree: HastParent): void => {
+    for (const child of tree.children) if (child.type === "element") markFoundIn(child, tokens);
+  };
+
 /**
  * GitHub's dialect, which is the one coding agents write: tables,
  * strikethrough, and task lists, with a single tilde left as the character it
@@ -216,20 +262,23 @@ const REMARK_PLUGINS: Options["remarkPlugins"] = [[remarkGfm, { singleTilde: fal
  * How each element is drawn where the library's default would say the wrong
  * thing on this surface.
  *
- * A link is drawn as one and names its destination on hover, but it is not a
- * control: the renderer refuses every navigation and has no door for opening
- * an arbitrary address, and a message's words must not become an action by
- * being pressed. Only HTTP and HTTPS destinations survive `urlTransform`
- * below, so anything else arrives here as words alone. The one exception is
- * a place that draws its own links (`LinkDrawer`): a plan's page draws a
- * mention as the chip that opens what it names.
+ * A link is drawn as a plain link (`text-link.tsx`), naming its destination
+ * on hover. It is pressed only where the place showing the words hands an
+ * opener (`openLink`), as the plan's page, its versions, and Luke's notes
+ * do; elsewhere, as in a caption, it is words going nowhere, so a message's
+ * words become an action only where a reader expects a link to open. Only
+ * HTTP and HTTPS destinations survive `urlTransform` below, so anything else
+ * arrives here as words alone. A place that draws its own links
+ * (`LinkDrawer`), one showing a plan's words or Luke's notes, draws a link
+ * naming a mention as the chip that opens what it names before it is ever
+ * drawn as a plain one.
  *
  * A heading is styled, never announced: a reader walking the document's
  * headings should meet the panel's, not a reply's. An image has no picture
  * to draw in a caption, so its alternative words stand in for it.
  */
 const COMPONENTS: Components = {
-  a: ({ href, children }) => plainLink(href, children),
+  a: ({ href, children, node }) => plainLink(href, children, node, undefined),
   h1: ({ children }) => heading(1, children),
   h2: ({ children }) => heading(2, children),
   h3: ({ children }) => heading(3, children),
@@ -239,13 +288,18 @@ const COMPONENTS: Components = {
   img: ({ alt }) => <>{alt ?? ""}</>,
 };
 
-/** A link as words drawn as one, naming a web destination on hover; anything else as its words alone. */
-function plainLink(href: string | undefined, children: ReactNode): ReactNode {
+/** A web link as a plain link, pressed where an opener is handed; anything else as its words alone. */
+function plainLink(
+  href: string | undefined,
+  children: ReactNode,
+  link: HastParent | undefined,
+  openLink: ((href: string) => void) | undefined,
+): ReactNode {
   if (href === undefined || !SAFE_LINK.test(href)) return children;
   return (
-    <span className="markdown-link" title={href}>
+    <TextLink href={href} words={plainLabelOf(link)} onOpen={openLink}>
       {children}
-    </span>
+    </TextLink>
   );
 }
 
@@ -255,6 +309,60 @@ function plainLink(href: string | undefined, children: ReactNode): ReactNode {
  * and its label's words; nothing for one it leaves drawn as any link is.
  */
 export type LinkDrawer = (href: string, label: string) => ReactNode | undefined;
+
+/** The marks a link's words wear, drawn mid-edit: none, one over every word, or a change inside its label. */
+const LINK_MARKS = {
+  NONE: "none",
+  MIXED: "mixed",
+} as const;
+
+type LinkMarks =
+  | (typeof LINK_MARKS)[keyof typeof LINK_MARKS]
+  | (typeof MARK_DRAWN)[MarkdownMarkKind];
+
+/** Whether a node is a change mark drawn over words. */
+function isMark(node: HastNode): boolean {
+  return (
+    node.type === "element" &&
+    Object.values(MARK_DRAWN).some((mark) => mark.tagName === node.tagName)
+  );
+}
+
+/** The marks a link's words wear: none, the one every word wears, or a change inside the label. */
+function marksOf(link: HastParent | undefined): LinkMarks {
+  const drawn = (link?.children ?? []).filter((child) => !isBlockBreak(child));
+  if (!drawn.some(isMark)) return LINK_MARKS.NONE;
+  const first = drawn[0];
+  const mark = Object.values(MARK_DRAWN).find(
+    (each) => first?.type === "element" && each.tagName === first.tagName,
+  );
+  const whole =
+    mark !== undefined &&
+    drawn.every((child) => child.type === "element" && child.tagName === mark.tagName);
+  return whole ? mark : LINK_MARKS.MIXED;
+}
+
+/**
+ * A link the place knows how to draw, a mention's chip say, drawn with the
+ * change marks its words wore: a chip in the mark every word wore, so a
+ * mention written in or struck out in a version reads as the change it is;
+ * and, where the change is inside its label, the link drawn as words with
+ * its marks, since one chip would join the words struck out and written in
+ * into one name and hide what changed.
+ */
+function drawnMarked(
+  drawn: ReactNode,
+  link: HastParent | undefined,
+  href: string,
+  children: ReactNode,
+  openLink: ((href: string) => void) | undefined,
+): ReactNode {
+  const marks = marksOf(link);
+  if (marks === LINK_MARKS.NONE) return drawn;
+  if (marks === LINK_MARKS.MIXED) return plainLink(href, children, link, openLink);
+  const Mark = marks.tagName;
+  return <Mark className={marks.className}>{drawn}</Mark>;
+}
 
 /** The words under a node of the tree, however they are formatted: a heading's emphasis copied into a label still reads as its words. */
 function wordsOf(node: HastParent | HastNode): string {
@@ -266,6 +374,12 @@ function wordsOf(node: HastParent | HastNode): string {
 /** A link's label as its words. */
 function labelOf(link: HastParent | undefined): string {
   return link === undefined ? "" : wordsOf(link);
+}
+
+/** A link's label as its words where it is words alone; nothing where an edit or a change marks inside it. */
+function plainLabelOf(link: HastParent | undefined): string | undefined {
+  const marked = link?.children.some((child) => child.type === "element") ?? false;
+  return marked ? undefined : labelOf(link);
 }
 
 function heading(level: number, children: ReactNode): React.JSX.Element {
@@ -297,6 +411,8 @@ export function MarkdownMessage({
   className,
   edit,
   link,
+  openLink,
+  found,
 }: {
   words: string;
   className?: string;
@@ -304,23 +420,32 @@ export function MarkdownMessage({
   edit?: MarkdownEdit | undefined;
   /** Draws the links the place knows better, a mention's chip say; every link is drawn as words without one. */
   link?: LinkDrawer | undefined;
+  /** Opens a plain link pressed; every plain link is words going nowhere without one. */
+  openLink?: ((href: string) => void) | undefined;
+  /** The words a search asks for, marked where they landed. */
+  found?: readonly string[] | undefined;
 }): React.JSX.Element {
   const rehypePlugins: NonNullable<Options["rehypePlugins"]> = [];
   if (edit !== undefined) rehypePlugins.push([drawEdit, edit, words.length]);
+  if (found !== undefined && found.length > 0) rehypePlugins.push([markFound, found]);
   // Note that a place drawing its own links is handed every destination,
   // since only it knows which it draws; any it leaves is drawn as above,
   // so a destination that is not the web's is still words alone.
   const components = useMemo<Components>(
     () =>
-      link === undefined
+      link === undefined && openLink === undefined
         ? COMPONENTS
         : {
             ...COMPONENTS,
-            a: ({ href, children, node }) =>
-              (href === undefined ? undefined : link(href, labelOf(node))) ??
-              plainLink(href, children),
+            a: ({ href, children, node }) => {
+              const drawn =
+                href === undefined || link === undefined ? undefined : link(href, labelOf(node));
+              return drawn === undefined || href === undefined
+                ? plainLink(href, children, node, openLink)
+                : drawnMarked(drawn, node, href, children, openLink);
+            },
           },
-    [link],
+    [link, openLink],
   );
   return (
     <div className={className === undefined ? "markdown" : `markdown ${className}`}>

@@ -1,6 +1,14 @@
-import { cssCustomProperties } from "@sidecar/brand/react-css";
-import type { CodeRef } from "@sidecar/features/plan-wire";
-import type { CodeToken, PlanCode, PlanCodeShowing } from "@sidecar/features/planning-view";
+import type { CodeRef } from "@luke/features/plan-wire";
+import type { CodeToken, PlanCode, PlanCodeShowing } from "@luke/features/planning-view";
+import { cssCustomProperties } from "@luke/ui";
+import {
+  type CodeFeedCall,
+  type CodeFeedCallSource,
+  codeFeedCalls,
+  copiedLines,
+  fileRefText,
+  isPointed,
+} from "@luke/voice/code-pane-model";
 import { FileInputIcon } from "lucide-react";
 import { type CSSProperties, Fragment, memo, type ReactNode, useLayoutEffect, useRef } from "react";
 import {
@@ -10,17 +18,12 @@ import {
 } from "../ai-elements/conversation";
 import { CopyGlyph, copyHint, useCopyFeedback } from "../copy-feedback";
 import { FIND_SKIP_ATTRIBUTE } from "../find-matches";
+import { MarkdownMessage } from "../markdown-message";
 import { Tooltip } from "../tooltip";
 import { CallCheckpoint, CallEnded } from "./call-card";
-import {
-  type CodeFeedCall,
-  type CodeFeedCallSource,
-  codeFeedCalls,
-  copiedLines,
-  fileRefText,
-  isPointed,
-} from "./code-pane-model";
 import { FileRef } from "./file-ref";
+import { useMentionLink } from "./plan-mentions";
+import { useOpenLink } from "./use-open-link";
 
 /**
  * code-pane.tsx -- the code Luke put on screen on a plan's calls: the side panel's Code tab, every snippet he showed, one card each, in the order he showed them.
@@ -216,6 +219,20 @@ export function CodeCardHeader({
   );
 }
 
+/**
+ * Luke's note on a snippet, as Markdown, a link naming a mention drawn as
+ * its chip, as a File tab draws the same note (`file-note.tsx`). Note that
+ * it reads the page's mentions itself, so the page drawn again draws the
+ * note again rather than the card's lines.
+ */
+function CodeCardNote({ note }: { note: string }): React.JSX.Element {
+  const link = useMentionLink();
+  const openLink = useOpenLink();
+  return (
+    <MarkdownMessage words={note} className="code-card-note" link={link} openLink={openLink} />
+  );
+}
+
 /** One snippet: its header, Luke's note, where code shown before notes were asked for has none, and the lines themselves. */
 function CodeCardContent({
   showing,
@@ -233,7 +250,7 @@ function CodeCardContent({
         copied={copiedLines(code)}
         onOpen={() => onOpenFile(code.ref, code.commit)}
       />
-      {code.note === undefined ? null : <p className="code-card-note">{code.note}</p>}
+      {code.note === undefined ? null : <CodeCardNote note={code.note} />}
       <CodeLines code={code} />
     </article>
   );
@@ -261,7 +278,7 @@ function CodeFeedRun({
 }): React.JSX.Element {
   return (
     <>
-      <CallCheckpoint startedAt={call.startedAt} live={call.live} now={now} />
+      <CallCheckpoint startedAt={call.startedAt} live={call.live} now={now} caller={call.caller} />
       {call.showings.map((showing) => (
         <CodeCard key={showing.callId} showing={showing} onOpenFile={onOpenFile} />
       ))}

@@ -1,20 +1,20 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CODING_AGENT_CALL_FAILURE } from "@sidecar/features/coding-agent-view";
+import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import {
   CODING_AGENT_BRIEF,
   CODING_AGENT_STATUS,
   type CodingAgentSummary,
-} from "@sidecar/features/coding-agent-wire";
-import { INTEGRATION_PROVIDER } from "@sidecar/features/integration-wire";
+} from "@luke/features/coding-agent-wire";
+import type { Failure } from "@luke/features/failure-remedy";
+import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import { ACT_KIND, type ActKind, type ActPayload, type ActResultFor } from "@luke/host/acts";
 import type { AtomRegistry } from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
-import { ACT_KIND, type ActKind, type ActPayload, type ActResultFor } from "#shared/messages/acts";
 import { onRegistry } from "#testing/copy-feedback";
-import type { Failure } from "../failure-remedy";
 import { ToastHost } from "../toast";
 import { type CodingAgentsControl, useCodingAgents } from "./use-coding-agents";
 
@@ -34,6 +34,7 @@ const STARTED: CodingAgentSummary = {
 
 interface Standing {
   planId: string | undefined;
+  agentId?: string;
   repository: string | null;
   archived?: boolean;
 }
@@ -88,6 +89,7 @@ function mount(initial: Standing, registry?: AtomRegistry) {
         },
       },
       planId: held.planId,
+      agentId: held.agentId,
       repository: held.repository,
       archived: held.archived === true,
       onOpenIntegrations: () => undefined,
@@ -145,14 +147,14 @@ function startPayloads(
 
 // Note that the refusal raises the window's toast, whose waits stand on the test's clock.
 
-test("a draft asks nothing of the service, one per plan, until its first message starts the agent on those words as its task under the draft's key, with the MCP servers it switched off, opening its tab", async () => {
+test("a draft asks nothing of the service, one per plan, until its first message starts the agent on those words as its prompt under the draft's key, with the MCP servers it switched off, opening its tab", async () => {
   const OTHER_PLAN = "3c2d1e0f-4a5b-4c6d-8e7f-9a0b1c2d3e4f";
   const tab = mount({ planId: PLAN, repository: "acme/relay" });
   tab.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [] }, { agents: [] }, { agents: [STARTED] });
   tab.answer(
     ACT_KIND.CODING_AGENTS_START,
     { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
-    { agent: { ...STARTED, brief: CODING_AGENT_BRIEF.TASK } },
+    { agent: { ...STARTED, brief: CODING_AGENT_BRIEF.PROMPT } },
   );
   await tab.mount();
 
@@ -169,10 +171,10 @@ test("a draft asks nothing of the service, one per plan, until its first message
   assert.deepEqual(startPayloads(tab.asked), [], "a draft starts nothing");
 
   // The words, the choice, and the servers off are the draft's, held while another plan opens a draft of its own.
-  const task = "Rename the invite email's subject.";
+  const prompt = "Rename the invite email's subject.";
   const choice = { model: "openai/gpt-6.1-sol", effort: "xhigh" };
   const disabledServers = [INTEGRATION_PROVIDER.LINEAR];
-  act(() => tab.control().onDraftChange({ task }));
+  act(() => tab.control().onDraftChange({ prompt }));
   act(() => tab.control().onDraftChange({ choice }));
   act(() => tab.control().onDraftChange({ disabledServers }));
   await tab.stand({ planId: OTHER_PLAN });
@@ -185,7 +187,7 @@ test("a draft asks nothing of the service, one per plan, until its first message
   await tab.stand({ planId: PLAN });
   assert.deepEqual(tab.control().draft, {
     id: draft,
-    task,
+    prompt,
     attachments: [],
     choice,
     disabledServers,
@@ -193,27 +195,81 @@ test("a draft asks nothing of the service, one per plan, until its first message
 
   let failed: Failure | undefined;
   await act(async () => {
-    failed = await tab.control().startTask(draft, task, choice, []);
+    failed = await tab.control().startPrompt(draft, prompt, choice, []);
   });
   assert.equal(failed?.text, "The agent could not be started. Try again.");
   assert.equal(tab.control().draft?.id, draft, "a send that did not start keeps the draft");
   assert.deepEqual(tab.started, []);
 
-  // The files attached to the words are the draft's too, and go with the task.
+  // The files attached to the words are the draft's too, and go with the prompt.
   const notes = { name: "notes.md", mediaType: "text/plain", data: "IyBOb3Rlcw==" } as const;
   act(() => tab.control().onDraftAttachments((held) => [...held, notes]));
   assert.deepEqual(tab.control().draft?.attachments, [notes]);
   await act(async () => {
-    failed = await tab.control().startTask(draft, task, undefined, [notes], disabledServers);
+    failed = await tab.control().startPrompt(draft, prompt, undefined, [notes], disabledServers);
   });
   assert.equal(failed, undefined);
   assert.deepEqual(startPayloads(tab.asked), [
-    { planId: PLAN, idempotencyKey: draft, task, ...choice },
-    { planId: PLAN, idempotencyKey: draft, task, attachments: [notes], disabledServers },
+    { planId: PLAN, idempotencyKey: draft, prompt, ...choice },
+    { planId: PLAN, idempotencyKey: draft, prompt, attachments: [notes], disabledServers },
   ]);
   assert.deepEqual(tab.started, [AGENT]);
   assert.equal(tab.control().draft, undefined, "the started draft is let go");
   await tab.stand({ planId: OTHER_PLAN });
   assert.equal(tab.control().draft?.id, other, "another plan's draft stands");
   assert.equal(tab.control().start.note, undefined, "the toolbar's Start says nothing of it");
+});
+
+test("with no plan open, the agent named is read as its page and held as a list of one, so its title from a transcript page moves it", async () => {
+  const planless = { ...STARTED, planId: null, status: CODING_AGENT_STATUS.RUNNING };
+  const tab = mount({ planId: undefined, agentId: AGENT, repository: null });
+  tab.answer(ACT_KIND.CODING_AGENTS_PAGE, {
+    agent: {
+      ...planless,
+      automationId: null,
+      workspaceId: "workspace-1",
+      repository: "acme/relay",
+    },
+  });
+  await tab.mount();
+
+  assert.deepEqual(
+    tab.asked.filter((each) => each.kind !== ACT_KIND.CODING_AGENTS_PULL_REQUEST),
+    [{ kind: ACT_KIND.CODING_AGENTS_PAGE, payload: { agentId: AGENT } }],
+    "no plan's list is read, only the agent named",
+  );
+  assert.deepEqual(
+    tab.control().agents?.map((agent) => [agent.id, agent.planId, agent.status]),
+    [[AGENT, null, CODING_AGENT_STATUS.RUNNING]],
+  );
+  act(() => tab.control().onTitle(AGENT, "Sweep the flaky tests"));
+  assert.equal(tab.control().agents?.[0]?.title, "Sweep the flaky tests");
+});
+
+test("another agent named with no plan open holds nothing of the last, even where its read does not land", async () => {
+  const OTHER = "3c2d1e0f-4a5b-4c6d-8e7f-9a0b1c2d3e4f";
+  const page = (id: string) => ({
+    agent: {
+      ...STARTED,
+      id,
+      planId: null,
+      automationId: null,
+      workspaceId: "workspace-1",
+      repository: "acme/relay",
+    },
+  });
+  const tab = mount({ planId: undefined, agentId: AGENT, repository: null });
+  tab.answer(ACT_KIND.CODING_AGENTS_PAGE, page(AGENT), {
+    failure: CODING_AGENT_CALL_FAILURE.UNANSWERED,
+  });
+  await tab.mount();
+  assert.deepEqual(
+    tab.control().agents?.map((agent) => agent.id),
+    [AGENT],
+  );
+
+  await tab.stand({ agentId: OTHER });
+
+  assert.equal(tab.control().agents, undefined, "the last agent is not drawn for the next");
+  assert.equal(tab.control().listFailed, true);
 });

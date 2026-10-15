@@ -8,7 +8,7 @@
  * kept, so every reader is handed the same objects render after render.
  */
 
-import { RUN_PROFILE } from "#shared/messages/app-state";
+import { RUN_PROFILE } from "@luke/host/app-state";
 import { appStateNow } from "../use-app-state";
 import { callShot } from "./call";
 import { changesShot } from "./changes";

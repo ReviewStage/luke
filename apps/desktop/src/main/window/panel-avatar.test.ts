@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
-import type { AvatarGrant } from "@sidecar/features/avatar-grant";
-import type { UnparsedWireValue } from "@sidecar/wire";
+import type { AvatarGrant } from "@luke/features/avatar-grant";
+import { AVATAR_FEED_KIND } from "@luke/voice/avatar";
+import type { UnparsedWireValue } from "@luke/wire";
 import { describe, it } from "vitest";
 import { channels } from "#shared/bridge";
-import { AVATAR_FEED_KIND } from "#shared/messages/avatar";
 import { type AvatarPage, PanelAvatarRelay } from "./panel-avatar";
 
 const GRANT: AvatarGrant = {

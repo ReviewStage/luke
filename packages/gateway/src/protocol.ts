@@ -7,7 +7,7 @@
  * answers a method and the client that calls it read the same words from one
  * contract. Nothing in this file performs anything.
  */
-import type { WireValue } from "@sidecar/wire";
+import type { WireValue } from "@luke/wire";
 import { Effect, Schema } from "effect";
 
 /** Every method the host answers, by the name a client calls it. */
@@ -64,14 +64,24 @@ export const GATEWAY_METHOD = {
   WORKSPACES_REFRESH: "workspaces.refresh",
   /** A workspace made on the service under a name, owned by the account; the view's workspaces are read again. */
   WORKSPACES_CREATE: "workspaces.create",
+  /** A workspace renamed on the service by an owner or admin; the view's workspaces are read again. */
+  WORKSPACES_RENAME: "workspaces.rename",
+  /** A workspace's photo set or removed on the service by an owner or admin; the view's workspaces are read again. */
+  WORKSPACES_PHOTO_SET: "workspaces.photoSet",
   /** A GitHub organization's connection to a workspace begun on the service: the Luke GitHub App's install address, for the caller to open. */
   WORKSPACES_GITHUB_CONNECT: "workspaces.githubConnect",
   /** A workspace's GitHub organization disconnected on the service; the view's workspaces are read again. */
   WORKSPACES_GITHUB_DISCONNECT: "workspaces.githubDisconnect",
   /** One workspace's members, read from the service now; answered to the caller, never held in the view. */
   WORKSPACES_MEMBERS: "workspaces.members",
+  /** One workspace's photo, read from the service now as its bytes in base64; answered to the caller, never held in the view. */
+  WORKSPACES_PHOTO: "workspaces.photo",
   /** One member removed from a workspace on the service, answered with the members who remain; the view's workspaces are read again. */
   WORKSPACES_MEMBER_REMOVE: "workspaces.memberRemove",
+  /** Another member made an admin or an admin a member on the service by the owner, answered with the members as they then stand; the view's workspaces are read again. */
+  WORKSPACES_MEMBER_ROLE: "workspaces.memberRole",
+  /** A workspace handed by its owner to one of its admins on the service, the owner becoming an admin, answered with the members as they then stand; the view's workspaces are read again, the account's role in it among them. */
+  WORKSPACES_TRANSFER: "workspaces.transfer",
   /** The account left one workspace on the service; the view's workspaces and plans are read again. */
   WORKSPACES_LEAVE: "workspaces.leave",
   /** One workspace's pending invitations, read from the service now; answered to the caller, never held in the view. */
@@ -92,6 +102,8 @@ export const GATEWAY_METHOD = {
   CODING_AGENTS_DEFAULT_WRITE: "codingAgents.defaultWrite",
   /** One plan's coding agents with their status, read from the service now. */
   CODING_AGENTS_LIST: "codingAgents.list",
+  /** A workspace's coding agents, newest started first, narrowed to one repository where one is named. */
+  CODING_AGENTS_WORKSPACE_LIST: "codingAgents.workspaceList",
   /** A coding agent started on one plan under the panel's own key; the agent, or why none started. */
   CODING_AGENTS_START: "codingAgents.start",
   /** One agent's transcript past a cursor, held open by the service while the agent runs. */
@@ -109,6 +121,15 @@ export const GATEWAY_METHOD = {
   /** One agent archived, a turn it still runs stopped first, or brought back; the agent as it then stands, or why it is unchanged. */
   CODING_AGENTS_ARCHIVE: "codingAgents.archive",
   /** What one agent published: the branch it pushed and the pull request from it, as GitHub holds them now. */
+  CODING_AGENTS_PAGE: "codingAgents.page",
+  AUTOMATIONS_LIST: "automations.list",
+  AUTOMATIONS_CREATE: "automations.create",
+  AUTOMATIONS_CHANGE: "automations.change",
+  AUTOMATIONS_DELETE: "automations.delete",
+  AUTOMATIONS_RUN: "automations.run",
+  AUTOMATIONS_RUNS: "automations.runs",
+  /** A webhook trigger's secret minted again by the host, its hash sent to the service, and the secret answered once to the window that asked (root AGENTS.md's carve-out). */
+  AUTOMATIONS_NEW_WEBHOOK_SECRET: "automations.newWebhookSecret",
   CODING_AGENTS_PULL_REQUEST: "codingAgents.pullRequest",
   /** One agent's changes: the files of its pull request as GitHub holds them now, each with its patch. */
   CODING_AGENTS_CHANGES: "codingAgents.changes",
@@ -132,6 +153,7 @@ export const GATEWAY_METHOD = {
   DICTATION_TRANSCRIBE: "dictation.transcribe",
   /** One plan's inbox past a cursor: every item its coding agents posted for the developer, held open by the service while nothing changed. */
   CODING_AGENTS_INBOX: "codingAgents.inbox",
+  CODING_AGENTS_AGENT_INBOX: "codingAgents.agentInbox",
   /** One item of a plan's inbox answered against the revision the panel drew, under the panel's own key; the item as it then stands and whether the answer was taken, or why there is no answer. */
   CODING_AGENTS_INBOX_ANSWER: "codingAgents.inboxAnswer",
   /** Where every one of the account's integrations stands, read from the service now. */
@@ -148,12 +170,33 @@ export const GATEWAY_METHOD = {
   CODING_AGENTS_ACCOUNT_INBOX: "codingAgents.accountInbox",
   /** One image of an inbox item, fetched under the account: its bytes in base64 under the media type the service kept, or why there is none. */
   CODING_AGENTS_INBOX_ATTACHMENT: "codingAgents.inboxAttachment",
+  /**
+   * A coding agent's terminals (`@luke/features/terminal-view`): its shells
+   * listed, started, named, and ended, and its sandbox resumed on the
+   * developer's click; and a shell attached for one panel under a
+   * connection id the desktop minted, typed into, resized, acked, woken
+   * after a sleep, and detached. What a shell prints is heard as
+   * `TERMINAL_OUTPUT` events, never answered.
+   */
+  TERMINALS_LIST: "terminals.list",
+  TERMINALS_CREATE: "terminals.create",
+  TERMINALS_RENAME: "terminals.rename",
+  TERMINALS_KILL: "terminals.kill",
+  TERMINALS_RESUME: "terminals.resume",
+  TERMINALS_CONNECT: "terminals.connect",
+  TERMINALS_INPUT: "terminals.input",
+  TERMINALS_RESIZE: "terminals.resize",
+  TERMINALS_ACK: "terminals.ack",
+  TERMINALS_DISCONNECT: "terminals.disconnect",
+  TERMINALS_WAKE: "terminals.wake",
   /** Everything a window's bootstrap reads of the host, in one answer. */
   CLIENT_BOOTSTRAP: "client.bootstrap",
   SETTINGS_SNAPSHOT: "settings.snapshot",
   SETTINGS_UPDATE: "settings.update",
   SETTINGS_UPDATE_ENTRY: "settings.updateEntry",
   SETTINGS_RESET: "settings.reset",
+  /** One experiment turned on or off for the signed-in account on the service; the settings as they then stand, the experiments among them. */
+  EXPERIMENTS_SET: "experiments.set",
   ACCOUNT_SNAPSHOT: "account.snapshot",
   ACCOUNT_BEGIN_SIGN_IN: "account.beginSignIn",
   ACCOUNT_CANCEL_SIGN_IN: "account.cancelSignIn",
@@ -446,6 +489,10 @@ export const GATEWAY_EVENT = {
   SESSION_REPLAY_CHANGED: "sessionReplay.changed",
   /** The panel's plans, active plan, and document, whole, whenever a read moved them. */
   PLANNING_CHANGED: "planning.changed",
+  /** What an attached shell printed, named by its connection, for the one panel that connection's port reaches. */
+  TERMINAL_OUTPUT: "terminal.output",
+  /** How an attached shell's connection stands, named by its connection. */
+  TERMINAL_STATE: "terminal.state",
 } as const;
 
 export type GatewayEventKind = (typeof GATEWAY_EVENT)[keyof typeof GATEWAY_EVENT];

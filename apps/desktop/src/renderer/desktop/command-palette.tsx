@@ -43,9 +43,13 @@
  * each row's words instead.
  */
 
-import { PLAN_TREE_BOUNDS, PLAN_TREE_ENTRY, type PlanSummary } from "@sidecar/features/plan-wire";
-import type { PlanCodeShowing, PlanningTreeAnswer } from "@sidecar/features/planning-view";
-import { GearIcon, SearchIcon } from "@sidecar/panel";
+import { PLAN_TREE_BOUNDS, PLAN_TREE_ENTRY, type PlanSummary } from "@luke/features/plan-wire";
+import type { PlanCodeShowing, PlanningTreeAnswer } from "@luke/features/planning-view";
+import type { Workspace } from "@luke/features/workspace-wire";
+import { SETTINGS_PAGE_LIST, type SettingsView } from "@luke/settings/settings-views";
+import { GearIcon, SearchIcon } from "@luke/ui";
+import { DOCUMENT_REGION } from "@luke/ui/planning-model";
+import { matchesTokens, searchTokens } from "@luke/ui/search-tokens";
 import { Command, defaultFilter } from "cmdk";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -65,13 +69,11 @@ import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { AgentCard, agentSubject, NOTHING_HELD } from "../planning/agent-ref";
 import { FileCard, fileLook, newestFileNote } from "../planning/file-ref";
 import { refusalLine } from "../planning/file-tab-model";
-import { DOCUMENT_REGION } from "../planning/planning-model";
 import { TAB_KIND, tabLook } from "../planning/tab-look";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { SIDE_PANEL_TABS } from "../planning/use-side-panel";
 import { workRowsOf } from "../planning/work-model";
 import { Highlighted } from "../search-field";
-import { matchesTokens, searchTokens } from "../search-tokens";
 import { settingsPageOf } from "../settings/pages";
 import {
   landOnSettingsRow,
@@ -79,11 +81,11 @@ import {
   type SettingsSearchInput,
   settingsSearchEntries,
 } from "../settings-search";
-import { SETTINGS_PAGE_LIST, type SettingsView } from "../settings-views";
 import { Shortcut } from "../shortcut";
 import { Tooltip } from "../tooltip";
 import { agentEntries, inboxEntries } from "./main-tabs";
 import { changesOffers, panelEntries, planWorkers } from "./side-panel";
+import { WorkspaceRef } from "./workspace-ref";
 
 /** The kinds of row the palette lists, each a filter of its own after All, in the order the chips stand. */
 const PALETTE_FILTER = {
@@ -105,7 +107,7 @@ const PALETTE_FILTERS: readonly PaletteFilter[] = Object.values(PALETTE_FILTER);
 /** Each filter's chip, which is also each kind's heading under All. */
 const FILTER_LABEL = {
   [PALETTE_FILTER.ALL]: "All",
-  [PALETTE_FILTER.PLANS]: "Plans",
+  [PALETTE_FILTER.PLANS]: "Tasks",
   [PALETTE_FILTER.AGENTS]: "Agents",
   [PALETTE_FILTER.FILES]: "Files",
   [PALETTE_FILTER.ACTIONS]: "Actions",
@@ -114,8 +116,8 @@ const FILTER_LABEL = {
 
 /** What the search field asks for under each filter. */
 const FILTER_PLACEHOLDER = {
-  [PALETTE_FILTER.ALL]: "Search plans, agents, files, actions, and settings…",
-  [PALETTE_FILTER.PLANS]: "Search plans…",
+  [PALETTE_FILTER.ALL]: "Search tasks, agents, files, actions, and settings…",
+  [PALETTE_FILTER.PLANS]: "Search tasks…",
   [PALETTE_FILTER.AGENTS]: "Search agents…",
   [PALETTE_FILTER.FILES]: "Search files…",
   [PALETTE_FILTER.ACTIONS]: "Search actions…",
@@ -151,7 +153,7 @@ type FilesRead =
   | { read: typeof FILES_READ.MISSED; notice: string };
 
 /** What the Files filter says while no plan with a repository is open. */
-const NO_REPOSITORY_LINE = "Open a plan with a repository to search its files.";
+const NO_REPOSITORY_LINE = "Open a task with a repository to search its files.";
 
 /** What the Files filter says where the read did not land. */
 const FILES_MISSED_LINE = "The files could not be read.";
@@ -208,6 +210,7 @@ const SETTINGS_WORD = "Settings";
 /** The commands the palette lists: the Keyboard shortcuts page's, then the menu bar's own dialogs. */
 const PALETTE_COMMANDS: readonly AppCommand[] = [
   ...APP_SHORTCUT_GROUPS.flatMap((group) => group.commands),
+  APP_COMMAND.NEW_TERMINAL,
   APP_COMMAND.SEND_FEEDBACK,
   APP_COMMAND.SUGGEST_FEATURE,
 ];
@@ -218,6 +221,8 @@ interface PaletteRow {
   label: string;
   /** Muted words after the name: a plan's repository, an agent's plan, a setting's page. */
   detail?: string | undefined;
+  /** The workspace a plan is in where that is not the one listed, named by its tile and name before the detail. */
+  workspace?: Workspace | undefined;
   /** The mark at the row's end: a failed agent's. */
   endMark?: React.JSX.Element | undefined;
   /** The card the row hangs beside it while the pointer rests on it: an agent's tab's. */
@@ -362,17 +367,36 @@ function planDetail(plan: PlanSummary, archived: boolean): string | undefined {
   return words.length === 0 ? undefined : words.join(" · ");
 }
 
-/** Every plan, the sidebar's first in its order, then the archived ones, each in its tab's look, an archived one saying so in its detail. */
+/**
+ * Every plan, the sidebar's first in its order, then the archived ones, each
+ * in its tab's look, an archived one saying so in its detail. Within each,
+ * the listed workspace's plans come first and every other workspace's after
+ * them, naming its workspace and found by its name, since opening one
+ * switches the window to it.
+ */
 function planRows(plans: PlansControl, open: (planId: string) => void): readonly PaletteRow[] {
-  const row = (plan: PlanSummary, archived: boolean): PaletteRow => ({
-    ...tabLook({ kind: TAB_KIND.PLAN, name: plan.name }),
-    detail: planDetail(plan, archived),
-    terms: plan.repository === null ? [plan.name] : [plan.name, plan.repository],
-    onChoose: () => open(plan.id),
-  });
+  const listedId = plans.workspace?.id;
+  const elsewhereOf = (plan: PlanSummary): Workspace | undefined =>
+    listedId === undefined || plan.workspaceId === listedId
+      ? undefined
+      : plans.workspaces.find((each) => each.id === plan.workspaceId);
+  const row = (plan: PlanSummary, archived: boolean): PaletteRow => {
+    const elsewhere = elsewhereOf(plan);
+    return {
+      ...tabLook({ kind: TAB_KIND.PLAN, name: plan.name }),
+      detail: planDetail(plan, archived),
+      workspace: elsewhere,
+      terms: [plan.name, plan.repository, elsewhere?.name ?? null].filter((term) => term !== null),
+      onChoose: () => open(plan.id),
+    };
+  };
+  const listedFirst = (list: readonly PlanSummary[]) => [
+    ...list.filter((plan) => listedId === undefined || plan.workspaceId === listedId),
+    ...list.filter((plan) => listedId !== undefined && plan.workspaceId !== listedId),
+  ];
   return [
-    ...plans.plans.map((plan) => row(plan, false)),
-    ...plans.archived.map((plan) => row(plan, true)),
+    ...listedFirst(plans.plans).map((plan) => row(plan, false)),
+    ...listedFirst(plans.archived).map((plan) => row(plan, true)),
   ];
 }
 
@@ -504,9 +528,16 @@ function PaletteItem({
       <span className="command-palette-name">
         <Highlighted text={row.label} tokens={tokens} />
       </span>
-      {row.detail === undefined ? null : (
+      {row.detail === undefined && row.workspace === undefined ? null : (
         <span className="command-palette-detail">
-          <Highlighted text={row.detail} tokens={tokens} />
+          {row.workspace === undefined ? null : (
+            <WorkspaceRef
+              workspace={row.workspace}
+              name={<Highlighted text={row.workspace.name} tokens={tokens} />}
+            />
+          )}
+          {row.workspace === undefined || row.detail === undefined ? null : " · "}
+          {row.detail === undefined ? null : <Highlighted text={row.detail} tokens={tokens} />}
         </span>
       )}
       {/* Spoken, since a palette row is an option, which carries no

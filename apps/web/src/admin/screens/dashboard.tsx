@@ -1,5 +1,6 @@
-import type { AdminIntegration, AdminMetrics } from "../../../server/admin/admin-metrics";
-import type { AdminMetricsWindow } from "../../../server/admin/http";
+import type { AdminIntegration, AdminMetrics } from "@luke/service/admin/admin-metrics";
+import type { AdminMetricsWindow } from "@luke/service/admin/http";
+import { formatNumber } from "@luke/ui/admin-format";
 import { ACCOUNTS_TABLE_MIN_WIDTH, AccountsTable } from "../accounts-table/accounts-table";
 import { RetentionGrid } from "../charts/retention-grid";
 import { SignInMethodsChart, SignupsChart } from "../charts/signups-chart";
@@ -10,7 +11,6 @@ import { HideAdminsToggle, RefreshFailureNotice, WindowSwitcher } from "../chrom
 import { RetentionNote, TopAccountsNote } from "../chrome/notes";
 import { PageHeader, type ViewerAccount } from "../chrome/page-header";
 import { PageSkeleton } from "../chrome/page-skeleton";
-import { formatNumber } from "../format";
 import { METRICS_PATH, windowedReadPath } from "../routing";
 import { SKELETON_PLOT, SKELETON_SHAPE, type SkeletonShape } from "../skeleton";
 import {

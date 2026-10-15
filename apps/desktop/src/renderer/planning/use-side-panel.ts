@@ -1,8 +1,5 @@
-import type { CodeRef } from "@sidecar/features/plan-wire";
-import { BoardIcon, CallIcon, CodeIcon } from "@sidecar/panel";
-import { Option, Schema } from "effect";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { fileName } from "./code-pane-model";
+import type { CodeRef } from "@luke/features/plan-wire";
+import { BoardIcon, CallIcon, CodeIcon } from "@luke/ui";
 import {
   type AgentStripTab,
   type ChangesStripTab,
@@ -14,6 +11,7 @@ import {
   isFileTab,
   isPageTab,
   isSubagentTab,
+  isTerminalTab,
   movedOrder,
   openedOrder,
   type PageStripTab,
@@ -22,8 +20,12 @@ import {
   type SubagentStripTab,
   sameTab,
   TAB_WORDS,
+  type TerminalStripTab,
   viewedLast,
-} from "./tab-strip-model";
+} from "@luke/ui/tab-strip-model";
+import { fileName } from "@luke/voice/code-pane-model";
+import { Option, Schema } from "effect";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { MAIN_TAB } from "./use-main-tabs";
 
 /**
@@ -66,7 +68,11 @@ import { MAIN_TAB } from "./use-main-tabs";
  * times, one per file: it is held to the files Luke showed on the open plan
  * the same way, closes, and is kept nowhere. A page's tab, opened from the
  * "+", stands once per page an agent wrote for the open plan, held to the
- * plan's pages and kept nowhere on the same terms. Opening a file
+ * plan's pages and kept nowhere on the same terms. An agent's Terminal tab
+ * stands once per agent, whose sandbox its shells run in, never once per
+ * plan: it is held to the plan's agents as a Changes tab is, and kept
+ * nowhere, since what it shows is a connection the next launch makes
+ * afresh. Opening a file
  * that already has a tab chooses that tab and moves its lit lines to the
  * snippet opened. A file browsed to from a File tab's tree or breadcrumbs
  * is held to the plan it was browsed on instead, since any file of the
@@ -160,12 +166,13 @@ const RETIRED_TABS: ReadonlySet<unknown> = new Set(Object.values(RETIRED_SIDE_PA
 
 export type FixedSidePanelTab = (typeof SIDE_PANEL_TAB)[keyof typeof SIDE_PANEL_TAB];
 
-/** A tab of the panel: one of the fixed kinds, one subagent's, one file's, one agent's Changes, or one page's. */
+/** A tab of the panel: one of the fixed kinds, one subagent's, one file's, one agent's Changes or Terminal, or one page's. */
 export type SidePanelTab =
   | FixedSidePanelTab
   | SubagentStripTab
   | FileStripTab
   | ChangesStripTab
+  | TerminalStripTab
   | PageStripTab;
 
 /**
@@ -380,6 +387,10 @@ interface HeldState extends Omit<SidePanelState, "tabs" | "tab" | "plans" | "pin
   readonly files: readonly OpenFile[];
   /** The open page tabs, by page, in the order opened. */
   readonly pages: readonly PageStripTab[];
+  /** The open Terminal tabs, by agent, in the order opened. */
+  readonly terminals: readonly TerminalStripTab[];
+  /** The agent whose Terminal tab was shown last on each plan, by plan. */
+  readonly lastTerminals: Readonly<Record<string, string>>;
   readonly plans: Readonly<Record<string, PlanTabs>>;
   readonly pins: readonly PinnedTab[];
 }
@@ -436,6 +447,10 @@ export interface SidePanelControl {
   changes: readonly ChangesStripTab[];
   /** The open page tabs in the order opened, after the Changes tabs; only those of the open plan's pages are drawn. */
   pages: readonly PageStripTab[];
+  /** The open Terminal tabs in the order opened, after the page tabs; only those of the open plan's agents are drawn. */
+  terminals: readonly TerminalStripTab[];
+  /** The agent whose Terminal tab was shown last on the open plan, which ⌘J goes to among several. */
+  lastTerminal: string | undefined;
   /** The open plan's tabs of every kind as the strip draws them, in its order. */
   strip: readonly SidePanelTab[];
   /** The tab shown, which is none only while the open plan has no tab open. */
@@ -724,14 +739,24 @@ function withTab(held: HeldState, tab: SidePanelTab, planId: string | undefined)
     isPageTab(tab) && !held.pages.some((each) => sameTab(each, tab))
       ? [...held.pages, tab]
       : held.pages;
+  const terminals =
+    isTerminalTab(tab) && !held.terminals.some((each) => sameTab(each, tab))
+      ? [...held.terminals, tab]
+      : held.terminals;
+  const lastTerminals =
+    isTerminalTab(tab) && planId !== undefined && held.lastTerminals[planId] !== tab.terminal
+      ? { ...held.lastTerminals, [planId]: tab.terminal }
+      : held.lastTerminals;
   const chosen = open ?? tab;
   return opened === held &&
     subagents === held.subagents &&
     files === held.files &&
     pages === held.pages &&
+    terminals === held.terminals &&
+    lastTerminals === held.lastTerminals &&
     chosen === held.tab
     ? held
-    : { ...opened, subagents, files, pages, tab: chosen };
+    : { ...opened, subagents, files, pages, terminals, lastTerminals, tab: chosen };
 }
 
 /** The range a reference lights, none for a whole file. */
@@ -895,6 +920,19 @@ export function drawsChanges(tab: ChangesStripTab, drawn: Pick<DrawnTabs, "planA
   return drawn.planAgents === undefined || drawn.planAgents.includes(tab.changes);
 }
 
+/**
+ * Whether the plan draws the agent's Terminal tab: once its agents are read
+ * and the agent is among them. Note that it waits for the read, unlike a
+ * Changes tab, because a Terminal tab is kept across no launch, so nothing
+ * stands in for it meanwhile, and the tabs are held across the plans.
+ */
+export function drawsTerminal(
+  tab: TerminalStripTab,
+  drawn: Pick<DrawnTabs, "planAgents">,
+): boolean {
+  return drawn.planAgents?.includes(tab.terminal) === true;
+}
+
 /** The open file tabs of files shown on the plan, by path, in the strip's order. */
 function drawnFiles(held: HeldState, drawn: DrawnTabs): readonly string[] {
   return held.files.flatMap((each) => (drawn.files.includes(each.path) ? [each.path] : []));
@@ -924,6 +962,7 @@ function stripOf(held: HeldState, drawn: DrawnTabs): readonly SidePanelTab[] {
     ...drawnFiles(held, drawn).map((file) => ({ file })),
     ...drawnChanges(held, drawn),
     ...held.pages.filter((each) => drawn.pages.includes(each.page)),
+    ...held.terminals.filter((each) => drawsTerminal(each, drawn)),
   ];
   return inPlanOrder(kinds, orderOn(held, drawn.plan.id), (tab) => tab);
 }
@@ -984,7 +1023,9 @@ function withoutTab(held: HeldState, tab: SidePanelTab, drawn: DrawnTabs): HeldS
           }))
         : isPageTab(tab)
           ? { ...held, pages: held.pages.filter((each) => !sameTab(each, tab)) }
-          : { ...held, files: held.files.filter((each) => each.path !== tab.file) };
+          : isTerminalTab(tab)
+            ? { ...held, terminals: held.terminals.filter((each) => !sameTab(each, tab)) }
+            : { ...held, files: held.files.filter((each) => each.path !== tab.file) };
   if (closed === undefined) return held;
   const forgotten = withoutViewed(closed, drawn.plan.id, tab);
   const shown = shownIn(held, drawn);
@@ -1157,6 +1198,8 @@ function settled(state: SidePanelState): HeldState {
     subagents: [],
     files: [],
     pages: [],
+    terminals: [],
+    lastTerminals: {},
     plans: currentPlans(state.plans),
     pins:
       pins === undefined
@@ -1253,6 +1296,7 @@ function shownTab(
   if (isFileTab(kept)) return drawn.files.includes(kept.file) ? kept : tabs[0];
   if (isChangesTab(kept)) return changes.some((each) => sameTab(each, kept)) ? kept : tabs[0];
   if (isPageTab(kept)) return drawn.pages.includes(kept.page) ? kept : tabs[0];
+  if (isTerminalTab(kept)) return drawsTerminal(kept, drawn) ? kept : tabs[0];
   return drawsSubagent(kept, drawn) ? kept : tabs[0];
 }
 
@@ -1542,6 +1586,8 @@ export function useSidePanel(
     subagents: state.subagents,
     changes: planTabs(state, planId).changes ?? NO_CHANGES,
     pages: state.pages,
+    terminals: state.terminals,
+    lastTerminal: planId === undefined ? undefined : state.lastTerminals[planId],
     files: state.files,
     tab: shownIn(state, drawn),
     width: state.width,

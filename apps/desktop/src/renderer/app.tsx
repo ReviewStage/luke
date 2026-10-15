@@ -1,64 +1,75 @@
-import { cssCustomProperties } from "@sidecar/brand/react-css";
-import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
-import { PRODUCT_SURFACE_EVENT } from "@sidecar/features/analytics";
-import { FEEDBACK_KIND, type FeedbackKind } from "@sidecar/features/feedback";
-import { IDLE_PLANNING_VIEW } from "@sidecar/features/planning-view";
-import { APP_SETTING_SCHEMA, VOICE_HOTKEY_NONE } from "@sidecar/settings";
-import { appSettingsView } from "@sidecar/settings/wire";
-import { ACTION_RESULT_STATUS } from "@sidecar/wire";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ACT_KIND } from "#shared/messages/acts";
+import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
+import { PRODUCT_SURFACE_EVENT } from "@luke/features/analytics";
+import { FEEDBACK_KIND, type FeedbackKind } from "@luke/features/feedback";
+import { MENTION_KIND, type PlanMention } from "@luke/features/mention-link";
+import { IDLE_PLANNING_VIEW } from "@luke/features/planning-view";
+import { ACT_KIND } from "@luke/host/acts";
 import {
   type AppInboxPlan,
   type AppInboxPlanHolding,
+  type AppInboxPlanlessItem,
   RUN_PROFILE,
   sessionReplayBootstrap,
-} from "#shared/messages/app-state";
-import { MICROPHONE_STATUS } from "#shared/messages/audio";
-import type { VoiceSpeakers } from "#shared/messages/voice-view";
+} from "@luke/host/app-state";
+import { APP_SETTING_SCHEMA, EXPERIMENT, type Experiment, VOICE_HOTKEY_NONE } from "@luke/settings";
+import { SETTINGS_VIEW, type SettingsLink, type SettingsView } from "@luke/settings/settings-views";
+import { fixtureUpdate } from "@luke/settings/update-row";
+import { appSettingsView } from "@luke/settings/wire";
+import { cssCustomProperties } from "@luke/ui";
+import { callBarPlanId, callCard, callCardShown } from "@luke/ui/call-card-model";
+import { useLinkOpener } from "@luke/ui/held-link";
+import { PLANS_PAGE } from "@luke/ui/planning-model";
+import { useStateWithRef } from "@luke/ui/use-state-with-ref";
+import { MICROPHONE_STATUS } from "@luke/voice/audio";
+import type {
+  MicrophoneControl,
+  ShortcutControl,
+  UpdateControl,
+} from "@luke/voice/settings-controls";
+import type { VoiceSpeakers } from "@luke/voice/voice-view";
+import {
+  outputSilent,
+  type VolumeHintDismissal,
+  volumeHintDismissed,
+  volumeHintText,
+} from "@luke/voice/volume-hint";
+import { ACTION_RESULT_STATUS } from "@luke/wire";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "./act";
 import { runAppCommand, useAppCommand, useAppKeymap, useMenuCommands } from "./app-commands";
 import { type CallCardInput, callControls } from "./call/call-card";
-import { callBarPlanId, callCard, callCardShown } from "./call/call-card-model";
 import { useWindowFocused } from "./call/use-window-focused";
 import { CommandPalette } from "./desktop/command-palette";
 import { DesktopShell } from "./desktop/desktop-shell";
+import { ListedAutomations } from "./desktop/listed-automations";
 import { useSidebarCollapse } from "./desktop/sidebar-collapse";
 import { prefetchEditorBundle } from "./editor-bundle";
 import { FeedbackDialog } from "./feedback-dialog";
 import { GitHubConnectProvider } from "./github-connect";
 import { useKeyboardModality } from "./keyboard-modality";
 import { useLastSignIn } from "./last-sign-in";
+import { prefetchMarkdownHtmlParser } from "./markdown-html-parser";
 import { useHistoryMouseButtons, useWindowHistory } from "./navigation-history";
+import { OpenFeedbackProvider } from "./open-feedback";
 import { OpenSettingsProvider } from "./open-settings";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
 import { useAgentEndToasts } from "./planning/agent-end-toast";
 import { useInboxToasts } from "./planning/inbox-toast";
-import { PLANS_PAGE } from "./planning/planning-model";
 import { type RepositoryRemedyDoors, RepositoryRemedyProvider } from "./planning/repository-remedy";
+import { OpenPlanProvider } from "./planning/use-open-link";
 import { usePlansTab } from "./planning/use-plans-tab";
 import { applySessionReplay } from "./session-replay";
-import type { MicrophoneControl, ShortcutControl, UpdateControl } from "./settings/controls";
 import { settingsRowsInput } from "./settings/settings-panel";
-import { followSettingsLink } from "./settings-link";
-import { SETTINGS_VIEW, type SettingsLink, type SettingsView } from "./settings-views";
+import { followSettingsLink, useSettingsWorkspace } from "./settings-link";
 import { useSignInFaceCycle } from "./sign-in-gate";
 import { ToastHost } from "./toast";
-import { fixtureUpdate } from "./update-row";
 import { useUpdatedToast } from "./update-toast";
-import { useAppState } from "./use-app-state";
+import { useAppState, useExperiment } from "./use-app-state";
 import { useCaptionPresentation } from "./use-caption-presentation";
 import { usePrefersReducedMotion } from "./use-reduced-motion";
 import { useSignIn } from "./use-sign-in";
-import { useStateWithRef } from "./use-state-with-ref";
 import { FIXTURE_SPEAKING_CAPTIONS, fixtureVoice, useVoiceView } from "./use-voice-view";
-import {
-  outputSilent,
-  type VolumeHintDismissal,
-  volumeHintDismissed,
-  volumeHintText,
-} from "./volume-hint";
 import { useWindowFullScreen } from "./window-full-screen";
 import { useWindowZoom } from "./window-zoom";
 
@@ -70,6 +81,8 @@ const NOTHING_WAITING: readonly AppInboxPlan[] = [];
 
 /** No plan holds an inbox item, as the document reads before main has answered. */
 const NO_PLANS_HOLDING: readonly AppInboxPlanHolding[] = [];
+/** Nothing waiting from agents with no plan, as one value across renders. */
+const NOTHING_PLANLESS: readonly AppInboxPlanlessItem[] = [];
 
 export function App(): React.JSX.Element {
   const { act, tell, updateSetting } = useAct();
@@ -81,8 +94,6 @@ export function App(): React.JSX.Element {
   const outputAudio = state?.audio.outputAudio;
   const [tab, setTab] = useStateWithRef<PanelTab>(PANEL_TAB.PLANS);
   const [settingsView, setSettingsView] = useStateWithRef<SettingsView>(SETTINGS_VIEW.ACCOUNT);
-  /** The workspace Settings' Workspace page shows, where a link or its picker named one; the sidebar's otherwise. */
-  const [settingsWorkspaceId, setSettingsWorkspaceId] = useState<string>();
   /** The settings the panel is drawing: the document's own. */
   const settings = useMemo(
     () => (state?.settings ? appSettingsView(state.settings) : undefined),
@@ -90,6 +101,12 @@ export function App(): React.JSX.Element {
   );
   /** The note being written to the people who make Luke, while its dialog stands. */
   const [feedbackKind, setFeedbackKind] = useState<FeedbackKind>();
+  /** The experiment that note is about, where an experiment's row opened it. */
+  const [feedbackAbout, setFeedbackAbout] = useState<Experiment>();
+  const openFeedbackAbout = useCallback((about: Experiment) => {
+    setFeedbackAbout(about);
+    setFeedbackKind(FEEDBACK_KIND.FEEDBACK);
+  }, []);
   useUpdatedToast(state ? fixtureUpdate(state.run, state.update) : undefined);
   /**
    * Which stretch of unbroken silence is on screen, advanced each time one
@@ -115,10 +132,12 @@ export function App(): React.JSX.Element {
   }, [run, sessionReplay]);
   // The editor bundle loads once the panel has painted, so an agent's message box and a plan's editor find it there.
   useEffect(prefetchEditorBundle, []);
+  // So does the parser a reply's markdown is drawn through, so a transcript opened finds it there.
+  useEffect(prefetchMarkdownHtmlParser, []);
   const changeTab = useCallback(
     (next: PanelTab) => {
       setTab(next);
-      // Arriving at the tab is arriving at its first page, Account: a page
+      // Arriving at the tab is arriving at its first page, Profile: a page
       // left open behind a tab switch would greet the next visit with a
       // corner of the settings rather than the settings. A flow that needs
       // another page sets it right after this reset.
@@ -131,17 +150,20 @@ export function App(): React.JSX.Element {
     },
     [setSettingsView, setTab],
   );
+  // Where a link's workspace is handed, read through a ref, because the
+  // workspace Settings shows is held beside the Plans tab, built after the opener.
+  const linkWorkspace = useRef<(workspaceId: string) => void>(() => undefined);
   /**
-   * Opens Settings at the place a link names: its page, the workspace the
-   * Workspace page shows, and its section, which is looked for once drawn
-   * and given up on by itself.
+   * Opens Settings at the place a link names: the workspace it names, which
+   * the Workspace page shows while Settings stays open; its page; and its
+   * section, which is looked for once drawn and given up on by itself.
    */
   const openSettings = useCallback(
     (link: SettingsLink) => {
       followSettingsLink(link, {
         changeTab,
         changeView: setSettingsView,
-        changeWorkspace: setSettingsWorkspaceId,
+        chooseWorkspace: (workspaceId) => linkWorkspace.current(workspaceId),
       });
     },
     [changeTab, setSettingsView],
@@ -162,8 +184,14 @@ export function App(): React.JSX.Element {
   const lastSignIn = useLastSignIn(account, state?.run.fixtureMode === true);
 
   // The menu bar's Help items open the same dialog Settings' buttons do.
-  useAppCommand(APP_COMMAND.SEND_FEEDBACK, () => setFeedbackKind(FEEDBACK_KIND.FEEDBACK));
-  useAppCommand(APP_COMMAND.SUGGEST_FEATURE, () => setFeedbackKind(FEEDBACK_KIND.PROMPT));
+  useAppCommand(APP_COMMAND.SEND_FEEDBACK, () => {
+    setFeedbackAbout(undefined);
+    setFeedbackKind(FEEDBACK_KIND.FEEDBACK);
+  });
+  useAppCommand(APP_COMMAND.SUGGEST_FEATURE, () => {
+    setFeedbackAbout(undefined);
+    setFeedbackKind(FEEDBACK_KIND.PROMPT);
+  });
 
   /**
    * Moves the talk key, or resets it when no chord is named. The key the row
@@ -245,24 +273,51 @@ export function App(): React.JSX.Element {
     unseenAgents: state?.codingAgents.unseen ?? NO_UNSEEN_AGENTS,
     inboxWaiting: state?.inbox.waiting ?? NOTHING_WAITING,
     inboxPlans: state?.inbox.plans ?? NO_PLANS_HOLDING,
+    inboxPlanless: state?.inbox.planless ?? NOTHING_PLANLESS,
     voice: { view: voiceView, listening, requestMicrophoneAccess },
     onOpenSettings: (link) => openSettings(link),
-    // Through the one opener, so a workspace an earlier link chose is not left showing.
     onOpenIntegrations: () => openSettings({ page: SETTINGS_VIEW.INTEGRATIONS }),
     onOpenApiKeys: () => openSettings({ page: SETTINGS_VIEW.CODING_AGENTS }),
   });
-  // A coding agent's notification clicked: the Plans tab, on that agent.
-  // Read through a ref, because the tab hands a new closure each render and
-  // the subscription is owed to the window, not to a render.
+  // The workspace Settings shows: the sidebar's, or one a link named while Settings stays open.
+  const settingsWorkspace = useSettingsWorkspace({
+    listedId: plans.workspace?.id,
+    workspaces: plans.workspaces,
+    settingsShown: tab === PANEL_TAB.SETTINGS,
+  });
+  linkWorkspace.current = settingsWorkspace.link;
+  // A coding agent's notification clicked: the Plans tab, on that agent,
+  // its plan's tab or its own page where it has no plan. Read through refs,
+  // because the tab hands new closures each render and the subscription is
+  // owed to the window, not to a render.
   const showAgent = useRef(plans.onShowAgent);
   showAgent.current = plans.onShowAgent;
+  const showAgentPage = useRef(plans.agentView.onOpen);
+  showAgentPage.current = plans.agentView.onOpen;
   useEffect(
     () =>
       window.luke.onShowAgent(({ planId, agentId }) => {
         changeTab(PANEL_TAB.PLANS);
-        showAgent.current(planId, agentId);
+        if (planId === null) showAgentPage.current(agentId);
+        else showAgent.current(planId, agentId);
       }),
     [changeTab],
+  );
+  // A Luke link the system handed the app: the Plans tab, on its plan, scrolled to its section, once sign-in no longer stands in the way.
+  const openLink = useLinkOpener(accountGated, (mention) => {
+    changeTab(PANEL_TAB.PLANS);
+    plans.onShowMention(mention);
+  });
+  useEffect(
+    () =>
+      window.luke.onShowLink(({ planId, anchor }) =>
+        openLink(
+          anchor === undefined
+            ? { kind: MENTION_KIND.PLAN, planId }
+            : { kind: MENTION_KIND.SECTION, planId, anchor },
+        ),
+      ),
+    [openLink],
   );
   // The call card's way back: the Plans tab, on the call's plan's document,
   // opening it where another plan, or none, is open.
@@ -278,13 +333,14 @@ export function App(): React.JSX.Element {
   );
   // The call card, while this window has the keyboard and its call bar is not
   // on screen: another plan, the home page, Settings, or the plan itself
-  // under its version history, the Inbox, or a side panel filling the window.
+  // under its version history, the Inbox, an agent's page, or a side panel filling the window.
   const focused = useWindowFocused();
   const planShown = callBarPlanId({
     plansTab: tab === PANEL_TAB.PLANS,
     documentPage: plans.page === PLANS_PAGE.DOCUMENT,
     historyOpen: plans.history.open,
     inboxOpen: plans.inboxView.open,
+    agentPageOpen: plans.agentView.agentId !== undefined,
     sidePanelFullScreen: plans.sidePanel.fullScreen,
     activePlanId: state?.planning.activePlanId,
   });
@@ -314,6 +370,23 @@ export function App(): React.JSX.Element {
     [changeTab],
   );
   useEffect(() => window.luke.onShowInbox(({ planId }) => openInbox(planId)), [openInbox]);
+  // A notification of an item of an agent with no plan clicked: the window's Inbox, on that item
+  // in its own workspace's list, the item itself shown where the Inbox shows one column.
+  const inboxDoors = useRef(plans);
+  inboxDoors.current = plans;
+  useEffect(
+    () =>
+      window.luke.onShowInboxItem(({ agentId, itemId, workspaceId }) => {
+        const doors = inboxDoors.current;
+        changeTab(PANEL_TAB.PLANS);
+        if (workspaceId !== undefined && doors.workspace?.id !== workspaceId) {
+          doors.onChooseWorkspace(workspaceId);
+        }
+        doors.inboxView.onOpen();
+        doors.inboxView.onChoose({ agentId, itemId, opened: true });
+      }),
+    [changeTab],
+  );
   useInboxToasts(
     openInbox,
     state?.inbox.waiting ?? NOTHING_WAITING,
@@ -332,6 +405,7 @@ export function App(): React.JSX.Element {
   });
   // The sidebar folds only where it is drawn: Settings keeps its page list,
   // and the sign-in gate draws no sidebar at all.
+  const automationsOn = useExperiment(EXPERIMENT.AUTOMATIONS);
   const sidebar = useSidebarCollapse(state?.run.fixtureMode === true);
 
   const caption = useCaptionPresentation({
@@ -404,7 +478,7 @@ export function App(): React.JSX.Element {
       // A dialog that took the press for itself is the nearest layer of all.
       if (event.defaultPrevented) return;
       // Otherwise it closes the nearest thing that is open, one layer at a
-      // time: Settings, a plan's version history, or the Inbox, back to wherever it was
+      // time: Settings, a plan's version history, the Inbox, Factory, or the Automations page, back to wherever it was
       // opened from, then a side panel filling the window back beside its
       // plan, then an open plan back to the home page. A menu and the
       // settings search answer their own Escapes and keep them — the search
@@ -412,6 +486,9 @@ export function App(): React.JSX.Element {
       if (runAppCommand(APP_COMMAND.EXIT_SETTINGS)) return;
       if (runAppCommand(APP_COMMAND.EXIT_VERSION_HISTORY)) return;
       if (runAppCommand(APP_COMMAND.EXIT_INBOX)) return;
+      if (runAppCommand(APP_COMMAND.EXIT_AGENT_PAGE)) return;
+      if (runAppCommand(APP_COMMAND.EXIT_FACTORY)) return;
+      if (runAppCommand(APP_COMMAND.EXIT_AUTOMATIONS)) return;
       // An open plan unwinds to the home page, which leaves it and ends
       // its call. That page is home, so a press there does nothing.
       plans.back();
@@ -465,14 +542,14 @@ export function App(): React.JSX.Element {
     onStopHotkeyChange: changeStopHotkey,
     onCapture: changeShortcutCapture,
   };
-  // The Workspace page shows the workspace a link or its picker chose, the sidebar's otherwise.
+  // The Workspace page shows the workspace the sidebar lists, or one a link named.
   const workspace = {
     workspaces: plans.workspaces,
-    workspaceId: settingsWorkspaceId ?? plans.workspace?.id,
-    onChooseWorkspace: setSettingsWorkspaceId,
+    workspaceId: settingsWorkspace.shownId,
+    // A leave closes Settings onto the Plans tab, whose Home the tab turns to.
     onLeft: (workspaceId: string) => {
       plans.onLeftWorkspace(workspaceId);
-      setSettingsWorkspaceId(undefined);
+      changeTab(PANEL_TAB.PLANS);
     },
     listFailed: plans.listFailed,
     onRetryList: plans.onRetryList,
@@ -486,118 +563,131 @@ export function App(): React.JSX.Element {
     movePlan: plans.onMovePlan,
   };
 
+  // A Luke link pressed anywhere in the window opens its plan on the Plans tab, scrolled to its section.
+  const openPlan = (mention: PlanMention) => {
+    changeTab(PANEL_TAB.PLANS);
+    plans.onShowMention(mention);
+  };
+
   return (
     <OpenSettingsProvider value={openSettings}>
-      <RepositoryRemedyProvider value={repositoryRemedies}>
-        <GitHubConnectProvider
-          value={{
-            connection: plans.github,
-            connect: plans.onConnectAccountGitHub,
-            disconnect: plans.onDisconnectAccountGitHub,
-          }}
-        >
-          <div
-            className="app-stage"
-            data-capture={String(state.run.captureMode)}
-            // The panel is drawn as an ordinary app window's content; desktop.css
-            // lays it out.
-            data-surface="desktop"
-            // The sidebar's width lays out the shell and Settings' page list, and
-            // places the captions over the work column beside it.
-            style={cssCustomProperties({ "--sidebar-width": `${sidebar.width}px` })}
-          >
-            {/* The window's content. */}
-            <div className="desktop-stage">
-              <DesktopShell
-                gates={{
-                  accountRequired: state.run.accountRequired,
-                  signInWait: signIn.signInWait,
-                  signInFailure: signIn.signInFailure,
-                  lastSignIn,
-                  onBeginSignIn: signIn.beginSignIn,
-                  onCancelSignIn: signIn.cancelSignIn,
-                  signInFace,
-                }}
-                tab={tab}
-                onTabChange={changeTab}
-                plans={plans}
-                history={history}
-                sidebar={sidebar}
-                call={call}
-                captions={{
-                  caption,
-                  volumeHint: {
-                    wanted: volumeHintWanted,
-                    text: volumeHintText(outputAudio),
-                    onDismiss: dismissVolumeHint,
-                  },
-                }}
-                settings={{
-                  account: state.account,
-                  onSignOut: async () => {
-                    await act(ACT_KIND.ACCOUNT_SIGN_OUT);
-                  },
-                  // The delete happens at the service before anything local moves,
-                  // so a failure resolves to why and the account is still standing.
-                  onDeleteAccount: async () => {
-                    try {
-                      await act(ACT_KIND.ACCOUNT_DELETE);
-                      return { status: ACTION_RESULT_STATUS.ACCEPTED };
-                    } catch {
-                      return {
-                        status: ACTION_RESULT_STATUS.REJECTED,
-                        reason: "Luke could not delete the account. Try again in a moment.",
-                      };
-                    }
-                  },
-                  view: settingsView,
-                  onViewChange: setSettingsView,
-                  microphone,
-                  notifications: {
-                    refused: state.notifications.refused,
-                    onOpenSettings: () => tell(ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS),
-                  },
-                  updates,
-                  settings,
-                  shortcuts,
-                  workspace,
-                }}
-              />
-            </div>
-            {/* A note to the people who make Luke, written in a dialog over the
+      <OpenPlanProvider value={openPlan}>
+        <OpenFeedbackProvider value={openFeedbackAbout}>
+          <RepositoryRemedyProvider value={repositoryRemedies}>
+            <GitHubConnectProvider
+              value={{
+                connection: plans.github,
+                connect: plans.onConnectAccountGitHub,
+                disconnect: plans.onDisconnectAccountGitHub,
+              }}
+            >
+              <ListedAutomations plans={plans} on={automationsOn}>
+                <div
+                  className="app-stage"
+                  data-capture={String(state.run.captureMode)}
+                  // The panel is drawn as an ordinary app window's content; desktop.css
+                  // lays it out.
+                  data-surface="desktop"
+                  // The sidebar's width lays out the shell and Settings' page list, and
+                  // places the captions over the work column beside it.
+                  style={cssCustomProperties({ "--sidebar-width": `${sidebar.width}px` })}
+                >
+                  {/* The window's content. */}
+                  <div className="desktop-stage">
+                    <DesktopShell
+                      gates={{
+                        accountRequired: state.run.accountRequired,
+                        signInWait: signIn.signInWait,
+                        signInFailure: signIn.signInFailure,
+                        lastSignIn,
+                        onBeginSignIn: signIn.beginSignIn,
+                        onCancelSignIn: signIn.cancelSignIn,
+                        signInFace,
+                      }}
+                      tab={tab}
+                      onTabChange={changeTab}
+                      plans={plans}
+                      history={history}
+                      sidebar={sidebar}
+                      call={call}
+                      captions={{
+                        caption,
+                        volumeHint: {
+                          wanted: volumeHintWanted,
+                          text: volumeHintText(outputAudio),
+                          onDismiss: dismissVolumeHint,
+                        },
+                      }}
+                      settings={{
+                        account: state.account,
+                        onSignOut: async () => {
+                          await act(ACT_KIND.ACCOUNT_SIGN_OUT);
+                        },
+                        // The delete happens at the service before anything local moves,
+                        // so a failure resolves to why and the account is still standing.
+                        onDeleteAccount: async () => {
+                          try {
+                            await act(ACT_KIND.ACCOUNT_DELETE);
+                            return { status: ACTION_RESULT_STATUS.ACCEPTED };
+                          } catch {
+                            return {
+                              status: ACTION_RESULT_STATUS.REJECTED,
+                              reason: "Luke could not delete the account. Try again in a moment.",
+                            };
+                          }
+                        },
+                        view: settingsView,
+                        onViewChange: setSettingsView,
+                        microphone,
+                        notifications: {
+                          refused: state.notifications.refused,
+                          onOpenSettings: () => tell(ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS),
+                        },
+                        updates,
+                        settings,
+                        shortcuts,
+                        workspace,
+                      }}
+                    />
+                  </div>
+                  {/* A note to the people who make Luke, written in a dialog over the
           window. */}
-            <FeedbackDialog
-              kind={feedbackKind}
-              account={account}
-              onClose={() => setFeedbackKind(undefined)}
-            />
-            {/* The window's passing notice: the thank-you after a note lands, what
+                  <FeedbackDialog
+                    kind={feedbackKind}
+                    about={feedbackAbout}
+                    account={account}
+                    onClose={() => setFeedbackKind(undefined)}
+                  />
+                  {/* The window's passing notice: the thank-you after a note lands, what
           came of a change made from a menu, and an update arrived. */}
-            <ToastHost />
-            {/* The plans, the open plan's agents and files, every command the
+                  <ToastHost />
+                  {/* The plans, the open plan's agents and files, every command the
           window can run now, and the settings, behind ⌘K, past the sign-in
           alone. */}
-            <CommandPalette
-              available={!accountGated}
-              tab={tab}
-              onTabChange={changeTab}
-              plans={plans}
-              settings={{
-                rows: settingsRowsInput({
-                  settings,
-                  microphone,
-                  account: state.account,
-                  workspace,
-                }),
-                onViewChange: setSettingsView,
-              }}
-              readFiles={(planId) =>
-                act(ACT_KIND.PLANNING_TREE, { planId, path: "", recursive: true })
-              }
-            />
-          </div>
-        </GitHubConnectProvider>
-      </RepositoryRemedyProvider>
+                  <CommandPalette
+                    available={!accountGated}
+                    tab={tab}
+                    onTabChange={changeTab}
+                    plans={plans}
+                    settings={{
+                      rows: settingsRowsInput({
+                        settings,
+                        microphone,
+                        account: state.account,
+                        workspace,
+                      }),
+                      onViewChange: setSettingsView,
+                    }}
+                    readFiles={(planId) =>
+                      act(ACT_KIND.PLANNING_TREE, { planId, path: "", recursive: true })
+                    }
+                  />
+                </div>
+              </ListedAutomations>
+            </GitHubConnectProvider>
+          </RepositoryRemedyProvider>
+        </OpenFeedbackProvider>
+      </OpenPlanProvider>
     </OpenSettingsProvider>
   );
 }

@@ -1,4 +1,4 @@
-import { isWireString, type WireRecord } from "@sidecar/wire";
+import { isWireString, type WireRecord } from "@luke/wire";
 
 /**
  * The opaque reporter a client minted for the window that asked. It rides on

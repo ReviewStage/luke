@@ -1,4 +1,4 @@
-import { AGENT_TOOL } from "@sidecar/features/agent-tools";
+import { AGENT_TOOL } from "@luke/features/agent-tools";
 import {
   CODING_AGENT_BRIEF,
   CODING_AGENT_STATUS,
@@ -8,14 +8,18 @@ import {
   type CodingAgentStatus,
   type CodingAgentSubagentStanding,
   type CodingAgentSummary,
-} from "@sidecar/features/coding-agent-wire";
-import type { CatalogModel, ModelChoice } from "@sidecar/features/models-wire";
-import { DocumentIcon } from "@sidecar/panel";
-import { MESSAGE_ROLE } from "@sidecar/wire";
+} from "@luke/features/coding-agent-wire";
+import { FAILURE_REASON, type FailureReason } from "@luke/features/failure-remedy";
+import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
+import { CALL_KIND, CALL_WORDS } from "@luke/features/turn-rows";
+import { ACT_KIND } from "@luke/host/acts";
+import { DocumentIcon } from "@luke/ui";
+import type { Actor } from "@luke/ui/actor-model";
+import { MESSAGE_ROLE } from "@luke/wire";
 import { BotIcon } from "lucide-react";
 import { Fragment, type ReactNode, useEffect, useRef } from "react";
-import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";
+import { ActorRef } from "../actor-ref";
 import {
   Conversation,
   ConversationContent,
@@ -27,7 +31,7 @@ import { Plan, PlanContent, PlanHeader, PlanTitle } from "../ai-elements/plan";
 import { TOOL_STATE } from "../ai-elements/tool";
 import { useCopyToast } from "../copy-feedback";
 import { FailureNote } from "../failure-note";
-import { FAILURE_REASON, type FailureReason } from "../failure-remedy";
+import { useMemberDirectory, usePerson } from "../member-directory";
 import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { SPINNER_SIZE, Spinner } from "../spinner";
 import { AgentComposer } from "./agent-composer";
@@ -48,10 +52,13 @@ import {
   dockedTodos,
   endLine,
   endLineReason,
+  lineSender,
+  macOwnerOf,
   messageWords,
   newestTodos,
   settledPlanEdits,
   showsPublishedRow,
+  teammateStarter,
   WORKING_PHASE_WORDS,
   workerLines,
   workerStatusOf,
@@ -75,6 +82,7 @@ import {
   type WorkerJobs,
 } from "./tool-call-model";
 import {
+  MacOwnerProvider,
   TranscriptNote,
   TranscriptOpeningCall,
   TranscriptReasoning,
@@ -85,7 +93,6 @@ import {
   TranscriptTool,
   TranscriptWords,
 } from "./transcript-blocks";
-import { CALL_KIND, CALL_WORDS } from "./turn-rows";
 import { type AgentComposerControl, useAgentComposer } from "./use-agent-composer";
 import { type AgentModelControl, useAgentModel } from "./use-agent-model";
 import { useAgentPullRequest } from "./use-agent-pull-request";
@@ -176,9 +183,9 @@ export const AGENT_LEAD: TranscriptLead = {
 /** What the tab says where its transcript could not be read. */
 const TRANSCRIPT_FAILED_LINE = "The transcript could not be read.";
 
-/** A worker's transcript: the task it was handed, and the worker starting. */
+/** A worker's transcript: the subagent task it was handed, and the worker starting. */
 const WORKER_LEAD: TranscriptLead = {
-  label: "Task",
+  label: "Subagent task",
   icon: <BotIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />,
   startingLine: "The worker is starting.",
   grouped: false,
@@ -482,6 +489,15 @@ function PlanCard({
   );
 }
 
+/** Who wrote or said a message, over it: their mark and their name, hanging their card. */
+function MessageSender({ actor }: { actor: Actor }): React.JSX.Element {
+  return (
+    <span className="message-sender">
+      <ActorRef actor={actor} />
+    </span>
+  );
+}
+
 /**
  * One message: the plan the agent was handed, as a card; a message the
  * developer sent it since, as the developer's bubble; or one of the
@@ -497,6 +513,7 @@ export function AgentMessage({
   todos = NO_TODOS,
   briefTitle,
   said = false,
+  sender,
 }: {
   message: CodingAgentMessage;
   /** Whether this is the plan the agent was handed, which is the first of the developer's messages. */
@@ -510,12 +527,16 @@ export function AgentMessage({
   todos?: TodosPlace;
   /** Whether its words were said aloud and are drawn after it, as a spoken turn's on the Call tab are, so its words stay inside its work's fold, with how long it worked, once it has finished. */
   said?: boolean;
+  /** Who wrote or said the message, named over it: a teammate, Luke, or an automation; none for the reader's own, or where nobody is named. */
+  sender?: Actor | undefined;
 }): ReactNode {
   const words = messageWords(message);
   if (plan) return <PlanCard text={words} lead={lead} title={briefTitle} />;
+  const named = sender === undefined ? null : <MessageSender actor={sender} />;
   if (message.role === MESSAGE_ROLE.USER) {
     return (
       <Message from={message.role}>
+        {named}
         <AttachedFileChips files={messageFileChips(message)} />
         {words === "" ? null : (
           <>
@@ -542,6 +563,7 @@ export function AgentMessage({
   // A spoken turn's words were Luke's line, so they get no Copy, and its "Worked for" line stays inside its fold.
   return (
     <Message from={message.role}>
+      {named}
       <MessageContent>
         <TranscriptRows
           rows={agentRows(message, moving, lead.grouped, {
@@ -579,9 +601,11 @@ function AgentTranscriptView({
   overComposer = false,
   earlierOmitted = false,
   briefTitle,
+  briefSender,
+  readerId,
 }: {
   messages: readonly CodingAgentMessage[];
-  /** What the agent was handed first: the plan, drawn as the plan's card, or a task, drawn as the developer's message; nothing reads as the plan. */
+  /** What the agent was handed first: the plan, drawn as the plan's card, or a prompt, drawn as the developer's message; nothing reads as the plan. */
   brief?: CodingAgentBrief | undefined;
   /** Whose transcript this is: an agent's, with its plan, unless said otherwise. */
   lead?: TranscriptLead;
@@ -610,16 +634,20 @@ function AgentTranscriptView({
   earlierOmitted?: boolean;
   /** The plan's or task's card line, where it is named otherwise than by its first line, as a planning worker is by its job. */
   briefTitle?: string | undefined;
+  /** The teammate who handed the agent its task, named over the task's message; none for the reader's own agent. */
+  briefSender?: Actor | undefined;
+  /** The reader's own account id, whose messages are drawn with no name over them (`lineSender`). */
+  readerId?: string | undefined;
 }): React.JSX.Element {
+  const { members } = useMemberDirectory();
   if (messages.length > 0) {
     const todos = todosPlace(messages, working);
     // The plan is the first of the developer's messages, unless the agent
-    // was handed a task in its place, which is the developer's message as
+    // was handed a prompt in its place, which is the developer's message as
     // any other is; the rest the developer sent since.
-    const plan =
-      brief === CODING_AGENT_BRIEF.TASK
-        ? undefined
-        : messages.find((message) => message.role === MESSAGE_ROLE.USER);
+    const first = messages.find((message) => message.role === MESSAGE_ROLE.USER);
+    const plan = brief === CODING_AGENT_BRIEF.PROMPT ? undefined : first;
+    const task = brief === CODING_AGENT_BRIEF.PROMPT ? first : undefined;
     return (
       <Conversation>
         {/* The plan's card stands off the tab row by the gap between a column's groups. */}
@@ -638,6 +666,9 @@ function AgentTranscriptView({
                 delegation={delegation}
                 todos={todos}
                 briefTitle={briefTitle}
+                sender={
+                  message === task ? briefSender : lineSender(message.sentBy, readerId, members)
+                }
               />
               {earlierOmitted && message === plan ? (
                 <TranscriptNote>Earlier steps are not shown.</TranscriptNote>
@@ -714,6 +745,8 @@ function AgentTabView({
   onOpenApiKeys,
   keywords,
   skills,
+  starter,
+  readerId,
 }: {
   agent: CodingAgentSummary;
   models: readonly CatalogModel[] | undefined;
@@ -745,39 +778,49 @@ function AgentTabView({
   keywords?: readonly string[] | undefined;
   /** Where the skills a `/` in the box offers are read from; nothing where it offers none. */
   skills?: SkillSource | undefined;
+  /** The teammate who started the agent (`teammateStarter`), whose key and task the tab names; none for the reader's own. */
+  starter?: string | undefined;
+  /** The reader's own account id, whose messages the transcript names nobody over, and whose Mac its Mac commands say is theirs. */
+  readerId?: string | undefined;
 }): React.JSX.Element {
   const lines = agentLines(transcript.messages, composer.sent);
   const working = agentStillWriting(agent.status);
+  const starterActor = usePerson(agent.startedBy);
+  const { members } = useMemberDirectory();
   return (
     <section className="agent-tab ph-no-capture" aria-label={agentTabLabel(agent, models)}>
-      <AgentTranscriptView
-        messages={lines}
-        brief={agent.brief}
-        delegation={{
-          models,
-          own: { model: agent.model, effort: agent.effort },
-          starts: delegationStarts && workerStarts(delegationStarts, transcript.subagents),
-          onOpen: onOpenSubagent,
-          onOpenTarget,
-          cards,
-          standings: transcript.subagents,
-        }}
-        reading={transcript.reading}
-        failed={transcript.failed}
-        working={working}
-        sessionStarting={agent.status === CODING_AGENT_STATUS.STARTING}
-        startedAt={startedAt}
-        ended={endLine(agent.status, transcript.failure, transcript.turnUsage)}
-        endReason={endLineReason(transcript.failure)}
-        onOpenApiKeys={onOpenApiKeys}
-        onRetry={transcript.onRetry}
-        footer={
-          showsPublishedRow(agent.status, published) ? (
-            <PublishedRow pullRequest={published.pullRequest} openGitHub={openGitHub} />
-          ) : null
-        }
-        overComposer
-      />
+      <MacOwnerProvider value={macOwnerOf(agent.startedBy, members, readerId)}>
+        <AgentTranscriptView
+          messages={lines}
+          brief={agent.brief}
+          briefSender={starter === undefined ? undefined : starterActor}
+          readerId={readerId}
+          delegation={{
+            models,
+            own: { model: agent.model, effort: agent.effort },
+            starts: delegationStarts && workerStarts(delegationStarts, transcript.subagents),
+            onOpen: onOpenSubagent,
+            onOpenTarget,
+            cards,
+            standings: transcript.subagents,
+          }}
+          reading={transcript.reading}
+          failed={transcript.failed}
+          working={working}
+          sessionStarting={agent.status === CODING_AGENT_STATUS.STARTING}
+          startedAt={startedAt}
+          ended={endLine(agent.status, transcript.failure, transcript.turnUsage, starter)}
+          endReason={endLineReason(transcript.failure, starter)}
+          onOpenApiKeys={onOpenApiKeys}
+          onRetry={transcript.onRetry}
+          footer={
+            showsPublishedRow(agent.status, published) ? (
+              <PublishedRow pullRequest={published.pullRequest} openGitHub={openGitHub} />
+            ) : null
+          }
+          overComposer
+        />
+      </MacOwnerProvider>
       <footer className="agent-tab-foot">
         <TodosDock messages={lines} working={working} />
         {onUnarchive !== undefined ? (
@@ -895,7 +938,11 @@ export function AgentTab({
       model={model}
       servers={servers}
       published={published}
-      doors={{ openGitHub, copy: copyWithToast, openChanges: onOpenChanges }}
+      doors={{
+        openGitHub,
+        copy: copyWithToast,
+        openChanges: onOpenChanges,
+      }}
       startedAt={shown ? agent.runStartedAt : undefined}
       delegationStarts={shown ? transcript.delegations : undefined}
       onStop={() => control.onStop(agent.id)}
@@ -907,6 +954,8 @@ export function AgentTab({
       onOpenApiKeys={control.onOpenApiKeys}
       keywords={control.keywords}
       skills={control.readSkills}
+      starter={teammateStarter(agent.startedBy, control.me)}
+      readerId={control.me}
     />
   );
 }
@@ -953,6 +1002,12 @@ export function AgentSubagentTab({
     onTitle: () => undefined,
   });
   const { messages, pageStatus, runStartedAt, pageTitle } = transcript;
+  // A worker runs as its agent does, so a command it ran on a Mac ran on its agent's starter's.
+  const owner =
+    control.agents?.find((each) => each.id === agentId) ??
+    control.archived?.find((each) => each.id === agentId);
+  const { members } = useMemberDirectory();
+  const macOwner = macOwnerOf(owner?.startedBy, members, control.me);
   // As an agent's: dated by the page it was read from, with the worker's own title.
   useEffect(() => {
     if (pageStatus === undefined || messages.length === 0) return;
@@ -961,18 +1016,20 @@ export function AgentSubagentTab({
   }, [onHeld, callId, messages, pageStatus, runStartedAt, pageTitle]);
   return (
     <section className="agent-tab ph-no-capture" aria-label={cardTitle(task)}>
-      <AgentTranscriptView
-        messages={workerLines(task, transcript.messages)}
-        lead={WORKER_LEAD}
-        delegation={{ models: control.models }}
-        reading={transcript.reading}
-        failed={transcript.failed}
-        working={agentStillWriting(status)}
-        sessionStarting={status === CODING_AGENT_STATUS.STARTING}
-        startedAt={shown ? transcript.runStartedAt : undefined}
-        ended={endLine(status, transcript.failure)}
-        onRetry={transcript.onRetry}
-      />
+      <MacOwnerProvider value={macOwner}>
+        <AgentTranscriptView
+          messages={workerLines(task, transcript.messages)}
+          lead={WORKER_LEAD}
+          delegation={{ models: control.models }}
+          reading={transcript.reading}
+          failed={transcript.failed}
+          working={agentStillWriting(status)}
+          sessionStarting={status === CODING_AGENT_STATUS.STARTING}
+          startedAt={shown ? transcript.runStartedAt : undefined}
+          ended={endLine(status, transcript.failure)}
+          onRetry={transcript.onRetry}
+        />
+      </MacOwnerProvider>
     </section>
   );
 }

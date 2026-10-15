@@ -1,6 +1,3 @@
-import type { UnparsedWireValue } from "@sidecar/wire";
-import { Data, Effect, Predicate } from "effect";
-import type { WebContents } from "electron";
 import {
   ACT,
   ACT_OUTCOME_STATUS,
@@ -9,7 +6,10 @@ import {
   type ActOutcome,
   type ActPayload,
   type ActResultFor,
-} from "#shared/messages/acts";
+} from "@luke/host/acts";
+import type { UnparsedWireValue } from "@luke/wire";
+import { Data, Effect, Predicate } from "effect";
+import type { WebContents } from "electron";
 
 /**
  * Who is asking, as this process alone can tell: which window sent the act,

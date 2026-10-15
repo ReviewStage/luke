@@ -16,10 +16,11 @@ import {
   type InboxReplyKind,
   inboxReplyRefusal,
   knownResponse,
-} from "@sidecar/features/inbox-wire";
-import type { PlanFileRequest, PlanSummary } from "@sidecar/features/plan-wire";
-import type { PlanCode, PlanningFileAnswer } from "@sidecar/features/planning-view";
-import { isWireString } from "@sidecar/wire";
+} from "@luke/features/inbox-wire";
+import type { PlanFileRequest, PlanSummary } from "@luke/features/plan-wire";
+import type { PlanCode, PlanningFileAnswer } from "@luke/features/planning-view";
+import type { AppInboxPlanlessItem } from "@luke/host/app-state";
+import { isWireString } from "@luke/wire";
 import type { CountNoun } from "../desktop/sidebar-group-header";
 import { refusalLine, refusalPasses } from "./file-tab-model";
 
@@ -154,7 +155,7 @@ export const INBOX_PRESSES = {
     back: { reply: INBOX_REPLY.DECLINED, label: "Decline" },
     ahead: { reply: INBOX_REPLY.APPROVED, label: "Approve" },
   },
-  [INBOX_RESPONSE.TASK]: {
+  [INBOX_RESPONSE.TODO]: {
     back: { reply: INBOX_REPLY.NOT_DONE, label: "Can't do this" },
     ahead: { reply: INBOX_REPLY.DONE, label: "Done" },
   },
@@ -171,7 +172,7 @@ export function pressesOf(
   if (!knownResponse(response)) return undefined;
   switch (response.type) {
     case INBOX_RESPONSE.APPROVAL:
-    case INBOX_RESPONSE.TASK:
+    case INBOX_RESPONSE.TODO:
     case INBOX_RESPONSE.NONE:
       return INBOX_PRESSES[response.type];
     default:
@@ -221,24 +222,27 @@ export const SETTLED_BY = {
   AGENT: "agent",
 } as const;
 
-/** What each answer's kind says the developer did. */
+/** What each answer's kind says its answerer did, after who they are. */
 const REPLY_WORDS = {
-  [INBOX_REPLY.CHOSE]: "You chose",
-  [INBOX_REPLY.APPROVED]: "You approved",
-  [INBOX_REPLY.DECLINED]: "You declined",
-  [INBOX_REPLY.ANSWERED]: "You answered",
-  [INBOX_REPLY.DONE]: "You marked it done",
-  [INBOX_REPLY.NOT_DONE]: "You couldn't do it",
-  [INBOX_REPLY.SUBMITTED]: "You filled it in",
-  [INBOX_REPLY.ACKNOWLEDGED]: "You acknowledged it",
+  [INBOX_REPLY.CHOSE]: "chose",
+  [INBOX_REPLY.APPROVED]: "approved",
+  [INBOX_REPLY.DECLINED]: "declined",
+  [INBOX_REPLY.ANSWERED]: "answered",
+  [INBOX_REPLY.DONE]: "marked it done",
+  [INBOX_REPLY.NOT_DONE]: "couldn't do it",
+  [INBOX_REPLY.SUBMITTED]: "filled it in",
+  [INBOX_REPLY.ACKNOWLEDGED]: "acknowledged it",
 } as const satisfies Record<InboxReplyKind, string>;
 
-/** How a settled item came to be settled: who settled it, what they did in a few words, and what they wrote. */
-export interface Settlement {
-  readonly by: (typeof SETTLED_BY)[keyof typeof SETTLED_BY];
-  readonly lead: string;
-  readonly words?: string;
-}
+/**
+ * How a settled item came to be settled: answered, by the item's
+ * `answeredBy`, whom its line names before what they did in a few words
+ * (`did`: "chose Postgres"), or taken back by its agent, said whole; and
+ * what either wrote.
+ */
+export type Settlement =
+  | { readonly by: typeof SETTLED_BY.DEVELOPER; readonly did: string; readonly words?: string }
+  | { readonly by: typeof SETTLED_BY.AGENT; readonly lead: string; readonly words?: string };
 
 /** What the developer wrote: a form's values one per line, then the note. */
 function answerWords(answer: InboxReply): string | undefined {
@@ -249,7 +253,7 @@ function answerWords(answer: InboxReply): string | undefined {
   return lines.length === 0 ? undefined : lines.join("\n");
 }
 
-/** How an item was settled, or nothing while it waits: the developer's answer and their words, or the agent taking it back and why. */
+/** How an item was settled, or nothing while it waits: what its answerer did and wrote, or the agent taking it back and why. */
 export function settlementOf(item: InboxItem): Settlement | undefined {
   if (item.status === INBOX_STATUS.OPEN) return undefined;
   if (item.status === INBOX_STATUS.CLOSED) {
@@ -261,13 +265,13 @@ export function settlementOf(item: InboxItem): Settlement | undefined {
   }
   const answer = item.answer;
   if (answer === undefined)
-    return { by: SETTLED_BY.DEVELOPER, lead: REPLY_WORDS[INBOX_REPLY.ANSWERED] };
-  const lead =
+    return { by: SETTLED_BY.DEVELOPER, did: REPLY_WORDS[INBOX_REPLY.ANSWERED] };
+  const did =
     answer.reply === INBOX_REPLY.CHOSE
       ? `${REPLY_WORDS[INBOX_REPLY.CHOSE]} ${(answer.choices ?? []).join(", ")}`
       : REPLY_WORDS[answer.reply];
   const words = answerWords(answer);
-  return { by: SETTLED_BY.DEVELOPER, lead, ...(words === undefined ? undefined : { words }) };
+  return { by: SETTLED_BY.DEVELOPER, did, ...(words === undefined ? undefined : { words }) };
 }
 
 /**
@@ -283,6 +287,108 @@ export const NEEDS_YOU = {
   NONE: "Nothing needs you",
 } as const;
 
+/** What an item is listed under: the plan its agent works on, or, for an agent with no plan, the automation that started it. */
+export const INBOX_HOLDER = {
+  PLAN: "plan",
+  AUTOMATION: "automation",
+} as const;
+
+/** An agent with no plan as main's read of what waits on the developer names it: its title, its model, and the automation that started it. */
+type InboxAgentLine = Pick<AppInboxPlanlessItem, "agentTitle" | "agentModel" | "automationId">;
+
+/**
+ * The plan holding an item, or the automation holding an item of an agent
+ * with no plan, named as its group's header names it, and its agents as
+ * main's read names them, by id; none for the agents no automation the
+ * reader may read started.
+ */
+export type InboxHolder =
+  | { readonly kind: typeof INBOX_HOLDER.PLAN; readonly plan: PlanSummary }
+  | {
+      readonly kind: typeof INBOX_HOLDER.AUTOMATION;
+      readonly automationId: string | null;
+      readonly name: string;
+      readonly repository: string;
+      readonly agents: ReadonlyMap<string, InboxAgentLine>;
+    };
+
+/** The key a holder's group is folded and drawn by: the plan's id, the automation's, or one key for the agents no automation names. */
+export function holderKey(holder: InboxHolder): string {
+  if (holder.kind === INBOX_HOLDER.PLAN) return holder.plan.id;
+  return holder.automationId ?? NO_AUTOMATION_KEY;
+}
+
+/** A plan as the holder of its items. */
+export function planHolder(plan: PlanSummary): InboxHolder {
+  return { kind: INBOX_HOLDER.PLAN, plan };
+}
+
+/** A holder's name as its header and a row's context say it: the plan's, or the automation's. */
+export function holderName(holder: InboxHolder): string {
+  return holder.kind === INBOX_HOLDER.PLAN ? holder.plan.name : holder.name;
+}
+
+/** What one group of agents no readable automation started is keyed by. */
+const NO_AUTOMATION_KEY = "no-automation";
+
+/** What the group of agents no automation the reader may read started is called. */
+const NO_AUTOMATION_NAME = "Other agents";
+
+/**
+ * Whether a waiting item of an agent with no plan is listed in the workspace
+ * given: one of that workspace's agents', or one whose workspace the service
+ * does not name. Note that with no workspace listed every agent's items
+ * stand, as every plan's do.
+ */
+export function listedIn(
+  entry: Pick<AppInboxPlanlessItem, "workspaceId">,
+  workspaceId: string | undefined,
+): boolean {
+  return (
+    workspaceId === undefined ||
+    entry.workspaceId === undefined ||
+    entry.workspaceId === workspaceId
+  );
+}
+
+/**
+ * The groups the items of agents with no plan stand in: one per automation
+ * that started them, by its name, and one for the agents no automation the
+ * reader may read names, each holding every item its agents' reads hold,
+ * settled ones too; only the listed workspace's agents, where the service
+ * names an agent's workspace, so another workspace's list holds none of
+ * them.
+ */
+export function planlessGroups(
+  waiting: readonly AppInboxPlanlessItem[],
+  read: ReadonlyMap<string, readonly InboxItem[]>,
+  workspaceId: string | undefined,
+): readonly InboxGroup[] {
+  const groups = new Map<string, { holder: InboxHolder; agents: Map<string, InboxAgentLine> }>();
+  for (const entry of waiting) {
+    if (!listedIn(entry, workspaceId)) continue;
+    const key = entry.automationId ?? NO_AUTOMATION_KEY;
+    const agents = groups.get(key)?.agents ?? new Map<string, InboxAgentLine>();
+    agents.set(entry.agentId, {
+      agentTitle: entry.agentTitle,
+      agentModel: entry.agentModel,
+      automationId: entry.automationId,
+    });
+    const holder: InboxHolder = groups.get(key)?.holder ?? {
+      kind: INBOX_HOLDER.AUTOMATION,
+      automationId: entry.automationId,
+      name: entry.automationName ?? NO_AUTOMATION_NAME,
+      repository: entry.repository,
+      agents,
+    };
+    groups.set(key, { holder, agents });
+  }
+  return [...groups.values()].map(({ holder, agents }) => ({
+    holder,
+    items: [...agents.keys()].flatMap((agentId) => read.get(agentId) ?? []),
+  }));
+}
+
 /** How the window's Inbox lists its items: under each plan, or in one list. */
 export const INBOX_GROUPING = {
   PLAN: "plan",
@@ -291,21 +397,21 @@ export const INBOX_GROUPING = {
 
 export type InboxGrouping = (typeof INBOX_GROUPING)[keyof typeof INBOX_GROUPING];
 
-/** One plan and every item its inbox holds, as the list is handed them. */
-export interface InboxPlanItems {
-  readonly plan: PlanSummary;
+/** One holder, a plan or an automation, and every item it holds, as the list is handed them. */
+export interface InboxGroup {
+  readonly holder: InboxHolder;
   readonly items: readonly InboxItem[];
 }
 
-/** One item the list draws, with the plan it belongs to. */
+/** One item the list draws, with what holds it. */
 export interface InboxListed {
-  readonly plan: PlanSummary;
+  readonly holder: InboxHolder;
   readonly item: InboxItem;
 }
 
 /** The list as it is drawn: a group for each plan holding an item it shows, or every item in one run. */
 export type InboxListView =
-  | { readonly grouping: typeof INBOX_GROUPING.PLAN; readonly groups: readonly InboxPlanItems[] }
+  | { readonly grouping: typeof INBOX_GROUPING.PLAN; readonly groups: readonly InboxGroup[] }
   | { readonly grouping: typeof INBOX_GROUPING.NEWEST; readonly items: readonly InboxListed[] };
 
 /** The latest change first. */
@@ -320,7 +426,7 @@ function newestFirst(a: InboxItem, b: InboxItem): number {
  * chosen, so the item answered does not slip away from under them.
  */
 export function inboxList(
-  plans: readonly InboxPlanItems[],
+  plans: readonly InboxGroup[],
   view: {
     readonly grouping: InboxGrouping;
     readonly waitingOnly: boolean;
@@ -330,25 +436,25 @@ export function inboxList(
   const shows = (item: InboxItem) =>
     !view.waitingOnly || item.status === INBOX_STATUS.OPEN || item.id === view.chosen;
   const groups = plans
-    .map(({ plan, items }) => ({ plan, items: items.filter(shows).toSorted(newestFirst) }))
+    .map(({ holder, items }) => ({ holder, items: items.filter(shows).toSorted(newestFirst) }))
     .filter((group) => group.items.length > 0)
     .toSorted((a, b) => (b.items[0]?.updatedAt ?? 0) - (a.items[0]?.updatedAt ?? 0));
   if (view.grouping === INBOX_GROUPING.PLAN) return { grouping: INBOX_GROUPING.PLAN, groups };
   const items = groups
-    .flatMap(({ plan, items }) => items.map((item) => ({ plan, item })))
+    .flatMap(({ holder, items }) => items.map((item) => ({ holder, item })))
     .toSorted((a, b) => newestFirst(a.item, b.item));
   return { grouping: INBOX_GROUPING.NEWEST, items };
 }
 
 /** Whether any plan's item needs the developer, listed or filtered out. */
-export function anyNeedsYou(plans: readonly InboxPlanItems[]): boolean {
+export function anyNeedsYou(plans: readonly InboxGroup[]): boolean {
   return plans.some(({ items }) => items.some((item) => item.status === INBOX_STATUS.OPEN));
 }
 
 /** Every item the list draws, in the order it draws them. */
 export function listedItems(view: InboxListView): readonly InboxListed[] {
   if (view.grouping === INBOX_GROUPING.NEWEST) return view.items;
-  return view.groups.flatMap(({ plan, items }) => items.map((item) => ({ plan, item })));
+  return view.groups.flatMap(({ holder, items }) => items.map((item) => ({ holder, item })));
 }
 
 /** The item that stands chosen where none is: the first listed that waits, else the first listed. */
@@ -405,7 +511,7 @@ export function codeWindow(block: InboxCodeBlock): PlanFileRequest {
  */
 export function codeNotice(block: InboxCodeBlock, repository: string | null): string | undefined {
   if (repository === null || repository.toLowerCase() !== block.repo.toLowerCase()) {
-    return `These lines are in ${block.repo}, which this plan no longer reads.`;
+    return `These lines are in ${block.repo}, which this task no longer reads.`;
   }
   if (!codeLinesReadable(block)) return "These lines cannot be read.";
   return undefined;

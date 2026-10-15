@@ -6,13 +6,9 @@ import {
   type ProductSurfaceEventName,
   productEventFromWire,
   type RecordProductEvent,
-} from "@sidecar/features/analytics";
-import { ACT, ACT_KIND } from "#shared/messages/acts";
-import {
-  MICROPHONE_STATUS,
-  type MicrophoneRoute,
-  type MicrophoneStatus,
-} from "#shared/messages/audio";
+} from "@luke/features/analytics";
+import { ACT, ACT_KIND } from "@luke/host/acts";
+import { MICROPHONE_STATUS, type MicrophoneRoute, type MicrophoneStatus } from "@luke/voice/audio";
 import { ActRefused, type ActRows, type ActSender } from "../act-router";
 import type { ReportHandlers } from "../bridge-host";
 import type { MicrophoneRouteWatch } from "../native/microphone-route";
@@ -20,7 +16,7 @@ import type { PanelManager } from "../window/panel-manager";
 
 /**
  * Which microphone answers a count can be built from. A total `Record` like
- * the bridges in `@sidecar/settings`, so a sixth status does not build until
+ * the bridges in `@luke/settings`, so a sixth status does not build until
  * someone has said whether the ask decided it — the three that map to nothing
  * are the point rather than an oversight.
  */

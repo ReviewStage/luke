@@ -1,15 +1,15 @@
-import { Effect } from "effect";
-import type { SessionAuth } from "eve/context";
-import { edgeKit } from "../server/hosted/agent-runtime/edge.js";
-import { AGENT_ROLE } from "../server/hosted/agent-runtime/role.js";
-import type { AgentSkill } from "../server/hosted/agent-runtime/skills.js";
-import { type BrainHost, brainHost } from "../server/hosted/brain-host/host.js";
+import { edgeKit } from "@luke/service/agents/agent-runtime/edge";
+import { AGENT_ROLE } from "@luke/service/agents/agent-runtime/role";
+import type { AgentSkill } from "@luke/service/agents/agent-runtime/skills";
+import { type BrainHost, brainHost } from "@luke/service/agents/brain-host/host";
 import {
   type BrainHostSeams,
   productionBrainHostSeams,
-} from "../server/hosted/brain-host/production.js";
-import { hostedEnvironment } from "../server/hosted/environment.js";
-import { runWeb } from "../server/runtime.js";
+} from "@luke/service/agents/brain-host/production";
+import { hostedEnvironment } from "@luke/service/environment";
+import { Effect } from "effect";
+import type { SessionAuth } from "eve/context";
+import { runAgent } from "./runtime.js";
 
 /**
  * The one host every authored file of this eve project shares, over the
@@ -24,20 +24,20 @@ import { runWeb } from "../server/runtime.js";
  * runner of its own.
  */
 export const seams: BrainHostSeams = Effect.runSync(
-  Effect.provide(productionBrainHostSeams(runWeb), hostedEnvironment),
+  Effect.provide(productionBrainHostSeams(runAgent), hostedEnvironment),
 );
 
 export const host: BrainHost = brainHost(seams);
 
 /**
  * The doors this project's authored files open onto the agent runtime
- * (`server/hosted/agent-runtime/edge.ts`), run here on the edge's runner.
+ * (`packages/service/src/agents/agent-runtime/edge.ts`), run here on the edge's runner.
  * Each task a subagent receives wakes its title on a fiber of its own once
  * relayed, so its turn is not held for it; the title always names the
  * first task the subagent received, and only the first title that lands
  * stands.
  */
-const edge = edgeKit(runWeb, { host, skills: host.skills, childTasked: host.titleChild });
+const edge = edgeKit(runAgent, { host, skills: host.skills, childTasked: host.titleChild });
 
 /** Relays one event of a subagent's session into its child conversation, for the subagent's own hook. */
 export function relayChildEvent(

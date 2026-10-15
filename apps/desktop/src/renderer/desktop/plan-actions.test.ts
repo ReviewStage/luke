@@ -1,18 +1,23 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { Plan, PlanSummary } from "@sidecar/features/plan-wire";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
+import { PLAN_ACTOR, type Plan, type PlanSummary } from "@luke/features/plan-wire";
+import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
+import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { DOCUMENT_REGION, PLANS_PAGE, type PlanMark } from "@luke/ui/planning-model";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { lineWords } from "#testing/actor-line";
 import { plansControl, UNPINNED_SUMMARY } from "#testing/plans-control";
 import { installScrollIntoView } from "#testing/scroll-into-view";
-import { DOCUMENT_REGION, PLANS_PAGE, type PlanMark } from "../planning/planning-model";
+import { MAIN_TAB, type MainTab } from "../planning/use-main-tabs";
 import { NO_LOOKS } from "../planning/use-plan-looks";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { DesktopPlans } from "./desktop-plans";
 import { SidebarPlan } from "./plan-actions";
+import { planCardOf } from "./plan-card";
 
 const PLAN: Plan = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
@@ -34,6 +39,19 @@ const OTHER: PlanSummary = {
 };
 
 const DIALOG = '[role="alertdialog"]';
+
+const CHARLES = { userId: "user-charles", name: "Charles Pan" };
+const DEAN = { userId: "user-dean", name: "Dean Stratakos" };
+
+/** `PLAN` as Charles started it and Dean last edited it, the minute after. */
+const SHARED_PLAN: Plan = {
+  ...PLAN,
+  createdAt: 60_000,
+  updatedAt: 120_000,
+  ownerId: CHARLES.userId,
+  createdBy: CHARLES,
+  lastEdit: { actor: PLAN_ACTOR.DEVELOPER, by: DEAN, at: 120_000, duringCall: false },
+};
 
 /** What the plan actions asked of the tab, by the plan each named. */
 interface Asked {
@@ -120,7 +138,7 @@ function mountToolbar(plans: PlansControl): HTMLButtonElement {
       plans,
     }),
   );
-  const more = container.querySelector('[aria-label="Plan actions"]');
+  const more = container.querySelector('[aria-label="Task actions"]');
   assert.ok(more instanceof HTMLButtonElement);
   return more;
 }
@@ -211,7 +229,7 @@ test("Permanently delete asks in a dialog naming the plan, from the ⋯ and from
   assert.equal(question.getAttribute("aria-modal"), "true");
   const title = document.getElementById(question.getAttribute("aria-labelledby") ?? "");
   const body = document.getElementById(question.getAttribute("aria-describedby") ?? "");
-  assert.equal(title?.textContent, "Permanently delete plan?");
+  assert.equal(title?.textContent, "Permanently delete task?");
   assert.equal(
     body?.textContent,
     "“Teammate invitations” and its board and transcript will be deleted. This can’t be undone. To keep it out of the way instead, archive it.",
@@ -242,4 +260,191 @@ test("the plan's name reaches the recording only as masked text, never in an att
       assert.doesNotMatch(attribute.value, /Teammate invitations/u, attribute.name);
     }
   }
+});
+
+/** The open plan's tab on `tab`, `SHARED_PLAN` open as `me` reads it and `OTHER` beside it in the list. */
+function sharedTab(me: string, tab: MainTab = MAIN_TAB.PLAN): PlansControl {
+  const base = plansControl();
+  return plansControl({
+    page: PLANS_PAGE.DOCUMENT,
+    me,
+    plans: [SHARED_PLAN, OTHER],
+    activePlanId: SHARED_PLAN.id,
+    region: { kind: DOCUMENT_REGION.READY, plan: SHARED_PLAN },
+    mainTabs: { ...base.mainTabs, tabs: [MAIN_TAB.PLAN, MAIN_TAB.INBOX], tab },
+  });
+}
+
+/** The lines under the open menu's items, each with its time left off. */
+function menuFooter(): string[] {
+  const notes = document.querySelectorAll('[role="menu"] .plan-menu-footer p');
+  return [...notes].map((note) => (lineWords(note) ?? "").replace(/ · .*$/u, ""));
+}
+
+test("the plan's ⋯ menu ends with who created the plan and who last edited it, the reader's own as you and a teammate's by name", () => {
+  openMenu(mountToolbar(sharedTab(DEAN.userId)));
+  assert.deepEqual(menuFooter(), ["Created by Charles Pan", "Last edited by you"]);
+  // Each person stands on their face, their letter until a picture is read.
+  const faces = document.querySelectorAll('[role="menu"] .plan-menu-footer .actor-mark');
+  assert.deepEqual(
+    [...faces].map((face) => [face.getAttribute("data-kind"), face.textContent]),
+    [
+      ["person", "C"],
+      ["person", "D"],
+    ],
+  );
+  const times = document.querySelectorAll('[role="menu"] .plan-menu-footer time');
+  assert.deepEqual(
+    [...times].map((time) => time.getAttribute("datetime")),
+    [new Date(60_000).toISOString(), new Date(120_000).toISOString()],
+  );
+  unmountAll();
+
+  openMenu(mountToolbar(sharedTab(CHARLES.userId)));
+  assert.deepEqual(menuFooter(), ["Created by you", "Last edited by Dean Stratakos"]);
+  unmountAll();
+
+  // A plan the window has not opened, from a service that named no creator, says only when it was saved.
+  const { asked } = openTab();
+  rightClick(mountSidebarPlan(sharedTab(DEAN.userId), OTHER, asked), 40, 60);
+  assert.deepEqual(menuFooter(), ["Created by someone", "Last edited"]);
+});
+
+test("Start and the plan's ⋯ stand in the toolbar on the Plan tab alone", () => {
+  const drawn = (tab: MainTab) => {
+    const container = mount(
+      createElement(DesktopPlans, {
+        summary: UNPINNED_SUMMARY,
+        looks: NO_LOOKS,
+        plans: sharedTab(DEAN.userId, tab),
+      }),
+    );
+    const toolbar = container.querySelector(".desktop-toolbar");
+    const shown = ["Start a coding agent", "Task actions"].filter(
+      (label) => toolbar?.querySelector(`[aria-label="${label}"]`) !== null,
+    );
+    unmountAll();
+    return shown;
+  };
+
+  assert.deepEqual(drawn(MAIN_TAB.PLAN), ["Start a coding agent", "Task actions"]);
+  assert.deepEqual(drawn(MAIN_TAB.INBOX), []);
+});
+
+/** Dean's own workspace, with no GitHub connected, and the team's, whose GitHub reaches acme-corp's repositories. */
+const PERSONAL: Workspace = {
+  id: "workspace-personal",
+  name: "Dean Stratakos",
+  role: WORKSPACE_ROLE.OWNER,
+  github: null,
+  memberCount: 1,
+};
+const STAGE: Workspace = {
+  id: "workspace-stage",
+  name: "Stage",
+  role: WORKSPACE_ROLE.MEMBER,
+  github: { login: "acme-corp", active: true },
+  memberCount: 6,
+};
+
+/** Dean's plan in his own workspace on a repository only Stage's GitHub reaches: stranded there. */
+const STRANDED: PlanSummary = {
+  ...OTHER,
+  repository: "acme-corp/relay",
+  ownerId: DEAN.userId,
+};
+
+/** The words a reader hears in an element: its text but for a mark hidden from a screen reader, a workspace's tile's letter among them. */
+function heard(node: Node): string {
+  if (node instanceof Element && node.getAttribute("aria-hidden") === "true") return "";
+  if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? "";
+  return [...node.childNodes].map(heard).join("");
+}
+
+test("a sidebar plan whose repository belongs to another of the account's workspaces wears the attention mark before its time, its card naming that workspace, until it is moved there", () => {
+  const { asked } = openTab();
+  const plans = plansControl({ me: DEAN.userId, workspaces: [PERSONAL, STAGE] });
+  const container = mount(sidebarPlan(plans, STRANDED, asked));
+  const mark = () => container.querySelector(".sidebar-plan-time .attention-mark");
+  const card = mount(planCardOf(plans, STRANDED, STRANDED.updatedAt));
+
+  assert.notEqual(mark(), null, "the row wears the attention mark");
+  assert.match(heard(container), /\(repository belongs to Stage\)/u);
+  assert.deepEqual([...card.querySelectorAll(".plan-card-detail")].map(heard), [
+    "acme-corp/relay",
+    "Repository belongs to Stage",
+  ]);
+
+  act(() => roots[0]?.render(sidebarPlan(plans, { ...STRANDED, workspaceId: STAGE.id }, asked)));
+  assert.equal(mark(), null, "moved to Stage, the row wears it no longer");
+});
+
+test("no sidebar plan wears the attention mark where its own workspace reaches its repository, no other workspace does, a teammate owns it, or it is archived", () => {
+  const { asked } = openTab();
+  const reaching = { ...PERSONAL, github: { login: "acme-corp", active: true } };
+  const cases: [PlanSummary, readonly Workspace[]][] = [
+    [STRANDED, [reaching, STAGE]],
+    [STRANDED, [PERSONAL]],
+    [{ ...STRANDED, ownerId: CHARLES.userId }, [PERSONAL, STAGE]],
+    [{ ...STRANDED, archivedAt: 6 }, [PERSONAL, STAGE]],
+  ];
+  const marked = cases.map(([plan, workspaces]) => {
+    const plans = plansControl({ me: DEAN.userId, workspaces: [...workspaces] });
+    const row = mount(sidebarPlan(plans, plan, asked));
+    const card = mount(planCardOf(plans, plan, plan.updatedAt));
+    const found = [
+      row.querySelector(".attention-mark") !== null,
+      card.querySelector(".attention-mark") !== null,
+    ];
+    unmountAll();
+    return found;
+  });
+
+  assert.deepEqual(
+    marked,
+    cases.map(() => [false, false]),
+  );
+});
+
+/** Main's clipboard, keeping each copy the window asks of it. */
+function installClipboard(): string[] {
+  const copied: string[] = [];
+  Object.defineProperty(window, "luke", {
+    configurable: true,
+    value: {
+      act: (request: Act): Promise<ActOutcome> => {
+        if (request.kind !== ACT_KIND.WINDOW_COPY_TEXT) {
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
+        }
+        copied.push(request.payload.words);
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
+      },
+      recordSurfaceEvent: () => undefined,
+    },
+  });
+  return copied;
+}
+
+test("Copy link to task copies the plan's address on tryluke.dev, alike from the toolbar's ⋯, the ⋯ beside its title, and its sidebar row", async () => {
+  const copied = installClipboard();
+  const opened = openTab();
+  const plans: PlansControl = { ...opened.plans, workspaces: [{ ...PERSONAL, slug: "dean" }] };
+  const link = `https://tryluke.dev/dean/plan/${PLAN.id}`;
+  const copyFromMenu = async () => {
+    const item = menuItems().find((candidate) => candidate.textContent === "Copy link to task");
+    assert.ok(item, "the menu offers Copy link to task");
+    await act(async () => item.click());
+  };
+
+  openMenu(mountToolbar(plans));
+  await copyFromMenu();
+  const title = document.querySelector<HTMLButtonElement>('[aria-label="Title actions"]');
+  assert.ok(title, "the title has a ⋯");
+  openMenu(title);
+  await copyFromMenu();
+  unmountAll();
+  rightClick(mountSidebarPlan(plans, PLAN, opened.asked), 40, 60);
+  await copyFromMenu();
+
+  assert.deepEqual(copied, [link, link, link]);
 });

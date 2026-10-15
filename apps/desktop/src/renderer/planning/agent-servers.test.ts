@@ -1,17 +1,17 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import type { IntegrationTool } from "@luke/features/integration-health";
 import {
   INTEGRATION_PROVIDER,
   INTEGRATION_STATUS,
   type IntegrationProvider,
   type IntegrationStatus,
-} from "@sidecar/features/integration-wire";
+} from "@luke/features/integration-wire";
+import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "#shared/messages/acts";
-import type { IntegrationTool } from "../integration-health";
 import type { IntegrationStatuses } from "../integration-statuses";
 import { AgentServersButton } from "./agent-servers";
 
@@ -50,6 +50,28 @@ const TOOLS = new Map<IntegrationProvider, readonly IntegrationTool[]>([
       },
       { name: "delete_domain", description: "Removes a domain." },
       { name: "get_deployment", description: "Reads one deployment." },
+      {
+        name: "read_project",
+        title: "Read project",
+        description: "Reads one project.\n\n## Returns\n\nIts `framework` and domains.",
+        annotations: { readOnlyHint: true, openWorldHint: false },
+        parameters: [
+          { name: "teamId", type: "string", required: false },
+          {
+            name: "idOrName",
+            type: "string",
+            required: true,
+            description: "The project's id or name.",
+          },
+          {
+            name: "format",
+            type: "enum",
+            required: false,
+            values: ["json", "text"],
+            default: "json",
+          },
+        ],
+      },
     ],
   ],
 ]);
@@ -142,9 +164,36 @@ function sections(container: HTMLElement) {
 /** Each tool on a server's page: its name and its badge, where it wears one. */
 function tools(container: HTMLElement) {
   return [...container.querySelectorAll(".integration-tool")].map((tool) => [
-    tool.querySelector(".integration-tool-id")?.textContent,
+    (tool.querySelector(".integration-tool-id") ?? tool.querySelector(".integration-tool-title"))
+      ?.textContent,
     tool.querySelector(".integration-tool-badge")?.textContent,
   ]);
+}
+
+/** Opens Vercel's page from the popover's home. */
+function openVercel(container: HTMLElement) {
+  act(() =>
+    [...container.querySelectorAll<HTMLElement>(".agent-servers-row")]
+      .find((row) => row.textContent?.includes("Vercel"))
+      ?.click(),
+  );
+}
+
+/** The name of the tool a server's page holds highlighted. */
+function highlighted(container: HTMLElement) {
+  const row = container.querySelector('.integration-tool[data-current="true"]');
+  return (
+    row?.querySelector(".integration-tool-id") ?? row?.querySelector(".integration-tool-title")
+  )?.textContent;
+}
+
+/** A key pressed wherever the focus stands, as a keyboard's lands. */
+function keyAtFocus(name: string) {
+  act(() => {
+    (document.activeElement ?? document.body).dispatchEvent(
+      new KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true }),
+    );
+  });
 }
 
 test("the servers stand under Connected and Not connected, each connected one with its count", async () => {
@@ -156,7 +205,7 @@ test("the servers stand under Connected and Not connected, each connected one wi
   ]);
   assert.deepEqual(
     [...container.querySelectorAll(".agent-servers-count")].map((count) => count.textContent),
-    ["1 tool", "3 tools"],
+    ["1 tool", "4 tools"],
   );
 });
 
@@ -174,6 +223,7 @@ test("pressing a connected server opens its tools in place, each badged only as 
     ["delete_domain", undefined],
     ["delete_project", "Destructive"],
     ["get_deployment", undefined],
+    ["read_project", "Read-only"],
   ]);
 });
 
@@ -247,14 +297,86 @@ test("a pointer's press on a server page's switch leaves the focus in the filter
   assert.equal(container.querySelector(".agent-servers-page-title"), null);
 });
 
-test("pressing a tool opens it in place onto its whole description, the popover open and its filter still hearing the keys; a second press closes it", async () => {
+test("on a server's page the arrows move the highlight, and Enter opens the tool's page: its title and name, its server's hints, what it does rendered, and its parameters, the required first", async () => {
   const { container, key } = await opened();
-  act(() =>
-    [...container.querySelectorAll<HTMLElement>(".agent-servers-row")]
-      .find((row) => row.textContent?.includes("Vercel"))
-      ?.click(),
+  openVercel(container);
+
+  assert.equal(highlighted(container), "delete_domain");
+  key("ArrowDown");
+  key("ArrowDown");
+  key("ArrowDown");
+  key("ArrowDown");
+  assert.equal(highlighted(container), "read_project");
+  key("Enter");
+
+  const page = container.querySelector(".integration-tool-detail") ?? assert.fail("no tool page");
+  assert.equal(page.querySelector(".integration-tool-detail-title")?.textContent, "Read project");
+  assert.equal(page.querySelector(".integration-tool-detail-name")?.textContent, "read_project");
+  assert.deepEqual(
+    [...page.querySelectorAll(".integration-tool-hint")].map((hint) => hint.textContent),
+    ["Read-only", "Only Vercel's own data"],
   );
-  const head = () =>
+  assert.equal(page.querySelector(".markdown-heading")?.textContent, "Returns");
+  assert.equal(
+    page.querySelector(".integration-tool-description-whole code")?.textContent,
+    "framework",
+  );
+  assert.deepEqual(
+    [...page.querySelectorAll(".integration-tool-parameter")].map((parameter) => [
+      parameter.querySelector(".integration-tool-parameter-name")?.textContent,
+      parameter.querySelector(".integration-tool-parameter-required") !== null,
+    ]),
+    [
+      ["idOrName", true],
+      ["teamId", false],
+      ["format", false],
+    ],
+  );
+  assert.deepEqual(
+    [...page.querySelectorAll(".integration-tool-parameter-values code")].map((value) => [
+      value.textContent,
+      value.getAttribute("data-default"),
+    ]),
+    [
+      ["json", "true"],
+      ["text", null],
+    ],
+  );
+  assert.equal(
+    container.querySelector(".agent-servers-menu")?.getAttribute("aria-label"),
+    "Read project",
+  );
+  assert.equal(document.activeElement, page.querySelector(".integration-tool-detail-body"));
+});
+
+test("Escape, Left, and Backspace on a tool's page each go back to its server's page, the filter and the highlight as they were", async () => {
+  const { container, key, type, field } = await opened();
+  openVercel(container);
+  type("project");
+  key("ArrowDown");
+  assert.equal(highlighted(container), "read_project");
+
+  for (const back of ["Escape", "ArrowLeft", "Backspace"]) {
+    key("Enter");
+    assert.notEqual(container.querySelector(".integration-tool-detail"), null);
+    keyAtFocus(back);
+    assert.equal(container.querySelector(".integration-tool-detail"), null, back);
+    assert.equal(container.querySelector(".agent-servers-page-title")?.textContent, "Vercel");
+    assert.equal(field().value, "project");
+    assert.equal(highlighted(container), "read_project");
+    assert.equal(document.activeElement, field());
+  }
+
+  key("Escape");
+  assert.equal(container.querySelector(".agent-servers-page-title"), null);
+  key("Escape");
+  assert.equal(container.querySelector(".agent-servers-menu"), null);
+});
+
+test("a press on a tool opens its page with the popover standing open, and its back goes back to the server's page", async () => {
+  const { container } = await opened();
+  openVercel(container);
+  const head =
     [...container.querySelectorAll<HTMLButtonElement>(".integration-tool-head")].find((button) =>
       button.textContent?.startsWith("delete_project"),
     ) ?? assert.fail("delete_project has its row");
@@ -262,21 +384,27 @@ test("pressing a tool opens it in place onto its whole description, the popover 
   // Note that the browser moves the focus on a press unless its mousedown is refused, which jsdom does not act out.
   const press = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
   act(() => {
-    head().dispatchEvent(press);
-    head().click();
+    head.dispatchEvent(press);
+    head.click();
   });
 
   assert.equal(press.defaultPrevented, true);
   assert.notEqual(container.querySelector(".agent-servers-menu"), null);
-  assert.equal(head().getAttribute("aria-expanded"), "true");
   assert.equal(
-    container.querySelector(".integration-tool-full")?.textContent,
-    "Deletes a project.",
+    container.querySelector(".integration-tool-detail-title")?.textContent,
+    "delete_project",
+  );
+  assert.equal(container.querySelector(".integration-tool-detail-name"), null);
+  assert.deepEqual(
+    [...container.querySelectorAll(".integration-tool-hint")].map((hint) => hint.textContent),
+    ["Destructive"],
   );
 
-  act(() => head().click());
-  assert.equal(container.querySelector(".integration-tool-full"), null);
-
-  key("Backspace");
-  assert.equal(container.querySelector(".agent-servers-page-title"), null);
+  act(() =>
+    container
+      .querySelector<HTMLButtonElement>('button[aria-label="Back to Vercel tools"]')
+      ?.click(),
+  );
+  assert.equal(container.querySelector(".integration-tool-detail"), null);
+  assert.equal(container.querySelector(".agent-servers-page-title")?.textContent, "Vercel");
 });

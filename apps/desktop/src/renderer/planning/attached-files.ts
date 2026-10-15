@@ -3,7 +3,7 @@ import {
   CODING_AGENT_ATTACHMENT_TYPE,
   CODING_AGENT_BOUNDS,
   type CodingAgentAttachment,
-} from "@sidecar/features/coding-agent-wire";
+} from "@luke/features/coding-agent-wire";
 import { encodeImage } from "../feedback-images";
 
 /**

@@ -2,18 +2,19 @@
 
 import assert from "node:assert/strict";
 import { gunzipSync } from "node:zlib";
-import { isRecord, jsonRoundTrip, text, valueFromJsonText, type WireValue } from "@sidecar/wire";
+import type { SessionReplayBootstrap } from "@luke/gateway/window-session";
+import { isRecord, jsonRoundTrip, text, valueFromJsonText, type WireValue } from "@luke/wire";
 import posthog, { type CaptureResult } from "posthog-js/dist/module.no-external";
 import { afterEach, test, vi } from "vitest";
-import type { SessionReplayBootstrap } from "#shared/messages/session";
 import { SESSION_RECORDER_ASSET } from "./session-recorder/contract";
 import { applySessionReplay } from "./session-replay";
 
 /**
  * The recorder is a bundle of its own that session replay loads before it
- * starts the client (`session-recorder/contract.ts`), so the masking `init`
- * is given has to reach a recorder that arrived after the panel's bundle,
- * and a stop that arrives while it loads has to hold. This runs the
+ * loads and starts the client, itself a chunk of its own
+ * (`session-recorder/contract.ts`), so the masking `init` is given has to
+ * reach a recorder that arrived after the panel's bundle, and a stop that
+ * arrives while they load has to hold. This runs the
  * library's own client and recorder over a page of words, through the
  * module's public door, and reads what the recording would send.
  */

@@ -1,4 +1,4 @@
-import type { UnparsedWireValue } from "@sidecar/wire";
+import type { UnparsedWireValue } from "@luke/wire";
 
 export const ACCOUNT_PROVIDER = {
   GOOGLE: "google",

@@ -1,6 +1,6 @@
 import { PersonaSession } from "@keyframelabs/sdk";
+import type { AvatarSessionModule } from "@luke/ui/avatar-session-contract";
 import { LogLevel, setLogLevel } from "livekit-client";
-import type { AvatarSessionModule } from "./contract";
 
 /**
  * index.ts -- the avatar session's own bundle: Keyframe's session over LiveKit, set on `window` for the panel to open (`./contract.ts`).

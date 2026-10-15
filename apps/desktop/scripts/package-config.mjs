@@ -61,11 +61,11 @@ export function resolveSigningMode(env) {
 
 /**
  * The esbuild define telling the bundle whether it was built alongside
- * Developer ID packaging, read by app-identity.ts to decide which name — and
- * so which state directory and Keychain entry — the run answers to. Derived
- * from the same environment `resolveSigningMode` reads so the flag and the
- * signature it stands for come from one place; only the fact travels, never
- * the identity's name.
+ * Developer ID packaging, read by `@luke/host`'s app-identity.ts to decide
+ * which name — and so which state directory and Keychain entry — the run
+ * answers to. Derived from the same environment `resolveSigningMode` reads so
+ * the flag and the signature it stands for come from one place; only the fact
+ * travels, never the identity's name.
  */
 export function signingModeDefine(env) {
   return {
@@ -82,7 +82,7 @@ export function signingModeDefine(env) {
  * downloadUpdate path), so a bundle without one fails with ENOENT the moment
  * a newer build is found. electron-builder writes this file from the generic
  * publish config. The URL must equal `UPDATE_ENDPOINT.UPDATE_FEED_URL` in
- * src/update-service.ts, and the cache directory must stay `luke-updater` so
+ * `@luke/host`'s update-service.ts, and the cache directory must stay `luke-updater` so
  * downloaded updates from the pre-builder transition are not orphaned.
  */
 export const APP_UPDATE_FEED_URL = "https://github.com/ReviewStage/luke/releases/latest/download/";

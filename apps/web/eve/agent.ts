@@ -1,10 +1,11 @@
+import { AGENT_EXTERNAL_DEPENDENCIES } from "@luke/service/agents/agent-runtime/build";
+import { BRAIN_HOST, BRAIN_HOST_REFUSAL } from "@luke/service/agents/brain-host/bounds";
+import { scriptedModel } from "@luke/service/testing/eve-scripted-model";
 import { Result } from "effect";
 import { defineAgent, defineDynamic } from "eve";
 import type { SessionAuth } from "eve/context";
-import { BRAIN_HOST, BRAIN_HOST_REFUSAL } from "../server/hosted/brain-host/bounds.js";
-import { runWeb } from "../server/runtime.js";
 import { host, seams } from "./host.js";
-import { scriptedModel } from "./scripted-model.js";
+import { runAgent } from "./runtime.js";
 
 /**
  * Luke's judgment on the hosted tier, as an eve agent. eve ships a default
@@ -40,7 +41,7 @@ export function brainModel(admit: Admission) {
             modelContextWindowTokens: BRAIN_HOST.MODEL_CONTEXT_WINDOW_TOKENS,
           };
         }
-        const admitted = await runWeb(admit(ctx.session.auth, ctx.session.id));
+        const admitted = await runAgent(admit(ctx.session.auth, ctx.session.id));
         if (Result.isFailure(admitted)) throw new Error(admitted.failure);
         if (host.turnKindOf(ctx.session.auth) === undefined) {
           throw new Error(BRAIN_HOST_REFUSAL.NO_TURN_KIND);
@@ -55,11 +56,12 @@ export function brainModel(admit: Admission) {
 
 export default defineAgent({
   defaultTools: false,
+  build: { externalDependencies: [...AGENT_EXTERNAL_DEPENDENCIES] },
   limits: { maxInputTokensPerSession: false, sessionTimeoutMs: false },
   compaction: { thresholdPercent: BRAIN_HOST.COMPACTION_THRESHOLD },
   model: brainModel(host.admit),
   // Note that a finished run's history is deleted at once rather than kept under Vercel's
   // retention, because Luke reads every transcript from its own store, written while the run is
-  // live; a session finishes only when it is retired (`server/hosted/retire-sessions.ts`).
+  // live; a session finishes only when it is retired (`packages/service/src/agents/retire-sessions.ts`).
   experimental: { workflow: { retention: 0 } },
 });

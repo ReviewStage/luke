@@ -1,4 +1,5 @@
-import { CloseIcon, SearchIcon } from "@sidecar/panel";
+import { CloseIcon, SearchIcon } from "@luke/ui";
+import { type StripTab, sameTab } from "@luke/ui/tab-strip-model";
 import { ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 import {
   type ComponentProps,
@@ -22,7 +23,6 @@ import {
   reveal,
   selectedWords,
 } from "./find-matches";
-import { type StripTab, sameTab } from "./planning/tab-strip-model";
 import { Tooltip } from "./tooltip";
 
 /**
@@ -42,7 +42,12 @@ import { Tooltip } from "./tooltip";
  * opens on the last one, as a browser's does. Choosing another tab closes
  * the bar.
  *
- * The matches are the DOM's (`find-matches.ts`): read again whenever the
+ * A tab whose words are drawn on a canvas, which the DOM holds none of, as
+ * a Terminal tab's are, hands the scope a source of its own
+ * (`useFindSource`), which finds, steps, and tallies in its own words in the
+ * DOM's place, and seeds the field from its own selection.
+ *
+ * Otherwise the matches are the DOM's (`find-matches.ts`): read again whenever the
  * tab's text changes, as a transcript does while it streams, without moving
  * the match the find is at. A tab that holds more than it draws draws all
  * of it while a bar is open over it (`useFindOpen`): a fold draws what it
@@ -51,7 +56,7 @@ import { Tooltip } from "./tooltip";
  */
 
 /** How far a step moves through the matches. */
-const FIND_STEP = {
+export const FIND_STEP = {
   PREVIOUS: -1,
   NEXT: 1,
 } as const;
@@ -62,6 +67,8 @@ type FindStep = (typeof FIND_STEP)[keyof typeof FIND_STEP];
 interface FindTally {
   readonly count: number;
   readonly at: number;
+  /** Whether there are more matches than the count, which a source that stops counting says. */
+  readonly more?: boolean;
 }
 
 /** What a scope shows: the plan, and its tab. */
@@ -82,18 +89,40 @@ interface FindMatches {
   readonly step: (step: FindStep) => void;
 }
 
+/**
+ * Where a tab's matches come from where its words are not the DOM's: the
+ * query found as typed, keeping to the match it was at; a step from it; the
+ * tints taken away; the tally as it changes; and the words selected, which
+ * ⌘F seeds the field with.
+ */
+export interface FindSource {
+  readonly search: (query: string) => void;
+  readonly step: (query: string, step: FindStep) => void;
+  readonly clear: () => void;
+  readonly onTally: (listener: (tally: FindTally) => void) => () => void;
+  readonly selection: () => string | undefined;
+}
+
 /** Whether a find bar stands open over the tab drawing under it. */
 const FindOpenContext = createContext(false);
+
+/** Hands the scope over the tab a source of the tab's own, or takes it back. */
+const FindSourceContext = createContext<(source: FindSource | undefined) => void>(() => undefined);
+
+/** No matches, and no match the find is at. */
+const NO_TALLY: FindTally = { count: 0, at: -1 };
 
 /** Whether two subjects name the same tab of the same plan. */
 function sameSubject(a: FindSubject, b: FindSubject): boolean {
   return a.plan === b.plan && sameTab(a.tab, b.tab);
 }
 
-/** The words the bar says of the matches. */
+/** The words the bar says of the matches: where the find is among them, or how many there are while it is at none counted. */
 function tallyLine(query: string, tally: FindTally): string {
   if (query.length === 0) return "";
-  return tally.count === 0 ? "No results" : `${tally.at + 1} of ${tally.count}`;
+  if (tally.count === 0) return "No results";
+  const count = tally.more === true ? `${tally.count}+` : String(tally.count);
+  return tally.at < 0 ? `${count} results` : `${tally.at + 1} of ${count}`;
 }
 
 /**
@@ -143,6 +172,27 @@ function useFindMatches(root: HTMLElement | null, query: string): FindMatches {
     if (range !== undefined) reveal(range, root);
   };
   return { tally, step };
+}
+
+/**
+ * The matches of `query` as a source of the tab's own finds and tallies
+ * them, and the step through them; the tints are taken away as the query
+ * empties or the source goes.
+ */
+function useSourceMatches(source: FindSource | undefined, query: string): FindMatches {
+  const [tally, setTally] = useState<FindTally>(NO_TALLY);
+  useEffect(() => source?.onTally(setTally), [source]);
+  useEffect(() => {
+    if (source === undefined) return;
+    if (query.length === 0) {
+      source.clear();
+      setTally(NO_TALLY);
+      return;
+    }
+    source.search(query);
+  }, [source, query]);
+  useEffect(() => () => source?.clear(), [source]);
+  return { tally, step: (by) => source?.step(query, by) };
 }
 
 /** One of the bar's buttons: a glyph alone, named for a reader, with its chord in its hint. */
@@ -264,6 +314,18 @@ export function useFindOpen(): boolean {
 }
 
 /**
+ * Hands the find over this tab a source of the tab's own for as long as it
+ * is given, where the tab draws its words on a canvas (`FindSource`).
+ */
+export function useFindSource(source: FindSource | undefined): void {
+  const offer = useContext(FindSourceContext);
+  useEffect(() => {
+    offer(source);
+    return () => offer(undefined);
+  }, [offer, source]);
+}
+
+/**
  * A tab's find: the element the tab is drawn in, with the find bar at its
  * top right while one is open. It offers ⌘F, and ⌘G and ⇧⌘G while the bar
  * is open, only while `active`, the column holding the window's keys with
@@ -294,11 +356,15 @@ export function FindScope({
     setBar(undefined);
   }
   const open = bar !== undefined && sameSubject(bar.subject, subject);
-  const { tally, step } = useFindMatches(root, open ? query : "");
+  // A tab that hands a source of its own finds in its words, never the DOM's.
+  const [source, setSource] = useState<FindSource | undefined>(undefined);
+  const domMatches = useFindMatches(source === undefined ? root : null, open ? query : "");
+  const sourceMatches = useSourceMatches(source, open ? query : "");
+  const { tally, step } = source === undefined ? domMatches : sourceMatches;
 
   const summon = () => {
     if (root === null) return;
-    const words = selectedWords(root);
+    const words = source === undefined ? selectedWords(root) : source.selection();
     if (words !== undefined) setQuery(words);
     // Note that the focus to hand back is the one before the bar first
     // opened, since a second ⌘F finds it in the bar's own field.
@@ -335,7 +401,9 @@ export function FindScope({
           onClose={close}
         />
       ) : null}
-      <FindOpenContext.Provider value={open}>{children}</FindOpenContext.Provider>
+      <FindSourceContext.Provider value={setSource}>
+        <FindOpenContext.Provider value={open}>{children}</FindOpenContext.Provider>
+      </FindSourceContext.Provider>
     </div>
   );
 }

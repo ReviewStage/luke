@@ -1,25 +1,25 @@
 import { useAtomValue } from "@effect/atom-react/Hooks";
-import { PRODUCT_EXCHANGE_KIND } from "@sidecar/features/analytics";
-import { sanitizedTraceEvent } from "@sidecar/gateway/devtrace";
-import { appSettingsView } from "@sidecar/settings/wire";
+import { PRODUCT_EXCHANGE_KIND } from "@luke/features/analytics";
+import { sanitizedTraceEvent } from "@luke/gateway/devtrace";
+import { ACT_KIND } from "@luke/host/acts";
+import { appSettingsView } from "@luke/settings/wire";
+import { MICROPHONE_STATUS } from "@luke/voice/audio";
+import { AVATAR_STATUS } from "@luke/voice/avatar";
+import { hostedVoiceUnavailableNote } from "@luke/voice/microphone-access";
 import {
   type LiveVoiceBridge,
   LiveVoiceOrchestrator,
   type LiveVoiceSurroundings,
-} from "@sidecar/voice/orchestrator";
+} from "@luke/voice/orchestrator";
+import { VOICE_COMMAND } from "@luke/voice/voice-view";
+import { outputSilent } from "@luke/voice/volume-hint";
 import { Duration, Effect, Schedule } from "effect";
 import * as Atom from "effect/reactivity/Atom";
 import { type RefObject, useCallback, useEffect, useRef } from "react";
-import { ACT_KIND } from "#shared/messages/acts";
-import { MICROPHONE_STATUS } from "#shared/messages/audio";
-import { AVATAR_STATUS } from "#shared/messages/avatar";
-import { VOICE_COMMAND } from "#shared/messages/voice-view";
 import { useAct } from "../act";
 import { startAvatarFeed } from "../avatar-feed/start-avatar-feed";
-import { hostedVoiceUnavailableNote } from "../microphone-access";
 import { rendererRegistry, rendererServicesNow } from "../renderer-runtime";
 import { appSettingsNow, appStateNow, useAppState } from "../use-app-state";
-import { outputSilent } from "../volume-hint";
 import { type AvatarFeedActs, LiveCall, type LiveStreamSlot } from "./live-call";
 import { createBrowserSilence } from "./live-peer";
 import { openPreferredMicrophone } from "./microphone-choice";
@@ -57,7 +57,7 @@ function atomSlot(atom: Atom.Writable<MediaStream | undefined>): LiveStreamSlot 
 
 /**
  * The spoken conversation, held in the hidden voice window so no panel does.
- * Everything it decides is {@link LiveVoiceOrchestrator}'s, in `@sidecar/voice`,
+ * Everything it decides is {@link LiveVoiceOrchestrator}'s, in `@luke/voice`,
  * which touches no DOM: what is left here is the wiring only a browser can
  * do — the peer connection, the capture device, the level meters'
  * `AudioContext`, the element Luke's voice plays through — and the

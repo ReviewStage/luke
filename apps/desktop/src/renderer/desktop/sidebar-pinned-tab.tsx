@@ -1,12 +1,12 @@
-import type { CodingAgentPullRequest } from "@sidecar/features/coding-agent-wire";
-import type { PlanAgentLine, PlanSummary } from "@sidecar/features/plan-wire";
-import { CopyIcon, DocumentIcon, UnpinIcon } from "@sidecar/panel";
+import type { CodingAgentPullRequest } from "@luke/features/coding-agent-wire";
+import type { PlanAgentLine, PlanSummary } from "@luke/features/plan-wire";
+import { CopyIcon, DocumentIcon, UnpinIcon } from "@luke/ui";
+import { isAgentTab, isChangesTab, isFileTab } from "@luke/ui/tab-strip-model";
+import { shownFiles } from "@luke/voice/code-pane-model";
 import { ScrollTextIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { CardHead, CardNote, CardRule, HoverCard } from "../hover-card";
-import { shownFiles } from "../planning/code-pane-model";
 import { TAB_KIND, type TabSubject, tabLook } from "../planning/tab-look";
-import { isAgentTab, isChangesTab, isFileTab } from "../planning/tab-strip-model";
 import { TRANSCRIPT_COPY } from "../planning/transcript-copy";
 import type { PullRequestReader } from "../planning/use-agent-pull-request";
 import { MAIN_TAB } from "../planning/use-main-tabs";
@@ -50,7 +50,7 @@ import { type TranscriptCopier, useTranscriptCopier } from "./strip-tabs";
  */
 
 /** What a pin's card says once its plan no longer holds what it opens. */
-const GONE_NOTE = "No longer on this plan";
+const GONE_NOTE = "No longer on this task";
 
 /** Whether the open plan has said the pin's agent, the agent of its Changes, or its file is gone from it; another plan's pins and a fixed tab's never are. */
 function pinGone(pin: PinnedTab, plans: PlansControl): boolean {
@@ -92,7 +92,7 @@ function pinAgentId({ tab }: PinnedTab): string | undefined {
  * A pin's actions in the groups a rule divides: an agent's two copies of
  * its transcript, read whole from the service, then Unpin. Note that the
  * copies stand only while the agent's plan is open, because a copy heads its
- * brief as the plan or the task the agent was handed, which only the open
+ * brief as the plan or the prompt the agent was handed, which only the open
  * plan's agents say.
  */
 function pinActionGroups(

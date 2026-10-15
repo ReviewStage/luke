@@ -1,8 +1,15 @@
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { APP_SETTING_SCHEMA } from "@sidecar/settings";
-import type { UnparsedWireValue } from "@sidecar/wire";
+import { APP_LINK_SCHEME, type AppLinkPlace, appLinkClaim } from "@luke/features/app-links";
+import { PAGE_SCHEME } from "@luke/features/page-frame";
+import { WINDOW_ROLE } from "@luke/gateway/window-session";
+import type { AgentEndToast, AgentPlace, InboxItemToast } from "@luke/host/agent-notices";
+import type { AppHotkeysSlice, AppStateSnapshot, AppWindowFacts } from "@luke/host/app-state";
+import { applyThemePreference, followAppearance, NativeTheme } from "@luke/host/appearance";
+import type { DesktopService } from "@luke/host/desktop-service";
+import { APP_SETTING_SCHEMA } from "@luke/settings";
+import type { UnparsedWireValue } from "@luke/wire";
 import { Effect, Exit, Scope } from "effect";
 import {
   app,
@@ -16,13 +23,8 @@ import {
   type WebContents,
 } from "electron";
 import { channels } from "#shared/bridge";
-import type { AppHotkeysSlice, AppStateSnapshot, AppWindowFacts } from "#shared/messages/app-state";
-import { WINDOW_ROLE } from "#shared/messages/session";
-import { PAGE_SCHEME } from "#shared/page-frame";
 import { APP_COMMAND } from "#shared/shortcuts";
-import type { AgentEndToast, AgentPlace, InboxItemToast } from "../agent-notices";
 import { type AppStateStore, voiceWindowGone, voiceWindowState } from "../app-state";
-import { applyThemePreference, followAppearance, NativeTheme } from "../window/appearance";
 import { CallWindow } from "../window/call-window";
 import { CallWindowPresence } from "../window/call-window-presence";
 import { followDockIcon } from "../window/dock-icon";
@@ -35,7 +37,6 @@ import { applyZoomPreference, PanelWindows, zoomFactorOf } from "../window/zoom"
 import type { DesktopConfig } from "./desktop-config";
 import type { NativeNode } from "./native-node";
 import type { OperatorClient } from "./operator-client";
-import type { DesktopService } from "./service";
 
 /** How long a display change is let settle before the panels are laid out over it. */
 const DISPLAY_SETTLE_MS = 100;
@@ -86,10 +87,18 @@ export interface WindowService extends DesktopService {
   sendToVoice: <Payload>(channel: string, payload: Payload) => void;
   /** Asks the panels to open a plan on one agent's tab: a notification's click. */
   showAgent: (place: AgentPlace) => void;
+  /** A panel has painted and hears the links it is handed: every Luke link held opens now, and each later one as it comes. */
+  panelReady: () => void;
   /** Asks the panels to say an agent's turn ended in their toast: its end while the window is focused. */
   toastAgentEnd: (end: AgentEndToast) => void;
   /** Asks the panels to open a plan on its Inbox tab: an inbox notification's click. */
   showInbox: (planId: string) => void;
+  /** Asks the panels to open the window's Inbox on an item of an agent with no plan. */
+  showInboxItem: (item: {
+    readonly agentId: string;
+    readonly itemId: string;
+    readonly workspaceId?: string;
+  }) => void;
   /** Asks the panels to open Settings: the menu bar's Check for Updates, whose answer is drawn there. */
   showSettings: () => void;
   /** Asks the panels to say an inbox item opened in their toast: one that opened while the window is focused. */
@@ -263,6 +272,18 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     panels.broadcast(channels.onShowInbox, { planId });
   }
 
+  function showInboxItem(item: {
+    readonly agentId: string;
+    readonly itemId: string;
+    readonly workspaceId?: string;
+  }): void {
+    panels.broadcast(channels.onShowInboxItem, {
+      agentId: item.agentId,
+      itemId: item.itemId,
+      ...(item.workspaceId === undefined ? undefined : { workspaceId: item.workspaceId }),
+    });
+  }
+
   function showSettings(): void {
     panels.broadcast(channels.onMenuCommand, APP_COMMAND.SETTINGS);
   }
@@ -369,10 +390,16 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     afterDelay(DISPLAY_SETTLE_MS, () => panels.reconcile());
   }
 
+  // A second launch's Luke link is heard by main itself, from before the windows stand (`../main.ts`).
   const handleSecondInstance = (): void => {
     if (!launchStanding()) return;
     panels.reconcile();
     panels.focusExpanded();
+  };
+  // A Luke link's plan opens in the panels, scrolled to its section, the window brought forward.
+  const openAppLink = (place: AppLinkPlace): void => {
+    panels.focusExpanded();
+    panels.broadcast(channels.onShowLink, place);
   };
   // The Dock tile pressed: the window comes back, whether it was closed or
   // only behind another app.
@@ -383,6 +410,8 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
   const wake = (eventName: "resume" | "unlock-screen" | "user-did-become-active") => () => {
     handleDisplayChange();
     broadcast(channels.onLifecycle, eventName);
+    // A terminal's socket may have died in the sleep without a word, and one waiting out a backoff need not wait on.
+    if (eventName === "resume") void run(operator.host.terminalWake());
   };
   const wakeHandlers = {
     resume: wake("resume"),
@@ -401,7 +430,9 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     windowFactsFor,
     sendToVoice,
     showAgent,
+    panelReady: () => config.appLinks.ready(openAppLink),
     showInbox,
+    showInboxItem,
     showSettings,
     toastInboxItem,
     toastAgentEnd,
@@ -458,6 +489,14 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       raiseVoiceWindow();
       configurePermissions();
 
+      // macOS is asked to send the app's own scheme here rather than to another Luke claiming it, a live development run's among them.
+      const linkClaim = appLinkClaim({
+        packaged: config.packaged,
+        live: runMode.sendsNetwork,
+        executable: process.execPath,
+        appPath: app.getAppPath(),
+      });
+      if (linkClaim !== undefined) app.setAsDefaultProtocolClient(APP_LINK_SCHEME, ...linkClaim);
       app.on("second-instance", handleSecondInstance);
       app.on("activate", handleActivate);
       app.on("browser-window-focus", panelFocused);
@@ -470,6 +509,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       powerMonitor.on("user-did-become-active", wakeHandlers["user-did-become-active"]);
     },
     stop: async () => {
+      config.appLinks.close();
       app.removeListener("second-instance", handleSecondInstance);
       app.removeListener("activate", handleActivate);
       app.removeListener("browser-window-focus", panelFocused);

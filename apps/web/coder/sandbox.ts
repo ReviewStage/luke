@@ -1,11 +1,11 @@
+import { AGENT_ROLE } from "@luke/service/agents/agent-runtime/role";
+import { environment, openSandbox } from "@luke/service/agents/agent-runtime/sandbox";
+import { CheckoutRefused } from "@luke/service/agents/coder-host/checkout";
 import { Effect, Redacted, Result } from "effect";
 import { authenticateGitHub } from "eve/extensions/code/sandbox";
 import { defineSandbox } from "eve/sandbox";
-import { AGENT_ROLE } from "../server/hosted/agent-runtime/role.js";
-import { environment, openSandbox } from "../server/hosted/agent-runtime/sandbox.js";
-import { CheckoutRefused } from "../server/hosted/coder-host/checkout.js";
-import { runWeb } from "../server/runtime.js";
 import { host } from "./host.js";
+import { runAgent } from "./runtime.js";
 
 /**
  * sandbox.ts -- the coding agent's sandbox: one Vercel Sandbox per eve session, with the agent's repository checked out in it.
@@ -19,7 +19,7 @@ import { host } from "./host.js";
  * the checkout and the agent's changes intact. The image, its timeout and
  * size, and the store hook's stop at each turn's end are the coding agent's
  * policy over the one environment both roots share
- * (`server/hosted/agent-runtime/sandbox.ts`). The network is eve's default,
+ * (`packages/service/src/agents/agent-runtime/sandbox.ts`). The network is eve's default,
  * open internet. As the sandbox opens, the agent's repository is checked out
  * whole at its default branch with a write token at the firewall for the
  * clone (`coder-host/checkout.ts`), and the same token is then set at the
@@ -33,7 +33,7 @@ export { environment };
 
 export default defineSandbox(async ({ session }) => {
   const sandbox = await openSandbox(AGENT_ROLE.CODER);
-  const token = await runWeb(
+  const token = await runAgent(
     Effect.gen(function* () {
       const admitted = yield* host.admitSandbox(session.auth, session.id);
       if (Result.isFailure(admitted)) {

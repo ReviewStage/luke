@@ -2,9 +2,21 @@ import {
   CODING_AGENT_TODO_STATUS,
   type CodingAgentTodoStatus,
   type CodingAgentTodos,
-} from "@sidecar/features/coding-agent-wire";
-import { decodeMention, isMentionLabel, mentionName } from "@sidecar/features/mention-link";
-import type { CatalogModel, ModelChoice } from "@sidecar/features/models-wire";
+} from "@luke/features/coding-agent-wire";
+import { linkMention, mayNameMention } from "@luke/features/mention-link";
+import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
+import {
+  CALL_KIND,
+  CALL_WORDS,
+  type CallKind,
+  callLine,
+  callPlace,
+  isCommandKind,
+  TURN_ROW,
+  type TurnRow,
+} from "@luke/features/turn-rows";
+import { cn } from "@luke/ui";
+import type { Actor } from "@luke/ui/actor-model";
 import {
   AppWindowIcon,
   BookOpenIcon,
@@ -21,9 +33,7 @@ import {
   HourglassIcon,
   InboxIcon,
   LaptopIcon,
-  LayersIcon,
   LayoutListIcon,
-  ListIcon,
   ListTodoIcon,
   type LucideIcon,
   MessageCircleQuestionIcon,
@@ -37,8 +47,9 @@ import {
   WorkflowIcon,
   WrenchIcon,
 } from "lucide-react";
-import { type ComponentProps, Fragment, type ReactNode } from "react";
+import { type ComponentProps, createContext, Fragment, type ReactNode, useContext } from "react";
 import { type Components, defaultRemarkPlugins, type ExtraProps } from "streamdown";
+import { ActorLine, ActorRef } from "../actor-ref";
 import { Fold, FoldBody, FoldChevron, FoldSummary } from "../ai-elements/fold";
 import { MessageResponse, PANEL_MARKDOWN_COMPONENTS } from "../ai-elements/message";
 import { Reasoning, ReasoningContent, ReasoningTrigger } from "../ai-elements/reasoning";
@@ -58,28 +69,18 @@ import {
   type ToolState,
   ToolStateMark,
 } from "../ai-elements/tool";
-import { cn } from "../ai-elements/utils";
+import { TextLink } from "../text-link";
 import { Tooltip } from "../tooltip";
 import { useClipped } from "../use-clipped";
 import { MentionChip } from "./mention-chip";
 import { ModelLabel } from "./model-label";
-import { usePlanMentions } from "./plan-mentions";
+import { useMentionDoors } from "./plan-mentions";
 import { SubagentMark } from "./tab-look";
 import { cardTitle } from "./tool-call-model";
 import {
   TRANSCRIPT_CODE_AND_TABLE_COMPONENTS,
   TranscriptMarkdownSource,
 } from "./transcript-markdown";
-import {
-  CALL_KIND,
-  CALL_WORDS,
-  type CallKind,
-  callLine,
-  callPlace,
-  isCommandKind,
-  TURN_ROW,
-  type TurnRow,
-} from "./turn-rows";
 import { opensAsLink, useOpenLink } from "./use-open-link";
 import { WorkingTime } from "./working-time";
 
@@ -104,39 +105,35 @@ import { WorkingTime } from "./working-time";
 
 /**
  * A link in a transcript's words. A web page, such as the pull request an
- * agent opened or the docs it read, opens in the browser over the act
- * channel (`use-open-link.ts`); any other address is drawn as words that go
- * nowhere, with the address as its hint.
+ * agent opened or the docs it read, is a plain link (`../text-link.tsx`)
+ * that opens in the browser over the act channel (`use-open-link.ts`); any
+ * other address is drawn as words that go nowhere, with the address as its
+ * hint. `words` are its label's, which say whether it is its own address.
  * Note that the press is ours rather than Streamdown's, because Streamdown's
  * link asks in a modal of its own and then calls `window.open`, which the
  * window denies (`hardened-window.ts`), so its link opened nothing.
  */
 function TranscriptLink({
   href,
+  words,
   children,
 }: {
   href: string | undefined;
+  words: string;
   children: ReactNode;
 }): ReactNode {
   const openLink = useOpenLink();
   if (href === undefined || !opensAsLink(href)) {
     return (
-      <span className="agent-link-inert" title={href}>
+      <span className="text-link-inert" title={href}>
         {children}
       </span>
     );
   }
   return (
-    <a
-      href={href}
-      className="agent-link"
-      onClick={(event) => {
-        event.preventDefault();
-        openLink(href);
-      }}
-    >
+    <TextLink href={href} words={words} onOpen={openLink}>
       {children}
-    </a>
+    </TextLink>
   );
 }
 
@@ -156,9 +153,10 @@ interface WordsNode {
   readonly children?: readonly WordsNode[];
 }
 
-/** A node of the words as markdown reads them, which a mention's link is marked on. */
+/** A node of the words as markdown reads them, which a mention's link is marked on: a link's target, or the label a reference link and its definition share. */
 interface MarkdownNode extends WordsNode {
   readonly url?: string;
+  readonly identifier?: string;
   readonly children?: readonly MarkdownNode[];
   data?: { hName?: string; hProperties?: Record<string, string> };
 }
@@ -170,40 +168,73 @@ function wordsOf(node: WordsNode): string {
 }
 
 /**
- * Marks every mention in the words, a link whose label starts with `@` and
- * whose target names a mention, to be drawn as its own element. Note that
- * the mark is made on the markdown, before it is drawn, because the
- * drawing's sanitizer keeps no address on a link but the web's, so a
- * mention's target would never reach a link of ours.
+ * Marks every link in the words whose target may name a mention to be
+ * drawn as its own element, which reads what it names against the plan
+ * its page is of (`linkMention`): the same rule for a developer's `@`
+ * mention, an agent's link, a reference link, and a bare address. A target
+ * is read here before the page's repository is known (`mayNameMention`),
+ * so every page of GitHub's is marked, and every other link is drawn as
+ * the library draws it. Note that the mark is made on the markdown, before
+ * it is drawn, because the drawing's sanitizer keeps no address on a link
+ * but the web's, so a mention's target would never reach a link of ours.
+ * Code holds no link, so a mention in code stays code.
  */
-function markMentions(node: MarkdownNode): void {
-  if (node.type === "link" && node.url !== undefined && isMentionLabel(wordsOf(node))) {
-    if (decodeMention(node.url) !== undefined) {
-      node.data = {
-        hName: MENTION_ELEMENT.TAG,
-        hProperties: { [MENTION_ELEMENT.TARGET]: node.url },
-      };
-    }
+function markMentions(node: MarkdownNode, definitions: ReadonlyMap<string, string>): void {
+  const target =
+    node.type === "link"
+      ? node.url
+      : node.type === "linkReference" && node.identifier !== undefined
+        ? definitions.get(node.identifier)
+        : undefined;
+  if (target !== undefined && mayNameMention(target)) {
+    node.data = {
+      hName: MENTION_ELEMENT.TAG,
+      hProperties: { [MENTION_ELEMENT.TARGET]: target },
+    };
     return;
   }
-  for (const child of node.children ?? []) markMentions(child);
+  for (const child of node.children ?? []) markMentions(child, definitions);
 }
 
-/** The markdown steps a transcript is read with: the library's own, then the mark on its mentions. */
-const TRANSCRIPT_REMARK_PLUGINS = [...Object.values(defaultRemarkPlugins), () => markMentions];
+/** Each link definition in the words, by the label a reference link names it with, the first standing where one is defined twice, as markdown reads them. */
+function definitionsIn(
+  node: MarkdownNode,
+  found: Map<string, string> = new Map(),
+): Map<string, string> {
+  if (node.type === "definition" && node.identifier !== undefined && node.url !== undefined) {
+    if (!found.has(node.identifier)) found.set(node.identifier, node.url);
+  }
+  for (const child of node.children ?? []) definitionsIn(child, found);
+  return found;
+}
+
+/** The step that marks a transcript's links, a reference link's read through its definition. */
+function markLinks(tree: MarkdownNode): void {
+  markMentions(tree, definitionsIn(tree));
+}
+
+/** The markdown steps a transcript is read with: the library's own, then the mark on its links. */
+const TRANSCRIPT_REMARK_PLUGINS = [...Object.values(defaultRemarkPlugins), () => markLinks];
 
 /**
- * A mention in a transcript's words: on a plan's page, the chip that opens
- * what it names (`mention-chip.tsx`); off one, a link as any other is.
+ * A link in a transcript's words: the chip that opens what it names
+ * (`mention-chip.tsx`) where its target names a mention, read against the
+ * plan's page it is drawn on, or the window's doors off one; a link as any
+ * other is where it names none.
  */
 function MentionElement({ node, children }: ExtraProps & { children?: ReactNode }): ReactNode {
-  const mentions = usePlanMentions();
+  const doors = useMentionDoors();
   const target = String(node?.properties[MENTION_ELEMENT.TARGET] ?? "");
-  const mention = decodeMention(target);
-  if (node === undefined || mention === undefined || mentions === undefined) {
-    return <TranscriptLink href={target}>{children}</TranscriptLink>;
+  const found =
+    node === undefined ? undefined : linkMention(wordsOf(node), target, doors.place.repository);
+  if (found === undefined) {
+    return (
+      <TranscriptLink href={target} words={node === undefined ? "" : wordsOf(node)}>
+        {children}
+      </TranscriptLink>
+    );
   }
-  return <MentionChip mention={mention} name={mentionName(wordsOf(node))} doors={mentions.doors} />;
+  return <MentionChip mention={found.mention} name={found.name} doors={doors} />;
 }
 
 /**
@@ -216,7 +247,11 @@ function MentionElement({ node, children }: ExtraProps & { children?: ReactNode 
 const TRANSCRIPT_COMPONENTS: Components = {
   ...PANEL_MARKDOWN_COMPONENTS,
   ...TRANSCRIPT_CODE_AND_TABLE_COMPONENTS,
-  a: ({ href, children }) => <TranscriptLink href={href}>{children}</TranscriptLink>,
+  a: ({ href, children, node }) => (
+    <TranscriptLink href={href} words={node === undefined ? "" : wordsOf(node)}>
+      {children}
+    </TranscriptLink>
+  ),
   [MENTION_ELEMENT.TAG]: MentionElement,
   img: () => null,
 };
@@ -345,6 +380,12 @@ const CALL_ICON = {
   [CALL_KIND.OTHER]: WrenchIcon,
 } as const satisfies Record<CallKind, LucideIcon>;
 
+/** Whose Mac a transcript's Mac commands ran on, its agent's starter, the reader's own among them (`macOwnerOf`); none where the window cannot tell, whose ran on the reader's own as far as it knows. */
+const MacOwnerContext = createContext<Actor | undefined>(undefined);
+
+/** Names whose Mac the transcript under it ran its Mac commands on. */
+export const MacOwnerProvider = MacOwnerContext.Provider;
+
 export type TranscriptToolProps = Omit<ComponentProps<typeof Tool>, "children"> &
   Pick<ToolHeaderProps, "state" | "subject"> & {
     kind: CallKind;
@@ -376,6 +417,7 @@ export function TranscriptTool({
   const Icon = CALL_ICON[kind];
   const line = callLine(kind, subject, description);
   const command = isCommandKind(kind);
+  const macOwner = useContext(MacOwnerContext);
   return (
     <Tool {...props}>
       <ToolHeader
@@ -385,7 +427,17 @@ export function TranscriptTool({
         subject={line.subject}
         subjectIsCode={line.code}
         subjectInBody={command && input.kind === TOOL_BLOCK.COMMAND}
-        place={callPlace(kind)}
+        place={
+          kind === CALL_KIND.MAC_COMMAND && macOwner !== undefined ? (
+            <ActorLine>
+              {"On "}
+              <ActorRef actor={macOwner} sentence possessive />
+              {" Mac"}
+            </ActorLine>
+          ) : (
+            callPlace(kind)
+          )
+        }
       />
       <ToolContent>
         <ToolInput block={input} />
@@ -683,16 +735,16 @@ export function TranscriptSubagent({
  * A line that folds the rows beneath it: a run of calls, or a finished
  * turn's lead. Note that it stays in the muted ink, summary and all,
  * unlike a call's line, because it counts rows rather than saying what one
- * did, and the rows it opens onto are what a reader scans.
+ * did, and the rows it opens onto are what a reader scans. It wears no
+ * icon, because its count already says what it holds and the rows it
+ * opens onto wear their own.
  */
 function TurnFold({
-  icon,
   summary,
   running,
   open = false,
   children,
 }: {
-  icon: ReactNode;
   summary: string;
   running: boolean;
   open?: boolean;
@@ -701,12 +753,6 @@ function TurnFold({
   return (
     <Fold className="text-[12.5px]" defaultOpen={open} data-turn-fold="">
       <FoldSummary className="flex h-7 cursor-pointer items-center gap-2 rounded-md px-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
-        <span
-          className="flex size-4 shrink-0 items-center justify-center [&>svg]:size-4"
-          aria-hidden="true"
-        >
-          {icon}
-        </span>
         {running ? <Shimmer>{summary}</Shimmer> : <span>{summary}</span>}
       </FoldSummary>
       <FoldBody className="ml-6 flex flex-col gap-1 pt-1">{children}</FoldBody>
@@ -732,10 +778,9 @@ function TurnRowView<B>({
           {trailer}
         </>
       );
-    // A run of calls wears a stack, its calls laid one on another, which no call's own icon is; a finished lead wears a list.
     case TURN_ROW.GROUP:
       return (
-        <TurnFold icon={<LayersIcon />} summary={row.summary} running={row.running} open={row.open}>
+        <TurnFold summary={row.summary} running={row.running} open={row.open}>
           {row.blocks.map((block, index) => (
             <Fragment key={index}>{children(block)}</Fragment>
           ))}
@@ -744,7 +789,7 @@ function TurnRowView<B>({
       );
     case TURN_ROW.FOLDED:
       return (
-        <TurnFold icon={<ListIcon />} summary={row.summary} running={false}>
+        <TurnFold summary={row.summary} running={false}>
           <TranscriptRows rows={row.rows} trailer={trailer}>
             {children}
           </TranscriptRows>

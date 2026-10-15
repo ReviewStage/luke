@@ -2,14 +2,14 @@ import {
   PRODUCT_EVENT,
   PRODUCT_UPDATE_ACTION,
   type RecordProductEvent,
-} from "@sidecar/features/analytics";
-import { jsonStateFile } from "@sidecar/host";
-import { text } from "@sidecar/wire";
+} from "@luke/features/analytics";
+import { jsonStateFile } from "@luke/host";
+import { UPDATE_ENDPOINT, type UpdaterEngine, UpdateService } from "@luke/host/update-service";
+import type { UpdateSnapshot } from "@luke/settings/update";
+import { text } from "@luke/wire";
 import { Effect, type Scope } from "effect";
-import type { UpdateSnapshot } from "#shared/messages/update";
 import { type UpdateMenuAct, updateMenuAct } from "../app-menu";
 import type { AppStateStore } from "../app-state";
-import { UPDATE_ENDPOINT, type UpdaterEngine, UpdateService } from "../update-service";
 import type { DesktopConfig } from "./desktop-config";
 
 export interface UpdateServiceHost {
@@ -89,19 +89,20 @@ export const createUpdateServiceHost = /* @__PURE__ */ Effect.fn("desktop/create
       const act = updateMenuAct(update, config.packaged);
       if (act === shownAct) return;
       shownAct = act;
-      config.showMenuBar(
-        act === undefined
-          ? undefined
-          : {
-              act,
-              onCheck: () => {
-                dependencies.showSettings();
-                void host.check();
+      config.showMenuBar({
+        update:
+          act === undefined
+            ? undefined
+            : {
+                act,
+                onCheck: () => {
+                  dependencies.showSettings();
+                  void host.check();
+                },
+                onInstall: () => host.install(),
+                onOpenLatest: () => host.openLatestRelease(),
               },
-              onInstall: () => host.install(),
-              onOpenLatest: () => host.openLatestRelease(),
-            },
-      );
+      });
     };
 
     const engine = dependencies.engine;

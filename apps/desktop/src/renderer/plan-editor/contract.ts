@@ -41,6 +41,8 @@ export interface PlanEditorProps {
 interface ComposerMentions {
   readonly onTrigger: (trigger: ComposerTrigger | undefined) => void;
   readonly drawMention: (element: HTMLElement, mention: MentionNode) => () => void;
+  /** The mention words pasted whole stand for, a page of an integration's address; nothing for any other words, which paste as words. */
+  readonly pasted: (words: string) => MentionNode | undefined;
 }
 
 /** A mention the plan's text holds: the name it was written with, without its `@`, and its link's target, which the panel alone reads. */
@@ -50,18 +52,35 @@ export interface MentionNode {
 }
 
 /**
+ * The text's section headings, as `planSections` knows them, before an edit
+ * and after it, and where each section the edit kept, its heading still the
+ * block it was, stands among them now: what the panel reads a section's
+ * anchor moving off, since only it spells anchors.
+ */
+export interface HeadingsChange {
+  readonly before: readonly string[];
+  readonly after: readonly string[];
+  /** A kept section's place among `before`, to its place among `after`. */
+  readonly kept: ReadonlyMap<number, number>;
+}
+
+/**
  * The plan editor's mentions, as the panel draws and picks them: an `@` word
  * the caret ends reported (`onTrigger`), the keys a list over it takes first
  * (`onKey`), each mention the text holds drawn into its node's own element
- * (`drawMention`), and a target named again where a heading of the text it
- * names was renamed in the edit (`retarget`), answering the new target or
- * nothing where the target names no section renamed.
+ * (`drawMention`), and a target named again where the edit changed the
+ * headings of the text (`retarget`), answering the new target or nothing
+ * where the section it names kept its anchor, or names none.
  */
 export interface PlanEditorMentions {
   readonly onTrigger: (trigger: ComposerTrigger | undefined) => void;
   readonly onKey: (event: KeyboardEvent) => boolean;
   readonly drawMention: (element: HTMLElement, mention: MentionNode) => () => void;
-  readonly retarget: (target: string, renamed: ReadonlyMap<string, string>) => string | undefined;
+  readonly retarget: (target: string, change: HeadingsChange) => string | undefined;
+  /** The mention words pasted whole stand for, a page of an integration's address; nothing for any other words, which paste as words. */
+  readonly pasted: (words: string) => MentionNode | undefined;
+  /** Whether a link's target names a mention, which the read view draws as its chip, so the editor draws the link in a chip's light look. */
+  readonly namesMention: (target: string) => boolean;
 }
 
 /** An editor as mounted. */
@@ -143,6 +162,10 @@ export interface ComposerEditorHandle {
   readonly chooseSkill: (name: string) => void;
   /** The `@` word the caret ends written as the mention chosen, a space after it, the caret after the space. */
   readonly chooseMention: (mention: MentionNode) => void;
+  /** The `@` word the caret ends written as the skill named, as a `/` word's pick writes it. */
+  readonly chooseSkillAtMention: (name: string) => void;
+  /** A mention made elsewhere (a File tab's ⌥K) laid in where the caret stands, a space after it, the box focused; nothing where it has no room under the bound. */
+  readonly insertMention: (mention: MentionNode) => void;
   /** The skills a `/name` names: each such word is drawn as a chip from now on. */
   readonly setSkills: (skills: ReadonlySet<string>) => void;
   /** Whether the words take a change: off while a message is held, read-only while a dictation stands, which keeps the caret. */

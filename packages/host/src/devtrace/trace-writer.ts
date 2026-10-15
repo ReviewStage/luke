@@ -1,9 +1,5 @@
-import {
-  type AgentWireTrace,
-  sanitizedTraceEvent,
-  TRACE_ENTRY_KIND,
-} from "@sidecar/gateway/devtrace";
-import { type SerialQueue, serialQueue } from "@sidecar/runtime/effect";
+import { type AgentWireTrace, sanitizedTraceEvent, TRACE_ENTRY_KIND } from "@luke/gateway/devtrace";
+import { type SerialQueue, serialQueue } from "@luke/runtime/effect";
 import { Cause, DateTime, Deferred, Effect, Path, type Scope } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import type { PlatformError } from "effect/PlatformError";

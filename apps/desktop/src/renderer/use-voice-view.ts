@@ -1,13 +1,13 @@
-import { useCallback } from "react";
-import { ACT_KIND } from "#shared/messages/acts";
-import { RUN_PROFILE, type RunProfile } from "#shared/messages/app-state";
-import { MICROPHONE_STATUS } from "#shared/messages/audio";
+import { ACT_KIND } from "@luke/host/acts";
+import { RUN_PROFILE, type RunProfile } from "@luke/host/app-state";
+import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import {
   IDLE_VOICE_VIEW,
   VOICE_COMMAND,
   type VoiceSpeakers,
   type VoiceView,
-} from "#shared/messages/voice-view";
+} from "@luke/voice/voice-view";
+import { useCallback } from "react";
 import { useAct } from "./act";
 import { useCallCommands } from "./call-commands";
 import { useAppState } from "./use-app-state";

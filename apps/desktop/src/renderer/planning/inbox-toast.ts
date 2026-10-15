@@ -1,7 +1,7 @@
 /**
  * inbox-toast.ts -- says in the window's toast that an inbox item opened while the window was focused away from its plan's Inbox, with a View that opens that Inbox, until the item no longer waits or the Inbox is shown.
  *
- * Main decides which items the window hears (`main/agent-notices.ts`): one
+ * Main decides which items the window hears (`@luke/host/agent-notices`): one
  * for each item that opens, and only while the window is focused, the OS's
  * notification saying it while the window is behind. The toast says what
  * the notification would, the plan's name on its second line, and its View
@@ -12,8 +12,8 @@
  * each waits for room rather than pushing out an earlier one.
  */
 
+import type { AppInboxPlan } from "@luke/host/app-state";
 import { useEffect, useRef } from "react";
-import type { AppInboxPlan } from "#shared/messages/app-state";
 import { TOAST_TONE, useToast, useWithdrawToast } from "../toast";
 import { appStateNow } from "../use-app-state";
 

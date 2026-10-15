@@ -1,11 +1,12 @@
 import { type JSONContent, Node } from "@tiptap/core";
+import type { EditorView } from "@tiptap/pm/view";
 import type { MentionNode } from "./contract";
 
 /**
  * mention-node.ts -- a mention in the editors' words: an atom holding the name it was written with and its link's target, drawn by the panel, written back as the link it was read from.
  *
  * A mention is written into markdown as a link whose label starts with `@`
- * (`@sidecar/features/mention-link`, which only the panel reads). The editor
+ * (`@luke/features/mention-link`, which only the panel reads). The editor
  * holds it as one node, an atom one Backspace takes out whole, its name and
  * target in the node and never in the DOM's attributes, since the recording
  * masks words and not every attribute: the chip inside the node's element
@@ -142,4 +143,25 @@ export function mentionTokens(text: string): readonly MentionToken[] {
     end: match.index + match[0].length,
     mention: { name: (match[1] ?? "").replace(LABEL_ESCAPE, "$1"), target: match[2] ?? "" },
   }));
+}
+
+/**
+ * A paste whose words the panel reads as one mention, a page of an
+ * integration's address, laid in as that mention's node and a space where
+ * the caret stands, outside code; answers whether it was, so any other
+ * paste goes on as words.
+ */
+export function pastedMention(
+  view: EditorView,
+  event: ClipboardEvent,
+  pasted: (words: string) => MentionNode | undefined,
+): boolean {
+  const mention = pasted(event.clipboardData?.getData("text/plain") ?? "");
+  const { $from } = view.state.selection;
+  if (mention === undefined || $from.parent.type.spec.code === true) return false;
+  if ($from.marks().some((mark) => mark.type.spec.code === true)) return false;
+  const { schema } = view.state;
+  const node = schema.node(MENTION_NODE, { name: mention.name, target: mention.target });
+  view.dispatch(view.state.tr.replaceSelectionWith(node, false).insertText(" ").scrollIntoView());
+  return true;
 }

@@ -3,7 +3,7 @@
  * A handler table is written against these shapes wherever the host composes
  * one, and the dispatcher in `./host` runs it.
  */
-import type { WireRecord, WireValue } from "@sidecar/wire";
+import type { WireRecord, WireValue } from "@luke/wire";
 import type { Effect } from "effect";
 import type { GatewayClientIdentity, GatewayMethod, GatewayRefusal } from "./protocol.js";
 

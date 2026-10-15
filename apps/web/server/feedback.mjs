@@ -77,6 +77,9 @@ const FEEDBACK_KINDS = Object.values(FEEDBACK_KIND);
 
 const FEEDBACK_IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp"];
 
+/* An experiment key's shape, as the desktop's own boundary holds it: a note sent from an experiment's row names it. */
+const EXPERIMENT_KEY_PATTERN = /^[a-z][a-z0-9-]{0,39}$/;
+
 /* The same bounds the composer and the app's trust boundary enforce. */
 const FEEDBACK_LIMITS = {
   MESSAGE_MAX_LENGTH: 8_000,
@@ -231,6 +234,10 @@ function feedbackSubmission(value) {
   if (emailLine === null) return undefined;
   const images = value.images;
   if (!Array.isArray(images) || images.length > FEEDBACK_LIMITS.MAX_IMAGES) return undefined;
+  const experiment = value.experiment === undefined ? undefined : readString(value.experiment);
+  if (value.experiment !== undefined && !(experiment && EXPERIMENT_KEY_PATTERN.test(experiment))) {
+    return undefined;
+  }
   const parsedImages = [];
   for (const candidate of images) {
     const image = feedbackImage(candidate);
@@ -244,6 +251,7 @@ function feedbackSubmission(value) {
   };
   if (nameLine) submission.name = nameLine;
   if (emailLine) submission.email = emailLine;
+  if (experiment) submission.experiment = experiment;
   return submission;
 }
 
@@ -288,9 +296,11 @@ export async function POST(request) {
   if (!submission) return json(400, { reason: "Malformed submission." });
 
   const signature = submission.name ?? submission.email;
-  const subject = signature
-    ? `${SUBJECT_LINE[submission.kind]} from ${signature}`
+  // A note sent from an experiment's row says which experiment it is about.
+  const topic = submission.experiment
+    ? `${SUBJECT_LINE[submission.kind]} on the ${submission.experiment} experiment`
     : SUBJECT_LINE[submission.kind];
+  const subject = signature ? `${topic} from ${signature}` : topic;
 
   let response;
   try {

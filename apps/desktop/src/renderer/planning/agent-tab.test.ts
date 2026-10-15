@@ -5,8 +5,8 @@ import {
   CODING_AGENT_STATUS,
   type CodingAgentMessage,
   type CodingAgentSummary,
-} from "@sidecar/features/coding-agent-wire";
-import { MESSAGE_ROLE, type WireRecord } from "@sidecar/wire";
+} from "@luke/features/coding-agent-wire";
+import { MESSAGE_ROLE, type WireRecord } from "@luke/wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
@@ -19,9 +19,10 @@ import { TOOL_TARGET, type ToolTarget } from "./tool-call-model";
 /**
  * agent-tab.test.ts -- a call about something the window draws in a tab of
  * its own is a row that opens that tab, and every other call a row that
- * folds open in place; a run of calls and a list of the agents each wear
- * their own icon. A row that opens an agent's or a worker's tab hangs that
- * tab's card.
+ * folds open in place; a run of calls and a finished turn's lead fold under
+ * a line that wears no icon, while the calls under it, a list of the agents
+ * among them, keep their own. A row that opens an agent's or a worker's tab
+ * hangs that tab's card.
  */
 
 const roots: Root[] = [];
@@ -243,7 +244,7 @@ for (const call of FOLDING_CALLS) {
   });
 }
 
-test("a run of calls wears a stack, and a list of the agents a list's icon", () => {
+test("a run of calls folds under a line with no icon, and its calls keep theirs, a list of the agents a list's", () => {
   const { container } = drawn(
     assistant([
       toolPart("list_coding_agents", {}, { agents: [] }),
@@ -251,13 +252,40 @@ test("a run of calls wears a stack, and a list of the agents a list's icon", () 
     ]),
     true,
   );
-  const group = container.querySelector("[data-turn-fold] > summary svg");
-  assert.ok(group?.classList.contains("lucide-layers"), "the group's line wears Layers");
+  const group = container.querySelector("[data-turn-fold] > summary");
+  assert.equal(group?.textContent, "2 tools called");
+  assert.ok(group?.querySelector("svg") === null, "the group's line wears no icon");
   const rows = [...container.querySelectorAll("[data-turn-fold] summary")];
   const listed = rows.find((row) => row.textContent?.includes("Listed the coding agents"));
   assert.ok(
     listed?.querySelector("svg")?.classList.contains("lucide-layout-list"),
     "the list's row wears LayoutList",
+  );
+  const ran = rows.find((row) => row.textContent?.includes("git status"));
+  assert.ok(
+    ran?.querySelector("svg")?.classList.contains("lucide-laptop"),
+    "the command's row wears Laptop",
+  );
+});
+
+test("a finished turn's lead folds under a line with no icon, and its calls keep theirs", () => {
+  const { container } = drawn(
+    assistant([
+      toolPart("read_file", { filePath: "src/new.ts" }, { content: "export {}" }),
+      { type: "text", text: "Read it." },
+      toolPart("run_on_mac", { command: "git status" }, { output: "clean" }),
+      { type: "text", text: "All clean." },
+    ]),
+  );
+  const fold = container.querySelector<HTMLElement>("[data-turn-fold] > summary");
+  assert.equal(fold?.textContent, "2 tool calls, 1 message");
+  assert.ok(fold?.querySelector("svg") === null, "the fold's line wears no icon");
+  act(() => fold?.click());
+  const rows = [...container.querySelectorAll("[data-turn-fold] summary")];
+  const read = rows.find((row) => row.textContent?.includes("src/new.ts"));
+  assert.ok(
+    read?.querySelector("svg")?.classList.contains("lucide-file-text"),
+    "the read's row wears FileText",
   );
 });
 

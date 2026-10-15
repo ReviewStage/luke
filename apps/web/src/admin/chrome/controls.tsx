@@ -1,4 +1,4 @@
-import { ADMIN_METRICS_WINDOW, type AdminMetricsWindow } from "../../../server/admin/http";
+import { ADMIN_METRICS_WINDOW, type AdminMetricsWindow } from "@luke/service/admin/http";
 
 /** The page's one button treatment: sign out and try again both wear it. */
 export const PLAIN_BUTTON =

@@ -1,4 +1,5 @@
-import { type AnyExtension, Editor } from "@tiptap/core";
+import { TEXT_LINK_CLASS } from "@luke/ui/link-face";
+import { type AnyExtension, Editor, Extension } from "@tiptap/core";
 import Heading from "@tiptap/extension-heading";
 import Image from "@tiptap/extension-image";
 import { TaskItem, TaskList } from "@tiptap/extension-list";
@@ -23,7 +24,7 @@ import {
   RawBlock,
   sourcesOf,
 } from "./document-source";
-import { mentionNode } from "./mention-node";
+import { mentionNode, pastedMention } from "./mention-node";
 import { planMentions } from "./plan-mentions";
 
 /**
@@ -56,12 +57,53 @@ const DocumentHeading = Heading.extend({
   },
 });
 
+/** The class a link whose target names a mention wears in the editor, which `planning.css` draws in a chip's light look. */
+const MENTION_LINK_CLASS = "plan-mention-link";
+
+/**
+ * How a link looks in the editor: a link whose target names a mention,
+ * which the read view draws as its chip, wears a chip's light look, so
+ * opening a section to edit it does not turn its chips into underlined
+ * words; any other is the plain link every place draws (`TEXT_LINK_CLASS`).
+ * Note that one attribute decides between the two, so a mention's link
+ * never wears the plain link's class beside its own, that only a class is
+ * added, never the target in an attribute of its own, and that the
+ * attribute is drawn alone and never read or written as markdown.
+ */
+function linkLook(namesMention: ((target: string) => boolean) | undefined) {
+  return Extension.create({
+    name: "linkLook",
+    addGlobalAttributes() {
+      return [
+        {
+          types: ["link"],
+          attributes: {
+            look: {
+              default: null,
+              parseHTML: () => null,
+              renderHTML: (attributes) => ({
+                class:
+                  namesMention?.(String(attributes.href ?? "")) === true
+                    ? MENTION_LINK_CLASS
+                    : TEXT_LINK_CLASS,
+              }),
+            },
+          },
+        },
+      ];
+    },
+  });
+}
+
 /**
  * What the text may hold, read and written as the editor reads and writes
- * it: the mention among the rest, drawn by the panel where it can draw one.
+ * it: the mention among the rest, drawn by the panel where it can draw one,
+ * a link naming one in a chip's light look where the panel says which, and
+ * every other link a plain one.
  */
 export function markdownExtensions(
   drawMention?: ((element: HTMLElement, mention: MentionNode) => () => void) | undefined,
+  namesMention?: ((target: string) => boolean) | undefined,
 ): AnyExtension[] {
   const kit = StarterKit.configure({
     heading: false,
@@ -79,6 +121,7 @@ export function markdownExtensions(
     Image.configure({ inline: true }),
     RawBlock,
     mentionNode(drawMention),
+    linkLook(namesMention),
   ];
 }
 
@@ -129,7 +172,7 @@ function placed(editor: Editor, placement: PlanEditorPlacement | undefined): Sel
 export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): PlanEditorHandle {
   const { markdown, placement, focus, label, className, onDraft, onFinish, onLeaveUp, mentions } =
     props;
-  const extensions = markdownExtensions(mentions?.drawMention);
+  const extensions = markdownExtensions(mentions?.drawMention, mentions?.namesMention);
   const manager = documentManager(extensions);
   // Filled once the editor is built, since a block's source is known by the node it opened as.
   let held: HeldSources = { sources: new Map(), lead: "", ending: "" };
@@ -151,6 +194,9 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
         "aria-multiline": "true",
         "aria-label": label,
       },
+      // Note that a page of an integration's pasted whole is laid in as its mention, as the box lays it in.
+      handlePaste: (view, event) =>
+        mentions === undefined ? false : pastedMention(view, event, mentions.pasted),
       handleKeyDown: (view, event) => {
         // A key an input method is composing with is its own: its Enter confirms its words, its Escape drops them.
         if (event.isComposing || view.composing || event.keyCode === COMPOSING_KEY_CODE) {

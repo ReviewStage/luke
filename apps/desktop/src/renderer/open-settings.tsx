@@ -1,5 +1,5 @@
+import type { SettingsLink } from "@luke/settings/settings-views";
 import { createContext, useContext } from "react";
-import type { SettingsLink } from "./settings-views";
 
 /**
  * open-settings.tsx -- Open Settings from anywhere in the window: the way the window opens Settings at a place, and what its press is called.

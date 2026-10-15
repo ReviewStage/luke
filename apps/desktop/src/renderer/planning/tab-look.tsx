@@ -1,12 +1,12 @@
-import type { CodingAgentStatus } from "@sidecar/features/coding-agent-wire";
-import type { ModelProvider } from "@sidecar/features/models-wire";
-import { CodingAgentsIcon, DocumentIcon, PlusIcon } from "@sidecar/panel";
+import type { CodingAgentStatus } from "@luke/features/coding-agent-wire";
+import type { ModelProvider } from "@luke/features/models-wire";
+import { CodingAgentsIcon, DocumentIcon, PlusIcon } from "@luke/ui";
+import { changesLabelOf, TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { AppWindowIcon, BotIcon, FileDiffIcon, InboxIcon } from "lucide-react";
 import { HarnessMark } from "../harness-marks";
 import { GLYPH_STATE, type GlyphState, StateGlyph, stateEndMark } from "../state-glyph";
 import { agentGlyphState, providerOf } from "./coding-agent-model";
 import { fileLook } from "./file-ref";
-import { changesLabelOf, TAB_WORDS } from "./tab-strip-model";
 import { type FixedSidePanelTab, SIDE_PANEL_TAB_KIND } from "./use-side-panel";
 
 /**
@@ -33,6 +33,8 @@ export const TAB_KIND = {
   AGENT: "agent",
   SUBAGENT: "subagent",
   CHANGES: "changes",
+  /** One agent's terminal, which wears the agent's own glyph: a terminal belongs to its agent's sandbox. */
+  TERMINAL: "terminal",
   FILE: "file",
   PAGE: "page",
 } as const;
@@ -66,6 +68,11 @@ export type TabSubject =
       readonly kind: typeof TAB_KIND.CHANGES;
       /** The label of the agent whose pull request it is; none before the agent is read. */
       readonly agentName: string | undefined;
+    }
+  | {
+      readonly kind: typeof TAB_KIND.TERMINAL;
+      /** Where the agent whose sandbox it is stands, as its own tab's glyph wears it. */
+      readonly agent: AgentStanding | undefined;
     }
   | { readonly kind: typeof TAB_KIND.FILE; readonly path: string }
   | { readonly kind: typeof TAB_KIND.PAGE; readonly title: string };
@@ -155,6 +162,10 @@ export function tabLook(subject: TabSubject): KindLook {
         label:
           subject.agentName === undefined ? TAB_WORDS.CHANGES : changesLabelOf(subject.agentName),
       };
+    case TAB_KIND.TERMINAL:
+      // Note that the agent's name is not the label, because the tab says
+      // what it is first; each place drawing it names the agent beside it.
+      return { icon: <AgentGlyph agent={subject.agent} />, label: TAB_WORDS.TERMINAL };
     case TAB_KIND.FILE: {
       // A file's tab is named as every place names a file (`file-ref.tsx`).
       const { icon, label } = fileLook(subject.path);

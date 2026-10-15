@@ -13,6 +13,9 @@
                   "name": {
                     "type": "string"
                   },
+                  "title": {
+                    "type": "string"
+                  },
                   "description": {
                     "type": "string"
                   },
@@ -34,6 +37,41 @@
                     },
                     "required": [],
                     "additionalProperties": false
+                  },
+                  "parameters": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string"
+                        },
+                        "required": {
+                          "type": "boolean"
+                        },
+                        "description": {
+                          "type": "string"
+                        },
+                        "values": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "default": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "type",
+                        "required"
+                      ],
+                      "additionalProperties": false
+                    }
                   }
                 },
                 "required": [

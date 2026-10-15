@@ -1,17 +1,13 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CODING_AGENT_CALL_FAILURE } from "@sidecar/features/coding-agent-view";
+import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import {
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_STATUS,
   type ProviderKeyRejection,
   type ProviderKeySummary,
-} from "@sidecar/features/provider-key-wire";
-import type { AtomRegistry } from "effect/reactivity/AtomRegistry";
-import { act, createElement } from "react";
-import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+} from "@luke/features/provider-key-wire";
 import {
   ACT_KIND,
   ACT_OUTCOME_STATUS,
@@ -19,7 +15,11 @@ import {
   type ActKind,
   type ActOutcome,
   type ActResultFor,
-} from "#shared/messages/acts";
+} from "@luke/host/acts";
+import type { AtomRegistry } from "effect/reactivity/AtomRegistry";
+import { act, createElement } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, test } from "vitest";
 import { onRegistry } from "#testing/copy-feedback";
 import { ApiKeysSection } from "./api-keys-section";
 

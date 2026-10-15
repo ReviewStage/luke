@@ -2,11 +2,21 @@ import {
   CONTEXT_WINDOW,
   type CodingAgentPullRequest,
   type ContextWindow,
-} from "@sidecar/features/coding-agent-wire";
-import type { IntegrationProvider } from "@sidecar/features/integration-wire";
-import { foreignKey, index, jsonb, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+} from "@luke/features/coding-agent-wire";
+import type { IntegrationProvider } from "@luke/features/integration-wire";
+import {
+  type AnyPgColumn,
+  foreignKey,
+  index,
+  jsonb,
+  pgTable,
+  text,
+  uniqueIndex,
+  uuid,
+} from "drizzle-orm/pg-core";
 import { createdAt, timestamptz } from "./_helpers.js";
-import { user } from "./auth.js";
+import { organization, user } from "./auth.js";
+import { automation } from "./automation.js";
 import { plan } from "./plan.js";
 import { conversations } from "./storage.js";
 
@@ -21,8 +31,8 @@ import { conversations } from "./storage.js";
  * the smaller standard one, which is also what an agent started before the
  * window could be chosen ran on and keeps; the snapshot
  * is the exact plan text the agent was handed, kept whole because the plan
- * keeps being edited after, or where the developer started it on a task of
- * their own, the snapshot is null and the task is what it was handed, so
+ * keeps being edited after, or where the developer started it on a prompt of
+ * their own, the snapshot is null and the prompt is what it was handed, so
  * exactly one of the two stands; the repository is `owner/name`; the branch
  * is the one checked out in the agent's sandbox as its last turn ended,
  * which is where its pull request is looked up, and null until a turn ends
@@ -45,6 +55,10 @@ import { conversations } from "./storage.js";
  * turns are not handed; null, like an empty list, switches none off, so a
  * server connected later is on for every agent. A provider no longer
  * offered may stand in the list and is ignored where it is read.
+ * `mentioned_servers` is the MCP servers a message to the agent mentioned
+ * since its last turn started (`@Linear`), which its next turn is handed
+ * whatever `disabled_servers` says and then takes back to null, so a mention
+ * turns a server on for the one turn and never touches the switch.
  * There is no commit column: the
  * checkout's own output is in the transcript, and the pull request on
  * GitHub records its base.
@@ -78,9 +92,16 @@ export const codingAgent = pgTable(
   "coding_agent",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    planId: uuid("plan_id")
+    /** The plan the agent works on; null for an agent an automation started with no plan. */
+    planId: uuid("plan_id").references(() => plan.id, { onDelete: "cascade" }),
+    /** The workspace the agent belongs to, its plan's or its automation's. */
+    organizationId: text("organization_id")
       .notNull()
-      .references(() => plan.id, { onDelete: "cascade" }),
+      .references(() => organization.id, { onDelete: "cascade" }),
+    /** The automation whose run started the agent; null for one started by hand or once that automation is deleted. */
+    automationId: uuid("automation_id").references((): AnyPgColumn => automation.id, {
+      onDelete: "set null",
+    }),
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
@@ -95,12 +116,14 @@ export const codingAgent = pgTable(
       .$type<ContextWindow>()
       .notNull()
       .default(CONTEXT_WINDOW.LONG),
-    /** The plan's document exactly as the agent was given it; null for an agent handed a task instead. */
+    /** The plan's document exactly as the agent was given it; null for an agent handed a prompt instead. */
     planSnapshot: text("plan_snapshot"),
     /** The developer's own words the agent was handed in the plan's place; null for an agent handed the plan. */
-    task: text("task"),
-    /** The GitHub repository the agent works in, as `owner/name`. */
+    prompt: text("task"),
+    /** The GitHub repository the agent works in, as `owner/name`: the first of `repositories`. */
     repository: text("repository").notNull(),
+    /** Every repository the agent works in, `owner/name` each, the first where it starts; one until full multi-repo. */
+    repositories: jsonb("repositories").$type<readonly string[]>().notNull().default([]),
     /** The branch checked out in the sandbox as the last turn ended; null before one ends or on a detached HEAD. */
     branch: text("branch"),
     /** The agent's title as its tab shows it; null falls back to the model's name. */
@@ -115,6 +138,8 @@ export const codingAgent = pgTable(
     archivedAt: timestamptz("archived_at"),
     /** The MCP servers switched off for this agent, by integration provider; null switches none off. */
     disabledServers: jsonb("disabled_servers").$type<readonly IntegrationProvider[]>(),
+    /** The MCP servers mentioned since the agent's last turn started, by integration provider; null for none. */
+    mentionedServers: jsonb("mentioned_servers").$type<readonly IntegrationProvider[]>(),
     idempotencyKey: text("idempotency_key").notNull(),
     createdAt: createdAt(),
   },
@@ -123,6 +148,8 @@ export const codingAgent = pgTable(
     uniqueIndex("coding_agent_user_idempotency").on(table.userId, table.idempotencyKey),
     // The tabs read one plan's agents in the order they were started.
     index("coding_agent_plan_created").on(table.planId, table.createdAt),
+    // A workspace's agents with no plan are read newest first.
+    index("coding_agent_org_created").on(table.organizationId, table.createdAt),
   ],
 );
 
@@ -130,7 +157,7 @@ export const codingAgent = pgTable(
  * One delegation of a coding agent's: the model and effort the agent chose
  * for the worker, keyed by the child conversation the worker's session is
  * recorded in, which is a function of the agent's conversation and the call
- * that started the worker (`@sidecar/database/models/ids`). The worker's own steps
+ * that started the worker (`@luke/database/models/ids`). The worker's own steps
  * read the pair here, since eve hands a child's resolvers no lineage and the
  * pair is per call rather than per agent. The call's own id is kept beside
  * it, since the child's id is a digest no reader can turn back into the

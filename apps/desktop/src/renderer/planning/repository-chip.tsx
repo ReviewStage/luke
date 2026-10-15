@@ -1,21 +1,17 @@
-import type { GitHubRepository } from "@sidecar/features";
-import { INTEGRATION_PROVIDER } from "@sidecar/features/integration-wire";
-import {
-  PLAN_CALL_FAILURE,
-  type PlanningRepositoriesAnswer,
-} from "@sidecar/features/planning-view";
-import { GearIcon } from "@sidecar/panel";
+import type { GitHubRepository } from "@luke/features";
+import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import { PLAN_CALL_FAILURE, type PlanningRepositoriesAnswer } from "@luke/features/planning-view";
+import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
+import { GearIcon, ProviderMark } from "@luke/ui";
+import { repositoryFailureNote } from "@luke/ui/planning-model";
 import { RotateCwIcon } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { CHIP_LOOK, Chip, type ChipLook } from "../chip";
 import { OPEN_SETTINGS_LABEL, useOpenSettings } from "../open-settings";
-import { ProviderMark } from "../provider-marks";
 import { RepositoryPicture } from "../repository-picture";
 import { type MenuRow, SearchableMenu } from "../searchable-menu";
-import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "../settings-views";
 import { Spinner } from "../spinner";
 import { useDisclosure } from "../use-disclosure";
-import { repositoryFailureNote } from "./planning-model";
 
 /**
  * repository-chip.tsx -- the chip that names a plan's GitHub repository, and the menu that picks one.
@@ -29,11 +25,15 @@ import { repositoryFailureNote } from "./planning-model";
  * hung from the toolbar. Its menu is the shared searchable one: a search over every
  * repository the GitHub connected to the workspace reaches, the
  * repositories the account's plans were about lately first and the rest as
- * GitHub last saw them change, each under its owner's picture. With no
- * GitHub connected to the workspace, the menu says so in the list's place:
- * an owner or an admin is offered Open Settings at the workspace's GitHub
- * repositories, the one place they are set, and a member is told to ask
- * one. The list is read from the service when the chip mounts and again
+ * GitHub last saw them change, each under its owner's picture. Nothing the
+ * workspace's GitHub does not reach is offered, so a plan never starts on
+ * a repository its workspace cannot work in; a pick the read finds out of
+ * reach is handed back, and with nothing to offer the chip reads No
+ * repository, which a plan can start with. With no
+ * GitHub connected to the workspace, or one GitHub removed or suspended,
+ * the menu says which in the list's place: an owner or an admin is offered
+ * Open Settings at the workspace's GitHub repositories, the one place they
+ * are set, and a member is told to ask one. The list is read from the service when the chip mounts and again
  * whenever the window takes focus, so a developer back from connecting
  * GitHub in the browser sees the change on the next opening; nothing polls. The menu
  * closes on a choice, on Escape, and on focus leaving it; Escape stops
@@ -54,46 +54,94 @@ export interface RepositoryChooser {
   scope?: string | undefined;
   /** Whether the account manages that workspace, so can connect its GitHub; a member is told to ask. */
   manages: boolean;
+  /** The workspace's name, which a list with no GitHub connected says it of. */
+  workspaceName?: string | undefined;
+  /**
+   * Whether the workspace has a GitHub connected, as its row last said: a read
+   * that then finds none installed means GitHub removed or suspended it, which
+   * the list says rather than that none is connected, whether or not the row
+   * has heard yet.
+   */
+  connected?: boolean | undefined;
+  /** Where the repositories come from, as the list's heading says it: "acme-corp on GitHub · Acme"; none where no GitHub is connected. */
+  source?: string | undefined;
 }
 
 /** Where the chip stands, which is how it is sized. */
 export const CHIP_PLACE = {
   COMPOSER: "composer",
   TOOLBAR: "toolbar",
+  /** A form row's value, as a Settings picker's chip is drawn. */
+  FIELD: "field",
 } as const;
 
 export type ChipPlace = (typeof CHIP_PLACE)[keyof typeof CHIP_PLACE];
 
-/** The chip's look in each place: the composer's pill, or the toolbar chip the toolbar's buttons beside it are drawn as. */
+/** The chip's look in each place: the composer's pill, the toolbar chip the toolbar's buttons beside it are drawn as, or a form row's field. */
 const PLACE_LOOK = {
   [CHIP_PLACE.COMPOSER]: CHIP_LOOK.PILL,
   [CHIP_PLACE.TOOLBAR]: CHIP_LOOK.TOOLBAR,
+  [CHIP_PLACE.FIELD]: CHIP_LOOK.FIELD,
 } as const satisfies Record<ChipPlace, ChipLook>;
 
 /** The chip's words while it waits on a pick. */
 const CHOOSE_LABEL = "Choose repository";
 
+/** The chip's words where the workspace's GitHub reaches nothing to pick. */
+const NONE_LABEL = "No repository";
+
 /** What the menu says in the list's place. */
 const MENU_NOTE = {
   NONE_REACHED: "Luke can't see any repository yet.",
   NOT_CONNECTED: "No GitHub is connected to this workspace yet.",
+  NOT_CONNECTED_IN: (workspace: string) => `${workspace} has no GitHub connected yet.`,
   ASK_TO_CONNECT: "Ask an owner or admin to connect GitHub.",
+  ASK_TO_CONNECT_IN: (workspace: string) =>
+    `Ask an owner or admin of ${workspace} to connect GitHub.`,
+  LAPSED: "This workspace's GitHub connection was removed or suspended on GitHub.",
+  LAPSED_IN: (workspace: string) =>
+    `${workspace}'s GitHub connection was removed or suspended on GitHub.`,
+  ASK_TO_RECONNECT: "Ask an owner or admin to reconnect GitHub.",
   NO_MATCH: "No repositories match",
 } as const;
 
 /**
+ * What an empty list says where the workspace's GitHub reaches nothing: that
+ * it was removed or suspended on GitHub, or that none is connected, and for
+ * a member, whom to ask. A member of a lapsed workspace is told both.
+ */
+function unconnectedNotes(chooser: RepositoryChooser): readonly string[] {
+  const name = chooser.workspaceName;
+  if (chooser.connected === true) {
+    const lapsed = name === undefined ? MENU_NOTE.LAPSED : MENU_NOTE.LAPSED_IN(name);
+    return chooser.manages ? [lapsed] : [lapsed, MENU_NOTE.ASK_TO_RECONNECT];
+  }
+  if (chooser.manages) {
+    return [name === undefined ? MENU_NOTE.NOT_CONNECTED : MENU_NOTE.NOT_CONNECTED_IN(name)];
+  }
+  return [name === undefined ? MENU_NOTE.ASK_TO_CONNECT : MENU_NOTE.ASK_TO_CONNECT_IN(name)];
+}
+
+/** Whether the read's repositories hold one, as GitHub spells it or not. */
+function listedIn(reached: readonly GitHubRepository[], repository: string): boolean {
+  const wanted = repository.toLowerCase();
+  return reached.some((each) => each.fullName.toLowerCase() === wanted);
+}
+
+/**
  * The menu's rows: the recent repositories first, then every other the App
  * reaches as the service ordered them, most recently updated first, each
- * once, every one under its owner's picture whether private or not. A recent
- * repository the App no longer reaches is still offered, since the plan it
- * came from still names it.
+ * once, every one under its owner's picture whether private or not. Once
+ * the read has answered, a recent repository it does not list is left out,
+ * because a plan started on it would be refused.
  */
 function repositoryRows(
   recent: readonly string[],
   reached: readonly GitHubRepository[] | undefined,
   pictures: boolean,
 ): MenuRow[] {
-  const names = [...recent];
+  const names =
+    reached === undefined ? [...recent] : recent.filter((each) => listedIn(reached, each));
   for (const each of reached ?? []) {
     if (!names.includes(each.fullName)) names.push(each.fullName);
   }
@@ -115,11 +163,13 @@ export function RepositoryChip(props: {
   value: string | null;
   chooser: RepositoryChooser;
   onChoose: (repository: string) => void;
+  /** Lets go of a pick the read finds the workspace's GitHub does not reach, where the pick is the chip's own to drop. */
+  onUnreached?: (() => void) | undefined;
   /** Counts the asks from elsewhere to open the menu, each opening it. */
   openRequest?: number | undefined;
   place: ChipPlace;
 }): React.JSX.Element {
-  const { chooser, openRequest } = props;
+  const { chooser, openRequest, onUnreached, value } = props;
   const openSettings = useOpenSettings();
   const [open, setOpen] = useState(false);
   const drawn = useDisclosure(open);
@@ -170,13 +220,17 @@ export function RepositoryChip(props: {
 
   const listed = list !== undefined && "repositories" in list ? list.repositories : undefined;
   const failure = list !== undefined && "failure" in list ? list.failure : undefined;
+  // A pick the read does not list is handed back, so nothing out of reach stands chosen.
+  const unreached = value !== null && listed !== undefined && !listedIn(listed.repositories, value);
+  useEffect(() => {
+    if (unreached) onUnreached?.();
+  }, [unreached, onUnreached]);
   // No GitHub connected is mended at the workspace's Integrations.
   const workspaceGitHub: SettingsLink = {
     page: SETTINGS_VIEW.WORKSPACE,
     section: SETTINGS_SECTION.GITHUB_REPOSITORIES,
     ...(chooser.scope === undefined ? undefined : { workspaceId: chooser.scope }),
   };
-  const label = props.value ?? CHOOSE_LABEL;
   const press = () => {
     opener.current = trigger.current;
     setOpen(!open);
@@ -184,7 +238,12 @@ export function RepositoryChip(props: {
   // The toolbar's chip is drawn only while the plan has no repository; the sidebar names one it has.
   const triggerDrawn = props.place !== CHIP_PLACE.TOOLBAR || props.value === null;
 
-  const rows = repositoryRows(chooser.recent, listed?.repositories, chooser.pictures);
+  // Every row stands under where the repositories come from, which the heading says.
+  const rows = repositoryRows(chooser.recent, listed?.repositories, chooser.pictures).map((row) =>
+    chooser.source === undefined ? row : { ...row, section: chooser.source },
+  );
+  const label =
+    props.value ?? (rows.length === 0 && listed !== undefined ? NONE_LABEL : CHOOSE_LABEL);
   const note =
     failure !== undefined ? (
       <>
@@ -198,9 +257,13 @@ export function RepositoryChip(props: {
       </>
     ) : listed !== undefined && !listed.installed ? (
       // Only an owner or an admin can connect the workspace's GitHub, so a member is told to ask.
-      chooser.manages ? (
-        <>
-          <p className="plan-compose-menu-note">{MENU_NOTE.NOT_CONNECTED}</p>
+      <>
+        {unconnectedNotes(chooser).map((words) => (
+          <p key={words} className="plan-compose-menu-note">
+            {words}
+          </p>
+        ))}
+        {chooser.manages ? (
           <button
             type="button"
             className="menu-item"
@@ -209,10 +272,8 @@ export function RepositoryChip(props: {
             <GearIcon />
             <span className="plan-compose-menu-name">{OPEN_SETTINGS_LABEL}</span>
           </button>
-        </>
-      ) : (
-        <p className="plan-compose-menu-note">{MENU_NOTE.ASK_TO_CONNECT}</p>
-      )
+        ) : null}
+      </>
     ) : list === undefined ? (
       <div className="plan-compose-menu-note">
         <Spinner label="Loading repositories" />
@@ -227,6 +288,8 @@ export function RepositoryChip(props: {
         <Chip
           ref={trigger}
           look={PLACE_LOOK[props.place]}
+          chevron={props.place === CHIP_PLACE.FIELD}
+          className={props.place === CHIP_PLACE.FIELD ? "settings-picker-chip" : undefined}
           aria-haspopup="dialog"
           aria-expanded={open}
           aria-controls={open ? menuId : undefined}

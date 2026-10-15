@@ -1,4 +1,4 @@
-import { CODING_AGENT_CALL_FAILURE } from "@sidecar/features/coding-agent-view";
+import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import {
   applyMessagesPage,
   CODING_AGENT_BOUNDS,
@@ -6,8 +6,16 @@ import {
   CODING_AGENT_CURSOR_START,
   type CodingAgentBrief,
   type CodingAgentMessage,
-} from "@sidecar/features/coding-agent-wire";
-import { MESSAGE_ROLE } from "@sidecar/wire";
+} from "@luke/features/coding-agent-wire";
+import {
+  CALL_KIND,
+  CALL_WORDS,
+  type CallKind,
+  callPlace,
+  TURN_ROW,
+  type TurnRow,
+} from "@luke/features/turn-rows";
+import { MESSAGE_ROLE } from "@luke/wire";
 import { TOOL_BLOCK, type ToolBlock } from "../ai-elements/tool";
 import {
   AGENT_PART,
@@ -18,14 +26,6 @@ import {
   workerLines,
 } from "./coding-agent-model";
 import { cardTitle, delegationView, plainWords, toolCallView } from "./tool-call-model";
-import {
-  CALL_KIND,
-  CALL_WORDS,
-  type CallKind,
-  callPlace,
-  TURN_ROW,
-  type TurnRow,
-} from "./turn-rows";
 import type { TranscriptReader } from "./use-agent-transcript";
 
 /**
@@ -81,10 +81,11 @@ const SPEAKER = {
 
 type Speaker = (typeof SPEAKER)[keyof typeof SPEAKER];
 
-/** What the brief's heading calls it: the plan an agent was handed, or a task in its place. */
+/** What the brief's heading calls it: the plan an agent was handed, or a prompt in its place, or the task a worker was handed. */
 const BRIEF_LABEL = {
   PLAN: "Plan",
-  TASK: "Task",
+  PROMPT: "Prompt",
+  SUBAGENT_TASK: "Subagent task",
 } as const;
 
 /** The most characters of one call's answer the full copy carries before it cuts the rest. */
@@ -183,7 +184,7 @@ function agentBlock(part: AgentPart): CopiedBlock[] {
 
 /**
  * A coding agent's transcript, or one of its workers', as a copy reads it:
- * the first of the developer's messages is the brief, the plan or the task
+ * the first of the developer's messages is the brief, the plan or the prompt
  * the agent was handed as its tab draws it, and a worker's is the task its
  * agent's call carried. The rest are turns: the developer's words, and the
  * agent's rows as its tab draws them.
@@ -199,7 +200,11 @@ export function agentTranscript(input: {
   const messages = task === undefined ? input.messages : workerLines(task, input.messages);
   const first = messages.find((message) => message.role === MESSAGE_ROLE.USER);
   const label =
-    task !== undefined || brief === CODING_AGENT_BRIEF.TASK ? BRIEF_LABEL.TASK : BRIEF_LABEL.PLAN;
+    task !== undefined
+      ? BRIEF_LABEL.SUBAGENT_TASK
+      : brief === CODING_AGENT_BRIEF.PROMPT
+        ? BRIEF_LABEL.PROMPT
+        : BRIEF_LABEL.PLAN;
   const turns = messages.flatMap((message): CopiedTurn[] => {
     if (message === first) return [];
     if (message.role === MESSAGE_ROLE.USER) {

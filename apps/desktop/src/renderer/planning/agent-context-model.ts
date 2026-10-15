@@ -2,7 +2,7 @@ import {
   CODING_AGENT_BRIEF,
   type CodingAgentBrief,
   type CodingAgentContext,
-} from "@sidecar/features/coding-agent-wire";
+} from "@luke/features/coding-agent-wire";
 import { compactCount } from "./coding-agent-model";
 import { agoText } from "./plan-time";
 
@@ -52,7 +52,7 @@ const ESTIMATE_MARK = "~";
 /** What the brief's row is called, by what the agent was handed. */
 const BRIEF_LABEL = {
   [CODING_AGENT_BRIEF.PLAN]: "Plan",
-  [CODING_AGENT_BRIEF.TASK]: "Task",
+  [CODING_AGENT_BRIEF.PROMPT]: "Prompt",
 } as const satisfies Record<CodingAgentBrief, string>;
 
 /** One part of the context as the popover's bar and legend draw it. */

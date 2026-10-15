@@ -1,10 +1,12 @@
-import { ChevronDownIcon, WingFace } from "@sidecar/panel";
+import { ChevronDownIcon, WingFace } from "@luke/ui";
+import { lineRangeText } from "@luke/voice/code-pane-model";
 import type { ReactNode } from "react";
 import { MarkdownMessage } from "../markdown-message";
-import { lineRangeText } from "./code-pane-model";
 import type { FileNote } from "./file-tab-model";
+import { useMentionLink } from "./plan-mentions";
 import { useMinute } from "./plan-time";
 import { RelativeTime } from "./relative-time";
+import { useOpenLink } from "./use-open-link";
 
 /**
  * file-note.tsx -- Luke's note on lines of a File tab's file: a card standing over the lines he showed, saying why he showed them, as a review comment stands over the lines it is on.
@@ -52,6 +54,8 @@ function FileNoteCard({
   const lines = lineRangeText(note) ?? "";
   // Note that the age moves on with the minute, because a tab left open draws nothing else anew.
   const now = useMinute();
+  const link = useMentionLink();
+  const openLink = useOpenLink();
   return (
     <aside
       className="file-note"
@@ -81,7 +85,14 @@ function FileNoteCard({
           {SHOW_IN_CODE_LABEL}
         </button>
       </header>
-      {folded ? null : <MarkdownMessage words={note.note} className="file-note-words" />}
+      {folded ? null : (
+        <MarkdownMessage
+          words={note.note}
+          className="file-note-words"
+          link={link}
+          openLink={openLink}
+        />
+      )}
     </aside>
   );
 }

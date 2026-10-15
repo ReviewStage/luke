@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { LIVE_STATUS } from "@sidecar/live";
+import { LIVE_STATUS } from "@luke/live";
 import type { WebContents } from "electron";
 import { describe, it } from "vitest";
 import { CallWindowPresence } from "./call-window-presence";

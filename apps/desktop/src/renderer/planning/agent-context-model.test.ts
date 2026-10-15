@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { CODING_AGENT_BRIEF, type CodingAgentContext } from "@sidecar/features/coding-agent-wire";
+import { CODING_AGENT_BRIEF, type CodingAgentContext } from "@luke/features/coding-agent-wire";
 import { test } from "vitest";
 import {
   contextFullLine,
@@ -75,10 +75,10 @@ test("the popover divides the read into the instructions, the tools, the plan, a
   assert.ok(Math.abs(filled - 62) < 1e-9);
 });
 
-test("an agent handed a task names its brief so; once eve compacted, the brief is folded into the conversation; estimates that outrun the read are scaled down to it", () => {
+test("an agent handed a prompt names its brief so; once eve compacted, the brief is folded into the conversation; estimates that outrun the read are scaled down to it", () => {
   assert.deepEqual(
-    contextRows(CONTEXT, CODING_AGENT_BRIEF.TASK).map((row) => row.label),
-    ["System prompt", "Tool definitions", "Task", "Conversation"],
+    contextRows(CONTEXT, CODING_AGENT_BRIEF.PROMPT).map((row) => row.label),
+    ["System prompt", "Tool definitions", "Prompt", "Conversation"],
   );
   const compacted: CodingAgentContext = {
     ...CONTEXT,

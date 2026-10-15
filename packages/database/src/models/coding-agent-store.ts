@@ -5,14 +5,14 @@ import {
   type ContextWindow,
   codingAgentPullRequestSchema,
   contextWindowSchema,
-} from "@sidecar/features/coding-agent-wire";
+} from "@luke/features/coding-agent-wire";
 import {
   INTEGRATION_PROVIDER_LIST,
   type IntegrationProvider,
   integrationProviderFromWire,
-} from "@sidecar/features/integration-wire";
-import type { ModelChoice } from "@sidecar/features/models-wire";
-import { TURN_STATUS } from "@sidecar/wire";
+} from "@luke/features/integration-wire";
+import type { ModelChoice } from "@luke/features/models-wire";
+import { TURN_STATUS } from "@luke/wire";
 import {
   and,
   asc,
@@ -29,14 +29,15 @@ import {
 import { DateTime, Effect, Option, Schema, SchemaTransformation } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError, queryBuilder } from "../core/query.js";
+import { organization, user } from "../schemas/auth.js";
 import {
   codingAgent,
   codingAgentDelegation,
   type StoredAgentStep,
 } from "../schemas/coding-agent.js";
 import { plan } from "../schemas/plan.js";
-import { conversations, turns } from "../schemas/storage.js";
-import { CONVERSATION_KIND } from "../storage-vocabulary.js";
+import { conversations, messages, turns } from "../schemas/storage.js";
+import { CONVERSATION_KIND, MESSAGE_SENDER } from "../storage-vocabulary.js";
 import { InstantColumnSchema } from "./columns.js";
 import {
   awaitingLinesOf,
@@ -48,16 +49,23 @@ import {
   turnUsagesOf,
 } from "./message-reads.js";
 import { PlanArchived } from "./plan-store.js";
-import { planReachableBy, reachablePlan } from "./workspace-store.js";
+import {
+  AGENT_WORKSPACE,
+  agentReachableBy,
+  planReachableBy,
+  reachablePlan,
+  workspaceReachableBy,
+} from "./workspace-store.js";
 import type { ConversationTarget } from "./writer.js";
 
 /**
  * coding-agent-store.ts -- the coding agents started on a workspace's plans, each one conversation and one row linking it to its plan.
  *
- * An agent belongs to its plan's workspace: every member reads, renames,
+ * An agent belongs to its workspace, its plan's or, for an agent an
+ * automation started with no plan, its own: every member reads, renames,
  * and re-chooses it, whichever of them started it. Every statement names the
  * account beside the plan or the agent and gates on that account's
- * membership of the plan's workspace (`workspace-store.ts`), so an agent of
+ * membership of that workspace (`workspace-store.ts`), so an agent of
  * a workspace the account is not in reads and starts exactly as an id that
  * names nothing. The one read keyed by the account alone is a Start's retry
  * key, which is the starter's own. Starting an agent is one transaction
@@ -113,15 +121,20 @@ export interface CodingAgent {
   readonly id: string;
   /** The account that started the agent, whose conversation it runs in and whose provider key pays for it. */
   readonly userId: string;
-  readonly planId: string;
+  /** The plan the agent works on; null for an agent an automation started with no plan. */
+  readonly planId: string | null;
+  /** The workspace the agent belongs to: its own, or its plan's on a row the backfill has not reached. */
+  readonly organizationId: string;
+  /** The automation whose run started the agent; null for one started by hand or once that automation is deleted. */
+  readonly automationId: string | null;
   readonly conversationId: string;
   readonly model: string;
   readonly effort: string;
   readonly contextWindow: ContextWindow;
-  /** The plan text the agent was handed; null where it was handed a task instead. */
+  /** The plan text the agent was handed; null where it was handed a prompt instead. */
   readonly planSnapshot: string | null;
   /** The developer's words the agent was handed in the plan's place; null where it was handed the plan. */
-  readonly task: string | null;
+  readonly prompt: string | null;
   readonly repository: string;
   /** The branch checked out in the sandbox as the last turn ended; null before one ends or where the checkout stood detached. */
   readonly branch: string | null;
@@ -151,14 +164,30 @@ export {
   turnUsagesOf,
 };
 
-/** What a Start hands the agent as its first message: the plan's text as it stands now, or the developer's task in its place. */
+/** What a Start hands the agent as its first message: the plan's text as it stands now, or the developer's prompt in its place. */
 export type CodingAgentBriefText =
-  | { readonly planSnapshot: string; readonly task: null }
-  | { readonly planSnapshot: null; readonly task: string };
+  | { readonly planSnapshot: string; readonly prompt: null }
+  | { readonly planSnapshot: null; readonly prompt: string };
 
-/** A Start: the plan, the request's own key, what to run on, what the agent is handed, and the repository as it stands now. */
-export type NewCodingAgent = CodingAgentBriefText & {
-  readonly planId: string;
+/**
+ * Where a Start puts the agent: on a plan, whose workspace it joins and
+ * whose text or the developer's prompt it is handed, or in a workspace with
+ * no plan, as an automation's run puts one, handed a prompt, since there is
+ * no plan to hand it.
+ */
+export type CodingAgentPlace =
+  | (CodingAgentBriefText & { readonly planId: string; readonly organizationId?: undefined })
+  | {
+      readonly planId: null;
+      readonly organizationId: string;
+      readonly planSnapshot: null;
+      readonly prompt: string;
+    };
+
+/** A Start: where it goes, the request's own key, what to run on, what the agent is handed, and the repository as it stands now. */
+export type NewCodingAgent = CodingAgentPlace & {
+  /** The automation whose run starts the agent; none for one started by hand. */
+  readonly automationId?: string | undefined;
   readonly idempotencyKey: string;
   readonly model: string;
   readonly effort: string;
@@ -167,6 +196,8 @@ export type NewCodingAgent = CodingAgentBriefText & {
   readonly repository: string;
   /** The MCP servers the draft switched off before it started; none where the Start names none. */
   readonly disabledServers?: readonly IntegrationProvider[] | undefined;
+  /** The MCP servers the prompt mentions, which the first turn is handed whatever the switches say; none where it mentions none. */
+  readonly mentionedServers?: readonly IntegrationProvider[] | undefined;
 };
 
 /** The columns every read and every `returning` projects, so a row decodes one way whatever wrote it. */
@@ -174,12 +205,14 @@ const CODING_AGENT_COLUMNS = {
   id: codingAgent.id,
   userId: codingAgent.userId,
   planId: codingAgent.planId,
+  organizationId: AGENT_WORKSPACE,
+  automationId: codingAgent.automationId,
   conversationId: codingAgent.conversationId,
   model: codingAgent.model,
   effort: codingAgent.effort,
   contextWindow: codingAgent.contextWindow,
   planSnapshot: codingAgent.planSnapshot,
-  task: codingAgent.task,
+  prompt: codingAgent.prompt,
   repository: codingAgent.repository,
   branch: codingAgent.branch,
   title: codingAgent.title,
@@ -214,13 +247,15 @@ function storedServers(
 const CodingAgentRowSchema = Schema.Struct({
   id: Schema.String,
   userId: Schema.String,
-  planId: Schema.String,
+  planId: Schema.NullOr(Schema.String),
+  organizationId: Schema.String,
+  automationId: Schema.NullOr(Schema.String),
   conversationId: Schema.String,
   model: Schema.String,
   effort: Schema.String,
   contextWindow: contextWindowSchema,
   planSnapshot: Schema.NullOr(Schema.String),
-  task: Schema.NullOr(Schema.String),
+  prompt: Schema.NullOr(Schema.String),
   repository: Schema.String,
   branch: Schema.NullOr(Schema.String),
   title: Schema.NullOr(Schema.String),
@@ -231,17 +266,7 @@ const CodingAgentRowSchema = Schema.Struct({
 
 const IdRowSchema = Schema.Struct({ id: Schema.String });
 
-/** The condition that the account is a member of the workspace of the plan the agent row a statement reads was started on. */
-function agentReachableBy(userId: string): SQL {
-  return exists(
-    queryBuilder
-      .select({ id: plan.id })
-      .from(plan)
-      .where(and(eq(plan.id, codingAgent.planId), planReachableBy(userId))),
-  );
-}
-
-/** The agent under this id, where the account is a member of its plan's workspace; any other id reads as no agent. */
+/** The agent under this id, where the account is a member of its workspace; any other id reads as no agent. */
 function reachableAgent(userId: string, agentId: string): SQL | undefined {
   return and(eq(codingAgent.id, agentId), agentReachableBy(userId));
 }
@@ -249,15 +274,48 @@ function reachableAgent(userId: string, agentId: string): SQL | undefined {
 /** The plan row under its own lock, where the account is a member of its workspace, with whether it is archived. */
 const lockReachablePlan = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, planId: Schema.String }),
-  Result: Schema.Struct({ id: Schema.String, archived: Schema.Boolean }),
+  Result: Schema.Struct({
+    id: Schema.String,
+    archived: Schema.Boolean,
+    organizationId: Schema.String,
+  }),
   execute: ({ userId, planId }) =>
     Database.use((db) =>
       db
-        .select({ id: plan.id, archived: sql<boolean>`${plan.archivedAt} is not null` })
+        .select({
+          id: plan.id,
+          archived: sql<boolean>`${plan.archivedAt} is not null`,
+          organizationId: plan.organizationId,
+        })
         .from(plan)
         .where(reachablePlan(userId, planId))
         .for("update"),
     ),
+});
+
+/** The workspace, locked, where the account is a member of it: the lock serialises two Starts in it under one key, as the plan's own lock does for a plan. */
+const lockReachableWorkspace = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, organizationId: Schema.String }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: ({ userId, organizationId }) =>
+    Database.use((db) =>
+      db
+        .select({ id: organization.id })
+        .from(organization)
+        .where(
+          and(eq(organization.id, organizationId), workspaceReachableBy(userId, organization.id)),
+        )
+        .for("update"),
+    ),
+});
+
+/** The workspace a Start puts its agent in, locked: the plan's, where the plan stands archived or not, or the workspace named; nothing where the account reaches neither. */
+const lockedPlace = Effect.fnUntraced(function* (userId: string, place: CodingAgentPlace) {
+  if (place.planId === null) {
+    const reached = yield* lockReachableWorkspace({ userId, organizationId: place.organizationId });
+    return Option.map(reached, (workspace) => ({ organizationId: workspace.id, archived: false }));
+  }
+  return yield* lockReachablePlan({ userId, planId: place.planId });
 });
 
 const findAgentByKey = SqlSchema.findOneOption({
@@ -297,15 +355,18 @@ const insertAgent = SqlSchema.findOne({
   Request: Schema.Struct({
     userId: Schema.String,
     conversationId: Schema.String,
-    planId: Schema.String,
+    planId: Schema.NullOr(Schema.String),
+    organizationId: Schema.String,
+    automationId: Schema.NullOr(Schema.String),
     idempotencyKey: Schema.String,
     model: Schema.String,
     effort: Schema.String,
     contextWindow: contextWindowSchema,
     planSnapshot: Schema.NullOr(Schema.String),
-    task: Schema.NullOr(Schema.String),
+    prompt: Schema.NullOr(Schema.String),
     repository: Schema.String,
     disabledServers: Schema.NullOr(Schema.Array(Schema.Literals(INTEGRATION_PROVIDER_LIST))),
+    mentionedServers: Schema.NullOr(Schema.Array(Schema.Literals(INTEGRATION_PROVIDER_LIST))),
     now: Schema.Date,
   }),
   Result: CodingAgentRowSchema,
@@ -316,14 +377,18 @@ const insertAgent = SqlSchema.findOne({
         .values({
           userId: write.userId,
           planId: write.planId,
+          organizationId: write.organizationId,
+          automationId: write.automationId,
           conversationId: write.conversationId,
           model: write.model,
           effort: write.effort,
           contextWindow: write.contextWindow,
           planSnapshot: write.planSnapshot,
-          task: write.task,
+          prompt: write.prompt,
           repository: write.repository,
+          repositories: [write.repository],
           disabledServers: write.disabledServers,
+          mentionedServers: write.mentionedServers,
           idempotencyKey: write.idempotencyKey,
           createdAt: write.now,
         })
@@ -367,6 +432,46 @@ const updateAgentServers = SqlSchema.findOneOption({
     ),
 });
 
+/** The agent of a conversation under its own lock, as far as a turn taking its mentioned servers reads it. */
+const lockAgentMentionedServers = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, conversationId: Schema.String }),
+  Result: Schema.Struct({ id: Schema.String, mentionedServers: DisabledServersColumnSchema }),
+  execute: ({ userId, conversationId }) =>
+    Database.use((db) =>
+      db
+        .select({ id: codingAgent.id, mentionedServers: codingAgent.mentionedServers })
+        .from(codingAgent)
+        .where(and(eq(codingAgent.conversationId, conversationId), agentReachableBy(userId)))
+        .limit(1)
+        .for("update"),
+    ),
+});
+
+/** The agent under its own lock, as far as a send adding to its mentioned servers reads it. */
+const lockReachableMentionedServers = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String }),
+  Result: Schema.Struct({ id: Schema.String, mentionedServers: DisabledServersColumnSchema }),
+  execute: ({ userId, agentId }) =>
+    Database.use((db) =>
+      db
+        .select({ id: codingAgent.id, mentionedServers: codingAgent.mentionedServers })
+        .from(codingAgent)
+        .where(reachableAgent(userId, agentId))
+        .for("update"),
+    ),
+});
+
+const setAgentMentionedServers = SqlSchema.void({
+  Request: Schema.Struct({
+    agentId: Schema.String,
+    mentionedServers: Schema.NullOr(Schema.Array(Schema.Literals(INTEGRATION_PROVIDER_LIST))),
+  }),
+  execute: ({ agentId, mentionedServers }) =>
+    Database.use((db) =>
+      db.update(codingAgent).set({ mentionedServers }).where(eq(codingAgent.id, agentId)),
+    ),
+});
+
 const updateAgentBranch = SqlSchema.void({
   Request: Schema.Struct({
     userId: Schema.String,
@@ -404,6 +509,45 @@ const updateAgentTitle = SqlSchema.findOneOption({
         .set({ title })
         .where(reachableAgent(userId, agentId))
         .returning(CODING_AGENT_COLUMNS),
+    ),
+});
+
+/**
+ * The agent archived where it stands unarchived and its conversation's
+ * lines have run no further than `seenSeq`, so an agent a message woke
+ * after the caller read it is left standing.
+ */
+const updateUnmovedArchived = SqlSchema.findAll({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    agentId: Schema.String,
+    seenSeq: Schema.Number,
+    archivedAt: Schema.Date,
+  }),
+  Result: IdRowSchema,
+  execute: ({ userId, agentId, seenSeq, archivedAt }) =>
+    Database.use((db) =>
+      db
+        .update(codingAgent)
+        .set({ archivedAt })
+        .where(
+          and(
+            reachableAgent(userId, agentId),
+            isNull(codingAgent.archivedAt),
+            exists(
+              queryBuilder
+                .select({ one: conversations.id })
+                .from(conversations)
+                .where(
+                  and(
+                    eq(conversations.id, codingAgent.conversationId),
+                    eq(conversations.nextMessageSeq, seenSeq),
+                  ),
+                ),
+            ),
+          ),
+        )
+        .returning({ id: codingAgent.id }),
     ),
 });
 
@@ -515,6 +659,35 @@ const findAgentsOfPlan = SqlSchema.findAll({
     ),
 });
 
+const findAgentsOfWorkspace = SqlSchema.findAll({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    organizationId: Schema.String,
+    repository: Schema.NullOr(Schema.String),
+    limit: Schema.Number,
+  }),
+  Result: CodingAgentRowSchema,
+  execute: ({ userId, organizationId, repository, limit }) =>
+    Database.use((db) =>
+      db
+        .select(CODING_AGENT_COLUMNS)
+        .from(codingAgent)
+        .where(
+          and(
+            agentReachableBy(userId),
+            eq(AGENT_WORKSPACE, organizationId),
+            isNull(codingAgent.archivedAt),
+            // Note that a repository is matched as GitHub matches one, its case aside.
+            repository === null
+              ? undefined
+              : eq(sql`lower(${codingAgent.repository})`, repository.toLowerCase()),
+          ),
+        )
+        .orderBy(desc(codingAgent.createdAt), desc(codingAgent.id))
+        .limit(limit),
+    ),
+});
+
 const updateAgentPublished = SqlSchema.void({
   Request: Schema.Struct({
     userId: Schema.String,
@@ -616,11 +789,14 @@ const deleteConversationRow = SqlSchema.void({
 });
 
 /**
- * Starts an agent on a plan of the account's workspace: a `coding_agent` conversation of the account's and
- * the row that binds it to the plan, with the plan text or the task, and
- * the repository, as handed. A Start whose key the account has already used answers the agent
+ * Starts an agent on a plan of the account's workspace, or in a workspace
+ * of the account's with no plan: a `coding_agent` conversation of the
+ * account's and the row that binds it to the plan or the workspace, with
+ * the plan text or the prompt, the repository, and the automation whose run
+ * started it, as handed. A Start whose key the account has already used answers the agent
  * that Start made, whatever else the retry carries, and writes nothing.
- * Nothing where the account reaches no such plan. An archived plan starts no
+ * Nothing where the account reaches no such plan or is no member of the
+ * workspace. An archived plan starts no
  * agent, read under the same lock, though a retry still answers the agent
  * its Start made before the archive.
  */
@@ -635,7 +811,7 @@ export function createCodingAgent(
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
-        const reached = yield* lockReachablePlan({ userId, planId: started.planId });
+        const reached = yield* lockedPlace(userId, started);
         if (Option.isNone(reached)) return Option.none();
         const existing = yield* findAgentByKey({
           userId,
@@ -654,14 +830,17 @@ export function createCodingAgent(
           userId,
           conversationId: conversation.id,
           planId: started.planId,
+          organizationId: reached.value.organizationId,
+          automationId: started.automationId ?? null,
           idempotencyKey: started.idempotencyKey,
           model: started.model,
           effort: started.effort,
           contextWindow: started.contextWindow ?? CONTEXT_WINDOW.LONG,
           planSnapshot: started.planSnapshot,
-          task: started.task,
+          prompt: started.prompt,
           repository: started.repository,
           disabledServers: storedServers(started.disabledServers ?? []),
+          mentionedServers: storedServers(started.mentionedServers ?? []),
           now,
         }).pipe(Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)));
         return Option.some({ agent: row, created: true });
@@ -698,6 +877,25 @@ export function listCodingAgents(
   options: { readonly includeArchived?: boolean } = {},
 ): CodingAgentStoreEffect<readonly CodingAgent[]> {
   return findAgentsOfPlan({ userId, planId, includeArchived: options.includeArchived ?? false });
+}
+
+/**
+ * The workspace's agents, on a plan or with none, by any member, newest
+ * started first, an archived one left out, only those on the repository
+ * named where one is, and at most `limit`; a workspace the account is not
+ * in has none.
+ */
+export function listWorkspaceCodingAgents(
+  userId: string,
+  organizationId: string,
+  options: { readonly repository?: string; readonly limit: number },
+): CodingAgentStoreEffect<readonly CodingAgent[]> {
+  return findAgentsOfWorkspace({
+    userId,
+    organizationId,
+    repository: options.repository ?? null,
+    limit: options.limit,
+  });
 }
 
 /** One agent, and the pull request from its branch as GitHub last answered; null before a read found one. */
@@ -790,6 +988,64 @@ export function updateCodingAgentServers(
   return updateAgentServers({ userId, agentId, disabledServers: storedServers(disabledServers) });
 }
 
+/**
+ * The hand-over of a message mentioning MCP servers to eve, run with those
+ * servers standing among the ones the agent's next turn takes whatever its
+ * switches say, and left standing only where the hand-over answers that eve
+ * took the message. The row is locked, the servers added, the hand-over
+ * run, and the servers as they stood put back for one that answered
+ * nothing, so a refused send leaves no server for a later turn. Note that
+ * the caller runs this as the dispatch under the conversation's lock
+ * (`writeAwaitingLine`), after its repeat check, so a send's servers are
+ * added only for a send eve hears, and no other send's hand-over stands
+ * between this one's servers and its message. Nothing is added for no
+ * server, or for an agent of a workspace the account is not in.
+ */
+export function dispatchMentioningServers<E, R>(
+  userId: string,
+  agentId: string,
+  mentioned: readonly IntegrationProvider[],
+  dispatch: Effect.Effect<boolean, E, R>,
+): Effect.Effect<boolean, E | CodingAgentStoreFailure, R | DatabaseServices> {
+  if (mentioned.length === 0) return dispatch;
+  return Effect.gen(function* () {
+    const locked = yield* lockReachableMentionedServers({ userId, agentId });
+    if (Option.isNone(locked)) return yield* dispatch;
+    const before = locked.value.mentionedServers;
+    yield* setAgentMentionedServers({
+      agentId,
+      mentionedServers: storedServers([...before, ...mentioned]),
+    });
+    const taken = yield* dispatch;
+    if (!taken)
+      yield* setAgentMentionedServers({ agentId, mentionedServers: storedServers(before) });
+    return taken;
+  });
+}
+
+/**
+ * The MCP servers mentioned since the agent of the conversation last started
+ * a turn, taken by the turn starting now: read and cleared under the row's
+ * lock, so a mention landing meanwhile is either taken here or left for the
+ * next turn, never lost. None for a conversation of no agent the account
+ * reaches.
+ */
+export function takeCodingAgentMentionedServers(
+  userId: string,
+  conversationId: string,
+): CodingAgentStoreEffect<readonly IntegrationProvider[]> {
+  return Effect.flatMap(SqlClient.SqlClient, (client) =>
+    client.withTransaction(
+      Effect.gen(function* () {
+        const locked = yield* lockAgentMentionedServers({ userId, conversationId });
+        if (Option.isNone(locked) || locked.value.mentionedServers.length === 0) return [];
+        yield* setAgentMentionedServers({ agentId: locked.value.id, mentionedServers: null });
+        return locked.value.mentionedServers;
+      }),
+    ),
+  );
+}
+
 /** The branch checked out in the agent's sandbox as its turn ended, null for a detached HEAD; nothing written for an agent of a workspace the account is not in. */
 export function updateCodingAgentBranch(
   userId: string,
@@ -824,6 +1080,49 @@ export function archiveCodingAgent(
 ): CodingAgentStoreEffect<Option.Option<CodingAgent>> {
   return Effect.flatMap(DateTime.nowAsDate, (now) =>
     updateAgentArchived({ userId, agentId, archivedAt: archived ? now : null }),
+  );
+}
+
+const findAgentConversation = SqlSchema.findOneOption({
+  Request: Schema.String,
+  Result: Schema.Struct({ userId: Schema.String, conversationId: Schema.String }),
+  execute: (agentId) =>
+    Database.use((db) =>
+      db
+        .select({ userId: codingAgent.userId, conversationId: codingAgent.conversationId })
+        .from(codingAgent)
+        .where(eq(codingAgent.id, agentId)),
+    ),
+});
+
+/**
+ * The agent's conversation under the member who started it, whoever asks;
+ * nothing where no such agent stands. Only for an id the service recorded
+ * itself, such as the agent a run was claimed for, because it reads past
+ * any account's gate.
+ */
+export function codingAgentConversation(
+  agentId: string,
+): CodingAgentStoreEffect<Option.Option<ConversationTarget>> {
+  return findAgentConversation(agentId);
+}
+
+/**
+ * Archives the agent as `archiveCodingAgent` does, but only where it stands
+ * unarchived and its conversation's lines have run no further than the
+ * `seenSeq` its reader saw, so an agent a message woke since stands;
+ * answers whether it was archived.
+ */
+export function archiveUnmovedCodingAgent(
+  userId: string,
+  agentId: string,
+  seenSeq: number,
+): CodingAgentStoreEffect<boolean> {
+  return Effect.flatMap(DateTime.nowAsDate, (archivedAt) =>
+    Effect.map(
+      updateUnmovedArchived({ userId, agentId, seenSeq, archivedAt }),
+      (rows) => rows.length > 0,
+    ),
   );
 }
 
@@ -997,6 +1296,101 @@ export function delegationStartsOf(
       childConversationIds,
     }),
     (rows) => new Map(rows.map((row) => [row.childConversationId, row.createdAt])),
+  );
+}
+
+/**
+ * What sent one of the developer's lines to an agent, as a reader names it:
+ * a member by their account's id and the name it holds now, or nobody where
+ * their account is gone; Luke; or an automation by the name its run kept.
+ */
+export type LineSent =
+  | {
+      readonly kind: typeof MESSAGE_SENDER.MEMBER;
+      readonly member: { readonly userId: string; readonly name: string } | undefined;
+    }
+  | { readonly kind: typeof MESSAGE_SENDER.LUKE }
+  | { readonly kind: typeof MESSAGE_SENDER.AUTOMATION; readonly name: string };
+
+/** A line's sender as its row keeps it, with the member's account where it still stands. */
+const LineSenderRowSchema = Schema.Struct({
+  id: Schema.String,
+  sender: Schema.Literals(Object.values(MESSAGE_SENDER)),
+  memberId: Schema.NullOr(Schema.String),
+  memberName: Schema.NullOr(Schema.String),
+  senderName: Schema.NullOr(Schema.String),
+});
+
+const findLineSenders = SqlSchema.findAll({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    conversationId: Schema.String,
+    messageIds: Schema.Array(Schema.String),
+  }),
+  Result: LineSenderRowSchema,
+  execute: ({ userId, conversationId, messageIds }) =>
+    Database.use((db) =>
+      db
+        .select({
+          id: messages.id,
+          sender: messages.sender,
+          memberId: user.id,
+          memberName: user.name,
+          senderName: messages.senderName,
+        })
+        .from(messages)
+        .leftJoin(user, eq(user.id, messages.senderUserId))
+        .where(
+          and(
+            inArray(messages.id, [...messageIds]),
+            eq(messages.userId, userId),
+            eq(messages.conversationId, conversationId),
+            isNotNull(messages.sender),
+          ),
+        ),
+    ),
+});
+
+/** A sender's row as a reader names it; an automation's that kept no name names nothing. */
+function lineSentOf(row: typeof LineSenderRowSchema.Type): LineSent | undefined {
+  switch (row.sender) {
+    case MESSAGE_SENDER.MEMBER:
+      return {
+        kind: MESSAGE_SENDER.MEMBER,
+        member:
+          row.memberId === null || row.memberName === null
+            ? undefined
+            : { userId: row.memberId, name: row.memberName },
+      };
+    case MESSAGE_SENDER.LUKE:
+      return { kind: MESSAGE_SENDER.LUKE };
+    case MESSAGE_SENDER.AUTOMATION:
+      return row.senderName === null
+        ? undefined
+        : { kind: MESSAGE_SENDER.AUTOMATION, name: row.senderName };
+  }
+}
+
+/**
+ * What sent each of these rows of the account's conversation, by row, for
+ * the lines whose sender was kept: every row but a developer's line to an
+ * agent, and a line written before senders were, names none. None asked,
+ * none read.
+ */
+export function lineSendersOf(
+  target: ConversationTarget,
+  messageIds: readonly string[],
+): CodingAgentStoreEffect<ReadonlyMap<string, LineSent>> {
+  if (messageIds.length === 0) return Effect.succeed(new Map());
+  return Effect.map(
+    findLineSenders({ userId: target.userId, conversationId: target.conversationId, messageIds }),
+    (rows) =>
+      new Map(
+        rows.flatMap((row) => {
+          const sent = lineSentOf(row);
+          return sent === undefined ? [] : [[row.id, sent] as const];
+        }),
+      ),
   );
 }
 

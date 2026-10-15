@@ -38,6 +38,16 @@
   -webkit-app-region: no-drag;
 }
 
+/* A hint held inside the window however long its words: a web address
+   (`text-link.tsx`) may be wider than the window, and breaks where it must
+   rather than running past the edge. Note that a hint narrower than the
+   window never wraps, because its place keeps its whole width inside it. */
+.tooltip:not(.tooltip-card) {
+  max-width: calc(100vw - 12px); /* off-scale: twice tooltip.tsx's TOOLTIP_MARGIN */
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
 .tooltip[data-instant="true"] {
   animation-delay: 0s;
 }

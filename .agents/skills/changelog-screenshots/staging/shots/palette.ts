@@ -14,8 +14,8 @@ import {
   PLAN_WORK_STATE,
   PLAN_WORK_TOOL,
   type PlanningTreeAnswer,
-} from "@sidecar/features/planning-view";
-import { ACT_KIND } from "#shared/messages/acts";
+} from "@luke/features/planning-view";
+import { ACT_KIND } from "@luke/host/acts";
 import { FIXTURE_CLOSED_PANEL } from "../planning/planning-fixture";
 import { ago } from "./clock";
 import { codingAgentAnswers } from "./coding-agent";

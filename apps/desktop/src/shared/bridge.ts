@@ -5,30 +5,30 @@ import {
   type ProductExchangeKind,
   type ProductSurfaceEventName,
   productEventFromWire,
-} from "@sidecar/features/analytics";
-import { type AvatarGrant, avatarGrantFromWire } from "@sidecar/features/avatar-grant";
-import { type VoiceLiveSessionChanged, voiceLiveSessionChangedSchema } from "@sidecar/gateway";
-import { type AgentWireTrace, isAgentWireTrace } from "@sidecar/gateway/devtrace";
-import { liveExchangeActive } from "@sidecar/live";
+} from "@luke/features/analytics";
+import { type AvatarGrant, avatarGrantFromWire } from "@luke/features/avatar-grant";
+import { type VoiceLiveSessionChanged, voiceLiveSessionChangedSchema } from "@luke/gateway";
+import { type AgentWireTrace, isAgentWireTrace } from "@luke/gateway/devtrace";
+import { type Act, type ActOutcome, isActOutcome, parsedAct } from "@luke/host/acts";
+import { type AppStateSnapshot, isAppStateSnapshot } from "@luke/host/app-state";
+import { liveExchangeActive } from "@luke/live";
+import { type AvatarFeed, avatarFeedFromWire } from "@luke/voice/avatar";
+import {
+  isVoiceCommand,
+  isVoiceView,
+  type VoiceCommand,
+  type VoiceView,
+} from "@luke/voice/voice-view";
 import {
   EXCESS_KEYS,
   isRecord,
   isWireBoolean,
   isWireString,
   type UnparsedWireValue,
-} from "@sidecar/wire";
-import { readEither } from "@sidecar/wire/effect";
+} from "@luke/wire";
+import { readEither } from "@luke/wire/effect";
+import { wireResult as result, type WireGuard } from "@luke/wire/wire-guard";
 import { Result } from "effect";
-import { type Act, type ActOutcome, isActOutcome, parsedAct } from "./messages/acts";
-import { type AppStateSnapshot, isAppStateSnapshot } from "./messages/app-state";
-import { type AvatarFeed, avatarFeedFromWire } from "./messages/avatar";
-import {
-  isVoiceCommand,
-  isVoiceView,
-  type VoiceCommand,
-  type VoiceView,
-} from "./messages/voice-view";
-import { wireResult as result, type WireGuard } from "./messages/wire-guard";
 import { type AppCommand, isAppCommand } from "./shortcuts";
 
 type BridgeArguments = readonly unknown[];
@@ -245,15 +245,19 @@ export const BRIDGE = {
   }),
   /**
    * A coding agent's notification clicked: the panel is to open the plan on
-   * that agent's tab. An event rather than a slice of the document, because a
-   * click is an ask the window answers once, not a state it bootstraps from.
+   * that agent's tab, or the agent's own page for an agent with no plan. An
+   * event rather than a slice of the document, because a click is an ask the
+   * window answers once, not a state it bootstraps from.
    */
   onShowAgent: entry({
     kind: "subscribe",
     channel: "app:show-agent",
     args: noArgs,
-    result: result<{ planId: string; agentId: string }>(
-      (value) => isRecord(value) && isWireString(value.planId) && isWireString(value.agentId),
+    result: result<{ planId: string | null; agentId: string }>(
+      (value) =>
+        isRecord(value) &&
+        (value.planId === null || isWireString(value.planId)) &&
+        isWireString(value.agentId),
     ),
   }),
   /**
@@ -266,6 +270,23 @@ export const BRIDGE = {
     channel: "app:show-inbox",
     args: noArgs,
     result: result<{ planId: string }>((value) => isRecord(value) && isWireString(value.planId)),
+  }),
+  /**
+   * A notification of an item of an agent with no plan clicked: the panel is
+   * to open the window's Inbox with that item chosen, where it is answered.
+   * An event, as an inbox notification's click is.
+   */
+  onShowInboxItem: entry({
+    kind: "subscribe",
+    channel: "app:show-inbox-item",
+    args: noArgs,
+    result: result<{ agentId: string; itemId: string; workspaceId?: string }>(
+      (value) =>
+        isRecord(value) &&
+        isWireString(value.agentId) &&
+        isWireString(value.itemId) &&
+        (value.workspaceId === undefined || isWireString(value.workspaceId)),
+    ),
   }),
   /**
    * The floating call window moved under a pointer that did not: a drag of
@@ -313,6 +334,22 @@ export const BRIDGE = {
     channel: "app:show-plan",
     args: noArgs,
     result: result<{ planId: string }>((value) => isRecord(value) && isWireString(value.planId)),
+  }),
+  /**
+   * A Luke link the system handed the app: the panel is to open its plan,
+   * scrolled to its section where it names one. An event, as a click is,
+   * because it is an ask the window answers once.
+   */
+  onShowLink: entry({
+    kind: "subscribe",
+    channel: "app:show-link",
+    args: noArgs,
+    result: result<{ planId: string; anchor?: string }>(
+      (value) =>
+        isRecord(value) &&
+        isWireString(value.planId) &&
+        (value.anchor === undefined || isWireString(value.anchor)),
+    ),
   }),
   /**
    * A coding agent's turn ended while the window was focused: the panel says

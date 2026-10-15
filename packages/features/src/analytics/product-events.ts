@@ -5,20 +5,20 @@ import {
   RATING_WORD,
   type RatingWord,
   type UnparsedWireValue,
-} from "@sidecar/wire";
+} from "@luke/wire";
 import {
   APP_PANEL_TAB,
   APP_SETTING_ID,
   type AppPanelTab,
   type AppSettingId,
-} from "@sidecar/wire/app-settings";
-import { PROVIDER_ID, PROVIDER_ID_LIST, type ProviderId } from "@sidecar/wire/provider-identity";
+} from "@luke/wire/app-settings";
+import { PROVIDER_ID, PROVIDER_ID_LIST, type ProviderId } from "@luke/wire/provider-identity";
 import { Schema } from "effect";
 import { parseReleaseVersion } from "./release-version.js";
 
 /**
  * What the desktop may count about its own use, and the one reader both sides
- * run over it. The rest of `@sidecar/features` holds the contracts for what Luke's service
+ * run over it. The rest of `@luke/features` holds the contracts for what Luke's service
  * *answers*; this holds the contract for what the desktop *asks* it to record.
  *
  * The vocabulary is the privacy boundary, not a convention on top of one. An
@@ -56,6 +56,7 @@ export const PRODUCT_EVENT = {
   VOICE_ANNOUNCEMENT_SPEAK: "voice:announcement_speak",
   VOICE_FIRST_ANNOUNCEMENT: "voice:first_announcement",
   SETTING_UPDATE: "setting:update",
+  EXPERIMENT_TOGGLE: "experiment:toggle",
   CONVERSATION_RATED: "conversation:rated",
 } as const;
 
@@ -113,6 +114,7 @@ export const PRODUCT_EVENT_PROPERTY = {
   SIGN_IN_AGE: "sign_in_age",
   SETTING_ID: "setting_id",
   SETTING_VALUE: "setting_value",
+  EXPERIMENT: "experiment",
   RATING: "rating",
   MESSAGE_KIND: "message_kind",
 } as const;
@@ -226,6 +228,7 @@ export const PRODUCT_SETTINGS_VIEW = {
   ACCOUNT: "account",
   NOTIFICATIONS: "notifications",
   THIS_MAC: "this_mac",
+  EXPERIMENTAL: "experimental",
   ABOUT: "about",
 } as const;
 
@@ -291,6 +294,20 @@ export type ProductSettingValue =
   (typeof PRODUCT_SETTING_VALUE)[keyof typeof PRODUCT_SETTING_VALUE];
 
 export const ProductSettingValueSchema = Schema.Literals(Object.values(PRODUCT_SETTING_VALUE));
+
+/**
+ * Which experiment a developer switched on or off in Settings ›
+ * Experimental, by its key. It repeats the settings package's own set rather
+ * than importing it, because that package reads this file and the edge would
+ * close a loop; the settings package closes the gap with a total `Record`
+ * bridge, so a new experiment does not build until this set answers for it.
+ */
+export const PRODUCT_EXPERIMENT = {
+  FACTORY: "factory",
+  AUTOMATIONS: "automations",
+} as const;
+
+export type ProductExperiment = (typeof PRODUCT_EXPERIMENT)[keyof typeof PRODUCT_EXPERIMENT];
 
 /**
  * Which kind of Luke's messages a rating landed on, never the message: a
@@ -407,6 +424,7 @@ interface ProductEventPropertyValue {
   [PRODUCT_EVENT_PROPERTY.SIGN_IN_AGE]: ProductSignInAge;
   [PRODUCT_EVENT_PROPERTY.SETTING_ID]: AppSettingId;
   [PRODUCT_EVENT_PROPERTY.SETTING_VALUE]: ProductSettingValue;
+  [PRODUCT_EVENT_PROPERTY.EXPERIMENT]: ProductExperiment;
   [PRODUCT_EVENT_PROPERTY.RATING]: RatingWord;
   [PRODUCT_EVENT_PROPERTY.MESSAGE_KIND]: ProductRatedMessageKind;
 }
@@ -441,6 +459,7 @@ const PRODUCT_EVENT_PROPERTY_VALUES = {
   [PRODUCT_EVENT_PROPERTY.SIGN_IN_AGE]: Object.values(PRODUCT_SIGN_IN_AGE),
   [PRODUCT_EVENT_PROPERTY.SETTING_ID]: Object.values(APP_SETTING_ID),
   [PRODUCT_EVENT_PROPERTY.SETTING_VALUE]: Object.values(PRODUCT_SETTING_VALUE),
+  [PRODUCT_EVENT_PROPERTY.EXPERIMENT]: Object.values(PRODUCT_EXPERIMENT),
   [PRODUCT_EVENT_PROPERTY.RATING]: Object.values(RATING_WORD),
   [PRODUCT_EVENT_PROPERTY.MESSAGE_KIND]: Object.values(PRODUCT_RATED_MESSAGE_KIND),
 } as const satisfies Record<EnumeratedProductEventProperty, readonly string[]>;
@@ -483,6 +502,10 @@ const PRODUCT_EVENT_PROPERTIES = {
   [PRODUCT_EVENT.VOICE_FIRST_ANNOUNCEMENT]: [PRODUCT_EVENT_PROPERTY.SIGN_IN_AGE],
   [PRODUCT_EVENT.SETTING_UPDATE]: [
     PRODUCT_EVENT_PROPERTY.SETTING_ID,
+    PRODUCT_EVENT_PROPERTY.SETTING_VALUE,
+  ],
+  [PRODUCT_EVENT.EXPERIMENT_TOGGLE]: [
+    PRODUCT_EVENT_PROPERTY.EXPERIMENT,
     PRODUCT_EVENT_PROPERTY.SETTING_VALUE,
   ],
   [PRODUCT_EVENT.CONVERSATION_RATED]: [

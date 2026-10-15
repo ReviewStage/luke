@@ -92,6 +92,36 @@ export const INTEGRATION_GRANT_OF = {
   [INTEGRATION_PROVIDER.YCOMBINATOR]: INTEGRATION_GRANT.CONNECT,
 } as const satisfies Record<IntegrationProvider, IntegrationGrant>;
 
+/**
+ * The web hosts each provider's own pages stand on, which a link is known to
+ * be the provider's by: the host itself or any host under it
+ * (`acme.slack.com`, `us.posthog.com`). A provider whose pages have no host
+ * of their own has none.
+ */
+const INTEGRATION_HOSTS = {
+  [INTEGRATION_PROVIDER.EXECUTOR]: [],
+  [INTEGRATION_PROVIDER.GITHUB]: ["github.com"],
+  [INTEGRATION_PROVIDER.GRANOLA]: ["granola.ai"],
+  [INTEGRATION_PROVIDER.LINEAR]: ["linear.app"],
+  [INTEGRATION_PROVIDER.MERCURY]: ["mercury.com"],
+  [INTEGRATION_PROVIDER.NEON]: ["neon.tech"],
+  [INTEGRATION_PROVIDER.NOTION]: ["notion.so", "notion.site"],
+  [INTEGRATION_PROVIDER.POSTHOG]: ["posthog.com"],
+  [INTEGRATION_PROVIDER.SENTRY]: ["sentry.io"],
+  [INTEGRATION_PROVIDER.SLACK]: ["slack.com"],
+  [INTEGRATION_PROVIDER.SUPABASE]: ["supabase.com"],
+  [INTEGRATION_PROVIDER.VERCEL]: ["vercel.com"],
+  [INTEGRATION_PROVIDER.YCOMBINATOR]: ["ycombinator.com"],
+} as const satisfies Record<IntegrationProvider, readonly string[]>;
+
+/** The provider whose pages the host stands among; nothing for a host no provider's. */
+export function integrationOfHost(host: string): IntegrationProvider | undefined {
+  const asked = host.toLowerCase();
+  return INTEGRATION_PROVIDER_LIST.find((provider) =>
+    INTEGRATION_HOSTS[provider].some((own) => asked === own || asked.endsWith(`.${own}`)),
+  );
+}
+
 const PROVIDERS: ReadonlySet<string> = new Set(INTEGRATION_PROVIDER_LIST);
 
 /** A provider as an address or a query spells it; anything else is no provider. */
@@ -183,18 +213,40 @@ export const integrationToolAnnotationsSchema = EffectSchema.Struct({
 export type IntegrationToolAnnotations = typeof integrationToolAnnotationsSchema.Type;
 
 /**
+ * One argument a tool takes, as its server's input schema declares it, for a
+ * person to read: its name, its type in a few words (`string`, `string[]`,
+ * `string | null`, `enum`, `object`), whether a call must give it, and, where
+ * the schema says, what it is, the values it may take, and its default, each
+ * value written as the JSON it is unless it is a string.
+ */
+export const integrationToolParameterSchema = EffectSchema.Struct({
+  name: EffectSchema.String,
+  type: EffectSchema.String,
+  required: EffectSchema.Boolean,
+  description: EffectSchema.optionalKey(EffectSchema.String),
+  values: EffectSchema.optionalKey(EffectSchema.Array(EffectSchema.String)),
+  default: EffectSchema.optionalKey(EffectSchema.String),
+});
+
+export type IntegrationToolParameter = typeof integrationToolParameterSchema.Type;
+
+/**
  * The tools one provider's server offers the account's agents (GET): each
- * one's name, what it does as its server wrote it, and the hints its server
- * annotated it with where it sent any, or why the server listed none, with
- * the server's own one-line message where it sent one.
+ * one's name, the title a person reads where its server gave one, what it
+ * does as its server wrote it, the hints its server annotated it with where
+ * it sent any, and the arguments it takes where its server's input schema
+ * was readable; or why the server listed none, with the server's own
+ * one-line message where it sent one.
  */
 export const integrationToolsAnswerSchema = EffectSchema.Union([
   EffectSchema.Struct({
     tools: EffectSchema.Array(
       EffectSchema.Struct({
         name: EffectSchema.String,
+        title: EffectSchema.optionalKey(EffectSchema.String),
         description: EffectSchema.String,
         annotations: EffectSchema.optionalKey(integrationToolAnnotationsSchema),
+        parameters: EffectSchema.optionalKey(EffectSchema.Array(integrationToolParameterSchema)),
       }),
     ),
   }),

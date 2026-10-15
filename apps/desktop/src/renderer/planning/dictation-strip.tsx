@@ -1,4 +1,4 @@
-import { CloseIcon, MicrophoneIcon } from "@sidecar/panel";
+import { CloseIcon, MicrophoneIcon } from "@luke/ui";
 import { CheckIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Spinner } from "../spinner";

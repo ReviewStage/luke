@@ -1,5 +1,5 @@
-import { SETTING_SIDE_EFFECT, type SettingSideEffectId } from "@sidecar/settings";
-import type { AppSettings } from "@sidecar/settings/wire";
+import { SETTING_SIDE_EFFECT, type SettingSideEffectId } from "@luke/settings";
+import type { AppSettings } from "@luke/settings/wire";
 import type { MediaDuckController } from "../native/media-duck";
 import { HOTKEY_RANK, type HotkeyRegistrar } from "../window/hotkey-registrar";
 

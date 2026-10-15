@@ -1,23 +1,29 @@
-import type { CodingAgentInboxParams } from "@sidecar/features/coding-agent-view";
-import type { PlanSummary } from "@sidecar/features/plan-wire";
-import { FolderIcon, SearchIcon, WingFace } from "@sidecar/panel";
+import type { CodingAgentInboxParams } from "@luke/features/coding-agent-view";
+import type { PlanSummary } from "@luke/features/plan-wire";
+import { ACT_KIND } from "@luke/host/acts";
+import { FolderIcon, SearchIcon, WingFace } from "@luke/ui";
+import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ACT_KIND } from "#shared/messages/acts";
 import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
 import { useAct } from "../act";
 import { runAppCommand } from "../app-commands";
+import { MemberDirectory } from "../member-directory";
 import { InboxItemRow } from "../planning/inbox-list";
 import {
+  holderName,
   INBOX_GROUPING,
+  INBOX_HOLDER,
   type InboxListed,
   inboxList,
   listedItems,
   NEEDS_YOU,
+  planHolder,
+  planlessGroups,
 } from "../planning/inbox-model";
 import { useMinute } from "../planning/plan-time";
 import { RelativeTime } from "../planning/relative-time";
-import { TAB_WORDS } from "../planning/tab-strip-model";
 import { useInboxItems } from "../planning/use-inbox-items";
+import { usePlanlessInboxItems } from "../planning/use-planless-inbox-items";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { RepositoryPicture } from "../repository-picture";
 import { RetryButton } from "../retry-button";
@@ -30,8 +36,8 @@ import { PlanStatusMark } from "./plan-card";
  * desktop-home.tsx -- the home page: the column the window rests on with no plan open, saying what needs the developer and the plans saved latest, and offering New plan.
  *
  * It is one column at a reading measure, as a chat app's empty page is: a
- * greeting with New plan beside it, then Inbox, every Inbox item
- * waiting on the developer's answer as the Inbox's own row draws it, the
+ * greeting with New plan beside it, then Inbox, every open Inbox item of the
+ * workspace listed, a teammate's agent's among them, as the Inbox's own row draws it, the
  * plan it is about after its title, a press opening the Inbox on it; then
  * Recent, the plans of the workspace listed saved latest, each as the
  * sidebar draws a plan, with its repository after its name, a press opening
@@ -65,9 +71,12 @@ function recentPlans(plans: readonly PlanSummary[]): PlanSummary[] {
 }
 
 /**
- * Every Inbox item waiting on the developer, the latest changed first, read
- * as the window's Inbox reads them: each plan main says holds a waiting item
- * and the account's list holds, read whole.
+ * Every open Inbox item of the listed workspace's plans, and of its agents
+ * with no plan, the latest changed first, read as the window's Inbox reads
+ * them: each plan main says holds an item and the listed workspace's list
+ * holds, read whole, a teammate's agent's items among them, as every
+ * member's Inbox lists them, and each agent with no plan main says
+ * something waits on.
  */
 function useWaitingItems(plans: PlansControl) {
   const { act } = useAct();
@@ -75,26 +84,35 @@ function useWaitingItems(plans: PlansControl) {
     (params: CodingAgentInboxParams) => act(ACT_KIND.CODING_AGENTS_INBOX, params),
     [act],
   );
-  const { inbox, inboxPlans, plans: listed } = plans;
+  const { inboxPlans, plans: listed } = plans.listed;
+  // Note that every plan holding an item is read, not only those main counts as waiting on the
+  // account, because those are its own agents' alone, and the Inbox lists every member's.
   const holdings = useMemo(
-    () =>
-      inboxPlans.filter(
-        (holding) =>
-          inbox.some((waiting) => waiting.planId === holding.planId) &&
-          listed.some((plan) => plan.id === holding.planId),
-      ),
-    [inbox, inboxPlans, listed],
+    () => inboxPlans.filter((holding) => listed.some((plan) => plan.id === holding.planId)),
+    [inboxPlans, listed],
   );
   const read = useInboxItems({ holdings, readInbox });
-  const entries = holdings.flatMap((holding) => {
-    const plan = listed.find((each) => each.id === holding.planId);
-    return plan === undefined ? [] : [{ plan, items: read.items.get(holding.planId) ?? [] }];
-  });
+  const planless = usePlanlessInboxItems(plans.inboxPlanless);
+  const entries = [
+    ...holdings.flatMap((holding) => {
+      const plan = listed.find((each) => each.id === holding.planId);
+      return plan === undefined
+        ? []
+        : [{ holder: planHolder(plan), items: read.items.get(holding.planId) ?? [] }];
+    }),
+    ...planlessGroups(plans.inboxPlanless, planless.items, plans.workspace?.id),
+  ];
   const items = listedItems(
     inboxList(entries, { grouping: INBOX_GROUPING.NEWEST, waitingOnly: true, chosen: undefined }),
   );
-  const reading = holdings.some((holding) => !read.items.has(holding.planId));
-  return { items, reading, failed: read.failed, onRetry: read.onRetry };
+  const reading =
+    holdings.some((holding) => !read.items.has(holding.planId)) ||
+    plans.inboxPlanless.some((each) => !planless.items.has(each.agentId));
+  const onRetry = () => {
+    read.onRetry();
+    planless.onRetry();
+  };
+  return { items, reading, failed: read.failed || planless.failed, onRetry };
 }
 
 /**
@@ -124,7 +142,8 @@ function useRowKeys(page: HTMLElement | null, shown: boolean): void {
   }, [page, shown]);
 }
 
-function NewPlanButton({ plans }: { plans: PlansControl }): React.JSX.Element {
+/** New plan, with its chord: the home page's, and the empty Factory's (`desktop-factory.tsx`). */
+export function NewPlanButton({ plans }: { plans: PlansControl }): React.JSX.Element {
   return (
     <button
       type="button"
@@ -133,7 +152,7 @@ function NewPlanButton({ plans }: { plans: PlansControl }): React.JSX.Element {
       disabled={!plans.signedIn}
       onClick={plans.onNewPlan}
     >
-      New plan
+      New task
       <Shortcut chord={APP_SHORTCUTS[APP_COMMAND.NEW_PLAN].chord} />
     </button>
   );
@@ -186,9 +205,13 @@ function RecentRow({
 function HomeInbox({ plans, now }: { plans: PlansControl; now: number }): React.JSX.Element {
   const waiting = useWaitingItems(plans);
   const { inboxView } = plans;
-  const open = ({ plan, item }: InboxListed) => {
+  const open = ({ holder, item }: InboxListed) => {
     inboxView.onOpen();
-    inboxView.onChoose({ planId: plan.id, itemId: item.id });
+    inboxView.onChoose(
+      holder.kind === INBOX_HOLDER.PLAN
+        ? { planId: holder.plan.id, itemId: item.id }
+        : { agentId: item.agentId, itemId: item.id },
+    );
   };
   const empty = waiting.items.length === 0;
   return (
@@ -198,19 +221,23 @@ function HomeInbox({ plans, now }: { plans: PlansControl; now: number }): React.
         {empty ? null : <span className="home-section-count">{waiting.items.length}</span>}
       </h2>
       {empty ? null : (
-        <ul className="sidebar-plans">
-          {waiting.items.map((listed) => (
-            <InboxItemRow
-              key={listed.item.id}
-              listed={listed}
-              chosen={false}
-              now={now}
-              models={plans.agents.models}
-              context={listed.plan.name}
-              onChoose={open}
-            />
-          ))}
-        </ul>
+        // The rows' agent cards name who started each agent, read against the listed workspace's members.
+        <MemberDirectory workspace={plans.workspace} readerId={plans.me}>
+          <ul className="sidebar-plans">
+            {waiting.items.map((listed) => (
+              <InboxItemRow
+                key={listed.item.id}
+                listed={listed}
+                chosen={false}
+                now={now}
+                models={plans.agents.models}
+                readerId={plans.me}
+                context={holderName(listed.holder)}
+                onChoose={open}
+              />
+            ))}
+          </ul>
+        </MemberDirectory>
       )}
       {waiting.failed ? (
         <div className="sidebar-note flex items-center gap-2" role="alert">
@@ -226,14 +253,14 @@ function HomeInbox({ plans, now }: { plans: PlansControl; now: number }): React.
   );
 }
 
-/** A new account's welcome: Luke's face and New plan. */
+/** A new account's welcome: Luke's face and New task. */
 function Welcome({ plans }: { plans: PlansControl }): React.JSX.Element {
   return (
     <section className="home-welcome" aria-label="Welcome">
       <span className="home-welcome-face" aria-hidden="true">
         <WingFace />
       </span>
-      <h1 className="home-title">Plan your first feature</h1>
+      <h1 className="home-title">Start your first task</h1>
       <NewPlanButton plans={plans} />
     </section>
   );
@@ -253,11 +280,12 @@ export function DesktopHome({
   useRowKeys(column, plans.shown);
   const { listed } = plans;
   if (!plans.listRead && !plans.listFailed) return null;
-  // Only an account with no plan in any workspace is new; a workspace of
-  // its own with none still says what needs it elsewhere.
-  if (!plans.listFailed && plans.plans.length === 0 && plans.archived.length === 0) {
-    return <Welcome plans={plans} />;
-  }
+  // Only an account with no plan in any workspace, and nothing an agent with
+  // no plan waits on, is new; a workspace of its own with none still says
+  // what needs it elsewhere.
+  const fresh =
+    plans.plans.length === 0 && plans.archived.length === 0 && plans.inboxPlanless.length === 0;
+  if (!plans.listFailed && fresh) return <Welcome plans={plans} />;
   const recent = recentPlans(listed.plans);
   return (
     <div className="home-scroll">
@@ -291,7 +319,7 @@ export function DesktopHome({
                 onClick={() => runAppCommand(APP_COMMAND.COMMAND_PALETTE)}
               >
                 <SearchIcon />
-                Search all {listed.plans.length} plans
+                Search all {listed.plans.length} tasks
                 <Shortcut chord={APP_SHORTCUTS[APP_COMMAND.COMMAND_PALETTE].chord} />
               </button>
             ) : null}

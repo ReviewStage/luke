@@ -1,8 +1,9 @@
 {
-  "name": "@sidecar/wire",
+  "name": "@luke/wire",
   "version": "0.13.0",
   "private": true,
   "type": "module",
+  "description": "The vocabulary every side speaks and the Schema tooling it is declared with: JSON, action results, turns, message metadata, UI message parts, conversation lines, app-setting ids",
   "exports": {
     ".": "./src/index.js",
     "./app-settings": "./src/app-settings/index.js",
@@ -10,7 +11,8 @@
     "./effect": "./src/effect/index.js",
     "./provider-identity": "./src/provider-identity.js",
     "./testing": "./src/testing/index.js",
-    "./ui-messages": "./src/ui-messages/index.js"
+    "./ui-messages": "./src/ui-messages/index.js",
+    "./wire-guard": "./src/wire-guard.js"
   },
   "types": "./src/index.ts",
   "scripts": {

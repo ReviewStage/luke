@@ -1,19 +1,21 @@
-import type { AccountSnapshot } from "@sidecar/credentials/snapshot";
-import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
-import type { AppSettingsView } from "@sidecar/settings/wire";
-import type { ActionResult } from "@sidecar/wire";
-import { microphoneAccessRow, voiceAttentionNote } from "../microphone-access";
-import type { SettingsSearchInput } from "../settings-search";
-import { SETTINGS_VIEW, type SettingsView } from "../settings-views";
-import { AccountSection } from "./account-section";
-import { AppearanceSection } from "./appearance-page";
-import { CodingAgentsPage } from "./coding-agents-page";
+import type { AccountSnapshot } from "@luke/credentials/snapshot";
+import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
+import { EXPERIMENTS, NO_EXPERIMENTS } from "@luke/settings";
+import { SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
+import type { AppSettingsView } from "@luke/settings/wire";
+import { microphoneAccessRow, voiceAttentionNote } from "@luke/voice/microphone-access";
 import type {
   MicrophoneControl,
   NotificationsControl,
   ShortcutControl,
   UpdateControl,
-} from "./controls";
+} from "@luke/voice/settings-controls";
+import type { ActionResult } from "@luke/wire";
+import type { SettingsSearchInput } from "../settings-search";
+import { AccountSection } from "./account-section";
+import { AppearanceSection } from "./appearance-page";
+import { CodingAgentsPage } from "./coding-agents-page";
+import { ExperimentalPage } from "./experimental-page";
 import { type IntegrationsFilter, IntegrationsSection } from "./integrations-page";
 import { MacCommandsSection } from "./mac-commands-section";
 import { NotificationsSection } from "./notifications-section";
@@ -138,7 +140,7 @@ export function SettingsPanel({
       {view !== SETTINGS_VIEW.WORKSPACE ? null : !signedIn ? (
         <p className="settings-note">Sign in to see your workspaces.</p>
       ) : workspace ? (
-        <WorkspacePage control={workspace} />
+        <WorkspacePage control={workspace} readerId={account.id} />
       ) : null}
 
       {view === SETTINGS_VIEW.CODING_AGENTS ? <CodingAgentsPage signedIn={signedIn} /> : null}
@@ -172,9 +174,19 @@ export function SettingsPanel({
         <MacCommandsSection view={panelView} writes={writes} />
       ) : null}
 
+      {view === SETTINGS_VIEW.EXPERIMENTAL ? (
+        <ExperimentalPage
+          entries={EXPERIMENTS}
+          experiments={settings?.experiments ?? NO_EXPERIMENTS}
+          signedIn={signedIn}
+        />
+      ) : null}
+
       {view === SETTINGS_VIEW.ABOUT ? <UpdatesSection control={updates} /> : null}
 
-      {view === SETTINGS_VIEW.SHORTCUTS ? <WindowShortcutSections /> : null}
+      {view === SETTINGS_VIEW.SHORTCUTS ? (
+        <WindowShortcutSections experiments={settings?.experiments ?? NO_EXPERIMENTS} />
+      ) : null}
     </div>
   );
 }

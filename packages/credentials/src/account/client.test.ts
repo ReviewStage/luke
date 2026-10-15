@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { type FakeResponder, fakeHttpClientLayer, type JsonValue } from "@sidecar/wire/testing";
+import { type FakeResponder, fakeHttpClientLayer, type JsonValue } from "@luke/wire/testing";
 import { Effect, Exit } from "effect";
 import { test } from "vitest";
 import { AccountClient, accountGateOpen, withIssuedAccountTokens } from "./client.js";

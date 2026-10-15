@@ -43,7 +43,8 @@
         "src/entry-server.tsx",
         "server/db/migrate.ts",
         "scripts/*.ts",
-        "server/feedback.mjs"
+        "server/feedback.mjs",
+        "server/feedback.d.mts"
       ],
       "project": ["src/**", "server/**", "scripts/**", "tests/**"]
     },
@@ -57,10 +58,34 @@
       "project": ["src/**"]
     },
     "apps/web/coder": {
+      "ignoreDependencies": [
+        "@ai-sdk/anthropic",
+        "@ai-sdk/openai",
+        "@better-auth/drizzle-adapter",
+        "@better-auth/electron",
+        "@better-auth/oauth-provider",
+        "@vercel/connect",
+        "@vercel/oidc",
+        "better-auth",
+        "diff",
+        "ws"
+      ],
       "entry": ["instructions/*.ts", "evals/evals.config.ts", "evals/*.eval.ts"],
       "project": ["**/*.ts"]
     },
     "apps/web/eve": {
+      "ignoreDependencies": [
+        "@ai-sdk/anthropic",
+        "@ai-sdk/openai",
+        "@better-auth/drizzle-adapter",
+        "@better-auth/electron",
+        "@better-auth/oauth-provider",
+        "@vercel/connect",
+        "@vercel/oidc",
+        "better-auth",
+        "diff",
+        "ws"
+      ],
       "entry": ["instructions/*.ts", "evals/evals.config.ts", "evals/*.eval.ts"],
       "project": ["**/*.ts"]
     },

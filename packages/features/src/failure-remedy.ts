@@ -1,0 +1,91 @@
+import { INTEGRATION_NAME, type IntegrationProvider } from "./integration-wire.js";
+
+/**
+ * failure-remedy.ts -- why a failure stands, as a typed word beside its sentence, and what the press that mends it says.
+ */
+
+export const FAILURE_REASON = {
+  RECONNECT_INTEGRATION: "reconnect-integration",
+  API_KEY: "api-key",
+  /** The plan's workspace has no GitHub connected: Settings › Workspace connects it. */
+  CONNECT_GITHUB: "connect-github",
+  /** The plan's workspace's GitHub was uninstalled or suspended: Settings › Workspace connects it again. */
+  RECONNECT_GITHUB: "reconnect-github",
+  /** The installation was not given the repository: its settings page on GitHub gives it. */
+  ADD_REPOSITORY: "add-repository",
+  /** The repository is not one the workspace can reach at all: the plan names another. */
+  CHOOSE_REPOSITORY: "choose-repository",
+  /** The repository's owner is connected to another workspace of the account's: the plan moves there. */
+  MOVE_PLAN: "move-plan",
+  OTHER: "other",
+} as const;
+
+export type FailureReason = (typeof FAILURE_REASON)[keyof typeof FAILURE_REASON];
+
+/** The remedies that mend a plan's repository in the plan's own place, and so name the plan. */
+type PlanRemedyReason =
+  | typeof FAILURE_REASON.CONNECT_GITHUB
+  | typeof FAILURE_REASON.RECONNECT_GITHUB
+  | typeof FAILURE_REASON.CHOOSE_REPOSITORY;
+
+export type Failure =
+  | {
+      readonly reason: typeof FAILURE_REASON.RECONNECT_INTEGRATION;
+      readonly text: string;
+      readonly provider: IntegrationProvider;
+    }
+  | { readonly reason: PlanRemedyReason; readonly text: string; readonly planId: string }
+  | {
+      readonly reason: typeof FAILURE_REASON.ADD_REPOSITORY;
+      readonly text: string;
+      /** `owner/name`, which the press names. */
+      readonly repository: string;
+      /** The installation's settings page on GitHub, where its repositories are chosen. */
+      readonly settingsUrl: string;
+    }
+  | {
+      readonly reason: typeof FAILURE_REASON.MOVE_PLAN;
+      readonly text: string;
+      readonly planId: string;
+      /** The workspace the plan moves to, whose name the press says. */
+      readonly workspace: { readonly id: string; readonly name: string };
+    }
+  | {
+      readonly reason: typeof FAILURE_REASON.API_KEY | typeof FAILURE_REASON.OTHER;
+      readonly text: string;
+    };
+
+/** The remedy's label; none where only Retry answers. */
+export function remedyLabel(failure: Failure): string | undefined {
+  switch (failure.reason) {
+    case FAILURE_REASON.RECONNECT_INTEGRATION:
+      return `Reconnect ${INTEGRATION_NAME[failure.provider]}`;
+    case FAILURE_REASON.API_KEY:
+      return "Open API keys";
+    case FAILURE_REASON.CONNECT_GITHUB:
+      return "Connect GitHub";
+    case FAILURE_REASON.RECONNECT_GITHUB:
+      return "Reconnect GitHub";
+    case FAILURE_REASON.ADD_REPOSITORY:
+      return `Add ${failure.repository} to Luke on GitHub`;
+    case FAILURE_REASON.CHOOSE_REPOSITORY:
+      return "Choose a repository";
+    case FAILURE_REASON.MOVE_PLAN:
+      return `Move task to ${failure.workspace.name}`;
+    case FAILURE_REASON.OTHER:
+      return undefined;
+  }
+}
+
+/**
+ * Whether Retry stands beside the remedy: a remedy finished somewhere Luke
+ * cannot watch, on GitHub or in Settings, leaves the same send to be made
+ * again once it is done.
+ */
+export function retriesBesideRemedy(failure: Failure): boolean {
+  return (
+    failure.reason === FAILURE_REASON.CONNECT_GITHUB ||
+    failure.reason === FAILURE_REASON.RECONNECT_GITHUB ||
+    failure.reason === FAILURE_REASON.ADD_REPOSITORY
+  );
+}

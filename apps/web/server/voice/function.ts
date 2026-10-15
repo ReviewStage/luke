@@ -1,22 +1,22 @@
-import { recordVoiceSeconds, spendHostedMeter } from "@sidecar/database/models/quota";
-import { voiceSessionRecord } from "@sidecar/database/models/voice-session-record";
-import { Effect, Layer, Redacted } from "effect";
-import * as FetchHttpClient from "effect/http/FetchHttpClient";
-import { hostedUserInfo, userIdForAuthorization } from "../hosted/bearer.js";
-import { deploymentEveOrigin } from "../hosted/brain-host/eve-origin.js";
-import { CRON_ENVIRONMENT } from "../hosted/maintenance-bounds.js";
-import { HOSTED_OPENAI_ENVIRONMENT } from "../hosted/openai.js";
-import { runWeb } from "../runtime.js";
-import type { VoiceAccounts } from "./accounts.js";
-import { deploymentExchange } from "./deployment-exchange.js";
-import { Keyframe } from "./keyframe.js";
-import { LOG_EVENT, standardOutputLog } from "./log.js";
+import { recordVoiceSeconds, spendHostedMeter } from "@luke/database/models/quota";
+import { voiceSessionRecord } from "@luke/database/models/voice-session-record";
+import { deploymentEveOrigin } from "@luke/service/agents/brain-host/eve-origin";
+import { hostedUserInfo, userIdForAuthorization } from "@luke/service/auth/bearer";
+import { CRON_ENVIRONMENT } from "@luke/service/maintenance/maintenance-bounds";
+import { HOSTED_OPENAI_ENVIRONMENT } from "@luke/service/providers/openai";
+import type { VoiceAccounts } from "@luke/service/voice/accounts";
+import { deploymentExchange } from "@luke/service/voice/deployment-exchange";
+import { Keyframe } from "@luke/service/voice/keyframe";
+import { LOG_EVENT, standardOutputLog } from "@luke/service/voice/log";
 import {
   type VoiceServer,
   VoiceService,
   type VoiceServiceOptions,
   voiceServer,
-} from "./service.js";
+} from "@luke/service/voice/service";
+import { Effect, Layer, Redacted } from "effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import { runWeb } from "../runtime.js";
 
 /**
  * The deployment's real seams handed to the voice service, once per function

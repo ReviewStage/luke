@@ -2,6 +2,12 @@
   color-scheme: dark;
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif;
   font-synthesis: none;
+  /* Note that every window draws its words without the Mac's font
+     smoothing, as Linear, Slack, and the website do, because the smoothing
+     thickens every stroke, light on dark most of all, until a regular reads
+     nearly as heavy as a semibold. */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   background: transparent;
   /* The one monospace stack, for code, a path, a branch, or a command,
      wherever it is drawn: a hand-written rule spends it, and so does
@@ -102,7 +108,6 @@
   --tooltip-edge: rgba(255, 255, 255, 0.1);
   --tooltip-text: rgba(255, 255, 255, 0.95);
   --tooltip-chord: rgba(255, 255, 255, 0.5);
-  --avatar-fill: linear-gradient(135deg, #3a3f55, #262833);
   /* The code on screen, in the ground and inks of the theme the host colours
      it with (`plan-code.ts`), and its lines pointed at in that theme's blue. */
   --code-ground: #0d1117;
@@ -139,6 +144,11 @@
   --terminal-bright-magenta: #d2a8ff;
   --terminal-bright-cyan: #56d4dd;
   --terminal-bright-white: #ffffff;
+  /* A find's tints in a terminal (`terminal-surface.ts`), opaque because
+     the terminal blends no alpha into its cells: the browser find's yellow
+     dimmed for every match, its orange for the one the find is at. */
+  --terminal-find-match: #5c4a00;
+  --terminal-find-current: #b36b00;
   /* A file's type icon in the file tree's own palette (`@pierre/trees`),
      which its shadow root keeps to itself, said again for a file drawn
      outside the tree (`planning.css`). */
@@ -233,7 +243,6 @@
     --shadow: rgba(0, 0, 0, 0.12);
     --shadow-deep: rgba(0, 0, 0, 0.2);
     --surface-caption: #fff;
-    --avatar-fill: linear-gradient(135deg, #e3e5ee, #cdd1dc);
     --code-ground: #fff;
     --code-text: #1f2328;
     --code-line-number: rgba(31, 35, 40, 0.5);
@@ -257,6 +266,8 @@
     --terminal-bright-magenta: #a475f9;
     --terminal-bright-cyan: #3192aa;
     --terminal-bright-white: #8c959f;
+    --terminal-find-match: #fff0a3;
+    --terminal-find-current: #ffb547;
     --file-icon-gray: #84848a;
     --file-icon-red: #d52c36;
     --file-icon-vermilion: #ff8c5b;

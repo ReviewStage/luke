@@ -84,7 +84,7 @@ export function StateGlyph({
  * The alert a failed piece of work wears at its row's end, named Failed to
  * a reader and, `hinted`, in its own hint. Note that a tab and a hover
  * card's row leave the hint out, because the tab's card already says it
- * failed and a hint over a card would take the card down.
+ * failed and a hint hung from a card would stand over the card's words.
  */
 function FailedMark({ hinted }: { hinted: boolean }): React.JSX.Element {
   const words = GLYPH_STATE_WORDS[GLYPH_STATE.FAILED];

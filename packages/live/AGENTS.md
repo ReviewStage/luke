@@ -1,4 +1,4 @@
-# `@sidecar/live`
+# `@luke/live`
 
 The vocabulary a GPT Live session is created, driven, and read with, declared once
 so no consumer re-encodes it, and Node-free so it rides into the renderer bundle,
@@ -27,7 +27,7 @@ the host, and a web function alike.
   the template's own shape, with no sample line.
 
 No full persona stands here: the brain's planning instructions
-(`apps/web/server/hosted/brain-host/planning.ts`) hold it, and shape what the
+(`packages/service/src/agents/brain-host/planning.ts`) hold it, and shape what the
 brain hands the voice.
 
 ## Tests

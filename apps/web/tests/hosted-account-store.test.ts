@@ -1,18 +1,18 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@sidecar/database/core/query";
+import { Database } from "@luke/database/core/query";
 import {
   deleteAccount,
   readAccountPreferences,
   writeAccountPreferences,
-} from "@sidecar/database/models/account-store";
-import { member, organization, user } from "@sidecar/database/schemas/auth";
-import { personalWorkspace } from "@sidecar/database/schemas/personal-workspace";
-import { accountPreference } from "@sidecar/database/schemas/preferences";
-import { hostedUsage } from "@sidecar/database/schemas/usage";
-import { getTestDB } from "@sidecar/database/testing";
-import { CODING_AGENT_DEFAULT_CHOICE } from "@sidecar/features/models-wire";
+} from "@luke/database/models/account-store";
+import { member, organization, user } from "@luke/database/schemas/auth";
+import { personalWorkspace } from "@luke/database/schemas/personal-workspace";
+import { accountPreference } from "@luke/database/schemas/preferences";
+import { hostedUsage } from "@luke/database/schemas/usage";
+import { getTestDB } from "@luke/database/testing";
+import { CODING_AGENT_DEFAULT_CHOICE } from "@luke/features/models-wire";
 import { count, eq, getColumnTable, or } from "drizzle-orm";
 import type { PgColumn } from "drizzle-orm/pg-core";
 import { Duration, Effect } from "effect";

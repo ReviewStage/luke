@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { WORKSPACE_ROLE, type Workspace } from "@sidecar/features/workspace-wire";
+import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -12,21 +12,23 @@ import type { PlansControl } from "../planning/use-plans-tab";
 import { WorkspaceSwitcher } from "./workspace-switcher";
 
 /**
- * The head of the sidebar's plans as the developer meets it: the workspace
- * listed, and the menu of every workspace, New workspace, and Workspace
- * settings, whoever the account is in the workspace. Each press is written
+ * The sidebar's head as the developer meets it: the workspace listed, by its
+ * tile and name and who shares it, and the menu of every workspace, New
+ * workspace, and Workspace settings, whoever the account is in the workspace. Each press is written
  * down where the sidebar would hand it on.
  */
 
 const PERSONAL: Workspace = {
   id: "workspace-personal",
   name: "Personal",
+  slug: "personal",
   role: WORKSPACE_ROLE.OWNER,
   github: null,
 };
 const ACME: Workspace = {
   id: "workspace-acme",
   name: "acme",
+  slug: "acme",
   role: WORKSPACE_ROLE.MEMBER,
   github: null,
 };
@@ -84,9 +86,14 @@ function open(switcher: HTMLButtonElement | null): void {
   act(() => switcher.click());
 }
 
+/** An item's label, the words beside its glyph. */
+function labelOf(item: HTMLElement): string | null {
+  return item.querySelector(".plan-menu-label")?.textContent ?? null;
+}
+
 /** Chooses the open menu's item by its label. */
 function choose(label: string): void {
-  const item = menuItems().find((candidate) => candidate.textContent === label);
+  const item = menuItems().find((candidate) => labelOf(candidate) === label);
   assert.ok(item, `the menu offers ${label}`);
   act(() => item.click());
 }
@@ -101,12 +108,12 @@ test("the menu offers the workspaces, the listed one checked, New workspace, and
   });
 
   open(page.switcher());
-  const offered = menuItems().map((item) => [item.textContent, item.getAttribute("aria-checked")]);
+  const offered = menuItems().map((item) => [labelOf(item), item.getAttribute("aria-checked")]);
   choose("Personal");
   open(page.switcher());
   choose("Workspace settings");
 
-  assert.equal(page.switcher()?.textContent, "acme");
+  assert.equal(page.switcher()?.querySelector(".workspace-ref-name")?.textContent, "acme");
   assert.deepEqual(offered, [
     ["Personal", "false"],
     ["acme", "true"],
@@ -120,10 +127,12 @@ test("a member of a team is offered the same three kinds of item as its admin", 
   const member = mount({ workspaces: [PERSONAL, ACME], workspace: ACME });
   open(member.switcher());
 
-  assert.deepEqual(
-    menuItems().map((item) => item.textContent),
-    ["Personal", "acme", "New workspace", "Workspace settings"],
-  );
+  assert.deepEqual(menuItems().map(labelOf), [
+    "Personal",
+    "acme",
+    "New workspace",
+    "Workspace settings",
+  ]);
 });
 
 test("New workspace asks a name and creates it, and a refusal is said on the card with the name kept", async () => {
@@ -139,7 +148,7 @@ test("New workspace asks a name and creates it, and a refusal is said on the car
   });
 
   open(page.switcher());
-  const offered = menuItems().map((item) => item.textContent);
+  const offered = menuItems().map(labelOf);
   choose("New workspace");
   const field =
     document.querySelector<HTMLInputElement>('input[aria-label="Workspace name"]') ??
@@ -247,4 +256,87 @@ test("Enter while an input method composes creates nothing, and a press dragged 
 
   assert.deepEqual(asked, []);
   assert.ok(document.querySelector('[role="alertdialog"]'), "the card still stands");
+});
+
+test("each workspace in the menu wears its tile, its first letter, and a rename keeps the tile's hue", () => {
+  const tiles = (workspaces: readonly Workspace[]) => {
+    const page = mount({ workspaces, workspace: workspaces[0] });
+    open(page.switcher());
+    const drawn = menuItems()
+      .map((item) => item.querySelector(".workspace-tile"))
+      .filter((tile) => tile !== null)
+      .map((tile) => [tile.textContent, tile.getAttribute("data-hue")]);
+    // Each reading stands alone, so the next finds only its own menu.
+    for (const root of roots.splice(0)) act(() => root.unmount());
+    document.body.innerHTML = "";
+    return drawn;
+  };
+
+  const before = tiles([PERSONAL, CONNECTED]);
+  assert.deepEqual(
+    before.map(([letter]) => letter),
+    ["P", "A"],
+    "a tile stands beside each workspace and on no other item",
+  );
+  const renamed = tiles([PERSONAL, { ...CONNECTED, name: "Zenith" }]);
+  assert.equal(renamed[1]?.[0], "Z");
+  assert.equal(renamed[1]?.[1], before[1]?.[1], "the hue is the workspace's, not its name's");
+  // An emoji is one character to a reader, though two to a string.
+  assert.equal(tiles([{ ...PERSONAL, name: "🐙 Octo" }])[0]?.[0], "🐙");
+});
+
+test("each workspace in the menu says who shares it under its name, to the eye and to a screen reader, as the head does: the account's own first workspace of one as personal, a team's members counted, and nothing where the service counts none", () => {
+  const solo: Workspace = { ...ACME, id: "workspace-solo", name: "Solo", memberCount: 1 };
+  const uncounted: Workspace = { ...ACME, id: "workspace-uncounted", name: "Uncounted" };
+  const page = mount({
+    workspaces: [
+      { ...PERSONAL, memberCount: 1 },
+      { ...CONNECTED, memberCount: 5 },
+      solo,
+      uncounted,
+    ],
+    workspace: CONNECTED,
+  });
+
+  open(page.switcher());
+  const rows = menuItems()
+    .slice(0, 4)
+    .map((item) => [
+      labelOf(item),
+      item.querySelector(".menu-item-detail")?.textContent,
+      item.getAttribute("aria-label"),
+    ]);
+
+  assert.deepEqual(rows, [
+    ["Personal", "Personal workspace", "Personal, Personal workspace"],
+    ["acme", "5 members", "acme, 5 members"],
+    ["Solo", "1 member", "Solo, 1 member"],
+    ["Uncounted", undefined, null],
+  ]);
+});
+
+test("the head says who shares the workspace, to the eye and to a screen reader: its members counted beside a people glyph, the account's own first workspace of one as personal in words alone, a team of one as its one member, and nothing where the service counts none", () => {
+  const shared = (memberCount?: number, first = true) => {
+    const workspace = memberCount === undefined ? ACME : { ...ACME, memberCount };
+    const page = mount({
+      workspaces: first ? [workspace, PERSONAL] : [PERSONAL, workspace],
+      workspace,
+    });
+    const head = page.switcher();
+    const line = head?.querySelector(".sidebar-workspace-shared");
+    const said = line ? [line.textContent, line.querySelectorAll("svg").length] : null;
+    const heard = head?.getAttribute("aria-label");
+    for (const root of roots.splice(0)) act(() => root.unmount());
+    document.body.innerHTML = "";
+    return [head?.querySelector(".workspace-tile")?.textContent, said, heard];
+  };
+
+  assert.deepEqual(shared(5), ["A", ["5 members", 1], "Workspace: acme, 5 members"]);
+  assert.deepEqual(shared(1), [
+    "A",
+    ["Personal workspace", 0],
+    "Workspace: acme, Personal workspace",
+  ]);
+  assert.deepEqual(shared(1, false), ["A", ["1 member", 1], "Workspace: acme, 1 member"]);
+  assert.deepEqual(shared(undefined), ["A", null, "Workspace: acme"]);
 });

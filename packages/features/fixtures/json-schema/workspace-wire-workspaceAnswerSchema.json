@@ -12,6 +12,9 @@
         "name": {
           "type": "string"
         },
+        "slug": {
+          "type": "string"
+        },
         "role": {
           "type": "string",
           "enum": [
@@ -41,6 +44,45 @@
             {
               "type": "null"
             }
+          ]
+        },
+        "githubInstallations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "installationId": {
+                "type": "number"
+              },
+              "login": {
+                "type": "string"
+              },
+              "active": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "installationId",
+              "login",
+              "active"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "memberCount": {
+          "type": "number",
+          "minimum": 0
+        },
+        "photoVersion": {
+          "type": "string"
+        },
+        "pictureUrl": {
+          "type": "string"
+        },
+        "personal": {
+          "type": "boolean",
+          "enum": [
+            true
           ]
         }
       },

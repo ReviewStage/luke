@@ -17,7 +17,7 @@ import { SCHEMA_REFUSAL } from "./schema-vocabulary.js";
  *
  * Every shape below is an Effect `Schema.Struct`, declared and exported
  * directly: a caller reads one with `readEither` and shows it with
- * `emitJsonSchema`, both from `@sidecar/wire/effect`.
+ * `emitJsonSchema`, both from `@luke/wire/effect`.
  */
 
 /** The roles a stored message may carry, as the SDK names them. */

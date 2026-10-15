@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { PlanEditRequest } from "@sidecar/features/plan-edit";
-import type { Plan } from "@sidecar/features/plan-wire";
-import type { PlanningEditAnswer } from "@sidecar/features/planning-view";
+import type { PlanEditRequest } from "@luke/features/plan-edit";
+import { PLAN_ACTOR, type Plan } from "@luke/features/plan-wire";
+import type { PlanningEditAnswer } from "@luke/features/planning-view";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
@@ -20,6 +20,8 @@ import { PlanBody } from "./plan-body";
  */
 
 const BODY = DOCUMENT_PLAN.document.body;
+
+const CHARLES = { userId: "user-charles", name: "Charles Pan" };
 
 /** Every editor the document mounted, newest last, with what it was handed and what it was asked to take. */
 const mounted: { props: PlanEditorProps; destroyed: boolean; took: [string, string][] }[] = [];
@@ -129,7 +131,7 @@ function _button(container: HTMLElement, text: string): HTMLButtonElement {
 }
 
 function title(container: HTMLElement): HTMLElement {
-  const text = container.querySelector<HTMLElement>('[aria-label="Plan name"]');
+  const text = container.querySelector<HTMLElement>('[aria-label="Task name"]');
   assert.ok(text, "the title's words");
   return text;
 }
@@ -146,6 +148,24 @@ test("a click into a section opens the whole text in place, the caret where the 
   assert.deepEqual(open().placement, { x: 120, y: 48 });
   assert.ok(container.querySelector(".plan-document-editor")?.classList.contains("ph-no-capture"));
   assert.equal(title(container).textContent, DOCUMENT_NAME, "the title stays over the text");
+});
+
+test("a press on the name in a section's byline opens no editor, while a press on the section's words still does", () => {
+  const { container, render } = mount();
+  const edit = { actor: PLAN_ACTOR.DEVELOPER, by: CHARLES, at: Date.now(), duringCall: false };
+  render({ ...DOCUMENT_PLAN, sectionEdits: [{ section: "Goal", ...edit }] });
+  const goal = block(container, "Goal");
+  const name = goal.querySelector(".plan-unit-byline .actor-ref");
+  assert.ok(name, "the byline names who last changed the section");
+
+  act(() => {
+    name.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
+  // Note that the check is a boolean, because a failing comparison would print the whole editor's DOM.
+  assert.ok(container.querySelector(".plan-document-editor") === null, "no editor opened");
+
+  act(() => goal.click());
+  assert.equal(open().markdown, BODY);
 });
 
 test("words handed over and not yet saved are sent when the developer leaves the plan", async () => {

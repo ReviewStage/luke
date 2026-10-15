@@ -1,6 +1,7 @@
-import type { AccountSnapshot } from "@sidecar/credentials/snapshot";
-import { INTEGRATION_PROVIDER } from "@sidecar/features/integration-wire";
-import type { PlanSummary } from "@sidecar/features/plan-wire";
+import type { AccountSnapshot } from "@luke/credentials/snapshot";
+import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import type { PlanSummary } from "@luke/features/plan-wire";
+import { EXPERIMENT } from "@luke/settings";
 import {
   ArchiveIcon,
   ArrowLeftIcon,
@@ -10,41 +11,42 @@ import {
   FolderIcon,
   PinIcon,
   PlusIcon,
+  ProviderMark,
   SearchIcon,
   UnpinIcon,
-} from "@sidecar/panel";
-import { HouseIcon, InboxIcon } from "lucide-react";
-import { useRef, useState } from "react";
-import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
-import { runAppCommand, useAppCommand } from "../app-commands";
-import { CALL_CARD_SURFACE, CallCardDock, type CallCardInput } from "../call/call-card";
-import type { NavigationHistory } from "../navigation-history";
-import { PANEL_TAB, type PanelTab } from "../panel-tabs";
-import { NEEDS_YOU } from "../planning/inbox-model";
-import { useMinute } from "../planning/plan-time";
+} from "@luke/ui";
 import {
   PLANS_PAGE,
   type RepositoryGroup,
   repositoryGroups,
   repositoryLabel,
   repositoryPageUrl,
-} from "../planning/planning-model";
-import { sameTab } from "../planning/tab-strip-model";
+} from "@luke/ui/planning-model";
+import { sameTab } from "@luke/ui/tab-strip-model";
+import type { UpdateControl } from "@luke/voice/settings-controls";
+import { FactoryIcon, HouseIcon, InboxIcon, ZapIcon } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
+import { runAppCommand, useAppCommand } from "../app-commands";
+import { type CallCardInput, ColumnFoot } from "../call/call-card";
+import type { NavigationHistory } from "../navigation-history";
+import { PANEL_TAB, type PanelTab } from "../panel-tabs";
+import { NEEDS_YOU } from "../planning/inbox-model";
+import { useMinute } from "../planning/plan-time";
 import { useUnreadPlans } from "../planning/use-plan-looks";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { inColumn, type PinnedTab } from "../planning/use-side-panel";
-import { ProviderMark } from "../provider-marks";
 import { ReadFailure } from "../read-failure";
 import { RepositoryPicture } from "../repository-picture";
-import type { UpdateControl } from "../settings/controls";
 import { Shortcut } from "../shortcut";
 import { Skeleton, SkeletonRegion } from "../skeleton";
 import { commandKeyshortcuts, Tooltip } from "../tooltip";
+import { useExperiment } from "../use-app-state";
 import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
 import { type FoldedGroups, useFoldedGroups } from "./folded-groups";
 import { LukeIdentity } from "./luke-identity";
 import { SidebarPlan } from "./plan-actions";
-import { SIDEBAR_WIDTH, type SidebarCollapse } from "./sidebar-collapse";
+import { SIDEBAR_OVERLAY, SIDEBAR_WIDTH, type SidebarCollapse } from "./sidebar-collapse";
 import { SidebarFoot } from "./sidebar-foot";
 import { type CountNoun, SidebarGroupHeader } from "./sidebar-group-header";
 import { SidebarPinnedTab } from "./sidebar-pinned-tab";
@@ -286,7 +288,7 @@ function PinnedSection({
 function repositoryActionGroups(group: RepositoryGroup, plans: PlansControl): MenuAction[][] {
   const { repository } = group;
   const archive: MenuAction = {
-    label: "Archive plans",
+    label: "Archive tasks",
     icon: <ArchiveIcon />,
     onSelect: () => plans.onArchivePlans(group.plans.map((plan) => plan.id)),
   };
@@ -390,11 +392,11 @@ function RepositorySection({
               </button>
             </Tooltip>
             {repository === null ? null : (
-              <Tooltip label={`New plan in ${label}`}>
+              <Tooltip label={`New task in ${label}`}>
                 <button
                   type="button"
                   className="sidebar-repository-action sidebar-repository-new"
-                  aria-label={`New plan in ${label}`}
+                  aria-label={`New task in ${label}`}
                   onClick={() => onNewPlanIn(repository)}
                 >
                   <PlusIcon />
@@ -453,7 +455,7 @@ function ArchivedPlans({ context }: { context: RowContext }): React.JSX.Element 
  */
 function ListSkeleton(): React.JSX.Element {
   return (
-    <SkeletonRegion label="Reading your plans…" className="sidebar-skeleton">
+    <SkeletonRegion label="Reading your tasks…" className="sidebar-skeleton">
       {LIST_SKELETON.map((width) => (
         <div key={width} className="sidebar-skeleton-row">
           <Skeleton width={width} />
@@ -463,9 +465,16 @@ function ListSkeleton(): React.JSX.Element {
   );
 }
 
-/** How many items wait on the developer across every plan: the sum of the Inbox's row counts. */
+/**
+ * How many items wait on the developer: those of the listed workspace's
+ * plans, the sum of the Inbox's row counts, and every one from an agent
+ * with no plan, which names no workspace to be counted in.
+ */
 function waitingItems(plans: PlansControl): number {
-  return plans.inbox.reduce((sum, plan) => sum + plan.items.length, 0);
+  return plans.listed.inbox.reduce(
+    (sum, plan) => sum + plan.items.length,
+    plans.inboxPlanless.length,
+  );
 }
 
 /**
@@ -544,15 +553,172 @@ function SidebarInboxRow({
   );
 }
 
+/** The layers that answer their own Escape before a floating sidebar is put away. */
+const KEY_LAYERS = '[role="menu"], [role="dialog"], [role="alertdialog"]';
+
+/** What the sidebar is drawn with while it floats, or could. */
+interface FloatingSidebar {
+  readonly ref: React.RefObject<HTMLElement | null>;
+  /** Whether the sidebar is on screen: pinned, or floating over the work. */
+  readonly inSight: boolean;
+  /** A choice made in the sidebar, which puts a floating sidebar away once made. */
+  readonly chosen: <A extends unknown[]>(go: (...args: A) => void) => (...args: A) => void;
+  readonly onPress: () => void;
+  readonly onPointerLeave: (event: React.PointerEvent<HTMLElement>) => void;
+  readonly onKeyDown: (event: React.KeyboardEvent<HTMLElement>) => void;
+}
+
 /**
- * The window's left column: Luke, the way to a new plan, Search, which
- * opens the command palette, every plan of the workspace chosen, headed by
- * the workspace's switcher while an account is signed in
- * (`workspace-switcher.tsx`), and the account's
- * row, whose menu and gear lead to Settings and the rest. Home's row and
- * then the Inbox's follow Search above the rule: Home's goes to the home
- * page, and the Inbox's counts what waits on the developer and opens the
- * window's Inbox. The pinned plans, and the side panel tabs
+ * The floating sidebar's doors: a press in a peek opens it, the pointer
+ * leaving a peek puts it away, though not for the toggle standing over its
+ * head, and Escape puts it away while no menu in it took the key first,
+ * wherever the keyboard stands, a peek leaving it in the work under it.
+ * Opened from away, it takes the keyboard, which Escape gives back. It goes
+ * with the sidebar, so a menu's way to Settings or a version history, or
+ * any other way off the plans, leaves it away for their return.
+ */
+function useFloatingSidebar(sidebar: SidebarCollapse): FloatingSidebar {
+  const ref = useRef<HTMLElement | null>(null);
+  const handBack = useRef<HTMLElement | null>(null);
+  const was = useRef(sidebar.overlay);
+  const { overlay, onOverlay } = sidebar;
+  const floating = overlay !== SIDEBAR_OVERLAY.CLOSED;
+  useEffect(() => {
+    const from = was.current;
+    was.current = overlay;
+    const held = ref.current;
+    if (overlay !== SIDEBAR_OVERLAY.OPEN || from !== SIDEBAR_OVERLAY.CLOSED || held === null) {
+      return;
+    }
+    handBack.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const first =
+      held.querySelector<HTMLElement>('[aria-current="page"]') ??
+      held.querySelector<HTMLElement>(".sidebar-new-plan");
+    first?.focus();
+  }, [overlay]);
+  useEffect(() => () => onOverlay(SIDEBAR_OVERLAY.CLOSED), [onOverlay]);
+  // Note that a floating sidebar need not hold the keyboard, a peek or one a
+  // bare press opened leaving it in the work under it, so Escape is heard at
+  // the window before the work's layers hear it. A key aimed into the
+  // sidebar is left to its own handler, and one aimed into a menu or a
+  // dialog to that layer, which may have been raised from the sidebar.
+  useEffect(() => {
+    if (!floating) return;
+    const putAway = (event: KeyboardEvent) => {
+      const held = ref.current;
+      const target = event.target instanceof Element ? event.target : null;
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      if (target !== null && (held?.contains(target) || target.closest(KEY_LAYERS) !== null)) {
+        return;
+      }
+      event.preventDefault();
+      onOverlay(SIDEBAR_OVERLAY.CLOSED);
+    };
+    window.addEventListener("keydown", putAway, true);
+    return () => window.removeEventListener("keydown", putAway, true);
+  }, [floating, onOverlay]);
+  return {
+    ref,
+    inSight: !sidebar.collapsed || floating,
+    chosen:
+      (go) =>
+      (...args) => {
+        go(...args);
+        if (floating) onOverlay(SIDEBAR_OVERLAY.CLOSED);
+      },
+    onPress: () => {
+      if (overlay === SIDEBAR_OVERLAY.PEEK) onOverlay(SIDEBAR_OVERLAY.OPEN);
+    },
+    onPointerLeave: (event) => {
+      if (overlay !== SIDEBAR_OVERLAY.PEEK) return;
+      const to = event.relatedTarget;
+      if (to instanceof Element && to.closest(".title-bar-controls") !== null) return;
+      onOverlay(SIDEBAR_OVERLAY.CLOSED);
+    },
+    onKeyDown: (event) => {
+      if (event.key !== "Escape" || event.defaultPrevented || !floating) return;
+      // Note that the window's layered Escape stands down for a key already taken.
+      event.preventDefault();
+      onOverlay(SIDEBAR_OVERLAY.CLOSED);
+      handBack.current?.focus();
+      handBack.current = null;
+    },
+  };
+}
+
+/**
+ * Factory's row, after the Inbox's and drawn as it is: the factory, its
+ * name, and its chord at its end while the row is hovered or reached from
+ * the keyboard. A press opens the window's Factory (`desktop-factory.tsx`),
+ * and the row is the place shown while it stands.
+ */
+function SidebarFactoryRow({
+  current,
+  disabled,
+  onOpen,
+}: {
+  current: boolean;
+  disabled: boolean;
+  onOpen: () => void;
+}): React.JSX.Element {
+  return (
+    <button
+      type="button"
+      className="sidebar-search sidebar-factory"
+      aria-current={current ? "page" : undefined}
+      aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.FACTORY)}
+      disabled={disabled}
+      onClick={onOpen}
+    >
+      <FactoryIcon />
+      Factory
+      <Shortcut chord={APP_SHORTCUTS[APP_COMMAND.FACTORY].chord} className="row-shortcut" />
+    </button>
+  );
+}
+
+/**
+ * The Automations page's row, after Factory's and drawn as it is: the
+ * zap, its name, and its chord. A press opens the window's Automations page
+ * (`automations-page.tsx`), and the row is the place shown while it stands.
+ */
+function SidebarAutomationsRow({
+  current,
+  disabled,
+  onOpen,
+}: {
+  current: boolean;
+  disabled: boolean;
+  onOpen: () => void;
+}): React.JSX.Element {
+  return (
+    <button
+      type="button"
+      className="sidebar-search sidebar-automations"
+      aria-current={current ? "page" : undefined}
+      aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.AUTOMATIONS)}
+      disabled={disabled}
+      onClick={onOpen}
+    >
+      <ZapIcon />
+      Automations
+      <Shortcut chord={APP_SHORTCUTS[APP_COMMAND.AUTOMATIONS].chord} className="row-shortcut" />
+    </button>
+  );
+}
+
+/**
+ * The window's left column: at its head the workspace chosen, by its tile
+ * and name and who shares it, with the menu that chooses another
+ * (`workspace-switcher.tsx`), or Luke while no workspace is read; the way to
+ * a new plan, Search, which opens the command palette, every plan of the
+ * workspace chosen, and the account's
+ * row, whose menu and gear lead to Settings and the rest. Home's row, the
+ * Inbox's, and Factory's follow Search above the rule: Home's goes to the
+ * home page, the Inbox's counts what waits on the developer and opens the
+ * window's Inbox, and Factory's, while its experiment is on, opens the
+ * window's Factory, and the Automations page's likewise opens it. The pinned plans, and the side panel tabs
  * pinned to the sidebar, stand in a section of their own above the rest
  * while any are pinned, newest pinned first, under a header that folds as
  * a repository's does, every row one line whose hover card says the rest;
@@ -568,7 +734,13 @@ function SidebarInboxRow({
  * The strip above Luke is the window's drag handle and the traffic lights'
  * room, with back and forward at its right. Its right edge resizes it, and a drag well past its least width
  * folds it away. Folded away, it is inert as well as out of sight, so no key
- * reaches a row nobody can see.
+ * reaches a row nobody can see, until it floats open over the work
+ * (`sidebar-collapse.ts`). A floating sidebar is put away by a choice in it,
+ * by Escape, or once the pointer leaves a peek; a press in a peek opens it,
+ * so a menu it raises outlasts the pointer. Opened from away, it takes the
+ * keyboard at the row it marks, else at New plan, and Escape gives the
+ * keyboard back where it was. Floating, it has no edge to drag, since only a
+ * pinned sidebar is resized.
  */
 export function DesktopSidebar({
   sidebar,
@@ -580,6 +752,7 @@ export function DesktopSidebar({
   updates,
   onSignOut,
   call,
+  onPressWithin,
 }: {
   sidebar: SidebarCollapse;
   history: NavigationHistory;
@@ -592,10 +765,20 @@ export function DesktopSidebar({
   onSignOut: () => Promise<void>;
   /** The call card, at the column's foot above the account row, while one is to be drawn here. */
   call: CallCardInput | undefined;
+  /** Hears every press in the sidebar, which a press outside it would put away while it floats. */
+  onPressWithin: () => void;
 }): React.JSX.Element {
   const onPlans = tab === PANEL_TAB.PLANS;
-  // The window's Inbox stands in the plan's place, so while it does no plan is the place shown.
+  const overlay = useFloatingSidebar(sidebar);
+  // The window's Inbox, an agent's page, Factory, and the Automations page stand in the plan's place, so while one does no plan is the place shown.
   const inInbox = onPlans && plans.inboxView.open;
+  const inFactory = onPlans && plans.factoryView.open;
+  const inAutomations = onPlans && plans.automationsView.open;
+  const standingIn =
+    inInbox || inFactory || inAutomations || (onPlans && plans.agentView.agentId !== undefined);
+  // Factory and the Automations page are experiments: each row stands only while the account has it on.
+  const factoryOn = useExperiment(EXPERIMENT.FACTORY);
+  const automationsOn = useExperiment(EXPERIMENT.AUTOMATIONS);
   // A press in the list is always about plans, so it brings the Plans tab
   // forward from Settings as well as choosing.
   const openPlan = (planId: string) => {
@@ -614,13 +797,21 @@ export function DesktopSidebar({
     if (!onPlans) onTabChange(PANEL_TAB.PLANS);
     plans.inboxView.onOpen();
   };
+  const openFactory = () => {
+    if (!onPlans) onTabChange(PANEL_TAB.PLANS);
+    plans.factoryView.onOpen();
+  };
+  const openAutomations = () => {
+    if (!onPlans) onTabChange(PANEL_TAB.PLANS);
+    plans.automationsView.onOpen();
+  };
   const goHome = () => {
     if (!onPlans) onTabChange(PANEL_TAB.PLANS);
     plans.onGoHome();
   };
   // The home page is the place shown while no plan is open, the Inbox is not
   // standing in its place, and no launch is still reopening a plan.
-  const atHome = onPlans && !inInbox && plans.page === PLANS_PAGE.HOME && !plans.restoring;
+  const atHome = onPlans && !standingIn && plans.page === PLANS_PAGE.HOME && !plans.restoring;
   const newPlanIn = (repository: string) => {
     if (!onPlans) onTabChange(PANEL_TAB.PLANS);
     plans.onNewPlanIn(repository);
@@ -632,7 +823,7 @@ export function DesktopSidebar({
   });
   const now = useMinute();
   const edge = useSidebarEdge(sidebar, sidebar.onToggle);
-  const current = (planId: string) => onPlans && !inInbox && planId === plans.activePlanId;
+  const current = (planId: string) => onPlans && !standingIn && planId === plans.activePlanId;
   // The list is the chosen workspace's; the unread marks above read every plan.
   const unlisted = plans.listed.plans.length === 0 && plans.listed.archived.length === 0;
   const pinned = plans.listed.plans.filter((plan) => plan.pinnedAt !== undefined);
@@ -648,15 +839,16 @@ export function DesktopSidebar({
       pin.plan === chosenPin.plan &&
       pin.at === chosenPin.at,
   )?.pin;
+  const { chosen } = overlay;
   const context: RowContext = {
     plans,
     current,
     marked: (planId, pin) =>
       pinMarked === undefined ? pin === undefined && current(planId) : pin === pinMarked,
-    onOpen: openPlan,
+    onOpen: chosen(openPlan),
     unread,
     now,
-    inSight: !sidebar.collapsed,
+    inSight: overlay.inSight,
   };
   // A pinned tab is on show where its plan is open and its column shows it:
   // an agent's or the Inbox in the plan's own column, any other in the side panel. The
@@ -702,20 +894,36 @@ export function DesktopSidebar({
   useAppCommand(APP_COMMAND.NEXT_PLAN, listed && at < drawn.length - 1 ? () => step(1) : undefined);
 
   return (
-    <aside className="desktop-sidebar" inert={sidebar.collapsed}>
+    <aside
+      ref={overlay.ref}
+      className="desktop-sidebar"
+      inert={!overlay.inSight}
+      onPointerDown={() => {
+        onPressWithin();
+        overlay.onPress();
+      }}
+      onPointerLeave={overlay.onPointerLeave}
+      onKeyDown={overlay.onKeyDown}
+    >
       <div className="desktop-drag-strip" />
       <HistoryButtons history={history} />
-      <LukeIdentity />
+      {/* The workspace heads the sidebar once one is read, as everything under it is that
+          workspace's; Luke's own head stands until then. */}
+      {plans.signedIn && plans.workspace !== undefined ? (
+        <WorkspaceSwitcher plans={plans} inSight={overlay.inSight} />
+      ) : (
+        <LukeIdentity />
+      )}
 
       <button
         type="button"
         className="sidebar-new-plan"
         aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.NEW_PLAN)}
         disabled={!plans.signedIn}
-        onClick={newPlan}
+        onClick={chosen(newPlan)}
       >
         <ComposeIcon />
-        New plan
+        New task
         <Shortcut chord={APP_SHORTCUTS[APP_COMMAND.NEW_PLAN].chord} className="row-shortcut" />
       </button>
       {/* Search is a second door to the command palette, drawn as New plan
@@ -724,7 +932,7 @@ export function DesktopSidebar({
         type="button"
         className="sidebar-search"
         aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.COMMAND_PALETTE)}
-        onClick={() => runAppCommand(APP_COMMAND.COMMAND_PALETTE)}
+        onClick={chosen(() => runAppCommand(APP_COMMAND.COMMAND_PALETTE))}
       >
         <SearchIcon />
         Search
@@ -733,17 +941,28 @@ export function DesktopSidebar({
           className="row-shortcut"
         />
       </button>
-      <SidebarHomeRow current={atHome} disabled={!plans.signedIn} onOpen={goHome} />
+      <SidebarHomeRow current={atHome} disabled={!plans.signedIn} onOpen={chosen(goHome)} />
       <SidebarInboxRow
         waiting={plans.signedIn ? waitingItems(plans) : 0}
         current={inInbox}
         disabled={!plans.signedIn}
-        onOpen={openInbox}
+        onOpen={chosen(openInbox)}
       />
+      {factoryOn ? (
+        <SidebarFactoryRow
+          current={inFactory}
+          disabled={!plans.signedIn}
+          onOpen={chosen(openFactory)}
+        />
+      ) : null}
+      {automationsOn ? (
+        <SidebarAutomationsRow
+          current={inAutomations}
+          disabled={!plans.signedIn}
+          onOpen={chosen(openAutomations)}
+        />
+      ) : null}
       <hr className="sidebar-rule" />
-      {/* The workspace the list is, while an account is signed in; it
-          stands over the scroller, so it never scrolls away. */}
-      {plans.signedIn ? <WorkspaceSwitcher plans={plans} inSight={!sidebar.collapsed} /> : null}
 
       {/* One scroller for both sections, so the pinned plans scroll away
           with the rest rather than holding half the column. */}
@@ -754,7 +973,7 @@ export function DesktopSidebar({
             folds={folds}
             shown={pinnedShown}
             context={context}
-            onOpenTab={openPinnedTab}
+            onOpenTab={chosen(openPinnedTab)}
           />
         ) : null}
         {/* The rule above heads the list, so it carries no heading of its
@@ -762,7 +981,7 @@ export function DesktopSidebar({
         <nav className="sidebar-group" aria-label="Plans">
           {plans.listFailed ? (
             <div className="sidebar-note">
-              <ReadFailure line="Your plans could not be read." onRetry={plans.onRetryList} />
+              <ReadFailure line="Your tasks could not be read." onRetry={plans.onRetryList} />
             </div>
           ) : null}
           {/* The list is empty before its first read lands, so that it
@@ -771,9 +990,9 @@ export function DesktopSidebar({
             <ListSkeleton />
           ) : null}
           {plans.signedIn && unlisted && plans.listRead && !plans.listFailed ? (
-            <p className="sidebar-note">No plans yet.</p>
+            <p className="sidebar-note">No tasks yet.</p>
           ) : null}
-          {plans.signedIn ? null : <p className="sidebar-note">Sign in to plan a feature.</p>}
+          {plans.signedIn ? null : <p className="sidebar-note">Sign in to start a task.</p>}
           {groups.map((group) => (
             <RepositorySection
               key={group.repository ?? NO_REPOSITORY}
@@ -784,7 +1003,7 @@ export function DesktopSidebar({
                   : repositoryLabel(group.repository, groups)
               }
               folds={folds}
-              onNewPlanIn={newPlanIn}
+              onNewPlanIn={chosen(newPlanIn)}
               context={context}
             />
           ))}
@@ -792,19 +1011,18 @@ export function DesktopSidebar({
         </nav>
       </div>
 
-      <div className="sidebar-foot">
-        <CallCardDock call={call} surface={CALL_CARD_SURFACE.SIDEBAR} />
+      <ColumnFoot call={call}>
         <SidebarFoot
           account={account}
           updates={updates}
-          shown={!sidebar.collapsed}
+          shown={overlay.inSight}
           settingsOpen={tab === PANEL_TAB.SETTINGS}
-          onSettings={() => onTabChange(PANEL_TAB.SETTINGS)}
+          onSettings={chosen(() => onTabChange(PANEL_TAB.SETTINGS))}
           onSignOut={onSignOut}
         />
-      </div>
+      </ColumnFoot>
       {/* Last, so the drag strip above Luke does not take the edge's top from it. */}
-      <SidebarResizeEdge edge={edge} />
+      {sidebar.collapsed ? null : <SidebarResizeEdge edge={edge} />}
     </aside>
   );
 }

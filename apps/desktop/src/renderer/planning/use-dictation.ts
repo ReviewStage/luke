@@ -1,10 +1,10 @@
 import { useAtomValue } from "@effect/atom-react";
-import { DICTATION_AUDIO_TYPE, DICTATION_BOUNDS } from "@sidecar/features/dictation-wire";
+import { DICTATION_AUDIO_TYPE, DICTATION_BOUNDS } from "@luke/features/dictation-wire";
+import { ACT_KIND } from "@luke/host/acts";
+import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { type RefObject, useEffect, useRef, useState } from "react";
-import { ACT_KIND } from "#shared/messages/acts";
-import { MICROPHONE_STATUS } from "#shared/messages/audio";
 import { useAct } from "../act";
 import type { ComposerEditorHandle, ComposerMark } from "../plan-editor/contract";
 import { rendererRuntime } from "../renderer-runtime";

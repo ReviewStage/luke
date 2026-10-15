@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { FEEDBACK_KIND } from "@sidecar/features/feedback";
-import { ACTION_RESULT_STATUS } from "@sidecar/wire";
+import { FEEDBACK_KIND } from "@luke/features/feedback";
+import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
+import { ACTION_RESULT_STATUS } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, type ReactElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { ACT_OUTCOME_STATUS } from "#shared/messages/acts";
 import { onRegistry } from "#testing/copy-feedback";
 import { plansControl } from "#testing/plans-control";
 import { installScrollIntoView } from "#testing/scroll-into-view";
@@ -82,12 +82,11 @@ function NewPlanOwner({ shown }: OwnerProps): ReactElement {
     () => setOpen(true),
     createElement(NewPlanDialog, {
       newPlan: {
+        ...control.newPlan,
         open: open && shown,
-        preset: undefined,
-        start: () => Promise.resolve(undefined),
+        repositoriesIn: () => ({ ...control.repositories, recent: ["acme/web"] }),
         onClose: () => setOpen(false),
       },
-      repositories: { ...control.repositories, recent: ["acme/web"] },
     }),
   );
 }
@@ -128,7 +127,7 @@ function AttachmentOwner({ shown }: OwnerProps): ReactElement {
 /** Each modal by the role its card carries. */
 const DIALOGS = [
   { name: "a confirm", Owner: ConfirmOwner, role: "alertdialog" },
-  { name: "New plan", Owner: NewPlanOwner, role: "dialog" },
+  { name: "New task", Owner: NewPlanOwner, role: "dialog" },
   { name: "Send feedback", Owner: FeedbackOwner, role: "dialog" },
   { name: "the attachment viewer", Owner: AttachmentOwner, role: "dialog" },
 ] as const;

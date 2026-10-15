@@ -1,21 +1,22 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
-import { CODING_AGENT_STATUS } from "@sidecar/features/coding-agent-wire";
-import type { PlanSummary } from "@sidecar/features/plan-wire";
+import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
+import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
+import type { PlanSummary } from "@luke/features/plan-wire";
+import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
+import { UPDATE_STATUS } from "@luke/settings/update";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { ACT_OUTCOME_STATUS } from "#shared/messages/acts";
-import { UPDATE_STATUS } from "#shared/messages/update";
 import { onRegistry } from "#testing/copy-feedback";
 import { codingAgentsControl, plansControl } from "#testing/plans-control";
 import { PANEL_TAB } from "../panel-tabs";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { ArchivedAgents } from "./agent-archive";
 import { DesktopSidebar } from "./desktop-sidebar";
+import { SIDEBAR_OVERLAY } from "./sidebar-collapse";
 
 /**
  * sidebar-group-header.test.ts -- every group that folds folds under one
@@ -72,11 +73,21 @@ function mount(element: ReactElement): HTMLElement {
 function mountSidebar(plans: PlansControl): HTMLElement {
   return mount(
     createElement(DesktopSidebar, {
-      sidebar: { collapsed: false, width: 264, onToggle: ignore, onResize: ignore, staged: false },
+      sidebar: {
+        collapsed: false,
+        compact: false,
+        overlay: SIDEBAR_OVERLAY.CLOSED,
+        width: 264,
+        onToggle: ignore,
+        onOverlay: ignore,
+        onResize: ignore,
+        staged: false,
+      },
       history: { canGoBack: false, canGoForward: false, onBack: ignore, onForward: ignore },
       plans,
       tab: PANEL_TAB.PLANS,
       onTabChange: ignore,
+      onPressWithin: ignore,
       account: {
         status: ACCOUNT_STATUS.SIGNED_IN,
         email: "dev@example.com",
@@ -143,11 +154,11 @@ test("the summary's archived agents fold under the sidebar's own Archived header
   );
 
   assert.equal(fold(sidebar, "Archived").getAttribute("aria-expanded"), "false");
-  assert.equal(fold(sidebar, "Archived").textContent, "Archived2 plans");
+  assert.equal(fold(sidebar, "Archived").textContent, "Archived2 tasks");
   assert.equal(fold(summary, "Archived").textContent, "Archived2 archived agents");
   assert.equal(
     headerShape(summary, "Archived", " archived agents"),
-    headerShape(sidebar, "Archived", " plans"),
+    headerShape(sidebar, "Archived", " tasks"),
   );
 
   act(() => fold(sidebar, "Archived").click());
@@ -172,9 +183,9 @@ test("a repository's header folds on its name, says its pin, counts its plans fo
 
   act(() => relay().click());
   assert.equal(relay().getAttribute("aria-expanded"), "false");
-  assert.equal(relay().textContent, "relay(pinned)2 plans");
+  assert.equal(relay().textContent, "relay(pinned)2 tasks");
 
-  const plus = sidebar.querySelector<HTMLButtonElement>('button[aria-label="New plan in relay"]');
+  const plus = sidebar.querySelector<HTMLButtonElement>('button[aria-label="New task in relay"]');
   assert.ok(plus, "the header offers a new plan in its repository");
   act(() => plus.click());
   assert.deepEqual(asked, ["acme/relay"]);
@@ -187,8 +198,36 @@ test("a repository's header folds on its name, says its pin, counts its plans fo
   assert.ok(menu, "the right-click opens the repository's menu");
   assert.deepEqual(
     [...menu.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent),
-    ["Unpin", "Archive plans", "Open on GitHub"],
+    ["Unpin", "Archive tasks", "Open on GitHub"],
   );
   const ellipsis = sidebar.querySelector('button[aria-label="Actions for relay"]');
   assert.equal(ellipsis?.getAttribute("aria-expanded"), "true");
+});
+
+test("the Inbox row counts what waits on a plan and what waits from an agent with no plan alike", () => {
+  const page = mountSidebar(
+    plansControl({
+      inbox: [
+        {
+          planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
+          items: [{ id: "item-1", agentId: "agent-1", title: "Retry?", postedAt: 1 }],
+        },
+      ],
+      inboxPlanless: [
+        {
+          id: "item-2",
+          agentId: "agent-2",
+          title: "Quarantine the flaky test?",
+          postedAt: 2,
+          agentTitle: null,
+          agentModel: "anthropic/claude-opus-5.5",
+          automationId: null,
+          automationName: null,
+          repository: "acme/relay",
+        },
+      ],
+    }),
+  );
+
+  assert.equal(page.querySelector(".sidebar-inbox-waiting")?.firstChild?.textContent, "2");
 });

@@ -1,3 +1,4 @@
+import type { WorkspaceRole } from "@luke/features/workspace-wire";
 import { Cause, Data, Effect, Option, Schema } from "effect";
 
 /**
@@ -11,9 +12,13 @@ import { Cause, Data, Effect, Option, Schema } from "effect";
  * plugin's `removeMember` and `leaveOrganization`, called with the headers
  * of the request that asked, which carry the Mac's own Better Auth session
  * as a signed bearer token, so the plugin checks the caller's role and
- * membership itself. An invitation is made, listed, and canceled the same
- * way, through `createInvitation`, `listInvitations`, and
- * `cancelInvitation`. Each call is the auth service's promise, wrapped once
+ * membership itself. A member's new role, a handover's two among them, is
+ * the plugin's `updateMemberRole` under the same headers. A rename, and a photo set or removed, is the plugin's
+ * `updateOrganization` under the same headers, given the name alone or the
+ * logo alone, so the plugin checks that the caller may update the workspace
+ * and leaves its slug as it was. An
+ * invitation is made, listed, and canceled the same way, through
+ * `createInvitation`, `listInvitations`, and `cancelInvitation`. Each call is the auth service's promise, wrapped once
  * here the way `bearer.ts` wraps `oauth2UserInfo`. The auth service is
  * handed in rather than imported, so a route hands it `auth.api` and a test
  * the API of a Better Auth over its own database.
@@ -58,10 +63,29 @@ interface MemberRemoval {
   readonly memberId: string;
 }
 
+/** One member given a role in a workspace under the session the headers carry. */
+interface MemberRoleUpdate {
+  readonly headers: Headers;
+  readonly organizationId: string;
+  /** The plugin's member id of the one given the role. */
+  readonly memberId: string;
+  readonly role: WorkspaceRole;
+}
+
 /** The session the headers carry leaving a workspace. */
 interface WorkspaceLeaving {
   readonly headers: Headers;
   readonly organizationId: string;
+}
+
+/**
+ * A workspace changed under the session the headers carry: given a new name,
+ * or a new logo, which holds its photo as a `data:` URL, null removing it.
+ */
+interface WorkspaceUpdate {
+  readonly headers: Headers;
+  readonly organizationId: string;
+  readonly data: { readonly name: string } | { readonly logo: string | null };
 }
 
 /** The plugin's write the workspace store makes. */
@@ -101,7 +125,9 @@ export interface MemberSeams {
     readonly invitationId: string;
   }) => Effect.Effect<void, MemberFailure>;
   readonly removeMember: (removal: MemberRemoval) => Effect.Effect<void, MemberFailure>;
+  readonly updateMemberRole: (update: MemberRoleUpdate) => Effect.Effect<void, MemberFailure>;
   readonly leaveOrganization: (leaving: WorkspaceLeaving) => Effect.Effect<void, MemberFailure>;
+  readonly updateOrganization: (update: WorkspaceUpdate) => Effect.Effect<void, MemberFailure>;
 }
 
 /** The part of a Better Auth `api` with the organization plugin that the workspace seam calls. */
@@ -129,9 +155,17 @@ export interface MemberAuthApi {
     headers: Headers;
     body: { memberIdOrEmail: string; organizationId: string };
   }) => Promise<object | null>;
+  readonly updateMemberRole: (input: {
+    headers: Headers;
+    body: { memberId: string; role: WorkspaceRole; organizationId: string };
+  }) => Promise<object | null>;
   readonly leaveOrganization: (input: {
     headers: Headers;
     body: { organizationId: string };
+  }) => Promise<object | null>;
+  readonly updateOrganization: (input: {
+    headers: Headers;
+    body: { data: { name: string } | { logo: string | null }; organizationId: string };
   }) => Promise<object | null>;
 }
 
@@ -231,12 +265,34 @@ export function memberSeams(api: MemberAuthApi): MemberSeams {
           }),
         ),
       ),
+    updateMemberRole: (update) =>
+      Effect.asVoid(
+        pluginCall(() =>
+          api.updateMemberRole({
+            headers: update.headers,
+            body: {
+              memberId: update.memberId,
+              role: update.role,
+              organizationId: update.organizationId,
+            },
+          }),
+        ),
+      ),
     leaveOrganization: (leaving) =>
       Effect.asVoid(
         pluginCall(() =>
           api.leaveOrganization({
             headers: leaving.headers,
             body: { organizationId: leaving.organizationId },
+          }),
+        ),
+      ),
+    updateOrganization: (update) =>
+      Effect.asVoid(
+        pluginCall(() =>
+          api.updateOrganization({
+            headers: update.headers,
+            body: { data: { ...update.data }, organizationId: update.organizationId },
           }),
         ),
       ),

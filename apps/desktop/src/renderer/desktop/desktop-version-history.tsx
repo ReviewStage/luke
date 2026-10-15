@@ -1,22 +1,25 @@
-import { ACCOUNT_STATUS, type AccountSnapshot } from "@sidecar/credentials/snapshot";
-import type { CodingAgentSummary } from "@sidecar/features/coding-agent-wire";
-import type { PlanRevisionLine } from "@sidecar/features/plan-wire";
-import { BackIcon, EllipsisIcon, WingFace } from "@sidecar/panel";
-import { ArrowUpRightIcon, FileDiffIcon, HistoryIcon, RotateCcwIcon } from "lucide-react";
+import { ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
+import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import { sectionAnchors } from "@luke/features/mention-link";
+import { planSections } from "@luke/features/plan-document";
+import type { PlanRevisionLine } from "@luke/features/plan-wire";
+import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
+import { BackIcon, EllipsisIcon } from "@luke/ui";
+import { type Actor, actorName } from "@luke/ui/actor-model";
+import { DOCUMENT_REGION } from "@luke/ui/planning-model";
+import { ArrowUpRightIcon, FileDiffIcon, RotateCcwIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
+import { ACTOR_SIZE, ActorMark } from "../actor-ref";
 import { useAppCommand } from "../app-commands";
+import { type CallCardInput, ColumnFoot } from "../call/call-card";
 import type { NavigationHistory } from "../navigation-history";
-import { PersonAvatar } from "../person-avatar";
 import { centreWithin } from "../planning/code-pane";
 import {
-  authorName,
   type ChangedSection,
   changedSections,
   type HistoryReader,
   opensSections,
-  REVISION_AUTHOR,
-  type RevisionAuthor,
   type RevisionSource,
   revisionAuthorOf,
   revisionSource,
@@ -26,10 +29,9 @@ import {
   VERSION_CHANGE,
   versionDiff,
 } from "../planning/plan-history-model";
+import type { MentionedPlan } from "../planning/plan-mentions";
 import { useMinute } from "../planning/plan-time";
-import { DOCUMENT_REGION } from "../planning/planning-model";
 import { RelativeTime } from "../planning/relative-time";
-import { AgentMark } from "../planning/tab-look";
 import {
   HISTORY_READ,
   type OpenedSections,
@@ -37,6 +39,7 @@ import {
   type ViewedVersion,
 } from "../planning/use-plan-history";
 import type { PlansControl } from "../planning/use-plans-tab";
+import { useWorkspaceMembers } from "../planning/use-workspace-members";
 import { useVersionRestore, VersionSkeleton, VersionView } from "../planning/version-view";
 import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { RetryRowLabel } from "../retry-button";
@@ -57,7 +60,8 @@ import type { SidebarCollapse } from "./sidebar-collapse";
  * back and forward and the Back row, which Escape presses too, then the
  * view's title, then the versions, newest first: who wrote each, drawn as
  * the rest of the window draws them (Luke's face as the Transcript wears
- * it, the reader's account picture as You, a coding agent's harness and
+ * it, the reader's account picture as You, a teammate's sign-in picture
+ * where the workspace's members read lists one, a coding agent's harness and
  * title), what it did, and how long ago, in the sidebar's few letters with
  * the moment itself on hover. The newest is the plan as it stands and the
  * one drawn when the view opens, wearing no tag of its own: its Restore says
@@ -114,6 +118,10 @@ export interface VersionSubject {
   readonly onShowSource: ((source: RevisionSource) => void) | undefined;
   /** Whether every person's revision is the reader's own, as the account's template's are; a plan's are its members'. */
   readonly own: boolean;
+  /** The workspace whose members wrote the revisions, whose pictures their rows wear; none for the account's own template. */
+  readonly workspace: Pick<Workspace, "id" | "memberCount"> | undefined;
+  /** The plan the versions are of, which their mentions are read against; none for the account's own template. */
+  readonly plan?: MentionedPlan | undefined;
 }
 
 /** What the page says while the subject has no revision yet. */
@@ -139,36 +147,6 @@ const LOG_SKELETON = [
   { author: "28%", summary: "84%" },
   { author: "40%", summary: "56%" },
 ] as const;
-
-/** Who wrote a revision, as the rest of the window draws them: Luke's face as the Transcript draws it, a person's picture, an agent's harness, or the history glyph. */
-function RevisionMark({ author }: { author: RevisionAuthor }): React.JSX.Element {
-  switch (author.kind) {
-    case REVISION_AUTHOR.LUKE:
-      return (
-        <span className="version-row-mark version-row-luke" aria-hidden="true">
-          <WingFace />
-        </span>
-      );
-    case REVISION_AUTHOR.PERSON:
-      return (
-        <span className="version-row-mark" aria-hidden="true">
-          <PersonAvatar name={author.name ?? authorName(author)} pictureUrl={author.pictureUrl} />
-        </span>
-      );
-    case REVISION_AUTHOR.AGENT:
-      return (
-        <span className="version-row-mark" aria-hidden="true">
-          <AgentMark provider={author.provider} />
-        </span>
-      );
-    case REVISION_AUTHOR.EARLIER:
-      return (
-        <span className="version-row-mark version-row-earlier" aria-hidden="true">
-          <HistoryIcon />
-        </span>
-      );
-  }
-}
 
 /** The way from a revision to the place that wrote it: what its Open says, and the press. */
 interface SourceDoor {
@@ -201,7 +179,7 @@ function RevisionRow({
   summary,
 }: {
   line: PlanRevisionLine;
-  author: RevisionAuthor;
+  author: Actor;
   selected: boolean;
   now: number;
   rowRef: (row: HTMLButtonElement | null) => void;
@@ -243,11 +221,11 @@ function RevisionRow({
         onClick={onSelect}
         onContextMenu={offered ? showMenu : undefined}
       >
-        <RevisionMark author={author} />
+        <ActorMark actor={author} size={ACTOR_SIZE.ROW} />
         <span className="version-row-text">
           <span className="version-row-head">
             <span className="version-row-author" data-author={author.kind}>
-              {authorName(author)}
+              {actorName(author)}
             </span>
             <RelativeTime className="version-row-time" at={lastEdit.at} now={now} />
           </span>
@@ -287,15 +265,15 @@ function SectionsHead({
   source,
   onBack,
 }: {
-  author: RevisionAuthor;
+  author: Actor;
   source: SourceDoor | undefined;
   onBack: () => void;
 }): React.JSX.Element {
   const who = (
     <>
-      <RevisionMark author={author} />
+      <ActorMark actor={author} size={ACTOR_SIZE.ROW} />
       <span className="version-row-author" data-author={author.kind}>
-        {authorName(author)}
+        {actorName(author)}
       </span>
     </>
   );
@@ -364,11 +342,16 @@ function SectionRow({
   );
 }
 
-/** The reader as their account names them, or nobody while no account is signed in. */
-function readerOf(account: AccountSnapshot): HistoryReader {
-  return account.status === ACCOUNT_STATUS.SIGNED_IN
-    ? { id: account.id, name: account.name ?? account.email, pictureUrl: account.pictureUrl }
-    : { id: undefined, name: undefined, pictureUrl: undefined };
+/** The reader as their account names them, or nobody while no account is signed in, with the workspace's members beside. */
+function readerOf(
+  account: AccountSnapshot,
+  members: readonly WorkspaceMember[] | undefined,
+): HistoryReader {
+  const reader =
+    account.status === ACCOUNT_STATUS.SIGNED_IN
+      ? { id: account.id, name: account.name ?? account.email, pictureUrl: account.pictureUrl }
+      : { id: undefined, name: undefined, pictureUrl: undefined };
+  return members === undefined ? reader : { ...reader, members };
 }
 
 /** The versions as quiet rows while they are read, in a row's own type. */
@@ -535,6 +518,7 @@ function VersionPage({
         title={subject.title}
         noun={subject.noun}
         section={section}
+        plan={subject.plan}
       />
     );
   }
@@ -579,7 +563,20 @@ function VersionPage({
 export function planVersionSubject(plans: PlansControl): VersionSubject {
   const { region, boundFor } = plans;
   const plan = region.kind === DOCUMENT_REGION.READY ? region.plan : undefined;
+  const workspace = plans.workspaces.find((each) => each.id === plan?.workspaceId);
   return {
+    workspace,
+    // A version's mentions are read against the plan as it stands, as its page reads them.
+    plan:
+      plan === undefined
+        ? undefined
+        : {
+            planId: plan.id,
+            place: { workspace: workspace?.slug ?? plan.workspaceId, repository: plan.repository },
+            anchors: new Set(
+              sectionAnchors(planSections(plan.document.body).map((section) => section.heading)),
+            ),
+          },
     versions: plans.history,
     noun: "plan",
     title: plan?.name,
@@ -595,15 +592,17 @@ export function planVersionSubject(plans: PlansControl): VersionSubject {
 
 /**
  * A version history over the whole window: the versions where the sidebar
- * stands, with the way back at their head, and the version chosen beside
- * them. `onExit` leaves for wherever it was opened from, and `onRestored`
- * for what a restore landed on.
+ * stands, with the way back at their head and the call card at their foot,
+ * as the sidebar holds them, and the version chosen beside them. `onExit`
+ * leaves for wherever it was opened from, and `onRestored` for what a
+ * restore landed on.
  */
 export function DesktopVersionHistory({
   sidebar,
   history,
   subject,
   account,
+  call,
   onExit,
   onRestored,
 }: {
@@ -612,6 +611,8 @@ export function DesktopVersionHistory({
   subject: VersionSubject;
   /** Who is reading, whose revisions are drawn as theirs. */
   account: AccountSnapshot;
+  /** The call card, while the window is to draw one. */
+  call: CallCardInput | undefined;
   onExit: () => void;
   onRestored: () => void;
 }): React.JSX.Element {
@@ -624,11 +625,12 @@ export function DesktopVersionHistory({
   const log = useRef<HTMLDivElement>(null);
   const { opened } = versions.spot ?? {};
   const edge = useSidebarEdge(sidebar);
-  const reader = readerOf(account);
+  const members = useWorkspaceMembers(subject.workspace);
+  const reader = readerOf(account, members);
   // A restore that lands leaves for the plan it restored, which is not always the one Back returns to.
   const restore = useVersionRestore(versions, subject.shown, restorable, onRestored);
   const sections = openedSections(versions.viewing, opened);
-  const sourceOf = (line: PlanRevisionLine, author: RevisionAuthor): SourceDoor | undefined => {
+  const sourceOf = (line: PlanRevisionLine, author: Actor): SourceDoor | undefined => {
     const source = revisionSource(line);
     const { onShowSource } = subject;
     if (source === undefined || onShowSource === undefined) return undefined;
@@ -769,6 +771,7 @@ export function DesktopVersionHistory({
             )}
           </section>
         </div>
+        <ColumnFoot call={call} />
         {/* Last, so the drag strip above the way back does not take the edge's top from it. */}
         <SidebarResizeEdge edge={edge} />
       </nav>

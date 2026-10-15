@@ -12,8 +12,8 @@
  * memberships schema, whose one hunk shows lines removed and added.
  */
 
-import type { CodingAgentChangesAnswerView } from "@sidecar/features/coding-agent-view";
-import { ACT_KIND } from "#shared/messages/acts";
+import type { CodingAgentChangesAnswerView } from "@luke/features/coding-agent-view";
+import { ACT_KIND } from "@luke/host/acts";
 import { FIXTURE_CLOSED_PANEL } from "../planning/planning-fixture";
 import { pullRequestFiles } from "./changes-files";
 import { codingAgentAnswers } from "./coding-agent";

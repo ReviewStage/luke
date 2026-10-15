@@ -1,16 +1,16 @@
-import { ResetIcon } from "@sidecar/panel";
-import { APP_SETTING_FIELDS, APP_SETTING_SCHEMA, settingsScopeChanged } from "@sidecar/settings";
+import { APP_SETTING_FIELDS, APP_SETTING_SCHEMA, settingsScopeChanged } from "@luke/settings";
+import { SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
 import type {
   AppSettingField,
   AppSettingsView,
   AppSettingValue,
   SettingsResetScope,
-} from "@sidecar/settings/wire";
-import { appSettingsView, SETTINGS_RESET_SCOPE } from "@sidecar/settings/wire";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
-import { SETTINGS_VIEW, type SettingsView } from "../settings-views";
+} from "@luke/settings/wire";
+import { appSettingsView, SETTINGS_RESET_SCOPE } from "@luke/settings/wire";
+import { ResetIcon } from "@luke/ui";
+import { useSettingWrite } from "@luke/ui/use-setting-write";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast";
-import { useSettingWrite } from "./use-setting-write";
 import type { SettingsWrites } from "./writes";
 
 /** What the toast says once a page's reset landed, by the group it reset. */

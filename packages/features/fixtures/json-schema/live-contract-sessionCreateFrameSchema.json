@@ -194,12 +194,6 @@
       "type": "string",
       "minLength": 1,
       "maxLength": 36
-    },
-    "holdGreeting": {
-      "type": "boolean",
-      "enum": [
-        true
-      ]
     }
   },
   "required": [

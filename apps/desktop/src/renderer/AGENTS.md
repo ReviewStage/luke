@@ -37,7 +37,7 @@ words in any case (`session-replay.ts`).
 
 No credential reaches the voice window, nothing there appends to the model, and it
 writes no Conversation line. The policy — whether a session stands, what the keys
-do — is `LiveVoiceOrchestrator` in `@sidecar/voice`. Two constraints are this
+do — is `LiveVoiceOrchestrator` in `@luke/voice`. Two constraints are this
 bundle's own and are easy to undo:
 
 - The audio line carries a track at every moment of the session's life. GPT Live
@@ -78,7 +78,7 @@ Read it first. What it does not cover is the Electron window under the surface:
 
 ## Confirms
 
-Any action that cannot be undone asks first, over `confirm-state.ts`. In the
+Any action that cannot be undone asks first, over `@luke/ui/confirm-state`. In the
 desktop window it asks through `<ConfirmDialog>`, a modal over the window held by
 `useConfirmDialog`: title, what goes, Cancel focused and the act in red.
 Settings asks the same way, from a row's button or its ⋯ menu. A question does not
@@ -113,3 +113,21 @@ the same change.
 - A credential is never described beyond whether a provider is connected, so no
   setting's description may carry a key, a key's shape, or an environment
   variable's value.
+
+## Experiments
+
+A feature still behind Settings › Experimental is gated by its key in
+`@luke/settings`'s `EXPERIMENT`, the one registry the page, the store, and the
+counting read; the account's choice is the service's, carried to every window
+on the settings snapshot.
+
+- A surface asks with `useExperiment(EXPERIMENT.X)`, or `experimentOnNow` in a
+  callback, never by reading the document itself.
+- A list gates an entry by a tag on its declaration (`AppShortcut.experiment`)
+  and filters it where the list is built, never by a check at a call site, so
+  the menu bar, the Keyboard shortcuts page, and the settings search agree.
+- While off, the feature stands nowhere: no row, no ⌘K entry (its
+  `useAppCommand` offers `undefined`), no chord, no menu item, and no place
+  the history can reach (`navigation-history.ts`'s `reachable`).
+- Graduating one deletes its key, which makes every gate left behind fail to
+  compile, so the one PR that graduates it deletes them all.

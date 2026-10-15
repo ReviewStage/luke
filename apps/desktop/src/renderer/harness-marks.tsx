@@ -1,13 +1,13 @@
-import { MODEL_PROVIDER, type ModelProvider } from "@sidecar/features/models-wire";
+import { MODEL_PROVIDER, type ModelProvider } from "@luke/features/models-wire";
 
 /**
  * harness-marks.tsx -- the marks of the two harnesses a coding agent's model runs in: Claude Code for Anthropic's models, Codex for OpenAI's.
  *
- * Brand marks like the account and integration providers' in
- * `provider-marks.tsx`, not glyphs of ours, each the harness's own artwork at
- * its own proportions and in its own colours, which read on a light ground
- * and a dark one alike. The React that draws a mark stays in the app rather
- * than entering the shared surface vocabulary, as the provider marks do.
+ * Brand marks like the account and integration providers' in `@luke/ui`'s
+ * `ProviderMark`, not glyphs of ours, each the harness's own artwork at its
+ * own proportions and in its own colours, which read on a light ground and a
+ * dark one alike. They stay in the desktop, the one app that draws a harness,
+ * where the provider marks are shared because the site draws them too.
  */
 
 /** Where the Codex mark's files are copied beside `renderer.js` by the build (`scripts/build.mjs`). */

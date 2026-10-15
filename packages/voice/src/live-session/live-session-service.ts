@@ -1,6 +1,6 @@
-import type { CodeRef } from "@sidecar/features/plan-wire";
-import { type PlanShownCode, VOICE_PHASE, type VoicePhase } from "@sidecar/features/planning-view";
-import { LIVE_TRANSPORT_STATE, type LiveTransportState } from "@sidecar/gateway";
+import type { CodeRef } from "@luke/features/plan-wire";
+import { type PlanShownCode, VOICE_PHASE, type VoicePhase } from "@luke/features/planning-view";
+import { LIVE_TRANSPORT_STATE, type LiveTransportState } from "@luke/gateway";
 import {
   chunkForAppend,
   commentaryAppend,
@@ -9,6 +9,7 @@ import {
   LIVE_DELEGATION_TARGET,
   LIVE_IDLE_WINDOW_MS,
   LIVE_SERVER_EVENT,
+  type LiveAppendEvent,
   type LiveDelegationId,
   type LiveDelegationTarget,
   type LiveServerEvent,
@@ -20,8 +21,8 @@ import {
   type TranscriptSpeaker,
   type TranscriptUtterance,
   thinkingAppend,
-} from "@sidecar/live";
-import { causeKind, type SerialQueue, serialQueue } from "@sidecar/runtime/effect";
+} from "@luke/live";
+import { causeKind, type SerialQueue, serialQueue } from "@luke/runtime/effect";
 import {
   Clock,
   Deferred,
@@ -58,10 +59,12 @@ import type { LiveRecord } from "./live-record.js";
 /**
  * The one voice session and everything its trusted side owes it. It stands
  * on a session another party created and offered it for adoption; it is
- * fed every append the trusted side makes, each awaiting its acknowledgment;
+ * fed every append the trusted side makes, each put on the wire in order and
+ * tracked against its own acknowledgment, none waiting on another's;
  * it hands each delegation to the brain as a spoken ask and streams the reply
  * back as commentary a finished sentence at a time while the run goes on,
- * each once every action the run journaled ahead of it has settled, the
+ * the moment the brain tells each (the brain tells a sentence only once every
+ * action the run journaled ahead of it has settled), the
  * reply of the newest ask alone, since a later delegation supersedes what
  * the earlier one asked — and nothing is said of the ask's mere acceptance,
  * which the delegation guide has the model answer from the conversation
@@ -401,7 +404,7 @@ interface Exchange {
   readonly runId: string;
   /** The delegation the run answers; none for a run the brain opened of its own, which speaks session-wide. */
   readonly delegationId: LiveDelegationId;
-  /** Whether the brain opened the run of its own, so its reply waits until no asked run of its session is under way. */
+  /** Whether the brain opened the run of its own: it silences nothing, ends no call, and says no note of a run that did not complete. */
   readonly woken: boolean;
   /** Where the delegation came in the session's order, so an older ask accepted late silences nothing newer. */
   readonly revision: number;
@@ -413,15 +416,8 @@ interface Exchange {
   readonly askedAt: number;
   /** Whether the run's end of the call was passed on, so a repeated one is not. */
   endAsked: boolean;
-  /** Whether this exchange's record write is still out; while any of its session's is, run events are deferred rather than spoken. */
-  pendingRecord: boolean;
-  /** Run events held while a record write is out, replayed in order once it lands. */
-  deferred: LiveBrainRunEvent[];
   /** The session the delegations belong to; a closed session's ids die with it, and a sentence arriving after has nowhere to go. */
   readonly sessionId: string;
-  settled: boolean;
-  buffered: string[];
-  spokenChunks: number;
   slowStepTold: boolean;
   /** How many progress notes the exchange has written, and when it last wrote any thinking note. */
   progressNotes: number;
@@ -449,12 +445,7 @@ function newExchange(
     cancelAsked: false,
     askedAt,
     endAsked: false,
-    pendingRecord: false,
-    deferred: [],
     sessionId,
-    settled: false,
-    buffered: [],
-    spokenChunks: 0,
     slowStepTold: false,
     progressNotes: 0,
     lastNoteAt: undefined,
@@ -849,15 +840,9 @@ export class LiveSessionService {
     // The stop is not something the session is worth keeping open for: the
     // idle decision is made against what this exchange said, and a developer
     // cutting Luke off is the opposite of that.
-    session.channel.enqueue(
-      Effect.suspend(() =>
-        Effect.asVoid(
-          session.channel.send(instructionsAppend(this.#input(null, STOP_SPEAKING_INSTRUCTION)), {
-            countsForIdle: false,
-          }),
-        ),
-      ),
-    );
+    this.#append(session, instructionsAppend(this.#input(null, STOP_SPEAKING_INSTRUCTION)), {
+      countsForIdle: false,
+    });
     session.stops += 1;
     for (const exchange of this.#exchanges.values()) {
       if (exchange.sessionId === session.sessionId) this.#block(session, exchange);
@@ -1331,34 +1316,24 @@ export class LiveSessionService {
         this.#speakInto(session, delegationId, submission.refusal);
         return;
       }
-      // The exchange stands before the ask's record write is awaited, so a run
-      // that ends at once or speaks its first sentence during the write is
-      // deferred into it rather than dropped; the record still precedes the
-      // speech, because nothing deferred is spoken until the write lands. The
-      // acceptance itself is told nothing of: a note saying the ask is with
-      // Luke is what the model reads as license to narrate waiting, and the
-      // only thinking appends this exchange earns are the factual ones a slow
-      // step actually begun, or a step actually settled, writes. An attach
-      // that lands nothing (a follow-up with no row of its own, a repeat, or a
-      // store failure, which `#attachAsk` reports) changes nothing here: the
-      // ask is with the brain either way, and the developer is told nothing of
-      // the record.
+      // The exchange stands before the ask's record write, and nothing it
+      // says waits for that write: the attach is the transcript's, beside the
+      // live path rather than a step of it, so a run that speaks during the
+      // write is spoken at once. The acceptance itself is told nothing of: a
+      // note saying the ask is with Luke is what the model reads as license
+      // to narrate waiting, and the only thinking appends this exchange earns
+      // are the factual ones a slow step actually begun, or a step actually
+      // settled, writes. An attach that lands nothing (a follow-up with no row
+      // of its own, a repeat, or a store failure, which `#attachAsk` reports)
+      // changes nothing here: the ask is with the brain either way, and the
+      // developer is told nothing of the record.
       this.#trace({ event: LIVE_SESSION_TRACE.DELEGATION_SENT, revision: asked.revision });
       const exchange = this.#registerExchange(session, submission.runId, delegationId, asked);
       // The delegation is the developer's answer to the question the voice held, if any.
       session.holdingQuestion = false;
-      if (rowIds.length > 0) {
-        exchange.pendingRecord = true;
-        yield* this.#attachAsk(session, delegationId, rowIds);
-        exchange.pendingRecord = false;
-      }
-      // A newer ask may still have its own attach out, and an older ask's
-      // reply waits for it too, so the record precedes whatever the session
-      // says next. A follow-up whose words joined the first ask's row has
-      // none of its own.
-      this.#replayDeferred(session.sessionId);
       // The next question goes to the voice now, not after the brain has thought about the answer.
       if (!exchange.silenced) this.#handQuestion(session, this.#delegationOf(exchange));
+      if (rowIds.length > 0) yield* this.#attachAsk(session, delegationId, rowIds);
     });
   }
 
@@ -1389,10 +1364,9 @@ export class LiveSessionService {
     return exchange;
   }
 
-  /** The exchange's reply is never to be spoken: what it held back is dropped, and nothing it says from here is. */
+  /** The exchange's reply is never to be spoken: a chunk still queued is withdrawn, and nothing it says from here is. */
   #silence(exchange: Exchange): void {
     exchange.silenced = true;
-    exchange.buffered = [];
   }
 
   /**
@@ -1414,38 +1388,14 @@ export class LiveSessionService {
           if (cancel !== LIVE_BRAIN_CANCEL.CANCELLED || this.#sessionOf(exchange) !== session) {
             return;
           }
-          session.channel.enqueue(
-            Effect.suspend(() =>
-              Effect.asVoid(
-                session.channel.send(
-                  thinkingAppend(this.#input(this.#delegationOf(exchange), STOPPED_RUN_NOTE)),
-                  { countsForIdle: false },
-                ),
-              ),
-            ),
+          this.#append(
+            session,
+            thinkingAppend(this.#input(this.#delegationOf(exchange), STOPPED_RUN_NOTE)),
+            { countsForIdle: false },
           );
         }),
       ),
     );
-  }
-
-  /** Every exchange of the session replays what it deferred, once no record write of the session is out. */
-  #replayDeferred(sessionId: string): void {
-    const held = [...this.#exchanges.values()].filter(
-      (exchange) => exchange.sessionId === sessionId,
-    );
-    if (held.some((exchange) => exchange.pendingRecord)) return;
-    for (const exchange of held) {
-      for (const event of exchange.deferred.splice(0)) this.#onRunEvent(event);
-    }
-  }
-
-  /** Whether a record write of the exchange's session is still out, which holds back what any of its runs says. */
-  #recordOut(exchange: Exchange): boolean {
-    for (const held of this.#exchanges.values()) {
-      if (held.sessionId === exchange.sessionId && held.pendingRecord) return true;
-    }
-    return false;
   }
 
   #voiceIn(session: StandingSession, phase: VoicePhase | undefined): void {
@@ -1496,28 +1446,6 @@ export class LiveSessionService {
     this.#reportStatus();
   }
 
-  /** Whether an exchange's reply may be said now: once its actions settled, and for a woken run only while no asked run of its session is under way. */
-  #mayReply(exchange: Exchange): boolean {
-    if (!exchange.settled) return false;
-    if (!exchange.woken) return true;
-    for (const held of this.#exchanges.values()) {
-      if (held.sessionId === exchange.sessionId && !held.woken && held.end === undefined) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  /** Says what each woken exchange of the session held back, once its reply may be said. */
-  #releaseWoken(sessionId: string): void {
-    for (const held of this.#exchanges.values()) {
-      if (held.sessionId !== sessionId || !held.woken || !this.#mayReply(held)) continue;
-      for (const sentence of held.buffered.splice(0)) this.#speakSentence(held, sentence);
-      // A woken run that ended while it waited was kept for this; it ends now.
-      if (held.end !== undefined && held.finalize === undefined) this.#finalize(held);
-    }
-  }
-
   #onRunEvent(event: LiveBrainRunEvent): void {
     if (event.kind === LIVE_BRAIN_RUN_EVENT.WOKEN) {
       this.#registerWoken(event.runId);
@@ -1525,10 +1453,6 @@ export class LiveSessionService {
     }
     const exchange = this.#exchanges.get(event.runId);
     if (!exchange) return;
-    if (this.#recordOut(exchange)) {
-      exchange.deferred.push(event);
-      return;
-    }
     switch (event.kind) {
       case LIVE_BRAIN_RUN_EVENT.SLOW_STEP: {
         if (exchange.slowStepTold || exchange.silenced) return;
@@ -1566,17 +1490,14 @@ export class LiveSessionService {
         if (session) session.pendingCode = { shown, delegationId: this.#delegationOf(exchange) };
         return;
       }
-      // The brain tells the settle as soon as no write of the run is still
-      // out, which for a read-only run is at its first words, so the gate
-      // below releases the reply earlier without meaning anything weaker.
-      case LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED:
-        exchange.settled = true;
-        if (!this.#mayReply(exchange)) return;
-        for (const sentence of exchange.buffered.splice(0)) this.#speakSentence(exchange, sentence);
-        return;
+      // Note that a sentence is spoken as it is told, with no settle of the
+      // service's own to wait for, because the brain tells none ahead of the
+      // results of the actions journaled before it: the settled mark it tells
+      // first is that ordering's, already kept, and a second gate here only
+      // held replies back. Nor does a woken run's reply wait for an asked run
+      // to end: the developer's next ask silences it as it would any older one.
       case LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE:
-        if (this.#mayReply(exchange)) this.#speakSentence(exchange, event.sentence);
-        else exchange.buffered.push(event.sentence);
+        this.#speakSentence(exchange, event.sentence);
         return;
       case LIVE_BRAIN_RUN_EVENT.ACTIVITY:
         exchange.action = event.action;
@@ -1589,8 +1510,6 @@ export class LiveSessionService {
         this.#reportStatus();
         this.#cancelDelay(exchange.finalize);
         exchange.finalize = this.#after(EXCHANGE_FINALIZE_MS, () => this.#finalize(exchange));
-        // An asked run ending may be the pause a woken run's reply was waiting for.
-        if (!exchange.woken) this.#releaseWoken(exchange.sessionId);
         return;
       default:
         return;
@@ -1651,13 +1570,7 @@ export class LiveSessionService {
     const session = this.#sessionOf(exchange);
     if (!session) return;
     exchange.lastNoteAt = this.#now();
-    session.channel.enqueue(
-      Effect.suspend(() =>
-        Effect.asVoid(
-          session.channel.send(thinkingAppend(this.#input(this.#delegationOf(exchange), note))),
-        ),
-      ),
-    );
+    this.#append(session, thinkingAppend(this.#input(this.#delegationOf(exchange), note)));
   }
 
   /**
@@ -1667,8 +1580,6 @@ export class LiveSessionService {
    */
   #finalize(exchange: Exchange): void {
     exchange.finalize = undefined;
-    // A woken reply still waiting for its pause is kept until `#releaseWoken` says it.
-    if (exchange.woken && !exchange.silenced && exchange.buffered.length > 0) return;
     if (this.#exchanges.get(exchange.runId) === exchange) this.#exchanges.delete(exchange.runId);
     // Note that the note follows any sentence the run released while it ran,
     // because those told only what it had settled so far. A woken run that did
@@ -1705,22 +1616,17 @@ export class LiveSessionService {
     if (held === undefined) return;
     session.pendingCode = undefined;
     this.#options.onCode?.(held.shown);
-    session.channel.enqueue(
-      Effect.suspend(() =>
-        Effect.asVoid(
-          session.channel.send(
-            thinkingAppend(this.#input(held.delegationId, codeOnScreenNote(held.shown.code.ref))),
-          ),
-        ),
-      ),
+    this.#append(
+      session,
+      thinkingAppend(this.#input(held.delegationId, codeOnScreenNote(held.shown.code.ref))),
     );
   }
 
   /**
    * One sentence of an exchange's reply, or the standing note it ended on.
    * A silenced exchange says none of it, checked here and again as each
-   * chunk reaches the channel, so a sentence queued behind an earlier append
-   * is dropped by a silence that landed while it waited.
+   * chunk's turn on the wire comes, so a chunk still queued when a silence
+   * lands is withdrawn unsent.
    */
   #speakSentence(exchange: Exchange, sentence: string): void {
     if (exchange.silenced) return;
@@ -1731,29 +1637,45 @@ export class LiveSessionService {
   #speakFor(exchange: Exchange, sentence: string, silenced: () => boolean = () => false): void {
     const session = this.#sessionOf(exchange);
     if (!session) return;
-    const delegationId = this.#delegationOf(exchange);
-    this.#voiceIn(session, VOICE_PHASE.ABOUT_TO_ANSWER);
-    for (const chunk of chunkForAppend(sentence)) {
-      session.channel.enqueue(
-        Effect.gen({ self: this }, function* () {
-          const taken = yield* this.#sayChunk(session, delegationId, chunk, silenced);
-          if (taken) exchange.spokenChunks += 1;
-        }),
-      );
-    }
+    this.#speakInto(session, this.#delegationOf(exchange), sentence, silenced);
   }
 
-  #speakInto(session: StandingSession, delegationId: LiveDelegationId, text: string): void {
+  #speakInto(
+    session: StandingSession,
+    delegationId: LiveDelegationId,
+    text: string,
+    silenced: () => boolean = () => false,
+  ): void {
     this.#voiceIn(session, VOICE_PHASE.ABOUT_TO_ANSWER);
-    for (const chunk of chunkForAppend(text)) {
-      session.channel.enqueue(Effect.asVoid(this.#sayChunk(session, delegationId, chunk)));
-    }
+    for (const chunk of chunkForAppend(text))
+      this.#sayChunk(session, delegationId, chunk, silenced);
   }
 
   /**
-   * One chunk of words for the voice to say under a delegation, answering
-   * whether the session took it. A chunk the session refused is sent once
-   * more under a fresh id, so one refused append does not leave a reply
+   * Puts one append on the session's wire now, in order behind what was
+   * queued before it, and tracks its answer on a fiber of its own, so nothing
+   * queued after it waits for that answer. One left unanswered is reported:
+   * the words may still reach the timeline once it moves again.
+   */
+  #append(
+    session: StandingSession,
+    event: LiveAppendEvent,
+    options: { countsForIdle?: boolean } = {},
+  ): void {
+    const outcome = session.channel.queue(event, options);
+    this.#start(
+      Effect.flatMap(outcome, (settled) =>
+        settled === APPEND_OUTCOME.UNANSWERED
+          ? Effect.sync(() => this.#options.report("A live append went unanswered"))
+          : Effect.void,
+      ),
+    );
+  }
+
+  /**
+   * One chunk of words for the voice to say under a delegation, queued now
+   * and tracked on a fiber of its own. A chunk the session refused is sent
+   * once more under a fresh id, so one refused append does not leave a reply
    * silent; refused again, it is reported and given up. A chunk left
    * unanswered is reported and never sent again, because the conversations
    * guide has a pending append still reach the timeline once it moves, and a
@@ -1763,21 +1685,26 @@ export class LiveSessionService {
     session: StandingSession,
     delegationId: LiveDelegationId,
     chunk: string,
-    silenced: () => boolean = () => false,
-  ): Effect.Effect<boolean> {
-    return Effect.gen({ self: this }, function* () {
-      if (silenced()) return false;
-      const say = () => session.channel.deliver(commentaryAppend(this.#input(delegationId, chunk)));
-      const first = yield* say();
-      const retried = first === APPEND_OUTCOME.REFUSED && !silenced();
-      const outcome = retried ? yield* say() : first;
-      if (retried && outcome === APPEND_OUTCOME.REFUSED) {
-        this.#options.report("A reply's commentary was refused twice and is not said");
-      } else if (outcome === APPEND_OUTCOME.UNANSWERED) {
-        this.#options.report("A reply's commentary went unanswered and is not sent again");
-      }
-      return outcome === APPEND_OUTCOME.TAKEN;
-    });
+    silenced: () => boolean,
+  ): void {
+    if (silenced()) return;
+    const say = () =>
+      session.channel.queue(commentaryAppend(this.#input(delegationId, chunk)), {
+        withdrawn: silenced,
+      });
+    const first = say();
+    this.#start(
+      Effect.gen({ self: this }, function* () {
+        const firstOutcome = yield* first;
+        const retried = firstOutcome === APPEND_OUTCOME.REFUSED && !silenced();
+        const outcome = retried ? yield* say() : firstOutcome;
+        if (retried && outcome === APPEND_OUTCOME.REFUSED) {
+          this.#options.report("A reply's commentary was refused twice and is not said");
+        } else if (outcome === APPEND_OUTCOME.UNANSWERED) {
+          this.#options.report("A reply's commentary went unanswered and is not sent again");
+        }
+      }),
+    );
   }
 
   /** The session an exchange's delegation ids belong to, if it still stands; a closed one leaves them dead. */

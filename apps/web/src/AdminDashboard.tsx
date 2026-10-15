@@ -1,5 +1,5 @@
+import type { AdminMetricsWindow } from "@luke/service/admin/http";
 import { useCallback, useEffect, useState } from "react";
-import type { AdminMetricsWindow } from "../server/admin/http";
 import { authClient } from "./admin/auth-client";
 import { ForbiddenCard, SignInCard } from "./admin/chrome/cards";
 import type { ViewerAccount } from "./admin/chrome/page-header";

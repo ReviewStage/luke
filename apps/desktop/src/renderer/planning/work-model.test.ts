@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
-import { AGENT_TOOL, EVE_TOOL } from "@sidecar/features/agent-tools";
+import { AGENT_TOOL, EVE_TOOL } from "@luke/features/agent-tools";
 import {
   PLAN_WORK_STATE,
   type PlanWorkState,
   type PlanWorkTurn,
   type PlanWorkWorker,
-} from "@sidecar/features/planning-view";
-import type { WireRecord } from "@sidecar/wire";
+} from "@luke/features/planning-view";
+import { TURN_ROW, type TurnRow } from "@luke/features/turn-rows";
+import type { WireRecord } from "@luke/wire";
 import { test } from "vitest";
 import {
   conversationOf,
@@ -20,7 +21,6 @@ import {
 import { TOOL_STATE } from "../ai-elements/tool";
 import { AGENT_PART, type AgentPart, agentParts, agentRows, delegates } from "./coding-agent-model";
 import { delegationView, toolCallView } from "./tool-call-model";
-import { TURN_ROW, type TurnRow } from "./turn-rows";
 import { workerOf, workFailed, workRowsOf } from "./work-model";
 
 /** What a reader scans a part as: words, a thought, a call, or a subagent. */

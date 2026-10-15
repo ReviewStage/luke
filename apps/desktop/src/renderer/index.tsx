@@ -1,9 +1,9 @@
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
+import { WINDOW_ROLE } from "@luke/gateway/window-session";
+import type { AppStateSnapshot } from "@luke/host/app-state";
 import * as Sentry from "@sentry/electron/renderer";
 import { Effect } from "effect";
 import { createRoot } from "react-dom/client";
-import type { AppStateSnapshot } from "#shared/messages/app-state";
-import { WINDOW_ROLE } from "#shared/messages/session";
 import { eventWithoutAccessTokens, withoutAccessTokens } from "#shared/sentry-breadcrumbs";
 import { App } from "./app";
 import { callAvatarAtom } from "./call/call-avatar";

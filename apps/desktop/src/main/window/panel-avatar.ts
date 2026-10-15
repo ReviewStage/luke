@@ -9,10 +9,10 @@
  * it is.
  */
 
-import type { AvatarGrant } from "@sidecar/features/avatar-grant";
-import type { UnparsedWireValue } from "@sidecar/wire";
+import type { AvatarGrant } from "@luke/features/avatar-grant";
+import type { AvatarFeed } from "@luke/voice/avatar";
+import type { UnparsedWireValue } from "@luke/wire";
 import { channels } from "#shared/bridge";
-import type { AvatarFeed } from "#shared/messages/avatar";
 
 /** The panel's page as the relay reaches it: its own `webContents`, and nothing wider. */
 export interface AvatarPage {

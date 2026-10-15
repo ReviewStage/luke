@@ -1,6 +1,6 @@
 import { Schema as EffectSchema } from "effect";
 import { workspaceIdSchema } from "./plan-wire.js";
-import { WORKSPACE_ROLE } from "./workspace-wire.js";
+import { ASSIGNABLE_ROLE } from "./workspace-wire.js";
 
 /**
  * workspace-invitation-wire.ts -- a workspace invitation as the Mac asks for, lists, and cancels it, and the web page its invitee accepts it on.
@@ -12,11 +12,16 @@ import { WORKSPACE_ROLE } from "./workspace-wire.js";
  * invitee opens to accept it on the browser's own session.
  *
  * The accept address carries the invited address beside the invitation's
- * id, because Better Auth reads an invitation to its recipient alone: a
- * browser signed in at another address, which a Google and a GitHub account
- * of the same person often are, learns nothing from the plugin, and the
- * page still has to say whose invitation it is. The address in the query
- * only names it; who may accept is the plugin's check, not the page's.
+ * id, because an invitation is read to its recipient alone: a browser
+ * signed in at another address, which a Google and a GitHub account of the
+ * same person often are, learns nothing of it, and the page still has to
+ * say whose invitation it is. The address in the query only names it; who
+ * may accept is the plugin's check, not the page's.
+ *
+ * An invitation is the workspace's, not its inviter's: the accept page reads
+ * it through Luke's own route (`invitationOfferAnswerSchema`), which names
+ * the inviter only while they are still a member, so a link stays good after
+ * whoever made it left, as the plugin's own read would not let it.
  */
 
 /** The page an invitee accepts an invitation on. */
@@ -53,12 +58,9 @@ export function invitationAcceptQuery(search: string): InvitationAcceptQuery {
 
 /**
  * The roles an invitation may carry. A workspace has one owner, its
- * creator, so nobody is invited as one.
+ * creator, so nobody is invited as one; and only the owner invites an admin.
  */
-export const INVITATION_ROLE = {
-  ADMIN: WORKSPACE_ROLE.ADMIN,
-  MEMBER: WORKSPACE_ROLE.MEMBER,
-} as const;
+export const INVITATION_ROLE = ASSIGNABLE_ROLE;
 
 const INVITATION_BOUNDS = {
   /** The most characters an address may spell (RFC 5321's path limit). */
@@ -108,6 +110,44 @@ export const workspaceInvitationsAnswerSchema = EffectSchema.Struct({
 
 /** The query an invitations read names its workspace under. */
 export const WORKSPACE_INVITATIONS_QUERY = { WORKSPACE_ID: "workspaceId" } as const;
+
+/** Why the accept page's read found no invitation to offer: used, canceled, or expired; made for another address; or the address not verified. */
+export const INVITATION_OFFER_REFUSAL = {
+  SPENT: "spent",
+  NOT_RECIPIENT: "not-recipient",
+  UNVERIFIED: "unverified",
+} as const;
+
+/** The accept page's read's query parameter naming the invitation. */
+export const INVITATION_OFFER_QUERY = { ID: "id" } as const;
+
+/** The accept page's read of one invitation (GET), by its id. */
+export const invitationOfferQuerySchema = EffectSchema.Struct({
+  id: EffectSchema.String.check(EffectSchema.isNonEmpty()),
+});
+
+/**
+ * An invitation as its recipient is offered it: the workspace's name, the
+ * role, and who invited them while they are still a member; or why there is
+ * none to offer.
+ */
+export const invitationOfferAnswerSchema = EffectSchema.Union([
+  EffectSchema.Struct({
+    offer: EffectSchema.Struct({
+      id: EffectSchema.String,
+      workspaceName: EffectSchema.String,
+      role: invitationRoleSchema,
+      inviter: EffectSchema.optionalKey(
+        EffectSchema.Struct({ name: EffectSchema.String, email: EffectSchema.String }),
+      ),
+    }),
+  }),
+  EffectSchema.Struct({
+    refused: EffectSchema.Literals(Object.values(INVITATION_OFFER_REFUSAL)),
+  }),
+]);
+
+export type InvitationOfferAnswer = typeof invitationOfferAnswerSchema.Type;
 
 /** A pending invitation canceled (POST), answered with those still pending. */
 export const workspaceInvitationCancelSchema = EffectSchema.Struct({

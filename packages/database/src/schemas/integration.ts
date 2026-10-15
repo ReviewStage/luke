@@ -1,4 +1,4 @@
-import type { IntegrationProvider } from "@sidecar/features/integration-wire";
+import type { IntegrationProvider } from "@luke/features/integration-wire";
 import { pgTable, primaryKey, text, uniqueIndex } from "drizzle-orm/pg-core";
 import { timestamptz } from "./_helpers.js";
 import { user } from "./auth.js";
@@ -10,7 +10,7 @@ import { user } from "./auth.js";
  * Luke's own word on whether its agents may use that grant, because Connect
  * has no way to ask whether a sign-in finished and its SDK caches tokens in
  * process. A row standing `connected` is what lets an agent read a token
- * (`hosted/integration-connection.ts`); no row is a disconnected provider, so
+ * (`packages/service/src/integrations/integration-connection.ts`); no row is a disconnected provider, so
  * a Disconnect deletes the row before anything is asked of Connect, and no
  * cache anywhere outlives it. `state` is the one-time value a browser sign-in
  * carries back to the callback, unique across every provider so the callback

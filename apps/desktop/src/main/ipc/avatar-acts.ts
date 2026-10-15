@@ -11,9 +11,9 @@
  * lip-sync it.
  */
 
+import { ACT, ACT_KIND } from "@luke/host/acts";
+import { AVATAR_STATUS } from "@luke/voice/avatar";
 import type { WebContents } from "electron";
-import { ACT, ACT_KIND } from "#shared/messages/acts";
-import { AVATAR_STATUS } from "#shared/messages/avatar";
 import { ActRefused, type ActRows } from "../act-router";
 import type { AppStateStore } from "../app-state";
 import type { ReportHandlers } from "../bridge-host";

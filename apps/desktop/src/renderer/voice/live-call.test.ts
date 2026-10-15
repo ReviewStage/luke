@@ -5,13 +5,13 @@ import {
   LIVE_TRANSPORT_STATE,
   type LivePeerEndReason,
   type LiveTransportState,
-} from "@sidecar/gateway";
-import { LIVE_CLIENT_EVENT, LIVE_SERVER_EVENT, LIVE_STATUS, type LiveStatus } from "@sidecar/live";
-import type { LiveCaptionRow, LiveVoiceSpeakers } from "@sidecar/voice/orchestrator";
-import type { WireRecord } from "@sidecar/wire";
+} from "@luke/gateway";
+import { LIVE_CLIENT_EVENT, LIVE_SERVER_EVENT, LIVE_STATUS, type LiveStatus } from "@luke/live";
+import { AVATAR_FEED_KIND, AVATAR_STATUS, type AvatarFeed } from "@luke/voice/avatar";
+import type { LiveCaptionRow, LiveVoiceSpeakers } from "@luke/voice/orchestrator";
+import type { WireRecord } from "@luke/wire";
 import { type Context, Deferred, Duration, Effect, Fiber, type Scope } from "effect";
 import { TestClock } from "effect/testing";
-import { AVATAR_FEED_KIND, AVATAR_STATUS, type AvatarFeed } from "#shared/messages/avatar";
 import type { AvatarFeedOptions } from "../avatar-feed/start-avatar-feed";
 import { LiveCall, type LiveStreamSlot, SESSION_CLOSE_TIMEOUT_MS } from "./live-call";
 import {

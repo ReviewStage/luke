@@ -1,24 +1,23 @@
 import {
+  connectionHealth,
+  type IntegrationTool,
+  toolsCount,
+} from "@luke/features/integration-health";
+import { SIGN_IN_ACTION } from "@luke/features/integration-sign-in";
+import { byName, toolTitle } from "@luke/features/integration-tool-model";
+import {
   INTEGRATION_PROVIDER_LIST,
   INTEGRATION_STATUS,
   type IntegrationProvider,
-} from "@sidecar/features/integration-wire";
-import { ArrowLeftIcon, ChevronRightIcon, GearIcon, McpIcon, SearchIcon } from "@sidecar/panel";
-import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import { AnchoredPopover, POPOVER_ALIGN } from "../anchored-popover";
-import { grantedBySignIn, useIntegrationGrant } from "../integration-grant";
-import { connectionHealth, type IntegrationTool, toolsCount } from "../integration-health";
-import { matchIntegration, shownTools } from "../integration-search";
-import { SIGN_IN_ACTION } from "../integration-sign-in";
-import type { IntegrationStatuses } from "../integration-statuses";
-import { IntegrationToolList } from "../integration-tool-list";
-import { useIntegrationTools } from "../integration-tools";
-import { ProviderMark } from "../provider-marks";
-import { Highlighted } from "../search-field";
-import { searchTokens } from "../search-tokens";
-import { SPINNER_SIZE, SpinnerRing } from "../spinner";
-import { Switch } from "../switch";
-import { Tooltip } from "../tooltip";
+} from "@luke/features/integration-wire";
+import {
+  ArrowLeftIcon,
+  ChevronRightIcon,
+  GearIcon,
+  McpIcon,
+  ProviderMark,
+  SearchIcon,
+} from "@luke/ui";
 import {
   opensTools,
   SERVER_ACTION,
@@ -30,7 +29,19 @@ import {
   serverRows,
   switchedServers,
   type ToolHit,
-} from "./agent-servers-model";
+} from "@luke/ui/agent-servers-model";
+import { matchIntegration, shownTools } from "@luke/ui/integration-search";
+import { searchTokens } from "@luke/ui/search-tokens";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { AnchoredPopover, POPOVER_ALIGN } from "../anchored-popover";
+import { grantedBySignIn, useIntegrationGrant } from "../integration-grant";
+import type { IntegrationStatuses } from "../integration-statuses";
+import { IntegrationToolDetail, IntegrationToolList, keepInView } from "../integration-tool-list";
+import { useIntegrationTools } from "../integration-tools";
+import { Highlighted } from "../search-field";
+import { SPINNER_SIZE, SpinnerRing } from "../spinner";
+import { Switch } from "../switch";
+import { Tooltip } from "../tooltip";
 
 /**
  * agent-servers.tsx -- the MCP button at an agent box's foot, and the popover that lists the servers the agent is handed with a switch for each, and each server's tools.
@@ -50,21 +61,27 @@ import {
  * or says it failed or did not finish and offers Try again
  * (`../integration-sign-in.ts`). Pressing a connected server turns the popover into
  * its page, in place: back, its name, its switch, a filter, and its tools
- * in alphabetical order, each its name, the badge its server's annotations
- * earn it, and what it does, a press opening it onto the whole of that
- * (`../integration-tool-list.tsx`), the popover standing open. What is typed in the home's field finds
- * servers by name and every tool by name or description, and a tool found
+ * in alphabetical order, each one line of its title, its name, the badge
+ * its server's annotations earn it, and what it does
+ * (`../integration-tool-list.tsx`). Pressing a tool turns the page into
+ * the tool's own, one level further in: back, its title and name, its
+ * server's hints, what it does rendered, and its parameters, the popover
+ * standing open. What is typed in the home's field finds
+ * servers by name and every tool by name, title, or description, and a tool found
  * opens its server's page filtered to the search. Focus stays in the field
- * throughout, as the searchable menu keeps it: the arrows move one
- * highlight through the rows, Enter or Right opens the highlighted server
- * or tool, Space on an empty search flips its switch, and on a server's
- * page Left, or Backspace on an empty filter, goes back. Where every
+ * on the home and a server's page, as the searchable menu keeps it: the
+ * arrows move one highlight through the rows, Enter or Right opens the
+ * highlighted server or tool, Space on an empty search flips its switch,
+ * and on a server's page Left, or Backspace on an empty filter, goes back.
+ * A tool's page hands the focus to its body, which the arrows scroll, and
+ * Left or Backspace goes back to the server's page with its filter and its
+ * highlight as they were. Where every
  * connection stands is the composer's read (`../integration-statuses.ts`),
  * taken as it is drawn and again when the window is focused, which is how
  * the developer comes back from the browser, so the popover stays open
  * while the window is away. A draft agent keeps its choice until its first
- * message starts it. Escape goes back from a server's page and otherwise
- * closes the popover, and stops there so the panel behind stays open; a
+ * message starts it. Escape goes back one level, from a tool's page or a
+ * server's, and otherwise closes the popover, and stops there so the panel behind stays open; a
  * second press of the button, and focus leaving it for another part of the
  * window, close it too.
  */
@@ -97,9 +114,6 @@ const PAGE = {
   NONE: "No tools match",
   BACK: "Back to MCP servers",
 } as const;
-
-/** How far the arrows scroll a server's page, about one tool. */
-const PAGE_STEP = 44;
 
 /**
  * A pointer's press that leaves the focus in the field, so the keys the
@@ -165,15 +179,6 @@ function SearchRow({
   );
 }
 
-/** Keeps a row inside its scroller's view, scrolling only the scroller (the renderer's rule against `scrollIntoView`). */
-function keepInView(list: HTMLElement | null, row: Element | null): void {
-  if (list === null || !(row instanceof HTMLElement)) return;
-  const top = row.offsetTop - list.offsetTop;
-  if (top < list.scrollTop) list.scrollTop = top;
-  else if (top + row.offsetHeight > list.scrollTop + list.clientHeight)
-    list.scrollTop = top + row.offsetHeight - list.clientHeight;
-}
-
 function ServersPopover({
   id,
   servers,
@@ -209,10 +214,29 @@ function ServersPopover({
   const [filter, setFilter] = useState("");
   const [opened, setOpened] = useState<IntegrationProvider | undefined>(undefined);
   const [highlight, setHighlight] = useState(0);
+  const [pageHighlight, setPageHighlight] = useState(0);
+  const [openedTool, setOpenedTool] = useState<string | undefined>(undefined);
+  const toolBody = useRef<HTMLDivElement>(null);
   const grant = useIntegrationGrant(statuses);
 
   // A server's page stands only while its server still answers with tools; otherwise the home is drawn.
   const page = rows.find((row) => row.provider === opened && opensTools(row));
+  // Note that the page's filter reads as the home's search does, so a query
+  // handed down that found a tool by its server's name ("vercel get") still
+  // finds it here.
+  const pageTokens = searchTokens(filter);
+  const pageTools =
+    page === undefined
+      ? []
+      : byName(
+          shownTools(
+            matchIntegration(page.provider, page.tools ?? [], pageTokens),
+            page.tools ?? [],
+          ),
+        );
+  const pageAt = Math.min(pageHighlight, Math.max(pageTools.length - 1, 0));
+  // A tool's page stands only while its server still lists it.
+  const tool = page?.tools?.find((each) => each.name === openedTool);
   const found = searchServers(rows, query);
   const groups = serverGroups(found.rows);
   const picks: Pick[] = [
@@ -221,15 +245,20 @@ function ServersPopover({
   ].map((each) => ("tool" in each ? each : { row: each }));
   const at = Math.min(highlight, Math.max(picks.length - 1, 0));
 
-  // The field takes focus as the popover opens and as either page is drawn, so the keys and focus leaving it are heard.
+  // The field takes focus as the popover opens and as either page is drawn,
+  // and a tool's page its body, so the keys and focus leaving it are heard.
   useEffect(() => {
-    field.current?.focus();
-  }, [page?.provider]);
+    if (tool !== undefined) toolBody.current?.focus({ preventScroll: true });
+    else field.current?.focus();
+  }, [page?.provider, tool]);
 
   useLayoutEffect(() => {
-    if (page !== undefined) return;
-    keepInView(list.current, document.getElementById(`${rowsId}-${at}`));
-  }, [at, page, rowsId]);
+    if (tool !== undefined) return;
+    keepInView(
+      list.current,
+      document.getElementById(page === undefined ? `${rowsId}-${at}` : `${rowsId}-tool-${pageAt}`),
+    );
+  }, [at, page, pageAt, tool, rowsId]);
 
   /** A grant begun from the row: the browser opens, and the row waits on the window's return to read it. */
   const connect = (provider: IntegrationProvider) => {
@@ -246,12 +275,27 @@ function ServersPopover({
   const open = (row: ServerRow, search = "") => {
     setOpened(row.provider);
     setFilter(search);
+    setPageHighlight(0);
+    setOpenedTool(undefined);
   };
 
   const back = () => {
     setOpened(undefined);
     setFilter("");
   };
+
+  const openTool = (name: string) => {
+    setPageHighlight(
+      Math.max(
+        pageTools.findIndex((each) => each.name === name),
+        0,
+      ),
+    );
+    setOpenedTool(name);
+  };
+
+  /** Back from a tool's page to its server's, the filter and the highlight as they were. */
+  const closeTool = () => setOpenedTool(undefined);
 
   /**
    * What a pick does when chosen: a server opens or connects, and a tool
@@ -299,19 +343,35 @@ function ServersPopover({
   };
 
   const onPageKey = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    const caretAtEnd = event.currentTarget.selectionStart === filter.length;
+    const highlighted = pageTools[pageAt];
     if ((event.key === "ArrowLeft" || event.key === "Backspace") && filter === "") {
       event.preventDefault();
       back();
     } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
-      list.current?.scrollBy({ top: event.key === "ArrowDown" ? PAGE_STEP : -PAGE_STEP });
+      const step = event.key === "ArrowDown" ? 1 : -1;
+      setPageHighlight(Math.min(Math.max(pageAt + step, 0), Math.max(pageTools.length - 1, 0)));
+    } else if (
+      highlighted !== undefined &&
+      (event.key === "Enter" || (event.key === "ArrowRight" && caretAtEnd))
+    ) {
+      event.preventDefault();
+      openTool(highlighted.name);
     }
+  };
+
+  const onToolKey = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "ArrowLeft" && event.key !== "Backspace") return;
+    event.preventDefault();
+    closeTool();
   };
 
   const onKey = (event: React.KeyboardEvent) => {
     if (event.key !== "Escape") return;
     event.stopPropagation();
-    if (page !== undefined) back();
+    if (tool !== undefined) closeTool();
+    else if (page !== undefined) back();
     else onClose();
   };
 
@@ -527,12 +587,6 @@ function ServersPopover({
   );
 
   const serverPage = (row: ServerRow) => {
-    // Note that the page's filter reads as the home's search does, so a query
-    // handed down that found a tool by its server's name ("vercel get") still
-    // finds it here.
-    const tokens = searchTokens(filter);
-    const all = row.tools ?? [];
-    const tools = shownTools(matchIntegration(row.provider, all, tokens), all);
     return (
       <>
         <div className="agent-servers-page-head">
@@ -558,15 +612,22 @@ function ServersPopover({
           field={field}
           value={filter}
           placeholder={`Filter ${toolsCount(row.tools?.length ?? 0)}`}
-          onChange={setFilter}
+          onChange={(value) => {
+            setFilter(value);
+            setPageHighlight(0);
+          }}
           onKeyDown={onPageKey}
         />
         <div ref={list} className="plan-compose-menu-list agent-servers-list">
-          {tools.length === 0 ? <p className="plan-compose-menu-note">{PAGE.NONE}</p> : null}
+          {pageTools.length === 0 ? <p className="plan-compose-menu-note">{PAGE.NONE}</p> : null}
           <IntegrationToolList
             server={row.name}
-            tools={tools}
-            tokens={tokens}
+            tools={pageTools}
+            tokens={pageTokens}
+            current={pageTools[pageAt]?.name}
+            idOf={(each) => `${rowsId}-tool-${pageTools.indexOf(each)}`}
+            onCurrent={(each) => setPageHighlight(pageTools.indexOf(each))}
+            onOpen={(each) => openTool(each.name)}
             onPressStart={keepFieldFocus}
           />
         </div>
@@ -574,12 +635,33 @@ function ServersPopover({
     );
   };
 
+  const toolPage = (row: ServerRow, shown: IntegrationTool) => (
+    <div className="agent-servers-tool-page">
+      <IntegrationToolDetail
+        server={row.name}
+        tool={shown}
+        tokens={pageTokens}
+        backLabel={`Back to ${row.name} tools`}
+        onBack={closeTool}
+        onPressStart={keepFieldFocus}
+        bodyRef={toolBody}
+        onBodyKeyDown={onToolKey}
+      />
+    </div>
+  );
+
   return (
     <div
       id={id}
       className="menu-surface searchable-menu agent-servers-menu"
       role="dialog"
-      aria-label={page !== undefined ? `${page.name} tools` : SERVERS_LABEL}
+      aria-label={
+        tool !== undefined
+          ? toolTitle(tool)
+          : page !== undefined
+            ? `${page.name} tools`
+            : SERVERS_LABEL
+      }
       // Note that the dialog takes the focus a press on its words would
       // otherwise hand to the page, because focus leaving the popover closes
       // it: a press that selects a tool's description must not.
@@ -587,7 +669,11 @@ function ServersPopover({
       onKeyDown={onKey}
       onBlur={(event) => onLeave(event.relatedTarget)}
     >
-      {page !== undefined ? serverPage(page) : home}
+      {page !== undefined && tool !== undefined
+        ? toolPage(page, tool)
+        : page !== undefined
+          ? serverPage(page)
+          : home}
       <div className="plan-compose-menu-foot">
         <button
           type="button"

@@ -1,15 +1,15 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { SETTINGS_VIEW } from "@luke/settings/settings-views";
+import { PLANS_PAGE } from "@luke/ui/planning-model";
 import { act, createElement, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { plansControl } from "#testing/plans-control";
 import { useWindowHistory, type WindowHistory } from "./navigation-history";
 import { PANEL_TAB } from "./panel-tabs";
-import { PLANS_PAGE } from "./planning/planning-model";
 import type { PlansControl } from "./planning/use-plans-tab";
-import { SETTINGS_VIEW } from "./settings-views";
 
 const PLAN_ID = "0f6a2c4e-8b1d-4e3f-9a57-1c2b3d4e5f60";
 

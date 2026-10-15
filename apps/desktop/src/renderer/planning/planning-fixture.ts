@@ -1,7 +1,7 @@
-import { AGENT_TOOL, EVE_TOOL } from "@sidecar/features/agent-tools";
-import { BOARD_ELEMENT_TYPE, DRAWING_ZONE } from "@sidecar/features/board-vocabulary";
-import type { Board, DrawingElement } from "@sidecar/features/board-wire";
-import type { Plan, PlanSummary } from "@sidecar/features/plan-wire";
+import { AGENT_TOOL, EVE_TOOL } from "@luke/features/agent-tools";
+import { BOARD_ELEMENT_TYPE, DRAWING_ZONE } from "@luke/features/board-vocabulary";
+import type { Board, DrawingElement } from "@luke/features/board-wire";
+import type { Plan, PlanSummary } from "@luke/features/plan-wire";
 import {
   type CodeToken,
   PLAN_WORK_STATE,
@@ -11,17 +11,17 @@ import {
   type PlanningRepositoriesAnswer,
   type PlanningView,
   type PlanWorkTurn,
-} from "@sidecar/features/planning-view";
+} from "@luke/features/planning-view";
 import {
   type PlanTranscript,
   TRANSCRIPT_PART_TYPE,
   type TranscriptMessage,
-} from "@sidecar/features/transcript-wire";
-import { WORKSPACE_ROLE, type Workspace } from "@sidecar/features/workspace-wire";
-import { LIVE_STATUS, TRANSCRIPT_SPEAKER } from "@sidecar/live";
-import type { WireRecord, WireValue } from "@sidecar/wire";
-import { RUN_PROFILE } from "#shared/messages/app-state";
-import type { VoiceView } from "#shared/messages/voice-view";
+} from "@luke/features/transcript-wire";
+import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
+import { RUN_PROFILE } from "@luke/host/app-state";
+import { LIVE_STATUS, TRANSCRIPT_SPEAKER } from "@luke/live";
+import type { VoiceView } from "@luke/voice/voice-view";
+import type { WireRecord, WireValue } from "@luke/wire";
 import { TOOL_STATE } from "../ai-elements/tool";
 import {
   SIDE_PANEL_TAB,
@@ -37,26 +37,32 @@ import {
  * would show only its signed-out line. It draws the synthetic list instead,
  * which is what the expanded capture in `scripts/evidence.sh` shows now that
  * the panel opens on Plans, and under the planning profile it also opens the
- * reference journey's plan from `docs/PLANNING.md`, a draft of the default
+ * reference journey's plan from `docs/TASKS.md`, a draft of the default
  * template partway through with Luke working on the call about it, which is
  * what the planning capture shows. Every name and repository here is
  * invented; nothing is read from an account.
  */
 
 /**
- * The fixture account's workspaces: its first one, which the sidebar
- * lists, and Acme, a team's it administers, whose GitHub organization is
- * connected, so the captures draw the sidebar's switcher with every item.
+ * The fixture account's workspaces: its first one, named for the account as
+ * the service names it, which the sidebar lists, with the account's own
+ * GitHub connected, and Acme, a team's it administers, whose GitHub organization is connected, so the captures
+ * draw the sidebar's switcher with every item. Each workspace's plans are
+ * about repositories its own GitHub reaches, as the service keeps them, so
+ * no plan here is one stranded in a workspace that cannot reach it.
  */
 const FIXTURE_FIRST: Workspace = {
   id: "workspace-personal",
-  name: "Personal",
+  name: "Ada Lovelace",
+  slug: "personal",
   role: WORKSPACE_ROLE.OWNER,
-  github: null,
+  github: { login: "ada", active: true },
+  personal: true,
 };
 const FIXTURE_TEAM: Workspace = {
   id: "workspace-acme",
   name: "Acme",
+  slug: "acme",
   role: WORKSPACE_ROLE.ADMIN,
   github: { login: "acme", active: true },
 };
@@ -111,7 +117,7 @@ const FIXTURE_PLAN: Plan = {
   name: "Teammate invitations",
   createdAt: 1,
   updatedAt: 2,
-  repository: "acme/relay",
+  repository: "ada/relay",
   document: { body: `${FIXTURE_TEXT}\n`, assumptions: [] },
 };
 
@@ -122,7 +128,7 @@ const FIXTURE_OTHER_PLANS: readonly PlanSummary[] = [
     name: "Billing export",
     createdAt: 1,
     updatedAt: 1,
-    repository: "acme/ledger",
+    repository: "ada/ledger",
   },
   {
     id: "2b8c4e6a-0d3f-4a51-9c79-3e4f5a6b7c82",
@@ -134,35 +140,39 @@ const FIXTURE_OTHER_PLANS: readonly PlanSummary[] = [
   },
 ];
 
-/** The repositories the fixture account reaches: the two its plans are about, as the service would list them. */
-const FIXTURE_REPOSITORIES: PlanningRepositoriesAnswer = {
-  repositories: {
-    installed: true,
-    repositories: [
-      {
-        owner: "acme",
-        name: "relay",
-        fullName: "acme/relay",
-        defaultBranch: "main",
-        private: true,
-        updatedAt: Date.parse("2026-10-07T16:20:00Z"),
-      },
-      {
-        owner: "acme",
-        name: "ledger",
-        fullName: "acme/ledger",
-        defaultBranch: "main",
-        private: true,
-        updatedAt: Date.parse("2026-10-01T09:00:00Z"),
-      },
-    ],
-    installationUrl: "https://github.com/apps/luke/installations/new",
-  },
-};
+/** A repository a fixture workspace's GitHub reaches, as the service would list it. */
+function fixtureRepository(owner: string, name: string, updatedAt: string) {
+  return {
+    owner,
+    name,
+    fullName: `${owner}/${name}`,
+    defaultBranch: "main",
+    private: true,
+    updatedAt: Date.parse(updatedAt),
+  };
+}
 
-/** The repositories a fixture run's chip lists, read from nowhere. */
-export function fixtureRepositories(): PlanningRepositoriesAnswer {
-  return FIXTURE_REPOSITORIES;
+/** The repositories each fixture workspace's GitHub reaches: the ones its plans are about. */
+const FIXTURE_REPOSITORIES = new Map([
+  [
+    FIXTURE_FIRST.id,
+    [
+      fixtureRepository("ada", "relay", "2026-10-07T16:20:00Z"),
+      fixtureRepository("ada", "ledger", "2026-10-01T09:00:00Z"),
+    ],
+  ],
+  [FIXTURE_TEAM.id, [fixtureRepository("acme", "relay", "2026-10-06T11:00:00Z")]],
+]);
+
+/** The repositories a fixture run's chip lists for a workspace, read from nowhere; the first workspace's before one is chosen. */
+export function fixtureRepositories(workspaceId: string | undefined): PlanningRepositoriesAnswer {
+  return {
+    repositories: {
+      installed: true,
+      repositories: FIXTURE_REPOSITORIES.get(workspaceId ?? FIXTURE_FIRST.id) ?? [],
+      installationUrl: "https://github.com/apps/luke/installations/new",
+    },
+  };
 }
 
 const FIXTURE_PLAN_LIST: PlanningView = {
@@ -210,7 +220,7 @@ function fixtureLine(...runs: readonly (string | CodeToken)[]): CodeToken[] {
  */
 const FIXTURE_CODE: PlanCode = {
   ref: { path: "src/members/invite.ts", startLine: 6, endLine: 9 },
-  repository: "acme/relay",
+  repository: "ada/relay",
   firstLine: 1,
   lineCount: 14,
   lines: [

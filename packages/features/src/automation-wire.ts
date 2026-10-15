@@ -1,5 +1,6 @@
 import { Schema as EffectSchema } from "effect";
 import { CODING_AGENT_STATUS } from "./coding-agent-wire.js";
+import { githubRepositoryFullNameSchema } from "./github-repositories-wire.js";
 import { modelChoiceSchema } from "./models-wire.js";
 import { countedNumber, wireUuidSchema } from "./service-wire.js";
 
@@ -8,7 +9,7 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
  *
  * An automation belongs to the account that made it and works on one of its
  * plans: when its trigger fires, the service starts a coding agent on the
- * plan's repository with the automation's prompt as the agent's task, the
+ * plan's repository with the automation's prompt as the agent's prompt, the
  * firing described beneath it, exactly as a developer's own Start with a
  * task would. A trigger is a schedule, a cron expression read in an IANA
  * time zone, or an event of the plan's repository the Luke GitHub App is
@@ -23,7 +24,7 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
 export const AUTOMATION_BOUNDS = {
   /** The most characters an automation's name may spell. */
   MAX_NAME_CHARS: 80,
-  /** The most characters of a prompt: under a coding agent's task bound, with room for what Luke adds about the firing. */
+  /** The most characters of a prompt: under a coding agent's prompt bound, with room for what Luke adds about the firing. */
   MAX_PROMPT_CHARS: 12_000,
   /** The most characters of a cron expression. */
   MAX_CRON_CHARS: 120,
@@ -33,6 +34,8 @@ export const AUTOMATION_BOUNDS = {
   MAX_FILTER_VALUES: 10,
   /** The most characters of one label or branch a filter names. */
   MAX_FILTER_VALUE_CHARS: 100,
+  /** The most repositories one automation's runs work in; a run starts in the first until full multi-repo. */
+  MAX_REPOSITORIES: 10,
   /** The most agents one automation may have at work at once. */
   MAX_CONCURRENT_RUNS: 5,
   /** The most runs one automation may start in a day. */
@@ -59,6 +62,8 @@ export type AutomationTriggerKind = (typeof AUTOMATION_TRIGGER)[keyof typeof AUT
 export const GITHUB_TRIGGER_EVENT = {
   PULL_REQUEST_OPENED: "pull-request-opened",
   PULL_REQUEST_LABELED: "pull-request-labeled",
+  /** A pull request ready for review opened, reopened, marked ready, or pushed to: what a review runs on. */
+  PULL_REQUEST_UPDATED: "pull-request-updated",
   ISSUE_OPENED: "issue-opened",
   ISSUE_LABELED: "issue-labeled",
   /** A check suite on a branch completed without passing. */
@@ -222,7 +227,7 @@ export const AUTOMATION_FIRING = {
  * What fired a run, in brief: the instant a schedule was due, the GitHub
  * event with the issue or pull request it names, or a webhook call with how
  * large its body was. Only what the run's history shows is kept; a
- * webhook's body reaches the agent's task and is kept nowhere else here.
+ * webhook's body reaches the agent's prompt and is kept nowhere else here.
  */
 export const automationFiringSchema = EffectSchema.Union([
   EffectSchema.Struct({
@@ -292,6 +297,8 @@ export const AUTOMATION_RUN_REASON = {
   PAUSED: "paused",
   /** It waited queued past the hour it could still be started in, the sweep down or failing all that while. */
   MISSED: "missed",
+  /** The agent the automation hands each run to is gone, archived, or no longer its creator's to reach. */
+  AGENT_GONE: "agent-gone",
 } as const;
 
 export type AutomationRunReason =
@@ -306,7 +313,7 @@ export const automationRunReasonSchema = EffectSchema.Literals(
 export const automationPauseSchema = EffectSchema.Literals(Object.values(AUTOMATION_PAUSE));
 
 /** The query an automation list may narrow by: one plan's automations alone. */
-export const AUTOMATION_LIST_QUERY = { PLAN_ID: "planId" } as const;
+export const AUTOMATION_LIST_QUERY = { PLAN_ID: "planId", WORKSPACE_ID: "workspaceId" } as const;
 
 /**
  * One run as the history shows it: what fired it, where it stands, why
@@ -337,10 +344,13 @@ export type AutomationRunSummary = typeof automationRunSummarySchema.Type;
  * runs and why not where the service paused it, what fires it and what it
  * starts, its guards, when a schedule is next due, and its newest run.
  */
-const automationSummarySchema = EffectSchema.Struct({
+export const automationSummarySchema = EffectSchema.Struct({
   id: wireUuidSchema,
-  planId: wireUuidSchema,
-  planName: EffectSchema.String,
+  /** The plan it was made on; null for an automation made on its workspace with no plan, which its repositories stand in for. */
+  planId: EffectSchema.NullOr(wireUuidSchema),
+  planName: EffectSchema.NullOr(EffectSchema.String),
+  /** The workspace it belongs to, whose members its scope lets reach it; absent from a service before it. */
+  workspaceId: EffectSchema.optionalKey(EffectSchema.String),
   name: EffectSchema.String,
   enabled: EffectSchema.Boolean,
   pausedReason: EffectSchema.NullOr(automationPauseSchema),
@@ -363,6 +373,14 @@ const automationSummarySchema = EffectSchema.Struct({
     ]),
   ),
   archiveSuccessful: EffectSchema.optionalKey(EffectSchema.Boolean),
+  /**
+   * The address a webhook trigger's caller posts to, as the client that read
+   * the automation reaches the service; the service sends none, since the
+   * one origin that holds is the caller's.
+   */
+  webhookUrl: EffectSchema.optionalKey(EffectSchema.String),
+  /** Whether the account reading it created it, which a run starts as; absent from a service before it. */
+  mine: EffectSchema.optionalKey(EffectSchema.Boolean),
 });
 
 export type AutomationSummary = typeof automationSummarySchema.Type;
@@ -381,9 +399,23 @@ export const automationAnswerSchema = EffectSchema.Struct({
   webhookSecret: EffectSchema.optionalKey(EffectSchema.String),
 });
 
-/** An automation to make (POST): its plan, name, trigger, and action, and its guards or the defaults. */
+/** The repositories an automation's runs work in, `owner/name` each, the first where a run starts: at least one, and a handful at most. */
+const automationRepositoriesSchema = EffectSchema.Array(githubRepositoryFullNameSchema).check(
+  EffectSchema.isMinLength(1),
+  EffectSchema.isMaxLength(AUTOMATION_BOUNDS.MAX_REPOSITORIES),
+);
+
+/**
+ * An automation to make (POST): where it stands, its name, trigger, and
+ * action, and its guards or the defaults. It stands on a plan, whose
+ * workspace and repository it takes, or on a workspace with the
+ * repositories its runs work in, which is how an automation is made with no
+ * plan; a request naming both, or neither, is refused.
+ */
 export const automationCreateRequestSchema = EffectSchema.Struct({
-  planId: wireUuidSchema,
+  planId: EffectSchema.optionalKey(wireUuidSchema),
+  workspaceId: EffectSchema.optionalKey(EffectSchema.NonEmptyString),
+  repositories: EffectSchema.optionalKey(automationRepositoriesSchema),
   name: nameSchema,
   trigger: automationTriggerSchema,
   action: automationActionSchema,
@@ -393,9 +425,30 @@ export const automationCreateRequestSchema = EffectSchema.Struct({
   archiveSuccessful: EffectSchema.optionalKey(EffectSchema.Boolean),
 });
 
-/** A change to an automation (PATCH): any of its fields, a field left out standing as it was. */
+/**
+ * How a webhook trigger's caller is admitted and deduplicated: the secret as
+ * the `Authorization: Bearer` value, never in the address; a retry carrying
+ * the same `Idempotency-Key` header is the same run. A body larger than the
+ * bound is refused, and one that is no UTF-8 text, or holds a NUL, too.
+ */
+export const AUTOMATION_WEBHOOK = {
+  IDEMPOTENCY_HEADER: "idempotency-key",
+  MAX_BODY_BYTES: 64 * 1024,
+} as const;
+
+/**
+ * A change to an automation (PATCH): any of its fields, a field left out
+ * standing as it was. `webhookSecretHash` replaces a webhook trigger's
+ * secret with one the caller minted, by its SHA-256 in hex, so the caller
+ * holds the secret before the one before stops admitting calls and the
+ * service never sees it.
+ */
 export const automationChangeRequestSchema = EffectSchema.Struct({
+  webhookSecretHash: EffectSchema.optionalKey(
+    EffectSchema.String.check(EffectSchema.isPattern(/^[0-9a-f]{64}$/u)),
+  ),
   name: EffectSchema.optionalKey(nameSchema),
+  repositories: EffectSchema.optionalKey(automationRepositoriesSchema),
   enabled: EffectSchema.optionalKey(EffectSchema.Boolean),
   trigger: EffectSchema.optionalKey(automationTriggerSchema),
   action: EffectSchema.optionalKey(automationActionSchema),

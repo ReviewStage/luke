@@ -1,4 +1,4 @@
-import { ChevronDownIcon } from "@sidecar/panel";
+import { ChevronDownIcon } from "@luke/ui";
 import type { ComponentPropsWithRef } from "react";
 
 /**

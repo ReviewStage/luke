@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { BOARD_ELEMENT_TYPE } from "@sidecar/features/board-vocabulary";
-import type { Board } from "@sidecar/features/board-wire";
-import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@sidecar/features/coding-agent-wire";
-import { PLAN_ACTOR, type Plan } from "@sidecar/features/plan-wire";
+import { BOARD_ELEMENT_TYPE } from "@luke/features/board-vocabulary";
+import type { Board } from "@luke/features/board-wire";
+import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import { MENTION_KIND } from "@luke/features/mention-link";
+import { PLAN_ACTOR, type Plan } from "@luke/features/plan-wire";
 import {
   IDLE_PLANNING_VIEW,
   PLAN_CALL_FAILURE,
@@ -14,34 +15,34 @@ import {
   type PlanCodeShowing,
   type PlanningView,
   type PlanWorkTurn,
-} from "@sidecar/features/planning-view";
-import { WORKSPACE_ROLE } from "@sidecar/features/workspace-wire";
-import { LIVE_STATUS } from "@sidecar/live";
+} from "@luke/features/planning-view";
+import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
+import { ACT, ACT_KIND, type ActKind, type ActResultFor } from "@luke/host/acts";
+import { type AppInboxPlan, type AppInboxPlanHolding, RUN_PROFILE } from "@luke/host/app-state";
+import { LIVE_STATUS } from "@luke/live";
+import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
+import { PLANS_PAGE } from "@luke/ui/planning-model";
+import { MICROPHONE_STATUS } from "@luke/voice/audio";
+import {
+  messageText,
+  TRANSCRIPT_REGION,
+  type TranscriptRegion,
+} from "@luke/voice/transcript-model";
+import {
+  IDLE_VOICE_VIEW,
+  VOICE_COMMAND,
+  type VoiceCommand,
+  type VoiceView,
+} from "@luke/voice/voice-view";
 import { Duration, Effect, Option, Schema } from "effect";
 import type { AtomRegistry } from "effect/reactivity/AtomRegistry";
 import { TestClock } from "effect/testing";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
-import { ACT, ACT_KIND, type ActKind, type ActResultFor } from "#shared/messages/acts";
-import {
-  type AppInboxPlan,
-  type AppInboxPlanHolding,
-  RUN_PROFILE,
-} from "#shared/messages/app-state";
-import { MICROPHONE_STATUS } from "#shared/messages/audio";
-import {
-  IDLE_VOICE_VIEW,
-  VOICE_COMMAND,
-  type VoiceCommand,
-  type VoiceView,
-} from "#shared/messages/voice-view";
 import { onRegistry } from "#testing/copy-feedback";
 import { newestToastAction, newestToastSays } from "#testing/toast";
-import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "../settings-views";
 import { ToastHost } from "../toast";
-import { PLANS_PAGE } from "./planning-model";
-import { messageText, TRANSCRIPT_REGION, type TranscriptRegion } from "./transcript-model";
 import { MAIN_TAB } from "./use-main-tabs";
 import { type PlansControl, usePlansTab } from "./use-plans-tab";
 import { SIDE_PANEL_TAB } from "./use-side-panel";
@@ -168,6 +169,7 @@ function mount(
       unseenAgents: held.unseenAgents,
       inboxWaiting: held.inboxWaiting,
       inboxPlans: held.inboxPlans,
+      inboxPlanless: [],
       voice: { view: held.voice, listening: false, requestMicrophoneAccess: () => undefined },
       onOpenIntegrations: () => undefined,
       onOpenApiKeys: () => undefined,
@@ -289,6 +291,7 @@ function row(
 const PERSONAL = {
   id: "workspace-personal",
   name: "Personal",
+  slug: "personal",
   role: WORKSPACE_ROLE.OWNER,
   github: null,
 };
@@ -296,6 +299,7 @@ const PERSONAL = {
 const ACME = {
   id: "workspace-acme",
   name: "acme",
+  slug: "acme",
   role: WORKSPACE_ROLE.MEMBER,
   github: null,
 };
@@ -343,6 +347,7 @@ const UNSTARTED = {
 const PLATFORM = {
   id: "workspace-platform",
   name: "Platform",
+  slug: "platform",
   role: WORKSPACE_ROLE.OWNER,
   github: null,
 };
@@ -391,12 +396,16 @@ test("New plan opens its dialog over the open plan, which stays open; a second p
 
   let note: string | undefined;
   await act(async () => {
-    note = await tab.control().newPlan.start("Dark mode", "acme/web");
+    note = await tab
+      .control()
+      .newPlan.start("Dark mode", "acme/web", tab.control().newPlan.workspaceId);
   });
   assert.ok(note, "a refusal says why");
   assert.equal(tab.control().newPlan.open, true, "a refusal keeps the dialog");
   await act(async () => {
-    note = await tab.control().newPlan.start("Dark mode", "acme/web");
+    note = await tab
+      .control()
+      .newPlan.start("Dark mode", "acme/web", tab.control().newPlan.workspaceId);
   });
   assert.equal(note, undefined);
   assert.equal(tab.control().newPlan.open, false, "a plan started closes the dialog");
@@ -628,6 +637,45 @@ test("a tab closed on another plan opens that plan again, and the tab on it once
   assert.deepEqual(tab.control().sidePanel.tabs, [SIDE_PANEL_TAB.BOARD]);
 });
 
+test("a Luke link to another plan's section opens that plan and asks its page to show the section, each ask its own", () => {
+  const tab = mount(
+    { shown: true, planning: OPEN },
+    { [ACT_KIND.PLANNING_SELECT]: () => Promise.resolve(true) },
+  );
+  const section = { kind: MENTION_KIND.SECTION, planId: OTHER_PLAN_ID, anchor: "rollout" } as const;
+
+  act(() => tab.control().onShowMention(section));
+  const first = tab.control().sectionReveal;
+  act(() => tab.control().onShowMention(section));
+
+  assert.equal(tab.told.at(-1), ACT_KIND.PLANNING_SELECT);
+  assert.deepEqual(first, { planId: OTHER_PLAN_ID, reveal: { anchor: "rollout", ask: 1 } });
+  assert.deepEqual(tab.control().sectionReveal, {
+    planId: OTHER_PLAN_ID,
+    reveal: { anchor: "rollout", ask: 2 },
+  });
+});
+
+test("a section shown is let go, so the plan opened again later opens where it would, while a newer ask stands", () => {
+  const tab = mount(
+    { shown: true, planning: OPEN },
+    { [ACT_KIND.PLANNING_SELECT]: () => Promise.resolve(true) },
+  );
+  const section = { kind: MENTION_KIND.SECTION, planId: OTHER_PLAN_ID, anchor: "rollout" } as const;
+
+  act(() => tab.control().onShowMention(section));
+  act(() => tab.control().onShowMention(section));
+  act(() => tab.control().onSectionRevealed(1));
+  const afterStale = tab.control().sectionReveal;
+  act(() => tab.control().onSectionRevealed(2));
+  const afterShown = tab.control().sectionReveal;
+  act(() => tab.control().onShowMention(section));
+
+  assert.deepEqual(afterStale, { planId: OTHER_PLAN_ID, reveal: { anchor: "rollout", ask: 2 } });
+  assert.equal(afterShown, undefined);
+  assert.deepEqual(tab.control().sectionReveal?.reveal, { anchor: "rollout", ask: 3 });
+});
+
 test("the closed tabs kept are the latest twenty, the oldest let go past them", () => {
   const tab = mount({ shown: true, planning: OPEN });
   const panel = () => tab.control().sidePanel;
@@ -727,9 +775,9 @@ test("the sidebar lists the first workspace's plans first, a workspace chosen li
     plans: tab.control().listed.plans.map((plan) => plan.id),
     archived: tab.control().listed.archived.map((plan) => plan.id),
   };
-  await tab.control().newPlan.start("Invites", null);
+  await tab.control().newPlan.start("Invites", null, tab.control().newPlan.workspaceId);
   act(() => tab.control().onChooseWorkspace(ACME.id));
-  await tab.control().newPlan.start("Usage", "acme/relay");
+  await tab.control().newPlan.start("Usage", "acme/relay", tab.control().newPlan.workspaceId);
 
   assert.deepEqual(personal, {
     workspace: PERSONAL.id,
@@ -786,11 +834,241 @@ test("opening a plan of another workspace lists that workspace once it opened, o
   );
 });
 
+/** A plan's inbox waiting on the developer: `count` open items, each asked by one agent. */
+function waitingIn(planId: string, count: number): AppInboxPlan {
+  return {
+    planId,
+    items: Array.from({ length: count }, (_, index) => ({
+      id: `${planId}-item-${index}`,
+      agentId: `${planId}-agent`,
+      title: "Which retry budget?",
+      postedAt: index,
+    })),
+  };
+}
+
+test("the Inbox lists the chosen workspace's share of what waits, and a plan the list has not read yet is in neither share", () => {
+  const tab = mount({
+    shown: true,
+    planning: TWO_WORKSPACES,
+    inboxWaiting: [waitingIn("notes", 1), waitingIn("alerts", 2), waitingIn("unread", 3)],
+    inboxPlans: [
+      { planId: "notes", items: 1, updatedAt: 3 },
+      { planId: "alerts", items: 2, updatedAt: 2 },
+      { planId: "unread", items: 3, updatedAt: 1 },
+    ],
+  });
+  const share = () => ({
+    inbox: tab.control().listed.inbox.map((plan) => plan.planId),
+    inboxPlans: tab.control().listed.inboxPlans.map((holding) => holding.planId),
+  });
+
+  const personal = share();
+  act(() => tab.control().onChooseWorkspace(ACME.id));
+
+  assert.deepEqual(personal, { inbox: ["notes"], inboxPlans: ["notes"] });
+  assert.deepEqual(share(), { inbox: ["alerts"], inboxPlans: ["alerts"] });
+});
+
+test("an Inbox item chosen in one workspace gives way as another is listed, so main is not told its plan's Inbox still shows", () => {
+  const tab = mount({ shown: true, planning: TWO_WORKSPACES });
+
+  act(() => tab.control().inboxView.onOpen());
+  act(() => tab.control().inboxView.onChoose({ planId: "notes", itemId: "notes-item-0" }));
+  const chosen = tab.control().inboxView.chosen;
+  act(() => tab.control().onChooseWorkspace(ACME.id));
+
+  assert.deepEqual(chosen, { planId: "notes", itemId: "notes-item-0" });
+  assert.equal(tab.control().inboxView.chosen, undefined);
+  assert.equal(tab.shownInboxes.at(-1), null);
+});
+
+/** The plans each open the tab asked of main named, in order. */
+function opensAsked(payloads: readonly { readonly kind: ActKind; readonly payload: unknown }[]) {
+  return payloads
+    .filter((asked) => asked.kind === ACT_KIND.PLANNING_SELECT)
+    .map((asked) => Option.getOrUndefined(readOpened(asked.payload))?.planId);
+}
+
+const readOpened = Schema.decodeUnknownOption(Schema.Struct({ planId: Schema.String }));
+
+/** Main's answers: every open lands, and every leave. */
+const OPENS = {
+  [ACT_KIND.PLANNING_SELECT]: () => Promise.resolve(true),
+  [ACT_KIND.PLANNING_CLOSE]: () => Promise.resolve(undefined),
+};
+
+test("a plan opened from another workspace says the window switched, and Back lists the workspace left with the plan that stood open there", async () => {
+  const tab = mount({ shown: true, planning: { ...TWO_WORKSPACES, activePlanId: "notes" } }, OPENS);
+
+  act(() => tab.control().onSelect("alerts"));
+  await settle();
+  const switched = { workspace: tab.control().workspace?.id, says: newestToastSays() };
+  tab.stand({ planning: { ...TWO_WORKSPACES, activePlanId: "alerts" } });
+  const back = newestToastAction() ?? assert.fail("the toast offers a way back");
+  const backSays = back.textContent;
+  act(() => back.click());
+  await settle();
+
+  assert.deepEqual(switched, { workspace: ACME.id, says: "Switched to acmeBack to Personal" });
+  assert.equal(backSays, "Back to Personal");
+  assert.equal(tab.control().workspace?.id, PERSONAL.id);
+  assert.deepEqual(opensAsked(tab.payloads), ["alerts", "notes"]);
+});
+
+test("Back from a switch made on the home page lists the workspace left and its home page again", async () => {
+  const fromHome = mount({ shown: true, planning: TWO_WORKSPACES }, OPENS);
+  act(() => fromHome.control().onSelect("alerts"));
+  await settle();
+  fromHome.stand({ planning: { ...TWO_WORKSPACES, activePlanId: "alerts" } });
+  act(() => newestToastAction()?.click());
+  await settle();
+
+  assert.equal(fromHome.control().workspace?.id, PERSONAL.id);
+  assert.ok(fromHome.told.includes(ACT_KIND.PLANNING_CLOSE), "Back from home returns home");
+});
+
+test("a workspace chosen while a plan is open opens the plan last open there, or the home page where none was", async () => {
+  const tab = mount(
+    {
+      shown: true,
+      planning: {
+        ...TWO_WORKSPACES,
+        workspaces: [PERSONAL, ACME, PLATFORM],
+        activePlanId: "alerts",
+      },
+    },
+    OPENS,
+  );
+  tab.stand({
+    planning: { ...TWO_WORKSPACES, workspaces: [PERSONAL, ACME, PLATFORM], activePlanId: "notes" },
+  });
+
+  act(() => tab.control().onChooseWorkspace(ACME.id));
+  await settle();
+  const reopened = opensAsked(tab.payloads);
+  tab.stand({
+    planning: { ...TWO_WORKSPACES, workspaces: [PERSONAL, ACME, PLATFORM], activePlanId: "alerts" },
+  });
+  act(() => tab.control().onChooseWorkspace(PLATFORM.id));
+  await settle();
+
+  assert.deepEqual(reopened, ["alerts"]);
+  assert.equal(tab.control().workspace?.id, PLATFORM.id);
+  assert.ok(
+    tab.told.includes(ACT_KIND.PLANNING_CLOSE),
+    "a workspace with no plan opened shows home",
+  );
+});
+
+test("a remembered plan that moved to another workspace since, or would not open, gives way to the home page of the workspace chosen", async () => {
+  const three = [PERSONAL, ACME, PLATFORM];
+  const moved = {
+    ...TWO_WORKSPACES,
+    workspaces: three,
+    plans: TWO_WORKSPACES.plans.map((plan) =>
+      plan.id === "alerts" ? { ...plan, workspaceId: PLATFORM.id } : plan,
+    ),
+  };
+  const tab = mount(
+    { shown: true, planning: { ...TWO_WORKSPACES, workspaces: three, activePlanId: "alerts" } },
+    OPENS,
+  );
+  tab.stand({ planning: { ...moved, activePlanId: "notes" } });
+  act(() => tab.control().onChooseWorkspace(ACME.id));
+  await settle();
+
+  assert.deepEqual(opensAsked(tab.payloads), []);
+  assert.ok(tab.told.includes(ACT_KIND.PLANNING_CLOSE));
+  assert.equal(tab.control().workspace?.id, ACME.id);
+
+  window.localStorage.clear();
+  const refused = mount(
+    { shown: true, planning: { ...TWO_WORKSPACES, workspaces: three, activePlanId: "alerts" } },
+    { ...OPENS, [ACT_KIND.PLANNING_SELECT]: () => Promise.resolve(false) },
+  );
+  refused.stand({ planning: { ...TWO_WORKSPACES, workspaces: three, activePlanId: "notes" } });
+  act(() => refused.control().onChooseWorkspace(ACME.id));
+  await settle();
+
+  assert.deepEqual(opensAsked(refused.payloads), ["alerts"]);
+  assert.ok(refused.told.includes(ACT_KIND.PLANNING_CLOSE), "the home page stands in for it");
+  assert.equal(refused.control().workspace?.id, ACME.id);
+});
+
+test("a workspace chosen is listed at once, and a reopen answered after another was chosen leaves the newer choice standing", async () => {
+  const three = [PERSONAL, ACME, PLATFORM];
+  // The first reopen waits on main until the test answers it.
+  const answers: ((opened: boolean) => void)[] = [];
+  const held = new Promise<boolean>((answer) => answers.push(answer));
+  const tab = mount(
+    { shown: true, planning: { ...TWO_WORKSPACES, workspaces: three, activePlanId: "alerts" } },
+    { ...OPENS, [ACT_KIND.PLANNING_SELECT]: () => held },
+  );
+  tab.stand({ planning: { ...TWO_WORKSPACES, workspaces: three, activePlanId: "notes" } });
+
+  act(() => tab.control().onChooseWorkspace(ACME.id));
+  const listedAtOnce = tab.control().workspace?.id;
+  act(() => tab.control().onChooseWorkspace(PLATFORM.id));
+  await settle();
+  const leaves = tab.told.filter((kind) => kind === ACT_KIND.PLANNING_CLOSE).length;
+  for (const answer of answers) answer(false);
+  await settle();
+
+  assert.equal(listedAtOnce, ACME.id);
+  assert.equal(tab.control().workspace?.id, PLATFORM.id);
+  assert.equal(
+    tab.told.filter((kind) => kind === ACT_KIND.PLANNING_CLOSE).length,
+    leaves,
+    "the refused reopen leaves nothing the newer choice opened",
+  );
+});
+
+test("a switch toast's Back does nothing once the window has moved on from the switch it reports", async () => {
+  const three = [PERSONAL, ACME, PLATFORM];
+  const tab = mount(
+    { shown: true, planning: { ...TWO_WORKSPACES, workspaces: three, activePlanId: "notes" } },
+    OPENS,
+  );
+  act(() => tab.control().onSelect("alerts"));
+  await settle();
+  tab.stand({ planning: { ...TWO_WORKSPACES, workspaces: three, activePlanId: "alerts" } });
+  const back = newestToastAction() ?? assert.fail("the toast offers a way back");
+  act(() => tab.control().onChooseWorkspace(PLATFORM.id));
+  await settle();
+  tab.stand({ planning: { ...TWO_WORKSPACES, workspaces: three } });
+
+  act(() => back.click());
+  await settle();
+
+  assert.equal(tab.control().workspace?.id, PLATFORM.id);
+  assert.deepEqual(opensAsked(tab.payloads), ["alerts"]);
+});
+
+test("a workspace chosen from the home page lists it and opens nothing", async () => {
+  const home = mount(
+    { shown: true, planning: { ...TWO_WORKSPACES, workspaces: [PERSONAL, ACME, PLATFORM] } },
+    OPENS,
+  );
+  act(() => home.control().onChooseWorkspace(ACME.id));
+  await settle();
+
+  assert.equal(home.control().workspace?.id, ACME.id);
+  assert.deepEqual(
+    [opensAsked(home.payloads), home.told.includes(ACT_KIND.PLANNING_CLOSE)],
+    [[], false],
+  );
+});
+
 test("the new-plan page's recent repositories are the chosen workspace's own, and the chip names its workspace", () => {
   const tab = mount({
     shown: true,
     planning: {
       ...TWO_WORKSPACES,
+      workspaces: [
+        { ...PERSONAL, github: { login: "alice", active: true } },
+        { ...ACME, github: { login: "acme", active: true } },
+      ],
       plans: [
         { ...row("notes", 4), repository: "alice/private" },
         { ...row("alerts", 3), workspaceId: ACME.id, repository: "acme/relay" },
@@ -804,6 +1082,63 @@ test("the new-plan page's recent repositories are the chosen workspace's own, an
 
   assert.deepEqual([personal.recent, personal.scope], [["alice/private"], PERSONAL.id]);
   assert.deepEqual([acme.recent, acme.scope], [["acme/relay"], ACME.id]);
+});
+
+test("a workspace's recent repositories are only those its GitHub reaches, so a plan stranded there by #2524 offers its repository to none", () => {
+  const tab = mount({
+    shown: true,
+    planning: {
+      ...TWO_WORKSPACES,
+      workspaces: [PERSONAL, { ...ACME, github: { login: "ReviewStage", active: true } }],
+      plans: [
+        { ...row("stranded", 5), repository: "ReviewStage/luke" },
+        { ...row("alerts", 4), workspaceId: ACME.id, repository: "reviewstage/luke" },
+        { ...row("elsewhere", 3), workspaceId: ACME.id, repository: "octo/site" },
+      ],
+    },
+  });
+
+  const personal = tab.control().repositories.recent;
+  act(() => tab.control().onChooseWorkspace(ACME.id));
+
+  assert.deepEqual(personal, [], "a workspace with no GitHub connected reaches none");
+  assert.deepEqual(tab.control().repositories.recent, ["reviewstage/luke"]);
+});
+
+test("newer plans on repositories a workspace does not reach crowd out none it does, and a suspended GitHub reaches nothing", () => {
+  const stranded = [5, 6, 7, 8, 9].map((at) => ({
+    ...row(`stranded-${at}`, at),
+    workspaceId: ACME.id,
+    repository: `octo/site-${at}`,
+  }));
+  const plans = [
+    ...stranded,
+    { ...row("relay", 1), workspaceId: ACME.id, repository: "acme/relay" },
+  ];
+  const active = mount({
+    shown: true,
+    planning: {
+      ...TWO_WORKSPACES,
+      workspaces: [PERSONAL, { ...ACME, github: { login: "acme", active: true } }],
+      plans,
+    },
+  });
+  act(() => active.control().onChooseWorkspace(ACME.id));
+  const reached = active.control().repositories.recent;
+  document.body.innerHTML = "";
+
+  const suspended = mount({
+    shown: true,
+    planning: {
+      ...TWO_WORKSPACES,
+      workspaces: [PERSONAL, { ...ACME, github: { login: "acme", active: false } }],
+      plans,
+    },
+  });
+  act(() => suspended.control().onChooseWorkspace(ACME.id));
+
+  assert.deepEqual(reached, ["acme/relay"]);
+  assert.deepEqual(suspended.control().repositories.recent, []);
 });
 
 test("a workspace chosen is chosen again on the next launch, and one the account is no longer in gives way to the first one", () => {
@@ -826,7 +1161,7 @@ test("a workspace chosen is chosen again on the next launch, and one the account
 test("before the workspaces are read every plan is listed and New plan names no workspace, so the service starts it in the first one", async () => {
   const tab = mount({ shown: true, planning: { ...TWO_WORKSPACES, workspaces: [] } }, UNSTARTED);
 
-  await tab.control().newPlan.start("Invites", null);
+  await tab.control().newPlan.start("Invites", null, tab.control().newPlan.workspaceId);
 
   assert.equal(tab.control().workspace, undefined);
   assert.deepEqual(
@@ -994,6 +1329,24 @@ test("a plan moved lists the workspace it moved to while it is still open, and a
   assert.equal(tab.control().workspace?.id, ACME.id);
 });
 
+test("a refused move says so in a toast, unless its caller says it itself", async () => {
+  const tab = mount(
+    { shown: true, planning: { ...TWO_WORKSPACES, activePlanId: "billing" } },
+    { [ACT_KIND.PLANNING_MOVE]: () => Promise.resolve({ failure: PLAN_CALL_FAILURE.UNANSWERED }) },
+  );
+
+  const quiet = await tab.control().onMovePlan("billing", ACME.id, { quiet: true });
+  await settle();
+  const saidQuietly = newestToastSays();
+  const told = await tab.control().onMovePlan("billing", ACME.id);
+  await settle();
+
+  const refused = "The task could not be moved. Try again.";
+  assert.deepEqual([quiet, told], [false, false]);
+  assert.notEqual(saidQuietly, refused, "the caller says the refusal, so no toast does");
+  assert.equal(newestToastSays(), refused);
+});
+
 test("a move pressed before the workspaces were read still lists the workspace it moved to once they land", async () => {
   const answers: ((answer: { workspaceId: string }) => void)[] = [];
   const tab = mount(
@@ -1027,18 +1380,28 @@ test("a workspace chosen while a move is out, even the first chosen after the wo
   assert.equal(tab.control().workspace?.id, PERSONAL.id);
 });
 
-test("the listed workspace left lists the first one again, and another workspace left keeps the one listed", () => {
-  const tab = mount({ shown: true, planning: TWO_WORKSPACES });
+test("a workspace left lists the account's own workspace, whichever was listed, and turns to the home page", () => {
+  const own = { ...PERSONAL, personal: true as const };
+  const tab = mount({
+    shown: true,
+    planning: { ...TWO_WORKSPACES, workspaces: [ACME, own], activePlanId: "billing" },
+  });
   act(() => tab.control().onChooseWorkspace(ACME.id));
   const chosen = tab.control().workspace?.id;
 
-  act(() => tab.control().onLeftWorkspace("workspace-elsewhere"));
-  const keptOnAnother = tab.control().workspace?.id;
   act(() => tab.control().onLeftWorkspace(ACME.id));
+  const afterListed = tab.control().workspace?.id;
+  act(() => tab.control().onChooseWorkspace(ACME.id));
+  act(() => tab.control().onLeftWorkspace("workspace-elsewhere"));
 
   assert.equal(chosen, ACME.id);
-  assert.equal(keptOnAnother, ACME.id);
+  assert.equal(afterListed, PERSONAL.id);
   assert.equal(tab.control().workspace?.id, PERSONAL.id);
+  assert.equal(
+    tab.told.includes(ACT_KIND.PLANNING_CLOSE),
+    true,
+    "the open plan is left for the home page",
+  );
 });
 
 test("a fixture run lists its first workspace's plans under the switcher, and a choice there is kept nowhere", () => {
@@ -1180,6 +1543,26 @@ test("another account signing in after a sign-out keeps its own plan, and has it
   tab.stand({ signedIn: true, account: "other@example.com", planning: LAUNCHING });
   tab.stand({ planning: listRead([listed()]) });
   assert.deepEqual(selected(tab), [PLAN.id]);
+});
+
+test("Factory and the Inbox stand in the plan's place in turn: opening one puts the other away, and Home or a plan's press puts Factory away", () => {
+  const tab = mount({ shown: true, planning: listRead([listed()]) });
+  act(() => tab.control().inboxView.onOpen());
+  act(() => tab.control().factoryView.onOpen());
+  assert.equal(tab.control().factoryView.open, true);
+  assert.equal(tab.control().inboxView.open, false);
+
+  act(() => tab.control().inboxView.onOpen());
+  assert.equal(tab.control().factoryView.open, false);
+  assert.equal(tab.control().inboxView.open, true);
+
+  act(() => tab.control().factoryView.onOpen());
+  act(() => tab.control().onGoHome());
+  assert.equal(tab.control().factoryView.open, false);
+
+  act(() => tab.control().factoryView.onOpen());
+  act(() => tab.control().onSelect(PLAN.id));
+  assert.equal(tab.control().factoryView.open, false);
 });
 
 test("Home from an open plan leaves it, and from the home page only puts the Inbox away, asking the host nothing", () => {

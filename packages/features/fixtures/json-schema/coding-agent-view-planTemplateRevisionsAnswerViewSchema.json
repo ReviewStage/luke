@@ -45,6 +45,11 @@
                     "minLength": 1,
                     "maxLength": 200
                   },
+                  "agentId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 36
+                  },
                   "at": {
                     "type": "number",
                     "minimum": 0

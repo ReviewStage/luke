@@ -1,12 +1,17 @@
 {
-  "name": "@sidecar/settings",
+  "name": "@luke/settings",
   "version": "0.13.0",
   "private": true,
   "type": "module",
+  "description": "The app settings schema: every setting's id, section, side effect, and how a change is counted",
   "exports": {
     ".": "./src/index.js",
     "./testing": "./src/testing.js",
-    "./wire": "./src/wire.js"
+    "./wire": "./src/wire.js",
+    "./settings-views": "./src/settings-views.js",
+    "./settings-anchors": "./src/settings-anchors.js",
+    "./update": "./src/update.js",
+    "./update-row": "./src/update-row.js"
   },
   "types": "./src/index.ts",
   "scripts": {
@@ -19,9 +24,9 @@
     "vitest": "catalog:"
   },
   "dependencies": {
-    "@sidecar/features": "workspace:*",
-    "@sidecar/live": "workspace:*",
-    "@sidecar/wire": "workspace:*",
+    "@luke/features": "workspace:*",
+    "@luke/live": "workspace:*",
+    "@luke/wire": "workspace:*",
     "effect": "catalog:"
   }
 }

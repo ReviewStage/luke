@@ -1,5 +1,5 @@
-import { PLAN_FILE_REFUSAL, type PlanFileRefusal } from "@sidecar/features/plan-wire";
-import type { PlanningSkillsAnswer } from "@sidecar/features/planning-view";
+import { PLAN_FILE_REFUSAL, type PlanFileRefusal } from "@luke/features/plan-wire";
+import type { PlanningSkillsAnswer } from "@luke/features/planning-view";
 import type { SkillSource, SkillsRead } from "./skill-picker";
 
 /**
@@ -16,9 +16,9 @@ import type { SkillSource, SkillsRead } from "./skill-picker";
 
 /** Why a repository's skills were not read, in the list's words. */
 const SKILLS_REFUSAL_LINE = {
-  [PLAN_FILE_REFUSAL.NO_REPOSITORY]: "This plan has no repository.",
+  [PLAN_FILE_REFUSAL.NO_REPOSITORY]: "This task has no repository.",
   [PLAN_FILE_REFUSAL.NOT_REACHABLE]:
-    "The Luke GitHub App no longer reaches this plan's repository.",
+    "The Luke GitHub App no longer reaches this task's repository.",
   [PLAN_FILE_REFUSAL.UNAVAILABLE]: "GitHub could not be read just now.",
   [PLAN_FILE_REFUSAL.SECRET]: "This repository's skills could not be read.",
   [PLAN_FILE_REFUSAL.MISSING]: "This repository's skills could not be read.",

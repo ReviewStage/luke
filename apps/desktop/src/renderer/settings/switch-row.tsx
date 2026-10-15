@@ -1,8 +1,8 @@
-import type { ActionResult } from "@sidecar/wire";
+import { useSettingWrite } from "@luke/ui/use-setting-write";
+import type { ActionResult } from "@luke/wire";
 import { useId } from "react";
 import { Switch } from "../switch";
 import { ChangedMark } from "./marks";
-import { useSettingWrite } from "./use-setting-write";
 
 /**
  * A settings switch: its name, optional why, and the thumb. The visible name is
@@ -29,7 +29,9 @@ export function SwitchRow({
   changed?: boolean;
   /** Whether the switch rests for a reason of its caller's, beside its own write in flight. */
   disabled?: boolean;
-  onChange: (enabled: boolean) => Promise<ActionResult>;
+  /** The write, or nothing to wait on where the switch only changes a draft. */
+  // biome-ignore lint/suspicious/noConfusingVoidType: a draft's switch cannot be refused, so its change answers void
+  onChange: (enabled: boolean) => void | Promise<ActionResult>;
 }): React.JSX.Element {
   const { busy, rejection, run } = useSettingWrite(onChange);
   const detailId = useId();

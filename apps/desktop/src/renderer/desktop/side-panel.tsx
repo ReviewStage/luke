@@ -1,18 +1,38 @@
-import type { Board } from "@sidecar/features/board-wire";
+import type { Board } from "@luke/features/board-wire";
 import {
   CODING_AGENT_STATUS,
   type CodingAgentMessage,
   type CodingAgentPullRequest,
   type CodingAgentStatus,
   type CodingAgentSummary,
-} from "@sidecar/features/coding-agent-wire";
-import type { ModelChoice } from "@sidecar/features/models-wire";
-import type { PageLine } from "@sidecar/features/page-wire";
-import type { CodeRef } from "@sidecar/features/plan-wire";
-import { PLAN_WORK_STATE, type PlanCodeShowing } from "@sidecar/features/planning-view";
-import { CollapseIcon, ExpandIcon, SidePanelIcon } from "@sidecar/panel";
+} from "@luke/features/coding-agent-wire";
+import type { ModelChoice } from "@luke/features/models-wire";
+import type { PageLine } from "@luke/features/page-wire";
+import type { CodeRef } from "@luke/features/plan-wire";
+import { PLAN_WORK_STATE, type PlanCodeShowing } from "@luke/features/planning-view";
+import { TERMINAL_ASK, TERMINAL_TARGET, terminalTarget } from "@luke/features/terminal-entry";
+import { ACT_KIND } from "@luke/host/acts";
+import { CollapseIcon, ExpandIcon, SidePanelIcon } from "@luke/ui";
+import {
+  agentOfTab,
+  type ChangesStripTab,
+  inPlanOrder,
+  isChangesTab,
+  isFileTab,
+  isPageTab,
+  isSubagentTab,
+  isTerminalTab,
+  type PageStripTab,
+  type StripTab,
+  type SubagentStripTab,
+  sameTab,
+  TAB_WORDS,
+  type TerminalStripTab,
+  tabKey,
+} from "@luke/ui/tab-strip-model";
+import { type ShownFile, shownFiles } from "@luke/voice/code-pane-model";
+import { TRANSCRIPT_REGION, type TranscriptRegion } from "@luke/voice/transcript-model";
 import { Fragment, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ACT_KIND } from "#shared/messages/acts";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "../act";
 import { useAppCommand } from "../app-commands";
@@ -31,7 +51,6 @@ import {
   lastFinished,
 } from "../planning/agent-tab-card";
 import { CodePane } from "../planning/code-pane";
-import { type ShownFile, shownFiles } from "../planning/code-pane-model";
 import {
   agentGlyphState,
   agentStateWords,
@@ -45,32 +64,22 @@ import { PagePane } from "../planning/page-pane";
 import { PlanBoard } from "../planning/plan-board";
 import { PlanCall } from "../planning/plan-call";
 import { type KindLook, TAB_KIND, tabLook } from "../planning/tab-look";
-import {
-  type ChangesStripTab,
-  inPlanOrder,
-  isChangesTab,
-  isFileTab,
-  isPageTab,
-  isSubagentTab,
-  type PageStripTab,
-  type StripTab,
-  type SubagentStripTab,
-  sameTab,
-  tabKey,
-} from "../planning/tab-strip-model";
+import { useOpenTerminal } from "../planning/terminal-commands";
+import { TerminalCardFoot, TerminalStanding } from "../planning/terminal-shells";
+import { TerminalTab } from "../planning/terminal-tab";
 import { cardTitle, TOOL_TARGET, type ToolTarget } from "../planning/tool-call-model";
 import {
   agentTranscript,
   readWholeTranscript,
   type TranscriptCopy,
 } from "../planning/transcript-copy";
-import { TRANSCRIPT_REGION, type TranscriptRegion } from "../planning/transcript-model";
 import type { TranscriptReader } from "../planning/use-agent-transcript";
 import type { CodingAgentsControl } from "../planning/use-coding-agents";
 import {
   type DrawnTabs,
   drawsChanges,
   drawsSubagent,
+  drawsTerminal,
   type FileHistoryStep,
   type FixedSidePanelTab,
   isPinnable,
@@ -199,7 +208,15 @@ export const ADD_SECTION = {
   FILES: "Files",
   CHANGES: "Changes",
   PAGES: "Pages",
+  TERMINAL: "Terminal",
 } as const;
+
+/** An agent's terminal as the "+" offers it: the agent, and whether ⌘J would open its Terminal tab from here. */
+export interface TerminalOffer {
+  readonly agent: CodingAgentSummary;
+  readonly label: string;
+  readonly showsOnChord: boolean;
+}
 
 /** An agent's Changes tab as the "+" offers it: the agent, its name as its own tab wears it, and the pull request the tab draws. */
 export interface ChangesOffer {
@@ -314,6 +331,11 @@ export function panelEntries(input: {
   changes?: readonly ChangesOffer[];
   /** The plan's pages, each by its newest version, which the "+" offers; none where the caller offers none. */
   pages?: readonly PageLine[];
+  /** The plan's agents' terminals on offer, and the door a row's pick asks a new shell through; none where the caller offers none. */
+  terminals?: {
+    readonly offers: readonly TerminalOffer[];
+    readonly onNew: (agentId: string) => void;
+  };
 }): AddEntry[] {
   const { panel, workers, files, changes = [], pages = [] } = input;
   const kinds = input.kinds.map((kind) => ({
@@ -367,7 +389,21 @@ export function panelEntries(input: {
     },
     onPick: () => panel.onChoose({ page: page.id }),
   }));
-  return [...kinds, ...subagentRows, ...fileRows, ...changesRows, ...pageRows];
+  // A terminal's row adds a shell to its agent's sandbox, as New terminal
+  // does; its words after the name say how the agent and its sandbox stand.
+  // Note that it is named by the key its tab is drawn under, because the
+  // agent's id names the agent's own row where the summary lists them.
+  const terminalRows = (input.terminals?.offers ?? []).map(({ agent, label, showsOnChord }) => ({
+    row: {
+      id: tabKey({ terminal: agent.id }),
+      ...tabLook({ kind: TAB_KIND.AGENT, name: label, agent }),
+      detail: <TerminalStanding agent={agent} />,
+      command: showsOnChord ? APP_COMMAND.SHOW_TERMINAL : undefined,
+      section: ADD_SECTION.TERMINAL,
+    },
+    onPick: () => input.terminals?.onNew(agent.id),
+  }));
+  return [...kinds, ...subagentRows, ...fileRows, ...changesRows, ...pageRows, ...terminalRows];
 }
 
 /** Every subagent the plan's work holds, with where its session stands, in the order started. */
@@ -384,6 +420,31 @@ function changesLook(agentId: string, agents: CodingAgentsControl): KindLook {
   const agentName = agent === undefined ? undefined : agentTabLabel(agent, agents.models);
   return tabLook({ kind: TAB_KIND.CHANGES, agentName });
 }
+
+/**
+ * The plan's agents as the "+" offers their terminals, each marked where ⌘J
+ * would open its Terminal tab from the panel's own tab (`terminal-entry.ts`).
+ */
+function terminalOffers(
+  agents: CodingAgentsControl,
+  panel: Pick<SidePanelControl, "tab" | "lastTerminal">,
+): readonly TerminalOffer[] {
+  const listed = agents.agents ?? [];
+  const target = terminalTarget(TERMINAL_ASK.SHOW, {
+    here: panel.tab === undefined ? undefined : agentOfTab(panel.tab),
+    agents: listed.map((agent) => agent.id),
+    lastUsed: panel.lastTerminal,
+  });
+  const chord = target.kind === TERMINAL_TARGET.AGENT ? target.agentId : undefined;
+  return listed.map((agent) => ({
+    agent,
+    label: agentTabLabel(agent, agents.models),
+    showsOnChord: agent.id === chord,
+  }));
+}
+
+/** Nothing to move: what the panel opens from its own "+" stands where the keys already are. */
+const noFocusMove = () => undefined;
 
 /** One tab the strip draws: the tab, how it looks, how it closes, and how its transcript is copied. */
 interface DrawnTab {
@@ -411,6 +472,7 @@ function stripTabs(input: {
   files: readonly OpenFile[];
   changes: readonly ChangesStripTab[];
   pages: readonly DrawnPage[];
+  terminals: readonly TerminalStripTab[];
   /** Every code Luke showed on the plan, whose newest note on a file its tab's card says. */
   shown: readonly PlanCodeShowing[];
   /** The plan's repository, whose showings alone a file tab's card reads its note from. */
@@ -419,9 +481,13 @@ function stripTabs(input: {
   copied: TranscriptCopier;
   /** Reads a planning worker's whole session for a copy, the plan standing in the agent's place. */
   readWorker: (callId: string) => Promise<readonly CodingAgentMessage[] | undefined>;
+  /** Opens an agent's tab in the plan's column, as a card naming the agent offers. */
+  onOpenAgent: (agentId: string) => void;
+  /** The agent whose tab the plan's column shows, whose card follows its run. */
+  shownAgent: string | undefined;
 }): DrawnTab[] {
-  const { panel, unread, agents, subagents, files, changes, pages, shown, held } = input;
-  const { repository, copied, readWorker } = input;
+  const { panel, unread, agents, subagents, files, changes, pages, terminals, shown, held } = input;
+  const { repository, copied, readWorker, onOpenAgent, shownAgent } = input;
   const chosen = (tab: SidePanelTab) => panel.tab !== undefined && sameTab(tab, panel.tab);
   const models = agents.models ?? [];
   const look = (tab: SidePanelTab, drawn: Omit<TabLook, "selected" | "onSelect">) => ({
@@ -483,14 +549,15 @@ function stripTabs(input: {
   });
   // A Changes tab hangs its pull request's card, naming the agent whose it is.
   const changesTabs = changes.map((tab) => {
-    const agent = agents.agents?.find((each) => each.id === tab.changes);
+    const subject = agentSubject(agents, tab.changes, held, shownAgent === tab.changes);
     const pullRequest = agents.pullRequests.get(tab.changes);
     const card =
-      agent === undefined || pullRequest === undefined ? undefined : (
+      subject.agent === undefined || pullRequest === undefined ? undefined : (
         <ChangesCard
-          agent={agent}
-          agentLabel={agentTabLabel(agent, agents.models)}
+          subject={subject}
+          models={agents.models}
           pullRequest={pullRequest}
+          onOpenAgent={() => onOpenAgent(tab.changes)}
         />
       );
     return {
@@ -504,7 +571,29 @@ function stripTabs(input: {
     look: look(tab, tabLook({ kind: TAB_KIND.PAGE, title: line.title })),
     close: () => panel.onClose(tab),
   }));
-  return [...fixed, ...subagentTabs, ...fileTabs, ...changesTabs, ...pageTabs];
+  // A Terminal tab wears its agent's glyph and name, and hangs its agent's
+  // card, saying under a rule whose sandbox its shells run in.
+  const terminalTabs = terminals.map((tab) => {
+    const subject = agentSubject(agents, tab.terminal, held, false);
+    const card = (
+      <AgentTabCard
+        name={subject.name}
+        models={models}
+        read={subject.read}
+        foot={<TerminalCardFoot agentId={tab.terminal} />}
+      />
+    );
+    return {
+      tab,
+      look: look(tab, {
+        ...tabLook({ kind: TAB_KIND.TERMINAL, agent: subject.agent }),
+        detail: subject.name,
+        card,
+      }),
+      close: () => panel.onClose(tab),
+    };
+  });
+  return [...fixed, ...subagentTabs, ...fileTabs, ...changesTabs, ...pageTabs, ...terminalTabs];
 }
 
 /**
@@ -523,7 +612,8 @@ function stripTabs(input: {
  * closes every tab but it and chooses it, and a fixed tab's, a file's, and
  * a Changes tab's Pin tab or Unpin tab, which puts it in the sidebar or takes it out; a
  * subagent's adds the two copies of its transcript, built from the rows the
- * tab draws (`transcript-copy.ts`) and answered with the window's toast.
+ * tab draws (`transcript-copy.ts`) and answered with the window's toast,
+ * which the bar's ⋯ also offers while the subagent's tab is the chosen one.
  * The "+" stands after all of them, apart from the strip, so it is never
  * dragged nor dropped before. ⌘W closes the chosen tab while the panel
  * holds the window's focus (`keys`).
@@ -539,12 +629,16 @@ function PanelTabs({
   files,
   changes,
   pages,
+  terminals,
   shownFiles,
   shown,
   repository,
   offeredPages,
   held,
   readWorker,
+  actionsSlot,
+  onOpenAgent,
+  shownAgent,
 }: {
   panel: SidePanelControl;
   /** The open plan, which a tab's pin is of. */
@@ -563,6 +657,8 @@ function PanelTabs({
   changes: readonly ChangesStripTab[];
   /** The open page tabs of the plan's pages, in the order opened. */
   pages: readonly DrawnPage[];
+  /** The open Terminal tabs of the plan's agents, in the order opened. */
+  terminals: readonly TerminalStripTab[];
   /** Each file Luke showed on the plan, which the "+" offers. */
   shownFiles: readonly ShownFile[];
   /** Every code Luke showed on the plan, whose notes the file tabs' cards say. */
@@ -575,8 +671,16 @@ function PanelTabs({
   held: HeldTranscripts;
   /** Reads a planning worker's session past a cursor, the plan standing in the agent's place. */
   readWorker: TranscriptReader;
+  /** The bar's slot the chosen tab's ⋯ stands in. */
+  actionsSlot: HTMLElement | null;
+  /** Opens an agent's tab in the plan's column, as a Changes tab's card offers. */
+  onOpenAgent: (agentId: string) => void;
+  /** The agent whose tab the plan's column shows, whose Changes card follows its run. */
+  shownAgent: string | undefined;
 }): React.JSX.Element {
   const copied = useTranscriptCopier();
+  // The panel's "+" asks for a new shell where the panel already holds the keys.
+  const openTerminal = useOpenTerminal(panel, noFocusMove);
   const kinds = stripTabs({
     panel,
     unread,
@@ -585,11 +689,14 @@ function PanelTabs({
     files,
     changes,
     pages,
+    terminals,
     shown,
     repository,
     held,
     copied,
     readWorker: (callId) => readWholeTranscript(readWorker, { agentId: planId, callId }),
+    onOpenAgent,
+    shownAgent,
   });
   const strip = inPlanOrder(kinds, panel.order, (entry) => entry.tab);
   // ⌘W closes the tab chosen, as its menu's Close does; with none, the key
@@ -630,7 +737,12 @@ function PanelTabs({
         }}
       >
         {strip.map((entry, at) => (
-          <DoorsTab key={tabKey(entry.tab)} look={entry.look} doors={doorsOf(entry, at)} />
+          <DoorsTab
+            key={tabKey(entry.tab)}
+            look={entry.look}
+            doors={doorsOf(entry, at)}
+            slot={actionsSlot}
+          />
         ))}
       </TabStrip>
       <AddTabButton
@@ -644,6 +756,10 @@ function PanelTabs({
           files: shownFiles,
           changes: changesOffers(agents, changes),
           pages: offeredPages,
+          terminals: {
+            offers: terminalOffers(agents, panel),
+            onNew: (agentId) => openTerminal(agentId, TERMINAL_ASK.NEW),
+          },
         })}
         onOpen={undefined}
         asked={panel.newTabAsked}
@@ -972,6 +1088,8 @@ function TabContent({
   codeReveal,
   onShowNote,
   onRevealed,
+  onCloseTab,
+  shellsList,
 }: {
   tab: SidePanelTab;
   planId: string;
@@ -1019,8 +1137,25 @@ function TabContent({
   onShowNote: (callId: string) => void;
   /** Says the Code tab scrolled to the card asked for. */
   onRevealed: () => void;
+  /** Closes a tab whose subject is gone, as an archived agent's Terminal tab closes. */
+  onCloseTab: (tab: SidePanelTab) => void;
+  /** Whether a Terminal tab's shells list is open, which holds for every one of them alike, and its toggle. */
+  shellsList: { readonly open: boolean; readonly onToggle: () => void };
 }): React.JSX.Element {
   const { act, tell } = useAct();
+  if (isTerminalTab(tab)) {
+    return (
+      <TerminalTab
+        key={tab.terminal}
+        agentId={tab.terminal}
+        agents={agents}
+        shown={shown}
+        onOpenAgent={() => onOpenTarget({ kind: TOOL_TARGET.AGENT, agent: tab.terminal })}
+        onClose={() => onCloseTab(tab)}
+        shells={shellsList}
+      />
+    );
+  }
   if (isPageTab(tab)) {
     const page = pages.find((each) => each.id === tab.page);
     // The tab stands for a page the plan no longer lists only until the panel moves on, a render away.
@@ -1374,11 +1509,13 @@ export function SidePanel({
   work,
   agents,
   openAgents,
+  shownAgent,
   views,
   shown,
   focused,
   onOpenTarget,
   cards,
+  banner,
 }: SidePanelDrawing & {
   panel: SidePanelControl;
   /** The tabs holding something that arrived while another was shown, each in semibold until it is shown. */
@@ -1396,6 +1533,8 @@ export function SidePanel({
   agents: CodingAgentsControl;
   /** The plan's agents whose tabs stand open in the plan's column, whose workers' tabs stand here; nothing while unread. */
   openAgents: readonly string[] | undefined;
+  /** The agent whose tab follows its run in the plan's column, whose card previews its latest step (`followedAgent`); none while another tab is shown or the column is out of sight. */
+  shownAgent: string | undefined;
   /** What the agents' and the workers' tabs last drew and said, which the workers' tabs and cards read. */
   views: TabViews;
   /** Whether the plan's page is on screen, which a subagent's tab follows its transcript under. */
@@ -1406,9 +1545,13 @@ export function SidePanel({
   onOpenTarget: (target: ToolTarget) => void;
   /** The cards the Call tab's rows that open a tab hang, as those tabs hang them. */
   cards: PlanCards;
+  /** The plan's banner, where one stands (`plan-banner.tsx`), drawn under the bar while the panel fills the window and covers the column that draws it otherwise. */
+  banner?: React.ReactNode;
 }): React.JSX.Element {
   const aside = useRef<HTMLElement>(null);
   const room = useRef<HTMLDivElement>(null);
+  // The one slot the bar keeps for the chosen tab's ⋯, drawn there from the tab (`strip-tabs.tsx`).
+  const [actionsSlot, setActionsSlot] = useState<HTMLElement | null>(null);
   const { tab } = panel;
   // Whether a File or Changes tab's tree is open, for every one of them
   // alike and for the window's life, as an editor's explorer stands across
@@ -1417,6 +1560,13 @@ export function SidePanel({
   const fileTree = useMemo(
     () => ({ open: fileTreeOpen, onToggle: () => setFileTreeOpen((was) => !was) }),
     [fileTreeOpen],
+  );
+  // Whether a Terminal tab's shells list is open, for every one of them alike
+  // and for the window's life, as the File tabs' tree is.
+  const [shellsOpen, setShellsOpen] = useState(true);
+  const shellsList = useMemo(
+    () => ({ open: shellsOpen, onToggle: () => setShellsOpen((was) => !was) }),
+    [shellsOpen],
   );
   // Every subagent the plan's work holds, and those with a tab open, each
   // with its session, in the order started and the strip's order; a
@@ -1437,6 +1587,10 @@ export function SidePanel({
   const changes = panel.changes.filter((each) =>
     drawsChanges(each, { planAgents: agents.agentIds }),
   );
+  // An agent's Terminal tab stands while the agent is the plan's, as its Changes tab does.
+  const terminals = panel.terminals.filter((each) =>
+    drawsTerminal(each, { planAgents: agents.agentIds }),
+  );
   // A page's tab stands while the plan lists the page.
   const planPages = pages ?? NO_PAGES;
   const pageTabs = panel.pages.flatMap((tab) => {
@@ -1454,7 +1608,9 @@ export function SidePanel({
             ? changesLook(tab.changes, agents).label
             : isPageTab(tab)
               ? pageTabs.find((each) => sameTab(each.tab, tab))?.line.title
-              : tabLook({ kind: TAB_KIND.PANEL, tab }).label;
+              : isTerminalTab(tab)
+                ? TAB_WORDS.TERMINAL
+                : tabLook({ kind: TAB_KIND.PANEL, tab }).label;
   const openSubagent = useCallback(
     (callId: string) => panel.onChoose({ subagent: callId }),
     [panel.onChoose],
@@ -1506,19 +1662,25 @@ export function SidePanel({
             files={files}
             changes={changes}
             pages={pageTabs}
+            terminals={terminals}
             shownFiles={offered}
             shown={shownCode ?? []}
             repository={repository}
             offeredPages={planPages}
             held={drawnTranscripts}
             readWorker={work.readWorker}
+            actionsSlot={actionsSlot}
+            onOpenAgent={(agent) => onOpenTarget({ kind: TOOL_TARGET.AGENT, agent })}
+            shownAgent={shownAgent}
           />
+          <span ref={setActionsSlot} className="toolbar-tab-actions" />
           <FullScreenToggle
             fullScreen={panel.fullScreen}
             leaving={leaving !== PANEL_LEAVING.NONE}
             onToggle={panel.onToggleFullScreen}
           />
         </div>
+        {panel.fullScreen ? banner : null}
         {/* A plan that has used no tab stands empty, the "+" above offering
             any; one whose tabs were closed offers them again in place. */}
         {tab === undefined ? (
@@ -1564,6 +1726,8 @@ export function SidePanel({
               codeReveal={codeReveal}
               onShowNote={showNote}
               onRevealed={revealed}
+              onCloseTab={panel.onClose}
+              shellsList={shellsList}
             />
           </FindScope>
         )}

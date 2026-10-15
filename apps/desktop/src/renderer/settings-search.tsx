@@ -1,29 +1,35 @@
-import { PRODUCT_SEARCH_SURFACE, PRODUCT_SURFACE_EVENT } from "@sidecar/features/analytics";
-import { INTEGRATION_NAME, INTEGRATION_PROVIDER_LIST } from "@sidecar/features/integration-wire";
-import type { Workspace } from "@sidecar/features/workspace-wire";
-import { CloseIcon, SearchIcon } from "@sidecar/panel";
+import { PRODUCT_SEARCH_SURFACE, PRODUCT_SURFACE_EVENT } from "@luke/features/analytics";
+import { INTEGRATION_NAME, INTEGRATION_PROVIDER_LIST } from "@luke/features/integration-wire";
+import { managesWorkspace } from "@luke/features/workspace-role";
+import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import {
   APP_SETTING_SCHEMA,
   describedSettings,
+  EXPERIMENTS,
   type SettingsRowsInput,
   settingFieldForId,
   settingIdVisible,
-} from "@sidecar/settings";
-import { useRef } from "react";
-import { APP_COMMAND, APP_SHORTCUT_GROUPS, APP_SHORTCUTS } from "#shared/shortcuts";
-import { useAppCommand } from "./app-commands";
-import { drawnVisibly, focusSeek } from "./focus-seek";
-import { integrationLines } from "./integration-search";
-import { focusSearchField, Highlighted } from "./search-field";
-import { matchesTokens, searchTokens } from "./search-tokens";
-import { settingsPageOf } from "./settings/pages";
-import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE, SETTINGS_SEARCH_ROW } from "./settings-anchors";
+} from "@luke/settings";
+import {
+  EXPERIMENT_ANCHOR,
+  SETTINGS_SEARCH_ANCHOR_ATTRIBUTE,
+  SETTINGS_SEARCH_ROW,
+} from "@luke/settings/settings-anchors";
 import {
   SETTINGS_PAGE_LIST,
   SETTINGS_SECTION,
   SETTINGS_VIEW,
   type SettingsView,
-} from "./settings-views";
+} from "@luke/settings/settings-views";
+import { CloseIcon, SearchIcon } from "@luke/ui";
+import { integrationLines } from "@luke/ui/integration-search";
+import { matchesTokens, searchTokens } from "@luke/ui/search-tokens";
+import { useRef } from "react";
+import { APP_COMMAND, APP_SHORTCUTS, shownShortcutGroups } from "#shared/shortcuts";
+import { useAppCommand } from "./app-commands";
+import { drawnVisibly, focusSeek } from "./focus-seek";
+import { focusSearchField, Highlighted } from "./search-field";
+import { settingsPageOf } from "./settings/pages";
 import { Shortcut } from "./shortcut";
 import { commandKeyshortcuts } from "./tooltip";
 
@@ -98,6 +104,9 @@ const SHORTCUT_WORDS = "keyboard shortcut hotkey key chord record remove delete 
 /** The words every integration's row can be found by, beside its own name. */
 const INTEGRATION_WORDS = "connect disconnect integration mcp";
 
+/** The words every experiment's row answers to beside its own name, the ones other apps call the same page by. */
+const EXPERIMENT_WORDS = "experiment preview beta labs early try";
+
 /** The words every window shortcut answers to, which change nothing and so offer no removal. */
 const WINDOW_SHORTCUT_WORDS = "keyboard shortcut key chord";
 
@@ -128,6 +137,17 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           haystack: ["Sign out", "account sign out log out"],
         }
       : undefined,
+    // Each experiment's row on Experimental, drawn once an account is signed in: found by its name and what it brings.
+    ...EXPERIMENTS.map((entry) =>
+      input.accountDrawn
+        ? {
+            id: EXPERIMENT_ANCHOR[entry.key],
+            label: entry.name,
+            page: SETTINGS_VIEW.EXPERIMENTAL,
+            haystack: [entry.name, entry.detail, EXPERIMENT_WORDS],
+          }
+        : undefined,
+    ),
     // Each integration's row on its page, drawn once an account is signed in and anchored by its provider.
     ...INTEGRATION_PROVIDER_LIST.map((provider) =>
       input.accountDrawn
@@ -178,7 +198,7 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           page: SETTINGS_VIEW.PLAN_TEMPLATE,
           haystack: [
             "Plan template",
-            "new plan starter document markdown sections headings default",
+            "new task plan starter document markdown sections headings default",
           ],
         }
       : undefined,
@@ -230,28 +250,46 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           ],
         }
       : undefined,
-    // The Workspace page's groups, as it draws them for the workspace it shows.
+    // The Workspace page's groups, as it draws them for the workspace it
+    // shows: the invite only where the reader may invite, and the leave
+    // only where the reader may leave.
     input.workspace
       ? {
           id: SETTINGS_SECTION.MEMBERS,
           label: "Members",
           page: SETTINGS_VIEW.WORKSPACE,
-          haystack: ["Members", "invite people team remove leave"],
+          haystack: ["Members", "people team remove role"],
+        }
+      : undefined,
+    input.workspace !== undefined && managesWorkspace(input.workspace)
+      ? {
+          id: SETTINGS_SECTION.INVITATIONS,
+          label: "Invitations",
+          page: SETTINGS_VIEW.WORKSPACE,
+          haystack: ["Invitations", "invite people add teammate link pending"],
+        }
+      : undefined,
+    input.workspace !== undefined && input.workspace.role !== WORKSPACE_ROLE.OWNER
+      ? {
+          id: SETTINGS_SECTION.LEAVE,
+          label: `Leave ${input.workspace.name}`,
+          page: SETTINGS_VIEW.WORKSPACE,
+          haystack: [`Leave ${input.workspace.name}`, "leave quit exit workspace"],
         }
       : undefined,
     input.workspace
       ? {
           id: SETTINGS_SECTION.GITHUB_REPOSITORIES,
-          label: "Integrations",
+          label: "GitHub",
           page: SETTINGS_VIEW.WORKSPACE,
           haystack: [
-            "Integrations",
-            "GitHub repositories connect choose manage disconnect organization",
+            "GitHub",
+            "Integrations repositories connect choose manage disconnect organization",
           ],
         }
       : undefined,
-    // The window's own chords, fixed rather than chosen, listed below them.
-    ...APP_SHORTCUT_GROUPS.flatMap((group) =>
+    // The window's own chords, fixed rather than chosen, listed below them; a gated feature's only while its experiment is on.
+    ...shownShortcutGroups(input.settings.experiments).flatMap((group) =>
       group.commands.map((command) => ({
         id: command,
         label: APP_SHORTCUTS[command].label,

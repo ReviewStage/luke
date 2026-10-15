@@ -15,7 +15,22 @@
  * never reported, logged, or held anywhere but the scope it opened.
  */
 
-import type { AvatarGrant } from "@sidecar/features/avatar-grant";
+import type { AvatarGrant } from "@luke/features/avatar-grant";
+import { ACT_KIND, type ActPayload } from "@luke/host/acts";
+import {
+  AVATAR_CLOSE_REASON,
+  type AvatarCloseReason,
+  type AvatarSession,
+  openAvatarSession,
+} from "@luke/ui/avatar-session";
+import type { AvatarSessionModule } from "@luke/ui/avatar-session-contract";
+import {
+  AVATAR_END_REASON,
+  AVATAR_FEED_KIND,
+  AVATAR_STATUS,
+  type AvatarEndReason,
+  type AvatarFeed,
+} from "@luke/voice/avatar";
 import {
   Duration,
   Effect,
@@ -31,22 +46,7 @@ import { Base64 } from "effect/encoding";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { ACT_KIND, type ActPayload } from "#shared/messages/acts";
-import {
-  AVATAR_END_REASON,
-  AVATAR_FEED_KIND,
-  AVATAR_STATUS,
-  type AvatarEndReason,
-  type AvatarFeed,
-} from "#shared/messages/avatar";
 import { tellAct } from "../act";
-import {
-  AVATAR_CLOSE_REASON,
-  type AvatarCloseReason,
-  type AvatarSession,
-  openAvatarSession,
-} from "../avatar-session/avatar-session";
-import type { AvatarSessionModule } from "../avatar-session/contract";
 import { rendererRegistry, rendererRuntime } from "../renderer-runtime";
 import { avatarSessionModuleAtom } from "./avatar-session-bundle";
 

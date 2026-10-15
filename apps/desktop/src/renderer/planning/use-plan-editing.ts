@@ -1,10 +1,5 @@
 import { useAtom } from "@effect/atom-react";
-import type { PlanEditRequest } from "@sidecar/features/plan-edit";
-import type { PlanningEditAnswer } from "@sidecar/features/planning-view";
-import { Duration, Effect } from "effect";
-import { AsyncResult } from "effect/reactivity";
-import { useEffect, useRef, useState } from "react";
-import { rendererRuntime } from "../renderer-runtime";
+import type { PlanEditRequest } from "@luke/features/plan-edit";
 import {
   type DocumentEditor,
   editorAnswered,
@@ -19,7 +14,12 @@ import {
   editorTookLukes,
   editorTyped,
   pendingSave,
-} from "./plan-edit-model";
+} from "@luke/features/plan-edit-model";
+import type { PlanningEditAnswer } from "@luke/features/planning-view";
+import { Duration, Effect } from "effect";
+import { AsyncResult } from "effect/reactivity";
+import { useEffect, useRef, useState } from "react";
+import { rendererRuntime } from "../renderer-runtime";
 
 /**
  * use-plan-editing.ts -- the open plan's one editor: whether its text is open, which block the keyboard stands on, and its saves as the developer pauses.

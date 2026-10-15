@@ -1,6 +1,7 @@
-import type { AdminUserAccount, AdminUserDetail } from "../../../server/admin/admin-user";
-import type { AdminMetricsWindow } from "../../../server/admin/http";
-import { accountLabel } from "../../account-initials";
+import type { AdminUserAccount, AdminUserDetail } from "@luke/service/admin/admin-user";
+import type { AdminMetricsWindow } from "@luke/service/admin/http";
+import { accountLabel } from "@luke/ui/account-initials";
+import { formatDate, formatDayTick, formatNumber, signInMethodLabel } from "@luke/ui/admin-format";
 import { ActivityCalendar } from "../charts/activity-calendar";
 import { SectionHeading, StatCard } from "../charts/stat-card";
 import { UsageChart } from "../charts/usage-chart";
@@ -9,7 +10,6 @@ import { PLAIN_BUTTON, RefreshFailureNotice, WindowSwitcher } from "../chrome/co
 import { AccountActivityNote } from "../chrome/notes";
 import { AccountAvatar, PageHeader, type ViewerAccount } from "../chrome/page-header";
 import { PageSkeleton } from "../chrome/page-skeleton";
-import { formatDate, formatDayTick, formatNumber, signInMethodLabel } from "../format";
 import { accountReadPath, plainLeftClick, tabHref } from "../routing";
 import { SKELETON_PLOT, SKELETON_SHAPE, type SkeletonShape } from "../skeleton";
 import { type AdminReader, useAdminRead } from "../use-admin-read";

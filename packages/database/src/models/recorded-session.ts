@@ -39,7 +39,7 @@ import { codingAgent } from "../schemas/coding-agent.js";
 import { plan } from "../schemas/plan.js";
 import { conversations } from "../schemas/storage.js";
 import { CONVERSATION_KIND } from "../storage-vocabulary.js";
-import { planReachableBy } from "./workspace-store.js";
+import { agentReachableBy, planReachableBy } from "./workspace-store.js";
 import type { ConversationTarget } from "./writer.js";
 
 const StandingSessionSchema = Schema.Struct({
@@ -130,8 +130,7 @@ function namedByReachableWork(userId: string, conversationId: SQLWrapper): SQL |
       queryBuilder
         .select({ one: codingAgent.id })
         .from(codingAgent)
-        .innerJoin(plan, eq(plan.id, codingAgent.planId))
-        .where(and(eq(codingAgent.conversationId, conversationId), planReachableBy(userId))),
+        .where(and(eq(codingAgent.conversationId, conversationId), agentReachableBy(userId))),
     ),
   );
 }

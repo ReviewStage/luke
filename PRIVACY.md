@@ -13,20 +13,20 @@ agents run on your Mac"). Apart from that, nothing in Luke reads a coding
 agent session, message history, file contents, or command output from your
 Mac's disk or from any other app, except a file you hand it to attach to a
 coding agent's message (see "Files you attach to a coding agent"). The only
-coding agents it lists are the ones started on a plan from Luke — its Start
-button, New coding agent, or Luke on a planning call — which our service runs
+coding agents it lists are the ones started on a task from Luke — its Start
+button, New coding agent, or Luke on a call — which our service runs
 in sandboxes of their own (see "Who we send it to"), and the transcripts it
-shows, a coding agent's and the planning conversation's, are read from our
-service. The planning model reads a plan's repository in a sandbox on our
+shows, a coding agent's and the task conversation's, are read from our
+service. Luke reads a task's repository in a sandbox on our
 service. No part of Luke's judgment runs on this Mac, so no transcript,
 working memory, or inbox of his is held here on disk, and in memory only the
 tabs described next. On disk, under its application data, Luke keeps only
-the layout of its window: which plans' tabs are open and which are pinned,
+the layout of its window: which tasks' tabs are open and which are pinned,
 each pin with its label (a coding agent's title or a file's path), which
 inbox items you have seen, and which groups you folded and how you sorted
 the Inbox. None of it is sent anywhere.
 
-**Commands agents run on your Mac.** Luke's planning model, the workers it
+**Commands agents run on your Mac.** Luke, the workers he
 hands work to, every coding agent, and the workers a coding agent hands work
 to can each run any shell command on your Mac, at once and without asking you,
 as many at a time as they like. This holds whenever Luke is open on the Mac
@@ -48,10 +48,10 @@ service fails during that wait they stay until you delete your account. A
 command no Mac takes within 30 seconds is not run, and the agent is told it
 had no answer. The command, the few words the agent gave to describe it, its
 exit code, and up to 20,000 characters each of what it printed to its output
-and its error are returned to the agent; stored with the planning conversation
+and its error are returned to the agent; stored with the task conversation
 or the coding agent's transcript, under its terms, and in the session history
 described under "Who we send it to"; shown, marked "On your Mac", on the
-plan's Call tab, a worker's tab, or the agent's tab on every Mac signed in as
+task's Call tab, a worker's tab, or the agent's tab on every Mac signed in as
 you; and sent to the model provider that agent runs on. Nothing is redacted:
 if a command prints a password, a token, a key, or a file's contents, all of
 that goes too, and our operators can read it there like the rest of the
@@ -66,46 +66,51 @@ is told that no Mac is listening.
 
 **Your conversation with Luke.** Nothing on your Mac writes what you said or
 what Luke spoke to disk, and no record of what he did is kept there. While a
-plan is open, Luke on your Mac reads from our service, for the plan's Call
-tab, the spoken words of the plan's calls beside the planning model's turns:
+task is open, Luke on your Mac reads from our service, for the task's Call
+tab, the spoken words of the task's calls beside Luke's turns:
 what it wrote, the summary of its reasoning that OpenAI returns for each step,
 and each tool call's input and answer, such as a command's output from the
-plan's repository or from your Mac, or a public page's text. There each turn
+task's repository or from your Mac, or a public page's text. There each turn
 keeps its newest sixty parts with every piece of text cut to 4,000
 characters, and a page's HTML and a picture of the whiteboard are left out;
-each worker the planning model handed work to shows only its title, model,
+each worker Luke handed work to shows only its title, model,
 and where it stands. Opening a worker reads its whole session, uncut, for its
 own tab, and opening a coding agent, yours or another member's, reads its
 transcript (its words, reasoning
 summaries, and tool calls with their input and output) for its tab, as it
-runs. Our service keeps the planning turns with the plan's planning
-conversation and Luke reads them while the plan is open, during a call within
+runs. Our service keeps Luke's turns with the task's
+conversation and Luke reads them while the task is open, during a call within
 a moment of each step, the newest twenty first and older ones as you scroll.
 All of this is held in Luke's memory, never on disk, goes when you leave the
-plan or quit Luke, and is left out of the screen recording (see "Screen
-recordings"); the planning turns are never sent to Luke's voice window or his
+task or quit Luke, and is left out of the screen recording (see "Screen
+recordings"); those turns are never sent to Luke's voice window or his
 call window, which draw none of them. Your default model, effort, and
 context size for a coding agent are kept with your account preferences on our
 service, set in Settings › Coding agents or by the model you last started
 with.
 
-A voice session on this Mac is a call about one plan. It opens with nothing
+A voice session on this Mac is a call about one task. It opens with nothing
 of your coding agents and no line of your conversation; what Luke knows when
 he answers a spoken ask he reads on our service, from the plan and the record
-described under "Your account". During the call, Luke's planning model can
-list the plan's coding agents, read the last few turns of one's transcript,
+described under "Your account". During the call, Luke can
+list the task's coding agents, read the last few turns of one's transcript,
 send one a message it writes for you (kept in that agent's transcript as
-yours), and start a new one; what it read and sent is kept with the plan's
-planning conversation. A fixture or evidence run keeps no conversation at all.
+Luke's), and start a new one; what he read and sent is kept with the task's
+conversation. A fixture or evidence run keeps no conversation at all.
 
-**Feature plans.** When you start a named plan, our service stores it in a
+**Tasks.** When you start a named task, our service stores it in a
 workspace: the first workspace made for your account unless you start it in
-another workspace you are a member of, and the plan records which. Every member of that
-workspace can read, change, and delete the plan, its board, its pages, and
+another workspace you are a member of, and the task records which, and who
+started it, named by their account's name to every member of the workspace. Every member of that
+workspace can read, change, and delete the task, its board, its pages, and
 its history, read what was said on its calls, yours included, and read,
-message, rename, and stop the coding agents any member started on it. It stores
-under your account its name and its one Markdown document, which begins as a copy of
-your plan template and is written by the planning call's notetaker, by coding
+message, rename, and stop the coding agents any member started on it. Each
+message a member sends a coding agent keeps which member sent it, as their
+account, and the agent's tab names them over it to every other member; a
+message of a member whose account is deleted keeps no account and reads as a
+former member's. It stores
+under your account its name and its plan, one Markdown document, which begins as a copy of
+your plan template and is written by the call's notetaker, by coding
 agents started on it, and by you, when you edit a section or restore an
 earlier version. Your edits are sent as you pause typing and when you finish;
 unsaved words stay in Luke's memory on your Mac, never on disk. Our service
@@ -119,29 +124,29 @@ workspace. A revision of a member whose account is deleted keeps no account
 and names nobody. A coding agent's last fifty saves are also kept as its
 notes, so Luke can tell you what it changed. All of it is stored as written,
 bound to your account and readable by our own operators, like the
-conversation described below. Luke on your Mac remembers, for each plan, only
+conversation described below. Luke on your Mac remembers, for each task, only
 the time of its newest save when you last had it open, to show which sections
 changed since.
 
-Deleting a plan removes it at once with its history, its inbox, and the
-record of each coding agent started on it with the plan copy or task that
-agent was handed, and marks the plan's conversation and each agent's
+Deleting a task removes it at once with its history, its inbox, and the
+record of each coding agent started on it with the plan copy or prompt that
+agent was handed, and marks the task's conversation and each agent's
 transcript deleted, removed thirty days later. Before it deletes anything, it
-stops every coding agent of the plan still at work, as Stop does; if one
-cannot be stopped just then, or is still starting, the plan is not deleted
+stops every coding agent of the task still at work, as Stop does; if one
+cannot be stopped just then, or is still starting, the task is not deleted
 and you can try again in a moment. It also deletes the record of each of the
-plan's calls, with every line said on it (see "Your account"): at once for a
+task's calls, with every line said on it (see "Your account"): at once for a
 call that has ended, and within a minute or so of its end for a call still
-open. Deleting your account removes every plan. Pinning or archiving a plan
+open. Deleting your account removes every task. Pinning or archiving a task
 stores only when you did it and deletes nothing.
 
-**Your plan template.** The template new plans start from is kept with your
+**Your plan template.** The template a new task's plan starts from is kept with your
 account preferences on our service, as you write it in Settings › Plan
 template (up to 20,000 characters; a built-in one until you do), sent as you
 pause typing. Our service keeps its history without limit, as it does a
 plan's: the template after each revision (your saves close together count as
 one), whether you wrote it or restored which earlier version, and when, so
-Settings can show and restore an earlier one. A new plan begins as a copy of
+Settings can show and restore an earlier one. A new task's plan begins as a copy of
 it; no model reads the template itself. Deleting your account removes it and
 its history.
 
@@ -150,9 +155,9 @@ service stores its name and when you pinned it under your account, so the pin
 follows you to every Mac you sign in on. Unpinning deletes that record, and
 deleting your account removes them all.
 
-**A plan's inbox.** When a coding agent on a plan needs a decision from you,
+**A task's inbox.** When a coding agent on a task needs a decision from you,
 or something only you can do such as changing a GitHub setting, it posts an
-item to the plan's inbox on our service: a title, context in Markdown, links,
+item to the task's inbox on our service: a title, context in Markdown, links,
 references to lines of its repository (a path, the lines, and the commit,
 never the lines themselves), and how it asks to be answered, with any options
 or form fields. An item may carry a picture the agent took in its sandbox,
@@ -163,22 +168,25 @@ Luke signed in as you. Items and their pictures are stored under your account
 and readable by our own operators, like the agent's transcript. The agent can
 change or withdraw an item, and our service keeps each as it last stood; a
 picture goes when the item stops naming it. Your answer, and any note, is
-stored with the item and, where the agent asked to hear back, handed to it as
-one of your messages, kept in its transcript. While you are signed in, Luke
-on your Mac keeps a read open to our service for every item waiting on you,
-each in brief (its plan, agent, and title), and for every plan holding an item,
-to count them in its sidebar and on its Dock icon. Opening the Inbox reads
-each of those plans' items whole, the ones you settled included, with what
+stored with the item under the account of whichever member gave it, which
+every member of the task's workspace sees by name beside the answer, and,
+where the agent asked to hear back, handed to it as one of your messages,
+kept in its transcript. While you are signed in, Luke
+on your Mac keeps a read open to our service for every item waiting in your
+workspaces, each in brief (its task, agent, title, and the account that started
+the agent), and for every task holding an item; it counts in its sidebar and on
+its Dock icon, and tells you of, only the items of agents you started. Opening the Inbox reads
+each of those tasks' items whole, the ones you settled included, with what
 each offered and the answer you picked; Luke holds them in memory only, never
 on disk. While its window is behind, a Mac notification names a new item by
-its plan, agent, and title, and a coding agent's ended turn by its plan, the
+its task, agent, and title, and a coding agent's ended turn by its task, the
 agent's title, and whether it finished or failed, or its branch's pull request
 number, unless you turn these off in Settings › Coding agents; macOS shows and
-keeps them as it does any app's. Deleting the plan, or your account, deletes
+keeps them as it does any app's. Deleting the task, or your account, deletes
 its items.
 
 **Files you attach to a coding agent.** You can attach files to a coding
-agent's message, or to the task you start one with, by picking them with +,
+agent's message, or to the prompt you start one with, by picking them with +,
 dropping, or pasting: images, PDFs up to 3 MB, and text files up to 100 KB, up
 to ten files and 3 MB a message. A PNG, JPEG, or WebP up to 1.5 MB is sent as
 it is; any other image, or a larger one, is first made into a smaller WebP on
@@ -188,7 +196,7 @@ as where and on what a photo was taken, but never where it was on your Mac.
 Our service sends them to the agent's model with your message and with every
 later call, copies images and PDFs into the agent's sandbox, and keeps them in
 the agent's transcript, stored as sent and readable by our own operators,
-except that the task an agent is started on keeps an image or PDF by name
+except that the prompt an agent is started on keeps an image or PDF by name
 alone. They go when the transcript does; the sandbox's snapshot and the
 agent's session history keep them on the terms under "Who we send it to".
 
@@ -204,34 +212,34 @@ characters, such as `sk-ant-…abcd`), when you last saved it, and whether, and
 when, the provider last accepted it, refused it, or said it was out of credit,
 or our service could no longer read it, updated when a coding agent call on it
 finds that changed. Only coding agents' and their workers' model calls use it;
-Luke's planning model, voice, notetaker, dictation, titles, every web search,
+Luke's judgment, voice, notetaker, dictation, titles, every web search,
 and Fast always run on our keys, and an account with its own Anthropic key is
 not offered Fast. After you save it, neither your Mac nor any answer from our
 service holds the key again, and we never log it or send it to our analytics,
 crash reports, or screen recordings. Removing it in Settings, or deleting your
 account, deletes it.
 
-**A plan's whiteboard.** You and Luke's planning model can both draw on a
-plan's whiteboard. Our service stores it with the plan, as drawn and readable
+**A task's whiteboard.** You and Luke can both draw on a
+task's whiteboard. Our service stores it with the task, as drawn and readable
 by our own operators: every shape, arrow, line, stroke, and piece of text and
-where it stands, and the planning model's latest drawing. Luke on your Mac
+where it stands, and Luke's latest drawing. Luke on your Mac
 sends the whole board each time it changes and, with a save holding a new
 drawing of the model's or one the model is waiting to look at, a picture of
 the board as your Mac draws it, at most 1,200 pixels a side, kept in place of
 the last one. The model reads the board as text at the start of each turn and
 may look at that picture to check what it drew, which sends the picture to
-the model; our service does not copy it into the planning conversation,
+the model; our service does not copy it into the task conversation,
 though the model's session history may keep it (see "Who we send it to").
-Each drawing call, with what it drew, is stored in the planning conversation.
-You cannot put an image or a file on the board. Deleting the plan deletes its
+Each drawing call, with what it drew, is stored in the task conversation.
+You cannot put an image or a file on the board. Deleting the task deletes its
 whiteboard.
 
-**How the planning model reads your repository.** A plan names a GitHub
-repository of the Luke GitHub App installation connected to the plan's
-workspace. The
-planning model reads its code by running shell commands (such as `ls`,
+**How Luke reads your repository.** A task names a GitHub
+repository of the Luke GitHub App installation connected to the task's
+workspace. Luke
+reads its code by running shell commands (such as `ls`,
 `grep`, or `cat`) in a Vercel Sandbox: an isolated machine our service opens
-for the plan's planning conversation, on Vercel's infrastructure, never on
+for the task's conversation, on Vercel's infrastructure, never on
 your Mac. The first command checks out the default branch's latest commit,
 after our service confirms the workspace's installation still reaches the
 repository, with a read-only
@@ -241,30 +249,30 @@ ends: it never enters the sandbox, a command, its output, or the
 conversation's record. The sandbox has ordinary Internet access while a
 command runs. Each command, the few words the model gives to describe it, and
 up to 20,000 characters each of its output and error text are stored with the
-planning conversation, under its terms. The checkout stays in the sandbox
+task conversation, under its terms. The checkout stays in the sandbox
 between commands and, once the sandbox is stopped for idleness, in a snapshot
-Vercel keeps until thirty days after its last use. When the plan's
-conversation is removed, thirty days after you delete the plan, our service
+Vercel keeps until thirty days after its last use. When the task's
+conversation is removed, thirty days after you delete the task, our service
 deletes the sandbox of each of its sessions and of its coding agents', with
 the snapshots no other sandbox uses, shortly after; deleting your account
 does the same for every session of yours, shortly after the deletion. A
-session a plan's conversation was moved off earlier in its life is not
+session a task's conversation was moved off earlier in its life is not
 tracked, and its snapshot stays until Vercel lets it expire. Nothing written
 in the sandbox reaches your repository.
 
-**Code on screen during a planning call.** When the planning model wants to
+**Code on screen during a call.** When Luke wants to
 show you code, it names a file and lines, and our service reads them from
 the same sandbox checkout. The path, the commit the checkout read it at, the
 line numbers, the lines (at most 200, each cut to 400 characters), and the
 model's note on why it showed them (at most 280 characters) are stored with
-the planning conversation and sent to your Mac, which draws them in the plan's
+the task conversation and sent to your Mac, which draws them in the task's
 Code tab; nothing is read from
 your Mac's disk. The service refuses a path outside the checkout and never
 reads a file named `.env` or starting with `.env`. The voice model is told
 the path and line numbers on screen, so Luke can refer to them. When you open
-the plan, Luke on your Mac reads back all the code shown on it, by the same
-rules, and holds it in memory, never on disk, until you leave the plan or quit
-Luke. It is never part of the plan's document.
+the task, Luke on your Mac reads back all the code shown on it, by the same
+rules, and holds it in memory, never on disk, until you leave the task or quit
+Luke. It is never part of the task's plan.
 
 **A whole file opened from a snippet.** A snippet in the Code tab can open
 its whole file in a File tab. Our service reads the file from GitHub at the
@@ -295,27 +303,27 @@ downloading the patch writes it where you save it.
 
 **Your repository's skills.** A repository can hold agent skills, Markdown
 instructions in `.agents/skills/` or `.claude/skills/`, each in a `SKILL.md`.
-When a planning conversation or a coding agent's session starts, our service
+When a task conversation or a coding agent's session starts, our service
 reads them from GitHub at the head of the default branch, with a token for
-that one repository: up to 64 skills, leaving out a file over 64 KB. The
-planning model and the coding agent are told each skill's name and
+that one repository: up to 64 skills, leaving out a file over 64 KB. Luke
+and the coding agent are told each skill's name and
 description, and read a skill's whole file when they load one, which you can
 ask for by typing `/` and its name in a coding agent's message box; a load is
-stored with the planning conversation or the agent's transcript like any tool
+stored with the task conversation or the agent's transcript like any tool
 call. Luke on your Mac reads each skill's name, description, and path through
 our service, read from GitHub the same way, never its file, to list after `/`,
 and holds them in memory only; a skill named in a message opens its file in a
 File tab, by the rules above. Our service keeps no copy of the skills
 themselves.
 
-**Pages an agent makes.** Luke's planning model and coding agents can make a
-page for a plan: an interactive HTML document, such as a chart or a mockup,
-that opens in the plan's side panel. Our service stores each page with the
-plan, as written and readable by our own operators: its title and HTML, at
+**Pages an agent makes.** Luke and coding agents can make a
+page for a task: an interactive HTML document, such as a chart or a mockup,
+that opens in the task's side panel. Our service stores each page with the
+task, as written and readable by our own operators: its title and HTML, at
 most 262,144 characters a version, and every version it has had, each kept as
-written and never changed. Deleting the plan deletes its pages. A page made by
-the planning model is part of the planning conversation, so it is sent back to
-the planning model as the conversation goes on (see "Who we send it to"). Luke
+written and never changed. Deleting the task deletes its pages. A page made by
+Luke is part of the task conversation, so it is sent back to
+Luke's model as the conversation goes on (see "Who we send it to"). Luke
 on your Mac reads a page's HTML from our service only to draw it, holds it in
 memory only, and never passes it to the rest of the panel. A page runs sealed
 off from Luke: it cannot read the panel, your account, or another page, and
@@ -355,8 +363,8 @@ what did not finish rather than finishing it. Beside those commands and the
 files you attach, the one thing the app does on this machine at the runtime's
 ask is open an address you asked to open.
 
-**How the plan is written during a planning call.** A notetaker on our
-service, not Luke's judgment, writes the plan during a planning call. Once
+**How the plan is written during a call.** A notetaker on our
+service, not Luke's judgment, writes the plan during a call. Once
 you have been quiet for about a second, it makes one call to OpenAI
 (`gpt-5.6-luna`) on our key, carrying the saved plan, both sides of what was
 said since its last note with a few lines before them, and Luke's own
@@ -365,9 +373,9 @@ heading (adding the heading where the plan lacks it, and taking the place of
 the template's guidance where that is all the section holds), a phrase
 replaced, or the lines a phrase names removed, drawing each on your Mac as it
 is written. It is told which sections you last wrote,
-so it adds to your words rather than rewording them, and so is Luke's
-planning model. It runs only during a call you started and only for its
-plan, each run counts in your daily usage, and a failed run writes nothing.
+so it adds to your words rather than rewording them, and so is
+Luke. It runs only during a call you started and only for its
+task, each run counts in your daily usage, and a failed run writes nothing.
 Nothing it reads or answers is kept beyond the plan and its history, said
 aloud, or shown elsewhere; OpenAI keeps the request and its reply under its
 own retention policy.
@@ -401,7 +409,7 @@ workspace reaches. We also keep the records
 that keep you signed in, each with the network address and the browser or app
 it was signed in from, and a daily count of your use of our service, one
 number a day: one for each voice session you opened; each model call made on
-our keys by Luke's planning model, the workers it hands work to, a coding
+our keys by Luke, the workers he hands work to, a coding
 agent, or a coding agent's workers (a call on your own key is not counted);
 each title; each web search; each notetaker run; and each clip you dictated;
 beside it, how many seconds you dictated.
@@ -419,7 +427,17 @@ you delete your account, as every workspace you own does, with only your
 membership removed. A workspace you create is a record
 named as you name it, holding you as its owner; every member of a workspace
 sees every other member's name, email address, and
-role in it, and an owner or admin of it can remove a member. When an owner
+role in it, and an owner or admin of it can remove a member. A workspace may
+show a photo an owner or admin of it uploads: the service keeps it with the
+workspace, a PNG, JPEG, or WebP image, and serves its bytes only to Luke
+signed in as one of the workspace's members, never caching it on the way;
+the list of your workspaces names only a short digest of it, so your Mac
+reads the photo again only when it changes. The photo is the one picture
+you choose, which your Mac first redraws as a small square, 256 pixels a
+side, and sends nothing else of the file; an owner or admin who removes it
+deletes it from the service, and a new upload replaces it. Your own first workspace, while
+it has no photo, shows your profile picture, from the address your sign-in
+gave us where it is Google's or GitHub's, and only to you. When an owner
 or admin connects GitHub to a workspace, the
 service keeps beside the workspace GitHub's ids for that installation and the
 account it is on, its login, whether it is a user or an organization, and
@@ -440,15 +458,15 @@ and effort, token counts, and when it was queued, started, and ended, and how
 call, what you said is kept as your line and what his voice said as his — an
 answer he gave without a turn, what he said around one, a reply he read aloud
 — each written once it has settled, so the record holds the words you heard
-beside the turns he ran. Each call also keeps a record of its own: its plan,
+beside the turns he ran. Each call also keeps a record of its own: its task,
 OpenAI's id for the session, when it started and ended and why, its voice
 model, its billed seconds (or our own count where OpenAI gave none), and each
-line said on it, by whom and when; the plan's Call tab shows it. These rows
+line said on it, by whom and when; the task's Call tab shows it. These rows
 are not sealed: they are stored as written, and our own operators can read
 them. They stand until you delete your account, which removes them at once. A
-deleted plan's conversation and its agents' transcripts are marked deleted and
+deleted task's conversation and its agents' transcripts are marked deleted and
 removed thirty days later; its call records, with the lines said on them, are
-deleted with the plan, or within a minute or so of the call ending for a call
+deleted with the task, or within a minute or so of the call ending for a call
 still open.
 
 **Linear, if you connect it.** Connecting Linear in Settings › Integrations
@@ -462,14 +480,14 @@ your Mac, a model, or a sandbox. We keep only your connection's state
 finished signing in, and, while a sign-in is under way, when it began and a
 one-time value that matches its return. The list of Linear's tools that menu
 shows is held in our service's memory for five minutes. While you are
-connected, Luke's planning model and the workers it hands work to can read and
+connected, Luke and the workers he hands work to can read and
 change whatever your Linear account can, through Linear's own MCP server,
 without asking you first, and so can every coding agent and its workers,
 unless you switch Linear off for that agent in its message box's MCP menu,
 which takes effect from its next turn and is stored with the agent. The
-workers are told to change something only when their task asks for it. What
-Linear answers goes to the model that made the call, and each call, with its
-input and everything Linear answered, is written to the plan's conversation
+workers are told to change something only when their subagent task asks for
+it. What Linear answers goes to the model that made the call, and each call,
+with its input and everything Linear answered, is written to the task's conversation
 or the agent's transcript like any other tool call. Disconnecting stops Luke
 using it from each agent's next step, removes the connection's record, and
 asks Vercel Connect to revoke the grant; what agents already changed in
@@ -482,12 +500,12 @@ stays until you revoke Luke in Linear's own settings.
 signs you in to Notion in your browser through Vercel Connect, which stores
 Notion's token for your account, encrypted, and renews it. Our service
 handles the token as it does Linear's, and keeps the same record of your
-connection. While you are connected, Luke's planning model, its workers, and
+connection. While you are connected, Luke, his workers, and
 every coding agent and its workers, as for Linear, can read, create, and
 change whatever your Notion account can, through Notion's own MCP server,
 without asking you first. What
 Notion answers goes to the model that made the call, and each call, with its
-input and everything Notion answered, is written to the plan's conversation or
+input and everything Notion answered, is written to the task's conversation or
 the agent's transcript like any other tool call. Disconnecting and deleting
 your account work as they do for Linear: Luke stops using it from each agent's
 next step, removes the connection's record, and asks Vercel Connect to revoke
@@ -501,12 +519,12 @@ Sentry's token for your account, encrypted, and renews it. Sentry's sign-in
 lists what Luke may do, reading issues and events among it, and you can untick
 its write access there to keep Luke to reading. Our service handles the token
 as it does Linear's, and keeps the same record of your connection. While you
-are connected, Luke's planning model, its workers, and every coding agent and
+are connected, Luke, his workers, and every coding agent and
 its workers, as for Linear, can do whatever your Sentry grant allows, through
 Sentry's own MCP server, without asking you first. What Sentry answers, which
 can include the error messages, stack traces, and event data your applications
 sent it, goes to the model that made the call, and each call, with its input
-and everything Sentry answered, is written to the plan's conversation or the
+and everything Sentry answered, is written to the task's conversation or the
 agent's transcript like any other tool call. Disconnecting and deleting your
 account work as they do for Linear: Luke stops using it from each agent's next
 step, removes the connection's record, and asks Vercel Connect to revoke the
@@ -529,7 +547,7 @@ canvases as you. Our service handles the token as it does Linear's, and keeps
 the same record of your connection; which agents can use Slack is as for
 Linear. What Slack answers, which can include other people's messages in
 conversations you can see, goes to the model that made the call, and each
-call, with its input and everything Slack answered, is written to the plan's
+call, with its input and everything Slack answered, is written to the task's
 conversation or the agent's transcript like any other tool call.
 Disconnecting and deleting your account work as they do for Linear: Luke
 stops using it from each agent's next step, removes the connection's record,
@@ -555,7 +573,7 @@ Bookface as your YC account can. What a service answers can include a
 credential it hands out, such as a database connection string or password, a
 decrypted environment variable, or an API key; like everything else it
 answers, it goes to the model that made the call, and each call, with its
-input and everything the service answered, is written to the plan's
+input and everything the service answered, is written to the task's
 conversation or the agent's transcript like any other tool call.
 Disconnecting and deleting your account work as they do for Linear: Luke stops
 using it from each agent's next step, removes the connection's record, and
@@ -578,7 +596,7 @@ that Executor's own policy holds for your approval, or that needs your input,
 comes back to the agent as a question, which it puts to you, and the call goes
 on only with your answer. What an app answers, which can include a credential
 that app hands out, goes to the model that made the call, and each call, with
-its input and everything Executor answered, is written to the plan's
+its input and everything Executor answered, is written to the task's
 conversation or the agent's transcript like any other tool call. Disconnecting
 and deleting your account work as they do for Linear: Luke stops using it from
 each agent's next step, removes the connection's record, and asks Vercel
@@ -587,7 +605,7 @@ the record of it, stays, and a grant Vercel Connect could not revoke stays
 until you revoke it in Executor's own settings.
 
 **GitHub, if you signed in with GitHub.** GitHub needs no connecting of its
-own: while your GitHub sign-in stands, Luke's planning model, its workers, and
+own: while your GitHub sign-in stands, Luke, his workers, and
 every coding agent and its workers, as for Linear, can do whatever the Luke
 GitHub App's token allows, through GitHub's own MCP server
 (`api.githubcopilot.com`), without asking you first: read and change
@@ -597,7 +615,7 @@ Our service reads that token from where your sign-in left it, as it does for
 everything else it reads from GitHub, sends it only to GitHub's MCP server,
 never to your Mac, a model, or a sandbox, and keeps no other record of the
 connection. What GitHub answers goes to the model that made the call, and each
-call, with its input and everything GitHub answered, is written to the plan's
+call, with its input and everything GitHub answered, is written to the task's
 conversation or the agent's transcript like any other tool call. An account
 that signed in with Google alone is offered Connect on GitHub's row in
 Settings › Integrations instead, which connects it, and Disconnect there
@@ -619,22 +637,23 @@ paths, prompts, or error text.
 screen, your editor, your terminal, or any other app, and records its shape,
 not its words: before it leaves your Mac, every piece of text, and every
 label, description, picture address, and link address a page carries for
-itself, is replaced with blocks of the same length, so a plan's document, a
+itself, is replaced with blocks of the same length, so a task's plan, a
 caption of what you or Luke said, your name and email address, and anything
 you type all appear as blocks. A coding agent's message box is an editor, and
 the words in it and a skill chosen there are text it draws, which appear as
 blocks too; no chip carries what it names anywhere else. As a second line, some parts are left out
 whole: the feedback form, since a screenshot you attach could carry another
-app's words; a plan's title while you edit it, its document while you edit it,
+app's words; a task's title while you edit it, its plan while you edit it,
 its whiteboard, its Call and Code tabs, the contents of its File tabs with
 their tree, its pages, and its version history with the earlier version you
 are viewing; an Inbox item's body and pictures; each coding agent's and
-worker's tab, with its Changes tab, message box, menus of skills and MCP
-servers, and the files you attach there; code drawn in a transcript; the API
-keys and Plan template pages of Settings; and the cards that open over a row
-on hover. The whiteboard draws its words as pixels, which the masking cannot
-reach, so leaving it out is its only line, and recording what a canvas draws
-is switched off. A mention drawn as a chip carries what it names, such as a
+worker's tab, with its Changes tab, its Terminal tab, message box, menus of
+skills and MCP servers, and the files you attach there; code drawn in a
+transcript; the API keys and Plan template pages of Settings; an automation's
+webhook secret, the one time it is shown; and the cards
+that open over a row on hover. The whiteboard and a Terminal tab's shell draw
+their words as pixels, which the masking cannot reach, so leaving them out is
+their only line, and recording what a canvas draws is switched off. A mention drawn as a chip carries what it names, such as a
 plan section's heading, only in its words, never in an attribute the masking
 leaves, so the recording keeps its shape alone. Luke does not report what you
 clicked.
@@ -682,14 +701,14 @@ only when you press Send.
 
 - OpenAI, for voice and for Luke's judgment. A voice session is one continuous
   conversation. While your microphone is on — while you hold the talk key, or
-  from a press of a plan's microphone button, the call card's, or the
-  microphone shortcut, or from starting a new plan, until you press one of
+  from a press of a task's microphone button, the call card's, or the
+  microphone shortcut, or from starting a new task, until you press one of
   those again or press and let go of the talk key — everything it hears
   streams to OpenAI. When it goes off, Luke tells OpenAI at once to stop
   listening and closes the microphone when OpenAI confirms, within five
   seconds; Luke can still speak while it is closed. Every ask is spoken; there
   is no way to type to Luke. A call opens only when you press the talk key or
-  a plan's microphone, or start a new plan, which opens a call about it with
+  a task's microphone, or start a new task, which opens a call about it with
   the microphone on where macOS already lets Luke use the microphone and no
   other call is open. Every session goes through our own voice service on your
   account: nothing on your Mac holds or is handed an OpenAI credential, and it
@@ -703,8 +722,8 @@ only when you press Send.
   words; and counts each session's billed seconds once. Luke's judgment is a
   separate run of calls to OpenAI's Responses API, one for each step of a
   turn, made from our service on our key when you ask him something on a call,
-  carrying the plan conversation's working memory: the saved plan, the
-  conversation so far, and what the planning model and its workers read for
+  carrying the task conversation's working memory: the saved plan, the
+  conversation so far, and what Luke and his workers read for
   it, such as the repository's code, a command's output from your Mac, an
   integration's answer, a skill, or a web page. Your Mac makes no such call.
   Our service logs none of the request or the reply and keeps only the record
@@ -712,7 +731,7 @@ only when you press Send.
   policy. Every model call and notetaker run is counted in your daily usage. A
   development build run from a checkout can write a local trace of the voice
   traffic when its developer asks; a packaged build cannot.
-- OpenAI, for web search. Luke's planning model, its workers, every coding
+- OpenAI, for web search. Luke, his workers, every coding
   agent, and its workers search the web through our service, which sends
   OpenAI's search the query alone (one line of at most 200 characters; a query
   that looks like a credential is refused) on our key, whatever model or key
@@ -721,13 +740,13 @@ only when you press Send.
   from a public HTTPS address, with no cookie or credential, so the site sees
   our service's address rather than your Mac's; up to a megabyte is read and
   20,000 characters kept. The query, what the search found, and the page's
-  text are stored with the plan's conversation or the agent's transcript like
+  text are stored with the task's conversation or the agent's transcript like
   any other tool call.
 - OpenAI, for dictation. Pressing the microphone in a message box records it,
   in memory and never on disk, until you press ✓ or Enter (or for two minutes
   at most); ✕ or Escape discards the recording. It goes through our service,
   on your account, to OpenAI's transcription model on our key, with words the
-  plan is likely to contain — its repository's name, its title, and the file
+  task is likely to contain — its repository's name, its title, and the file
   paths it names — so they are spelled right. Only the text comes back, into
   the box at the caret, and it goes nowhere until you send it. Our service
   stores and logs neither the recording nor the text, and counts only the clip
@@ -752,8 +771,8 @@ only when you press Send.
 - Sentry, for the anonymous exception, process-session, and native crash
   reports described above.
 - Anthropic and OpenAI, for a coding agent. When you, or Luke on a call, start
-  one on a plan, our service runs it in a Vercel Sandbox of its own with the
-  plan's repository checked out, and calls the model chosen (or your default)
+  one on a task, our service runs it in a Vercel Sandbox of its own with the
+  task's repository checked out, and calls the model chosen (or your default)
   and whatever model it picks for each worker it hands work to, which may be
   the other provider's: Anthropic for a Claude model, OpenAI for a GPT model,
   on your own key for that provider if you added one, and otherwise on ours. A
@@ -775,15 +794,27 @@ only when you press Send.
   has ordinary Internet access and runs the repository's own checks; the agent
   searches the web as described above. The sandbox stops when a turn ends or
   you stop it, and its checkout, with the agent's changes, stays in a snapshot
-  on the terms under "How the planning model reads your repository". Nothing
-  of the sandbox reaches the screen recording.
+  on the terms under "How Luke reads your repository". Nothing
+  of the sandbox reaches the screen recording. A Terminal tab opens a shell in
+  the agent's sandbox, beside its checkout, and reaches it through our
+  service: what you type and what the shell prints pass through the service
+  on their way and are not stored, logged, or counted there or on your Mac.
+  Your shells, and what they printed, stay in the sandbox until it stops, and
+  no shell history is written to a file; anything you write into the
+  sandbox's files the agent can read on its next turn. While you are typing in
+  a terminal the sandbox does not stop at a turn's end; it stops about seven
+  minutes after you last typed, unless a turn is running, and a stopped
+  sandbox comes back only when you resume it. While a terminal is connected,
+  the agent's GitHub access at the sandbox's firewall is kept fresh, so what
+  you run there reaches GitHub as the agent does, never holding the token
+  itself.
 - Anthropic, for titles. As a coding agent's turn completes, until it has a
   title and for its first three turns at most, our service asks a small Claude
   model, on our key whatever key the agent runs on, for a short title, sending
   your first message (for an agent started on the plan, the plan's text), your
   latest one, and the agent's latest answer, as text alone cut to 2,000
-  characters each. A worker that a coding agent or Luke's planning model hands
-  work to is titled from the whole task it was handed. Each title is counted
+  characters each. A worker that a coding agent or Luke hands work to is
+  titled from the whole subagent task it was handed. Each title is counted
   in your daily usage and stored with the agent or worker; Anthropic keeps the
   request and its reply under its own retention policy.
 - GitHub, through the Luke GitHub App, for a coding agent's work. The agent
@@ -800,7 +831,7 @@ only when you press Send.
   the App mints on the workspace's installation the pull request's number,
   title, link, state, checks,
   and size of change, and the branch's latest commit, and keeps them with the
-  agent until the plan is deleted. Commits and pull requests are the Luke
+  agent until the task is deleted. Commits and pull requests are the Luke
   GitHub App's own, under its bot, and name no one's GitHub account. Our
   service also reads from GitHub, through the workspace's installation and
   storing none of it, a file or folder you open, a pull request's
@@ -830,12 +861,12 @@ only when you press Send.
   which keeps it under that service's own policy.
 - Vercel, which runs our service and the sandboxes, and Neon, which hosts our
   database: everything our service keeps is stored with Neon and passes
-  through Vercel. Luke's planning model, its workers, and each coding agent
+  through Vercel. Luke, his workers, and each coding agent
   and its workers also run as sessions on Vercel Workflow, which keeps each
   session's history (the messages, files, tool calls, and answers its model
-  works from) so the session can pick up where it stopped. Deleting a plan or
+  works from) so the session can pick up where it stopped. Deleting a task or
   your account ends each of its sessions for good, a turn still running
-  included. When a planning or coding-agent session ends, Vercel deletes that
+  included. When a session of Luke's or a coding agent's ends, Vercel deletes that
   history at once, though the session's ids, status, and times may stay as
   long as Vercel's own retention. This holds for a session started on or after
   13 October 2026; a session started before then, and the session of a worker
@@ -847,7 +878,8 @@ only when you press Send.
   when you quit; and for the picture of each repository owner the app names,
   an organization's logo or a person's avatar, carrying only the owner's name.
 - Google or GitHub, asked by your Mac itself for your own profile picture,
-  from the address your sign-in gave us, carrying no referrer.
+  from the address your sign-in gave us, carrying no referrer, beside your
+  name and on your own first workspace while it has no photo.
 
 We do not sell your information or use it for advertising.
 
@@ -873,7 +905,7 @@ Mac beyond the layout of its window described under "On your Mac", and the
 switch for commands on your Mac is kept with that Mac's settings. Our service
 keeps your account and, unsealed, your conversation in our database, which
 Neon hosts, beside what earlier versions left there; a
-plan's checkout and a coding agent's changes are held in a Vercel Sandbox and
+task's checkout and a coding agent's changes are held in a Vercel Sandbox and
 its snapshot; usage counts and recordings are held by PostHog, and crash
 reports by Sentry.
 
@@ -888,14 +920,14 @@ reports by Sentry.
 - Delete any workspace file an earlier version of Luke left on your Mac;
   nothing reads it now. What earlier versions left on our service goes with
   your account.
-- What you say to Luke on a call goes to that plan's conversation, fixed when
+- What you say to Luke on a call goes to that task's conversation, fixed when
   the call opens and never moved afterwards.
 - Luke listens through your microphone only while a call's microphone is on,
   or while a dictation into a message box is recording, which the box shows as
-  a moving waveform with its time. The talk key opens it while held; a plan's
+  a moving waveform with its time. The talk key opens it while held; a task's
   microphone button, the call card's, or the microphone shortcut opens it
   until you press one again or press and let go of the talk key, and so does
-  starting a new plan, which opens a call about it. macOS's microphone
+  starting a new task, which opens a call about it. macOS's microphone
   indicator is lit whenever the device is open: from the press, including
   while a new call connects, until OpenAI confirms it has stopped listening,
   within five seconds of the microphone going off. The stop key closes it too,
@@ -907,7 +939,7 @@ reports by Sentry.
   once your account and everything our service keeps under it — among them
   your sign-in records and the GitHub and Google tokens we kept, your usage
   counts, preferences, and plan template with its history, your pinned
-  repositories, your plans with their history, whiteboards, pages, coding
+  repositories, your tasks with their history, whiteboards, pages, coding
   agents, and inbox items and pictures, the conversation with its attached
   files, every call's record, the commands waiting for your Mac with the
   record of when it last read, your own API keys, Luke's record of your

@@ -1,12 +1,13 @@
-import { Schema } from "effect";
-import { systemPreferences } from "electron";
-import type { AppAudioSlice } from "#shared/messages/app-state";
+import type { AppAudioSlice } from "@luke/host/app-state";
+import type { DesktopService } from "@luke/host/desktop-service";
 import {
   MICROPHONE_STATUS,
   type MicrophoneRoute,
   type MicrophoneStatus,
   type OutputAudioState,
-} from "#shared/messages/audio";
+} from "@luke/voice/audio";
+import { Schema } from "effect";
+import { systemPreferences } from "electron";
 import type { AppStateStore } from "../app-state";
 import { MediaDuckController } from "../native/media-duck";
 import {
@@ -18,7 +19,6 @@ import {
   type OutputVolumeWatch,
 } from "../native/output-volume";
 import type { DesktopConfig } from "./desktop-config";
-import type { DesktopService } from "./service";
 
 /** Electron's media-access status word, read as one this build names; Electron documents no other. */
 const readMicrophoneStatusWord = Schema.decodeUnknownSync(

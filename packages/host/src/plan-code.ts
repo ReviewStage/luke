@@ -1,4 +1,6 @@
 import { extname } from "node:path";
+import type { PlanFileWindow, ShownCode } from "@luke/features/plan-wire";
+import type { CodeToken, PlanCode, PlanFileShown } from "@luke/features/planning-view";
 import langBash from "@shikijs/langs/bash";
 import langC from "@shikijs/langs/c";
 import langCpp from "@shikijs/langs/cpp";
@@ -22,8 +24,6 @@ import langTypescript from "@shikijs/langs/typescript";
 import langYaml from "@shikijs/langs/yaml";
 import githubDarkDefault from "@shikijs/themes/github-dark-default";
 import githubLightDefault from "@shikijs/themes/github-light-default";
-import type { PlanFileWindow, ShownCode } from "@sidecar/features/plan-wire";
-import type { CodeToken, PlanCode, PlanFileShown } from "@sidecar/features/planning-view";
 import { createHighlighterCoreSync, type HighlighterCore } from "shiki/core";
 import { createJavaScriptRegexEngine } from "shiki/engine/javascript";
 

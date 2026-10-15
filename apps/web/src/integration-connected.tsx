@@ -6,13 +6,13 @@ import {
   type IntegrationProvider,
   integrationLandingStatusFromWire,
   integrationProviderFromWire,
-} from "@sidecar/features/integration-wire";
+} from "@luke/features/integration-wire";
+import { ProviderMark } from "@luke/ui";
+import { AUTH_CARD, AUTH_SHELL, AUTH_TITLE } from "@luke/ui/auth-surface";
 import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { startSiteAnalytics } from "./analytics";
-import { AUTH_CARD, AUTH_SHELL, AUTH_TITLE } from "./auth-surface";
 import { ConnectionGraphic } from "./connection-graphic";
-import { IntegrationMark } from "./integration-marks";
 import { LukeMark } from "./SiteChrome";
 import "./styles.css";
 
@@ -72,7 +72,7 @@ function IntegrationConnected(): React.JSX.Element {
           </div>
         ) : (
           <ConnectionGraphic
-            mark={<IntegrationMark provider={landing.provider} className="size-10 shrink-0" />}
+            mark={<ProviderMark provider={landing.provider} className="size-10 shrink-0" />}
           />
         )}
         <h1 id="landing-title" className={AUTH_TITLE}>

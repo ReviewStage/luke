@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { AVATAR_STATUS } from "@luke/voice/avatar";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
-import { AVATAR_STATUS } from "#shared/messages/avatar";
 import { CALL_CONTROL_LABEL } from "../planning/planning-parts";
 import { AvatarVoice, CALL_VIDEO_LABEL, CallVideoTile } from "./call-video-tile";
 

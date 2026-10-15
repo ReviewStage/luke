@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { BRAND_ASSETS_DIRECTORY } from "@sidecar/brand/assets-directory";
+import { BRAND_ASSETS_DIRECTORY } from "@luke/brand/assets-directory";
 import { ICONSET_SOURCES, iconutilArguments } from "./package-config.mjs";
 
 /**

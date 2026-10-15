@@ -1,6 +1,6 @@
-import type { ProductSettingValue } from "@sidecar/features/analytics";
-import type { UnparsedWireValue } from "@sidecar/wire";
-import type { AppSettingId, DescribedSetting } from "@sidecar/wire/app-settings";
+import type { ProductSettingValue } from "@luke/features/analytics";
+import type { UnparsedWireValue } from "@luke/wire";
+import type { AppSettingId, DescribedSetting } from "@luke/wire/app-settings";
 import type { RuntimeStatus } from "./status.js";
 
 export const SETTINGS_PAGE = {
@@ -26,6 +26,8 @@ export const SETTINGS_PAGE = {
   NOTIFICATIONS: "notifications",
   /** What this Mac lets agents do on it: the stored switch for running commands here. */
   THIS_MAC: "this-mac",
+  /** The features the account can turn on before they are finished, each the account's on the service rather than a stored setting. */
+  EXPERIMENTAL: "experimental",
   /** The running version, its updates, and the changelog. */
   ABOUT: "about",
 } as const;

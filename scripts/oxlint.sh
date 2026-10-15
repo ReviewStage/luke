@@ -11,7 +11,7 @@ source "$SCRIPT_DIRECTORY/lib/workspace.sh"
 # version against nodejs.org on every run: CI's Node comes from setup-node, not
 # nvm, so each lint downloaded Node again, and a failed fetch failed the lint
 # with "Version '24' not found" in files nobody touched.
-sidecar_require_node
+luke_require_node
 
-cd "$SIDECAR_REPO_ROOT"
+cd "$LUKE_REPO_ROOT"
 exec pnpm exec oxlint --config .oxlintrc.json --deny-warnings "$@"

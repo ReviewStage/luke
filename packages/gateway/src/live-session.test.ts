@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { EXCESS_KEYS, type UnparsedWireValue } from "@sidecar/wire";
-import { readEither } from "@sidecar/wire/effect";
+import { EXCESS_KEYS, type UnparsedWireValue } from "@luke/wire";
+import { readEither } from "@luke/wire/effect";
 import { Result, type Schema } from "effect";
 import { test } from "vitest";
 import {

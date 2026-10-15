@@ -1,11 +1,15 @@
 import { pathToFileURL } from "node:url";
-import { Database, type DatabaseServices, type QueryError } from "@sidecar/database/core/query";
-import { jwks as jwksTable, oauthClient as oauthClientTable } from "@sidecar/database/schemas/auth";
+import { Database, type DatabaseServices, type QueryError } from "@luke/database/core/query";
+import { jwks as jwksTable, oauthClient as oauthClientTable } from "@luke/database/schemas/auth";
+import { authSecrets } from "@luke/service/auth/auth-deployment";
+import {
+  DESKTOP_OAUTH_CLIENT,
+  type OAuthClient,
+  oauthClientRecord,
+} from "@luke/service/auth/oauth-clients";
 import { symmetricDecrypt } from "better-auth/crypto";
 import { inArray } from "drizzle-orm";
 import { Effect, Redacted } from "effect";
-import { authSecrets } from "./auth-deployment.js";
-import { DESKTOP_OAUTH_CLIENT, type OAuthClient, oauthClientRecord } from "./oauth-clients.js";
 import { disposeWebRuntime, runWeb } from "./runtime.js";
 
 /**

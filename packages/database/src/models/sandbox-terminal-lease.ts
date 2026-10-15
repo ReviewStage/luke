@@ -20,7 +20,7 @@
  * conversation and its instants.
  */
 
-import { TURN_STATUS } from "@sidecar/wire";
+import { TURN_STATUS } from "@luke/wire";
 import { and, asc, eq, gt, isNull, lt, or, sql } from "drizzle-orm";
 import { Effect, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
@@ -164,6 +164,30 @@ const deleteLapsed = SqlSchema.void({
     ),
 });
 
+const claimCredential = SqlSchema.findAll({
+  Request: Schema.Struct({
+    conversationId: Schema.String,
+    sandboxSessionId: Schema.String,
+    now: Schema.Date,
+    renewedBefore: Schema.Date,
+  }),
+  Result: Schema.Struct({ conversationId: Schema.String }),
+  execute: ({ conversationId, sandboxSessionId, now, renewedBefore }) =>
+    Database.use((db) =>
+      db
+        .update(sandboxTerminalLease)
+        .set({ credentialAt: now, credentialSession: sandboxSessionId })
+        .where(
+          and(
+            eq(sandboxTerminalLease.conversationId, conversationId),
+            // Never renewed, renewed before the bound, or renewed on another session's firewall than this one.
+            sql`(${sandboxTerminalLease.credentialAt} is null or ${sandboxTerminalLease.credentialAt} < ${renewedBefore} or ${sandboxTerminalLease.credentialSession} is distinct from ${sandboxSessionId})`,
+          ),
+        )
+        .returning({ conversationId: sandboxTerminalLease.conversationId }),
+    ),
+});
+
 /** Holds the conversation's sandbox until the instant given, or later where the lease already reaches further. */
 export function holdSandbox(conversationId: string, heldUntil: Date): LeaseEffect<void> {
   return upsertLease({ conversationId, heldUntil });
@@ -199,4 +223,54 @@ export function claimLapsedLease(
 /** Lets go of a lease whose sandbox the sweep stopped, while it is still lapsed; one the developer took up again during the stop stands. */
 export function releaseLapsedLease(conversationId: string, lapsedBefore: Date): LeaseEffect<void> {
   return deleteLapsed({ conversationId, lapsedBefore });
+}
+
+const unclaimCredential = SqlSchema.void({
+  Request: Schema.Struct({
+    conversationId: Schema.String,
+    sandboxSessionId: Schema.String,
+    claimedAt: Schema.Date,
+  }),
+  execute: ({ conversationId, sandboxSessionId, claimedAt }) =>
+    Database.use((db) =>
+      db
+        .update(sandboxTerminalLease)
+        .set({ credentialAt: null })
+        .where(
+          and(
+            eq(sandboxTerminalLease.conversationId, conversationId),
+            eq(sandboxTerminalLease.credentialAt, claimedAt),
+            eq(sandboxTerminalLease.credentialSession, sandboxSessionId),
+          ),
+        ),
+    ),
+});
+
+/**
+ * Claims the renewal of the GitHub token at the running sandbox session's
+ * firewall, answering whether this caller is to renew it now: once per lease
+ * when it was never renewed, last renewed before the instant given, or last
+ * renewed on another session, which a resumed sandbox is, so two windows on
+ * one session mint one token between them and a resumed one is never left
+ * without.
+ */
+export function claimCredentialRenewal(
+  conversationId: string,
+  sandboxSessionId: string,
+  now: Date,
+  renewedBefore: Date,
+): LeaseEffect<boolean> {
+  return Effect.map(
+    claimCredential({ conversationId, sandboxSessionId, now, renewedBefore }),
+    (rows) => rows.length > 0,
+  );
+}
+
+/** Gives back a renewal this caller claimed on the session and at the instant given and could not finish, so the next check claims it again; a later claim, or another session's at the same instant, stands. */
+export function releaseCredentialRenewal(
+  conversationId: string,
+  sandboxSessionId: string,
+  claimedAt: Date,
+): LeaseEffect<void> {
+  return unclaimCredential({ conversationId, sandboxSessionId, claimedAt });
 }

@@ -1,4 +1,4 @@
-import type { RunMode } from "@sidecar/host";
+import type { RunMode } from "@luke/host";
 import { BrowserWindow, type WebContents } from "electron";
 import { hardenedWebPreferences, refuseForeignNavigation } from "./hardened-window";
 

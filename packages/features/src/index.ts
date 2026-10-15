@@ -15,6 +15,10 @@ export {
 } from "./account-token.js";
 export { ASK_ORIGIN, type AskOrigin } from "./ask-wire.js";
 export {
+  HostedAutomationClient,
+  type HostedAutomationClientOptions,
+} from "./automation-client.js";
+export {
   HostedCodingAgentClient,
   type HostedCodingAgentClientOptions,
 } from "./coding-agent-client.js";
@@ -81,7 +85,6 @@ export {
   type SessionAttachFrame,
   type SessionCreatedFrame,
   type SessionCreateFrame,
-  type SessionGreetFrame,
   type SessionHangUpFrame,
   type SessionReportFrame,
   type SessionStopFrame,
@@ -93,7 +96,6 @@ export {
   sessionCreatedFrameFromWire,
   sessionCreatedFrameSchema,
   sessionCreateFrameSchema,
-  sessionGreetFrameSchema,
   sessionHangUpFrameSchema,
   sessionOpeningFrameFromWire,
   sessionOpeningFrameSchema,
@@ -121,10 +123,12 @@ export {
   automationPath,
   automationRunPath,
   automationRunsPath,
+  automationWebhookPath,
   HOSTED_SERVICE_PATH,
   planAgentsPath,
   planPath,
   VOICE_SERVICE_PATH,
+  workspacePhotoPath,
 } from "./service-paths.js";
 export {
   HOSTED_API_ERROR,
@@ -137,6 +141,14 @@ export {
   WIRE_UUID_LENGTH,
   wireUuidSchema,
 } from "./service-wire.js";
+export {
+  HostedTerminalClient,
+  type HostedTerminalClientOptions,
+  TERMINAL_UNANSWERED,
+  type TerminalRelayAsk,
+  type TerminalUnanswered,
+  terminalRelayAddress,
+} from "./terminal-client.js";
 export {
   TURN_END,
   TURN_EVENT_KIND,

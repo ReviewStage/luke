@@ -1,16 +1,16 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { INTEGRATION_CALL_FAILURE } from "@sidecar/features/integration-view";
+import { INTEGRATION_CALL_FAILURE } from "@luke/features/integration-view";
 import {
   INTEGRATION_PROVIDER,
   INTEGRATION_PROVIDER_LIST,
   INTEGRATION_STATUS,
   type IntegrationProvider,
   type IntegrationStatus,
-} from "@sidecar/features/integration-wire";
+} from "@luke/features/integration-wire";
+import { ACT, ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { Effect } from "effect";
 import type { WebContents } from "electron";
-import { ACT, ACT_KIND, ACT_OUTCOME_STATUS } from "#shared/messages/acts";
 import { type ActRows, type ActSender, createActRouter } from "../act-router";
 import { integrationActRows } from "./integration-acts";
 

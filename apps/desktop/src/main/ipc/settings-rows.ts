@@ -1,11 +1,11 @@
-import { APP_SETTING_FIELDS, APP_SETTING_SCHEMA, type AppSettingField } from "@sidecar/settings";
-import type { AppSettings, SettingsUpdateResult } from "@sidecar/settings/wire";
-import { ACTION_RESULT_STATUS } from "@sidecar/wire";
+import { ACT, ACT_KIND, type SettingUpdatePayload } from "@luke/host/acts";
+import type { HostOperator } from "@luke/host/host-operator";
+import { APP_SETTING_FIELDS, APP_SETTING_SCHEMA, type AppSettingField } from "@luke/settings";
+import type { AppSettings, SettingsUpdateResult } from "@luke/settings/wire";
+import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { Effect, Option } from "effect";
 import type { WebContents } from "electron";
-import { ACT, ACT_KIND, type SettingUpdatePayload } from "#shared/messages/acts";
 import { ActRefused, type ActRows } from "../act-router";
-import type { HostOperator } from "../gateway/host-operator";
 import type { MediaDuckController } from "../native/media-duck";
 import { HOTKEY_RANK, type HotkeyRegistrar } from "../window/hotkey-registrar";
 import { clientSettingSideEffects } from "./settings-side-effects";
@@ -30,7 +30,10 @@ export interface SettingsRowsDependencies {
 }
 
 /** Which kinds this file answers for: the settings writes. */
-type SettingsActKind = typeof ACT_KIND.SETTING_UPDATE | typeof ACT_KIND.SETTINGS_RESET;
+type SettingsActKind =
+  | typeof ACT_KIND.SETTING_UPDATE
+  | typeof ACT_KIND.SETTINGS_RESET
+  | typeof ACT_KIND.EXPERIMENT_SET;
 
 /** How every settings row below answers: a write carried, or a refusal the row can draw. */
 interface SettingsWriter {
@@ -138,6 +141,9 @@ export function settingsActRows(
             : applyClientSettingSideEffect(payload.field, result.settings),
       );
     },
+    // An experiment's switch has no side effect of this process's: the gated surfaces read it off the document.
+    [ACT_KIND.EXPERIMENT_SET]: ({ experiment, on }, { sender }) =>
+      write(ACT_KIND.EXPERIMENT_SET, host.setExperiment(experiment, on, reporterOf(sender))),
     [ACT_KIND.SETTINGS_RESET]: ({ scope }, { sender }) =>
       write(ACT_KIND.SETTINGS_RESET, host.resetSettings(scope, reporterOf(sender)), (result) =>
         result.reason

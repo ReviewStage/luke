@@ -76,7 +76,7 @@ follows PRs 2 and 3, assigned separately.
 
 There are two writers:
 
-- **The notetaker** (`apps/web/server/voice/plan-scribe.ts`). It runs
+- **The notetaker** (`packages/service/src/plans/plan-scribe.ts`). It runs
   `gpt-5.6-luna` after each ~1 s pause in speech, and its runs never overlap.
   It saves with **no author**, so nothing records that it wrote
   (`plan-notes.ts:20-23`, `plan-scribe.ts:254-257`).
@@ -398,7 +398,7 @@ CREATE TABLE "plan_revision" (
 
 - **The call is `live_session_id`, not a `voice_sessions` reference.** The
   notetaker knows its call by the live session's id
-  (`voice/live-exchange.ts`'s `liveSessionId`), which is
+  (`packages/service/src/voice/live-exchange.ts`'s `liveSessionId`), which is
   `voice_sessions.live_session_id`, a text column, not the row's uuid.
 - **No `restored_from` column yet.** PR 2 adds one if Restore needs it.
 
@@ -419,7 +419,7 @@ CREATE TABLE "plan_revision" (
   save, so the first diff has a left side. A plan never saved gets no
   baseline: its first revision differs from the untouched template.
 - **The notetaker needs its call's id.** `planScribe` gets `liveSessionId`
-  threaded from `voice/live-exchange.ts`.
+  threaded from `packages/service/src/voice/live-exchange.ts`.
 - **The store's API** (`apps/web/server/hosted/plan-revisions.ts`):
   `recordRevision` (called only by the locked save), `readLastEdit`, and
   `listRevisions(userId, planId)`, the account-scoped list, newest first, that

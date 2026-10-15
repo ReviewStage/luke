@@ -1,13 +1,13 @@
-import { Bar, BarChart, CartesianGrid, Cell, XAxis, YAxis } from "recharts";
-import type { AdminDailyUsage, AdminTrend } from "../../../server/admin/admin-metrics";
+import type { AdminDailyUsage, AdminTrend } from "@luke/service/admin/admin-metrics";
+import { formatDayTick, formatTooltipDay, PARTIAL_DAY_OPACITY } from "@luke/ui/admin-format";
 import {
   type ChartConfig,
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
-} from "../../components/ui/chart";
-import { partialDayKey, seriesHasNoData } from "../../daily-series";
-import { formatDayTick, formatTooltipDay, PARTIAL_DAY_OPACITY } from "../format";
+} from "@luke/ui/chart";
+import { partialDayKey, seriesHasNoData } from "@luke/ui/daily-series";
+import { Bar, BarChart, CartesianGrid, Cell, XAxis, YAxis } from "recharts";
 import { ChartHeading } from "./chart-heading";
 
 export const USAGE_CHART = {

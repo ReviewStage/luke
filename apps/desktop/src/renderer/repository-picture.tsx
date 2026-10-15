@@ -1,5 +1,5 @@
+import { repositoryOwnerPictureUrl } from "@luke/ui/planning-model";
 import { useState } from "react";
-import { repositoryOwnerPictureUrl } from "./planning/planning-model";
 
 /**
  * repository-picture.tsx -- a repository drawn as its owner's picture on GitHub, wherever a repository is named or picked.

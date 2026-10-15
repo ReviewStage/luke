@@ -1,26 +1,37 @@
-import type { CodingAgentSummary } from "@sidecar/features/coding-agent-wire";
-import type { ModelProvider } from "@sidecar/features/models-wire";
-import { type PlanSection, planSections } from "@sidecar/features/plan-document";
+import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import { type WordChange, wordChanges } from "@luke/features/plan-diff";
+import { type PlanSection, planSections } from "@luke/features/plan-document";
 import {
   PLAN_ACTOR,
   type PlanDocument,
   type PlanEditor,
   type PlanRevisionLine,
-} from "@sidecar/features/plan-wire";
+} from "@luke/features/plan-wire";
+import type { WorkspaceMember } from "@luke/features/workspace-wire";
+import {
+  ACTOR_KIND,
+  ACTOR_STATE,
+  type Actor,
+  actorName,
+  LUKE_ACTOR,
+  type PersonActor,
+  personActor,
+  SOMEONE_REASON,
+} from "@luke/ui/actor-model";
+import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { diffArrays } from "diff";
 import { MARKDOWN_MARK, type MarkdownMark } from "../markdown-message";
 import { providerOf } from "./coding-agent-model";
-import { type WordChange, wordChanges } from "./plan-diff";
 import { dayAndTimeText } from "./plan-time";
-import { TAB_WORDS } from "./tab-strip-model";
 
 /**
  * plan-history-model.ts -- the version history's words for each revision, and a version of the plan drawn against another with its changes marked.
  *
  * A revision is drawn under its writer the way the rest of the window draws
- * them: Luke for the notetaker, the reader by their account's picture as
- * You, a teammate by their name, a coding agent by its harness and title, and Earlier for the plan as
- * it stood before its history began. Its line says
+ * them (`@luke/ui/actor-model`): Luke for the notetaker, the reader by their
+ * account's picture as You, a teammate as the workspace's members list them,
+ * a coding agent by its harness and title, and Earlier for the plan as it
+ * stood before its history began. Its line says
  * what it did: how many changes its saves made, or which version a restore
  * brought back. A version is drawn whole, a unit to each section of its
  * body (`planSections`, as the open plan cuts it in `plan-reveal.ts`), each
@@ -31,9 +42,6 @@ import { TAB_WORDS } from "./tab-strip-model";
  * "Edited by" names the save that last changed it, which is found
  * as the revision it moved on. Everything here is pure.
  */
-
-/** How a person's revision is named where the service names no member: their account is gone, or it predates writers being kept. */
-export const UNNAMED_MEMBER = "Someone";
 
 /** A section as a version compares it: its heading and its words, wherever they stood. */
 type SectionWords = Pick<PlanSection, "heading" | "text">;
@@ -62,37 +70,6 @@ export interface VersionDiff {
   readonly changed: boolean;
 }
 
-/** The kinds of writer a revision is drawn under. */
-export const REVISION_AUTHOR = {
-  PERSON: "person",
-  LUKE: "luke",
-  AGENT: "agent",
-  EARLIER: "earlier",
-} as const;
-
-/**
- * Who wrote a revision, as its row draws them: a person by their name and
- * picture, Luke, a coding agent by its title and the harness its model runs
- * in, or nobody for the plan before its history began. Note that a person
- * carries whether they are the one reading, because a plan shared with
- * others will hold revisions of people who are not, and only the reader is
- * called You.
- */
-export type RevisionAuthor =
-  | {
-      readonly kind: typeof REVISION_AUTHOR.PERSON;
-      readonly you: boolean;
-      readonly name: string | undefined;
-      readonly pictureUrl: string | undefined;
-    }
-  | { readonly kind: typeof REVISION_AUTHOR.LUKE }
-  | {
-      readonly kind: typeof REVISION_AUTHOR.AGENT;
-      readonly title: string;
-      readonly provider: ModelProvider | undefined;
-    }
-  | { readonly kind: typeof REVISION_AUTHOR.EARLIER };
-
 /**
  * The one reading the history, as their account names them: none while no
  * account is signed in. The id is what tells their revisions from a
@@ -102,28 +79,27 @@ export interface HistoryReader {
   readonly id: string | undefined;
   readonly name: string | undefined;
   readonly pictureUrl: string | undefined;
+  /** The workspace's members as last read, which add a teammate's picture and say who has left; none while unread. */
+  readonly members?: readonly WorkspaceMember[];
 }
 
 /**
  * The member a person's revision names, as its row draws them: the reader,
  * by their own name and picture, where it is theirs or where every revision
- * is (`own`, the account's template); a teammate by the name the service
- * holds now; nobody the row can name where the service names nobody.
+ * is (`own`, the account's template); a teammate as the members read lists
+ * them, or as a former member where it no longer does; someone unnamed
+ * where the service names nobody.
  */
-function personOf(
-  by: PlanEditor | undefined,
-  reader: HistoryReader,
-  own: boolean,
-): Extract<RevisionAuthor, { kind: typeof REVISION_AUTHOR.PERSON }> {
+function personOf(by: PlanEditor | undefined, reader: HistoryReader, own: boolean): Actor {
   const yours = own || (by !== undefined && reader.id !== undefined && by.userId === reader.id);
-  if (yours)
-    return {
-      kind: REVISION_AUTHOR.PERSON,
-      you: true,
-      name: reader.name,
-      pictureUrl: reader.pictureUrl,
-    };
-  return { kind: REVISION_AUTHOR.PERSON, you: false, name: by?.name, pictureUrl: undefined };
+  if (!yours) return personActor(by, reader.members, undefined);
+  const you: PersonActor = {
+    kind: ACTOR_KIND.PERSON,
+    userId: reader.id ?? "",
+    name: reader.name ?? "",
+    you: true,
+  };
+  return reader.pictureUrl === undefined ? you : { ...you, pictureUrl: reader.pictureUrl };
 }
 
 /**
@@ -131,49 +107,31 @@ function personOf(
  * names them, or every revision where `own` says the history is theirs
  * alone; Luke; a coding agent by the title its row has now, wearing
  * the harness of the agent the line names among the plan's `agents`, or no
- * harness where the agent is not among them; or nobody.
+ * harness where the agent is not among them; or the plan before history.
  */
 export function revisionAuthorOf(
   line: Pick<PlanRevisionLine, "lastEdit" | "agentId">,
   reader: HistoryReader,
   agents: readonly Pick<CodingAgentSummary, "id" | "model">[],
   own = false,
-): RevisionAuthor {
+): Actor {
   const { lastEdit } = line;
   switch (lastEdit.actor) {
     case PLAN_ACTOR.DEVELOPER:
       return personOf(lastEdit.by, reader, own);
     case PLAN_ACTOR.NOTETAKER:
-      return { kind: REVISION_AUTHOR.LUKE };
+      return LUKE_ACTOR;
     case PLAN_ACTOR.AGENT: {
       const agent = agents.find((each) => each.id === line.agentId);
       return {
-        kind: REVISION_AUTHOR.AGENT,
-        title: lastEdit.label ?? TAB_WORDS.CODING_AGENT,
+        kind: ACTOR_KIND.AGENT,
+        name: lastEdit.label ?? TAB_WORDS.CODING_AGENT,
         provider: agent === undefined ? undefined : providerOf(agent.model),
+        state: ACTOR_STATE.REST,
       };
     }
     case PLAN_ACTOR.EARLIER:
-      return { kind: REVISION_AUTHOR.EARLIER };
-  }
-}
-
-/**
- * A revision's writer as their row names them: You for the reader, another
- * person by name, Luke, an agent by its title, or Earlier. A member the
- * service names nobody for, one whose account is gone or who wrote before
- * writers were kept, is Someone, never You.
- */
-export function authorName(author: RevisionAuthor): string {
-  switch (author.kind) {
-    case REVISION_AUTHOR.PERSON:
-      return author.you ? "You" : (author.name ?? UNNAMED_MEMBER);
-    case REVISION_AUTHOR.LUKE:
-      return "Luke";
-    case REVISION_AUTHOR.AGENT:
-      return author.title;
-    case REVISION_AUTHOR.EARLIER:
-      return "Earlier";
+      return { kind: ACTOR_KIND.SOMEONE, reason: SOMEONE_REASON.EARLIER };
   }
 }
 
@@ -439,10 +397,10 @@ export function revisionSource(
 }
 
 /** What a revision's Open says: the agent's tab by its writer's name, or the tab Luke's work stands in. */
-export function sourceLabel(source: RevisionSource, author: RevisionAuthor): string {
+export function sourceLabel(source: RevisionSource, author: Actor): string {
   switch (source.kind) {
     case REVISION_SOURCE.AGENT:
-      return `Open ${authorName(author)}`;
+      return `Open ${actorName(author)}`;
     case REVISION_SOURCE.CALL:
       return "Open in Transcript";
     case REVISION_SOURCE.WORK:

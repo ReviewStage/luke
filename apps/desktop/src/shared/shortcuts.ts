@@ -12,7 +12,8 @@
  * to the menu and from there to the same nothing.
  */
 
-import { isWireString, type UnparsedWireValue } from "@sidecar/wire";
+import { EXPERIMENT, type Experiment, type ExperimentChoices, experimentOn } from "@luke/settings";
+import { isWireString, type UnparsedWireValue } from "@luke/wire";
 
 /** What a shortcut does. A command is one entry here and one row in {@link APP_SHORTCUTS} or {@link MENU_COMMAND_LABELS}. */
 export const APP_COMMAND = {
@@ -52,22 +53,32 @@ export const APP_COMMAND = {
   HOME: "home",
   INBOX: "inbox",
   EXIT_INBOX: "exit-inbox",
+  EXIT_AGENT_PAGE: "exit-agent-page",
+  FACTORY: "factory",
+  EXIT_FACTORY: "exit-factory",
+  AUTOMATIONS: "automations",
+  EXIT_AUTOMATIONS: "exit-automations",
   BACK: "back",
   FORWARD: "forward",
   SEND_FEEDBACK: "send-feedback",
   SUGGEST_FEATURE: "suggest-feature",
   COMMAND_PALETTE: "command-palette",
+  SHOW_TERMINAL: "show-terminal",
+  NEW_TERMINAL: "new-terminal",
+  MENTION_LINES: "mention-lines",
 } as const;
 
 export type AppCommand = (typeof APP_COMMAND)[keyof typeof APP_COMMAND];
 
 /**
  * The commands the menu bar alone offers, by the name it gives them: a
- * dialog reached now and then, which takes none of the window's keys.
+ * dialog reached now and then, or a new shell in an agent's sandbox, which
+ * ⌘K and the panel's "+" reach too; none takes the window's keys.
  */
 export const MENU_COMMAND_LABELS = {
   [APP_COMMAND.SEND_FEEDBACK]: "Send feedback",
   [APP_COMMAND.SUGGEST_FEATURE]: "Suggest a feature",
+  [APP_COMMAND.NEW_TERMINAL]: "New terminal",
 } as const;
 
 export type MenuCommand = keyof typeof MENU_COMMAND_LABELS;
@@ -109,7 +120,9 @@ export const SHORTCUT_KEY = {
   T: { accelerator: "T", glyph: "T", key: "t", code: "KeyT" },
   W: { accelerator: "W", glyph: "W", key: "w", code: "KeyW" },
   K: { accelerator: "K", glyph: "K", key: "k", code: "KeyK" },
+  J: { accelerator: "J", glyph: "J", key: "j", code: "KeyJ" },
   I: { accelerator: "I", glyph: "I", key: "i", code: "KeyI" },
+  U: { accelerator: "U", glyph: "U", key: "u", code: "KeyU" },
   ZERO: { accelerator: "0", glyph: "0", key: "0", code: "Digit0" },
   // ⌘+ answers ⌘= as well, so zooming in never needs Shift, as in Chrome and
   // VS Code.
@@ -190,6 +203,14 @@ export interface ShortcutChord {
 export interface AppShortcut {
   label: string;
   chord: ShortcutChord;
+  /**
+   * The experiment a gated feature's command belongs to. While the account
+   * has it off, the command is in no list: not the Keyboard shortcuts page,
+   * not the settings search, and not the menu bar. Its chord stays reserved
+   * here all the same, so turning the experiment on never collides with
+   * another command.
+   */
+  experiment?: Experiment;
 }
 
 /**
@@ -203,7 +224,9 @@ export interface AppShortcut {
  * close the window as Chrome and VS Code have them,
  * ⇧⌘M to toggle the call's microphone as Teams has it, with ⇧⌘S for its
  * speaker beside it, ⌘K for the command palette as Linear, Slack, and
- * Raycast have it, ⌘F to find, and ⌘G and ⇧⌘G to step through what it
+ * Raycast have it, ⌘J for the terminal as VS Code and Cursor have the
+ * panel that holds it, ⌥⌘K to mention a File tab's selected lines in the
+ * agent's message box, beside the palette's ⌘K, ⌘F to find, and ⌘G and ⇧⌘G to step through what it
  * found, as every Mac app has them, and ⌘+, ⌘−, and ⌘0 to zoom as every
  * browser has them.
  *
@@ -214,21 +237,21 @@ export interface AppShortcut {
  * menu's own items answer them.
  */
 export const APP_SHORTCUTS = {
-  [APP_COMMAND.NEW_PLAN]: { label: "New plan", chord: { key: SHORTCUT_KEY.N } },
+  [APP_COMMAND.NEW_PLAN]: { label: "New task", chord: { key: SHORTCUT_KEY.N } },
   [APP_COMMAND.COPY_PLAN]: { label: "Copy plan", chord: { key: SHORTCUT_KEY.C, shift: true } },
   [APP_COMMAND.ARCHIVE_PLAN]: {
-    label: "Archive plan",
+    label: "Archive task",
     chord: { key: SHORTCUT_KEY.A, shift: true },
   },
   [APP_COMMAND.DELETE_PLAN]: {
-    label: "Permanently delete plan",
+    label: "Permanently delete task",
     chord: { key: SHORTCUT_KEY.BACKSPACE },
   },
   [APP_COMMAND.PREVIOUS_PLAN]: {
-    label: "Previous plan",
+    label: "Previous task",
     chord: { key: SHORTCUT_KEY.UP, option: true },
   },
-  [APP_COMMAND.NEXT_PLAN]: { label: "Next plan", chord: { key: SHORTCUT_KEY.DOWN, option: true } },
+  [APP_COMMAND.NEXT_PLAN]: { label: "Next task", chord: { key: SHORTCUT_KEY.DOWN, option: true } },
   [APP_COMMAND.TOGGLE_SIDEBAR]: { label: "Toggle sidebar", chord: { key: SHORTCUT_KEY.B } },
   [APP_COMMAND.TOGGLE_SIDE_PANEL]: {
     label: "Toggle panel",
@@ -307,9 +330,38 @@ export const APP_SHORTCUTS = {
     label: "Exit inbox",
     chord: { key: SHORTCUT_KEY.ESCAPE, bare: true },
   },
+  [APP_COMMAND.EXIT_AGENT_PAGE]: {
+    label: "Exit agent page",
+    chord: { key: SHORTCUT_KEY.ESCAPE, bare: true },
+  },
+  [APP_COMMAND.FACTORY]: {
+    label: "Factory",
+    chord: { key: SHORTCUT_KEY.F, shift: true },
+    experiment: EXPERIMENT.FACTORY,
+  },
+  [APP_COMMAND.EXIT_FACTORY]: {
+    label: "Exit factory",
+    chord: { key: SHORTCUT_KEY.ESCAPE, bare: true },
+    experiment: EXPERIMENT.FACTORY,
+  },
+  [APP_COMMAND.AUTOMATIONS]: {
+    label: "Automations",
+    chord: { key: SHORTCUT_KEY.U, shift: true },
+    experiment: EXPERIMENT.AUTOMATIONS,
+  },
+  [APP_COMMAND.EXIT_AUTOMATIONS]: {
+    label: "Exit automations",
+    chord: { key: SHORTCUT_KEY.ESCAPE, bare: true },
+    experiment: EXPERIMENT.AUTOMATIONS,
+  },
   [APP_COMMAND.BACK]: { label: "Back", chord: { key: SHORTCUT_KEY.OPEN_BRACKET } },
   [APP_COMMAND.FORWARD]: { label: "Forward", chord: { key: SHORTCUT_KEY.CLOSE_BRACKET } },
   [APP_COMMAND.COMMAND_PALETTE]: { label: "Command palette", chord: { key: SHORTCUT_KEY.K } },
+  [APP_COMMAND.SHOW_TERMINAL]: { label: "Show terminal", chord: { key: SHORTCUT_KEY.J } },
+  [APP_COMMAND.MENTION_LINES]: {
+    label: "Mention lines in agent",
+    chord: { key: SHORTCUT_KEY.K, option: true },
+  },
 } as const satisfies Record<KeyedCommand, AppShortcut>;
 
 /**
@@ -334,7 +386,7 @@ export const APP_SHORTCUT_GROUPS = [
     ],
   },
   {
-    title: "Plans",
+    title: "Tasks",
     commands: [
       APP_COMMAND.NEW_PLAN,
       APP_COMMAND.COPY_PLAN,
@@ -344,6 +396,11 @@ export const APP_SHORTCUT_GROUPS = [
       APP_COMMAND.HOME,
       APP_COMMAND.INBOX,
       APP_COMMAND.EXIT_INBOX,
+      APP_COMMAND.EXIT_AGENT_PAGE,
+      APP_COMMAND.FACTORY,
+      APP_COMMAND.EXIT_FACTORY,
+      APP_COMMAND.AUTOMATIONS,
+      APP_COMMAND.EXIT_AUTOMATIONS,
     ],
   },
   {
@@ -358,6 +415,8 @@ export const APP_SHORTCUT_GROUPS = [
       APP_COMMAND.REOPEN_CLOSED_TAB,
       APP_COMMAND.MOVE_TAB_LEFT,
       APP_COMMAND.MOVE_TAB_RIGHT,
+      APP_COMMAND.SHOW_TERMINAL,
+      APP_COMMAND.MENTION_LINES,
     ],
   },
   {
@@ -396,6 +455,26 @@ export function isKeyedCommand(command: AppCommand): command is KeyedCommand {
 
 /** Every command a chord reaches, in the order the table declares them. */
 export const KEYED_COMMANDS: readonly KeyedCommand[] = APP_COMMANDS.filter(isKeyedCommand);
+
+/**
+ * Whether a keyed command stands in the window's lists for the account's
+ * experiments: every command does but a gated feature's while its
+ * experiment is off.
+ */
+export function shortcutShown(command: KeyedCommand, experiments: ExperimentChoices): boolean {
+  const shortcut: AppShortcut = APP_SHORTCUTS[command];
+  return shortcut.experiment === undefined || experimentOn(experiments, shortcut.experiment);
+}
+
+/** The shortcut groups with only the commands that stand for the account's experiments, as every list of them reads them. */
+export function shownShortcutGroups(
+  experiments: ExperimentChoices,
+): readonly { readonly title: string; readonly commands: readonly KeyedCommand[] }[] {
+  return APP_SHORTCUT_GROUPS.map((group) => ({
+    ...group,
+    commands: group.commands.filter((command) => shortcutShown(command, experiments)),
+  })).filter((group) => group.commands.length > 0);
+}
 
 /** A command's name as the window says it, keyed or the menu bar's own. */
 export function appCommandLabel(command: AppCommand): string {

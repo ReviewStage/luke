@@ -1,17 +1,12 @@
 import assert from "node:assert/strict";
-import { AVATAR_STOP_REASON, AVATAR_UNAVAILABLE_REASON } from "@sidecar/features";
+import { AVATAR_STOP_REASON, AVATAR_UNAVAILABLE_REASON } from "@luke/features";
+import { AVATAR_END_REASON, AVATAR_OFF, AVATAR_STATUS, type AvatarState } from "@luke/voice/avatar";
 import {
   LIVE_AVATAR_END,
   LIVE_AVATAR_STATUS,
   type LiveAvatarState,
-} from "@sidecar/voice/live-session";
+} from "@luke/voice/live-session";
 import { describe, it } from "vitest";
-import {
-  AVATAR_END_REASON,
-  AVATAR_OFF,
-  AVATAR_STATUS,
-  type AvatarState,
-} from "#shared/messages/avatar";
 import { avatarAfter } from "./avatar-link";
 
 const LIVE: AvatarState = { status: AVATAR_STATUS.LIVE };

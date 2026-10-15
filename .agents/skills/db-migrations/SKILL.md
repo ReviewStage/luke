@@ -123,12 +123,12 @@ After a migration has reached production or the target default branch, treat it 
 
 Each migration is a folder of its own, `packages/database/migrations/<UTC timestamp>_<name>/`, holding `migration.sql` and `snapshot.json`, and the snapshot's `prevIds` names the snapshot it was generated from. There is no journal, so two branches that each add a migration merge without a file conflict. Drizzle's migrator (`packages/database/src/core/migrator.ts`) applies every folder its history table, `public.__drizzle_migrations`, does not name, in folder-name order, so a branch's migration that lands after main's newer ones is still applied.
 
-What a clean merge does not prove is that the two migrations commute. `pnpm --filter @sidecar/database check:migrations` (`drizzle-kit check`, run by `./scripts/check.sh`) reads the snapshot graph and fails when two branches cut from one parent touch the same table, column, or index. When it fails after a rebase, delete this branch's conflicting migration folder and every later one this branch added, then regenerate from the rebased schema:
+What a clean merge does not prove is that the two migrations commute. `pnpm --filter @luke/database check:migrations` (`drizzle-kit check`, run by `./scripts/check.sh`) reads the snapshot graph and fails when two branches cut from one parent touch the same table, column, or index. When it fails after a rebase, delete this branch's conflicting migration folder and every later one this branch added, then regenerate from the rebased schema:
 
 ```bash
 rm -r packages/database/migrations/<this branch's folders>
 pnpm db:generate --name=<what_it_does>
-pnpm --filter @sidecar/database check:migrations
+pnpm --filter @luke/database check:migrations
 ```
 
 ## Step 1: Generate Migrations

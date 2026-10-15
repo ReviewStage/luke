@@ -1,7 +1,7 @@
 /**
  * agent-tools.ts -- every tool name a Luke agent's transcript may carry, which the service offers and the desktop draws.
  *
- * The service's tool registry (`apps/web/server/hosted/agent-runtime/tools.ts`)
+ * The service's tool registry (`packages/service/src/agents/agent-runtime/tools.ts`)
  * says which roles each of Luke's tools serves; the names themselves are
  * declared here, once, so the desktop reads a call in a transcript by the
  * same name the service offered it under, the planning model's as a coding
@@ -60,7 +60,8 @@ export type AgentTool = (typeof AGENT_TOOL)[keyof typeof AGENT_TOOL];
  * The tools eve gives a planning session of its own, which its transcript
  * carries: its subagent tool for the worker, which earlier transcripts name
  * where the planning model now calls its own `delegate`, and the two task
- * controls it adds beside any task.
+ * controls it adds beside any task. Note that their names are eve's own and
+ * the tasks they name are eve's subagent tasks, not a Luke task.
  */
 export const EVE_TOOL = {
   WORKER: "worker",

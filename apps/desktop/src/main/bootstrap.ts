@@ -1,9 +1,10 @@
 import path from "node:path";
-import { type RunMode, runModeFor } from "@sidecar/host";
-import { RUN_PROFILE } from "#shared/messages/app-state";
-import { buildCarriesDeveloperIdSigning, resolveAppName } from "./app-identity";
-import type { UpdateMenu } from "./app-menu";
-import { buildCommit } from "./build-commit";
+import type { AppLinkInbox } from "@luke/features/app-links";
+import { type RunMode, runModeFor } from "@luke/host";
+import { buildCarriesDeveloperIdSigning, resolveAppName } from "@luke/host/app-identity";
+import { RUN_PROFILE } from "@luke/host/app-state";
+import { buildCommit } from "@luke/host/build-commit";
+import type { MenuBarChange } from "./app-menu";
 import type { DesktopConfig } from "./services/desktop-config";
 
 /**
@@ -29,7 +30,9 @@ export interface BootstrapDependencies {
   report: (message: string) => void;
   openExternal: (url: string) => Promise<void>;
   quit: () => void;
-  showMenuBar: (update?: UpdateMenu) => void;
+  showMenuBar: (change?: MenuBarChange) => void;
+  /** The Luke links the system hands the app, heard from module scope, before the launch. */
+  appLinks: AppLinkInbox;
   /**
    * The crash reporter, begun here rather than inside a service: Electron
    * spawns its GPU process during bootstrap, and the reporter has to stand
@@ -102,5 +105,6 @@ export function bootstrapDesktop(dependencies: BootstrapDependencies): DesktopCo
     openExternal: dependencies.openExternal,
     quit: dependencies.quit,
     showMenuBar: dependencies.showMenuBar,
+    appLinks: dependencies.appLinks,
   };
 }

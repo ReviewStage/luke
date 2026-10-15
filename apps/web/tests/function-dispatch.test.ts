@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
+import type { Route } from "@luke/service/route";
 import { test } from "vitest";
 import { DISPATCH_QUERY, dispatchRoutes } from "../server/function-dispatch";
-import type { Route } from "../server/route";
 import { dispatched } from "./support/platform-landing";
 
 function recording() {

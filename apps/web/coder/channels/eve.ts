@@ -1,13 +1,10 @@
+import { DEPLOYMENT_PRESENCE } from "@luke/service/agents/brain-host/auth";
+import { CODER_DEPLOYMENT_TURNS, coderChannelInput } from "@luke/service/agents/coder-host/channel";
+import { hostedUserId } from "@luke/service/auth/bearer";
 import { Effect, Option } from "effect";
 import { eveChannel } from "eve/channels/eve";
-import { hostedUserId } from "../../server/hosted/bearer.js";
-import { DEPLOYMENT_PRESENCE } from "../../server/hosted/brain-host/auth.js";
-import {
-  CODER_DEPLOYMENT_TURNS,
-  coderChannelInput,
-} from "../../server/hosted/coder-host/channel.js";
-import { runWeb } from "../../server/runtime.js";
 import { seams } from "../host.js";
+import { runAgent } from "../runtime.js";
 
 /**
  * The bearer's account, resolved as an effect and run once here: eve's door
@@ -16,7 +13,7 @@ import { seams } from "../host.js";
  * the resolution for eve's sake.
  */
 const resolveUserId = (request: Request): Promise<string | undefined> =>
-  runWeb(Effect.map(hostedUserId(request, seams.userInfo), Option.getOrUndefined));
+  runAgent(Effect.map(hostedUserId(request, seams.userInfo), Option.getOrUndefined));
 
 /** The one door into the coding-agent service: eve's own HTTP API under the host's auth and steer policy. */
 export default eveChannel(

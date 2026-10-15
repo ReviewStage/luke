@@ -1,0 +1,61 @@
+{
+  "name": "@luke/ui",
+  "version": "0.13.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared React for the desktop panel: Luke's face and glyphs, traced from the brand's generated art",
+  "exports": {
+    ".": "./src/index.js",
+    "./account-initials": "./src/account-initials.js",
+    "./actor-model": "./src/actor-model.js",
+    "./accounts-sort": "./src/accounts-sort.js",
+    "./activity-calendar": "./src/activity-calendar.js",
+    "./admin-animations": "./src/admin-animations.js",
+    "./admin-format": "./src/admin-format.js",
+    "./auth-surface": "./src/auth-surface.js",
+    "./daily-series": "./src/daily-series.js",
+    "./chart": "./src/chart/chart.js",
+    "./theme.css": "./src/theme.css",
+    "./search-tokens": "./src/search-tokens.js",
+    "./skill-mention": "./src/skill-mention.js",
+    "./tab-strip-model": "./src/tab-strip-model.js",
+    "./integration-search": "./src/integration-search.js",
+    "./agent-servers-model": "./src/agent-servers-model.js",
+    "./held-link": "./src/held-link.js",
+    "./link-face": "./src/link-face.js",
+    "./confirm-state": "./src/confirm-state.js",
+    "./use-setting-write": "./src/use-setting-write.js",
+    "./use-state-with-ref": "./src/use-state-with-ref.js",
+    "./planning-model": "./src/planning-model.js",
+    "./call-card-model": "./src/call-card-model.js",
+    "./avatar-session-contract": "./src/avatar-session-contract.js",
+    "./avatar-session": "./src/avatar-session.js"
+  },
+  "types": "./src/index.ts",
+  "scripts": {
+    "test:vitest": "vitest run",
+    "typecheck": "tsc --project tsconfig.json"
+  },
+  "dependencies": {
+    "@luke/brand": "workspace:*",
+    "@luke/features": "workspace:*",
+    "@luke/live": "workspace:*",
+    "@luke/voice": "workspace:*",
+    "@luke/wire": "workspace:*",
+    "clsx": "2.1.1",
+    "effect": "catalog:",
+    "react": "catalog:",
+    "recharts": "3.8.0",
+    "tailwind-merge": "3.7.0"
+  },
+  "devDependencies": {
+    "@effect/vitest": "catalog:",
+    "@types/node": "catalog:",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.4",
+    "jsdom": "^30.0.1",
+    "react-dom": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

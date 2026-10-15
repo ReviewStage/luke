@@ -1,4 +1,4 @@
-import { ArchiveIcon } from "@sidecar/panel";
+import { ArchiveIcon } from "@luke/ui";
 import { useState } from "react";
 import { BusyLabel } from "../spinner";
 
@@ -16,7 +16,7 @@ import { BusyLabel } from "../spinner";
 
 /** What the banner and the composer's note say, worded once. */
 const ARCHIVED_PLAN_COPY = {
-  TITLE: "This plan is archived",
+  TITLE: "This task is archived",
   COMPOSER: "Unarchive to send messages",
   UNARCHIVE: "Unarchive",
 } as const;

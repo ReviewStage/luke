@@ -1,8 +1,9 @@
 # Packages
 
 Application logic lives here; `apps/` holds only what is specific to a
-deployable. **A module belongs in an app when it imports `electron`, `react`, or
-a DOM API** — everything else is logic and tests under vitest with no harness,
+platform or deployable (root `AGENTS.md`'s Layout). **React may live in a
+package; the DOM and Electron may not, except in `packages/ui`** — everything
+else is logic and tests under vitest with no harness,
 registered in the root project list by the package's own `vitest.config.ts`.
 `repository-checks.sh` fails a package that holds one config without the other,
 so a suite nothing runs is caught rather than staying quietly green. A developer
@@ -65,7 +66,7 @@ Give a subpath of its own to anything the barrel's other callers must not
 resolve:
 
 - **Node-reaching behavior behind a vocabulary door**
-  (`@sidecar/runtime/vocabulary`), or the renderer bundle fails to resolve
+  (`@luke/runtime/vocabulary`), or the renderer bundle fails to resolve
   `node:fs` behind a string constant it wanted to draw.
 - **A heavy run-time dependency**, like a reader that calls the AI SDK, where the
   vocabulary beside it reaches the SDK for its types alone.
@@ -77,7 +78,7 @@ every symbol has exactly one way in. `repository-checks.sh` keeps that true and
 walks a door's own relative-import graph, so a later re-export cannot quietly
 carry a Node-reaching layer a few files deep.
 
-A door is not what keeps `effect` out of a bundle generally; `@sidecar/wire`'s
+A door is not what keeps `effect` out of a bundle generally; `@luke/wire`'s
 barrel resolves `Schema` beneath it. Root AGENTS.md's "Effect idioms" section
 records that cost against the renderer bundle budget: one copy per bundle,
 paid once. What a door still keeps out is a Node-reaching companion like

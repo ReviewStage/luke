@@ -1,12 +1,14 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@sidecar/database/core/query";
+import { Database } from "@luke/database/core/query";
 import {
   type CodingAgent,
   type CodingAgentBriefText,
+  type CodingAgentPlace,
   type CodingAgentStarted,
   createCodingAgent,
+  dispatchMentioningServers,
   listCodingAgents,
   listPublishedCodingAgents,
   type NewCodingAgent,
@@ -14,21 +16,22 @@ import {
   readCodingAgentOfConversation,
   recordCodingAgentPublished,
   renameCodingAgent,
+  takeCodingAgentMentionedServers,
   updateCodingAgentChoice,
-} from "@sidecar/database/models/coding-agent-store";
-import { user } from "@sidecar/database/schemas/auth";
-import { codingAgent } from "@sidecar/database/schemas/coding-agent";
-import { conversations } from "@sidecar/database/schemas/storage";
-import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
-import { getTestDB } from "@sidecar/database/testing";
+} from "@luke/database/models/coding-agent-store";
+import { user } from "@luke/database/schemas/auth";
+import { codingAgent } from "@luke/database/schemas/coding-agent";
+import { conversations } from "@luke/database/schemas/storage";
+import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
+import { getTestDB, joinWorkspace, startPlan } from "@luke/database/testing";
 import {
   CHECK_SUMMARY,
   type CodingAgentPullRequest,
   PULL_REQUEST_STATE,
-} from "@sidecar/features/coding-agent-wire";
+} from "@luke/features/coding-agent-wire";
+import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { count, eq } from "drizzle-orm";
 import { Effect, Option } from "effect";
-import { joinWorkspace, startPlan } from "./support/workspaces";
 
 /**
  * The coding agents of an account's plans, through the store's public
@@ -58,12 +61,12 @@ const openPlan = Effect.gen(function* () {
 /** What a Start hands the agent where the test names nothing: the plan's text. */
 const PLAN_BRIEF: CodingAgentBriefText = {
   planSnapshot: "# Teammate invitations\n\nAny member may invite by email.\n",
-  task: null,
+  prompt: null,
 };
 
 function start(
   planId: string,
-  overrides: Partial<Omit<NewCodingAgent, keyof CodingAgentBriefText>> = {},
+  overrides: Partial<Omit<NewCodingAgent, keyof CodingAgentPlace>> = {},
   brief: CodingAgentBriefText = PLAN_BRIEF,
 ): NewCodingAgent {
   return {
@@ -149,6 +152,52 @@ it.layer(getTestDB())("the coding agents of an account's plans", (it) => {
       }),
   );
 
+  it.effect(
+    "the servers a send eve took mentioned are taken once, each once, by the next turn, the task's among them, while a refused send's are put back as they stood, and another account adds or takes none",
+    () =>
+      Effect.gen(function* () {
+        const { userId, planId } = yield* openPlan;
+        const other = yield* openPlan;
+        const agent = started(
+          yield* createCodingAgent(
+            userId,
+            start(planId, { mentionedServers: [INTEGRATION_PROVIDER.SENTRY] }),
+          ),
+        );
+        const taken = Effect.succeed(true);
+        const refused = Effect.succeed(false);
+
+        yield* dispatchMentioningServers(userId, agent.id, [INTEGRATION_PROVIDER.LINEAR], taken);
+        yield* dispatchMentioningServers(
+          userId,
+          agent.id,
+          [INTEGRATION_PROVIDER.LINEAR, INTEGRATION_PROVIDER.NOTION],
+          taken,
+        );
+        yield* dispatchMentioningServers(userId, agent.id, [INTEGRATION_PROVIDER.VERCEL], refused);
+        yield* dispatchMentioningServers(
+          other.userId,
+          agent.id,
+          [INTEGRATION_PROVIDER.SLACK],
+          taken,
+        );
+        const theirs = yield* takeCodingAgentMentionedServers(other.userId, agent.conversationId);
+        const first = yield* takeCodingAgentMentionedServers(userId, agent.conversationId);
+        const again = yield* takeCodingAgentMentionedServers(userId, agent.conversationId);
+
+        assert.deepEqual(theirs, []);
+        assert.deepEqual(
+          [...first].sort(),
+          [
+            INTEGRATION_PROVIDER.LINEAR,
+            INTEGRATION_PROVIDER.NOTION,
+            INTEGRATION_PROVIDER.SENTRY,
+          ].sort(),
+        );
+        assert.deepEqual(again, []);
+      }),
+  );
+
   it.effect("a Start is one agent on a conversation of its own, holding what it was handed", () =>
     Effect.gen(function* () {
       const { userId, planId } = yield* openPlan;
@@ -160,7 +209,7 @@ it.layer(getTestDB())("the coding agents of an account's plans", (it) => {
       assert.equal(agent.model, asked.model);
       assert.equal(agent.effort, asked.effort);
       assert.equal(agent.planSnapshot, asked.planSnapshot);
-      assert.equal(agent.task, null);
+      assert.equal(agent.prompt, null);
       assert.equal(agent.repository, asked.repository);
       assert.deepEqual(yield* conversationKind(agent.conversationId), {
         kind: CONVERSATION_KIND.CODING_AGENT,

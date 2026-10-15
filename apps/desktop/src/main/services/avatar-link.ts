@@ -5,32 +5,31 @@
  * (`HostAvatar`); the panel says whether it played the avatar. Both write
  * `state.voice.avatar`, and the host wins: the panel's word stands only
  * while the host holds a grant, which is the one stretch the panel alone
- * knows more than the host; its word that the avatar is live goes back to
- * the host, which lets Luke's greeting go then. A grant reaches the panel's
- * page and nothing else here: it is never written, logged, or kept.
+ * knows more than the host. A grant reaches the panel's page and nothing
+ * else here: it is never written, logged, or kept.
  */
 
 import {
   AVATAR_STOP_REASON,
   AVATAR_UNAVAILABLE_REASON,
   type AvatarStopReason,
-} from "@sidecar/features";
-import type { HostAvatar } from "@sidecar/host/effect";
-import {
-  LIVE_AVATAR_END,
-  LIVE_AVATAR_STATUS,
-  type LiveAvatarEnd,
-  type LiveAvatarState,
-} from "@sidecar/voice/live-session";
-import { Effect, type Scope, Stream } from "effect";
-import type { ACT_KIND, ActPayload } from "#shared/messages/acts";
+} from "@luke/features";
+import type { ACT_KIND, ActPayload } from "@luke/host/acts";
+import type { HostAvatar } from "@luke/host/effect";
 import {
   AVATAR_END_REASON,
   AVATAR_OFF,
   AVATAR_STATUS,
   type AvatarEndReason,
   type AvatarState,
-} from "#shared/messages/avatar";
+} from "@luke/voice/avatar";
+import {
+  LIVE_AVATAR_END,
+  LIVE_AVATAR_STATUS,
+  type LiveAvatarEnd,
+  type LiveAvatarState,
+} from "@luke/voice/live-session";
+import { Effect, type Scope, Stream } from "effect";
 import type { AppStateStore } from "../app-state";
 import type { PanelManager } from "../window/panel-manager";
 
@@ -158,8 +157,6 @@ export const linkAvatar = Effect.fnUntraced(function* ({
         report.status === AVATAR_STATUS.ENDED ? unstartedStopReason(report.endReason) : undefined;
       // Note that the host's own moves follow on its stream: the stop, and the one restart a call has.
       if (granted && unstarted !== undefined) host.closed(unstarted);
-      // The first frame drawn lets Luke greet, whichever window drew it.
-      if (granted && report.status === AVATAR_STATUS.LIVE) host.live();
     },
     // Note that the host is asked even where the document reads ENDED, because a
     // restart it already began may not have reached the document yet: only its

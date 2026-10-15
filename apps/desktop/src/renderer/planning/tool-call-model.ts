@@ -1,9 +1,9 @@
-import { AGENT_TOOL, type AgentTool, EVE_TOOL, RETIRED_TOOL } from "@sidecar/features/agent-tools";
+import { AGENT_TOOL, type AgentTool, EVE_TOOL, RETIRED_TOOL } from "@luke/features/agent-tools";
 import {
   CODING_AGENT_TODO_STATUS,
   type CodingAgentTodos,
   codingAgentTodosInputSchema,
-} from "@sidecar/features/coding-agent-wire";
+} from "@luke/features/coding-agent-wire";
 import {
   INBOX_BLOCK,
   INBOX_FIELD,
@@ -11,17 +11,18 @@ import {
   type InboxPost,
   type InboxPostBlock,
   inboxPostInputSchema,
-} from "@sidecar/features/inbox-wire";
-import type { ModelChoice } from "@sidecar/features/models-wire";
-import type { PlanNote } from "@sidecar/features/plan-template";
-import type { CodeRef } from "@sidecar/features/plan-wire";
-import { isRecord, isWireNumber, isWireString, type WireValue } from "@sidecar/wire";
+} from "@luke/features/inbox-wire";
+import { linkLabels } from "@luke/features/mention-link";
+import type { ModelChoice } from "@luke/features/models-wire";
+import type { PlanNote } from "@luke/features/plan-template";
+import type { CodeRef } from "@luke/features/plan-wire";
+import { CALL_KIND, type CallKind, commandDescription, pageName } from "@luke/features/turn-rows";
+import { skillWord } from "@luke/ui/skill-mention";
+import { fileRefText } from "@luke/voice/code-pane-model";
+import { isRecord, isWireNumber, isWireString, type WireValue } from "@luke/wire";
 import { Option, Schema } from "effect";
 import { TOOL_BLOCK, type ToolBlock } from "../ai-elements/tool";
-import { fileRefText } from "./code-pane-model";
 import { shortCommit } from "./file-tab-model";
-import { skillWord } from "./skill-mention";
-import { CALL_KIND, type CallKind, commandDescription, pageName } from "./turn-rows";
 
 /**
  * tool-call-model.ts -- what a coding agent's tool call says on its one row, and what its body shows, decided from the part's own input and output.
@@ -547,7 +548,13 @@ function planningToolView(
     case AGENT_TOOL.MESSAGE_CODING_AGENT:
       return namedCall(CALL_KIND.MESSAGE_AGENT, input, output, "text");
     case AGENT_TOOL.START_CODING_AGENT:
-      return namedCall(CALL_KIND.START_AGENT, input, output, "task");
+      // Note that a start journaled before the prompt had its name carries it as `task`.
+      return namedCall(
+        CALL_KIND.START_AGENT,
+        input,
+        output,
+        stringAt(input, "prompt") === undefined ? "task" : "prompt",
+      );
     case AGENT_TOOL.END_CALL:
       return namedCall(CALL_KIND.END_CALL, input, output, undefined);
     case EVE_TOOL.TASK_WAIT:
@@ -769,9 +776,6 @@ const LINE_MARKS = /^(?:#{1,6}|>|[-*+]|\d+[.)])\s+/u;
  */
 const INLINE_MARKS = /\*\*|`/gu;
 
-/** A markdown link, whose words a title keeps and whose destination it leaves out. */
-const LINK = /\[([^\]]*)\]\([^)]*\)/gu;
-
 /** A markdown fence's opening or closing line, which plain words leave out. */
 const FENCE_LINE = /^\s*(?:```|~~~)/u;
 
@@ -787,7 +791,8 @@ export function cardTitle(text: string): string {
 }
 
 function plainLine(line: string): string {
-  return line.trim().replace(LINE_MARKS, "").replace(LINK, "$1").replace(INLINE_MARKS, "").trim();
+  // A link is said by its name, as its chip names it, never its destination (`linkLabels`).
+  return linkLabels(line.trim().replace(LINE_MARKS, "")).replace(INLINE_MARKS, "").trim();
 }
 
 /**

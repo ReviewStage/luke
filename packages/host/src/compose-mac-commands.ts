@@ -1,5 +1,5 @@
-import type { HostedMacCommandClient } from "@sidecar/features";
-import type { MacCommand, MacCommandResult } from "@sidecar/features/mac-command-wire";
+import type { HostedMacCommandClient } from "@luke/features";
+import type { MacCommand, MacCommandResult } from "@luke/features/mac-command-wire";
 import { Config, Duration, Effect, FiberSet, Option } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import type * as HttpClient from "effect/http/HttpClient";

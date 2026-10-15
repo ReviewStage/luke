@@ -1,29 +1,34 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@sidecar/database/core/query";
-import { writePage } from "@sidecar/database/models/plan-pages";
-import { PLAN_REVISION } from "@sidecar/database/models/plan-revisions";
-import { createPlan } from "@sidecar/database/models/plan-store";
-import { personalWorkspaceOf } from "@sidecar/database/models/workspace-store";
-import { user } from "@sidecar/database/schemas/auth";
-import { voiceSessions, voiceTranscriptSegments } from "@sidecar/database/schemas/voice";
-import { getTestDB } from "@sidecar/database/testing";
+import { Database } from "@luke/database/core/query";
+import { writePage } from "@luke/database/models/plan-pages";
+import { PLAN_REVISION } from "@luke/database/models/plan-revisions";
+import { createPlan } from "@luke/database/models/plan-store";
+import { personalWorkspaceOf } from "@luke/database/models/workspace-store";
+import { user } from "@luke/database/schemas/auth";
+import { voiceSessions, voiceTranscriptSegments } from "@luke/database/schemas/voice";
+import {
+  fakeWorkspaceSeams,
+  getTestDB,
+  joinWorkspace,
+  openWorkspace,
+} from "@luke/database/testing";
 import {
   VOICE_CLOSE_REASON,
   VOICE_DELEGATION_MODE,
   VOICE_SEGMENT_ROLE,
   type VoiceSegmentRole,
-} from "@sidecar/database/voice-vocabulary";
-import { BOARD_ELEMENT_TYPE } from "@sidecar/features/board-vocabulary";
-import { boardAnswerSchema } from "@sidecar/features/board-wire";
+} from "@luke/database/voice-vocabulary";
+import { BOARD_ELEMENT_TYPE } from "@luke/features/board-vocabulary";
+import { boardAnswerSchema } from "@luke/features/board-wire";
 import {
   CODING_AGENT_STATUS,
   codingAgentMessagesAnswerSchema,
-} from "@sidecar/features/coding-agent-wire";
-import { DEFAULT_PLAN_TEMPLATE } from "@sidecar/features/plan-document-template";
-import { PLAN_EDIT_REFUSAL, planEditAnswerSchema } from "@sidecar/features/plan-edit";
-import { PLAN_HEADING } from "@sidecar/features/plan-template";
+} from "@luke/features/coding-agent-wire";
+import { DEFAULT_PLAN_TEMPLATE } from "@luke/features/plan-document-template";
+import { PLAN_EDIT_REFUSAL, planEditAnswerSchema } from "@luke/features/plan-edit";
+import { PLAN_HEADING } from "@luke/features/plan-template";
 import {
   PLAN_ACTOR,
   PLAN_BOUNDS,
@@ -34,30 +39,24 @@ import {
   planListAnswerSchema,
   planRevisionAnswerSchema,
   planRevisionsAnswerSchema,
-} from "@sidecar/features/plan-wire";
-import { planWorkAnswerSchema } from "@sidecar/features/planning-view";
+} from "@luke/features/plan-wire";
+import { planWorkAnswerSchema } from "@luke/features/planning-view";
 import {
   REPOSITORY_UNREACHED,
   type RepositoryUnreached,
-} from "@sidecar/features/repository-reach-wire";
+} from "@luke/features/repository-reach-wire";
 import {
   planTranscriptAnswerSchema,
   TRANSCRIPT_PART_TYPE,
   type TranscriptMessage,
-} from "@sidecar/features/transcript-wire";
-import { TRANSCRIPT_SPEAKER } from "@sidecar/live";
-import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
-import { readEither } from "@sidecar/wire/effect";
-import { Clock, Duration, Effect, Layer, Option, Result, type Schema } from "effect";
-import { HttpRouter } from "effect/http";
-import { SqlClient } from "effect/sql";
-import { TestClock } from "effect/testing";
-import { DRAW_ON_BOARD_STATUS, runDrawOnBoard } from "../server/hosted/board-tool";
-import { LINK_OUTCOME } from "../server/hosted/github-installations";
-import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../server/hosted/http";
-import { modelCatalogOf } from "../server/hosted/model-catalog";
-import { PLAN_SAVE_STATUS, saveNotes } from "../server/hosted/plan-notes";
-import { plansApp } from "../server/plans-app";
+} from "@luke/features/transcript-wire";
+import { TRANSCRIPT_SPEAKER } from "@luke/live";
+import { LINK_OUTCOME } from "@luke/service/github/github-installations";
+import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "@luke/service/http/http";
+import { DRAW_ON_BOARD_STATUS, runDrawOnBoard } from "@luke/service/plans/board-tool";
+import { PLAN_SAVE_STATUS, saveNotes } from "@luke/service/plans/plan-notes";
+import { plansApp } from "@luke/service/plans/plans-app";
+import { modelCatalogOf } from "@luke/service/providers/model-catalog";
 import {
   connectWorkspaceGitHub,
   type FakeGitHub,
@@ -67,15 +66,21 @@ import {
   NO_GITHUB,
   openGithubUser,
   type SentToGitHub,
-} from "./support/github-app-fake";
-import { added } from "./support/plan-contents";
+} from "@luke/service/testing/github-app-fake";
+import { added } from "@luke/service/testing/plan-contents";
 import {
   INVITATIONS_TEXT,
   makeDocumentPlan,
   makeSavedDocumentPlan,
-} from "./support/plan-documents";
+} from "@luke/service/testing/plan-documents";
+import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
+import { readEither } from "@luke/wire/effect";
+import { eq } from "drizzle-orm";
+import { Clock, Duration, Effect, Layer, Option, Result, type Schema } from "effect";
+import { HttpRouter } from "effect/http";
+import { SqlClient } from "effect/sql";
+import { TestClock } from "effect/testing";
 import { dispatched } from "./support/platform-landing";
-import { fakeWorkspaceSeams, joinWorkspace, openWorkspace } from "./support/workspaces";
 
 /**
  * The Plans tab's plan routes, answered by the group the way a
@@ -448,6 +453,45 @@ it.layer(getTestDB())("the plan routes", (it) => {
   );
 
   it.effect(
+    "a shared plan names the account that started it, by the name it holds now, to every member alike",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, ask } = yield* openAccounts();
+        const shared = yield* openWorkspace(other);
+        yield* joinWorkspace(shared, owner);
+        const planId = startedId(
+          yield* ask(
+            request(PLANS, owner, { method: "POST", body: { ...RELAY, workspaceId: shared } }),
+          ),
+        );
+        const db = yield* Database;
+        yield* db.update(user).set({ name: "Charles Pan" }).where(eq(user.id, owner));
+
+        const ownersOf = (bearer: string) =>
+          Effect.map(ask(request(PLANS, bearer)), (listed) =>
+            readAnswer(planListAnswerSchema, HOSTED_HTTP_STATUS.OK, listed).plans.map((plan) => [
+              plan.ownerId,
+              plan.createdBy,
+            ]),
+          );
+        const opened = readAnswer(
+          planAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(ONE_PLAN, other, { id: planId })),
+        ).plan;
+        const creator = { userId: owner, name: "Charles Pan" };
+
+        assert.deepEqual(yield* ownersOf(owner), [[owner, creator]]);
+        assert.deepEqual(
+          yield* ownersOf(other),
+          [[owner, creator]],
+          "the teammate reads who started it",
+        );
+        assert.deepEqual([opened.ownerId, opened.createdBy], [owner, creator]);
+      }),
+  );
+
+  it.effect(
     "a start in a workspace the account is not in answers as none, and starts nothing",
     () =>
       Effect.gen(function* () {
@@ -711,11 +755,13 @@ it.layer(getTestDB())("the plan routes", (it) => {
                 spoken(1, TRANSCRIPT_SPEAKER.ASSISTANT, "Mm.", [600, 1_100]),
                 spoken(2, TRANSCRIPT_SPEAKER.ASSISTANT, "After how many days?", [9_000, 9_500]),
               ],
+              by: { userId: owner, name: "Test User" },
             },
             {
               id: second,
               startedAt: 2_000_000,
               messages: [spoken(0, TRANSCRIPT_SPEAKER.USER, "Seven days.", [0, 500])],
+              by: { userId: owner, name: "Test User" },
             },
           ],
           earlierOmitted: false,
@@ -732,7 +778,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
   );
 
   it.effect(
-    "a teammate's call about a shared plan reads in every member's transcript, with what its record holds",
+    "a teammate's call about a shared plan reads in every member's transcript, with what its record holds and whose call it was",
     () =>
       Effect.gen(function* () {
         const { owner, other, ask } = yield* openAccounts();
@@ -774,6 +820,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
               id: ownersCall,
               startedAt: 1_000_000,
               messages: [spoken(0, TRANSCRIPT_SPEAKER.USER, "Invites should expire.", [0, 500])],
+              by: { userId: owner, name: "Test User" },
             },
             {
               id: teammatesCall,
@@ -782,6 +829,8 @@ it.layer(getTestDB())("the plan routes", (it) => {
               endedAt: 2_060_000,
               ending: VOICE_CLOSE_REASON.CONNECTION_LOST,
               usage: { seconds: 60, confirmed: false },
+              // Whose call each was, which every member reads the same and the window says.
+              by: { userId: other, name: "Test User" },
             },
           ],
           earlierOmitted: false,
@@ -919,6 +968,55 @@ it.layer(getTestDB())("the plan routes", (it) => {
           yield* window(other, "src/invite.ts", "1", "2"),
           refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
         );
+      }),
+  );
+
+  it.effect(
+    "a window of the default branch names the commit its head stands at, and is read at that commit, so lines picked from it pin to it",
+    () =>
+      Effect.gen(function* () {
+        const head = "0123456789abcdef0123456789abcdef01234567";
+        const relay = relayInstallation(7011);
+        const github = githubReaching([relay], undefined, {}, (sent) =>
+          new URL(sent.url).pathname === "/repos/Acme/Relay/git/ref/heads/main"
+            ? Response.json({ ref: "refs/heads/main", object: { type: "commit", sha: head } })
+            : contentsOf(sent),
+        );
+        const { owner, ask } = yield* openAccounts(github);
+        const workspaceId = yield* openConnectedWorkspace(owner, relay);
+        const planId = startedId(
+          yield* ask(
+            request(PLANS, owner, {
+              method: "POST",
+              body: { ...RELAY, workspaceId, repository: "acme/relay" },
+            }),
+          ),
+        );
+
+        const read = readAnswer(
+          planFileAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(
+            request(FILE, owner, {
+              id: planId,
+              query: { path: "src/invite.ts", first: "1", last: "2" },
+            }),
+          ),
+        );
+
+        assert.deepEqual(read, {
+          file: {
+            path: "src/invite.ts",
+            repository: "Acme/Relay",
+            branch: "main",
+            commit: head,
+            firstLine: 1,
+            lineCount: 4,
+            lines: ["one", "two"],
+          },
+        });
+        const asked = github.sent.find((sent) => CONTENTS_PATH.test(new URL(sent.url).pathname));
+        assert.equal(new URL(asked?.url ?? ORIGIN).searchParams.get("ref"), head);
       }),
   );
 

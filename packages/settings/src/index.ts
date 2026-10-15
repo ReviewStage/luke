@@ -1,4 +1,15 @@
-export { SETTINGS_VIEW_COUNTED_AS } from "./counted.js";
+export { EXPERIMENT_COUNTED_AS, SETTINGS_VIEW_COUNTED_AS } from "./counted.js";
+export {
+  EXPERIMENT,
+  EXPERIMENTS,
+  type Experiment,
+  type ExperimentChoices,
+  type ExperimentEntry,
+  experimentChoicesFrom,
+  experimentOn,
+  isExperiment,
+  NO_EXPERIMENTS,
+} from "./experiments.js";
 export {
   APP_SETTING_ID,
   APP_SETTING_SCHEMA,

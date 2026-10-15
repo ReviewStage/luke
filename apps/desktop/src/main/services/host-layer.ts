@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platform-node";
-import type { HostSeams } from "@sidecar/host";
+import type { HostSeams } from "@luke/host";
 import {
   AppIdentity,
   type DuplicateGatewayMethod,
@@ -14,7 +14,7 @@ import {
   SecretCipher,
   ShutdownSignal,
   StateRoot,
-} from "@sidecar/host/effect";
+} from "@luke/host/effect";
 import { ConfigProvider, Layer } from "effect";
 import type { DesktopConfig } from "./desktop-config";
 

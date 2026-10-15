@@ -13,9 +13,9 @@
  * Call tab is, and the voice is what the developer hears whatever is shown.
  */
 
-import { CloseIcon, ResetIcon, VideoOffIcon, WingFace } from "@sidecar/panel";
+import { CloseIcon, ResetIcon, VideoOffIcon, WingFace } from "@luke/ui";
+import { AVATAR_STATUS, type AvatarStatus } from "@luke/voice/avatar";
 import { useCallback, useEffect, useRef } from "react";
-import { AVATAR_STATUS, type AvatarStatus } from "#shared/messages/avatar";
 import { CALL_CONTROL_LABEL } from "../planning/planning-parts";
 import { ThinkingDots } from "../thinking-dots";
 

@@ -3,7 +3,7 @@ import {
   GITHUB_CONNECT_CLAIM,
   type GitHubConnectClaim,
   type GitHubConnection,
-} from "@sidecar/features/github-connection-wire";
+} from "@luke/features/github-connection-wire";
 import { and, desc, eq, gt, lte } from "drizzle-orm";
 import { DateTime, Duration, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
@@ -93,7 +93,7 @@ type GitHubAccountTokens = typeof GitHubAccountTokensSchema.Type;
 
 /**
  * The account's newest GitHub row, the one the service's user-token read
- * takes where a user somehow has two (`apps/web/server/github/github-app.ts`'s
+ * takes where a user somehow has two (`packages/service/src/github/github-app.ts`'s
  * `lockGithubAccount`), so the connection is judged on the row the service
  * would use.
  */

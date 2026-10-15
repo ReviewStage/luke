@@ -1,9 +1,4 @@
-import type {
-  InboxBlock,
-  InboxReply,
-  InboxResponse,
-  InboxStatus,
-} from "@sidecar/features/inbox-wire";
+import type { InboxBlock, InboxReply, InboxResponse, InboxStatus } from "@luke/features/inbox-wire";
 import {
   boolean,
   index,
@@ -15,7 +10,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { timestamptz } from "./_helpers.js";
-import { user } from "./auth.js";
+import { organization, user } from "./auth.js";
 import { codingAgent } from "./coding-agent.js";
 import { plan } from "./plan.js";
 
@@ -27,12 +22,12 @@ import { plan } from "./plan.js";
  * revision moves on, the item opens again, and what it asked replaces what
  * it asked before. The title, the blocks of context, and the response the
  * item asks for are what the agent posted last, the blocks and the response
- * as the wire's own JSON (`@sidecar/features/inbox-wire`), so a block type
+ * as the wire's own JSON (`@luke/features/inbox-wire`), so a block type
  * added later is a member of that JSON rather than a column; `needs_reply`
  * is whether the agent is to hear the answer as a message. The status is
- * open until the developer answers it, which writes the answer and the key
- * the client sent it under, so an answer sent again after a lost reply is
- * taken once, or until the agent closes it, which writes why. The plan is
+ * open until a member answers it, which writes the answer, the member, and
+ * the key the client sent it under, so an answer sent again after a lost
+ * reply is taken once, or until the agent closes it, which writes why. The plan is
  * the agent's, kept on the row so a plan's inbox is read by one index, and
  * the account's open items are read by another. The row goes with its
  * account, its plan, and its agent alike. The columns
@@ -47,9 +42,12 @@ export const inboxItem = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    planId: uuid("plan_id")
+    /** The agent's plan; null for an agent with no plan. */
+    planId: uuid("plan_id").references(() => plan.id, { onDelete: "cascade" }),
+    /** The agent's workspace. */
+    organizationId: text("organization_id")
       .notNull()
-      .references(() => plan.id, { onDelete: "cascade" }),
+      .references(() => organization.id, { onDelete: "cascade" }),
     agentId: uuid("agent_id")
       .notNull()
       .references(() => codingAgent.id, { onDelete: "cascade" }),
@@ -70,6 +68,12 @@ export const inboxItem = pgTable(
     answer: jsonb("answer").$type<InboxReply>(),
     /** The key the answer was sent under; null until they answer. */
     answerKey: text("answer_key"),
+    /**
+     * The member who answered, any member of the plan's workspace; null until
+     * one does, for an answer from before answerers were kept, and once their
+     * account is gone, which reads as nobody the service can name.
+     */
+    answeredBy: text("answered_by").references(() => user.id, { onDelete: "set null" }),
     /** Why the agent took the item back; null until it does. */
     closedReason: text("closed_reason"),
     postedAt: timestamptz("posted_at").notNull(),
@@ -80,6 +84,8 @@ export const inboxItem = pgTable(
     uniqueIndex("inbox_item_agent_key").on(table.agentId, table.key),
     // A plan's inbox is read the latest changed first.
     index("inbox_item_plan_updated").on(table.planId, table.updatedAt),
+    // A workspace's items of agents with no plan are read the latest changed first.
+    index("inbox_item_org_updated").on(table.organizationId, table.updatedAt),
     // What waits across the account is read on every look of a held read, its open items the latest changed first.
     index("inbox_item_user_status_updated").on(table.userId, table.status, table.updatedAt),
   ],

@@ -27,14 +27,46 @@ Command Line Tools.
 ./scripts/run.sh --fixture smoke   # launch against deterministic fixture data
 ```
 
+## Repository layout
+
+```
+apps/
+  desktop/        the Electron app: main, preload, the renderer windows, build and release scripts
+  web/            the site, the Vercel function routes (server/routes/), and the deployment shell
+    eve/          the planner's eve service root
+    coder/        the coding agent's eve service root
+packages/
+  brand/          the design sources, the generators, and the generated art, motion tokens, and geometry
+  credentials/    account sign-in: PKCE, loopback consent, the account session manager
+  database/       the hosted store's Drizzle schema, queries, migrations, and test databases
+  features/       the hosted service's client side: paths, wire, clients, plans and boards, product events, feedback
+  gateway/        the one protocol between the renderer and the host, and the trace record of what crosses it
+  host/           the desktop's Node kernel, reached only through the Gateway
+  live/           the GPT Live protocol as Luke reads it
+  panel/          shared React for the desktop panel: Luke's face and glyphs
+  runtime/        Effect infrastructure: storage, timers, queues, single-flight, test support
+  settings/       the app settings schema
+  voice/          the live voice orchestrator
+  wire/           the vocabulary every side speaks and the Schema tooling it is declared with
+tools/
+  anti-slop/      the repository's oxlint rules
+  trace-export/   turns a recorded development trace into the unbox-ai viewer's document
+scripts/          bootstrap, check, run, evidence, and release; repository-checks.sh holds the contract checks
+docs/             design, planning, style, and workflow; proposals/ for what is not built yet
+```
+
+Application logic lives in `packages/`; an app holds only what is specific to
+its platform or deployment, so another platform can share the packages.
+[AGENTS.md](AGENTS.md)'s Layout section is the rule in full, and each
+package's `package.json` `description` says what it holds.
+
 ## Make the change
 
 [docs/WORKFLOW.md](docs/WORKFLOW.md) is the step-by-step, from the scoped issue
 through the evidence in the pull request.
 
-Deployable products live in `apps/`, reusable logic lives in `packages/`. Keep
-Electron main and preload code thin, keep the renderer sandboxed, and put
-platform-independent behavior in a package.
+Keep Electron main and preload code thin, keep the renderer sandboxed, and put
+platform-independent behavior in a package (see Repository layout above).
 
 ## Check your work
 

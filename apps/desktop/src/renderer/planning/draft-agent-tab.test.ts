@@ -1,22 +1,24 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CODING_AGENT_CALL_FAILURE } from "@sidecar/features/coding-agent-view";
+import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
+import type { Failure } from "@luke/features/failure-remedy";
 import {
   INTEGRATION_PROVIDER,
   INTEGRATION_PROVIDER_LIST,
   INTEGRATION_STATUS,
   type IntegrationProvider,
   type IntegrationStatus,
-} from "@sidecar/features/integration-wire";
+} from "@luke/features/integration-wire";
 import {
   REPOSITORY_UNREACHED,
   type RepositoryUnreached,
-} from "@sidecar/features/repository-reach-wire";
+} from "@luke/features/repository-reach-wire";
+import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import type { SettingsLink } from "@luke/settings/settings-views";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "#shared/messages/acts";
 import {
   composerEditor,
   installEditorBundle,
@@ -25,10 +27,8 @@ import {
 } from "#testing/composer";
 import { codingAgentsControl } from "#testing/plans-control";
 import { installScrollIntoView } from "#testing/scroll-into-view";
-import type { Failure } from "../failure-remedy";
 import { GitHubConnectProvider } from "../github-connect";
 import { OpenSettingsProvider } from "../open-settings";
-import type { SettingsLink } from "../settings-views";
 import { startFailureNote } from "./coding-agent-model";
 import { DraftAgentTab } from "./draft-agent-tab";
 import { type RepositoryRemedyDoors, RepositoryRemedyProvider } from "./repository-remedy";
@@ -62,7 +62,7 @@ let sent: Act[] = [];
 
 const DRAFT: AgentDraft = {
   id: "draft-1",
-  task: "Can you see Slack messages?",
+  prompt: "Can you see Slack messages?",
   attachments: [],
   choice: undefined,
   disabledServers: [],
@@ -139,8 +139,8 @@ function mount(answers: (Failure | undefined)[], draft: AgentDraft = DRAFT) {
   const links: SettingsLink[] = [];
   const settings = { integrationsOpened: false };
   const control = codingAgentsControl({
-    startTask: (_draftId, task) => {
-      starts.push(task);
+    startPrompt: (_draftId, prompt) => {
+      starts.push(prompt);
       return Promise.resolve(answers.shift());
     },
     onOpenIntegrations: () => {
@@ -229,7 +229,7 @@ test("a refused Start offers Retry, which sends the message again", async () => 
   assert.match(tab.note() ?? "", /could not be started/u);
 
   await tab.press("Retry");
-  assert.deepEqual(tab.starts, [DRAFT.task, DRAFT.task]);
+  assert.deepEqual(tab.starts, [DRAFT.prompt, DRAFT.prompt]);
 });
 
 /** A Start refused for the repository out of reach, as the host hears the service say why. */
@@ -250,11 +250,11 @@ test("a Start refused because the workspace has no GitHub connected names the re
     tab.words(),
     "This workspace isn't connected to GitHub, so Luke can't reach Acme/Relay.",
   );
-  assert.equal(tab.draft(), DRAFT.task, "the words stay in the box");
+  assert.equal(tab.draft(), DRAFT.prompt, "the words stay in the box");
   await tab.press("Connect GitHub");
   assert.deepEqual(tab.remedies, [`workspace-github:${PLAN_ID}`]);
   await tab.press("Retry");
-  assert.deepEqual(tab.starts, [DRAFT.task, DRAFT.task]);
+  assert.deepEqual(tab.starts, [DRAFT.prompt, DRAFT.prompt]);
 });
 
 test("a Start refused because the workspace's GitHub was removed or suspended offers Reconnect GitHub", async () => {
@@ -320,9 +320,9 @@ test("a Start refused because the repository's owner is connected to another wor
   await tab.send();
 
   assert.equal(tab.words(), "Acme/Relay is connected to Acme Team, not this workspace.");
-  await tab.press("Move plan to Acme Team");
+  await tab.press("Move task to Acme Team");
   assert.deepEqual(tab.remedies, [`move:${PLAN_ID}:team-1`]);
-  assert.deepEqual(tab.starts, [DRAFT.task, DRAFT.task]);
+  assert.deepEqual(tab.starts, [DRAFT.prompt, DRAFT.prompt]);
   assert.equal(tab.note(), undefined);
 });
 
@@ -335,7 +335,7 @@ test("a Start GitHub did not answer says so and offers Retry alone, and one from
 
   assert.equal(tab.words(), "GitHub didn't answer. Try again.");
   await tab.press("Retry");
-  assert.equal(tab.words(), "Luke can't reach this plan's repository on GitHub.");
+  assert.equal(tab.words(), "Luke can't reach this task's repository on GitHub.");
   assert.ok(tab.button("Retry"));
   assert.deepEqual(tab.remedies, []);
 });

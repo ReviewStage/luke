@@ -15,7 +15,7 @@ import {
   ACCOUNT_STATUS,
   type AccountProvider,
   type AccountSnapshot,
-} from "@sidecar/credentials/snapshot";
+} from "@luke/credentials/snapshot";
 import { Option, Schema } from "effect";
 import { useEffect, useState } from "react";
 

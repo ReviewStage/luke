@@ -2,13 +2,13 @@ import {
   PLAN_FILE_BOUNDS,
   PLAN_FILE_REFUSAL,
   type PlanFileRefusal,
-} from "@sidecar/features/plan-wire";
+} from "@luke/features/plan-wire";
 import type {
   PlanCode,
   PlanCodeShowing,
   PlanFileShown,
   PlanningFileAnswer,
-} from "@sidecar/features/planning-view";
+} from "@luke/features/planning-view";
 import { githubPath } from "./coding-agent-model";
 import type { OpenFile } from "./use-side-panel";
 
@@ -26,10 +26,11 @@ export const FILE_READ = {
   FAILED: "failed",
 } as const;
 
-/** The lines read so far, one run from `firstLine`, of a file of `lineCount` lines, read on `branch`. */
+/** The lines read so far, one run from `firstLine`, of a file of `lineCount` lines, read on `branch`, at `commit` where the service named the commit. */
 export interface FileLines {
   readonly repository: string;
   readonly branch: string;
+  readonly commit: string | undefined;
   readonly lineCount: number;
   readonly firstLine: number;
   readonly lines: PlanCode["lines"];
@@ -57,9 +58,9 @@ const FILE_REFUSAL_LINE = {
   [PLAN_FILE_REFUSAL.SECRET]: "This file holds secrets, such as a .env, and is never shown.",
   [PLAN_FILE_REFUSAL.MISSING]: "There is no file at this path in the repository.",
   [PLAN_FILE_REFUSAL.NOT_TEXT]: "This file is too large to show, or is not text.",
-  [PLAN_FILE_REFUSAL.NO_REPOSITORY]: "This plan has no repository.",
+  [PLAN_FILE_REFUSAL.NO_REPOSITORY]: "This task has no repository.",
   [PLAN_FILE_REFUSAL.NOT_REACHABLE]:
-    "The Luke GitHub App no longer reaches this plan's repository.",
+    "The Luke GitHub App no longer reaches this task's repository.",
   [PLAN_FILE_REFUSAL.UNAVAILABLE]: "GitHub could not be read just now.",
 } as const satisfies Record<PlanFileRefusal, string>;
 
@@ -152,12 +153,13 @@ export function notesOf(
 }
 
 /**
- * The file's page on GitHub at the branch its lines were read on, its lit
- * lines marked where it still has them: a file shortened past them, which
- * the tab lights nothing of, opens at its top.
+ * The file's page on GitHub at the commit its lines were read at, or the
+ * branch where the service named no commit, so the page holds the lines
+ * the tab draws; its lit lines marked where it still has them: a file
+ * shortened past them, which the tab lights nothing of, opens at its top.
  */
 export function fileUrl(held: FileLines, file: OpenFile): string {
-  const page = `https://github.com/${held.repository}/blob/${githubPath(held.branch)}/${githubPath(file.path)}`;
+  const page = `https://github.com/${held.repository}/blob/${githubPath(held.commit ?? held.branch)}/${githubPath(file.path)}`;
   if (file.range === undefined || file.range.startLine > held.lineCount) return page;
   const { startLine, endLine } = file.range;
   return startLine === endLine ? `${page}#L${startLine}` : `${page}#L${startLine}-L${endLine}`;
@@ -211,11 +213,13 @@ export function withWindow(held: FileRead, read: PlanFileShown): FileLines {
   const window: FileLines = {
     repository: read.repository,
     branch: read.branch,
+    commit: read.commit,
     lineCount: read.lineCount,
     firstLine: read.firstLine,
     lines: read.lines,
   };
-  if (held.kind !== FILE_READ.READY) return window;
+  // Note that lines read at another commit are never laid beside these, since they may be other lines.
+  if (held.kind !== FILE_READ.READY || held.commit !== read.commit) return window;
   if (holdsLines(held, read.firstLine, read.firstLine + read.lines.length - 1)) {
     return { ...window, firstLine: held.firstLine, lines: held.lines };
   }

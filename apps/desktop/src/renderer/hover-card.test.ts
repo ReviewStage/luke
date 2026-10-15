@@ -6,14 +6,17 @@ import {
   CODING_AGENT_STATUS,
   PULL_REQUEST_STATE,
   TURN_ENDING,
-} from "@sidecar/features/coding-agent-wire";
-import type { PlanSummary } from "@sidecar/features/plan-wire";
-import { LIVE_CLOSE_REASON } from "@sidecar/live";
+} from "@luke/features/coding-agent-wire";
+import type { PlanSummary } from "@luke/features/plan-wire";
+import { LIVE_CLOSE_REASON } from "@luke/live";
+import { Effect } from "effect";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, test } from "vitest";
+import { afterEach, beforeAll, test } from "vitest";
+import { markdownHtmlParserLanded } from "#testing/markdown";
 import { PlanCard } from "./desktop/plan-card";
 import { ChangesCard } from "./planning/agent-changes-tab";
+import { agentSubject, NOTHING_HELD } from "./planning/agent-ref";
 import { AgentTabCard, cardCorner } from "./planning/agent-tab-card";
 import { CallEnded } from "./planning/call-card";
 import { SentWords, SkillFiles } from "./planning/skill-chip";
@@ -34,6 +37,9 @@ const ENDED_AT = STARTED_AT + 90_000;
 const ignore = () => undefined;
 
 const roots: Root[] = [];
+
+// Note that a skill chip is drawn through the markdown parser, which lands as its own chunk, so the suite waits for it once rather than racing it.
+beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
@@ -146,18 +152,32 @@ test("a plan's, a skill's, an agent tab's, and a Changes tab's cards each name t
 
   const changes = drawn(
     createElement(ChangesCard, {
-      agent: {
-        id: AGENT,
-        planId: PLAN,
-        model: "anthropic/claude-opus-5.5",
-        effort: "high",
-        title: "Invite flow",
-        createdAt: 1,
-        status: CODING_AGENT_STATUS.COMPLETED,
-        turnId: null,
-      },
-      agentLabel: "Invite flow",
+      subject: agentSubject(
+        {
+          agents: [
+            {
+              id: AGENT,
+              planId: PLAN,
+              model: "anthropic/claude-opus-5.5",
+              effort: "high",
+              title: "Invite flow",
+              createdAt: 1,
+              status: CODING_AGENT_STATUS.COMPLETED,
+              turnId: null,
+            },
+          ],
+          archived: [],
+          models: [],
+          me: undefined,
+          pullRequests: new Map(),
+        },
+        AGENT,
+        NOTHING_HELD,
+        false,
+      ),
+      models: [],
       pullRequest: PULL_REQUEST,
+      onOpenAgent: () => undefined,
     }),
   );
   assert.deepEqual(headOf(changes), {

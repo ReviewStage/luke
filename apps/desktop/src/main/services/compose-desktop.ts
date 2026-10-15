@@ -1,15 +1,22 @@
-import { ACCOUNT_STATUS, type AccountSnapshot } from "@sidecar/credentials/snapshot";
+import { ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
+import {
+  AgentNoticeDoors,
+  type AgentNotices,
+  createAgentNotices,
+  noticePlanTitle,
+} from "@luke/host/agent-notices";
 import {
   type DuplicateGatewayMethod,
   HostAssemblyTag,
   type HostTag,
   hostStandingLayer,
   layersInOrder,
-} from "@sidecar/host/effect";
-import { APP_SETTING_SCHEMA } from "@sidecar/settings";
+} from "@luke/host/effect";
+import { confirmingHold, type DesktopQuit } from "@luke/host/quit";
+import { effectServiceLayer, serviceLayer } from "@luke/host/service-layer";
+import { APP_SETTING_SCHEMA, NO_EXPERIMENTS } from "@luke/settings";
+import { callInProgress } from "@luke/voice/voice-view";
 import { Context, Effect, Layer, Stream } from "effect";
-import { callInProgress } from "#shared/messages/voice-view";
-import { AgentNoticeDoors, type AgentNotices, createAgentNotices } from "../agent-notices";
 import { AppStateStore, initialAppState } from "../app-state";
 import { registerDesktopIpc } from "../ipc/register-desktop-ipc";
 import { createElectronUpdaterEngine } from "../update-installer";
@@ -21,8 +28,6 @@ import { hostAssemblyLayerFor } from "./host-layer";
 import { createKeychainService } from "./keychain-service";
 import { createNativeNode, type NativeNode } from "./native-node";
 import { createOperatorClient, type OperatorClient } from "./operator-client";
-import { confirmingHold, type DesktopQuit } from "./quit";
-import { effectServiceLayer, serviceLayer } from "./service-layer";
 import { createTelemetryService, type TelemetryService } from "./telemetry-service";
 import { createUpdateServiceHost, type UpdateServiceHost } from "./update-service-host";
 import { createWindowService, type WindowService } from "./window-service";
@@ -113,7 +118,13 @@ const launchSteps = (services: DesktopServices): Layer.Layer<HostTag, never, Hos
           // settings already draws under the appearance they name.
           Effect.andThen(
             windows.applyAppearance(),
-            Effect.sync(() => windows.publishAppState()),
+            Effect.sync(() => {
+              windows.publishAppState();
+              // A gated feature's menu items follow the account's experiments as the windows' surfaces do.
+              config.showMenuBar({
+                experiments: state.snapshot().settings?.experiments ?? NO_EXPERIMENTS,
+              });
+            }),
           ),
           (defect) =>
             Effect.sync(() => {
@@ -226,14 +237,7 @@ export function composeDesktop(
       const notices = yield* createAgentNotices({
         listAgents: (planId) => operator.host.codingAgentList({ planId }),
         readPullRequest: (agentId) => operator.host.codingAgentPullRequest({ agentId }),
-        planName: (planId) => {
-          const { planning } = state.snapshot();
-          const open = planning.document.plan;
-          return (
-            planning.plans.find((plan) => plan.id === planId)?.name ??
-            (open?.id === planId ? open.name : undefined)
-          );
-        },
+        planName: (planId) => noticePlanTitle(state.snapshot().planning, planId),
         open: (place) => {
           windows.panels.focusExpanded();
           windows.showAgent(place);
@@ -244,6 +248,10 @@ export function composeDesktop(
           state.snapshot().settings?.stored.agentNotifications ??
           APP_SETTING_SCHEMA.agentNotifications.default,
         signedInAs: () => accountKey(state.snapshot().account),
+        accountId: () => {
+          const { account } = state.snapshot();
+          return account.status === ACCOUNT_STATUS.SIGNED_IN ? account.id : undefined;
+        },
         onAccountChanged: (listener) =>
           operator.host.onAccountChanged((account) => listener(accountKey(account))),
         // An agent starting or ending, or a new pull request, is read on the sidebar's rows from the list.
@@ -256,6 +264,10 @@ export function composeDesktop(
         openInbox: (planId) => {
           windows.panels.focusExpanded();
           windows.showInbox(planId);
+        },
+        openPlanlessItem: (item) => {
+          windows.panels.focusExpanded();
+          windows.showInboxItem(item);
         },
         report: config.report,
       }).pipe(

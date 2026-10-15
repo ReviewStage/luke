@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { GITHUB_CONNECT_CLAIM } from "@sidecar/features/github-connection-wire";
+import { GITHUB_CONNECT_CLAIM } from "@luke/features/github-connection-wire";
 import { Duration, Effect } from "effect";
 import { TestClock } from "effect/testing";
 import { Database } from "../../core/query.js";

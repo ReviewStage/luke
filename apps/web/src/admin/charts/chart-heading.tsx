@@ -1,5 +1,5 @@
-import type { AdminTrend } from "../../../server/admin/admin-metrics";
-import { formatNumber, formatTrendMove, trendTone } from "../format";
+import type { AdminTrend } from "@luke/service/admin/admin-metrics";
+import { formatNumber, formatTrendMove, trendTone } from "@luke/ui/admin-format";
 
 /**
  * A chart's own heading: what it draws on the left, and how its trailing run

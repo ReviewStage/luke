@@ -3,10 +3,9 @@ import {
   type UnparsedWireValue,
   unparsedWire,
   type WireBoundaryInput,
-} from "@sidecar/wire";
-import { readEither } from "@sidecar/wire/effect";
+} from "@luke/wire";
+import { readEither } from "@luke/wire/effect";
 import { Effect, Result, type Schema } from "effect";
-import { Base64 } from "effect/encoding";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
   type AccountCallEffects,
@@ -30,7 +29,9 @@ import {
   type CodingAgentListAnswer,
   type CodingAgentMessagesAnswerView,
   type CodingAgentModelsAnswer,
+  type CodingAgentPageAnswerView,
   type CodingAgentPullRequestAnswerView,
+  type CodingAgentWorkspaceListParams,
   type DictationTranscribeAnswerView,
   type DictationTranscribeParams,
   type PlanTemplateAnswerView,
@@ -47,6 +48,7 @@ import {
   CODING_AGENT_CURSOR_START,
   CODING_AGENT_LIST_ARCHIVED,
   CODING_AGENT_LIST_QUERY,
+  CODING_AGENT_WORKSPACE_QUERY,
   type CodingAgentArchiveRequest,
   type CodingAgentMessageRequest,
   type CodingAgentRenameRequest,
@@ -57,12 +59,14 @@ import {
   codingAgentListAnswerSchema,
   codingAgentMessageRequestSchema,
   codingAgentMessagesAnswerSchema,
+  codingAgentPageAnswerSchema,
   codingAgentPullRequestAnswerSchema,
   codingAgentRenameRequestSchema,
   codingAgentServersRequestSchema,
-  codingAgentStartRequestSchema,
+  codingAgentStartRequestOnWire,
 } from "./coding-agent-wire.js";
 import { dictationAnswerSchema, dictationRequestSchema } from "./dictation-wire.js";
+import { imageBodyOf } from "./image-body.js";
 import {
   type InboxAnswerRequest,
   inboxAnsweredSchema,
@@ -91,6 +95,7 @@ import {
 import { type RepositoryUnreached, repositoryNotReachableSchema } from "./repository-reach-wire.js";
 import {
   agentChangesPath,
+  agentInboxPath,
   agentMessagesPath,
   agentPath,
   agentPullRequestPath,
@@ -215,21 +220,7 @@ function refusedAs(payload: UnparsedWireValue, named: NamedRefusals): Failed {
 
 /** An image's bytes read whole and spelled in base64 under the type the service named, or unanswered where the type is none an image block may be or the body could not be read. */
 function readImage(response: Response): Effect.Effect<CodingAgentInboxAttachmentView> {
-  const contentType = Result.getOrUndefined(
-    readEither(inboxImageTypeSchema)(unparsedWire(response.headers.get("content-type"))),
-  );
-  if (contentType === undefined) return Effect.succeed(UNANSWERED);
-  return Effect.promise(() =>
-    response
-      .arrayBuffer()
-      .then(
-        (bytes): CodingAgentInboxAttachmentView => ({
-          contentType,
-          base64: Base64.encode(new Uint8Array(bytes)),
-        }),
-      )
-      .catch(() => UNANSWERED),
-  );
+  return Effect.map(imageBodyOf(response, inboxImageTypeSchema), (image) => image ?? UNANSWERED);
 }
 
 /**
@@ -460,6 +451,22 @@ export class HostedCodingAgentClient {
     );
   }
 
+  /** A workspace's agents, newest started first, narrowed to one repository where one is named. */
+  listWorkspace(
+    params: CodingAgentWorkspaceListParams,
+  ): Effect.Effect<CodingAgentListAnswer, never, HttpClient.HttpClient> {
+    const query = new URLSearchParams({
+      [CODING_AGENT_WORKSPACE_QUERY.WORKSPACE_ID]: params.workspaceId,
+    });
+    if (params.repository !== undefined) {
+      query.set(CODING_AGENT_WORKSPACE_QUERY.REPOSITORY, params.repository);
+    }
+    return Effect.flatMap(
+      this.#call.send({ method: HTTP_METHOD.GET, path: `${HOSTED_SERVICE_PATH.AGENTS}?${query}` }),
+      (answer) => readAnswer(answer, codingAgentListAnswerSchema, ROW_REFUSALS),
+    );
+  }
+
   /**
    * Starts an agent on the plan under the request's own key, so a retry
    * carrying the same key answers the agent the first Start made; a request
@@ -469,7 +476,7 @@ export class HostedCodingAgentClient {
     planId: string,
     request: CodingAgentStartRequest,
   ): Effect.Effect<CodingAgentAgentAnswer, never, HttpClient.HttpClient> {
-    const admitted = Result.getOrUndefined(readEither(codingAgentStartRequestSchema)(request));
+    const admitted = Result.getOrUndefined(codingAgentStartRequestOnWire(request));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
     return Effect.flatMap(
       this.#call.send({
@@ -612,6 +619,14 @@ export class HostedCodingAgentClient {
     );
   }
 
+  /** One agent read whole as its own page by its id, on a plan or with none. */
+  agent(agentId: string): Effect.Effect<CodingAgentPageAnswerView, never, HttpClient.HttpClient> {
+    return Effect.flatMap(
+      this.#call.send({ method: HTTP_METHOD.GET, path: agentPath(agentId) }),
+      (answer) => readAnswer(answer, codingAgentPageAnswerSchema, ROW_REFUSALS),
+    );
+  }
+
   /** What one agent published: the branch it pushed and the pull request from it, as GitHub holds them now. */
   pullRequest(
     agentId: string,
@@ -639,6 +654,17 @@ export class HostedCodingAgentClient {
   ): Effect.Effect<CodingAgentInboxAnswerView, never, HttpClient.HttpClient> {
     return Effect.flatMap(
       this.#held.send({ method: HTTP_METHOD.GET, path: planInboxPath(planId, after) }),
+      (answer) => readAnswer(answer, inboxAnswerSchema, ROW_REFUSALS),
+    );
+  }
+
+  /** One agent's inbox past the cursor, an agent with no plan as much as one on a plan: every item it posted, held by the service while nothing changed. */
+  agentInbox(
+    agentId: string,
+    after: string,
+  ): Effect.Effect<CodingAgentInboxAnswerView, never, HttpClient.HttpClient> {
+    return Effect.flatMap(
+      this.#held.send({ method: HTTP_METHOD.GET, path: agentInboxPath(agentId, after) }),
       (answer) => readAnswer(answer, inboxAnswerSchema, ROW_REFUSALS),
     );
   }

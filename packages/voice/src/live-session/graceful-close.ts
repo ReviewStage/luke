@@ -1,4 +1,4 @@
-import { closeEvent, type LiveSessionClosed } from "@sidecar/live";
+import { closeEvent, type LiveSessionClosed } from "@luke/live";
 import { Duration, Effect } from "effect";
 import type { LiveSideband, SocketClose } from "../live-socket.js";
 

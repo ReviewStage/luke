@@ -1,39 +1,53 @@
+import { INTEGRATION_NAME } from "@luke/features/integration-wire";
 import {
   decodeMention,
   encodeMention,
+  linkMention,
   MENTION_KIND,
   type Mention,
+  type MentionLines,
+  type MentionPlace,
   type PlanMention,
-} from "@sidecar/features/mention-link";
-import { DocumentIcon } from "@sidecar/panel";
+  pastedLinkMention,
+  sectionAnchors,
+} from "@luke/features/mention-link";
+import { DocumentIcon, ProviderMark } from "@luke/ui";
+import { fileName } from "@luke/voice/code-pane-model";
 import { FolderIcon, HashIcon } from "lucide-react";
 import { CardHead, CardNote, HoverCard } from "../hover-card";
-import type { MentionNode } from "../plan-editor/contract";
+import type { LinkDrawer } from "../markdown-message";
+import type { HeadingsChange, MentionNode } from "../plan-editor/contract";
 import { Tooltip } from "../tooltip";
-import { fileName } from "./code-pane-model";
 import { FileCard } from "./file-ref";
+import { shortCommit } from "./file-tab-model";
 import { FileTypeIcon } from "./file-type-icon";
+import { useOpenLink } from "./use-open-link";
 
 /**
  * mention-chip.tsx -- a mention drawn in words as its chip: its kind's glyph and its name, a button that opens what it names, hanging a card that says what that is, struck through where what it names is gone.
  *
- * A mention is written into markdown as a link whose label starts with `@`
- * (`@sidecar/features/mention-link`), and wherever the words are drawn by a
- * place that can open what a mention names, the link is drawn as this
- * chip: a pill on the words' line, the kind's glyph and the name the
+ * A mention is written into markdown as a link whose target names it
+ * (`@luke/features/mention-link`'s `linkMention`), a developer's with a
+ * label starting with `@`, and wherever words are drawn, the link is drawn
+ * as this chip: a pill on the words' line, the kind's glyph and the name the
  * mention was written with, cut to the chip's width. A press opens it: a
  * section of a plan, that plan scrolled to the section; a plan, the plan
  * at its top; a file, its tab, through the side panel's one door for a file
  * (`file-ref.tsx`). A folder opens nothing, since the window has no door to
  * one, and is a chip that hangs its card alone, as is a file where the
- * place can open none. Its card, hung while the pointer rests on it, names
- * it whole: a file's is the card every place naming the file hangs.
+ * place can open none. An MCP server or one of its tools opens nothing
+ * either, wearing its server's mark; a page of an integration's, a Linear
+ * issue say, wears the integration's mark and opens the page in the
+ * browser, its card saying its address. Its card, hung while the pointer rests
+ * on it, names it whole: a file's is the card every place naming the file
+ * hangs, and a file's lines open at the commit the mention pins them to.
  *
- * A section is known by its heading, so a section of the plan drawn here
- * whose heading the plan no longer holds is gone: its chip keeps the name
- * it was written with, struck through, its card says it is no longer in
- * the plan, and a press opens the plan at its top. A section of another
- * plan is drawn as found, since what that plan holds is not at hand.
+ * A section is known by its heading's anchor, so a section of the plan
+ * drawn here whose anchor no heading of the plan spells any longer is gone:
+ * its chip keeps the name it was written with, struck through, its card
+ * says it is no longer in the plan, and a press opens the plan at its top.
+ * A section of another plan is drawn as found, since what that plan holds
+ * is not at hand.
  *
  * Nothing the mention names rides on the chip's element: no attribute
  * carries its target, its plan, its heading, or its path, because only the
@@ -50,41 +64,51 @@ const MENTION_STATE = {
 
 type MentionState = (typeof MENTION_STATE)[keyof typeof MENTION_STATE];
 
-/** What a place drawing mentions knows and does: the plan it draws and its headings, and what opening a mention does. */
+/** What a place drawing mentions knows and does: the plan it draws, where its mentions are written, its sections' anchors, and what opening a mention does. */
 export interface MentionDoors {
   readonly planId: string;
-  readonly headings: ReadonlySet<string>;
+  readonly place: MentionPlace;
+  readonly anchors: ReadonlySet<string>;
   readonly onOpenPlan: (mention: PlanMention) => void;
-  /** Shows a file's tab; none where no file can be opened from here. */
-  readonly onOpenFile: ((path: string) => void) | undefined;
+  /** Shows a file's tab, at its lines where a mention names them; none where no file can be opened from here. */
+  readonly onOpenFile: ((path: string, lines: MentionLines | undefined) => void) | undefined;
 }
 
 /**
- * A mention's target named again where the plan it names had the heading
- * it names renamed in an edit (`../plan-editor/plan-mentions.ts`): the new
- * target, or nothing where the target names no section of the plan, or one
- * of a heading the edit did not rename.
+ * A mention's target named again where an edit of the plan it names moved
+ * the anchor of the section it names (`../plan-editor/plan-mentions.ts`):
+ * the new target, or nothing where the target names no section of the
+ * plan, or one whose anchor the edit left where it was, or one of a
+ * section the edit did not keep.
  */
 export function retargetedMention(
   planId: string,
+  place: MentionPlace,
   target: string,
-  renamed: ReadonlyMap<string, string>,
+  change: HeadingsChange,
 ): string | undefined {
-  const mention = decodeMention(target);
+  const mention = decodeMention(target, place.repository);
   if (mention?.kind !== MENTION_KIND.SECTION || mention.planId !== planId) return undefined;
-  const heading = renamed.get(mention.heading);
-  return heading === undefined ? undefined : encodeMention({ ...mention, heading });
+  const was = sectionAnchors(change.before);
+  const is = sectionAnchors(change.after);
+  const at = was.indexOf(mention.anchor);
+  const now = is[change.kept.get(at) ?? -1];
+  if (now === undefined || now === "" || now === mention.anchor) return undefined;
+  return encodeMention({ ...mention, anchor: now }, place);
 }
 
 /** What a gone section's card says of it. */
 const GONE_WORDS = "No longer in the plan";
 
-/** Whether what the mention names is there to open: a section of this plan is there while the plan holds its heading. */
+/** What a server's card says of it. */
+const SERVER_WORDS = "An MCP server";
+
+/** Whether what the mention names is there to open: a section of this plan is there while a heading of the plan spells its anchor. */
 function mentionState(mention: Mention, doors: MentionDoors): MentionState {
   if (mention.kind !== MENTION_KIND.SECTION || mention.planId !== doors.planId) {
     return MENTION_STATE.FOUND;
   }
-  return doors.headings.has(mention.heading) ? MENTION_STATE.FOUND : MENTION_STATE.GONE;
+  return doors.anchors.has(mention.anchor) ? MENTION_STATE.FOUND : MENTION_STATE.GONE;
 }
 
 /** What a press on the chip does, or nothing where it opens nothing from here. */
@@ -92,13 +116,18 @@ function pressOf(
   mention: Mention,
   state: MentionState,
   doors: MentionDoors,
+  openLink: (href: string) => void,
 ): (() => void) | undefined {
   switch (mention.kind) {
+    case MENTION_KIND.LINK:
+      return () => openLink(mention.url);
     case MENTION_KIND.FILE: {
       const { onOpenFile } = doors;
-      return onOpenFile === undefined ? undefined : () => onOpenFile(mention.path);
+      return onOpenFile === undefined ? undefined : () => onOpenFile(mention.path, mention.lines);
     }
     case MENTION_KIND.FOLDER:
+    case MENTION_KIND.SERVER:
+    case MENTION_KIND.TOOL:
       return undefined;
     case MENTION_KIND.PLAN:
       return () => doors.onOpenPlan(mention);
@@ -123,7 +152,31 @@ function MentionGlyph({ mention }: { mention: Mention }): React.JSX.Element {
       return <FileTypeIcon name={fileName(mention.path)} />;
     case MENTION_KIND.FOLDER:
       return <FolderIcon aria-hidden="true" />;
+    case MENTION_KIND.SERVER:
+    case MENTION_KIND.TOOL:
+    case MENTION_KIND.LINK:
+      return <ProviderMark provider={mention.provider} />;
   }
+}
+
+/** What a chip's card says of what it names, beside its name, where the name alone does not say it. */
+function noteOf(mention: Mention, state: MentionState): string | undefined {
+  if (state === MENTION_STATE.GONE) return GONE_WORDS;
+  if (mention.kind === MENTION_KIND.SERVER) return SERVER_WORDS;
+  if (mention.kind === MENTION_KIND.TOOL)
+    return `A tool of ${INTEGRATION_NAME[mention.provider]}'s MCP server`;
+  if (mention.kind === MENTION_KIND.LINK) return mention.url;
+  return undefined;
+}
+
+/** What a file's card says of the lines a mention pins: where they run, and the commit they were read at. */
+function linesNote(lines: MentionLines | undefined): string | undefined {
+  if (lines === undefined) return undefined;
+  const span =
+    lines.startLine === lines.endLine
+      ? `Line ${lines.startLine}`
+      : `Lines ${lines.startLine}–${lines.endLine}`;
+  return `${span} at ${shortCommit(lines.commit)}`;
 }
 
 /** The card a chip hangs: a file's own card, or its glyph and whole name, and why it is gone where it is. */
@@ -136,12 +189,15 @@ function MentionCard({
   name: string;
   state: MentionState;
 }): React.JSX.Element {
-  if (mention.kind === MENTION_KIND.FILE) return <FileCard path={mention.path} note={undefined} />;
+  if (mention.kind === MENTION_KIND.FILE) {
+    return <FileCard path={mention.path} note={linesNote(mention.lines)} />;
+  }
   const whole = mention.kind === MENTION_KIND.FOLDER ? `${mention.path}/` : name;
+  const note = noteOf(mention, state);
   return (
     <HoverCard data-mention-card="">
       <CardHead glyph={<MentionGlyph mention={mention} />} name={whole} />
-      {state === MENTION_STATE.GONE ? <CardNote>{GONE_WORDS}</CardNote> : null}
+      {note === undefined ? null : <CardNote>{note}</CardNote>}
     </HoverCard>
   );
 }
@@ -157,8 +213,9 @@ export function MentionChip({
   name: string;
   doors: MentionDoors;
 }): React.JSX.Element {
+  const openLink = useOpenLink();
   const state = mentionState(mention, doors);
-  const press = pressOf(mention, state, doors);
+  const press = pressOf(mention, state, doors, openLink);
   const face = (
     <>
       <span className="mention-chip-glyph">
@@ -192,6 +249,23 @@ export function MentionChip({
   );
 }
 
+/** What draws a link in Markdown as its mention's chip through the doors given, where its target names a mention (`linkMention`); a link where it names none. */
+export function mentionLinkDrawer(doors: MentionDoors): LinkDrawer {
+  return (href, label) => {
+    const found = linkMention(label, href, doors.place.repository);
+    if (found === undefined) return undefined;
+    return <MentionChip mention={found.mention} name={found.name} doors={doors} />;
+  };
+}
+
+/** The mention node words pasted whole stand for: a page of an integration's, named by its address's readable form; nothing for any other words, a file of the plan's repository among them. */
+export function pastedMentionNode(words: string, place: MentionPlace): MentionNode | undefined {
+  const link = pastedLinkMention(words, place.repository);
+  return link === undefined
+    ? undefined
+    : { name: link.name, target: encodeMention(link.mention, place) };
+}
+
 /** A mention an editor holds, as its node names it: its chip where its target names a mention, and its words where it names none. */
 export function MentionNodeChip({
   mention,
@@ -200,7 +274,7 @@ export function MentionNodeChip({
   mention: MentionNode;
   doors: MentionDoors;
 }): React.JSX.Element {
-  const named = decodeMention(mention.target);
+  const named = decodeMention(mention.target, doors.place.repository);
   if (named === undefined) return <>{`@${mention.name}`}</>;
   return <MentionChip mention={named} name={mention.name} doors={doors} />;
 }

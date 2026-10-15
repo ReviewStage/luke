@@ -22,11 +22,13 @@
  * restore lands on the plan as Back would, where the plan stands behind.
  */
 
+import { EXPERIMENT } from "@luke/settings";
+import type { SettingsView } from "@luke/settings/settings-views";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
 import type { HistorySpot } from "./planning/use-plan-history";
 import type { PlansControl } from "./planning/use-plans-tab";
-import type { SettingsView } from "./settings-views";
+import { useExperiment } from "./use-app-state";
 
 /** The most places the history holds; the oldest go first. */
 const HISTORY_LIMIT = 50;
@@ -43,6 +45,9 @@ const PLACE_KIND = {
   VERSION_HISTORY: "version-history",
   HOME: "home",
   INBOX: "inbox",
+  AGENT: "agent",
+  FACTORY: "factory",
+  AUTOMATIONS: "automations",
   SETTINGS: "settings",
 } as const;
 
@@ -56,6 +61,9 @@ type Place =
     }
   | { readonly kind: typeof PLACE_KIND.HOME }
   | { readonly kind: typeof PLACE_KIND.INBOX }
+  | { readonly kind: typeof PLACE_KIND.AGENT; readonly agentId: string }
+  | { readonly kind: typeof PLACE_KIND.FACTORY }
+  | { readonly kind: typeof PLACE_KIND.AUTOMATIONS }
   | { readonly kind: typeof PLACE_KIND.SETTINGS; readonly view: SettingsView };
 
 interface Trail {
@@ -65,10 +73,11 @@ interface Trail {
 
 const EMPTY_TRAIL: Trail = { places: [], at: -1 };
 
-/** Whether two places are one step of the history: the same plan, the same plan's version history, the home page, the Inbox on any plan, or Settings on any page. */
+/** Whether two places are one step of the history: the same plan, the same plan's version history, the home page, the Inbox on any plan, the same agent's page, Factory, the Automations page, or Settings on any page. */
 function sameStep(one: Place | undefined, other: Place): boolean {
   if (one === undefined || one.kind !== other.kind) return false;
   if ("planId" in one && "planId" in other) return one.planId === other.planId;
+  if ("agentId" in one && "agentId" in other) return one.agentId === other.agentId;
   return true;
 }
 
@@ -227,6 +236,9 @@ export function useWindowHistory(input: {
     | "onLeavePlan"
     | "history"
     | "inboxView"
+    | "agentView"
+    | "factoryView"
+    | "automationsView"
     | "restoring"
   >;
 }): WindowHistory {
@@ -235,6 +247,11 @@ export function useWindowHistory(input: {
   const historyOpen = plans.history.open;
   const { spot } = plans.history;
   const inboxOpen = plans.inboxView.open;
+  const pageAgent = plans.agentView.agentId;
+  const factoryOpen = plans.factoryView.open;
+  const factoryOn = useExperiment(EXPERIMENT.FACTORY);
+  const automationsOpen = plans.automationsView.open;
+  const automationsOn = useExperiment(EXPERIMENT.AUTOMATIONS);
   // A launch reopening the plan last open stands nowhere until it opens, so
   // the home page it waits on is no place to go back to.
   const known = input.known && !plans.restoring;
@@ -245,12 +262,29 @@ export function useWindowHistory(input: {
     if (!known) return undefined;
     if (tab === PANEL_TAB.SETTINGS) return { kind: PLACE_KIND.SETTINGS, view: settingsView };
     if (inboxOpen) return { kind: PLACE_KIND.INBOX };
+    if (pageAgent !== undefined) return { kind: PLACE_KIND.AGENT, agentId: pageAgent };
+    if (factoryOpen) return { kind: PLACE_KIND.FACTORY };
+    if (automationsOpen) return { kind: PLACE_KIND.AUTOMATIONS };
     if (boundFor === undefined) return { kind: PLACE_KIND.HOME };
     return historyOpen
       ? { kind: PLACE_KIND.VERSION_HISTORY, planId: boundFor, spot }
       : { kind: PLACE_KIND.PLAN, planId: boundFor };
-  }, [known, tab, settingsView, boundFor, historyOpen, spot, inboxOpen]);
+  }, [
+    known,
+    tab,
+    settingsView,
+    boundFor,
+    historyOpen,
+    spot,
+    inboxOpen,
+    pageAgent,
+    factoryOpen,
+    automationsOpen,
+  ]);
   const reachable = (to: Place) => {
+    // Factory and the Automations page are experiments, so back and forward pass over each while it is off.
+    if (to.kind === PLACE_KIND.FACTORY) return factoryOn;
+    if (to.kind === PLACE_KIND.AUTOMATIONS) return automationsOn;
     if (!("planId" in to) || to.planId === boundFor) return true;
     if (plans.archived.some((plan) => plan.id === to.planId)) return false;
     return (
@@ -270,8 +304,23 @@ export function useWindowHistory(input: {
       plans.inboxView.onOpen();
       return;
     }
-    // Every other place of the Plans tab is the plan's, which the Inbox stands over.
+    if (to.kind === PLACE_KIND.AGENT) {
+      plans.agentView.onOpen(to.agentId);
+      return;
+    }
+    if (to.kind === PLACE_KIND.FACTORY) {
+      plans.factoryView.onOpen();
+      return;
+    }
+    if (to.kind === PLACE_KIND.AUTOMATIONS) {
+      plans.automationsView.onOpen();
+      return;
+    }
+    // Every other place of the Plans tab is the plan's, which the Inbox, an agent's page, Factory, and the Automations page stand over.
     if (inboxOpen) plans.inboxView.onClose();
+    if (pageAgent !== undefined) plans.agentView.onClose();
+    if (factoryOpen) plans.factoryView.onClose();
+    if (automationsOpen) plans.automationsView.onClose();
     // Note that a version history is opened on its spot even where it is
     // still open under Settings, because a version history out of sight
     // keeps no version chosen.

@@ -7,6 +7,10 @@
 
 @import "tailwindcss";
 
+/* The admin dashboard's chart is `@luke/ui`'s, written in the same utilities
+   and read in this theme's tokens; the import is what scans it. */
+@import "@luke/ui/theme.css";
+
 /* The three faces the page loads, declared beside the stack that names them
    rather than at each of the four HTML entry points. */
 @import "@fontsource-variable/geist/wght.css";
@@ -43,6 +47,26 @@
   --font-sans: var(--font-page);
   --font-mono: var(--font-code);
   --font-brand: var(--font-wordmark);
+}
+
+/* A line that waits a moment before it fades in, as the Open in Luke page's
+   "Didn't open?" does after a press: the wait is the time a browser takes to
+   hand the link to the app, and a fade rather than a slide, so reduced motion
+   need not hold it still. Note that it is hidden, not only transparent, while
+   it waits, because a hidden line is out of the accessibility tree, so a
+   screen reader announces it when it shows rather than when it was drawn. */
+@theme {
+  --animate-arrive-late: arrive-late 240ms ease-out 2s both;
+
+  @keyframes arrive-late {
+    from {
+      opacity: 0;
+      visibility: hidden;
+    }
+    to {
+      opacity: 1;
+    }
+  }
 }
 
 :root {
@@ -135,6 +159,23 @@
      of the same hue family, validated against the card at #101114 (6.1:1,
      ≥ 3:1). */
   --chart-1: #2f9bd8;
+}
+
+/* An integration whose brand publishes its one-colour mark in named inks
+   wears them by the ground (`@luke/ui`'s `marks/provider-mark.tsx`). The one
+   page that draws an integration's mark, its landing, is on the dark ground,
+   so these are the dark inks: Executor's, Notion's, and Sentry's white,
+   Mercury's near-white, and Neon's green for a dark ground. */
+.dark :is(.integration-mark-executor, .integration-mark-notion, .integration-mark-sentry) {
+  color: #fff;
+}
+
+.dark .integration-mark-mercury {
+  color: #f4f5f9;
+}
+
+.dark .integration-mark-neon {
+  color: #34d59a;
 }
 
 @layer base {

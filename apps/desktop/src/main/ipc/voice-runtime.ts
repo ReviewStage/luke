@@ -1,13 +1,13 @@
-import { PRODUCT_EVENT, type RecordProductEvent } from "@sidecar/features/analytics";
-import { type LiveDiagnostics, liveExchangeActive } from "@sidecar/live";
+import { PRODUCT_EVENT, type RecordProductEvent } from "@luke/features/analytics";
+import { ACT_KIND } from "@luke/host/acts";
+import type { HostOperator } from "@luke/host/host-operator";
+import { type LiveDiagnostics, liveExchangeActive } from "@luke/live";
 import { Effect, Option } from "effect";
 import type { BrowserWindow, WebContents } from "electron";
 import { channels } from "#shared/bridge";
-import { ACT_KIND } from "#shared/messages/acts";
 import type { ActRows } from "../act-router";
 import type { AppStateStore } from "../app-state";
 import type { ReportHandlers } from "../bridge-host";
-import type { HostOperator } from "../gateway/host-operator";
 import type { PanelManager } from "../window/panel-manager";
 
 /** The hidden window the conversation lives in, as much of it as this file needs. */

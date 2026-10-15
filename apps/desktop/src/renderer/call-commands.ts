@@ -7,7 +7,7 @@ import {
   VOICE_COMMAND,
   type VoiceCommand,
   type VoiceView,
-} from "#shared/messages/voice-view";
+} from "@luke/voice/voice-view";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "./app-commands";
 

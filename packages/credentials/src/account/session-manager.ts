@@ -1,5 +1,5 @@
-import { desktopSessionPageUrl } from "@sidecar/features/desktop-session-wire";
-import { singleFlightEffect } from "@sidecar/runtime/effect";
+import { desktopSessionPageUrl } from "@luke/features/desktop-session-wire";
+import { singleFlightEffect } from "@luke/runtime/effect";
 import {
   Cause,
   Data,

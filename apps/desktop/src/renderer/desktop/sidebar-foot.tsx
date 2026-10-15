@@ -1,7 +1,12 @@
-import { ACCOUNT_STATUS, type AccountSnapshot } from "@sidecar/credentials/snapshot";
-import { INTEGRATION_PROVIDER } from "@sidecar/features/integration-wire";
-import { ExternalIcon, GearIcon, KeyboardIcon, UpdateIcon, UserIcon } from "@sidecar/panel";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
+import { ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
+import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import { ACT_KIND } from "@luke/host/acts";
+import { UPDATE_STATUS } from "@luke/settings/update";
+import { updateInSidebar } from "@luke/settings/update-row";
+import { ExternalIcon, GearIcon, KeyboardIcon, ProviderMark, UpdateIcon } from "@luke/ui";
+import { ACTOR_KIND, type Actor, accountActor, SOMEONE_REASON } from "@luke/ui/actor-model";
+import type { UpdateControl } from "@luke/voice/settings-controls";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import {
   LifeBuoyIcon,
   LightbulbIcon,
@@ -10,17 +15,12 @@ import {
   MessageSquareIcon,
   NewspaperIcon,
 } from "lucide-react";
-import { ACT_KIND } from "#shared/messages/acts";
-import { UPDATE_STATUS } from "#shared/messages/update";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "../act";
+import { ACTOR_SIZE, ActorMark } from "../actor-ref";
 import { runAppCommand } from "../app-commands";
-import { PersonAvatar } from "../person-avatar";
-import { ProviderMark } from "../provider-marks";
 import { ConfirmDialog, DIALOG_TONE, useConfirmDialog } from "../settings/confirm-dialog";
-import type { UpdateControl } from "../settings/controls";
 import { Tooltip } from "../tooltip";
-import { updateInSidebar } from "../update-row";
 import { ActionMenu, type MenuEntry, riseAbove, useActionMenu } from "./action-menu";
 
 /**
@@ -39,16 +39,15 @@ import { ActionMenu, type MenuEntry, riseAbove, useActionMenu } from "./action-m
 /** Where Contact us > GitHub leads: Luke's own issues, where CONTRIBUTING.md sends bugs and feature requests. */
 const ISSUES_URL = "https://github.com/ReviewStage/luke/issues";
 
-/** The account's face: the signed-in person's (`person-avatar.tsx`), or a person glyph while no one is signed in. */
+/** The account's place while no one is signed in: someone's outline. */
+const NOBODY_SIGNED_IN: Actor = { kind: ACTOR_KIND.SOMEONE, reason: SOMEONE_REASON.UNNAMED };
+
+/** The account's face: the signed-in person's (`actor-ref.tsx`), or someone's outline while no one is signed in. */
 function AccountAvatar({ account }: { account: AccountSnapshot }): React.JSX.Element {
   if (account.status !== ACCOUNT_STATUS.SIGNED_IN) {
-    return (
-      <span className="sidebar-avatar sidebar-avatar-neutral" aria-hidden="true">
-        <UserIcon />
-      </span>
-    );
+    return <ActorMark actor={NOBODY_SIGNED_IN} size={ACTOR_SIZE.ACCOUNT} />;
   }
-  return <PersonAvatar name={account.name ?? account.email} pictureUrl={account.pictureUrl} />;
+  return <ActorMark actor={accountActor(account)} size={ACTOR_SIZE.ACCOUNT} />;
 }
 
 /**

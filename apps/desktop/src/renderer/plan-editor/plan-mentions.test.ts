@@ -1,8 +1,14 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { MENTION_KIND, mentionMarkdown, mentionsIn } from "@sidecar/features/mention-link";
-import { planSections } from "@sidecar/features/plan-document";
+import {
+  MENTION_KIND,
+  type MentionPlace,
+  mentionMarkdown,
+  mentionsIn,
+  sectionAnchors,
+} from "@luke/features/mention-link";
+import { planSections } from "@luke/features/plan-document";
 import type { TiptapEditorHTMLElement } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
 import { afterEach, beforeEach, test } from "vitest";
@@ -15,16 +21,26 @@ import { mountPlanEditor } from "./plan-editor";
  * The plan editor's mentions over the real editor: a mention in the text
  * opened as its node, drawn by the panel, and written back as the link it was
  * read from; an `@` word reported and a pick written in its place; no `@` in
- * code or inside a word; and a heading renamed in the edit renaming the
- * text's own mentions of it. Synthetic plan.
+ * code or inside a word; and a heading renamed in the edit, or one laid in
+ * that a later heading's anchor steps aside for, renaming the text's own
+ * mentions of it. Synthetic plan.
  */
 
 const PLAN_ID = "pl_1";
 
-const section = (heading: string) =>
-  mentionMarkdown({ kind: MENTION_KIND.SECTION, planId: PLAN_ID, heading }, heading);
+const PLACE: MentionPlace = { workspace: "acme", repository: "acme/checkout" };
+
+/** A mention of the section an anchor names, written with the name given. */
+const named = (anchor: string, name: string) =>
+  mentionMarkdown({ kind: MENTION_KIND.SECTION, planId: PLAN_ID, anchor }, name, PLACE);
+
+const section = (heading: string) => named(sectionAnchors([heading])[0] ?? "", heading);
 
 const TEXT = `## Goal\n\nShip as ${section("Rollout")} says.\n\n## Rollout\n\nStore first.\n`;
+
+/** A page of an integration's, as the panel names it. */
+const ISSUE_URL = "https://linear.app/acme/issue/LUKE-142/fix-the-thing";
+const ISSUE = { name: "LUKE-142/fix-the-thing", target: ISSUE_URL };
 
 const editors: PlanEditorHandle[] = [];
 
@@ -66,7 +82,10 @@ function mounted(markdown: string) {
         drawn.push(mention);
         return () => undefined;
       },
-      retarget: (target, renamed) => retargetedMention(PLAN_ID, target, renamed),
+      retarget: (target, change) => retargetedMention(PLAN_ID, PLACE, target, change),
+      namesMention: () => false,
+      // The panel reads the one page of an integration's this plan is pasted.
+      pasted: (words) => (words.trim() === ISSUE_URL ? ISSUE : undefined),
     },
   });
   editors.push(handle);
@@ -85,6 +104,11 @@ function mounted(markdown: string) {
     editor.view.focus();
     editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc, at)));
     editor.view.dispatch(editor.state.tr.insertText(typed));
+  };
+  /** A heading of the words given laid in as its own block, right after the words named. */
+  const layHeadingAfter = (words: string, heading: string) => {
+    typeAfter(words, "");
+    editor.chain().splitBlock().setHeading({ level: 2 }).insertContent(heading).run();
   };
   /** A key pressed in the editor. */
   const press = (init: KeyboardEventInit) =>
@@ -105,9 +129,22 @@ function mounted(markdown: string) {
     drawn,
     offered,
     typeAfter,
+    layHeadingAfter,
     press,
     back,
     last: () => drafts.at(-1) ?? "",
+    /** Words pasted where the caret stands, as the system's clipboard hands them over. */
+    paste: (words: string) => {
+      const event = new Event("paste", { bubbles: true, cancelable: true });
+      Object.defineProperty(event, "clipboardData", {
+        value: {
+          files: [],
+          types: ["text/plain"],
+          getData: (type: string) => (type === "text/plain" ? words : ""),
+        },
+      });
+      editor.view.dom.dispatchEvent(event);
+    },
     finished: () => finished,
   };
 }
@@ -117,7 +154,9 @@ test("a mention in the text opens as its node, drawn by the panel, and writes ba
 
   plan.typeAfter("says.", " Today.");
 
-  assert.deepEqual(plan.drawn, [{ name: "Rollout", target: `luke://plan/${PLAN_ID}#Rollout` }]);
+  assert.deepEqual(plan.drawn, [
+    { name: "Rollout", target: `https://tryluke.dev/acme/plan/${PLAN_ID}#rollout` },
+  ]);
   assert.equal(
     plan.last(),
     `## Goal\n\nShip as ${section("Rollout")} says. Today.\n\n## Rollout\n\nStore first.\n`,
@@ -129,7 +168,10 @@ test("an @ word the caret ends is reported with what follows it, and a pick writ
 
   plan.typeAfter("Store first.", " See @go");
   const reported = plan.triggers.at(-1);
-  plan.handle.chooseMention({ name: "Goal", target: `luke://plan/${PLAN_ID}#Goal` });
+  plan.handle.chooseMention({
+    name: "Goal",
+    target: `https://tryluke.dev/acme/plan/${PLAN_ID}#goal`,
+  });
 
   assert.equal(reported?.query, "go");
   assert.ok(plan.last().includes(`Store first. See ${section("Goal")}`), plan.last());
@@ -151,8 +193,26 @@ test("renaming a heading in the editor renames the text's own mentions of it, in
 
   assert.equal(
     plan.last(),
-    `## Goal\n\nShip as ${mentionMarkdown({ kind: MENTION_KIND.SECTION, planId: PLAN_ID, heading: "Rollout plan" }, "Rollout")} says.\n\n## Rollout plan\n\nStore first.\n`,
+    `## Goal\n\nShip as ${named("rollout-plan", "Rollout")} says.\n\n## Rollout plan\n\nStore first.\n`,
   );
+});
+
+test("renaming a heading renames a mention of it written before the link was settled, into the settled form", () => {
+  const plan = mounted(
+    `## Goal\n\nShip as [@Rollout](luke://plan/${PLAN_ID}#Rollout) says.\n\n## Rollout\n\nStore first.\n`,
+  );
+
+  plan.typeAfter("Rollout", " plan");
+
+  assert.ok(plan.last().includes(named("rollout-plan", "Rollout")), plan.last());
+});
+
+test("a heading laid in above another of the same words moves that one's mentions onto its new anchor", () => {
+  const plan = mounted(`## Goal\n\nShip.\n\n## Notes\n\nSee ${named("notes", "Notes")}.\n`);
+
+  plan.layHeadingAfter("Ship.", "Notes");
+
+  assert.ok(plan.last().includes(`## Notes\n\nSee ${named("notes-1", "Notes")}.`), plan.last());
 });
 
 test("renaming a heading written with its own formatting still renames its mentions, read from the heading's source", () => {
@@ -163,14 +223,14 @@ test("renaming a heading written with its own formatting still renames its menti
   plan.typeAfter("today", " now");
 
   const draft = plan.last();
-  const headings = new Set(planSections(draft).map((each) => each.heading));
-  const named = mentionsIn(draft).map(({ mention }) =>
-    mention.kind === MENTION_KIND.SECTION ? mention.heading : "",
+  const anchors = new Set(sectionAnchors(planSections(draft).map((each) => each.heading)));
+  const found = mentionsIn(draft, PLACE.repository).map(({ mention }) =>
+    mention.kind === MENTION_KIND.SECTION ? mention.anchor : "",
   );
-  assert.equal(named.length, 1);
+  assert.equal(found.length, 1);
   assert.ok(
-    headings.has(named[0] ?? ""),
-    `${named[0]} is a heading of ${[...headings].join(", ")}`,
+    anchors.has(found[0] ?? "") && found[0] !== "ship-_today_",
+    `${found[0]} is an anchor of ${[...anchors].join(", ")}`,
   );
 });
 
@@ -193,7 +253,10 @@ test("a pick with the caret inside the word replaces the word through its end", 
 
   plan.typeAfter("Store first.", " See @goal");
   plan.back(2);
-  plan.handle.chooseMention({ name: "Goal", target: `luke://plan/${PLAN_ID}#Goal` });
+  plan.handle.chooseMention({
+    name: "Goal",
+    target: `https://tryluke.dev/acme/plan/${PLAN_ID}#goal`,
+  });
 
   assert.ok(plan.last().endsWith(`Store first. See ${section("Goal")}\n`), plan.last());
 });
@@ -202,7 +265,23 @@ test("a pick right before a chip replaces the word alone, and the chip stays", (
   const plan = mounted(`## Goal\n\nSee ${section("Rollout")}\n\n## Rollout\n\nStore first.\n`);
 
   plan.typeAfter("See ", "@go");
-  plan.handle.chooseMention({ name: "Goal", target: `luke://plan/${PLAN_ID}#Goal` });
+  plan.handle.chooseMention({
+    name: "Goal",
+    target: `https://tryluke.dev/acme/plan/${PLAN_ID}#goal`,
+  });
 
   assert.ok(plan.last().includes(`See ${section("Goal")} ${section("Rollout")}`), plan.last());
+});
+
+test("a page of an integration's pasted whole is laid in as its mention, written back as its link", () => {
+  const plan = mounted(TEXT);
+
+  plan.typeAfter("Store first.", " See ");
+  plan.paste(ISSUE_URL);
+
+  assert.ok(
+    plan.last().includes(`Store first. See [@LUKE-142/fix-the-thing](${ISSUE_URL})`),
+    plan.last(),
+  );
+  assert.ok(plan.drawn.some((mention) => mention.target === ISSUE_URL));
 });

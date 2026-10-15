@@ -1,5 +1,6 @@
-import type { ContextWindow } from "@sidecar/features/coding-agent-wire";
-import { pgTable, text } from "drizzle-orm/pg-core";
+import type { ContextWindow } from "@luke/features/coding-agent-wire";
+import type { ExperimentChoices } from "@luke/settings";
+import { jsonb, pgTable, text } from "drizzle-orm/pg-core";
 import { createdAt, timestamptz } from "./_helpers.js";
 import { user } from "./auth.js";
 
@@ -16,7 +17,7 @@ export const accountPreference = pgTable("account_preference", {
   voice: text("voice"),
   /**
    * The model and effort a coding agent starts on when Start is clicked, as
-   * AI Gateway's catalog names them (`hosted/model-catalog.ts`); null on both
+   * AI Gateway's catalog names them (`packages/service/src/providers/model-catalog.ts`); null on both
    * means the account has never chosen and starts on the catalog's default.
    * The context window beside them is null for the model's whole window,
    * which is also what a choice written before the window could be chosen
@@ -28,10 +29,18 @@ export const accountPreference = pgTable("account_preference", {
   /**
    * The Markdown a new plan of this account starts from, kept verbatim as
    * Settings wrote it; null means the built-in `DEFAULT_PLAN_TEMPLATE`
-   * (`@sidecar/features/plan-document-template`). Its own path writes it
+   * (`@luke/features/plan-document-template`). Its own path writes it
    * (`/api/account/plan-template`), apart from the preferences snapshot.
    */
   planTemplate: text("plan_template"),
+  /**
+   * Each experiment the account turned on or back off, by its key
+   * (`@luke/settings`'s `EXPERIMENT`); null on a row that never chose one,
+   * which reads as every experiment off. A write merges its keys over what
+   * stood, so a Mac that knows fewer experiments never erases another's
+   * choice, and a key no build lists any more is left inert.
+   */
+  experiments: jsonb("experiments").$type<ExperimentChoices>(),
   createdAt: createdAt(),
   /**
    * When the preferences part was last written; null on a row only a

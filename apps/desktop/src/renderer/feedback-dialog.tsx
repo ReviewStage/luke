@@ -15,7 +15,9 @@
  * it too.
  *
  * What a send carries is exactly what the card shows: the words, the
- * screenshots drawn in it, and — only while "Include my name and email" is
+ * screenshots drawn in it, which experiment the note is about where its
+ * title names one (opened from that experiment's row in Settings ›
+ * Experimental), and — only while "Include my name and email" is
  * ticked — the signed-in account's name and address, the line beside the
  * box reads out. Nothing else rides along, a credential least of all. The
  * whole card is left out of the screen recording (`ph-no-capture`), because a
@@ -23,18 +25,20 @@
  * app's words.
  */
 
-import { ACCOUNT_STATUS, type AccountSnapshot } from "@sidecar/credentials/snapshot";
+import { ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
 import {
   FEEDBACK_KIND,
   FEEDBACK_LIMITS,
   type FeedbackImage,
   type FeedbackKind,
   type FeedbackSubmission,
-} from "@sidecar/features/feedback";
-import { ImageIcon, RemoveIcon } from "@sidecar/panel";
+} from "@luke/features/feedback";
+import { ACT_KIND } from "@luke/host/acts";
+import { EXPERIMENTS, type Experiment } from "@luke/settings";
+import { ImageIcon, RemoveIcon } from "@luke/ui";
+import { useStateWithRef } from "@luke/ui/use-state-with-ref";
 import { Duration } from "effect";
-import { useEffect, useId, useRef, useState } from "react";
-import { ACT_KIND } from "#shared/messages/acts";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutAria } from "#shared/shortcuts";
 import { useAct } from "./act";
 import { encodeImage, imageFiles } from "./feedback-images";
@@ -43,7 +47,6 @@ import { Shortcut } from "./shortcut";
 import { BusyLabel } from "./spinner";
 import { TOAST_TONE, type ToastNotice, useToast } from "./toast";
 import { Tooltip } from "./tooltip";
-import { useStateWithRef } from "./use-state-with-ref";
 
 /**
  * Each kind in its own words: the title its dialog carries, the field's
@@ -121,6 +124,7 @@ function draftSubmission(
   kind: FeedbackKind,
   draft: FeedbackDraft,
   signature: FeedbackSignature | undefined,
+  about: Experiment | undefined,
 ): FeedbackSubmission {
   const credit = draft.signed ? signature : undefined;
   return {
@@ -129,7 +133,14 @@ function draftSubmission(
     ...(credit?.name ? { name: credit.name } : undefined),
     ...(credit ? { email: credit.email } : undefined),
     images: draft.images,
+    ...(about === undefined ? undefined : { experiment: about }),
   };
+}
+
+/** The dialog's title: the kind's own, or which experiment a note is about where it was opened from that experiment's row. */
+function dialogTitle(kind: FeedbackKind, about: Experiment | undefined): string {
+  const experiment = EXPERIMENTS.find((entry) => entry.key === about);
+  return experiment ? `Feedback on ${experiment.name}` : FEEDBACK_COPY[kind].title;
 }
 
 function feedbackImageUrl(image: FeedbackImage): string {
@@ -195,11 +206,14 @@ function ImageThumbnail({
  */
 export function FeedbackDialog({
   kind,
+  about,
   account,
   onClose,
 }: {
   /** The kind being written, or nothing while the dialog is closed. */
   kind: FeedbackKind | undefined;
+  /** The experiment the note is about, where an experiment's row opened it. */
+  about?: Experiment | undefined;
   account: AccountSnapshot | undefined;
   onClose: () => void;
 }): React.JSX.Element | null {
@@ -226,6 +240,23 @@ export function FeedbackDialog({
   const titleId = useId();
   const signatureId = useId();
   const signature = accountSignature(account);
+
+  /**
+   * Which experiment each kind's kept draft was written about. A note kept by
+   * Escape belongs to the place it was written from, so opened about another
+   * experiment, or about none, that kind starts fresh rather than sending the
+   * old words under the new title.
+   */
+  const draftAbout = useRef<Record<FeedbackKind, Experiment | undefined>>({
+    [FEEDBACK_KIND.FEEDBACK]: undefined,
+    [FEEDBACK_KIND.PROMPT]: undefined,
+  });
+  useLayoutEffect(() => {
+    if (kind === undefined || draftAbout.current[kind] === about) return;
+    draftAbout.current[kind] = about;
+    discards.current[kind] += 1;
+    setDrafts({ ...latestDrafts(), [kind]: FRESH_DRAFT });
+  }, [kind, about, latestDrafts, setDrafts]);
 
   // Closing puts a drop's highlight away, whatever became of the drag.
   useEffect(() => {
@@ -284,7 +315,7 @@ export function FeedbackDialog({
     setBusy(true);
     setRejection(undefined);
     const refusal = await act(ACT_KIND.FEEDBACK_SEND, {
-      submission: draftSubmission(kind, current, signature),
+      submission: draftSubmission(kind, current, signature, about),
     }).then(
       (result) => (result.delivered ? undefined : (result.reason ?? SEND_REFUSAL)),
       () => SEND_REFUSAL,
@@ -337,7 +368,7 @@ export function FeedbackDialog({
       data-dropping={String(dropping)}
     >
       <h2 id={titleId} className="confirm-dialog-title">
-        {FEEDBACK_COPY[kind].title}
+        {dialogTitle(kind, about)}
       </h2>
       <textarea
         ref={field}

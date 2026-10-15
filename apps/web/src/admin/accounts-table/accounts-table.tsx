@@ -1,9 +1,4 @@
-import { useState } from "react";
-import { accountLabel } from "../../account-initials";
-import { AccountAvatar } from "../chrome/page-header";
-import { formatDayTick, formatNumber } from "../format";
-import { ACCOUNTS_SORT } from "../prefs";
-import { accountHref, plainLeftClick } from "../routing";
+import { accountLabel } from "@luke/ui/account-initials";
 import {
   ACCOUNTS_SORT_KEY,
   type AccountsDetailColumn,
@@ -13,7 +8,12 @@ import {
   nextSort,
   SORT_DIRECTION,
   sortAccountsRows,
-} from "./sort";
+} from "@luke/ui/accounts-sort";
+import { formatDayTick, formatNumber } from "@luke/ui/admin-format";
+import { useState } from "react";
+import { AccountAvatar } from "../chrome/page-header";
+import { ACCOUNTS_SORT } from "../prefs";
+import { accountHref, plainLeftClick } from "../routing";
 
 /**
  * The narrowest each surface's table may draw before its scroll wrapper takes

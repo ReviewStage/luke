@@ -52,6 +52,25 @@
             "type": "number",
             "minimum": 0
           },
+          "ownerId": {
+            "type": "string"
+          },
+          "createdBy": {
+            "type": "object",
+            "properties": {
+              "userId": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "userId",
+              "name"
+            ],
+            "additionalProperties": false
+          },
           "agents": {
             "type": "object",
             "properties": {
@@ -102,6 +121,27 @@
                     "at": {
                       "type": "number",
                       "minimum": 0
+                    },
+                    "startedBy": {
+                      "type": "object",
+                      "properties": {
+                        "userId": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "userId",
+                        "name"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "automationId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 36
                     }
                   },
                   "required": [

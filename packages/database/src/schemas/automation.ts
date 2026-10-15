@@ -11,7 +11,7 @@ import {
   type AutomationTargetKind,
   type AutomationTrigger,
   type AutomationTriggerKind,
-} from "@sidecar/features/automation-wire";
+} from "@luke/features/automation-wire";
 import { sql } from "drizzle-orm";
 import { boolean, index, jsonb, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { createdAt, timestamptz, updatedAt } from "./_helpers.js";
@@ -24,7 +24,7 @@ import { plan } from "./plan.js";
  *
  * An automation is its account's and works on one plan: the trigger, the
  * action, and the guards are the wire's own JSON
- * (`@sidecar/features/automation-wire`), so a trigger kind added later is a
+ * (`@luke/features/automation-wire`), so a trigger kind added later is a
  * member of that JSON rather than a column. Two things are columns because a
  * statement reads them: `trigger_kind`, which a GitHub delivery finds its
  * automations by, and `next_run_at`, the instant a schedule is next due,
@@ -52,9 +52,9 @@ export const automation = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    organizationId: text("organization_id").references(() => organization.id, {
-      onDelete: "cascade",
-    }),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
     scope: text("scope").$type<AutomationScope>().notNull().default(AUTOMATION_SCOPE.PERSONAL),
     planId: uuid("plan_id").references(() => plan.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
@@ -88,7 +88,7 @@ export const automation = pgTable(
     index("automation_user_created").on(table.userId, table.createdAt),
     // The sweep claims the schedules due, soonest first.
     index("automation_next_run").on(table.nextRunAt).where(sql`${table.nextRunAt} is not null`),
-    // A delivery finds the automations of its trigger kind on the plans of its repository.
+    // A delivery finds the automations of its trigger kind, then reads each one's repositories.
     index("automation_trigger_plan").on(table.triggerKind, table.planId),
     // A workspace's automations, each scope newest first.
     index("automation_org_scope_created").on(table.organizationId, table.scope, table.createdAt),
@@ -101,7 +101,9 @@ export const automation = pgTable(
  * a schedule claimed twice, a webhook GitHub delivers again, or a caller's
  * retry under the same key records one run: the due instant for a
  * schedule, GitHub's delivery id for an event, the caller's idempotency key
- * for a webhook or a "Run now". The status is the firing's; how the agent it
+ * for a webhook or a "Run now". A webhook's body is kept beside it as
+ * `payload`, since the sweep that starts the run's agent comes after the
+ * request that brought it. The status is the firing's; how the agent it
  * started is doing is the agent's own, read through `coding_agent_id`,
  * which goes null where the agent is deleted while the run stays in the
  * history. The row goes with its automation.
@@ -118,6 +120,8 @@ export const automationRun = pgTable(
       .references(() => user.id, { onDelete: "cascade" }),
     dedupeKey: text("dedupe_key").notNull(),
     firing: jsonb("firing").$type<AutomationFiring>().notNull(),
+    /** A webhook firing's body as its caller sent it, bounded, for the agent's prompt; null for every other firing. */
+    payload: text("payload"),
     status: text("status").$type<AutomationRunStatus>().notNull(),
     /** Why it was skipped or failed; null while queued and once started. */
     reason: text("reason").$type<AutomationRunReason>(),
@@ -128,6 +132,22 @@ export const automationRun = pgTable(
     firedAt: timestamptz("fired_at").notNull(),
     /** When it was started, skipped, or failed; null while queued. */
     settledAt: timestamptz("settled_at"),
+    /**
+     * The agent a run of an automation that hands every run to the same
+     * agent was claimed to send its task to, as it was at the claim, so the
+     * run is recovered by that agent's line whatever the automation names
+     * since; null for any other run, and once that agent is deleted.
+     */
+    claimedAgentId: uuid("claimed_agent_id").references(() => codingAgent.id, {
+      onDelete: "set null",
+    }),
+    /**
+     * When the sweep settled what becomes of the agent a run started for an
+     * automation that archives its successful runs: archived once it
+     * finished well, or left standing for good as failed, stopped, or put
+     * away by hand; null until then, and for every other run.
+     */
+    archiveSettledAt: timestamptz("archive_settled_at"),
   },
   (table) => [
     // One run per firing: a second claim of the same firing finds this row.

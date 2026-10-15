@@ -7,7 +7,7 @@ applied on a Mac to the release commit, built, and run as
 electron . --user-data-dir=$(mktemp -d) --fixture smoke --profile shot-<name>
 ```
 
-Each `--profile shot-*` (see `RUN_PROFILE` in `src/shared/messages/app-state.ts`)
+Each `--profile shot-*` (see `RUN_PROFILE` in `packages/host/src/app-state.ts`)
 stages one shot of `.context/shots/SPEC.md`. Only a fixture run stages one.
 
 ## How a shot is staged

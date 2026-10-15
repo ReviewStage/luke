@@ -1,36 +1,36 @@
 import assert from "node:assert/strict";
-import { Database, type DatabaseServices } from "@sidecar/database/core/query";
-import { sqlClientOverUrl } from "@sidecar/database/core/sql-client";
-import { type CodingAgent, createCodingAgent } from "@sidecar/database/models/coding-agent-store";
-import { childConversationId, hostTurnId } from "@sidecar/database/models/ids";
-import { user } from "@sidecar/database/schemas/auth";
-import { conversations } from "@sidecar/database/schemas/storage";
-import { CODING_AGENT_TODO_STATUS } from "@sidecar/features/coding-agent-wire";
-import { EXCESS_KEYS } from "@sidecar/wire";
-import { readEither } from "@sidecar/wire/effect";
-import { isTextUIPart, isToolUIPart } from "ai";
-import { eq } from "drizzle-orm";
-import { Effect, ManagedRuntime, Option, Result, Schema } from "effect";
-import { defineEval } from "eve/evals";
-import {
-  MESSAGE_AUTHOR,
-  MESSAGE_CHANNEL,
-  MESSAGE_ROLE,
-  TOOL_PART_STATE,
-  TURN_ORIGIN,
-  TURN_STATUS,
-  unparsedWire,
-} from "../../server/core";
-import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "../../server/hosted/brain-host/bounds";
-import { CODER_MODEL_FIXTURE } from "../../server/hosted/coder-host/bounds";
-import { TODOS_SAVED } from "../../server/hosted/coder-host/todos";
-import { CODER_TOOL } from "../../server/hosted/coder-host/tool-set";
+import { Database, type DatabaseServices } from "@luke/database/core/query";
+import { sqlClientOverUrl } from "@luke/database/core/sql-client";
+import { type CodingAgent, createCodingAgent } from "@luke/database/models/coding-agent-store";
+import { childConversationId, hostTurnId } from "@luke/database/models/ids";
+import { user } from "@luke/database/schemas/auth";
+import { conversations } from "@luke/database/schemas/storage";
 import {
   readMessagesByConversationTyped,
   readTurnById,
   readTurnsByConversation,
-} from "../../tests/support/store-rows";
-import { startPlan } from "../../tests/support/workspaces";
+  startPlan,
+} from "@luke/database/testing";
+import { CODING_AGENT_TODO_STATUS } from "@luke/features/coding-agent-wire";
+import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "@luke/service/agents/brain-host/bounds";
+import { CODER_MODEL_FIXTURE } from "@luke/service/agents/coder-host/bounds";
+import { TODOS_SAVED } from "@luke/service/agents/coder-host/todos";
+import { CODER_TOOL } from "@luke/service/agents/coder-host/tool-set";
+import {
+  EXCESS_KEYS,
+  MESSAGE_AUTHOR,
+  MESSAGE_CHANNEL,
+  MESSAGE_ROLE,
+  TURN_ORIGIN,
+  TURN_STATUS,
+  unparsedWire,
+} from "@luke/wire";
+import { readEither } from "@luke/wire/effect";
+import { TOOL_PART_STATE } from "@luke/wire/ui-messages";
+import { isTextUIPart, isToolUIPart } from "ai";
+import { eq } from "drizzle-orm";
+import { Effect, ManagedRuntime, Option, Result, Schema } from "effect";
+import { defineEval } from "eve/evals";
 import {
   SCRIPTED_CODER_REPLY,
   SCRIPTED_DELEGATE,
@@ -125,7 +125,7 @@ function startAgent(run: Run, planId: string): Promise<CodingAgent> {
         model: "anthropic/claude-opus-5.5",
         effort: "high",
         planSnapshot: PLAN_SNAPSHOT,
-        task: null,
+        prompt: null,
         repository: REPOSITORY,
       }),
       (started) => {

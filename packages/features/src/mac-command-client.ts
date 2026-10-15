@@ -1,4 +1,4 @@
-import { HTTP_METHOD } from "@sidecar/wire";
+import { HTTP_METHOD } from "@luke/wire";
 import { Effect } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {

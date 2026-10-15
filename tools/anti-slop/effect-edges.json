@@ -11,6 +11,7 @@
     "apps/web/coder/hooks/store.ts",
     "apps/web/coder/host.ts",
     "apps/web/coder/instructions/prompt.ts",
+    "apps/web/coder/runtime.ts",
     "apps/web/coder/sandbox.ts",
     "apps/web/eve/agent.ts",
     "apps/web/eve/channels/eve.ts",
@@ -18,20 +19,22 @@
     "apps/web/eve/host.ts",
     "apps/web/eve/instructions/prompt.ts",
     "apps/web/eve/instructions/seed.ts",
+    "apps/web/eve/runtime.ts",
     "apps/web/eve/tools/brain.ts",
     "apps/web/scripts/preview-probe.ts",
     "apps/web/server/db/migrate.ts",
     "apps/web/server/route-effect.ts",
     "apps/web/server/runtime.ts",
     "apps/web/server/seed-clients.ts",
+    "apps/web/server/terminal/function.ts",
     "apps/web/server/voice/function.ts",
     "tools/trace-export/src/cli.ts"
   ],
   "runShims": [
     "apps/web/coder/evals/coder.eval.ts",
     "apps/web/eve/evals/brain-host.eval.ts",
-    "apps/web/tests/support/hosted-store-database.ts",
-    "apps/web/tests/support/no-database.ts",
+    "packages/database/src/testing/hosted-store-database.ts",
+    "packages/database/src/testing/no-database.ts",
     "packages/database/src/testing/sql-client.ts",
     "packages/host/src/host-kernel.ts",
     "packages/runtime/src/effect/single-flight.ts",
@@ -39,7 +42,7 @@
   ],
   "runOnHandedRuntime": [
     "apps/desktop/src/main/app-state.ts",
-    "apps/desktop/src/main/update-service.ts",
+    "packages/host/src/update-service.ts",
     "packages/voice/src/orchestrator/live-voice-orchestrator.ts"
   ],
   "rawAsyncPrimitives": [
@@ -53,6 +56,6 @@
     "apps/desktop/src/renderer/sign-in-gate.tsx",
     "apps/desktop/src/renderer/use-caption-presentation.ts",
     "apps/web/src/admin/use-admin-read.ts",
-    "apps/web/tests/support/voice-fakes.ts"
+    "packages/service/src/testing/voice-fakes.ts"
   ]
 }

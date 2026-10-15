@@ -1,4 +1,4 @@
-import type { GitHubConnection } from "@sidecar/features/github-connection-wire";
+import type { GitHubConnection } from "@luke/features/github-connection-wire";
 import { createContext, useContext } from "react";
 
 /**

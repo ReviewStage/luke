@@ -1,5 +1,5 @@
-/** The code extension's `apply_patch`, its paths resolved from the agent's checkout (`server/hosted/coder-host/files.ts`). */
-import { CODER } from "../../server/hosted/coder-host/bounds.js";
-import { applyPatchIn } from "../../server/hosted/coder-host/files.js";
+/** The code extension's `apply_patch`, its paths resolved from the agent's checkout (`packages/service/src/agents/coder-host/files.ts`). */
+import { CODER } from "@luke/service/agents/coder-host/bounds";
+import { applyPatchIn } from "@luke/service/agents/coder-host/files";
 
 export default applyPatchIn(CODER.CHECKOUT_PATH);

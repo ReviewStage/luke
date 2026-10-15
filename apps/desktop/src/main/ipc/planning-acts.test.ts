@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { WORKSPACE_CALL_FAILURE } from "@sidecar/features";
-import { CODING_AGENT_CALL_FAILURE } from "@sidecar/features/coding-agent-view";
-import { PLAN_FILE_REFUSAL } from "@sidecar/features/plan-wire";
+import { WORKSPACE_CALL_FAILURE } from "@luke/features";
+import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
+import { PLAN_FILE_REFUSAL } from "@luke/features/plan-wire";
 import {
   GITHUB_DISCONNECT_FAILURE,
   PLAN_CALL_FAILURE,
@@ -10,11 +10,9 @@ import {
   type PlanningGitHubPageAnswer,
   type PlanningStartAnswer,
   type PlanningWorkspaceGitHubConnectAnswer,
-} from "@sidecar/features/planning-view";
-import { WORKSPACE_ROLE } from "@sidecar/features/workspace-wire";
-import { highlightSnippet } from "@sidecar/host";
-import { Effect } from "effect";
-import type { WebContents } from "electron";
+} from "@luke/features/planning-view";
+import { WORKSPACE_PHOTO_TYPE, WORKSPACE_ROLE } from "@luke/features/workspace-wire";
+import { highlightSnippet } from "@luke/host";
 import {
   ACT,
   ACT_KIND,
@@ -22,7 +20,9 @@ import {
   ALREADY_INVITED_REFUSAL,
   GITHUB_LAST_SIGN_IN_REFUSAL,
   WORKSPACE_NOT_PERMITTED_REFUSAL,
-} from "#shared/messages/acts";
+} from "@luke/host/acts";
+import { Effect } from "effect";
+import type { WebContents } from "electron";
 import { type ActRows, type ActSender, createActRouter } from "../act-router";
 import { planningActRows } from "./planning-acts";
 
@@ -42,9 +42,12 @@ const INVITATION = {
   acceptUrl: "https://luke.test/accept-invitation.html?id=inv-1",
 };
 const INSTALL_URL = "https://github.com/apps/luke/installations/new?state=intent-1";
+/** A workspace's photo as the window sends it: a WebP's `data:` URL. */
+const PHOTO_URL = "data:image/webp;base64,UklGRgAAAABXRUJQ";
 const ACME = {
   id: "workspace-acme",
   name: "acme",
+  slug: "acme",
   role: WORKSPACE_ROLE.MEMBER,
   github: { login: "acme", active: true },
 };
@@ -228,6 +231,17 @@ function fixture() {
           asked.push(`create:${params.name}`);
           return host.notPermitted ? refusal() : { workspace: { ...ACME, name: params.name } };
         }),
+      workspaceRename: (params) =>
+        Effect.sync(() => {
+          asked.push(`rename:${params.workspaceId}:${params.name}`);
+          return host.notPermitted ? refusal() : { workspace: { ...ACME, name: params.name } };
+        }),
+      workspacePhotoSet: (params) =>
+        Effect.sync(() => {
+          asked.push(`photoSet:${params.workspaceId}:${params.photo ?? "none"}`);
+          if (host.notPermitted) return refusal();
+          return { workspace: params.photo === null ? ACME : { ...ACME, photoVersion: "v2" } };
+        }),
       workspaceGitHubConnect: (params) =>
         Effect.sync((): PlanningWorkspaceGitHubConnectAnswer => {
           asked.push(`connect:${params.workspaceId}`);
@@ -243,10 +257,29 @@ function fixture() {
           asked.push(`members:${params.workspaceId}`);
           return params.workspaceId === ACME.id ? { members: [GRACE] } : refusal();
         }),
+      workspacePhoto: (params) =>
+        Effect.sync(() => {
+          asked.push(`photo:${params.workspaceId}`);
+          return params.workspaceId === ACME.id
+            ? { contentType: WORKSPACE_PHOTO_TYPE.PNG, base64: "iVBORw0KGgo=" }
+            : ({ failure: WORKSPACE_CALL_FAILURE.NOT_FOUND } as const);
+        }),
       workspaceMemberRemove: (params) =>
         Effect.sync(() => {
           asked.push(`remove:${params.workspaceId}:${params.userId}`);
           return host.notPermitted ? refusal() : { members: [] };
+        }),
+      workspaceMemberRole: (params) =>
+        Effect.sync(() => {
+          asked.push(`role:${params.workspaceId}:${params.userId}:${params.role}`);
+          return host.notPermitted ? refusal() : { members: [{ ...GRACE, role: params.role }] };
+        }),
+      workspaceTransfer: (params) =>
+        Effect.sync(() => {
+          asked.push(`transfer:${params.workspaceId}:${params.userId}`);
+          return host.notPermitted
+            ? refusal()
+            : { members: [{ ...GRACE, role: WORKSPACE_ROLE.OWNER }] };
         }),
       workspaceLeave: (params) =>
         Effect.sync(() => {
@@ -455,6 +488,18 @@ it.effect(
         { kind: ACT_KIND.WORKSPACE_CREATE, payload: { name: "Relay Labs" } },
         PANEL,
       );
+      const renamed = yield* f.router.performAct(
+        { kind: ACT_KIND.WORKSPACE_RENAME, payload: { ...workspace, name: "  Acme Labs " } },
+        PANEL,
+      );
+      const photographed = yield* f.router.performAct(
+        { kind: ACT_KIND.WORKSPACE_PHOTO_SET, payload: { ...workspace, photo: PHOTO_URL } },
+        PANEL,
+      );
+      const unphotographed = yield* f.router.performAct(
+        { kind: ACT_KIND.WORKSPACE_PHOTO_SET, payload: { ...workspace, photo: null } },
+        PANEL,
+      );
       const connected = yield* f.router.performAct(
         { kind: ACT_KIND.WORKSPACE_GITHUB_CONNECT, payload: workspace },
         PANEL,
@@ -484,6 +529,15 @@ it.effect(
         status: ACT_OUTCOME_STATUS.DONE,
         value: { ...ACME, name: "Relay Labs" },
       });
+      assert.deepEqual(renamed, {
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: { ...ACME, name: "Acme Labs" },
+      });
+      assert.deepEqual(photographed, {
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: { ...ACME, photoVersion: "v2" },
+      });
+      assert.deepEqual(unphotographed, { status: ACT_OUTCOME_STATUS.DONE, value: ACME });
       assert.equal(connected.status, ACT_OUTCOME_STATUS.DONE);
       assert.equal(disconnected.status, ACT_OUTCOME_STATUS.DONE);
       assert.deepEqual(members, { status: ACT_OUTCOME_STATUS.DONE, value: [GRACE] });
@@ -492,6 +546,9 @@ it.effect(
       assert.equal(fromVoice.status, ACT_OUTCOME_STATUS.REFUSED);
       assert.deepEqual(f.asked, [
         "create:Relay Labs",
+        `rename:${ACME.id}:Acme Labs`,
+        `photoSet:${ACME.id}:${PHOTO_URL}`,
+        `photoSet:${ACME.id}:none`,
         `connect:${ACME.id}`,
         `disconnect:${ACME.id}`,
         `members:${ACME.id}`,
@@ -499,6 +556,90 @@ it.effect(
         `leave:${ACME.id}`,
       ]);
       assert.deepEqual(f.opened, [INSTALL_URL]);
+    }),
+);
+
+it.effect(
+  "a member's role is changed and a workspace handed over through the host from a panel alone, each answered with the members, and one the account's role does not allow is refused in words that say so",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const role = {
+        kind: ACT_KIND.WORKSPACE_MEMBER_ROLE,
+        payload: { workspaceId: ACME.id, userId: GRACE.userId, role: WORKSPACE_ROLE.ADMIN },
+      } as const;
+      const transfer = {
+        kind: ACT_KIND.WORKSPACE_TRANSFER,
+        payload: { workspaceId: ACME.id, userId: GRACE.userId },
+      } as const;
+
+      const changed = yield* f.router.performAct(role, PANEL);
+      const handedOver = yield* f.router.performAct(transfer, PANEL);
+      const fromVoice = yield* Effect.all([
+        f.router.performAct(role, VOICE),
+        f.router.performAct(transfer, VOICE),
+      ]);
+      f.host.notPermitted = true;
+      const refused = yield* Effect.all([
+        f.router.performAct(role, PANEL),
+        f.router.performAct(transfer, PANEL),
+      ]);
+
+      assert.deepEqual(changed, {
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: [{ ...GRACE, role: WORKSPACE_ROLE.ADMIN }],
+      });
+      assert.deepEqual(handedOver, {
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: [{ ...GRACE, role: WORKSPACE_ROLE.OWNER }],
+      });
+      assert.deepEqual(fromVoice, [
+        { status: ACT_OUTCOME_STATUS.REFUSED, reason: ACT[ACT_KIND.WORKSPACE_MEMBER_ROLE].refusal },
+        { status: ACT_OUTCOME_STATUS.REFUSED, reason: ACT[ACT_KIND.WORKSPACE_TRANSFER].refusal },
+      ]);
+      const notPermitted = {
+        status: ACT_OUTCOME_STATUS.REFUSED,
+        reason: WORKSPACE_NOT_PERMITTED_REFUSAL,
+      };
+      assert.deepEqual(refused, [notPermitted, notPermitted]);
+      assert.deepEqual(f.asked, [
+        `role:${ACME.id}:${GRACE.userId}:${WORKSPACE_ROLE.ADMIN}`,
+        `transfer:${ACME.id}:${GRACE.userId}`,
+        `role:${ACME.id}:${GRACE.userId}:${WORKSPACE_ROLE.ADMIN}`,
+        `transfer:${ACME.id}:${GRACE.userId}`,
+      ]);
+    }),
+);
+
+it.effect(
+  "a workspace's photo is read through the host from a panel, its absence answered rather than refused, and never from the voice window",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+
+      const read = yield* f.router.performAct(
+        { kind: ACT_KIND.WORKSPACE_PHOTO_READ, payload: { workspaceId: ACME.id } },
+        PANEL,
+      );
+      const none = yield* f.router.performAct(
+        { kind: ACT_KIND.WORKSPACE_PHOTO_READ, payload: { workspaceId: "workspace-plain" } },
+        PANEL,
+      );
+      const fromVoice = yield* f.router.performAct(
+        { kind: ACT_KIND.WORKSPACE_PHOTO_READ, payload: { workspaceId: ACME.id } },
+        VOICE,
+      );
+
+      assert.deepEqual(read, {
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: { contentType: WORKSPACE_PHOTO_TYPE.PNG, base64: "iVBORw0KGgo=" },
+      });
+      assert.deepEqual(none, {
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: { failure: WORKSPACE_CALL_FAILURE.NOT_FOUND },
+      });
+      assert.equal(fromVoice.status, ACT_OUTCOME_STATUS.REFUSED);
+      assert.deepEqual(f.asked, [`photo:${ACME.id}`, "photo:workspace-plain"]);
     }),
 );
 
@@ -585,6 +726,14 @@ it.effect(
           PANEL,
         ),
         f.router.performAct({ kind: ACT_KIND.WORKSPACE_LEAVE, payload: workspace }, PANEL),
+        f.router.performAct(
+          { kind: ACT_KIND.WORKSPACE_RENAME, payload: { ...workspace, name: "Acme Labs" } },
+          PANEL,
+        ),
+        f.router.performAct(
+          { kind: ACT_KIND.WORKSPACE_PHOTO_SET, payload: { ...workspace, photo: null } },
+          PANEL,
+        ),
       ]);
       f.host.notPermitted = false;
       const unread = yield* f.router.performAct(
@@ -596,7 +745,14 @@ it.effect(
         status: ACT_OUTCOME_STATUS.REFUSED,
         reason: WORKSPACE_NOT_PERMITTED_REFUSAL,
       };
-      assert.deepEqual(refusedNow, [notPermitted, notPermitted, notPermitted, notPermitted]);
+      assert.deepEqual(refusedNow, [
+        notPermitted,
+        notPermitted,
+        notPermitted,
+        notPermitted,
+        notPermitted,
+        notPermitted,
+      ]);
       assert.deepEqual(unread, {
         status: ACT_OUTCOME_STATUS.REFUSED,
         reason: ACT[ACT_KIND.WORKSPACE_MEMBERS_READ].refusal,

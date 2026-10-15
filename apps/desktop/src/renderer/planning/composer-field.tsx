@@ -1,7 +1,7 @@
+import { cn } from "@luke/ui";
 import { type ReactNode, type RefObject, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { PROMPT_INPUT_FIELD_CLASS } from "../ai-elements/prompt-input";
-import { cn } from "../ai-elements/utils";
 import type {
   ComposerChip,
   ComposerEditorHandle,
@@ -54,6 +54,8 @@ interface DrawnChip {
 export interface ComposerFieldMentions {
   readonly onTrigger: (trigger: ComposerTrigger | undefined) => void;
   readonly chip: (mention: MentionNode) => ReactNode;
+  /** The mention words pasted whole stand for; nothing for words that paste as words. */
+  readonly pasted: (words: string) => MentionNode | undefined;
 }
 
 export function ComposerField({
@@ -153,6 +155,7 @@ export function ComposerField({
           : {
               onTrigger: (trigger) => latest.current.mentions?.onTrigger(trigger),
               drawMention: (element, mention) => draw(element, { mention }),
+              pasted: (words) => latest.current.mentions?.pasted(words),
             },
     });
     editor.current = mounted;

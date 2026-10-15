@@ -1,15 +1,16 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import type { AccountInboxEntry } from "@sidecar/features/account-inbox-wire";
-import { CODING_AGENT_CALL_FAILURE } from "@sidecar/features/coding-agent-view";
+import type { AccountInboxEntry } from "@luke/features/account-inbox-wire";
+import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import {
   CHANGED_FILE_STATUS,
   CHECK_SUMMARY,
   CODING_AGENT_CURSOR_START,
   CODING_AGENT_STATUS,
+  type CodingAgentPage,
   type CodingAgentSummary,
   PULL_REQUEST_STATE,
-} from "@sidecar/features/coding-agent-wire";
+} from "@luke/features/coding-agent-wire";
 import {
   INBOX_CURSOR_START,
   INBOX_IMAGE_TYPE,
@@ -18,21 +19,21 @@ import {
   INBOX_STATUS,
   INBOX_WIRE_VERSION,
   type InboxItem,
-} from "@sidecar/features/inbox-wire";
-import { INTEGRATION_PROVIDER } from "@sidecar/features/integration-wire";
-import { MODEL_PROVIDER } from "@sidecar/features/models-wire";
+} from "@luke/features/inbox-wire";
+import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import {
   DEFAULT_PLAN_TEMPLATE,
   type PlanTemplateRevisionLine,
-} from "@sidecar/features/plan-document-template";
-import { PLAN_ACTOR } from "@sidecar/features/plan-wire";
+} from "@luke/features/plan-document-template";
+import { PLAN_ACTOR } from "@luke/features/plan-wire";
 import {
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_STATUS,
   type ProviderKeySummary,
-} from "@sidecar/features/provider-key-wire";
-import { GATEWAY_CLIENT_ROLE, GATEWAY_METHOD, type GatewayMethod } from "@sidecar/gateway";
-import type { WireRecord } from "@sidecar/wire";
+} from "@luke/features/provider-key-wire";
+import { GATEWAY_CLIENT_ROLE, GATEWAY_METHOD, type GatewayMethod } from "@luke/gateway";
+import type { WireRecord } from "@luke/wire";
 import { Effect } from "effect";
 import { type CodingAgentClient, composeCodingAgents } from "./compose-coding-agents.js";
 
@@ -56,6 +57,15 @@ const AGENT: CodingAgentSummary = {
   createdAt: 1_800_000_000_000,
   status: CODING_AGENT_STATUS.RUNNING,
   turnId: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32",
+};
+
+/** The agent as its own page reads it, with no plan, as an automation's run leaves one. */
+const PAGE: CodingAgentPage = {
+  ...AGENT,
+  planId: null,
+  automationId: "5a0c4d2e-8f1b-4c3a-9e7d-2b6f1a8c9d04",
+  workspaceId: "workspace-1",
+  repository: "acme/relay",
 };
 
 const MODELS = [
@@ -171,6 +181,11 @@ function fakeService() {
         asked.push(includeArchived === true ? `list:${planId}:archived` : `list:${planId}`);
         return { agents: [AGENT] };
       }),
+    listWorkspace: ({ workspaceId, repository }) =>
+      Effect.sync(() => {
+        asked.push(`workspace:${workspaceId}:${repository ?? "any"}`);
+        return { agents: [AGENT] };
+      }),
     start: (planId, request) =>
       Effect.sync(() => {
         asked.push(`start:${planId}:${request.idempotencyKey}:${request.model ?? "default"}`);
@@ -220,6 +235,16 @@ function fakeService() {
       Effect.sync(() => {
         asked.push(`archive:${agentId}:${String(request.archived)}`);
         return { agent: { ...AGENT, archivedAt: 1_800_000_120_000 } };
+      }),
+    agent: (agentId) =>
+      Effect.sync(() => {
+        asked.push(`page:${agentId}`);
+        return { agent: PAGE };
+      }),
+    agentInbox: (agentId, after) =>
+      Effect.sync(() => {
+        asked.push(`agent-inbox:${agentId}:${after}`);
+        return { items: [ITEM], cursor: "8" };
       }),
     pullRequest: (agentId) =>
       Effect.sync(() => {
@@ -359,6 +384,13 @@ it.effect("each method asks the service once and answers what it said, whole", (
       { agents: [AGENT] },
     );
     assert.deepEqual(
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_WORKSPACE_LIST, {
+        workspaceId: "workspace-1",
+        repository: "acme/relay",
+      }),
+      { agents: [AGENT] },
+    );
+    assert.deepEqual(
       yield* call(GATEWAY_METHOD.CODING_AGENTS_START, {
         planId: PLAN_ID,
         idempotencyKey: "press-1",
@@ -427,6 +459,16 @@ it.effect("each method asks the service once and answers what it said, whole", (
       yield* call(GATEWAY_METHOD.CODING_AGENTS_ARCHIVE, { agentId: AGENT_ID, archived: true }),
       { agent: { ...AGENT, archivedAt: 1_800_000_120_000 } },
     );
+    assert.deepEqual(yield* call(GATEWAY_METHOD.CODING_AGENTS_PAGE, { agentId: AGENT_ID }), {
+      agent: PAGE,
+    });
+    assert.deepEqual(
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_AGENT_INBOX, {
+        agentId: AGENT_ID,
+        after: INBOX_CURSOR_START,
+      }),
+      { items: [ITEM], cursor: "8" },
+    );
     assert.deepEqual(
       yield* call(GATEWAY_METHOD.CODING_AGENTS_PULL_REQUEST, { agentId: AGENT_ID }),
       PUBLISHED,
@@ -479,6 +521,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
       "default:openai/gpt-6.1-sol:xhigh",
       `list:${PLAN_ID}`,
       `list:${PLAN_ID}:archived`,
+      "workspace:workspace-1:acme/relay",
       `start:${PLAN_ID}:press-1:default`,
       `messages:${AGENT_ID}:${CODING_AGENT_CURSOR_START}`,
       `worker:${AGENT_ID}:call-7:${CODING_AGENT_CURSOR_START}`,
@@ -488,6 +531,8 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `servers:${AGENT_ID}:linear`,
       `stop:${AGENT_ID}`,
       `archive:${AGENT_ID}:true`,
+      `page:${AGENT_ID}`,
+      `agent-inbox:${AGENT_ID}:${INBOX_CURSOR_START}`,
       `pull-request:${AGENT_ID}`,
       `changes:${AGENT_ID}`,
       `inbox:${PLAN_ID}:${INBOX_CURSOR_START}`,

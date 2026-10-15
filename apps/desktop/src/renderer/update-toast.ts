@@ -9,9 +9,9 @@
  * window drawn again while main still reports it says nothing twice.
  */
 
+import { ACT_KIND } from "@luke/host/acts";
+import { UPDATE_STATUS, type UpdateSnapshot } from "@luke/settings/update";
 import { useEffect } from "react";
-import { ACT_KIND } from "#shared/messages/acts";
-import { UPDATE_STATUS, type UpdateSnapshot } from "#shared/messages/update";
 import { useAct } from "./act";
 import { TOAST_TONE, useToast } from "./toast";
 

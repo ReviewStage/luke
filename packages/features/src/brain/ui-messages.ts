@@ -1,4 +1,4 @@
-import type { ReasoningSummary, ToolInvocation } from "@sidecar/runtime/vocabulary";
+import type { ReasoningSummary, ToolInvocation } from "@luke/runtime/vocabulary";
 import {
   type AssistantMessageMetadata,
   MESSAGE_AUTHOR,
@@ -7,8 +7,8 @@ import {
   OBSERVATION_SOURCE,
   type UnparsedWireValue,
   type UserMessageMetadata,
-} from "@sidecar/wire";
-import { TOOL_PART_STATE } from "@sidecar/wire/ui-messages";
+} from "@luke/wire";
+import { TOOL_PART_STATE } from "@luke/wire/ui-messages";
 import type {
   ReasoningUIPart,
   StepStartUIPart,
@@ -23,7 +23,7 @@ import { BRAIN_TURN_TRIGGER, type BrainTurnTrigger } from "./turn.js";
 
 /**
  * A turn's messages in the AI SDK's `UIMessage` shape, under the storage
- * vocabulary `@sidecar/wire` and `@sidecar/wire/ui-messages` declare for a stored row:
+ * vocabulary `@luke/wire` and `@luke/wire/ui-messages` declare for a stored row:
  * the words the turn was handed as user messages, each carrying the metadata
  * its role's schema names where this build has a shape for it, and the
  * model's answer as one assistant message whose parts are its reasoning

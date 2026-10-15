@@ -3,8 +3,8 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
+import { BRAND_ASSETS_DIRECTORY } from "@luke/brand/assets-directory";
 import { sentryEsbuildPlugin } from "@sentry/esbuild-plugin";
-import { BRAND_ASSETS_DIRECTORY } from "@sidecar/brand/assets-directory";
 import { build } from "esbuild";
 import { signingModeDefine } from "./package-config.mjs";
 import { tailwindPlugin } from "./tailwind.mjs";
@@ -50,6 +50,23 @@ const excalidrawTrim = {
   },
 };
 
+// The HTML parser Streamdown draws every reply through, `rehype-raw` and
+// parse5 under it, loaded after the panel's first paint rather than parsed
+// with the bundle every window opens with: Streamdown's own import of it is
+// answered with the module that loads it on demand
+// (`src/renderer/markdown-html-parser.ts`), whose `import()` of the library
+// the splitting below makes a chunk of its own. `vitest.config.ts` answers
+// the import the same way, so the tests draw what the panel draws.
+const MARKDOWN_HTML_PARSER = path.join(appRoot, "src/renderer/markdown-html-parser.ts");
+const markdownHtmlParserOnDemand = {
+  name: "markdown-html-parser-on-demand",
+  setup(build) {
+    build.onResolve({ filter: /^rehype-raw$/ }, (args) =>
+      args.importer === MARKDOWN_HTML_PARSER ? undefined : { path: MARKDOWN_HTML_PARSER },
+    );
+  },
+};
+
 // Excalidraw's fonts, copied beside the whiteboard bundle so the panel loads
 // nothing from the network. Xiaolai is left out: it is 13 MB of CJK glyphs,
 // and the system's own font draws those characters instead.
@@ -60,7 +77,7 @@ const EXCALIDRAW_FONTS = path.join(
 const EXCALIDRAW_FONTS_LEFT_OUT = new Set(["Xiaolai"]);
 
 // The commit the bundle is cut from, which Settings › Updates names
-// (`src/main/build-commit.ts`): the short SHA, whether the tree held
+// (`@luke/host`'s `build-commit.ts`): the short SHA, whether the tree held
 // uncommitted changes (a new file the bundle may carry counts too), and the
 // branch unless the head is detached, as a tag's checkout is. A build made
 // where git cannot answer stamps none.
@@ -147,7 +164,7 @@ const rendererBuild = build({
   target: "chrome140",
   jsx: "automatic",
   minify: true,
-  plugins: sentryPlugins(),
+  plugins: [markdownHtmlParserOnDemand, ...sentryPlugins()],
   sourcemap: true,
   logLevel: "info",
   define: {
@@ -177,7 +194,7 @@ await Promise.all([
       PACKAGED_BUILD_COMMIT: JSON.stringify(buildCommit()),
       // Whether this bundle rides in a Developer ID release, which is what
       // decides the name — and so the state directory and Keychain entry —
-      // the run answers to; see app-identity.ts.
+      // the run answers to; see `@luke/host`'s app-identity.ts.
       ...signingModeDefine(process.env),
     },
     sourcemap: true,
@@ -307,7 +324,7 @@ await Promise.all([
   // The avatar feed's AudioWorklet, its own bundle because a worklet loads a
   // module by URL into a scope of its own on the audio thread; the voice
   // window adds it from beside `voice.html`, whose `script-src 'self'` is the
-  // policy a worklet module answers to (`src/renderer/avatar-feed/contract.ts`).
+  // policy a worklet module answers to (`@luke/voice/avatar-pcm`).
   build({
     entryPoints: [path.join(appRoot, "src/renderer/avatar-feed/pcm-tee-worklet.ts")],
     outfile: path.join(outputRoot, "renderer/pcm-tee-worklet.js"),
@@ -322,7 +339,7 @@ await Promise.all([
   // A call's avatar, its own bundle so the bundle every window parses never
   // carries Keyframe's SDK or the LiveKit client under it; the panel
   // loads it the first time an avatar is shown
-  // (`src/renderer/avatar-session/contract.ts`).
+  // (`@luke/ui/avatar-session-contract`).
   build({
     entryPoints: [path.join(appRoot, "src/renderer/avatar-session/index.ts")],
     outfile: path.join(outputRoot, "renderer/avatar-session.js"),

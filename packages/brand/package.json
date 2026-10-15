@@ -1,14 +1,14 @@
 {
-  "name": "@sidecar/brand",
+  "name": "@luke/brand",
   "version": "0.13.0",
   "private": true,
   "type": "module",
+  "description": "Luke's brand: the design sources, the generators, and the generated art, motion tokens, and geometry",
   "exports": {
     ".": "./src/index.js",
     "./assets-directory": "./scripts/assets-directory.mjs",
     "./dmg-window": "./scripts/dmg-window.mjs",
-    "./motion-tokens.css": "./src/generated/motion-tokens.css",
-    "./react-css": "./src/react-css.js"
+    "./motion-tokens.css": "./src/generated/motion-tokens.css"
   },
   "types": "./src/index.ts",
   "scripts": {
@@ -18,7 +18,6 @@
   },
   "devDependencies": {
     "@types/node": "catalog:",
-    "@types/react": "19.2.18",
     "typescript": "catalog:"
   }
 }

@@ -8,8 +8,8 @@
  * posted, its buffer transferred, and the gate runs on the window's thread.
  */
 
-import { PCM_TEE } from "./contract";
-import { createPcmChunker } from "./pcm";
+import { PCM_TEE } from "@luke/voice/avatar-pcm";
+import { createPcmChunker } from "@luke/voice/avatar-pcm-chunker";
 
 // The worklet scope's globals, which the DOM library does not declare.
 declare class AudioWorkletProcessor {

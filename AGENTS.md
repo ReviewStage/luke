@@ -1,7 +1,7 @@
 # Agent guide
 
-Luke is a macOS Electron app for planning a feature by voice: the developer
-talks a plan through with Luke, who writes it down as they go.
+Luke is a macOS Electron app for working through a task by voice: the
+developer talks a task through with Luke, who writes its plan down as they go.
 
 ## Commands
 
@@ -20,6 +20,25 @@ CI runs the portable check on Linux alone. The release rehearsal
 is the only Mac gate, so a green PR says nothing about the Mac and there is no
 macOS check to wait for.
 
+## Layout
+
+Application logic lives in `packages/`. An app holds what is specific to
+its platform or deployment and nothing else: Electron's main and preload
+processes, the window and page roots, the Vercel function routes under
+`apps/web/server/routes/`, the deployment shell beside them, the two eve
+service roots, and build and release scripts. A React component, hook, or
+DOM-free view model lives in `packages/ui` when more than one app can
+mount it, the hosted service's logic in `packages/service`, its contract
+and clients in `packages/features`, and a wire value in `packages/wire`. A
+`.ts` module whose imports name no module of its app and no platform
+library (`electron`, `react-dom`, a DOM API, `better-auth`, `eve`,
+`@vercel/*`) is logic and belongs in a package. The logic-lives-in-packages
+check in `scripts/repository-checks.sh` refuses one under
+`apps/desktop/src`, `apps/web/src`, or `apps/web/server` unless it is shell:
+an app entry in `knip.json`, a `runtimeEdges` row in
+`tools/anti-slop/effect-edges.json`, or a deployment or test-support file
+the check names. A component is placed by review under the same rule.
+
 ## Never
 
 - Never let a credential or account secret enter a Gateway answer or event, the
@@ -30,7 +49,15 @@ macOS check to wait for.
   tool's events as it printed; a trace, a counted event, and a fixture still never
   carry it where that can be avoided. And an integration's MCP tool calls and
   results, a credential its provider answers among them, may reach the
-  conversation, the model, an agent's transcript, and its traces. And, approved
+  conversation, the model, an agent's transcript, and its traces. And, approved by
+  Dean on 2026-10-14, a Terminal tab's bytes go only to the tab that opened
+  them: through the terminal relay (`apps/web/server/terminal/`) and the host
+  to that panel's window, never into a trace, a counted event, a fixture, app
+  state, or the voice window. And, approved by Dean (automations D10), a webhook
+  body an automation's caller sends may reach that run's agent task, transcript
+  and traces. And, approved by Dean on 2026-10-15, an automation webhook secret
+  may be shown once, in the window that minted it, at creation or rotation;
+  never anywhere else. And, approved
   on 2026-10-13: the Keyframe session token for a call's own avatar may reach
   the panel window, which runs that session, and never the voice window,
   a Gateway answer or event, app state, a counted event, a trace, or a fixture.
@@ -48,7 +75,7 @@ macOS check to wait for.
 ## The scheduled sweep
 
 Vercel's cron calls `/api/maintenance/sweep` once a minute (`apps/web/vercel.json`;
-`apps/web/server/hosted/maintenance-sweep.ts`) under the deployment's own
+`packages/service/src/maintenance/maintenance-sweep.ts`) under the deployment's own
 `CRON_SECRET`, compared in constant time; a deployment missing that secret
 answers unavailable and sweeps nothing. Each call purges the conversations
 stamped deleted thirty days ago, settles as abandoned every turn still running
@@ -91,9 +118,9 @@ testing guide, and the rules below agree with it. Its `bunx vitest` is
 - Assert what a caller observes, never private state or call counts.
 - Use the shared builders before inline setup:
   `apps/web/tests/support/`, `packages/wire/src/testing/`, and
-  `temporaryDirectory` from `@sidecar/runtime/testing`.
+  `temporaryDirectory` from `@luke/runtime/testing`.
 - A test that needs a database provides `getTestDB()`
-  (`@sidecar/database/testing`), a migrated database of its own, and a query
+  (`@luke/database/testing`), a migrated database of its own, and a query
   over account rows tests that one user cannot read another's. A model or
   repository under `packages/database/src/` ships with a sibling
   `__tests__/<name>.test.ts` in the same PR.
@@ -154,15 +181,20 @@ reads it, the moment the root first reaches it, so the edge is here rather than
 at the root that imports it), the renderer's own fiber sites — the
 voice window's `apps/desktop/src/renderer/voice/live-call.ts` and
 `apps/desktop/src/renderer/voice/use-voice-session.ts` — the web's own
-module-scope memoized runtime `apps/web/server/runtime.ts` and the three doors
+module-scope memoized runtime `apps/web/server/runtime.ts` and the four doors
 that hold its `runWeb`: `apps/web/server/route-effect.ts` (the adaptor every
 function module under `apps/web/server/routes/**` exports its `HttpRouter`
 through, which reads that runtime once per instance and lets the handler it
 builds do its own running), `apps/web/server/voice/function.ts`
 (the voice service, stood for a function instance's life rather than for a
-request, so there is no request fiber to compose it into) and
+request, so there is no request fiber to compose it into),
+`apps/web/server/terminal/function.ts` (the terminal relay, stood for a
+function instance's life on the same terms) and
 `apps/web/server/seed-clients.ts` (the OAuth client seeding command, run as
-its own process), the eve project's authored files —
+its own process), each eve root's own module-scope memoized runtime,
+`apps/web/eve/runtime.ts` and `apps/web/coder/runtime.ts`, built over the
+same layer (`@luke/service/runtime`'s `webServices`) and holding its
+`runAgent`, the eve project's authored files —
 `apps/web/eve/agent.ts`, `apps/web/eve/channels/eve.ts`,
 `apps/web/eve/hooks/store.ts`, `apps/web/eve/instructions/prompt.ts`,
 `apps/web/eve/instructions/seed.ts`, and `apps/web/eve/tools/brain.ts` — each
@@ -181,9 +213,9 @@ there), each an edge because eve drives them through promise-shaped hooks of
 its own, and `apps/web/coder/host.ts`, the one module those files share their
 host through, composed with `Effect.runSync` as it loads for the same reason
 `apps/web/eve/host.ts` is. Not
-every seam under `apps/web/server/hosted/` is an effect down to its floor:
-`hosted/brain-host/production.ts`'s `spend` is
-the AI SDK's async middleware, and `hosted/brain-host/door.ts`'s
+every seam in `packages/service/src/` is an effect down to its floor:
+`packages/service/src/agents/brain-host/production.ts`'s `spend` is
+the AI SDK's async middleware, and `packages/service/src/agents/brain-host/door.ts`'s
 `SessionOwnership` speaks eve's own `AuthFn<Request>` — two promise-shaped
 foreign boundaries the effects around them compose over rather than
 replace, `apps/web/server/db/migrate.ts` (the migration command, through
@@ -195,8 +227,8 @@ any of them — which is where a `Runtime<R>` went, v4 having removed the type �
 belong nowhere else — everything between the edges returns an Effect and lets its caller
 decide — which the oxlint rule `no-run-promise-outside-edges` enforces against
 that same file's `runtimeEdges`, `runShims`, and `runOnHandedRuntime` lists,
-reading `apps/web/server/runtime.ts`'s own `runWeb` and `webRuntime` as the
-runs they are, so a module that holds the edge's runner rather than
+reading `apps/web/server/runtime.ts`'s own `runWeb` and `webRuntime`, and
+each eve root's `runAgent`, as the runs they are, so a module that holds the edge's runner rather than
 `Effect.runPromise` itself is no less visible to it;
 `no-raw-async-primitives` enforces the equivalent for `setTimeout`,
 `setInterval`, `new Promise`, `AbortController`, and `fs.watch` against its
@@ -230,16 +262,16 @@ PR that finishes the callers it was for, not left as a name on an allowlist.
   object, and the ordering those callers and this file's own tests depend on —
   a listener's patch is not lost, a re-announce lands before the caller's next
   statement — is what turning them into effects a caller awaits would give up.
-- **`apps/desktop/src/main/update-service.ts`** — synchronous Electron
+- **`packages/host/src/update-service.ts`** — synchronous Electron
   IPC/menu callers (start, check, install) bridge into fibers on the services
-  the launch handed them, on the same terms as `app-state.ts` beside it.
+  the launch handed them, on the same terms as the desktop's `app-state.ts`.
 - **`packages/voice/src/orchestrator/live-voice-orchestrator.ts`** — the notice
   strip's two clocks, armed from callbacks belonging to no fiber of their own,
   start on the services the orchestrator was constructed with; the standing
   call's lifecycle is a `forkDetach` and needs no door.
 - **The test-support edges** — `packages/database/src/testing/sql-client.ts`,
-  `apps/web/tests/support/no-database.ts`,
-  `apps/web/tests/support/hosted-store-database.ts`,
+  `packages/database/src/testing/no-database.ts`,
+  `packages/database/src/testing/hosted-store-database.ts`,
   `apps/web/eve/evals/brain-host.eval.ts`, `apps/web/coder/evals/coder.eval.ts`, and
   `packages/wire/src/testing/effect.ts` each build a runner (a
   `ManagedRuntime` over a throwaway database, a `SqlClient` that refuses every
@@ -249,10 +281,10 @@ PR that finishes the callers it was for, not left as a name on an allowlist.
 
 ### Vocabulary
 
-`SchemaRead` (`@sidecar/wire`) is the boundary result vocabulary a Schema
+`SchemaRead` (`@luke/wire`) is the boundary result vocabulary a Schema
 decode answers when the result crosses IPC or the wire — a `Result` inside a
 process, a `SchemaRead` where a caller on the other side of a process boundary
-reads it: `apps/desktop/src/shared/messages/acts.ts`,
+reads it: `packages/host/src/acts.ts`,
 `packages/wire/src/effect/json-schema.ts`, and
 `packages/database/src/models/message-reads.ts` all produce or read it.
 
@@ -304,9 +336,11 @@ reads it: `apps/desktop/src/shared/messages/acts.ts`,
   host's event loop for as long as it stands, so a store with an automatic
   reset enabled holds its host open for as long as its generation does: mind
   this when the caller is a process that would otherwise exit.
-- A bundle-budget baseline moves only for a deliberate library adoption, never
-  for drift a deletion happened to leave behind (`apps/desktop/bundle-budget.json`,
-  checked with 5% slack).
+- A bundle-budget baseline (`apps/desktop/bundle-budget.json`, checked with 5%
+  slack) is re-recorded with `LUKE_UPDATE_BUNDLE_BUDGET=1` by a PR that
+  genuinely needs the room, a feature's or a library's, which states the reason
+  and the size delta in its body. Drift and accidental growth are not a reason:
+  the slack is the speed bump that makes a PR stop and say why.
 
 ## Code style
 
@@ -321,6 +355,12 @@ The model is Redis. Full rules with sources and examples in `docs/STYLE.md`.
 - One-line guide comments inside functions. Why comments talk: "Note that
   we X, because Y." Design comments sit above the function. No trivial
   comments.
+
+## Commits
+
+Commit messages and PR titles follow Conventional Commits 1.0.0
+(https://www.conventionalcommits.org/en/v1.0.0/) and branch names follow
+Conventional Branch 1.1.0 (https://conventionalbranch.org/), both exactly.
 
 ## TypeScript
 

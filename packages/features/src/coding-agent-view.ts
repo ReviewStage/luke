@@ -6,10 +6,11 @@ import {
   codingAgentChangesAnswerSchema,
   codingAgentMessageRequestSchema,
   codingAgentMessagesAnswerSchema,
+  codingAgentPageAnswerSchema,
   codingAgentPullRequestAnswerSchema,
   codingAgentRenameRequestSchema,
   codingAgentServersRequestSchema,
-  codingAgentStartRequestSchema,
+  codingAgentStartRequestFields,
   codingAgentSummarySchema,
 } from "./coding-agent-wire.js";
 import { dictationAnswerSchema, dictationRequestSchema } from "./dictation-wire.js";
@@ -182,6 +183,14 @@ export const codingAgentListParamsSchema = EffectSchema.Struct({
 
 export type CodingAgentListParams = typeof codingAgentListParamsSchema.Type;
 
+/** A workspace's agents asked for, narrowed to one repository where one is named: what an automation's Same agent is chosen from. */
+export const codingAgentWorkspaceListParamsSchema = EffectSchema.Struct({
+  workspaceId: EffectSchema.NonEmptyString,
+  repository: EffectSchema.optionalKey(EffectSchema.NonEmptyString),
+});
+
+export type CodingAgentWorkspaceListParams = typeof codingAgentWorkspaceListParamsSchema.Type;
+
 /** One plan's agents, as the window hears them: each with its status, in the order started, or why there is no list. */
 export const codingAgentListAnswerViewSchema = EffectSchema.Union([
   EffectSchema.Struct({ agents: EffectSchema.Array(codingAgentSummarySchema) }),
@@ -193,7 +202,7 @@ export type CodingAgentListAnswer = typeof codingAgentListAnswerViewSchema.Type;
 /** Starting an agent, as the window asks it: the plan, and the Start request the service takes. */
 export const codingAgentStartParamsSchema = EffectSchema.Struct({
   planId: EffectSchema.NonEmptyString,
-  ...codingAgentStartRequestSchema.fields,
+  ...codingAgentStartRequestFields,
 });
 
 export type CodingAgentStartParams = typeof codingAgentStartParamsSchema.Type;
@@ -270,6 +279,21 @@ export const codingAgentStopParamsSchema = EffectSchema.Struct({
 
 export type CodingAgentStopParams = typeof codingAgentStopParamsSchema.Type;
 
+/** One agent, as the window asks to read it whole as its own page, on a plan or with none. */
+export const codingAgentPageParamsSchema = EffectSchema.Struct({
+  agentId: EffectSchema.NonEmptyString,
+});
+
+export type CodingAgentPageParams = typeof codingAgentPageParamsSchema.Type;
+
+/** One agent as its own page, as the window hears it: the agent, or why there is no answer. */
+export const codingAgentPageAnswerViewSchema = EffectSchema.Union([
+  codingAgentPageAnswerSchema,
+  failed,
+]);
+
+export type CodingAgentPageAnswerView = typeof codingAgentPageAnswerViewSchema.Type;
+
 /** One agent, as the window asks what it published. */
 export const codingAgentPullRequestParamsSchema = EffectSchema.Struct({
   agentId: EffectSchema.NonEmptyString,
@@ -313,6 +337,14 @@ export const codingAgentInboxParamsSchema = EffectSchema.Struct({
 });
 
 export type CodingAgentInboxParams = typeof codingAgentInboxParamsSchema.Type;
+
+/** One agent's inbox past a cursor, as the window asks it: the agent, and where the window stands; it is heard as a plan's inbox is. */
+export const codingAgentAgentInboxParamsSchema = EffectSchema.Struct({
+  agentId: EffectSchema.NonEmptyString,
+  after: EffectSchema.NonEmptyString,
+});
+
+export type CodingAgentAgentInboxParams = typeof codingAgentAgentInboxParamsSchema.Type;
 
 /** The plan's inbox, as the window hears it: every item its agents posted and the cursor to read on from, or why there is none. */
 export const codingAgentInboxAnswerViewSchema = EffectSchema.Union([inboxAnswerSchema, failed]);

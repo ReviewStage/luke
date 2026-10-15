@@ -2,8 +2,8 @@ import {
   CHECK_SUMMARY,
   type CodingAgentPullRequest,
   type CodingAgentPullRequestAnswer,
-} from "@sidecar/features/coding-agent-wire";
-import { CopyIcon } from "@sidecar/panel";
+} from "@luke/features/coding-agent-wire";
+import { CopyIcon } from "@luke/ui";
 import { FileDiffIcon, GitBranchIcon, TerminalIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { CHIP_LOOK, Chip } from "../chip";

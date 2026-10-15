@@ -5,7 +5,7 @@ import {
   type RecordedJsonSchemaSource,
   settleJsonSchemaGolden,
   settleJsonSchemaGoldenSet,
-} from "@sidecar/wire/testing";
+} from "@luke/wire/testing";
 import { test } from "vitest";
 import * as accountInboxWire from "./account-inbox-wire.js";
 import * as boardWire from "./board-wire.js";
@@ -44,6 +44,8 @@ const EFFECT_MODULE_SCHEMAS = {
   "account-inbox-wire": {
     accountInboxEntrySchema: accountInboxWire.accountInboxEntrySchema,
     accountInboxPlanSchema: accountInboxWire.accountInboxPlanSchema,
+    accountPlanlessEntrySchema: accountInboxWire.accountPlanlessEntrySchema,
+    accountInboxAutomationSchema: accountInboxWire.accountInboxAutomationSchema,
     accountInboxAnswerSchema: accountInboxWire.accountInboxAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof accountInboxWire>,
   "board-wire": {
@@ -64,6 +66,8 @@ const EFFECT_MODULE_SCHEMAS = {
     codingAgentServersRequestSchema: codingAgentWire.codingAgentServersRequestSchema,
     codingAgentSummarySchema: codingAgentWire.codingAgentSummarySchema,
     codingAgentAnswerSchema: codingAgentWire.codingAgentAnswerSchema,
+    codingAgentPageSchema: codingAgentWire.codingAgentPageSchema,
+    codingAgentPageAnswerSchema: codingAgentWire.codingAgentPageAnswerSchema,
     codingAgentListAnswerSchema: codingAgentWire.codingAgentListAnswerSchema,
     codingAgentMessageSchema: codingAgentWire.codingAgentMessageSchema,
     codingAgentCursorSchema: codingAgentWire.codingAgentCursorSchema,
@@ -120,6 +124,7 @@ const EFFECT_MODULE_SCHEMAS = {
     dictationTranscribeParamsSchema: codingAgentView.dictationTranscribeParamsSchema,
     dictationTranscribeAnswerViewSchema: codingAgentView.dictationTranscribeAnswerViewSchema,
     codingAgentListParamsSchema: codingAgentView.codingAgentListParamsSchema,
+    codingAgentWorkspaceListParamsSchema: codingAgentView.codingAgentWorkspaceListParamsSchema,
     codingAgentServersParamsSchema: codingAgentView.codingAgentServersParamsSchema,
     codingAgentListAnswerViewSchema: codingAgentView.codingAgentListAnswerViewSchema,
     codingAgentStartParamsSchema: codingAgentView.codingAgentStartParamsSchema,
@@ -131,6 +136,9 @@ const EFFECT_MODULE_SCHEMAS = {
     codingAgentRenameParamsSchema: codingAgentView.codingAgentRenameParamsSchema,
     codingAgentStopParamsSchema: codingAgentView.codingAgentStopParamsSchema,
     codingAgentArchiveParamsSchema: codingAgentView.codingAgentArchiveParamsSchema,
+    codingAgentPageParamsSchema: codingAgentView.codingAgentPageParamsSchema,
+    codingAgentAgentInboxParamsSchema: codingAgentView.codingAgentAgentInboxParamsSchema,
+    codingAgentPageAnswerViewSchema: codingAgentView.codingAgentPageAnswerViewSchema,
     codingAgentPullRequestParamsSchema: codingAgentView.codingAgentPullRequestParamsSchema,
     codingAgentPullRequestAnswerViewSchema: codingAgentView.codingAgentPullRequestAnswerViewSchema,
     codingAgentChangesAnswerViewSchema: codingAgentView.codingAgentChangesAnswerViewSchema,
@@ -173,6 +181,7 @@ const EFFECT_MODULE_SCHEMAS = {
     integrationStatusAnswerSchema: integrationWire.integrationStatusAnswerSchema,
     integrationConnectAnswerSchema: integrationWire.integrationConnectAnswerSchema,
     integrationToolAnnotationsSchema: integrationWire.integrationToolAnnotationsSchema,
+    integrationToolParameterSchema: integrationWire.integrationToolParameterSchema,
     integrationToolsAnswerSchema: integrationWire.integrationToolsAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof integrationWire>,
   "live-contract": {
@@ -182,7 +191,6 @@ const EFFECT_MODULE_SCHEMAS = {
     sessionActivityFrameSchema: liveContract.sessionActivityFrameSchema,
     sessionStopFrameSchema: liveContract.sessionStopFrameSchema,
     sessionHangUpFrameSchema: liveContract.sessionHangUpFrameSchema,
-    sessionGreetFrameSchema: liveContract.sessionGreetFrameSchema,
     sessionReportFrameSchema: liveContract.sessionReportFrameSchema,
     planDraftFrameSchema: liveContract.planDraftFrameSchema,
     planActivityFrameSchema: liveContract.planActivityFrameSchema,
@@ -276,6 +284,7 @@ const EFFECT_MODULE_SCHEMAS = {
     hostedQuotaSchema: serviceWire.hostedQuotaSchema,
     hostedErrorSchema: serviceWire.hostedErrorSchema,
     wireUuidSchema: serviceWire.wireUuidSchema,
+    memberRefSchema: serviceWire.memberRefSchema,
   } satisfies RecordedEffectJsonSchemas<typeof serviceWire>,
   "transcript-wire": {
     transcriptTextPartSchema: transcriptWire.transcriptTextPartSchema,
@@ -285,16 +294,22 @@ const EFFECT_MODULE_SCHEMAS = {
     planTranscriptAnswerSchema: transcriptWire.planTranscriptAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof transcriptWire>,
   "workspace-wire": {
+    workspacePhotoTypeSchema: workspaceWire.workspacePhotoTypeSchema,
     workspaceGithubSchema: workspaceWire.workspaceGithubSchema,
+    workspaceGithubInstallationSchema: workspaceWire.workspaceGithubInstallationSchema,
     workspaceSchema: workspaceWire.workspaceSchema,
     workspacesAnswerSchema: workspaceWire.workspacesAnswerSchema,
     workspaceAnswerSchema: workspaceWire.workspaceAnswerSchema,
     workspaceCreateRequestSchema: workspaceWire.workspaceCreateRequestSchema,
+    workspaceRenameRequestSchema: workspaceWire.workspaceRenameRequestSchema,
+    workspacePhotoSetRequestSchema: workspaceWire.workspacePhotoSetRequestSchema,
     workspaceGithubRequestSchema: workspaceWire.workspaceGithubRequestSchema,
     workspaceGithubConnectAnswerSchema: workspaceWire.workspaceGithubConnectAnswerSchema,
     workspaceMemberSchema: workspaceWire.workspaceMemberSchema,
     workspaceMembersAnswerSchema: workspaceWire.workspaceMembersAnswerSchema,
     workspaceMemberRemovalSchema: workspaceWire.workspaceMemberRemovalSchema,
+    workspaceMemberRoleSchema: workspaceWire.workspaceMemberRoleSchema,
+    workspaceTransferSchema: workspaceWire.workspaceTransferSchema,
     workspaceLeaveRequestSchema: workspaceWire.workspaceLeaveRequestSchema,
     workspaceLeaveAnswerSchema: workspaceWire.workspaceLeaveAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof workspaceWire>,

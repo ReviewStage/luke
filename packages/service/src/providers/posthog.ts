@@ -1,0 +1,167 @@
+/**
+ * How the recording endpoint reaches the analytics processor. The project key
+ * comes from the deployment's environment and never appears in a response, a
+ * log line, or an error; without one the endpoint answers 503 and product
+ * analytics is simply off, the same kill switch the voice endpoint uses for
+ * its OpenAI key.
+ *
+ * `fetch` rather than the vendor SDK on purpose. The SDK's value is queueing,
+ * retry, and a background flush, all built for a long-lived process; a
+ * serverless instance may freeze the moment it returns, so a background flush
+ * can be lost silently, and shutting the SDK down per request produces the
+ * same single POST minus a dependency to track. What is given up is automatic
+ * retry, which this pipeline does not want — the desktop never retries either.
+ */
+
+import { HTTP_METHOD, withoutTrailingSlash } from "@luke/wire";
+import { Data, Effect, type Layer } from "effect";
+import type * as HttpClient from "effect/http/HttpClient";
+import { accountCall, callAnswered, fixedBearer, NO_CREDENTIAL } from "../core.js";
+
+export const POSTHOG_ENVIRONMENT = {
+  PROJECT_API_KEY: "POSTHOG_PROJECT_API_KEY",
+  /** The ingestion host a batch is posted to. */
+  HOST: "POSTHOG_HOST",
+  /** The private API host deletion is asked of, which is not the ingestion host. */
+  API_HOST: "POSTHOG_API_HOST",
+  /** Deletion is a private endpoint, so it takes a personal key rather than the project token. */
+  PERSONAL_API_KEY: "POSTHOG_PERSONAL_API_KEY",
+  PROJECT_ID: "POSTHOG_PROJECT_ID",
+} as const;
+
+const POSTHOG_DEFAULTS = {
+  HOST: "https://us.i.posthog.com",
+  /** The private API lives on the app host, not the ingestion host. */
+  API_HOST: "https://us.posthog.com",
+  BATCH_PATH: "/batch/",
+  REQUEST_TIMEOUT_MS: 5_000,
+} as const;
+
+/**
+ * One project's console page, on the app host the private API lives on —
+ * never the ingestion host, which serves no pages. This is an address for a
+ * maintainer's browser, not an endpoint Luke calls, and it honors the same
+ * host override the erasure call does, so an EU project links to its own
+ * console.
+ */
+export function posthogProjectConsoleUrl(projectId: string, host?: string): string {
+  return `${resolvePosthogApiHost(host)}/project/${encodeURIComponent(projectId)}`;
+}
+
+/**
+ * Who the account behind a batch is, as the person record should read. The
+ * service reads this from its own user row rather than taking it from the
+ * request, so the desktop still names nobody: these are the same fields the
+ * account itself already holds.
+ */
+export interface PosthogPerson {
+  name?: string;
+  email?: string;
+}
+
+/** Every kind of value one of this build's event properties may hold. */
+type PosthogPropertyValue = string | number | boolean | PosthogPerson;
+
+/** One item of the documented batch document, as this build builds it. */
+export interface PosthogBatchItem {
+  event: string;
+  timestamp: string;
+  properties: Readonly<Record<string, PosthogPropertyValue>>;
+}
+
+/** The whole batch document, exactly as the capture endpoint documents it. */
+export interface PosthogBatch {
+  api_key: string;
+  historical_migration: boolean;
+  batch: readonly PosthogBatchItem[];
+}
+
+export interface PosthogUpstreamOptions {
+  host?: string;
+  httpClient?: Layer.Layer<HttpClient.HttpClient>;
+  timeoutMs?: number;
+}
+
+/** The deployment's private-API host override when it holds one, the default otherwise. */
+function resolvePosthogApiHost(host: string | undefined): string {
+  return withoutTrailingSlash(host?.trim() || POSTHOG_DEFAULTS.API_HOST);
+}
+
+/**
+ * Posts one batch document over the ambient `HttpClient`, answering nothing on
+ * a network fault so the caller answers 502 without ever holding an error that
+ * could name the key.
+ */
+export function postBatchEffect(
+  body: PosthogBatch,
+  options: PosthogUpstreamOptions = {},
+): Effect.Effect<Response | undefined, never, HttpClient.HttpClient> {
+  // The project token travels in the batch document itself, so ingestion takes
+  // no identity of its own.
+  const call = accountCall({
+    baseUrl: options.host?.trim() || POSTHOG_DEFAULTS.HOST,
+    credential: NO_CREDENTIAL,
+    requestTimeoutMs: options.timeoutMs ?? POSTHOG_DEFAULTS.REQUEST_TIMEOUT_MS,
+  });
+  return Effect.map(
+    call.send({
+      method: HTTP_METHOD.POST,
+      path: POSTHOG_DEFAULTS.BATCH_PATH,
+      body: JSON.stringify(body),
+    }),
+    (answer) => (callAnswered(answer) ? answer.response : undefined),
+  );
+}
+
+export interface PosthogForgetOptions {
+  host?: string;
+  timeoutMs?: number;
+  personalApiKey: string;
+  projectId: string;
+}
+
+/** Why an erasure did not go through: the upstream never answered, or answered with a status that names no key. */
+export class PosthogForgetError extends Data.TaggedError("PosthogForgetError")<{
+  readonly message: string;
+}> {}
+
+/**
+ * Asks the processor to erase the person behind one distinct id, and the
+ * events recorded against them. The documented bulk-delete endpoint takes the
+ * distinct ids in its body and `delete_events` in its query, and queues the
+ * event deletion rather than performing it — so a settled effect means the
+ * erasure was accepted, never that it has already happened. The request runs
+ * over the ambient `HttpClient`.
+ */
+export function forgetPosthogPersonEffect(
+  distinctId: string,
+  options: PosthogForgetOptions,
+): Effect.Effect<void, PosthogForgetError, HttpClient.HttpClient> {
+  const call = accountCall({
+    baseUrl: resolvePosthogApiHost(options.host),
+    credential: fixedBearer(options.personalApiKey),
+    requestTimeoutMs: options.timeoutMs ?? POSTHOG_DEFAULTS.REQUEST_TIMEOUT_MS,
+  });
+  const path = `/api/projects/${encodeURIComponent(options.projectId)}/persons/bulk_delete/?delete_events=true`;
+  return Effect.flatMap(
+    call.send({
+      method: HTTP_METHOD.POST,
+      path,
+      body: JSON.stringify({ distinct_ids: [distinctId] }),
+    }),
+    (answer) => {
+      if (!callAnswered(answer)) {
+        return Effect.fail(
+          new PosthogForgetError({ message: `network fault: ${answer.errorName ?? "unknown"}` }),
+        );
+      }
+      // The status alone diagnoses the refusal; the body could name the key.
+      if (!answer.response.ok) {
+        return Effect.fail(
+          new PosthogForgetError({ message: `refused with status ${answer.response.status}` }),
+        );
+      }
+      return Effect.void;
+    },
+  );
+}

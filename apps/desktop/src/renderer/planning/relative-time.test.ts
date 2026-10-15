@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { PLAN_ACTOR, type Plan } from "@sidecar/features/plan-wire";
+import { PLAN_ACTOR, type Plan } from "@luke/features/plan-wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
+import { lineWords } from "#testing/actor-line";
 import { onRegistry } from "#testing/copy-feedback";
 import { DOCUMENT_PLAN } from "#testing/document-plan";
 import { plansControl } from "#testing/plans-control";
@@ -61,11 +62,11 @@ function saidOf(at: number) {
     }),
   );
   const body = mount(
-    createElement(PlanBody, { plan, live: false, reader: { id: DANA.userId, own: false } }),
+    createElement(PlanBody, { plan, live: false, reader: { readerId: DANA.userId } }),
   );
   return {
     row: row.querySelector(".sidebar-plan-time time")?.textContent,
-    edited: body.querySelector(".plan-edit-note")?.textContent,
+    edited: lineWords(body.querySelector(".plan-edit-note")),
   };
 }
 

@@ -1,12 +1,12 @@
+import { eveTurnIdOf, type HostedToolBinding } from "@luke/service/agents/brain-host/host";
+import { PLANNER_TOOL_NAMES } from "@luke/service/agents/brain-host/planning";
+import { lookModelOutput } from "@luke/service/plans/board-look";
+import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { Effect, Result } from "effect";
 import type { SessionAuth } from "eve/context";
 import { defineDynamic, defineTool } from "eve/tools";
-import { unparsedWire, type WireBoundaryInput } from "../../server/core.js";
-import { lookModelOutput } from "../../server/hosted/board-look.js";
-import { eveTurnIdOf, type HostedToolBinding } from "../../server/hosted/brain-host/host.js";
-import { PLANNER_TOOL_NAMES } from "../../server/hosted/brain-host/planning.js";
-import { runWeb } from "../../server/runtime.js";
 import { host } from "../host.js";
+import { runAgent } from "../runtime.js";
 
 /**
  * The brain's tools, resolved at every turn's start for the conversation the
@@ -27,7 +27,7 @@ export function hostedTools(
   return defineDynamic({
     events: {
       "turn.started": (event, ctx) =>
-        runWeb(
+        runAgent(
           Effect.gen(function* () {
             const admitted = yield* admit(ctx.session.auth, ctx.session.id);
             if (Result.isFailure(admitted)) return null;
@@ -56,7 +56,7 @@ export function hostedTools(
                     toModelOutput: (output) =>
                       lookModelOutput(unparsedWire(output as WireBoundaryInput)),
                     execute: (input, toolContext) =>
-                      runWeb(
+                      runAgent(
                         host.runTool(
                           name,
                           binding,

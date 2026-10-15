@@ -1,9 +1,3 @@
-import { CloseIcon } from "@sidecar/panel";
-import { ChevronLeftIcon, ChevronRightIcon, DownloadIcon } from "lucide-react";
-import { useId } from "react";
-import { CopyGlyph, copyHint, useCopyFeedback } from "../copy-feedback";
-import { ModalShell } from "../modal-shell";
-import { Tooltip } from "../tooltip";
 import {
   ATTACHMENT_VIEW,
   attachmentText,
@@ -11,7 +5,13 @@ import {
   chipBase64,
   type FileChip,
   sizeLabel,
-} from "./attachment-model";
+} from "@luke/features/attachment-model";
+import { CloseIcon } from "@luke/ui";
+import { ChevronLeftIcon, ChevronRightIcon, DownloadIcon } from "lucide-react";
+import { useId } from "react";
+import { CopyGlyph, copyHint, useCopyFeedback } from "../copy-feedback";
+import { ModalShell } from "../modal-shell";
+import { Tooltip } from "../tooltip";
 import { FileTypeIcon } from "./file-type-icon";
 
 /**

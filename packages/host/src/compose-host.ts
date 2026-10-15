@@ -1,35 +1,39 @@
 import {
+  HostedAutomationClient,
   HostedCodingAgentClient,
   HostedGitHubConnectionClient,
   HostedIntegrationsClient,
   HostedMacCommandClient,
   HostedPlanClient,
+  HostedTerminalClient,
   HostedWorkspaceClient,
   type PlanActivityFrame,
   type PlanCodeFrame,
   type PlanDraftFrame,
   type PlanWorkFrame,
-} from "@sidecar/features";
+} from "@luke/features";
 import {
   carried,
   GATEWAY_METHOD,
   type GatewayMethodTable,
   type GatewayShutdownSteps,
   NODE_CAPABILITY_STATUS,
-} from "@sidecar/gateway";
-import { APP_SETTING_SCHEMA } from "@sidecar/settings";
-import { LIVE_SESSION_END_CAUSE } from "@sidecar/voice/live-session";
+} from "@luke/gateway";
+import { APP_SETTING_SCHEMA } from "@luke/settings";
+import { LIVE_SESSION_END_CAUSE } from "@luke/voice/live-session";
 import { Effect, Layer } from "effect";
 import type * as FileSystem from "effect/FileSystem";
 import type * as Path from "effect/Path";
 import type { ChildProcessSpawner } from "effect/process";
 import { composeAccount } from "./compose-account.js";
+import { composeAutomations } from "./compose-automations.js";
 import { composeCodingAgents } from "./compose-coding-agents.js";
 import { composeIntegrations } from "./compose-integrations.js";
 import { composeLive } from "./compose-live.js";
 import { composeMacCommands } from "./compose-mac-commands.js";
 import { composePlanning } from "./compose-planning.js";
 import { composeSettings } from "./compose-settings.js";
+import { composeTerminals } from "./compose-terminals.js";
 import type { Composer, DuplicateGatewayMethod } from "./composer.js";
 import { mergedMethods } from "./effect/composer.js";
 import { type HostAssembly, HostAssemblyTag, hostDrain } from "./effect/host.js";
@@ -44,16 +48,19 @@ import {
 import { shutdownStepsClosingLiveSession, shutdownStepsFlushingEvents } from "./lifecycle.js";
 import { HOST_NODE_CAPABILITY } from "./node-capabilities.js";
 import { createGatewayService } from "./service.js";
+import { openTerminalSocketOverWs } from "./terminal/socket-over-ws.js";
 
-/** The seven concerns, by the name each is built under. */
+/** The concerns, by the name each is built under. */
 const HOST_CONCERN = {
   SETTINGS: "settings",
   ACCOUNT: "account",
   LIVE: "live",
   PLANNING: "planning",
   CODING_AGENTS: "codingAgents",
+  AUTOMATIONS: "automations",
   INTEGRATIONS: "integrations",
   MAC_COMMANDS: "macCommands",
+  TERMINALS: "terminals",
 } as const;
 
 type HostConcern = (typeof HOST_CONCERN)[keyof typeof HOST_CONCERN];
@@ -68,6 +75,7 @@ const HOST_START_ORDER: readonly HostConcern[] = [
   HOST_CONCERN.LIVE,
   HOST_CONCERN.PLANNING,
   HOST_CONCERN.CODING_AGENTS,
+  HOST_CONCERN.AUTOMATIONS,
   HOST_CONCERN.INTEGRATIONS,
   HOST_CONCERN.MAC_COMMANDS,
 ];
@@ -153,6 +161,14 @@ export const hostAssemblyLayer: Layer.Layer<
       account,
       client: codingAgentClient,
     });
+    const automations = yield* composeAutomations({
+      kernel,
+      account,
+      client: new HostedAutomationClient({
+        serviceBaseUrl: kernel.hostedServiceBaseUrl,
+        ...account.token,
+      }),
+    });
     const integrations = yield* composeIntegrations({
       kernel,
       account,
@@ -179,6 +195,15 @@ export const hostAssemblyLayer: Layer.Layer<
         ...account.token,
       }),
     });
+    const terminals = yield* composeTerminals({
+      kernel,
+      account,
+      client: new HostedTerminalClient({
+        serviceBaseUrl: kernel.hostedServiceBaseUrl,
+        ...account.token,
+      }),
+      openSocket: openTerminalSocketOverWs,
+    });
     activePlanId = planning.activePlanId;
     showPlanDraft = planning.showDraft;
     showPlanActivity = planning.showActivity;
@@ -200,6 +225,7 @@ export const hostAssemblyLayer: Layer.Layer<
     /** The gate closing: what a sign-out means. */
     const closeCapabilities = Effect.gen(function* () {
       yield* planning.reset;
+      yield* terminals.reset;
       yield* account.applyVoiceCredential;
       yield* settings.emitSettings();
     });
@@ -226,8 +252,10 @@ export const hostAssemblyLayer: Layer.Layer<
       [HOST_CONCERN.LIVE]: live,
       [HOST_CONCERN.PLANNING]: planning,
       [HOST_CONCERN.CODING_AGENTS]: codingAgents,
+      [HOST_CONCERN.AUTOMATIONS]: automations,
       [HOST_CONCERN.INTEGRATIONS]: integrations,
       [HOST_CONCERN.MAC_COMMANDS]: macCommands,
+      [HOST_CONCERN.TERMINALS]: terminals,
     } satisfies Readonly<Record<HostConcern, Composer>>;
 
     /**
@@ -307,7 +335,6 @@ export const hostAssemblyLayer: Layer.Layer<
         states: live.service.avatarStates,
         grants: live.service.avatarGrants,
         closed: (reason) => live.service.closed(reason),
-        live: () => live.service.avatarLive(),
       },
     };
     return assembly;

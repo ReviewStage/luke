@@ -10,10 +10,11 @@
  */
 
 import { useAtomMount, useAtomSet, useAtomValue } from "@effect/atom-react/Hooks";
+import { ACT_KIND } from "@luke/host/acts";
+import { callTabVideoStatus } from "@luke/ui/call-card-model";
+import { AVATAR_OFF } from "@luke/voice/avatar";
 import { Option } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
-import { ACT_KIND } from "#shared/messages/acts";
-import { AVATAR_OFF } from "#shared/messages/avatar";
 import { useAct } from "../act";
 import { useAppState } from "../use-app-state";
 import { useVoiceView } from "../use-voice-view";
@@ -25,7 +26,6 @@ import {
   NO_AVATAR_TRACKS,
 } from "./call-avatar";
 import { callControls } from "./call-card";
-import { callTabVideoStatus } from "./call-card-model";
 import { AvatarVoice, CallVideoTile } from "./call-video-tile";
 
 /** The avatar's tracks as published so far, none before a session stands. */

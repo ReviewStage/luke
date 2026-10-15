@@ -1,24 +1,24 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { AVATAR_STOP_REASON, type AvatarStopReason } from "@sidecar/features";
-import type { AvatarGrant } from "@sidecar/features/avatar-grant";
-import { runModeFor } from "@sidecar/host";
-import type { HostAvatar } from "@sidecar/host/effect";
-import {
-  LIVE_AVATAR_END,
-  LIVE_AVATAR_STATUS,
-  type LiveAvatarState,
-} from "@sidecar/voice/live-session";
-import type { UnparsedWireValue } from "@sidecar/wire";
-import { Context, Effect, PubSub, Stream } from "effect";
-import type { WebContents } from "electron";
-import { ACT_KIND } from "#shared/messages/acts";
+import { AVATAR_STOP_REASON, type AvatarStopReason } from "@luke/features";
+import type { AvatarGrant } from "@luke/features/avatar-grant";
+import { runModeFor } from "@luke/host";
+import { ACT_KIND } from "@luke/host/acts";
+import type { HostAvatar } from "@luke/host/effect";
 import {
   AVATAR_END_REASON,
   AVATAR_FEED_KIND,
   AVATAR_STATUS,
   type AvatarFeed,
-} from "#shared/messages/avatar";
+} from "@luke/voice/avatar";
+import {
+  LIVE_AVATAR_END,
+  LIVE_AVATAR_STATUS,
+  type LiveAvatarState,
+} from "@luke/voice/live-session";
+import type { UnparsedWireValue } from "@luke/wire";
+import { Context, Effect, PubSub, Stream } from "effect";
+import type { WebContents } from "electron";
 import { type ActRows, type ActSender, createActRouter } from "../act-router";
 import { AppStateStore, initialAppState } from "../app-state";
 import { linkAvatar } from "../services/avatar-link";
@@ -78,8 +78,6 @@ function fakeHost() {
       tell(state);
     };
     const restarts = { told: true };
-    /** How many times the host was told the avatar drew its first frame, which lets Luke greet. */
-    const lived = { count: 0 };
     move({ status: LIVE_AVATAR_STATUS.OFF });
     const host: HostAvatar = {
       states: Stream.fromPubSub(states),
@@ -94,9 +92,6 @@ function fakeHost() {
           untold = current;
         }
         return true;
-      },
-      live: () => {
-        lived.count += 1;
       },
     };
     const grant = (granted: AvatarGrant) => {
@@ -118,14 +113,14 @@ function fakeHost() {
       });
       return true;
     };
-    return { host, move, grant, setVideo, restarts, lived };
+    return { host, move, grant, setVideo, restarts };
   });
 }
 
 function fixture() {
   return Effect.gen(function* () {
     const state = new AppStateStore(initialAppState(RUN, false), Context.empty());
-    const { host, move, grant, setVideo, restarts, lived } = yield* fakeHost();
+    const { host, move, grant, setVideo, restarts } = yield* fakeHost();
     /** What reached the panel's page: each grant handed over, and each feed relayed. */
     const grants: (AvatarGrant | undefined)[] = [];
     const feeds: AvatarFeed[] = [];
@@ -185,7 +180,7 @@ function fixture() {
       settle(),
     );
     const avatarNow = () => state.snapshot().voice.avatar;
-    return { perform, feed, moved, granted, avatarNow, page, asked, restarts, lived };
+    return { perform, feed, moved, granted, avatarNow, page, asked, restarts };
   });
 }
 
@@ -221,24 +216,6 @@ it.effect("the panel's report is not heard while the host holds no grant", () =>
     yield* f.perform(ROLE.PANEL, ACT_KIND.AVATAR_REPORT, { status: AVATAR_STATUS.LIVE });
     assert.deepEqual(f.avatarNow(), { status: AVATAR_STATUS.STARTING });
   }),
-);
-
-it.effect(
-  "the avatar's first frame drawn on a grant lets Luke greet, and one with no grant does not",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture();
-      yield* f.moved({ status: LIVE_AVATAR_STATUS.STARTING });
-      yield* f.perform(ROLE.PANEL, ACT_KIND.AVATAR_REPORT, { status: AVATAR_STATUS.LIVE });
-      assert.equal(f.lived.count, 0);
-
-      yield* f.granted;
-      yield* f.perform(ROLE.PANEL, ACT_KIND.AVATAR_REPORT, { status: AVATAR_STATUS.STARTING });
-      assert.equal(f.lived.count, 0);
-      yield* f.perform(ROLE.PANEL, ACT_KIND.AVATAR_REPORT, { status: AVATAR_STATUS.LIVE });
-
-      assert.equal(f.lived.count, 1);
-    }),
 );
 
 it.effect("the call's end keeps its reason over the panel's own end on the grant withdrawn", () =>

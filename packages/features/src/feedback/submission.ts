@@ -1,4 +1,4 @@
-import { isRecord, isWireString, type UnparsedWireValue } from "@sidecar/wire";
+import { isRecord, isWireString, type UnparsedWireValue } from "@luke/wire";
 /**
  * A note from the user to the people who make Luke. Two kinds, because they are
  * read differently on arrival: feedback is about Luke, and a prompt is an ask
@@ -75,7 +75,17 @@ export interface FeedbackSubmission {
   name?: string;
   email?: string;
   images: readonly FeedbackImage[];
+  /**
+   * The experiment a note is about, by its key, where it was sent from that
+   * experiment's row in Settings › Experimental. A fixed key, never prose:
+   * this package sits below the settings vocabulary that lists them, so it
+   * holds the key to a key's shape (`EXPERIMENT_KEY_PATTERN`).
+   */
+  experiment?: string;
 }
+
+/** An experiment key's shape: lowercase words joined by hyphens, as `@luke/settings`'s `EXPERIMENT` spells them. */
+const EXPERIMENT_KEY_PATTERN = /^[a-z][a-z0-9-]{0,39}$/;
 
 /** What became of a submission: delivered, or why not, in the user's terms. */
 export interface FeedbackResult {
@@ -122,7 +132,7 @@ function optionalLine(value: UnparsedWireValue, maxLength: number): string | und
  */
 export function feedbackSubmission(value: UnparsedWireValue): FeedbackSubmission | undefined {
   if (!isRecord(value)) return undefined;
-  const { kind, message, name, email, images } = value;
+  const { kind, message, name, email, images, experiment } = value;
   if (!isFeedbackKind(kind)) return undefined;
   if (!isWireString(message)) return undefined;
   const messageText = message.trim();
@@ -134,6 +144,12 @@ export function feedbackSubmission(value: UnparsedWireValue): FeedbackSubmission
   const emailLine = optionalLine(email, FEEDBACK_LIMITS.EMAIL_MAX_LENGTH);
   if (emailLine === null) return undefined;
   if (!Array.isArray(images) || images.length > FEEDBACK_LIMITS.MAX_IMAGES) return undefined;
+  if (
+    experiment !== undefined &&
+    !(isWireString(experiment) && EXPERIMENT_KEY_PATTERN.test(experiment))
+  ) {
+    return undefined;
+  }
   const parsedImages: FeedbackImage[] = [];
   for (const candidate of images) {
     const image = feedbackImage(candidate);
@@ -146,5 +162,6 @@ export function feedbackSubmission(value: UnparsedWireValue): FeedbackSubmission
     ...(nameLine ? { name: nameLine } : undefined),
     ...(emailLine ? { email: emailLine } : undefined),
     images: parsedImages,
+    ...(experiment === undefined ? undefined : { experiment }),
   };
 }

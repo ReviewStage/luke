@@ -73,7 +73,7 @@ Can we pause and discuss why they are different and how we can unify them?"
 | **Transcript store** | The plan's conversation (`plan.conversation_id`). Worker in `childConversationId(parent, callId)` (`brain-host/host.ts:450-477`) | The agent's conversation (kind `coding_agent`). Workers in child conversations under the same function |
 | **Transcript wire** | A typed, bounded server projection `planWorkOf` (`voice/plan-work.ts:403`) → `planWorkTurnSchema` (`packages/features/src/planning-view.ts:118-273`). Pushed: `GET /api/plans/{id}/work?before=` plus the live `plan.work` socket frame, into `app:state` | Raw stored AI SDK parts (`coding-agent-wire.ts:620-821`). Pulled: held `GET /api/agents/{id}/messages?after=` (`coder-host/transcript.ts:436`) |
 | **Transcript UI** | Work tab, `planning/plan-work.tsx` (535) and `work-model.ts` (427) | Agent tab, `planning/agent-tab.tsx` (816), `coding-agent-model.ts` (1,118) and `tool-call-model.ts` (531) |
-| **Plan writing** | The brain never writes the plan (`planning.ts:144`). The notetaker does: `voice/plan-scribe.ts`, `gpt-5.6-luna`, inside the voice service, through `saveNotes` (`plan-notes.ts:248`) | `edit_plan` reuses the notetaker's schema and `saveNotes`, capped per turn (`coder-host/plan-edit.ts`) |
+| **Plan writing** | The brain never writes the plan (`planning.ts:144`). The notetaker does: `packages/service/src/plans/plan-scribe.ts`, `gpt-5.6-luna`, inside the voice service, through `saveNotes` (`plan-notes.ts:248`) | `edit_plan` reuses the notetaker's schema and `saveNotes`, capped per turn (`coder-host/plan-edit.ts`) |
 | **Evals** | `eve/evals/brain-host.eval.ts` plus `eve/scripted-model.ts` (139 lines) | `coder/evals/coder.eval.ts` plus `coder/scripted-model.ts` (140 lines) |
 
 ### 1.1 Already shared (the premise is half true)
@@ -124,7 +124,7 @@ code already acts as one runtime split across two folders.
 
 | Difference | Fundamental? | Why |
 | --- | --- | --- |
-| **A live voice call vs unattended work** | **Fundamental for the front end, not for the agent.** | The planner's turn is an ordinary eve turn. What is special is the layer in front of it: GPT Live delegating asks (`packages/voice/.../live-session-service.ts:1095, 1314`), the voice following the turn row and journal every 250 ms (`voice/live-brain.ts`), `queue_question`/`end_call` carried by the journal, and the notetaker. That layer stays separate (§4); the agent behind it needn't. |
+| **A live voice call vs unattended work** | **Fundamental for the front end, not for the agent.** | The planner's turn is an ordinary eve turn. What is special is the layer in front of it: GPT Live delegating asks (`packages/voice/.../live-session-service.ts:1095, 1314`), the voice following the turn row and journal every 250 ms (`packages/service/src/voice/live-brain.ts`), `queue_question`/`end_call` carried by the journal, and the notetaker. That layer stays separate (§4); the agent behind it needn't. |
 | **Latency** | **Fundamental, as configuration.** | The planner must answer at conversational speed. Delegation must not block (eve background tasks), effort stays at medium, the tool list stays short and stable for the prompt cache, and sentences are released one at a time. All of this is profile data (model policy, `delegation: background`, tool allow-list), not a second runtime. |
 | **Writing the plan vs editing a repo** | **Mostly accidental.** | Neither agent's loop writes the plan. The notetaker writes it during a call, and a coder's `edit_plan` writes through the same `saveNotes`. What really differs is repository access: a read token and a depth-1 clone vs a write token, a full clone and a branch. That is sandbox policy. |
 | **Models and keys** | **Accidental.** | The brain is pinned to GPT-6.1-sol on Luke's key and already goes through `coderModel`. BYOK for the planner, or a catalog choice, is a product decision, not an architectural one. Metering only the brain is an accident of order: the meter predates coders. |
@@ -296,7 +296,7 @@ As built: the planner's turns are drawn by the agent tab's own component
 lines are drawn as messages too, so the deviation from the proposal below
 is that a planner's user lines are drawn, as the voice transcript. The Call
 tab draws each turn's work under the line that asked for it. Every tool name
-lives in one shared vocabulary (`@sidecar/features/agent-tools`, #2397), and
+lives in one shared vocabulary (`@luke/features/agent-tools`, #2397), and
 the agent tab reads the planning model's raw calls by it. The wire switch
 (9b) and the old wire's deletion (9c) come after the release, as one step:
 9c has to wait for a desktop release anyway, and 9b alone would double the
@@ -385,7 +385,7 @@ lifecycle.
   It is a front end that opens planner turns. It is not an agent, and it has
   its own model, key and latency loop. Making it a role would put eve's
   durable loop under real-time audio.
-- **The notetaker** (`voice/plan-scribe.ts`). It is a small model reacting to
+- **The notetaker** (`packages/service/src/plans/plan-scribe.ts`). It is a small model reacting to
   the call's ledger, inside the voice service, between utterances. Its write
   path (`saveNotes`) is already shared with the coder's `edit_plan`, which is
   the part that should be shared.
@@ -558,7 +558,7 @@ PR 3.
    - **The planner gets background only.** A foreground call would hold the
      spoken turn silent for the worker's whole run, and the voice already
      follows a turn parked on a background task (`PARKED_FOLLOW`,
-     `voice/live-brain.ts`). Offering the planner no flag at all is the
+     `packages/service/src/voice/live-brain.ts`). Offering the planner no flag at all is the
      simplest way to keep the voice fast: it is one fewer choice for the
      model to get wrong mid-call.
 4. **Brain skills now** (the profile flag plus `load_skill`, read during

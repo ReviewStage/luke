@@ -27,9 +27,9 @@ SCRIPT_DIRECTORY=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=scripts/lib/workspace.sh
 source "$SCRIPT_DIRECTORY/lib/workspace.sh"
 
-sidecar_require_macos
-sidecar_require_command xcrun
-sidecar_require_command screencapture
+luke_require_macos
+luke_require_command xcrun
+luke_require_command screencapture
 
 usage() {
     printf 'usage: %s <out.png> [--from <capture.png>] [--layout window|top|bleed] [--crop <x,y,width,height>] [--zoom <factor>]\n' "$0" >&2
@@ -53,7 +53,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 
-work_root="$SIDECAR_BUILD_ROOT/changelog-screenshot"
+work_root="$LUKE_BUILD_ROOT/changelog-screenshot"
 framer="$work_root/frame-screenshot"
 framer_source="$SCRIPT_DIRECTORY/lib/frame-screenshot.swift"
 mkdir -p "$work_root"

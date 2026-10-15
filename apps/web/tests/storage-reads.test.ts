@@ -1,34 +1,31 @@
 import assert from "node:assert/strict";
-import type { MessageListRead } from "@sidecar/database/models/message-reads";
-import {
-  listRecentMessages,
-  type StoredMessageRecord,
-} from "@sidecar/database/models/message-reads";
-import { CLEARED_CONVERSATION_RETENTION_MS } from "@sidecar/database/models/soft-delete";
-import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
-import {
-  MESSAGE_AUTHOR,
-  MESSAGE_CHANNEL,
-  MESSAGE_ROLE,
-  TURN_ORIGIN,
-  TURN_STATUS,
-} from "@sidecar/wire";
-import { type ToolSet, tool } from "ai";
-import { afterAll, test } from "vitest";
-import { z } from "zod";
-import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
+import type { MessageListRead } from "@luke/database/models/message-reads";
+import { listRecentMessages, type StoredMessageRecord } from "@luke/database/models/message-reads";
+import { CLEARED_CONVERSATION_RETENTION_MS } from "@luke/database/models/soft-delete";
+import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
 import {
   type ConversationRow,
   insertConversation as insertConversationRow,
   insertMessage as insertMessageRow,
   insertTurn as insertTurnRow,
   type MessageRow as MessageInsertRow,
+  openHostedStoreTestDatabase,
   readConversationById,
   readMessagesByConversation,
   readTurnsByConversation,
   setConversationDeletedAt,
   type TurnInsertRow,
-} from "./support/store-rows";
+} from "@luke/database/testing";
+import {
+  MESSAGE_AUTHOR,
+  MESSAGE_CHANNEL,
+  MESSAGE_ROLE,
+  TURN_ORIGIN,
+  TURN_STATUS,
+} from "@luke/wire";
+import { type ToolSet, tool } from "ai";
+import { afterAll, test } from "vitest";
+import { z } from "zod";
 
 /**
  * The conversation reads the brain and the voice make, against the real

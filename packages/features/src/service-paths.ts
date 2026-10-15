@@ -12,7 +12,7 @@ export const HOSTED_SERVICE_PATH = {
   EVENTS: "/api/events",
   /**
    * Store and read account preferences (GET, PUT). Only settings named by
-   * `@sidecar/settings` as cross-device preferences belong here.
+   * `@luke/settings` as cross-device preferences belong here.
    */
   ACCOUNT_PREFERENCES: "/api/account/preferences",
   /**
@@ -54,6 +54,13 @@ export const HOSTED_SERVICE_PATH = {
    * plan's inbox is. `account-inbox-wire.ts` declares the answer.
    */
   INBOX: "/api/inbox",
+  /**
+   * A workspace's agents, on a plan or with none, newest started first and
+   * the archived ones left out, narrowed to one repository where the query
+   * names one (GET), what an automation's Same agent is chosen from; the
+   * plan list's answer (`coding-agent-wire.ts`).
+   */
+  AGENTS: "/api/agents",
   /**
    * The shell commands the account's agents asked to run on the developer's
    * Mac: the ones waiting, held open while none is, each claimed for the
@@ -145,10 +152,18 @@ export const HOSTED_SERVICE_PATH = {
   WORKSPACE_GITHUB_CONNECT: "/api/workspaces/github/connect",
   /** A workspace's GitHub organization disconnected by an owner or admin (POST), answering the workspace. */
   WORKSPACE_GITHUB_DISCONNECT: "/api/workspaces/github/disconnect",
+  /** A workspace renamed by an owner or an admin (POST), answering the workspace; its slug stays as it was. */
+  WORKSPACES_RENAME: "/api/workspaces/rename",
+  /** A workspace's photo set as a `data:` URL, or removed with null, by an owner or an admin (POST), answering the workspace. */
+  WORKSPACES_PHOTO_SET: "/api/workspaces/photo/set",
   /** One workspace's members, to a member of it (GET), the workspace named in `workspace-wire.ts`'s `WORKSPACE_MEMBERS_QUERY`. */
   WORKSPACES_MEMBERS: "/api/workspaces/members",
-  /** An owner or an admin removes a member who is not an owner (POST), answered with those who remain. */
+  /** The owner removes an admin or a member, and an admin a member (POST), answered with those who remain. */
   WORKSPACES_MEMBERS_REMOVE: "/api/workspaces/members/remove",
+  /** The owner makes another member an admin or an admin a member (POST), answered with the members as they then stand. */
+  WORKSPACES_MEMBERS_ROLE: "/api/workspaces/members/role",
+  /** The owner hands the workspace to an admin, becoming an admin (POST), answered with the members as they then stand. */
+  WORKSPACES_TRANSFER: "/api/workspaces/transfer",
   /** The account leaves a workspace it does not own (POST). */
   WORKSPACES_LEAVE: "/api/workspaces/leave",
   /**
@@ -159,6 +174,7 @@ export const HOSTED_SERVICE_PATH = {
   WORKSPACES_INVITATIONS: "/api/workspaces/invitations",
   /** A pending invitation canceled by an owner or an admin (POST), answered with those still pending. */
   WORKSPACES_INVITATIONS_CANCEL: "/api/workspaces/invitations/cancel",
+  WORKSPACES_INVITATION_OFFER: "/api/workspaces/invitations/offer",
 } as const;
 
 /**
@@ -200,6 +216,14 @@ export function automationPath(automationId: string): string {
 /** An automation's "Run now" (POST), answered with the run as it came out. */
 export function automationRunPath(automationId: string): string {
   return `${automationPath(automationId)}/run`;
+}
+
+/**
+ * An automation's webhook address (POST), called by the sender the developer
+ * hands it to under the trigger's secret rather than an account bearer.
+ */
+export function automationWebhookPath(automationId: string): string {
+  return `${automationPath(automationId)}/webhook`;
 }
 
 /** An automation's runs, newest first (GET). */
@@ -361,9 +385,20 @@ export function planInboxPath(planId: string, after?: string): string {
   return `${path}?${query}`;
 }
 
+/** One agent's inbox past a cursor (GET), held open while nothing changed as a plan's is, an agent with no plan as much as one on a plan; the same answer as `planInboxPath`'s read. */
+export function agentInboxPath(agentId: string, after: string): string {
+  const query = new URLSearchParams({ after });
+  return `/api/agents/${encodeURIComponent(agentId)}/inbox?${query}`;
+}
+
 /** One item of a plan's inbox, answered by the developer (POST) against the revision they saw; `inbox-wire.ts` declares the request and the answer. */
 export function inboxItemPath(itemId: string): string {
   return `/api/inbox/${encodeURIComponent(itemId)}`;
+}
+
+/** One workspace's photo, as its bytes under its own media type (GET), served to the workspace's members alone. */
+export function workspacePhotoPath(workspaceId: string): string {
+  return `${HOSTED_SERVICE_PATH.WORKSPACES}/${encodeURIComponent(workspaceId)}/photo`;
 }
 
 /** One attachment of an inbox item, an image block's picture, as its bytes under its own media type (GET), served to the item's account alone. */
@@ -407,4 +442,19 @@ export function agentPullRequestPath(agentId: string): string {
 /** One agent's changes (GET): the files of its pull request as GitHub holds them; `coding-agent-wire.ts` declares the answer. */
 export function agentChangesPath(agentId: string): string {
   return `/api/agents/${encodeURIComponent(agentId)}/changes`;
+}
+
+/** One agent's shells: list them and where its sandbox stands (GET), or start one (POST); `terminal-wire.ts` declares both. */
+export function agentTerminalsPath(agentId: string): string {
+  return `/api/agents/${encodeURIComponent(agentId)}/terminals`;
+}
+
+/** One of an agent's shells: named anew (PATCH) or ended (DELETE), each answering the shells as they stand after. */
+export function agentTerminalPath(agentId: string, terminalId: string): string {
+  return `${agentTerminalsPath(agentId)}/${encodeURIComponent(terminalId)}`;
+}
+
+/** Resumes one agent's stopped sandbox (POST), on the developer's click and nothing else. */
+export function agentSandboxResumePath(agentId: string): string {
+  return `/api/agents/${encodeURIComponent(agentId)}/sandbox/resume`;
 }

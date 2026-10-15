@@ -1,8 +1,9 @@
 {
-  "name": "@sidecar/live",
+  "name": "@luke/live",
   "version": "0.13.0",
   "private": true,
   "type": "module",
+  "description": "The GPT Live protocol as Luke reads it, Node-free so the renderer, the host, and a web function share it",
   "exports": {
     ".": "./src/index.js"
   },
@@ -12,7 +13,7 @@
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
-    "@sidecar/wire": "workspace:*",
+    "@luke/wire": "workspace:*",
     "effect": "catalog:"
   },
   "devDependencies": {

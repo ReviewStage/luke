@@ -1,9 +1,9 @@
-import { memberSeams, workspaceSeams } from "@sidecar/database/models/workspace-seams";
-import { auth } from "../../auth.js";
-import { resolveHostedUserId } from "../../hosted/bearer.js";
-import { resolveBrowserSessionUserId } from "../../hosted/browser-session.js";
+import { memberSeams, workspaceSeams } from "@luke/database/models/workspace-seams";
+import { workspacesApp } from "@luke/service/accounts/workspaces-app";
+import { auth } from "@luke/service/auth/auth";
+import { resolveHostedUserId } from "@luke/service/auth/bearer";
+import { resolveBrowserSessionUserId } from "@luke/service/auth/browser-session";
 import { routeFromHttpRouter } from "../../route-effect.js";
-import { workspacesApp } from "../../workspaces-app.js";
 
 /** One workspace's members, to a member of it (GET). */
 export default routeFromHttpRouter(

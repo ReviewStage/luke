@@ -1,10 +1,6 @@
-import { isRecord, text, type UnparsedWireValue, type WireValue } from "@sidecar/wire";
-import type { Properties } from "posthog-js";
-// The "no-external" client: the full build without the surveys, product
-// tours, web vitals, and the rest Luke never turns on, and without the
-// recorder, which is a bundle of its own (`session-recorder/contract.ts`).
-import posthog from "posthog-js/dist/module.no-external";
-import type { SessionReplayBootstrap } from "#shared/messages/session";
+import type { SessionReplayBootstrap } from "@luke/gateway/window-session";
+import { isRecord, text, type UnparsedWireValue, type WireValue } from "@luke/wire";
+import type { PostHog, Properties } from "posthog-js/dist/module.no-external";
 import { appendBundle } from "./bundle-loader";
 import { SESSION_RECORDER_ASSET, sessionRecorderLoaded } from "./session-recorder/contract";
 
@@ -26,10 +22,11 @@ import { SESSION_RECORDER_ASSET, sessionRecorderLoaded } from "./session-recorde
  * pictures of the person's screen, a plan's title and the editor its document
  * is edited in, whose masked value would still record the rhythm of the
  * typing, and its whiteboard, transcript, Work, Code, File, and page tabs,
- * version history, Inbox, and coding agents' tabs, among others. The whiteboard is
- * the one surface that draws its words on a canvas, which the text masking
- * cannot reach, so its block is its only line, and canvas recording is held
- * off by name rather than by the library's default.
+ * version history, Inbox, and coding agents' tabs and their Terminal tabs,
+ * among others. The whiteboard and a Terminal tab are the surfaces that draw
+ * their words on a canvas, which the text masking cannot reach, so their
+ * block is their only line, and canvas recording is held off by name rather
+ * than by the library's default.
  *
  * `PRIVACY.md` says all of that plainly, and it has to keep saying it: the
  * masking and those blocks are the whole of what decides it.
@@ -40,8 +37,8 @@ import { SESSION_RECORDER_ASSET, sessionRecorderLoaded } from "./session-recorde
  * There is no switch — `PRIVACY.md` is where a user learns this happens, so
  * that file carries the whole of the disclosure and has to keep doing it. No
  * account is among the reasons either. Recording begins at the first paint of
- * an ordinary launch, as soon as the recorder's bundle has loaded beside it,
- * before anyone has signed in, because the launch is where what goes wrong goes wrong and a
+ * an ordinary launch, as soon as the recorder's bundle and the client have
+ * loaded beside it, before anyone has signed in, because the launch is where what goes wrong goes wrong and a
  * recording that waited for a sign-in never saw it. A session that reaches
  * one is joined to the person there; a session that never does stays
  * anonymous, which is the part `PRIVACY.md` has to say plainly, because such
@@ -271,7 +268,9 @@ const SESSION_REPLAY_MASKING = {
 
 let started = false;
 let initialized = false;
-let recorderLoading = false;
+let loading = false;
+/** The client, once its module has landed after the recorder. */
+let client: PostHog | undefined;
 /** The run's latest word on recording, which a recorder that finishes loading starts under. */
 let latest: SessionReplayBootstrap | undefined;
 
@@ -301,47 +300,57 @@ function startSessionReplay(bootstrap: SessionReplayBootstrap): void {
   const key = projectApiKey();
   if (!key) return;
   started = true;
-  if (sessionRecorderLoaded()) record(key, bootstrap);
-  else loadRecorder(key);
+  if (client !== undefined) record(client, key, bootstrap);
+  else loadRecording(key);
 }
 
 /**
- * Loads the recorder's bundle (`session-recorder/contract.ts`), then starts
- * the client under the run's word as it stands by then, unless a stop
- * arrived while it loaded. Note that the client is started only once the
- * recorder is there, because the "no-external" client never fetches a
- * recorder of its own: started first, it would find none and silently
- * record nothing. A recorder that failed to load, or loaded and registered
- * nothing, records nothing and stands recording down, so the run's next word
- * on it tries again.
+ * Loads what recording needs, the recorder's bundle
+ * (`session-recorder/contract.ts`) and then the client, a chunk of the
+ * panel's own that the bundle every window parses leaves out, and starts the
+ * client under the run's word as it stands by then, unless a stop arrived
+ * while they loaded. Note that the client is loaded only once the recorder
+ * is there, because the "no-external" client never fetches a recorder of its
+ * own: started first, it would find none and silently record nothing. Either
+ * failing to load, or a recorder that loaded and registered nothing, records
+ * nothing and stands recording down, so the run's next word on it tries
+ * again.
  */
-function loadRecorder(key: string): void {
-  if (recorderLoading) return;
-  recorderLoading = true;
-  appendBundle(
-    { script: SESSION_RECORDER_ASSET.SCRIPT },
-    () => {
-      recorderLoading = false;
-      if (!sessionRecorderLoaded()) started = false;
-      else if (started && latest) record(key, latest);
-    },
-    () => {
-      recorderLoading = false;
-      started = false;
-    },
-  );
+function loadRecording(key: string): void {
+  if (loading) return;
+  loading = true;
+  const failed = () => {
+    loading = false;
+    started = false;
+  };
+  const loadClient = () => {
+    if (!sessionRecorderLoaded()) {
+      failed();
+      return;
+    }
+    // The "no-external" client: the full build without the surveys, product
+    // tours, web vitals, and the rest Luke never turns on, and without the
+    // recorder, which is a bundle of its own.
+    void import("posthog-js/dist/module.no-external").then((module) => {
+      loading = false;
+      client = module.default;
+      if (started && latest) record(client, key, latest);
+    }, failed);
+  };
+  if (sessionRecorderLoaded()) loadClient();
+  else appendBundle({ script: SESSION_RECORDER_ASSET.SCRIPT }, loadClient, failed);
 }
 
 /** Starts the client over a recorder already loaded: built once per window, resumed after that. */
-function record(key: string, bootstrap: SessionReplayBootstrap): void {
+function record(posthog: PostHog, key: string, bootstrap: SessionReplayBootstrap): void {
   if (initialized) {
     // The client is built once per window. A second `init` would not rebuild
     // it, so a recording resumed after an account change is started rather
     // than re-configured — but it must still be told whose recording it is,
     // because the person may have changed since the last one.
-    optIn();
-    registerBuild(bootstrap);
-    identifyAccount(bootstrap);
+    optIn(posthog);
+    registerBuild(posthog, bootstrap);
+    identifyAccount(posthog, bootstrap);
     posthog.startSessionRecording();
     return;
   }
@@ -381,9 +390,9 @@ function record(key: string, bootstrap: SessionReplayBootstrap): void {
   // Stopping opts out, and that is written into the same storage this client
   // reads at launch — so without opting back in here, a run that had ever
   // been stopped would come up recording nothing for the rest of the install.
-  optIn();
-  registerBuild(bootstrap);
-  identifyAccount(bootstrap);
+  optIn(posthog);
+  registerBuild(posthog, bootstrap);
+  identifyAccount(posthog, bootstrap);
 }
 
 /**
@@ -399,7 +408,7 @@ function record(key: string, bootstrap: SessionReplayBootstrap): void {
  * to the person. What never reaches a sign-in stays anonymous, and so cannot
  * be erased with an account — `PRIVACY.md` says so, because it is now true.
  */
-function identifyAccount(bootstrap: SessionReplayBootstrap): void {
+function identifyAccount(posthog: PostHog, bootstrap: SessionReplayBootstrap): void {
   if (bootstrap.accountId) posthog.identify(bootstrap.accountId);
 }
 
@@ -413,7 +422,7 @@ function identifyAccount(bootstrap: SessionReplayBootstrap): void {
  * The opt-in names no event: `$opt_in` counts a consent moving, and nothing
  * here moves one.
  */
-function optIn(): void {
+function optIn(posthog: PostHog): void {
   posthog.opt_in_capturing({ captureEventName: false });
 }
 
@@ -423,7 +432,7 @@ function optIn(): void {
  * with the person, so a recording resumed afterwards would otherwise say
  * nothing about the version it came from.
  */
-function registerBuild(bootstrap: SessionReplayBootstrap): void {
+function registerBuild(posthog: PostHog, bootstrap: SessionReplayBootstrap): void {
   posthog.register({
     app_name: "desktop",
     app_version: bootstrap.appVersion,
@@ -433,7 +442,8 @@ function registerBuild(bootstrap: SessionReplayBootstrap): void {
 
 function stopSessionReplay(): void {
   started = false;
-  if (!initialized) return;
+  const posthog = initialized ? client : undefined;
+  if (posthog === undefined) return;
   posthog.stopSessionRecording();
   // The person goes with the recording. Without this the client keeps the
   // previous account's id and its anonymous session, so signing in as someone

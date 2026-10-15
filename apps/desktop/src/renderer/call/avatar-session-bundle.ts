@@ -1,4 +1,4 @@
-import { AVATAR_SESSION_ASSET } from "../avatar-session/contract";
+import { AVATAR_SESSION_ASSET } from "@luke/ui/avatar-session-contract";
 import { bundleAtom } from "../bundle-loader";
 
 /**

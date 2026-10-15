@@ -1,23 +1,24 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { Database } from "@sidecar/database/core/query";
-import { EpochMillisColumnSchema } from "@sidecar/database/models/columns";
+import { Database } from "@luke/database/core/query";
+import { EpochMillisColumnSchema } from "@luke/database/models/columns";
 import {
   type ConversationTarget,
   STORE_WRITE_EFFECT,
   STORE_WRITE_REFUSAL,
   type StoreWriteResult,
   storeWriter,
-} from "@sidecar/database/models/writer";
-import { conversations } from "@sidecar/database/schemas/storage";
-import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
-import { type ToolSet, tool, type UIMessage } from "ai";
-import { eq } from "drizzle-orm";
-import { Option, Result, Schema } from "effect";
-import { afterAll, test } from "vitest";
-import { z } from "zod";
+} from "@luke/database/models/writer";
+import { conversations } from "@luke/database/schemas/storage";
+import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
 import {
-  ACTION_RESULT_STATUS,
+  insertConversation,
+  openHostedStoreTestDatabase,
+  readMessagesByConversationTyped,
+  readTurnById,
+  setConversationDeletedAt,
+} from "@luke/database/testing";
+import {
   BRAIN_REQUEST_STATUS,
   BRAIN_RUN_EVENT,
   BRAIN_TURN_ORIGIN,
@@ -27,31 +28,31 @@ import {
   type BrainRunEventBody,
   type BrainTurnOrigin,
   type BrainTurnTrigger,
-  MESSAGE_AUTHOR,
-  MESSAGE_CHANNEL,
-  MESSAGE_ROLE,
-  readStoredUIMessages,
-  sessionKey,
   TOOL_CALL_SETTLEMENT,
-  TOOL_PART_STATE,
   type ToolCallSettlement,
-  TURN_ORIGIN,
-  TURN_STATUS,
   toolPartType,
   UI_PART_STATE,
   UI_PART_TYPE,
+} from "@luke/features/brain";
+import { sessionKey } from "@luke/runtime/vocabulary";
+import {
+  ACTION_RESULT_STATUS,
+  MESSAGE_AUTHOR,
+  MESSAGE_CHANNEL,
+  MESSAGE_ROLE,
+  TURN_ORIGIN,
+  TURN_STATUS,
   UNKNOWN_ACTION_STATUS,
   type UnparsedWireValue,
   type UserMessageMetadata,
   unparsedWire,
-} from "../server/core";
-import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
-import {
-  insertConversation,
-  readMessagesByConversationTyped,
-  readTurnById,
-  setConversationDeletedAt,
-} from "./support/store-rows";
+} from "@luke/wire";
+import { readStoredUIMessages, TOOL_PART_STATE } from "@luke/wire/ui-messages";
+import { type ToolSet, tool, type UIMessage } from "ai";
+import { eq } from "drizzle-orm";
+import { Option, Result, Schema } from "effect";
+import { afterAll, test } from "vitest";
+import { z } from "zod";
 
 /**
  * The store writer over the real migrations on PGlite. Synthetic fixtures

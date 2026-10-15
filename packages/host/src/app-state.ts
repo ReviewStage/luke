@@ -1,0 +1,286 @@
+import type { AccountSnapshot } from "@luke/credentials/snapshot";
+import type { PlanningView } from "@luke/features/planning-view";
+import {
+  type SessionReplayBootstrap,
+  WINDOW_ROLE,
+  type WindowRole,
+} from "@luke/gateway/window-session";
+import type { BuildCommit, UpdateSnapshot } from "@luke/settings/update";
+import type { AppSettings } from "@luke/settings/wire";
+import type { MicrophoneRoute, MicrophoneStatus, OutputAudioState } from "@luke/voice/audio";
+import type { AvatarState } from "@luke/voice/avatar";
+import type { VoiceView } from "@luke/voice/voice-view";
+import {
+  isRecord,
+  isWireBoolean,
+  isWireNumber,
+  isWireString,
+  type UnparsedWireValue,
+} from "@luke/wire";
+
+/**
+ * The launch profiles a window answers to. A capture run stages a
+ * conversation it has no voice window for: Luke speaking, that with the
+ * Mac's output off, and both speakers heard at once; or, in any fixture run,
+ * the panel's Plans tab over a synthetic plan. Any other word — the default
+ * included — stages nothing.
+ */
+export const RUN_PROFILE = {
+  IDLE: "idle",
+  SPEAKING: "speaking",
+  MUTED: "muted",
+  DUPLEX: "duplex",
+  /** The panel's Plans tab, opened at launch over a synthetic plan. */
+  PLANNING: "planning",
+  /** The same plan, opened at launch on the whiteboard Luke drew for it. */
+  PLANNING_BOARD: "planning-board",
+  /** The same plan mid-call, opened at launch on the transcript of what was said on its calls. */
+  PLANNING_TRANSCRIPT: "planning-transcript",
+  /** The same plan mid-call, opened at launch on the work Luke's planning model did on its calls. */
+  PLANNING_WORK: "planning-work",
+} as const;
+
+export type RunProfile = (typeof RUN_PROFILE)[keyof typeof RUN_PROFILE];
+
+/**
+ * What this launch is, as every window is told it and no event ever changes —
+ * save the trace gate, which is the host's answer about this run rather than
+ * the launch's own argument.
+ */
+interface AppRunFacts {
+  /** The `--profile` argument as given, which is {@link RUN_PROFILE.IDLE} when absent. */
+  profile: string;
+  packaged: boolean;
+  platform: string;
+  appVersion: string;
+  /** The commit the build was cut from, for the Updates row to name. */
+  commit?: BuildCommit;
+  captureMode: boolean;
+  fixtureMode: boolean;
+  accountRequired: boolean;
+  agentTraceEnabled: boolean;
+}
+
+export interface AppAudioSlice {
+  microphoneStatus: MicrophoneStatus;
+  microphoneRoute?: MicrophoneRoute;
+  outputAudio?: OutputAudioState;
+}
+
+export interface AppHotkeysSlice {
+  /**
+   * The accelerator each key was registered as, absent where the system
+   * refused one — a chord nothing can trigger must not be drawn as though it
+   * works. Raw rather than labelled, because the panel draws the keys apart
+   * and says the chord whole.
+   */
+  talk?: string;
+  /**
+   * Whether the talk key reports being let go of. Only a key that does can
+   * hold a turn open for as long as it is down; the fallback can only toggle
+   * one, and the panel says which of the two the developer actually has.
+   */
+  talkHeld: boolean;
+  stop?: string;
+}
+
+interface AppVoiceSlice {
+  /**
+   * The live conversation as the voice window last reported it, so a panel
+   * that opens mid-exchange draws the exchange rather than an idle voice.
+   * Absent until that window has reported once, and always in a fixture or
+   * capture run, which raises no voice window.
+   *
+   * The loudness beside it is deliberately not here. It is a reading taken
+   * twenty times a second that expires in fifty milliseconds, so nothing
+   * bootstraps from it and no version of this document could usefully carry
+   * one: it travels on `app:voice-level-changed` as the stream it is.
+   */
+  view?: VoiceView;
+  /**
+   * Luke's avatar on the call, as the panel reports it: what puts the video
+   * tile at the top of the Call tab and what the tile draws. Main's rather than
+   * the voice window's, so a replaced voice window leaves it standing.
+   */
+  avatar: AvatarState;
+}
+
+/**
+ * What this run may record, as its two halves: what the host answered, and
+ * whether an action that ended the account it files under has stood recording
+ * down for the rest of the run.
+ */
+interface AppSessionReplaySlice {
+  permitted: boolean;
+  accountId?: string;
+  halted: boolean;
+}
+
+/**
+ * The coding agents whose turn ended while the developer was not looking at
+ * the agent's tab, each until that tab is shown: what the tab's unseen dot
+ * is drawn from. Main's, because main is what watches the agents while no
+ * tab does, and so a reload of the window does not lose the dots.
+ */
+interface AppCodingAgentsSlice {
+  unseen: readonly string[];
+}
+
+/** One inbox item waiting on the developer: the item, the agent that posted it, what it asks, and when the agent first posted it, by the service's clock. */
+export interface AppInboxWaitingItem {
+  id: string;
+  agentId: string;
+  title: string;
+  postedAt: number;
+}
+
+/** One plan with inbox items waiting on the developer: the plan, and its open items, the latest changed first. */
+export interface AppInboxPlan {
+  planId: string;
+  items: readonly AppInboxWaitingItem[];
+}
+
+/** One plan holding inbox items, waiting or settled: the plan, how many, and when the latest changed, by the service's clock. */
+export interface AppInboxPlanHolding {
+  planId: string;
+  items: number;
+  updatedAt: number;
+}
+
+/**
+ * One inbox item of an agent an automation started with no plan, waiting on
+ * the developer: the item as a plan's are, the agent as its row names it
+ * now, and the automation and repository standing where a plan would; the
+ * automation, and its name, null where the reader may not read it or none
+ * stands.
+ */
+export interface AppInboxPlanlessItem extends AppInboxWaitingItem {
+  agentTitle: string | null;
+  agentModel: string;
+  automationId: string | null;
+  automationName: string | null;
+  repository: string;
+  /** The workspace the agent belongs to, whose Inbox lists the item; absent from a service before it. */
+  workspaceId?: string;
+}
+
+/** One automation holding items of its runs' agents with no plan, waiting or settled, as a plan holding items is listed: how many, and when the latest changed; null for the agents no automation the reader may read names. */
+interface AppInboxAutomationHolding {
+  automationId: string | null;
+  items: number;
+  updatedAt: number;
+}
+
+/**
+ * What waits on the developer across the account's plans, as main's own
+ * read of it last answered (`@luke/host/agent-notices`): each plan with an
+ * open inbox item, the plan whose item changed latest first. What the
+ * sidebar's Inbox counts, and what an item's toast is withdrawn by once it
+ * no longer waits. Main's, because main holds that read whichever plan is
+ * open, and empty while nobody is signed in.
+ */
+export interface AppInboxSlice {
+  waiting: readonly AppInboxPlan[];
+  /** Every plan holding an inbox item, waiting or settled, the plan whose item changed latest first: what the window's Inbox lists. */
+  plans: readonly AppInboxPlanHolding[];
+  /** The open items of agents with no plan, the latest changed first, which wait beside the plans' and count with them. */
+  planless: readonly AppInboxPlanlessItem[];
+  /** Every automation holding items of its agents with no plan, as `plans` lists the plans. */
+  automations: readonly AppInboxAutomationHolding[];
+}
+
+/**
+ * Whether macOS refused the last notification Luke posted, which is the only
+ * word Electron gives of notifications being off for Luke in System Settings:
+ * false until one is refused, and again once one is shown.
+ */
+interface AppNotificationsSlice {
+  refused: boolean;
+}
+
+/**
+ * Everything main keeps of what the host tells it and what this machine
+ * answers for itself: one document, read whole and replaced a slice at a
+ * time, so the state a window is handed and the state main answers a call
+ * from cannot differ.
+ *
+ * Per-window facts — the mode, the display, the role — are deliberately not
+ * here: they belong to the window they describe, the panels own them, and
+ * they ride the snapshot a window is handed rather than the document.
+ */
+export interface AppState {
+  /** 0 before any patch; +1 per applied patch, monotone and never reset. */
+  readonly version: number;
+  run: AppRunFacts;
+  settings?: AppSettings;
+  account: AccountSnapshot;
+  update: UpdateSnapshot;
+  audio: AppAudioSlice;
+  hotkeys: AppHotkeysSlice;
+  voice: AppVoiceSlice;
+  /**
+   * The Plans tab's named plans as the host's reads of the service
+   * hold them: the list, the one active plan, and its saved document. Only
+   * the panel's Plans tab draws it, and the active plan is the one a voice
+   * session and the talk key bind to.
+   */
+  planning: PlanningView;
+  codingAgents: AppCodingAgentsSlice;
+  inbox: AppInboxSlice;
+  notifications: AppNotificationsSlice;
+  sessionReplay: AppSessionReplaySlice;
+}
+
+/**
+ * What one window answers for and the document cannot: which surface it
+ * draws, and whether it stands in full screen, where macOS hides its traffic
+ * lights and the title bar's buttons take their place. Decided in the main
+ * process by which window asked, never by anything a renderer could claim
+ * about itself.
+ */
+export interface AppWindowFacts {
+  role: WindowRole;
+  fullScreen: boolean;
+}
+
+/**
+ * The document as one window is handed it: every slice, and that window's own
+ * facts beside them. The first delivery is this window's bootstrap and every
+ * later one carries a version at least as high, so there is no "which arrived
+ * first" for a reader to answer.
+ */
+export type AppStateSnapshot = AppState & { window: AppWindowFacts };
+
+const WINDOW_ROLES: ReadonlySet<string> = new Set(Object.values(WINDOW_ROLE));
+
+/**
+ * The boundary parse for a snapshot. What it can check is what the wire
+ * cannot lie about cheaply and every reader depends on: the version that
+ * orders deliveries, and the window facts that decide which surface draws at
+ * all. The slices are read by the guards of the vocabularies they came from,
+ * where a reader actually uses them.
+ */
+export function isAppStateSnapshot(value: UnparsedWireValue): boolean {
+  if (!isRecord(value)) return false;
+  if (!isWireNumber(value.version) || !Number.isInteger(value.version) || value.version < 0) {
+    return false;
+  }
+  const window = value.window;
+  return (
+    isRecord(window) &&
+    isWireString(window.role) &&
+    WINDOW_ROLES.has(window.role) &&
+    isWireBoolean(window.fullScreen)
+  );
+}
+
+/** What this run may record, as the renderer is handed it. */
+export function sessionReplayBootstrap(
+  state: Pick<AppState, "run" | "sessionReplay">,
+): SessionReplayBootstrap {
+  return {
+    permitted: state.sessionReplay.permitted && !state.sessionReplay.halted,
+    appVersion: state.run.appVersion,
+    ...(state.sessionReplay.accountId ? { accountId: state.sessionReplay.accountId } : undefined),
+  };
+}

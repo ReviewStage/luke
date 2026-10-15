@@ -1,21 +1,21 @@
-import { Effect, Redacted, Result } from "effect";
-import { defineState } from "eve/context";
-import { authenticateGitHub } from "eve/extensions/code/sandbox";
-import { defineHook, type HookContext } from "eve/hooks";
-import { AGENT_ROLE } from "../../server/hosted/agent-runtime/role.js";
+import { AGENT_ROLE } from "@luke/service/agents/agent-runtime/role";
 import {
   endsTurn,
   renewsCredential,
   type SandboxRecord,
   stopsAtTurnEnd,
-} from "../../server/hosted/agent-runtime/sandbox.js";
-import { pinnedState } from "../../server/hosted/brain-host/pinned-state.js";
-import { EMPTY_RELAY_STATE, type RelayState } from "../../server/hosted/brain-host/relay.js";
-import type { CheckoutFailure } from "../../server/hosted/coder-host/host.js";
-import { opensSandbox } from "../../server/hosted/coder-host/tool-set.js";
-import type { RepositorySandbox } from "../../server/hosted/repository-shell.js";
-import { runWeb } from "../../server/runtime.js";
+} from "@luke/service/agents/agent-runtime/sandbox";
+import { pinnedState } from "@luke/service/agents/brain-host/pinned-state";
+import { EMPTY_RELAY_STATE, type RelayState } from "@luke/service/agents/brain-host/relay";
+import type { CheckoutFailure } from "@luke/service/agents/coder-host/host";
+import { opensSandbox } from "@luke/service/agents/coder-host/tool-set";
+import type { RepositorySandbox } from "@luke/service/agents/repository-shell";
+import { Effect, Redacted, Result } from "effect";
+import { defineState } from "eve/context";
+import { authenticateGitHub } from "eve/extensions/code/sandbox";
+import { defineHook, type HookContext } from "eve/hooks";
 import { host, seams } from "../host.js";
+import { runAgent } from "../runtime.js";
 import { environment } from "../sandbox.js";
 import { sandboxRecord, sessionPrompt } from "../session-prompt.js";
 
@@ -24,7 +24,7 @@ import { sandboxRecord, sessionPrompt } from "../session-prompt.js";
  * session's sandbox needs of the stream: every event eve records for a
  * session is read here, after eve has written it, and told to the writer as
  * the agent's own event through the relay the planning brain shares
- * (`server/hosted/brain-host/relay.ts`). A session the host does not admit
+ * (`packages/service/src/agents/brain-host/relay.ts`). A session the host does not admit
  * writes nothing. Beside the relay, the hook watches the sandbox: a call of
  * a sandbox tool, or a message received with files eve staged there, is
  * when the sandbox opened and its checkout set the repository credential
@@ -36,7 +36,7 @@ import { sandboxRecord, sessionPrompt } from "../session-prompt.js";
  * developer's terminal holds it, when the scheduled sweep stops it once the
  * terminal's lease lapses (`sandbox-terminal-lease.ts`). Whether a
  * step renews the credential and whether a turn's end stops the sandbox are
- * the coding agent's sandbox policy (`server/hosted/agent-runtime/sandbox.ts`),
+ * the coding agent's sandbox policy (`packages/service/src/agents/agent-runtime/sandbox.ts`),
  * not this hook's. Note that the branch is written before the end is
  * relayed, because a tab reads the pull request the moment it hears the
  * agent ended and the service keeps that answer a while: an end relayed
@@ -56,7 +56,7 @@ function describeRefusal(failure: CheckoutFailure): string {
 
 /** The branch checked out as the turn ends, written on the agent's row; an admission that fails is logged, and the host logs its own failures, so the stop that follows is never skipped. */
 async function recordBranch(ctx: HookContext, sandbox: RepositorySandbox): Promise<void> {
-  await runWeb(
+  await runAgent(
     Effect.gen(function* () {
       const admitted = yield* host.admit(ctx.session.auth, ctx.session.id);
       if (Result.isFailure(admitted)) return;
@@ -73,7 +73,7 @@ async function recordBranch(ctx: HookContext, sandbox: RepositorySandbox): Promi
 
 /** Whether a developer's terminal holds the sandbox as the turn ends; a session the host does not admit, and a read that fails, hold nothing. */
 async function terminalHolds(ctx: HookContext): Promise<boolean> {
-  return runWeb(
+  return runAgent(
     Effect.gen(function* () {
       const admitted = yield* host.admit(ctx.session.auth, ctx.session.id);
       if (Result.isFailure(admitted)) return false;
@@ -97,7 +97,7 @@ async function renewCredential(
   record: ReturnType<typeof pinnedState<SandboxRecord>>,
   now: number,
 ): Promise<void> {
-  const minted = await runWeb(
+  const minted = await runAgent(
     Effect.gen(function* () {
       const admitted = yield* host.admit(ctx.session.auth, ctx.session.id);
       if (Result.isFailure(admitted)) return undefined;
@@ -126,7 +126,7 @@ export default defineHook({
     async "*"(event, ctx) {
       // Pinned before anything awaits, because the admission's statement can
       // hand this fiber back in another session's context, and the relay's
-      // state and the prompt's hash are this session's (`server/hosted/brain-host/pinned-state.ts`).
+      // state and the prompt's hash are this session's (`packages/service/src/agents/brain-host/pinned-state.ts`).
       const state = pinnedState(relayState);
       const prompt = pinnedState(sessionPrompt);
       const sandbox = pinnedState(sandboxRecord);
@@ -139,7 +139,7 @@ export default defineHook({
           ? await ctx.getSandbox()
           : undefined;
       if (ending !== undefined) await recordBranch(ctx, ending);
-      await runWeb(
+      await runAgent(
         Effect.gen(function* () {
           if (event.type === "session.started") {
             const starting = yield* host.admitStarting(ctx.session.auth, ctx.session.id);

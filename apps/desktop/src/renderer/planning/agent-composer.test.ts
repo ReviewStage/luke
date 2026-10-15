@@ -4,13 +4,14 @@ import assert from "node:assert/strict";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAgentAnswer,
-} from "@sidecar/features/coding-agent-view";
-import { REPOSITORY_UNREACHED } from "@sidecar/features/repository-reach-wire";
+} from "@luke/features/coding-agent-view";
+import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
+import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import type { SkillOption } from "@luke/ui/skill-mention";
+import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "#shared/messages/acts";
-import { MICROPHONE_STATUS } from "#shared/messages/audio";
 import {
   composerEditor,
   installEditorBundle,
@@ -22,7 +23,6 @@ import {
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { AgentComposer } from "./agent-composer";
 import { type RepositoryRemedyDoors, RepositoryRemedyProvider } from "./repository-remedy";
-import type { SkillOption } from "./skill-mention";
 import type { SkillSource } from "./skill-picker";
 import { type MessageSender, useAgentComposer } from "./use-agent-composer";
 
@@ -358,7 +358,7 @@ async function mountedRefusedForMove() {
   await settle();
   const move =
     [...container.querySelectorAll("button")].find(
-      (each) => each.textContent === "Move plan to Acme Team",
+      (each) => each.textContent === "Move task to Acme Team",
     ) ?? assert.fail("the note offers the move");
   act(() => move.click());
   await settle();

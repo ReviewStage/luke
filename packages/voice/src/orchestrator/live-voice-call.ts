@@ -1,5 +1,5 @@
-import type { LiveStatus } from "@sidecar/live";
-import type { LiveConversationLine } from "@sidecar/wire/conversation";
+import type { LiveStatus } from "@luke/live";
+import type { LiveConversationLine } from "@luke/wire/conversation";
 import type { Effect } from "effect";
 
 /**

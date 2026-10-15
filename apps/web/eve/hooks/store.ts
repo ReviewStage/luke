@@ -1,10 +1,10 @@
+import { pinnedState } from "@luke/service/agents/brain-host/pinned-state";
+import { EMPTY_RELAY_STATE, type RelayState } from "@luke/service/agents/brain-host/relay";
 import { Effect, Result } from "effect";
 import { defineState } from "eve/context";
 import { defineHook } from "eve/hooks";
-import { pinnedState } from "../../server/hosted/brain-host/pinned-state.js";
-import { EMPTY_RELAY_STATE, type RelayState } from "../../server/hosted/brain-host/relay.js";
-import { runWeb } from "../../server/runtime.js";
 import { host } from "../host.js";
+import { runAgent } from "../runtime.js";
 import { sessionPrompt } from "../session-prompt.js";
 
 /**
@@ -25,10 +25,10 @@ export default defineHook({
     "*"(event, ctx) {
       // Pinned before anything awaits, because the admission's statement can
       // hand this fiber back in another session's context, and the relay's
-      // state and the prompt's hash are this session's (`server/hosted/brain-host/pinned-state.ts`).
+      // state and the prompt's hash are this session's (`packages/service/src/agents/brain-host/pinned-state.ts`).
       const state = pinnedState(relayState);
       const prompt = pinnedState(sessionPrompt);
-      return runWeb(
+      return runAgent(
         Effect.gen(function* () {
           if (event.type === "session.started") {
             const starting = yield* host.admitStarting(ctx.session.auth, ctx.session.id);

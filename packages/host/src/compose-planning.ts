@@ -8,25 +8,22 @@ import type {
   PlanDraftFrame,
   PlanMarks,
   WorkspaceCallResult,
-} from "@sidecar/features";
-import { WORKSPACE_CALL_FAILURE } from "@sidecar/features";
-import {
-  DRAW_ON_BOARD_TOOL_NAME,
-  LOOK_AT_BOARD_TOOL_NAME,
-} from "@sidecar/features/board-vocabulary";
+} from "@luke/features";
+import { WORKSPACE_CALL_FAILURE } from "@luke/features";
+import { DRAW_ON_BOARD_TOOL_NAME, LOOK_AT_BOARD_TOOL_NAME } from "@luke/features/board-vocabulary";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentCallFailure,
   type CodingAgentMessagesAnswerView,
-} from "@sidecar/features/coding-agent-view";
+} from "@luke/features/coding-agent-view";
 import {
   applyMessagesPage,
   CODING_AGENT_STATUS,
   type CodingAgentMessagesAnswer,
   type CodingAgentStatus,
-} from "@sidecar/features/coding-agent-wire";
-import { SHOW_PAGE_TOOL_NAME } from "@sidecar/features/page-wire";
-import { PLAN_ACTOR, type Plan } from "@sidecar/features/plan-wire";
+} from "@luke/features/coding-agent-wire";
+import { SHOW_PAGE_TOOL_NAME } from "@luke/features/page-wire";
+import { PLAN_ACTOR, type Plan } from "@luke/features/plan-wire";
 import {
   IDLE_PLANNING_VIEW,
   PLAN_CALL_FAILURE,
@@ -54,6 +51,7 @@ import {
   type PlanningWorkspaceInvitationsAnswer,
   type PlanningWorkspaceLeaveAnswer,
   type PlanningWorkspaceMembersAnswer,
+  type PlanningWorkspacePhotoAnswer,
   type PlanShownCode,
   type PlanWorkTurn,
   planningArchiveParamsSchema,
@@ -78,19 +76,25 @@ import {
   planningWorkspaceInviteParamsSchema,
   planningWorkspaceLeaveParamsSchema,
   planningWorkspaceMemberRemoveParamsSchema,
+  planningWorkspaceMemberRoleParamsSchema,
   planningWorkspaceMembersParamsSchema,
   planningWorkspaceParamsSchema,
-} from "@sidecar/features/planning-view";
-import { EMPTY_TRANSCRIPT } from "@sidecar/features/transcript-wire";
+  planningWorkspacePhotoParamsSchema,
+  planningWorkspacePhotoSetParamsSchema,
+  planningWorkspaceRenameParamsSchema,
+  planningWorkspaceTransferParamsSchema,
+} from "@luke/features/planning-view";
+import { EMPTY_TRANSCRIPT } from "@luke/features/transcript-wire";
+import type { Workspace } from "@luke/features/workspace-wire";
 import {
   carried,
   GATEWAY_EVENT,
   GATEWAY_METHOD,
   type GatewayMethodTable,
   invalid,
-} from "@sidecar/gateway";
-import { unparsedWire } from "@sidecar/wire";
-import { readEither } from "@sidecar/wire/effect";
+} from "@luke/gateway";
+import { unparsedWire } from "@luke/wire";
+import { readEither } from "@luke/wire/effect";
 import {
   Clock,
   Data,
@@ -158,8 +162,9 @@ import type { RunMode } from "./run-mode.js";
  * the plans and read apart from them, so the plans never wait on them: on
  * the first refresh after a launch or a sign-in, when the panel comes
  * forward, at most once a minute either way, and after a workspace call
- * moved them. A workspace made, a GitHub organization connected or
- * disconnected, a removal of a member, and a leave are carried to the
+ * moved them. A workspace made, renamed, or given a photo, a GitHub
+ * organization connected or disconnected, a removal of a member, a
+ * member's role changed, a handover, and a leave are carried to the
  * service on the developer's word, and a workspace's members and a
  * connection's install address are answered to the caller that asked and
  * held nowhere here.
@@ -290,10 +295,15 @@ export type PlanningClient = Pick<
     HostedWorkspaceClient,
     | "list"
     | "create"
+    | "rename"
+    | "setPhoto"
     | "githubConnect"
     | "githubDisconnect"
     | "members"
+    | "photo"
     | "removeMember"
+    | "changeRole"
+    | "transfer"
     | "leave"
     | "invite"
     | "invitations"
@@ -522,7 +532,10 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
     const current = () => read === workspacesRead;
     const workspaces = Effect.tap(client.workspaces.list(), (answer) =>
       Effect.sync(() => {
-        if (current() && answer !== undefined) write({ workspaces: answer.workspaces });
+        if (!current()) return;
+        // A read that did not answer leaves the workspaces stale, so the next refresh reads them again at once.
+        if (answer === undefined) workspacesAskedAt = undefined;
+        else write({ workspaces: answer.workspaces });
       }),
     );
     const github = Effect.tap(client.github.status(), (read) =>
@@ -1002,6 +1015,28 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
         ? Effect.all([readWorkspaces, serial(readList)], { concurrency: "unbounded" })
         : readWorkspaces,
     );
+  }
+
+  /**
+   * A write whose answer is the workspace as it then stands, then the
+   * workspaces read again. Note that the workspace the service answered
+   * lands on the view before the read after it, because that read may fail
+   * and keep the workspace as it was, and one that answers is the newer word.
+   */
+  function workspaceWrite(
+    call: Effect.Effect<WorkspaceCallResult<Workspace>, never, HttpClient.HttpClient>,
+  ): Effect.Effect<PlanningWorkspaceAnswer> {
+    return Effect.gen(function* () {
+      const written = yield* Effect.provide(call, FetchHttpClient.layer);
+      if (written.ok) {
+        const answered = written.answer;
+        write({
+          workspaces: view.workspaces.map((each) => (each.id === answered.id ? answered : each)),
+        });
+      }
+      yield* readWorkspaces;
+      return written.ok ? { workspace: written.answer } : { failure: written.failure };
+    });
   }
 
   const methods: GatewayMethodTable = {
@@ -1511,6 +1546,35 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
           made.ok ? { workspace: made.answer } : { failure: made.failure },
         );
       }),
+    // A rename moves no plan, so the workspaces alone are read again, and
+    // the new name arrives on the document with them.
+    [GATEWAY_METHOD.WORKSPACES_RENAME]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(planningWorkspaceRenameParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) {
+          return yield* invalid("renaming a workspace names it and its new name");
+        }
+        if (!gate()) return carried<PlanningWorkspaceAnswer>(WORKSPACE_UNANSWERED);
+        const { workspaceId, name } = read.success;
+        return carried<PlanningWorkspaceAnswer>(
+          yield* workspaceWrite(client.workspaces.rename(workspaceId, name)),
+        );
+      }),
+    // A photo moves no plan either, so it is a rename's twin: the answered
+    // workspace, its photo's new version or none, lands, and the
+    // workspaces are read again; the window's tiles read the photo by it.
+    [GATEWAY_METHOD.WORKSPACES_PHOTO_SET]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(planningWorkspacePhotoSetParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) {
+          return yield* invalid("setting a workspace's photo names it and a photo or none");
+        }
+        if (!gate()) return carried<PlanningWorkspaceAnswer>(WORKSPACE_UNANSWERED);
+        const { workspaceId, photo } = read.success;
+        return carried<PlanningWorkspaceAnswer>(
+          yield* workspaceWrite(client.workspaces.setPhoto(workspaceId, photo)),
+        );
+      }),
     // The install address is answered to the caller that opens it and held
     // nowhere: the connection lands in the browser, and the workspaces read
     // after it, as the panel comes forward, carry the organization.
@@ -1556,6 +1620,22 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
           members.ok ? { members: members.answer } : { failure: members.failure },
         );
       }),
+    // A photo is answered to the window that asked and held nowhere, as
+    // the members are: the window keeps it under the version the list
+    // named, and the list itself never carries its bytes.
+    [GATEWAY_METHOD.WORKSPACES_PHOTO]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(planningWorkspacePhotoParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) return yield* invalid("reading a photo names a workspace");
+        if (!gate()) return carried<PlanningWorkspacePhotoAnswer>(WORKSPACE_UNANSWERED);
+        const photo = yield* Effect.provide(
+          client.workspaces.photo(read.success.workspaceId),
+          FetchHttpClient.layer,
+        );
+        return carried<PlanningWorkspacePhotoAnswer>(
+          photo.ok ? photo.answer : { failure: photo.failure },
+        );
+      }),
     [GATEWAY_METHOD.WORKSPACES_MEMBER_REMOVE]: (params) =>
       Effect.gen(function* () {
         const read = readEither(planningWorkspaceMemberRemoveParamsSchema)(unparsedWire(params));
@@ -1572,6 +1652,42 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
         );
         return carried<PlanningWorkspaceMembersAnswer>(
           remaining.ok ? { members: remaining.answer } : { failure: remaining.failure },
+        );
+      }),
+    // A role changed moves no plan, so the workspaces alone are read again,
+    // as after a removal.
+    [GATEWAY_METHOD.WORKSPACES_MEMBER_ROLE]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(planningWorkspaceMemberRoleParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) {
+          return yield* invalid("changing a role names the workspace, the member, and the role");
+        }
+        if (!gate()) return carried<PlanningWorkspaceMembersAnswer>(WORKSPACE_UNANSWERED);
+        const { workspaceId, userId, role } = read.success;
+        const changed = yield* workspaceCall(
+          client.workspaces.changeRole(workspaceId, userId, role),
+          { plans: false },
+        );
+        return carried<PlanningWorkspaceMembersAnswer>(
+          changed.ok ? { members: changed.answer } : { failure: changed.failure },
+        );
+      }),
+    // Note that a handover changes the account's own role in the workspace,
+    // which the view's workspaces carry and every owner's and admin's act is
+    // drawn from, so the workspaces are read again; it moves no plan.
+    [GATEWAY_METHOD.WORKSPACES_TRANSFER]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(planningWorkspaceTransferParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) {
+          return yield* invalid("handing a workspace over names it and the admin");
+        }
+        if (!gate()) return carried<PlanningWorkspaceMembersAnswer>(WORKSPACE_UNANSWERED);
+        const { workspaceId, userId } = read.success;
+        const handedOver = yield* workspaceCall(client.workspaces.transfer(workspaceId, userId), {
+          plans: false,
+        });
+        return carried<PlanningWorkspaceMembersAnswer>(
+          handedOver.ok ? { members: handedOver.answer } : { failure: handedOver.failure },
         );
       }),
     // Note that a leave ends a call about any plan of the workspace left,

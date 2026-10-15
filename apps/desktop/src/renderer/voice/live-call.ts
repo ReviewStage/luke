@@ -5,9 +5,9 @@ import {
   type VoiceEndLiveSessionParams,
   type VoiceReportLiveTransportParams,
   voiceReportLiveTransportParamsSchema,
-} from "@sidecar/gateway";
-import { TRACE_DIRECTION, type TraceDirection } from "@sidecar/gateway/devtrace";
-import type { VoiceCreateLiveSessionResult } from "@sidecar/gateway/protocol";
+} from "@luke/gateway";
+import { TRACE_DIRECTION, type TraceDirection } from "@luke/gateway/devtrace";
+import type { VoiceCreateLiveSessionResult } from "@luke/gateway/protocol";
 import {
   decodeLivePayload,
   generalLiveError,
@@ -23,16 +23,29 @@ import {
   parseLiveServerEvent,
   TRANSCRIPT_SPEAKER,
   unmuteEvent,
-} from "@sidecar/live";
+} from "@luke/live";
+import { AVATAR_STATUS, type AvatarFeed, type AvatarStatus } from "@luke/voice/avatar";
+import {
+  AVATAR_HANDOVER_DIRECT,
+  type AvatarHandover,
+  avatarVoiced,
+  handoverInterrupt,
+  handoverOnFeed,
+  handoverOnStatus,
+  handoverOnTee,
+} from "@luke/voice/avatar-handover";
+import { PCM_SAMPLE_RATE } from "@luke/voice/avatar-pcm";
+import { TURN_GATE } from "@luke/voice/avatar-turn-gate";
+import { LiveCaptions } from "@luke/voice/live-captions";
 import type {
   LiveCaptionRow,
   LiveVoiceCall,
   LiveVoiceCallEvents,
   LiveVoiceCallOpening,
   LiveVoiceSpeakers,
-} from "@sidecar/voice/orchestrator";
-import type { UnparsedWireValue, WireRecord } from "@sidecar/wire";
-import { readEither } from "@sidecar/wire/effect";
+} from "@luke/voice/orchestrator";
+import type { UnparsedWireValue, WireRecord } from "@luke/wire";
+import { readEither } from "@luke/wire/effect";
 import {
   type Context,
   Deferred,
@@ -44,20 +57,7 @@ import {
   Result,
   type Scope,
 } from "effect";
-import { AVATAR_STATUS, type AvatarFeed, type AvatarStatus } from "#shared/messages/avatar";
-import { PCM_SAMPLE_RATE } from "../avatar-feed/contract";
-import {
-  AVATAR_HANDOVER_DIRECT,
-  type AvatarHandover,
-  avatarVoiced,
-  handoverInterrupt,
-  handoverOnFeed,
-  handoverOnStatus,
-  handoverOnTee,
-} from "../avatar-feed/handover";
 import type { AvatarFeedOptions } from "../avatar-feed/start-avatar-feed";
-import { TURN_GATE } from "../avatar-feed/turn-gate";
-import { LiveCaptions } from "./live-captions";
 import {
   acquireLivePeer,
   LIVE_PEER_OUTCOME,

@@ -1,8 +1,8 @@
-import type { ModelChoice } from "@sidecar/features/models-wire";
-import { ChevronDownIcon, PlayIcon } from "@sidecar/panel";
+import { FAILURE_REASON } from "@luke/features/failure-remedy";
+import type { ModelChoice } from "@luke/features/models-wire";
+import { ChevronDownIcon, PlayIcon } from "@luke/ui";
 import { useEffect, useId, useRef, useState } from "react";
 import { FailureNote } from "../failure-note";
-import { FAILURE_REASON } from "../failure-remedy";
 import { choiceLabel } from "../planning/coding-agent-model";
 import { ModelMenu, settledChoice } from "../planning/model-menu";
 import { useRepositoryRemedy } from "../planning/repository-remedy";

@@ -1,28 +1,42 @@
-import { INTEGRATION_PROVIDER } from "@sidecar/features/integration-wire";
-import type { PlanSummary } from "@sidecar/features/plan-wire";
+import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
+import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import { PLAN_ACTOR, type PlanSummary } from "@luke/features/plan-wire";
 import {
   ArchiveIcon,
   CopyIcon,
   EllipsisIcon,
   ExternalIcon,
-  PencilIcon,
   PinIcon,
+  ProviderMark,
   TrashIcon,
   UnarchiveIcon,
   UnpinIcon,
-} from "@sidecar/panel";
-import { HistoryIcon } from "lucide-react";
+} from "@luke/ui";
+import { accountActor, creatorActor } from "@luke/ui/actor-model";
+import { confirmAsked } from "@luke/ui/confirm-state";
+import { DOCUMENT_REGION, PLAN_MARK, type PlanMark } from "@luke/ui/planning-model";
+import { FolderInputIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
+import { ActorRef } from "../actor-ref";
 import { useAppCommand } from "../app-commands";
-import { DOCUMENT_REGION, PLAN_MARK, type PlanMark } from "../planning/planning-model";
+import { useCopyToast } from "../copy-feedback";
+import { EditedBy, type EditPlace, useEditReader } from "../planning/edit-ref";
+import { lastEditOf } from "../planning/plan-body";
+import {
+  copyPlanLinkItem,
+  planLinkPlace,
+  renamePlanItem,
+  versionHistoryItem,
+} from "../planning/plan-menu-items";
+import { useMinute } from "../planning/plan-time";
 import { RelativeTime } from "../planning/relative-time";
 import type { PlansControl } from "../planning/use-plans-tab";
-import { ProviderMark } from "../provider-marks";
 import { ConfirmDialog, type DialogQuestion, useConfirmDialog } from "../settings/confirm-dialog";
-import { confirmAsked } from "../settings/confirm-state";
 import { Tooltip } from "../tooltip";
+import { useAppState } from "../use-app-state";
 import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
+import { strandedHome, useMovePlanDialog } from "./move-plan-dialog";
 import { PlanStatusMark, planCardOf } from "./plan-card";
 import { PlanNameField, usePlanRename } from "./plan-name-field";
 
@@ -33,15 +47,21 @@ import { PlanNameField, usePlanRename } from "./plan-name-field";
  * be acted on without being opened first. The menu is the window's own (`action-menu.tsx`),
  * so both doors draw it the same way and Permanently delete can be drawn red.
  *
- * Rename edits the name where the door draws it: the sidebar's row turns
- * into a field, and the toolbar's ⋯ opens its title as one. Version history
+ * Copy link to plan copies the plan's address on tryluke.dev, as the ⋯
+ * beside the plan's title does (`plan-menu-items.tsx`). Rename edits the
+ * name where the door draws it: the sidebar's row turns into a field, and
+ * the toolbar's ⋯ opens its title as one. Version history
  * opens the plan's versions over the whole window, opening the plan first
  * where it is not the open one, the one item that moves it. Pin and Archive
  * move the plan in the sidebar at once, and each is undone from the same
  * menu; a sidebar row also offers both as buttons at its end on hover.
+ * Move to workspace opens a dialog listing the account's other workspaces
+ * and what the move does (`move-plan-dialog.tsx`), offered on a plan the
+ * reader started.
  * Permanently delete cannot be undone, so choosing it asks first in a dialog
  * over the window that names the plan and offers Archive as the way to keep
- * it, whichever door it was chosen from.
+ * it, whichever door it was chosen from. Under the items, pressed by nothing,
+ * the menu says who created the plan and who last edited it, and when.
  */
 
 /** A plan as the list or the open document holds it, archived or not; nothing for a plan neither holds. */
@@ -140,43 +160,57 @@ function SidebarPlanMarks({
 /**
  * One plan's actions in the groups a rule divides, offering only those that
  * apply to it now. Copy formats the document drawn, so only the open plan
- * offers it, ahead of Rename and Version history; Pin and Archive follow; the repository is
- * changed from any plan and opened on GitHub where there is one; Permanently
- * delete is last and alone. An archived plan takes nothing until it is
- * brought back, so it offers neither Rename nor Change repository, only
- * what reads it, its version history (which restores nothing), Unarchive,
- * and Permanently delete.
+ * offers it, ahead of Copy link to plan, Rename, and Version history; Pin
+ * and Archive follow; the repository is changed from any plan and opened on
+ * GitHub where there is one, beside Move to workspace where the plan may be
+ * moved; Permanently delete is last and alone. An archived plan takes
+ * nothing until it is brought back, so it offers neither Rename, Change
+ * repository, nor a move, only what reads it, its link and its version
+ * history (which restores nothing), Unarchive, and Permanently delete.
  */
 function planActionGroups(
   plans: PlansControl,
   planId: string,
-  doors: { rename: () => void; askDelete: () => void },
+  doors: {
+    rename: () => void;
+    askDelete: () => void;
+    askMove: (() => void) | undefined;
+    copy: (words: string, label: string) => void;
+  },
 ): MenuAction[][] {
   const { region } = plans;
   const drawn = region.kind === DOCUMENT_REGION.READY && region.plan.id === planId;
   const plan = planOf(plans, planId);
   const archived = plan?.archivedAt !== undefined;
   const copy: MenuAction = { label: "Copy plan", icon: <CopyIcon />, onSelect: plans.copy.onPress };
-  const rename: MenuAction = { label: "Rename", icon: <PencilIcon />, onSelect: doors.rename };
-  const versions: MenuAction = {
-    label: "Version history",
-    icon: <HistoryIcon />,
-    onSelect: () => plans.history.onOpen(planId),
-  };
+  const link: MenuAction[] =
+    plan === undefined
+      ? []
+      : [copyPlanLinkItem(doors.copy, planId, planLinkPlace(plans.workspaces, plan))];
+  const rename = renamePlanItem(doors.rename);
+  const versions = versionHistoryItem(() => plans.history.onOpen(planId));
   const change: MenuAction = {
     label: "Change repository",
     icon: <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />,
     onSelect: () => plans.onChangeRepository(planId),
   };
+  const move: MenuAction[] =
+    doors.askMove === undefined
+      ? []
+      : [{ label: "Move to workspace", icon: <FolderInputIcon />, onSelect: doors.askMove }];
   const open: MenuAction = {
     label: "Open on GitHub",
     icon: <ExternalIcon />,
     onSelect: () => plans.onOpenOnGitHub(planId),
   };
   const groups: MenuAction[][] = [
-    [...(drawn ? [copy] : []), ...(archived ? [] : [rename]), versions],
+    [...(drawn ? [copy] : []), ...link, ...(archived ? [] : [rename]), versions],
     placeActions(plans, plan),
-    [...(archived ? [] : [change]), ...((plan?.repository ?? null) === null ? [] : [open])],
+    [
+      ...(archived ? [] : [change]),
+      ...move,
+      ...((plan?.repository ?? null) === null ? [] : [open]),
+    ],
     [
       {
         label: "Permanently delete",
@@ -190,6 +224,57 @@ function planActionGroups(
 }
 
 /**
+ * The menu's quiet foot, as Notion, Linear, and Google Docs end a document's
+ * menu: "Created by [Charles] Charles Pan · 3d ago" and "Last edited by
+ * [you] you · 2h ago", each person on their face hanging their card. The
+ * last editor is named only for the plan the window has open, whose newest
+ * revision it holds, as its "Edited by" line names them; another plan is
+ * said only by when it was last saved, and one nobody has saved since it
+ * started says only who created it. Nothing here is a press: the menu's
+ * items are.
+ */
+function PlanMenuFooter({
+  plans,
+  plan,
+}: {
+  plans: PlansControl;
+  plan: PlanSummary;
+}): React.JSX.Element {
+  const now = useMinute();
+  const reader = useEditReader({ readerId: plans.me });
+  const account = useAppState()?.account;
+  const you = account?.status === ACCOUNT_STATUS.SIGNED_IN ? accountActor(account) : undefined;
+  const { region } = plans;
+  const opened = region.kind === DOCUMENT_REGION.READY && region.plan.id === plan.id;
+  const edit = opened ? lastEditOf(region.plan) : undefined;
+  const place: EditPlace = {
+    reader,
+    sections: (opened ? region.plan.sectionEdits : undefined) ?? [],
+    agents: { control: plans.agents, onOpen: undefined },
+    now,
+  };
+  const named = edit !== undefined && edit.actor !== PLAN_ACTOR.EARLIER;
+  return (
+    <>
+      <p className="plan-menu-note actor-line">
+        {"Created by "}
+        <ActorRef actor={creatorActor(plan, reader, you)} sentence />
+        {" · "}
+        <RelativeTime at={plan.createdAt} now={now} ago />
+      </p>
+      {edit === undefined && plan.updatedAt <= plan.createdAt ? null : (
+        <p className="plan-menu-note actor-line">
+          {named ? "Last edited by " : "Last edited"}
+          {edit === undefined ? null : <EditedBy edit={edit} place={place} sentence />}
+          {" · "}
+          <RelativeTime at={edit?.at ?? plan.updatedAt} now={now} ago />
+        </p>
+      )}
+    </>
+  );
+}
+
+/**
  * The question Permanently delete asks, naming the plan. Deleting a plan
  * removes its document and its board and clears the conversation its
  * transcript is read from, which nothing in the app brings back, so a plan
@@ -198,7 +283,7 @@ function planActionGroups(
 function deleteQuestion(name: string, archived: boolean): DialogQuestion {
   const lost = `“${name}” and its board and transcript will be deleted. This can’t be undone.`;
   return {
-    title: "Permanently delete plan?",
+    title: "Permanently delete task?",
     body: archived ? lost : `${lost} To keep it out of the way instead, archive it.`,
     verb: "Permanently delete",
     running: "Deleting",
@@ -223,24 +308,32 @@ function usePlanMenu(
   const deletion = useConfirmDialog({ subject: plan !== undefined, surfaceOpen: plans.shown }, () =>
     plans.onDeletePlan(planId),
   );
+  const moving = useMovePlanDialog(plans, plan);
+  const copy = useCopyToast();
   const { open, drawn, close, trigger, contextMenu } = useActionMenu(plans.shown && doors.drawn);
   const menu =
     drawn === undefined ? null : (
       <ActionMenu
-        label="Plan actions"
+        label="Task actions"
         menu={drawn}
+        footer={plan === undefined ? undefined : <PlanMenuFooter plans={plans} plan={plan} />}
         groups={planActionGroups(plans, planId, {
           rename: doors.rename,
           askDelete: deletion.ask,
+          askMove: moving.ask,
+          copy,
         })}
         onClose={close}
       />
     );
   const dialog = (
-    <ConfirmDialog
-      confirm={deletion}
-      question={deleteQuestion(name, plan?.archivedAt !== undefined)}
-    />
+    <>
+      <ConfirmDialog
+        confirm={deletion}
+        question={deleteQuestion(name, plan?.archivedAt !== undefined)}
+      />
+      {moving.dialog}
+    </>
   );
   return { deletion, open: open !== undefined, close, trigger, contextMenu, menu, dialog };
 }
@@ -280,11 +373,11 @@ export function PlanActions({
   return (
     <>
       {button ? (
-        <Tooltip label="Plan actions">
+        <Tooltip label="Task actions">
           <button
             type="button"
             className="icon-button"
-            aria-label="Plan actions"
+            aria-label="Task actions"
             disabled={deletion.busy}
             {...actions.trigger()}
           >
@@ -301,8 +394,9 @@ export function PlanActions({
 /**
  * A plan in the sidebar, pinned, listed, or archived alike: its name, in the
  * body's weight unless the plan is unread, and at the row's end how long ago
- * it was last updated, led by one mark for an agent at work or a pull
- * request (`plan-card.tsx`), which Pin and Archive stand in place of while
+ * it was last updated, led by one mark for a repository that belongs to
+ * another workspace, an agent at work, or a pull request (`plan-card.tsx`),
+ * the first named in the row's card, which Pin and Archive stand in place of while
  * the row is hovered or reached from the keyboard.
  * A press opens it, and a right-click offers its actions where the pointer is. Renamed,
  * the row is its name's field until the edit ends, and a key that ends it
@@ -376,7 +470,7 @@ export function SidebarPlan({
               <span className="sidebar-plan-name">{plan.name}</span>
               {unread ? <span className="visually-hidden">(unread)</span> : null}
               <span className="sidebar-plan-time">
-                <PlanStatusMark plan={plan} />
+                <PlanStatusMark plan={plan} stranded={strandedHome(plans, plan)} />
                 <RelativeTime at={plan.updatedAt} now={now} hint={false} />
               </span>
             </span>

@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { isRecord, unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { Schema } from "effect";
-import { isRecord, unparsedWire, type WireBoundaryInput } from "./core.js";
 import { DISPATCH_QUERY } from "./function-dispatch.js";
 import type { FunctionDefinition } from "./function-durations.js";
 import { functionPublicPath, webFunctions } from "./function-layout.js";
@@ -101,6 +101,7 @@ const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
   { src: "/api/agents/([^/]+)/stop", route: "agents/stop", query: "id=$1" },
   { src: "/api/agents/([^/]+)/pull-request", route: "agents/pull-request", query: "id=$1" },
   { src: "/api/agents/([^/]+)/changes", route: "agents/changes", query: "id=$1" },
+  { src: "/api/agents/([^/]+)/inbox", route: "agents/inbox", query: "id=$1" },
   {
     src: "/api/agents/([^/]+)/terminals/([^/]+)",
     route: "agents/terminal",
@@ -115,6 +116,8 @@ const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
     query: "id=$1&attachment=$2",
   },
   { src: "/api/inbox/([^/]+)", route: "inbox/item", query: "id=$1" },
+  { src: "/api/workspaces/([^/]+)/photo", route: "workspaces/photo", query: "id=$1" },
+  { src: "/api/automations/([^/]+)/webhook", route: "automations/webhook", query: "id=$1" },
   { src: "/api/automations/([^/]+)/runs", route: "automations/runs", query: "id=$1" },
   { src: "/api/automations/([^/]+)/run", route: "automations/run", query: "id=$1" },
   { src: "/api/automations/([^/]+)", route: "automations/automation", query: "id=$1" },

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { fakeCloudApi, HTTP_STATUS, type JsonValue } from "@sidecar/wire/testing";
+import { fakeCloudApi, HTTP_STATUS, type JsonValue } from "@luke/wire/testing";
 import { Effect } from "effect";
 import { HostedCodingAgentClient } from "./coding-agent-client.js";
 import { CODING_AGENT_CALL_FAILURE } from "./coding-agent-view.js";
@@ -74,6 +74,26 @@ it.effect(
         const refused = yield* Effect.provide(client().start(PLAN_ID, request), refusing.layer);
         assert.deepEqual(refused, { failure }, error);
       }
+    }),
+);
+
+it.effect(
+  "a Start's prompt travels under the key a released service reads, task, trimmed as it is bounded",
+  () =>
+    Effect.gen(function* () {
+      const api = fakeCloudApi({
+        [`POST /api/plans/${PLAN_ID}/agents`]: { answer: () => ({ agent: AGENT }), status: 201 },
+      });
+
+      yield* Effect.provide(
+        client().start(PLAN_ID, { idempotencyKey: "press-1", prompt: "  Fix the flaky test.  " }),
+        api.layer,
+      );
+
+      assert.deepEqual(JSON.parse(api.requests()[0]?.body ?? "{}"), {
+        idempotencyKey: "press-1",
+        task: "Fix the flaky test.",
+      });
     }),
 );
 
@@ -166,5 +186,82 @@ it.effect(
         removal?.url,
         `https://tryluke.dev/api/account/provider-keys?provider=${PROVIDER_KEY_PROVIDER.ANTHROPIC}`,
       );
+    }),
+);
+
+it.effect(
+  "reads one agent as its own page by its id, an agent with no plan among them, and one the account does not reach as not found",
+  () =>
+    Effect.gen(function* () {
+      const page = {
+        ...AGENT,
+        planId: null,
+        automationId: "5a0c4d2e-8f1b-4c3a-9e7d-2b6f1a8c9d04",
+        workspaceId: "workspace-1",
+        repository: "acme/relay",
+      };
+      const api = fakeCloudApi({
+        [`GET /api/agents/${AGENT_ID}`]: { answer: () => ({ agent: page }) },
+      });
+      const refusing = fakeCloudApi({
+        [`GET /api/agents/${AGENT_ID}`]: {
+          answer: () => ({ error: HOSTED_API_ERROR.NOT_FOUND }),
+          status: HTTP_STATUS.NOT_FOUND,
+        },
+      });
+
+      const read = yield* Effect.provide(client().agent(AGENT_ID), api.layer);
+      const refused = yield* Effect.provide(client().agent(AGENT_ID), refusing.layer);
+
+      assert.deepEqual(read, { agent: page });
+      assert.deepEqual(refused, { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND });
+    }),
+);
+
+it.effect(
+  "reads one agent's inbox past a cursor at the agent's own path, held as a plan's is",
+  () =>
+    Effect.gen(function* () {
+      const api = fakeCloudApi({
+        [`GET /api/agents/${AGENT_ID}/inbox`]: {
+          answer: () => ({ items: [], cursor: "3" }),
+        },
+      });
+
+      const read = yield* Effect.provide(client().agentInbox(AGENT_ID, "0"), api.layer);
+
+      assert.deepEqual(read, { items: [], cursor: "3" });
+    }),
+);
+
+it.effect(
+  "lists a workspace's agents by its id and the repository named, and a workspace the account is not in as not found",
+  () =>
+    Effect.gen(function* () {
+      const api = fakeCloudApi({ "GET /api/agents": { answer: () => ({ agents: [AGENT] }) } });
+      const refusing = fakeCloudApi({
+        "GET /api/agents": {
+          answer: () => ({ error: HOSTED_API_ERROR.NOT_FOUND }),
+          status: HTTP_STATUS.NOT_FOUND,
+        },
+      });
+
+      const listed = yield* Effect.provide(
+        client().listWorkspace({ workspaceId: "workspace-1", repository: "acme/relay" }),
+        api.layer,
+      );
+      const refused = yield* Effect.provide(
+        client().listWorkspace({ workspaceId: "workspace-2" }),
+        refusing.layer,
+      );
+
+      assert.deepEqual(listed, { agents: [AGENT] });
+      const query = api.requests()[0]?.searchParams;
+      assert.deepEqual(
+        [query?.get("workspaceId"), query?.get("repository")],
+        ["workspace-1", "acme/relay"],
+      );
+      assert.equal(refusing.requests()[0]?.searchParams.get("repository"), null);
+      assert.deepEqual(refused, { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND });
     }),
 );

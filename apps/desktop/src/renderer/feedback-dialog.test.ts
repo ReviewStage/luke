@@ -1,17 +1,14 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import {
-  ACCOUNT_PROVIDER,
-  ACCOUNT_STATUS,
-  type AccountSnapshot,
-} from "@sidecar/credentials/snapshot";
-import { FEEDBACK_KIND, type FeedbackKind, type FeedbackResult } from "@sidecar/features/feedback";
+import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
+import { FEEDBACK_KIND, type FeedbackKind, type FeedbackResult } from "@luke/features/feedback";
+import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import { EXPERIMENT } from "@luke/settings";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { ACT_OUTCOME_STATUS, type Act } from "#shared/messages/acts";
 import { APP_COMMAND, type AppCommand } from "#shared/shortcuts";
 import { onRegistry } from "#testing/copy-feedback";
 import { useAppCommand, useMenuCommands } from "./app-commands";
@@ -126,4 +123,82 @@ test("each of Help's items opens the dialog of its own kind, with the field taki
   act(() => button("Cancel").click());
   const prompt = openFromHelp(APP_COMMAND.SUGGEST_FEATURE);
   assert.equal(prompt.querySelector("h2")?.textContent, "Suggest a feature");
+});
+
+test("opened from an experiment's row, the dialog is titled for it and its note names the experiment", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const registry = AtomRegistry.make();
+  registries.push(registry);
+  act(() =>
+    root.render(
+      onRegistry(
+        registry,
+        createElement(FeedbackDialog, {
+          kind: FEEDBACK_KIND.FEEDBACK,
+          about: EXPERIMENT.FACTORY,
+          account: SIGNED_IN,
+          onClose: () => undefined,
+        }),
+      ),
+    ),
+  );
+
+  assert.equal(dialog()?.querySelector("h2")?.textContent, "Feedback on Factory");
+  // React reads a typed value off the element's own setter, as a keystroke sets it.
+  const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+  act(() => {
+    setValue?.call(field(), "The board missed a plan.");
+    field().dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await act(async () => button("Send").click());
+
+  assert.deepEqual(sent.find((request) => request.kind === ACT_KIND.FEEDBACK_SEND)?.payload, {
+    submission: {
+      kind: FEEDBACK_KIND.FEEDBACK,
+      message: "The board missed a plan.",
+      name: SIGNED_IN.name,
+      email: SIGNED_IN.email,
+      images: [],
+      experiment: EXPERIMENT.FACTORY,
+    },
+  });
+});
+
+test("a note kept from one experiment's row is not sent under another place's title", () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const registry = AtomRegistry.make();
+  registries.push(registry);
+  const draw = (about: typeof EXPERIMENT.FACTORY | undefined) =>
+    act(() =>
+      root.render(
+        onRegistry(
+          registry,
+          createElement(FeedbackDialog, {
+            kind: FEEDBACK_KIND.FEEDBACK,
+            about,
+            account: SIGNED_IN,
+            onClose: () => undefined,
+          }),
+        ),
+      ),
+    );
+
+  draw(EXPERIMENT.FACTORY);
+  const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+  act(() => {
+    setValue?.call(field(), "The board missed a plan.");
+    field().dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  assert.equal(field().value, "The board missed a plan.");
+
+  // The same dialog, now opened from Help about no experiment.
+  draw(undefined);
+  assert.equal(dialog()?.querySelector("h2")?.textContent, "Send feedback");
+  assert.equal(field().value, "");
 });

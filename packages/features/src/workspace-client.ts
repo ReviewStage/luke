@@ -3,8 +3,8 @@ import {
   type UnparsedWireValue,
   unparsedWire,
   type WireBoundaryInput,
-} from "@sidecar/wire";
-import { readEither } from "@sidecar/wire/effect";
+} from "@luke/wire";
+import { readEither } from "@luke/wire/effect";
 import { Effect, Result, type Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
@@ -17,7 +17,8 @@ import {
   sessionBearer,
 } from "./account-call.js";
 import type { AccountSessionToken, AccountToken } from "./account-token.js";
-import { HOSTED_SERVICE_PATH } from "./service-paths.js";
+import { type ImageBody, imageBodyOf } from "./image-body.js";
+import { HOSTED_SERVICE_PATH, workspacePhotoPath } from "./service-paths.js";
 import {
   HOSTED_API_ERROR,
   type HostedApiError,
@@ -41,6 +42,7 @@ import {
   WORKSPACE_MEMBERS_QUERY,
   type Workspace,
   type WorkspaceMember,
+  type WorkspacePhotoType,
   type WorkspacesAnswer,
   workspaceAnswerSchema,
   workspaceCreateRequestSchema,
@@ -49,20 +51,28 @@ import {
   workspaceLeaveAnswerSchema,
   workspaceLeaveRequestSchema,
   workspaceMemberRemovalSchema,
+  workspaceMemberRoleSchema,
   workspaceMembersAnswerSchema,
+  workspacePhotoSetRequestSchema,
+  workspacePhotoTypeSchema,
+  workspaceRenameRequestSchema,
   workspacesAnswerSchema,
+  workspaceTransferSchema,
 } from "./workspace-wire.js";
 
 /**
- * workspace-client.ts -- the account's workspaces as the host asks the service for them: the list, a workspace created, a GitHub organization connected or disconnected, and its members read, removed, or left.
+ * workspace-client.ts -- the account's workspaces as the host asks the service for them: the list, a workspace created, renamed, given a photo, or handed over, a GitHub organization connected or disconnected, and its members read, removed, given a role, or left.
  *
  * Every call is the account call, so the bearer is read fresh per attempt
- * and a 401 is renewed and retried once. Removing a member and leaving
- * write through Better Auth's own organization calls, so they carry the
+ * and a 401 is renewed and retried once. Renaming, setting the photo,
+ * removing a member, changing a member's role, handing the workspace over,
+ * and leaving write through Better Auth's own
+ * organization calls, so they carry the
  * Mac's Better Auth session rather than its OAuth token: with no session
  * yet, or one the service no longer takes, the call asks for one through
  * the browser's hand-off and is sent once more on it. An owner's or an
- * admin's invitations are made, read, and canceled the same way. A list that did not come back is
+ * admin's invitations are made, read, and canceled the same way. A
+ * workspace's photo is read apart from the list, as its bytes. A list that did not come back is
  * nothing, because the one thing a caller does without it is keep the
  * workspaces it last read; every other call answers a result, because its
  * caller draws why it did not happen: the account's role does not allow
@@ -142,6 +152,48 @@ export class HostedWorkspaceClient {
     );
   }
 
+  /** The workspace renamed by an owner or admin, answering it as it then stands; a name the service would refuse by shape never travels. */
+  rename(
+    workspaceId: string,
+    name: string,
+  ): Effect.Effect<WorkspaceCallResult<Workspace>, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(
+      readEither(workspaceRenameRequestSchema)({ workspaceId, name }),
+    );
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return this.#answered(
+      {
+        method: HTTP_METHOD.POST,
+        path: HOSTED_SERVICE_PATH.WORKSPACES_RENAME,
+        body: JSON.stringify(admitted),
+      },
+      workspaceAnswerSchema,
+      (answer) => answer.workspace,
+      this.#inSession,
+    );
+  }
+
+  /** The workspace's photo set as a `data:` URL, or removed with null, by an owner or admin, answering the workspace as it then stands; a photo the service would refuse by shape never travels. */
+  setPhoto(
+    workspaceId: string,
+    photo: string | null,
+  ): Effect.Effect<WorkspaceCallResult<Workspace>, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(
+      readEither(workspacePhotoSetRequestSchema)({ workspaceId, photo }),
+    );
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return this.#answered(
+      {
+        method: HTTP_METHOD.POST,
+        path: HOSTED_SERVICE_PATH.WORKSPACES_PHOTO_SET,
+        body: JSON.stringify(admitted),
+      },
+      workspaceAnswerSchema,
+      (answer) => answer.workspace,
+      this.#inSession,
+    );
+  }
+
   /** Where the browser goes to connect a GitHub organization to the workspace: the App's install address, carrying a single-use intent. */
   githubConnect(
     workspaceId: string,
@@ -172,6 +224,33 @@ export class HostedWorkspaceClient {
     );
   }
 
+  /**
+   * One workspace's photo, fetched under the account: its bytes in base64
+   * under its media type, where the service answered with one a photo may
+   * be; not found where the workspace is not one the account is in or holds
+   * no photo; unanswered for anything else, another media type included, so
+   * nothing the window draws is a type it did not expect.
+   */
+  photo(
+    workspaceId: string,
+  ): Effect.Effect<
+    WorkspaceCallResult<ImageBody<WorkspacePhotoType>>,
+    never,
+    HttpClient.HttpClient
+  > {
+    const send = this.#call.send;
+    return Effect.gen(function* () {
+      const answer = yield* send({
+        method: HTTP_METHOD.GET,
+        path: workspacePhotoPath(workspaceId),
+      });
+      if (!callAnswered(answer)) return UNANSWERED;
+      if (!answer.response.ok) return refusedAs(unparsedWire(yield* jsonOf(answer.response)));
+      const image = yield* imageBodyOf(answer.response, workspacePhotoTypeSchema);
+      return image === undefined ? UNANSWERED : { ok: true, answer: image };
+    });
+  }
+
   /** One member removed by an owner or admin, answering the members who remain; an id the service would refuse by shape never travels. */
   removeMember(
     workspaceId: string,
@@ -185,6 +264,49 @@ export class HostedWorkspaceClient {
       {
         method: HTTP_METHOD.POST,
         path: HOSTED_SERVICE_PATH.WORKSPACES_MEMBERS_REMOVE,
+        body: JSON.stringify(admitted),
+      },
+      workspaceMembersAnswerSchema,
+      (answer) => answer.members,
+      this.#inSession,
+    );
+  }
+
+  /** Another member made an admin or an admin a member by the owner, answering the members as they then stand; a role the service would refuse by shape never travels. */
+  changeRole(
+    workspaceId: string,
+    userId: string,
+    role: string,
+  ): Effect.Effect<WorkspaceCallResult<readonly WorkspaceMember[]>, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(
+      readEither(workspaceMemberRoleSchema)({ workspaceId, userId, role }),
+    );
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return this.#answered(
+      {
+        method: HTTP_METHOD.POST,
+        path: HOSTED_SERVICE_PATH.WORKSPACES_MEMBERS_ROLE,
+        body: JSON.stringify(admitted),
+      },
+      workspaceMembersAnswerSchema,
+      (answer) => answer.members,
+      this.#inSession,
+    );
+  }
+
+  /** The workspace handed by its owner to one of its admins, the owner becoming an admin, answering the members as they then stand. */
+  transfer(
+    workspaceId: string,
+    userId: string,
+  ): Effect.Effect<WorkspaceCallResult<readonly WorkspaceMember[]>, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(
+      readEither(workspaceTransferSchema)({ workspaceId, userId }),
+    );
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return this.#answered(
+      {
+        method: HTTP_METHOD.POST,
+        path: HOSTED_SERVICE_PATH.WORKSPACES_TRANSFER,
         body: JSON.stringify(admitted),
       },
       workspaceMembersAnswerSchema,

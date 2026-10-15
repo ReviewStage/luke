@@ -1,16 +1,25 @@
-import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
-import { PRODUCT_SURFACE_EVENT } from "@sidecar/features/analytics";
-import { INTEGRATION_PROVIDER_LIST } from "@sidecar/features/integration-wire";
-import { BackIcon } from "@sidecar/panel";
-import { SETTINGS_VIEW_COUNTED_AS } from "@sidecar/settings";
+import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
+import { PRODUCT_SURFACE_EVENT } from "@luke/features/analytics";
+import { INTEGRATION_PROVIDER_LIST } from "@luke/features/integration-wire";
+import type { Workspace } from "@luke/features/workspace-wire";
+import { SETTINGS_VIEW_COUNTED_AS } from "@luke/settings";
+import {
+  SETTINGS_PAGE_GROUP,
+  SETTINGS_PAGE_GROUPS,
+  SETTINGS_VIEW,
+  type SettingsPageGroup,
+  type SettingsView,
+} from "@luke/settings/settings-views";
+import { BackIcon } from "@luke/ui";
+import { accountActor } from "@luke/ui/actor-model";
+import { integrationNamed } from "@luke/ui/integration-search";
 import { useEffect, useRef, useState } from "react";
 import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
-import { CALL_CARD_SURFACE, CallCardDock, type CallCardInput } from "../call/call-card";
-import { integrationNamed } from "../integration-search";
+import { type CallCardInput, ColumnFoot } from "../call/call-card";
 import type { NavigationHistory } from "../navigation-history";
 import { AttentionMark } from "../settings/marks";
-import { settingsPageOf } from "../settings/pages";
+import { settingsGroupHeadingOf, settingsPageOf } from "../settings/pages";
 import { TemplateVersionHistory } from "../settings/plan-template-history";
 import { PlanTemplatePage } from "../settings/plan-template-page";
 import { pageResetControl } from "../settings/reset";
@@ -20,6 +29,7 @@ import {
   settingsRowsInput,
   voicePageAttention,
 } from "../settings/settings-panel";
+import { shownWorkspace } from "../settings/workspace-page";
 import { useSettingsWrites } from "../settings/writes";
 import {
   landOnSettingsRow,
@@ -29,22 +39,46 @@ import {
   searchSettings,
   settingsSearchEntries,
 } from "../settings-search";
-import { SETTINGS_PAGE_LIST, SETTINGS_VIEW, type SettingsView } from "../settings-views";
 import { Shortcut } from "../shortcut";
 import { commandKeyshortcuts } from "../tooltip";
 import { HistoryButtons, SidebarResizeEdge, useSidebarEdge } from "./desktop-sidebar";
 import type { SidebarCollapse } from "./sidebar-collapse";
+import { WorkspaceTile } from "./workspace-tile";
+
+/** A group's heading: the listed workspace's tile and name over its own group, the group's words otherwise. */
+function GroupHeading({
+  group,
+  listed,
+}: {
+  group: SettingsPageGroup;
+  listed: Workspace | undefined;
+}): React.JSX.Element {
+  if (group !== SETTINGS_PAGE_GROUP.WORKSPACE || listed === undefined) {
+    return <h2 className="section-heading">{settingsGroupHeadingOf(group)}</h2>;
+  }
+  return (
+    <h2 className="section-heading settings-nav-workspace">
+      <WorkspaceTile workspace={listed} />
+      {listed.name}
+    </h2>
+  );
+}
 
 /**
  * Settings as a desktop app lays them out: the sidebar turns into the list of
  * pages, with the way back to plans at its head and the search above the
  * list, and the chosen page stands beside it under its own title. The pages
  * are the panel's own, drawn by `SettingsPanel`, and this list is the one
- * index of them, the Voice row wearing its attention mark. Settings opens on
- * Account, the list's first page. The page has no top bar: its title heads
- * its column, under the window's drag strip, and a page's reset ends the
- * title's line. The plan template is the one page drawn apart from the
- * panel: it is a plan's page, document and all
+ * index of them, the Voice row wearing its attention mark. It groups them
+ * under three headings, as Linear and Notion group theirs: the workspace the
+ * plans' sidebar lists, by its tile and name, over its Members and GitHub;
+ * Account, over what is the account's whichever workspace is listed; and
+ * This Mac. Settings opens on Profile, Account's first page. The page has
+ * no top bar: its title heads its column, under the window's drag strip,
+ * and a page's reset ends the title's line. The Workspace page's title is
+ * the listed workspace's name, since that is the workspace it shows. The
+ * plan template is the one page drawn apart from the panel: it is a plan's
+ * page, document and all
  * (`../settings/plan-template-page.tsx`), and its version history takes the
  * whole window as a plan's does, Back and Escape leaving it for the page.
  *
@@ -94,6 +128,12 @@ export function DesktopSettings({
   // Note that the template's version history answers Escape itself, back to the template, so Settings does not then.
   useAppCommand(APP_COMMAND.EXIT_SETTINGS, templateHistory ? undefined : onExit);
   const shown = settingsPageOf(settings.view);
+  // The workspace the plans' sidebar lists, which heads the first group and is the one the Workspace page shows.
+  const listed =
+    settings.account.status === ACCOUNT_STATUS.SIGNED_IN && settings.workspace
+      ? shownWorkspace(settings.workspace)
+      : undefined;
+  const title = settings.view === SETTINGS_VIEW.WORKSPACE && listed ? listed.name : shown.title;
   const voiceNote = voicePageAttention(settings.microphone);
   const writes = useSettingsWrites();
   const reset = pageResetControl(settings.view, settings.settings, writes);
@@ -140,19 +180,17 @@ export function DesktopSettings({
     settings.view === SETTINGS_VIEW.INTEGRATIONS &&
     settings.account.status === ACCOUNT_STATUS.SIGNED_IN;
 
-  // The template's version history takes the whole window as a plan's does, and leaves for the template.
-  // Note that the call card floats while it does, as over a plan's history, since the page list it rides is gone.
+  // The template's version history takes the whole window as a plan's does, and leaves for the template,
+  // the call card at the foot of its versions as it was at the page list's.
   if (templateHistory) {
     return (
-      <>
-        <TemplateVersionHistory
-          sidebar={sidebar}
-          history={history}
-          account={settings.account}
-          onExit={() => setTemplateHistory(false)}
-        />
-        <CallCardDock call={call} surface={CALL_CARD_SURFACE.FLOATING} />
-      </>
+      <TemplateVersionHistory
+        sidebar={sidebar}
+        history={history}
+        account={settings.account}
+        call={call}
+        onExit={() => setTemplateHistory(false)}
+      />
     );
   }
   return (
@@ -186,47 +224,54 @@ export function DesktopSettings({
           {search ? (
             <SettingsSearchResults search={search} opened={marked} onOpen={openResult} />
           ) : (
-            <ul>
-              {SETTINGS_PAGE_LIST.map((view) => {
-                const page = settingsPageOf(view);
-                return (
-                  <li key={view}>
-                    <button
-                      type="button"
-                      className="sidebar-item"
-                      aria-current={view === settings.view ? "page" : undefined}
-                      onClick={() => open(view)}
-                    >
-                      {page.icon}
-                      {page.title}
-                      {view === SETTINGS_VIEW.VOICE && voiceNote ? (
-                        <AttentionMark note={voiceNote} />
-                      ) : null}
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
+            SETTINGS_PAGE_GROUPS.map(({ group, pages }) => (
+              <section key={group} className="settings-nav-group">
+                <GroupHeading group={group} listed={listed} />
+                <ul>
+                  {pages.map((view) => {
+                    const page = settingsPageOf(view);
+                    return (
+                      <li key={view}>
+                        <button
+                          type="button"
+                          className="sidebar-item"
+                          aria-current={view === settings.view ? "page" : undefined}
+                          onClick={() => open(view)}
+                        >
+                          {page.icon}
+                          {page.title}
+                          {view === SETTINGS_VIEW.VOICE && voiceNote ? (
+                            <AttentionMark note={voiceNote} />
+                          ) : null}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </section>
+            ))
           )}
         </div>
-        <div className="sidebar-foot">
-          <CallCardDock call={call} surface={CALL_CARD_SURFACE.SIDEBAR} />
-        </div>
+        <ColumnFoot call={call} />
         {/* Last, so the drag strip above the way back does not take the edge's top from it. */}
         <SidebarResizeEdge edge={edge} />
       </nav>
       {settings.view === SETTINGS_VIEW.PLAN_TEMPLATE ? (
         <PlanTemplatePage
-          signedIn={settings.account.status === ACCOUNT_STATUS.SIGNED_IN}
+          account={
+            settings.account.status === ACCOUNT_STATUS.SIGNED_IN
+              ? accountActor(settings.account)
+              : undefined
+          }
           onShowHistory={() => setTemplateHistory(true)}
         />
       ) : (
-        <section className="settings-page" aria-label={shown.title}>
+        <section className="settings-page" aria-label={title}>
           <div className="desktop-drag-strip" />
           {/* Keyed to the page, so a page turned to opens at its top rather than where the last one was scrolled. */}
           <div key={settings.view} className="settings-page-scroll">
             <header className="settings-page-head">
-              <h1 className="settings-page-title">{shown.title}</h1>
+              <h1 className="settings-page-title">{title}</h1>
               {reset}
             </header>
             <SettingsPanel

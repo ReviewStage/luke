@@ -1,4 +1,4 @@
-import type { PlanShownCode } from "@sidecar/features/planning-view";
+import type { PlanShownCode } from "@luke/features/planning-view";
 import type { Effect } from "effect";
 
 /**

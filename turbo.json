@@ -9,7 +9,7 @@
   "envMode": "strict",
   // Files outside every workspace that a workspace reads: the web app imports
   // the changelog and the privacy notice. The brand artwork the web app and
-  // the desktop build read is @sidecar/brand's, which `transit` tracks.
+  // the desktop build read is @luke/brand's, which `transit` tracks.
   "globalDependencies": [".nvmrc", "tsconfig.base.json", "CHANGELOG.md", "PRIVACY.md"],
   "tasks": {
     // A task with no script anywhere, whose hash is its workspace's files and
@@ -38,7 +38,7 @@
       "dependsOn": ["^transit"],
       "outputs": []
     },
-    // apps/web's suite in three vitest shards, one per CI runner.
+    // @luke/service's suite in three vitest shards, one per CI runner.
     "test:vitest:1": {
       "dependsOn": ["^transit"],
       "outputs": []

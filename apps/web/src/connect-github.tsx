@@ -1,16 +1,4 @@
-import { HOSTED_SERVICE_PATH } from "@sidecar/features";
-import {
-  GITHUB_CONNECT_CLAIM,
-  GITHUB_CONNECT_PAGE,
-  type GitHubConnectClaim,
-  githubConnectClaimAnswerSchema,
-} from "@sidecar/features/github-connection-wire";
-import { createAuthClient } from "better-auth/react";
-import { Option, Schema } from "effect";
-import { StrictMode, useEffect, useRef, useState } from "react";
-import { createRoot } from "react-dom/client";
-import { GitHubMark } from "./account-marks";
-import { AUTH_CARD, AUTH_SHELL, AUTH_TITLE } from "./auth-surface";
+import { HOSTED_SERVICE_PATH } from "@luke/features";
 import {
   CONNECT_STEP,
   type ConnectStep,
@@ -18,10 +6,22 @@ import {
   failedLinkAddress,
   LINK_FAILED,
   linkErrorWords,
-} from "./connect-github-step";
+} from "@luke/features/connect-github-step";
+import {
+  GITHUB_CONNECT_CLAIM,
+  GITHUB_CONNECT_PAGE,
+  type GitHubConnectClaim,
+  githubConnectClaimAnswerSchema,
+} from "@luke/features/github-connection-wire";
+import { SOCIAL_PROVIDER } from "@luke/features/sign-in-provider";
+import { MARK_PROVIDER, ProviderMark } from "@luke/ui";
+import { AUTH_CARD, AUTH_SHELL, AUTH_TITLE } from "@luke/ui/auth-surface";
+import { createAuthClient } from "better-auth/react";
+import { Option, Schema } from "effect";
+import { StrictMode, useEffect, useRef, useState } from "react";
+import { createRoot } from "react-dom/client";
 import { ConnectionGraphic } from "./connection-graphic";
 import { SignInChoices } from "./sign-in-choices";
-import { SOCIAL_PROVIDER } from "./sign-in-provider";
 import "./styles.css";
 
 /**
@@ -156,7 +156,9 @@ function ConnectGitHub(): React.JSX.Element {
   return (
     <main className={AUTH_SHELL}>
       <section className={AUTH_CARD} aria-labelledby="connect-title">
-        <ConnectionGraphic mark={<GitHubMark className="size-10 shrink-0" />} />
+        <ConnectionGraphic
+          mark={<ProviderMark provider={MARK_PROVIDER.GITHUB} className="size-10 shrink-0" />}
+        />
         <h1 id="connect-title" className={AUTH_TITLE}>
           {view.kind !== VIEW.WORKING ? view.title : "Connecting GitHub…"}
         </h1>

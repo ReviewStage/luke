@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
+import { CALL_KIND } from "@luke/features/turn-rows";
 import { test } from "vitest";
 import { TOOL_BLOCK } from "../ai-elements/tool";
 import { cardTitle, toolCallView } from "./tool-call-model";
-import { CALL_KIND } from "./turn-rows";
 
 const ESCAPE = String.fromCharCode(27);
 
@@ -231,6 +231,18 @@ test("a plan's card is titled by its first heading, or its first line of words",
   assert.equal(cardTitle("```ts\nconst seats = plan.seats;\n```"), "const seats = plan.seats;");
 });
 
+test("a card's title says each link by its name, as markdown reads the link, and never its destination", () => {
+  assert.equal(
+    cardTitle("Review [@store.ts](https://github.com/acme/relay/blob/HEAD/store.ts) first"),
+    "Review store.ts first",
+  );
+  assert.equal(cardTitle("Read [Plan](https://www.notion.so/Plan-(draft)) now"), "Read Plan now");
+  assert.equal(cardTitle("See [the \\[draft\\]](https://example.com/a)"), "See the [draft]");
+  assert.equal(cardTitle("outer [inner](https://example.com/b) end"), "outer inner end");
+  assert.equal(cardTitle("Read [Docs](<https://example.com/the docs>)"), "Read Docs");
+  assert.equal(cardTitle("Keep [a](b c d) as written"), "Keep [a](b c d) as written");
+});
+
 test("a card's title is plain words: the marks a markdown line opens on, strong emphasis, code spans, and a link's destination are left out, and an identifier keeps its underscores", () => {
   assert.equal(
     cardTitle("**Goal:** find where `planList` refreshes.\n\n- Read it"),
@@ -397,6 +409,13 @@ test("the planning model's own calls draw from their parts as a coding agent's d
   assert.deepEqual([asked.kind, asked.subject], [CALL_KIND.QUEUE_QUESTION, "Who can invite?"]);
   const looked = toolCallView({ tool: "look_at_board", input: {}, output: { image: "…" } });
   assert.deepEqual([looked.kind, looked.output], [CALL_KIND.LOOK_AT_BOARD, undefined]);
+  const started = (input: Record<string, string>) =>
+    toolCallView({ tool: "start_coding_agent", input, output: undefined }).subject;
+  assert.deepEqual(
+    [started({ prompt: "Fix the invite email." }), started({ task: "Fix the invite email." })],
+    ["Fix the invite email.", "Fix the invite email."],
+    "a start names its prompt, and one journaled before it had its name names its task",
+  );
   const waited = toolCallView({ tool: "task_wait", input: {}, output: "1 task settled." });
   assert.equal(waited.kind, CALL_KIND.WORKER_WAIT);
   const stopped = toolCallView({

@@ -1,14 +1,15 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { CODING_AGENT_STATUS } from "@sidecar/features/coding-agent-wire";
-import { PLAN_WORK_STATE } from "@sidecar/features/planning-view";
-import { runModeFor } from "@sidecar/host";
-import { MESSAGE_ROLE } from "@sidecar/wire";
+import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
+import { PLAN_WORK_STATE } from "@luke/features/planning-view";
+import { runModeFor } from "@luke/host";
+import { type AppState, sessionReplayBootstrap } from "@luke/host/app-state";
+import type { HostBootstrap } from "@luke/host/host-operator";
+import { MICROPHONE_STATUS } from "@luke/voice/audio";
+import { AVATAR_END_REASON, AVATAR_OFF, AVATAR_STATUS } from "@luke/voice/avatar";
+import { IDLE_VOICE_VIEW } from "@luke/voice/voice-view";
+import { MESSAGE_ROLE } from "@luke/wire";
 import { Context, Effect, Fiber, Stream } from "effect";
-import { type AppState, sessionReplayBootstrap } from "#shared/messages/app-state";
-import { MICROPHONE_STATUS } from "#shared/messages/audio";
-import { AVATAR_END_REASON, AVATAR_OFF, AVATAR_STATUS } from "#shared/messages/avatar";
-import { IDLE_VOICE_VIEW } from "#shared/messages/voice-view";
 import {
   AppStateStore,
   bootstrapPatch,
@@ -17,7 +18,6 @@ import {
   voiceWindowState,
   windowAppState,
 } from "./app-state";
-import type { HostBootstrap } from "./gateway/host-operator";
 
 /**
  * The document and the one path out of it. What is proven here is what the

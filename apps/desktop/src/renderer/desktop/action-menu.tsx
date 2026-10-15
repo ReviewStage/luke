@@ -65,6 +65,8 @@ export interface MenuAction {
   label: string;
   /** The glyph leading the label, drawn in a column every item keeps whether or not it has one. */
   icon?: React.JSX.Element;
+  /** A muted second line under the label, such as who shares a workspace, which a reader hears after it. */
+  detail?: string | undefined;
   onSelect: () => void;
   /** Drawn red: the action cannot be taken back. */
   danger?: boolean;
@@ -103,6 +105,23 @@ export interface OpenMenu {
 export interface DrawnMenu extends OpenMenu {
   leaving: boolean;
   ref: (element: HTMLElement | null) => void;
+}
+
+/**
+ * The layer a menu stands in: over the window, or over the modal it was
+ * opened from. A menu is drawn over `document.body`, so one opened from a
+ * modal's card would otherwise stand under the window the modal dims.
+ */
+const MENU_LAYER = {
+  WINDOW: "window",
+  DIALOG: "dialog",
+} as const;
+
+type MenuLayer = (typeof MENU_LAYER)[keyof typeof MENU_LAYER];
+
+/** The layer a menu opened from `opener` stands in. */
+function layerOf(opener: HTMLElement): MenuLayer {
+  return opener.closest('[aria-modal="true"]') === null ? MENU_LAYER.WINDOW : MENU_LAYER.DIALOG;
 }
 
 /** Where a menu dropped from a button hangs: under it, its right edge on the button's. */
@@ -247,13 +266,23 @@ export function MenuItem({
   inMenu: boolean;
   onChoose: () => void;
 }): React.JSX.Element {
+  const label = <span className="plan-menu-label">{action.label}</span>;
   const body = (
     <>
       <span className="menu-item-glyph">{action.icon}</span>
-      <span className="plan-menu-label">{action.label}</span>
+      {action.detail === undefined ? (
+        label
+      ) : (
+        <span className="menu-item-copy">
+          {label}
+          <span className="menu-item-detail">{action.detail}</span>
+        </span>
+      )}
       <ItemEnd action={action} />
     </>
   );
+  // Note that a detail is heard after the label with a pause, because the two spans would otherwise run together.
+  const heard = action.detail === undefined ? undefined : `${action.label}, ${action.detail}`;
   // A setting in a menu says whether it is on as a menu's check does.
   if (inMenu && action.checked !== undefined) {
     return (
@@ -261,8 +290,10 @@ export function MenuItem({
         type="button"
         role="menuitemcheckbox"
         aria-checked={action.checked}
+        aria-label={heard}
         tabIndex={-1}
         className="menu-item"
+        data-detail={action.detail === undefined ? undefined : "true"}
         disabled={action.disabled}
         onClick={onChoose}
       >
@@ -274,9 +305,11 @@ export function MenuItem({
     <button
       type="button"
       role={inMenu ? "menuitem" : undefined}
+      aria-label={heard}
       tabIndex={inMenu ? -1 : undefined}
       className="menu-item"
       data-danger={action.danger ? "true" : undefined}
+      data-detail={action.detail === undefined ? undefined : "true"}
       disabled={action.disabled}
       onClick={onChoose}
     >
@@ -342,12 +375,15 @@ function SubmenuItem({
  */
 function Submenu({
   open,
+  layer,
   surface,
   leaving,
   onChoose,
   onBack,
 }: {
   open: OpenSubmenu;
+  /** The layer its menu stands in, which it stands in too. */
+  layer: MenuLayer;
   /** The submenu's element, which the menu counts as its own when it hears a press. */
   surface: React.RefObject<HTMLDivElement | null>;
   leaving: boolean;
@@ -398,6 +434,7 @@ function Submenu({
       className="menu-surface plan-menu plan-submenu"
       role="menu"
       aria-label={entry.label}
+      data-layer={layer}
       data-placed={String(placed)}
       data-leaving={leaving ? "true" : undefined}
       inert={leaving}
@@ -415,12 +452,14 @@ function Submenu({
  * The menu itself, drawn over the window at the point it hangs from. It is
  * measured before it is painted, so it is drawn once and where it fits. A
  * heading, where one is given, stands over the items, muted and pressed by
- * nothing: whose account the menu is about.
+ * nothing: whose account the menu is about. A footer, where one is given,
+ * stands under them on the same terms: who made what the menu is about.
  */
 export function ActionMenu({
   label,
   menu,
   heading,
+  footer,
   groups,
   onClose,
 }: {
@@ -428,6 +467,7 @@ export function ActionMenu({
   /** Where it hangs, and whether it is on its way out (`useActionMenu`'s `drawn`). */
   menu: DrawnMenu;
   heading?: React.ReactNode;
+  footer?: React.ReactNode;
   groups: readonly (readonly MenuEntry[])[];
   /** Closes the menu, handing focus back to its opener where nothing else has taken it. */
   onClose: (returnFocus: boolean) => void;
@@ -529,6 +569,7 @@ export function ActionMenu({
       className="menu-surface plan-menu"
       role="menu"
       aria-label={label}
+      data-layer={layerOf(opener)}
       data-placed={String(placed)}
       data-leaving={leaving ? "true" : undefined}
       inert={leaving}
@@ -561,12 +602,21 @@ export function ActionMenu({
           )}
         </Fragment>
       ))}
+      {footer === undefined ? null : (
+        <>
+          <hr className="plan-menu-rule" />
+          <div className="plan-menu-footer" role="none">
+            {footer}
+          </div>
+        </>
+      )}
       {submenu === undefined
         ? null
         : createPortal(
             <Submenu
               key={submenu.entry.label}
               open={submenu}
+              layer={layerOf(opener)}
               surface={submenuElement}
               leaving={leaving}
               onChoose={choose}

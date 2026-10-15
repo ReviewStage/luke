@@ -5,13 +5,13 @@ SCRIPT_DIRECTORY=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=scripts/lib/workspace.sh
 source "$SCRIPT_DIRECTORY/lib/workspace.sh"
 
-sidecar_require_node
+luke_require_node
 if [[ $(uname -s) == Darwin ]]; then
-    sidecar_require_command xcrun
+    luke_require_command xcrun
 fi
 
-mkdir -p "$SIDECAR_BUILD_ROOT" "$SIDECAR_ARTIFACT_ROOT/evidence"
-cd "$SIDECAR_REPO_ROOT"
+mkdir -p "$LUKE_BUILD_ROOT" "$LUKE_ARTIFACT_ROOT/evidence"
+cd "$LUKE_REPO_ROOT"
 
 if [[ $(uname -s) == Darwin ]]; then
     pnpm install --frozen-lockfile
@@ -19,4 +19,4 @@ else
     ELECTRON_SKIP_BINARY_DOWNLOAD=1 pnpm install --frozen-lockfile
 fi
 
-printf 'Sidecar workspace bootstrapped at %s\n' "$SIDECAR_REPO_ROOT"
+printf 'Luke workspace bootstrapped at %s\n' "$LUKE_REPO_ROOT"

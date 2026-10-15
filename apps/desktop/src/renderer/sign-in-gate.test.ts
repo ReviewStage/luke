@@ -6,11 +6,11 @@ import {
   ACCOUNT_STATUS,
   type AccountProvider,
   type AccountSnapshot,
-} from "@sidecar/credentials/snapshot";
+} from "@luke/credentials/snapshot";
+import type { Act, ActOutcome } from "@luke/host/acts";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import type { Act, ActOutcome } from "#shared/messages/acts";
 import { SignInGate } from "./sign-in-gate";
 
 const ignore = () => undefined;
@@ -90,4 +90,54 @@ test("each provider's button begins that provider's sign-in", () => {
   act(() => button(container, "Continue with Google").click());
   act(() => button(container, "Continue with GitHub").click());
   assert.deepEqual(pressed, [ACCOUNT_PROVIDER.GOOGLE, ACCOUNT_PROVIDER.GITHUB]);
+});
+
+/** Every "Last used" badge drawn, with the button each describes. */
+function lastUsedBadges(container: HTMLElement) {
+  return [...container.querySelectorAll("span")]
+    .filter((each) => each.textContent === "Last used")
+    .map((badge) => ({
+      badge,
+      described: container.querySelector(`button[aria-describedby="${badge.id}"]`),
+    }));
+}
+
+test("the provider this Mac last signed in with wears the one Last used badge, outside its label", () => {
+  for (const [lastUsed, other] of [
+    [ACCOUNT_PROVIDER.GOOGLE, "Continue with GitHub"],
+    [ACCOUNT_PROVIDER.GITHUB, "Continue with Google"],
+  ] as const) {
+    const container = mount(gate({ lastUsed }));
+    const badges = lastUsedBadges(container);
+    assert.equal(badges.length, 1);
+    assert.equal(badges[0]?.described?.getAttribute("data-provider"), lastUsed);
+    assert.equal(badges[0]?.described?.contains(badges[0].badge), false);
+    assert.equal(button(container, other).hasAttribute("aria-describedby"), false);
+  }
+});
+
+test("with no provider kept, no button wears the Last used badge", () => {
+  const container = mount(gate());
+  assert.deepEqual(lastUsedBadges(container), []);
+});
+
+test("a sign-in waited on holds both buttons, keeps the badge, and Cancel takes the wait back", () => {
+  let cancelled = 0;
+  const container = mount(
+    gate({
+      waiting: ACCOUNT_PROVIDER.GITHUB,
+      lastUsed: ACCOUNT_PROVIDER.GITHUB,
+      onCancel: () => (cancelled += 1),
+    }),
+  );
+  const waiting = button(container, "Waiting for browser…");
+  assert.equal(waiting.getAttribute("data-provider"), ACCOUNT_PROVIDER.GITHUB);
+  assert.equal(waiting.disabled, true);
+  assert.equal(button(container, "Continue with Google").disabled, true);
+  assert.deepEqual(
+    lastUsedBadges(container).map(({ described }) => described?.getAttribute("data-provider")),
+    [ACCOUNT_PROVIDER.GITHUB],
+  );
+  act(() => button(container, "Cancel").click());
+  assert.equal(cancelled, 1);
 });

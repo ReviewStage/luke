@@ -1,3 +1,10 @@
+import {
+  insideCode,
+  mentionAt,
+  skillTokens,
+  skillWord,
+  type TextRange,
+} from "@luke/ui/skill-mention";
 import { type AnyExtension, Editor, Extension, Node } from "@tiptap/core";
 import { type Fragment, type Node as PmNode, type Schema, Slice } from "@tiptap/pm/model";
 import {
@@ -9,13 +16,6 @@ import {
 } from "@tiptap/pm/state";
 import type { EditorProps, EditorView } from "@tiptap/pm/view";
 import StarterKit from "@tiptap/starter-kit";
-import {
-  insideCode,
-  mentionAt,
-  skillTokens,
-  skillWord,
-  type TextRange,
-} from "../planning/skill-mention";
 import {
   COMPOSER_INPUT,
   type ComposerEditorHandle,
@@ -31,6 +31,7 @@ import {
   mentionLink,
   mentionNode,
   mentionTokens,
+  pastedMention,
 } from "./mention-node";
 
 /**
@@ -472,6 +473,17 @@ function guardPlugin(state: ComposerState, props: ComposerEditorProps): Plugin {
   });
 }
 
+/**
+ * Whether a caret stands in code: the character after it is code's, or the
+ * one before it on its own line is, as a caret just inside a span's closing
+ * backtick is. Note that the line before is never read, because a fence's
+ * closing line is code and the line after it is not.
+ */
+function caretInCode(text: string, caret: number): boolean {
+  if (insideCode(text, caret)) return true;
+  return caret > 0 && text[caret - 1] !== NEWLINE && insideCode(text, caret - 1);
+}
+
 /** A paste taken: files the owner takes kept out of the words, and words past the bound cut to the room left. */
 function pasted(
   view: EditorView,
@@ -487,6 +499,15 @@ function pasted(
   const words = fragmentText(slice.content);
   const room =
     props.maxLength - textOf(doc).length + textBetween(doc, selection.from, selection.to).length;
+  // A page of an integration's pasted whole, outside code, is laid in as its mention, where its link has room.
+  const mention = props.mentions?.pasted(words);
+  if (
+    mention !== undefined &&
+    mentionLink(mention).length + SPACE.length <= room &&
+    !caretInCode(textOf(doc), offsetAt(doc, selection.from))
+  ) {
+    return pastedMention(view, event, () => mention);
+  }
   if (words.length <= room) return false;
   if (room > 0) {
     const cut = sliceOf(view.state.schema, words.slice(0, room), state);
@@ -584,13 +605,11 @@ function insertedAt(
   return true;
 }
 
-/** The `/` word the caret ends written as the skill named, a space after it unless one follows, the caret after the space. */
-function choseSkill(editor: Editor, state: ComposerState, name: string): void {
-  const word = state.trigger;
+/** The word a trigger found written as the chip given, a space after it unless one follows, the caret after the space. */
+function choseChip(editor: Editor, word: ReturnType<typeof triggerAt>, chip: PmNode): void {
   if (word === undefined) return;
   const { doc, schema } = editor.state;
   const spaced = doc.textBetween(word.to, Math.min(word.to + 1, doc.content.size)) === SPACE;
-  const chip = schema.node(SKILL_NODE, { name });
   const tr = editor.state.tr.replaceWith(
     word.from,
     word.to,
@@ -601,21 +620,29 @@ function choseSkill(editor: Editor, state: ComposerState, name: string): void {
   );
 }
 
-/** The `@` word the caret ends written as the mention chosen, a space after it unless one follows, the caret after the space. */
-function choseMention(editor: Editor, state: ComposerState, mention: MentionNode): void {
-  const word = state.mentionTrigger;
-  if (word === undefined) return;
-  const { doc, schema } = editor.state;
-  const spaced = doc.textBetween(word.to, Math.min(word.to + 1, doc.content.size)) === SPACE;
+/**
+ * A mention made elsewhere laid in where the caret stands, over what is
+ * selected, a space after it unless one follows, the caret after the
+ * mention and the box focused; nothing where the box takes no words now, or the mention's link
+ * has no room left under the bound, as a key typed past it is not written.
+ */
+function laidInMention(
+  editor: Editor,
+  state: ComposerState,
+  maxLength: number,
+  mention: MentionNode,
+): void {
+  if (state.input !== COMPOSER_INPUT.EDITABLE) return;
+  const { doc, selection, schema } = editor.state;
+  const room =
+    maxLength - textOf(doc).length + textBetween(doc, selection.from, selection.to).length;
+  const spaced =
+    doc.textBetween(selection.to, Math.min(selection.to + 1, doc.content.size)) === SPACE;
+  if (mentionLink(mention).length + (spaced ? 0 : SPACE.length) > room) return;
   const chip = schema.node(MENTION_NODE, { name: mention.name, target: mention.target });
-  const tr = editor.state.tr.replaceWith(
-    word.from,
-    word.to,
-    spaced ? [chip] : [chip, schema.text(SPACE)],
-  );
-  editor.view.dispatch(
-    tr.setSelection(TextSelection.create(tr.doc, word.from + 2)).scrollIntoView(),
-  );
+  const tr = editor.state.tr.replaceSelectionWith(chip, false);
+  editor.view.dispatch((spaced ? tr : tr.insertText(SPACE)).scrollIntoView());
+  editor.view.focus();
 }
 
 /** A mark of the caret where it stands, carried through every change until its words land or it is let go. */
@@ -688,8 +715,17 @@ export function mountComposer(host: HTMLElement, props: ComposerEditorProps): Co
     clear: () => laidIn(editor, state, ""),
     replace: (text) => laidIn(editor, state, text),
     mark: () => marked(editor, state, props.maxLength),
-    chooseSkill: (name) => choseSkill(editor, state, name),
-    chooseMention: (mention) => choseMention(editor, state, mention),
+    chooseSkill: (name) =>
+      choseChip(editor, state.trigger, editor.schema.node(SKILL_NODE, { name })),
+    chooseMention: (mention) =>
+      choseChip(
+        editor,
+        state.mentionTrigger,
+        editor.schema.node(MENTION_NODE, { name: mention.name, target: mention.target }),
+      ),
+    insertMention: (mention) => laidInMention(editor, state, props.maxLength, mention),
+    chooseSkillAtMention: (name) =>
+      choseChip(editor, state.mentionTrigger, editor.schema.node(SKILL_NODE, { name })),
     setSkills: (skills) => {
       state.skills = skills;
       const tr = chipped(editor.state, skills, true);

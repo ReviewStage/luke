@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { PLAN_ACTOR, type Plan } from "@sidecar/features/plan-wire";
+import { PLAN_ACTOR, type Plan } from "@luke/features/plan-wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -43,7 +43,7 @@ function typesIn(by: typeof DEAN): boolean {
   const root = createRoot(container);
   roots.push(root);
   const registry = AtomRegistry.make();
-  const reader = { id: DEAN.userId, own: false };
+  const reader = { readerId: DEAN.userId };
   const plan = (body: string, at: number): Plan => ({
     ...DOCUMENT_PLAN,
     document: { body, assumptions: [] },

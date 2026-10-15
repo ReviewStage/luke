@@ -1,6 +1,10 @@
-import type { PlanFileRequest } from "@sidecar/features/plan-wire";
-import type { PlanCode, PlanningFileAnswer } from "@sidecar/features/planning-view";
+import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
+import type { PlanFileRequest } from "@luke/features/plan-wire";
+import type { PlanCode, PlanningFileAnswer } from "@luke/features/planning-view";
+import { fileName } from "@luke/voice/code-pane-model";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { APP_COMMAND } from "#shared/shortcuts";
+import { useAppCommand } from "../app-commands";
 import { useFindOpen } from "../find-in-tab";
 import { READ_FAILURE_PLACE, ReadFailure, type ReadFailurePlace } from "../read-failure";
 import { RetryRowLabel } from "../retry-button";
@@ -21,6 +25,7 @@ import {
   withWindow,
 } from "./file-tab-model";
 import { useFileViewSettings } from "./file-view-settings";
+import { useMentionDrop, usePlanMentions } from "./plan-mentions";
 import type { OpenFile } from "./use-side-panel";
 
 /**
@@ -241,6 +246,40 @@ function ReadNotice({
   );
 }
 
+/** The first and last line a selection over the tab covers, by the numbers their rows are drawn with; nothing where it covers no line of the file. */
+function selectedLines(
+  tab: HTMLElement,
+  selection: Selection | null,
+): { readonly startLine: number; readonly endLine: number } | undefined {
+  if (selection === null || selection.rangeCount === 0 || selection.isCollapsed) return undefined;
+  const range = selection.getRangeAt(0);
+  const rows = [...tab.querySelectorAll<HTMLElement>(".code-line")].filter((row) => {
+    if (!range.intersectsNode(row)) return false;
+    // Note that a row the selection only touches at its start, as a line selected whole ends, holds none of it.
+    const text = row.querySelector(".code-line-text");
+    if (text === null || !row.contains(range.endContainer)) return true;
+    const held = document.createRange();
+    held.setStart(text, 0);
+    held.setEnd(range.endContainer, range.endOffset);
+    return held.toString() !== "";
+  });
+  const numbers = rows.map((row) => Number(row.querySelector(".code-line-number")?.textContent));
+  const startLine = numbers[0];
+  const endLine = numbers.at(-1);
+  if (startLine === undefined || endLine === undefined) return undefined;
+  if (!Number.isInteger(startLine) || !Number.isInteger(endLine)) return undefined;
+  return { startLine, endLine };
+}
+
+/** A file's lines as their mention's chip names them: the file's name and the lines, `app.ts:12–20`, or the one line. */
+function linesName(path: string, lines: { readonly startLine: number; readonly endLine: number }) {
+  const span =
+    lines.startLine === lines.endLine
+      ? String(lines.startLine)
+      : `${lines.startLine}–${lines.endLine}`;
+  return `${fileName(path)}:${span}`;
+}
+
 /** The tab: the file, or why it is not shown over the lines Luke showed of it. */
 export function FileTab({
   file,
@@ -259,6 +298,9 @@ export function FileTab({
   onRead: (read: FileRead) => void;
 }): React.JSX.Element {
   const [read, setRead] = useState<FileRead>({ kind: FILE_READ.READING });
+  const tab = useRef<HTMLElement>(null);
+  const page = usePlanMentions();
+  const drop = useMentionDrop();
   const held = useRef<FileRead>(read);
   held.current = read;
   const told = useRef(onRead);
@@ -348,8 +390,25 @@ export function FileTab({
     readLit();
   }, [file.opened, readLit]);
 
+  // ⌥⌘K hands the agent's message box the lines selected here, pinned to the commit they were read at.
+  const commit = read.kind === FILE_READ.READY ? (read.commit ?? file.commit) : undefined;
+  const mentionLines =
+    page === undefined || drop === undefined || commit === undefined
+      ? undefined
+      : () => {
+          const shown = tab.current;
+          const lines = shown === null ? undefined : selectedLines(shown, window.getSelection());
+          if (lines === undefined) return;
+          const mention = { kind: MENTION_KIND.FILE, path: file.path, lines: { commit, ...lines } };
+          drop({
+            name: linesName(file.path, lines),
+            target: encodeMention(mention, page.doors.place),
+          });
+        };
+  useAppCommand(APP_COMMAND.MENTION_LINES, mentionLines);
+
   return (
-    <section className="file-tab ph-no-capture" aria-label={file.path}>
+    <section className="file-tab ph-no-capture" aria-label={file.path} ref={tab}>
       {read.kind === FILE_READ.READY ? (
         <FileLinesView file={file} held={read} notes={notes} readWindow={readWindow} />
       ) : read.kind === FILE_READ.READING ? (

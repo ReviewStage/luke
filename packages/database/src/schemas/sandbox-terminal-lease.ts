@@ -1,4 +1,4 @@
-import { index, pgTable, uuid } from "drizzle-orm/pg-core";
+import { index, pgTable, text, uuid } from "drizzle-orm/pg-core";
 import { timestamptz } from "./_helpers.js";
 import { conversations } from "./storage.js";
 
@@ -25,6 +25,10 @@ export const sandboxTerminalLease = pgTable(
     heldUntil: timestamptz("held_until").notNull(),
     /** When a sweep last tried to stop the sandbox and Vercel did not confirm it; null until one has, and again once the developer types. */
     triedAt: timestamptz("tried_at"),
+    /** When the terminal relay last set a fresh GitHub token at the sandbox's firewall; null until it has. */
+    credentialAt: timestamptz("credential_at"),
+    /** The sandbox session that token was set on: a resumed sandbox is a new session whose firewall holds none. */
+    credentialSession: text("credential_session"),
   },
   (table) => [index("sandbox_terminal_lease_next").on(table.triedAt, table.heldUntil)],
 );

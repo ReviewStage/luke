@@ -10,10 +10,10 @@ import type { RunMode as RunModeFacts } from "../run-mode.js";
 import type { SecretCipher as SecretCipherSeam } from "../settings-store.js";
 
 /** Luke's own application-state root, given explicitly. */
-export class StateRoot extends Context.Service<StateRoot, string>()("@sidecar/host/StateRoot") {}
+export class StateRoot extends Context.Service<StateRoot, string>()("@luke/host/StateRoot") {}
 
 /** What this launch is allowed to do. */
-export class RunMode extends Context.Service<RunMode, RunModeFacts>()("@sidecar/host/RunMode") {}
+export class RunMode extends Context.Service<RunMode, RunModeFacts>()("@luke/host/RunMode") {}
 
 /** What this build is, and whose machine it runs on. */
 export interface AppIdentityFacts {
@@ -22,7 +22,7 @@ export interface AppIdentityFacts {
 }
 
 export class AppIdentity extends Context.Service<AppIdentity, AppIdentityFacts>()(
-  "@sidecar/host/AppIdentity",
+  "@luke/host/AppIdentity",
 ) {}
 
 /**
@@ -32,12 +32,12 @@ export class AppIdentity extends Context.Service<AppIdentity, AppIdentityFacts>(
  * that holds none.
  */
 export class Environment extends Context.Service<Environment, ConfigProvider.ConfigProvider>()(
-  "@sidecar/host/Environment",
+  "@luke/host/Environment",
 ) {}
 
 /** The Keychain-backed cipher the settings store encrypts its secrets with. */
 export class SecretCipher extends Context.Service<SecretCipher, SecretCipherSeam>()(
-  "@sidecar/host/SecretCipher",
+  "@luke/host/SecretCipher",
 ) {}
 
 /** The ids the host mints for its own records. */
@@ -45,7 +45,7 @@ export interface IdSourceSeam {
   readonly create: () => string;
 }
 
-export class IdSource extends Context.Service<IdSource, IdSourceSeam>()("@sidecar/host/IdSource") {}
+export class IdSource extends Context.Service<IdSource, IdSourceSeam>()("@luke/host/IdSource") {}
 
 /**
  * Where a line about the host's own running goes. The service answers the
@@ -57,7 +57,7 @@ export interface HostReporter {
   readonly report: (message: string) => void;
 }
 
-export class Reporter extends Context.Service<Reporter, HostReporter>()("@sidecar/host/Reporter") {}
+export class Reporter extends Context.Service<Reporter, HostReporter>()("@luke/host/Reporter") {}
 
 export const reporterLayer = (report: (message: string) => void): Layer.Layer<Reporter> =>
   Layer.merge(
@@ -88,7 +88,7 @@ export interface ShutdownSignalSeam {
 }
 
 export class ShutdownSignal extends Context.Service<ShutdownSignal, ShutdownSignalSeam>()(
-  "@sidecar/host/ShutdownSignal",
+  "@luke/host/ShutdownSignal",
 ) {}
 
 /** Every seam tag a host composition stands on. */

@@ -1,21 +1,25 @@
-import { CODING_AGENT_CALL_FAILURE } from "@sidecar/features/coding-agent-view";
-import type { InboxItem } from "@sidecar/features/inbox-wire";
-import { PLAN_CALL_FAILURE } from "@sidecar/features/planning-view";
-import { ACTION_RESULT_STATUS } from "@sidecar/wire";
-import type { AppInboxWaitingItem } from "#shared/messages/app-state";
+import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
+import type { InboxItem } from "@luke/features/inbox-wire";
+import { PLAN_CALL_FAILURE } from "@luke/features/planning-view";
+import type { AppInboxWaitingItem } from "@luke/host/app-state";
+import { CONFIRM_STAGE } from "@luke/ui/confirm-state";
+import { DOCUMENT_REGION, PLANS_PAGE } from "@luke/ui/planning-model";
+import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
+import { ACTION_RESULT_STATUS } from "@luke/wire";
 import type { SummaryPin } from "../renderer/desktop/plan-summary";
-import { DOCUMENT_REGION, PLANS_PAGE } from "../renderer/planning/planning-model";
-import { TRANSCRIPT_REGION } from "../renderer/planning/transcript-model";
 import type { CodingAgentsControl } from "../renderer/planning/use-coding-agents";
 import { MAIN_TAB } from "../renderer/planning/use-main-tabs";
 import { HISTORY_READ } from "../renderer/planning/use-plan-history";
-import type { PlansControl, VersionHistoryControl } from "../renderer/planning/use-plans-tab";
+import {
+  AUTOMATIONS_PAGE,
+  type PlansControl,
+  type VersionHistoryControl,
+} from "../renderer/planning/use-plans-tab";
 import {
   SIDE_PANEL_TAB,
   SIDE_PANEL_TABS,
   SIDE_PANEL_WIDTH,
 } from "../renderer/planning/use-side-panel";
-import { CONFIRM_STAGE } from "../renderer/settings/confirm-state";
 
 const ignore = () => undefined;
 
@@ -56,11 +60,21 @@ function versionHistoryControl(
   };
 }
 
+/** A repository chip's list read from nowhere, which answers that the service did not. */
+const NO_REPOSITORIES = {
+  recent: [],
+  read: () => Promise.resolve({ failure: PLAN_CALL_FAILURE.UNANSWERED }),
+  openGitHub: ignore,
+  pictures: true,
+  manages: true,
+} as const satisfies PlansControl["repositories"];
+
 /** A plan with no agents and no repository, every press ignored. */
 export function codingAgentsControl(
   overrides: Partial<CodingAgentsControl> = {},
 ): CodingAgentsControl {
   return {
+    me: undefined,
     agents: [],
     archived: [],
     agentIds: [],
@@ -73,7 +87,7 @@ export function codingAgentsControl(
     onDraftChange: ignore,
     onDraftAttachments: ignore,
     onDiscardDraft: ignore,
-    startTask: () => Promise.resolve(undefined),
+    startPrompt: () => Promise.resolve(undefined),
     listFailed: false,
     onRetryList: ignore,
     models: undefined,
@@ -123,7 +137,12 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
     me: undefined,
     plans: [],
     archived: [],
-    listed: { plans: overrides.plans ?? [], archived: overrides.archived ?? [] },
+    listed: {
+      plans: overrides.plans ?? [],
+      archived: overrides.archived ?? [],
+      inbox: overrides.inbox ?? [],
+      inboxPlans: overrides.inboxPlans ?? [],
+    },
     workspaces: [],
     workspace: undefined,
     onChooseWorkspace: ignore,
@@ -142,7 +161,7 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
     region: { kind: DOCUMENT_REGION.NONE },
     copy: { onPress: ignore },
     edit: () => Promise.resolve({ failure: PLAN_CALL_FAILURE.UNANSWERED }),
-    microphone: { label: "Talk about this plan", enabled: true, muted: false, onPress: ignore },
+    microphone: { label: "Talk about this task", enabled: true, muted: false, onPress: ignore },
     speaker: { muted: false, onPress: ignore },
     stop: { shown: false, onPress: ignore },
     status: undefined,
@@ -173,6 +192,8 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
       files: [],
       changes: [],
       pages: [],
+      terminals: [],
+      lastTerminal: undefined,
       strip: SIDE_PANEL_TABS,
       tab: SIDE_PANEL_TAB.BOARD,
       width: SIDE_PANEL_WIDTH.DEFAULT,
@@ -211,6 +232,9 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
     onShowAgent: ignore,
     onShowSource: ignore,
     onShowPlan: ignore,
+    onShowMention: ignore,
+    sectionReveal: undefined,
+    onSectionRevealed: ignore,
     onShowInbox: ignore,
     secondCall: {
       confirm: {
@@ -235,17 +259,21 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
       onClose: ignore,
       onChoose: ignore,
     },
+    agentView: { agentId: undefined, onOpen: ignore, onClose: ignore },
+    inboxPlanless: [],
+    factoryView: { open: false, onOpen: ignore, onClose: ignore },
+    automationsView: {
+      open: false,
+      place: { kind: AUTOMATIONS_PAGE.LIST },
+      onOpen: ignore,
+      onClose: ignore,
+    },
+    callPlanId: undefined,
     onShowFile: ignore,
     onOpenPinnedTab: ignore,
     onReopenClosedTab: undefined,
     chosenPin: undefined,
-    repositories: {
-      recent: [],
-      read: () => Promise.resolve({ failure: PLAN_CALL_FAILURE.UNANSWERED }),
-      openGitHub: ignore,
-      pictures: true,
-      manages: true,
-    },
+    repositories: NO_REPOSITORIES,
     repositoryMenu: undefined,
     onChangeRepository: ignore,
     onSetRepository: () => Promise.resolve(undefined),
@@ -257,6 +285,9 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
     newPlan: {
       open: false,
       preset: undefined,
+      workspaces: [],
+      workspaceId: undefined,
+      repositoriesIn: () => NO_REPOSITORIES,
       start: () => Promise.resolve(undefined),
       onClose: ignore,
     },

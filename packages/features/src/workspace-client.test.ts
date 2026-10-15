@@ -1,26 +1,23 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import {
-  fakeCloudApi,
-  HTTP_STATUS,
-  jsonResponse,
-  recordingHttpClient,
-} from "@sidecar/wire/testing";
+import { fakeCloudApi, HTTP_STATUS, jsonResponse, recordingHttpClient } from "@luke/wire/testing";
 import { Effect } from "effect";
 import { HOSTED_API_ERROR } from "./service-wire.js";
 import { WORKSPACE_CALL_FAILURE } from "./workspace-call.js";
 import { HostedWorkspaceClient, type HostedWorkspaceClientOptions } from "./workspace-client.js";
-import { WORKSPACE_ROLE } from "./workspace-wire.js";
+import { WORKSPACE_PHOTO_BOUNDS, WORKSPACE_PHOTO_TYPE, WORKSPACE_ROLE } from "./workspace-wire.js";
 
 const PERSONAL = {
   id: "org-personal-1",
   name: "Ada Lovelace",
+  slug: "ada-lovelace",
   role: WORKSPACE_ROLE.OWNER,
   github: null,
 };
 const ACME = {
   id: "org-acme-1",
   name: "Acme",
+  slug: "acme",
   role: WORKSPACE_ROLE.ADMIN,
   github: { login: "acme", active: false },
 };
@@ -82,6 +79,48 @@ it.effect(
       });
       assert.deepEqual(api.credentials(), ["token-1"]);
       assert.equal(yield* Effect.provide(client().list(), malformed.layer), undefined);
+    }),
+);
+
+it.effect("reads a workspace from a service before slugs travelled, its slug left out", () =>
+  Effect.gen(function* () {
+    const { slug: _slug, ...older } = ACME;
+    const api = fakeCloudApi({
+      "GET /api/workspaces": { answer: () => ({ workspaces: [older] }) },
+    });
+
+    assert.deepEqual(yield* Effect.provide(client().list(), api.layer), { workspaces: [older] });
+  }),
+);
+
+it.effect(
+  "reads every installation a service with several connections lists, and a service from before them as its one GitHub account alone",
+  () =>
+    Effect.gen(function* () {
+      const several = {
+        ...ACME,
+        github: { login: "acme", active: true },
+        githubInstallations: [
+          { installationId: 11, login: "acme", active: true },
+          { installationId: 12, login: "acme-labs", active: false },
+        ],
+      };
+      const current = fakeCloudApi({
+        "GET /api/workspaces": { answer: () => ({ workspaces: [several] }) },
+      });
+      const before = fakeCloudApi({
+        "GET /api/workspaces": { answer: () => ({ workspaces: [ACME] }) },
+      });
+
+      const read = yield* Effect.provide(client().list(), current.layer);
+      const older = yield* Effect.provide(client().list(), before.layer);
+
+      assert.deepEqual(read, { workspaces: [several] });
+      assert.deepEqual(older, { workspaces: [ACME] });
+      assert.equal(
+        older?.workspaces[0] !== undefined && "githubInstallations" in older.workspaces[0],
+        false,
+      );
     }),
 );
 
@@ -216,6 +255,166 @@ it.effect(
             body: { workspaceId: ACME.id, userId: GRACE.userId },
           },
           { route: "POST /api/workspaces/leave", body: { workspaceId: ACME.id } },
+        ],
+      );
+    }),
+);
+
+it.effect(
+  "changes a member's role and hands the workspace over under the Mac's session, answered with the members, sends an owner's role nowhere, and names a refusal",
+  () =>
+    Effect.gen(function* () {
+      const promoted = { ...GRACE, role: "admin" };
+      const handedOver = [
+        { ...GRACE, role: "owner" },
+        { ...ADA, role: "admin" },
+      ];
+      const api = fakeCloudApi({
+        "POST /api/workspaces/members/role": { answer: () => ({ members: [ADA, promoted] }) },
+        "POST /api/workspaces/transfer": { answer: () => ({ members: handedOver }) },
+      });
+      const forbidden = {
+        answer: () => ({ error: HOSTED_API_ERROR.NOT_PERMITTED }),
+        status: HTTP_STATUS.FORBIDDEN,
+      };
+      const refusing = fakeCloudApi({
+        "POST /api/workspaces/members/role": forbidden,
+        "POST /api/workspaces/transfer": forbidden,
+      });
+      const workspaces = client();
+
+      const changed = yield* Effect.provide(
+        workspaces.changeRole(ACME.id, GRACE.userId, WORKSPACE_ROLE.ADMIN),
+        api.layer,
+      );
+      const toOwner = yield* Effect.provide(
+        workspaces.changeRole(ACME.id, GRACE.userId, WORKSPACE_ROLE.OWNER),
+        api.layer,
+      );
+      const transferred = yield* Effect.provide(
+        workspaces.transfer(ACME.id, GRACE.userId),
+        api.layer,
+      );
+      const refused = yield* Effect.provide(
+        Effect.all([
+          workspaces.changeRole(ACME.id, GRACE.userId, WORKSPACE_ROLE.MEMBER),
+          workspaces.transfer(ACME.id, GRACE.userId),
+        ]),
+        refusing.layer,
+      );
+
+      assert.deepEqual(changed, { ok: true, answer: [ADA, promoted] });
+      assert.deepEqual(toOwner, { ok: false, failure: WORKSPACE_CALL_FAILURE.UNANSWERED });
+      assert.deepEqual(transferred, { ok: true, answer: handedOver });
+      const notPermitted = { ok: false, failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED };
+      assert.deepEqual(refused, [notPermitted, notPermitted]);
+      // Both write through Better Auth, so both carry the Mac's session, never its OAuth token.
+      assert.deepEqual(api.credentials(), ["session-1", "session-1"]);
+      assert.deepEqual(
+        api.requests().map(({ method, pathname, body }) => ({
+          route: `${method} ${pathname}`,
+          body: body === undefined ? undefined : JSON.parse(body),
+        })),
+        [
+          {
+            route: "POST /api/workspaces/members/role",
+            body: { workspaceId: ACME.id, userId: GRACE.userId, role: WORKSPACE_ROLE.ADMIN },
+          },
+          {
+            route: "POST /api/workspaces/transfer",
+            body: { workspaceId: ACME.id, userId: GRACE.userId },
+          },
+        ],
+      );
+    }),
+);
+
+it.effect(
+  "renames a workspace under the Mac's session with its name trimmed, sends a blank name nowhere, and names a refusal",
+  () =>
+    Effect.gen(function* () {
+      const renamed = { ...ACME, name: "Acme Labs" };
+      const api = fakeCloudApi({
+        "POST /api/workspaces/rename": { answer: () => ({ workspace: renamed }) },
+      });
+      const refusing = fakeCloudApi({
+        "POST /api/workspaces/rename": {
+          answer: () => ({ error: HOSTED_API_ERROR.NOT_PERMITTED }),
+          status: HTTP_STATUS.FORBIDDEN,
+        },
+      });
+      const workspaces = client();
+
+      const answered = yield* Effect.provide(workspaces.rename(ACME.id, "  Acme Labs "), api.layer);
+      const blank = yield* Effect.provide(workspaces.rename(ACME.id, "   "), api.layer);
+      const refused = yield* Effect.provide(
+        workspaces.rename(ACME.id, "Acme Labs"),
+        refusing.layer,
+      );
+
+      assert.deepEqual(answered, { ok: true, answer: renamed });
+      assert.deepEqual(blank, { ok: false, failure: WORKSPACE_CALL_FAILURE.UNANSWERED });
+      assert.deepEqual(refused, { ok: false, failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED });
+      assert.deepEqual(api.credentials(), ["session-1"]);
+      assert.deepEqual(
+        api.requests().map(({ method, pathname, body }) => ({
+          route: `${method} ${pathname}`,
+          body: body === undefined ? undefined : JSON.parse(body),
+        })),
+        [
+          {
+            route: "POST /api/workspaces/rename",
+            body: { workspaceId: ACME.id, name: "Acme Labs" },
+          },
+        ],
+      );
+    }),
+);
+
+it.effect(
+  "sets a workspace's photo or removes it under the Mac's session, sends an SVG or one past the bound nowhere, and names a refusal",
+  () =>
+    Effect.gen(function* () {
+      const photo = "data:image/webp;base64,UklGRgAAAABXRUJQ";
+      const photographed = { ...ACME, photoVersion: "0123456789abcdef" };
+      const api = fakeCloudApi({
+        "POST /api/workspaces/photo/set": {
+          answer: (request) =>
+            request.body?.includes(photo) ? { workspace: photographed } : { workspace: ACME },
+        },
+      });
+      const refusing = fakeCloudApi({
+        "POST /api/workspaces/photo/set": {
+          answer: () => ({ error: HOSTED_API_ERROR.NOT_PERMITTED }),
+          status: HTTP_STATUS.FORBIDDEN,
+        },
+      });
+      const workspaces = client();
+      const tooLarge = `data:image/png;base64,${btoa("x".repeat(WORKSPACE_PHOTO_BOUNDS.MAX_BYTES + 1))}`;
+
+      const set = yield* Effect.provide(workspaces.setPhoto(ACME.id, photo), api.layer);
+      const removed = yield* Effect.provide(workspaces.setPhoto(ACME.id, null), api.layer);
+      const svg = yield* Effect.provide(
+        workspaces.setPhoto(ACME.id, "data:image/svg+xml;base64,PHN2Zy8+"),
+        api.layer,
+      );
+      const large = yield* Effect.provide(workspaces.setPhoto(ACME.id, tooLarge), api.layer);
+      const refused = yield* Effect.provide(workspaces.setPhoto(ACME.id, null), refusing.layer);
+
+      assert.deepEqual(set, { ok: true, answer: photographed });
+      assert.deepEqual(removed, { ok: true, answer: ACME });
+      assert.deepEqual(svg, { ok: false, failure: WORKSPACE_CALL_FAILURE.UNANSWERED });
+      assert.deepEqual(large, { ok: false, failure: WORKSPACE_CALL_FAILURE.UNANSWERED });
+      assert.deepEqual(refused, { ok: false, failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED });
+      assert.deepEqual(api.credentials(), ["session-1", "session-1"]);
+      assert.deepEqual(
+        api.requests().map(({ method, pathname, body }) => ({
+          route: `${method} ${pathname}`,
+          body: body === undefined ? undefined : JSON.parse(body),
+        })),
+        [
+          { route: "POST /api/workspaces/photo/set", body: { workspaceId: ACME.id, photo } },
+          { route: "POST /api/workspaces/photo/set", body: { workspaceId: ACME.id, photo: null } },
         ],
       );
     }),
@@ -418,5 +617,44 @@ it.effect(
       assert.deepEqual(notAnAddress, { ok: false, failure: WORKSPACE_CALL_FAILURE.UNANSWERED });
       assert.deepEqual(asOwner, { ok: false, failure: WORKSPACE_CALL_FAILURE.UNANSWERED });
       assert.equal(api.requests().length, 1);
+    }),
+);
+
+/** The photo of `org-acme-1` read against a service answering `response`, and the paths it asked. */
+const photoAgainst = (response: () => Response) =>
+  Effect.gen(function* () {
+    const service = recordingHttpClient(response);
+    const photo = yield* Effect.provide(client().photo(ACME.id), service.layer);
+    return { photo, paths: service.requests.map((request) => request.pathname) };
+  });
+
+it.effect("reads a workspace's photo as its bytes in base64 under the type it was served as", () =>
+  Effect.gen(function* () {
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    const { photo, paths } = yield* photoAgainst(
+      () => new Response(png, { headers: { "content-type": WORKSPACE_PHOTO_TYPE.PNG } }),
+    );
+
+    assert.deepEqual(photo, {
+      ok: true,
+      answer: { contentType: WORKSPACE_PHOTO_TYPE.PNG, base64: "iVBORw0KGgo=" },
+    });
+    assert.deepEqual(paths, [`/api/workspaces/${ACME.id}/photo`]);
+  }),
+);
+
+it.effect(
+  "reads a photo the service did not find as not found, and one of another type as unanswered",
+  () =>
+    Effect.gen(function* () {
+      const missing = yield* photoAgainst(() =>
+        jsonResponse({ error: HOSTED_API_ERROR.NOT_FOUND }, HTTP_STATUS.NOT_FOUND),
+      );
+      const otherType = yield* photoAgainst(
+        () => new Response("<svg/>", { headers: { "content-type": "image/svg+xml" } }),
+      );
+
+      assert.deepEqual(missing.photo, { ok: false, failure: WORKSPACE_CALL_FAILURE.NOT_FOUND });
+      assert.deepEqual(otherType.photo, { ok: false, failure: WORKSPACE_CALL_FAILURE.UNANSWERED });
     }),
 );

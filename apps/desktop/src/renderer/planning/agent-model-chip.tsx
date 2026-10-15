@@ -1,8 +1,8 @@
-import type { CodingAgentUsage } from "@sidecar/features/coding-agent-wire";
-import type { CatalogModel } from "@sidecar/features/models-wire";
+import type { CodingAgentUsage } from "@luke/features/coding-agent-wire";
+import type { CatalogModel } from "@luke/features/models-wire";
 import { useEffect, useId, useRef, useState } from "react";
 import { AnchoredPopover, POPOVER_ALIGN } from "../anchored-popover";
-import { CHIP_LOOK, Chip } from "../chip";
+import { CHIP_LOOK, Chip, type ChipLook } from "../chip";
 import { useDisclosure } from "../use-disclosure";
 import { agentUsageLine } from "./coding-agent-model";
 import { ModelLabel } from "./model-label";
@@ -39,6 +39,8 @@ export function AgentModelChip({
   models,
   readModels,
   usage,
+  look = CHIP_LOOK.TOOLBAR,
+  className,
 }: {
   model: AgentModelControl;
   /** The catalog as last read; nothing before the first read lands. */
@@ -47,6 +49,10 @@ export function AgentModelChip({
   readModels: () => void;
   /** What the agent has cost, as its transcript's last page said; nothing before a turn settled. */
   usage: CodingAgentUsage | undefined;
+  /** The chip's look: the agent box's toolbar chip, or a form row's field (`../chip.tsx`). */
+  look?: ChipLook;
+  /** A class for the chip itself, such as the width a form's column gives it. */
+  className?: string | undefined;
 }): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const drawn = useDisclosure(open);
@@ -73,8 +79,9 @@ export function AgentModelChip({
     <div className="agent-model-chip" ref={root}>
       <Chip
         ref={trigger}
-        look={CHIP_LOOK.TOOLBAR}
+        look={look}
         chevron
+        className={className}
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}

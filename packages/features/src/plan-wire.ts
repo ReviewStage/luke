@@ -1,13 +1,13 @@
 import { Schema as EffectSchema } from "effect";
 import { CHECK_SUMMARY, CODING_AGENT_STATUS, PULL_REQUEST_STATE } from "./coding-agent-wire.js";
 import { githubRepositoryFullNameSchema } from "./github-repositories-wire.js";
-import { countedNumber, wireUuidSchema } from "./service-wire.js";
+import { countedNumber, memberRefSchema, wireUuidSchema } from "./service-wire.js";
 
 /**
  * plan-wire.ts -- a named feature plan and its one saved document, as the Plans tab and the service read them.
  *
  * A plan is its owner's name for it and one current document: one free
- * Markdown text (`plan-document.ts`, `docs/PLANNING.md`), answered as the
+ * Markdown text (`plan-document.ts`, `docs/TASKS.md`), answered as the
  * document's `body` with no title line, since the name is its own, and an
  * empty `assumptions` list, since its assumptions are a section of the text;
  * the list stays on the wire because a desktop through v0.11.0 requires it.
@@ -220,6 +220,17 @@ const planSummaryFields = {
   pinnedAt: EffectSchema.optionalKey(countedNumber),
   /** Epoch milliseconds the plan was archived; absent while it is not, and from a service before archiving. */
   archivedAt: EffectSchema.optionalKey(countedNumber),
+  /**
+   * The account that started the plan, its owner, which alone may move it to
+   * another workspace; absent from a service before it was sent.
+   */
+  ownerId: EffectSchema.optionalKey(EffectSchema.String),
+  /**
+   * The owner by id and the name their account holds now, as the plan's ⋯
+   * menu says who created it; absent once their account is gone, and from a
+   * service before it was sent.
+   */
+  createdBy: EffectSchema.optionalKey(memberRefSchema),
 };
 
 /** How much of a plan's coding agents and their pull requests one row of the list names; its counts say how many stand in all. */
@@ -230,7 +241,7 @@ export const PLAN_AGENTS_BOUNDS = {
   MAX_PULL_REQUESTS: 3,
 } as const;
 
-/** One of a plan's coding agents as its row names it: what it is called and runs on, where it stands, and since when. */
+/** One of a plan's coding agents as its row names it: what it is called and runs on, where it stands, since when, and who started it. */
 export const planAgentLineSchema = EffectSchema.Struct({
   id: wireUuidSchema,
   /** The agent's title; null where it has none, when it is named by its model. */
@@ -244,6 +255,14 @@ export const planAgentLineSchema = EffectSchema.Struct({
    * newest turn ended once it has; absent where neither is known.
    */
   at: EffectSchema.optionalKey(countedNumber),
+  /**
+   * The member who started the agent, whose provider key pays for it and
+   * whose Mac its commands run on; absent once their account is gone, and
+   * from a service before it.
+   */
+  startedBy: EffectSchema.optionalKey(memberRefSchema),
+  /** The automation whose run started the agent; absent for one started by hand, once that automation is deleted, and from a service before it. */
+  automationId: EffectSchema.optionalKey(wireUuidSchema),
 });
 
 export type PlanAgentLine = typeof planAgentLineSchema.Type;
@@ -329,10 +348,7 @@ export type PlanActor = (typeof PLAN_ACTOR)[keyof typeof PLAN_ACTOR];
  * name it holds now, a member who has since left the workspace among them.
  * The window calls the member You only where the id is its own account's.
  */
-export const planEditorSchema = EffectSchema.Struct({
-  userId: EffectSchema.String,
-  name: EffectSchema.String,
-});
+export const planEditorSchema = memberRefSchema;
 
 export type PlanEditor = typeof planEditorSchema.Type;
 
@@ -343,6 +359,8 @@ export const planLastEditSchema = EffectSchema.Struct({
   by: EffectSchema.optionalKey(planEditorSchema),
   /** The coding agent as its row names it now; present only where a coding agent wrote it. */
   label: EffectSchema.optionalKey(trimmedText(PLAN_BOUNDS.MAX_NAME_CHARS)),
+  /** The coding agent that wrote it, which the window finds among the plan's agents; absent for any other writer and from a service before it. */
+  agentId: EffectSchema.optionalKey(wireUuidSchema),
   /** Epoch milliseconds of the revision's latest save. */
   at: countedNumber,
   /** Whether the revision was written on one of the plan's calls. */
@@ -634,7 +652,8 @@ export type PlanFileRequest = typeof planFileRequestSchema.Type;
 /**
  * A window of a file of the plan's repository as it stands now on its
  * default branch, or at the commit the request pinned, read through the
- * Luke GitHub App: the path, the repository and the branch or commit read, the line the first carried line is, how
+ * Luke GitHub App: the path, the repository and the branch or commit read,
+ * the commit the lines were read at where GitHub named one, the line the first carried line is, how
  * many lines the whole file has, and the lines, each cut as `show_code`
  * cuts it. A window past the file's end carries no lines.
  */
@@ -642,6 +661,7 @@ export const planFileWindowSchema = EffectSchema.Struct({
   path: EffectSchema.String,
   repository: githubRepositoryFullNameSchema,
   branch: EffectSchema.String,
+  commit: EffectSchema.optionalKey(commitShaSchema),
   firstLine: codeLineSchema,
   lineCount: EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(1)),
   lines: EffectSchema.Array(

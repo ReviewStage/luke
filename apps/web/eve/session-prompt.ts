@@ -1,5 +1,5 @@
+import type { SessionPromptRecord } from "@luke/service/agents/brain-host/host";
 import { defineState } from "eve/context";
-import type { SessionPromptRecord } from "../server/hosted/brain-host/host.js";
 
 /**
  * The session's prompt as its content address, in eve's durable session

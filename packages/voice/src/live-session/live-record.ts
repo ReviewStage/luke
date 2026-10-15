@@ -1,4 +1,4 @@
-import type { TranscriptSpeaker } from "@sidecar/live";
+import type { TranscriptSpeaker } from "@luke/live";
 import type { Effect } from "effect";
 
 /**

@@ -1,5 +1,5 @@
-import { WORKSPACE_CALL_FAILURE, type WorkspaceCallFailure } from "@sidecar/features";
-import type { CodingAgentMessagesAnswerView } from "@sidecar/features/coding-agent-view";
+import { WORKSPACE_CALL_FAILURE, type WorkspaceCallFailure } from "@luke/features";
+import type { CodingAgentMessagesAnswerView } from "@luke/features/coding-agent-view";
 import type {
   CodeLines,
   PlanningArchiveParams,
@@ -43,12 +43,17 @@ import type {
   PlanningWorkspaceLeaveAnswer,
   PlanningWorkspaceLeaveParams,
   PlanningWorkspaceMemberRemoveParams,
+  PlanningWorkspaceMemberRoleParams,
   PlanningWorkspaceMembersAnswer,
   PlanningWorkspaceMembersParams,
   PlanningWorkspaceParams,
-} from "@sidecar/features/planning-view";
-import { GITHUB_DISCONNECT_FAILURE } from "@sidecar/features/planning-view";
-import { Effect } from "effect";
+  PlanningWorkspacePhotoAnswer,
+  PlanningWorkspacePhotoParams,
+  PlanningWorkspacePhotoSetParams,
+  PlanningWorkspaceRenameParams,
+  PlanningWorkspaceTransferParams,
+} from "@luke/features/planning-view";
+import { GITHUB_DISCONNECT_FAILURE } from "@luke/features/planning-view";
 import {
   ACT,
   ACT_KIND,
@@ -56,7 +61,8 @@ import {
   GITHUB_LAST_SIGN_IN_REFUSAL,
   isGitHubAddress,
   WORKSPACE_NOT_PERMITTED_REFUSAL,
-} from "#shared/messages/acts";
+} from "@luke/host/acts";
+import { Effect } from "effect";
 import { ActRefused, type ActRows, type ActSender } from "../act-router";
 
 /**
@@ -101,6 +107,10 @@ export interface PlanningActsDependencies {
     githubConnect(): Effect.Effect<PlanningGitHubPageAnswer>;
     githubDisconnect(): Effect.Effect<PlanningGitHubDisconnectAnswer>;
     workspaceCreate(params: PlanningWorkspaceCreateParams): Effect.Effect<PlanningWorkspaceAnswer>;
+    workspaceRename(params: PlanningWorkspaceRenameParams): Effect.Effect<PlanningWorkspaceAnswer>;
+    workspacePhotoSet(
+      params: PlanningWorkspacePhotoSetParams,
+    ): Effect.Effect<PlanningWorkspaceAnswer>;
     workspaceGitHubConnect(
       params: PlanningWorkspaceParams,
     ): Effect.Effect<PlanningWorkspaceGitHubConnectAnswer>;
@@ -110,8 +120,17 @@ export interface PlanningActsDependencies {
     workspaceMembers(
       params: PlanningWorkspaceMembersParams,
     ): Effect.Effect<PlanningWorkspaceMembersAnswer>;
+    workspacePhoto(
+      params: PlanningWorkspacePhotoParams,
+    ): Effect.Effect<PlanningWorkspacePhotoAnswer>;
     workspaceMemberRemove(
       params: PlanningWorkspaceMemberRemoveParams,
+    ): Effect.Effect<PlanningWorkspaceMembersAnswer>;
+    workspaceMemberRole(
+      params: PlanningWorkspaceMemberRoleParams,
+    ): Effect.Effect<PlanningWorkspaceMembersAnswer>;
+    workspaceTransfer(
+      params: PlanningWorkspaceTransferParams,
     ): Effect.Effect<PlanningWorkspaceMembersAnswer>;
     workspaceLeave(
       params: PlanningWorkspaceLeaveParams,
@@ -174,17 +193,24 @@ type PlanningActKind =
   | typeof ACT_KIND.PLANNING_RESTORE
   | typeof ACT_KIND.PLANNING_PAGE_SOURCE
   | typeof ACT_KIND.WORKSPACE_CREATE
+  | typeof ACT_KIND.WORKSPACE_RENAME
+  | typeof ACT_KIND.WORKSPACE_PHOTO_SET
   | typeof ACT_KIND.WORKSPACE_INVITATIONS_READ
   | typeof ACT_KIND.WORKSPACE_INVITE
   | typeof ACT_KIND.WORKSPACE_INVITATION_CANCEL
   | typeof ACT_KIND.WORKSPACE_GITHUB_CONNECT
   | typeof ACT_KIND.WORKSPACE_GITHUB_DISCONNECT
   | typeof ACT_KIND.WORKSPACE_MEMBERS_READ
+  | typeof ACT_KIND.WORKSPACE_PHOTO_READ
   | typeof ACT_KIND.WORKSPACE_MEMBER_REMOVE
+  | typeof ACT_KIND.WORKSPACE_MEMBER_ROLE
+  | typeof ACT_KIND.WORKSPACE_TRANSFER
   | typeof ACT_KIND.WORKSPACE_LEAVE;
 
 type WorkspaceActKind =
   | typeof ACT_KIND.WORKSPACE_CREATE
+  | typeof ACT_KIND.WORKSPACE_RENAME
+  | typeof ACT_KIND.WORKSPACE_PHOTO_SET
   | typeof ACT_KIND.WORKSPACE_INVITATIONS_READ
   | typeof ACT_KIND.WORKSPACE_INVITE
   | typeof ACT_KIND.WORKSPACE_INVITATION_CANCEL
@@ -192,6 +218,8 @@ type WorkspaceActKind =
   | typeof ACT_KIND.WORKSPACE_GITHUB_DISCONNECT
   | typeof ACT_KIND.WORKSPACE_MEMBERS_READ
   | typeof ACT_KIND.WORKSPACE_MEMBER_REMOVE
+  | typeof ACT_KIND.WORKSPACE_MEMBER_ROLE
+  | typeof ACT_KIND.WORKSPACE_TRANSFER
   | typeof ACT_KIND.WORKSPACE_LEAVE;
 
 /**
@@ -432,6 +460,22 @@ export function planningActRows(
           : refusedWorkspace(ACT_KIND.WORKSPACE_CREATE, answer.failure),
       );
     },
+    [ACT_KIND.WORKSPACE_RENAME]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.WORKSPACE_RENAME, sender);
+      return Effect.flatMap(host.workspaceRename(params), (answer) =>
+        "workspace" in answer
+          ? Effect.succeed(answer.workspace)
+          : refusedWorkspace(ACT_KIND.WORKSPACE_RENAME, answer.failure),
+      );
+    },
+    [ACT_KIND.WORKSPACE_PHOTO_SET]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.WORKSPACE_PHOTO_SET, sender);
+      return Effect.flatMap(host.workspacePhotoSet(params), (answer) =>
+        "workspace" in answer
+          ? Effect.succeed(answer.workspace)
+          : refusedWorkspace(ACT_KIND.WORKSPACE_PHOTO_SET, answer.failure),
+      );
+    },
     [ACT_KIND.WORKSPACE_INVITATIONS_READ]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.WORKSPACE_INVITATIONS_READ, sender);
       return Effect.flatMap(host.workspaceInvitations(params), (answer) =>
@@ -489,12 +533,35 @@ export function planningActRows(
           : refusedWorkspace(ACT_KIND.WORKSPACE_MEMBERS_READ, answer.failure),
       );
     },
+    // Note that the photo's answer, a failure among them, is the panel's to
+    // read, as an inbox image's is, because a tile that hears none draws its
+    // letter rather than a refusal.
+    [ACT_KIND.WORKSPACE_PHOTO_READ]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.WORKSPACE_PHOTO_READ, sender);
+      return host.workspacePhoto(params);
+    },
     [ACT_KIND.WORKSPACE_MEMBER_REMOVE]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.WORKSPACE_MEMBER_REMOVE, sender);
       return Effect.flatMap(host.workspaceMemberRemove(params), (answer) =>
         "members" in answer
           ? Effect.succeed(answer.members)
           : refusedWorkspace(ACT_KIND.WORKSPACE_MEMBER_REMOVE, answer.failure),
+      );
+    },
+    [ACT_KIND.WORKSPACE_MEMBER_ROLE]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.WORKSPACE_MEMBER_ROLE, sender);
+      return Effect.flatMap(host.workspaceMemberRole(params), (answer) =>
+        "members" in answer
+          ? Effect.succeed(answer.members)
+          : refusedWorkspace(ACT_KIND.WORKSPACE_MEMBER_ROLE, answer.failure),
+      );
+    },
+    [ACT_KIND.WORKSPACE_TRANSFER]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.WORKSPACE_TRANSFER, sender);
+      return Effect.flatMap(host.workspaceTransfer(params), (answer) =>
+        "members" in answer
+          ? Effect.succeed(answer.members)
+          : refusedWorkspace(ACT_KIND.WORKSPACE_TRANSFER, answer.failure),
       );
     },
     [ACT_KIND.WORKSPACE_LEAVE]: (params, sender) => {

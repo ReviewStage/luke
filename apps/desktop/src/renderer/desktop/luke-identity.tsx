@@ -1,4 +1,4 @@
-import { WingFace } from "@sidecar/panel";
+import { WingFace } from "@luke/ui";
 import { useRef } from "react";
 import { useFaceHover, useFaceMotion } from "../luke-face-mood";
 import { usePrefersReducedMotion } from "../use-reduced-motion";

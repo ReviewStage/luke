@@ -6,9 +6,10 @@ import {
   CODING_AGENT_STATUS,
   type CodingAgentSummary,
   PULL_REQUEST_STATE,
-} from "@sidecar/features/coding-agent-wire";
-import type { Plan, PlanSummary } from "@sidecar/features/plan-wire";
-import { PLAN_WORK_STATE } from "@sidecar/features/planning-view";
+} from "@luke/features/coding-agent-wire";
+import type { Plan, PlanSummary } from "@luke/features/plan-wire";
+import { PLAN_WORK_STATE } from "@luke/features/planning-view";
+import { DOCUMENT_REGION, PLANS_PAGE } from "@luke/ui/planning-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -17,7 +18,6 @@ import { onRegistry } from "#testing/copy-feedback";
 import { conversationOf, worker, workerCall, workTurn } from "#testing/plan-work";
 import { codingAgentsControl, plansControl, UNPINNED_SUMMARY } from "#testing/plans-control";
 import { installScrollIntoView } from "#testing/scroll-into-view";
-import { DOCUMENT_REGION, PLANS_PAGE } from "../planning/planning-model";
 import { MAIN_TAB } from "../planning/use-main-tabs";
 import { NO_LOOKS } from "../planning/use-plan-looks";
 import { SIDE_PANEL_TAB } from "../planning/use-side-panel";
@@ -112,8 +112,8 @@ afterEach(() => {
 
 /**
  * The plan open on its own tab, a working agent's tab and a draft's beside
- * it, and the side panel open with a working subagent's tab and the done
- * agent's Changes tab.
+ * it, and the side panel open with a working subagent's tab, the done
+ * agent's Changes tab, and the working agent's Terminal tab.
  */
 function mount(): HTMLElement {
   const container = document.body.appendChild(document.createElement("div"));
@@ -137,6 +137,7 @@ function mount(): HTMLElement {
       tab: SIDE_PANEL_TAB.CODE,
       subagents: [{ subagent: READER.callId }],
       changes: [{ changes: DONE.id }],
+      terminals: [{ terminal: WORKING.id }],
     },
     work: {
       ...base.work,
@@ -148,7 +149,7 @@ function mount(): HTMLElement {
     agents: codingAgentsControl({
       agents: [WORKING, DONE],
       agentIds: [WORKING.id, DONE.id],
-      draft: { id: DRAFT, task: "", attachments: [], choice: undefined, disabledServers: [] },
+      draft: { id: DRAFT, prompt: "", attachments: [], choice: undefined, disabledServers: [] },
       pullRequests: new Map([
         [
           DONE.id,
@@ -243,4 +244,25 @@ test("the plan's own tab hangs the plan's card, as its sidebar row does, its age
   assert.match(card.textContent ?? "", /acme\/relay/u);
   // The card is the plan as the list names it, its agents among it.
   assert.equal(card.querySelector("[data-plan-card-agent]")?.textContent, "Invite flow");
+});
+
+test("a Terminal tab wears its agent's glyph, says Terminal with the agent's name beside it, and hangs the agent's card saying whose sandbox it is in", () => {
+  const panel = mount().querySelector(".side-panel-tabs");
+  const tab = [...(panel?.querySelectorAll<HTMLElement>('[role="tab"]') ?? [])].find(
+    (each) => each.querySelector(".tab-label")?.firstChild?.textContent === "Terminal",
+  );
+  assert.ok(tab, "the strip has a Terminal tab");
+  assert.equal(tab.querySelector(".tab-detail")?.textContent, WORKING.title);
+  assert.match(tab.querySelector(".tab-icon")?.innerHTML ?? "", /data-state="working"/u);
+  act(() => {
+    tab.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+  });
+  const card = document.querySelector(".tooltip-card [data-tab-card]");
+  assert.ok(card, "the agent's card is hung");
+  assert.equal(card.querySelector(".card-name")?.textContent, WORKING.title);
+  assert.ok(card.querySelector(".card-rule"));
+  assert.equal(
+    [...card.querySelectorAll(".card-note")].at(-1)?.textContent,
+    "Terminal in this agent’s sandbox",
+  );
 });

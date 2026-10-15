@@ -1,17 +1,13 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
+import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentChangesAnswerView,
-} from "@sidecar/features/coding-agent-view";
-import { INBOX_CURSOR_START } from "@sidecar/features/inbox-wire";
-import type { PlanSummary } from "@sidecar/features/plan-wire";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement } from "react";
-import { createRoot } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+} from "@luke/features/coding-agent-view";
+import { INBOX_CURSOR_START } from "@luke/features/inbox-wire";
+import type { PlanSummary } from "@luke/features/plan-wire";
 import {
   ACT_KIND,
   ACT_OUTCOME_STATUS,
@@ -19,12 +15,17 @@ import {
   type ActKind,
   type ActOutcome,
   type ActResultFor,
-} from "#shared/messages/acts";
-import { UPDATE_STATUS } from "#shared/messages/update";
+} from "@luke/host/acts";
+import { UPDATE_STATUS } from "@luke/settings/update";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
+import { act, createElement } from "react";
+import { createRoot } from "react-dom/client";
+import { afterEach, beforeEach, test } from "vitest";
 import { onRegistry } from "#testing/copy-feedback";
 import { codingAgentsControl, plansControl } from "#testing/plans-control";
 import { DesktopInbox } from "./desktop/desktop-inbox";
 import { DesktopSidebar } from "./desktop/desktop-sidebar";
+import { SIDEBAR_OVERLAY } from "./desktop/sidebar-collapse";
 import { PANEL_TAB } from "./panel-tabs";
 import { AgentChangesTab } from "./planning/agent-changes-tab";
 import { ApiKeysSection } from "./settings/api-keys-section";
@@ -141,7 +142,16 @@ test("the sidebar's plans that could not be read say so in the fault red, and Re
   let retried = 0;
   const page = await mount(
     createElement(DesktopSidebar, {
-      sidebar: { collapsed: false, width: 264, onToggle: ignore, onResize: ignore, staged: false },
+      sidebar: {
+        collapsed: false,
+        compact: false,
+        overlay: SIDEBAR_OVERLAY.CLOSED,
+        width: 264,
+        onToggle: ignore,
+        onOverlay: ignore,
+        onResize: ignore,
+        staged: false,
+      },
       history: { canGoBack: false, canGoForward: false, onBack: ignore, onForward: ignore },
       plans: plansControl({
         listFailed: true,
@@ -151,6 +161,7 @@ test("the sidebar's plans that could not be read say so in the fault red, and Re
       }),
       tab: PANEL_TAB.PLANS,
       onTabChange: ignore,
+      onPressWithin: ignore,
       account: {
         status: ACCOUNT_STATUS.SIGNED_IN,
         email: "dev@example.com",
@@ -174,7 +185,7 @@ test("the sidebar's plans that could not be read say so in the fault red, and Re
     }),
   );
   const failure = readFailure(page);
-  assertSaidAlike(failure, "Your plans could not be read.");
+  assertSaidAlike(failure, "Your tasks could not be read.");
   failure.retry();
   assert.equal(retried, 1);
 });
@@ -237,10 +248,10 @@ test("Settings says a page's failed read alike in its card's place, the keys and
   let retried = 0;
   const workspaces = await mount(
     createElement(WorkspacePage, {
+      readerId: undefined,
       control: {
         workspaces: [],
         workspaceId: undefined,
-        onChooseWorkspace: ignore,
         onLeft: ignore,
         listFailed: true,
         onRetryList: () => {

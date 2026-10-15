@@ -3,24 +3,24 @@ import { it } from "@effect/vitest";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAgentAnswer,
-} from "@sidecar/features/coding-agent-view";
+} from "@luke/features/coding-agent-view";
 import {
   CHECK_SUMMARY,
   CODING_AGENT_STATUS,
   PULL_REQUEST_STATE,
-} from "@sidecar/features/coding-agent-wire";
+} from "@luke/features/coding-agent-wire";
 import {
   INBOX_IMAGE_TYPE,
   INBOX_RESPONSE,
   INBOX_STATUS,
   INBOX_WIRE_VERSION,
   type InboxItem,
-} from "@sidecar/features/inbox-wire";
-import { DEFAULT_PLAN_TEMPLATE } from "@sidecar/features/plan-document-template";
-import { PROVIDER_KEY_PROVIDER } from "@sidecar/features/provider-key-wire";
+} from "@luke/features/inbox-wire";
+import { DEFAULT_PLAN_TEMPLATE } from "@luke/features/plan-document-template";
+import { PROVIDER_KEY_PROVIDER } from "@luke/features/provider-key-wire";
+import { ACT, ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { Effect } from "effect";
 import type { WebContents } from "electron";
-import { ACT, ACT_KIND, ACT_OUTCOME_STATUS } from "#shared/messages/acts";
 import { type ActRows, type ActSender, createActRouter } from "../act-router";
 import { codingAgentActRows } from "./coding-agent-acts";
 
@@ -98,6 +98,11 @@ function fixture() {
       },
     },
     host: {
+      codingAgentWorkspaceList: (params) =>
+        Effect.sync(() => {
+          asked.push(`workspace agents ${params.workspaceId}`);
+          return { agents: [] };
+        }),
       codingAgentModels: () =>
         Effect.sync(() => {
           asked.push("models");
@@ -162,6 +167,10 @@ function fixture() {
           asked.push(`archive:${agentId}:${String(archived)}`);
           return STARTED;
         }),
+      codingAgentPage: () =>
+        Effect.succeed({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const),
+      codingAgentAgentInbox: () =>
+        Effect.succeed({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const),
       codingAgentPullRequest: ({ agentId }) =>
         Effect.sync(() => {
           asked.push(`pull-request:${agentId}`);
@@ -329,5 +338,27 @@ it.effect(
         [ACT_OUTCOME_STATUS.REFUSED, ACT_OUTCOME_STATUS.REFUSED, ACT_OUTCOME_STATUS.REFUSED],
       );
       assert.ok(!JSON.stringify(refused).includes(PROVIDER_KEY));
+    }),
+);
+
+it.effect(
+  "a panel's ask for a workspace's agents reaches the host as asked, and the voice window's is refused before it",
+  () =>
+    Effect.gen(function* () {
+      const { router, asked } = fixture();
+      const act = {
+        kind: ACT_KIND.CODING_AGENTS_WORKSPACE_LIST,
+        payload: { workspaceId: "workspace-1" },
+      } as const;
+
+      const refused = yield* router.performAct(act, VOICE);
+      const listed = yield* router.performAct(act, PANEL);
+
+      assert.deepEqual(refused, {
+        status: ACT_OUTCOME_STATUS.REFUSED,
+        reason: ACT[ACT_KIND.CODING_AGENTS_WORKSPACE_LIST].refusal,
+      });
+      assert.deepEqual(listed, { status: ACT_OUTCOME_STATUS.DONE, value: { agents: [] } });
+      assert.deepEqual(asked, ["workspace agents workspace-1"]);
     }),
 );

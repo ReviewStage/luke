@@ -22,6 +22,9 @@
               "admin",
               "member"
             ]
+          },
+          "pictureUrl": {
+            "type": "string"
           }
         },
         "required": [

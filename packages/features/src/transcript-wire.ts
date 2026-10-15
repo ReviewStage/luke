@@ -1,5 +1,6 @@
-import { LiveCloseReasonSchema, TRANSCRIPT_SPEAKER } from "@sidecar/live";
+import { LiveCloseReasonSchema, TRANSCRIPT_SPEAKER } from "@luke/live";
 import { Schema as EffectSchema } from "effect";
+import { planEditorSchema } from "./plan-wire.js";
 import { countedNumber, wireUuidSchema } from "./service-wire.js";
 
 /**
@@ -8,7 +9,7 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
  * The service keeps a call's words as timed fragments
  * (`voice_transcript_segments`) and answers them grouped the way the live
  * captions group them, by the one ledger both sides keep
- * (`@sidecar/live`'s `TranscriptLedger`), so a call that ends reads back in
+ * (`@luke/live`'s `TranscriptLedger`), so a call that ends reads back in
  * the lines its captions drew. Each line is answered as an AI SDK
  * `UIMessage`: an id, a role, and its words as one text part. That is the
  * shape Luke's `messages` table keeps every conversation in and the shape
@@ -101,6 +102,14 @@ export const transcriptCallSchema = EffectSchema.Struct({
   ),
   /** The voice model the call ran on. */
   model: EffectSchema.optionalKey(EffectSchema.String),
+  /**
+   * The member whose call it was, by their account's id and the name it
+   * holds now, a member who has since left the workspace among them; absent
+   * once their account is gone, and from a service before it. A shared
+   * plan's transcript holds every member's calls, and the window names a
+   * teammate's while drawing the reader's own as theirs.
+   */
+  by: EffectSchema.optionalKey(planEditorSchema),
 });
 
 export type TranscriptCall = typeof transcriptCallSchema.Type;

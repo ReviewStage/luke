@@ -120,6 +120,10 @@
     "dest": "/api/default.js?route=agents/changes&id=$1"
   },
   {
+    "src": "/api/agents/([^/]+)/inbox",
+    "dest": "/api/default.js?route=agents/inbox&id=$1"
+  },
+  {
     "src": "/api/agents/([^/]+)/terminals/([^/]+)",
     "dest": "/api/default.js?route=agents/terminal&id=$1&terminal=$2"
   },
@@ -142,6 +146,14 @@
   {
     "src": "/api/inbox/([^/]+)",
     "dest": "/api/default.js?route=inbox/item&id=$1"
+  },
+  {
+    "src": "/api/workspaces/([^/]+)/photo",
+    "dest": "/api/default.js?route=workspaces/photo&id=$1"
+  },
+  {
+    "src": "/api/automations/([^/]+)/webhook",
+    "dest": "/api/default.js?route=automations/webhook&id=$1"
   },
   {
     "src": "/api/automations/([^/]+)/runs",
@@ -202,6 +214,10 @@
   {
     "src": "/api/admin/users",
     "dest": "/api/default.js?route=admin/users"
+  },
+  {
+    "src": "/api/agents",
+    "dest": "/api/default.js?route=agents"
   },
   {
     "src": "/api/automations",
@@ -296,6 +312,10 @@
     "dest": "/api/default.js?route=workspaces/invitations/cancel"
   },
   {
+    "src": "/api/workspaces/invitations/offer",
+    "dest": "/api/default.js?route=workspaces/invitations/offer"
+  },
+  {
     "src": "/api/workspaces/leave",
     "dest": "/api/default.js?route=workspaces/leave"
   },
@@ -306,6 +326,22 @@
   {
     "src": "/api/workspaces/members/remove",
     "dest": "/api/default.js?route=workspaces/members/remove"
+  },
+  {
+    "src": "/api/workspaces/members/role",
+    "dest": "/api/default.js?route=workspaces/members/role"
+  },
+  {
+    "src": "/api/workspaces/photo/set",
+    "dest": "/api/default.js?route=workspaces/photo/set"
+  },
+  {
+    "src": "/api/workspaces/rename",
+    "dest": "/api/default.js?route=workspaces/rename"
+  },
+  {
+    "src": "/api/workspaces/transfer",
+    "dest": "/api/default.js?route=workspaces/transfer"
   },
   {
     "src": "/api/maintenance/sweep",

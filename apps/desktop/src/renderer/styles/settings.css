@@ -227,10 +227,21 @@
   line-height: 1.4;
 }
 
-.settings-copy small a {
+.settings-copy small a,
+.settings-detail-act {
   color: inherit;
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+
+/* A press among a row's detail words, drawn as the links beside it are: an
+   experiment's Send feedback, which opens a dialog rather than a page. */
+.settings-detail-act {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  cursor: pointer;
 }
 
 /* The app's one switch (`switch.tsx`). On is the accent (`--switch-on`), so
@@ -386,28 +397,6 @@
   gap: 7px;
 }
 
-/* The signed-in identity's picture, leading its row as a provider's mark
-   leads one, or our own glyph where no picture travelled. */
-.account-avatar {
-  width: 30px;
-  height: 30px;
-  flex: 0 0 auto;
-  border-radius: 50%;
-  object-fit: cover;
-}
-
-.account-avatar-fallback {
-  display: grid;
-  background: var(--raised);
-  color: var(--text-secondary);
-  place-items: center;
-}
-
-.account-avatar-fallback .settings-icon {
-  width: 14px;
-  height: 14px;
-}
-
 /* The provider the account signed in with, its mark beside its name as the
    sign-in button drew them, at the size of the line's own words. */
 .account-provider {
@@ -512,9 +501,10 @@
   font-family: var(--font-mono);
 }
 
-/* Settings › Workspace › Members: the invite form, an address field taking
-   the row's room, then the role's segments and Invite, the field drawn as
-   API keys' is. */
+/* Settings › Workspace › Invitations: the invite form, an address field
+   taking the row's room, then the role's chip and Invite, the field drawn
+   as API keys' is. The chip is a field chip of one width, as every Settings
+   picker shares one, so the row does not reshape as the role changes. */
 .workspace-invite .settings-input {
   min-width: 0;
   height: var(--control-height);
@@ -522,6 +512,83 @@
   padding: 0 var(--space-8);
   border-radius: var(--control-radius);
   letter-spacing: 0;
+}
+
+.workspace-invite-role {
+  width: 104px;
+  justify-content: space-between;
+}
+
+/* The workspace's name, renamed in place on the name's own line in the
+   page's first row, the field's words where the name's stood. */
+.workspace-name-input {
+  height: 24px;
+  margin: -3px 0 -1px -9px;
+  padding: 0 8px;
+  border-radius: var(--control-radius);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+/* A row's value standing in a column of its own at the row's end, in the
+   value's ink at the row's size, as the Keyboard shortcuts page sets a
+   chord: a member's role. */
+.settings-row-value {
+  min-width: 64px;
+  flex: none;
+  color: var(--text-secondary);
+  font-size: 13px;
+  text-align: right;
+}
+
+/* The ⋯'s room on a row with none, in a list where other rows have one, so
+   every row's value ends in one column. */
+.settings-act-slot {
+  width: var(--control-height);
+  flex: none;
+}
+
+/* The handover dialog's admin to make the owner: a field chip leading with
+   their face, wide enough for a name. */
+.workspace-heir {
+  min-width: 220px;
+  justify-content: flex-start;
+  gap: var(--space-8);
+}
+
+.workspace-heir > svg:last-child {
+  margin-left: auto;
+}
+
+/* A dialog's labelled control under its body, the label over it as a form
+   row's. */
+.dialog-field {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-6);
+  margin-top: var(--space-12);
+}
+
+.dialog-field-label {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* What a leave keeps and stops, under the leave dialog's body, in its
+   muted words. */
+.leave-consequences {
+  margin: var(--space-12) 0 0;
+  padding-left: 18px;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.leave-consequences li + li {
+  margin-top: var(--space-4);
 }
 
 /* The Keyboard shortcuts page: a reference list more than a form, so the
@@ -632,9 +699,11 @@
 }
 
 /* Settings › Integrations: a connected row's tools opened in place under
-   it. The chevron that opens a row, after its count, turns down while its
-   tools show; the tools scroll inside their own bound, past the row's
-   mark. */
+   it, over a hairline. The chevron that opens a row, after its count, turns
+   down while its tools show. The tools stand in a column of their own,
+   which scrolls, and the page of the one it holds beside them, which
+   scrolls apart; where the page is too narrow for both, the column stands
+   above the page, which still scrolls within its own bound. */
 .integration-tools-toggle {
   display: inline-flex;
   align-items: center;
@@ -663,8 +732,47 @@
 }
 
 .settings-card > .integration-tools-panel {
-  max-height: 360px;
-  padding: var(--space-4) var(--space-8) var(--space-8) calc(var(--space-16) + 20px);
+  border-top: 1px solid var(--hairline);
+  container-type: inline-size;
+}
+
+.integration-tools-split {
+  display: grid;
+  height: 420px;
+  grid-template-columns: minmax(200px, 42%) minmax(0, 1fr);
+}
+
+.integration-tools-list {
+  min-height: 0;
+  padding: var(--space-4);
   overflow-y: auto;
+  border-right: 1px solid var(--hairline);
   overscroll-behavior: contain;
+}
+
+/* The column is too narrow for a title and a name both, so it says the
+   title alone, and the page beside it says the name of the one it holds. */
+.integration-tools-list .integration-tool-title + .integration-tool-id {
+  display: none;
+}
+
+.integration-tools-panel .integration-tool-detail-head {
+  border-bottom: 0;
+}
+
+.integration-tools-panel .integration-tool-detail-body {
+  padding-top: var(--space-2);
+}
+
+@container (max-width: 480px) {
+  .integration-tools-split {
+    height: 560px;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: 180px minmax(0, 1fr);
+  }
+
+  .integration-tools-list {
+    border-right: 0;
+    border-bottom: 1px solid var(--hairline);
+  }
 }

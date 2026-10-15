@@ -1,12 +1,12 @@
-import { CopyIcon, DownloadIcon, EllipsisIcon } from "@sidecar/panel";
+import { ACT_KIND } from "@luke/host/acts";
+import { CopyIcon, DownloadIcon, EllipsisIcon } from "@luke/ui";
+import { fileName } from "@luke/voice/code-pane-model";
 import { ClipboardCopyIcon, ListOrderedIcon, WrapTextIcon } from "lucide-react";
-import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";
 import { useCopyToast } from "../copy-feedback";
 import { ActionMenu, type MenuAction, useActionMenu } from "../desktop/action-menu";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { Tooltip } from "../tooltip";
-import { fileName } from "./code-pane-model";
 import { WHOLE_TEXT, type WholeText } from "./file-tab-model";
 import { useFileViewSettings } from "./file-view-settings";
 

@@ -1,8 +1,8 @@
-import type { CodeRef } from "@sidecar/features/plan-wire";
-import type { PlanCodeShowing } from "@sidecar/features/planning-view";
+import type { CodeRef } from "@luke/features/plan-wire";
+import type { PlanCodeShowing } from "@luke/features/planning-view";
+import { fileFolder, fileName, fileRefText, lineRangeText } from "@luke/voice/code-pane-model";
 import { CardHead, CardNote, HoverCard } from "../hover-card";
 import { Tooltip } from "../tooltip";
-import { fileFolder, fileName, fileRefText, lineRangeText } from "./code-pane-model";
 import { shownWhereRead } from "./file-tab-model";
 import { FileTypeIcon } from "./file-type-icon";
 

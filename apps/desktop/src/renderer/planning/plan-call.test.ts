@@ -1,24 +1,32 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { AGENT_TOOL, EVE_TOOL } from "@sidecar/features/agent-tools";
-import { CODING_AGENT_STATUS } from "@sidecar/features/coding-agent-wire";
-import { PLAN_WORK_STATE } from "@sidecar/features/planning-view";
-import { TRANSCRIPT_PART_TYPE } from "@sidecar/features/transcript-wire";
-import { TRANSCRIPT_SPEAKER } from "@sidecar/live";
-import { TURN_ORIGIN } from "@sidecar/wire";
-import { act, createElement } from "react";
+import { AGENT_TOOL, EVE_TOOL } from "@luke/features/agent-tools";
+import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
+import type { PlanEditor } from "@luke/features/plan-wire";
+import { PLAN_WORK_STATE } from "@luke/features/planning-view";
+import { TRANSCRIPT_PART_TYPE } from "@luke/features/transcript-wire";
+import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
+import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { TRANSCRIPT_SPEAKER, type TranscriptSpeaker } from "@luke/live";
+import { ACTOR_KIND } from "@luke/ui/actor-model";
+import { TRANSCRIPT_REGION, type TranscriptRegion } from "@luke/voice/transcript-model";
+import { TURN_ORIGIN } from "@luke/wire";
+import type { UIMessage } from "ai";
+import { Effect } from "effect";
+import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, test } from "vitest";
+import { afterEach, beforeAll, test } from "vitest";
+import { markdownHtmlParserLanded } from "#testing/markdown";
 import { conversationOf, toolCall, words, worker, workerCall, workTurn } from "#testing/plan-work";
 import { codingAgentsControl } from "#testing/plans-control";
 import { planCards } from "../desktop/side-panel";
+import { MemberDirectory } from "../member-directory";
 import { NOTHING_HELD } from "./agent-ref";
 import { CodeCardHeader } from "./code-pane";
 import { PlanCall } from "./plan-call";
 import { TOOL_TARGET, type ToolTarget } from "./tool-call-model";
-import { TRANSCRIPT_REGION, type TranscriptRegion } from "./transcript-model";
 import { workRowsOf } from "./work-model";
 
 /** The Call tab as a test draws it: what it is given over a plan with no planning turn, which reads no older page and opens nothing. */
@@ -57,6 +65,9 @@ function said(count: number): TranscriptRegion {
   };
 }
 
+// A reply is drawn once the parser has landed, as the panel lands it after its first paint.
+beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
+
 const roots: Root[] = [];
 
 afterEach(() => {
@@ -65,7 +76,7 @@ afterEach(() => {
 });
 
 /** The tab drawn into the page, for a test to read as a reader would. */
-function mounted(element: ReturnType<typeof callTab>): HTMLElement {
+function mounted(element: ReactElement): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -362,4 +373,108 @@ test("on the Call tab, a show_code row says its lines as the Code tab's card say
   );
   act(() => row.click());
   assert.deepEqual(opened, [{ kind: TOOL_TARGET.SHOWN_CODE, call: "c", ref }]);
+});
+
+/** Charles's sign-in picture, which the members read lists. */
+const CHARLES_PICTURE = "https://lh3.googleusercontent.com/a/charles=s96-c";
+
+/** The plan's workspace's members as the members read answers them: the reader, Dean, and Charles with his picture. */
+const MEMBERS: readonly WorkspaceMember[] = [
+  {
+    userId: "user-dean",
+    name: "Dean Stratakos",
+    email: "dean@example.com",
+    role: WORKSPACE_ROLE.OWNER,
+  },
+  {
+    userId: "user-charles",
+    name: "Charles Pan",
+    email: "charles@example.com",
+    role: WORKSPACE_ROLE.MEMBER,
+    pictureUrl: CHARLES_PICTURE,
+  },
+];
+
+/** A spoken line of the call's, by who said it. */
+function spoken(id: string, role: TranscriptSpeaker, text: string): UIMessage {
+  return { id, role, parts: [{ type: TRANSCRIPT_PART_TYPE.TEXT, text }] };
+}
+
+/** An actor named over something as a reader sees it: what kind of mark it wears, the name beside it, and the picture on it. */
+function seen(ref: Element | null): readonly (string | undefined)[] | undefined {
+  if (!(ref instanceof HTMLElement)) return undefined;
+  const picture = ref.querySelector("img")?.getAttribute("src") ?? undefined;
+  const named = [ref.dataset.kind, ref.querySelector(".actor-ref-name")?.textContent ?? undefined];
+  return picture === undefined ? named : [...named, picture];
+}
+
+test("a teammate's call is headed with their face and name, their lines carry it and Luke's carry his, and the reader's own call names nobody", async () => {
+  Object.defineProperty(window, "luke", {
+    configurable: true,
+    value: {
+      recordSurfaceEvent: () => undefined,
+      act: (request: Act): Promise<ActOutcome> =>
+        Promise.resolve(
+          request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
+            ? { status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS }
+            : { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." },
+        ),
+    },
+  });
+  const drawn = async (caller: PlanEditor | undefined) => {
+    const page = mounted(
+      createElement(MemberDirectory, {
+        workspace: { id: "workspace-acme", memberCount: 2 },
+        readerId: "user-dean",
+        children: callTab({
+          region: {
+            kind: TRANSCRIPT_REGION.READY,
+            earlierOmitted: false,
+            calls: [
+              {
+                key: "call-1",
+                startedAt: 1_000,
+                live: false,
+                lukeEnded: false,
+                messages: [
+                  spoken("1", TRANSCRIPT_SPEAKER.USER, "Seven days."),
+                  spoken("2", TRANSCRIPT_SPEAKER.ASSISTANT, "Seven it is."),
+                  spoken("3", TRANSCRIPT_SPEAKER.USER, "Thanks."),
+                ],
+                caller,
+              },
+            ],
+          },
+        }),
+      }),
+    );
+    await act(async () => {
+      for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+    });
+    const divider = page.querySelector("[data-checkpoint]");
+    return {
+      heading: seen(divider?.querySelector(".actor-ref") ?? null),
+      line: divider?.textContent ?? "",
+      senders: [...page.querySelectorAll(".message-sender")].map((each) =>
+        seen(each.querySelector(".actor-ref")),
+      ),
+    };
+  };
+
+  const teammates = await drawn({ userId: "user-charles", name: "Charles Pan" });
+  assert.deepEqual(teammates.heading, [ACTOR_KIND.PERSON, "Charles Pan’s", CHARLES_PICTURE]);
+  assert.match(teammates.line, /Charles Pan’s call · /u);
+  const charles = [ACTOR_KIND.PERSON, "Charles Pan", CHARLES_PICTURE];
+  assert.deepEqual(teammates.senders, [charles, [ACTOR_KIND.LUKE, "Luke"], charles]);
+
+  // A teammate the workspace no longer lists has left it, and keeps their name on an outline.
+  const left = await drawn({ userId: "user-ana", name: "Ana Ruiz" });
+  assert.deepEqual(left.heading, [ACTOR_KIND.SOMEONE, "Ana Ruiz’s"]);
+  assert.deepEqual(left.senders[0], [ACTOR_KIND.SOMEONE, "Ana Ruiz"]);
+
+  const own = await drawn(undefined);
+  assert.equal(own.heading, undefined);
+  assert.doesNotMatch(own.line, /call/u);
+  assert.deepEqual(own.senders, []);
+  Reflect.deleteProperty(window, "luke");
 });

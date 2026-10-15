@@ -4,8 +4,30 @@
    weight. */
 
 :root {
+  /* A workspace's tile (`workspace-tile.tsx`): six muted hues, each holding
+     its white letter at AA, the only colour a workspace wears. */
+  --workspace-hue-1: #4f63b8;
+  --workspace-hue-2: #2b7f78;
+  --workspace-hue-3: #9a6a1e;
+  --workspace-hue-4: #a24a63;
+  --workspace-hue-5: #6c55b3;
+  --workspace-hue-6: #477a3a;
+  --workspace-tile-ink: #fff;
+  /* The attention mark's disc (`attention-mark.tsx`): the attention orange
+     deepened until its white exclamation holds on it, in the dark as in the
+     light, where the orange is deep already. */
+  --attention-mark-ground: #c4620c;
+  /* An actor's square (`actor-ref.tsx`): Luke's face in his own blue, an
+     agent's harness, or an automation's clock, each on one solid neutral, so
+     a tile reads as one object on any ground beneath it. */
+  --actor-tile: #2a2a30;
+  --actor-tile-ink: rgba(255, 255, 255, 0.92);
   --desktop-ground: #0c0c0e;
   --desktop-sidebar: #111114;
+  /* A sidebar row's words at rest, a step under the primary ink and clear of
+     the time's tertiary, so the open, hovered, and unread rows stand out by
+     going up to the primary. */
+  --sidebar-ink: rgba(255, 255, 255, 0.7);
   --desktop-well: #0f0f12;
   /* What floats over the window, a menu or a dialog:
      the sidebar's step above the ground in the dark, where lighter is nearer,
@@ -139,9 +161,19 @@
   :root {
     --desktop-ground: #fcfcfc;
     --desktop-sidebar: #f3f3f4;
+    --sidebar-ink: rgba(0, 0, 0, 0.68);
     --desktop-well: #f8f8f9;
     --surface-popover: #fff;
     --find-match: rgba(255, 204, 0, 0.42);
+    --attention-mark-ground: #a65400;
+    --workspace-hue-1: #4a5fc0;
+    --workspace-hue-2: #23766f;
+    --workspace-hue-3: #94631a;
+    --workspace-hue-4: #a8435f;
+    --workspace-hue-5: #6a4fbd;
+    --workspace-hue-6: #3f7434;
+    --actor-tile: #e8e8ec;
+    --actor-tile-ink: rgba(0, 0, 0, 0.82);
   }
 }
 
@@ -256,6 +288,30 @@ body,
   transform: translateX(-100%);
 }
 
+/* A folded sidebar floats open over the work rather than beside it, on the
+   same slide that folds it, so the work under it neither moves nor re-wraps
+   (`sidebar-collapse.ts`). It stands over the work's own layers, the panel
+   filling the window among them, and under the title bar's buttons that
+   follow it; its shadow parts it from the work as a popover's does. */
+.desktop-shell[data-sidebar-overlay="peek"] .desktop-sidebar,
+.desktop-shell[data-sidebar-overlay="open"] .desktop-sidebar {
+  z-index: 2;
+  box-shadow: var(--menu-shadow);
+  opacity: 1;
+  transform: none;
+}
+
+/* Where the pointer peeks the folded sidebar out: a strip at the window's
+   left edge, under the title bar so the traffic lights keep their presses. */
+.sidebar-peek-edge {
+  position: absolute;
+  z-index: 2;
+  top: var(--desktop-bar-height);
+  bottom: 0;
+  left: 0;
+  width: var(--space-6);
+}
+
 .desktop-shell[data-sidebar-collapsed="true"] .desktop-main .desktop-toolbar {
   padding-left: var(--sidebar-toggle-clearance);
 }
@@ -288,14 +344,20 @@ body,
 }
 
 /* The Inbox's list stands on the sidebar's ground, so the folded sidebar's
-   buttons over its head do too. */
+   buttons over its head do too, as they do over the floating sidebar. */
 .desktop-shell[data-sidebar-collapsed="false"] .title-bar-controls:not([data-edge]),
-.desktop-shell[data-sidebar-collapsed="true"]:has(.desktop-main > .inbox-view)
+.desktop-shell[data-sidebar-overlay="peek"] .title-bar-controls:not([data-edge]),
+.desktop-shell[data-sidebar-overlay="open"] .title-bar-controls:not([data-edge]),
+.desktop-shell[data-sidebar-collapsed="true"]:has(
+    .desktop-main > .inbox-view:not([data-columns="item"])
+  )
   .title-bar-controls:not([data-edge]) {
   --title-bar-ground: var(--desktop-sidebar);
 }
 
-.desktop-shell[data-sidebar-collapsed="true"]:has(.side-panel[data-full-screen="true"])
+.desktop-shell[data-sidebar-collapsed="true"][data-sidebar-overlay="closed"]:has(
+    .side-panel[data-full-screen="true"]
+  )
   .title-bar-controls:not([data-edge]),
 .desktop-shell:has(.side-panel) .title-bar-controls[data-edge="end"] {
   --title-bar-ground: var(--desktop-well);
@@ -367,22 +429,31 @@ body,
   letter-spacing: -0.01em;
 }
 
-/* New plan reads as a row of the list it heads: no ground at rest, the body's
-   weight a read plan's name takes, and the plan rows' own hover and selection,
-   since its page is a place like theirs. Search beneath it is drawn the same,
-   and a hairline under it parts the two from the list. */
+/* New plan reads as a row of the list it heads: no ground at rest, a read
+   plan's weight, ink, and height, and the plan rows' own hover and
+   selection, since its page is a place like theirs. Search beneath it is
+   drawn the same, and a hairline under it parts the two from the list. */
 .sidebar-new-plan,
 .sidebar-search {
   display: flex;
   align-items: center;
   gap: var(--glyph-gap);
-  height: 36px;
+  height: var(--control-height);
   margin: 0 0 var(--list-gap);
   padding: 0 var(--row-inset);
   border-radius: 9px;
   background: none;
+  color: var(--sidebar-ink);
   font-size: 13px;
-  transition: background-color var(--duration-hover) ease;
+  transition:
+    background-color var(--duration-hover) ease,
+    color var(--duration-hover) ease;
+}
+
+.sidebar-new-plan:hover:not(:disabled),
+.sidebar-search:hover:not(:disabled),
+.sidebar-search[aria-current="page"] {
+  color: var(--text-primary);
 }
 
 .sidebar-rule {
@@ -395,17 +466,23 @@ body,
 
 .sidebar-new-plan:disabled,
 .sidebar-home:disabled,
-.sidebar-inbox:disabled {
+.sidebar-inbox:disabled,
+.sidebar-factory:disabled,
+.sidebar-automations:disabled {
   opacity: 0.45;
 }
 
-/* The Home row is the place shown while the home page stands, and the Inbox
-   row while the window's Inbox does, each filled as the open plan's row is.
+/* The Home row is the place shown while the home page stands, the Inbox
+   row while the window's Inbox does, Factory's while Factory does, and the
+   Automations row while the Automations page does, each
+   filled as the open plan's row is.
    The Inbox's count of what waits on the developer stands at its end in a
    group count's ink, and gives way to its chord while the row is hovered
    or reached from the keyboard, as the rows above show theirs. */
 .sidebar-home[aria-current="page"],
-.sidebar-inbox[aria-current="page"] {
+.sidebar-inbox[aria-current="page"],
+.sidebar-factory[aria-current="page"],
+.sidebar-automations[aria-current="page"] {
   background: var(--raised-strong);
 }
 
@@ -427,49 +504,208 @@ body,
   display: inline-flex;
 }
 
-/* The workspace the plans are, drawn as a repository's header is, in the
-   headings' voice, with a chevron after its name for the menu it drops
-   (`workspace-switcher.tsx`). It stands over the scroller, a list's gap
-   above the first group. */
+/* A workspace's tile: a square of its hue with its first letter as its text,
+   at a row's glyph size. A loaded picture drops the hue (`data-hue`) and the
+   letter, so the square has no fill of its own and a transparent photo shows
+   the surface it sits on. */
+.workspace-tile {
+  display: inline-grid;
+  width: var(--menu-glyph);
+  height: var(--menu-glyph);
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 4px;
+  color: var(--workspace-tile-ink);
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 1;
+}
+
+/* A photo or a picture fills the tile's square, cropped rather than
+   stretched, hidden until it has loaded, so the letter stands while it loads
+   and where it fails (workspace-tile.tsx). */
+.workspace-tile:has(.workspace-tile-picture) {
+  position: relative;
+  overflow: hidden;
+}
+
+.workspace-tile-picture {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.workspace-tile-picture[data-loaded="false"] {
+  visibility: hidden;
+}
+
+.workspace-tile[data-hue="1"] {
+  background: var(--workspace-hue-1);
+}
+
+.workspace-tile[data-hue="2"] {
+  background: var(--workspace-hue-2);
+}
+
+.workspace-tile[data-hue="3"] {
+  background: var(--workspace-hue-3);
+}
+
+.workspace-tile[data-hue="4"] {
+  background: var(--workspace-hue-4);
+}
+
+.workspace-tile[data-hue="5"] {
+  background: var(--workspace-hue-5);
+}
+
+.workspace-tile[data-hue="6"] {
+  background: var(--workspace-hue-6);
+}
+
+/* In a line of words, the tile keeps to the line's height. */
+.workspace-tile[data-size="inline"] {
+  width: 14px;
+  height: 14px;
+  border-radius: 3.5px; /* off-scale */
+  font-size: 9px;
+}
+
+.workspace-tile[data-size="head"] {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  font-size: 15px;
+}
+
+/* A workspace named (`workspace-ref.tsx`): its tile and its name as one
+   object in the ink of the place it stands in, the name cut short rather
+   than wrapped; with a line under the name, the two stand in a column
+   beside the tile, the line quieter. Each place sets the name's weight. */
+.workspace-ref {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  align-items: center;
+  gap: 5px; /* off-scale: a 14px tile's gap to its word, an actor's alike */
+  vertical-align: middle;
+}
+
+/* In a line of words the name sits on the line's baseline, as an actor's
+   does, standing at least the tile's height so the tile stays centred on it. */
+.workspace-ref[data-size="inline"] {
+  vertical-align: baseline;
+}
+
+.workspace-ref[data-size="inline"] > .workspace-ref-name {
+  align-self: baseline;
+  padding-block: max(0px, calc((14px - 1lh) / 2));
+}
+
+.workspace-ref[data-size="row"] {
+  gap: var(--space-6);
+}
+
+.workspace-ref[data-size="head"],
+.workspace-ref:has(> .workspace-ref-copy) {
+  gap: var(--space-12);
+}
+
+.workspace-ref-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px; /* off-scale */
+}
+
+.workspace-ref-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A workspace's card leads with its tile at the sidebar head's size, the
+   photo large enough to know it by, as an actor's card leads with its mark. */
+.workspace-card-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+.workspace-card-head > .card-head {
+  min-width: 0;
+  flex: 1;
+}
+
+.workspace-ref-line {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+/* The sidebar's head: the workspace listed, its tile, its name in the head's
+   weight, and under it who shares it in the meta voice, with a chevron at the
+   row's end for the menu it drops (`workspace-switcher.tsx`). It stands where
+   Luke's own head stands until a workspace is read, the same section gap
+   above New plan. */
 .sidebar-workspace {
   flex: 0 0 auto;
-  margin-bottom: var(--list-gap);
+  padding-bottom: var(--space-12);
 }
 
 .sidebar-workspace-toggle {
   display: flex;
   width: 100%;
   align-items: center;
-  gap: var(--space-4);
-  padding: var(--space-8) var(--row-inset);
-  border-radius: 9px;
+  gap: var(--space-12);
+  padding: var(--space-6) var(--row-inset);
+  border-radius: 10px;
   background: none;
-  color: var(--text-secondary);
-  font-size: 12px;
-  font-weight: 500;
   text-align: left;
-  transition:
-    background-color var(--duration-hover) ease,
-    color var(--duration-hover) ease;
+  transition: background-color var(--duration-hover) ease;
   -webkit-app-region: no-drag;
 }
 
 .sidebar-workspace-toggle:hover,
 .sidebar-workspace-toggle[aria-expanded="true"] {
   background: var(--raised);
-  color: var(--text-primary);
 }
 
-.sidebar-workspace-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.sidebar-workspace-toggle > .workspace-ref {
+  flex: 1;
+}
+
+.sidebar-workspace-toggle .workspace-ref-copy {
+  gap: var(--space-2);
+}
+
+.sidebar-workspace-toggle .workspace-ref-name {
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: -0.005em;
+}
+
+.sidebar-workspace-shared {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  color: var(--text-secondary);
+  font-size: 11.5px;
+}
+
+.sidebar-workspace-shared > svg {
+  width: 11px;
+  height: 11px;
 }
 
 .sidebar-workspace-toggle > svg {
   width: 12px;
   height: 12px;
   flex: none;
+  color: var(--text-secondary);
 }
 
 .sidebar-new-plan svg,
@@ -523,8 +759,9 @@ body,
 }
 
 .sidebar-skeleton-row {
-  padding: var(--space-8) var(--row-inset);
+  padding: var(--space-6) var(--row-inset);
   font-size: 13px;
+  line-height: var(--sidebar-row-line);
 }
 
 .sidebar-plans {
@@ -548,6 +785,35 @@ body,
   transition: background-color var(--duration-hover) ease;
 }
 
+/* In the sidebar a row is a control's height, as New plan's is, its line set
+   rather than left to the font, so every row of the column stands as tall
+   whatever the font measures. */
+.desktop-sidebar {
+  --sidebar-row-line: 18px;
+}
+
+.desktop-sidebar .sidebar-plan-item {
+  line-height: var(--sidebar-row-line);
+}
+
+/* Note that the row's height is set rather than grown from its padding,
+   because the smaller time, set on the name's baseline, sits a pixel lower
+   in its line and would make the row a pixel taller than New plan's. */
+.desktop-sidebar .sidebar-plan {
+  display: flex;
+  height: var(--control-height);
+  align-items: center;
+  padding-block: 0;
+}
+
+.desktop-sidebar .sidebar-plan > .sidebar-plan-line {
+  flex: 1;
+}
+
+.desktop-sidebar .sidebar-plan-marks {
+  top: calc((var(--control-height) - var(--sidebar-row-line)) / 2);
+}
+
 /* A plan's row fills while the pointer is anywhere on its item, its own
    buttons at its end included, and no more than its hover does, so the open
    plan keeps its stronger fill. */
@@ -561,6 +827,268 @@ body,
   background: var(--raised-strong);
 }
 
+/* Whoever did something (`actor-ref.tsx`): a person on a circle, their
+   picture or their letter on a hue; Luke, an agent, or an automation on a
+   solid rounded square; someone the window cannot name on a quiet outline.
+   One size per place, so a byline, a facepile, and a row read level whoever
+   is in them. A square's corner is rounder than a workspace tile's of its
+   size, and it never holds a letter, so the two never read as one. */
+.actor-mark {
+  --actor-size: 16px;
+  --state-glyph-size: calc(var(--actor-size) * 0.66);
+
+  position: relative;
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: var(--actor-size);
+  height: var(--actor-size);
+  border-radius: 50%;
+  background: var(--actor-tile);
+  color: var(--actor-tile-ink);
+  vertical-align: middle;
+}
+
+.actor-mark[data-size="stack"] {
+  --actor-size: 18px;
+}
+
+.actor-mark[data-size="row"] {
+  --actor-size: 20px;
+}
+
+.actor-mark[data-size="account"] {
+  --actor-size: 26px;
+}
+
+.actor-mark[data-size="card"] {
+  --actor-size: 32px;
+}
+
+/* An App's bot on GitHub stands on the same square, its avatar on the neutral tile. */
+.actor-mark:is(
+  [data-kind="luke"],
+  [data-kind="agent"],
+  [data-kind="automation"],
+  [data-kind="github"][data-bot="true"]
+) {
+  border-radius: calc(var(--actor-size) * 0.36);
+}
+
+/* Luke wears his blue on his face, not his tile, the colour his voice and
+   the Transcript's face already answer in: 8.4:1 on the dark tile and 4.3:1
+   on the light one. */
+.actor-mark[data-kind="luke"] {
+  color: var(--voice-luke);
+}
+
+/* A person's picture keeps its edge on a ground of its own colour, a GitHub user's too. */
+.actor-mark:is([data-kind="person"], [data-kind="github"]:not([data-bot="true"]))::after {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 0.5px var(--hairline-strong);
+  content: "";
+  pointer-events: none;
+}
+
+.actor-mark[data-kind="someone"] {
+  background: none;
+  box-shadow: inset 0 0 0 1px var(--hairline-strong);
+  color: var(--text-tertiary);
+}
+
+.actor-face {
+  display: grid;
+  position: relative;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+  overflow: hidden;
+  border-radius: inherit;
+  font-size: calc(var(--actor-size) * 0.5);
+  font-weight: 650;
+  line-height: 1;
+}
+
+.actor-face > svg,
+.actor-face .state-glyph > :is(svg, img) {
+  width: calc(var(--actor-size) * 0.62);
+  height: calc(var(--actor-size) * 0.62);
+}
+
+.actor-mark[data-kind="luke"] .luke-face {
+  width: calc(var(--actor-size) * 0.8);
+  height: calc(var(--actor-size) * 0.8);
+  color: inherit;
+}
+
+.actor-face[data-hue] {
+  color: var(--workspace-tile-ink);
+}
+
+.actor-face[data-hue="1"] {
+  background: var(--workspace-hue-1);
+}
+
+.actor-face[data-hue="2"] {
+  background: var(--workspace-hue-2);
+}
+
+.actor-face[data-hue="3"] {
+  background: var(--workspace-hue-3);
+}
+
+.actor-face[data-hue="4"] {
+  background: var(--workspace-hue-4);
+}
+
+.actor-face[data-hue="5"] {
+  background: var(--workspace-hue-5);
+}
+
+.actor-face[data-hue="6"] {
+  background: var(--workspace-hue-6);
+}
+
+.actor-picture {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.actor-picture[data-loaded="false"] {
+  visibility: hidden;
+}
+
+/* An actor named in a line: its mark and its name as one target, in the
+   line's own ink, rising to the primary on hover as the crumb's presses do.
+   The hover fill bleeds by a ring of its own colour rather than padding, so
+   the words around it keep their spacing. Its name sits on the baseline of
+   the words around it. */
+.actor-ref {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 5px; /* off-scale: a 16px mark's gap to its word */
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  line-height: inherit;
+  vertical-align: baseline;
+  white-space: nowrap;
+}
+
+/* Note that the name alone is baseline-aligned, so the ref takes its
+   baseline from the name rather than the mark, and stands at least the
+   16px mark's height, so the mark stays centred on it. */
+.actor-ref-name {
+  min-width: 0;
+  align-self: baseline;
+  padding-block: max(0px, calc((16px - 1lh) / 2));
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.actor-ref:hover {
+  background: var(--raised);
+  box-shadow: 0 0 0 3px var(--raised);
+  color: var(--text-primary);
+}
+
+/* A line that names an actor: its words and the actor in one row centred on
+   the disc, so the disc never rides above the words' baseline. Note that
+   its spaces stand inside its words, because a row drops a run that is
+   spaces alone, and that it keeps them as typed. */
+.actor-line {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  white-space: pre;
+}
+
+/* A facepile: each disc cut from the ground behind it, overlapping the one
+   before, then how many more in a pill of the same height. */
+.actor-stack {
+  display: inline-flex;
+  align-items: center;
+}
+
+.actor-stack > :is(.actor-mark, .actor-stack-more) {
+  margin-left: -5px;
+  box-shadow: 0 0 0 2px var(--actor-stack-ground, var(--desktop-ground));
+}
+
+.actor-stack > :first-child {
+  margin-left: 0;
+}
+
+/* Someone unnamed keeps their outline inside the ring that cuts them from the ground. */
+.actor-stack > .actor-mark[data-kind="someone"] {
+  box-shadow:
+    inset 0 0 0 1px var(--hairline-strong),
+    0 0 0 2px var(--actor-stack-ground, var(--desktop-ground));
+}
+
+.actor-stack-more {
+  display: inline-grid;
+  height: 18px;
+  min-width: 18px;
+  padding: 0 5px;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--actor-tile);
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* An actor's card head: its mark at a card's size beside the shared head. */
+.actor-card-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+.actor-card-head > .card-head {
+  min-width: 0;
+  flex: 1;
+}
+
+.actor-card-name {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-6);
+}
+
+/* Words naming an actor inside a line of their own, a card's note or a
+   pill, in one row centred on its disc; each word keeps its own spaces,
+   since a row drops a run of spaces standing alone. */
+.actor-words {
+  display: inline-flex;
+  max-width: 100%;
+  min-width: 0;
+  align-items: center;
+  vertical-align: middle;
+  white-space: pre;
+}
+
+.actor-you {
+  padding: 0 5px; /* off-scale */
+  border-radius: 4px;
+  background: var(--raised-strong);
+  color: var(--text-secondary);
+  font-size: 10.5px;
+  font-weight: 500;
+  line-height: 16px;
+}
+
 .sidebar-plan-name,
 .sidebar-account-name {
   overflow: hidden;
@@ -569,9 +1097,22 @@ body,
 }
 
 /* A plan's name reads in the body's weight, the open one too, whose fill is
-   what marks it. */
+   what marks it. In the sidebar a read name is in the quieter ink, and the
+   open one and the one under the pointer go up to the primary. */
 .sidebar-plan-name {
   font-size: 13px;
+}
+
+.desktop-sidebar :is(.sidebar-plan-name, .sidebar-pinned-tab-name) {
+  color: var(--sidebar-ink);
+  transition: color var(--duration-hover) ease;
+}
+
+.desktop-sidebar
+  .sidebar-plan[aria-current="page"]
+  :is(.sidebar-plan-name, .sidebar-pinned-tab-name),
+.desktop-sidebar .sidebar-plan-item:hover :is(.sidebar-plan-name, .sidebar-pinned-tab-name) {
+  color: var(--text-primary);
 }
 
 /* The one unread mark: what the developer has not seen, a plan saved since
@@ -579,11 +1120,16 @@ body,
    another was chosen, and an Inbox item that needs them, reads in the
    heavier weight and the primary ink until they look, as a chat app's
    channels do. Only what waits on them, the Inbox item, also wears the
-   blue dot (`.inbox-row-dot`). */
+   blue dot (`.inbox-row-dot`). In the sidebar, where a read name is in the
+   quieter ink, the ink carries half the step, so a semibold is enough. */
 .sidebar-plan[data-unread="true"] .sidebar-plan-name,
 .tab[data-unread="true"] .tab-label {
   color: var(--text-primary);
   font-weight: 680;
+}
+
+.desktop-sidebar .sidebar-plan[data-unread="true"] .sidebar-plan-name {
+  font-weight: 600;
 }
 
 /* A sidebar plan renamed in place keeps its row: the field takes the name's
@@ -647,6 +1193,25 @@ body,
 
 .sidebar-plan-time .plan-mark-glyph {
   margin-right: var(--space-4);
+}
+
+/* A plan whose repository belongs to another workspace wears the attention
+   mark in that place, the white exclamation on its orange disc
+   (`attention-mark.tsx`), a size under the glyph's, so the disc's edge
+   reads at the time's height. */
+.plan-mark-attention {
+  margin-right: var(--space-4);
+}
+
+.plan-mark-attention .attention-mark {
+  width: 12px;
+  height: 12px;
+  vertical-align: -1.5px; /* off-scale */
+}
+
+.plan-mark-attention .attention-mark svg {
+  width: 10px;
+  height: 10px;
 }
 
 /* Pin and Archive stand in the time's slot, which is always as wide as the
@@ -770,6 +1335,12 @@ body,
   font-weight: 500;
   text-align: left;
   transition: color var(--duration-hover) ease;
+}
+
+/* A header in the sidebar stands as tall as the rows under it. */
+.desktop-sidebar .sidebar-repository-toggle {
+  padding-block: calc((var(--control-height) - var(--sidebar-row-line)) / 2);
+  line-height: var(--sidebar-row-line);
 }
 
 .sidebar-repository-header:hover .sidebar-repository-toggle {
@@ -1025,29 +1596,6 @@ body,
 
 .sidebar-account[aria-expanded="true"] {
   background: var(--raised);
-}
-
-.sidebar-avatar {
-  display: grid;
-  flex: 0 0 auto;
-  place-items: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  background: var(--avatar-fill);
-  font-size: 12px;
-  font-weight: 700;
-  object-fit: cover;
-}
-
-.sidebar-avatar-neutral {
-  background: var(--raised-strong);
-  color: var(--text-secondary);
-}
-
-.sidebar-avatar-neutral svg {
-  width: 14px;
-  height: 14px;
 }
 
 .sidebar-account-name {
@@ -1454,7 +2002,7 @@ body,
   font-weight: 500;
 }
 
-.chip:where([data-look="field"]) .chip-name {
+.chip:where([data-look="field"]) :is(.chip-name, .model-label) {
   flex: 1;
   text-align: left;
 }
@@ -1720,10 +2268,42 @@ body,
   -webkit-app-region: no-drag;
 }
 
+/* A menu opened from a modal's card stands over the window the modal dims. */
+.plan-menu[data-layer="dialog"] {
+  z-index: calc(var(--z-dialog) + 1);
+}
+
 .plan-menu-label {
   min-width: 0;
   flex: 1;
   overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* An item with a second line under its label grows to hold both, as the
+   sidebar's workspace head does. */
+.menu-item[data-detail="true"] {
+  height: auto;
+  min-height: var(--menu-row-height);
+  padding-block: var(--space-4);
+}
+
+.menu-item-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.menu-item-copy > .plan-menu-label {
+  flex: none;
+}
+
+.menu-item-detail {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 11.5px;
   text-overflow: ellipsis;
 }
 
@@ -1742,6 +2322,26 @@ body,
   gap: var(--space-2);
   padding: var(--space-4) var(--row-inset);
   font-size: 12px;
+}
+
+/* Who made the plan a menu is about, under its items and pressed by nothing:
+   who created it and who last edited it, each on a muted line of its own. */
+.plan-menu-footer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--row-inset);
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+/* Each a line naming an actor (`.actor-line`), whose spaces it keeps; a
+   name too long for the menu is cut short. It clips past the ring an
+   actor's hover fill bleeds by, so the ring is drawn whole. */
+.plan-menu-note {
+  margin: 0;
+  overflow: clip;
+  overflow-clip-margin: 3px;
 }
 
 .account-menu-name,
@@ -1788,6 +2388,46 @@ body,
   line-height: 1.55;
 }
 
+/* A whole tab with nothing in it yet (empty-state.tsx) fills the room its
+   pane leaves under the pane's header and stands a little above that room's
+   middle, where the eye takes the middle to be: the room above it and the
+   room below it are shared two to three. Where the pane is shorter than the
+   state, both shares are nothing and the state scrolls rather than run under
+   the header. */
+.empty-state {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 0;
+  flex-direction: column;
+  align-items: center;
+  overflow-y: auto;
+}
+
+.empty-state::before,
+.empty-state::after {
+  content: "";
+}
+
+.empty-state::before {
+  flex: 2 1 0;
+}
+
+.empty-state::after {
+  flex: 3 1 0;
+}
+
+/* A pane that scrolls a list lays its empty state out as a column the state
+   fills, while it holds one. Settings' column holds its page's name over the
+   page, which keep their measure. */
+:is(.automations-scroll, .inbox-plans-scroll, .settings-page-scroll):has(.empty-state) {
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-page-scroll:has(.empty-state) > * {
+  width: 100%;
+}
+
 /* A whole tab with nothing in it yet (empty-state.tsx): the tab's glyph,
    large and fainter than the faintest ink, which no token is, over its one
    line. The stroke is thinned so the glyph keeps the weight of the tab's
@@ -1802,6 +2442,83 @@ body,
   width: 40px;
   height: 40px;
   stroke-width: 1.4;
+}
+
+/* Something wanting a hand (`attention-mark.tsx`): a white exclamation on a
+   disc of the attention orange, at a row glyph's size. */
+.attention-mark {
+  display: inline-grid;
+  width: 14px;
+  height: 14px;
+  flex: none;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--attention-mark-ground);
+  color: #fff;
+}
+
+.attention-mark svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* A notice about the whole plan (`plan-banner.tsx`): one slim line across
+   the plan's column under its toolbar, or under the side panel's bar while
+   the panel fills the window, on a faint attention tint with a hairline of
+   it beneath. Its words are cut short rather than wrapped, so the line keeps
+   its height at any width, and its one press stands at its end, a quiet
+   bordered button as a devtool's notice draws one. */
+.plan-banner {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-8);
+  min-height: 32px; /* off-scale: a 22px press and its inset */
+  padding: var(--space-4) var(--column-inset) var(--space-4) var(--content-inset);
+  border-bottom: 1px solid color-mix(in srgb, var(--state-attention) 30%, var(--hairline));
+  background: color-mix(in srgb, var(--state-attention) 9%, var(--desktop-ground));
+  color: var(--text-body);
+  font-size: 12.5px;
+}
+
+.plan-banner-words {
+  min-width: 0;
+  flex: 1;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plan-banner-words .workspace-ref {
+  max-width: none;
+  color: var(--text-primary);
+  font-weight: 560;
+}
+
+/* The press gives way too, its words cut short at the end rather than the
+   press pushed out of a narrow column, and never takes more than half the
+   line; the whole of them stays its text, which a reader hears. */
+.plan-banner-action {
+  min-width: 0;
+  max-width: 50%;
+  flex: 0 1 auto;
+  height: 22px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0 var(--space-8);
+  border: 1px solid var(--hairline-strong);
+  border-radius: 6px;
+  background: none;
+  color: var(--text-primary);
+  font: inherit;
+  font-weight: 560;
+  white-space: nowrap;
+  transition: background-color var(--duration-hover) ease;
+}
+
+.plan-banner-action:hover {
+  background: var(--raised);
 }
 
 /* The document ------------------------------------------------------------- */
@@ -1898,6 +2615,26 @@ body,
   padding-inline: max(var(--content-inset), var(--reading-room));
 }
 
+/* Who said or wrote a message on a shared plan, a teammate, Luke, or an
+   automation, named over it by their mark and name in the muted meta voice,
+   the mark centred on the words; the reader's own carry no name. */
+.message-sender {
+  display: flex;
+  align-items: center;
+  padding-inline: var(--space-4);
+  color: var(--text-secondary);
+  font-size: 11.5px;
+}
+
+/* A teammate's call at its divider: their mark and name, then when it
+   started, centred on the mark, every space kept. */
+.call-caller {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  white-space: pre;
+}
+
 /* The transcript's way back to its newest line stands on the column's own
    ground rather than the panel's. */
 .desktop-agent .conversation-scroll {
@@ -1960,6 +2697,7 @@ body,
 }
 
 .desktop-document .plan-body,
+.desktop-document .plan-crumb,
 .desktop-document .plan-edit-note,
 .desktop-document .plan-changed-note,
 .desktop-document .version-note {
@@ -2178,9 +2916,16 @@ body,
   left: auto;
 }
 
+/* A form row's chip is a Settings picker (`settings/picker-row.tsx`), so its
+   menu hangs from the chip's trailing edge, where the column is. */
+.repository-chip[data-place="field"] .searchable-menu {
+  right: 0;
+  left: auto;
+}
+
 /* A harness's or a provider's mark keeps its box in a row however tight the
    row is, the harness mark drawn as an image (`harness-marks.tsx`) as the
-   traced ones (`provider-marks.tsx`) do. */
+   traced ones (`@luke/ui`'s `ProviderMark`) do. */
 :is(.harness-mark, .provider-mark) {
   flex: 0 0 auto;
 }
@@ -2189,7 +2934,7 @@ body,
    wears them by the ground: Executor's and Notion's pure white on dark and
    pure black on light, Sentry's white on dark and its dark blurple on light,
    Neon's two greens, and Mercury's near-white on dark and near-black on
-   light (`provider-marks.tsx`). */
+   light (`@luke/ui`'s `marks/provider-mark.tsx`). */
 :root {
   --integration-ink-executor: #fff;
   --integration-ink-mercury: #f4f5f9;
@@ -2480,10 +3225,12 @@ body:has(.app-stage[data-capture="true"])
 
 /* An integration's tools (`integration-tool-list.tsx`), in the MCP
    popover's server page and in Settings › Integrations alike: one list, each
-   tool a press whose face is its name in the code face with its badge after
-   it, and the start of what it does under it in the muted type, two lines at
-   most. A tool opened shows the whole of what it does instead, wrapped as
-   its server wrote it and selectable, on the pressed row's fill. */
+   tool a press of one line, its title in the window's type with its name
+   after it in the code face, muted, and its badge, and under them the first
+   sentence of what it does in the muted type. The name gives way first where
+   the row is narrow, then the title, never the badge. The row its owner
+   holds wears the menu's highlight, and its chevron, which says a press
+   opens it. */
 .integration-tool-list {
   margin: 0;
   padding: 0;
@@ -2497,17 +3244,14 @@ body:has(.app-stage[data-capture="true"])
   border-radius: var(--menu-row-radius);
 }
 
-.integration-tool[data-open="true"] {
-  background: var(--raised);
-}
-
 .integration-tool-head {
+  position: relative;
   display: flex;
   width: 100%;
   min-width: 0;
   flex-direction: column;
   gap: 1px;
-  padding: var(--space-4) var(--row-inset);
+  padding: var(--space-4) calc(var(--row-inset) + 16px) var(--space-4) var(--row-inset);
   border-radius: var(--menu-row-radius);
   background: none;
   color: inherit;
@@ -2515,52 +3259,77 @@ body:has(.app-stage[data-capture="true"])
   text-align: left;
 }
 
-.integration-tool-head:hover {
-  background: var(--raised);
-}
-
-.integration-tool-full {
-  margin: 0;
-  padding: 0 var(--row-inset) var(--space-6);
-  color: var(--text-secondary);
-  font-size: 12px;
-  line-height: 1.45;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  user-select: text;
-  cursor: text;
+.integration-tool-head:hover,
+.integration-tool[data-current="true"] > .integration-tool-head {
+  background: var(--raised-strong);
 }
 
 .integration-tool-name {
   display: flex;
   min-width: 0;
-  align-items: center;
+  align-items: baseline;
   gap: var(--space-6);
+}
+
+.integration-tool-title {
+  overflow: hidden;
+  flex: 0 1 auto;
+  color: var(--text-primary);
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A tool its server gave no title is called by its name, in the code face. */
+:is(.integration-tool-title, .integration-tool-detail-title)[data-name="true"] {
+  font-family: var(--font-mono);
+  font-size: 12px;
 }
 
 .integration-tool-id {
   overflow: hidden;
-  color: var(--text-primary);
+  flex: 0 100 auto;
+  min-width: 0;
+  color: var(--text-tertiary);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .integration-tool-description {
-  display: -webkit-box;
   overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
   color: var(--text-tertiary);
   font-size: 12px;
   line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.integration-tool-chevron {
+  position: absolute;
+  top: 50%;
+  right: var(--row-inset);
+  display: flex;
+  color: var(--text-tertiary);
+  opacity: 0;
+  transform: translateY(-50%);
+}
+
+.integration-tool-chevron svg {
+  width: 10px;
+  height: 10px;
+}
+
+.integration-tool[data-current="true"] .integration-tool-chevron {
+  opacity: 1;
 }
 
 /* The badge a server's own annotations earn a tool: quiet for Read-only,
    the danger tint for Destructive. */
 .integration-tool-badge {
   flex: none;
+  align-self: center;
   padding: 0 var(--space-4);
   border-radius: 4px;
   background: var(--raised-strong);
@@ -2573,6 +3342,248 @@ body:has(.app-stage[data-capture="true"])
 .integration-tool-badge[data-destructive="true"] {
   background: color-mix(in srgb, var(--danger) 14%, transparent);
   color: var(--danger-text);
+}
+
+/* A tool's page: its head at a server page's head's height over a hairline,
+   the title in the head's weight and the name after it in the code face,
+   then one scroller holding its hints, what it does as rendered markdown,
+   selectable, and its parameters. A hint is the badge's chip, the danger
+   tint for Destructive, and only hairlined for how far the tool reaches. A
+   parameter is its name and type in the code face, required in the
+   attention tint, and under them what it is, the values it takes as chips,
+   its default outlined; where the page is wide enough, the name and type
+   stand in a column of their own beside the rest. */
+.integration-tool-detail {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.integration-tool-detail-head {
+  display: flex;
+  min-width: 0;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--glyph-gap);
+  height: 40px;
+  padding: 0 var(--space-12);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.integration-tool-detail-head:has(.integration-tool-back) {
+  padding-left: var(--space-6);
+}
+
+.integration-tool-back {
+  --control-height: 24px;
+}
+
+.integration-tool-back svg {
+  width: 14px;
+  height: 14px;
+}
+
+.integration-tool-detail-title {
+  overflow: hidden;
+  flex: 0 1 auto;
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.integration-tool-detail-name {
+  overflow: hidden;
+  flex: 0 100 auto;
+  min-width: 0;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  user-select: text;
+}
+
+.integration-tool-detail-body {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-12);
+  padding: var(--space-8) var(--space-12) var(--space-12);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  outline: none;
+}
+
+.integration-tool-hints {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.integration-tool-hint {
+  padding: 0 var(--space-6);
+  border-radius: 4px;
+  background: var(--raised-strong);
+  color: var(--text-secondary);
+  font-size: 10.5px;
+  font-weight: 560;
+  line-height: 18px;
+}
+
+.integration-tool-hint[data-tone="danger"] {
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+  color: var(--danger-text);
+}
+
+.integration-tool-hint[data-tone="quiet"] {
+  background: none;
+  box-shadow: inset 0 0 0 1px var(--hairline-strong);
+  font-weight: 500;
+}
+
+.integration-tool-description-whole {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+  user-select: text;
+  cursor: text;
+}
+
+.integration-tool-description-whole :is(strong, .markdown-heading, code) {
+  color: var(--text-primary);
+}
+
+.integration-tool-description-whole .markdown-heading {
+  margin-top: 0.9em;
+  font-size: 1em;
+}
+
+.integration-tool-silent {
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.integration-tool-parameters {
+  container-type: inline-size;
+}
+
+.integration-tool-section {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-6);
+  margin: 0 0 var(--space-4);
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.integration-tool-section-count {
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.integration-tool-parameter-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+}
+
+.integration-tool-parameter {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-6) 0;
+  border-top: 1px solid var(--hairline);
+}
+
+.integration-tool-parameter-head {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: var(--space-6);
+}
+
+.integration-tool-parameter-name {
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.integration-tool-parameter-type {
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.integration-tool-parameter-required {
+  margin-left: auto;
+  color: var(--state-attention);
+  font-size: 10.5px;
+  font-weight: 560;
+}
+
+.integration-tool-parameter-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  line-height: 1.4;
+  user-select: text;
+}
+
+.integration-tool-parameter-description code {
+  color: var(--text-primary);
+}
+
+.integration-tool-parameter-values {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-4);
+  color: var(--text-tertiary);
+}
+
+.integration-tool-parameter-values code {
+  padding: 0 var(--space-4);
+  border-radius: 4px;
+  background: var(--raised-strong);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 16px;
+}
+
+.integration-tool-parameter-values code[data-default="true"] {
+  box-shadow: inset 0 0 0 1px var(--hairline-strong);
+  color: var(--text-primary);
+}
+
+@container (min-width: 440px) {
+  .integration-tool-parameter {
+    display: grid;
+    grid-template-columns: minmax(150px, 34%) 1fr;
+    column-gap: var(--space-12);
+  }
+
+  .integration-tool-parameter-required {
+    flex-basis: 100%;
+    margin-left: 0;
+  }
 }
 
 /* Inbox ---------------------------------------------------------------------- */
@@ -2590,6 +3601,21 @@ body:has(.app-stage[data-capture="true"])
   min-height: 0;
   flex: 1;
   grid-template-columns: auto minmax(0, 1fr);
+}
+
+/* Too narrow for both, the Inbox shows its list or the item a press opened,
+   the whole Inbox wide (`inbox-columns.ts`); the list then needs no edge to
+   part it from the item. */
+.inbox-view:is([data-columns="list"], [data-columns="item"]) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.inbox-view[data-columns="list"] .inbox-plans {
+  border-right: 0;
+}
+
+.inbox-view > [hidden] {
+  display: none;
 }
 
 .inbox-plans {
@@ -2633,6 +3659,16 @@ body:has(.app-stage[data-capture="true"])
   justify-self: end;
 }
 
+/* The list standing alone is a page rather than a column, so its name leads
+   its bar past the title bar's buttons, as a page's title does. */
+.desktop-shell[data-sidebar-collapsed="true"]
+  .desktop-main
+  .inbox-view[data-columns="list"]
+  .inbox-plans-bar {
+  display: flex;
+  padding-left: var(--sidebar-toggle-clearance);
+}
+
 .inbox-plans-scroll {
   min-height: 0;
   flex: 1;
@@ -2640,11 +3676,16 @@ body:has(.app-stage[data-capture="true"])
   padding: var(--space-8) var(--column-inset) var(--column-inset);
 }
 
-/* An item's row is a sidebar row led by its agent's mark, centred on the
-   line as a pinned tab's is, with no Unpin to leave room for. */
+/* An item's row is a sidebar row led by its agent's tile (`actor-ref.tsx`),
+   centred on the line as a pinned tab's is, with no Unpin to leave room for. */
 .inbox-row .sidebar-plan-line {
   align-items: center;
   gap: var(--space-6);
+}
+
+.inbox-row-mark {
+  display: flex;
+  flex: none;
 }
 
 /* An item that needs the developer wears a mail app's unread dot in the system
@@ -2673,9 +3714,18 @@ body:has(.app-stage[data-capture="true"])
   transform: translateY(-50%);
 }
 
-/* The pane's words under the agent's byline start where its name does, past its mark. */
+/* The agent's byline names it in the thread's own ink, as a message's sender is named. */
+.inbox-byline-agent {
+  display: flex;
+  min-width: 0;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+/* The pane's words under the agent's byline start where its name does, past
+   its tile: an inline actor's 16px and its 5px gap (`.actor-ref`). */
 .inbox-indent {
-  padding-left: calc(var(--control-glyph) + var(--glyph-gap));
+  padding-left: 21px;
 }
 
 /* The pane's crumbs are drawn as the plan's column's tabs (`.tab`), parted
@@ -2696,6 +3746,20 @@ body:has(.app-stage[data-capture="true"])
   color: var(--text-primary);
 }
 
+/* One agent's page stands in the plan's place as the Inbox does: its toolbar
+   over the agent's tab, which fills the rest as it fills a plan's column. */
+.agent-page {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.agent-page-note {
+  padding: var(--section-gap) var(--space-12);
+}
+
 .inbox-view-items {
   display: flex;
   min-width: 0;
@@ -2707,6 +3771,627 @@ body:has(.app-stage[data-capture="true"])
    keeps its own inset then. */
 .desktop-shell[data-sidebar-collapsed="true"] .inbox-view-items .desktop-toolbar {
   padding-left: var(--column-inset);
+}
+
+/* An item standing alone in the window's Inbox is its first column, so its
+   bar, led by the way back, leaves the title bar's buttons their room. */
+.desktop-shell[data-sidebar-collapsed="true"]
+  .desktop-main
+  > .inbox-view[data-columns="item"]
+  .inbox-view-items
+  .desktop-toolbar {
+  padding-left: var(--sidebar-toggle-clearance);
+}
+
+/* Factory -------------------------------------------------------------------- */
+
+/* Factory stands in the plan's place as the Inbox does: the toolbar, the
+   summary line, then the line of steps, each a card on the sidebar's ground
+   holding sidebar rows. The steps share one grid row each for their work and
+   their wait, so what waits on the developer lines up as one band across the
+   line, under the step it holds up. */
+/* An experiment's toolbar: a quiet badge after its title, as a tool's
+   annotation is drawn, and Send feedback as a quiet text button. */
+.desktop-toolbar-heading:has(.experiment-badge) {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+.experiment-feedback {
+  padding: var(--space-2) var(--space-6);
+  border-radius: var(--menu-row-radius);
+  background: none;
+  color: var(--text-secondary);
+  font-size: 12px;
+  transition: background-color var(--duration-hover) ease;
+  -webkit-app-region: no-drag;
+}
+
+.experiment-feedback:hover {
+  background: var(--raised);
+  color: var(--text-primary);
+}
+
+.factory-view {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.factory-scroll {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 var(--content-inset) var(--space-32);
+}
+
+.factory-summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  margin: 0;
+  padding: var(--space-12) 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.factory-needs {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-6);
+  margin: calc(-1 * var(--space-2)) calc(-1 * var(--space-6));
+  padding: var(--space-2) var(--space-6);
+  border-radius: var(--menu-row-radius);
+  background: none;
+  color: var(--text-primary);
+  font-weight: 600;
+  transition: background-color var(--duration-hover) ease;
+}
+
+.factory-needs:hover {
+  background: var(--raised);
+}
+
+.factory-sep {
+  color: var(--text-tertiary);
+}
+
+.factory-line-up {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  align-items: start;
+  column-gap: var(--space-8);
+  max-width: 1080px; /* off-scale */
+}
+
+.factory-step {
+  display: grid;
+  grid-row: span 2;
+  grid-template-rows: subgrid;
+  min-width: 0;
+  padding: var(--space-8) var(--space-4) var(--space-4);
+  border: 1px solid var(--hairline);
+  border-radius: var(--menu-radius);
+  background: var(--desktop-sidebar);
+}
+
+.factory-work,
+.factory-wait {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.factory-wait {
+  margin: var(--space-12) calc(-1 * var(--space-4)) calc(-1 * var(--space-4));
+  padding: var(--space-8) var(--space-4) var(--space-4);
+  border-top: 1px solid var(--hairline);
+  border-radius: 0 0 var(--menu-radius) var(--menu-radius);
+  background: var(--desktop-ground);
+}
+
+.factory-arrow {
+  display: flex;
+  align-self: start;
+  margin-top: var(--space-6);
+  color: var(--selected-edge);
+}
+
+.factory-arrow svg {
+  width: var(--control-glyph);
+  height: var(--control-glyph);
+}
+
+.factory-head {
+  display: flex;
+  align-items: center;
+  gap: var(--glyph-gap);
+  min-height: 24px;
+  margin: 0;
+  padding: 0 var(--row-inset);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.factory-glyph {
+  width: var(--control-glyph);
+  height: var(--control-glyph);
+  flex: none;
+  color: var(--text-secondary);
+}
+
+.factory-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.factory-count {
+  margin-left: auto;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+
+.factory-head-dot {
+  --inbox-dot: 7px;
+  position: static;
+  flex: none;
+  transform: none;
+}
+
+.factory-over {
+  margin: 0 0 var(--space-4);
+  padding: 0 var(--row-inset);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.factory-line {
+  margin: 0;
+  padding: var(--space-2) var(--row-inset) var(--space-6);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+/* A step's rows read whole on two lines, and a question on up to five,
+   rather than cut short; the time and the dot stand at the first line. */
+.factory-rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.factory-row .sidebar-plan-line {
+  align-items: flex-start;
+}
+
+.factory-row .sidebar-plan-name {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-height: 1.35;
+  white-space: normal;
+}
+
+.factory-rows[data-wait] .sidebar-plan-name {
+  -webkit-line-clamp: 5;
+}
+
+/* The dot stands centred on the first line, beside the time. */
+.factory-row .inbox-row-dot {
+  top: 0.675em; /* off-scale: half the line's height */
+}
+
+.factory-more {
+  padding: var(--space-4) var(--row-inset) var(--space-6);
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+/* An agent stopped on a question wears the question, in full ink, not the
+   working mark; what just shipped wears the finished mark, its name muted. */
+.factory-asking {
+  color: var(--text-primary);
+}
+
+.factory-shipped {
+  color: var(--state-complete);
+}
+
+.factory-row:has(.factory-shipped) .sidebar-plan-name {
+  color: var(--text-secondary);
+}
+
+.factory-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-12);
+  max-width: 1080px; /* off-scale */
+  margin-top: var(--space-48);
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+/* Automations ---------------------------------------------------------------- */
+
+/* A window-wide place beside the sidebar, as Factory is: its toolbar, then
+   each owner's automations in a Settings card, at the measure a plan is read
+   at and centred in the room beside the sidebar, as a plan is. */
+.automations-view {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.automations-scroll {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-16) var(--content-inset) var(--space-32);
+}
+
+.automation-group {
+  max-width: var(--reading-width);
+  margin-inline: auto;
+}
+
+.automation-group + .automation-group {
+  margin-top: var(--space-24);
+}
+
+/* One automation's row: its clock wearing its newest run's state, its name
+   over what fires it, its owner, when it runs next in the tertiary ink, a
+   failure's mark, and its switch, divided by the card's hairlines. */
+.automation-row {
+  display: flex;
+  min-height: 52px; /* off-scale */
+  align-items: center;
+  gap: var(--space-12);
+  padding: var(--space-8) var(--space-16);
+}
+
+.automation-row-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px; /* off-scale */
+}
+
+.automation-row-name,
+.automation-row-detail {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.automation-row-name {
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.automation-row-detail,
+.automation-row-when {
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.automation-row-when {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+
+/* An automation turned off reads as set aside: its name in the secondary ink. */
+.automation-row[data-enabled="false"] .automation-row-name {
+  color: var(--text-secondary);
+}
+
+/* Who owns it, never in doubt: the workspace in the primary ink beside its
+   building, Personal in the secondary beside its lock, in a column of its
+   own so the owners line up down the card. */
+.automation-owner {
+  display: inline-flex;
+  width: 112px; /* off-scale */
+  flex: none;
+  align-items: center;
+  gap: var(--space-6);
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.automation-owner svg {
+  width: 13px;
+  height: 13px;
+  flex: none;
+}
+
+.automation-owner-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.automation-owner[data-owner="workspace"] {
+  color: var(--text-primary);
+}
+
+/* A row's name and schedule are its press, which opens its page; the owner,
+   the next run, and the switch beside them are not, so the switch stays a
+   switch. */
+.automation-row-open {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: var(--space-12);
+  margin: calc(-1 * var(--space-8)) 0;
+  padding: var(--space-8) 0;
+  background: none;
+  color: inherit;
+  text-align: left;
+}
+
+.automation-row-open > .state-glyph {
+  color: var(--text-secondary);
+}
+
+.automation-row:has(.automation-row-open:hover) {
+  background: var(--raised);
+}
+
+/* An automation's page: crumbs back to the list naming its owner, then its
+   name, the line saying who sees it, and its form at a Settings measure. */
+.automation-crumbs {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-4);
+  color: var(--text-secondary);
+}
+
+.automation-crumbs > svg {
+  width: 13px;
+  height: 13px;
+  flex: none;
+}
+
+.automation-crumb {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.automation-editor-status {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.automation-editor-status[data-dirty="true"] {
+  color: var(--text-secondary);
+}
+
+.automation-editor {
+  display: flex;
+  max-width: var(--reading-width);
+  flex-direction: column;
+  margin-inline: auto;
+  gap: var(--space-12);
+}
+
+/* Its name is written where a Settings page's title stands, at that title's
+   size and weight. */
+.automation-editor-name {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-primary);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  outline: none; /* no ring: the caret in the title's own words shows focus */
+}
+
+.automation-editor-name::placeholder {
+  color: var(--text-tertiary);
+}
+
+/* The line under the name, in a Settings row's detail type: who owns it, by
+   glyph and name, then who sees it. */
+.automation-owner-line {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.automation-owner-line .automation-owner {
+  width: auto;
+  font-size: 12px;
+}
+
+.automation-crumbs .automation-owner {
+  width: auto;
+}
+
+/* The form, drawn as a Settings page: each group's name over a card of
+   Settings rows, the groups a section apart. */
+.automation-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--section-gap);
+}
+
+/* A row holding two controls, a day and its time or an address and its
+   copy, stands them a control's gap apart at the row's end. */
+.automation-row-controls {
+  display: flex;
+  min-width: 0;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: var(--control-gap);
+}
+
+/* A field beside the pickers stands at their height and corner, so a row's
+   controls read as one set. */
+.automation-row-controls > .settings-input,
+.settings-row > .automation-cron {
+  height: var(--control-height);
+  padding-block: 0;
+  border-radius: var(--control-radius);
+}
+
+/* Note that the time's own clock is hidden, because what it opens is the
+   engine's picker rather than the window's menu; the hour and minute are
+   typed or stepped with the arrows. */
+.automation-time::-webkit-calendar-picker-indicator {
+  display: none;
+}
+
+/* A picker here grows from a Settings picker's width to name its whole
+   value, an event's or a zone's, rather than cut it short; the time stands
+   at that same width beside them. Where the window leaves the form narrow,
+   beside the sidebar and the runs, a row's controls drop under its name and
+   wrap, as a wrapping Settings row's do, and a picker gives way to the room
+   rather than run past its card. */
+.automation-form .settings-row {
+  flex-wrap: wrap;
+}
+
+.automation-form .settings-row > .settings-copy {
+  flex: 1 1 200px;
+}
+
+.automation-row-controls {
+  flex-wrap: wrap;
+}
+
+.automation-form .settings-picker {
+  max-width: 100%;
+}
+
+.automation-form .settings-picker-chip {
+  width: auto;
+  min-width: min(200px, 100%);
+}
+
+.automation-time {
+  width: 200px;
+  max-width: 100%;
+}
+
+.automation-cron {
+  width: 200px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+.automation-webhook-url {
+  width: 240px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+}
+
+/* What stops a save stands under its row inside the card, as a Settings
+   row's refusal does. */
+.automation-save-refusal,
+.automation-form-problem {
+  margin: 0;
+  font-size: 12px;
+}
+
+/* Choose a model hangs its menu from itself, as the agent box's model chip does. */
+.automation-model-picker {
+  position: relative;
+  display: flex;
+  min-width: 0;
+}
+
+/* An automation's page: its setup at the measure a plan is read at, centred
+   in the room between the sidebar and its runs, then its runs in a panel of
+   their own on the right, each scrolling by itself. */
+.automation-editor-layout {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+}
+
+.automation-editor-layout > .automations-scroll {
+  min-width: 0;
+}
+
+.automation-runs {
+  display: flex;
+  width: 340px; /* off-scale */
+  flex: none;
+  flex-direction: column;
+  gap: var(--space-8);
+  overflow-y: auto;
+  padding: var(--space-16);
+  border-left: 1px solid var(--hairline);
+}
+
+.automation-runs-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.automation-run {
+  display: flex;
+  width: 100%;
+  min-height: 44px; /* off-scale */
+  align-items: center;
+  gap: var(--space-8);
+  padding: var(--space-6) var(--space-8);
+  border-radius: var(--control-radius);
+  background: none;
+  color: inherit;
+  text-align: left;
+}
+
+.automation-run > .state-glyph {
+  color: var(--text-secondary);
+}
+
+button.automation-run:hover {
+  background: var(--raised);
+}
+
+/* The task is its card: the words written on the card's own ground, the
+   card's corner the field's, ringed while it holds the caret as any field is. */
+.settings-card > .automation-prompt {
+  min-height: 120px; /* off-scale */
+  padding: var(--space-12) var(--space-16);
+  border: 0;
+  border-radius: inherit;
+  background: none;
+  color: var(--text-primary);
+  font: inherit;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.settings-card > .automation-prompt::placeholder {
+  color: var(--text-tertiary);
 }
 
 /* Settings ------------------------------------------------------------------- */
@@ -2893,6 +4578,22 @@ body:has(.app-stage[data-capture="true"])
   list-style: none;
 }
 
+/* The page list's three groups, a section's gap apart, each under its
+   heading; the first is headed by the listed workspace's tile and name, in
+   the primary ink, as the plans' sidebar heads its list
+   (`desktop-settings.tsx`). */
+.settings-nav-group + .settings-nav-group {
+  margin-top: var(--section-gap);
+}
+
+.settings-nav-workspace {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-6);
+  color: var(--text-primary);
+}
+
 /* A page that needs a hand wears the front page's own mark at the row's end,
    where the front page's row wears it before its chevron. */
 .settings-pages .sidebar-item .settings-attention {
@@ -2949,8 +4650,10 @@ body:has(.app-stage[data-capture="true"])
   scroll-margin-top: calc(var(--space-32) + 3 * var(--control-height));
 }
 
-/* The measure a Settings page's head and rows read at, and a row's height. */
-.settings-page {
+/* The measure a Settings page's head and rows read at, and a row's height,
+   which an automation's page, drawn as a Settings page, takes its rows' from. */
+.settings-page,
+.automation-editor {
   --settings-width: 640px;
   --settings-row-height: 52px;
 }
@@ -3044,38 +4747,9 @@ body:has(.app-stage[data-capture="true"])
 }
 
 /* Who wrote the version, beside its two lines, as the rest of the window
-   draws them: Luke's face in his colour as the Transcript wears it, a
-   person's picture, an agent's harness. */
-.version-row-mark {
-  display: grid;
-  flex: none;
-  place-items: center;
-  width: 18px;
-  height: 18px;
-  color: var(--text-secondary);
-}
-
-.version-row-mark svg {
-  width: 16px;
-  height: 16px;
-}
-
-.version-row-mark .sidebar-avatar {
-  width: 18px;
-  height: 18px;
-  font-size: 10px;
-}
-
-.version-row-luke .luke-face {
-  width: 18px;
-  height: 18px;
-  color: var(--voice-luke);
-}
-
-.version-row-earlier svg {
-  width: 15px;
-  height: 15px;
-  color: var(--text-tertiary);
+   draws them (`actor-ref.tsx`), level with the author's line. */
+.version-row > .actor-mark {
+  margin-top: 1px; /* off-scale: the author line's half-leading */
 }
 
 .version-row-text {
@@ -3101,10 +4775,6 @@ body:has(.app-stage[data-capture="true"])
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.version-row-author[data-author="luke"] {
-  color: var(--voice-luke);
 }
 
 .version-row-time {
@@ -4283,6 +5953,30 @@ body:has(.app-stage[data-capture="true"])
   background: var(--hairline);
 }
 
+/* A card's way to the page of what it is about, under its rule, set as a
+   menu's row: its fill washes off the card's edge on hover. */
+.card-door {
+  display: flex;
+  width: calc(100% + 2 * var(--row-inset));
+  height: var(--menu-row-height);
+  align-items: center;
+  margin-inline: calc(-1 * var(--row-inset));
+  padding: 0 var(--row-inset);
+  border: 0;
+  border-radius: var(--menu-row-radius);
+  background: none;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  transition: background-color var(--duration-hover) ease;
+}
+
+.card-door:is(:hover, :focus-visible) {
+  outline: none; /* no ring: the row's fill marks it, as a menu row's does */
+  background: var(--raised-strong);
+}
+
 /* Renamed in place, the label gives way to a field in the same type,
    ringed rather than bordered so nothing moves. */
 .tab-button[data-editing="true"] {
@@ -4381,6 +6075,17 @@ body:has(.app-stage[data-capture="true"])
   display: flex;
   align-items: center;
   gap: var(--list-gap);
+}
+
+/* The one slot a column's bar keeps for the ⋯ that acts on its chosen tab:
+   the plan's on the plan's tab, another tab's own, or none on a tab with no
+   action of the kind. It holds a button's width either way, so nothing in
+   the bar moves as the developer goes from tab to tab. */
+.toolbar-tab-actions {
+  display: flex;
+  min-width: var(--control-height);
+  flex: none;
+  align-items: center;
 }
 
 /* A tab dragged in the plan's column is lifted on the column's ground. */
@@ -5048,6 +6753,20 @@ body:has(.app-stage[data-capture="true"])
   gap: var(--space-12);
 }
 
+/* The title says where the plan starts, "New plan in", then the workspace's
+   chip in the title's own line, as Linear's team chip stands in its title. */
+.new-plan-title {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-6);
+}
+
+.new-plan-workspace {
+  position: relative;
+  min-width: 0;
+}
+
 .dialog-name-field {
   width: 100%;
   padding: var(--space-8) var(--space-12);
@@ -5067,6 +6786,64 @@ body:has(.app-stage[data-capture="true"])
 
 .confirm-dialog-actions > .repository-chip {
   margin-right: auto;
+}
+
+/* Move to workspace (`move-plan-dialog.tsx`): the other workspaces as rows,
+   a tile and two lines each, the chosen one ringed and one that cannot take
+   the plan dimmed, then what the move does in a well under them. */
+.move-dialog {
+  width: min(440px, 100%);
+  gap: var(--space-12);
+}
+
+.move-list {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.move-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-12);
+  padding: var(--space-8);
+  border: 0;
+  border-radius: var(--control-radius);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  transition: background-color var(--duration-hover) ease;
+}
+
+.move-row:hover:not(:disabled) {
+  background: var(--raised);
+}
+
+.move-row[aria-checked="true"] {
+  background: var(--raised-strong);
+  box-shadow: inset 0 0 0 1px var(--selected-edge);
+}
+
+.move-row:disabled {
+  opacity: 0.55;
+}
+
+.move-row .workspace-ref-name {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.move-effects {
+  display: grid;
+  gap: var(--space-4);
+  margin: 0;
+  padding: var(--space-12) var(--space-12) var(--space-12) var(--space-24);
+  border-radius: var(--control-radius);
+  background: var(--raised);
+  color: var(--text-body);
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 /* The window's passing notices (`toast.tsx`): up to three cards stacked in

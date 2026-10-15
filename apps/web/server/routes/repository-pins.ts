@@ -1,5 +1,5 @@
-import { resolveHostedUserId } from "../hosted/bearer.js";
-import { repositoryPinsApp } from "../repository-pins-app.js";
+import { resolveHostedUserId } from "@luke/service/auth/bearer";
+import { repositoryPinsApp } from "@luke/service/github/repository-pins-app";
 import { routeFromHttpRouter } from "../route-effect.js";
 
 /** The repositories the account pinned in the sidebar: read them (GET), or pin or unpin one (PUT). */

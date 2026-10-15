@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import {
   CHECK_SUMMARY,
   CODING_AGENT_STATUS,
@@ -6,9 +7,11 @@ import {
   type CodingAgentMessage,
   type CodingAgentPullRequest,
   PULL_REQUEST_STATE,
-} from "@sidecar/features/coding-agent-wire";
-import { MODEL_PROVIDER } from "@sidecar/features/models-wire";
-import { MESSAGE_ROLE } from "@sidecar/wire";
+} from "@luke/features/coding-agent-wire";
+import { FAILURE_REASON } from "@luke/features/failure-remedy";
+import { MODEL_PROVIDER } from "@luke/features/models-wire";
+import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
+import { MESSAGE_ROLE } from "@luke/wire";
 import { test } from "vitest";
 import { TOOL_STATE } from "../ai-elements/tool";
 import {
@@ -24,6 +27,8 @@ import {
   effortFor,
   followsAgent,
   knownDeveloperRows,
+  messageFailureNote,
+  messageFailureWords,
   messageWords,
   modelLabel,
   offeredModels,
@@ -468,4 +473,38 @@ test("a planning transcript's raw parts read as the agent tab reads them: eve's 
   assert.equal(startedAgentOf(started), "agent-9");
   assert.equal(startedAgentOf(refused), undefined);
   assert.equal(startedAgentOf(worker), undefined);
+});
+
+test("a message refused for a repository out of reach names the plan's remedy on a plan, and on an agent with no plan says its words alone but where the remedy needs no plan", () => {
+  const refused = {
+    failure: CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
+    unreached: { reason: REPOSITORY_UNREACHED.NOT_CONNECTED, repository: "acme/relay" },
+  } as const;
+
+  const onPlan = messageFailureNote(refused, "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10");
+  const planless = messageFailureNote(refused, null);
+
+  assert.equal("planId" in onPlan && onPlan.planId, "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10");
+  assert.deepEqual(planless, {
+    reason: FAILURE_REASON.OTHER,
+    text: messageFailureWords(CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE),
+  });
+  // Giving the repository to Luke on GitHub is pressed on GitHub, not the plan, so it stands for an agent with no plan.
+  const notSelected = messageFailureNote(
+    {
+      failure: CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
+      unreached: {
+        reason: REPOSITORY_UNREACHED.NOT_SELECTED,
+        repository: "acme/relay",
+        settingsUrl: "https://github.com/settings/installations/7",
+      },
+    },
+    null,
+  );
+  assert.deepEqual(notSelected, {
+    reason: FAILURE_REASON.ADD_REPOSITORY,
+    text: "Luke on GitHub doesn't have access to acme/relay.",
+    repository: "acme/relay",
+    settingsUrl: "https://github.com/settings/installations/7",
+  });
 });

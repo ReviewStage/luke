@@ -3,15 +3,15 @@ import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import { EFFECT_MIGRATION_FOLDERS } from "@sidecar/database/core/effect-migration-folders";
+import { EFFECT_MIGRATION_FOLDERS } from "@luke/database/core/effect-migration-folders";
 import {
   DRIZZLE_MIGRATIONS,
   EFFECT_MIGRATIONS_TABLE,
   MIGRATIONS_FOLDER,
   MigrationHistoryUnmapped,
   runWebMigrations,
-} from "@sidecar/database/core/migrator";
-import { getTestDB, unmigratedPgliteSqlClient } from "@sidecar/database/testing";
+} from "@luke/database/core/migrator";
+import { getTestDB, unmigratedPgliteSqlClient } from "@luke/database/testing";
 import { Effect, Layer } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { Path } from "effect/Path";

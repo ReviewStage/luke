@@ -2,7 +2,7 @@
   "name": "luke",
   "version": "0.13.0",
   "private": true,
-  "description": "A notch-attached desktop sidecar for coding-agent sessions",
+  "description": "Luke is a macOS app for planning a feature by voice before you hand it to a coding agent",
   "packageManager": "pnpm@10.34.5",
   "engines": {
     "node": ">=24.0.0"
@@ -11,7 +11,7 @@
     "build": "pnpm --recursive --if-present run build",
     "check": "node scripts/check.mjs",
     "check:affected": "./scripts/check.sh --affected",
-    "db:generate": "pnpm --filter @sidecar/database db:generate",
+    "db:generate": "pnpm --filter @luke/database db:generate",
     "discarded-effect": "node scripts/discarded-effect.mjs",
     "format": "biome format --write .",
     "knip": "knip --no-config-hints",

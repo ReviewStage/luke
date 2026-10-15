@@ -1,5 +1,12 @@
 import { useAtom, useAtomValue } from "@effect/atom-react";
-import type { IntegrationStatusView } from "@sidecar/features/integration-view";
+import {
+  signInBegun as begunSignIn,
+  SIGN_IN,
+  type SignIn,
+  signInAfterRead,
+  signInGraced,
+} from "@luke/features/integration-sign-in";
+import type { IntegrationStatusView } from "@luke/features/integration-view";
 import {
   INTEGRATION_GRANT,
   INTEGRATION_GRANT_OF,
@@ -8,19 +15,12 @@ import {
   type IntegrationProvider,
   type IntegrationSignInFailure,
   type IntegrationStatus,
-} from "@sidecar/features/integration-wire";
+} from "@luke/features/integration-wire";
+import { ACT_KIND } from "@luke/host/acts";
 import { Clock, Context, Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "./act";
-import {
-  signInBegun as begunSignIn,
-  SIGN_IN,
-  type SignIn,
-  signInAfterRead,
-  signInGraced,
-} from "./integration-sign-in";
 import { rendererRuntime } from "./renderer-runtime";
 
 /**

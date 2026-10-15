@@ -1,12 +1,12 @@
-import type { BrainModelUsage, BrainRunUsage } from "@sidecar/features/brain";
+import type { BrainModelUsage, BrainRunUsage } from "@luke/features/brain";
 import {
   type MessageRole,
   type StoredMessageMetadata,
   TURN_STATUS,
   type TurnOrigin,
   type TurnStatus,
-} from "@sidecar/wire";
-import type { StoredUIMessage } from "@sidecar/wire/ui-messages";
+} from "@luke/wire";
+import type { StoredUIMessage } from "@luke/wire/ui-messages";
 import { sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
@@ -21,7 +21,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { CONVERSATION_KIND } from "../storage-vocabulary.js";
+import { CONVERSATION_KIND, type MessageSender } from "../storage-vocabulary.js";
 import { createdAt, timestamptz } from "./_helpers.js";
 import { user } from "./auth.js";
 
@@ -128,7 +128,7 @@ export const messages = pgTable(
     role: text("role").$type<MessageRole>().notNull(),
     /** The message's parts exactly as the SDK shapes them; read back through `readStoredUIMessages`, never the SDK's validator alone. */
     parts: jsonb("parts").$type<StoredUIMessage["parts"]>().notNull(),
-    /** The `@sidecar/wire` metadata for the row's role; a system row carries none. */
+    /** The `@luke/wire` metadata for the row's role; a system row carries none. */
     metadata: jsonb("metadata").$type<StoredMessageMetadata>(),
     createdAt: createdAt(),
     finishedAt: timestamptz("finished_at"),
@@ -140,6 +140,17 @@ export const messages = pgTable(
      * a row placed back among the messages it belongs with.
      */
     placedAt: timestamptz("placed_at").notNull(),
+    /** What sent a developer's line to a coding agent (`MESSAGE_SENDER`); null on every other row, and on a line written before senders were kept. */
+    sender: text("sender").$type<MessageSender>(),
+    /** The member who sent the line, where a member did; set null with their account, which then reads as a former member's. */
+    senderUserId: text("sender_user_id").references(() => user.id, { onDelete: "set null" }),
+    /**
+     * The automation whose run sent the line, by its name as it stood then;
+     * null on every other row. Note that the name is kept rather than a
+     * reference, because an automation is deleted outright and a reference
+     * would have every delete look through every message for its lines.
+     */
+    senderName: text("sender_name"),
   },
   (table) => [
     unique("messages_conversation_client").on(table.conversationId, table.clientId),
@@ -236,7 +247,7 @@ export const turns = pgTable(
  * conversation.
  *
  * A spoken ask also carries what a re-attached connection needs to pick it
- * up again: the live session it was delegated in, its task revision in that
+ * up again: the live session it was delegated in, its ask revision in that
  * session's order, how far its turn's events were told to the voice, and
  * when the run's end was told. A typed ask has none of them.
  */
@@ -264,7 +275,7 @@ export const asks = pgTable(
     /** The Live API's id of the voice session a spoken ask was delegated in; null for a typed ask. */
     voiceSessionId: text("voice_session_id"),
     /** The spoken ask's place in its voice session's order of delegations: a higher revision supersedes a lower. */
-    taskRevision: integer("task_revision"),
+    askRevision: integer("task_revision"),
     /** The last event of the ask's turn told to the voice under this ask short of its end, written before it is told. */
     toldSeq: integer("told_seq").notNull().default(0),
     /** When the run's end was told to the voice under this ask, written before it is told. */

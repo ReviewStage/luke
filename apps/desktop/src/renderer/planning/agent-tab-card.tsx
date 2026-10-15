@@ -1,9 +1,32 @@
-import type { CodingAgentMessage, CodingAgentStatus } from "@sidecar/features/coding-agent-wire";
-import type { CatalogModel, ModelChoice } from "@sidecar/features/models-wire";
-import { CardHead, CardNote, HoverCard } from "../hover-card";
-import { agentParts, agentStillWriting, isDelegation } from "./coding-agent-model";
+import type {
+  CodingAgentMessage,
+  CodingAgentPullRequest,
+  CodingAgentStatus,
+} from "@luke/features/coding-agent-wire";
+import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
+import type { PlanEditor } from "@luke/features/plan-wire";
+import type { Actor } from "@luke/ui/actor-model";
+import {
+  ACTOR_SIZE,
+  ActorLine,
+  ActorMark,
+  ActorRef,
+  AutomationCard,
+  automationActor,
+  CardDoor,
+} from "../actor-ref";
+import { useAutomation } from "../automation-directory";
+import { CardHead, CardNote, CardRule, HoverCard } from "../hover-card";
+import { usePerson } from "../member-directory";
+import {
+  agentParts,
+  agentStillWriting,
+  isDelegation,
+  pullRequestNumberLabel,
+} from "./coding-agent-model";
 import { ModelLabel } from "./model-label";
 import { useMinute } from "./plan-time";
+import { PullRequestMark } from "./pull-request-mark";
 import { RelativeTime } from "./relative-time";
 import { delegationView } from "./tool-call-model";
 import { type CopiedTranscript, LATEST_ACTIVITY, latestActivity } from "./transcript-copy";
@@ -27,6 +50,14 @@ import { WorkingTime } from "./working-time";
  * it stands one line of the latest step, faded where it is cut short as a
  * tab's label is: the agent's last words as plain text, or its last call as
  * the concise copy says it (`transcript-copy.ts`'s `latestActivity`).
+ *
+ * An agent's card wears its tile beside its name (`actor-ref.tsx`), its
+ * pull request at the corner's lead where the place holds one, and
+ * "Started by" and who did: the automation whose run started it, by its
+ * clock and name, where the window knows it, or else, for a teammate's
+ * agent, the teammate's disc and name; either hangs its own card over this
+ * one. Hung from a place other than its tab,
+ * it ends on "Open agent" under a rule, which opens the tab.
  *
  * The step is read from what a tab already holds, never fetched on hover:
  * the transcript the agent's tab last drew (`HeldTranscript`), while it is
@@ -59,6 +90,9 @@ const ENDED_SEPARATOR = " · ";
 /** What the corner says before the count while the agent works, as its transcript's last line does. */
 const WORKING_WORD = "Working…";
 
+/** What a card's way to the agent's tab says. */
+const OPEN_AGENT = "Open agent";
+
 /** The transcript an agent's or a worker's tab last drew, and where the agent stood, since when its run began, and the titles it and its workers bear, as the page it was read from said. */
 export interface HeldTranscript {
   readonly messages: readonly CodingAgentMessage[];
@@ -75,6 +109,14 @@ export interface CardReading {
   readonly corner: CardCorner;
   readonly choice: ModelChoice | undefined;
   readonly transcript: CopiedTranscript | undefined;
+  /** The teammate who started the agent, as the wire names them, drawn "Started by [disc] Charles Pan"; none for the reader's own, or a card that is no agent's. */
+  readonly startedBy?: PlanEditor | undefined;
+  /** The automation whose run started the agent, drawn "Started by [clock] Morning Sentry triage" in the starter's place where the window knows it. */
+  readonly automationId?: string | undefined;
+  /** The agent's own tile, beside its name; none on a card that is no agent's, or of one the place does not hold. */
+  readonly tile?: Actor | undefined;
+  /** The pull request the agent opened, where the place holds it, at the head's corner. */
+  readonly pullRequest?: Pick<CodingAgentPullRequest, "number" | "state" | "checks"> | undefined;
 }
 
 function Corner({ corner }: { corner: CardCorner }): React.JSX.Element | null {
@@ -98,6 +140,57 @@ function Corner({ corner }: { corner: CardCorner }): React.JSX.Element | null {
     case CARD_CORNER.NONE:
       return null;
   }
+}
+
+/** What the head says at its right: the agent's pull request where the place holds one, then where the agent stands; nothing where neither is known. */
+function headCorner(
+  corner: CardCorner,
+  pullRequest: CardReading["pullRequest"],
+): React.ReactNode | undefined {
+  const standing = corner.kind === CARD_CORNER.NONE ? undefined : <Corner corner={corner} />;
+  if (pullRequest === undefined) return standing;
+  return (
+    <>
+      <PullRequestMark pullRequest={pullRequest} />
+      {pullRequestNumberLabel(pullRequest)}
+      {standing === undefined ? null : ENDED_SEPARATOR}
+      {standing}
+    </>
+  );
+}
+
+/**
+ * Who started the agent: the automation whose run did, by its clock and
+ * name, which hang its card and open its page, where the window knows it
+ * (`automation-directory.tsx`); else a teammate, by their disc and name,
+ * which hang their card; else nobody.
+ */
+function StartedBy({
+  by,
+  automationId,
+}: {
+  by: PlanEditor | undefined;
+  automationId: string | undefined;
+}): React.JSX.Element | null {
+  const person = usePerson(by);
+  const known = useAutomation(automationId);
+  if (known === undefined && by === undefined) return null;
+  return (
+    <CardNote oneLine>
+      <ActorLine>
+        {"Started by "}
+        {known === undefined ? (
+          <ActorRef actor={person} />
+        ) : (
+          <ActorRef
+            actor={automationActor(known.automation)}
+            card={<AutomationCard {...known} />}
+            onOpen={known.onOpen}
+          />
+        )}
+      </ActorLine>
+    </CardNote>
+  );
 }
 
 /** The one line of the latest step, faded at its end where it is cut short. */
@@ -180,12 +273,20 @@ export function heldLatest(
   return !agentStillWriting(held.status) && !now.writing ? held.messages : undefined;
 }
 
-/** The card: the name, its model under it, and its corner, then the latest step where the tab holds one current. */
+/**
+ * The card: the agent's tile, the name, its model under it, and its
+ * corner, then who started it, the latest step where the tab holds one
+ * current, and under a rule what a tab of the agent's other than its own
+ * adds, as its Terminal tab says whose sandbox it is in, and the way to its
+ * tab where the card hangs elsewhere.
+ */
 export function AgentTabCard({
   name,
   untitled = false,
   models,
   read,
+  foot,
+  onOpen,
 }: {
   name: string;
   /** Whether the name is a subagent's task standing in until it has a title. */
@@ -194,17 +295,35 @@ export function AgentTabCard({
   models: readonly CatalogModel[];
   /** What the card says, read from what the tab holds as the card is hung. */
   read: () => CardReading;
+  /** One line under a rule, said by a tab of the agent's other than its own. */
+  foot?: React.ReactNode;
+  /** Opens the agent's tab, offered under a rule where the card hangs from a place other than the tab. */
+  onOpen?: (() => void) | undefined;
 }): React.JSX.Element {
-  const { corner, choice, transcript } = read();
+  const { corner, choice, transcript, startedBy, automationId, tile, pullRequest } = read();
+  const head = (
+    <CardHead
+      name={name}
+      oneLine={untitled}
+      sub={choice === undefined ? undefined : <ModelLabel choice={choice} models={models} />}
+      corner={headCorner(corner, pullRequest)}
+    />
+  );
   return (
     <HoverCard data-tab-card="">
-      <CardHead
-        name={name}
-        oneLine={untitled}
-        sub={choice === undefined ? undefined : <ModelLabel choice={choice} models={models} />}
-        corner={corner.kind === CARD_CORNER.NONE ? undefined : <Corner corner={corner} />}
-      />
+      {tile === undefined ? (
+        head
+      ) : (
+        <div className="actor-card-head">
+          <ActorMark actor={tile} size={ACTOR_SIZE.CARD} />
+          {head}
+        </div>
+      )}
+      <StartedBy by={startedBy} automationId={automationId} />
       {transcript === undefined ? null : <ActivityLine transcript={transcript} />}
+      {foot === undefined && onOpen === undefined ? null : <CardRule />}
+      {foot === undefined ? null : <CardNote>{foot}</CardNote>}
+      {onOpen === undefined ? null : <CardDoor label={OPEN_AGENT} onOpen={onOpen} />}
     </HoverCard>
   );
 }

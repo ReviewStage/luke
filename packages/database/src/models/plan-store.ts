@@ -1,20 +1,22 @@
-import { AUTOMATION_SCOPE } from "@sidecar/features/automation-wire";
-import type { PlanSectionWriter } from "@sidecar/features/plan-document";
-import { DEFAULT_PLAN_TEMPLATE } from "@sidecar/features/plan-document-template";
-import { type PlanAgentEdit, planAgentEditSchema } from "@sidecar/features/plan-template";
+import { AUTOMATION_SCOPE } from "@luke/features/automation-wire";
+import type { PlanSectionWriter } from "@luke/features/plan-document";
+import { DEFAULT_PLAN_TEMPLATE } from "@luke/features/plan-document-template";
+import { type PlanAgentEdit, planAgentEditSchema } from "@luke/features/plan-template";
 import {
   PLAN_ACTOR,
   type Plan,
   type PlanLastEdit,
   type PlanSectionEdit,
   type PlanSummary,
-} from "@sidecar/features/plan-wire";
+} from "@luke/features/plan-wire";
 import { and, desc, eq, exists, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { Data, DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
 import { automation } from "../schemas/automation.js";
 import { codingAgent } from "../schemas/coding-agent.js";
+import { inboxItem } from "../schemas/inbox.js";
+import { inboxAttachment } from "../schemas/inbox-attachment.js";
 import { personalWorkspace } from "../schemas/personal-workspace.js";
 import { plan } from "../schemas/plan.js";
 import { conversations } from "../schemas/storage.js";
@@ -24,7 +26,7 @@ import { readPlanTemplate } from "./account-store.js";
 import { InstantColumnSchema } from "./columns.js";
 import { readLastEdit, readSectionWriters, UNKNOWN_AGENT_LABEL } from "./plan-revisions.js";
 import { readTemplateAt } from "./plan-template-revisions.js";
-import { planReachableBy, reachablePlan } from "./workspace-store.js";
+import { planReachableBy, reachablePlan, readAccountNames } from "./workspace-store.js";
 
 /**
  * plan-store.ts -- the named plans of an account's workspaces, and the one document each holds.
@@ -133,6 +135,7 @@ export interface PlanChanges {
  */
 const PLAN_SUMMARY_COLUMNS = {
   id: plan.id,
+  userId: plan.userId,
   organizationId: plan.organizationId,
   name: plan.name,
   repository: plan.repository,
@@ -145,7 +148,6 @@ const PLAN_SUMMARY_COLUMNS = {
 /** The columns every other read and every `returning` projects, so a row decodes one way whatever wrote it. */
 const PLAN_COLUMNS = {
   ...PLAN_SUMMARY_COLUMNS,
-  userId: plan.userId,
   agentEdits: plan.agentEdits,
   document: plan.document,
   conversationId: plan.conversationId,
@@ -153,6 +155,7 @@ const PLAN_COLUMNS = {
 
 const PlanSummaryRowSchema = Schema.Struct({
   id: Schema.String,
+  userId: Schema.String,
   organizationId: Schema.String,
   name: Schema.String,
   repository: Schema.NullOr(Schema.String),
@@ -166,7 +169,6 @@ type PlanSummaryRow = typeof PlanSummaryRowSchema.Type;
 
 const PlanRowSchema = Schema.Struct({
   ...PlanSummaryRowSchema.fields,
-  userId: Schema.String,
   agentEdits: Schema.Array(planAgentEditSchema),
   // Every plan is one document since the backfill, so a row with none is the store breaking its own contract.
   document: Schema.String,
@@ -233,6 +235,7 @@ function sectionEditOf(
     section,
     actor,
     ...(actor === PLAN_ACTOR.AGENT ? { label: label ?? UNKNOWN_AGENT_LABEL } : undefined),
+    ...(writer.agentId === undefined ? undefined : { agentId: writer.agentId }),
     ...(writer.by === undefined ? undefined : { by: writer.by }),
     at,
     duringCall: writer.duringCall === true,
@@ -245,7 +248,13 @@ function sectionEditOf(
  * thing the service can name a writer for.
  */
 function journaledEdit(edit: LabelledAgentEdit): PlanLastEdit {
-  return { actor: PLAN_ACTOR.AGENT, label: edit.label, at: edit.at, duringCall: false };
+  return {
+    actor: PLAN_ACTOR.AGENT,
+    label: edit.label,
+    agentId: edit.agentId,
+    at: edit.at,
+    duringCall: false,
+  };
 }
 
 /** The text the row's plan started as (`readStartedText`). */
@@ -264,7 +273,7 @@ function startedText(row: PlanRow): PlanStoreEffect<string> {
  */
 function storedPlanOf(row: PlanRow): PlanStoreEffect<StoredPlan> {
   return Effect.gen(function* () {
-    const summary = summaryOf(row);
+    const summary = summaryOf(row, yield* readAccountNames([row.userId]));
     const sectionWriters = yield* readSectionWriters(row.id, startedText(row));
     const labels = yield* agentLabelsOf(row, sectionWriters);
     const agentEdits = row.agentEdits.map((edit) => ({
@@ -298,14 +307,17 @@ function planOf(row: PlanRow): PlanStoreEffect<Plan> {
 }
 
 /**
- * The row as one line of the list. Note that `openedAt` is still answered,
- * as the start, because a desktop through v0.7.1 refuses a summary without it.
- * It goes once a release whose decoder treats it as optional has shipped and
- * v0.7.1 is no longer supported. A pin and an archive are answered only where
- * they stand, so a plan that is neither reads as every plan did before them.
+ * The row as one line of the list, its owner named by `names`. Note that
+ * `openedAt` is still answered, as the start, because a desktop through
+ * v0.7.1 refuses a summary without it. It goes once a release whose decoder
+ * treats it as optional has shipped and v0.7.1 is no longer supported. A pin
+ * and an archive are answered only where they stand, so a plan that is
+ * neither reads as every plan did before them; an owner whose account is gone
+ * is named by nothing.
  */
-function summaryOf(row: PlanSummaryRow): PlanSummary {
+function summaryOf(row: PlanSummaryRow, names: ReadonlyMap<string, string>): PlanSummary {
   const createdAt = row.createdAt.getTime();
+  const owner = names.get(row.userId);
   return {
     id: row.id,
     workspaceId: row.organizationId,
@@ -314,6 +326,8 @@ function summaryOf(row: PlanSummaryRow): PlanSummary {
     updatedAt: row.updatedAt.getTime(),
     repository: row.repository,
     openedAt: createdAt,
+    ownerId: row.userId,
+    ...(owner === undefined ? undefined : { createdBy: { userId: row.userId, name: owner } }),
     ...(row.pinnedAt === null ? undefined : { pinnedAt: row.pinnedAt.getTime() }),
     ...(row.archivedAt === null ? undefined : { archivedAt: row.archivedAt.getTime() }),
   };
@@ -621,10 +635,11 @@ export function listPlans(
   userId: string,
   options: { readonly includeArchived?: boolean } = {},
 ): PlanStoreEffect<readonly PlanSummary[]> {
-  return Effect.map(
-    findPlans({ userId, includeArchived: options.includeArchived === true }),
-    (rows) => rows.map(summaryOf),
-  );
+  return Effect.gen(function* () {
+    const rows = yield* findPlans({ userId, includeArchived: options.includeArchived === true });
+    const names = yield* readAccountNames(rows.map((row) => row.userId));
+    return rows.map((row) => summaryOf(row, names));
+  });
 }
 
 /**
@@ -717,6 +732,26 @@ const followingAutomations = SqlSchema.void({
 });
 
 /**
+ * The plan's agents and inbox moved along with it to another workspace, so
+ * no row of the plan's stays tied to the workspace it left, whose deletion
+ * would otherwise take them with it.
+ */
+const followingAgentsAndInbox = Effect.fnUntraced(function* (
+  planId: string,
+  organizationId: string,
+) {
+  yield* Database.use((db) =>
+    db.update(codingAgent).set({ organizationId }).where(eq(codingAgent.planId, planId)),
+  );
+  yield* Database.use((db) =>
+    db.update(inboxItem).set({ organizationId }).where(eq(inboxItem.planId, planId)),
+  );
+  yield* Database.use((db) =>
+    db.update(inboxAttachment).set({ organizationId }).where(eq(inboxAttachment.planId, planId)),
+  );
+});
+
+/**
  * Changes the plan, a new name with its document's heading, a repository or
  * none, pinned or not, archived or not, its workspace, and answers it as
  * changed, or nothing where the account reaches no such plan. The changes
@@ -776,6 +811,9 @@ export function updatePlan<E = never, R = never>(
             organizationId: row.organizationId,
             repository: row.repository,
           });
+        }
+        if (changes.organizationId !== undefined) {
+          yield* followingAgentsAndInbox(planId, row.organizationId);
         }
         return Option.some(yield* planOf(row));
       }),
