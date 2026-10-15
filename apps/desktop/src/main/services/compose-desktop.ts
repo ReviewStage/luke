@@ -11,7 +11,12 @@ import { effectServiceLayer, serviceLayer } from "@luke/host/service-layer";
 import { APP_SETTING_SCHEMA, NO_EXPERIMENTS } from "@luke/settings";
 import { callInProgress } from "@luke/voice/voice-view";
 import { Context, Effect, Layer, Stream } from "effect";
-import { AgentNoticeDoors, type AgentNotices, createAgentNotices } from "../agent-notices";
+import {
+  AgentNoticeDoors,
+  type AgentNotices,
+  createAgentNotices,
+  noticePlanTitle,
+} from "../agent-notices";
 import { AppStateStore, initialAppState } from "../app-state";
 import { registerDesktopIpc } from "../ipc/register-desktop-ipc";
 import { createElectronUpdaterEngine } from "../update-installer";
@@ -221,14 +226,7 @@ export function composeDesktop(
       const notices = yield* createAgentNotices({
         listAgents: (planId) => operator.host.codingAgentList({ planId }),
         readPullRequest: (agentId) => operator.host.codingAgentPullRequest({ agentId }),
-        planName: (planId) => {
-          const { planning } = state.snapshot();
-          const open = planning.document.plan;
-          return (
-            planning.plans.find((plan) => plan.id === planId)?.name ??
-            (open?.id === planId ? open.name : undefined)
-          );
-        },
+        planName: (planId) => noticePlanTitle(state.snapshot().planning, planId),
         open: (place) => {
           windows.panels.focusExpanded();
           windows.showAgent(place);

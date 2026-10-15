@@ -18,6 +18,7 @@ import {
 import { INBOX_CURSOR_START } from "@luke/features/inbox-wire";
 import { modelLabel } from "@luke/features/model-label";
 import type { CatalogModel } from "@luke/features/models-wire";
+import type { PlanningView } from "@luke/features/planning-view";
 import { scheduleOnce } from "@luke/runtime/effect";
 import { Context, Duration, Effect, Queue, Schedule, type Scope, Stream } from "effect";
 import type { AppInboxSlice, AppInboxWaitingItem } from "#shared/messages/app-state";
@@ -171,7 +172,7 @@ export interface AgentNoticesDependencies {
   listAgents: (planId: string) => Effect.Effect<CodingAgentListAnswer>;
   /** What the agent published, read once as a completed turn ends for the pull request the notice names. */
   readPullRequest: (agentId: string) => Effect.Effect<CodingAgentPullRequestAnswerView>;
-  /** The plan's name as main holds it, or nothing for a plan it holds no name for. */
+  /** The plan as a notice's title names it (`noticePlanTitle`), or nothing for a plan main holds no name for. */
   planName: (planId: string) => string | undefined;
   /** Brings Luke forward on the plan with the agent's tab open: the click's whole effect. */
   open: (place: AgentPlace) => void;
@@ -233,6 +234,25 @@ interface HeldAgent {
   awaiting: boolean;
   /** The turns the agent has left behind, which a list that landed late may still describe. */
   pastTurns: ReadonlySet<string>;
+}
+
+/**
+ * The plan a notice is about, as its title names it: the plan's name, led by
+ * its workspace's where the account is in more than one, "Acme · Billing
+ * export", so a notice from a workspace the window is not listing says
+ * whose it is; nothing for a plan main holds no name for.
+ */
+export function noticePlanTitle(
+  planning: Pick<PlanningView, "plans" | "workspaces" | "document">,
+  planId: string,
+): string | undefined {
+  const open = planning.document.plan;
+  const listed = planning.plans.find((plan) => plan.id === planId);
+  const plan = listed ?? (open?.id === planId ? open : undefined);
+  if (plan === undefined) return undefined;
+  if (planning.workspaces.length <= 1) return plan.name;
+  const workspace = planning.workspaces.find((each) => each.id === plan.workspaceId);
+  return workspace === undefined ? plan.name : `${workspace.name} · ${plan.name}`;
 }
 
 /** One turn's end as the ledger saw it, waiting to be announced, and whether the window was focused as it ended. */

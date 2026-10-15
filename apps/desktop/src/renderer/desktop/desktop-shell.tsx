@@ -28,6 +28,7 @@ import { PaneGlide } from "./pane-motion";
 import { useSummaryPin } from "./plan-summary";
 import { SidePanelToggle } from "./side-panel";
 import { SIDEBAR_OVERLAY, type SidebarCollapse } from "./sidebar-collapse";
+import { useWindowTitle } from "./window-title";
 
 /** What stands between the developer and the window's own content: the account sign-in. */
 export interface DesktopGates {
@@ -261,6 +262,16 @@ export function DesktopShell({
     plans.sidePanel.fullScreen,
     `${tab}:${plans.page}:${plans.history.open}:${plans.inboxView.open}:${sidebar.collapsed}`,
   );
+  // The window's title names the open plan and the workspace it is in.
+  const openPlan = region.kind === DOCUMENT_REGION.READY ? region.plan : undefined;
+  useWindowTitle({
+    signedIn: plans.signedIn,
+    planName: openPlan?.name,
+    workspace:
+      (openPlan === undefined
+        ? undefined
+        : plans.workspaces.find((each) => each.id === openPlan.workspaceId)) ?? plans.workspace,
+  });
   // The plan is looked at only while it is on screen, which the Inbox standing in its place is not.
   const looks = usePlanLooks(
     tab === PANEL_TAB.PLANS && !plans.inboxView.open && region.kind === DOCUMENT_REGION.READY
