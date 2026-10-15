@@ -110,6 +110,10 @@ export const wireKeys =
     const onWire = Object.fromEntries(
       Object.entries(self.fields).map(([key, field]) => [toWire[key] ?? key, field]),
     );
+    // Two fields under one wire key would leave one unreadable, which is a declaration's mistake.
+    if (Object.keys(onWire).length !== Object.keys(self.fields).length) {
+      throw new Error(`wireKeys: two fields travel under one key in ${JSON.stringify(toWire)}`);
+    }
     // SAFETY: `onWire` is `self.fields` with each key the mapping names under its wire name, which is `WireKeyedFields` spelled out.
     const wire = Schema.Struct(onWire as WireKeyedFields<F, M>);
     type Read = Schema.Struct<F>["Type"];

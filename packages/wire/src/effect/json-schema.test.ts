@@ -20,6 +20,15 @@ test("a struct with wire keys reads and writes the wire's key, decoding each fie
   assert.ok(Result.isFailure(readEither(RENAMED)({ planId: "eleven char" })), "a bound holds");
 });
 
+test("a struct whose wire keys would put two fields under one key is refused as it is declared", () => {
+  const both = Schema.Struct({ taskId: SAID, planId: SAID });
+
+  assert.throws(
+    () => both.pipe(wireKeys({ taskId: "planId" })),
+    /two fields travel under one key/u,
+  );
+});
+
 test("a struct with wire keys emits the wire's keys with every field's bounds", () => {
   const said = { type: "string", minLength: 1, maxLength: 10 };
 
