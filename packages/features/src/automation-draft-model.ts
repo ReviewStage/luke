@@ -173,6 +173,16 @@ function targetOf(draft: AutomationDraft): AutomationTarget {
     : { kind: AUTOMATION_TARGET.NEW_AGENT };
 }
 
+/** Whether two GitHub triggers keep to the same labels and branches, in the order given. */
+function sameFilters(
+  one: AutomationDraft["githubFilters"],
+  other: AutomationDraft["githubFilters"],
+) {
+  const same = (a: readonly string[] = [], b: readonly string[] = []) =>
+    a.length === b.length && a.every((each, index) => each === b[index]);
+  return same(one.labels, other.labels) && same(one.branches, other.branches);
+}
+
 /** The trigger a draft writes: its schedule's cron and zone, its GitHub event with the filters it kept, or its webhook. */
 export function draftTrigger(draft: AutomationDraft): AutomationTrigger {
   switch (draft.triggerKind) {
@@ -369,8 +379,10 @@ export function sameDraft(one: AutomationDraft, other: AutomationDraft): boolean
     one.name.trim() === other.name.trim() &&
     one.prompt.trim() === other.prompt.trim() &&
     one.triggerKind === other.triggerKind &&
-    // A GitHub event chosen and left behind for another trigger kind is no change.
-    (one.triggerKind !== AUTOMATION_TRIGGER.GITHUB || one.githubEvent === other.githubEvent) &&
+    // A GitHub event and its filters, chosen and left behind for another trigger kind, are no change.
+    (one.triggerKind !== AUTOMATION_TRIGGER.GITHUB ||
+      (one.githubEvent === other.githubEvent &&
+        sameFilters(one.githubFilters, other.githubFilters))) &&
     cronOf(one.schedule) === cronOf(other.schedule) &&
     one.timezone === other.timezone &&
     one.repository === other.repository &&
@@ -397,8 +409,10 @@ export function changeOf(
   const scheduleMoved =
     draft.triggerKind === AUTOMATION_TRIGGER.SCHEDULE &&
     (cronOf(draft.schedule) !== cronOf(was.schedule) || draft.timezone !== was.timezone);
+  // Note that filters let go of on the way to another event and back are a change, because the editor then shows none.
   const eventMoved =
-    draft.triggerKind === AUTOMATION_TRIGGER.GITHUB && draft.githubEvent !== was.githubEvent;
+    draft.triggerKind === AUTOMATION_TRIGGER.GITHUB &&
+    (draft.githubEvent !== was.githubEvent || !sameFilters(draft.githubFilters, was.githubFilters));
   const triggerMoved = draft.triggerKind !== was.triggerKind || scheduleMoved || eventMoved;
   const actionMoved = draft.prompt.trim() !== was.prompt || !sameChoice(draft.choice, was.choice);
   const targetMoved = draft.target !== was.target || landingAgent(draft) !== landingAgent(was);

@@ -407,4 +407,13 @@ test("a move to another GitHub event lets go of the filters the event before was
     { trigger: { kind: AUTOMATION_TRIGGER.GITHUB, event: GITHUB_TRIGGER_EVENT.PUSH } },
   );
   assert.equal(withGithubEvent(opened, GITHUB_TRIGGER_EVENT.ISSUE_OPENED), opened);
+  // Away and back again, the filters let go of are a change the editor can save, since it now shows none.
+  const back = withGithubEvent(
+    withGithubEvent(opened, GITHUB_TRIGGER_EVENT.PUSH),
+    GITHUB_TRIGGER_EVENT.ISSUE_OPENED,
+  );
+  assert.ok(!sameDraft(opened, back));
+  assert.deepEqual(changeOf(back, filtered, DEFAULTS), {
+    trigger: { kind: AUTOMATION_TRIGGER.GITHUB, event: GITHUB_TRIGGER_EVENT.ISSUE_OPENED },
+  });
 });
