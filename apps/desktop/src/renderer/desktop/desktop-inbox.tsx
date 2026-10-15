@@ -280,7 +280,12 @@ export function DesktopInbox({ plans }: { plans: PlansControl }): React.JSX.Elem
             view={list}
             chosen={chosen?.item.id}
             columns={columns.shown}
-            head={{ shown: plans.shown, choices, folds, waiting: anyNeedsYou(entries) }}
+            head={{
+              shown: plans.shown,
+              needsYou: choices,
+              view: { choices, folds },
+              waiting: anyNeedsYou(entries),
+            }}
             models={named.models}
             readerId={plans.me}
             note={
