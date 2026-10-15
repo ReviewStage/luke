@@ -103,6 +103,16 @@ const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
     route: "agents/subagent-messages",
     query: "id=$1&call=$2",
   },
+  {
+    src: "/api/agents/([^/]+)/subagents/([^/]+)/pictures/([^/]+)",
+    route: "agents/picture",
+    query: "id=$1&call=$2&picture=$3",
+  },
+  {
+    src: "/api/agents/([^/]+)/pictures/([^/]+)",
+    route: "agents/picture",
+    query: "id=$1&picture=$2",
+  },
   { src: "/api/agents/([^/]+)/messages", route: "agents/messages", query: "id=$1" },
   { src: "/api/agents/([^/]+)/stop", route: "agents/stop", query: "id=$1" },
   { src: "/api/agents/([^/]+)/pull-request", route: "agents/pull-request", query: "id=$1" },

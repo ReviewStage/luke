@@ -424,6 +424,13 @@ export function agentSubagentMessagesPath(agentId: string, callId: string, after
   return `/api/agents/${encodeURIComponent(agentId)}/subagents/${encodeURIComponent(callId)}/messages?${query}`;
 }
 
+/** One picture a tool answered an agent, as its bytes under its own media type (GET), served to whoever may read the agent; one of its workers' where `callId` names the delegation call that started the worker. */
+export function agentPicturePath(agentId: string, pictureId: string, callId?: string): string {
+  const agent = `/api/agents/${encodeURIComponent(agentId)}`;
+  const owner = callId === undefined ? agent : `${agent}/subagents/${encodeURIComponent(callId)}`;
+  return `${owner}/pictures/${encodeURIComponent(pictureId)}`;
+}
+
 /** One agent: its model and effort changed for its next step (PATCH), `models-wire.ts`'s choice as the body. */
 export function agentPath(agentId: string): string {
   return `/api/agents/${encodeURIComponent(agentId)}`;

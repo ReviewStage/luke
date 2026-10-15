@@ -112,6 +112,14 @@
     "dest": "/api/default.js?route=agents/subagent-messages&id=$1&call=$2"
   },
   {
+    "src": "/api/agents/([^/]+)/subagents/([^/]+)/pictures/([^/]+)",
+    "dest": "/api/default.js?route=agents/picture&id=$1&call=$2&picture=$3"
+  },
+  {
+    "src": "/api/agents/([^/]+)/pictures/([^/]+)",
+    "dest": "/api/default.js?route=agents/picture&id=$1&picture=$2"
+  },
+  {
     "src": "/api/agents/([^/]+)/messages",
     "dest": "/api/default.js?route=agents/messages&id=$1"
   },
