@@ -34,6 +34,7 @@ import {
   AUTOMATION_RUN_STATUS,
   AUTOMATION_TARGET,
   AUTOMATION_TRIGGER,
+  type AutomationFiring,
   type AutomationRunReason,
   GITHUB_TRIGGER_EVENT,
   type GitHubTriggerEvent,
@@ -68,7 +69,9 @@ import type { ModelChoiceRefused } from "../providers/model-catalog.js";
  * owner, the opening the coder channel already admits for the voice
  * brain (`coder-host/channel.ts`), since no request of the owner's is in
  * hand. The run's own id is the Start's key, so a run acted on twice, by two
- * sweeps or a sweep and its trigger, starts one agent.
+ * sweeps or a sweep and its trigger, starts one agent. A run about one pull
+ * request or issue starts its agent named by it, and any other run's agent
+ * is named by the title model from the automation's prompt.
  *
  * Before the start, the guards: a run whose automation was paused after it
  * was queued is skipped, but for the owner's own "Run now"; and a run past
@@ -123,6 +126,29 @@ const GITHUB_EVENT_WORDS = {
   [GITHUB_TRIGGER_EVENT.CHECK_FAILED]: "a check suite failed",
   [GITHUB_TRIGGER_EVENT.PUSH]: "commits were pushed",
 } as const satisfies Record<GitHubTriggerEvent, string>;
+
+/** The GitHub events about one pull request or issue, whose run is named by it rather than by the model. */
+const SUBJECT_EVENTS: ReadonlySet<GitHubTriggerEvent> = new Set([
+  GITHUB_TRIGGER_EVENT.PULL_REQUEST_OPENED,
+  GITHUB_TRIGGER_EVENT.PULL_REQUEST_LABELED,
+  GITHUB_TRIGGER_EVENT.PULL_REQUEST_UPDATED,
+  GITHUB_TRIGGER_EVENT.ISSUE_OPENED,
+  GITHUB_TRIGGER_EVENT.ISSUE_LABELED,
+]);
+
+/**
+ * The fixed name of a run about one pull request or issue, its number and
+ * title, `#2905 View commands`, which stays the same across pushes and is
+ * what the subject is searched by; none for any other run, which the title
+ * model names from the automation's prompt (`coder-host/title.ts`).
+ */
+function subjectTitle(firing: AutomationFiring): string | undefined {
+  if (firing.kind !== AUTOMATION_FIRING.GITHUB || firing.number === undefined) return undefined;
+  if (!SUBJECT_EVENTS.has(firing.event)) return undefined;
+  const named =
+    firing.title === undefined ? `#${firing.number}` : `#${firing.number} ${firing.title}`;
+  return named.slice(0, CODING_AGENT_BOUNDS.MAX_TITLE_CHARS).trim();
+}
 
 /** Why this run was fired, in the words the agent's prompt closes with. */
 function firingSentence(automation: Automation, run: ActedRun): string {
@@ -543,6 +569,7 @@ const startClaimed = Effect.fnUntraced(function* (
       rememberChoice: false,
       automationId: automation.id,
       automationOrigin: handed.origin,
+      title: subjectTitle(run.firing),
     }),
   );
   if (Result.isSuccess(start)) {

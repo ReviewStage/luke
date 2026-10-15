@@ -121,7 +121,12 @@ function itemSubject(
     return line === undefined
       ? undefined
       : planlessSubject(
-          { title: line.agentTitle, model: line.agentModel, automationId: line.automationId },
+          {
+            title: line.agentTitle,
+            model: line.agentModel,
+            automationId: line.automationId,
+            automationName: holder.automationId === null ? undefined : holder.name,
+          },
           models,
         );
   }

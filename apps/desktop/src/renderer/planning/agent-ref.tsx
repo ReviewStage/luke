@@ -128,7 +128,7 @@ export function lineSubject(
 
 /**
  * An agent with no plan as main's read of what waits on the developer names
- * it: its title, else its model, its harness's tile at rest, and the
+ * it: its title, else its automation's name, else its model, its harness's tile at rest, and the
  * automation whose run started it. Note that the line says nothing of
  * where the agent stands, so its card's corner says nothing either.
  */
@@ -137,10 +137,15 @@ export function planlessSubject(
     readonly title: string | null;
     readonly model: string;
     readonly automationId: string | null;
+    /** The name of the automation whose run started it, which an untitled agent goes by; none where the line names none. */
+    readonly automationName?: string | undefined;
   },
   models: readonly CatalogModel[] | undefined,
 ): AgentSubject {
-  const name = agentTabLabel({ title: line.title, model: line.model }, models);
+  const name = agentTabLabel(
+    { title: line.title, model: line.model, automationName: line.automationName },
+    models,
+  );
   const tile: Actor = {
     kind: ACTOR_KIND.AGENT,
     name,

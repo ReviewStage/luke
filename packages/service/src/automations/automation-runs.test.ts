@@ -37,6 +37,7 @@ import {
   AUTOMATION_TRIGGER,
   type AutomationGuards,
   GITHUB_TRIGGER_EVENT,
+  type GitHubTriggerEvent,
 } from "@luke/features/automation-wire";
 import { CODING_AGENT_BOUNDS } from "@luke/features/coding-agent-wire";
 import { INBOX_RESPONSE } from "@luke/features/inbox-wire";
@@ -1003,6 +1004,45 @@ it.layer(getTestDB())("an automation's runs", (it) => {
           firing: { kind: AUTOMATION_FIRING.MANUAL, userId: owner },
           prompt: PROMPT,
         });
+      }),
+  );
+
+  it.effect(
+    "a run about a pull request starts its agent named by the pull request, and a push's run starts it unnamed for the title model",
+    () =>
+      Effect.gen(function* () {
+        const { owner, automation } = yield* openAutomation({
+          guards: { ...AUTOMATION_DEFAULT_GUARDS, maxConcurrentRuns: 2 },
+        });
+        const eve = fakeEve();
+        const titleOf = (event: GitHubTriggerEvent) =>
+          Effect.gen(function* () {
+            const run = Option.getOrThrow(
+              yield* recordAutomationRun(automation, {
+                dedupeKey: randomUUID(),
+                firing: {
+                  kind: AUTOMATION_FIRING.GITHUB,
+                  event,
+                  repository: `${RELAY.owner}/${RELAY.name}`,
+                  number: 2905,
+                  title: "View commands",
+                },
+                firedAt: new Date(),
+              }),
+            );
+            const outcome = yield* executeAutomationRun(eve.eveFor, run).pipe(
+              Effect.provide(services),
+            );
+            const agentId =
+              outcome?.status === AUTOMATION_RUN_STATUS.STARTED ? outcome.codingAgentId : "";
+            return Option.getOrThrow(yield* readCodingAgent(owner, agentId)).title;
+          });
+
+        const opened = yield* titleOf(GITHUB_TRIGGER_EVENT.PULL_REQUEST_OPENED);
+        const pushed = yield* titleOf(GITHUB_TRIGGER_EVENT.PUSH);
+
+        assert.equal(opened, "#2905 View commands");
+        assert.equal(pushed, null);
       }),
   );
 

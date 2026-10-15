@@ -25,7 +25,7 @@ import {
   type PullRequestState,
 } from "@luke/features/coding-agent-wire";
 import { FAILURE_REASON, type Failure, type FailureReason } from "@luke/features/failure-remedy";
-import { CATALOG_ID_SEPARATOR, modelLabel } from "@luke/features/model-label";
+import { agentTabLabel, CATALOG_ID_SEPARATOR, modelLabel } from "@luke/features/model-label";
 import {
   type CatalogModel,
   type ContextWindows,
@@ -521,18 +521,11 @@ export function closesComposer(failure: CodingAgentCallFailure): boolean {
 }
 
 /**
- * A model as a tab or a menu names it, shared with the main process's
- * notifications so one model is never named two ways (`@luke/features/model-label`).
+ * A model, and an agent, as a tab or a menu names it, shared with the main
+ * process's notifications so neither is ever named two ways
+ * (`@luke/features/model-label`).
  */
-export { modelLabel };
-
-/** The agent's tab label: its title, or its model's name until it has one. */
-export function agentTabLabel(
-  agent: Pick<CodingAgentSummary, "title" | "model">,
-  models?: readonly CatalogModel[],
-): string {
-  return agent.title ?? modelLabel(agent.model, models);
-}
+export { agentTabLabel, modelLabel };
 
 /**
  * The provider whose harness runs a model, read from its catalog id, whose

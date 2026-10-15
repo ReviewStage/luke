@@ -666,3 +666,11 @@ test("a webhook's body stands folded inside the card under the prompt, and nowhe
   act(() => fold.click());
   assert.equal(card.querySelector("pre")?.textContent, body);
 });
+
+test("an automation's agent the model has not named yet is titled by its automation, not its model", async () => {
+  pages = [{ agent: RUN_PAGE }];
+  const page = mount();
+  await settle();
+
+  assert.equal(page.querySelector("h1")?.textContent, "Flaky-test sweep");
+});
