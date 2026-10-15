@@ -105,6 +105,23 @@ export interface DrawnMenu extends OpenMenu {
   ref: (element: HTMLElement | null) => void;
 }
 
+/**
+ * The layer a menu stands in: over the window, or over the modal it was
+ * opened from. A menu is drawn over `document.body`, so one opened from a
+ * modal's card would otherwise stand under the window the modal dims.
+ */
+const MENU_LAYER = {
+  WINDOW: "window",
+  DIALOG: "dialog",
+} as const;
+
+type MenuLayer = (typeof MENU_LAYER)[keyof typeof MENU_LAYER];
+
+/** The layer a menu opened from `opener` stands in. */
+function layerOf(opener: HTMLElement): MenuLayer {
+  return opener.closest('[aria-modal="true"]') === null ? MENU_LAYER.WINDOW : MENU_LAYER.DIALOG;
+}
+
 /** Where a menu dropped from a button hangs: under it, its right edge on the button's. */
 function dropBelow(button: HTMLElement): MenuPlacement {
   const bounds = button.getBoundingClientRect();
@@ -342,12 +359,15 @@ function SubmenuItem({
  */
 function Submenu({
   open,
+  layer,
   surface,
   leaving,
   onChoose,
   onBack,
 }: {
   open: OpenSubmenu;
+  /** The layer its menu stands in, which it stands in too. */
+  layer: MenuLayer;
   /** The submenu's element, which the menu counts as its own when it hears a press. */
   surface: React.RefObject<HTMLDivElement | null>;
   leaving: boolean;
@@ -398,6 +418,7 @@ function Submenu({
       className="menu-surface plan-menu plan-submenu"
       role="menu"
       aria-label={entry.label}
+      data-layer={layer}
       data-placed={String(placed)}
       data-leaving={leaving ? "true" : undefined}
       inert={leaving}
@@ -529,6 +550,7 @@ export function ActionMenu({
       className="menu-surface plan-menu"
       role="menu"
       aria-label={label}
+      data-layer={layerOf(opener)}
       data-placed={String(placed)}
       data-leaving={leaving ? "true" : undefined}
       inert={leaving}
@@ -567,6 +589,7 @@ export function ActionMenu({
             <Submenu
               key={submenu.entry.label}
               open={submenu}
+              layer={layerOf(opener)}
               surface={submenuElement}
               leaving={leaving}
               onChoose={choose}

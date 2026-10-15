@@ -1827,6 +1827,11 @@ body,
   -webkit-app-region: no-drag;
 }
 
+/* A menu opened from a modal's card stands over the window the modal dims. */
+.plan-menu[data-layer="dialog"] {
+  z-index: calc(var(--z-dialog) + 1);
+}
+
 .plan-menu-label {
   min-width: 0;
   flex: 1;

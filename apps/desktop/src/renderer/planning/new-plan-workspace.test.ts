@@ -115,6 +115,11 @@ test("New plan says the workspace it starts in, and the workspace chosen there l
     assert.fail("the title's workspace is a chip");
   act(() => workspaceChip.click());
   await settle();
+  assert.equal(
+    document.querySelector<HTMLElement>('[role="menu"][aria-label="Workspace"]')?.dataset.layer,
+    "dialog",
+    "the chip's menu stands over the window the dialog dims, not under it",
+  );
   const acme = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitemcheckbox"]')].find(
     (item) => item.textContent?.endsWith("Acme"),
   );
