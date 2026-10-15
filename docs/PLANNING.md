@@ -1336,7 +1336,7 @@ changes when a check is run, not when one is planned.
 ### Known limitations
 
 - **The GitHub App's user token can write.** GitHub sign-in is the Luke
-  GitHub App's user authorization (`apps/web/server/auth-policy.ts`,
+  GitHub App's user authorization (`packages/service/src/auth/auth-policy.ts`,
   `GITHUB_SIGN_IN` with `disableDefaultScope`): it names no OAuth scope, and
   the token reaches the repositories the App is installed on and the
   developer can reach, with the App's registered permissions, contents and

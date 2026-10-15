@@ -1,3 +1,4 @@
+import { auth } from "@luke/service/auth/auth";
 import {
   isRecord,
   text,
@@ -7,7 +8,6 @@ import {
 } from "@luke/service/core";
 import type { Cause } from "effect";
 import { Effect, Option } from "effect";
-import { auth } from "../auth.js";
 
 /** The subject a signed-in OAuth userinfo answer names. */
 export interface OAuthUserInfo {

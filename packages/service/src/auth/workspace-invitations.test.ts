@@ -5,8 +5,8 @@ import { organization } from "better-auth/plugins";
 import { drizzle } from "drizzle-orm/pglite";
 import { Schema } from "effect";
 import { test } from "vitest";
-import { authDatabaseAdapter } from "../server/auth-database";
-import { DISABLED_AUTH_PATHS, ORGANIZATION_OPTIONS } from "../server/auth-policy";
+import { authDatabaseAdapter } from "./auth-database.js";
+import { DISABLED_AUTH_PATHS, ORGANIZATION_OPTIONS } from "./auth-policy.js";
 
 /**
  * Workspace invitations on Luke's own organization policy over a migrated

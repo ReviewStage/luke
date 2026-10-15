@@ -1,5 +1,5 @@
+import { auth } from "@luke/service/auth/auth";
 import { Effect, Option } from "effect";
-import { auth } from "../auth.js";
 
 /**
  * browser-session.ts -- the account a Better Auth session names: a browser's own cookie, for the few routes a web page calls, or the Mac's signed session bearer, which the bearer plugin reads as that cookie.

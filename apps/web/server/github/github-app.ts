@@ -54,6 +54,10 @@ import {
   REPOSITORY_UNREACHED,
   type RepositoryUnreached,
 } from "@luke/features/repository-reach-wire";
+import {
+  AUTH_SECRET_ENVIRONMENT,
+  GITHUB_APP_ENVIRONMENT,
+} from "@luke/service/auth/auth-deployment";
 import { type GitHubRepository, text } from "@luke/service/core";
 import { installationOfWorkspace } from "@luke/service/github/github-installations";
 import type { StoreFailure } from "@luke/service/http/store-failure";
@@ -78,7 +82,6 @@ import type * as HttpClientError from "effect/http/HttpClientError";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import { SqlClient, SqlSchema } from "effect/sql";
-import { AUTH_SECRET_ENVIRONMENT, GITHUB_APP_ENVIRONMENT } from "../auth-deployment.js";
 
 const GITHUB_API = "https://api.github.com";
 const GITHUB_TOKEN_ENDPOINT = "https://github.com/login/oauth/access_token";

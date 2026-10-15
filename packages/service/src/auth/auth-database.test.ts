@@ -7,15 +7,15 @@ import { drizzle } from "drizzle-orm/pglite";
 import { Effect, Layer, ManagedRuntime, Schema } from "effect";
 import * as SqlClient from "effect/sql/SqlClient";
 import { test } from "vitest";
-import { authDatabaseAdapter } from "../server/auth-database";
+import { authDatabaseAdapter } from "./auth-database.js";
 import {
   ACCOUNT_TOKEN_STORAGE,
   DISABLED_AUTH_PATHS,
   denyOAuthClientPrivileges,
   JWT_KEY_STORAGE,
   ORGANIZATION_OPTIONS,
-} from "../server/auth-policy";
-import { DESKTOP_OAUTH_CLIENT, oauthClientRecord } from "../server/oauth-clients";
+} from "./auth-policy.js";
+import { DESKTOP_OAUTH_CLIENT, oauthClientRecord } from "./oauth-clients.js";
 
 const AUTH_TABLE_NAME = {
   ACCOUNT: "account",

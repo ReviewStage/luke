@@ -5,6 +5,13 @@ import { OrganizationRefused } from "@luke/database/models/workspace-seams";
 import { account } from "@luke/database/schemas/auth";
 import { openMigratedPglite, sqlClientOverPglite } from "@luke/database/testing";
 import { GITHUB_CONNECT_CLAIM, GITHUB_CONNECT_PAGE } from "@luke/features/github-connection-wire";
+import { authDatabaseAdapter } from "@luke/service/auth/auth-database";
+import {
+  ACCOUNT_TOKEN_STORAGE,
+  DISABLED_AUTH_PATHS,
+  GITHUB_SIGN_IN,
+  SESSION_BEARER,
+} from "@luke/service/auth/auth-policy";
 import type { WireValue } from "@luke/service/core";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import type { WireBoundaryInput } from "@luke/wire";
@@ -18,13 +25,6 @@ import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { afterEach, beforeEach, vi } from "vitest";
-import { authDatabaseAdapter } from "../server/auth-database";
-import {
-  ACCOUNT_TOKEN_STORAGE,
-  DISABLED_AUTH_PATHS,
-  GITHUB_SIGN_IN,
-  SESSION_BEARER,
-} from "../server/auth-policy";
 import { githubConnectionApp } from "../server/github-connection-app";
 import { type GitHubUnlink, githubUnlink } from "../server/hosted/github-unlink";
 
