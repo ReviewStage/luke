@@ -521,7 +521,10 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
     const current = () => read === workspacesRead;
     const workspaces = Effect.tap(client.workspaces.list(), (answer) =>
       Effect.sync(() => {
-        if (current() && answer !== undefined) write({ workspaces: answer.workspaces });
+        if (!current()) return;
+        // A read that did not answer leaves the workspaces stale, so the next refresh reads them again at once.
+        if (answer === undefined) workspacesAskedAt = undefined;
+        else write({ workspaces: answer.workspaces });
       }),
     );
     const github = Effect.tap(client.github.status(), (read) =>
@@ -1523,6 +1526,13 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
         const renamed = yield* workspaceCall(client.workspaces.rename(workspaceId, name), {
           plans: false,
         });
+        // Note that the workspace the service answered lands on the view itself, because the read after it may fail and keep the old name.
+        if (renamed.ok) {
+          const answered = renamed.answer;
+          write({
+            workspaces: view.workspaces.map((each) => (each.id === answered.id ? answered : each)),
+          });
+        }
         return carried<PlanningWorkspaceAnswer>(
           renamed.ok ? { workspace: renamed.answer } : { failure: renamed.failure },
         );

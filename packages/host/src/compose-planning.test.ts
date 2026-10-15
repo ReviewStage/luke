@@ -1227,6 +1227,30 @@ it.effect(
 );
 
 it.effect(
+  "a rename whose read after it fails still draws the new name the service answered, and the next refresh reads the workspaces again",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      service.memberships = [PERSONAL, ACME];
+      const { call, last } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+      service.workspacesFail = true;
+
+      yield* call(GATEWAY_METHOD.WORKSPACES_RENAME, { workspaceId: ACME.id, name: "Acme Labs" });
+      const drawn = last()?.workspaces;
+      service.workspacesFail = false;
+      const before = service.reads.length;
+      yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+
+      assert.deepEqual(drawn, [PERSONAL, { ...ACME, name: "Acme Labs" }]);
+      assert.ok(
+        service.reads.slice(before).includes("workspaces"),
+        "the failed read is not taken as fresh",
+      );
+    }),
+);
+
+it.effect(
   "connecting GitHub answers the service's install address and reads nothing, and disconnecting draws the workspace without its organization",
   () =>
     Effect.gen(function* () {
