@@ -294,10 +294,7 @@ export const INBOX_HOLDER = {
 } as const;
 
 /** An agent with no plan as main's read of what waits on the developer names it: its title, its model, and the automation that started it. */
-export type InboxAgentLine = Pick<
-  AppInboxPlanlessItem,
-  "agentTitle" | "agentModel" | "automationId"
->;
+type InboxAgentLine = Pick<AppInboxPlanlessItem, "agentTitle" | "agentModel" | "automationId">;
 
 /**
  * The plan holding an item, or the automation holding an item of an agent
