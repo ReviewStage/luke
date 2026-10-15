@@ -1346,9 +1346,10 @@ workspace the account left, is `not-found`:
 - `GET`, `PATCH`, and `DELETE /api/automations/{id}` read, change, and
   delete one. A resume, or a new trigger, computes a schedule's next due
   instant afresh, a pause clears it, and a resume clears any reason an
-  older build paused it for. `{ rotateWebhookSecret: true }` mints a
-  webhook trigger's secret again, answered once as `webhookSecret`; the one
-  before stops admitting calls, and it is `invalid-request` for any other
+  older build paused it for. `{ webhookSecretHash }` replaces a webhook
+  trigger's secret with one the caller minted, by its SHA-256, so the
+  caller holds the new secret before the one before stops admitting calls
+  and the service never sees it; it is `invalid-request` for any other
   trigger.
 - `POST /api/automations/{id}/run` takes `{ idempotencyKey }`, records a
   manual firing under it, and acts on it at once through the same guards

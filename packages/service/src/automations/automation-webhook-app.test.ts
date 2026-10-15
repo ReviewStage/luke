@@ -35,8 +35,9 @@ import { automationsApp } from "./automations-app.js";
  * bearer and never in the address, queues one run with its body kept for
  * the agent; a retry under the same key queues none; a paused automation
  * takes the call and queues nothing, its body unread; a body past the
- * bound, not UTF-8, or holding a NUL is refused; and a wrong secret, an id that names no webhook, a secret
- * rotated away, and a departed owner's address are refused alike.
+ * bound, not UTF-8, or holding a NUL is refused; and a wrong secret, an id
+ * that names no webhook, a secret the caller replaced with its own, and a
+ * departed owner's address are refused alike.
  * Synthetic accounts and words throughout.
  */
 
@@ -169,7 +170,7 @@ it.layer(getTestDB())("an automation's webhook", (it) => {
   );
 
   it.effect(
-    "a wrong secret, an id that names no webhook, no secret, and a secret rotated away are refused alike, and a paused automation queues nothing",
+    "a wrong secret, an id that names no webhook, no secret, and a secret replaced are refused alike, and a paused automation queues nothing",
     () =>
       Effect.gen(function* () {
         const { owner, automation, secret } = yield* openWebhook;
@@ -180,15 +181,20 @@ it.layer(getTestDB())("an automation's webhook", (it) => {
         assert.deepEqual(yield* ask(automationWebhookPath(randomUUID()), call(secret)), INVALID);
         assert.deepEqual(yield* ask(path, { method: "POST", body: ALERT }), INVALID);
 
-        const rotated = yield* ask(automationPath(automation.id), {
+        const fresh = randomBytes(32).toString("base64url");
+        const replaced = yield* ask(automationPath(automation.id), {
           method: "PATCH",
           headers: { authorization: `Bearer ${owner}`, "content-type": "application/json" },
-          body: JSON.stringify({ rotateWebhookSecret: true }),
+          body: JSON.stringify({
+            webhookSecretHash: createHash("sha256").update(fresh).digest("hex"),
+          }),
         });
-        assert.equal(rotated.status, HOSTED_HTTP_STATUS.OK);
-        const read = readEither(automationAnswerSchema)(unparsedWire(rotated.body));
-        const fresh = Result.isSuccess(read) ? (read.success.webhookSecret ?? "") : "";
-        assert.ok(fresh.length > 0, "a fresh secret is answered once");
+        assert.equal(replaced.status, HOSTED_HTTP_STATUS.OK);
+        const read = readEither(automationAnswerSchema)(unparsedWire(replaced.body));
+        assert.ok(
+          Result.isSuccess(read) && read.success.webhookSecret === undefined,
+          "no secret is answered",
+        );
         assert.deepEqual(yield* ask(path, call(secret)), INVALID, "the secret before stops");
         assert.deepEqual(yield* ask(path, call(fresh)), {
           status: HOSTED_HTTP_STATUS.ACCEPTED,
@@ -208,7 +214,7 @@ it.layer(getTestDB())("an automation's webhook", (it) => {
   );
 
   it.effect(
-    "a body past the bound, not UTF-8, or holding a NUL is refused, and a rotation asked of an automation that is no webhook is refused",
+    "a body past the bound, not UTF-8, or holding a NUL is refused, and a secret replaced on an automation that is no webhook is refused",
     () =>
       Effect.gen(function* () {
         const { owner, automation, secret } = yield* openWebhook;
@@ -231,7 +237,7 @@ it.layer(getTestDB())("an automation's webhook", (it) => {
         const notWebhook = yield* ask(automationPath(automation.id), {
           method: "PATCH",
           headers: { authorization: `Bearer ${owner}`, "content-type": "application/json" },
-          body: JSON.stringify({ rotateWebhookSecret: true }),
+          body: JSON.stringify({ webhookSecretHash: "ab".repeat(32) }),
         });
 
         assert.equal(tooLarge.status, HOSTED_HTTP_STATUS.PAYLOAD_TOO_LARGE);

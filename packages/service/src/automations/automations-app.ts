@@ -448,7 +448,8 @@ const automationsEndpoint = /* @__PURE__ */ Effect.fn("web/automationsEndpoint")
  * the automation ends up enabled with a schedule and either was resumed or
  * given a new trigger, cleared while paused, and the owner's pause or resume
  * clearing why the service paused it. A webhook sent again is no change; a
- * trigger becoming a webhook, or a rotation asked of one, mints its secret.
+ * trigger becoming a webhook mints its secret, and a hash the caller sends
+ * replaces a webhook's secret with the one it minted.
  */
 const changesOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
@@ -475,12 +476,12 @@ const changesOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   const becameWebhook =
     newTrigger?.kind === AUTOMATION_TRIGGER.WEBHOOK &&
     standing.trigger.kind !== AUTOMATION_TRIGGER.WEBHOOK;
-  // A rotation is asked of a webhook alone: there is no secret to mint for any other trigger.
-  if (asked.rotateWebhookSecret === true && trigger.kind !== AUTOMATION_TRIGGER.WEBHOOK) {
+  // A secret is replaced on a webhook alone: there is none to replace on any other trigger.
+  if (asked.webhookSecretHash !== undefined && trigger.kind !== AUTOMATION_TRIGGER.WEBHOOK) {
     return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   }
-  const webhook =
-    becameWebhook || asked.rotateWebhookSecret === true ? mintWebhookSecret() : undefined;
+  const webhook = becameWebhook ? mintWebhookSecret() : undefined;
+  const secretHash = asked.webhookSecretHash ?? webhook?.hash;
   const scope =
     asked.scope === undefined
       ? undefined
@@ -508,7 +509,7 @@ const changesOf = /* @__PURE__ */ Effect.fnUntraced(function* (
     ...(action === undefined ? undefined : { action }),
     ...(asked.guards === undefined ? undefined : { guards: asked.guards }),
     ...(reschedules ? { nextRunAt: enabled ? due : null } : undefined),
-    ...(webhook === undefined ? undefined : { webhookSecretHash: webhook.hash }),
+    ...(secretHash === undefined ? undefined : { webhookSecretHash: secretHash }),
     ...(scope === undefined ? undefined : { scope }),
     ...(repositories === undefined ? undefined : { repositories }),
     ...target,
