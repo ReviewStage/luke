@@ -53,7 +53,9 @@ the check names. A component is placed by review under the same rule.
   Dean on 2026-10-14, a Terminal tab's bytes go only to the tab that opened
   them: through the terminal relay (`apps/web/server/terminal/`) and the host
   to that panel's window, never into a trace, a counted event, a fixture, app
-  state, or the voice window.
+  state, or the voice window. And, approved by Dean (automations D10), a webhook
+  body an automation's caller sends may reach that run's agent task, transcript
+  and traces.
 - Session replay records the rendered panel with every word masked
   (`apps/desktop/src/renderer/session-replay.ts`), so what leaves the machine is
   layout, not text; an unmasked attribute or a new way of drawing words is what

@@ -213,6 +213,14 @@ export function automationRunPath(automationId: string): string {
   return `${automationPath(automationId)}/run`;
 }
 
+/**
+ * An automation's webhook address (POST), called by the sender the developer
+ * hands it to under the trigger's secret rather than an account bearer.
+ */
+export function automationWebhookPath(automationId: string): string {
+  return `${automationPath(automationId)}/webhook`;
+}
+
 /** An automation's runs, newest first (GET). */
 export function automationRunsPath(automationId: string): string {
   return `${automationPath(automationId)}/runs`;

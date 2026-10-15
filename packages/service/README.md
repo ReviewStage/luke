@@ -1346,7 +1346,10 @@ workspace the account left, is `not-found`:
 - `GET`, `PATCH`, and `DELETE /api/automations/{id}` read, change, and
   delete one. A resume, or a new trigger, computes a schedule's next due
   instant afresh, a pause clears it, and a resume clears any reason an
-  older build paused it for.
+  older build paused it for. `{ rotateWebhookSecret: true }` mints a
+  webhook trigger's secret again, answered once as `webhookSecret`; the one
+  before stops admitting calls, and it is `invalid-request` for any other
+  trigger.
 - `POST /api/automations/{id}/run` takes `{ idempotencyKey }`, records a
   manual firing under it, and acts on it at once through the same guards
   and start a scheduled run takes, reaching eve as the developer under the
@@ -1355,6 +1358,23 @@ workspace the account left, is `not-found`:
 - `GET /api/automations/{id}/runs` answers its runs newest first, fifty at
   most, each with its agent's title and status as the agent's tab reads
   them.
+
+A webhook trigger's address is `POST /api/automations/{id}/webhook`
+(`src/automations/automation-webhook-app.ts`), called by whatever the
+developer hands it to under the trigger's own secret rather than an account
+bearer: the `Authorization: Bearer` value, or the `token` query for a sender
+that can set no header, hashed and compared in constant time against the
+SHA-256 the row keeps. An id that names no webhook automation, one whose
+owner left its workspace, and a secret that does not hold are all
+`invalid-token`, so the address says nothing of what stands behind it. A
+paused automation answers `200 { queued: 0 }`, so a sender does not retry;
+otherwise the call is `202 { queued }`, the run recorded under the SHA-256 of
+the caller's `Idempotency-Key` where it sends one. The body, UTF-8 and at most
+64 KiB, is kept on the run's `payload`, read only by the act that starts the
+run, and handed to the agent fenced as the caller's own text, its angle
+brackets spelled as entities, cut with a note where it would push the task
+past its bound. The body reaches the run's agent task, transcript, and traces
+by the carve-out in root `AGENTS.md`; nothing of it or the secret is logged.
 
 `@luke/features/automation-wire` declares every body and `service-paths.ts`
 the addresses; `src/automations/automations-app.test.ts` holds the routes over a fake

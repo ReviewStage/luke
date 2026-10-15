@@ -448,7 +448,7 @@ const automationsEndpoint = /* @__PURE__ */ Effect.fn("web/automationsEndpoint")
  * the automation ends up enabled with a schedule and either was resumed or
  * given a new trigger, cleared while paused, and the owner's pause or resume
  * clearing why the service paused it. A webhook sent again is no change; a
- * trigger becoming a webhook mints its secret.
+ * trigger becoming a webhook, or a rotation asked of one, mints its secret.
  */
 const changesOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
@@ -475,7 +475,12 @@ const changesOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   const becameWebhook =
     newTrigger?.kind === AUTOMATION_TRIGGER.WEBHOOK &&
     standing.trigger.kind !== AUTOMATION_TRIGGER.WEBHOOK;
-  const webhook = becameWebhook ? mintWebhookSecret() : undefined;
+  // A rotation is asked of a webhook alone: there is no secret to mint for any other trigger.
+  if (asked.rotateWebhookSecret === true && trigger.kind !== AUTOMATION_TRIGGER.WEBHOOK) {
+    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  }
+  const webhook =
+    becameWebhook || asked.rotateWebhookSecret === true ? mintWebhookSecret() : undefined;
   const scope =
     asked.scope === undefined
       ? undefined
