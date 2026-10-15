@@ -147,7 +147,6 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
     workspaces: [],
     workspace: undefined,
     onChooseWorkspace: ignore,
-    onListWorkspace: ignore,
     onLeftWorkspace: ignore,
     onCreateWorkspace: () => Promise.resolve(undefined),
     onOpenWorkspaceSettings: ignore,

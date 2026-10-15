@@ -60,7 +60,7 @@ import { OpenPlanProvider } from "./planning/use-open-link";
 import { usePlansTab } from "./planning/use-plans-tab";
 import { applySessionReplay } from "./session-replay";
 import { settingsRowsInput } from "./settings/settings-panel";
-import { followSettingsLink } from "./settings-link";
+import { followSettingsLink, useSettingsWorkspace } from "./settings-link";
 import { useSignInFaceCycle } from "./sign-in-gate";
 import { ToastHost } from "./toast";
 import { useUpdatedToast } from "./update-toast";
@@ -149,12 +149,12 @@ export function App(): React.JSX.Element {
     },
     [setSettingsView, setTab],
   );
-  // The sidebar's switch, read through a ref, because the Plans tab that
-  // holds it is built after the opener it hands its links to.
-  const chooseListedWorkspace = useRef<(workspaceId: string) => void>(() => undefined);
+  // Where a link's workspace is handed, read through a ref, because the
+  // workspace Settings shows is held beside the Plans tab, built after the opener.
+  const linkWorkspace = useRef<(workspaceId: string) => void>(() => undefined);
   /**
    * Opens Settings at the place a link names: the workspace it names, which
-   * the sidebar lists, so the Workspace page shows it; its page; and its
+   * the Workspace page shows while Settings stays open; its page; and its
    * section, which is looked for once drawn and given up on by itself.
    */
   const openSettings = useCallback(
@@ -162,7 +162,7 @@ export function App(): React.JSX.Element {
       followSettingsLink(link, {
         changeTab,
         changeView: setSettingsView,
-        chooseWorkspace: (workspaceId) => chooseListedWorkspace.current(workspaceId),
+        chooseWorkspace: (workspaceId) => linkWorkspace.current(workspaceId),
       });
     },
     [changeTab, setSettingsView],
@@ -278,8 +278,13 @@ export function App(): React.JSX.Element {
     onOpenIntegrations: () => openSettings({ page: SETTINGS_VIEW.INTEGRATIONS }),
     onOpenApiKeys: () => openSettings({ page: SETTINGS_VIEW.CODING_AGENTS }),
   });
-  // Note that a link lists its workspace without moving the plan on screen, because Back from Settings returns to it.
-  chooseListedWorkspace.current = plans.onListWorkspace;
+  // The workspace Settings shows: the sidebar's, or one a link named while Settings stays open.
+  const settingsWorkspace = useSettingsWorkspace({
+    listedId: plans.workspace?.id,
+    workspaces: plans.workspaces,
+    settingsShown: tab === PANEL_TAB.SETTINGS,
+  });
+  linkWorkspace.current = settingsWorkspace.link;
   // A coding agent's notification clicked: the Plans tab, on that agent,
   // its plan's tab or its own page where it has no plan. Read through refs,
   // because the tab hands new closures each render and the subscription is
@@ -518,10 +523,10 @@ export function App(): React.JSX.Element {
     onStopHotkeyChange: changeStopHotkey,
     onCapture: changeShortcutCapture,
   };
-  // The Workspace page shows the workspace the sidebar lists.
+  // The Workspace page shows the workspace the sidebar lists, or one a link named.
   const workspace = {
     workspaces: plans.workspaces,
-    workspaceId: plans.workspace?.id,
+    workspaceId: settingsWorkspace.shownId,
     onLeft: plans.onLeftWorkspace,
     listFailed: plans.listFailed,
     onRetryList: plans.onRetryList,

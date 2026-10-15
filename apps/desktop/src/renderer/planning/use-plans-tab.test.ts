@@ -42,7 +42,6 @@ import { createRoot } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import { onRegistry } from "#testing/copy-feedback";
 import { newestToastAction, newestToastSays } from "#testing/toast";
-import { followSettingsLink } from "../settings-link";
 import { ToastHost } from "../toast";
 import { MAIN_TAB } from "./use-main-tabs";
 import { type PlansControl, usePlansTab } from "./use-plans-tab";
@@ -832,32 +831,6 @@ test("opening a plan of another workspace lists that workspace once it opened, o
   assert.deepEqual(
     tab.control().listed.plans.map((plan) => plan.id),
     ["alerts"],
-  );
-});
-
-test("a Settings link naming another workspace, as the repository chip's Open Settings names a plan's own, lists that workspace in the sidebar and leaves the plan open behind Settings", async () => {
-  const tab = mount({ shown: true, planning: { ...TWO_WORKSPACES, activePlanId: "notes" } }, OPENS);
-  const listedBefore = tab.control().workspace?.id;
-
-  act(() => tab.control().onOpenWorkspaceGitHub("alerts"));
-  const [link] = tab.links;
-  assert.ok(link, "the chip opened Settings");
-  act(() => {
-    followSettingsLink(link, {
-      changeTab: () => undefined,
-      changeView: () => undefined,
-      chooseWorkspace: tab.control().onListWorkspace,
-      land: () => () => undefined,
-    });
-  });
-  await settle();
-
-  assert.equal(listedBefore, PERSONAL.id);
-  assert.equal(tab.control().workspace?.id, ACME.id);
-  assert.deepEqual(
-    [opensAsked(tab.payloads), tab.told.includes(ACT_KIND.PLANNING_CLOSE)],
-    [[], false],
-    "the plan open behind Settings stays open, for Back to come back to",
   );
 });
 

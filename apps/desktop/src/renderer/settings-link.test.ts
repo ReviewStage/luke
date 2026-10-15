@@ -10,7 +10,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
 import { WorkspacePage } from "./settings/workspace-page";
-import { followSettingsLink } from "./settings-link";
+import { followSettingsLink, useSettingsWorkspace } from "./settings-link";
 
 /**
  * A Settings link followed as the window follows it: Settings, then the
@@ -115,4 +115,36 @@ test("a link naming no section or workspace lands on the page's head, and leaves
 
   assert.deepEqual(turned, [PANEL_TAB.SETTINGS, SETTINGS_VIEW.WORKSPACE]);
   assert.equal(landings, 0);
+});
+
+test("a link's workspace stands on the Workspace page while Settings stays open, the sidebar's listing untouched, and gives way once Settings is left or the sidebar lists another", () => {
+  const workspaces = [
+    { id: "workspace-personal" },
+    { id: "workspace-acme" },
+    { id: "workspace-platform" },
+  ];
+  let shown: ReturnType<typeof useSettingsWorkspace> | undefined;
+  function Probe(props: { listedId: string; settingsShown: boolean }) {
+    shown = useSettingsWorkspace({ ...props, workspaces });
+    return null;
+  }
+  const root = createRoot(document.createElement("div"));
+  const draw = (listedId: string, settingsShown: boolean) =>
+    act(() => root.render(createElement(Probe, { listedId, settingsShown })));
+
+  draw("workspace-personal", true);
+  act(() => shown?.link("workspace-acme"));
+  const linked = shown?.shownId;
+  draw("workspace-personal", false);
+  const left = shown?.shownId;
+  draw("workspace-personal", true);
+  act(() => shown?.link("workspace-acme"));
+  draw("workspace-platform", true);
+  const switched = shown?.shownId;
+  act(() => root.unmount());
+
+  assert.deepEqual(
+    [linked, left, switched],
+    ["workspace-acme", "workspace-personal", "workspace-platform"],
+  );
 });
