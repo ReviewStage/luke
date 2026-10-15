@@ -4,10 +4,12 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { Effect } from "effect";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { ACT_OUTCOME_STATUS, type ActOutcome } from "#shared/messages/acts";
+import { markdownHtmlParserLanded } from "#testing/markdown";
 import { TranscriptWords } from "./transcript-blocks";
 
 /**
@@ -50,6 +52,9 @@ const SAMPLES = {
   htmlInCode: 'Inline `<div>` and:\n\n```html\n<div class="a">b</div>\n```',
   mention: "Ask [@the plan](https://tryluke.dev/acme/plan/3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b).",
 } as const;
+
+// A reply is drawn once the parser has landed, as the panel lands it after its first paint.
+beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
 const roots: Root[] = [];
 

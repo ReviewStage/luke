@@ -16,9 +16,10 @@ import {
   mentionMarkdown,
 } from "@luke/features/mention-link";
 import { PLAN_TREE_ENTRY } from "@luke/features/plan-wire";
+import { Effect } from "effect";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "#shared/messages/acts";
 import {
   composerEditor,
@@ -28,6 +29,7 @@ import {
   QUIET_COMPOSER,
   typeInComposer,
 } from "#testing/composer";
+import { markdownHtmlParserLanded } from "#testing/markdown";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { AgentComposer } from "./agent-composer";
 import { PlanMentions, type PlanMentionsValue } from "./plan-mentions";
@@ -79,6 +81,9 @@ let standing = "acme/relay";
 const noSkills: SkillSource = () => Promise.resolve({ skills: [] });
 
 const ignore = () => undefined;
+
+// A reply is drawn once the parser has landed, as the panel lands it after its first paint.
+beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
 const roots: Root[] = [];
 
