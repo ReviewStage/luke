@@ -139,6 +139,11 @@
   --terminal-bright-magenta: #d2a8ff;
   --terminal-bright-cyan: #56d4dd;
   --terminal-bright-white: #ffffff;
+  /* A find's tints in a terminal (`terminal-surface.ts`), opaque because
+     the terminal blends no alpha into its cells: the browser find's yellow
+     dimmed for every match, its orange for the one the find is at. */
+  --terminal-find-match: #5c4a00;
+  --terminal-find-current: #b36b00;
   /* A file's type icon in the file tree's own palette (`@pierre/trees`),
      which its shadow root keeps to itself, said again for a file drawn
      outside the tree (`planning.css`). */
@@ -257,6 +262,8 @@
     --terminal-bright-magenta: #a475f9;
     --terminal-bright-cyan: #3192aa;
     --terminal-bright-white: #8c959f;
+    --terminal-find-match: #fff0a3;
+    --terminal-find-current: #ffb547;
     --file-icon-gray: #84848a;
     --file-icon-red: #d52c36;
     --file-icon-vermilion: #ff8c5b;

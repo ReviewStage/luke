@@ -18,7 +18,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";
 import { rendererRuntime } from "../renderer-runtime";
-import type { TerminalHandle } from "../terminal/contract";
+import type { TerminalFind, TerminalHandle } from "../terminal/contract";
 import { onTerminalPort } from "../terminal/terminal-port";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { terminalModuleAtom } from "./terminal-bundle";
@@ -208,6 +208,8 @@ export interface TerminalSession {
   readonly state: TerminalState;
   /** Whether the terminal bundle failed to load, so there is no screen to draw on. */
   readonly failed: boolean;
+  /** The find over the screen's scrollback, once there is a screen. */
+  readonly find: TerminalFind | undefined;
   readonly screen: (element: HTMLDivElement | null) => void;
   readonly onAction: (action: TerminalAction) => void;
   /** The agent's shells and where its sandbox stands, as last read, or nothing before the first read. */
@@ -697,6 +699,7 @@ export function useTerminalSession(
   return {
     state,
     failed: AsyncResult.isFailure(loaded),
+    find: handle?.find,
     screen: setElement,
     onAction,
     listed,
