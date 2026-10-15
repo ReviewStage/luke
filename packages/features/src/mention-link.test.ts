@@ -333,7 +333,9 @@ test("every @ link outside code is one a writer keeps, whatever its target names
   const words = [
     "See [@Rollout](https://tryluke.dev/acme/plan/x#rollout), [@Linear](https://linear.app/a)",
     "and `[@code](luke://file/a.ts)`, but not [plain](https://example.com)",
-    "or the picture ![@Rollout mock](https://tryluke.dev/acme/plan/x/files/y).",
+    "or the picture ![@Rollout mock](https://tryluke.dev/acme/plan/x/files/y), even after a",
+    "written backslash \\\\![@Flow](https://tryluke.dev/acme/plan/x/files/z), while an escaped",
+    "\\![@Escaped](https://linear.app/b) is a link.",
   ].join("\n");
 
   assert.deepEqual(
@@ -341,6 +343,7 @@ test("every @ link outside code is one a writer keeps, whatever its target names
     [
       { label: "@Rollout", target: "https://tryluke.dev/acme/plan/x#rollout" },
       { label: "@Linear", target: "https://linear.app/a" },
+      { label: "@Escaped", target: "https://linear.app/b" },
     ],
   );
 });

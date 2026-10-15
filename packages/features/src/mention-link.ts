@@ -824,9 +824,16 @@ export function mentionMarkdown(mention: Mention, name: string, place: MentionPl
   return `[${label}](${encodeMention(mention, place)})`;
 }
 
-/** Whether the bracket at `at` opens a picture, `![…](…)`, rather than a link: its `!` stands before it, unescaped. */
+/**
+ * Whether the bracket at `at` opens a picture, `![…](…)`, rather than a
+ * link: its `!` stands before it, unescaped, which is behind an even run of
+ * backslashes, since each pair is one backslash written as itself.
+ */
 function opensPicture(text: string, at: number): boolean {
-  return text[at - 1] === "!" && text[at - 2] !== "\\";
+  if (text[at - 1] !== "!") return false;
+  let backslashes = 0;
+  while (text[at - 2 - backslashes] === "\\") backslashes += 1;
+  return backslashes % 2 === 0;
 }
 
 /**
