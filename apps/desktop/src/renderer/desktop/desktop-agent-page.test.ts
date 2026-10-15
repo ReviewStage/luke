@@ -14,12 +14,16 @@ import {
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import { MESSAGE_ROLE } from "@luke/wire";
+import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { APP_COMMAND } from "#shared/shortcuts";
 import { onRegistry } from "#testing/copy-feedback";
+import { markdownHtmlParserLanded } from "#testing/markdown";
 import { plansControl } from "#testing/plans-control";
+import { runAppCommand } from "../app-commands";
 import { archiveWords } from "../planning/coding-agent-model";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { ToastHost } from "../toast";
@@ -48,6 +52,9 @@ const PAGE: CodingAgentPage = {
 };
 
 let root: Root | undefined;
+
+// A message is drawn once the parser has landed, as the panel lands it after its first paint.
+beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 /** How the next reads of the agent's page answer, in order; the last stands for every read after it. */
 let pages: CodingAgentPageAnswerView[] = [];
 /** Every agent whose page was read, in order. */
@@ -60,6 +67,8 @@ let archiveRefused = false;
 let members: readonly WorkspaceMember[] | undefined;
 /** What the next read of the agent's transcript answers; none refuses it. */
 let transcript: CodingAgentMessagesAnswerView | undefined;
+/** Every act the page told or asked, in order. */
+let told: Act[] = [];
 
 beforeEach(() => {
   pages = [{ agent: PAGE }];
@@ -68,12 +77,30 @@ beforeEach(() => {
   archiveRefused = false;
   members = undefined;
   transcript = undefined;
+  told = [];
   Object.defineProperty(window, "luke", {
     configurable: true,
     value: {
       onMenuCommand: () => () => undefined,
       recordSurfaceEvent: () => undefined,
       act: (request: Act) => {
+        told.push(request);
+        if (request.kind === ACT_KIND.PLANNING_SKILLS) {
+          const value = {
+            skills: {
+              repository: "acme/relay",
+              branch: "main",
+              skills: [
+                {
+                  name: "release",
+                  description: "Cut a release.",
+                  path: ".agents/skills/release/SKILL.md",
+                },
+              ],
+            },
+          };
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+        }
         if (request.kind === ACT_KIND.CODING_AGENTS_ARCHIVE) {
           archives.push(request.payload);
           const value = archiveRefused
@@ -141,6 +168,64 @@ test("the page reads the agent by its id and titles it as its tab would", async 
 
   assert.deepEqual(read, [AGENT_ID]);
   assert.equal(page.querySelector("h1")?.textContent, "Sweep the flaky tests");
+});
+
+test("the page draws the task column's agent pane, at its reading width, and ⌘F finds in the agent's transcript", async () => {
+  transcript = {
+    messages: [
+      { id: "brief", role: MESSAGE_ROLE.USER, parts: [{ type: "text", text: "Sweep the tests." }] },
+      {
+        id: "answer",
+        role: MESSAGE_ROLE.ASSISTANT,
+        parts: [{ type: "text", text: "The flaky retry is gone." }],
+      },
+    ],
+    cursor: "1:0",
+    status: CODING_AGENT_STATUS.COMPLETED,
+    title: null,
+  };
+  const page = mount();
+  await settle();
+
+  let offered = false;
+  act(() => {
+    offered = runAppCommand(APP_COMMAND.FIND);
+  });
+
+  assert.ok(page.querySelector(".desktop-agent [role='log']"), "the transcript is the pane's");
+  assert.equal(offered, true);
+  assert.ok(page.querySelector(".desktop-agent")?.closest(".find-scope"), "the pane finds");
+  assert.ok(page.querySelector("search[aria-label='Find']"), "⌘F opens the find bar");
+});
+
+test("a skill a message names is its chip, which opens the skill's SKILL.md on GitHub, there being no File tab for a repository no plan names", async () => {
+  transcript = {
+    messages: [
+      { id: "brief", role: MESSAGE_ROLE.USER, parts: [{ type: "text", text: "Sweep the tests." }] },
+      {
+        id: "line",
+        role: MESSAGE_ROLE.USER,
+        parts: [{ type: "text", text: "Then run /release now." }],
+        sentBy: { userId: "user-dean", name: "Dean Stratakos", kind: CODING_AGENT_SENDER.MEMBER },
+      },
+    ],
+    cursor: "1:0",
+    status: CODING_AGENT_STATUS.COMPLETED,
+    title: null,
+  };
+  const page = mount();
+  await settle();
+
+  // The skills are read once a sent message first asks for them, a settle after the transcript lands.
+  await settle();
+  const chip = page.querySelector<HTMLButtonElement>("button.skill-chip");
+  assert.ok(chip, "the skill is its chip");
+  act(() => chip.click());
+
+  assert.deepEqual(
+    told.filter((each) => each.kind === ACT_KIND.GITHUB_OPEN).map((each) => each.payload),
+    [{ url: "https://github.com/acme/relay/blob/HEAD/.agents/skills/release/SKILL.md" }],
+  );
 });
 
 test("a read that did not land says so, and Retry reads the agent again and draws it", async () => {

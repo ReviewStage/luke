@@ -571,8 +571,8 @@ export function MainTabContent({
     task: string,
     status: CodingAgentStatus,
   ) => void;
-  /** Opens the agent's changes in the side panel, by the agent. */
-  onOpenChanges: (agentId: string) => void;
+  /** Opens the agent's changes in the side panel, by the agent; none where no side panel stands to show them. */
+  onOpenChanges?: ((agentId: string) => void) | undefined;
   /** Opens what a call in the agent's transcript is about in the tab that draws it. */
   onOpenTarget: (target: ToolTarget) => void;
   /** The cards the transcript's rows that open a tab hang, as those tabs hang them. */
@@ -599,10 +599,40 @@ export function MainTabContent({
       control={agents}
       shown={shown}
       onOpenSubagent={(callId, task, status) => onOpenDelegation(agent.id, callId, task, status)}
-      onOpenChanges={() => onOpenChanges(agent.id)}
+      onOpenChanges={onOpenChanges === undefined ? undefined : () => onOpenChanges(agent.id)}
       onOpenTarget={onOpenTarget}
       cards={cards.agent(agent.id)}
       onHeld={views.onAgentHeld}
     />
+  );
+}
+
+/**
+ * One agent's pane: what an agent's or the draft's tab shows
+ * (`MainTabContent`), at the document's reading width (`.desktop-agent`).
+ * The task column draws it for the tab it shows, as the panel of that tab,
+ * and the page of an agent no plan holds draws it for its agent
+ * (`desktop-agent-page.tsx`), so an agent reads, finds, and is written to
+ * alike wherever it stands.
+ */
+export function AgentPane({
+  label,
+  tabbed,
+  ...content
+}: Parameters<typeof MainTabContent>[0] & {
+  /** What the pane is called to a reader: the agent's tab's name. */
+  label: string | undefined;
+  /** Whether the pane is the panel of a tab in a strip, as the task column's is. */
+  tabbed: boolean;
+}): React.JSX.Element {
+  return (
+    <section
+      className="desktop-agent"
+      role={tabbed ? "tabpanel" : undefined}
+      aria-label={label}
+      data-popover-room=""
+    >
+      <MainTabContent {...content} />
+    </section>
   );
 }

@@ -246,6 +246,37 @@ test("with no plan open, the agent named is read as its page and held as a list 
   assert.equal(tab.control().agents?.[0]?.title, "Sweep the flaky tests");
 });
 
+test("with no plan open, a / reads the agent's own repository's skills through the workspace its page names, there being no plan to read them by", async () => {
+  const tab = mount({ planId: undefined, agentId: AGENT, repository: null });
+  tab.answer(ACT_KIND.CODING_AGENTS_PAGE, {
+    agent: {
+      ...STARTED,
+      planId: null,
+      automationId: null,
+      workspaceId: "workspace-1",
+      repository: "acme/relay",
+    },
+  });
+  const skills = { skills: { repository: "acme/relay", branch: "main", skills: [] } };
+  tab.answer(ACT_KIND.PLANNING_SKILLS, skills);
+  await tab.mount();
+
+  const read = tab.control().readSkills;
+  assert.ok(read, "the agent's box offers its repository's skills");
+  const answered = await read();
+
+  assert.deepEqual(answered, { skills: [] });
+  assert.deepEqual(
+    tab.asked.filter((each) => each.kind === ACT_KIND.PLANNING_SKILLS),
+    [
+      {
+        kind: ACT_KIND.PLANNING_SKILLS,
+        payload: { workspaceId: "workspace-1", repository: "acme/relay" },
+      },
+    ],
+  );
+});
+
 test("another agent named with no plan open holds nothing of the last, even where its read does not land", async () => {
   const OTHER = "3c2d1e0f-4a5b-4c6d-8e7f-9a0b1c2d3e4f";
   const page = (id: string) => ({
