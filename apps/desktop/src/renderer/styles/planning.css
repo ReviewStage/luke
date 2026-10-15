@@ -182,7 +182,7 @@
   margin-left: calc(-1 * var(--space-6));
 }
 
-:is(button.plan-crumb-item, .plan-crumb-people):hover {
+button.plan-crumb-item:hover {
   background: var(--raised);
   color: var(--text-primary);
 }

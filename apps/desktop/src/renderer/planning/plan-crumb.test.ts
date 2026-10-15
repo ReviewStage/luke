@@ -9,7 +9,7 @@ import {
   type WorkspaceMember,
 } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
-import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
+import type { SettingsLink } from "@luke/settings/settings-views";
 import { repositoryLabel } from "@luke/ui/task-list-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -24,9 +24,8 @@ import { PlanCrumb } from "./plan-crumb";
 /**
  * plan-crumb.test.ts -- the line over a plan's title says where the plan
  * lives, "Acme › relay", and who can edit it, "3 can edit" or "Only you".
- * The workspace opens its home page, the repository hangs its card and
- * presses nowhere, and who can edit opens the workspace's members in
- * Settings. Synthetic throughout.
+ * The workspace opens its home page, and the repository and who can edit
+ * each hang their card and press nowhere. Synthetic throughout.
  */
 
 const ACME: Workspace = {
@@ -213,16 +212,46 @@ test("members that could not be read leave the workspace's own count standing, w
   assert.equal(nav.querySelector(".actor-stack"), null);
 });
 
-test("the workspace opens its home page rather than its Settings, and who can edit opens its members", async () => {
+test("the workspace opens its home page rather than its Settings", async () => {
   const { nav, links, asked } = await crumb(ACME, "acme-corp/relay", MEMBERS);
 
   press(nav, "Acme");
-  press(nav, "can edit");
 
   assert.deepEqual(asked, [`home ${ACME.id}`]);
-  assert.deepEqual(links, [
-    { page: SETTINGS_VIEW.WORKSPACE, workspaceId: ACME.id, section: SETTINGS_SECTION.MEMBERS },
-  ]);
+  assert.deepEqual(links, []);
+});
+
+test("who can edit is no press: a click on the faces or the count opens nothing, Settings included", async () => {
+  const { nav, links, asked } = await crumb(ACME, "acme-corp/relay", MEMBERS);
+  const people =
+    nav.querySelector<HTMLElement>(".plan-crumb-people") ?? assert.fail("who can edit stands");
+
+  act(() => people.click());
+  act(() => people.querySelector<HTMLElement>(".actor-stack")?.click());
+
+  assert.equal(people.textContent, "DSL3 can edit");
+  assert.ok(people.closest("button, a") === null, "who can edit is no button and no link");
+  assert.deepEqual(links, []);
+  assert.deepEqual(asked, []);
+});
+
+test("who can edit takes the keyboard and hangs its card there, and Return or Space on it opens nothing", async () => {
+  const { nav, links, asked } = await crumb(ACME, "acme-corp/relay", MEMBERS);
+  const people =
+    nav.querySelector<HTMLElement>(".plan-crumb-people") ?? assert.fail("who can edit stands");
+
+  const card = cardOf(people, "data-people-card");
+  for (const key of ["Enter", " "]) {
+    act(() => {
+      people.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+      people.dispatchEvent(new KeyboardEvent("keyup", { key, bubbles: true }));
+    });
+  }
+
+  assert.equal(document.activeElement, people);
+  assert.match(card.textContent ?? "", /Everyone in Acme/u);
+  assert.deepEqual(links, []);
+  assert.deepEqual(asked, []);
 });
 
 test("the repository says its name alone, as the sidebar does, and is no press: it drops no menu", async () => {
