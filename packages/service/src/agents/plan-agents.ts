@@ -74,6 +74,7 @@ function agentLine(
       ...(starter === undefined
         ? undefined
         : { startedBy: { userId: agent.userId, name: starter } }),
+      ...(agent.automationId === null ? undefined : { automationId: agent.automationId }),
     },
     createdAt: agent.createdAt.getTime(),
     published: held.published,

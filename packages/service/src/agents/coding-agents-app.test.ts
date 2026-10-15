@@ -5,6 +5,7 @@ import { Database } from "@luke/database/core/query";
 import { GITHUB_ACCOUNT_TYPE } from "@luke/database/github-installation-vocabulary";
 import { readAccountPreferences } from "@luke/database/models/account-store";
 import { MENTIONED_HEADING } from "@luke/database/models/attached-file-parts";
+import { createAutomation } from "@luke/database/models/automation-store";
 import {
   readCodingAgent,
   takeCodingAgentMentionedServers,
@@ -28,6 +29,12 @@ import {
 } from "@luke/database/testing";
 import { HOSTED_API_ERROR } from "@luke/features";
 import { accountInboxAnswerSchema } from "@luke/features/account-inbox-wire";
+import {
+  AUTOMATION_ACTION,
+  AUTOMATION_DEFAULT_GUARDS,
+  AUTOMATION_SCOPE,
+  AUTOMATION_TRIGGER,
+} from "@luke/features/automation-wire";
 import {
   CODING_AGENT_BOUNDS,
   CODING_AGENT_BRIEF,
@@ -1063,6 +1070,47 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
             ?.agents?.agents.map((each) => [each.id, each.startedBy]),
           [[agent.id, { userId: owner, name: "Charles Pan" }]],
         );
+      }),
+  );
+
+  it.effect(
+    "an agent an automation's run started names the automation on the plan's agent list and on the plan list's line, and one started by hand names none",
+    () =>
+      Effect.gen(function* () {
+        const { owner, plan, agent, ask } = yield* startedAgent(fakeEve(), { running: false });
+        const automationIds = () =>
+          Effect.gen(function* () {
+            const agents = readAnswer(
+              codingAgentListAnswerSchema,
+              HOSTED_HTTP_STATUS.OK,
+              yield* ask(request(PLAN_AGENTS, owner, { id: plan.id })),
+            );
+            const plans = readAnswer(
+              planListAnswerSchema,
+              HOSTED_HTTP_STATUS.OK,
+              yield* ask(request(PLANS, owner)),
+            );
+            const line = plans.plans.find((each) => each.id === plan.id)?.agents?.agents[0];
+            return [agents.agents[0]?.automationId, line?.automationId];
+          });
+        assert.deepEqual(yield* automationIds(), [undefined, undefined]);
+
+        const made = yield* createAutomation(owner, {
+          planId: plan.id,
+          name: "Morning Sentry triage",
+          scope: AUTOMATION_SCOPE.PERSONAL,
+          trigger: { kind: AUTOMATION_TRIGGER.SCHEDULE, cron: "0 9 * * 1-5", timezone: "UTC" },
+          action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: "Triage Sentry." },
+          guards: AUTOMATION_DEFAULT_GUARDS,
+          nextRunAt: new Date("2026-10-16T09:00:00Z"),
+          webhookSecretHash: null,
+        });
+        const automationId = Option.getOrThrow(made).id;
+        yield* Database.use((db) =>
+          db.update(codingAgent).set({ automationId }).where(eq(codingAgent.id, agent.id)),
+        );
+
+        assert.deepEqual(yield* automationIds(), [automationId, automationId]);
       }),
   );
 

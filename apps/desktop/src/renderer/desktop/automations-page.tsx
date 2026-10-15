@@ -20,7 +20,7 @@ import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 import { EmptyState } from "../empty-state";
 import { useOpenFeedback } from "../open-feedback";
-import { dayAndTimeText, momentText, useMinute } from "../planning/plan-time";
+import { momentText, useMinute } from "../planning/plan-time";
 import { AUTOMATIONS_PAGE, type PlansControl } from "../planning/use-plans-tab";
 import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { StateGlyph, stateEndMark } from "../state-glyph";
@@ -28,6 +28,7 @@ import { Switch } from "../switch";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { AutomationEditor } from "./automation-editor";
 import { STANDING_GLYPH } from "./automation-runs-panel";
+import { automationNextText, automationOwnerName } from "./automation-words";
 import { useAutomations } from "./use-automations";
 
 /**
@@ -46,34 +47,8 @@ import { useAutomations } from "./use-automations";
  * feedback.
  */
 
-/** How near a next run is still named by its weekday alone: under a week, so no weekday stands for two days. */
-const WEEKDAY_REACH_MS = 6 * 24 * 60 * 60 * 1000;
-
-const WEEKDAY_AND_TIME = new Intl.DateTimeFormat(undefined, {
-  weekday: "short",
-  hour: "numeric",
-  minute: "2-digit",
-});
-
 /** What the list says where it could not be read. */
 const UNREAD_LINE = "The automations could not be read.";
-
-/** When an automation runs next, in the few words its row ends with: within the week by its weekday, further off by its date. */
-function nextText(automation: AutomationSummary, now: number): string {
-  const next = automationNext(automation);
-  switch (next.kind) {
-    case AUTOMATION_NEXT.OFF:
-      return "Off";
-    case AUTOMATION_NEXT.PAUSED:
-      return "Paused";
-    case AUTOMATION_NEXT.UNSCHEDULED:
-      return "Not scheduled";
-    case AUTOMATION_NEXT.AT:
-      return next.at - now < WEEKDAY_REACH_MS
-        ? `Next ${WEEKDAY_AND_TIME.format(next.at)}`
-        : `Next ${dayAndTimeText(next.at)}`;
-  }
-}
 
 /** Why a switch did not move, as its toast says it. */
 function toggleRefusal(answer: AutomationView, enabled: boolean): string | undefined {
@@ -82,11 +57,6 @@ function toggleRefusal(answer: AutomationView, enabled: boolean): string | undef
     return "Only its creator, or the workspace's owners and admins, can change it.";
   }
   return enabled ? "Couldn't turn it on. Try again." : "Couldn't turn it off. Try again.";
-}
-
-/** An owner as its column and its heading name it: the workspace by its name, or Personal. */
-function ownerName(owner: AutomationScope, workspaceName: string | undefined): string {
-  return owner === AUTOMATION_SCOPE.WORKSPACE ? (workspaceName ?? "Workspace") : "Personal";
 }
 
 /** Who owns an automation, as its row's column says it: a building and the workspace, or a lock and Personal, its name whole on hover where the column cuts it short. */
@@ -98,13 +68,17 @@ function OwnerCell({
   workspaceName: string | undefined;
 }): React.JSX.Element {
   return (
-    <span className="automation-owner" data-owner={owner} title={ownerName(owner, workspaceName)}>
+    <span
+      className="automation-owner"
+      data-owner={owner}
+      title={automationOwnerName(owner, workspaceName)}
+    >
       {owner === AUTOMATION_SCOPE.WORKSPACE ? (
         <BuildingIcon aria-hidden="true" />
       ) : (
         <LockIcon aria-hidden="true" />
       )}
-      <span className="automation-owner-name">{ownerName(owner, workspaceName)}</span>
+      <span className="automation-owner-name">{automationOwnerName(owner, workspaceName)}</span>
     </span>
   );
 }
@@ -145,7 +119,7 @@ function AutomationRow({
         className="automation-row-when"
         title={next.kind === AUTOMATION_NEXT.AT ? momentText(next.at) : undefined}
       >
-        {nextText(automation, now)}
+        {automationNextText(automation, now)}
       </span>
       {stateEndMark(state, true)}
       <Switch
@@ -177,10 +151,12 @@ function AutomationList({
         <section
           key={group.owner}
           className="automation-group"
-          aria-label={ownerName(group.owner, workspaceName)}
+          aria-label={automationOwnerName(group.owner, workspaceName)}
         >
           {groups.length > 1 ? (
-            <h2 className="settings-group-title">{ownerName(group.owner, workspaceName)}</h2>
+            <h2 className="settings-group-title">
+              {automationOwnerName(group.owner, workspaceName)}
+            </h2>
           ) : null}
           <div className="settings-card">
             {group.automations.map((automation) => (

@@ -172,6 +172,7 @@ function summaryFields(
       ? undefined
       : { disabledServers: agent.disabledServers }),
     ...(starter === undefined ? undefined : { startedBy: { userId: agent.userId, name: starter } }),
+    ...(agent.automationId === null ? undefined : { automationId: agent.automationId }),
   };
   const started = codingAgentRunStartedAt(standing.turn, {
     createdAt: agent.createdAt,
