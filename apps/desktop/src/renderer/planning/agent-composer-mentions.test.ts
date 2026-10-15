@@ -110,6 +110,7 @@ beforeEach(() => {
                         name: "list\ud800",
                         description: "A name that is no string of characters.",
                       },
+                      { name: "..", description: "A name an address resolves away." },
                     ],
                   },
                 }

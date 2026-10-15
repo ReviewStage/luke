@@ -108,6 +108,9 @@ const LEGACY = {
 /** A tool's name as an MCP server lists it, which is the name the agent's connection runs it by. */
 const TOOL_NAME = /^[A-Za-z0-9_.-]{1,128}$/u;
 
+/** A path's steps an address resolves away, which no tool's name can be, since its link would lose it. */
+const DOT_STEPS: ReadonlySet<string> = new Set([".", ".."]);
+
 /** An anchor as `sectionAnchors` spells one: letters, marks, digits, underscores, and hyphens. */
 const ANCHOR = /^[\p{L}\p{M}\p{N}\p{Pc}-]+$/u;
 
@@ -217,7 +220,10 @@ const mentionSchema = EffectSchema.Union([
   EffectSchema.Struct({
     kind: EffectSchema.Literal(MENTION_KIND.TOOL),
     provider: integrationProviderSchema,
-    tool: EffectSchema.String.check(EffectSchema.isPattern(TOOL_NAME)),
+    tool: EffectSchema.String.check(
+      EffectSchema.isPattern(TOOL_NAME),
+      EffectSchema.makeFilter((name) => !DOT_STEPS.has(name)),
+    ),
   }),
 ]);
 
@@ -231,7 +237,7 @@ export type ServerMention = Extract<Mention, { readonly provider: string }>;
 
 /** Whether a tool's name, as an MCP server lists it, is one a mention of the tool can carry. */
 export function isMentionableTool(name: string): boolean {
-  return TOOL_NAME.test(name);
+  return TOOL_NAME.test(name) && !DOT_STEPS.has(name);
 }
 
 /** A file's lines a mention names, at the commit they were read at. */
