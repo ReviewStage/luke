@@ -1,4 +1,5 @@
 import { AGENT_TOOL, CONNECTION_TOOL, EVE_TOOL } from "@luke/features/agent-tools";
+import { AGENT_FAILURE_WORDS } from "@luke/features/coding-agent-failure-words";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentCallFailure,
@@ -116,22 +117,6 @@ function withCost(line: string, usage: CodingAgentUsage | undefined): string {
   const cost = costLabel(usage);
   return cost === undefined ? line : `${line}${LINE_SEPARATOR}${cost}`;
 }
-
-/** What a failed turn's end line says after "Failed", by the service's one word for why; nothing for a reason it has no words for. */
-const AGENT_FAILURE_WORDS = {
-  [CODING_AGENT_FAILURE.MODEL]: "the model call failed",
-  [CODING_AGENT_FAILURE.SANDBOX]: "the sandbox or checkout failed",
-  [CODING_AGENT_FAILURE.GITHUB]: "GitHub refused or could not be reached",
-  [CODING_AGENT_FAILURE.ABANDONED]: "the turn ran past its bound and was ended",
-  [CODING_AGENT_FAILURE.PROVIDER_KEY]:
-    "your API key was refused or can't be read; check Settings › Coding agents › API keys",
-  [CODING_AGENT_FAILURE.NOT_STARTED]: "the agent never started; start a new one",
-  [CODING_AGENT_FAILURE.FAST_ON_OWN_KEY]:
-    "Fast isn't available on your own API key; choose the model with Fast off",
-  [CODING_AGENT_FAILURE.FAST_NOT_ENABLED]:
-    "Fast mode isn't enabled for this Anthropic organization; choose the model with Fast off",
-  [CODING_AGENT_FAILURE.OTHER]: undefined,
-} as const satisfies Record<CodingAgentFailure, string | undefined>;
 
 /**
  * The teammate who started an agent, by name, whose key pays for it and whose

@@ -37,13 +37,18 @@ import {
   automationCreateRequestSchema,
   automationRunRequestSchema,
 } from "@luke/features/automation-wire";
+import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import { unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Clock, Effect, Layer, Option, Result } from "effect";
 import { HttpRouter, HttpServerRequest, type HttpServerResponse } from "effect/http";
 import type * as HttpClient from "effect/http/HttpClient";
 import { acceptedAgentChoice } from "../agents/coder-host/start.js";
-import { type AgentTurnStanding, codingAgentStatusOf } from "../agents/coder-host/status.js";
+import {
+  type AgentTurnStanding,
+  codingAgentFailureOf,
+  codingAgentStatusOf,
+} from "../agents/coder-host/status.js";
 import { type EveReach, eveFor, standingsOf } from "../agents/coder-host/stop.js";
 import type { GitHubApp } from "../github/github-app.js";
 import { workspaceRepository } from "../github/workspace-repository.js";
@@ -186,6 +191,24 @@ const checkedAction = /* @__PURE__ */ Effect.fnUntraced(function* (
   return action;
 });
 
+/** A run's agent for the wire: its status read from its standing, and why it failed where it did. */
+function agentOf(
+  id: string,
+  title: string | null,
+  createdAt: Date,
+  standing: AgentTurnStanding,
+  now: number,
+): NonNullable<AutomationRunSummary["agent"]> {
+  const status = codingAgentStatusOf(standing.turn, {
+    createdAt,
+    now,
+    lineAwaits: standing.lineAwaits,
+  });
+  const failureReason =
+    status === CODING_AGENT_STATUS.FAILED ? codingAgentFailureOf(standing.turn) : undefined;
+  return { id, title, status, ...(failureReason === undefined ? undefined : { failureReason }) };
+}
+
 /** One run for the wire, its agent's status read from the standing given. */
 function runSummaryOf(
   run: AutomationRunInHistory,
@@ -195,15 +218,13 @@ function runSummaryOf(
   const agent =
     run.codingAgentId === null || run.agentConversationId === null || run.agentCreatedAt === null
       ? null
-      : {
-          id: run.codingAgentId,
-          title: run.agentTitle,
-          status: codingAgentStatusOf(standingOf(run.agentConversationId).turn, {
-            createdAt: run.agentCreatedAt,
-            now,
-            lineAwaits: standingOf(run.agentConversationId).lineAwaits,
-          }),
-        };
+      : agentOf(
+          run.codingAgentId,
+          run.agentTitle,
+          run.agentCreatedAt,
+          standingOf(run.agentConversationId),
+          now,
+        );
   return {
     id: run.id,
     firing: run.firing,

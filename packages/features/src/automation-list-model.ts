@@ -19,6 +19,7 @@ import {
   PULL_REQUEST_MOMENT,
   type PullRequestMoment,
 } from "./automation-wire.js";
+import { AGENT_FAILURE_WORDS } from "./coding-agent-failure-words.js";
 import { CODING_AGENT_STATUS, type CodingAgentStatus } from "./coding-agent-wire.js";
 
 /**
@@ -105,6 +106,16 @@ const FIRING_WORDS = {
   [AUTOMATION_FIRING.GITHUB]: "GitHub event",
   [AUTOMATION_FIRING.WEBHOOK]: "Webhook called",
 } as const satisfies Record<AutomationRunSummary["firing"]["kind"], string>;
+
+/** Where a started run's agent stands, and why it failed where it did, in the words its own end line uses. */
+function agentLine(agent: NonNullable<AutomationRunSummary["agent"]>): string {
+  const standing = AGENT_STATUS_WORDS[agent.status];
+  const why =
+    agent.failureReason === undefined ? undefined : AGENT_FAILURE_WORDS[agent.failureReason];
+  return agent.status === CODING_AGENT_STATUS.FAILED && why !== undefined
+    ? `${standing}: ${why}`
+    : standing;
+}
 
 /** Where a started run's agent stands, as its row's line says it. */
 const AGENT_STATUS_WORDS = {
@@ -300,6 +311,6 @@ export function automationRunLine(run: AutomationRunSummary): string {
     case AUTOMATION_RUN_STATUS.SKIPPED:
       return "Skipped";
     case AUTOMATION_RUN_STATUS.STARTED:
-      return run.agent === null ? "Its agent is gone" : AGENT_STATUS_WORDS[run.agent.status];
+      return run.agent === null ? "Its agent is gone" : agentLine(run.agent);
   }
 }

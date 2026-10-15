@@ -2,10 +2,12 @@ import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
+import { readCodingAgent } from "@luke/database/models/coding-agent-store";
 import { createPlan } from "@luke/database/models/plan-store";
 import { member as memberTable } from "@luke/database/schemas/auth";
 import { automation as automationTable } from "@luke/database/schemas/automation";
 import { personalWorkspace } from "@luke/database/schemas/personal-workspace";
+import { turns } from "@luke/database/schemas/storage";
 import {
   getTestDB,
   joinWorkspace,
@@ -37,10 +39,10 @@ import {
   automationRunsAnswerSchema,
   GITHUB_TRIGGER_EVENT,
 } from "@luke/features/automation-wire";
-import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
+import { CODING_AGENT_FAILURE, CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
-import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
+import { TURN_ORIGIN, TURN_STATUS, unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { eq } from "drizzle-orm";
 import { Clock, Effect, Layer, Option, Result, type Schema, Stream } from "effect";
@@ -52,6 +54,7 @@ import {
   EVE_SEND_OUTCOME,
   type EveSessions,
 } from "../agents/brain-host/eve-sessions.js";
+import { BRAIN_REQUEST_FAILURE } from "../core.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { modelCatalogOf, type OfferedModel } from "../providers/model-catalog.js";
 import {
@@ -546,6 +549,53 @@ it.layer(getTestDB())("the automation routes", (it) => {
         assert.equal(resumed.enabled, true);
         assert.equal(resumed.pausedReason, null);
         assert.equal(resumed.nextRunAt, scheduled.nextRunAt);
+      }),
+  );
+
+  it.effect(
+    "a run whose agent failed is read back in the history with why it failed, as the agent's own end line says it",
+    () =>
+      Effect.gen(function* () {
+        const { owner, plan, ask } = yield* openAccounts;
+        const { automation } = readAnswer(
+          automationAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(HOSTED_SERVICE_PATH.AUTOMATIONS, owner, {
+            method: "POST",
+            body: weekdays(plan.id),
+          }),
+        );
+        const { run } = readAnswer(
+          automationRunAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(automationRunPath(automation.id), owner, {
+            method: "POST",
+            body: { idempotencyKey: randomUUID() },
+          }),
+        );
+        const agent = Option.getOrThrow(yield* readCodingAgent(owner, run.agent?.id ?? ""));
+        // Its one turn ran past its bound, and the sweep settled it.
+        yield* Database.use((db) =>
+          db.insert(turns).values({
+            userId: owner,
+            conversationId: agent.conversationId,
+            origin: TURN_ORIGIN.TYPED,
+            status: TURN_STATUS.FAILED,
+            failure: BRAIN_REQUEST_FAILURE.ABANDONED,
+          }),
+        );
+
+        const history = readAnswer(
+          automationRunsAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(automationRunsPath(automation.id), owner),
+        );
+        assert.deepEqual(history.runs[0]?.agent, {
+          id: agent.id,
+          title: null,
+          status: CODING_AGENT_STATUS.FAILED,
+          failureReason: CODING_AGENT_FAILURE.ABANDONED,
+        });
       }),
   );
 
