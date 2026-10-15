@@ -482,9 +482,14 @@ export interface StackFace {
   readonly card?: ReactNode;
 }
 
+/** What the face says of an actor to a screen reader and in its pill: their name, and what the face says beside it. */
+function faceName(actor: Actor, face: StackFace): string {
+  return face.says === undefined ? actorName(actor) : `${actorName(actor)} · ${face.says}`;
+}
+
 /** One face of a facepile that hangs its card: the actor's mark, its badge, named to a screen reader by its name and what it says. */
 function CardedFace({ actor, face }: { actor: Actor; face: StackFace }): React.JSX.Element {
-  const name = face.says === undefined ? actorName(actor) : `${actorName(actor)} · ${face.says}`;
+  const name = faceName(actor, face);
   return (
     <Tooltip label={name} card={face.card ?? actorCard(actor)}>
       <li className="actor-stack-face" aria-label={name}>
@@ -500,13 +505,51 @@ function CardedFace({ actor, face }: { actor: Actor; face: StackFace }): React.J
 }
 
 /**
+ * The count past a pile's last face, which hangs a card naming each actor
+ * it counts by their mark and what their face would say, so nobody the pile
+ * leaves out is left unnamed, and is read to a screen reader as that list.
+ */
+function MoreFaces({
+  actors,
+  faces,
+  more,
+}: {
+  actors: readonly Actor[];
+  faces: readonly StackFace[];
+  more: string;
+}): React.JSX.Element {
+  const names = actors.map((actor, index) => faceName(actor, faces[index] ?? {}));
+  const card = (
+    <HoverCard data-actor-card="more">
+      <ul className="actor-more-list">
+        {actors.map((actor, index) => (
+          // Note that the rest stand in the pile's own order, so each is keyed by where it stands.
+          <li key={index} className="actor-more-row">
+            <ActorMark actor={actor} size={ACTOR_SIZE.STACK} />
+            <span>{names[index]}</span>
+          </li>
+        ))}
+      </ul>
+    </HoverCard>
+  );
+  return (
+    <Tooltip label={names.join(", ")} card={card}>
+      <li className="actor-stack-more" aria-label={names.join(", ")}>
+        {more}
+      </li>
+    </Tooltip>
+  );
+}
+
+/**
  * Many actors as a facepile: the first `drawn`, each cut from the ground
  * behind it by a ring of that ground, then how many more where `counted`;
  * a place whose words beside the pile already count them, "5 can edit",
  * draws no pill. Handed `faces`, one for each actor, each face hangs its
  * card, the actor's own where the face names none, wears its badge, and is
- * named to a screen reader, the pile a list under `label`; without them the
- * pile is the words' picture beside them and a screen reader skips it.
+ * named to a screen reader, the pile a list under `label`, its count hanging
+ * a card naming the rest; without them the pile is the words' picture
+ * beside them and a screen reader skips it.
  */
 export function ActorStack({
   actors,
@@ -541,7 +584,9 @@ export function ActorStack({
         // Note that a pile's order is its place's own and never moves under it, so a face is keyed by where it stands.
         <CardedFace key={index} actor={actor} face={faces[index] ?? {}} />
       ))}
-      {rest > 0 ? <li className="actor-stack-more">{`+${rest}`}</li> : null}
+      {rest > 0 ? (
+        <MoreFaces actors={actors.slice(drawn)} faces={faces.slice(drawn)} more={`+${rest}`} />
+      ) : null}
     </ul>
   );
 }

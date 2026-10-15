@@ -289,3 +289,35 @@ test("a card says the people its tab read only for the pull request they were re
   assert.equal(peopleOf(held, { url: "https://github.com/acme/relay/pull/43" }), undefined);
   assert.equal(peopleOf(undefined, PULL_REQUEST), undefined);
 });
+
+test("reviewers past the pile's last face are counted, and the count hangs a card naming each with where they stand", async () => {
+  const many = Array.from({ length: 6 }, (_, at) => ({
+    by: { login: `reviewer${at}`, bot: false },
+    state: at === 5 ? REVIEW_STATE.CHANGES_REQUESTED : REVIEW_STATE.APPROVED,
+  }));
+  const card = await draw(
+    createElement(ChangesCard, {
+      subject: agentSubject(control, AGENT.id, NOTHING_HELD, false),
+      models: [],
+      pullRequest: PULL_REQUEST,
+      people: { reviewers: many },
+      onOpenAgent: () => undefined,
+    }),
+  );
+  const more =
+    card.querySelector('[aria-label="Reviewers"] .actor-stack-more') ??
+    assert.fail("the rest are counted");
+  assert.equal(more.textContent, "+1");
+  assert.equal(more.getAttribute("aria-label"), "reviewer5 · Changes requested");
+  hover(more);
+  const rest = [
+    ...document.querySelectorAll('.tooltip-card [data-actor-card="more"] .actor-more-row'),
+  ];
+  assert.deepEqual(
+    rest.map((row) => [
+      row.querySelector(".actor-mark")?.getAttribute("data-kind"),
+      row.lastElementChild?.textContent,
+    ]),
+    [["github", "reviewer5 · Changes requested"]],
+  );
+});

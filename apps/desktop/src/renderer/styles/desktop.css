@@ -1084,6 +1084,22 @@ ul.actor-stack {
   stroke-width: 3;
 }
 
+/* The rest a pile's count stands for, each by their mark and what their face would say. */
+.actor-more-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.actor-more-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+}
+
 .actor-stack-more {
   display: inline-grid;
   height: 18px;
