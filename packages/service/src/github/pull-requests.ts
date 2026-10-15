@@ -15,8 +15,12 @@
  * patch where GitHub sends one; GitHub sends none for a file that is not
  * text, which it counts as changing no line, or for one whose patch is too
  * large to send, and the file says which rather than reading as unchanged.
+ * Who a pull request names is read beside its files: who opened it, its
+ * reviewers and where each stands, who authored its commits, and its
+ * reviews that said something, each the first page GitHub answers.
  */
 
+import { githubAvatarUrl } from "@luke/features/account-picture";
 import {
   CHANGED_FILE_STATUS,
   CHANGES_BOUNDS,
@@ -27,6 +31,8 @@ import {
   PATCH_OMITTED,
   PULL_REQUEST_STATE,
   type PullRequestState,
+  REVIEW_STATE,
+  type ReviewState,
 } from "@luke/features/coding-agent-wire";
 import { Effect, Option, type Redacted, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
@@ -133,6 +139,50 @@ const PullRequestFilesSchema = Schema.Array(
 const CombinedStatusSchema = Schema.Struct({
   statuses: Schema.Array(Schema.Struct({ state: Schema.String })),
 });
+
+/** A GitHub account as a pull request, a review, or a commit names it. */
+const GitHubAccountSchema = Schema.Struct({
+  login: Schema.String,
+  id: Schema.Number,
+  type: Schema.String,
+  avatar_url: Schema.optionalKey(Schema.String),
+});
+
+/** A pull request read for who it names: who opened it, and who it still asks for a review. */
+const PullRequestPeopleSchema = Schema.Struct({
+  user: Schema.NullOr(GitHubAccountSchema),
+  requested_reviewers: Schema.optionalKey(Schema.Array(GitHubAccountSchema)),
+});
+
+/** A pull request's reviews, oldest first, as GitHub lists them. */
+const ReviewsSchema = Schema.Array(
+  Schema.Struct({
+    user: Schema.NullOr(GitHubAccountSchema),
+    state: Schema.String,
+    body: Schema.NullOr(Schema.String),
+    submitted_at: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  }),
+);
+
+/** A pull request's commits, as GitHub lists them: the GitHub account each is by, where GitHub links its address to one. */
+const CommitsSchema = Schema.Array(Schema.Struct({ author: Schema.NullOr(GitHubAccountSchema) }));
+
+/** GitHub's own words for a review's standing; a pending review is its author's draft, which nobody else sees. */
+const GITHUB_REVIEW_STATE = new Map<string, ReviewState>([
+  ["APPROVED", REVIEW_STATE.APPROVED],
+  ["CHANGES_REQUESTED", REVIEW_STATE.CHANGES_REQUESTED],
+  ["DISMISSED", REVIEW_STATE.DISMISSED],
+  ["COMMENTED", REVIEW_STATE.COMMENTED],
+]);
+
+/** The kind GitHub gives an App's own bot account. */
+const GITHUB_BOT_TYPE = "Bot";
+
+/** The suffix GitHub gives an App's bot's login. */
+const BOT_LOGIN_SUFFIX = "[bot]";
+
+/** How many reviews and commits a read asks for: GitHub's one full page. */
+const PEOPLE_PER_PAGE = "100";
 
 /** A path segment as GitHub takes it, so a branch spelled with a slash stays one branch. */
 function segment(value: string): string {
@@ -376,4 +426,144 @@ export const pullRequestFiles = /* @__PURE__ */ Effect.fn("web/pullRequestFiles"
   }
   const kept = files.slice(0, CHANGES_BOUNDS.MAX_FILES);
   return { files: kept, truncated: pullRequest.changedFiles > kept.length };
+});
+
+/** A GitHub account as the people a pull request names hold it: GitHub's id, its login, whether it is an App's bot, and its avatar where GitHub's avatar host serves it. */
+export interface GitHubAccount {
+  readonly id: number;
+  readonly login: string;
+  readonly bot: boolean;
+  readonly avatarUrl: string | undefined;
+}
+
+/** A reviewer and where they stand. */
+export interface GitHubReviewer {
+  readonly account: GitHubAccount;
+  readonly state: ReviewState;
+}
+
+/** A review that said something: who, where it left them, the start of its words, and when. */
+export interface GitHubReviewComment {
+  readonly account: GitHubAccount;
+  readonly state: ReviewState;
+  readonly excerpt: string;
+  readonly at: number;
+}
+
+/** Who a pull request names: who opened it, its reviewers, who authored its commits, and its reviews that said something, each up to the bound. */
+export interface PullRequestPeople {
+  readonly author: GitHubAccount | undefined;
+  readonly reviewers: readonly GitHubReviewer[];
+  readonly commitAuthors: readonly GitHubAccount[];
+  readonly comments: readonly GitHubReviewComment[];
+}
+
+/** An account as GitHub records it, as the people hold it: a bot by its kind or its login's suffix. */
+function accountOf(record: typeof GitHubAccountSchema.Type): GitHubAccount {
+  return {
+    id: record.id,
+    login: record.login,
+    bot: record.type === GITHUB_BOT_TYPE || record.login.endsWith(BOT_LOGIN_SUFFIX),
+    avatarUrl: githubAvatarUrl(record.avatar_url),
+  };
+}
+
+/** Each account once, the first time it stands, up to the bound. */
+function distinctAccounts(accounts: readonly GitHubAccount[]): readonly GitHubAccount[] {
+  const seen = new Map<number, GitHubAccount>();
+  for (const account of accounts) if (!seen.has(account.id)) seen.set(account.id, account);
+  return [...seen.values()].slice(0, CHANGES_BOUNDS.MAX_PEOPLE);
+}
+
+/** The start of a review's words, its runs of space one space, cut at the bound; the window fades what it cuts. */
+function excerptOf(body: string): string {
+  return body.replace(/\s+/gu, " ").trim().slice(0, CHANGES_BOUNDS.MAX_EXCERPT_CHARS).trimEnd();
+}
+
+/**
+ * Where each reviewer stands, by their newest review that decides, else as
+ * having commented; one the pull request still asks for a review stands
+ * asked, as GitHub shows a re-requested reviewer, whatever they said before.
+ */
+function reviewersOf(
+  reviews: typeof ReviewsSchema.Type,
+  requested: readonly GitHubAccount[],
+): readonly GitHubReviewer[] {
+  const standing = new Map<number, GitHubReviewer>();
+  for (const review of reviews) {
+    const state = GITHUB_REVIEW_STATE.get(review.state);
+    if (review.user === null || state === undefined) continue;
+    const account = accountOf(review.user);
+    const held = standing.get(account.id);
+    // Note that a comment after a decision leaves the decision standing, as GitHub reads it.
+    if (state === REVIEW_STATE.COMMENTED && held !== undefined) continue;
+    standing.set(account.id, { account, state });
+  }
+  for (const account of requested)
+    standing.set(account.id, { account, state: REVIEW_STATE.REQUESTED });
+  return [...standing.values()].slice(0, CHANGES_BOUNDS.MAX_PEOPLE);
+}
+
+/** The reviews that said something, oldest first, up to the bound; a draft review and one by nobody GitHub names are left out. */
+function commentsOf(reviews: typeof ReviewsSchema.Type): readonly GitHubReviewComment[] {
+  return reviews
+    .flatMap((review) => {
+      const state = GITHUB_REVIEW_STATE.get(review.state);
+      const words = review.body?.trim() ?? "";
+      if (review.user === null || state === undefined || words === "") return [];
+      const at = Date.parse(review.submitted_at ?? "");
+      return [
+        {
+          account: accountOf(review.user),
+          state,
+          excerpt: excerptOf(words),
+          at: Number.isNaN(at) ? 0 : at,
+        },
+      ];
+    })
+    .slice(0, CHANGES_BOUNDS.MAX_PEOPLE);
+}
+
+/** No one: what a pull request the repository no longer holds names. */
+const NOBODY: PullRequestPeople = {
+  author: undefined,
+  reviewers: [],
+  commitAuthors: [],
+  comments: [],
+};
+
+/**
+ * Who the pull request names, read on the token in three asks at once: the
+ * pull request itself, for who opened it and who it still asks for a
+ * review; its reviews; and its commits. Nobody where the repository holds
+ * no such pull request.
+ */
+export const pullRequestPeople = /* @__PURE__ */ Effect.fn("web/pullRequestPeople")(function* (
+  token: Redacted.Redacted,
+  fullName: string,
+  number: number,
+): Effect.fn.Return<PullRequestPeople, PullRequestReadFailure, HttpClient.HttpClient> {
+  const path = `${repositoryPath(fullName)}/pulls/${number}`;
+  const page = HttpClientRequest.setUrlParams({ per_page: PEOPLE_PER_PAGE });
+  const [pull, reviews, commits] = yield* Effect.all(
+    [
+      readOptional(githubRead(path, token), PullRequestPeopleSchema),
+      readOptional(githubRead(`${path}/reviews`, token).pipe(page), ReviewsSchema),
+      readOptional(githubRead(`${path}/commits`, token).pipe(page), CommitsSchema),
+    ],
+    { concurrency: "unbounded" },
+  );
+  if (Option.isNone(pull)) return NOBODY;
+  const listed = Option.getOrElse(reviews, () => []);
+  const requested = (pull.value.requested_reviewers ?? []).map(accountOf);
+  return {
+    author: pull.value.user === null ? undefined : accountOf(pull.value.user),
+    reviewers: reviewersOf(listed, requested),
+    commitAuthors: distinctAccounts(
+      Option.getOrElse(commits, () => []).flatMap((commit) =>
+        commit.author === null ? [] : [accountOf(commit.author)],
+      ),
+    ),
+    comments: commentsOf(listed),
+  };
 });

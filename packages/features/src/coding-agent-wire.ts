@@ -575,6 +575,10 @@ export const CHANGES_BOUNDS = {
   MAX_FILES: 300,
   /** The most characters one file's patch may spell before it is left out as too large. */
   MAX_PATCH_CHARS: 100_000,
+  /** The most reviewers, commit authors, or review comments one read names; a pull request with more names its first. */
+  MAX_PEOPLE: 50,
+  /** The most characters of a review comment's words a read carries. */
+  MAX_EXCERPT_CHARS: 280,
 } as const;
 
 /**
@@ -596,10 +600,61 @@ const changedFileSchema = EffectSchema.Struct({
 export type CodingAgentChangedFile = typeof changedFileSchema.Type;
 
 /**
+ * Where a reviewer stands on a pull request, by their newest review that
+ * decides: approved, asked for changes, or that review dismissed; one who
+ * only commented, or one asked for a review not yet given.
+ */
+export const REVIEW_STATE = {
+  APPROVED: "approved",
+  CHANGES_REQUESTED: "changes-requested",
+  DISMISSED: "dismissed",
+  COMMENTED: "commented",
+  REQUESTED: "requested",
+} as const;
+
+/**
+ * Someone a pull request names on GitHub: their login, their avatar where
+ * GitHub's own avatar host serves it, whether they are an App's bot, and
+ * whether that bot is Luke's own App, whose commits and pull requests are
+ * its agents'; and the Luke account whose linked GitHub account it is,
+ * where that account is a member of the agent's workspace.
+ */
+const githubPersonSchema = EffectSchema.Struct({
+  login: EffectSchema.String,
+  avatarUrl: EffectSchema.optionalKey(EffectSchema.String),
+  bot: EffectSchema.Boolean,
+  luke: EffectSchema.optionalKey(EffectSchema.Boolean),
+  userId: EffectSchema.optionalKey(EffectSchema.String),
+});
+
+export type GitHubPerson = typeof githubPersonSchema.Type;
+
+export type ReviewState = (typeof REVIEW_STATE)[keyof typeof REVIEW_STATE];
+
+const reviewStateSchema = EffectSchema.Literals(Object.values(REVIEW_STATE));
+
+/** A reviewer of a pull request, and where they stand on it. */
+const pullRequestReviewerSchema = EffectSchema.Struct({
+  by: githubPersonSchema,
+  state: reviewStateSchema,
+});
+
+/** One review that said something: who, where it left them, the start of its words, and when. */
+const reviewCommentSchema = EffectSchema.Struct({
+  by: githubPersonSchema,
+  state: reviewStateSchema,
+  excerpt: EffectSchema.String.check(EffectSchema.isMaxLength(CHANGES_BOUNDS.MAX_EXCERPT_CHARS)),
+  at: countedNumber,
+});
+
+/**
  * One agent's changes (GET): the pull request it published, as its page on
  * GitHub, its files in the order GitHub lists them now, and whether the
  * list was cut short at the bound; or null where it has opened none yet,
- * which is not the same as a pull request that changes nothing.
+ * which is not the same as a pull request that changes nothing. Who opened
+ * it, its reviewers and where each stands, who authored its commits, and
+ * its reviews that said something ride beside the files, each absent from
+ * a service before them.
  */
 export const codingAgentChangesAnswerSchema = EffectSchema.Struct({
   pullRequest: EffectSchema.NullOr(
@@ -609,9 +664,29 @@ export const codingAgentChangesAnswerSchema = EffectSchema.Struct({
         EffectSchema.isMaxLength(CHANGES_BOUNDS.MAX_FILES),
       ),
       truncated: EffectSchema.Boolean,
+      author: EffectSchema.optionalKey(githubPersonSchema),
+      reviewers: EffectSchema.optionalKey(
+        EffectSchema.Array(pullRequestReviewerSchema).check(
+          EffectSchema.isMaxLength(CHANGES_BOUNDS.MAX_PEOPLE),
+        ),
+      ),
+      commitAuthors: EffectSchema.optionalKey(
+        EffectSchema.Array(githubPersonSchema).check(
+          EffectSchema.isMaxLength(CHANGES_BOUNDS.MAX_PEOPLE),
+        ),
+      ),
+      comments: EffectSchema.optionalKey(
+        EffectSchema.Array(reviewCommentSchema).check(
+          EffectSchema.isMaxLength(CHANGES_BOUNDS.MAX_PEOPLE),
+        ),
+      ),
     }),
   ),
 });
+
+export type CodingAgentChanges = NonNullable<
+  (typeof codingAgentChangesAnswerSchema.Type)["pullRequest"]
+>;
 
 /**
  * The tool an agent hands a slice of its work to a subagent with, by the
