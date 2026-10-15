@@ -27,6 +27,7 @@ import { automationRun, automation as automationTable } from "@luke/database/sch
 import { turns } from "@luke/database/schemas/storage";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { getTestDB, joinWorkspace, leaveWorkspace, startPlan } from "@luke/database/testing";
+import { codeReviewPreset } from "@luke/features/automation-code-review";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -145,6 +146,7 @@ const openAutomation = (
     readonly guards?: AutomationGuards;
     readonly archiveSuccessful?: boolean;
     readonly disabledServers?: readonly IntegrationProvider[];
+    readonly prompt?: string;
   } = {},
 ) =>
   Effect.gen(function* () {
@@ -163,7 +165,7 @@ const openAutomation = (
       trigger: { kind: AUTOMATION_TRIGGER.SCHEDULE, cron: "0 9 * * 1-5", timezone: "UTC" },
       action: {
         kind: AUTOMATION_ACTION.CODING_AGENT,
-        prompt: PROMPT,
+        prompt: options.prompt ?? PROMPT,
         choice: { model: SOL, effort: "low" },
         ...(options.disabledServers === undefined
           ? undefined
@@ -1065,6 +1067,36 @@ it.layer(getTestDB())("an automation's runs", (it) => {
 
         assert.equal(opened, "#2905 View commands");
         assert.equal(pushed, null);
+      }),
+  );
+
+  it.effect(
+    "a code review's run about a pull request starts its agent named as a review of it",
+    () =>
+      Effect.gen(function* () {
+        const { owner, automation } = yield* openAutomation({ prompt: codeReviewPreset().prompt });
+        const eve = fakeEve();
+        const run = Option.getOrThrow(
+          yield* recordAutomationRun(automation, {
+            dedupeKey: randomUUID(),
+            firing: {
+              kind: AUTOMATION_FIRING.GITHUB,
+              event: GITHUB_TRIGGER_EVENT.PULL_REQUEST_UPDATED,
+              repository: `${RELAY.owner}/${RELAY.name}`,
+              number: 2905,
+              title: "View commands",
+            },
+            firedAt: new Date(),
+          }),
+        );
+        const outcome = yield* executeAutomationRun(eve.eveFor, run).pipe(Effect.provide(services));
+        const agentId =
+          outcome?.status === AUTOMATION_RUN_STATUS.STARTED ? outcome.codingAgentId : "";
+
+        assert.equal(
+          Option.getOrThrow(yield* readCodingAgent(owner, agentId)).title,
+          "Review #2905 View commands",
+        );
       }),
   );
 
