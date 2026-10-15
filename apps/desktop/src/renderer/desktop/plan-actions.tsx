@@ -474,12 +474,13 @@ export function SidebarPlan({
             <span className="sidebar-plan-line">
               <span className="sidebar-plan-name">{plan.name}</span>
               {unread ? <span className="visually-hidden">(unread)</span> : null}
+              {/* Note that the creator is said outside the time, because the time steps out while the row holds the keyboard. */}
+              {creator === undefined ? null : (
+                <span className="visually-hidden">{`(created by ${actorName(creator)})`}</span>
+              )}
               <span className="sidebar-plan-time">
                 {creator === undefined ? null : (
-                  <>
-                    <ActorMark actor={creator} size={ACTOR_SIZE.MARK} />
-                    <span className="visually-hidden">{`(created by ${actorName(creator)})`}</span>
-                  </>
+                  <ActorMark actor={creator} size={ACTOR_SIZE.MARK} />
                 )}
                 <PlanStatusMark plan={plan} stranded={strandedHome(plans, plan)} />
                 <RelativeTime at={plan.updatedAt} now={now} hint={false} />

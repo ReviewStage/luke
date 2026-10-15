@@ -323,7 +323,13 @@ test("a sidebar task someone else created wears its creator's face before its ti
       }),
     );
     const marks = container.querySelectorAll(".sidebar-plan-time .actor-mark");
-    const said = container.querySelector(".sidebar-plan-time .visually-hidden")?.textContent;
+    // What the row says while it holds the keyboard, its time stepped out for Pin and Archive.
+    const line = container.querySelector(".sidebar-plan-line");
+    const said = [...(line?.childNodes ?? [])]
+      .filter((part) => !(part instanceof Element && part.matches(".sidebar-plan-time")))
+      .map(heard)
+      .join("")
+      .match(/\(created by [^)]*\)/u)?.[0];
     unmountAll();
     return [[...marks].map((mark) => mark.textContent), said];
   };
