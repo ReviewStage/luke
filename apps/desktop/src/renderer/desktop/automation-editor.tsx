@@ -10,6 +10,7 @@ import {
   draftProblems,
   draftRepositories,
   draftTrigger,
+  type GitHubTriggerSettings,
   SCHEDULE_KIND,
   type ScheduleDraft,
   type ScheduleKind,
@@ -34,8 +35,12 @@ import {
   type AutomationSummary,
   type AutomationTargetKind,
   type AutomationTriggerKind,
+  GITHUB_SENDER,
   GITHUB_TRIGGER_EVENT,
+  type GitHubSender,
   type GitHubTriggerEvent,
+  PULL_REQUEST_MOMENT,
+  type PullRequestMoment,
 } from "@luke/features/automation-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
@@ -487,6 +492,109 @@ function EditorToolbar({
         )}
       </div>
     </header>
+  );
+}
+
+/** Whose events a GitHub trigger may hear, as its switches name them. */
+const SENDER_CHOICES: readonly { value: GitHubSender; label: string; detail?: string }[] = [
+  { value: GITHUB_SENDER.PEOPLE, label: "From people" },
+  {
+    value: GITHUB_SENDER.LUKE_AGENTS,
+    label: "From Luke's agents",
+    detail: "What Luke's coding agents open, as the workspace's GitHub App.",
+  },
+  {
+    value: GITHUB_SENDER.OTHER_BOTS,
+    label: "From other bots",
+    detail: "Dependabot, Renovate, and every other app.",
+  },
+];
+
+/** The moments of a pull request an update may fire on, as its switches name them. */
+const MOMENT_CHOICES: readonly { value: PullRequestMoment; label: string; detail?: string }[] = [
+  { value: PULL_REQUEST_MOMENT.OPENED, label: "When opened" },
+  { value: PULL_REQUEST_MOMENT.READY, label: "When marked ready" },
+  {
+    value: PULL_REQUEST_MOMENT.PUSHED,
+    label: "When pushed to",
+    detail:
+      "A push by Luke's own agents never starts a run, so a run that pushes cannot start itself.",
+  },
+];
+
+/** The GitHub events a pull request's drafts and forks speak to. */
+const PULL_REQUEST_EVENTS: ReadonlySet<GitHubTriggerEvent> = new Set([
+  GITHUB_TRIGGER_EVENT.PULL_REQUEST_OPENED,
+  GITHUB_TRIGGER_EVENT.PULL_REQUEST_LABELED,
+  GITHUB_TRIGGER_EVENT.PULL_REQUEST_UPDATED,
+]);
+
+/** A list with a value in it or out of it, as a switch leaves it. */
+function toggled<Value>(list: readonly Value[], value: Value, on: boolean): readonly Value[] {
+  return on
+    ? [...list.filter((each) => each !== value), value]
+    : list.filter((each) => each !== value);
+}
+
+/**
+ * A GitHub trigger's settings, as rows of the Trigger card, a switch each
+ * as Settings lists several: whose events fire it, the moments an update
+ * fires on, and whether drafts are skipped and forks heard, each shown
+ * only for the events it speaks to. A check names no sender, so it shows none.
+ */
+function GitHubSettingsRows({
+  event,
+  settings,
+  onSettings,
+}: {
+  event: GitHubTriggerEvent;
+  settings: GitHubTriggerSettings;
+  onSettings: (settings: GitHubTriggerSettings) => void;
+}): React.JSX.Element | null {
+  if (event === GITHUB_TRIGGER_EVENT.CHECK_FAILED) return null;
+  return (
+    <>
+      {SENDER_CHOICES.map((choice) => (
+        <SwitchRow
+          key={choice.value}
+          label={choice.label}
+          detail={choice.detail}
+          checked={settings.senders.includes(choice.value)}
+          onChange={(on) =>
+            onSettings({ ...settings, senders: toggled(settings.senders, choice.value, on) })
+          }
+        />
+      ))}
+      {event === GITHUB_TRIGGER_EVENT.PULL_REQUEST_UPDATED
+        ? MOMENT_CHOICES.map((choice) => (
+            <SwitchRow
+              key={choice.value}
+              label={choice.label}
+              detail={choice.detail}
+              checked={settings.moments.includes(choice.value)}
+              onChange={(on) =>
+                onSettings({ ...settings, moments: toggled(settings.moments, choice.value, on) })
+              }
+            />
+          ))
+        : null}
+      {PULL_REQUEST_EVENTS.has(event) ? (
+        <>
+          <SwitchRow
+            label="Skip drafts"
+            detail="A draft starts a run once it is marked ready."
+            checked={!settings.drafts}
+            onChange={(skip) => onSettings({ ...settings, drafts: !skip })}
+          />
+          <SwitchRow
+            label="Include forks"
+            detail="A fork's pull request is code from outside the repository, read by an agent that can push to it."
+            checked={settings.forks}
+            onChange={(forks) => onSettings({ ...settings, forks })}
+          />
+        </>
+      ) : null}
+    </>
   );
 }
 
@@ -992,14 +1100,21 @@ function EditorForm({
             onTimezone={(timezone) => onDraft({ timezone })}
           />
         ) : draft.triggerKind === AUTOMATION_TRIGGER.GITHUB ? (
-          <SelectRow
-            label="Event"
-            detail="Heard through the workspace's GitHub App, in the repositories below. Events Luke's own agents cause, and draft pull requests, start nothing."
-            value={draft.githubEvent}
-            options={GITHUB_EVENTS}
-            parse={githubEventOf}
-            onChange={(event) => onDraft(withGithubEvent(draft, event))}
-          />
+          <>
+            <SelectRow
+              label="Event"
+              detail="Heard through the workspace's GitHub App, in the repositories below."
+              value={draft.githubEvent}
+              options={GITHUB_EVENTS}
+              parse={githubEventOf}
+              onChange={(event) => onDraft(withGithubEvent(draft, event))}
+            />
+            <GitHubSettingsRows
+              event={draft.githubEvent}
+              settings={draft.githubSettings}
+              onSettings={(githubSettings) => onDraft({ githubSettings })}
+            />
+          </>
         ) : (
           <WebhookRows
             automation={automation}

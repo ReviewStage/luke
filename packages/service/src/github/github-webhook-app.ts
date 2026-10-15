@@ -28,7 +28,7 @@ import {
   readBodyBytesEffect,
 } from "../http/http-effect.js";
 import { ANY_METHOD, type WebRoutes } from "../route.js";
-import { clearRevokedAuthorization, type GitHubApp } from "./github-app.js";
+import { clearRevokedAuthorization, GitHubApp } from "./github-app.js";
 import { setInstallationStatus } from "./github-installations.js";
 
 /**
@@ -347,8 +347,10 @@ const deliveryEndpoint = /* @__PURE__ */ Effect.fn("web/githubWebhookEndpoint")(
       }
       return hostedJsonResponse(200, { read: 0 });
     }
+    // A deployment with no App configured knows no bot of its own, so every bot is another's.
+    const agentLogin = yield* Effect.orElseSucceed((yield* GitHubApp).botLogin, () => undefined);
     const queued = yield* hostedStoreOrUnavailable(
-      queueGithubRuns(request.headers[DELIVERY_HEADER.DELIVERY] ?? "", event, payload),
+      queueGithubRuns(request.headers[DELIVERY_HEADER.DELIVERY] ?? "", event, payload, agentLogin),
     );
     const target = deliveryTarget(event, payload);
     const read = target === undefined ? 0 : yield* readAgainOnBranches(target);
