@@ -113,13 +113,33 @@ function readDrafts(owner: Owner): readonly KeptDraft[] {
     .map(({ place, text }) => ({ place, text, attachments: [] }));
 }
 
-/** Keeps the owner's drafts' words, each holding some, beside every other account's as storage holds them. */
-function writeDrafts(owner: Owner, drafts: readonly KeptDraft[]): void {
-  const others = readStored().filter((kept) => kept.accountId !== owner);
-  const worded = drafts
-    .filter((kept) => kept.text !== "")
+/** Whether a kept draft is the one storage holds for an entry: the owner's, at its place, in its words. */
+function storedAs(owner: Owner, kept: KeptDraft, entry: StoredDraft): boolean {
+  return (
+    entry.accountId === owner && Equal.equals(entry.place, kept.place) && entry.text === kept.text
+  );
+}
+
+/**
+ * Keeps the owner's drafts beside every other account's, in the order they
+ * were written: an entry unchanged stands where it stood and one written
+ * moves last, so the oldest written of any account's is the one let go past
+ * `MAX_KEPT`. Answers the owner's drafts as kept, a draft of files alone
+ * among them, since storage holds none of those to let go.
+ */
+function writeDrafts(owner: Owner, drafts: readonly KeptDraft[]): readonly KeptDraft[] {
+  const worded = drafts.filter((kept) => kept.text !== "");
+  const standing = readStored().filter(
+    (entry) => entry.accountId !== owner || worded.some((kept) => storedAs(owner, kept, entry)),
+  );
+  const written = worded
+    .filter((kept) => !standing.some((entry) => storedAs(owner, kept, entry)))
     .map(({ place, text }) => ({ accountId: owner, place, text }));
-  writeKept(STORAGE_KEY, storedDrafts, [...others, ...worded].slice(-MAX_KEPT));
+  const kept = [...standing, ...written].slice(-MAX_KEPT);
+  writeKept(STORAGE_KEY, storedDrafts, kept);
+  return drafts.filter(
+    (draft) => draft.text === "" || kept.some((entry) => storedAs(owner, draft, entry)),
+  );
 }
 
 /** The drafts with `place`'s set to `draft`, latest last, or let go where it holds nothing. */
@@ -137,65 +157,88 @@ type DraftChange =
   | { readonly place: DraftPlace; readonly next: (was: Draft) => Draft }
   | { readonly drop: (place: DraftPlace) => boolean };
 
+/**
+ * Every draft one account holds, in an atom of its own. Note that a write
+ * keeps the words of every other place as storage holds them, and the files
+ * as this window does, since storage holds none, with a draft of files alone
+ * this window's own; each draft unchanged is the very one it was, so a box
+ * reading another place's draft does not draw again. Each account's atom is
+ * kept alive, because the files live nowhere else while no box is open, and
+ * is its own, so nothing one account attached reaches another's box.
+ */
+const draftsOf = Atom.family((owner: Owner) => {
+  const self: Atom.Writable<readonly KeptDraft[], DraftChange> = Atom.keepAlive(
+    Atom.writable(
+      () => readDrafts(owner),
+      (ctx, change: DraftChange) => {
+        const held = ctx.get(self);
+        const read = readDrafts(owner).map((kept) => {
+          const was = held.find((each) => Equal.equals(each.place, kept.place));
+          if (was === undefined) return kept;
+          return was.text === kept.text ? was : { ...kept, attachments: was.attachments };
+        });
+        const filesAlone = held.filter(
+          (kept) =>
+            kept.text === "" &&
+            kept.attachments.length > 0 &&
+            !read.some((each) => Equal.equals(each.place, kept.place)),
+        );
+        const standing = [...filesAlone, ...read];
+        const next =
+          "drop" in change
+            ? standing.filter((kept) => !change.drop(kept.place))
+            : withDraft(
+                standing,
+                change.place,
+                change.next(
+                  standing.find((kept) => Equal.equals(kept.place, change.place)) ?? EMPTY_DRAFT,
+                ),
+              );
+        ctx.setSelf(writeDrafts(owner, next));
+      },
+    ),
+  );
+  return self;
+});
+
 /** The account signed in to this window, whose drafts it reads and writes. */
 const ownerAtom = Atom.keepAlive(Atom.make<Owner>(null));
 
-/**
- * Every draft this window's account holds. Note that a write keeps the words
- * of every other place as storage holds them, and the files as this window
- * does, since storage holds none, with a draft of files alone this window's
- * own; each draft unchanged is the very one it was, so a box reading another
- * place's draft does not draw again. The atom is kept alive, because the
- * files live nowhere else while no box is open; another account signing in
- * reads its own afresh.
- */
-const draftsAtom = Atom.keepAlive(
-  Atom.writable(
-    (get) => readDrafts(get(ownerAtom)),
-    (ctx, change: DraftChange) => {
-      const owner = ctx.get(ownerAtom);
-      const held = ctx.get(draftsAtom);
-      const read = readDrafts(owner).map((stored) => {
-        const was = held.find((kept) => Equal.equals(kept.place, stored.place));
-        if (was === undefined) return stored;
-        return was.text === stored.text ? was : { ...stored, attachments: was.attachments };
-      });
-      const filesAlone = held.filter(
-        (kept) =>
-          kept.text === "" &&
-          kept.attachments.length > 0 &&
-          !read.some((stored) => Equal.equals(stored.place, kept.place)),
-      );
-      const stored = [...filesAlone, ...read];
-      const next =
-        "drop" in change
-          ? stored.filter((kept) => !change.drop(kept.place))
-          : withDraft(
-              stored,
-              change.place,
-              change.next(
-                stored.find((kept) => Equal.equals(kept.place, change.place)) ?? EMPTY_DRAFT,
-              ),
-            );
-      writeDrafts(owner, next);
-      ctx.setSelf(next);
-    },
-  ),
+/** The drafts of the account signed in to this window, written as that account's. */
+const draftsAtom = Atom.writable(
+  (get) => get(draftsOf(get(ownerAtom))),
+  (ctx, change: DraftChange) => ctx.set(draftsOf(ctx.get(ownerAtom)), change),
 );
+
+/** Moves the drafts kept under an account's address to its id, the order they were written kept, once its identity learns its id. */
+function adoptDrafts(address: string, accountId: string): void {
+  const stored = readStored();
+  if (!stored.some((entry) => entry.accountId === address)) return;
+  writeKept(
+    STORAGE_KEY,
+    storedDrafts,
+    stored.map((entry) => (entry.accountId === address ? { ...entry, accountId } : entry)),
+  );
+}
 
 /**
  * Hands this window's drafts to the account signed in to it, before the
  * window is painted, so a box opening as the account changes never shows
  * another's words; nothing while none is signed in. An account is known by
  * its id, or by its address where its identity was stored without one, so
- * two such accounts never share their drafts either.
+ * two such accounts never share their drafts either; the drafts it kept
+ * under its address become its id's once its identity learns the id.
  */
 export function useDraftsOwner(
   account: { readonly id?: string | undefined; readonly email: string } | undefined,
 ): void {
   const own = useAtomSet(ownerAtom);
-  const owner = account === undefined ? null : (account.id ?? account.email);
-  useLayoutEffect(() => own(owner), [own, owner]);
+  const id = account?.id;
+  const email = account?.email;
+  useLayoutEffect(() => {
+    if (id !== undefined && email !== undefined) adoptDrafts(email, id);
+    own(id ?? email ?? null);
+  }, [own, id, email]);
 }
 
 /**

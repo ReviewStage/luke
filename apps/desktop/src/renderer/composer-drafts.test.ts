@@ -305,3 +305,46 @@ test("accounts whose identity holds no id are told apart by their address, so ne
   await app.show(INVITES, { account: { email: DEAN.email } });
   assert.equal(app.box(), "Expire invites after a week");
 });
+
+test("the drafts an account kept under its address are its own still once its identity learns its id", async () => {
+  const app = windowOn(AtomRegistry.make());
+  await app.show(INVITES, { account: { email: DEAN.email } });
+  typeInComposer(app.container, "Expire invites after a week");
+  await settle();
+
+  await app.show(INVITES, { account: DEAN });
+  assert.equal(app.box(), "Expire invites after a week");
+  assert.equal(app.rowDrafted(INVITES.plan.name), true);
+});
+
+/** A draft as storage keeps it: an agent's words on a plan, by the account that wrote them. */
+function keptEntry(accountId: string, planId: string, agentId: string, text: string) {
+  return { accountId, place: { kind: "agent", planId, agentId }, text };
+}
+
+test("past the most drafts kept, the oldest written goes, whosever it is, and the window lets go of it as storage does", async () => {
+  // Dean's draft on Teammate invitations is the oldest; Sam's on Billing export the newest.
+  const filler = Array.from({ length: 198 }, (_, at) =>
+    keptEntry(DEAN.id, `plan-${at}`, `agent-${at}`, `Draft ${at}`),
+  );
+  window.localStorage.setItem(
+    "luke.composerDrafts",
+    JSON.stringify([
+      keptEntry(DEAN.id, INVITES.plan.id, INVITES.agent.id, "Expire invites after a week"),
+      ...filler,
+      keptEntry(SAM.id, BILLING.plan.id, BILLING.agent.id, "Also the CSV"),
+    ]),
+  );
+  const app = windowOn(AtomRegistry.make());
+  await app.show(BILLING, { account: DEAN });
+  assert.equal(app.rowDrafted(INVITES.plan.name), true);
+
+  typeInComposer(app.container, "Monthly, not weekly");
+  await settle();
+  assert.equal(app.rowDrafted(INVITES.plan.name), false, "the oldest is let go at once");
+  for (const root of roots.splice(0)) act(() => root.unmount());
+
+  const sam = windowOn(AtomRegistry.make());
+  await sam.show(BILLING, { account: SAM });
+  assert.equal(sam.box(), "Also the CSV", "a newer draft of another account's stands");
+});
