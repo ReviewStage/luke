@@ -23,6 +23,7 @@ import { afterEach, beforeEach, test } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { onRegistry } from "#testing/copy-feedback";
 import { plansControl } from "#testing/plans-control";
+import { installScrollIntoView } from "#testing/scroll-into-view";
 import { runAppCommand } from "../app-commands";
 import { AUTOMATIONS_PAGE, type AutomationsPlace } from "../planning/use-plans-tab";
 import { ToastHost } from "../toast";
@@ -103,6 +104,7 @@ let changeRefusal:
   | undefined;
 
 beforeEach(() => {
+  installScrollIntoView();
   standing = [DIGEST, SWEEP, FAILING];
   lists = [];
   listHeld = false;
@@ -450,7 +452,7 @@ function mountPages(start: AutomationsPlace, workspace: Workspace = WORKSPACE): 
           repositoriesIn: () => ({
             ...base.repositoriesIn(listed.id),
             scope: listed.id,
-            recent: [listed.id === WORKSPACE.id ? "acme/ledger" : "beta/app"],
+            recent: listed.id === WORKSPACE.id ? ["acme/ledger", "acme/web"] : ["beta/app"],
           }),
         },
       },
@@ -730,4 +732,38 @@ test("Escape keeps a new page whose schedule was changed, though nothing was typ
   act(() => runAppCommand(APP_COMMAND.EXIT_AUTOMATIONS));
 
   assert.equal(places.length, 1);
+});
+
+test("a refresh that fails while an automation's page stands keeps the page and what was typed in it", async () => {
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+  type(page.querySelector("input[aria-label='Automation name']"), "Sweep");
+
+  lists = [{ failure: AUTOMATION_CALL_FAILURE.UNANSWERED }];
+  act(() => page.querySelector<HTMLButtonElement>(".automations-view [role=switch]")?.click());
+  await settle();
+
+  assert.equal(
+    page.querySelector<HTMLInputElement>("input[aria-label='Automation name']")?.value,
+    "Sweep",
+  );
+  assert.doesNotMatch(page.textContent ?? "", /could not be read/u);
+});
+
+test("the repository chosen first is not said again among the others its runs work in", async () => {
+  const several = automation(8, {
+    name: "Cross-repo sweep",
+    repositories: ["acme/ledger", "acme/web"],
+  });
+  standing = [several];
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: several.id });
+  await settle();
+  assert.match(page.textContent ?? "", /also work in acme\/web\./u);
+
+  act(() => page.querySelector<HTMLButtonElement>(".automation-form .chip")?.click());
+  await settle();
+  act(() => button("acme/web").click());
+  await settle();
+
+  assert.doesNotMatch(page.textContent ?? "", /also work in/u);
 });

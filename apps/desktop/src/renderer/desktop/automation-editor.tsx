@@ -395,6 +395,8 @@ function EditorForm({
   onDraft: (patch: Partial<AutomationDraft>) => void;
 }): React.JSX.Element {
   const promptId = useId();
+  // The other repositories as a save would send them: the one shown first left out.
+  const also = draft.alsoRepositories.filter((repository) => repository !== draft.repository);
   return (
     <div className="settings-card automation-form">
       <FormRow label="Schedule" problem={problems[DRAFT_FIELD.SCHEDULE]}>
@@ -437,9 +439,9 @@ function EditorForm({
               chooser={repositories}
               onChoose={(repository) => onDraft({ repository })}
             />
-            {draft.alsoRepositories.length === 0 ? null : (
+            {also.length === 0 ? null : (
               <p className="automation-form-note">
-                {`Runs start here, and also work in ${draft.alsoRepositories.join(", ")}.`}
+                {`Runs start here, and also work in ${also.join(", ")}.`}
               </p>
             )}
           </>

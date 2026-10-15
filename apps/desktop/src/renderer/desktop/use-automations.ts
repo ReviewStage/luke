@@ -21,7 +21,8 @@ import { useMinute } from "../planning/plan-time";
  * which takes its place in the list at once, a new one first, where it is
  * the newest write of that automation, and a deletion takes its row away;
  * the list is read again once any write settles, so what changed elsewhere
- * while it was out is not lost to it. A failure is kept to be said rather
+ * while it was out is not lost to it. A refresh that fails keeps the list
+ * it would have replaced, so nothing drawn from it is taken down. A failure is kept to be said rather
  * than thrown, since every caller does the same with one: says it, and
  * offers to try again.
  */
@@ -74,8 +75,20 @@ export function useAutomations(workspaceId: string | undefined) {
     generation.current += 1;
     if (workspaceId === undefined) return;
     const asked = generation.current;
+    // Note that a refresh that fails keeps the list it would have replaced,
+    // so a page drawn from it, an editor's draft among them, stands; only a
+    // first read that fails is said as one.
     const taken = (read: AutomationsRead) => {
-      if (asked === generation.current) setHeld({ workspaceId, read });
+      if (asked !== generation.current) return;
+      setHeld((was) =>
+        read !== undefined &&
+        "failure" in read &&
+        was?.workspaceId === workspaceId &&
+        was.read !== undefined &&
+        "automations" in was.read
+          ? was
+          : { workspaceId, read },
+      );
     };
     act(ACT_KIND.AUTOMATIONS_LIST, { workspaceId }).then(taken, () => taken(UNANSWERED));
   }, [act, workspaceId]);
