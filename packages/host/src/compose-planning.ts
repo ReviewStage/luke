@@ -51,6 +51,7 @@ import {
   type PlanningWorkspaceInvitationsAnswer,
   type PlanningWorkspaceLeaveAnswer,
   type PlanningWorkspaceMembersAnswer,
+  type PlanningWorkspacePhotoAnswer,
   type PlanShownCode,
   type PlanWorkTurn,
   planningArchiveParamsSchema,
@@ -78,6 +79,7 @@ import {
   planningWorkspaceMembersParamsSchema,
   planningWorkspaceParamsSchema,
   planningWorkspaceRenameParamsSchema,
+  planningWorkspacePhotoParamsSchema,
 } from "@luke/features/planning-view";
 import { EMPTY_TRANSCRIPT } from "@luke/features/transcript-wire";
 import {
@@ -292,6 +294,7 @@ export type PlanningClient = Pick<
     | "githubConnect"
     | "githubDisconnect"
     | "members"
+    | "photo"
     | "removeMember"
     | "leave"
     | "invite"
@@ -1583,6 +1586,22 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
         );
         return carried<PlanningWorkspaceMembersAnswer>(
           members.ok ? { members: members.answer } : { failure: members.failure },
+        );
+      }),
+    // A photo is answered to the window that asked and held nowhere, as
+    // the members are: the window keeps it under the version the list
+    // named, and the list itself never carries its bytes.
+    [GATEWAY_METHOD.WORKSPACES_PHOTO]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(planningWorkspacePhotoParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) return yield* invalid("reading a photo names a workspace");
+        if (!gate()) return carried<PlanningWorkspacePhotoAnswer>(WORKSPACE_UNANSWERED);
+        const photo = yield* Effect.provide(
+          client.workspaces.photo(read.success.workspaceId),
+          FetchHttpClient.layer,
+        );
+        return carried<PlanningWorkspacePhotoAnswer>(
+          photo.ok ? photo.answer : { failure: photo.failure },
         );
       }),
     [GATEWAY_METHOD.WORKSPACES_MEMBER_REMOVE]: (params) =>

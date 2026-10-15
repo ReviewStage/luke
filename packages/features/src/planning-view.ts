@@ -51,6 +51,7 @@ import {
   workspaceMemberRemovalSchema,
   workspaceMemberSchema,
   workspaceRenameRequestSchema,
+  workspacePhotoTypeSchema,
   workspaceSchema,
 } from "./workspace-wire.js";
 
@@ -798,6 +799,25 @@ export const planningWorkspaceMembersAnswerSchema = EffectSchema.Union([
 ]);
 
 export type PlanningWorkspaceMembersAnswer = typeof planningWorkspaceMembersAnswerSchema.Type;
+
+/** A workspace's photo, as a window's tile asks for it: the workspace. */
+export const planningWorkspacePhotoParamsSchema = workspaceLeaveRequestSchema;
+
+export type PlanningWorkspacePhotoParams = typeof planningWorkspacePhotoParamsSchema.Type;
+
+/**
+ * A workspace's photo, as the window hears it: its bytes in base64 under
+ * its media type, which the window draws from a `data:` URL of its own
+ * making, or why there is none: not a member, no photo, or no answer. The
+ * host fetched it under the account, so the window holds no bearer and no
+ * address.
+ */
+export const planningWorkspacePhotoAnswerSchema = EffectSchema.Union([
+  EffectSchema.Struct({ contentType: workspacePhotoTypeSchema, base64: EffectSchema.String }),
+  workspaceCallFailureSchema,
+]);
+
+export type PlanningWorkspacePhotoAnswer = typeof planningWorkspacePhotoAnswerSchema.Type;
 
 /** Leaving a workspace, as the window asks it: the workspace. */
 export const planningWorkspaceLeaveParamsSchema = workspaceLeaveRequestSchema;

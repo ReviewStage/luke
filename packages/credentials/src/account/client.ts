@@ -1,4 +1,5 @@
 import { HOSTED_SERVICE_PATH } from "@luke/features";
+import { pinnedPictureUrl } from "@luke/features/account-picture";
 import { onOwnFiber } from "@luke/runtime/effect";
 import { isRecord, isWireString, text, type UnparsedWireValue, type WireRecord } from "@luke/wire";
 import { webResponseFromClientResponse } from "@luke/wire/effect";
@@ -36,24 +37,12 @@ export interface AccountIdentity {
 }
 
 /**
- * The only hosts an avatar may be loaded from, matching the renderer's image
- * policy exactly: Google serves profile photos from `googleusercontent.com`
- * and GitHub from `avatars.githubusercontent.com`. A picture anywhere else is
- * dropped rather than handed to a renderer whose CSP would refuse it — and the
- * set is fixed by this build, like every address the renderer is given.
+ * The account's picture, kept only where it is drawn from a host the
+ * renderer's image policy allows (`@luke/features/account-picture`, the one
+ * rule the service's workspace read follows too).
  */
 function accountPictureUrl(value: UnparsedWireValue): string | undefined {
-  if (!isWireString(value) || !value) return undefined;
-  let url: URL;
-  try {
-    url = new URL(value);
-  } catch {
-    return undefined;
-  }
-  if (url.protocol !== "https:") return undefined;
-  const host = url.hostname;
-  const googleHosted = host === "googleusercontent.com" || host.endsWith(".googleusercontent.com");
-  return googleHosted || host === "avatars.githubusercontent.com" ? url.toString() : undefined;
+  return isWireString(value) ? pinnedPictureUrl(value) : undefined;
 }
 
 interface AccountClientOptions {

@@ -491,6 +491,11 @@ body,
   line-height: 1;
 }
 
+/* A photo or a picture fills the tile's square, cropped rather than stretched. */
+img.workspace-tile {
+  object-fit: cover;
+}
+
 .workspace-tile[data-hue="2"] {
   background: var(--workspace-hue-2);
 }

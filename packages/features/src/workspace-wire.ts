@@ -32,6 +32,11 @@ import { countedNumber } from "./service-wire.js";
  * takes one Luke's own pages stand under: `RESERVED_WORKSPACE_SLUGS`. The
  * slug only reads well; a link is found by the plan's id alone, so a slug
  * spelled differently later breaks no link written under the old one.
+ *
+ * A workspace may show a photo an owner or admin uploaded, served to its
+ * members alone at `GET /api/workspaces/<id>/photo` as its bytes; the list
+ * says only which version of it stands. The account's own first workspace
+ * with no photo shows the account's sign-in picture instead.
  */
 
 /** An account's role in a workspace, as the auth service's organization plugin names it. */
@@ -97,6 +102,22 @@ export const WORKSPACE_BOUNDS = {
   MAX_NAME_CHARS: 64,
 } as const;
 
+/**
+ * The image types a workspace's photo may be: kept as a `data:` URL of one
+ * of them, served as its bytes under it, and drawn by a window from a `data:`
+ * URL of its own making.
+ */
+export const WORKSPACE_PHOTO_TYPE = {
+  PNG: "image/png",
+  JPEG: "image/jpeg",
+  WEBP: "image/webp",
+} as const;
+
+export type WorkspacePhotoType = (typeof WORKSPACE_PHOTO_TYPE)[keyof typeof WORKSPACE_PHOTO_TYPE];
+
+/** A workspace photo's media type as the wire carries it. */
+export const workspacePhotoTypeSchema = EffectSchema.Literals(Object.values(WORKSPACE_PHOTO_TYPE));
+
 /** The GitHub account a workspace's connected installation is on: its login, and whether the installation is active. */
 export const workspaceGithubSchema = EffectSchema.Struct({
   login: EffectSchema.String,
@@ -123,6 +144,22 @@ export const workspaceSchema = EffectSchema.Struct({
   github: EffectSchema.NullOr(workspaceGithubSchema),
   /** How many members it has, the account among them, which the window says as who shares it; absent from a service before it. */
   memberCount: EffectSchema.optionalKey(countedNumber),
+  /**
+   * A short digest of the photo an owner or admin uploaded, present only
+   * where the workspace holds one of `WORKSPACE_PHOTO_TYPE`; absent from a
+   * service before photos. The photo's bytes never travel with the list,
+   * which the desktop hands every window on every change: a window reads
+   * them apart, at `workspacePhotoPath`, and reads them again only when the
+   * digest changes.
+   */
+  photoVersion: EffectSchema.optionalKey(EffectSchema.String),
+  /**
+   * The owner's own sign-in picture, present only on the account's own first
+   * workspace while it holds no uploaded photo, and only where the address is
+   * one the renderer may draw (`account-picture.ts`); absent from a service
+   * before it, and from every workspace a teammate shares.
+   */
+  pictureUrl: EffectSchema.optionalKey(EffectSchema.String),
 });
 
 export type Workspace = typeof workspaceSchema.Type;

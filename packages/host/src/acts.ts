@@ -104,6 +104,7 @@ import {
   type PlanningSkillsAnswer,
   type PlanningStartAnswer,
   type PlanningTreeAnswer,
+  type PlanningWorkspacePhotoAnswer,
   planningArchiveParamsSchema,
   planningBoardSaveParamsSchema,
   planningEditAnswerSchema,
@@ -140,6 +141,8 @@ import {
   planningWorkspaceMembersParamsSchema,
   planningWorkspaceParamsSchema,
   planningWorkspaceRenameParamsSchema,
+  planningWorkspacePhotoAnswerSchema,
+  planningWorkspacePhotoParamsSchema,
 } from "@luke/features/planning-view";
 import {
   type TerminalCreatedActAnswer,
@@ -314,7 +317,9 @@ export const ACT_KIND = {
    * workspace's members read; one member removed, answered with the members
    * who remain; and one workspace left. Every write reads the workspaces
    * again, so they arrive on the document; a write the account's role does
-   * not allow is refused in words that say so.
+   * not allow is refused in words that say so. A workspace's photo is read
+   * apart, answered with its bytes in base64 under its media type or why
+   * there are none, since the document never carries them.
    */
   WORKSPACE_CREATE: "workspace.create",
   WORKSPACE_RENAME: "workspace.rename",
@@ -326,6 +331,7 @@ export const ACT_KIND = {
   WORKSPACE_MEMBERS_READ: "workspace.membersRead",
   WORKSPACE_MEMBER_REMOVE: "workspace.memberRemove",
   WORKSPACE_LEAVE: "workspace.leave",
+  WORKSPACE_PHOTO_READ: "workspace.photoRead",
   /**
    * A plan's coding agents, asked of the service: the models one may run
    * on, the account's default among them read and written, the plan's
@@ -873,6 +879,13 @@ export const ACT = {
     payload: actSchema(planningWorkspaceLeaveParamsSchema),
     result: answersNothing,
     refusal: "Could not leave that workspace on this system.",
+  },
+  [ACT_KIND.WORKSPACE_PHOTO_READ]: {
+    payload: actSchema(planningWorkspacePhotoParamsSchema),
+    result: wireResult<PlanningWorkspacePhotoAnswer>(
+      isReadable(planningWorkspacePhotoAnswerSchema),
+    ),
+    refusal: "Could not read that workspace's photo on this system.",
   },
   [ACT_KIND.PLANNING_BOARD_SAVE]: {
     payload: actSchema(planningBoardSaveParamsSchema),

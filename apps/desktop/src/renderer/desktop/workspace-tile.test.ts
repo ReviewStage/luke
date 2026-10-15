@@ -1,0 +1,126 @@
+// @vitest-environment jsdom
+
+import assert from "node:assert/strict";
+import { WORKSPACE_CALL_FAILURE } from "@luke/features";
+import type { PlanningWorkspacePhotoAnswer } from "@luke/features/planning-view";
+import { WORKSPACE_PHOTO_TYPE } from "@luke/features/workspace-wire";
+import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
+import { act, createElement } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, test } from "vitest";
+import { WorkspaceTile } from "./workspace-tile";
+
+/**
+ * A workspace's tile as the developer meets it: the photo an owner or admin
+ * uploaded once the host answers it, read with the workspace's id; the
+ * owner's sign-in picture on a personal workspace with no photo; and the
+ * letter where there is neither, while the photo loads, and where an image
+ * fails to load. Synthetic workspaces and addresses throughout.
+ */
+
+const PHOTO = { contentType: WORKSPACE_PHOTO_TYPE.PNG, base64: "iVBORw0KGgo=" };
+const PICTURE_URL = "https://avatars.githubusercontent.com/u/1";
+
+const roots: Root[] = [];
+
+/** Every act the tile sent, in order. */
+let sent: { kind: string; payload?: unknown }[] = [];
+
+/** What the host answers a photo read with. */
+let answer: PlanningWorkspacePhotoAnswer = PHOTO;
+
+beforeEach(() => {
+  sent = [];
+  answer = PHOTO;
+  Object.defineProperty(window, "luke", {
+    configurable: true,
+    value: {
+      act: (request: { kind: string; payload?: unknown }) => {
+        sent.push(request);
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: answer });
+      },
+    },
+  });
+});
+
+afterEach(() => {
+  for (const root of roots.splice(0)) act(() => root.unmount());
+  document.body.innerHTML = "";
+});
+
+/** Lets every promise settled so far run its continuations. */
+async function settle(): Promise<void> {
+  await act(async () => {
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
+}
+
+/** The tile for the workspace given, as a row draws it. */
+function mount(workspace: {
+  id: string;
+  name: string;
+  photoVersion?: string;
+  pictureUrl?: string;
+}): HTMLElement {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  act(() => root.render(createElement(WorkspaceTile, { workspace })));
+  return container;
+}
+
+/** What the tile draws: an image's address, or its letter. */
+function drawn(container: HTMLElement): { src: string } | { letter: string } {
+  const image = container.querySelector("img");
+  if (image !== null) return { src: image.getAttribute("src") ?? "" };
+  return { letter: container.querySelector(".workspace-tile")?.textContent ?? "" };
+}
+
+test("a workspace with a photo draws its letter while it loads, then the photo the host read for its id", async () => {
+  const tile = mount({ id: "workspace-photo", name: "acme", photoVersion: "1a2b3c4d5e6f7a8b" });
+
+  assert.deepEqual(drawn(tile), { letter: "A" });
+  await settle();
+
+  assert.deepEqual(drawn(tile), { src: `data:image/png;base64,${PHOTO.base64}` });
+  assert.deepEqual(sent, [
+    { kind: ACT_KIND.WORKSPACE_PHOTO_READ, payload: { workspaceId: "workspace-photo" } },
+  ]);
+});
+
+test("a photo the host has none of, or that fails to load, leaves the letter", async () => {
+  answer = { failure: WORKSPACE_CALL_FAILURE.NOT_FOUND };
+  const missing = mount({
+    id: "workspace-missing",
+    name: "relay",
+    photoVersion: "0f0f0f0f0f0f0f0f",
+  });
+  await settle();
+  answer = PHOTO;
+  const broken = mount({ id: "workspace-broken", name: "zeta", photoVersion: "0e0e0e0e0e0e0e0e" });
+  await settle();
+  act(() => broken.querySelector("img")?.dispatchEvent(new Event("error")));
+
+  assert.deepEqual(drawn(missing), { letter: "R" });
+  assert.deepEqual(drawn(broken), { letter: "Z" });
+});
+
+test("a personal workspace with no photo draws its owner's picture, and its letter where the picture fails to load", () => {
+  const tile = mount({ id: "workspace-personal", name: "Personal", pictureUrl: PICTURE_URL });
+
+  assert.deepEqual(drawn(tile), { src: PICTURE_URL });
+  assert.deepEqual(sent, []);
+
+  act(() => tile.querySelector("img")?.dispatchEvent(new Event("error")));
+
+  assert.deepEqual(drawn(tile), { letter: "P" });
+});
+
+test("a workspace with neither a photo nor a picture draws its letter and reads nothing", async () => {
+  const tile = mount({ id: "workspace-plain", name: "plain" });
+  await settle();
+
+  assert.deepEqual(drawn(tile), { letter: "P" });
+  assert.deepEqual(sent, []);
+});

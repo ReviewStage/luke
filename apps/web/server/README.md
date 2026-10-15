@@ -174,6 +174,13 @@ A workspace's members are read, removed, and left, and a workspace renamed, thro
 answers a workspace's members to a member under the Mac's OAuth token, read
 through Drizzle (`packages/service/src/accounts/workspace-members.ts`), owners first, then admins,
 then members, since the plugin's own `listMembers` takes a session.
+`GET /api/workspaces/<id>/photo` serves a workspace's photo, kept as a
+`data:` URL in the organization plugin's own `logo` column, as its bytes under
+its type, to a member alone, `nosniff` and `private, no-store`; a non-member,
+and a workspace with no PNG, JPEG, or WebP photo, read `not-found`. The list
+carries only a digest of it as `photoVersion`, and the account's own first
+workspace with none carries the account's sign-in picture as `pictureUrl`
+where it is Google's or GitHub's (`@luke/features/account-picture`).
 `POST /api/workspaces/members/remove` lets an owner or an admin remove a
 member who is not an owner, `POST /api/workspaces/leave` lets anyone but
 an owner leave, and `POST /api/workspaces/rename { workspaceId, name }` lets

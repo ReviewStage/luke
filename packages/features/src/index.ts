@@ -112,6 +112,7 @@ export {
   planAgentsPath,
   planPath,
   VOICE_SERVICE_PATH,
+  workspacePhotoPath,
 } from "./service-paths.js";
 export {
   HOSTED_API_ERROR,

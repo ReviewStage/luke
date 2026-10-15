@@ -1,12 +1,16 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+import { pinnedPictureUrl } from "@luke/features/account-picture";
 import {
   RESERVED_WORKSPACE_SLUGS,
   type Workspace as WireWorkspace,
   WORKSPACE_ROLE,
+  type WorkspacePhotoType,
   type WorkspaceRole,
+  workspacePhotoTypeSchema,
 } from "@luke/features/workspace-wire";
 import { and, asc, eq, exists, inArray, type SQL, type SQLWrapper, sql } from "drizzle-orm";
-import { type Cause, DateTime, Effect, Option, Schema } from "effect";
+import { type Cause, DateTime, Effect, Option, Result, Schema } from "effect";
+import { Base64 } from "effect/encoding";
 import { SqlSchema } from "effect/sql";
 import {
   Database,
@@ -48,6 +52,11 @@ import {
  * read and written by every member of the workspace it names, so a store
  * gates a plan through `planReachableBy` and `reachablePlan` rather than by
  * the account that started it.
+ * A workspace's photo is the plugin's own `organization.logo`, kept as a
+ * `data:` URL of one of `WORKSPACE_PHOTO_TYPE`; a list names only a digest of
+ * it, and its bytes are read apart, by a member alone. The account's own
+ * first workspace with no photo lists the account's sign-in picture, where
+ * the renderer may draw it.
  * Every function is an effect over the ambient `Database`.
  */
 
@@ -57,11 +66,25 @@ const PERSONAL_WORKSPACE_NAME = "Personal";
 /** The slug every account's first workspace is made under, one per account, which is what makes the plugin refuse a second. */
 const PERSONAL_SLUG_PREFIX = "personal-";
 
+/** How many hex characters of a photo's digest name its version: enough that two photos of one workspace never share one. */
+const PHOTO_VERSION_CHARS = 16;
+
+/** A photo as `organization.logo` keeps it: a `data:` URL naming its media type, then its bytes in base64. */
+const PHOTO_DATA_URL = /^data:([^;,]+);base64,([A-Za-z0-9+/]+={0,2})$/u;
+
+const isPhotoType = Schema.is(workspacePhotoTypeSchema);
+
 /**
  * One workspace as its members see it: the account's role in it and the
  * GitHub account its connected installation is on, if any.
  */
 export type Workspace = WireWorkspace;
+
+/** A workspace's photo, as its bytes under its media type. */
+export interface WorkspacePhoto {
+  readonly contentType: WorkspacePhotoType;
+  readonly bytes: Uint8Array;
+}
 
 const WORKSPACE_ROLES: readonly WorkspaceRole[] = Object.values(WORKSPACE_ROLE);
 
@@ -88,6 +111,10 @@ const WorkspaceRowSchema = Schema.Struct({
   status: Schema.NullOr(Schema.String),
   /** How many members the workspace has, the account among them. */
   memberCount: Schema.Number,
+  /** The plugin's `logo` text, which holds the workspace's photo as a `data:` URL where it has one. */
+  logo: Schema.NullOr(Schema.String),
+  /** The account's own sign-in picture where this workspace is the first one made for it, else null. */
+  ownerImage: Schema.NullOr(Schema.String),
 });
 
 const findPersonalWorkspace = SqlSchema.findOneOption({
@@ -196,6 +223,20 @@ const findMemberWorkspace = SqlSchema.findOneOption({
     ),
 });
 
+const findWorkspaceLogo = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, organizationId: Schema.String }),
+  Result: Schema.Struct({ logo: Schema.NullOr(Schema.String) }),
+  execute: ({ userId, organizationId }) =>
+    Database.use((db) =>
+      db
+        .select({ logo: organization.logo })
+        .from(organization)
+        .where(
+          and(eq(organization.id, organizationId), memberOfWorkspace(userId, organization.id)),
+        ),
+    ),
+});
+
 /** The workspaces the account is a member of, or the one named among them, as rows, each with how many members it has, counted apart from the account's own row the read joins. */
 function workspaceRows(db: DatabaseShape, userId: string, organizationId?: string) {
   return db
@@ -208,6 +249,8 @@ function workspaceRows(db: DatabaseShape, userId: string, organizationId?: strin
       login: githubInstallation.accountLogin,
       status: githubInstallation.status,
       memberCount: sql<number>`(select count(*)::int from ${member} as "members" where "members"."organization_id" = ${organization.id})`,
+      logo: organization.logo,
+      ownerImage: user.image,
     })
     .from(member)
     .innerJoin(organization, eq(organization.id, member.organizationId))
@@ -218,6 +261,7 @@ function workspaceRows(db: DatabaseShape, userId: string, organizationId?: strin
         eq(personalWorkspace.userId, userId),
       ),
     )
+    .leftJoin(user, eq(user.id, personalWorkspace.userId))
     .leftJoin(githubInstallation, eq(githubInstallation.organizationId, organization.id))
     .where(
       and(
@@ -241,6 +285,33 @@ const findWorkspace = SqlSchema.findOneOption({
     Database.use((db) => workspaceRows(db, userId, organizationId)),
 });
 
+/** The photo a workspace's `logo` holds, where it is a `data:` URL of a photo's type whose bytes read; nothing for any other text. */
+function photoOfLogo(logo: string | null): WorkspacePhoto | undefined {
+  const matched = logo === null ? null : PHOTO_DATA_URL.exec(logo);
+  const [, contentType, base64] = matched ?? [];
+  if (contentType === undefined || base64 === undefined || !isPhotoType(contentType)) {
+    return undefined;
+  }
+  const bytes = Base64.decode(base64);
+  return Result.isSuccess(bytes) ? { contentType, bytes: bytes.success } : undefined;
+}
+
+/**
+ * What a row shows of the workspace's face: a digest of its photo where it
+ * holds one, else, on the account's own first workspace, the account's
+ * sign-in picture where the renderer may draw it, else nothing.
+ */
+function faceOfRow(
+  row: typeof WorkspaceRowSchema.Type,
+): Pick<Workspace, "photoVersion" | "pictureUrl"> {
+  if (row.logo !== null && photoOfLogo(row.logo) !== undefined) {
+    const digest = createHash("sha256").update(row.logo).digest("hex");
+    return { photoVersion: digest.slice(0, PHOTO_VERSION_CHARS) };
+  }
+  const pictureUrl = row.personalOf === null ? undefined : pinnedPictureUrl(row.ownerImage);
+  return pictureUrl === undefined ? {} : { pictureUrl };
+}
+
 /** One row as the wire carries the workspace. */
 function workspaceOfRow(row: typeof WorkspaceRowSchema.Type): Workspace {
   return {
@@ -253,6 +324,7 @@ function workspaceOfRow(row: typeof WorkspaceRowSchema.Type): Workspace {
         ? null
         : { login: row.login, active: row.status === GITHUB_INSTALLATION_STATUS.ACTIVE },
     memberCount: row.memberCount,
+    ...faceOfRow(row),
   };
 }
 
@@ -425,6 +497,16 @@ export function workspaceOf(
   organizationId: string,
 ): WorkspaceStoreEffect<Option.Option<Workspace>> {
   return Effect.map(findWorkspace({ userId, organizationId }), Option.map(workspaceOfRow));
+}
+
+/** One workspace's photo as its bytes, to a member of it alone; nothing for a workspace it is not in, or one that holds no photo. */
+export function readWorkspacePhoto(
+  userId: string,
+  organizationId: string,
+): WorkspaceStoreEffect<Option.Option<WorkspacePhoto>> {
+  return Effect.map(findWorkspaceLogo({ userId, organizationId }), (found) =>
+    Option.flatMap(found, (row) => Option.fromNullishOr(photoOfLogo(row.logo))),
+  );
 }
 
 /**

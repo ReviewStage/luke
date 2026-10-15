@@ -7,6 +7,7 @@ import {
   ensurePersonalWorkspace,
   listWorkspaces,
   personalWorkspaceOf,
+  readWorkspacePhoto,
 } from "@luke/database/models/workspace-store";
 import { member, organization, user } from "@luke/database/schemas/auth";
 import { personalWorkspace } from "@luke/database/schemas/personal-workspace";
@@ -16,6 +17,7 @@ import {
   joinWorkspace,
   WORKSPACE_ROLE,
 } from "@luke/database/testing";
+import { WORKSPACE_PHOTO_TYPE } from "@luke/features/workspace-wire";
 import { openWorkspacePlugin } from "@luke/service/testing/workspace-plugin";
 import { eq } from "drizzle-orm";
 import { Cause, DateTime, Effect, Option } from "effect";
@@ -25,7 +27,10 @@ import { Cause, DateTime, Effect, Option } from "effect";
  * first time it is asked for and never again, a workspace a racing ensure
  * made and named the account's is adopted rather than doubled, one anyone
  * else made under the account's slug is never adopted, and a list puts the
- * account's own first workspace first and no teammate's.
+ * account's own first workspace first and no teammate's. A workspace's
+ * photo is listed as a digest of it and read as its bytes by a member alone,
+ * and the account's own first workspace with none lists the account's sign-in
+ * picture where the renderer may draw it.
  *
  * The plugin's write is a fake over the same tables (`@luke/database/testing`'s `workspaces.ts`),
  * refusing a slug that is taken as the plugin does, on both dialects, and Better Auth's own plugin
@@ -64,7 +69,126 @@ const openSharedWorkspace = (
     return { id, slug };
   });
 
+/** A one-pixel photo's bytes, and another's, each as a `data:` URL of its type keeps them. */
+const PNG_BYTES = "iVBORw0KGgo=";
+const JPEG_BYTES = "/9j/4AAQSkZJRg==";
+const photoUrl = (type: string, base64: string) => `data:${type};base64,${base64}`;
+
+/** The workspace's `logo`, as an upload would write it. */
+const keepLogo = (organizationId: string, logo: string | null) =>
+  Database.use((db) =>
+    db.update(organization).set({ logo }).where(eq(organization.id, organizationId)),
+  );
+
+/** The account's sign-in picture, as its provider handed it over. */
+const keepImage = (userId: string, image: string | null) =>
+  Database.use((db) => db.update(user).set({ image }).where(eq(user.id, userId)));
+
+/** What one listed workspace shows of its face: its photo's version and its picture's address, where it lists them. */
+const faceIn = (
+  listed: readonly { id: string; photoVersion?: string; pictureUrl?: string }[],
+  id: string,
+) => {
+  const found = listed.find((workspace) => workspace.id === id);
+  assert.ok(found, `${id} is listed`);
+  return { photoVersion: found.photoVersion, pictureUrl: found.pictureUrl };
+};
+
 it.layer(getTestDB())("an account's workspaces over effect/unstable/sql", (it) => {
+  it.effect(
+    "a workspace holding a photo lists a digest of it and none of its bytes, a digest that moves when the photo does, and any other text lists none",
+    () =>
+      Effect.gen(function* () {
+        const seams = yield* fakeWorkspaceSeams;
+        const owner = yield* openUser("Owner");
+        const acme = yield* openSharedWorkspace(seams, "Acme", owner, []);
+
+        yield* keepLogo(acme.id, photoUrl(WORKSPACE_PHOTO_TYPE.PNG, PNG_BYTES));
+        const first = yield* listWorkspaces(owner);
+        yield* keepLogo(acme.id, photoUrl(WORKSPACE_PHOTO_TYPE.JPEG, JPEG_BYTES));
+        const second = yield* listWorkspaces(owner);
+        const others = [];
+        for (const logo of [
+          "https://example.test/acme.png",
+          photoUrl("image/svg+xml", "PHN2Zz48L3N2Zz4="),
+          "data:image/png;base64,not base64!",
+          null,
+        ]) {
+          yield* keepLogo(acme.id, logo);
+          others.push(faceIn(yield* listWorkspaces(owner), acme.id));
+        }
+
+        const firstVersion = faceIn(first, acme.id).photoVersion;
+        const secondVersion = faceIn(second, acme.id).photoVersion;
+        assert.match(firstVersion ?? "", /^[0-9a-f]{16}$/u);
+        assert.match(secondVersion ?? "", /^[0-9a-f]{16}$/u);
+        assert.notEqual(secondVersion, firstVersion);
+        assert.ok(!JSON.stringify(first).includes(PNG_BYTES), "the list carries no photo bytes");
+        assert.deepEqual(faceIn(first, acme.id).pictureUrl, undefined);
+        const none = { photoVersion: undefined, pictureUrl: undefined };
+        assert.deepEqual(others, [none, none, none, none]);
+      }),
+  );
+
+  it.effect("a workspace's photo is read as its bytes by a member, and by no one else", () =>
+    Effect.gen(function* () {
+      const seams = yield* fakeWorkspaceSeams;
+      const owner = yield* openUser("Owner");
+      const teammate = yield* openUser("Teammate");
+      const stranger = yield* openUser("Stranger");
+      const acme = yield* openSharedWorkspace(seams, "Acme", owner, [teammate]);
+      const plain = yield* openSharedWorkspace(seams, "Plain", owner, []);
+      yield* keepLogo(acme.id, photoUrl(WORKSPACE_PHOTO_TYPE.PNG, PNG_BYTES));
+
+      const read = yield* readWorkspacePhoto(teammate, acme.id);
+
+      assert.ok(Option.isSome(read));
+      assert.equal(read.value.contentType, WORKSPACE_PHOTO_TYPE.PNG);
+      assert.equal(Buffer.from(read.value.bytes).toString("base64"), PNG_BYTES);
+      assert.deepEqual(yield* readWorkspacePhoto(stranger, acme.id), Option.none());
+      assert.deepEqual(yield* readWorkspacePhoto(owner, plain.id), Option.none());
+    }),
+  );
+
+  it.effect(
+    "the account's own first workspace with no photo lists its sign-in picture where the renderer may draw it, and a shared one lists none",
+    () =>
+      Effect.gen(function* () {
+        const seams = yield* fakeWorkspaceSeams;
+        const owner = yield* openUser("Owner");
+        const teammate = yield* openUser("Teammate");
+        const personal = yield* ensurePersonalWorkspace(owner, seams);
+        assert.ok(Option.isSome(personal));
+        const acme = yield* openSharedWorkspace(seams, "Acme", owner, [teammate]);
+        const faces = (image: string) =>
+          Effect.gen(function* () {
+            yield* keepImage(owner, image);
+            return faceIn(yield* listWorkspaces(owner), personal.value).pictureUrl;
+          });
+
+        const google = "https://lh3.googleusercontent.com/a/owner";
+        const github = "https://avatars.githubusercontent.com/u/1";
+        const pinned = [yield* faces(google), yield* faces(github)];
+        const unpinned = [
+          yield* faces("http://lh3.googleusercontent.com/a/owner"),
+          yield* faces("https://avatars.example.test/u/1"),
+          yield* faces("https://googleusercontent.com.example.test/a/owner"),
+        ];
+        yield* keepImage(owner, google);
+        const shared = faceIn(yield* listWorkspaces(owner), acme.id);
+        const teammates = faceIn(yield* listWorkspaces(teammate), acme.id);
+        yield* keepLogo(personal.value, photoUrl(WORKSPACE_PHOTO_TYPE.PNG, PNG_BYTES));
+        const photographed = faceIn(yield* listWorkspaces(owner), personal.value);
+
+        assert.deepEqual(pinned, [google, github]);
+        assert.deepEqual(unpinned, [undefined, undefined, undefined]);
+        assert.deepEqual(shared, { photoVersion: undefined, pictureUrl: undefined });
+        assert.deepEqual(teammates, { photoVersion: undefined, pictureUrl: undefined });
+        assert.match(photographed.photoVersion ?? "", /^[0-9a-f]{16}$/u);
+        assert.equal(photographed.pictureUrl, undefined);
+      }),
+  );
+
   it.effect("an account's first ensure makes its first workspace and the second makes none", () =>
     Effect.gen(function* () {
       const seams = yield* fakeWorkspaceSeams;
