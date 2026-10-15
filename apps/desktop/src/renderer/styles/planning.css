@@ -3104,6 +3104,14 @@ button.inbox-option:hover:not(:disabled) {
   gap: var(--space-8);
 }
 
+/* The label gives the badge its room: it shrinks past its longest word,
+   and a word too long for what is left, a path or an identifier, breaks
+   anywhere rather than pushing the badge out past the option's edge. */
+.inbox-option-label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .inbox-recommended {
   flex: none;
   margin-top: 3px;

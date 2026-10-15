@@ -454,7 +454,7 @@ function OptionHead({
 }): React.JSX.Element {
   return (
     <span className="inbox-option-head">
-      <span>
+      <span className="inbox-option-label">
         <span className="font-medium">{label}</span>
         {children}
       </span>
