@@ -141,10 +141,11 @@ test("an agent on a task is told of the task's links and pages, and one an autom
   }
 });
 
-test("an agent handed its task's plan is offered edit_plan and show_page, one handed a prompt on a task show_page alone, and one an automation started with no task neither", () => {
+test("an agent handed its task's plan is offered edit_plan, look_at_picture, and show_page, one handed a prompt on a task show_page alone, and one an automation started with no task none", () => {
   const offered = (agent: Parameters<typeof planToolsOf>[0]) => [...planToolsOf(agent)].sort();
   assert.deepEqual(offered({ planId: "plan-1", prompt: null }), [
     CODER_TOOL.EDIT_PLAN,
+    CODER_TOOL.LOOK_AT_PICTURE,
     CODER_TOOL.SHOW_PAGE,
   ]);
   assert.deepEqual(offered({ planId: "plan-1", prompt: "Fix the flaky test." }), [
