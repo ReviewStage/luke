@@ -1002,13 +1002,16 @@ function githubAppService(
 
   /**
    * The installation connected to the workspace as GitHub holds it now; none
-   * where none active is connected, or GitHub no longer knows the one that is.
+   * where none is connected, GitHub no longer knows the one that is, or its
+   * account suspended it, since GitHub mints a suspended installation no
+   * token to list with.
    */
   const workspaceInstallation = (organizationId: string) =>
     Effect.gen(function* () {
       const connected = yield* installationOfWorkspace(organizationId);
       if (Option.isNone(connected)) return Option.none<GitHubInstallation>();
-      return yield* installation(connected.value);
+      const reached = yield* installation(connected.value);
+      return Option.filter(reached, (running) => !running.suspended);
     });
 
   /** The installation's repositories, every one or as many as are enough, read on a token minted for the listing alone. */

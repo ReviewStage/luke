@@ -226,7 +226,8 @@ function installationJson(installation: InstallationFixture) {
 /**
  * A GitHub on which the App is installed as given, each installation's
  * repositories listed on a token minted for the listing and paged the way
- * GitHub pages them; the App mints a token for any of those installations;
+ * GitHub pages them; the App mints a token for any of those installations
+ * but a suspended one, which GitHub refuses as forbidden;
  * GitHub's web flow exchanges any code but the refused one for a user
  * access token that sees every installation given, and revokes it; the App's
  * bot is the one given, the fixture's own when unsaid; and a repository
@@ -270,6 +271,9 @@ export function githubReaching(
     if (minting !== null) {
       const installation = installations.find((candidate) => String(candidate.id) === minting[1]);
       if (installation === undefined) return notFound();
+      if (installation.suspendedAt !== undefined) {
+        return Response.json({ message: "This installation has been suspended" }, { status: 403 });
+      }
       const forRepositories = "repositories" in JSON.parse(sent.body);
       return Response.json(
         {
