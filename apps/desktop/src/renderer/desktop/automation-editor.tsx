@@ -23,8 +23,10 @@ import {
 } from "@luke/features/automation-view";
 import {
   AUTOMATION_SCOPE,
+  AUTOMATION_TARGET,
   type AutomationScope,
   type AutomationSummary,
+  type AutomationTargetKind,
 } from "@luke/features/automation-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
@@ -32,12 +34,14 @@ import { BuildingIcon, ChevronRightIcon, LockIcon, Trash2Icon, ZapIcon } from "l
 import { useId, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
-import { dayAndTimeText } from "../planning/plan-time";
+import { AgentModelChip } from "../planning/agent-model-chip";
+import { dayAndTimeText, sinceText, useMinute } from "../planning/plan-time";
 import { CHIP_PLACE, RepositoryChip, type RepositoryChooser } from "../planning/repository-chip";
 import { Segmented } from "../segmented";
 import { ConfirmDialog, useConfirmDialog } from "../settings/confirm-dialog";
 import { BusyLabel } from "../spinner";
 import { Switch } from "../switch";
+import { type AgentsRead, type RunChoices, useRunChoices } from "./use-run-choices";
 
 /**
  * automation-editor.tsx -- one automation's page, or a new one's: under breadcrumbs that name its owner, its name, its schedule, its task, its repository, and who owns it, saved by an explicit Create or Save.
@@ -45,7 +49,10 @@ import { Switch } from "../switch";
  * It stands where the list stood, in the plan's place, and the first crumb
  * goes back to the list. Who owns it is said three times over, since it is
  * what the list must never leave in doubt: in the crumbs, under its name,
- * and in the Owner row a team workspace offers. A schedule is chosen as the
+ * and in the Owner row a team workspace offers. Where its runs land is
+ * one row: a new agent each run, on the agent box's model chip and
+ * archived once it succeeds where asked, or the same agent, chosen from
+ * the workspace's agents on its repository. A schedule is chosen as the
  * picker writes one, every hour, every day, on weekdays, or on one day of
  * the week, at a time in a zone, and a cron the picker did not write stands
  * as custom, kept as it was; its next two runs are said under it. What
@@ -376,6 +383,136 @@ function EditorToolbar({
   );
 }
 
+/** Where a run may land, as the row's segments name them. */
+const TARGETS: readonly { value: AutomationTargetKind; label: string }[] = [
+  { value: AUTOMATION_TARGET.NEW_AGENT, label: "New agent each run" },
+  { value: AUTOMATION_TARGET.SAME_AGENT, label: "Same agent" },
+];
+
+/** A new agent's model: the chip the agent box wears, on the account's default until one is chosen. */
+function ModelControl({
+  draft,
+  choices,
+  onDraft,
+}: {
+  draft: AutomationDraft;
+  choices: RunChoices;
+  onDraft: (patch: Partial<AutomationDraft>) => void;
+}): React.JSX.Element {
+  const shown = draft.choice ?? choices.defaultChoice;
+  if (shown === undefined) return <p className="automation-form-note">Your default model.</p>;
+  return (
+    <div className="automation-model">
+      <AgentModelChip
+        model={{ choice: shown, note: undefined, choose: (choice) => onDraft({ choice }) }}
+        models={choices.models}
+        readModels={choices.readModels}
+        usage={undefined}
+      />
+      {draft.choice === null ? (
+        <span className="automation-form-note">Your default, until you choose one.</span>
+      ) : null}
+    </div>
+  );
+}
+
+/** The agent each run goes to, chosen from the workspace's agents on the repository, the one it goes to now kept where the list no longer holds it. */
+function AgentPicker({
+  draft,
+  agents,
+  onDraft,
+}: {
+  draft: AutomationDraft;
+  agents: AgentsRead;
+  onDraft: (patch: Partial<AutomationDraft>) => void;
+}): React.JSX.Element {
+  const now = useMinute();
+  if (agents !== undefined && "failed" in agents) {
+    return <p className="error-message">The workspace's agents could not be read.</p>;
+  }
+  const listed = agents?.agents ?? [];
+  const kept = draft.agentId !== null && !listed.some((agent) => agent.id === draft.agentId);
+  return (
+    <>
+      <select
+        className="settings-input automation-select automation-agent"
+        aria-label="Agent"
+        value={draft.agentId ?? ""}
+        onChange={(event) =>
+          onDraft({ agentId: event.target.value === "" ? null : event.target.value })
+        }
+      >
+        <option value="" disabled>
+          {agents === undefined ? "Reading the workspace's agents…" : "Choose an agent"}
+        </option>
+        {kept && draft.agentId !== null ? (
+          <option value={draft.agentId}>The agent it goes to now</option>
+        ) : null}
+        {listed.map((agent) => (
+          <option key={agent.id} value={agent.id}>
+            {`${agent.title ?? "Untitled agent"} · ${sinceText(agent.createdAt, now)}`}
+          </option>
+        ))}
+      </select>
+      <p className="automation-form-note">
+        Each run goes to that agent as a message, as if you'd typed it, even mid-turn, and it keeps
+        its own model and effort.
+      </p>
+    </>
+  );
+}
+
+/** Where a run lands: a new agent each time, on a model, archived once it succeeds where asked, or the one agent chosen. */
+function RunsLandIn({
+  draft,
+  workspace,
+  problem,
+  onDraft,
+}: {
+  draft: AutomationDraft;
+  workspace: Workspace | undefined;
+  problem: string | undefined;
+  onDraft: (patch: Partial<AutomationDraft>) => void;
+}): React.JSX.Element {
+  const sameAgent = draft.target === AUTOMATION_TARGET.SAME_AGENT;
+  const choices = useRunChoices({
+    workspaceId: workspace?.id,
+    repository: draft.repository,
+    wantsAgents: sameAgent,
+  });
+  return (
+    <FormRow label="Runs land in" problem={problem}>
+      <Segmented
+        legend="Runs land in"
+        options={TARGETS}
+        value={draft.target}
+        onChange={(target) => onDraft({ target })}
+      />
+      {sameAgent ? (
+        <AgentPicker draft={draft} agents={choices.agents} onDraft={onDraft} />
+      ) : (
+        <>
+          <ModelControl draft={draft} choices={choices} onDraft={onDraft} />
+          <label className="automation-check">
+            <input
+              type="checkbox"
+              checked={draft.archiveSuccessful}
+              onChange={(event) => onDraft({ archiveSuccessful: event.target.checked })}
+            />
+            <span className="settings-copy">
+              <strong>Archive successful runs</strong>
+              <small>
+                A run's agent is archived once it finishes without failing. Its transcript and pull
+                request stay reachable.
+              </small>
+            </span>
+          </label>
+        </>
+      )}
+    </FormRow>
+  );
+}
+
 /** The form: its schedule, task, repository, and, where the workspace is shared, its owner. */
 function EditorForm({
   draft,
@@ -447,6 +584,12 @@ function EditorForm({
           </>
         )}
       </FormRow>
+      <RunsLandIn
+        draft={draft}
+        workspace={workspace}
+        problem={problems[DRAFT_FIELD.AGENT]}
+        onDraft={onDraft}
+      />
       {offersOwner ? (
         <FormRow label="Owner" problem={undefined}>
           <Segmented
@@ -508,9 +651,12 @@ export function AutomationEditor({
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
   const planBacked = automation !== undefined && automation.planId !== null;
   const change = automation === undefined ? undefined : changeOf(draft, automation, defaults);
-  const dirty = automation === undefined || change !== undefined;
+  // Note that a draft is unsaved wherever it differs from the automation, even where what differs
+  // cannot be written yet, a same agent with none chosen, so Save stands to say what is missing.
+  const dirty =
+    automation === undefined || !sameDraft(draft, automationDraft(automation, defaults));
   // Note that a new draft nothing was changed in is no work to lose, so Escape may leave it.
-  const written = automation === undefined ? !sameDraft(draft, start) : change !== undefined;
+  const written = automation === undefined ? !sameDraft(draft, start) : dirty;
   // Escape goes back to the list while nothing written would be lost, and is kept, doing nothing, while it would.
   useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, written ? keepEscape : onBack);
   const problems = draftProblems(draft, planBacked, new Date());

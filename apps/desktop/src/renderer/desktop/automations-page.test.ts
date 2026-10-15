@@ -11,6 +11,7 @@ import {
   AUTOMATION_DEFAULT_GUARDS,
   AUTOMATION_RUN_STATUS,
   AUTOMATION_SCOPE,
+  AUTOMATION_TARGET,
   AUTOMATION_TRIGGER,
   type AutomationSummary,
 } from "@luke/features/automation-wire";
@@ -81,6 +82,21 @@ const FAILING = automation(3, {
   },
 });
 
+/** The account's default model, which a new agent runs on until another is chosen. */
+const DEFAULT_CHOICE = { model: "anthropic/claude-opus-5.5", effort: "high" };
+
+/** One agent of the workspace's on the repository, which a same-agent automation's runs may go to. */
+const CI_DIGEST = {
+  id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
+  planId: null,
+  model: "anthropic/claude-opus-5.5",
+  effort: "high",
+  title: "CI digest",
+  createdAt: 1,
+  status: "completed",
+  turnId: null,
+} as const;
+
 let root: Root | undefined;
 /** The service's automations, as a read of the list answers them and a change changes them. */
 let standing: AutomationSummary[] = [];
@@ -98,6 +114,8 @@ let changes: unknown[] = [];
 let creates: AutomationCreateParams[] = [];
 /** Every automation deleted, by its id. */
 let deletes: string[] = [];
+/** Every ask for a workspace's agents, as the act carried it. */
+let agentsAsked: unknown[] = [];
 /** What a change answers: the automation as changed, or why not. */
 let changeRefusal:
   | (typeof AUTOMATION_CALL_FAILURE)[keyof typeof AUTOMATION_CALL_FAILURE]
@@ -113,6 +131,7 @@ beforeEach(() => {
   changes = [];
   creates = [];
   deletes = [];
+  agentsAsked = [];
   changeRefusal = undefined;
   Object.defineProperty(window, "luke", {
     configurable: true,
@@ -161,6 +180,22 @@ beforeEach(() => {
           });
           standing = [made, ...standing];
           return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { automation: made } });
+        }
+        if (request.kind === ACT_KIND.CODING_AGENTS_MODELS) {
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { models: [] } });
+        }
+        if (request.kind === ACT_KIND.CODING_AGENTS_DEFAULT_READ) {
+          return Promise.resolve({
+            status: ACT_OUTCOME_STATUS.DONE,
+            value: { choice: DEFAULT_CHOICE },
+          });
+        }
+        if (request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST) {
+          agentsAsked.push(request.payload);
+          return Promise.resolve({
+            status: ACT_OUTCOME_STATUS.DONE,
+            value: { agents: [CI_DIGEST] },
+          });
         }
         if (request.kind === ACT_KIND.AUTOMATIONS_DELETE) {
           deletes.push(request.payload.automationId);
@@ -552,6 +587,8 @@ test("a new automation is created only once it is named and told its task, and t
     },
     action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: "Triage the issues opened overnight." },
     scope: AUTOMATION_SCOPE.PERSONAL,
+    target: { kind: AUTOMATION_TARGET.NEW_AGENT },
+    archiveSuccessful: false,
     repositories: ["acme/ledger"],
   });
   assert.equal(places.at(-1)?.kind, AUTOMATIONS_PAGE.EDIT);
@@ -766,4 +803,46 @@ test("the repository chosen first is not said again among the others its runs wo
   await settle();
 
   assert.doesNotMatch(page.textContent ?? "", /also work in/u);
+});
+
+test("runs land in a new agent on the account's default until a model is chosen, and archiving successful runs is saved", async () => {
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+
+  assert.match(page.textContent ?? "", /Your default, until you choose one\./u);
+  const archive = page.querySelector<HTMLInputElement>(".automation-check input");
+  act(() => archive?.click());
+  act(() => button("Save").click());
+  await settle();
+
+  assert.deepEqual(changes, [{ automationId: SWEEP.id, change: { archiveSuccessful: true } }]);
+});
+
+test("Same agent is chosen from the workspace's agents on the automation's repository, and saved as its target", async () => {
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+
+  act(() => button("Same agent").click());
+  await settle();
+  assert.deepEqual(agentsAsked, [{ workspaceId: WORKSPACE.id, repository: "acme/ledger" }]);
+  act(() => button("Save").click());
+  await settle();
+  assert.deepEqual(changes, [], "a same agent with none chosen is not saved");
+  assert.match(page.textContent ?? "", /Choose the agent its runs go to\./u);
+
+  const picker = page.querySelector<HTMLSelectElement>("select[aria-label='Agent']");
+  assert.ok(picker);
+  act(() => {
+    picker.value = CI_DIGEST.id;
+    picker.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  act(() => button("Save").click());
+  await settle();
+
+  assert.deepEqual(changes, [
+    {
+      automationId: SWEEP.id,
+      change: { target: { kind: AUTOMATION_TARGET.SAME_AGENT, agentId: CI_DIGEST.id } },
+    },
+  ]);
 });

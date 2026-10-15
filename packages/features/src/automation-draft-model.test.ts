@@ -16,6 +16,7 @@ import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
   AUTOMATION_SCOPE,
+  AUTOMATION_TARGET,
   AUTOMATION_TRIGGER,
   type AutomationSummary,
 } from "./automation-wire.js";
@@ -164,6 +165,8 @@ test("a new automation is made in its workspace on its schedule, task, repositor
     },
     action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: "Fix it." },
     scope: AUTOMATION_SCOPE.WORKSPACE,
+    target: { kind: AUTOMATION_TARGET.NEW_AGENT },
+    archiveSuccessful: false,
   });
 });
 
@@ -249,4 +252,73 @@ test("two drafts are the same where every field the editor writes is, the words 
   ]) {
     assert.ok(!sameDraft(fresh, moved));
   }
+});
+
+const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
+
+test("runs land in a new agent each time on the account's default until a model is chosen, or in the one agent chosen", () => {
+  const fresh = {
+    ...automationDraft(undefined, DEFAULTS),
+    name: "Sweep",
+    prompt: "Fix it.",
+    repository: "acme/ledger",
+  };
+  const choice = { model: "openai/gpt-6.1-sol", effort: "xhigh" };
+
+  assert.deepEqual(
+    createRequestOf({ ...fresh, choice, archiveSuccessful: true }, "workspace-acme").action,
+    {
+      kind: AUTOMATION_ACTION.CODING_AGENT,
+      prompt: "Fix it.",
+      choice,
+    },
+  );
+  const same = { ...fresh, target: AUTOMATION_TARGET.SAME_AGENT };
+  assert.equal(
+    draftProblems(same, false, NOW)[DRAFT_FIELD.AGENT],
+    "Choose the agent its runs go to.",
+  );
+  assert.deepEqual(createRequestOf({ ...same, agentId: AGENT_ID }, "workspace-acme").target, {
+    kind: AUTOMATION_TARGET.SAME_AGENT,
+    agentId: AGENT_ID,
+  });
+});
+
+test("a saved automation opens on where its runs land, and a save sends only the target, model, or archiving that moved", () => {
+  const onAgent = {
+    ...SAVED,
+    target: { kind: AUTOMATION_TARGET.SAME_AGENT, agentId: AGENT_ID },
+    archiveSuccessful: false,
+  } as const;
+  const opened = automationDraft(onAgent, DEFAULTS);
+  assert.deepEqual(
+    [opened.target, opened.agentId, opened.choice, opened.archiveSuccessful],
+    [AUTOMATION_TARGET.SAME_AGENT, AGENT_ID, SAVED.action.choice, false],
+  );
+
+  assert.deepEqual(
+    changeOf(
+      { ...opened, target: AUTOMATION_TARGET.NEW_AGENT, archiveSuccessful: true },
+      onAgent,
+      DEFAULTS,
+    ),
+    {
+      target: { kind: AUTOMATION_TARGET.NEW_AGENT },
+      archiveSuccessful: true,
+    },
+  );
+  assert.deepEqual(changeOf({ ...opened, choice: null }, onAgent, DEFAULTS), {
+    action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: SAVED.action.prompt },
+  });
+  assert.equal(
+    changeOf({ ...opened, agentId: null }, onAgent, DEFAULTS),
+    undefined,
+    "a same agent with none chosen is a problem, not a write",
+  );
+  const gone = { ...SAVED, target: { kind: AUTOMATION_TARGET.SAME_AGENT, agentId: null } } as const;
+  assert.equal(
+    automationDraft(gone, DEFAULTS).agentId,
+    null,
+    "an agent since deleted reads as none chosen",
+  );
 });

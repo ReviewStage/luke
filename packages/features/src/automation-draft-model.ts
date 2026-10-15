@@ -10,10 +10,15 @@ import {
   AUTOMATION_ACTION,
   AUTOMATION_BOUNDS,
   AUTOMATION_SCOPE,
+  AUTOMATION_TARGET,
   AUTOMATION_TRIGGER,
+  type AutomationAction,
   type AutomationScope,
   type AutomationSummary,
+  type AutomationTarget,
+  type AutomationTargetKind,
 } from "./automation-wire.js";
+import type { ModelChoice } from "./models-wire.js";
 
 /**
  * automation-draft-model.ts -- an automation as its editor holds it while it is written: a schedule in the picker's terms, the task, the repository, and the owner, with what stops it saving and the write that saves it.
@@ -47,6 +52,7 @@ export const DRAFT_FIELD = {
   SCHEDULE: "schedule",
   PROMPT: "prompt",
   REPOSITORY: "repository",
+  AGENT: "agent",
 } as const;
 
 type DraftField = (typeof DRAFT_FIELD)[keyof typeof DRAFT_FIELD];
@@ -73,6 +79,14 @@ export interface AutomationDraft {
   /** Any other repositories its runs work in, kept behind the first as they were given. */
   readonly alsoRepositories: readonly string[];
   readonly owner: AutomationScope;
+  /** Where a run lands: a new agent each time, or the one agent each run goes to. */
+  readonly target: AutomationTargetKind;
+  /** The agent each run goes to where runs land in the same agent, or none chosen yet. */
+  readonly agentId: string | null;
+  /** The model and effort a new agent runs on, or none for the account's default as it stands when a run starts. */
+  readonly choice: ModelChoice | null;
+  /** Whether a run's agent is archived once it finishes without failing. */
+  readonly archiveSuccessful: boolean;
 }
 
 /** What a draft starts from where nothing is written: nine on weekdays, in the zone the window is in. */
@@ -117,6 +131,29 @@ function repositoriesOf(draft: AutomationDraft): readonly string[] {
   if (draft.repository === null) return draft.alsoRepositories;
   const first = draft.repository;
   return [first, ...draft.alsoRepositories.filter((repository) => repository !== first)];
+}
+
+/** Whether two model choices are one: the same model, effort, and context window, or both the account's default. */
+function sameChoice(one: ModelChoice | null, other: ModelChoice | null): boolean {
+  if (one === null || other === null) return one === other;
+  return (
+    one.model === other.model &&
+    one.effort === other.effort &&
+    one.contextWindow === other.contextWindow
+  );
+}
+
+/** The action a draft's runs take: its task, on its model where it names one. */
+function actionOf(draft: AutomationDraft): AutomationAction {
+  const action = { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: draft.prompt.trim() } as const;
+  return draft.choice === null ? action : { ...action, choice: draft.choice };
+}
+
+/** Where a draft's runs land, as the service takes it: a new agent, or the one chosen; a same agent with none chosen lands nowhere and is a problem before it is a write. */
+function targetOf(draft: AutomationDraft): AutomationTarget {
+  return draft.target === AUTOMATION_TARGET.SAME_AGENT && draft.agentId !== null
+    ? { kind: AUTOMATION_TARGET.SAME_AGENT, agentId: draft.agentId }
+    : { kind: AUTOMATION_TARGET.NEW_AGENT };
 }
 
 /** A trimmed text past its bound, or empty, as its field says it; nothing while it reads. */
@@ -184,6 +221,10 @@ export function automationDraft(
       repository: null,
       alsoRepositories: [],
       owner: defaults.owner,
+      target: AUTOMATION_TARGET.NEW_AGENT,
+      agentId: null,
+      choice: null,
+      archiveSuccessful: false,
     };
   }
   const { trigger } = automation;
@@ -197,6 +238,11 @@ export function automationDraft(
     repository: automation.repositories?.[0] ?? null,
     alsoRepositories: automation.repositories?.slice(1) ?? [],
     owner: automation.scope ?? AUTOMATION_SCOPE.PERSONAL,
+    target: automation.target?.kind ?? AUTOMATION_TARGET.NEW_AGENT,
+    agentId:
+      automation.target?.kind === AUTOMATION_TARGET.SAME_AGENT ? automation.target.agentId : null,
+    choice: automation.action.choice ?? null,
+    archiveSuccessful: automation.archiveSuccessful ?? false,
   };
 }
 
@@ -228,11 +274,16 @@ export function draftProblems(
     draft.scheduled && Result.isFailure(read) ? SCHEDULE_REFUSAL_WORDS[read.failure] : undefined;
   const repository =
     !planBacked && draft.repository === null ? "Choose the repository it works in." : undefined;
+  const agent =
+    draft.target === AUTOMATION_TARGET.SAME_AGENT && draft.agentId === null
+      ? "Choose the agent its runs go to."
+      : undefined;
   const problems: { [Field in DraftField]?: string } = {};
   if (name !== undefined) problems[DRAFT_FIELD.NAME] = name;
   if (schedule !== undefined) problems[DRAFT_FIELD.SCHEDULE] = schedule;
   if (prompt !== undefined) problems[DRAFT_FIELD.PROMPT] = prompt;
   if (repository !== undefined) problems[DRAFT_FIELD.REPOSITORY] = repository;
+  if (agent !== undefined) problems[DRAFT_FIELD.AGENT] = agent;
   return problems;
 }
 
@@ -264,8 +315,10 @@ export function createRequestOf(
       cron: cronOf(draft.schedule),
       timezone: draft.timezone,
     },
-    action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: draft.prompt.trim() },
+    action: actionOf(draft),
     scope: draft.owner,
+    target: targetOf(draft),
+    archiveSuccessful: draft.archiveSuccessful,
   } as const;
   return draft.repository === null ? made : { ...made, repositories: repositoriesOf(draft) };
 }
@@ -278,7 +331,11 @@ export function sameDraft(one: AutomationDraft, other: AutomationDraft): boolean
     cronOf(one.schedule) === cronOf(other.schedule) &&
     one.timezone === other.timezone &&
     one.repository === other.repository &&
-    one.owner === other.owner
+    one.owner === other.owner &&
+    one.target === other.target &&
+    one.agentId === other.agentId &&
+    sameChoice(one.choice, other.choice) &&
+    one.archiveSuccessful === other.archiveSuccessful
   );
 }
 
@@ -297,14 +354,21 @@ export function changeOf(
   const cron = cronOf(draft.schedule);
   const scheduleMoved =
     draft.scheduled && (cron !== cronOf(was.schedule) || draft.timezone !== was.timezone);
-  const promptMoved = draft.prompt.trim() !== was.prompt;
+  const actionMoved = draft.prompt.trim() !== was.prompt || !sameChoice(draft.choice, was.choice);
+  const targetMoved = draft.target !== was.target || draft.agentId !== was.agentId;
   const repositoryMoved = automation.planId === null && draft.repository !== was.repository;
   const change: ChangeDraft = {};
   if (draft.name.trim() !== was.name) change.name = draft.name.trim();
   if (scheduleMoved) {
     change.trigger = { kind: AUTOMATION_TRIGGER.SCHEDULE, cron, timezone: draft.timezone };
   }
-  if (promptMoved) change.action = { ...automation.action, prompt: draft.prompt.trim() };
+  if (actionMoved) change.action = actionOf(draft);
+  if (targetMoved && (draft.target === AUTOMATION_TARGET.NEW_AGENT || draft.agentId !== null)) {
+    change.target = targetOf(draft);
+  }
+  if (draft.archiveSuccessful !== was.archiveSuccessful) {
+    change.archiveSuccessful = draft.archiveSuccessful;
+  }
   if (repositoryMoved && draft.repository !== null) change.repositories = repositoriesOf(draft);
   if (draft.owner !== was.owner) change.scope = draft.owner;
   return Object.keys(change).length === 0 ? undefined : change;

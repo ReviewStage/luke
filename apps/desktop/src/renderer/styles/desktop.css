@@ -3715,6 +3715,32 @@ body:has(.app-stage[data-capture="true"])
   font-family: var(--font-mono, ui-monospace, monospace);
 }
 
+.automation-model {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+.automation-agent {
+  max-width: 420px; /* off-scale */
+}
+
+/* Archive successful runs: a box, then its name over what it does. */
+.automation-check {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-8);
+}
+
+.automation-check > input {
+  margin-top: 3px; /* off-scale */
+}
+
+.automation-check small {
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
 .automation-prompt {
   min-height: 120px; /* off-scale */
   resize: vertical;
