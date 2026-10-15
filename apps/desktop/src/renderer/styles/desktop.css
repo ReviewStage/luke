@@ -5506,6 +5506,17 @@ button.automation-run:hover {
   gap: var(--list-gap);
 }
 
+/* The one slot a column's bar keeps for the ⋯ that acts on its chosen tab:
+   the plan's on the plan's tab, another tab's own, or none on a tab with no
+   action of the kind. It holds a button's width either way, so nothing in
+   the bar moves as the developer goes from tab to tab. */
+.toolbar-tab-actions {
+  display: flex;
+  min-width: var(--control-height);
+  flex: none;
+  align-items: center;
+}
+
 /* A tab dragged in the plan's column is lifted on the column's ground. */
 .main-tabs .tab[data-dragging="true"] {
   background: linear-gradient(var(--raised-strong), var(--raised-strong)), var(--desktop-ground);

@@ -167,6 +167,16 @@ function focusTab(strip: HTMLElement | null, tab: HTMLElement | undefined | null
   if (strip !== null && tab !== undefined && tab !== null) reveal(strip, tab);
 }
 
+/**
+ * Whether an event's target stands in the strip itself. Note that an event
+ * from what a tab draws elsewhere, its menu or its ⋯ in the toolbar's slot,
+ * reaches the strip's handlers too, because React bubbles it through the
+ * portal to the tab that drew it, and none of it is a tab to scroll or move.
+ */
+function within(strip: HTMLElement, target: EventTarget): boolean {
+  return target instanceof Node && strip.contains(target);
+}
+
 /** What the strip says aloud of a tab moved: its label and the place it now stands. */
 function movedLine(tab: HTMLElement | undefined, to: number, count: number): string {
   return `${tab?.textContent ?? "Tab"} moved to position ${to + 1} of ${count}`;
@@ -298,6 +308,7 @@ export function TabStrip({
   // restarted, and cut short, by every step of a turning wheel.
   const wheel = (event: React.WheelEvent<HTMLDivElement>) => {
     const node = event.currentTarget;
+    if (!within(node, event.target)) return;
     if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
     if (node.scrollWidth <= node.clientWidth) return;
     const unit =
@@ -327,7 +338,9 @@ export function TabStrip({
         onPointerDown={onPointerDown}
         onWheel={wheel}
         onScroll={(event) => markOverflow(event.currentTarget)}
-        onFocus={() => setFocused(true)}
+        onFocus={(event) => {
+          if (within(event.currentTarget, event.target)) setFocused(true);
+        }}
         onBlur={(event) => {
           if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false);
         }}

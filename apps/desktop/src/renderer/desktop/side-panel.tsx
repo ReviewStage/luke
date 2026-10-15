@@ -606,7 +606,8 @@ function stripTabs(input: {
  * closes every tab but it and chooses it, and a fixed tab's, a file's, and
  * a Changes tab's Pin tab or Unpin tab, which puts it in the sidebar or takes it out; a
  * subagent's adds the two copies of its transcript, built from the rows the
- * tab draws (`transcript-copy.ts`) and answered with the window's toast.
+ * tab draws (`transcript-copy.ts`) and answered with the window's toast,
+ * which the bar's ⋯ also offers while the subagent's tab is the chosen one.
  * The "+" stands after all of them, apart from the strip, so it is never
  * dragged nor dropped before. ⌘W closes the chosen tab while the panel
  * holds the window's focus (`keys`).
@@ -629,6 +630,7 @@ function PanelTabs({
   offeredPages,
   held,
   readWorker,
+  actionsSlot,
 }: {
   panel: SidePanelControl;
   /** The open plan, which a tab's pin is of. */
@@ -661,6 +663,8 @@ function PanelTabs({
   held: HeldTranscripts;
   /** Reads a planning worker's session past a cursor, the plan standing in the agent's place. */
   readWorker: TranscriptReader;
+  /** The bar's slot the chosen tab's ⋯ stands in. */
+  actionsSlot: HTMLElement | null;
 }): React.JSX.Element {
   const copied = useTranscriptCopier();
   // The panel's "+" asks for a new shell where the panel already holds the keys.
@@ -719,7 +723,12 @@ function PanelTabs({
         }}
       >
         {strip.map((entry, at) => (
-          <DoorsTab key={tabKey(entry.tab)} look={entry.look} doors={doorsOf(entry, at)} />
+          <DoorsTab
+            key={tabKey(entry.tab)}
+            look={entry.look}
+            doors={doorsOf(entry, at)}
+            slot={actionsSlot}
+          />
         ))}
       </TabStrip>
       <AddTabButton
@@ -1520,6 +1529,8 @@ export function SidePanel({
 }): React.JSX.Element {
   const aside = useRef<HTMLElement>(null);
   const room = useRef<HTMLDivElement>(null);
+  // The one slot the bar keeps for the chosen tab's ⋯, drawn there from the tab (`strip-tabs.tsx`).
+  const [actionsSlot, setActionsSlot] = useState<HTMLElement | null>(null);
   const { tab } = panel;
   // Whether a File or Changes tab's tree is open, for every one of them
   // alike and for the window's life, as an editor's explorer stands across
@@ -1637,7 +1648,9 @@ export function SidePanel({
             offeredPages={planPages}
             held={drawnTranscripts}
             readWorker={work.readWorker}
+            actionsSlot={actionsSlot}
           />
+          <span ref={setActionsSlot} className="toolbar-tab-actions" />
           <FullScreenToggle
             fullScreen={panel.fullScreen}
             leaving={leaving !== PANEL_LEAVING.NONE}

@@ -51,7 +51,10 @@ import { TabStrip } from "./tab-strip";
  * to it. The strip is the side panel's in every way but its first tab: the
  * same pills, the same hover and chosen fills, dragged and stepped along,
  * closed by ×, Delete, ⌘W, or the menu's Close and Close others, each tab's
- * menu on a right-click (`strip-tabs.tsx`).
+ * menu on a right-click (`strip-tabs.tsx`). The toolbar's ⋯ acts on the
+ * chosen tab: the plan's actions on the plan's tab, and on an agent's its
+ * Rename, its transcript's copies, and its Archive, standing in the one slot
+ * the toolbar keeps for it, left empty on a tab with nothing of the kind.
  *
  * The plan's tab stands first, named for the plan, and hangs the plan's
  * card, as its sidebar row does (`plan-card.tsx`): its repository, its
@@ -128,6 +131,7 @@ function RenamableTab({
   doors,
   rename,
   field,
+  slot,
 }: {
   look: TabLook;
   doors: TabDoors;
@@ -135,6 +139,8 @@ function RenamableTab({
   rename: ReturnType<typeof usePlanRename> | undefined;
   /** What the field is called for a reader and how long a name it takes; a plan's where absent. */
   field?: { label: string; maxLength: number } | undefined;
+  /** The toolbar's slot the chosen tab's ⋯ stands in; none for the plan's, whose ⋯ the toolbar draws itself. */
+  slot?: HTMLElement | null | undefined;
 }): React.JSX.Element {
   const tab = useRef<HTMLButtonElement | null>(null);
   const refocus = useRef(false);
@@ -162,6 +168,7 @@ function RenamableTab({
       doors={rename === undefined ? doors : { ...doors, onRename: rename.begin }}
       editor={editor}
       tabRef={tab}
+      slot={slot}
     />
   );
 }
@@ -173,12 +180,14 @@ function AgentMenuTab({
   look,
   doors,
   shown,
+  slot,
 }: {
   agent: CodingAgentSummary;
   agents: CodingAgentsControl;
   look: TabLook;
   doors: TabDoors;
   shown: boolean;
+  slot: HTMLElement | null;
 }): React.JSX.Element {
   const rename = usePlanRename(agent.id, agents.onRename);
   const archive = useAgentArchive(agent, agents, shown);
@@ -190,6 +199,7 @@ function AgentMenuTab({
         // A rename still open when the plan is archived elsewhere is let go unsaved.
         rename={agents.onUnarchive === undefined ? rename : undefined}
         field={{ label: "Agent name", maxLength: CODING_AGENT_BOUNDS.MAX_TITLE_CHARS }}
+        slot={slot}
       />
       {archive.dialog}
     </>
@@ -357,6 +367,7 @@ export function MainTabStrip({
   keys,
   shown,
   inbox,
+  actionsSlot,
 }: {
   plan: PlanSummary;
   /** The plan's card, as its sidebar row hangs it, which its tab hangs (`plan-card.tsx`). */
@@ -380,6 +391,8 @@ export function MainTabStrip({
   shown: boolean;
   /** How many of the plan's inbox items wait on the developer, which its Inbox tab counts. */
   inbox: number;
+  /** The toolbar's slot the chosen tab's ⋯ stands in, where the plan's own stands on its tab. */
+  actionsSlot: HTMLElement | null;
 }): React.JSX.Element {
   const copied = useTranscriptCopier();
   const pinnedOf = (tab: ColumnPinnableTab) =>
@@ -473,7 +486,12 @@ export function MainTabStrip({
                 rename={rename}
               />
             ) : (
-              <DoorsTab key={tabKey(entry.tab)} look={entry.look} doors={doorsOf(entry)} />
+              <DoorsTab
+                key={tabKey(entry.tab)}
+                look={entry.look}
+                doors={doorsOf(entry)}
+                slot={actionsSlot}
+              />
             )
           ) : (
             <AgentMenuTab
@@ -483,6 +501,7 @@ export function MainTabStrip({
               look={entry.look}
               doors={doorsOf(entry)}
               shown={shown}
+              slot={actionsSlot}
             />
           ),
         )}
