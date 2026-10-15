@@ -81,6 +81,16 @@ const INBOXES = new Map<string, readonly InboxItem[]>([
   [BILLING.id, [ACCOUNT]],
 ]);
 
+/** An agent with no plan an automation started, and the question it waits on. */
+const SWEEP_AGENT = "5e6f7081-92a3-4b4c-8d5e-6f708192a3b4";
+const QUARANTINE: InboxItem = {
+  ...item(9, "Quarantine the flaky test?", NOW - 60_000),
+  agentId: SWEEP_AGENT,
+};
+
+/** Each agent with no plan's inbox as the service answers a read of it. */
+const AGENT_INBOXES = new Map<string, readonly InboxItem[]>([[SWEEP_AGENT, [QUARANTINE]]]);
+
 /** The plans holding items, and those of them with an item waiting, as main reads the account. */
 const HOLDING: Pick<PlansControl, "inbox" | "inboxPlans"> = {
   inbox: [
@@ -102,6 +112,13 @@ beforeEach(() => {
       onMenuCommand: () => () => undefined,
       recordSurfaceEvent: () => undefined,
       act: (request: Act) => {
+        if (request.kind === ACT_KIND.CODING_AGENTS_AGENT_INBOX) {
+          const value: CodingAgentInboxAnswerView = {
+            items: AGENT_INBOXES.get(request.payload.agentId) ?? [],
+            cursor: "1",
+          };
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+        }
         if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX) {
           return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
         }
@@ -319,4 +336,31 @@ test("Home lists every open item of the listed plans, a teammate's agent's inclu
     "Email the invitee when an invite is withdrawn? · Teammate invitations",
     "Which billing account does the export read? · Billing export",
   ]);
+});
+
+test("Home lists an item an automation's agent with no plan waits on, by its automation, and opens the Inbox on it by its agent", async () => {
+  const { page, opened } = mount({
+    inboxPlanless: [
+      {
+        id: QUARANTINE.id,
+        agentId: SWEEP_AGENT,
+        title: QUARANTINE.title,
+        postedAt: QUARANTINE.postedAt,
+        agentTitle: null,
+        agentModel: "anthropic/claude-opus-5.5",
+        automationId: "5a0c4d2e-8f1b-4c3a-9e7d-2b6f1a8c9d04",
+        automationName: "Nightly flake sweep",
+        repository: "acme/relay",
+      },
+    ],
+  });
+  await settle();
+
+  assert.ok(
+    rows(page, "home-inbox").includes("Quarantine the flaky test? · Nightly flake sweep"),
+    rows(page, "home-inbox").join(" | "),
+  );
+  button(page, "Quarantine the flaky test?").click();
+
+  assert.deepEqual(opened.inbox, ["inbox", { agentId: SWEEP_AGENT, itemId: QUARANTINE.id }]);
 });

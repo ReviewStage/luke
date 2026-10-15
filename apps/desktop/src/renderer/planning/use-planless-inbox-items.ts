@@ -11,12 +11,13 @@ import { useAct } from "../act";
  * Main's read of the account carries the items of agents with no plan that
  * wait on the developer, in brief, as it carries a plan's. So each such
  * agent is read whole here, its settled items as well, from the start,
- * which the service answers at once, and read again only when the newest
- * item main lists for it moves, rather than holding a read open on every
- * agent; the agent whose item is chosen holds its own read open besides,
- * as a plan's does (`use-plan-inbox.ts`). An answer a newer ask overtook is
- * let go. A read that did not answer leaves the agent as it was last read,
- * or unread, and says so, with Try again.
+ * which the service answers at once, and read again only when the items
+ * main lists as waiting on it move, one answered or one opened, rather
+ * than holding a read open on every agent; the agent whose item is chosen
+ * holds its own read open besides, as a plan's does (`use-plan-inbox.ts`).
+ * An answer a newer ask overtook is let go. A read that did not answer
+ * leaves the agent as it was last read, or unread, and says so, with Try
+ * again, which asks again of it whether or not it was read before.
  */
 
 const UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
@@ -30,27 +31,40 @@ export interface PlanlessInboxItems {
   readonly onRetry: () => void;
 }
 
-/** The moment main's newest listed item of each agent was posted: what an agent is read again on. */
-function newestPerAgent(waiting: readonly AppInboxPlanlessItem[]): ReadonlyMap<string, number> {
-  const newest = new Map<string, number>();
+/** The items main lists as waiting on each agent, by id in id order: what an agent is read again on, an item answered or opened since moving it. */
+function waitingPerAgent(
+  waiting: readonly AppInboxPlanlessItem[],
+): ReadonlyMap<string, readonly string[]> {
+  const ids = new Map<string, string[]>();
   for (const item of waiting) {
-    newest.set(item.agentId, Math.max(newest.get(item.agentId) ?? item.postedAt, item.postedAt));
+    const held = ids.get(item.agentId) ?? [];
+    held.push(item.id);
+    ids.set(item.agentId, held);
   }
-  return newest;
+  return new Map([...ids].map(([agentId, held]) => [agentId, held.toSorted()]));
+}
+
+/** Whether two agents' waiting items are the same items. */
+function sameItems(one: readonly string[] | undefined, other: readonly string[]): boolean {
+  return (
+    one !== undefined && one.length === other.length && one.every((id, at) => id === other[at])
+  );
 }
 
 export function usePlanlessInboxItems(
   waiting: readonly AppInboxPlanlessItem[],
 ): PlanlessInboxItems {
   const { act } = useAct();
-  const [reads, setReads] = useState<
-    ReadonlyMap<string, { at: number; items: readonly InboxItem[] }>
-  >(new Map());
+  const [reads, setReads] = useState<ReadonlyMap<string, readonly InboxItem[]>>(new Map());
   const [failed, setFailed] = useState<ReadonlySet<string>>(new Set());
   const [attempt, setAttempt] = useState(0);
-  const newest = useMemo(() => newestPerAgent(waiting), [waiting]);
-  // The moment each agent was last asked for, so an agent is asked once per move and a late answer to an earlier ask is let go.
-  const asked = useRef(new Map<string, number>());
+  const standing = useMemo(() => waitingPerAgent(waiting), [waiting]);
+  // The waiting items each agent's held read answered for, so an agent is read again only when they move.
+  const readFor = useRef(new Map<string, readonly string[]>());
+  // Each agent's ask out now, by its number and the waiting items it asks for: an answer is taken
+  // only for an agent's latest ask, so one overtaken, even for items it waited on before, is let go.
+  const asking = useRef(new Map<string, { seq: number; items: readonly string[] }>());
+  const asks = useRef(0);
   const live = useRef(true);
   useEffect(() => {
     live.current = true;
@@ -58,18 +72,20 @@ export function usePlanlessInboxItems(
       live.current = false;
     };
   }, []);
-  const readsNow = useRef(reads);
-  readsNow.current = reads;
 
   useEffect(() => {
     void attempt;
-    for (const [agentId, at] of newest) {
-      if (readsNow.current.get(agentId)?.at === at || asked.current.get(agentId) === at) continue;
-      asked.current.set(agentId, at);
+    for (const [agentId, items] of standing) {
+      if (sameItems(readFor.current.get(agentId), items)) continue;
+      if (sameItems(asking.current.get(agentId)?.items, items)) continue;
+      asks.current += 1;
+      const seq = asks.current;
+      asking.current.set(agentId, { seq, items });
       act(ACT_KIND.CODING_AGENTS_AGENT_INBOX, { agentId, after: INBOX_CURSOR_START })
         .catch(() => UNANSWERED)
         .then((answer) => {
-          if (!live.current || asked.current.get(agentId) !== at) return;
+          if (!live.current || asking.current.get(agentId)?.seq !== seq) return;
+          asking.current.delete(agentId);
           const failure = "failure" in answer;
           setFailed((was) => {
             if (was.has(agentId) === failure) return was;
@@ -78,21 +94,25 @@ export function usePlanlessInboxItems(
             else next.delete(agentId);
             return next;
           });
-          if (!("failure" in answer)) {
-            setReads((was) => new Map(was).set(agentId, { at, items: answer.items }));
-          }
+          if ("failure" in answer) return;
+          readFor.current.set(agentId, items);
+          setReads((was) => new Map(was).set(agentId, answer.items));
         });
     }
-  }, [act, newest, attempt]);
+  }, [act, standing, attempt]);
 
+  // A retry asks again of every agent whose read failed, one read before among them, its last answer left drawn until the new one lands.
+  const failedNow = useRef(failed);
+  failedNow.current = failed;
   const onRetry = useCallback(() => {
-    asked.current.clear();
+    for (const agentId of failedNow.current) readFor.current.delete(agentId);
+    asking.current.clear();
     setFailed(new Set());
     setAttempt((count) => count + 1);
   }, []);
-  const items = useMemo(
-    () => new Map([...reads].map(([agentId, read]) => [agentId, read.items])),
-    [reads],
-  );
-  return { items, failed: [...newest.keys()].some((agentId) => failed.has(agentId)), onRetry };
+  return {
+    items: reads,
+    failed: [...standing.keys()].some((agentId) => failed.has(agentId)),
+    onRetry,
+  };
 }

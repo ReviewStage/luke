@@ -17,10 +17,12 @@ import {
   listedItems,
   NEEDS_YOU,
   planHolder,
+  planlessGroups,
 } from "../planning/inbox-model";
 import { useMinute } from "../planning/plan-time";
 import { RelativeTime } from "../planning/relative-time";
 import { useInboxItems } from "../planning/use-inbox-items";
+import { usePlanlessInboxItems } from "../planning/use-planless-inbox-items";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { RepositoryPicture } from "../repository-picture";
 import { RetryButton } from "../retry-button";
@@ -68,10 +70,12 @@ function recentPlans(plans: readonly PlanSummary[]): PlanSummary[] {
 }
 
 /**
- * Every open Inbox item of the listed workspace's plans, the latest changed
- * first, read as the window's Inbox reads them: each plan main says holds an
- * item and the listed workspace's list holds, read whole, a teammate's agent's
- * items among them, as every member's Inbox lists them.
+ * Every open Inbox item of the listed workspace's plans, and of its agents
+ * with no plan, the latest changed first, read as the window's Inbox reads
+ * them: each plan main says holds an item and the listed workspace's list
+ * holds, read whole, a teammate's agent's items among them, as every
+ * member's Inbox lists them, and each agent with no plan main says
+ * something waits on.
  */
 function useWaitingItems(plans: PlansControl) {
   const { act } = useAct();
@@ -87,17 +91,27 @@ function useWaitingItems(plans: PlansControl) {
     [inboxPlans, listed],
   );
   const read = useInboxItems({ holdings, readInbox });
-  const entries = holdings.flatMap((holding) => {
-    const plan = listed.find((each) => each.id === holding.planId);
-    return plan === undefined
-      ? []
-      : [{ holder: planHolder(plan), items: read.items.get(holding.planId) ?? [] }];
-  });
+  const planless = usePlanlessInboxItems(plans.inboxPlanless);
+  const entries = [
+    ...holdings.flatMap((holding) => {
+      const plan = listed.find((each) => each.id === holding.planId);
+      return plan === undefined
+        ? []
+        : [{ holder: planHolder(plan), items: read.items.get(holding.planId) ?? [] }];
+    }),
+    ...planlessGroups(plans.inboxPlanless, planless.items, plans.workspace?.id),
+  ];
   const items = listedItems(
     inboxList(entries, { grouping: INBOX_GROUPING.NEWEST, waitingOnly: true, chosen: undefined }),
   );
-  const reading = holdings.some((holding) => !read.items.has(holding.planId));
-  return { items, reading, failed: read.failed, onRetry: read.onRetry };
+  const reading =
+    holdings.some((holding) => !read.items.has(holding.planId)) ||
+    plans.inboxPlanless.some((each) => !planless.items.has(each.agentId));
+  const onRetry = () => {
+    read.onRetry();
+    planless.onRetry();
+  };
+  return { items, reading, failed: read.failed || planless.failed, onRetry };
 }
 
 /**
@@ -192,9 +206,11 @@ function HomeInbox({ plans, now }: { plans: PlansControl; now: number }): React.
   const { inboxView } = plans;
   const open = ({ holder, item }: InboxListed) => {
     inboxView.onOpen();
-    if (holder.kind === INBOX_HOLDER.PLAN) {
-      inboxView.onChoose({ planId: holder.plan.id, itemId: item.id });
-    }
+    inboxView.onChoose(
+      holder.kind === INBOX_HOLDER.PLAN
+        ? { planId: holder.plan.id, itemId: item.id }
+        : { agentId: item.agentId, itemId: item.id },
+    );
   };
   const empty = waiting.items.length === 0;
   return (
