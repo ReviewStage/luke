@@ -164,7 +164,12 @@ import {
 } from "@luke/gateway";
 import type { AgentWireTrace } from "@luke/gateway/devtrace";
 import type { LiveDiagnostics } from "@luke/live";
-import type { AppSettingField, AppSettingValue, SettingsResetScope } from "@luke/settings";
+import type {
+  AppSettingField,
+  AppSettingValue,
+  Experiment,
+  SettingsResetScope,
+} from "@luke/settings";
 import type { AppSettings, SettingsUpdateResult } from "@luke/settings/wire";
 import {
   EXCESS_KEYS,
@@ -217,6 +222,12 @@ export interface HostOperator {
     reporter: string,
   ): Effect.Effect<SettingsUpdateResult>;
   resetSettings(scope: SettingsResetScope, reporter: string): Effect.Effect<SettingsUpdateResult>;
+  /** One experiment turned on or off for the signed-in account, on the service. */
+  setExperiment(
+    experiment: Experiment,
+    on: boolean,
+    reporter: string,
+  ): Effect.Effect<SettingsUpdateResult>;
   accountSnapshot(): Effect.Effect<Option.Option<AccountSnapshot>>;
   beginSignIn(provider: AccountProvider): Effect.Effect<AccountSnapshot>;
   /** The sign-in taken again over the session that stands: whether a new session landed. */
@@ -634,6 +645,15 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       settingsResult(
         GATEWAY_METHOD.SETTINGS_RESET,
         client.call(GATEWAY_METHOD.SETTINGS_RESET, { scope, ...wireReporter(reporter) }),
+      ),
+    setExperiment: (experiment, on, reporter) =>
+      settingsResult(
+        GATEWAY_METHOD.EXPERIMENTS_SET,
+        client.call(GATEWAY_METHOD.EXPERIMENTS_SET, {
+          experiment,
+          on,
+          ...wireReporter(reporter),
+        }),
       ),
     accountSnapshot: () =>
       Effect.map(client.call(GATEWAY_METHOD.ACCOUNT_SNAPSHOT), (answer) =>

@@ -52,7 +52,8 @@ export type ExperimentChoices = Readonly<Partial<Record<Experiment, boolean>>>;
 /** No experiment chosen: every one off. */
 export const NO_EXPERIMENTS: ExperimentChoices = {};
 
-const isExperiment = Schema.is(Schema.Literals(Object.values(EXPERIMENT)));
+/** Whether a value names an experiment this build lists. */
+export const isExperiment = Schema.is(Schema.Literals(Object.values(EXPERIMENT)));
 const isChoice = Schema.is(Schema.Boolean);
 const choicesRecord = Schema.Record(Schema.String, Schema.Unknown);
 

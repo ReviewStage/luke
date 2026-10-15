@@ -36,6 +36,9 @@ import {
   type AppSettingField,
   type AppSettingValue,
   accountPreferencesFromStored,
+  type ExperimentChoices,
+  experimentChoicesFrom,
+  NO_EXPERIMENTS,
   type StoredAppSettings,
 } from "@luke/settings";
 
@@ -44,6 +47,7 @@ const SETTINGS_FILE_VERSION = 2;
 const SETTINGS_FIELD = {
   ACCOUNT: "account",
   ACCOUNT_PREFERENCES_SYNC: "accountPreferencesSync",
+  EXPERIMENTS: "experiments",
   VERSION: "version",
 } as const;
 
@@ -275,6 +279,25 @@ function storedAccountPreferencesSync(
 }
 
 /**
+ * The account's experiments as the service last answered them, and whose
+ * they are. Local bookkeeping only, since the choice is the account's on the
+ * service: it is what lets a launch draw the gated surfaces as they stood
+ * before the service has answered, and it is kept only for the account
+ * signed in, so a sign-out or another account's sign-in leaves none behind.
+ */
+interface PersistedExperiments {
+  accountEmail: string;
+  choices: ExperimentChoices;
+}
+
+function storedExperiments(value: UnparsedWireValue): PersistedExperiments | undefined {
+  const held = readWireRecord(value);
+  if (!held || !isWireString(held.accountEmail) || !held.accountEmail) return undefined;
+  const choices = experimentChoicesFrom(held.choices);
+  return choices === undefined ? undefined : { accountEmail: held.accountEmail, choices };
+}
+
+/**
  * The settings file's record: the version and the keys every file carries,
  * the sections a file holds only while something stands in them, and every
  * stored setting. Read by `parsePersistedSettingsEither` and written by
@@ -290,6 +313,7 @@ const PersistedSettingsSchema = Schema.Struct({
   [SETTINGS_FIELD.ACCOUNT_PREFERENCES_SYNC]: Schema.optionalKey(
     settingsField(storedAccountPreferencesSync),
   ),
+  [SETTINGS_FIELD.EXPERIMENTS]: Schema.optionalKey(settingsField(storedExperiments)),
   ...storedSettingFields,
 });
 
@@ -316,19 +340,28 @@ const decodeAccountTokens = Schema.decodeUnknownResult(Schema.fromJsonString(Acc
 
 /**
  * The record as the store keeps it: a section its reader could not read is
- * not a key holding `undefined` but no key at all, and a sync baseline is
- * kept only for the account signed in, since one left by another account
- * would let that account's edits stand in for this one's.
+ * not a key holding `undefined` but no key at all, and a sync baseline and
+ * the experiments are kept only for the account signed in, since one left by
+ * another account would let that account's edits stand in for this one's.
  */
 function settledPersistedSettings(persisted: PersistedSettings): PersistedSettings {
-  const { account, accountPreferencesSync, ...settings } = persisted;
+  const { account, accountPreferencesSync, experiments, ...settings } = persisted;
   return {
     ...settings,
     ...(account ? { account } : undefined),
     ...(account && accountPreferencesSync?.accountEmail === account.email
       ? { accountPreferencesSync }
       : undefined),
+    ...(account && experiments?.accountEmail === account.email ? { experiments } : undefined),
   };
+}
+
+/** The signed-in account's experiments as last cached, or none. */
+function experimentsOf(persisted: PersistedSettings): ExperimentChoices {
+  const { account, experiments } = persisted;
+  return account && experiments?.accountEmail === account.email
+    ? experiments.choices
+    : NO_EXPERIMENTS;
 }
 
 const DECLARED_SETTINGS_FIELDS: ReadonlySet<string> = new Set(
@@ -521,6 +554,28 @@ export class SettingsStore {
     });
   }
 
+  /**
+   * Keeps the experiments the service answered for the account signed in,
+   * answering whether they changed what the store held. An answer for an
+   * account no longer signed in is dropped, since it is no choice of the
+   * account that is.
+   */
+  cacheExperiments(
+    accountEmail: string,
+    choices: ExperimentChoices,
+  ): Effect.Effect<boolean, PlatformError> {
+    return Effect.gen({ self: this }, function* () {
+      let changed = false;
+      yield* this.#mutate((persisted) => {
+        if (persisted.account?.email !== accountEmail) return undefined;
+        if (JSON.stringify(experimentsOf(persisted)) === JSON.stringify(choices)) return undefined;
+        changed = true;
+        return { ...persisted, experiments: { accountEmail, choices } };
+      });
+      return changed;
+    });
+  }
+
   /** Whether the cipher can protect a secret, asked at most once a run; unasked until then. */
   #secretStorageAvailable: boolean | undefined;
 
@@ -544,6 +599,7 @@ export class SettingsStore {
           // what would actually be heard while the persisted file remains optional.
           voice: persisted.voice ?? this.#overrides.voice ?? LIVE_DEFAULTS.VOICE,
         },
+        experiments: experimentsOf(persisted),
         status: {
           // Whether a spoken turn could actually be opened: an account signed in,
           // and this run will use it. Resolved here rather than left to the panel
@@ -619,6 +675,7 @@ export class SettingsStore {
         if (persisted.account?.email && persisted.account.email !== account.email) {
           for (const field of ACCOUNT_PREFERENCE_FIELDS) next[field] = undefined;
           delete next.accountPreferencesSync;
+          delete next.experiments;
         }
         return next;
       });
@@ -634,6 +691,7 @@ export class SettingsStore {
         const next: PersistedSettings = { ...withoutAccount };
         for (const field of ACCOUNT_PREFERENCE_FIELDS) next[field] = undefined;
         delete next.accountPreferencesSync;
+        delete next.experiments;
         return next;
       }),
       { status: ACCOUNT_STATUS.SIGNED_OUT },

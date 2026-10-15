@@ -1,4 +1,5 @@
 import { useAtomValue } from "@effect/atom-react/Hooks";
+import { type Experiment, experimentOn, NO_EXPERIMENTS } from "@luke/settings";
 import { type AppSettingsView, appSettingsView } from "@luke/settings/wire";
 import { type Cause, Data, Effect, Option, Queue, Stream } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
@@ -140,4 +141,25 @@ export function useAppState(): AppStateSnapshot | undefined {
 export function appSettingsNow(): AppSettingsView | undefined {
   const stored = appStateNow()?.settings;
   return stored ? appSettingsView(stored) : undefined;
+}
+
+/**
+ * Whether the signed-in account has an experiment on, redrawn as it moves:
+ * the one way a gated feature's row, command, and place ask, so each appears
+ * and goes as its switch in Settings › Experimental does. Signed out, or
+ * before the first read, every experiment is off.
+ *
+ * @public Read by Factory's gated surfaces (#2608), above this contract.
+ */
+export function useExperiment(experiment: Experiment): boolean {
+  return experimentOn(useAppState()?.settings?.experiments ?? NO_EXPERIMENTS, experiment);
+}
+
+/**
+ * The same answer for a callback that cannot wait a render.
+ *
+ * @public Read by Factory's gated surfaces (#2608), above this contract.
+ */
+export function experimentOnNow(experiment: Experiment): boolean {
+  return experimentOn(appStateNow()?.settings?.experiments ?? NO_EXPERIMENTS, experiment);
 }

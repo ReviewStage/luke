@@ -12,6 +12,7 @@
  * to the menu and from there to the same nothing.
  */
 
+import { type Experiment, type ExperimentChoices, experimentOn } from "@luke/settings";
 import { isWireString, type UnparsedWireValue } from "@luke/wire";
 
 /** What a shortcut does. A command is one entry here and one row in {@link APP_SHORTCUTS} or {@link MENU_COMMAND_LABELS}. */
@@ -195,6 +196,14 @@ export interface ShortcutChord {
 export interface AppShortcut {
   label: string;
   chord: ShortcutChord;
+  /**
+   * The experiment a gated feature's command belongs to. While the account
+   * has it off, the command is in no list: not the Keyboard shortcuts page,
+   * not the settings search, and not the menu bar. Its chord stays reserved
+   * here all the same, so turning the experiment on never collides with
+   * another command.
+   */
+  experiment?: Experiment;
 }
 
 /**
@@ -404,6 +413,26 @@ export function isKeyedCommand(command: AppCommand): command is KeyedCommand {
 
 /** Every command a chord reaches, in the order the table declares them. */
 export const KEYED_COMMANDS: readonly KeyedCommand[] = APP_COMMANDS.filter(isKeyedCommand);
+
+/**
+ * Whether a keyed command stands in the window's lists for the account's
+ * experiments: every command does but a gated feature's while its
+ * experiment is off.
+ */
+export function shortcutShown(command: KeyedCommand, experiments: ExperimentChoices): boolean {
+  const shortcut: AppShortcut = APP_SHORTCUTS[command];
+  return shortcut.experiment === undefined || experimentOn(experiments, shortcut.experiment);
+}
+
+/** The shortcut groups with only the commands that stand for the account's experiments, as every list of them reads them. */
+export function shownShortcutGroups(
+  experiments: ExperimentChoices,
+): readonly { readonly title: string; readonly commands: readonly KeyedCommand[] }[] {
+  return APP_SHORTCUT_GROUPS.map((group) => ({
+    ...group,
+    commands: group.commands.filter((command) => shortcutShown(command, experiments)),
+  })).filter((group) => group.commands.length > 0);
+}
 
 /** A command's name as the window says it, keyed or the menu bar's own. */
 export function appCommandLabel(command: AppCommand): string {

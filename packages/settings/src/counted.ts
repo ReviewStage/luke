@@ -1,4 +1,10 @@
-import { PRODUCT_SETTINGS_VIEW, type ProductSettingsView } from "@luke/features/analytics";
+import {
+  PRODUCT_EXPERIMENT,
+  PRODUCT_SETTINGS_VIEW,
+  type ProductExperiment,
+  type ProductSettingsView,
+} from "@luke/features/analytics";
+import { EXPERIMENT, type Experiment } from "./experiments.js";
 import { SETTINGS_PAGE, type SettingsPage } from "./schema.js";
 
 /**
@@ -23,3 +29,7 @@ export const SETTINGS_VIEW_COUNTED_AS = {
   [SETTINGS_PAGE.THIS_MAC]: PRODUCT_SETTINGS_VIEW.THIS_MAC,
   [SETTINGS_PAGE.ABOUT]: PRODUCT_SETTINGS_VIEW.ABOUT,
 } satisfies Record<SettingsPage, ProductSettingsView>;
+
+export const EXPERIMENT_COUNTED_AS = {
+  [EXPERIMENT.FACTORY]: PRODUCT_EXPERIMENT.FACTORY,
+} satisfies Record<Experiment, ProductExperiment>;

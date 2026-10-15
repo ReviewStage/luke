@@ -11,6 +11,8 @@ import {
   APP_SETTING_SCHEMA,
   type AppSettingField,
   type AppSettingValue,
+  EXPERIMENT,
+  type ExperimentChoices,
   THEME,
 } from "@luke/settings";
 import {
@@ -114,6 +116,7 @@ interface PromisedSettingsStore {
     preferences: AccountPreferences,
   ): Promise<boolean>;
   retireStoredApiKeys(): Promise<void>;
+  cacheExperiments(accountEmail: string, choices: ExperimentChoices): Promise<boolean>;
 }
 
 function awaitedStoreOf(
@@ -139,6 +142,8 @@ function awaitedStoreOf(
     setAccountPreferencesSyncBaseline: (accountEmail, preferences) =>
       awaited(store.setAccountPreferencesSyncBaseline(accountEmail, preferences)),
     retireStoredApiKeys: () => awaited(store.retireStoredApiKeys()),
+    cacheExperiments: (accountEmail, choices) =>
+      awaited(store.cacheExperiments(accountEmail, choices)),
   };
 }
 
@@ -334,4 +339,41 @@ test("refuses to store an account when encrypted storage is unavailable", async 
   );
   assert.deepEqual(await store.accountSnapshot(), { status: ACCOUNT_STATUS.SIGNED_OUT });
   await assert.rejects(() => readSettingsFile(directory), /ENOENT/);
+});
+
+test("the experiments the service answered stand for the account signed in, across a reopen", async (t) => {
+  const directory = await temporaryDirectory(t, "luke-settings-");
+  const store = storeIn(directory);
+  await store.setAccount(TEST_ACCOUNT);
+  const factoryOn = { [EXPERIMENT.FACTORY]: true };
+
+  assert.deepEqual((await store.snapshot()).experiments, {});
+  assert.equal(await store.cacheExperiments(TEST_ACCOUNT.email, factoryOn), true);
+  assert.deepEqual((await store.snapshot()).experiments, factoryOn);
+  assert.deepEqual((await storeIn(directory).snapshot()).experiments, factoryOn);
+
+  // The same answer again changes nothing, and an answer for an account not signed in is no choice of this one's.
+  assert.equal(await store.cacheExperiments(TEST_ACCOUNT.email, factoryOn), false);
+  assert.equal(await store.cacheExperiments("someone-else@example.com", {}), false);
+  assert.deepEqual((await store.snapshot()).experiments, factoryOn);
+});
+
+test("a sign-out, or another account's sign-in, leaves no experiment of the last account on", async (t) => {
+  const factoryOn = { [EXPERIMENT.FACTORY]: true };
+
+  const signedOut = await temporaryDirectory(t, "luke-settings-");
+  const store = storeIn(signedOut);
+  await store.setAccount(TEST_ACCOUNT);
+  await store.cacheExperiments(TEST_ACCOUNT.email, factoryOn);
+  await store.clearAccount();
+  assert.deepEqual((await store.snapshot()).experiments, {});
+  await store.setAccount(TEST_ACCOUNT);
+  assert.deepEqual((await storeIn(signedOut).snapshot()).experiments, {});
+
+  const switched = await temporaryDirectory(t, "luke-settings-");
+  const other = storeIn(switched);
+  await other.setAccount(TEST_ACCOUNT);
+  await other.cacheExperiments(TEST_ACCOUNT.email, factoryOn);
+  await other.setAccount({ ...TEST_ACCOUNT, email: "teammate@example.com" });
+  assert.deepEqual((await storeIn(switched).snapshot()).experiments, {});
 });

@@ -1,4 +1,5 @@
 import { LIVE_VOICE } from "@luke/live";
+import { type Experiment, type ExperimentChoices, NO_EXPERIMENTS } from "./experiments.js";
 import {
   APP_SETTING_DEFAULTS,
   APP_SETTING_FIELDS,
@@ -31,6 +32,7 @@ export function settingsView(overrides: SettingsViewOverrides = {}): AppSettings
       duckOtherMedia: true,
       voiceAvailable: false,
       preferBuiltInMicrophone: false,
+      experiments: NO_EXPERIMENTS,
     },
     overrides,
   );
@@ -44,5 +46,14 @@ export function appSettingsWire(settings: AppSettingsView): AppSettings {
   // SAFETY: APP_SETTING_FIELDS enumerates every schema-derived stored field exactly once.
   const stored = storedEntries as StoredAppSettings;
   const status: RuntimeStatus = { voiceAvailable: settings.voiceAvailable };
-  return { stored, status };
+  return { stored, status, experiments: settings.experiments };
+}
+
+/**
+ * The account's choice with exactly these experiments on and every other
+ * off, for a case that draws a gated surface: `settingsView({ experiments:
+ * experimentsOn(EXPERIMENT.FACTORY) })`.
+ */
+export function experimentsOn(...experiments: readonly Experiment[]): ExperimentChoices {
+  return Object.fromEntries(experiments.map((experiment) => [experiment, true]));
 }

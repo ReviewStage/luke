@@ -2,6 +2,7 @@ import type { ProductSettingValue } from "@luke/features/analytics";
 import { isRecord, isWireString, type UnparsedWireValue } from "@luke/wire";
 import type { AppSettingId, DescribedSetting } from "@luke/wire/app-settings";
 import { Schema } from "effect";
+import type { ExperimentChoices } from "./experiments.js";
 import { APP_SETTING_SCHEMA } from "./schema.js";
 import type {
   AppSettingReader,
@@ -172,7 +173,11 @@ export function settingIdVisible(id: string, view: SettingsVisibility): boolean 
  * One record, so a result can never lead to a page without its row.
  */
 export interface SettingsRowsInput extends SettingsVisibility {
-  settings: Pick<StoredAppSettings, AppSettingField> & RuntimeStatus;
+  /** The settings as they stand, and the experiments the account has on, which decide whether a gated feature's rows stand. */
+  settings: Pick<StoredAppSettings, AppSettingField> &
+    RuntimeStatus & {
+      experiments: ExperimentChoices;
+    };
 }
 
 /** One row of a settings page, as the panel's own schema renderer draws it. */

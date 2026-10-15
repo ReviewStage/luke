@@ -56,6 +56,7 @@ export const PRODUCT_EVENT = {
   VOICE_ANNOUNCEMENT_SPEAK: "voice:announcement_speak",
   VOICE_FIRST_ANNOUNCEMENT: "voice:first_announcement",
   SETTING_UPDATE: "setting:update",
+  EXPERIMENT_TOGGLE: "experiment:toggle",
   CONVERSATION_RATED: "conversation:rated",
 } as const;
 
@@ -113,6 +114,7 @@ export const PRODUCT_EVENT_PROPERTY = {
   SIGN_IN_AGE: "sign_in_age",
   SETTING_ID: "setting_id",
   SETTING_VALUE: "setting_value",
+  EXPERIMENT: "experiment",
   RATING: "rating",
   MESSAGE_KIND: "message_kind",
 } as const;
@@ -293,6 +295,19 @@ export type ProductSettingValue =
 export const ProductSettingValueSchema = Schema.Literals(Object.values(PRODUCT_SETTING_VALUE));
 
 /**
+ * Which experiment a developer switched on or off in Settings ›
+ * Experimental, by its key. It repeats the settings package's own set rather
+ * than importing it, because that package reads this file and the edge would
+ * close a loop; the settings package closes the gap with a total `Record`
+ * bridge, so a new experiment does not build until this set answers for it.
+ */
+export const PRODUCT_EXPERIMENT = {
+  FACTORY: "factory",
+} as const;
+
+export type ProductExperiment = (typeof PRODUCT_EXPERIMENT)[keyof typeof PRODUCT_EXPERIMENT];
+
+/**
  * Which kind of Luke's messages a rating landed on, never the message: a
  * reply to the developer, or a briefing he announced on his own. The verdict
  * itself travels as `RATING_WORD`, the stored event's own three words, a
@@ -407,6 +422,7 @@ interface ProductEventPropertyValue {
   [PRODUCT_EVENT_PROPERTY.SIGN_IN_AGE]: ProductSignInAge;
   [PRODUCT_EVENT_PROPERTY.SETTING_ID]: AppSettingId;
   [PRODUCT_EVENT_PROPERTY.SETTING_VALUE]: ProductSettingValue;
+  [PRODUCT_EVENT_PROPERTY.EXPERIMENT]: ProductExperiment;
   [PRODUCT_EVENT_PROPERTY.RATING]: RatingWord;
   [PRODUCT_EVENT_PROPERTY.MESSAGE_KIND]: ProductRatedMessageKind;
 }
@@ -441,6 +457,7 @@ const PRODUCT_EVENT_PROPERTY_VALUES = {
   [PRODUCT_EVENT_PROPERTY.SIGN_IN_AGE]: Object.values(PRODUCT_SIGN_IN_AGE),
   [PRODUCT_EVENT_PROPERTY.SETTING_ID]: Object.values(APP_SETTING_ID),
   [PRODUCT_EVENT_PROPERTY.SETTING_VALUE]: Object.values(PRODUCT_SETTING_VALUE),
+  [PRODUCT_EVENT_PROPERTY.EXPERIMENT]: Object.values(PRODUCT_EXPERIMENT),
   [PRODUCT_EVENT_PROPERTY.RATING]: Object.values(RATING_WORD),
   [PRODUCT_EVENT_PROPERTY.MESSAGE_KIND]: Object.values(PRODUCT_RATED_MESSAGE_KIND),
 } as const satisfies Record<EnumeratedProductEventProperty, readonly string[]>;
@@ -483,6 +500,10 @@ const PRODUCT_EVENT_PROPERTIES = {
   [PRODUCT_EVENT.VOICE_FIRST_ANNOUNCEMENT]: [PRODUCT_EVENT_PROPERTY.SIGN_IN_AGE],
   [PRODUCT_EVENT.SETTING_UPDATE]: [
     PRODUCT_EVENT_PROPERTY.SETTING_ID,
+    PRODUCT_EVENT_PROPERTY.SETTING_VALUE,
+  ],
+  [PRODUCT_EVENT.EXPERIMENT_TOGGLE]: [
+    PRODUCT_EVENT_PROPERTY.EXPERIMENT,
     PRODUCT_EVENT_PROPERTY.SETTING_VALUE,
   ],
   [PRODUCT_EVENT.CONVERSATION_RATED]: [

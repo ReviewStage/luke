@@ -155,6 +155,7 @@ import {
   APP_SETTING_SCHEMA,
   type AppSettingField,
   type AppSettingValue,
+  EXPERIMENT,
   isAppSettingField,
   SETTINGS_RESET_SCOPE,
 } from "@luke/settings";
@@ -214,6 +215,8 @@ export const ACT_KIND = {
   INTEGRATIONS_TOOLS: "integrations.tools",
   SETTING_UPDATE: "setting.update",
   SETTINGS_RESET: "settings.reset",
+  /** One experiment turned on or off for the signed-in account, answering the settings as they then stand. */
+  EXPERIMENT_SET: "experiment.set",
   UPDATE_CHECK: "update.check",
   UPDATE_INSTALL: "update.install",
   UPDATE_OPEN_RELEASE: "update.openRelease",
@@ -701,6 +704,14 @@ export const ACT = {
     }),
     result: answersSettings,
     refusal: "Could not reset those settings on this system.",
+  },
+  [ACT_KIND.EXPERIMENT_SET]: {
+    payload: record({
+      experiment: EffectSchema.Literals(Object.values(EXPERIMENT)),
+      on: EffectSchema.Boolean,
+    }),
+    result: answersSettings,
+    refusal: "Could not change that experiment on this system.",
   },
   [ACT_KIND.UPDATE_CHECK]: {
     payload: noPayload,

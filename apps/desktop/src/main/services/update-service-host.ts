@@ -89,19 +89,20 @@ export const createUpdateServiceHost = /* @__PURE__ */ Effect.fn("desktop/create
       const act = updateMenuAct(update, config.packaged);
       if (act === shownAct) return;
       shownAct = act;
-      config.showMenuBar(
-        act === undefined
-          ? undefined
-          : {
-              act,
-              onCheck: () => {
-                dependencies.showSettings();
-                void host.check();
+      config.showMenuBar({
+        update:
+          act === undefined
+            ? undefined
+            : {
+                act,
+                onCheck: () => {
+                  dependencies.showSettings();
+                  void host.check();
+                },
+                onInstall: () => host.install(),
+                onOpenLatest: () => host.openLatestRelease(),
               },
-              onInstall: () => host.install(),
-              onOpenLatest: () => host.openLatestRelease(),
-            },
-      );
+      });
     };
 
     const engine = dependencies.engine;

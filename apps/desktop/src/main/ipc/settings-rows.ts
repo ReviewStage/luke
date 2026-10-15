@@ -30,7 +30,10 @@ export interface SettingsRowsDependencies {
 }
 
 /** Which kinds this file answers for: the settings writes. */
-type SettingsActKind = typeof ACT_KIND.SETTING_UPDATE | typeof ACT_KIND.SETTINGS_RESET;
+type SettingsActKind =
+  | typeof ACT_KIND.SETTING_UPDATE
+  | typeof ACT_KIND.SETTINGS_RESET
+  | typeof ACT_KIND.EXPERIMENT_SET;
 
 /** How every settings row below answers: a write carried, or a refusal the row can draw. */
 interface SettingsWriter {
@@ -138,6 +141,9 @@ export function settingsActRows(
             : applyClientSettingSideEffect(payload.field, result.settings),
       );
     },
+    // An experiment's switch has no side effect of this process's: the gated surfaces read it off the document.
+    [ACT_KIND.EXPERIMENT_SET]: ({ experiment, on }, { sender }) =>
+      write(ACT_KIND.EXPERIMENT_SET, host.setExperiment(experiment, on, reporterOf(sender))),
     [ACT_KIND.SETTINGS_RESET]: ({ scope }, { sender }) =>
       write(ACT_KIND.SETTINGS_RESET, host.resetSettings(scope, reporterOf(sender)), (result) =>
         result.reason
