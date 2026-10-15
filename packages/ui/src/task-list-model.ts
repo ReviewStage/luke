@@ -1,7 +1,7 @@
 import type { PlanSummary } from "@luke/features/plan-wire";
 
 /**
- * task-list-model.ts -- how the sidebar's task list is grouped and ordered: the view a workspace keeps, the groups it draws, and the time each row shows.
+ * task-list-model.ts -- how the sidebar's task list is grouped, ordered, and filtered: the view a workspace keeps, the groups it draws, and the time each row shows.
  *
  * The list is one section of the sidebar, its tasks drawn under the groups
  * the view chooses: by repository, by who created them, or in one run. The
@@ -28,10 +28,12 @@ export const TASK_ORDER = {
 
 export type TaskOrder = (typeof TASK_ORDER)[keyof typeof TASK_ORDER];
 
-/** How a workspace's list is drawn: today's, by repository and last update, until it is changed. */
+/** How a workspace's list is drawn: today's, by repository and last update, everyone's, until it is changed. */
 export interface TaskListView {
   readonly grouping: TaskGrouping;
   readonly order: TaskOrder;
+  /** Whose tasks the list holds: one member's by account id, or everyone's where absent. */
+  readonly createdBy?: string;
 }
 
 export const DEFAULT_TASK_LIST_VIEW: TaskListView = {
@@ -136,6 +138,14 @@ export function repositoryLabel(repository: string, groups: readonly RepositoryG
 /** Who created a plan, by account id: the creator the wire names, else its owner. */
 function creatorIdOf(plan: PlanSummary): string | undefined {
   return plan.createdBy?.userId ?? plan.ownerId;
+}
+
+/** The plans one member created, or every plan where the view names nobody. */
+export function createdByOnly(
+  plans: readonly PlanSummary[],
+  createdBy: string | undefined,
+): readonly PlanSummary[] {
+  return createdBy === undefined ? plans : plans.filter((plan) => creatorIdOf(plan) === createdBy);
 }
 
 /**

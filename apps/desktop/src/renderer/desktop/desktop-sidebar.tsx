@@ -20,6 +20,7 @@ import { PLANS_PAGE, repositoryPageUrl } from "@luke/ui/planning-model";
 import { sameTab } from "@luke/ui/tab-strip-model";
 import {
   type CreatorGroup,
+  createdByOnly,
   creatorGroups,
   orderTasks,
   type RepositoryGroup,
@@ -58,7 +59,7 @@ import { SIDEBAR_OVERLAY, SIDEBAR_WIDTH, type SidebarCollapse } from "./sidebar-
 import { SidebarFoot } from "./sidebar-foot";
 import { type CountNoun, SidebarGroupHeader } from "./sidebar-group-header";
 import { SidebarPinnedTab } from "./sidebar-pinned-tab";
-import { SidebarSectionHead, TaskViewOptions } from "./sidebar-task-view";
+import { CreatedByChip, SidebarSectionHead, TaskViewOptions } from "./sidebar-task-view";
 import { useTaskListView } from "./task-list-view";
 import { EDGE_SIDE, type ResizableEdgeProps, useResizableEdge } from "./use-resizable-edge";
 import { WorkspaceSwitcher } from "./workspace-switcher";
@@ -156,6 +157,8 @@ interface RowContext {
   readonly now: number;
   /** The list's order, whose time each of its rows shows. */
   readonly order: TaskOrder;
+  /** Whether a teammate's task wears its creator's face: not while the list holds one creator's tasks. */
+  readonly faces: boolean;
   /** Whether the sidebar is in sight: folded away, nothing it opened stands over the window. */
   readonly inSight: boolean;
 }
@@ -170,7 +173,7 @@ function PlanRows({
   rows,
   context,
   repository,
-  face = true,
+  face = context.faces,
 }: {
   rows: readonly PlanSummary[];
   context: RowContext;
@@ -1002,8 +1005,9 @@ function SidebarColumn({
   const folds = useFoldedGroups(sidebar.staged);
   const taskView = useTaskListView(plans.workspace?.id, sidebar.staged);
   const reader = useMemberDirectory();
-  // Only a workspace somebody shares has creators to group by.
+  // Only a workspace somebody shares has creators to group and filter by.
   const shared = (plans.workspace?.memberCount ?? 1) > 1;
+  const createdBy = shared ? taskView.view.createdBy : undefined;
   const unread = useUnreadPlans([...plans.plans, ...plans.archived], {
     listRead: plans.listRead,
     staged: sidebar.staged,
@@ -1036,6 +1040,7 @@ function SidebarColumn({
     unread,
     now,
     order: taskView.view.order,
+    faces: createdBy === undefined,
     inSight: overlay.inSight,
   };
   // A pinned tab is on show where its plan is open and its column shows it:
@@ -1050,7 +1055,9 @@ function SidebarColumn({
           : plans.sidePanel.open &&
             plans.sidePanel.tab !== undefined &&
             sameTab(plans.sidePanel.tab, pin.tab))));
-  const tasks = plans.listed.plans.filter((plan) => plan.pinnedAt === undefined);
+  // Note that the pins are never filtered, because a pin is already the reader's own choice.
+  const unpinned = plans.listed.plans.filter((plan) => plan.pinnedAt === undefined);
+  const tasks = createdByOnly(unpinned, createdBy);
   const { grouping, order } = taskView.view;
   const sections = taskSections(
     tasks,
@@ -1061,7 +1068,7 @@ function SidebarColumn({
     (plan) => actorName(creatorActor(plan, reader, undefined)),
   );
   // A row names its repository as its group's header would, owner and all where two share a name.
-  const named = repositoryGroups(tasks);
+  const named = repositoryGroups(unpinned);
   const repositoryOf = (plan: PlanSummary) =>
     plan.repository === null ? undefined : repositoryLabel(plan.repository, named);
   // The rows as the list draws them: the pinned, then each group not folded
@@ -1172,8 +1179,28 @@ function SidebarColumn({
                 shown={plans.shown && overlay.inSight}
                 control={taskView}
                 shared={shared}
+                filtered={createdBy !== undefined}
               />
             </SidebarSectionHead>
+          ) : null}
+          {plans.signedIn && createdBy !== undefined ? (
+            <CreatedByChip
+              createdBy={createdBy}
+              plans={unpinned}
+              onClear={() => taskView.onCreatedBy(undefined)}
+            />
+          ) : null}
+          {createdBy !== undefined && tasks.length === 0 && unpinned.length > 0 ? (
+            <p className="sidebar-note">
+              {createdBy === plans.me ? "None of your tasks here." : "None of their tasks here."}{" "}
+              <button
+                type="button"
+                className="toolbar-button quiet-button"
+                onClick={() => taskView.onCreatedBy(undefined)}
+              >
+                Show all
+              </button>
+            </p>
           ) : null}
           {plans.listFailed ? (
             <div className="sidebar-note">

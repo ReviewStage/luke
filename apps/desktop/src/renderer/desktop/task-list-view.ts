@@ -11,13 +11,13 @@ import { useState } from "react";
 import { readKept, writeKept } from "./folded-groups";
 
 /**
- * task-list-view.ts -- how each workspace's task list is grouped and ordered in the sidebar, kept per workspace on this Mac.
+ * task-list-view.ts -- how each workspace's task list is grouped, ordered, and filtered in the sidebar, kept per workspace on this Mac.
  *
  * The view is the developer's reading of a workspace's list, kept in the
  * renderer's own storage as the folds are, so a list grouped by creator on
  * one Mac stays grouped by repository on another, and one workspace's view
  * never changes another's. A workspace with no view kept draws today's,
- * by repository and last update. A fixture run draws that view and keeps
+ * by repository and last update, everyone's tasks. A fixture run draws that view and keeps
  * nothing, so its frames never wear a developer's choices.
  */
 
@@ -31,6 +31,7 @@ const storedViews = Schema.fromJsonString(
     Schema.Struct({
       grouping: Schema.Literals(Object.values(TASK_GROUPING)),
       order: Schema.Literals(Object.values(TASK_ORDER)),
+      createdBy: Schema.optionalKey(Schema.String),
     }),
   ),
 );
@@ -42,6 +43,8 @@ export interface TaskListViewControl {
   readonly view: TaskListView;
   readonly onGrouping: (grouping: TaskGrouping) => void;
   readonly onOrder: (order: TaskOrder) => void;
+  /** Lists one member's tasks, by account id, or everyone's for undefined. */
+  readonly onCreatedBy: (createdBy: string | undefined) => void;
 }
 
 /** The view of the workspace listed, kept as each choice is made, unless the run is `staged`. */
@@ -68,5 +71,11 @@ export function useTaskListView(
     view,
     onGrouping: (grouping) => choose({ ...view, grouping }),
     onOrder: (order) => choose({ ...view, order }),
+    onCreatedBy: (createdBy) =>
+      choose(
+        createdBy === undefined
+          ? { grouping: view.grouping, order: view.order }
+          : { ...view, createdBy },
+      ),
   };
 }
