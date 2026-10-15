@@ -13,7 +13,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { onRegistry } from "#testing/copy-feedback";
 import { DOCUMENT_PLAN } from "#testing/document-plan";
-import { usePlanLooks, useUnreadPlans } from "./use-plan-looks";
+import { NO_LOOKS, usePlanLooks, useUnreadPlans } from "./use-plan-looks";
 
 /**
  * use-plan-looks.test.ts -- the sections a reader is shown as changed since
@@ -164,4 +164,42 @@ test("a save landing while the plan stays open is read as it lands, and stays re
 
   draw(undefined);
   assert.deepEqual(drawn, { changed: [], unread: false });
+});
+
+test("a reader's id arriving mid-stay lights neither a save that landed during the stay nor a section dismissed", () => {
+  const charles = { section: "Approach", actor: PLAN_ACTOR.DEVELOPER, by: CHARLES };
+  const plan: Plan = {
+    ...DOCUMENT_PLAN,
+    updatedAt: LOOKED_AT + 1,
+    sectionEdits: [{ ...charles, at: LOOKED_AT + 1, duringCall: false }],
+  };
+  const saved: Plan = {
+    ...plan,
+    updatedAt: LOOKED_AT + 2,
+    sectionEdits: [
+      { ...charles, at: LOOKED_AT + 1, duringCall: false },
+      { section: "Context", actor: PLAN_ACTOR.NOTETAKER, at: LOOKED_AT + 2, duringCall: false },
+    ],
+  };
+  const stay = (dismissing: boolean) => {
+    window.localStorage.setItem("luke.planLooks", JSON.stringify({ [plan.id]: LOOKED_AT }));
+    let looks = NO_LOOKS;
+    function Reader({ open, readerId }: { open: Plan; readerId: string | undefined }) {
+      looks = usePlanLooks(open, readerId);
+      return null;
+    }
+    const root = createRoot(document.createElement("div"));
+    roots.push(root);
+    const registry = AtomRegistry.make();
+    const draw = (open: Plan, readerId: string | undefined) =>
+      act(() => root.render(onRegistry(registry, createElement(Reader, { open, readerId }))));
+    draw(plan, undefined);
+    if (dismissing) act(() => looks.dismiss());
+    draw(saved, undefined);
+    draw(saved, DEAN.userId);
+    return [...looks.changed];
+  };
+
+  assert.deepEqual(stay(false), ["Approach"]);
+  assert.deepEqual(stay(true), []);
 });

@@ -60,17 +60,20 @@ interface KeptLooks {
 }
 
 /**
- * One stay on a plan: the mark the last look left as it opened, and the
- * sections changed since it, as read for the reader it names. Note that a
- * reader's id arriving mid-stay reads the sections again against the mark
- * the stay opened with, because the sections read without it took every
- * developer's save as the reader's, and this stay's own look has moved the
- * kept mark since.
+ * One stay on a plan: the mark the last look left as it opened, the newest
+ * save the plan named then, and the sections saved between the two, as read
+ * for the reader it names. Note that a reader's id arriving mid-stay reads
+ * the sections again within that same span, because the sections read
+ * without it took every developer's save as the reader's, this stay's own
+ * look has moved the kept mark since, and a save landing during the stay
+ * was watched as it landed. A dismissal closes the span, so no read
+ * after it lights a section again.
  */
 interface Visit {
   readonly planId: string | undefined;
   readonly readerId: string | undefined;
   readonly mark: number | undefined;
+  readonly opened: number | undefined;
   readonly changed: ReadonlySet<string>;
 }
 
@@ -169,34 +172,42 @@ function readersOwn(edit: PlanSectionEdit, readerId: string | undefined): boolea
   return edit.by === undefined || readerId === undefined || edit.by.userId === readerId;
 }
 
-/** A visit to the plan at `mark`, the last look's: each section someone else, a teammate or Luke or an agent, saved after it; none while no plan is drawn. */
+/** A visit to the plan between `mark`, the last look's, and `opened`: each section someone else, a teammate or Luke or an agent, saved in that span; none while no plan is drawn. */
 function visited(
   plan: Plan | undefined,
   readerId: string | undefined,
   mark: number | undefined,
+  opened: number | undefined,
 ): Visit {
   if (plan === undefined)
-    return { planId: undefined, readerId, mark: undefined, changed: NOTHING_CHANGED };
+    return {
+      planId: undefined,
+      readerId,
+      mark: undefined,
+      opened: undefined,
+      changed: NOTHING_CHANGED,
+    };
   const changed =
-    mark === undefined
+    mark === undefined || opened === undefined
       ? NOTHING_CHANGED
       : new Set(
           sectionSavesOf(plan)
-            .filter((edit) => !readersOwn(edit, readerId) && edit.at > mark)
+            .filter((edit) => !readersOwn(edit, readerId) && edit.at > mark && edit.at <= opened)
             .map((edit) => edit.section),
         );
-  return { planId: plan.id, readerId, mark, changed };
+  return { planId: plan.id, readerId, mark, opened, changed };
 }
 
-/** The visit as the plan opens, or as the reader's id arrives on the one already open, whose mark it keeps. */
+/** The visit as the plan opens, or as the reader's id arrives on the one already open, whose span it keeps. */
 function revisited(
   held: Visit | undefined,
   plan: Plan | undefined,
   readerId: string | undefined,
 ): Visit {
-  const staying = held !== undefined && plan !== undefined && held.planId === plan.id;
-  const mark = staying ? held.mark : plan === undefined ? undefined : readLooks()[plan.id];
-  return visited(plan, readerId, mark);
+  if (plan === undefined) return visited(undefined, readerId, undefined, undefined);
+  if (held !== undefined && held.planId === plan.id)
+    return visited(plan, readerId, held.mark, held.opened);
+  return visited(plan, readerId, readLooks()[plan.id], newestSaveOf(plan));
 }
 
 /**
@@ -234,7 +245,9 @@ export function usePlanLooks(plan: Plan | undefined, readerId: string | undefine
   return {
     changed: current.changed,
     dismiss: () => {
-      setVisit((held) => (held.planId === planId ? { ...held, changed: NOTHING_CHANGED } : held));
+      setVisit((held) =>
+        held.planId === planId ? { ...held, mark: held.opened, changed: NOTHING_CHANGED } : held,
+      );
       if (planId !== undefined && newest !== undefined)
         keep({ marks: { [planId]: newest }, seeded: false });
     },
