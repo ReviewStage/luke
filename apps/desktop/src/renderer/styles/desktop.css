@@ -562,6 +562,14 @@ body,
   background: var(--workspace-hue-6);
 }
 
+/* In a line of words, the tile keeps to the line's height. */
+.workspace-tile[data-size="inline"] {
+  width: 14px;
+  height: 14px;
+  border-radius: 3.5px; /* off-scale */
+  font-size: 9px;
+}
+
 .workspace-tile[data-size="head"] {
   width: 32px;
   height: 32px;
@@ -576,6 +584,60 @@ body,
   height: 48px;
   border-radius: 12px;
   font-size: 22px;
+}
+
+/* A workspace named (`workspace-ref.tsx`): its tile and its name as one
+   object in the ink of the place it stands in, the name cut short rather
+   than wrapped; with a line under the name, the two stand in a column
+   beside the tile, the line quieter. Each place sets the name's weight. */
+.workspace-ref {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  align-items: center;
+  gap: 5px; /* off-scale: a 14px tile's gap to its word, an actor's alike */
+  vertical-align: middle;
+}
+
+.workspace-ref[data-size="row"] {
+  gap: var(--space-6);
+}
+
+.workspace-ref[data-size="head"],
+.workspace-ref:has(> .workspace-ref-copy) {
+  gap: var(--space-12);
+}
+
+.workspace-ref-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px; /* off-scale */
+}
+
+.workspace-ref-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A workspace's card leads with its tile at the sidebar head's size, the
+   photo large enough to know it by, as an actor's card leads with its mark. */
+.workspace-card-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+.workspace-card-head > .card-head {
+  min-width: 0;
+  flex: 1;
+}
+
+.workspace-ref-line {
+  color: var(--text-secondary);
+  font-size: 12px;
 }
 
 /* The sidebar's head: the workspace listed, its tile, its name in the head's
@@ -606,22 +668,19 @@ body,
   background: var(--raised);
 }
 
-.sidebar-workspace-copy {
-  display: flex;
-  min-width: 0;
+.sidebar-workspace-toggle > .workspace-ref {
   flex: 1;
-  flex-direction: column;
+}
+
+.sidebar-workspace-toggle .workspace-ref-copy {
   gap: var(--space-2);
 }
 
-.sidebar-workspace-name {
-  overflow: hidden;
+.sidebar-workspace-toggle .workspace-ref-name {
   color: var(--text-primary);
   font-size: 14px;
   font-weight: 650;
   letter-spacing: -0.005em;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .sidebar-workspace-shared {
@@ -6586,24 +6645,9 @@ button.automation-run:hover {
   opacity: 0.55;
 }
 
-.move-row-copy {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 1px; /* off-scale */
-}
-
-.move-row-name {
-  overflow: hidden;
+.move-row .workspace-ref-name {
   color: var(--text-primary);
   font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.move-row-line {
-  color: var(--text-secondary);
-  font-size: 12px;
 }
 
 .move-effects {

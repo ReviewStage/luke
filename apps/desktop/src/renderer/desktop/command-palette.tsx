@@ -45,6 +45,7 @@
 
 import { PLAN_TREE_BOUNDS, PLAN_TREE_ENTRY, type PlanSummary } from "@luke/features/plan-wire";
 import type { PlanCodeShowing, PlanningTreeAnswer } from "@luke/features/planning-view";
+import type { Workspace } from "@luke/features/workspace-wire";
 import { SETTINGS_PAGE_LIST, type SettingsView } from "@luke/settings/settings-views";
 import { GearIcon, SearchIcon } from "@luke/ui";
 import { DOCUMENT_REGION } from "@luke/ui/planning-model";
@@ -84,6 +85,7 @@ import { Shortcut } from "../shortcut";
 import { Tooltip } from "../tooltip";
 import { agentEntries, inboxEntries } from "./main-tabs";
 import { changesOffers, panelEntries, planWorkers } from "./side-panel";
+import { WorkspaceRef } from "./workspace-ref";
 
 /** The kinds of row the palette lists, each a filter of its own after All, in the order the chips stand. */
 const PALETTE_FILTER = {
@@ -219,6 +221,8 @@ interface PaletteRow {
   label: string;
   /** Muted words after the name: a plan's repository, an agent's plan, a setting's page. */
   detail?: string | undefined;
+  /** The workspace a plan is in where that is not the one listed, named by its tile and name before the detail. */
+  workspace?: Workspace | undefined;
   /** The mark at the row's end: a failed agent's. */
   endMark?: React.JSX.Element | undefined;
   /** The card the row hangs beside it while the pointer rests on it: an agent's tab's. */
@@ -357,15 +361,9 @@ function steppedFilter(filter: PaletteFilter, step: number): PaletteFilter {
   return PALETTE_FILTERS[(at + step + count) % count] ?? PALETTE_FILTER.ALL;
 }
 
-/** A plan's muted words: the workspace it is in where that is not the one listed, its repository, and whether it is archived. */
-function planDetail(
-  plan: PlanSummary,
-  archived: boolean,
-  elsewhere: string | undefined,
-): string | undefined {
-  const words = [elsewhere ?? null, plan.repository, archived ? "Archived" : null].filter(
-    (word) => word !== null,
-  );
+/** A plan's muted words: its repository, and whether it is archived. */
+function planDetail(plan: PlanSummary, archived: boolean): string | undefined {
+  const words = [plan.repository, archived ? "Archived" : null].filter((word) => word !== null);
   return words.length === 0 ? undefined : words.join(" · ");
 }
 
@@ -378,16 +376,17 @@ function planDetail(
  */
 function planRows(plans: PlansControl, open: (planId: string) => void): readonly PaletteRow[] {
   const listedId = plans.workspace?.id;
-  const elsewhereOf = (plan: PlanSummary): string | undefined =>
+  const elsewhereOf = (plan: PlanSummary): Workspace | undefined =>
     listedId === undefined || plan.workspaceId === listedId
       ? undefined
-      : plans.workspaces.find((each) => each.id === plan.workspaceId)?.name;
+      : plans.workspaces.find((each) => each.id === plan.workspaceId);
   const row = (plan: PlanSummary, archived: boolean): PaletteRow => {
     const elsewhere = elsewhereOf(plan);
     return {
       ...tabLook({ kind: TAB_KIND.PLAN, name: plan.name }),
-      detail: planDetail(plan, archived, elsewhere),
-      terms: [plan.name, plan.repository, elsewhere ?? null].filter((term) => term !== null),
+      detail: planDetail(plan, archived),
+      workspace: elsewhere,
+      terms: [plan.name, plan.repository, elsewhere?.name ?? null].filter((term) => term !== null),
       onChoose: () => open(plan.id),
     };
   };
@@ -529,9 +528,16 @@ function PaletteItem({
       <span className="command-palette-name">
         <Highlighted text={row.label} tokens={tokens} />
       </span>
-      {row.detail === undefined ? null : (
+      {row.detail === undefined && row.workspace === undefined ? null : (
         <span className="command-palette-detail">
-          <Highlighted text={row.detail} tokens={tokens} />
+          {row.workspace === undefined ? null : (
+            <WorkspaceRef
+              workspace={row.workspace}
+              name={<Highlighted text={row.workspace.name} tokens={tokens} />}
+            />
+          )}
+          {row.workspace === undefined || row.detail === undefined ? null : " · "}
+          {row.detail === undefined ? null : <Highlighted text={row.detail} tokens={tokens} />}
         </span>
       )}
       {/* Spoken, since a palette row is an option, which carries no

@@ -113,7 +113,7 @@ test("the menu offers the workspaces, the listed one checked, New workspace, and
   open(page.switcher());
   choose("Workspace settings");
 
-  assert.equal(page.switcher()?.querySelector(".sidebar-workspace-name")?.textContent, "acme");
+  assert.equal(page.switcher()?.querySelector(".workspace-ref-name")?.textContent, "acme");
   assert.deepEqual(offered, [
     ["Personal", "false"],
     ["acme", "true"],

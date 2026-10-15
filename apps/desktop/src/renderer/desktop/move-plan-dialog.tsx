@@ -8,8 +8,7 @@ import { ModalShell } from "../modal-shell";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { type DialogConfirm, useConfirmDialog } from "../settings/confirm-dialog";
 import { BusyLabel } from "../spinner";
-import { sharedWords } from "./workspace-switcher";
-import { WorkspaceTile } from "./workspace-tile";
+import { sharedWords, WORKSPACE_REF_SIZE, WorkspaceRef } from "./workspace-ref";
 
 /**
  * move-plan-dialog.tsx -- Move to workspace…, from a plan's ⋯: the account's other workspaces to move the plan to, and what the move does.
@@ -148,11 +147,7 @@ function WorkspaceChoices({
             disabled={disabled || !reaches(workspace, repository)}
             onClick={() => onChoose(workspace.id)}
           >
-            <WorkspaceTile workspace={workspace} />
-            <span className="move-row-copy">
-              <span className="move-row-name">{workspace.name}</span>
-              {line === undefined ? null : <span className="move-row-line">{line}</span>}
-            </span>
+            <WorkspaceRef workspace={workspace} size={WORKSPACE_REF_SIZE.ROW} line={line} />
           </button>
         );
       })}

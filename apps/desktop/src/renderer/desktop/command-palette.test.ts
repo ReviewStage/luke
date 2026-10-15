@@ -100,12 +100,19 @@ function type(words: string): void {
   });
 }
 
+/** The words a reader hears in a part of a row: its text but for a mark hidden from a screen reader, a workspace's tile's letter among them. */
+function heard(node: Node): string {
+  if (node instanceof Element && node.getAttribute("aria-hidden") === "true") return "";
+  if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? "";
+  return [...node.childNodes].map(heard).join("");
+}
+
 /** Each row the palette lists, as its name and the muted words after it. */
 function rows(): string[] {
   return [...document.querySelectorAll(".menu-item")].map((row) =>
     [row.querySelector(".command-palette-name"), row.querySelector(".command-palette-detail")]
-      .map((part) => part?.textContent)
-      .filter((words) => words !== undefined)
+      .filter((part) => part !== null)
+      .map(heard)
       .join(" · "),
   );
 }
@@ -437,7 +444,7 @@ test('a file found wears the look the side panel\'s "+" gives it, hangs its card
   assert.deepEqual(opened, [[{ path }], [{ path }]]);
 });
 
-test("Search lists the listed workspace's plans first, then every other workspace's, each naming its workspace and found by it", () => {
+test("Search lists the listed workspace's plans first, then every other workspace's, each naming its workspace by its tile and name and found by it", () => {
   const personal = {
     id: "workspace-personal",
     name: "Personal",
@@ -474,4 +481,9 @@ test("Search lists the listed workspace's plans first, then every other workspac
 
   assert.deepEqual(listed, ["Dotfiles sync", "Checkout retries · Northwind · northwind/shop"]);
   assert.deepEqual(rows(), ["Checkout retries · Northwind · northwind/shop"]);
+  assert.equal(
+    document.querySelector(".command-palette-detail .workspace-ref .workspace-tile")?.textContent,
+    "N",
+    "the other workspace is named by its tile and its name",
+  );
 });
