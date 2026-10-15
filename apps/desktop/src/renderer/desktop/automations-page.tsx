@@ -135,7 +135,9 @@ function AutomationRow({
         <StateGlyph glyph={<ClockIcon />} state={state} />
         <span className="automation-row-copy">
           <span className="automation-row-name">{automation.name}</span>
-          <span className="automation-row-detail">{automationTriggerText(automation.trigger)}</span>
+          <span className="automation-row-detail">
+            {automationTriggerText(automation.trigger, automation.repositories ?? [])}
+          </span>
         </span>
       </button>
       <OwnerCell owner={automationOwner(automation)} workspaceName={workspaceName} />

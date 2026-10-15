@@ -162,25 +162,25 @@ it.effect(
 );
 
 it.effect(
-  "a webhook's secret is minted again by a change asking for it, and the fresh secret is answered for the host alone to copy",
+  "a webhook's secret is replaced by the hash the host sends, and a window's own write to a webhook drops the secret the service mints",
   () =>
     Effect.gen(function* () {
       const api = fakeCloudApi({
         [`PATCH /api/automations/${AUTOMATION_ID}`]: {
           answer: () => ({
             automation: { ...SUMMARY, trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK } },
-            webhookSecret: "a-fresh-secret",
+            webhookSecret: "a-secret-the-service-minted",
           }),
         },
       });
 
-      const rotated = yield* Effect.provide(
-        client().rotateWebhookSecret({ automationId: AUTOMATION_ID }),
+      const replaced = yield* Effect.provide(
+        client().replaceWebhookSecret({
+          automationId: AUTOMATION_ID,
+          webhookSecretHash: "ab".repeat(32),
+        }),
         api.layer,
       );
-
-      assert.ok(!("failure" in rotated) && rotated.webhookSecret === "a-fresh-secret");
-      // A window's own write to a webhook travels, its minted secret dropped as every write's is.
       const toWebhook = yield* Effect.provide(
         client().change({
           automationId: AUTOMATION_ID,
@@ -188,7 +188,11 @@ it.effect(
         }),
         api.layer,
       );
-      assert.ok(!JSON.stringify(toWebhook).includes("a-fresh-secret"));
-      assert.deepEqual(JSON.parse(api.requests()[0]?.body ?? "{}"), { rotateWebhookSecret: true });
+
+      assert.ok(!("failure" in replaced) && replaced.automation.id === AUTOMATION_ID);
+      assert.deepEqual(JSON.parse(api.requests()[0]?.body ?? "{}"), {
+        webhookSecretHash: "ab".repeat(32),
+      });
+      assert.ok(!JSON.stringify([replaced, toWebhook]).includes("a-secret-the-service-minted"));
     }),
 );

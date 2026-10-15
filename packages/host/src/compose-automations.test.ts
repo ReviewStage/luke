@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { it } from "@effect/vitest";
 import { AUTOMATION_CALL_FAILURE } from "@luke/features/automation-view";
 import {
@@ -45,9 +46,6 @@ const SUMMARY = {
   createdAt: 1,
 } as const;
 
-/** A webhook secret as the service would answer it once; synthetic. */
-const SECRET = "whsec-fixture-not-a-secret";
-
 const CREATE = {
   workspaceId: WORKSPACE_ID,
   repositories: ["acme/web"],
@@ -73,7 +71,7 @@ function fakeService() {
     remove: answer("remove", { deleted: true } as const),
     runNow: answer("run", { failure: AUTOMATION_CALL_FAILURE.NOT_FOUND }),
     runs: answer("runs", { runs: [] }),
-    rotateWebhookSecret: answer("rotate", { automation: SUMMARY, webhookSecret: SECRET }),
+    replaceWebhookSecret: answer("replace", { automation: SUMMARY }),
   };
   return { client, asked };
 }
@@ -165,7 +163,7 @@ it.effect("params of the wrong shape are refused before anything travels", () =>
 );
 
 it.effect(
-  "a webhook's fresh secret is put on the clipboard and the window hears only that it was copied, and a clipboard that refuses it answers unanswered",
+  "a webhook's fresh secret is on the clipboard before its hash alone is sent, the window hears only that it was copied, and a clipboard that refuses it replaces nothing",
   () =>
     Effect.gen(function* () {
       const { call, asked, clipboard } = yield* subject();
@@ -175,12 +173,19 @@ it.effect(
       const copied = yield* call(GATEWAY_METHOD.AUTOMATIONS_COPY_WEBHOOK_SECRET, named);
       const refused = yield* refusing.call(GATEWAY_METHOD.AUTOMATIONS_COPY_WEBHOOK_SECRET, named);
 
+      const [secret = ""] = clipboard;
       assert.deepEqual(copied, { automation: SUMMARY, secretCopied: true });
-      assert.deepEqual(clipboard, [SECRET]);
-      assert.deepEqual(asked, [["rotate", named]]);
+      assert.ok(secret.length >= 40, "a secret of 32 random bytes is copied");
+      assert.deepEqual(asked, [
+        [
+          "replace",
+          { ...named, webhookSecretHash: createHash("sha256").update(secret).digest("hex") },
+        ],
+      ]);
       assert.deepEqual(refused, { failure: AUTOMATION_CALL_FAILURE.UNANSWERED });
+      assert.deepEqual(refusing.asked, [], "a copy that failed replaces nothing");
       assert.ok(
-        !JSON.stringify([copied, refused]).includes(SECRET),
+        !JSON.stringify([copied, refused]).includes(secret),
         "no answer carries the secret",
       );
     }),

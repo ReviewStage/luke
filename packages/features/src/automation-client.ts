@@ -75,9 +75,6 @@ type Failed = {
   readonly unreached?: RepositoryUnreached;
 };
 
-/** A rotation's answer: the automation and its fresh secret, or why there is none. */
-export type AutomationSecretRead = typeof automationAnswerSchema.Type | Failed;
-
 const UNANSWERED: Failed = { failure: AUTOMATION_CALL_FAILURE.UNANSWERED };
 
 /** The refusals a call may answer with, by the service's own word for each. */
@@ -204,20 +201,21 @@ export class HostedAutomationClient {
   }
 
   /**
-   * A webhook trigger's secret minted again, answered with the automation and
-   * the fresh secret: the one answer of this client that carries a secret,
-   * for the host to put on the clipboard, never to hand on to a window.
+   * A webhook trigger's secret replaced by one the host minted, sent by its
+   * SHA-256 alone, so the secret itself never leaves this machine; answering
+   * the automation as it then stands.
    */
-  rotateWebhookSecret(
-    params: AutomationIdParams,
-  ): Effect.Effect<AutomationSecretRead, never, HttpClient.HttpClient> {
+  replaceWebhookSecret(params: {
+    readonly automationId: string;
+    readonly webhookSecretHash: string;
+  }): Effect.Effect<AutomationView, never, HttpClient.HttpClient> {
     return Effect.flatMap(
       this.#call.send({
         method: HTTP_METHOD.PATCH,
         path: automationPath(params.automationId),
-        body: JSON.stringify({ rotateWebhookSecret: true }),
+        body: JSON.stringify({ webhookSecretHash: params.webhookSecretHash }),
       }),
-      (answer) => readAnswer(answer, automationAnswerSchema),
+      (answer) => Effect.map(readAnswer(answer, automationAnswerSchema), summaryOnly),
     );
   }
 

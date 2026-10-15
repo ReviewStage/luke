@@ -61,10 +61,10 @@ export const automationCreateParamsSchema = automationCreateRequestSchema;
 
 export type AutomationCreateParams = typeof automationCreateParamsSchema.Type;
 
-/** A change to one automation. A rotation of its webhook's secret is the copy's own ask, never a change's. */
+/** A change to one automation. A webhook's secret is replaced by the copy's own ask, never a change's. */
 export const automationChangeParamsSchema = EffectSchema.Struct({
   automationId: wireUuidSchema,
-  change: automationChangeRequestSchema.mapFields(Struct.omit(["rotateWebhookSecret"])),
+  change: automationChangeRequestSchema.mapFields(Struct.omit(["webhookSecretHash"])),
 });
 
 export type AutomationChangeParams = typeof automationChangeParamsSchema.Type;

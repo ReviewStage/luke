@@ -15,7 +15,6 @@ export {
 } from "./account-token.js";
 export { ASK_ORIGIN, type AskOrigin } from "./ask-wire.js";
 export {
-  type AutomationSecretRead,
   HostedAutomationClient,
   type HostedAutomationClientOptions,
 } from "./automation-client.js";

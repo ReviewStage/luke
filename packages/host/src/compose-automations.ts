@@ -1,3 +1,4 @@
+import { createHash, randomBytes } from "node:crypto";
 import type { HostedAutomationClient } from "@luke/features";
 import {
   AUTOMATION_CALL_FAILURE,
@@ -30,15 +31,16 @@ import type { RunMode } from "./run-mode.js";
  * when its page opens and after each write, and every ask is one call of
  * the service answered whole. Behind a closed account gate, or on a run
  * that sends nothing, every ask answers unanswered. A webhook's secret is
- * the one thing answered here that goes no further: minted again at the
- * window's ask, it is put on the clipboard, and the window hears only that
- * it was copied, since a secret never enters a Gateway answer.
+ * the one thing here that goes no further: minted at the window's ask, it
+ * is put on the clipboard and only then sent to the service as its
+ * SHA-256, and the window hears only that it was copied, since a secret
+ * never enters a Gateway answer.
  */
 
 /** The service's side of the automations, as this concern asks it. */
 export type AutomationsClient = Pick<
   HostedAutomationClient,
-  "list" | "create" | "change" | "remove" | "runNow" | "runs" | "rotateWebhookSecret"
+  "list" | "create" | "change" | "remove" | "runNow" | "runs" | "replaceWebhookSecret"
 >;
 
 export interface AutomationsDependencies {
@@ -52,6 +54,9 @@ export interface AutomationsDependencies {
 export type AutomationsComposer = Composer;
 
 const UNANSWERED = { failure: AUTOMATION_CALL_FAILURE.UNANSWERED } as const;
+
+/** The bytes of randomness in a webhook secret the host mints, as many as the service's own. */
+const WEBHOOK_SECRET_BYTES = 32;
 
 export function composeAutomations(
   dependencies: AutomationsDependencies,
@@ -125,13 +130,21 @@ function composed(dependencies: AutomationsDependencies): AutomationsComposer {
     [GATEWAY_METHOD.AUTOMATIONS_COPY_WEBHOOK_SECRET]: (params) =>
       Effect.gen(function* () {
         const named = yield* read(automationIdParamsSchema, params, "a copy names an automation");
-        const rotated = yield* asked(client.rotateWebhookSecret(named));
-        if ("failure" in rotated) return carried<AutomationSecretCopiedView>(rotated);
-        const secret = rotated.webhookSecret;
-        // A rotation the service answered with no secret, or a clipboard that refused it, leaves nothing to paste.
-        const copied = secret !== undefined && (yield* copyText(secret));
+        if (!gate()) return carried<AutomationSecretCopiedView>(UNANSWERED);
+        // Note that the secret is on the clipboard before its hash is sent, because a copy that
+        // fails then replaces nothing, and the secret before goes on admitting calls.
+        const secret = randomBytes(WEBHOOK_SECRET_BYTES).toString("base64url");
+        if (!(yield* copyText(secret))) return carried<AutomationSecretCopiedView>(UNANSWERED);
+        const replaced = yield* asked(
+          client.replaceWebhookSecret({
+            automationId: named.automationId,
+            webhookSecretHash: createHash("sha256").update(secret).digest("hex"),
+          }),
+        );
         return carried<AutomationSecretCopiedView>(
-          copied ? { automation: rotated.automation, secretCopied: true } : UNANSWERED,
+          "failure" in replaced
+            ? replaced
+            : { automation: replaced.automation, secretCopied: true },
         );
       }),
     [GATEWAY_METHOD.AUTOMATIONS_RUNS]: (params) =>
