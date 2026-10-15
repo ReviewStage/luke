@@ -1,6 +1,11 @@
 # Proposal: Settings › Workspace, finished
 
-Status: **awaiting Dean's pick.** Nothing below is built yet.
+Status: **Dean picked A on 2026-10-15** ("I think I like A, but let's focus
+more on the leave workspace flow. And also I do want to support changing role
+types. Also, is the member/admin toggle next to the invite button standard for
+the rest of our app's feel?"). Plan PR 1 (#2810) and PR 3 (#2813) are in
+review and merge on their own. PR 2 and PR 4 wait on the round-two
+decisions in §7, which the show's §0 draws.
 
 Dean's ask: "I really don't like the workspace settings page. It needs a
 redesign to look more finished." Then: "It should match our other settings
@@ -130,3 +135,75 @@ PR 1 stands alone. PR 2 builds on it. PR 3 is independent.
 5. **Delete workspace**, which has no act. *Recommended: not in this work.*
    It would later join Leave's group as the row below it, asking by name.
 6. **Profile on `ActorMark`** (PR 3). *Recommended: yes.*
+
+## 7. Round two: the leave flow, role changes, and the invite's role
+
+The show's §0 draws each state below. The research behind it, with its
+sources, is `docs/proposals/workspace-settings/leave-research.md`.
+
+**The invite's role is a chip, not segments.** In Luke, `Segmented` only
+stands as a labelled row's own control: Effort, Trigger, "Runs land in".
+Where a value travels with a field and its send, the app uses a menu-button
+chip: the composer's model and repository chips, and every Settings picker.
+Linear, Vercel, Notion and Slack all make the invite role a dropdown. The
+invite row is therefore the address, a field chip "Member ⌄" whose menu
+checks the role and says what each may do, and Invite. For an admin the menu
+shows Admin dimmed.
+
+**Role changes live in a member's ⋯ and are the owner's alone.**
+
+| Reading | On a member | On an admin | On themselves | Invites as |
+|---|---|---|---|---|
+| Owner | Make admin · Remove | Make member · Make owner… · Remove | Transfer ownership… | Member or Admin |
+| Admin | Remove | — | Leave | Member |
+| Member | — | — | Leave | — |
+
+Make admin and Make member apply at once; Make owner… asks first. The rule
+narrows one that ships today: an admin can currently remove another admin.
+
+**Leaving.** The page's last group holds a row in the shape of Profile's
+Delete account: "Leave Acme · You lose its plans, agents, and Inbox until
+someone invites you again." and a red Leave. Leave asks once, in the
+`ConfirmDialog`:
+
+- plans you wrote stay in the workspace;
+- agents you started stay in its history, named as a former member;
+- the automations you created stop running, since a run starts as its
+  creator and fails as `creator-left`;
+- your own workspace isn't affected.
+
+Afterwards Settings closes onto the personal workspace's Home, and the toast
+says "You left Acme." A refusal, offline included, is said in the dialog,
+which stays open to try again.
+
+**The owner can't leave.** A workspace has one owner, its creator, and the
+service already refuses an owner's leave. The owner's row says to make an
+admin the owner first and offers Transfer ownership…. That is a one-way
+handoff to an admin, after which the old owner is an admin and can leave.
+With no admin, the row says to make one first. A personal workspace draws no
+Leave group. A teammate's personal workspace is left like any other.
+
+**Edge cases:**
+
+- Invitations the leaver sent stay pending.
+- An invitation to the leaver's own address stays good.
+- A member whose members read failed can still leave.
+
+**Decisions:**
+
+- **R-1, who changes roles.** Owner only; admins remove members only.
+- **R-2, ownership.** One owner, handed off one way to an admin.
+- **R-3, invite as Admin.** The owner alone.
+- **R-4, naming the reader's automations in the leave dialog.** Needs one
+  optional field on the automation summary.
+- **R-5, invitations the leaver sent.** Keep them pending.
+- **R-6, the leaver's still-running agents.** Let them finish, once the
+  service's behaviour is confirmed.
+
+**PR plan, revised:**
+
+| # | PR | Size |
+|---|---|---|
+| 2 | The reshaped page with the "Member ⌄" chip and the leave flow; Transfer ownership… shows once 4a's act exists | M–L · ~500 |
+| 4a | Service and host: role and transfer routes, the narrowed remove rule, the acts, the automation summary's "mine" | M · ~400 |
+| 4b | Desktop: Make admin, Make member, Make owner…, Transfer ownership…, the admin's dimmed Admin, the dialog naming automations | M · ~300 |
