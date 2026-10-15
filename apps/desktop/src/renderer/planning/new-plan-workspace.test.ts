@@ -280,3 +280,25 @@ test("New task's workspace and repository chips are the app's bordered picker, e
     { menu: "Repository", look: CHIP_LOOK.FIELD, hangsFrom: PICKER_ALIGN.START },
   ]);
 });
+
+test("Tab from the workspace picker's open list moves on to the task's name, and Shift-Tab back to the chip", async () => {
+  await openNewPlan(ACME.id);
+  const chip =
+    document.querySelector<HTMLButtonElement>('[aria-label="Workspace: Acme"]') ??
+    assert.fail("the title's workspace is a chip");
+  const tabFromList = async (shiftKey: boolean) => {
+    act(() => chip.click());
+    await settle();
+    const list = document.activeElement ?? assert.fail("the open menu holds the keyboard");
+    act(() => {
+      list.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", shiftKey, bubbles: true }));
+    });
+    await settle();
+    return document.activeElement?.getAttribute("aria-label");
+  };
+
+  const forward = await tabFromList(false);
+  const backward = await tabFromList(true);
+
+  assert.deepEqual([forward, backward], ["Task name", "Workspace: Acme"]);
+});
