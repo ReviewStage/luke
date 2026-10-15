@@ -1095,7 +1095,7 @@ test("an automation's group wears its clock tile and hangs its card, as its crum
   );
 
   const others = headerNamed(page, "Other agents");
-  assert.equal(others.querySelector(".actor-mark"), null, "a group of agents names no actor");
+  assert.ok(others.querySelector(".actor-mark") === null, "a group of agents names no actor");
 
   const mark = rowNamed(page, "Quarantine the flaky test?").querySelector("[data-agent-ref]");
   assert.ok(mark, "the planless agent's row hangs its card");
@@ -1109,7 +1109,17 @@ test("an automation's group wears its clock tile and hangs its card, as its crum
   await settle();
   const crumb = page.querySelector<HTMLButtonElement>('nav[aria-label="Path"] button');
   assert.ok(crumb, "the automation's crumb is drawn");
+  assert.ok(crumb.querySelector(".lucide-clock"), "the automation's crumb wears its clock");
   assert.match(hoveredCard(crumb, '[data-actor-card="automation"]') ?? "", /Nightly flake sweep/u);
+
+  act(() => rowNamed(page, "Bump the Node image?").click());
+  await settle();
+  const stray = page.querySelector<HTMLButtonElement>('nav[aria-label="Path"] button');
+  assert.equal(stray?.textContent, "Other agents");
+  assert.ok(
+    stray?.querySelector(".lucide-clock") === null,
+    "the crumb of the agents no automation names wears no automation's clock",
+  );
 });
 
 /** Another agent with no plan the same automation started, whose two questions wait. */

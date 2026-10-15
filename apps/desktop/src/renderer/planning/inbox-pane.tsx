@@ -19,7 +19,7 @@ import {
 } from "@luke/features/inbox-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import type { CodeRef } from "@luke/features/plan-wire";
-import { BackIcon, ChevronRightIcon } from "@luke/ui";
+import { BackIcon, ChevronRightIcon, CodingAgentsIcon } from "@luke/ui";
 import { copiedLines, fileRefText } from "@luke/voice/code-pane-model";
 import { CheckIcon, ClockIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -903,13 +903,15 @@ function AutomationCrumb({
   onOpen: (() => void) | undefined;
 }): React.JSX.Element {
   const known = useAutomation(holder.automationId ?? undefined);
+  // Note that the agents no automation names stand under no automation, so their crumb wears the coding agents' glyph, as their group's header does.
+  const icon = holder.automationId === null ? <CodingAgentsIcon /> : <ClockIcon />;
   return (
     <Tooltip
       label={holder.name}
       card={known === undefined ? undefined : <AutomationCard {...known} />}
     >
       <button type="button" className="tab-button" disabled={onOpen === undefined} onClick={onOpen}>
-        <CrumbWords look={{ icon: <ClockIcon />, label: holder.name }} />
+        <CrumbWords look={{ icon, label: holder.name }} />
       </button>
     </Tooltip>
   );
