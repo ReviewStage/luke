@@ -189,15 +189,15 @@ request, so there is no request fiber to compose it into),
 function instance's life on the same terms) and
 `apps/web/server/seed-clients.ts` (the OAuth client seeding command, run as
 its own process), each eve root's own module-scope memoized runtime,
-`apps/web/eve/runtime.ts` and `apps/web/coder/runtime.ts`, built over the
+`apps/luke/runtime.ts` and `apps/web/coder/runtime.ts`, built over the
 same layer (`@luke/service/runtime`'s `webServices`) and holding its
 `runAgent`, the eve project's authored files —
-`apps/web/eve/agent.ts`, `apps/web/eve/channels/eve.ts`,
-`apps/web/eve/hooks/store.ts`, `apps/web/eve/instructions/prompt.ts`,
-`apps/web/eve/instructions/seed.ts`, and `apps/web/eve/tools/brain.ts` — each
+`apps/luke/agent.ts`, `apps/luke/channels/eve.ts`,
+`apps/luke/hooks/store.ts`, `apps/luke/instructions/prompt.ts`,
+`apps/luke/instructions/seed.ts`, and `apps/luke/tools/brain.ts` — each
 an edge because eve drives them through promise-shaped hooks of its own and
 an authored file is where this deployment runs what it hands eve — and
-`apps/web/eve/host.ts`, the one module those files share their host through,
+`apps/luke/host.ts`, the one module those files share their host through,
 which composes the production seams over `HostedEnvironment` with
 `Effect.runSync` as it loads, because the channel's door takes the
 deployment's secret as a value and the environment read suspends on nothing —
@@ -209,7 +209,7 @@ promise when a tool first needs the sandbox and which runs the checkout
 there), each an edge because eve drives them through promise-shaped hooks of
 its own, and `apps/web/coder/host.ts`, the one module those files share their
 host through, composed with `Effect.runSync` as it loads for the same reason
-`apps/web/eve/host.ts` is. Not
+`apps/luke/host.ts` is. Not
 every seam in `packages/service/src/` is an effect down to its floor:
 `packages/service/src/agents/brain-host/production.ts`'s `spend` is
 the AI SDK's async middleware, and `packages/service/src/agents/brain-host/door.ts`'s
@@ -269,7 +269,7 @@ PR that finishes the callers it was for, not left as a name on an allowlist.
 - **The test-support edges** — `packages/database/src/testing/sql-client.ts`,
   `packages/database/src/testing/no-database.ts`,
   `packages/database/src/testing/hosted-store-database.ts`,
-  `apps/web/eve/evals/brain-host.eval.ts`, `apps/web/coder/evals/coder.eval.ts`, and
+  `apps/luke/evals/brain-host.eval.ts`, `apps/web/coder/evals/coder.eval.ts`, and
   `packages/wire/src/testing/effect.ts` each build a runner (a
   `ManagedRuntime` over a throwaway database, a `SqlClient` that refuses every
   statement) so a suite or an offline eval still written on `node:assert` or a

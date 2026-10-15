@@ -386,12 +386,12 @@
         }
       ]
     },
-    "eve": {
-      "root": "apps/web/eve",
+    "luke": {
+      "root": "apps/luke",
       "framework": "eve",
-      "installCommand": "pnpm install --frozen-lockfile --filter @luke/web... --filter @luke/eve",
+      "installCommand": "pnpm install --frozen-lockfile --filter @luke/luke...",
       "buildCommand": "pnpm exec eve build",
-      "ignoreCommand": "git diff --quiet HEAD^ HEAD -- :/apps/web :/packages :/pnpm-lock.yaml :/pnpm-workspace.yaml :/package.json :/vercel.json"
+      "ignoreCommand": "git diff --quiet HEAD^ HEAD -- :/apps/luke :/packages :/pnpm-lock.yaml :/pnpm-workspace.yaml :/package.json :/vercel.json"
     },
     "coder": {
       "root": "apps/web/coder",
@@ -429,7 +429,7 @@
     {
       "source": "/eve/v1/(.*)",
       "destination": {
-        "service": "eve"
+        "service": "luke"
       }
     },
     {

@@ -10,7 +10,6 @@
     "tests/**/*.ts",
     "scripts/**/*.ts",
     "vite.config.ts",
-    "coder/**/*.ts",
-    "eve/**/*.ts"
+    "coder/**/*.ts"
   ]
 }

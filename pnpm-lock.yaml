@@ -283,6 +283,73 @@ importers:
         specifier: 'catalog:'
         version: 5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@7.3.1(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.32.0)(sass@1.51.0)(tsx@4.23.12)(yaml@2.9.0))
 
+  apps/luke:
+    dependencies:
+      '@ai-sdk/anthropic':
+        specifier: 4.0.78
+        version: 4.0.78(zod@4.5.4)
+      '@ai-sdk/openai':
+        specifier: 4.0.91
+        version: 4.0.91(zod@4.5.4)
+      '@better-auth/drizzle-adapter':
+        specifier: 1.7.7
+        version: 1.7.7(@better-auth/core@1.7.7(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.2)(@opentelemetry/api@1.9.1)(better-call@1.4.0(zod@4.5.4))(jose@6.2.9)(kysely@0.29.5)(nanostores@1.5.0))(@better-auth/utils@0.4.2)(drizzle-orm@1.0.0-rc.4(patch_hash=7eca027493ea68b0777e0306d382bf89cdd6217b8c3377c6d44e7911303f9f5b)(@effect/sql-pg@4.0.4(effect@4.0.4))(@effect/sql-pglite@4.0.4(effect@4.0.4))(@electric-sql/pglite@0.5.8)(@opentelemetry/api@1.9.1)(@types/pg@8.21.0)(effect@4.0.4)(pg@8.23.0)(zod@4.5.4))
+      '@better-auth/electron':
+        specifier: 1.7.7
+        version: 1.7.7(109d460deb9f73fbc104e484cd5b6d21)
+      '@better-auth/oauth-provider':
+        specifier: 1.7.7
+        version: 1.7.7(patch_hash=b4b560cbadacfe5a94972c9a6c390e724b8fc4d34b6328f41345f642cd1ec060)(@better-auth/core@1.7.7(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.2)(@opentelemetry/api@1.9.1)(better-call@1.4.0(zod@4.5.4))(jose@6.2.9)(kysely@0.29.5)(nanostores@1.5.0))(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.2)(better-auth@1.7.7(@opentelemetry/api@1.9.1)(drizzle-kit@1.0.0-rc.4)(drizzle-orm@1.0.0-rc.4(patch_hash=7eca027493ea68b0777e0306d382bf89cdd6217b8c3377c6d44e7911303f9f5b)(@effect/sql-pg@4.0.4(effect@4.0.4))(@effect/sql-pglite@4.0.4(effect@4.0.4))(@electric-sql/pglite@0.5.8)(@opentelemetry/api@1.9.1)(@types/pg@8.21.0)(effect@4.0.4)(pg@8.23.0)(zod@4.5.4))(next@16.3.1(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(sass@1.51.0))(pg@8.23.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(vitest@5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@7.3.1(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.32.0)(sass@1.51.0)(tsx@4.23.12)(yaml@2.9.0))))(better-call@1.4.0(zod@4.5.4))
+      '@effect/sql-pg':
+        specifier: 'catalog:'
+        version: 4.0.4(effect@4.0.4)
+      '@luke/database':
+        specifier: workspace:*
+        version: link:../../packages/database
+      '@luke/service':
+        specifier: workspace:*
+        version: link:../../packages/service
+      '@luke/wire':
+        specifier: workspace:*
+        version: link:../../packages/wire
+      '@vercel/connect':
+        specifier: 2.4.1
+        version: 2.4.1(ai@7.0.135(zod@4.5.4))(better-auth@1.7.7(@opentelemetry/api@1.9.1)(drizzle-kit@1.0.0-rc.4)(drizzle-orm@1.0.0-rc.4(patch_hash=7eca027493ea68b0777e0306d382bf89cdd6217b8c3377c6d44e7911303f9f5b)(@effect/sql-pg@4.0.4(effect@4.0.4))(@effect/sql-pglite@4.0.4(effect@4.0.4))(@electric-sql/pglite@0.5.8)(@opentelemetry/api@1.9.1)(@types/pg@8.21.0)(effect@4.0.4)(pg@8.23.0)(zod@4.5.4))(next@16.3.1(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(sass@1.51.0))(pg@8.23.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(vitest@5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@7.3.1(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.32.0)(sass@1.51.0)(tsx@4.23.12)(yaml@2.9.0))))(eve@0.74.0(@opentelemetry/api@1.9.1)(ai@7.0.135(zod@4.5.4)))
+      '@vercel/oidc':
+        specifier: 4.0.0
+        version: 4.0.0
+      ai:
+        specifier: 'catalog:'
+        version: 7.0.135(zod@4.5.4)
+      better-auth:
+        specifier: 1.7.7
+        version: 1.7.7(@opentelemetry/api@1.9.1)(drizzle-kit@1.0.0-rc.4)(drizzle-orm@1.0.0-rc.4(patch_hash=7eca027493ea68b0777e0306d382bf89cdd6217b8c3377c6d44e7911303f9f5b)(@effect/sql-pg@4.0.4(effect@4.0.4))(@effect/sql-pglite@4.0.4(effect@4.0.4))(@electric-sql/pglite@0.5.8)(@opentelemetry/api@1.9.1)(@types/pg@8.21.0)(effect@4.0.4)(pg@8.23.0)(zod@4.5.4))(next@16.3.1(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(sass@1.51.0))(pg@8.23.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(vitest@5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@7.3.1(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.32.0)(sass@1.51.0)(tsx@4.23.12)(yaml@2.9.0)))
+      diff:
+        specifier: 9.0.0
+        version: 9.0.0
+      drizzle-orm:
+        specifier: 'catalog:'
+        version: 1.0.0-rc.4(patch_hash=7eca027493ea68b0777e0306d382bf89cdd6217b8c3377c6d44e7911303f9f5b)(@effect/sql-pg@4.0.4(effect@4.0.4))(@effect/sql-pglite@4.0.4(effect@4.0.4))(@electric-sql/pglite@0.5.8)(@opentelemetry/api@1.9.1)(@types/pg@8.21.0)(effect@4.0.4)(pg@8.23.0)(zod@4.5.4)
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.4
+      eve:
+        specifier: 0.74.0
+        version: 0.74.0(@opentelemetry/api@1.9.1)(ai@7.0.135(zod@4.5.4))
+      pg:
+        specifier: 8.23.0
+        version: 8.23.0
+      ws:
+        specifier: 'catalog:'
+        version: 8.21.3
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.2.0
+      typescript:
+        specifier: catalog:web
+        version: 6.0.3
+
   apps/web:
     dependencies:
       '@better-auth/oauth-provider':
@@ -433,66 +500,6 @@ importers:
       '@luke/features':
         specifier: workspace:*
         version: link:../../../packages/features
-      '@luke/service':
-        specifier: workspace:*
-        version: link:../../../packages/service
-      '@luke/wire':
-        specifier: workspace:*
-        version: link:../../../packages/wire
-      '@vercel/connect':
-        specifier: 2.4.1
-        version: 2.4.1(ai@7.0.135(zod@4.5.4))(better-auth@1.7.7(@opentelemetry/api@1.9.1)(drizzle-kit@1.0.0-rc.4)(drizzle-orm@1.0.0-rc.4(patch_hash=7eca027493ea68b0777e0306d382bf89cdd6217b8c3377c6d44e7911303f9f5b)(@effect/sql-pg@4.0.4(effect@4.0.4))(@effect/sql-pglite@4.0.4(effect@4.0.4))(@electric-sql/pglite@0.5.8)(@opentelemetry/api@1.9.1)(@types/pg@8.21.0)(effect@4.0.4)(pg@8.23.0)(zod@4.5.4))(next@16.3.1(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(sass@1.51.0))(pg@8.23.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(vitest@5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@7.3.1(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.32.0)(sass@1.51.0)(tsx@4.23.12)(yaml@2.9.0))))(eve@0.74.0(@opentelemetry/api@1.9.1)(ai@7.0.135(zod@4.5.4)))
-      '@vercel/oidc':
-        specifier: 4.0.0
-        version: 4.0.0
-      ai:
-        specifier: 'catalog:'
-        version: 7.0.135(zod@4.5.4)
-      better-auth:
-        specifier: 1.7.7
-        version: 1.7.7(@opentelemetry/api@1.9.1)(drizzle-kit@1.0.0-rc.4)(drizzle-orm@1.0.0-rc.4(patch_hash=7eca027493ea68b0777e0306d382bf89cdd6217b8c3377c6d44e7911303f9f5b)(@effect/sql-pg@4.0.4(effect@4.0.4))(@effect/sql-pglite@4.0.4(effect@4.0.4))(@electric-sql/pglite@0.5.8)(@opentelemetry/api@1.9.1)(@types/pg@8.21.0)(effect@4.0.4)(pg@8.23.0)(zod@4.5.4))(next@16.3.1(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(sass@1.51.0))(pg@8.23.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(vitest@5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@7.3.1(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.32.0)(sass@1.51.0)(tsx@4.23.12)(yaml@2.9.0)))
-      diff:
-        specifier: 9.0.0
-        version: 9.0.0
-      drizzle-orm:
-        specifier: 'catalog:'
-        version: 1.0.0-rc.4(patch_hash=7eca027493ea68b0777e0306d382bf89cdd6217b8c3377c6d44e7911303f9f5b)(@effect/sql-pg@4.0.4(effect@4.0.4))(@effect/sql-pglite@4.0.4(effect@4.0.4))(@electric-sql/pglite@0.5.8)(@opentelemetry/api@1.9.1)(@types/pg@8.21.0)(effect@4.0.4)(pg@8.23.0)(zod@4.5.4)
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.4
-      eve:
-        specifier: 0.74.0
-        version: 0.74.0(@opentelemetry/api@1.9.1)(ai@7.0.135(zod@4.5.4))
-      pg:
-        specifier: 8.23.0
-        version: 8.23.0
-      ws:
-        specifier: 'catalog:'
-        version: 8.21.3
-
-  apps/web/eve:
-    dependencies:
-      '@ai-sdk/anthropic':
-        specifier: 4.0.78
-        version: 4.0.78(zod@4.5.4)
-      '@ai-sdk/openai':
-        specifier: 4.0.91
-        version: 4.0.91(zod@4.5.4)
-      '@better-auth/drizzle-adapter':
-        specifier: 1.7.7
-        version: 1.7.7(@better-auth/core@1.7.7(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.2)(@opentelemetry/api@1.9.1)(better-call@1.4.0(zod@4.5.4))(jose@6.2.9)(kysely@0.29.5)(nanostores@1.5.0))(@better-auth/utils@0.4.2)(drizzle-orm@1.0.0-rc.4(patch_hash=7eca027493ea68b0777e0306d382bf89cdd6217b8c3377c6d44e7911303f9f5b)(@effect/sql-pg@4.0.4(effect@4.0.4))(@effect/sql-pglite@4.0.4(effect@4.0.4))(@electric-sql/pglite@0.5.8)(@opentelemetry/api@1.9.1)(@types/pg@8.21.0)(effect@4.0.4)(pg@8.23.0)(zod@4.5.4))
-      '@better-auth/electron':
-        specifier: 1.7.7
-        version: 1.7.7(109d460deb9f73fbc104e484cd5b6d21)
-      '@better-auth/oauth-provider':
-        specifier: 1.7.7
-        version: 1.7.7(patch_hash=b4b560cbadacfe5a94972c9a6c390e724b8fc4d34b6328f41345f642cd1ec060)(@better-auth/core@1.7.7(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.2)(@opentelemetry/api@1.9.1)(better-call@1.4.0(zod@4.5.4))(jose@6.2.9)(kysely@0.29.5)(nanostores@1.5.0))(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.2)(better-auth@1.7.7(@opentelemetry/api@1.9.1)(drizzle-kit@1.0.0-rc.4)(drizzle-orm@1.0.0-rc.4(patch_hash=7eca027493ea68b0777e0306d382bf89cdd6217b8c3377c6d44e7911303f9f5b)(@effect/sql-pg@4.0.4(effect@4.0.4))(@effect/sql-pglite@4.0.4(effect@4.0.4))(@electric-sql/pglite@0.5.8)(@opentelemetry/api@1.9.1)(@types/pg@8.21.0)(effect@4.0.4)(pg@8.23.0)(zod@4.5.4))(next@16.3.1(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(sass@1.51.0))(pg@8.23.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(vitest@5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@7.3.1(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.32.0)(sass@1.51.0)(tsx@4.23.12)(yaml@2.9.0))))(better-call@1.4.0(zod@4.5.4))
-      '@effect/sql-pg':
-        specifier: 'catalog:'
-        version: 4.0.4(effect@4.0.4)
-      '@luke/database':
-        specifier: workspace:*
-        version: link:../../../packages/database
       '@luke/service':
         specifier: workspace:*
         version: link:../../../packages/service

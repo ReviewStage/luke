@@ -68,10 +68,9 @@ function listWorkspaces(args, env) {
 
 // The `--filter`s that select every affected workspace, or none when nothing
 // changed. Note that we do not hand turbo `--affected` itself, because it
-// misses a change inside a nested workspace: apps/web/eve and apps/web/coder
-// are workspaces of their own, so turbo counts an edit there as changing them
-// alone, yet @luke/web compiles and tests their files and hashes them as its
-// own. The scope is turbo's affected list plus every workspace that holds an
+// misses a change inside a nested workspace: apps/web/coder is a workspace of
+// its own, so turbo counts an edit there as changing it alone, yet @luke/web
+// compiles and tests its files and hashes them as its own. The scope is turbo's affected list plus every workspace that holds an
 // affected one, each with its dependents; turbo intersects `--affected` with
 // a `--filter` rather than adding to it, so the whole scope is filters.
 function affectedFilters() {

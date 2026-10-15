@@ -72,7 +72,7 @@
       "entry": ["instructions/*.ts", "evals/evals.config.ts", "evals/*.eval.ts"],
       "project": ["**/*.ts"]
     },
-    "apps/web/eve": {
+    "apps/luke": {
       "ignoreDependencies": [
         "@ai-sdk/anthropic",
         "@ai-sdk/openai",
