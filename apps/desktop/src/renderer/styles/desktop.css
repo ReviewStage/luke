@@ -1501,12 +1501,6 @@ ul.actor-stack {
   margin-top: var(--space-8);
 }
 
-/* Archived stands at the foot of the list as one more group, its header a
-   repository's (`ArchivedPlans`). */
-.sidebar-archived {
-  margin-top: var(--space-8);
-}
-
 .sidebar-repository-header {
   display: flex;
   align-items: center;

@@ -78,17 +78,7 @@ function fold(within: HTMLElement, name: string): HTMLButtonElement {
   return found;
 }
 
-/** The row a fold heads, its fold and whatever stands beside it, with what its count is read as left out. */
-function headerShape(within: HTMLElement, name: string, noun: string): string {
-  const row = fold(within, name).parentElement;
-  assert.ok(row, "the fold stands in a row");
-  return row.outerHTML.replace(noun, "");
-}
-
-test("the summary's archived agents fold under the sidebar's own Archived header, folded and open alike, but for what they count", () => {
-  const sidebar = mountSidebar(
-    plansControl({ archived: [plan("a-1", "Old spike", null), plan("a-2", "Dropped", null)] }),
-  );
+test("the summary's archived agents fold under a group header that counts them folded and lists them unfolded", () => {
   const agent = {
     planId: "plan-1",
     model: "anthropic/claude-opus-5.5",
@@ -110,18 +100,10 @@ test("the summary's archived agents fold under the sidebar's own Archived header
     }),
   );
 
-  assert.equal(fold(sidebar, "Archived").getAttribute("aria-expanded"), "false");
-  assert.equal(fold(sidebar, "Archived").textContent, "Archived2 tasks");
+  assert.equal(fold(summary, "Archived").getAttribute("aria-expanded"), "false");
   assert.equal(fold(summary, "Archived").textContent, "Archived2 archived agents");
-  assert.equal(
-    headerShape(summary, "Archived", " archived agents"),
-    headerShape(sidebar, "Archived", " tasks"),
-  );
-
-  act(() => fold(sidebar, "Archived").click());
   act(() => fold(summary, "Archived").click());
   assert.equal(fold(summary, "Archived").getAttribute("aria-expanded"), "true");
-  assert.equal(headerShape(summary, "Archived", ""), headerShape(sidebar, "Archived", ""));
   assert.ok(summary.querySelector('[aria-label="Archived agents"]'), "the agents are listed");
 });
 

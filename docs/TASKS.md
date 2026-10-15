@@ -129,16 +129,24 @@ new-task page, which leaves the task, and the new-task page closes the panel. Es
 
 - Every named task the account owns, newest started first. Opening a task
   moves no row, so a new task stands at the head and nothing else moves.
-  The tasks are grouped under their repositories' headers, the repository's
-  name with its owner on hover (or `owner/name` where two share a name), the
-  group whose task was updated most recently first and "No repository" last;
-  within a group the order stays newest started first, so no row moves while
-  Luke writes. A header's chevron folds the group, remembered on this Mac,
-  and its + (shown on hover or focus) opens the new-task page with that
+  The tasks stand in the **Tasks** section, whose head's **View options**
+  (the Inbox's sliders) chooses how they are drawn, remembered for each
+  workspace on this Mac: Group by Repository (the default), Creator (in a
+  shared workspace: You first, then each teammate), or None; Order by Last
+  updated (the default), Created, or Name, which orders the groups too; and,
+  in a shared workspace, Created by Anyone (the default), Me, or a teammate,
+  which while it names someone stands as a chip under the head whose ×
+  lifts it, the button wearing a dot. Under Repository, the groups stand
+  under their repositories' headers, the repository's name with its owner on
+  hover (or `owner/name` where two share a name), "No repository" last. A
+  header's chevron folds the group, remembered on this Mac, and a
+  repository's + (shown on hover or focus) opens the new-task page with that
   repository already chosen. Each row shows the task's name and, muted at its
-  end, how long ago it was last updated ("now", "5m", "3h", "2d", "3w", then
-  the date), moved on each minute, the full moment on hover. Pinned and
-  archived rows stay flat and name their `owner/repository` beneath.
+  end, the time the order chooses (its last update, or under Created when it
+  was started: "now", "5m", "3h", "2d", "3w", then the date), moved on each
+  minute, the full moment on hover. A row says what its group does not: a
+  teammate's face under a repository's header, its repository's name under a
+  creator's, and both in one run.
 - A workspace is a team's shared tasks; the first one, made for the account
   when it signs in, is one like any other. A signed-in account sees the list
   headed by the workspace it lists, its first one until another is chosen. Its menu lists every workspace the
@@ -171,10 +179,13 @@ new-task page, which leaves the task, and the new-task page closes the panel. Es
 - `New task` at the head of the list leaves any open task for the new-task
   page and focuses its name field. It is drawn as a row of the list, and is
   the selected row whenever the new-task page shows.
-- A pinned task stands under **Pinned**, a section above the rest drawn only
-  while any task is pinned, newest pinned first.
-- An archived task leaves the list for **Archived (n)**, a quiet row at the
-  list's foot that unfolds the archived tasks, newest archived first.
+- A pinned task stands under **Pinned**, a section above Tasks drawn only
+  while any task is pinned, newest pinned first, which no view filters.
+- An archived task leaves the list. View options' **Archived tasks** turns
+  the Tasks section to the archived tasks, grouped and ordered as the view
+  says, the pins standing aside, with an Archived chip whose × goes back; it
+  is not remembered, so another workspace or the next launch opens on the
+  tasks.
   Archiving the open task leaves it for the new-task page, as deleting it
   does, and back and forward pass archived tasks over. A pin is the account's
   own and an archive the workspace's (`PATCH /api/plans/{id}`), so a task of
@@ -243,7 +254,7 @@ composer card, and nothing spoken. Leaving or deleting a task lands here.
   Permanently delete, last and red, which asks first in a dialog that points
   a task not yet archived at Archive instead. ⇧⌘A archives the open task and
   ⌘⌫ asks to delete it, from any of its tabs.
-- An archived task opened from under Archived reads and works as any other,
+- An archived task opened from Archived tasks reads and works as any other,
   under a quiet line, "This task is archived", with Unarchive beside it.
 - **Start**, a split button (`desktop/start-agent-button.tsx`), drawn
   while the task's own tab is chosen, as the ⋯ is. Its main
