@@ -307,6 +307,7 @@ export const hostAssemblyLayer: Layer.Layer<
         states: live.service.avatarStates,
         grants: live.service.avatarGrants,
         closed: (reason) => live.service.closed(reason),
+        live: () => live.service.avatarLive(),
       },
     };
     return assembly;

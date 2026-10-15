@@ -13,8 +13,10 @@ import { Deferred, Effect, type Fiber, type Scope, Stream } from "effect";
 import {
   type AvatarRequestFrame,
   avatarRequestFrameFromWire,
+  type SessionGreetFrame,
   type SessionReportFrame,
   sessionReportFrameFromWire,
+  VOICE_SERVICE_FRAME,
 } from "../core.js";
 import { deviceFrameDecision, FRAME_DECISION, frameType, upstreamFrameDecision } from "./frames.js";
 import { FINALIZATION, type Finalization, type RelayCounts } from "./log.js";
@@ -42,8 +44,10 @@ import {
  * the command, then its acknowledgment or refusal matched by the id it was
  * sent with under a bounded wait, then whatever the service answers
  * that with; a caller who has hung up is sent none of it, whichever side of
- * the start they went. It ends the way the docs say a
- * session ends: `session.closed` is the finalization, reported once with the
+ * the start they went. A call that asked for its greeting held keeps that
+ * answer until the device's `session.greet`, and drops it at the hang-up,
+ * so the cue goes up once the device lets it and never to a caller gone.
+ * It ends the way the docs say a session ends: `session.closed` is the finalization, reported once with the
  * seconds it named; a device that goes first after asking for the close, or
  * once its socket was closed on a refused frame, has `session.close` sent on
  * its behalf and the sideband held open for the final event under a timeout.
@@ -101,6 +105,9 @@ const UPSTREAM_CLOSED_REASON = "upstream-closed";
 /** The reason a device socket is closed with when it sent a frame the service does not admit. */
 const UNPERMITTED_FRAME_REASON = "unpermitted-frame";
 
+/** A report the relay hands on: every one but the greet, which is the relay's own to read. */
+type DeviceReport = Exclude<SessionReportFrame, SessionGreetFrame>;
+
 export interface RelayOptions<R = never> {
   device: VoiceSocket;
   upstream: VoiceSocket;
@@ -112,8 +119,10 @@ export interface RelayOptions<R = never> {
   onSessionStarted?: (() => LiveClientEvent | undefined) | undefined;
   /** Asked once, with how that event was answered; an event it answers is sent upstream in turn. */
   onOpeningSettled?: ((settled: OpeningSettled) => LiveClientEvent | undefined) | undefined;
+  /** Whether what `onOpeningSettled` answers waits for the device's `session.greet` before it goes up. */
+  holdGreeting?: boolean | undefined;
   /** Runs on every report the device sent in the service's vocabulary, which is read here and forwarded nowhere. */
-  onDeviceReport?: ((report: SessionReportFrame) => void) | undefined;
+  onDeviceReport?: ((report: DeviceReport) => void) | undefined;
   /** Runs on every avatar ask the device sent, read here and forwarded nowhere. */
   onAvatarRequest?: ((request: AvatarRequestFrame) => void) | undefined;
   /** Runs on the device's hang-up, before the close it asks for. */
@@ -169,6 +178,10 @@ export function relaySession<R = never>(
     let openingWait: Fiber.Fiber<void> | undefined;
     /** Whether the session's close was asked for, so it is asked once whoever asks. */
     let closeAsked = false;
+    /** Whether the device has let Luke greet: at once on a call that held nothing. */
+    let greetLet = options.holdGreeting !== true;
+    /** The opening's answer, held while the device has not yet let Luke greet. */
+    let heldCue: LiveClientEvent | undefined;
 
     const settled = yield* Deferred.make<Finalization>();
     const settle = (finalization: Finalization): Effect.Effect<void> =>
@@ -205,7 +218,8 @@ export function relaySession<R = never>(
         const waiting = openingWait;
         openingWait = undefined;
         const next = options.onOpeningSettled?.(opening);
-        const sending = next === undefined ? Effect.void : sendUpstream(next);
+        if (!greetLet) heldCue = next;
+        const sending = next === undefined || !greetLet ? Effect.void : sendUpstream(next);
         return waiting === undefined
           ? sending
           : Effect.andThen(
@@ -213,6 +227,18 @@ export function relaySession<R = never>(
               sending,
             );
       });
+
+    /**
+     * The device's `session.greet`, once: the cue the opening answered goes
+     * up now where it was held, or goes up as the opening settles where that
+     * has not happened yet. A caller already gone is sent nothing.
+     */
+    const greet: Effect.Effect<void> = Effect.suspend(() => {
+      greetLet = true;
+      const cue = heldCue;
+      heldCue = undefined;
+      return cue === undefined || hungUp ? Effect.void : sendUpstream(cue);
+    });
 
     /** How a server event answers the opening command, or nothing when it is about something else. */
     const openingAnswer = (event: LiveServerEvent): OpeningSettled | undefined => {
@@ -355,6 +381,7 @@ export function relaySession<R = never>(
         // settled as unanswered, whichever reaches the relay first.
         hungUp = true;
         deviceAskedClose = true;
+        heldCue = undefined;
         options.onHangUp?.();
         yield* settleOpening({ outcome: OPENING_OUTCOME.UNACKNOWLEDGED });
         yield* askClose;
@@ -379,6 +406,10 @@ export function relaySession<R = never>(
           return;
         }
         counts.reportsRead += 1;
+        if (report.type === VOICE_SERVICE_FRAME.SESSION_GREET) {
+          yield* greet;
+          return;
+        }
         options.onDeviceReport?.(report);
         return;
       }
@@ -402,6 +433,7 @@ export function relaySession<R = never>(
      */
     const onDeviceGone = Effect.gen(function* () {
       hungUp = true;
+      heldCue = undefined;
       if (closedSeen || (yield* Deferred.isDone(settled))) return;
       const detached = !deviceAskedClose && !refusedByPolicy;
       // The caller has hung up, so the opening command will never be answered

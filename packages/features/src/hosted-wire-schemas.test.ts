@@ -182,6 +182,7 @@ const EFFECT_MODULE_SCHEMAS = {
     sessionActivityFrameSchema: liveContract.sessionActivityFrameSchema,
     sessionStopFrameSchema: liveContract.sessionStopFrameSchema,
     sessionHangUpFrameSchema: liveContract.sessionHangUpFrameSchema,
+    sessionGreetFrameSchema: liveContract.sessionGreetFrameSchema,
     sessionReportFrameSchema: liveContract.sessionReportFrameSchema,
     planDraftFrameSchema: liveContract.planDraftFrameSchema,
     planActivityFrameSchema: liveContract.planActivityFrameSchema,

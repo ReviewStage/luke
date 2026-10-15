@@ -92,8 +92,9 @@ import {
  * echoing the latest is heard, so an answer to an earlier ask, late or
  * lost, is never mistaken for the current one, and a start nobody answers
  * is given up on after `AVATAR_START_BOUND`. A call opens with the avatar
- * where `videoOnCall` says so, and a close the call window reports that this
- * side did not start asks for it once more on that call (`closed`).
+ * where `videoOnCall` says so, with Luke's greeting held until the avatar is
+ * live or has ended (`#letGreet`), and a close the call window reports that
+ * this side did not start asks for it once more on that call (`closed`).
  */
 
 /** Where Luke's avatar stands on the call, as the host knows it; whether the call window drew it is the desktop's to say. */
@@ -220,6 +221,8 @@ interface HeldSession {
   readonly scope: Scope.Closeable;
   started: boolean;
   ended: boolean;
+  /** Whether the service holds Luke's greeting for this side's word, which `#letGreet` sends once. */
+  greetingHeld: boolean;
   /** The graceful close under way, so a second ask to end the session waits on the first. */
   closing: Deferred.Deferred<void> | undefined;
   usageSeconds: number | undefined;
@@ -430,7 +433,13 @@ export class LiveSessionHolder {
     scope: Scope.Closeable,
   ): Effect.Effect<LiveSessionCreated | undefined> {
     return Effect.gen({ self: this }, function* () {
-      const opened = yield* Scope.provide(source.create({ sdpOffer, planId }), scope);
+      // Note that the setting is read before the session is created, because
+      // the service has to know the greeting waits before the session starts.
+      const video = yield* this.#options.videoOnCall ?? Effect.succeed(false);
+      const opened = yield* Scope.provide(
+        source.create({ sdpOffer, planId, holdGreeting: video }),
+        scope,
+      );
       if (!opened) return undefined;
       this.#options.emit({ sessionId: opened.sessionId, phase: LIVE_SESSION_PHASE.CREATED });
       const sideband = yield* Scope.provide(opened.attach(), scope);
@@ -445,6 +454,7 @@ export class LiveSessionHolder {
         scope,
         started: false,
         ended: false,
+        greetingHeld: video,
         closing: undefined,
         usageSeconds: undefined,
         settled: yield* Deferred.make<SidebandCloseResult>(),
@@ -471,7 +481,7 @@ export class LiveSessionHolder {
         this.#avatarMoved({ status: LIVE_AVATAR_STATUS.OFF });
       }
       this.#options.onSessionCreated?.();
-      if (yield* this.#options.videoOnCall ?? Effect.succeed(false)) this.startAvatar();
+      if (video && !this.startAvatar()) this.#letGreet(session);
       return createdOf(opened);
     });
   }
@@ -746,6 +756,16 @@ export class LiveSessionHolder {
     return this.startAvatar();
   }
 
+  /**
+   * The avatar's first frame was drawn: Luke may greet now, so
+   * his first sentence plays through the avatar. A report while no grant
+   * stands is about an avatar already withdrawn, and lets nothing go.
+   */
+  avatarLive(): void {
+    if (this.#avatar.status !== LIVE_AVATAR_STATUS.GRANTED) return;
+    this.#letGreet(this.#held);
+  }
+
   /** The drain: the session is closed gracefully inside the quit's own deadline, and nothing is opened after. */
   stop(): Effect.Effect<void> {
     return this.endSession(LIVE_SESSION_END_CAUSE.DRAIN);
@@ -815,13 +835,37 @@ export class LiveSessionHolder {
     );
   }
 
-  /** The avatar asked for or up has ended, and a grant handed on is withdrawn from its subscribers. */
+  /**
+   * The avatar asked for or up has ended, and a grant handed on is withdrawn
+   * from its subscribers. A greeting still held for it is let go: the call
+   * goes on as voice, and Luke greets on it.
+   */
   #avatarEnded(end: LiveAvatarEnd): void {
     const { status } = this.#avatar;
     if (status !== LIVE_AVATAR_STATUS.STARTING && status !== LIVE_AVATAR_STATUS.GRANTED) return;
+    this.#letGreet(this.#held);
     this.#avatarRequest = undefined;
     this.#avatarMoved({ status: LIVE_AVATAR_STATUS.ENDED, end });
     if (status === LIVE_AVATAR_STATUS.GRANTED) PubSub.publishUnsafe(this.#avatarGrants, undefined);
+  }
+
+  /**
+   * Lets Luke greet on a call that opened with his avatar, once. The service
+   * holds the greeting's cue on such a call until this side's word, so the
+   * first sentence is not spent on direct audio while the avatar connects;
+   * the word goes when the avatar is live (`avatarLive`) or ends however it
+   * ends (`#avatarEnded`), which is every way out of the hold. Note that the
+   * hold has no bound of its own, because the ways in are already bounded: a
+   * start the service never answers ends at `AVATAR_START_BOUND`, and a
+   * grant whose join hangs fails on livekit-client's own connect and
+   * peer-connection timeouts, which the avatar's window reports as an error
+   * end that stops the avatar here. A call that ends first sends nothing: the
+   * service drops the held cue at the hang-up.
+   */
+  #letGreet(session: HeldSession | undefined): void {
+    if (session === undefined || session.ended || !session.greetingHeld) return;
+    session.greetingHeld = false;
+    session.opened.greet?.();
   }
 
   #avatarMoved(state: LiveAvatarState): void {
