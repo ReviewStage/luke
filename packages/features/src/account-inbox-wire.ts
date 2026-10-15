@@ -83,6 +83,8 @@ export const accountPlanlessEntrySchema = EffectSchema.Struct({
   automationId: EffectSchema.NullOr(wireUuidSchema),
   automationName: EffectSchema.NullOr(EffectSchema.String),
   repository: EffectSchema.String,
+  /** The workspace the agent belongs to, whose list its items stand in; absent from a service before it. */
+  workspaceId: EffectSchema.optionalKey(EffectSchema.String),
   title: EffectSchema.String,
   revision: countedNumber,
   postedAt: countedNumber,

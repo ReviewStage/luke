@@ -52,6 +52,9 @@
     "repository": {
       "type": "string"
     },
+    "workspaceId": {
+      "type": "string"
+    },
     "title": {
       "type": "string"
     },

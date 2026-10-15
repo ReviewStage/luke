@@ -153,8 +153,9 @@ it.layer(getTestDB())("the inbox store", (it) => {
             entry.automationId,
             entry.automationName,
             entry.repository,
+            entry.workspaceId,
           ]),
-          [[posted.success.id, automationId, "Flaky-test sweep", "acme/relay"]],
+          [[posted.success.id, automationId, "Flaky-test sweep", "acme/relay", workspaceId]],
         );
         assert.deepEqual(
           theirs.automations?.map((group) => [group.automationId, group.items]),

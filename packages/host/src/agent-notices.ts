@@ -384,6 +384,7 @@ function waitingPlanless(items: readonly AccountPlanlessEntry[]): AppInboxSlice[
     automationId: item.automationId,
     automationName: item.automationName,
     repository: item.repository,
+    ...(item.workspaceId === undefined ? undefined : { workspaceId: item.workspaceId }),
   }));
 }
 
@@ -403,7 +404,7 @@ function planlessNoticeText(
 /** What an answer of the inbox read carries that the window and the Dock are told of. */
 type InboxAnswered = Pick<AccountInboxAnswer, "items" | "plans" | "planless" | "automations">;
 
-/** Whether two answers say alike everything the window draws of each item of an agent with no plan: its agent's title and model and the automation and repository standing in a plan's place, which change without the item's stamp moving. */
+/** Whether two answers say alike everything the window draws of each item of an agent with no plan: its agent's title and model, the automation and repository standing in a plan's place, and the workspace whose list it stands in, which change without the item's stamp moving, a service first naming the workspace among them. */
 function samePlanless(
   one: readonly AccountPlanlessEntry[],
   other: readonly AccountPlanlessEntry[],
@@ -419,7 +420,8 @@ function samePlanless(
         was.agentModel === item.agentModel &&
         was.automationId === item.automationId &&
         was.automationName === item.automationName &&
-        was.repository === item.repository
+        was.repository === item.repository &&
+        was.workspaceId === item.workspaceId
       );
     })
   );

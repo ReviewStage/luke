@@ -567,6 +567,7 @@ const PlanlessRowSchema = Schema.Struct({
   automationId: Schema.NullOr(Schema.String),
   automationName: Schema.NullOr(Schema.String),
   repository: Schema.String,
+  workspaceId: Schema.NullOr(Schema.String),
   title: Schema.String,
   revision: Schema.Number,
   status: Schema.Literals(Object.values(INBOX_STATUS)),
@@ -589,6 +590,7 @@ const findPlanlessWaitingItems = SqlSchema.findAll({
           automationId: automation.id,
           automationName: automation.name,
           repository: codingAgent.repository,
+          workspaceId: codingAgent.organizationId,
           title: inboxItem.title,
           revision: inboxItem.revision,
           status: inboxItem.status,
@@ -1006,8 +1008,9 @@ export function accountPlanlessItems(
   userId: string,
 ): InboxStoreEffect<readonly AccountPlanlessRow[]> {
   return Effect.map(findPlanlessWaitingItems({ userId }), (rows) =>
-    rows.map((row) => ({
+    rows.map(({ workspaceId, ...row }) => ({
       ...row,
+      ...(workspaceId === null ? undefined : { workspaceId }),
       postedAt: row.postedAt.getTime(),
       updatedAt: row.updatedAt.getTime(),
     })),

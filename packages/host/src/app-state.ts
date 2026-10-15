@@ -153,6 +153,8 @@ export interface AppInboxPlanlessItem extends AppInboxWaitingItem {
   automationId: string | null;
   automationName: string | null;
   repository: string;
+  /** The workspace the agent belongs to, whose Inbox lists the item; absent from a service before it. */
+  workspaceId?: string;
 }
 
 /** One automation holding items of its runs' agents with no plan, waiting or settled, as a plan holding items is listed: how many, and when the latest changed; null for the agents no automation the reader may read names. */
