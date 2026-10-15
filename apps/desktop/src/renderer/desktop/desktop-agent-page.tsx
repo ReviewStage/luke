@@ -13,6 +13,7 @@ import { useAppCommand } from "../app-commands";
 import { AutomationDirectory } from "../automation-directory";
 import { FindScope } from "../find-in-tab";
 import { MemberDirectory } from "../member-directory";
+import { NOT_FOUND_THING, NotFound } from "../not-found";
 import { agentTabLabel } from "../planning/coding-agent-model";
 import { PlanMentions, type PlanMentionsValue, planlessMentions } from "../planning/plan-mentions";
 import { SkillFiles } from "../planning/skill-chip";
@@ -59,7 +60,9 @@ import { useTabViews } from "./strip-tabs";
  * its width, and its keys are the plan's own; ⌘T opens its "+", the page's
  * one, since the agent's own column opens no tab. Its title names the agent as
  * its tab would. An archived agent takes no message, so its composer gives
- * way to its own Unarchive. Whoever sent it a message is read against its
+ * way to its own Unarchive. An agent the service will not hand the reader,
+ * deleted or of a workspace they are not in, as a link may name, is not
+ * found, and nothing of it is drawn. Whoever sent it a message is read against its
  * workspace's members, as on a plan, and the automation whose run started
  * it against its workspace's automations, so the prompt it opens on names
  * the automation and opens its page. Escape leaves it for wherever it was
@@ -230,7 +233,9 @@ export function DesktopAgentPage({
     return (
       <section className="agent-page" aria-label="Agent">
         {toolbar}
-        {agents.listFailed ? (
+        {agents.listMissing ? (
+          <NotFound thing={NOT_FOUND_THING.AGENT} />
+        ) : agents.listFailed ? (
           <div className="agent-page-note">
             <ReadFailure line={NOT_READ} onRetry={agents.onRetryList} />
           </div>

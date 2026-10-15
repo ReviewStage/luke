@@ -26,7 +26,7 @@ function opener() {
   const opened: string[] = [];
   let handTo: ((mention: PlanMention) => void) | undefined;
   function Probe({ gated, arriving }: { gated: boolean; arriving?: PlanMention }): null {
-    const open = useLinkOpener(gated, (mention) => opened.push(mention.planId));
+    const open = useLinkOpener<PlanMention>(gated, (mention) => opened.push(mention.planId));
     handTo = open;
     useLayoutEffect(() => {
       if (arriving !== undefined) open(arriving);

@@ -205,6 +205,9 @@ export interface ReadLink {
 
 const readPlace = EffectSchema.decodeUnknownOption(linkPlaceSchema);
 
+/** Whether a value is a place a link can name, as one crossing from main to a window is checked. */
+export const isLinkPlace = EffectSchema.is(linkPlaceSchema);
+
 /** The characters `encodeURIComponent` leaves that would end or break a markdown link's target. */
 const TARGET_SPECIAL = /[()!'*]/gu;
 

@@ -131,6 +131,8 @@ export interface CodingAgentsControl {
   heldIds: readonly string[] | undefined;
   /** Whether the last read of the list did not land. */
   listFailed: boolean;
+  /** Whether the last read answered that the agent read by its id is not there for the reader: deleted, or of a workspace they are not in. */
+  listMissing: boolean;
   /** Reads the list again: after a read that failed, or as the column's "+" opens, so it says where each agent stands now. */
   onRetryList: () => void;
   /** The models the menu offers, as last read; nothing before the menu first asks. */
@@ -359,6 +361,7 @@ export function useCodingAgents(input: {
     agentId: string | undefined;
     agents: readonly CodingAgentSummary[] | undefined;
     failed: boolean;
+    missing?: boolean;
     workspaceId?: string | undefined;
     repository?: string | undefined;
     origin?: CodingAgentOrigin | undefined;
@@ -396,6 +399,7 @@ export function useCodingAgents(input: {
     [held],
   );
   const listFailed = ours(list) && list.failed;
+  const listMissing = ours(list) && list.missing === true;
 
   // Read when the plan opens, or the page's agent where no plan is, and again when a Start or a Stop asks (`reads`).
   useEffect(() => {
@@ -411,6 +415,7 @@ export function useCodingAgents(input: {
                 agentId: listOf,
                 agents: ours(was) ? was.agents : undefined,
                 failed: true,
+                missing: answer.failure === CODING_AGENT_CALL_FAILURE.NOT_FOUND,
                 workspaceId: ours(was) ? was.workspaceId : undefined,
                 repository: ours(was) ? was.repository : undefined,
                 origin: ours(was) ? was.origin : undefined,
@@ -888,6 +893,7 @@ export function useCodingAgents(input: {
     onDiscardDraft,
     startPrompt,
     listFailed,
+    listMissing,
     onRetryList: readAgain,
     models,
     readModels,

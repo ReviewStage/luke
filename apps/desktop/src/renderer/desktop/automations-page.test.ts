@@ -1018,14 +1018,17 @@ test("the list and an automation's page each say they are an experiment, and eac
   assert.deepEqual(feedbackAbout, [EXPERIMENT.AUTOMATIONS, EXPERIMENT.AUTOMATIONS]);
 });
 
-test("a page naming an automation the list no longer holds says it is gone", async () => {
+test("a page naming an automation the list does not hold, as a link to another workspace's may, says it is not found and draws nothing of it", async () => {
   const page = mountPages({
     kind: AUTOMATIONS_PAGE.EDIT,
     automationId: "3f0e6f5c-7d1a-4f6e-9a55-999999999999",
   });
   await settle();
 
-  assert.match(page.textContent ?? "", /This automation is gone/u);
+  assert.match(
+    page.textContent ?? "",
+    /Not foundThis automation doesn't exist, or you don't have access to it\./u,
+  );
 });
 
 test("what is typed while a save is out stands, unsaved, once the save lands", async () => {

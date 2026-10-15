@@ -1,22 +1,21 @@
-import type { PlanMention } from "@luke/features/mention-link";
 import { useCallback, useEffect, useRef } from "react";
 
 /**
  * held-link.ts -- a Luke link the system hands the window while sign-in stands, held until the account is signed in.
  *
  * A link can launch the app before anyone is signed in, and the Plans tab
- * opens no plan behind the sign-in gate: its select is refused and the
+ * opens nothing behind the sign-in gate: its select is refused and the
  * link would be gone. So a link handed while the gate stands is held, the
  * latest one only, and opened the moment the gate gives way; one handed
  * after opens at once, and supersedes any still held.
  */
 
-/** Opens a link's plan now, or once the gate gives way where it stands. */
-export function useLinkOpener(
+/** Opens a link's place now, or once the gate gives way where it stands. */
+export function useLinkOpener<Link>(
   gated: boolean,
-  open: (mention: PlanMention) => void,
-): (mention: PlanMention) => void {
-  const held = useRef<PlanMention | undefined>(undefined);
+  open: (link: Link) => void,
+): (link: Link) => void {
+  const held = useRef<Link | undefined>(undefined);
   const latestGated = useRef(gated);
   latestGated.current = gated;
   const latestOpen = useRef(open);
@@ -27,13 +26,13 @@ export function useLinkOpener(
     held.current = undefined;
     latestOpen.current(waiting);
   }, [gated]);
-  return useCallback((mention: PlanMention) => {
+  return useCallback((link: Link) => {
     if (latestGated.current) {
-      held.current = mention;
+      held.current = link;
       return;
     }
     // Note that a link opened at once supersedes one still held, because the gate's giving way opens the held one only once its effect runs.
     held.current = undefined;
-    latestOpen.current(mention);
+    latestOpen.current(link);
   }, []);
 }

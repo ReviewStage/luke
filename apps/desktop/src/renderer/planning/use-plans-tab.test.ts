@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { BOARD_ELEMENT_TYPE } from "@luke/features/board-vocabulary";
 import type { Board } from "@luke/features/board-wire";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import { LINK_PLACE } from "@luke/features/luke-link";
 import { MENTION_KIND } from "@luke/features/mention-link";
 import { PLAN_ACTOR, type Plan } from "@luke/features/plan-wire";
 import {
@@ -21,7 +22,7 @@ import { ACT, ACT_KIND, type ActKind, type ActResultFor } from "@luke/host/acts"
 import { type AppInboxPlan, type AppInboxPlanHolding, RUN_PROFILE } from "@luke/host/app-state";
 import { LIVE_STATUS } from "@luke/live";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
-import { PLANS_PAGE } from "@luke/ui/planning-model";
+import { DOCUMENT_REGION, PLANS_PAGE } from "@luke/ui/planning-model";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import {
   messageText,
@@ -46,7 +47,13 @@ import { newestToastAction, newestToastSays } from "#testing/toast";
 import { ToastHost } from "../toast";
 import { CHIP_PLACE, RepositoryChip } from "./repository-chip";
 import { MAIN_TAB } from "./use-main-tabs";
-import { type LeaveAsk, type PlansControl, useLeaveGuard, usePlansTab } from "./use-plans-tab";
+import {
+  AUTOMATIONS_PAGE,
+  type LeaveAsk,
+  type PlansControl,
+  useLeaveGuard,
+  usePlansTab,
+} from "./use-plans-tab";
 import { SIDE_PANEL_TAB } from "./use-side-panel";
 
 const PLAN: Plan = {
@@ -657,6 +664,127 @@ test("a Luke link to another plan's section opens that plan and asks its page to
     planId: OTHER_PLAN_ID,
     reveal: { anchor: "rollout", ask: 2 },
   });
+});
+
+test("a Luke link to an agent with no task opens its page, and one under a task opens its tab on that task", async () => {
+  const tab = mount(
+    { shown: true, planning: OPEN },
+    { [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }) },
+  );
+  await settle();
+
+  act(() =>
+    tab.control().onOpenLink({
+      workspace: "acme",
+      place: { kind: LINK_PLACE.AGENT, agentId: AGENT_ID },
+    }),
+  );
+  const page = tab.control().agentView.agentId;
+  act(() =>
+    tab.control().onOpenLink({
+      workspace: "acme",
+      place: { kind: LINK_PLACE.AGENT, planId: PLAN.id, agentId: AGENT_ID },
+    }),
+  );
+
+  assert.equal(page, AGENT_ID);
+  assert.equal(tab.control().agentView.agentId, undefined);
+  assert.deepEqual(tab.control().mainTabs.tab, { agent: AGENT_ID });
+});
+
+test("a Luke link to an Inbox item opens it in its task's workspace, and one to an automation in the workspace its slug names", () => {
+  const tab = mount({ shown: true, planning: TWO_WORKSPACES });
+  const alerts = "alerts";
+  const itemId = "5d1e2f3a-4b5c-4d6e-8f70-819203a4b5c6";
+  const automationId = "6e2f3a4b-5c6d-4e7f-8a91-92a3b4c5d6e7";
+
+  act(() =>
+    tab.control().onOpenLink({
+      workspace: "renamed-since",
+      place: { kind: LINK_PLACE.INBOX_ITEM, planId: alerts, itemId },
+    }),
+  );
+  const inbox = { open: tab.control().inboxView.open, chosen: tab.control().inboxView.chosen };
+  const listed = tab.control().workspace?.id;
+  act(() =>
+    tab.control().onOpenLink({
+      workspace: "personal",
+      place: { kind: LINK_PLACE.AUTOMATION, automationId },
+    }),
+  );
+
+  assert.deepEqual(inbox, { open: true, chosen: { planId: alerts, itemId, opened: true } });
+  assert.equal(listed, ACME.id);
+  assert.equal(tab.control().inboxView.open, false);
+  assert.deepEqual(tab.control().automationsView.place, {
+    kind: AUTOMATIONS_PAGE.EDIT,
+    automationId,
+  });
+  assert.equal(tab.control().workspace?.id, PERSONAL.id);
+});
+
+test("a Luke link whose slug names no workspace of the account's leaves the listed one, and opens its place all the same, whose read decides", () => {
+  const tab = mount({ shown: true, planning: TWO_WORKSPACES });
+  const listed = tab.control().workspace?.id;
+
+  act(() =>
+    tab.control().onOpenLink({
+      workspace: "someone-elses",
+      place: { kind: LINK_PLACE.AUTOMATION, automationId: OTHER_PLAN_ID },
+    }),
+  );
+
+  assert.equal(tab.control().workspace?.id, listed);
+  assert.equal(tab.control().automationsView.open, true);
+});
+
+test("a Luke link to a task's version opens its version history on that version, and one to its call opens its Call tab", () => {
+  const tab = mount(
+    { shown: true, planning: OPEN },
+    { [ACT_KIND.PLANNING_SELECT]: () => Promise.resolve(true) },
+  );
+
+  act(() =>
+    tab.control().onOpenLink({
+      workspace: "acme",
+      place: { kind: LINK_PLACE.VERSION, planId: PLAN.id, revision: 3 },
+    }),
+  );
+  const history = { open: tab.control().history.open, spot: tab.control().history.spot };
+  act(() =>
+    tab.control().onOpenLink({
+      workspace: "acme",
+      place: { kind: LINK_PLACE.CALL, planId: PLAN.id },
+    }),
+  );
+
+  assert.deepEqual(history, { open: true, spot: { revision: 3, opened: undefined } });
+  assert.equal(tab.control().history.open, false);
+  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.CALL });
+});
+
+test("a Luke link to a version of a task the service will not hand the reader leaves no version history standing over the task's Not found", () => {
+  const tab = mount(
+    { shown: true, planning: OPEN },
+    { [ACT_KIND.PLANNING_SELECT]: () => Promise.resolve(true) },
+  );
+
+  act(() =>
+    tab.control().onOpenLink({
+      workspace: "someone-elses",
+      place: { kind: LINK_PLACE.VERSION, planId: OTHER_PLAN_ID, revision: 3 },
+    }),
+  );
+  tab.stand({
+    planning: {
+      ...OPEN,
+      activePlanId: OTHER_PLAN_ID,
+      document: { status: PLANNING_READ.MISSING },
+    },
+  });
+
+  assert.equal(tab.control().history.open, false);
+  assert.equal(tab.control().region.kind, DOCUMENT_REGION.MISSING);
 });
 
 test("a section shown is let go, so the plan opened again later opens where it would, while a newer ask stands", () => {

@@ -2,6 +2,7 @@ import type { Board } from "@luke/features/board-wire";
 import { dictationKeywords } from "@luke/features/dictation-keywords";
 import type { GitHubConnection } from "@luke/features/github-connection-wire";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
+import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
 import { MENTION_KIND, type PlanMention } from "@luke/features/mention-link";
 import type { PlanEditRequest } from "@luke/features/plan-edit";
 import { planMarkdown } from "@luke/features/plan-markdown";
@@ -372,6 +373,15 @@ export interface PlansControl {
   onShowPlan: (planId: string) => void;
   /** Opens a plan the same way, scrolled to the section a mention or a Luke link names, or at its top for the plan's own. */
   onShowMention: (mention: PlanMention) => void;
+  /**
+   * Opens the place a Luke link names, of the Plans tab's: a task, its
+   * section, version, page, call, or turn; an agent, on its task's tab or
+   * its own page; the Inbox, on an item; Automations, on one; Factory. A
+   * place of a workspace the account lists by the link's slug is shown in
+   * it. Whoever cannot read the place is told so where it would stand, by
+   * the place's own read, which is checked against them.
+   */
+  onOpenLink: (link: ReadLink) => void;
   /** The last ask to show a section, under the plan it was asked of, so a section of a plan not yet open is shown once it is drawn; let go once shown. */
   sectionReveal: { readonly planId: string; readonly reveal: SectionReveal } | undefined;
   /** The plan's page showed the section an ask named, so a later visit to the plan does not show it again. */
@@ -1045,7 +1055,11 @@ export function usePlansTab(input: {
   const boundFor = asked !== undefined && asked.over === openPlanId ? asked.planId : openPlanId;
   // The version history is the plan's, so another plan, or none, leaves it.
   if (historyFor !== undefined && historyFor.planId !== boundFor) setHistoryFor(undefined);
-  const historyOpen = historyFor !== undefined && historyFor.planId === boundFor;
+  // A plan the service would not hand the reader has no history to show, so its Not found stands in the history's place, as a version's link may ask for one.
+  const historyOpen =
+    historyFor !== undefined &&
+    historyFor.planId === boundFor &&
+    region.kind !== DOCUMENT_REGION.MISSING;
   // A reveal is the open plan's, so another plan opening drops it, and
   // coming back asks nothing of the visit after.
   if (reveal !== undefined && reveal.planId !== boundFor) setReveal(undefined);
@@ -1695,6 +1709,132 @@ export function usePlansTab(input: {
     mainTabs.onShow(planId, tab);
   };
 
+  // A tab of the side panel, on its plan, out from under a version history or whatever stands in the plan's place.
+  const showPanelTab = (planId: string, tab: SidePanelTab) => {
+    if (planId !== planning.activePlanId) select(planId);
+    setStandIn(undefined);
+    setHistoryFor(undefined);
+    sidePanel.onShow(planId, tab);
+  };
+
+  // A link's workspace, by its slug or its id, listed where the account is in it and another is listed.
+  const listLinked = (workspace: string) => {
+    const home = viewed.workspaces.find((each) => each.slug === workspace || each.id === workspace);
+    if (home !== undefined && home.id !== listedWorkspace?.id) chooseListed(home.id);
+  };
+
+  // A version's Open lands where its writer wrote it: an agent's tab as a
+  // notification opens it, or the side panel's Call tab, asked to
+  // bring the call or the turn into view once it draws.
+  const showSource = (planId: string, source: RevisionSource) => {
+    if (source.kind === REVISION_SOURCE.AGENT) {
+      showColumnTab(planId, { agent: source.agentId });
+      return;
+    }
+    setReveal({ planId, source });
+    showPanelTab(planId, SIDE_PANEL_TAB.CALL);
+  };
+
+  // Each ask is its own, so the same section asked twice scrolls twice.
+  const showMention = (mention: PlanMention) => {
+    showColumnTab(mention.planId, MAIN_TAB.PLAN);
+    const anchor = mention.kind === MENTION_KIND.SECTION ? mention.anchor : undefined;
+    sectionAsks.current += 1;
+    setSectionReveal({ planId: mention.planId, reveal: { anchor, ask: sectionAsks.current } });
+  };
+
+  // What stands in the plan's place for a link, a version history there giving way, as each one's own door does.
+  const standInFor = (standing: StandIn) => {
+    setHistoryFor(undefined);
+    setStandIn(standing);
+  };
+
+  /**
+   * A Luke link's place opened through the door each kind already has: the
+   * task's tabs, its side panel, its version history, or what stands in the
+   * plan's place. A worker of an agent's, its Changes, or one of its
+   * messages opens the agent's tab until each has a door of its own. Note
+   * that nothing is checked here: a place the account cannot read is read
+   * all the same, and its read says it is not there.
+   */
+  const openLink = ({ workspace, place }: ReadLink) => {
+    switch (place.kind) {
+      case LINK_PLACE.TASK:
+        showMention({ kind: MENTION_KIND.PLAN, planId: place.planId });
+        return;
+      case LINK_PLACE.SECTION:
+        showMention({ kind: MENTION_KIND.SECTION, planId: place.planId, anchor: place.anchor });
+        return;
+      case LINK_PLACE.VERSION:
+        openHistory({
+          planId: place.planId,
+          save: undefined,
+          spot: { revision: place.revision, opened: undefined },
+        });
+        return;
+      case LINK_PLACE.PAGE:
+        showPanelTab(place.planId, { page: place.pageId });
+        return;
+      case LINK_PLACE.CALL:
+        if (place.callId === undefined) showPanelTab(place.planId, SIDE_PANEL_TAB.CALL);
+        else showSource(place.planId, { kind: REVISION_SOURCE.CALL, callId: place.callId });
+        return;
+      case LINK_PLACE.TURN:
+        showSource(place.planId, { kind: REVISION_SOURCE.WORK, at: place.at });
+        return;
+      case LINK_PLACE.WORKER:
+        if (place.agentId === undefined) showPanelTab(place.planId, { subagent: place.callId });
+        else showColumnTab(place.planId, { agent: place.agentId });
+        return;
+      case LINK_PLACE.CHANGES:
+        showPanelTab(place.planId, { changes: place.agentId });
+        return;
+      case LINK_PLACE.AGENT:
+      case LINK_PLACE.MESSAGE:
+        if (place.planId === undefined)
+          standInFor({ kind: STAND_IN.AGENT, agentId: place.agentId });
+        else showColumnTab(place.planId, { agent: place.agentId });
+        return;
+      case LINK_PLACE.INBOX:
+        listLinked(workspace);
+        standInFor({ kind: STAND_IN.INBOX, chosen: undefined });
+        return;
+      case LINK_PLACE.INBOX_ITEM:
+        // An item of a task the account lists is shown in the task's own workspace, whatever the slug says.
+        listLinked(
+          ("planId" in place
+            ? viewed.plans.find((plan) => plan.id === place.planId)?.workspaceId
+            : undefined) ?? workspace,
+        );
+        standInFor({
+          kind: STAND_IN.INBOX,
+          chosen:
+            "planId" in place
+              ? { planId: place.planId, itemId: place.itemId, opened: true }
+              : { agentId: place.agentId, itemId: place.itemId, opened: true },
+        });
+        return;
+      case LINK_PLACE.AUTOMATIONS:
+        listLinked(workspace);
+        standInFor({ kind: STAND_IN.AUTOMATIONS, place: AUTOMATIONS_LIST });
+        return;
+      case LINK_PLACE.AUTOMATION:
+      case LINK_PLACE.AUTOMATION_RUN:
+        listLinked(workspace);
+        standInFor({
+          kind: STAND_IN.AUTOMATIONS,
+          place: { kind: AUTOMATIONS_PAGE.EDIT, automationId: place.automationId },
+        });
+        return;
+      case LINK_PLACE.FACTORY:
+        standInFor({ kind: STAND_IN.FACTORY });
+        return;
+      // Settings is the window's, not the Plans tab's, so its link is opened there.
+      case LINK_PLACE.SETTINGS:
+        return;
+    }
+  };
+
   // An inbox item's code opens in its plan's File tab; on a plan not yet
   // open, once the host has it open, since the panel draws the open plan's.
   const showFile = (planId: string, ref: CodeRef, commit: string) => {
@@ -2007,16 +2147,7 @@ export function usePlansTab(input: {
     // A version's Open lands where its writer wrote it: an agent's tab as a
     // notification opens it, or the side panel's Call tab, asked to
     // bring the call or the turn into view once it draws.
-    onShowSource: guard((planId: string, source: RevisionSource) => {
-      if (source.kind === REVISION_SOURCE.AGENT) {
-        showColumnTab(planId, { agent: source.agentId });
-        return;
-      }
-      setStandIn(undefined);
-      setHistoryFor(undefined);
-      setReveal({ planId, source });
-      sidePanel.onShow(planId, SIDE_PANEL_TAB.CALL);
-    }),
+    onShowSource: guard(showSource),
     // The call card's way back lands where the plan's call bar is in sight.
     secondCall: {
       confirm: secondCall,
@@ -2024,12 +2155,8 @@ export function usePlansTab(input: {
     },
     onShowPlan: guard((planId: string) => showColumnTab(planId, MAIN_TAB.PLAN)),
     // Each ask is its own, so the same section asked twice scrolls twice.
-    onShowMention: guard((mention: PlanMention) => {
-      showColumnTab(mention.planId, MAIN_TAB.PLAN);
-      const anchor = mention.kind === MENTION_KIND.SECTION ? mention.anchor : undefined;
-      sectionAsks.current += 1;
-      setSectionReveal({ planId: mention.planId, reveal: { anchor, ask: sectionAsks.current } });
-    }),
+    onShowMention: guard(showMention),
+    onOpenLink: guard((link: ReadLink) => openLink(link)),
     sectionReveal,
     // Only the ask shown is let go; a newer one stands until its own plan shows it.
     onSectionRevealed: (ask) =>

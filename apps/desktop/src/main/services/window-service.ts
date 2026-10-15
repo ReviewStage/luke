@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { APP_LINK_SCHEME, type AppLinkPlace, appLinkClaim } from "@luke/features/app-links";
+import { APP_LINK_SCHEME, appLinkClaim } from "@luke/features/app-links";
+import type { ReadLink } from "@luke/features/luke-link";
 import { PAGE_SCHEME } from "@luke/features/page-frame";
 import { WINDOW_ROLE } from "@luke/gateway/window-session";
 import type { AgentEndToast, AgentPlace, InboxItemToast } from "@luke/host/agent-notices";
@@ -396,10 +397,10 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     panels.reconcile();
     panels.focusExpanded();
   };
-  // A Luke link's plan opens in the panels, scrolled to its section, the window brought forward.
-  const openAppLink = (place: AppLinkPlace): void => {
+  // A Luke link's place opens in the panels, the window brought forward.
+  const openAppLink = (link: ReadLink): void => {
     panels.focusExpanded();
-    panels.broadcast(channels.onShowLink, place);
+    panels.broadcast(channels.onShowLink, link);
   };
   // The Dock tile pressed: the window comes back, whether it was closed or
   // only behind another app.

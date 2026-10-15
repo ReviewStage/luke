@@ -1,7 +1,7 @@
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { PRODUCT_SURFACE_EVENT } from "@luke/features/analytics";
 import { FEEDBACK_KIND, type FeedbackKind } from "@luke/features/feedback";
-import { MENTION_KIND, type PlanMention } from "@luke/features/mention-link";
+import type { ReadLink } from "@luke/features/luke-link";
 import { IDLE_PLANNING_VIEW } from "@luke/features/planning-view";
 import { ACT_KIND } from "@luke/host/acts";
 import {
@@ -18,6 +18,7 @@ import { appSettingsView } from "@luke/settings/wire";
 import { cssCustomProperties } from "@luke/ui";
 import { callBarPlanId, callCard, callCardShown } from "@luke/ui/call-card-model";
 import { useLinkOpener } from "@luke/ui/held-link";
+import { EXPERIMENT_OFF_LINK, LINK_ROUTE, linkRoute } from "@luke/ui/link-route";
 import { forgetPictures } from "@luke/ui/picture-cache";
 import { PLANS_PAGE } from "@luke/ui/planning-model";
 import { useStateWithRef } from "@luke/ui/use-state-with-ref";
@@ -59,12 +60,12 @@ import { PANEL_TAB, type PanelTab } from "./panel-tabs";
 import { useAgentEndToasts } from "./planning/agent-end-toast";
 import { useInboxToasts } from "./planning/inbox-toast";
 import { type RepositoryRemedyDoors, RepositoryRemedyProvider } from "./planning/repository-remedy";
-import { OpenPlanProvider } from "./planning/use-open-link";
+import { OpenLinkProvider } from "./planning/use-open-link";
 import { useLeaveGuard, usePlansTab } from "./planning/use-plans-tab";
 import { applySessionReplay } from "./session-replay";
 import { settingsRowsInput } from "./settings/settings-panel";
 import { followSettingsLink, useSettingsWorkspace } from "./settings-link";
-import { ToastHost } from "./toast";
+import { TOAST_HOLD, TOAST_TONE, ToastHost, useToast } from "./toast";
 import { useUpdatedToast } from "./update-toast";
 import { useAppState, useExperiment } from "./use-app-state";
 import { useCaptionPresentation } from "./use-caption-presentation";
@@ -315,24 +316,29 @@ export function App(): React.JSX.Element {
       ),
     [changeTab, guardLeave],
   );
-  // A Luke link the system handed the app: the Plans tab, on its plan, scrolled to its section, once sign-in no longer stands in the way.
-  const openLink = useLinkOpener(accountGated, (mention) =>
-    guardLeave(() => {
-      changeTab(PANEL_TAB.PLANS);
-      plans.onShowMention(mention);
-    })(),
-  );
-  useEffect(
-    () =>
-      window.luke.onShowLink(({ planId, anchor }) =>
-        openLink(
-          anchor === undefined
-            ? { kind: MENTION_KIND.PLAN, planId }
-            : { kind: MENTION_KIND.SECTION, planId, anchor },
-        ),
-      ),
-    [openLink],
-  );
+  // A Luke link, handed by the system or pressed in the window, opens where its place stands (`@luke/ui/link-route`).
+  const factoryOn = useExperiment(EXPERIMENT.FACTORY);
+  const automationsOn = useExperiment(EXPERIMENT.AUTOMATIONS);
+  const toast = useToast();
+  const openLukeLink = (link: ReadLink) => {
+    const route = linkRoute(link, { workspaces: plans.workspaces, factoryOn, automationsOn });
+    if (route.kind === LINK_ROUTE.SETTINGS) {
+      openSettings(route.settings);
+    } else if (route.kind === LINK_ROUTE.EXPERIMENT_OFF) {
+      toast({ words: EXPERIMENT_OFF_LINK, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
+    } else {
+      guardLeave(() => {
+        changeTab(PANEL_TAB.PLANS);
+        plans.onOpenLink(link);
+      })();
+    }
+  };
+  // A Luke link the system handed the app opens once sign-in no longer stands in the way, and
+  // the account's workspaces are read, since a link's slug is read against them (every account
+  // holds its own workspace, so none read means none read yet).
+  const workspacesUnread = plans.workspaces.length === 0 && !plans.listFailed;
+  const openLink = useLinkOpener(accountGated || workspacesUnread, openLukeLink);
+  useEffect(() => window.luke.onShowLink(openLink), [openLink]);
   // The call card's way back: the Plans tab, on the call's plan's document,
   // opening it where another plan, or none, is open.
   const showPlan = useRef(plans.onShowPlan);
@@ -428,7 +434,6 @@ export function App(): React.JSX.Element {
   });
   // The sidebar folds only where it is drawn: Settings keeps its page list,
   // and the sign-in gate draws no sidebar at all.
-  const automationsOn = useExperiment(EXPERIMENT.AUTOMATIONS);
   const sidebar = useSidebarCollapse(state?.run.fixtureMode === true);
 
   const caption = useCaptionPresentation({
@@ -586,15 +591,9 @@ export function App(): React.JSX.Element {
     movePlan: plans.onMovePlan,
   };
 
-  // A Luke link pressed anywhere in the window opens its plan on the Plans tab, scrolled to its section.
-  const openPlan = (mention: PlanMention) => {
-    changeTab(PANEL_TAB.PLANS);
-    plans.onShowMention(mention);
-  };
-
   return (
     <OpenSettingsProvider value={openSettings}>
-      <OpenPlanProvider value={openPlan}>
+      <OpenLinkProvider value={openLukeLink}>
         <OpenFeedbackProvider value={openFeedbackAbout}>
           <RepositoryRemedyProvider value={repositoryRemedies}>
             <GitHubConnectProvider
@@ -709,7 +708,7 @@ export function App(): React.JSX.Element {
             </GitHubConnectProvider>
           </RepositoryRemedyProvider>
         </OpenFeedbackProvider>
-      </OpenPlanProvider>
+      </OpenLinkProvider>
     </OpenSettingsProvider>
   );
 }

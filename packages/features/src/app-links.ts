@@ -1,20 +1,20 @@
 import { isAppLinkProtocol, LINK_HOME } from "@luke/features/link-home";
-import { decodeMention, MENTION_KIND } from "@luke/features/mention-link";
+import { type ReadLink, readLink } from "@luke/features/luke-link";
 
 /**
- * app-links.ts -- a Luke link the system hands the app: the plan and section it names, and the links that arrive before a window can open them.
+ * app-links.ts -- a Luke link the system hands the app: the place it names, and the links that arrive before a window can open them.
  *
- * A plan's link is the same address on the web and in the app
- * (`https://tryluke.dev/<workspace>/plan/<id>#<section>`); the browser's
- * "Open in Luke" page hands it to the app in the app's own scheme,
- * `tryluke://`, which the bundle registers with macOS
- * (`scripts/electron-builder-config.mjs`'s `protocols`). macOS delivers it
- * as `open-url`, the link that launched the app among them, which arrives
- * before any window stands; a second launch elsewhere carries it among its
- * arguments. Either way it is read by the one module that knows a link's
- * form (`@luke/features/mention-link`), only as a plan or a section of one,
- * and anything else is refused. A link only opens a plan: nothing it
- * carries starts a call, writes, or reaches the host.
+ * A link to anything in Luke is the same address on the web and in the app
+ * (`@luke/features/luke-link`); the browser's "Open in Luke" page hands it
+ * to the app in the app's own scheme (`@luke/features/link-home`), which
+ * the bundle registers with macOS (`scripts/electron-builder-config.mjs`'s
+ * `protocols`). macOS delivers it as `open-url`, the link that launched the
+ * app among them, which arrives before any window stands; a second launch
+ * elsewhere carries it among its arguments. Either way it is read by the
+ * one module that knows a link's form, only as a place in Luke, and anything
+ * else is refused. A link only opens a place: nothing it carries starts a
+ * call, writes, or reaches the host, and whoever opens it is checked there,
+ * as the place's own read checks them.
  *
  * Links are held until a panel says it has painted and is listening, so the
  * link that launched the app opens once the window can open it; after that
@@ -27,14 +27,8 @@ export const APP_LINK_SCHEME = LINK_HOME.APP_SCHEME;
 /** The most links held while no window can open them; a launch hands one. */
 const MAX_HELD = 8;
 
-/** The plan a link names, and the anchor of its section where it names one. */
-export interface AppLinkPlace {
-  readonly planId: string;
-  readonly anchor?: string;
-}
-
-/** What opens a link's plan in the panels. */
-type AppLinkOpener = (place: AppLinkPlace) => void;
+/** What opens a link's place in the panels. */
+type AppLinkOpener = (link: ReadLink) => void;
 
 /** The links the system hands the app, held until a window can open them. */
 export interface AppLinkInbox {
@@ -52,15 +46,9 @@ function isAppLink(argument: string): boolean {
   return colon > 0 && isAppLinkProtocol(argument.slice(0, colon + 1));
 }
 
-/** The plan and section a link in the app's own scheme names; nothing for any other address. */
-export function placeOfAppLink(url: string): AppLinkPlace | undefined {
-  if (!isAppLink(url)) return undefined;
-  const mention = decodeMention(url, null);
-  if (mention?.kind === MENTION_KIND.PLAN) return { planId: mention.planId };
-  if (mention?.kind === MENTION_KIND.SECTION) {
-    return { planId: mention.planId, anchor: mention.anchor };
-  }
-  return undefined;
+/** The place a link in the app's own scheme names, and the workspace it was written under; nothing for any other address. */
+export function placeOfAppLink(url: string): ReadLink | undefined {
+  return isAppLink(url) ? readLink(url) : undefined;
 }
 
 /** The link a launch's arguments carry, as a second launch hands one: the last argument in the app's own scheme. */
@@ -96,20 +84,20 @@ export function appLinkClaim(launch: {
 
 /** An inbox holding no link and able to open none yet. */
 export function appLinkInbox(): AppLinkInbox {
-  const held: AppLinkPlace[] = [];
+  const held: ReadLink[] = [];
   let opener: AppLinkOpener | undefined;
   let closed = false;
   return {
     arrive: (url) => {
-      const place = placeOfAppLink(url);
-      if (place === undefined || closed) return;
-      if (opener !== undefined) opener(place);
-      else if (held.length < MAX_HELD) held.push(place);
+      const link = placeOfAppLink(url);
+      if (link === undefined || closed) return;
+      if (opener !== undefined) opener(link);
+      else if (held.length < MAX_HELD) held.push(link);
     },
     ready: (open) => {
       if (closed) return;
       opener = open;
-      for (const place of held.splice(0)) open(place);
+      for (const link of held.splice(0)) open(link);
     },
     close: () => {
       closed = true;
