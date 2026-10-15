@@ -94,6 +94,8 @@ export type Actor =
       readonly reason: SomeoneReason;
       /** The name the service still holds for a member who left; none for the rest. */
       readonly name?: string;
+      /** A member who left's account id, which their page is opened by; none for the rest. */
+      readonly userId?: string;
     }
   | GitHubActor;
 
@@ -217,7 +219,12 @@ export function personActor(
   const you = readerId !== undefined && ref.userId === readerId;
   const member = members?.find((each) => each.userId === ref.userId);
   if (members !== undefined && member === undefined && !you) {
-    return { kind: ACTOR_KIND.SOMEONE, reason: SOMEONE_REASON.FORMER, name: ref.name };
+    return {
+      kind: ACTOR_KIND.SOMEONE,
+      reason: SOMEONE_REASON.FORMER,
+      name: ref.name,
+      userId: ref.userId,
+    };
   }
   const person: PersonActor = { kind: ACTOR_KIND.PERSON, userId: ref.userId, name: ref.name, you };
   return member === undefined ? person : memberActor(member, readerId);

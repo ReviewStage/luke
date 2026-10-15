@@ -19,6 +19,7 @@ import { signedInAs } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { MemberDirectory } from "../member-directory";
 import { OpenSettingsProvider } from "../open-settings";
+import { OpenPersonProvider } from "../person-door";
 import { PlanCrumb } from "./plan-crumb";
 
 /**
@@ -135,28 +136,32 @@ async function crumb(
           createElement(
             OpenSettingsProvider,
             { value: (link: SettingsLink) => links.push(link) },
-            createElement(MemberDirectory, {
-              workspace: shown,
-              readerId: "user-sam",
-              children: createElement(PlanCrumb, {
+            createElement(
+              OpenPersonProvider,
+              { value: (userId: string) => asked.push(`profile ${userId}`) },
+              createElement(MemberDirectory, {
                 workspace: shown,
-                repository,
-                archived,
-                created,
-                doors: {
-                  personal: false,
-                  onOpenWorkspace: () => asked.push(`home ${shown.id}`),
-                  repository: {
-                    label: (named) => repositoryLabel(named, []),
-                    pictures: false,
-                    read: () => {
-                      asked.push("read repositories");
-                      return Promise.resolve(REPOSITORIES);
+                readerId: "user-sam",
+                children: createElement(PlanCrumb, {
+                  workspace: shown,
+                  repository,
+                  archived,
+                  created,
+                  doors: {
+                    personal: false,
+                    onOpenWorkspace: () => asked.push(`home ${shown.id}`),
+                    repository: {
+                      label: (named) => repositoryLabel(named, []),
+                      pictures: false,
+                      read: () => {
+                        asked.push("read repositories");
+                        return Promise.resolve(REPOSITORIES);
+                      },
                     },
                   },
-                },
+                }),
               }),
-            }),
+            ),
           ),
         ),
       ),
@@ -430,4 +435,18 @@ test("a task the list names by its owner's id alone is the reader's own where th
   });
   const line = document.querySelector("[data-people-card] .plan-crumb-created")?.textContent;
   assert.equal(line?.replace(/ · .*$/u, ""), "Created by S you");
+});
+
+test("each member in the card of who can edit opens their page, while the faces and the count stay put", async () => {
+  const { nav, asked } = await crumb(ACME, "acme-corp/relay", MEMBERS);
+  const people =
+    nav.querySelector<HTMLElement>(".plan-crumb-people") ?? assert.fail("who can edit stands");
+  const card = cardOf(people, "data-people-card");
+
+  act(() => people.click());
+  const rows = [...card.querySelectorAll<HTMLButtonElement>("button.plan-crumb-person-row")];
+  act(() => rows[1]?.click());
+
+  assert.equal(rows.length, MEMBERS.length);
+  assert.deepEqual(asked, [`profile ${MEMBERS[1]?.userId}`]);
 });

@@ -235,17 +235,36 @@ button.plan-crumb-item:hover {
 /* The crumb's card lists everyone who can edit, a face, a name, and a role a row. */
 .plan-crumb-people-list {
   display: grid;
-  gap: var(--space-6);
+  gap: 0;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.plan-crumb-people-list li {
+/* A member's row in the people card, a press opening their page, filled
+   under the pointer as a card's door is, bled past the list's edges so its
+   words keep their place. */
+.plan-crumb-person-row {
   display: flex;
+  width: calc(100% + 2 * var(--row-inset));
+  min-height: var(--menu-row-height);
   align-items: center;
   gap: var(--space-8);
+  margin-inline: calc(-1 * var(--row-inset));
+  padding: 0 var(--row-inset);
+  border: 0;
+  border-radius: var(--menu-row-radius);
+  background: none;
+  color: var(--text-primary);
+  font: inherit;
   font-size: 12.5px;
+  text-align: left;
+  transition: background-color var(--duration-hover) ease;
+}
+
+button.plan-crumb-person-row:is(:hover, :focus-visible) {
+  outline: none; /* no ring: the row's fill marks it, as a card's door does */
+  background: var(--raised-strong);
 }
 
 .plan-crumb-person {
