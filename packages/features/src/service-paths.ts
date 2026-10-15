@@ -1,3 +1,4 @@
+import { GITHUB_REPOSITORIES_QUERY } from "./github-repositories-wire.js";
 import type { IntegrationProvider } from "./integration-wire.js";
 
 /**
@@ -96,6 +97,20 @@ export const HOSTED_SERVICE_PATH = {
    * `GITHUB_REPOSITORIES_QUERY` that names a workspace to list for.
    */
   GITHUB_REPOSITORIES: "/api/github/repositories",
+  /**
+   * One folder of a repository a workspace's installation reaches, as
+   * GitHub holds it now (GET), named by the workspace and the repository
+   * (`GITHUB_REPOSITORIES_QUERY`), for a place with no plan to name it by,
+   * such as an agent an automation started; the answer is a plan's tree's
+   * (`plan-wire.ts`).
+   */
+  GITHUB_REPOSITORY_TREE: "/api/github/repositories/tree",
+  /**
+   * The skills a developer may choose of a repository a workspace's
+   * installation reaches (GET), named as `GITHUB_REPOSITORY_TREE` names it;
+   * the answer is a plan's skills' (`plan-wire.ts`).
+   */
+  GITHUB_REPOSITORY_SKILLS: "/api/github/repositories/skills",
   /**
    * Sends the browser to GitHub to install the Luke GitHub App, or to change
    * which repositories it reaches (GET). GitHub returns the browser to
@@ -340,6 +355,36 @@ export function planTreePath(
 /** The skills a developer may choose of one plan's repository, as GitHub holds it now (GET). */
 export function planSkillsPath(planId: string): string {
   return `${planPath(planId)}/skills`;
+}
+
+/** A repository as a read with no plan names it: the workspace whose installation reaches it, and the repository, `owner/name`. */
+export interface RepositoryPlace {
+  readonly workspaceId: string;
+  readonly repository: string;
+}
+
+/** The query naming a repository place, which every read of one repository by its workspace opens with. */
+function repositoryPlaceQuery(place: RepositoryPlace): URLSearchParams {
+  return new URLSearchParams({
+    [GITHUB_REPOSITORIES_QUERY.WORKSPACE_ID]: place.workspaceId,
+    [GITHUB_REPOSITORIES_QUERY.REPOSITORY]: place.repository,
+  });
+}
+
+/** One folder of a repository a workspace reaches, as GitHub holds it now (GET), queried as `planTreePath`'s folder is. */
+export function repositoryTreePath(
+  place: RepositoryPlace,
+  folder: { readonly path: string; readonly recursive?: boolean },
+): string {
+  const query = repositoryPlaceQuery(place);
+  if (folder.path !== "") query.set("path", folder.path);
+  if (folder.recursive === true) query.set("recursive", "1");
+  return `${HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_TREE}?${query}`;
+}
+
+/** The skills a developer may choose of a repository a workspace reaches, as GitHub holds it now (GET). */
+export function repositorySkillsPath(place: RepositoryPlace): string {
+  return `${HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_SKILLS}?${repositoryPlaceQuery(place)}`;
 }
 
 /** One plan's history (GET): a page of its revisions, the newest of all or, with `before`, the newest before that revision. */

@@ -10,10 +10,20 @@ import {
   openInstallationWorkspace,
   openWorkspace,
 } from "@luke/database/testing";
-import { githubRepositoriesAnswerSchema, HOSTED_SERVICE_PATH } from "@luke/features";
+import {
+  GITHUB_REPOSITORIES_QUERY,
+  githubRepositoriesAnswerSchema,
+  HOSTED_SERVICE_PATH,
+} from "@luke/features";
+import {
+  PLAN_FILE_REFUSAL,
+  PLAN_TREE_ENTRY,
+  planSkillsAnswerSchema,
+  planTreeAnswerSchema,
+} from "@luke/features/plan-wire";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { Clock, Effect, Layer, Option, Result } from "effect";
+import { Clock, Effect, Layer, Option, Result, type Schema } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
@@ -92,10 +102,35 @@ const openAccounts = (github: FakeGitHub) =>
         }),
       );
     };
-    return { owner, other, ask };
+    /** A read of one repository at the path given (its tree or its skills), with the queries given in order. */
+    const read = (
+      userId: string,
+      path: string,
+      query: readonly (readonly [name: string, value: string])[],
+    ) => {
+      const url = new URL(path, ORIGIN);
+      for (const [name, value] of query) url.searchParams.append(name, value);
+      return answer(
+        bearers,
+        github,
+        new Request(url, { headers: { authorization: `Bearer ${userId}` } }),
+      );
+    };
+    return { owner, other, ask, read };
   });
 
 const refusal = (status: number, error: string): Answer => ({ status, body: { error } });
+
+/** One repository's read answered, as the wire declares it, failing the test where it is not one. */
+function readOf<S extends Schema.ConstraintDecoder<unknown>>(
+  schema: S,
+  answered: Answer,
+): S["Type"] {
+  assert.equal(answered.status, HOSTED_HTTP_STATUS.OK);
+  const read = readEither(schema)(unparsedWire(answered.body));
+  if (Result.isFailure(read)) return assert.fail(`not the wire's answer: ${read.failure.refusal}`);
+  return read.success;
+}
 
 /** The answer read as the wire declares it, failing the test where it is not one. */
 function listed(answered: Answer) {
@@ -256,6 +291,109 @@ it.layer(getTestDB())("the repositories route", (it) => {
 
         assert.deepEqual(before.toSorted(), ["acme/ledger", "acme/relay"]);
         assert.deepEqual(after, ["acme/relay"]);
+      }),
+  );
+
+  it.effect(
+    "a member reads a folder and the skills of a repository the workspace's installation reaches by the workspace and the repository's name, as a plan's own reads answer them, and one it does not reach is refused as unreachable",
+    () =>
+      Effect.gen(function* () {
+        const github = githubReaching(
+          [{ id: 7601, login: "acme", repositories: [{ owner: "acme", name: "relay" }] }],
+          undefined,
+          {},
+          (sent) =>
+            new URL(sent.url).pathname === "/repos/acme/relay/git/trees/main%3Asrc"
+              ? Response.json({
+                  tree: [
+                    { path: "invite.ts", type: "blob" },
+                    { path: "mail", type: "tree" },
+                  ],
+                  truncated: false,
+                })
+              : undefined,
+        );
+        const { owner, read } = yield* openAccounts(github);
+        const workspace = yield* openInstallationWorkspace(owner, {
+          installationId: 7601,
+          accountId: 9601,
+          accountLogin: "acme",
+        });
+        const place = (repository: string) =>
+          [
+            [GITHUB_REPOSITORIES_QUERY.WORKSPACE_ID, workspace],
+            [GITHUB_REPOSITORIES_QUERY.REPOSITORY, repository],
+          ] as const;
+
+        const tree = readOf(
+          planTreeAnswerSchema,
+          yield* read(owner, HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_TREE, [
+            ...place("acme/relay"),
+            ["path", "src"],
+          ]),
+        );
+        const skills = readOf(
+          planSkillsAnswerSchema,
+          yield* read(owner, HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_SKILLS, place("acme/relay")),
+        );
+        const elsewhere = readOf(
+          planTreeAnswerSchema,
+          yield* read(owner, HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_TREE, place("acme/ledger")),
+        );
+
+        assert.deepEqual(tree, {
+          folder: {
+            path: "src",
+            repository: "acme/relay",
+            branch: "main",
+            entries: [
+              { name: "invite.ts", kind: PLAN_TREE_ENTRY.FILE },
+              { name: "mail", kind: PLAN_TREE_ENTRY.FOLDER },
+            ],
+            truncated: false,
+          },
+        });
+        assert.deepEqual(skills, {
+          skills: { repository: "acme/relay", branch: "main", skills: [] },
+        });
+        assert.deepEqual(elsewhere, { refusal: PLAN_FILE_REFUSAL.NOT_REACHABLE });
+      }),
+  );
+
+  it.effect(
+    "a repository's read in a workspace the account is not in is not found, and one naming no repository is invalid, before GitHub is asked",
+    () =>
+      Effect.gen(function* () {
+        const github = githubReaching([
+          { id: 7701, login: "acme", repositories: [{ owner: "acme", name: "relay" }] },
+        ]);
+        const { owner, other, read } = yield* openAccounts(github);
+        const theirs = yield* openInstallationWorkspace(other, {
+          installationId: 7701,
+          accountId: 9701,
+          accountLogin: "acme",
+        });
+        const mine = yield* openWorkspace(owner);
+
+        for (const path of [
+          HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_TREE,
+          HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_SKILLS,
+        ]) {
+          assert.deepEqual(
+            yield* read(owner, path, [
+              [GITHUB_REPOSITORIES_QUERY.WORKSPACE_ID, theirs],
+              [GITHUB_REPOSITORIES_QUERY.REPOSITORY, "acme/relay"],
+            ]),
+            refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+            path,
+          );
+          assert.deepEqual(
+            yield* read(owner, path, [[GITHUB_REPOSITORIES_QUERY.WORKSPACE_ID, mine]]),
+            refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+            path,
+          );
+        }
+        assert.equal(github.sent.length, 0);
       }),
   );
 

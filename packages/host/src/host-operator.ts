@@ -906,7 +906,9 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     planningTree: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.PLANNING_TREE, {
-          planId: params.planId,
+          ...("planId" in params
+            ? { planId: params.planId }
+            : { workspaceId: params.workspaceId, repository: params.repository }),
           path: params.path,
           ...(params.recursive === undefined ? undefined : { recursive: params.recursive }),
         }),
@@ -919,7 +921,12 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       ),
     planningSkills: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.PLANNING_SKILLS, { planId: params.planId }),
+        client.call(
+          GATEWAY_METHOD.PLANNING_SKILLS,
+          "planId" in params
+            ? { planId: params.planId }
+            : { workspaceId: params.workspaceId, repository: params.repository },
+        ),
         (answer): PlanningSkillsAnswer =>
           (answer.ok
             ? Result.getOrUndefined(

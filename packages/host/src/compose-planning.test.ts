@@ -137,6 +137,11 @@ interface FakeService extends PlanningClient {
   folders: Record<string, PlanTreeAnswer>;
   /** What the service answers for each plan's skills, by plan id; a plan with none answers nothing, as a service that did not answer. */
   skills: Record<string, PlanSkillsAnswer>;
+  /** What the service answers of a repository a workspace reaches, read with no plan, by workspace id and then repository: its folders by path, and its skills. */
+  places: Record<
+    string,
+    Record<string, { folders: Record<string, PlanTreeAnswer>; skills: PlanSkillsAnswer }>
+  >;
   /** The newest page of the history, for any plan; none answers nothing, as a service that did not answer. */
   history: PlanRevisionsAnswer | undefined;
   /** The older pages of the history, by the revision each is read before. */
@@ -250,6 +255,7 @@ function fakeService(plans: Plan[]): FakeService {
     files: {},
     folders: {},
     skills: {},
+    places: {},
     history: undefined,
     olderHistory: {},
     revisions: {},
@@ -547,6 +553,12 @@ function fakeService(plans: Plan[]): FakeService {
     readFile: (_planId, window) => Effect.sync(() => service.files[window.path]),
     readTree: (_planId, folder) => Effect.sync(() => service.folders[folder.path]),
     readSkills: (planId) => Effect.sync(() => service.skills[planId]),
+    readRepositoryTree: (place, folder) =>
+      Effect.sync(
+        () => service.places[place.workspaceId]?.[place.repository]?.folders[folder.path],
+      ),
+    readRepositorySkills: (place) =>
+      Effect.sync(() => service.places[place.workspaceId]?.[place.repository]?.skills),
     readBoard: (planId) => Effect.sync(() => service.boards[planId]),
     readTranscript: (planId) => Effect.sync(() => service.transcripts[planId]),
     readWork: (planId, before) =>
@@ -2010,6 +2022,45 @@ it.effect("behind a closed account gate no workspace call reaches the service", 
     );
     assert.deepEqual(service.reads, []);
   }),
+);
+
+it.effect(
+  "a folder and the skills of a repository are read by its workspace and its name where no plan names it, and by the plan where one does",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      const folder = (path: string): PlanTreeAnswer => ({
+        folder: { path, repository: "acme/relay", branch: "main", entries: [], truncated: false },
+      });
+      const skills = (name: string): PlanSkillsAnswer => ({
+        skills: {
+          repository: "acme/relay",
+          branch: "main",
+          skills: [{ name, description: "", path: `.agents/skills/${name}/SKILL.md` }],
+        },
+      });
+      service.places[ACME.id] = {
+        "acme/relay": { folders: { src: folder("src") }, skills: skills("release") },
+      };
+      service.folders.docs = folder("docs");
+      service.skills[INVITES] = skills("review");
+      const { call } = yield* subject(service);
+      const place = { workspaceId: ACME.id, repository: "acme/relay" };
+
+      assert.deepEqual(
+        yield* call(GATEWAY_METHOD.PLANNING_TREE, { ...place, path: "src" }),
+        folder("src"),
+      );
+      assert.deepEqual(yield* call(GATEWAY_METHOD.PLANNING_SKILLS, place), skills("release"));
+      assert.deepEqual(
+        yield* call(GATEWAY_METHOD.PLANNING_TREE, { planId: INVITES, path: "docs" }),
+        folder("docs"),
+      );
+      assert.deepEqual(
+        yield* call(GATEWAY_METHOD.PLANNING_SKILLS, { planId: INVITES }),
+        skills("review"),
+      );
+    }),
 );
 
 it.effect("the repository chip's read names the workspace it is for to the service", () =>

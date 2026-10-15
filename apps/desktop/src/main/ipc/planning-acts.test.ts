@@ -200,7 +200,7 @@ function fixture() {
         }),
       planningSkills: (params) =>
         Effect.sync(() => {
-          asked.push(`skills:${params.planId}`);
+          asked.push(`skills:${"planId" in params ? params.planId : params.repository}`);
           return { refusal: PLAN_FILE_REFUSAL.NO_REPOSITORY } as const;
         }),
       planningRevisions: (params) =>

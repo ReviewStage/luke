@@ -289,6 +289,14 @@
           "dest": "/api/default.js?route=github/repositories"
         },
         {
+          "src": "/api/github/repositories/skills",
+          "dest": "/api/default.js?route=github/repositories/skills"
+        },
+        {
+          "src": "/api/github/repositories/tree",
+          "dest": "/api/default.js?route=github/repositories/tree"
+        },
+        {
           "src": "/api/github/webhook",
           "dest": "/api/default.js?route=github/webhook"
         },

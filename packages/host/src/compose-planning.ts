@@ -284,6 +284,8 @@ export type PlanningClient = Pick<
   | "readFile"
   | "readTree"
   | "readSkills"
+  | "readRepositoryTree"
+  | "readRepositorySkills"
   | "readRevisions"
   | "readRevision"
   | "readPages"
@@ -1170,12 +1172,20 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
       Effect.gen(function* () {
         const read = readEither(planningTreeParamsSchema)(unparsedWire(params));
         if (Result.isFailure(read)) {
-          return yield* invalid("listing a folder names a plan and the folder's path");
+          return yield* invalid(
+            "listing a folder names a plan, or a workspace and its repository, and the folder's path",
+          );
         }
         if (!gate()) return carried<PlanningTreeAnswer>({ failure: PLAN_CALL_FAILURE.UNANSWERED });
-        const { planId, ...folder } = read.success;
+        const asked = read.success;
+        const folder = {
+          path: asked.path,
+          ...(asked.recursive === undefined ? undefined : { recursive: asked.recursive }),
+        };
         const answer = yield* Effect.provide(
-          client.readTree(planId, folder),
+          "planId" in asked
+            ? client.readTree(asked.planId, folder)
+            : client.readRepositoryTree(asked, folder),
           FetchHttpClient.layer,
         );
         return carried<PlanningTreeAnswer>(answer ?? { failure: PLAN_CALL_FAILURE.UNANSWERED });
@@ -1186,13 +1196,16 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
       Effect.gen(function* () {
         const read = readEither(planningSkillsParamsSchema)(unparsedWire(params));
         if (Result.isFailure(read)) {
-          return yield* invalid("reading a repository's skills names the plan");
+          return yield* invalid(
+            "reading a repository's skills names the plan, or a workspace and its repository",
+          );
         }
         if (!gate()) {
           return carried<PlanningSkillsAnswer>({ failure: PLAN_CALL_FAILURE.UNANSWERED });
         }
+        const asked = read.success;
         const answer = yield* Effect.provide(
-          client.readSkills(read.success.planId),
+          "planId" in asked ? client.readSkills(asked.planId) : client.readRepositorySkills(asked),
           FetchHttpClient.layer,
         );
         return carried<PlanningSkillsAnswer>(answer ?? { failure: PLAN_CALL_FAILURE.UNANSWERED });
