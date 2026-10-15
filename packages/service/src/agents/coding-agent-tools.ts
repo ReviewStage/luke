@@ -92,33 +92,33 @@ export const CODING_AGENT_TOOL_REFUSAL = {
   UNREADABLE:
     "Not run: name the agent by the id list_coding_agents answered, and a message as text of at " +
     `most ${CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS} characters.`,
-  NO_AGENT: "Not run: this plan has no coding agent with that id.",
+  NO_AGENT: "Not run: this task has no coding agent with that id.",
   STORE: "Not run: the agents could not be read just now. The call may be made again.",
   NO_SERVICE: "Not sent: this deployment cannot reach the coding agents' service.",
   NOT_REACHABLE:
-    "Not sent: the GitHub installation connected to the plan's workspace no longer reaches the agent's repository.",
+    "Not sent: the GitHub installation connected to the task's workspace no longer reaches the agent's repository.",
   NOT_READY:
     "Not sent: the agent's session is still coming up; the same message a moment later is taken.",
   RETIRED:
     "Not sent: the agent's session has ended for good, so nothing reaches it; only a new agent goes on from here.",
   UNAVAILABLE: "Not sent: the service could not take the message just now.",
   ARCHIVED:
-    "Not sent: this plan is archived, so its agents take no message until the developer unarchives it.",
+    "Not sent: this task is archived, so its agents take no message until the developer unarchives it.",
 } as const;
 
 /** Why a start made nothing, in words the model can act on; a choice the catalog refused is said with the choices (`choiceRefusal`). */
 export const START_CODING_AGENT_REFUSAL = {
   UNREADABLE:
-    "Not started: give a task as text of at most " +
+    "Not started: give a prompt as text of at most " +
     `${CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS} characters, or none to start on the plan, and ` +
     "a model with its effort, both or neither.",
   NO_SERVICE: "Not started: this deployment cannot reach the coding agents' service.",
-  NO_REPOSITORY: "Not started: this plan names no GitHub repository yet.",
+  NO_REPOSITORY: "Not started: this task names no GitHub repository yet.",
   NOT_REACHABLE:
-    "Not started: the GitHub installation connected to the plan's workspace does not reach the plan's repository.",
+    "Not started: the GitHub installation connected to the task's workspace does not reach the task's repository.",
   UNAVAILABLE:
     "Not started: the service could not start an agent just now. The call may be made again.",
-  ARCHIVED: "Not started: this plan is archived; the developer unarchives it first.",
+  ARCHIVED: "Not started: this task is archived; the developer unarchives it first.",
 } as const;
 
 /** The start refusal's sentence for each hosted refusal a start may answer; any other is the service down. */
@@ -173,8 +173,8 @@ const START_CODING_AGENT_INPUT = Schema.Struct({
         Schema.isNonEmpty(),
         Schema.isMaxLength(CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS),
       ),
-      "What the agent should do, in the developer's words, as a task typed to it; leave it out " +
-        "to start the agent on the plan itself.",
+      "The prompt the agent starts on: what it should do, in the developer's words, typed to it " +
+        "as its first message; leave it out to start the agent on the plan itself.",
     ),
   ),
   model: Schema.optionalKey(
@@ -200,7 +200,7 @@ const readStart = Schema.decodeUnknownResult(START_CODING_AGENT_INPUT);
 export const LIST_CODING_AGENTS_TOOL = {
   name: AGENT_TOOL.LIST_CODING_AGENTS,
   description:
-    "List the coding agents working on this plan: each with its id, its title (how the " +
+    "List the coding agents working on this task: each with its id, its title (how the " +
     "developer sees it named), the model and effort it runs on with the model's name to say it " +
     "by, its status (starting, running, " +
     "completed, failed, cancelled), the branch its sandbox is on if a turn has ended, and one " +
@@ -232,8 +232,8 @@ export const MESSAGE_CODING_AGENT_TOOL = {
 export const START_CODING_AGENT_TOOL = {
   name: AGENT_TOOL.START_CODING_AGENT,
   description:
-    "Start a new coding agent on this plan, exactly as the developer's Start button would: " +
-    "on the plan itself with no task, or on the task given in the plan's place. It runs on the " +
+    "Start a new coding agent on this task, exactly as the developer's Start button would: " +
+    "on the plan itself with no prompt, or on the prompt given in the plan's place. It runs on the " +
     "model and effort named, or on the developer's default with neither. Answers `accepted` " +
     "with the agent's id, model, the model's name to say it by, effort, and status once its " +
     "session is open, or `rejected` " +

@@ -70,7 +70,7 @@ export const INBOX_TOOLS = {
       "blocks is the context they need to act, in order: markdown blocks of short Markdown, a file, a pull request, or an " +
       "issue in it written as a Markdown link to its page, such as [store.ts](https://github.com/<owner>/<name>/blob/HEAD/<path>), " +
       "so Luke draws it as a chip; link blocks naming a page, " +
-      "such as the GitHub settings page a task is done on, and code blocks pointing at the exact lines a decision is about: " +
+      "such as the GitHub settings page a to-do is done on, and code blocks pointing at the exact lines a decision is about: " +
       `repo is your repository as owner/name, path is from its root, startLine to endLine spans at most ${INBOX_BOUNDS.MAX_CODE_LINES} lines, ` +
       "and sha is the full 40-character commit you read them at, one already on GitHub; they see those lines as GitHub holds them at that commit; " +
       "and image blocks showing them a picture, such as a screenshot " +
@@ -78,11 +78,11 @@ export const INBOX_TOOLS = {
       `or WebP of at most ${(INBOX_BOUNDS.MAX_IMAGE_BYTES / 1_000_000).toFixed(1)} MB, and alt says in a sentence what it shows. ` +
       "response is what you ask of them: choice (two to six options, each a short label and an optional detail; name the " +
       "label you recommend; multiple lets them pick several), approval (a yes or no on one step you propose), text (an open " +
-      "answer in their words), task (something only they can do by hand, such as changing a GitHub setting or adding a secret: " +
+      "answer in their words), task (a to-do: something only they can do by hand, such as changing a GitHub setting or adding a secret: " +
       "say exactly what to do in the blocks), form (one to eight typed fields, text, number, select with its options, or " +
       "boolean, each named by its label and required where it must be filled; never ask for a credential or a secret in a " +
-      "form, since the answer reaches your transcript: that is a task the developer does by hand), or none (something they " +
-      "should know; they acknowledge it). needsReply is whether you need to hear the answer as a message; set it false for a task you only " +
+      "form, since the answer reaches your transcript: that is a to-do the developer does by hand), or none (something they " +
+      "should know; they acknowledge it). needsReply is whether you need to hear the answer as a message; set it false for a to-do you only " +
       "need done or an item that asks nothing, and its answer is kept for you to read. " +
       `An answer you need reaches you as a developer's message whose first line starts "${INBOX_ANSWER_LEAD}" and names the key. ` +
       `You may hold at most ${INBOX_BOUNDS.MAX_OPEN_PER_AGENT} open items. The call answers with your whole inbox as it stands.`,
@@ -92,14 +92,14 @@ export const INBOX_TOOLS = {
     name: INBOX_TOOL.CLOSE,
     description:
       "Take an item of yours out of the developer's inbox, by its key, with why: you no longer need it, " +
-      "you found the answer yourself, or you checked that the task is done. The call answers with your whole inbox as it stands.",
+      "you found the answer yourself, or you checked that the to-do is done. The call answers with your whole inbox as it stands.",
     inputSchema: inboxCloseInputSchema,
   },
   READ: {
     name: INBOX_TOOL.READ,
     description:
       "Read every item you have put in the developer's inbox as it stands now: what is still open, what they answered and how, " +
-      "and what you closed. Read it before you rely on a task you posted without needsReply being done.",
+      "and what you closed. Read it before you rely on a to-do you posted without needsReply being done.",
     inputSchema: inboxReadInputSchema,
   },
 } as const;

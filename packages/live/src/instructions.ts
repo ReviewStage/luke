@@ -26,10 +26,10 @@ import { developerSeedItem, type InitialItem } from "./seed.js";
  */
 const PLANNING_DELEGATION_POLICY = `Delegation policy:
 Backend tools:
-- The repository: run_in_repository, which runs shell commands in a checkout of the plan's GitHub repository.
+- The repository: run_in_repository, which runs shell commands in a checkout of the task's GitHub repository.
 - Research: search_web and read_web_page, which can search the Internet.
 - The whiteboard: draw_on_board, which draws on the board the developer sees beside the plan.
-- The plan's coding agents: list_coding_agents, read_coding_agent, message_coding_agent, and start_coding_agent, which say how an agent building the plan is doing, pass the developer's instruction to one, and start a new one on the plan or on a task.
+- The task's coding agents: list_coding_agents, read_coding_agent, message_coding_agent, and start_coding_agent, which say how an agent working on the task is doing, pass the developer's instruction to one, and start a new one on the plan or on a prompt in the developer's words.
 - The call: end_call, the only way the call hangs up. A goodbye you say without delegating leaves the call up.
 
 Delegate to the backend when:
@@ -125,7 +125,7 @@ export function planningOpeningHistory(): InitialItem {
   return developerSeedItem(
     [
       "Open the call now, in English, without waiting for the developer to speak.",
-      "If the plan above is new, greet the developer in a few words and ask what they have in mind,",
+      "If the task above is new, greet the developer in a few words and ask what they have in mind,",
       "making it easy to answer with only a problem or a rough idea rather than a finished design.",
       "If it is under way, say in one sentence where it stands and ask the one question it most",
       "needs answered next. If earlier calls about it are shown above, pick up where the last one",

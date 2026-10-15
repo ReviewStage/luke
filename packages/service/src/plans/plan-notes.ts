@@ -93,9 +93,9 @@ export const PLAN_SAVE_STATUS = {
 /** Why notes, an edit, or a restore saved nothing. */
 export const PLAN_SAVE_REFUSAL = {
   TOO_LONG: "Not saved: the plan is longer than a plan may be.",
-  NO_PLAN: "Not saved: this plan no longer exists.",
+  NO_PLAN: "Not saved: this task no longer exists.",
   NO_REVISION: "Not saved: this plan has no such revision.",
-  ARCHIVED: "Not saved: this plan is archived.",
+  ARCHIVED: "Not saved: this task is archived.",
   UNAVAILABLE: "Not saved: the service could not reach its store.",
 } as const;
 

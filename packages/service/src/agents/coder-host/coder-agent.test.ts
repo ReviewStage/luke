@@ -124,8 +124,8 @@ test("a follow-up steers the turn under way; the deployment's typed line on the 
   });
 });
 
-test("an agent on a plan is told of the plan's links and pages, and one an automation started with no plan of neither", () => {
-  const PLAN_LINK = "`https://tryluke.dev/<workspace>/plan/<id>` link names the plan";
+test("an agent on a task is told of the task's links and pages, and one an automation started with no task of neither", () => {
+  const PLAN_LINK = "`https://tryluke.dev/<workspace>/plan/<id>` link names a task";
   const PAGES = `show it with \`${CODER_TOOL.SHOW_PAGE}\``;
   for (const brief of Object.values(CODING_AGENT_BRIEF)) {
     const onPlan = coderInstructions("Acme/Relay", brief, true);

@@ -212,7 +212,7 @@ export interface BrainHost extends HostAdmission {
 
 /** The body a planning skill loads as: where it stands in the plan's repository, which \`run_in_repository\` reads, and then its own words. */
 function planningSkillMarkdown(skill: RepositorySkill): string {
-  return `This skill is \`${skill.folder}/SKILL.md\` in the plan's repository; read the files it names with \`run_in_repository\`, relative to \`${skill.folder}/\`.\n\n${skill.markdown}`;
+  return `This skill is \`${skill.folder}/SKILL.md\` in the task's repository; read the files it names with \`run_in_repository\`, relative to \`${skill.folder}/\`.\n\n${skill.markdown}`;
 }
 
 /** Where a child's first task is read from: before every row of its conversation. */

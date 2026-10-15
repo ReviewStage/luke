@@ -122,7 +122,7 @@ export const RUN_ON_MAC_TOOL = {
     "folder, and read what it printed. It runs at once, without asking the developer, and " +
     "reaches whatever the developer's account on the Mac reaches: their local checkouts and " +
     "uncommitted work, installed tools, running servers. Use it for what only the Mac has; " +
-    "read the plan's repository where you have it. Nothing reads stdin, so a command that asks " +
+    "read the task's repository where you have it. Nothing reads stdin, so a command that asks " +
     `for input fails. It is killed after ${MAC_COMMAND_BOUNDS.DEFAULT_TIMEOUT_SECONDS} seconds ` +
     "unless `timeout_seconds` says otherwise. Answers the exit code, stdout, and stderr, each " +
     `cut to ${MAC_COMMAND_BOUNDS.MAX_OUTPUT_CHARS} characters, or \`not-run\` and why, such as ` +

@@ -43,7 +43,7 @@ export const EDIT_PLAN_TOOL = {
     "made, each under the heading it belongs to. Write a file, a pull request, or an issue a note names as a Markdown " +
     "link to its page, such as [store.ts](https://github.com/<owner>/<name>/blob/HEAD/<path>), so the plan draws it as a chip. " +
     "Every save is recorded in the plan as yours. The developer reads the plan on their next " +
-    "planning call; you do not wait for an answer. A note naming a phrase the plan does not " +
+    "call with Luke; you do not wait for an answer. A note naming a phrase the plan does not " +
     `hold is passed over and reported. A turn may take at most ${PLAN_EDIT.MAX_NOTES_PER_TURN} notes.`,
   inputSchema: planNotesSchema,
 } as const;
@@ -54,7 +54,7 @@ export const PLAN_EDIT_REFUSAL = {
   TOO_MANY: `Not saved: a turn may take at most ${PLAN_EDIT.MAX_NOTES_PER_TURN} notes on the plan. Go on, and name what you would have noted in your message.`,
   UNAVAILABLE: "Not saved: the service could not reach its store.",
   NO_PLAN:
-    "Not saved: you were handed a task rather than the plan, so there is no plan of yours to update.",
+    "Not saved: you were handed a prompt rather than the plan, so there is no plan of yours to update.",
 } as const;
 
 /** How many notes a turn has taken, kept in eve's durable session state: the turn and its count. */
