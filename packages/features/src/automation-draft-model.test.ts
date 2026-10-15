@@ -8,6 +8,7 @@ import {
   DRAFT_FIELD,
   draftNextRuns,
   draftProblems,
+  presetDraft,
   SCHEDULE_KIND,
   sameDraft,
   scheduleDraftOf,
@@ -518,4 +519,24 @@ test("a move to another GitHub event lets go of the filters the event before was
       ...SAID_SETTINGS,
     },
   });
+});
+
+test("a preset's guards are the draft's, so a draft that only took them is not the same as before, and a saved automation opens on its own", () => {
+  const fresh = automationDraft(undefined, DEFAULTS);
+  const preset = {
+    name: "Code review",
+    trigger: { kind: AUTOMATION_TRIGGER.GITHUB, event: GITHUB_TRIGGER_EVENT.PULL_REQUEST_UPDATED },
+    prompt: "Review this pull request.",
+    guards: { maxConcurrentRuns: 5, dailyRunCap: 50 },
+    archiveSuccessful: true,
+    description: "Reviews pull requests.",
+  } as const;
+  const taken = presetDraft(fresh, preset);
+
+  assert.ok(!sameDraft({ ...taken, guards: null }, taken));
+  assert.deepEqual(createRequestOf(taken, "workspace-1").guards, preset.guards);
+  assert.deepEqual(
+    automationDraft({ ...SAVED, guards: preset.guards }, DEFAULTS).guards,
+    preset.guards,
+  );
 });

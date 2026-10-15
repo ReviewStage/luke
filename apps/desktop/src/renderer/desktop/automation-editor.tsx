@@ -1,4 +1,11 @@
 import {
+  CODE_REVIEW_DESCRIPTION,
+  type CodeReviewSettings,
+  codeReviewPreset,
+  readCodeReviewSettings,
+  withCodeReviewSettings,
+} from "@luke/features/automation-code-review";
+import {
   type AutomationDraft,
   automationDraft,
   changeOf,
@@ -11,6 +18,7 @@ import {
   draftRepositories,
   draftTrigger,
   type GitHubTriggerSettings,
+  presetDraft,
   SCHEDULE_KIND,
   type ScheduleDraft,
   type ScheduleKind,
@@ -56,7 +64,7 @@ import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { EllipsisIcon, ProviderMark, SidePanelIcon } from "@luke/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
-import { ChevronRightIcon, PlayIcon, Trash2Icon, ZapIcon } from "lucide-react";
+import { ChevronRightIcon, GitPullRequestIcon, PlayIcon, Trash2Icon, ZapIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { AnchoredPopover, POPOVER_ALIGN } from "../anchored-popover";
@@ -788,6 +796,72 @@ function GitHubSettingsRows({
   );
 }
 
+/** The most findings a review may be set to post, as its picker offers them. */
+const MOST_FINDINGS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((most) => ({
+  value: most,
+  label: String(most),
+}));
+
+/** The most findings a review may post, read back from its picker's row. */
+function mostFindingsOf(raw: string): number | undefined {
+  return MOST_FINDINGS.find((option) => String(option.value) === raw)?.value;
+}
+
+/**
+ * A code review's own settings, modelled on Cursor Bugbot's, as a card of
+ * Settings rows: whether a clean first review says so, the most findings it
+ * posts, the rules file it reads, and whether it pushes fixes. Each is a
+ * line the task opens with, written back as it changes, so the task stays
+ * the one place the review is described; when it runs and on whose pull
+ * requests are the Trigger card's.
+ */
+function CodeReviewGroup({
+  settings,
+  onSettings,
+}: {
+  settings: CodeReviewSettings;
+  onSettings: (settings: CodeReviewSettings) => void;
+}): React.JSX.Element {
+  return (
+    <SettingsGroup title="Code review">
+      <SwitchRow
+        label="Comment when no issues are found"
+        detail="A first review that finds nothing says so. A later one that finds nothing new posts nothing."
+        checked={settings.commentWhenClean}
+        onChange={(commentWhenClean) => onSettings({ ...settings, commentWhenClean })}
+      />
+      <SelectRow
+        label="Most findings"
+        detail="The most one review posts, the most severe first."
+        value={settings.mostFindings}
+        options={MOST_FINDINGS}
+        parse={mostFindingsOf}
+        onChange={(mostFindings) => onSettings({ ...settings, mostFindings })}
+      />
+      <div className="settings-row">
+        <span className="settings-copy">
+          <strong>Rules file</strong>
+          <small>Read from the base branch, beside AGENTS.md and CLAUDE.md.</small>
+        </span>
+        <input
+          className="settings-input automation-rules-file"
+          aria-label="Rules file"
+          spellCheck={false}
+          value={settings.rulesFile}
+          onKeyDown={releaseOnEscape}
+          onChange={(event) => onSettings({ ...settings, rulesFile: event.target.value })}
+        />
+      </div>
+      <SwitchRow
+        label="Fix what it finds"
+        detail="Pushes its fixes to the pull request as Luke. Luke's own pushes start no review."
+        checked={settings.fix}
+        onChange={(fix) => onSettings({ ...settings, fix })}
+      />
+    </SettingsGroup>
+  );
+}
+
 /** Why a new secret could not be made, as its dialog says it. */
 const NEW_SECRET_REFUSAL_WORDS = {
   ...SAVE_REFUSAL_WORDS,
@@ -1259,6 +1333,7 @@ function EditorForm({
   shownSecret,
   onSecret,
   savedAgentId,
+  onStartFromCodeReview,
   onDraft,
 }: {
   draft: AutomationDraft;
@@ -1273,8 +1348,12 @@ function EditorForm({
   onSecret: (secret: string | undefined) => void;
   /** The agent its runs go to as saved, while the draft is still on the repository it was saved on; none otherwise. */
   savedAgentId: string | null;
+  /** Fills the draft in from the code review preset; offered only while the automation is new. */
+  onStartFromCodeReview: (() => void) | undefined;
   onDraft: (patch: Partial<AutomationDraft>) => void;
 }): React.JSX.Element {
+  // A code review's own settings are the lines its task opens with, so its card reads them there and writes them back.
+  const review = readCodeReviewSettings(draft.prompt);
   const workspaceName = workspace?.name ?? "Workspace";
   const owners = [
     { value: AUTOMATION_SCOPE.PERSONAL, label: "Personal" },
@@ -1293,6 +1372,24 @@ function EditorForm({
           />
         </SettingsGroup>
       ) : null}
+      {onStartFromCodeReview === undefined ? null : (
+        <SettingsGroup title="Start from">
+          <div className="settings-row">
+            <span className="settings-copy">
+              <strong>Code review</strong>
+              <small>{CODE_REVIEW_DESCRIPTION}</small>
+            </span>
+            <button
+              type="button"
+              className="toolbar-button bordered-button"
+              onClick={onStartFromCodeReview}
+            >
+              <GitPullRequestIcon />
+              Start from Code review
+            </button>
+          </div>
+        </SettingsGroup>
+      )}
       <SettingsGroup title="Trigger">
         <SelectRow
           label="Type"
@@ -1334,6 +1431,12 @@ function EditorForm({
         )}
         <Problem problem={problems[DRAFT_FIELD.SCHEDULE]} />
       </SettingsGroup>
+      {review === undefined ? null : (
+        <CodeReviewGroup
+          settings={review}
+          onSettings={(next) => onDraft({ prompt: withCodeReviewSettings(draft.prompt, next) })}
+        />
+      )}
       <SettingsGroup title="Prompt">
         <textarea
           className="automation-prompt"
@@ -1438,6 +1541,10 @@ export function AutomationEditor({
     if (linked?.runId !== undefined) showRuns.current();
   }, [linked]);
   const problems = draftProblems(draft, planBacked, new Date());
+  const startFromCodeReview = () => {
+    setDraft((was) => presetDraft(was, codeReviewPreset()));
+    setRefusal(undefined);
+  };
   const editDraft = (patch: Partial<AutomationDraft>) => {
     setDraft((was) => ({ ...was, ...patch }));
     setRefusal(undefined);
@@ -1565,6 +1672,7 @@ export function AutomationEditor({
               shownSecret={shownSecret}
               onSecret={setShownSecret}
               savedAgentId={savedAgentId}
+              onStartFromCodeReview={automation === undefined ? startFromCodeReview : undefined}
               onDraft={editDraft}
             />
           </div>

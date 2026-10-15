@@ -4692,7 +4692,8 @@ body:has(.app-stage[data-capture="true"])
 /* A field beside the pickers stands at their height and corner, so a row's
    controls read as one set. */
 .automation-row-controls > .settings-input,
-.settings-row > .automation-cron {
+.settings-row > .automation-cron,
+.settings-row > .automation-rules-file {
   height: var(--control-height);
   padding-block: 0;
   border-radius: var(--control-radius);
@@ -4749,7 +4750,8 @@ body:has(.app-stage[data-capture="true"])
   max-width: 100%;
 }
 
-.automation-cron {
+.automation-cron,
+.automation-rules-file {
   width: 200px;
   font-family: var(--font-mono, ui-monospace, monospace);
 }

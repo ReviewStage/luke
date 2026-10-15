@@ -9,6 +9,7 @@
     "./account-inbox-wire": "./src/account-inbox-wire.js",
     "./account-picture": "./src/account-picture.js",
     "./app-links": "./src/app-links.js",
+    "./automation-code-review": "./src/automation-code-review.js",
     "./automation-schedule": "./src/automation-schedule.js",
     "./automation-wire": "./src/automation-wire.js",
     "./automation-view": "./src/automation-view.js",

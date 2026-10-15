@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# gh shim for the review-bot spike: reads pass through; writes pass only in live mode, only for the allowed PR.
+REAL=/conductor/bin/gh
+args="$*"
+write=0
+case "$1" in
+  pr) case "$2" in comment|review|edit|merge|close|ready|reopen|create|lock|unlock) write=1;; esac;;
+  issue|release|repo|label|secret|variable|workflow|run) case "$2" in view|list|status|diff|download|watch) ;; *) write=1;; esac;;
+  api)
+    if echo "$args" | grep -qiE -- '(--method|-X)[ =]*(POST|PATCH|PUT|DELETE)'; then write=1; fi
+    if echo "$args" | grep -qE -- '(^| )(-f|-F|--field|--raw-field|--input)( |=)' && ! echo "$args" | grep -q graphql && ! echo "$args" | grep -qiE -- '(--method|-X)[ =]*GET'; then write=1; fi
+    if echo "$args" | grep -q graphql; then
+      # a mutation may arrive inline or via -F query=@file
+      body="$args"
+      for f in $(echo "$args" | grep -oE '@[^ ]+' | tr -d '@'); do [ -f "$f" ] && body="$body $(cat "$f")"; done
+      echo "$body" | grep -qi mutation && write=1
+    fi;;
+esac
+if [ "$write" = 1 ]; then
+  echo "[harness] gh write: $args" >> "$HARNESS_LOG"
+  if [ "$HARNESS_MODE" != live ]; then
+    echo "gh: refused by the dry-run harness (writes are disabled in this run): $args" >&2; exit 1
+  fi
+  if ! echo "$args" | grep -q graphql && ! echo "$args" | grep -qE "pulls/${HARNESS_PR}(/|$| )|pull/${HARNESS_PR}( |$)| ${HARNESS_PR}( |$)"; then
+    echo "gh: refused by the harness: writes are allowed only on PR #${HARNESS_PR}" >&2; exit 1
+  fi
+fi
+exec "$REAL" "$@"
