@@ -23,7 +23,7 @@ import {
   RawBlock,
   sourcesOf,
 } from "./document-source";
-import { mentionNode } from "./mention-node";
+import { mentionNode, pastedMention } from "./mention-node";
 import { planMentions } from "./plan-mentions";
 
 /**
@@ -151,6 +151,9 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
         "aria-multiline": "true",
         "aria-label": label,
       },
+      // Note that a page of an integration's pasted whole is laid in as its mention, as the box lays it in.
+      handlePaste: (view, event) =>
+        mentions === undefined ? false : pastedMention(view, event, mentions.pasted),
       handleKeyDown: (view, event) => {
         // A key an input method is composing with is its own: its Enter confirms its words, its Escape drops them.
         if (event.isComposing || view.composing || event.keyCode === COMPOSING_KEY_CODE) {

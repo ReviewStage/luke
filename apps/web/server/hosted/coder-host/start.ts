@@ -200,7 +200,7 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
       repository: landing.repository,
       disabledServers: ask.disabledServers,
       // The servers the task mentions are its first turn's, whatever the switches say.
-      mentionedServers: brief.task === null ? [] : mentionedServers(brief.task),
+      mentionedServers: brief.task === null ? [] : mentionedServers(brief.task, landing.repository),
     }),
   );
   if (Option.isNone(started)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);

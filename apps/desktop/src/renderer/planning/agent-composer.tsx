@@ -44,7 +44,7 @@ import { AttachedFileChips, attachmentChips } from "./attached-file-chips";
 import { readFiles, withFiles } from "./attached-files";
 import { ComposerField } from "./composer-field";
 import { DictateButton, DictationStrip } from "./dictation-strip";
-import { MentionNodeChip } from "./mention-chip";
+import { MentionNodeChip, pastedMentionNode } from "./mention-chip";
 import { MENTION_MENU_SIDE, useMentionPicker } from "./mention-picker";
 import { usePlanMentions } from "./plan-mentions";
 import { useRepositoryRemedy } from "./repository-remedy";
@@ -404,6 +404,7 @@ export function AgentComposer({
                   chip: (mention) => (
                     <MentionNodeChip mention={mention} doors={planMentions.doors} />
                   ),
+                  pasted: (words) => pastedMentionNode(words, planMentions.doors.place),
                 }
           }
         >

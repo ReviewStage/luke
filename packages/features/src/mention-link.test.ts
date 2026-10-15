@@ -14,12 +14,19 @@ import {
   mentionMarkdown,
   mentionName,
   mentionsIn,
+  pastedLinkMention,
   sectionAnchors,
 } from "./mention-link.js";
 
 const PLAN_ID = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
 const REPOSITORY = "acme/checkout";
 const PLACE: MentionPlace = { workspace: "acme", repository: REPOSITORY };
+
+/** Whether a target names no file or folder of a plan about `repository`: nothing, or a page of GitHub's own. */
+function namesNoFile(target: string, repository: string | null): boolean {
+  const kind = decodeMention(target, repository)?.kind;
+  return kind !== MENTION_KIND.FILE && kind !== MENTION_KIND.FOLDER;
+}
 const PLAN: Mention = { kind: MENTION_KIND.PLAN, planId: PLAN_ID };
 const ROLLOUT: Mention = { kind: MENTION_KIND.SECTION, planId: PLAN_ID, anchor: "rollout" };
 
@@ -134,7 +141,7 @@ test("a branch's page is no file of the plan, since a branch's name may hold a s
     "https://github.com/acme/checkout/blob/feature/rollout/src/a.ts",
     "https://github.com/acme/checkout/tree/feature/rollout/src",
   ]) {
-    assert.equal(decodeMention(target, REPOSITORY), undefined, target);
+    assert.ok(namesNoFile(target, REPOSITORY), target);
   }
 });
 
@@ -175,8 +182,8 @@ test("a GitHub page is a file or a folder only of the plan's own repository, and
     "https://github.com/acme/checkout/blob/HEAD/src/a.ts",
     "https://github.com/acme/checkout/tree/HEAD/src",
   ]) {
-    assert.equal(decodeMention(target, null), undefined, target);
-    assert.equal(decodeMention(target, "acme/other"), undefined, target);
+    assert.ok(namesNoFile(target, null), target);
+    assert.ok(namesNoFile(target, "acme/other"), target);
   }
   for (const target of [
     "https://github.com/acme/checkout/pull/12",
@@ -184,7 +191,7 @@ test("a GitHub page is a file or a folder only of the plan's own repository, and
     "https://github.com/acme/checkout/tree/HEAD",
     "https://github.com/acme/checkout/blob/HEAD/",
   ]) {
-    assert.equal(decodeMention(target, REPOSITORY), undefined, target);
+    assert.ok(namesNoFile(target, REPOSITORY), target);
   }
 });
 
@@ -200,7 +207,7 @@ test("a file of a plan with no repository is written in the form that names none
 
 test("a link that names no mention reads as none", () => {
   for (const target of [
-    "https://linear.app/luke/issue/LUKE-142",
+    "https://example.com/luke/issue/LUKE-142",
     "https://tryluke.dev/changelog",
     `https://tryluke.dev//plan/${PLAN_ID}`,
     `https://tryluke.dev/acme/plan/${PLAN_ID}/more`,
@@ -235,9 +242,8 @@ test("a step back at a path's root is taken by the address itself, and stays ins
     kind: MENTION_KIND.FILE,
     path: "secrets.txt",
   });
-  assert.deepEqual(
-    decodeMention("https://github.com/acme/checkout/blob/HEAD/%2E%2E/secrets.txt", REPOSITORY),
-    undefined,
+  assert.ok(
+    namesNoFile("https://github.com/acme/checkout/blob/HEAD/%2E%2E/secrets.txt", REPOSITORY),
   );
 });
 
@@ -485,5 +491,90 @@ test("a tool named by a step an address resolves away is no tool a mention can c
       undefined,
       tool,
     );
+  }
+});
+
+test("a page on an integration's host, its own or one under it, reads as that integration's link, and any other page as no mention", () => {
+  assert.deepEqual(
+    decodeMention("https://linear.app/acme/issue/LUKE-142/fix-the-thing", REPOSITORY),
+    {
+      kind: MENTION_KIND.LINK,
+      provider: INTEGRATION_PROVIDER.LINEAR,
+      url: "https://linear.app/acme/issue/LUKE-142/fix-the-thing",
+    },
+  );
+  assert.equal(
+    decodeMention("https://acme.sentry.io/issues/12345/", REPOSITORY)?.kind,
+    MENTION_KIND.LINK,
+  );
+  for (const target of [
+    "https://example.com/linear.app/issue",
+    "https://notlinear.app/acme",
+    "ftp://github.com/acme/relay",
+  ]) {
+    assert.equal(decodeMention(target, REPOSITORY), undefined, target);
+  }
+});
+
+test("a page's address stays one markdown link's however many parentheses it keeps", () => {
+  const mention = decodeMention("https://www.notion.so/acme/Plan-(draft)-1a2b3c", REPOSITORY);
+  assert.ok(mention !== undefined);
+  const markdown = mentionMarkdown(mention, "Plan (draft)", PLACE);
+
+  assert.deepEqual(
+    mentionsIn(`See ${markdown}.`, REPOSITORY).map((each) => each.mention),
+    [mention],
+  );
+});
+
+test("words pasted whole that are one integration's page become its mention, named by the last steps of its address", () => {
+  const named = (words: string) => pastedLinkMention(words, REPOSITORY)?.name;
+
+  assert.equal(
+    named(" https://linear.app/acme/issue/LUKE-142/fix-the-thing\n"),
+    "LUKE-142/fix-the-thing",
+  );
+  assert.equal(named("https://github.com/acme/relay/pull/123"), "relay/pull/123");
+  assert.equal(named("https://acme.sentry.io/issues/12345/"), "issues/12345");
+  assert.equal(named("https://linear.app"), "linear.app");
+  assert.equal(named("see https://linear.app/acme"), undefined);
+  assert.equal(named("https://example.com/a/b"), undefined);
+});
+
+test("a page's address keeps no user, password, or query parameter that may carry a credential, and the rest of its query", () => {
+  const mention = decodeMention(
+    "https://bot:hunter2@acme.slack.com/archives/C04/p1760?thread_ts=1760.1&token=xoxp-1&cid=C04",
+    REPOSITORY,
+  );
+
+  assert.equal(
+    mention?.kind === MENTION_KIND.LINK ? mention.url : undefined,
+    "https://acme.slack.com/archives/C04/p1760?thread_ts=1760.1&cid=C04",
+  );
+});
+
+test("a page's name stays one line whatever its address encodes, so its link is still read as a mention", () => {
+  const pasted = pastedLinkMention("https://linear.app/acme/issue/Fix%0ANow", REPOSITORY);
+  assert.ok(pasted !== undefined);
+
+  assert.equal(pasted.name, "acme/issue/Fix Now");
+  assert.deepEqual(
+    mentionsIn(`See ${mentionMarkdown(pasted.mention, pasted.name, PLACE)}.`, REPOSITORY).map(
+      (each) => each.mention,
+    ),
+    [pasted.mention],
+  );
+});
+
+test("a GitHub page that is a file of the plan stays the file's mention, while one on a branch, or of another repository, is GitHub's page", () => {
+  assert.equal(
+    decodeMention(`https://github.com/${REPOSITORY}/blob/HEAD/src/app.ts`, REPOSITORY)?.kind,
+    MENTION_KIND.FILE,
+  );
+  for (const target of [
+    `https://github.com/${REPOSITORY}/blob/main/src/app.ts`,
+    "https://github.com/acme/other/pull/12",
+  ]) {
+    assert.equal(decodeMention(target, REPOSITORY)?.kind, MENTION_KIND.LINK, target);
   }
 });

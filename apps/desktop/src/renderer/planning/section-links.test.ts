@@ -345,7 +345,7 @@ test("a mention of a file is drawn as its chip, and a press opens the file's tab
   assert.deepEqual(opened, ["apps/web/session-store.ts"]);
 });
 
-test("a mention of a file as its page on GitHub opens its tab, at the lines it pins where it pins them", () => {
+test("a mention of a file as its page on GitHub opens its tab, at the lines it pins where it pins them, and another repository's page opens none", () => {
   const plan: Plan = {
     ...PLAN,
     repository: PLACE.repository,
@@ -364,12 +364,13 @@ test("a mention of a file as its page on GitHub opens its tab, at the lines it p
 
   act(() => chipNamed(container, "session-store.ts").click());
   act(() => chipNamed(container, "session-store.ts:3").click());
+  // Another repository's file is no file of the plan's, but GitHub's own page, which opens no tab.
+  act(() => chipNamed(container, "other.ts").click());
 
   assert.deepEqual(opened, [
     ["apps/web/session-store.ts", undefined],
     ["apps/web/session-store.ts", { commit: "0123456", startLine: 3, endLine: 5 }],
   ]);
-  assert.equal(container.querySelectorAll(".mention-chip").length, 2);
 });
 
 test("a heading the plan bears twice: a mention of the second opens the second, and each ⋯ copies its own", async () => {

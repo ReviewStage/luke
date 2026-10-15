@@ -38,6 +38,10 @@ const section = (heading: string) => named(sectionAnchors([heading])[0] ?? "", h
 
 const TEXT = `## Goal\n\nShip as ${section("Rollout")} says.\n\n## Rollout\n\nStore first.\n`;
 
+/** A page of an integration's, as the panel names it. */
+const ISSUE_URL = "https://linear.app/acme/issue/LUKE-142/fix-the-thing";
+const ISSUE = { name: "LUKE-142/fix-the-thing", target: ISSUE_URL };
+
 const editors: PlanEditorHandle[] = [];
 
 beforeEach(installEditorLayout);
@@ -79,6 +83,8 @@ function mounted(markdown: string) {
         return () => undefined;
       },
       retarget: (target, change) => retargetedMention(PLAN_ID, PLACE, target, change),
+      // The panel reads the one page of an integration's this plan is pasted.
+      pasted: (words) => (words.trim() === ISSUE_URL ? ISSUE : undefined),
     },
   });
   editors.push(handle);
@@ -126,6 +132,18 @@ function mounted(markdown: string) {
     press,
     back,
     last: () => drafts.at(-1) ?? "",
+    /** Words pasted where the caret stands, as the system's clipboard hands them over. */
+    paste: (words: string) => {
+      const event = new Event("paste", { bubbles: true, cancelable: true });
+      Object.defineProperty(event, "clipboardData", {
+        value: {
+          files: [],
+          types: ["text/plain"],
+          getData: (type: string) => (type === "text/plain" ? words : ""),
+        },
+      });
+      editor.view.dom.dispatchEvent(event);
+    },
     finished: () => finished,
   };
 }
@@ -252,4 +270,17 @@ test("a pick right before a chip replaces the word alone, and the chip stays", (
   });
 
   assert.ok(plan.last().includes(`See ${section("Goal")} ${section("Rollout")}`), plan.last());
+});
+
+test("a page of an integration's pasted whole is laid in as its mention, written back as its link", () => {
+  const plan = mounted(TEXT);
+
+  plan.typeAfter("Store first.", " See ");
+  plan.paste(ISSUE_URL);
+
+  assert.ok(
+    plan.last().includes(`Store first. See [@LUKE-142/fix-the-thing](${ISSUE_URL})`),
+    plan.last(),
+  );
+  assert.ok(plan.drawn.some((mention) => mention.target === ISSUE_URL));
 });

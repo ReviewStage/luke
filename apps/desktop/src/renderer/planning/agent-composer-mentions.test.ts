@@ -70,6 +70,9 @@ const LINEAR_CONNECTED = Object.fromEntries(
   ]),
 ) as Record<IntegrationProvider, IntegrationStatus>;
 
+/** Every act the panel told the main process, in order. */
+const told: Act[] = [];
+
 /** The repository the plan's tree is read from now. */
 let standing = "acme/relay";
 
@@ -84,13 +87,15 @@ installEditorBundle();
 
 beforeEach(() => {
   standing = "acme/relay";
+  told.length = 0;
   installScrollIntoView();
   installEditorLayout();
   Object.defineProperty(window, "luke", {
     configurable: true,
     value: {
-      act: (request: Act): Promise<ActOutcome> =>
-        Promise.resolve(
+      act: (request: Act): Promise<ActOutcome> => {
+        told.push(request);
+        return Promise.resolve(
           request.kind === ACT_KIND.INTEGRATIONS_STATUS
             ? {
                 status: ACT_OUTCOME_STATUS.DONE,
@@ -128,7 +133,8 @@ beforeEach(() => {
                     },
                   }
                 : { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT },
-        ),
+        );
+      },
       recordSurfaceEvent: ignore,
     },
   });
@@ -208,12 +214,21 @@ async function box(page: PlanMentionsValue | undefined, skills: SkillSource = no
   return { container, sent, redraw };
 }
 
-/** The attribute that carries a mention's target, other than one session replay masks, if any element drawn holds one. */
+/** The attribute that carries an address, other than those session replay masks (`../session-replay.ts`), if any element drawn holds one. */
 function carryingTarget(container: HTMLElement): string | undefined {
-  const masked = new Set(["title", "aria-label"]);
+  // Note that an SVG glyph's own namespace is no address of a page.
+  const masked = new Set([
+    "title",
+    "aria-label",
+    "aria-description",
+    "alt",
+    "src",
+    "href",
+    "xmlns",
+  ]);
   return [...container.querySelectorAll("*")]
     .flatMap((element) => [...element.attributes])
-    .find((attribute) => !masked.has(attribute.name) && attribute.value.includes("luke://"))?.name;
+    .find((attribute) => !masked.has(attribute.name) && attribute.value.includes("://"))?.name;
 }
 
 /** The rows the list draws, by name. */
@@ -406,4 +421,66 @@ test("skills that could not be read for one @ list are asked for again by the ne
 
   assert.deepEqual(first, []);
   assert.deepEqual(groups(container), ["Skills"]);
+});
+
+const ISSUE_URL = "https://linear.app/acme/issue/LUKE-142/fix-the-thing";
+
+/** Words pasted into the box's editor, as the system's clipboard hands them over. */
+function pasteInComposer(container: HTMLElement, words: string): void {
+  const event = new Event("paste", { bubbles: true, cancelable: true });
+  Object.defineProperty(event, "clipboardData", {
+    value: {
+      files: [],
+      types: ["text/plain"],
+      getData: (type: string) => (type === "text/plain" ? words : ""),
+    },
+  });
+  act(() => {
+    composerEditor(container).dispatchEvent(event);
+  });
+}
+
+test("a page of an integration's pasted into the box on a plan's page is drawn as its chip and sent as its link", async () => {
+  const { container, sent } = await box(planPage([]));
+
+  typeInComposer(container, "Fix ");
+  pasteInComposer(container, ISSUE_URL);
+  await settle();
+  const chips = [...composerEditor(container).querySelectorAll(".mention-chip")];
+  pressInComposer(container, "Enter");
+  await settle();
+
+  assert.deepEqual(
+    chips.map((chip) => chip.textContent),
+    ["LUKE-142/fix-the-thing"],
+  );
+  assert.deepEqual(sent, [`Fix [@LUKE-142/fix-the-thing](${ISSUE_URL})`]);
+});
+
+test("a sent message's page of an integration's is a chip that opens the page in the browser", () => {
+  const container = drawn(
+    createElement(TranscriptWords, {
+      text: `Fix ${mentionMarkdown({ kind: MENTION_KIND.LINK, provider: INTEGRATION_PROVIDER.LINEAR, url: ISSUE_URL }, "LUKE-142/fix-the-thing", PLACE)}.`,
+    }),
+    planPage([]),
+  );
+
+  const chip = container.querySelector<HTMLButtonElement>("button.mention-chip");
+  assert.ok(chip, "the page is a chip");
+  act(() => chip.click());
+
+  assert.deepEqual(told.at(-1), { kind: ACT_KIND.WEB_OPEN, payload: { url: ISSUE_URL } });
+  assert.equal(carryingTarget(container), undefined);
+});
+
+test("off a plan's page a sent message's page of an integration's is a link, its address on no attribute the recording keeps", () => {
+  const container = drawn(
+    createElement(TranscriptWords, {
+      text: `Fix ${mentionMarkdown({ kind: MENTION_KIND.LINK, provider: INTEGRATION_PROVIDER.LINEAR, url: ISSUE_URL }, "LUKE-142/fix-the-thing", PLACE)}.`,
+    }),
+    undefined,
+  );
+
+  assert.equal(container.querySelector(".mention-chip"), null);
+  assert.equal(carryingTarget(container), undefined);
 });

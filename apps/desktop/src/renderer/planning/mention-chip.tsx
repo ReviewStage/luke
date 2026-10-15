@@ -7,6 +7,7 @@ import {
   type MentionLines,
   type MentionPlace,
   type PlanMention,
+  pastedLinkMention,
   sectionAnchors,
 } from "@luke/features/mention-link";
 import { DocumentIcon, ProviderMark } from "@luke/ui";
@@ -17,6 +18,7 @@ import type { HeadingsChange, MentionNode } from "../plan-editor/contract";
 import { Tooltip } from "../tooltip";
 import { FileCard } from "./file-ref";
 import { FileTypeIcon } from "./file-type-icon";
+import { useOpenLink } from "./use-open-link";
 
 /**
  * mention-chip.tsx -- a mention drawn in words as its chip: its kind's glyph and its name, a button that opens what it names, hanging a card that says what that is, struck through where what it names is gone.
@@ -31,7 +33,9 @@ import { FileTypeIcon } from "./file-type-icon";
  * (`file-ref.tsx`). A folder opens nothing, since the window has no door to
  * one, and is a chip that hangs its card alone, as is a file where the
  * place can open none. An MCP server or one of its tools opens nothing
- * either, wearing its server's mark. Its card, hung while the pointer rests
+ * either, wearing its server's mark; a page of an integration's, a Linear
+ * issue say, wears the integration's mark and opens the page in the
+ * browser, its card saying its address. Its card, hung while the pointer rests
  * on it, names it whole: a file's is the card every place naming the file
  * hangs, and a file's lines open at the commit the mention pins them to.
  *
@@ -109,8 +113,11 @@ function pressOf(
   mention: Mention,
   state: MentionState,
   doors: MentionDoors,
+  openLink: (href: string) => void,
 ): (() => void) | undefined {
   switch (mention.kind) {
+    case MENTION_KIND.LINK:
+      return () => openLink(mention.url);
     case MENTION_KIND.FILE: {
       const { onOpenFile } = doors;
       return onOpenFile === undefined ? undefined : () => onOpenFile(mention.path, mention.lines);
@@ -144,6 +151,7 @@ function MentionGlyph({ mention }: { mention: Mention }): React.JSX.Element {
       return <FolderIcon aria-hidden="true" />;
     case MENTION_KIND.SERVER:
     case MENTION_KIND.TOOL:
+    case MENTION_KIND.LINK:
       return <ProviderMark provider={mention.provider} />;
   }
 }
@@ -154,6 +162,7 @@ function noteOf(mention: Mention, state: MentionState): string | undefined {
   if (mention.kind === MENTION_KIND.SERVER) return SERVER_WORDS;
   if (mention.kind === MENTION_KIND.TOOL)
     return `A tool of ${INTEGRATION_NAME[mention.provider]}'s MCP server`;
+  if (mention.kind === MENTION_KIND.LINK) return mention.url;
   return undefined;
 }
 
@@ -189,8 +198,9 @@ export function MentionChip({
   name: string;
   doors: MentionDoors;
 }): React.JSX.Element {
+  const openLink = useOpenLink();
   const state = mentionState(mention, doors);
-  const press = pressOf(mention, state, doors);
+  const press = pressOf(mention, state, doors, openLink);
   const face = (
     <>
       <span className="mention-chip-glyph">
@@ -222,6 +232,14 @@ export function MentionChip({
       )}
     </Tooltip>
   );
+}
+
+/** The mention node words pasted whole stand for: a page of an integration's, named by its address's readable form; nothing for any other words, a file of the plan's repository among them. */
+export function pastedMentionNode(words: string, place: MentionPlace): MentionNode | undefined {
+  const link = pastedLinkMention(words, place.repository);
+  return link === undefined
+    ? undefined
+    : { name: link.name, target: encodeMention(link.mention, place) };
 }
 
 /** A mention an editor holds, as its node names it: its chip where its target names a mention, and its words where it names none. */

@@ -18,7 +18,12 @@ import type {
 } from "../plan-editor/contract";
 import { rendererRuntime } from "../renderer-runtime";
 import { RetryButton } from "../retry-button";
-import { type MentionDoors, MentionNodeChip, retargetedMention } from "./mention-chip";
+import {
+  type MentionDoors,
+  MentionNodeChip,
+  pastedMentionNode,
+  retargetedMention,
+} from "./mention-chip";
 import { MENTION_MENU_SIDE, useMentionPicker } from "./mention-picker";
 import { EDITOR_PLACE, type EditorHost, type PlanEditing } from "./use-plan-editing";
 
@@ -439,6 +444,7 @@ function MountedPlanEditor({
               drawMention: (element, mention) =>
                 latest.current.mentions?.drawMention(element, mention) ?? (() => undefined),
               retarget: (target, renamed) => latest.current.mentions?.retarget(target, renamed),
+              pasted: (words) => latest.current.mentions?.pasted(words),
             },
     });
     handle.current = mounted;
@@ -588,6 +594,7 @@ export function PlanDocumentEditor({
             drawMention: chips.draw,
             retarget: (target, change) =>
               retargetedMention(plan.id, mentions.place, target, change),
+            pasted: (words) => pastedMentionNode(words, mentions.place),
           },
   };
   return (
