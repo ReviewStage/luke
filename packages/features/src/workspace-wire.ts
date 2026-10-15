@@ -199,6 +199,8 @@ export const workspaceGithubInstallationSchema = EffectSchema.Struct({
   active: EffectSchema.Boolean,
 });
 
+export type WorkspaceGithubInstallation = typeof workspaceGithubInstallationSchema.Type;
+
 /**
  * One workspace the account is a member of. The name is held to no bound
  * here, because a name the service already holds must not make the whole
