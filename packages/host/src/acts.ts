@@ -140,9 +140,9 @@ import {
   planningWorkspaceMemberRemoveParamsSchema,
   planningWorkspaceMembersParamsSchema,
   planningWorkspaceParamsSchema,
-  planningWorkspaceRenameParamsSchema,
   planningWorkspacePhotoAnswerSchema,
   planningWorkspacePhotoParamsSchema,
+  planningWorkspaceRenameParamsSchema,
 } from "@luke/features/planning-view";
 import {
   type TerminalCreatedActAnswer,

@@ -46,9 +46,9 @@ import type {
   PlanningWorkspaceMembersAnswer,
   PlanningWorkspaceMembersParams,
   PlanningWorkspaceParams,
-  PlanningWorkspaceRenameParams,
   PlanningWorkspacePhotoAnswer,
   PlanningWorkspacePhotoParams,
+  PlanningWorkspaceRenameParams,
 } from "@luke/features/planning-view";
 import { GITHUB_DISCONNECT_FAILURE } from "@luke/features/planning-view";
 import {

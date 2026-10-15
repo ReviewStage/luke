@@ -52,8 +52,8 @@ import {
   workspaceLeaveRequestSchema,
   workspaceMemberRemovalSchema,
   workspaceMembersAnswerSchema,
-  workspaceRenameRequestSchema,
   workspacePhotoTypeSchema,
+  workspaceRenameRequestSchema,
   workspacesAnswerSchema,
 } from "./workspace-wire.js";
 

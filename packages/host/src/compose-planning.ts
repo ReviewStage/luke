@@ -78,8 +78,8 @@ import {
   planningWorkspaceMemberRemoveParamsSchema,
   planningWorkspaceMembersParamsSchema,
   planningWorkspaceParamsSchema,
-  planningWorkspaceRenameParamsSchema,
   planningWorkspacePhotoParamsSchema,
+  planningWorkspaceRenameParamsSchema,
 } from "@luke/features/planning-view";
 import { EMPTY_TRANSCRIPT } from "@luke/features/transcript-wire";
 import {
