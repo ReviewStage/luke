@@ -474,10 +474,14 @@ it("a failure message keeps its words and loses every run shaped like a credenti
   );
 });
 
-it("a name prefixed by 64 word characters still loses its whole value", () => {
+it("a name however long its prefix still loses its whole value", () => {
   // Note that the value carries a dot, so the bare run cannot take it in the name's place.
   assert.equal(
     redactCredentials(`${"a".repeat(60)}api_key=fixture.value refused`),
     "[redacted] refused",
+  );
+  assert.equal(
+    redactCredentials(`${"a".repeat(100)}_api_key=fixture.value refused`),
+    "[redacted][redacted] refused",
   );
 });
