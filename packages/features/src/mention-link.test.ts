@@ -7,6 +7,7 @@ import {
   encodeMention,
   isMentionableTool,
   isMentionLabel,
+  linkLabels,
   linkMention,
   MENTION_KIND,
   type Mention,
@@ -645,4 +646,38 @@ test("a GitHub page that is a file of the plan stays the file's mention, while o
   ]) {
     assert.equal(decodeMention(target, REPOSITORY)?.kind, MENTION_KIND.LINK, target);
   }
+});
+
+test("a plain place says each link by its name, a mention's without its @, and never its address", () => {
+  assert.equal(
+    linkLabels(
+      `Review [@store.ts](https://github.com/${REPOSITORY}/blob/HEAD/store.ts) and [LUKE-142](https://linear.app/acme/issue/LUKE-142) for [the \\[draft\\]](https://example.com/a)`,
+    ),
+    "Review store.ts and LUKE-142 for the [draft]",
+  );
+  assert.equal(
+    linkLabels("See https://linear.app/acme/issue/LUKE-9"),
+    "See https://linear.app/acme/issue/LUKE-9",
+  );
+});
+
+test("a plain place reads a link as markdown does: balanced parentheses and a title in its destination, the inner of nested brackets, and a bare address by its chip's name", () => {
+  assert.equal(
+    linkLabels("Review [Plan](https://www.notion.so/Plan-(draft)) now"),
+    "Review Plan now",
+  );
+  assert.equal(linkLabels('See [the docs](https://example.com/docs "Docs").'), "See the docs.");
+  assert.equal(linkLabels("outer [inner](https://example.com/b) end"), "outer inner end");
+  assert.equal(
+    linkLabels("[https://linear.app/acme/issue/LUKE-9](https://linear.app/acme/issue/LUKE-9)"),
+    "acme/issue/LUKE-9",
+  );
+  assert.equal(linkLabels("Ask [@alice](https://example.com/profile)"), "Ask @alice");
+  assert.equal(linkLabels("[a](b c d) and [x]"), "[a](b c d) and [x]");
+  assert.equal(
+    linkLabels('[See](https://example.com/( "note")'),
+    '[See](https://example.com/( "note")',
+  );
+  assert.equal(linkLabels(`[Report](https://example.com/${"a".repeat(3_000)})`), "Report");
+  assert.equal(linkLabels(`[Report](https://example.com/${"a".repeat(3_000)} "Notes")`), "Report");
 });

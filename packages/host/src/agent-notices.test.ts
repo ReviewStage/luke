@@ -438,6 +438,37 @@ it.effect(
       );
     }),
 );
+
+it.effect("an item's title says a link by its name, never its address, in the notification", () =>
+  Effect.gen(function* () {
+    const f = fixture();
+    yield* f.notices;
+    f.focus(false);
+    f.answerInbox({ items: [], cursor: "1", readAt: READ_AT });
+    yield* settled;
+
+    f.answerInbox({
+      items: [],
+      planless: [
+        planlessItem(ITEM_B, {
+          title:
+            "Quarantine [@flaky.test.ts](https://github.com/acme/relay/blob/HEAD/flaky.test.ts) per [LUKE-9](https://linear.app/acme/issue/LUKE-9)?",
+          updatedAt: READ_AT + 1,
+        }),
+      ],
+      cursor: "2",
+      readAt: READ_AT + 2,
+    });
+    yield* settled;
+
+    assert.deepEqual(f.said(), [
+      {
+        title: "Nightly flake sweep",
+        body: "Sweep the flaky tests: Quarantine flaky.test.ts per LUKE-9?",
+      },
+    ]);
+  }),
+);
 it.effect(
   "an automation renamed with nothing waiting moving is written as the item's new name, its cursor the same",
   () =>
