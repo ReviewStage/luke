@@ -99,14 +99,19 @@ const reachedSession = /* @__PURE__ */ Effect.fnUntraced(function* (
   return session?.sessionId;
 });
 
-/** A sandbox Vercel could not be asked about, as the refusal a caller may retry; the log names the status Vercel answered, where it answered one. */
-function sandboxOrUnavailable<A, R>(
+/**
+ * A sandbox Vercel could not be asked about, as the upstream's refusal a
+ * caller may retry, apart from the store's own unavailable, so the tab can
+ * say it was Vercel Sandbox that did not answer. The log names the status
+ * Vercel answered, where it answered one.
+ */
+function sandboxOrUpstream<A, R>(
   effect: Effect.Effect<A, SandboxUnavailable, R>,
 ): Effect.Effect<A, HostedRefusal, R> {
   return Effect.catch(effect, (failure) =>
     Effect.andThen(
       Effect.logWarning(`a terminal's sandbox call failed: ${failure.message}`),
-      Effect.fail(HOSTED_REFUSAL.UNAVAILABLE),
+      Effect.fail(HOSTED_REFUSAL.UPSTREAM_ERROR),
     ),
   );
 }
@@ -132,7 +137,7 @@ const listed = /* @__PURE__ */ Effect.fnUntraced(function* (
   const sandbox = yield* AgentSandbox;
   return hostedJsonResponse(
     HOSTED_HTTP_STATUS.OK,
-    yield* sandboxOrUnavailable(sandbox.terminals(sessionId)),
+    yield* sandboxOrUpstream(sandbox.terminals(sessionId)),
   );
 });
 
@@ -149,7 +154,7 @@ const terminalsEndpoint = /* @__PURE__ */ Effect.fn("web/agentTerminalsEndpoint"
   if (Result.isFailure(body)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   if (sessionId === undefined) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_NOT_READY);
   const sandbox = yield* AgentSandbox;
-  const started = yield* sandboxOrUnavailable(
+  const started = yield* sandboxOrUpstream(
     sandbox.start(sessionId, randomUUID(), body.success.title),
   );
   if (Result.isFailure(started)) return yield* Effect.fail(shellRefusal(started.failure));
@@ -170,13 +175,13 @@ const terminalEndpoint = /* @__PURE__ */ Effect.fn("web/agentTerminalEndpoint")(
       yield* readJsonBodyEffect(MAXIMUM_TERMINAL_BODY_BYTES),
     );
     if (Result.isFailure(body)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-    const renamed = yield* sandboxOrUnavailable(
+    const renamed = yield* sandboxOrUpstream(
       sandbox.rename(sessionId, terminalId, body.success.title),
     );
     if (Result.isFailure(renamed)) return yield* Effect.fail(shellRefusal(renamed.failure));
     return yield* listed(sessionId);
   }
-  const killed = yield* sandboxOrUnavailable(sandbox.kill(sessionId, terminalId));
+  const killed = yield* sandboxOrUpstream(sandbox.kill(sessionId, terminalId));
   if (Result.isFailure(killed)) return yield* Effect.fail(shellRefusal(killed.failure));
   return yield* listed(sessionId);
 });
@@ -191,7 +196,7 @@ const resumeEndpoint = /* @__PURE__ */ Effect.fn("web/agentSandboxResumeEndpoint
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { sandbox: SANDBOX_STATE.STARTING });
   }
   const sandbox = yield* AgentSandbox;
-  const resumed = yield* sandboxOrUnavailable(sandbox.resume(sessionId));
+  const resumed = yield* sandboxOrUpstream(sandbox.resume(sessionId));
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { sandbox: resumed });
 });
 

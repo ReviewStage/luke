@@ -27,6 +27,7 @@ const HOSTED_REFUSAL_STATUS = {
   [HOSTED_API_ERROR.UNKNOWN_TOOL]: HOSTED_HTTP_STATUS.BAD_REQUEST,
   [HOSTED_API_ERROR.REQUEST_TOO_LARGE]: HOSTED_HTTP_STATUS.PAYLOAD_TOO_LARGE,
   [HOSTED_API_ERROR.UNAVAILABLE]: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
+  [HOSTED_API_ERROR.UPSTREAM_ERROR]: HOSTED_HTTP_STATUS.BAD_GATEWAY,
   [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE]: HOSTED_HTTP_STATUS.FORBIDDEN,
   [HOSTED_API_ERROR.GITHUB_UNANSWERED]: HOSTED_HTTP_STATUS.BAD_GATEWAY,
   [HOSTED_API_ERROR.NO_REPOSITORY]: HOSTED_HTTP_STATUS.CONFLICT,
@@ -77,6 +78,8 @@ export const HOSTED_REFUSAL = {
   UNKNOWN_TOOL: { error: HOSTED_API_ERROR.UNKNOWN_TOOL },
   REQUEST_TOO_LARGE: { error: HOSTED_API_ERROR.REQUEST_TOO_LARGE },
   UNAVAILABLE: { error: HOSTED_API_ERROR.UNAVAILABLE },
+  /** A service this one asks on the caller's behalf — Vercel Sandbox for a terminal — refused or did not answer; nothing was changed, and a retry may be taken. */
+  UPSTREAM_ERROR: { error: HOSTED_API_ERROR.UPSTREAM_ERROR },
   /** The workspace's GitHub installation reaches no such repository, or it has none; nothing was written. */
   REPOSITORY_NOT_REACHABLE: { error: HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE },
   /** GitHub did not answer whether the workspace reaches the repository; nothing was written, and a retry may be taken. */

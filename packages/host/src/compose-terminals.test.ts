@@ -314,6 +314,27 @@ it.effect("a shell's exit, a stopped sandbox, and an archived agent each end the
 );
 
 it.effect(
+  "an upgrade refused as not found says the deployment serves no relay, and one refused as forbidden ends as gone, neither asked again",
+  () =>
+    Effect.gen(function* () {
+      const refusals = [
+        { refused: 404, ends: state(TERMINAL_CONNECTION.UNAVAILABLE) },
+        { refused: 403, ends: state(TERMINAL_CONNECTION.GONE) },
+      ];
+      for (const refusal of refusals) {
+        const { call, hand, opened, states } = yield* subject();
+        yield* call(GATEWAY_METHOD.TERMINALS_CONNECT, connected());
+        yield* hand({ refused: refusal.refused });
+        yield* settle;
+        yield* TestClock.adjust(Duration.minutes(1));
+
+        assert.deepEqual(states().at(-1), refusal.ends);
+        assert.equal(opened.length, 1);
+      }
+    }),
+);
+
+it.effect(
   "a socket that dropped is opened again after a wait that doubles, and starts over once the shell attached",
   () =>
     Effect.gen(function* () {

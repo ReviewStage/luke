@@ -59,6 +59,8 @@ const TERMINAL_REFUSALS: ReadonlyMap<HostedApiError, TerminalRefusal> = new Map(
   [HOSTED_API_ERROR.AGENT_RETIRED, TERMINAL_REFUSAL.GONE],
   [HOSTED_API_ERROR.AGENT_NOT_READY, TERMINAL_REFUSAL.AGENT_NOT_READY],
   [HOSTED_API_ERROR.SANDBOX_STOPPED, TERMINAL_REFUSAL.SANDBOX_STOPPED],
+  // The terminal routes' upstream is Vercel Sandbox alone, so its failure is the sandbox's.
+  [HOSTED_API_ERROR.UPSTREAM_ERROR, TERMINAL_REFUSAL.SANDBOX_UNANSWERED],
 ]);
 
 /** What one shell's relay socket asks for: the agent, the shell, and the terminal's size. */

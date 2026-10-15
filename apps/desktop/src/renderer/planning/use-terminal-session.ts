@@ -13,6 +13,7 @@ import {
 import {
   TERMINAL_ACTION,
   TERMINAL_STATE,
+  TERMINAL_UNREACHED,
   type TerminalAction,
   type TerminalState,
   terminalLook,
@@ -89,6 +90,12 @@ const RESET = "\x1b[0m";
 /** What hides the cursor, as a terminal reads it (DECTCEM). */
 const HIDE_CURSOR = "\x1b[?25l";
 
+/** Where a call main refused leaves the tab: main refuses where the service could not be reached or did not answer. */
+const SERVICE_UNREACHED: TerminalState = {
+  kind: TERMINAL_STATE.UNREACHABLE,
+  why: TERMINAL_UNREACHED.SERVICE,
+};
+
 /** A state from the host's word for it. */
 function stateOf(
   connection: TerminalConnection,
@@ -111,6 +118,8 @@ function stateOf(
       return { kind: TERMINAL_STATE.EXITED, code };
     case TERMINAL_CONNECTION.GONE:
       return undefined;
+    case TERMINAL_CONNECTION.UNAVAILABLE:
+      return { kind: TERMINAL_STATE.UNREACHABLE, why: TERMINAL_UNREACHED.RELAY };
   }
 }
 
@@ -130,8 +139,9 @@ function returnAction(state: TerminalState): TerminalAction | undefined {
 /**
  * Where a refusal leaves the tab: a stopped sandbox's bar, the wait for an
  * agent that has not opened its sandbox, or the bar that asks again for a
- * shell or agent not found; nothing for an agent archived or retired, whose
- * tab closes, as its Changes tab does.
+ * shell or agent not found or a sandbox Vercel did not answer for, saying
+ * which; nothing for an agent archived or retired, whose tab closes, as its
+ * Changes tab does.
  */
 function refusedState(refused: TerminalRefusal): TerminalState | undefined {
   switch (refused) {
@@ -140,7 +150,9 @@ function refusedState(refused: TerminalRefusal): TerminalState | undefined {
     case TERMINAL_REFUSAL.AGENT_NOT_READY:
       return { kind: TERMINAL_STATE.STARTING };
     case TERMINAL_REFUSAL.NOT_FOUND:
-      return { kind: TERMINAL_STATE.UNREACHABLE };
+      return { kind: TERMINAL_STATE.UNREACHABLE, why: TERMINAL_UNREACHED.NOT_FOUND };
+    case TERMINAL_REFUSAL.SANDBOX_UNANSWERED:
+      return { kind: TERMINAL_STATE.UNREACHABLE, why: TERMINAL_UNREACHED.SANDBOX };
     case TERMINAL_REFUSAL.GONE:
       return undefined;
   }
@@ -324,7 +336,7 @@ export function useTerminalSession(
       void act(ACT_KIND.TERMINAL_ATTACH, { agentId, terminalId: shell, ...size }).catch(() => {
         held.asked = held.asked.filter((each) => each !== asked);
         if (held.asked.length === 0) held.release?.();
-        if (held.attaching && held.asked.length === 0) enter({ kind: TERMINAL_STATE.UNREACHABLE });
+        if (held.attaching && held.asked.length === 0) enter(SERVICE_UNREACHED);
       });
     },
     [act, agentId, enter],
@@ -366,7 +378,7 @@ export function useTerminalSession(
       setListed({ ...listed, terminals: [...listed.terminals, made.terminal] });
       attach(made.terminal.id);
     } catch {
-      if (current()) enter({ kind: TERMINAL_STATE.UNREACHABLE });
+      if (current()) enter(SERVICE_UNREACHED);
     }
   }, [act, agentId, attach, enter, letGo, relistLater, setAsked, setListed]);
 
@@ -485,7 +497,7 @@ export function useTerminalSession(
       }
       await connect();
     } catch {
-      if (generation === live.current.generation) enter({ kind: TERMINAL_STATE.UNREACHABLE });
+      if (generation === live.current.generation) enter(SERVICE_UNREACHED);
     }
   }, [act, agentId, connect, enter]);
 

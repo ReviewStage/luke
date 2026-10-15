@@ -65,8 +65,9 @@ import type { RunMode } from "./run-mode.js";
  * change, the relay function's bound — is opened again on its own, after a
  * wait that doubles to ten seconds and starts over once the shell attaches;
  * one whose agent has not opened its sandbox is asked after every five
- * seconds; and one the relay ended as idle, stopped, gone, or exited stays
- * ended until the tab attaches again. A wake after the Mac slept cuts every
+ * seconds; and one the relay ended as idle, stopped, gone, or exited, or
+ * one the deployment serves no relay for, stays ended until the tab
+ * attaches again. A wake after the Mac slept cuts every
  * wait short. Output is paced to what the tab has drawn: past
  * `PAUSE_ABOVE_BYTES` unacked the socket is no longer read, so the relay
  * backs up rather than this process. Nothing a shell printed is kept here,
@@ -135,6 +136,9 @@ export interface TerminalsComposer extends Composer {
 
 /** The status of an upgrade a server refused for want of itself rather than the ask: it may answer the next one. */
 const SERVER_ERROR_STATUS = 500;
+
+/** The status of an upgrade to a path the deployment does not serve, which the relay never answers of an agent or shell. */
+const NOT_FOUND_STATUS = 404;
 
 const RECONNECT_BACKOFF = Schedule.exponential(TERMINAL_RECONNECT.FIRST).pipe(
   Schedule.modifyDelay(({ duration }) =>
@@ -286,7 +290,12 @@ function composed(
         if ("unreachable" in opening) return yield* drop;
         if ("refused" in opening) {
           if (opening.refused >= SERVER_ERROR_STATUS) return yield* drop;
-          yield* tell(connection, TERMINAL_CONNECTION.GONE);
+          // A relay this deployment does not serve is said as such, never as a shell gone, which would close the tab.
+          const ended =
+            opening.refused === NOT_FOUND_STATUS
+              ? TERMINAL_CONNECTION.UNAVAILABLE
+              : TERMINAL_CONNECTION.GONE;
+          yield* tell(connection, ended);
           return SOCKET_ENDING.ENDED;
         }
         const { socket } = opening;
