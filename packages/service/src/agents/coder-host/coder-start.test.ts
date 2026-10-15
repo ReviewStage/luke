@@ -93,7 +93,7 @@ function workspaceAsk(workspaceId: string, repository = RELAY_REPOSITORY, key?: 
     planId: null,
     organizationId: workspaceId,
     repository,
-    task: TASK,
+    prompt: TASK,
     idempotencyKey: key ?? randomUUID(),
     choice: undefined,
     rememberChoice: false,
@@ -116,7 +116,7 @@ it.layer(getTestDB())("an agent started in a workspace with no plan", (it) => {
         assert.deepEqual([again.created, again.agent.id], [false, first.agent.id]);
         const agent = Option.getOrThrow(yield* readCodingAgent(owner, first.agent.id));
         assert.deepEqual(
-          [agent.planId, agent.organizationId, agent.repository, agent.task, agent.planSnapshot],
+          [agent.planId, agent.organizationId, agent.repository, agent.prompt, agent.planSnapshot],
           [null, workspaceId, RELAY_REPOSITORY, TASK, null],
         );
         assert.deepEqual(

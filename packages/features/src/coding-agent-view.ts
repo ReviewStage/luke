@@ -10,7 +10,7 @@ import {
   codingAgentPullRequestAnswerSchema,
   codingAgentRenameRequestSchema,
   codingAgentServersRequestSchema,
-  codingAgentStartRequestSchema,
+  codingAgentStartRequestFields,
   codingAgentSummarySchema,
 } from "./coding-agent-wire.js";
 import { dictationAnswerSchema, dictationRequestSchema } from "./dictation-wire.js";
@@ -202,7 +202,7 @@ export type CodingAgentListAnswer = typeof codingAgentListAnswerViewSchema.Type;
 /** Starting an agent, as the window asks it: the plan, and the Start request the service takes. */
 export const codingAgentStartParamsSchema = EffectSchema.Struct({
   planId: EffectSchema.NonEmptyString,
-  ...codingAgentStartRequestSchema.fields,
+  ...codingAgentStartRequestFields,
 });
 
 export type CodingAgentStartParams = typeof codingAgentStartParamsSchema.Type;

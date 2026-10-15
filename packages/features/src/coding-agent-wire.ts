@@ -1,6 +1,6 @@
 import { MESSAGE_ROLE, TURN_ORIGIN, WireValueSchema } from "@luke/wire";
-import { verbatimJsonSchema } from "@luke/wire/effect";
-import { Schema as EffectSchema, SchemaTransformation } from "effect";
+import { readEither, verbatimJsonSchema, wireKeys } from "@luke/wire/effect";
+import { Schema as EffectSchema, Result, SchemaTransformation } from "effect";
 import {
   INTEGRATION_PROVIDER_LIST,
   type IntegrationProvider,
@@ -14,7 +14,7 @@ import { countedNumber, memberRefSchema, wireUuidSchema } from "./service-wire.j
  * A coding agent is one cloud session the service runs over a plan: it
  * checks the plan's repository out, implements the plan, and decides on a
  * pull request. Or, where the developer started it with words of their own,
- * it is handed those as its task in the plan's place, and never the plan.
+ * it is handed those as its prompt in the plan's place, and never the plan.
  * The desktop starts one with a key of its own, so a retry of the same
  * Start is the same agent, and names the model and effort it runs on or
  * leaves both to the account's default. What comes back is the
@@ -103,10 +103,11 @@ export type ContextWindow = (typeof CONTEXT_WINDOW)[keyof typeof CONTEXT_WINDOW]
 /** A context window as a choice names it. */
 export const contextWindowSchema = EffectSchema.Literals(Object.values(CONTEXT_WINDOW));
 
-/** What an agent was handed as its first message: the plan's document, or a task the developer wrote in its place. */
+/** What an agent was handed as its first message: the plan's document, or a prompt the developer wrote in its place. */
 export const CODING_AGENT_BRIEF = {
   PLAN: "plan",
-  TASK: "task",
+  // Note that the value says "task", because a released desktop decodes it.
+  PROMPT: "task",
 } as const;
 
 export type CodingAgentBrief = (typeof CODING_AGENT_BRIEF)[keyof typeof CODING_AGENT_BRIEF];
@@ -291,28 +292,52 @@ export const disabledServersSchema = EffectSchema.Array(
  * Starting an agent (POST): the request's own key, which a retry carries
  * again, and the model and effort to run on where the developer chose
  * them; both or neither, since a choice is one thing, and the context
- * window beside them where it is the standard one. A task, where the
+ * window beside them where it is the standard one. A prompt, where the
  * developer wrote one, is the agent's first message in the plan's place,
  * bounded as a message is: its words, the files the developer attached to
  * it, or both. With none, the agent is handed the plan, and files go only
- * with a task. The MCP servers its draft switched off go with it, and none
+ * with a prompt. The MCP servers its draft switched off go with it, and none
  * is off where the Start names none.
  */
-export const codingAgentStartRequestSchema = EffectSchema.Struct({
+export const codingAgentStartRequestFields = {
   idempotencyKey: trimmedText(CODING_AGENT_BOUNDS.MAX_KEY_CHARS),
   model: EffectSchema.optionalKey(trimmedText(CODING_AGENT_BOUNDS.MAX_CHOICE_CHARS)),
   effort: EffectSchema.optionalKey(trimmedText(CODING_AGENT_BOUNDS.MAX_CHOICE_CHARS)),
   contextWindow: EffectSchema.optionalKey(contextWindowSchema),
-  task: EffectSchema.optionalKey(messageWordsSchema),
+  prompt: EffectSchema.optionalKey(messageWordsSchema),
   attachments: EffectSchema.optionalKey(codingAgentAttachmentsSchema),
   disabledServers: EffectSchema.optionalKey(disabledServersSchema),
-}).check(
-  EffectSchema.makeFilter(({ task, attachments }) =>
-    task === undefined ? attachments === undefined : hasWordsOrFiles(task, attachments),
-  ),
+};
+
+/** A Start's words or files: none, or words, files, or both, since files go only with a prompt. */
+const startBrief = EffectSchema.makeFilter(
+  ({
+    prompt,
+    attachments,
+  }: {
+    readonly prompt?: string;
+    readonly attachments?: readonly CodingAgentAttachment[];
+  }) => (prompt === undefined ? attachments === undefined : hasWordsOrFiles(prompt, attachments)),
 );
 
+/** The Start request as a caller holds it, before it is put on the wire. */
+const codingAgentStartRequestValueSchema = EffectSchema.Struct(codingAgentStartRequestFields).check(
+  startBrief,
+);
+
+/** The Start request on the wire, where the prompt travels as `task`, because a released desktop sends that key. */
+export const codingAgentStartRequestSchema = EffectSchema.Struct(codingAgentStartRequestFields)
+  .pipe(wireKeys({ prompt: "task" }))
+  .check(startBrief);
+
 export type CodingAgentStartRequest = typeof codingAgentStartRequestSchema.Type;
+
+/** A Start request as it travels: read as a caller holds it, so it is trimmed and held to its bounds, then keyed as the wire spells it; a refusal where the service would refuse it by shape. */
+export const codingAgentStartRequestOnWire = (request: CodingAgentStartRequest) =>
+  Result.flatMap(
+    readEither(codingAgentStartRequestValueSchema)(request),
+    EffectSchema.encodeUnknownResult(codingAgentStartRequestSchema),
+  );
 
 /**
  * Messaging an agent (POST): the developer's words, trimmed and bounded,

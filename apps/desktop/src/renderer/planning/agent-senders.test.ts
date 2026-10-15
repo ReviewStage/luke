@@ -68,7 +68,7 @@ const AGENT: CodingAgentSummary = {
   createdAt: 1_000,
   status: CODING_AGENT_STATUS.COMPLETED,
   turnId: null,
-  brief: CODING_AGENT_BRIEF.TASK,
+  brief: CODING_AGENT_BRIEF.PROMPT,
   startedBy: DEAN,
 };
 

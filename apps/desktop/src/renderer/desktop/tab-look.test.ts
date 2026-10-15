@@ -149,7 +149,7 @@ function mount(): HTMLElement {
     agents: codingAgentsControl({
       agents: [WORKING, DONE],
       agentIds: [WORKING.id, DONE.id],
-      draft: { id: DRAFT, task: "", attachments: [], choice: undefined, disabledServers: [] },
+      draft: { id: DRAFT, prompt: "", attachments: [], choice: undefined, disabledServers: [] },
       pullRequests: new Map([
         [
           DONE.id,

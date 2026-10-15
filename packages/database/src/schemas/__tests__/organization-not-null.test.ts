@@ -86,7 +86,7 @@ it.layer(getTestDB())("the contract step's organization migration", (it) => {
             effort: "high",
             repository: "acme/api",
             planSnapshot: null,
-            task: "Sweep the flaky tests.",
+            prompt: "Sweep the flaky tests.",
           }),
         );
         // The database as it stood before the migration: the column open, and rows left null.

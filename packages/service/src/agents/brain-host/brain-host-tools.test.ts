@@ -230,7 +230,7 @@ async function agentOn(
         model: "anthropic/claude-opus-5.5",
         effort: "high",
         planSnapshot: "# Teammate invitations",
-        task: null,
+        prompt: null,
         repository: RELAY_FULL_NAME,
       }),
     ),
@@ -375,7 +375,7 @@ function startedAgentOf(answer: WireRecord) {
   return { id, model, modelName, effort, status };
 }
 
-test("Luke starts an agent on the call's plan as the deployment acting for the account: on the plan and the default choice with no task, on a task and the choice named, under the tool call's own key so the same call run again starts no second agent; a choice the catalog refuses is refused with the choices, and a deployment with no secret starts nothing", async () => {
+test("Luke starts an agent on the call's plan as the deployment acting for the account: on the plan and the default choice with no prompt, on a prompt and the choice named, under the tool call's own key so the same call run again starts no second agent; a choice the catalog refuses is refused with the choices, and a deployment with no secret starts nothing", async () => {
   const userId = await database.createUser();
   const plan = await planConversation(userId, RELAY_FULL_NAME);
   const eve = await fakeCoderEve(plan.workspaceId);
@@ -399,7 +399,7 @@ test("Luke starts an agent on the call's plan as the deployment acting for the a
   });
   const stored = Option.getOrThrow(await database.run(readCodingAgent(userId, agent.id)));
   assert.equal(stored.planId, plan.planId);
-  assert.equal(stored.task, null);
+  assert.equal(stored.prompt, null);
   // The session opened as the deployment for the account, on the agent's conversation, with the plan first.
   assert.equal(eve.sent.length, 1);
   const [opening] = eve.sent;

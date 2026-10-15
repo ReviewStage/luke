@@ -202,7 +202,7 @@ const insertAsk = SqlSchema.void({
           origin: ask.origin,
           createdAt: ask.createdAt,
           voiceSessionId: ask.voice?.sessionId ?? null,
-          taskRevision: ask.voice?.revision ?? null,
+          askRevision: ask.voice?.revision ?? null,
         })
         .onConflictDoNothing({ target: [asks.conversationId, asks.clientId] }),
     ),
@@ -351,7 +351,7 @@ const findSpokenIn = SqlSchema.findAll({
         .select({
           id: asks.id,
           clientId: asks.clientId,
-          revision: sql<number>`coalesce(${asks.taskRevision}, 0)`,
+          revision: sql<number>`coalesce(${asks.askRevision}, 0)`,
           turnId: asks.turnId,
           cancelRequestedAt: asks.cancelRequestedAt,
           toldSeq: asks.toldSeq,
@@ -359,7 +359,7 @@ const findSpokenIn = SqlSchema.findAll({
         })
         .from(asks)
         .where(and(eq(asks.userId, key.userId), eq(asks.voiceSessionId, key.voiceSessionId)))
-        .orderBy(asc(asks.taskRevision), asc(asks.createdAt)),
+        .orderBy(asc(asks.askRevision), asc(asks.createdAt)),
     ),
 });
 

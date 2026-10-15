@@ -81,7 +81,7 @@ const SPEAKER = {
 
 type Speaker = (typeof SPEAKER)[keyof typeof SPEAKER];
 
-/** What the brief's heading calls it: the plan an agent was handed, or a task in its place. */
+/** What the brief's heading calls it: the plan an agent was handed, or a prompt in its place, or the task a worker was handed. */
 const BRIEF_LABEL = {
   PLAN: "Plan",
   TASK: "Task",
@@ -183,7 +183,7 @@ function agentBlock(part: AgentPart): CopiedBlock[] {
 
 /**
  * A coding agent's transcript, or one of its workers', as a copy reads it:
- * the first of the developer's messages is the brief, the plan or the task
+ * the first of the developer's messages is the brief, the plan or the prompt
  * the agent was handed as its tab draws it, and a worker's is the task its
  * agent's call carried. The rest are turns: the developer's words, and the
  * agent's rows as its tab draws them.
@@ -199,7 +199,7 @@ export function agentTranscript(input: {
   const messages = task === undefined ? input.messages : workerLines(task, input.messages);
   const first = messages.find((message) => message.role === MESSAGE_ROLE.USER);
   const label =
-    task !== undefined || brief === CODING_AGENT_BRIEF.TASK ? BRIEF_LABEL.TASK : BRIEF_LABEL.PLAN;
+    task !== undefined || brief === CODING_AGENT_BRIEF.PROMPT ? BRIEF_LABEL.TASK : BRIEF_LABEL.PLAN;
   const turns = messages.flatMap((message): CopiedTurn[] => {
     if (message === first) return [];
     if (message.role === MESSAGE_ROLE.USER) {

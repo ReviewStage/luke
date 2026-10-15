@@ -605,7 +605,7 @@ function AgentTranscriptView({
   readerId,
 }: {
   messages: readonly CodingAgentMessage[];
-  /** What the agent was handed first: the plan, drawn as the plan's card, or a task, drawn as the developer's message; nothing reads as the plan. */
+  /** What the agent was handed first: the plan, drawn as the plan's card, or a prompt, drawn as the developer's message; nothing reads as the plan. */
   brief?: CodingAgentBrief | undefined;
   /** Whose transcript this is: an agent's, with its plan, unless said otherwise. */
   lead?: TranscriptLead;
@@ -643,11 +643,11 @@ function AgentTranscriptView({
   if (messages.length > 0) {
     const todos = todosPlace(messages, working);
     // The plan is the first of the developer's messages, unless the agent
-    // was handed a task in its place, which is the developer's message as
+    // was handed a prompt in its place, which is the developer's message as
     // any other is; the rest the developer sent since.
     const first = messages.find((message) => message.role === MESSAGE_ROLE.USER);
-    const plan = brief === CODING_AGENT_BRIEF.TASK ? undefined : first;
-    const task = brief === CODING_AGENT_BRIEF.TASK ? first : undefined;
+    const plan = brief === CODING_AGENT_BRIEF.PROMPT ? undefined : first;
+    const task = brief === CODING_AGENT_BRIEF.PROMPT ? first : undefined;
     return (
       <Conversation>
         {/* The plan's card stands off the tab row by the gap between a column's groups. */}

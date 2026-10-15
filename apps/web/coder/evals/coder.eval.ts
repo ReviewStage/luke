@@ -125,7 +125,7 @@ function startAgent(run: Run, planId: string): Promise<CodingAgent> {
         model: "anthropic/claude-opus-5.5",
         effort: "high",
         planSnapshot: PLAN_SNAPSHOT,
-        task: null,
+        prompt: null,
         repository: REPOSITORY,
       }),
       (started) => {

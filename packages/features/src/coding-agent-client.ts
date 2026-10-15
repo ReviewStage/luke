@@ -63,7 +63,7 @@ import {
   codingAgentPullRequestAnswerSchema,
   codingAgentRenameRequestSchema,
   codingAgentServersRequestSchema,
-  codingAgentStartRequestSchema,
+  codingAgentStartRequestOnWire,
 } from "./coding-agent-wire.js";
 import { dictationAnswerSchema, dictationRequestSchema } from "./dictation-wire.js";
 import { imageBodyOf } from "./image-body.js";
@@ -476,7 +476,7 @@ export class HostedCodingAgentClient {
     planId: string,
     request: CodingAgentStartRequest,
   ): Effect.Effect<CodingAgentAgentAnswer, never, HttpClient.HttpClient> {
-    const admitted = Result.getOrUndefined(readEither(codingAgentStartRequestSchema)(request));
+    const admitted = Result.getOrUndefined(codingAgentStartRequestOnWire(request));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
     return Effect.flatMap(
       this.#call.send({

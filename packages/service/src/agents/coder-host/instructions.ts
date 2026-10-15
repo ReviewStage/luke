@@ -18,7 +18,7 @@ const CODING_AGENT_EDIT_PLAN_TOOL = EDIT_PLAN_TOOL.name;
  * instructions.ts -- what a coding agent's session runs under.
  *
  * The plan is the session's first message, or where the developer started
- * the agent on words of their own, their task is, and the agent never sees
+ * the agent on words of their own, their prompt is, and the agent never sees
  * the plan; these are the standing rules around it, worded for whichever it
  * was handed. Note that publishing is the agent's own judgment, as the plan
  * decided: it may open a pull request, a draft one, or none, and says
@@ -36,7 +36,7 @@ const CODING_AGENT_EDIT_PLAN_TOOL = EDIT_PLAN_TOOL.name;
  * (`brain-host/planning.ts`).
  */
 
-/** The words the instructions say of what the agent was handed, a plan or a task, where the two differ. */
+/** The words the instructions say of what the agent was handed, a plan or a prompt, where the two differ. */
 const BRIEF_WORDS = {
   [CODING_AGENT_BRIEF.PLAN]: {
     job: "implement the plan given as the first message of this conversation",
@@ -53,14 +53,14 @@ const BRIEF_WORDS = {
 
 \`${CODING_AGENT_EDIT_PLAN_TOOL}\` takes the same notes the plan's notetaker takes: add a point under one of the plan's headings, correct a phrase copied exactly from the saved text, or strike one. Use it to record a question the plan does not answer under its open questions together with the assumption you go on under, to correct a fact you verified in the code, to record a hard part you met or an interface you had to change, and to record a decision you made. Every save is recorded in the plan as yours, and the developer reads the plan on their next planning call, so never wait for an answer; it reaches you as a later message. Say in your message what you assumed or decided, and name it in the pull request's description.`,
   },
-  [CODING_AGENT_BRIEF.TASK]: {
+  [CODING_AGENT_BRIEF.PROMPT]: {
     job: "carry out the task the developer gave as the first message of this conversation",
     reread:
       "Read the code the task touches before you change it. Where the task is unclear or the code does not fit what it asks, say so plainly in your final message rather than guessing at a larger change.",
     whole: "does the task whole",
     none: "the task could not be done",
     describe: "say in its description what the task asked",
-    /** An agent handed a task never sees the plan, so it is told of no way to update it, and of no plan to take a decision into. */
+    /** An agent handed a prompt never sees the plan, so it is told of no way to update it, and of no plan to take a decision into. */
     decided: "",
     updating: "",
   },

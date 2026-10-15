@@ -388,7 +388,7 @@ test("a member of a plan's workspace reaches the plan's conversation, its coding
         effort: "high",
         repository: "reviewstage/luke",
         planSnapshot: null,
-        task: "Draft the invite email.",
+        prompt: "Draft the invite email.",
       }),
     ),
   ).agent;

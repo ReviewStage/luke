@@ -147,14 +147,14 @@ function startPayloads(
 
 // Note that the refusal raises the window's toast, whose waits stand on the test's clock.
 
-test("a draft asks nothing of the service, one per plan, until its first message starts the agent on those words as its task under the draft's key, with the MCP servers it switched off, opening its tab", async () => {
+test("a draft asks nothing of the service, one per plan, until its first message starts the agent on those words as its prompt under the draft's key, with the MCP servers it switched off, opening its tab", async () => {
   const OTHER_PLAN = "3c2d1e0f-4a5b-4c6d-8e7f-9a0b1c2d3e4f";
   const tab = mount({ planId: PLAN, repository: "acme/relay" });
   tab.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [] }, { agents: [] }, { agents: [STARTED] });
   tab.answer(
     ACT_KIND.CODING_AGENTS_START,
     { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
-    { agent: { ...STARTED, brief: CODING_AGENT_BRIEF.TASK } },
+    { agent: { ...STARTED, brief: CODING_AGENT_BRIEF.PROMPT } },
   );
   await tab.mount();
 
@@ -171,10 +171,10 @@ test("a draft asks nothing of the service, one per plan, until its first message
   assert.deepEqual(startPayloads(tab.asked), [], "a draft starts nothing");
 
   // The words, the choice, and the servers off are the draft's, held while another plan opens a draft of its own.
-  const task = "Rename the invite email's subject.";
+  const prompt = "Rename the invite email's subject.";
   const choice = { model: "openai/gpt-6.1-sol", effort: "xhigh" };
   const disabledServers = [INTEGRATION_PROVIDER.LINEAR];
-  act(() => tab.control().onDraftChange({ task }));
+  act(() => tab.control().onDraftChange({ prompt }));
   act(() => tab.control().onDraftChange({ choice }));
   act(() => tab.control().onDraftChange({ disabledServers }));
   await tab.stand({ planId: OTHER_PLAN });
@@ -187,7 +187,7 @@ test("a draft asks nothing of the service, one per plan, until its first message
   await tab.stand({ planId: PLAN });
   assert.deepEqual(tab.control().draft, {
     id: draft,
-    task,
+    prompt,
     attachments: [],
     choice,
     disabledServers,
@@ -195,23 +195,23 @@ test("a draft asks nothing of the service, one per plan, until its first message
 
   let failed: Failure | undefined;
   await act(async () => {
-    failed = await tab.control().startTask(draft, task, choice, []);
+    failed = await tab.control().startPrompt(draft, prompt, choice, []);
   });
   assert.equal(failed?.text, "The agent could not be started. Try again.");
   assert.equal(tab.control().draft?.id, draft, "a send that did not start keeps the draft");
   assert.deepEqual(tab.started, []);
 
-  // The files attached to the words are the draft's too, and go with the task.
+  // The files attached to the words are the draft's too, and go with the prompt.
   const notes = { name: "notes.md", mediaType: "text/plain", data: "IyBOb3Rlcw==" } as const;
   act(() => tab.control().onDraftAttachments((held) => [...held, notes]));
   assert.deepEqual(tab.control().draft?.attachments, [notes]);
   await act(async () => {
-    failed = await tab.control().startTask(draft, task, undefined, [notes], disabledServers);
+    failed = await tab.control().startPrompt(draft, prompt, undefined, [notes], disabledServers);
   });
   assert.equal(failed, undefined);
   assert.deepEqual(startPayloads(tab.asked), [
-    { planId: PLAN, idempotencyKey: draft, task, ...choice },
-    { planId: PLAN, idempotencyKey: draft, task, attachments: [notes], disabledServers },
+    { planId: PLAN, idempotencyKey: draft, prompt, ...choice },
+    { planId: PLAN, idempotencyKey: draft, prompt, attachments: [notes], disabledServers },
   ]);
   assert.deepEqual(tab.started, [AGENT]);
   assert.equal(tab.control().draft, undefined, "the started draft is let go");

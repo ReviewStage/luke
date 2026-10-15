@@ -516,7 +516,8 @@ const PLANNING_TOOLS_BY_NAME = new Map(PLANNING_TOOLS.map((tool) => [tool.name, 
  * named by its directory under `eve/subagents/`, and the two task controls
  * eve adds beside any agent tool, `task_wait` and `task_cancel`. eve runs
  * them, so they are no planning tool, but a turn's rows name them, and the
- * writer holds every row to the hosted tool set.
+ * writer holds every row to the hosted tool set. Their tasks are eve's
+ * subagent tasks, not a Luke task.
  */
 export const EVE_DELEGATION_TOOL = {
   WORKER: "worker",

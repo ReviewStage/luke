@@ -87,7 +87,7 @@ export function codingAgentsControl(
     onDraftChange: ignore,
     onDraftAttachments: ignore,
     onDiscardDraft: ignore,
-    startTask: () => Promise.resolve(undefined),
+    startPrompt: () => Promise.resolve(undefined),
     listFailed: false,
     onRetryList: ignore,
     models: undefined,

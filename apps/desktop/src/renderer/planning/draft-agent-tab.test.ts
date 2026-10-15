@@ -62,7 +62,7 @@ let sent: Act[] = [];
 
 const DRAFT: AgentDraft = {
   id: "draft-1",
-  task: "Can you see Slack messages?",
+  prompt: "Can you see Slack messages?",
   attachments: [],
   choice: undefined,
   disabledServers: [],
@@ -139,8 +139,8 @@ function mount(answers: (Failure | undefined)[], draft: AgentDraft = DRAFT) {
   const links: SettingsLink[] = [];
   const settings = { integrationsOpened: false };
   const control = codingAgentsControl({
-    startTask: (_draftId, task) => {
-      starts.push(task);
+    startPrompt: (_draftId, prompt) => {
+      starts.push(prompt);
       return Promise.resolve(answers.shift());
     },
     onOpenIntegrations: () => {
@@ -229,7 +229,7 @@ test("a refused Start offers Retry, which sends the message again", async () => 
   assert.match(tab.note() ?? "", /could not be started/u);
 
   await tab.press("Retry");
-  assert.deepEqual(tab.starts, [DRAFT.task, DRAFT.task]);
+  assert.deepEqual(tab.starts, [DRAFT.prompt, DRAFT.prompt]);
 });
 
 /** A Start refused for the repository out of reach, as the host hears the service say why. */
@@ -250,11 +250,11 @@ test("a Start refused because the workspace has no GitHub connected names the re
     tab.words(),
     "This workspace isn't connected to GitHub, so Luke can't reach Acme/Relay.",
   );
-  assert.equal(tab.draft(), DRAFT.task, "the words stay in the box");
+  assert.equal(tab.draft(), DRAFT.prompt, "the words stay in the box");
   await tab.press("Connect GitHub");
   assert.deepEqual(tab.remedies, [`workspace-github:${PLAN_ID}`]);
   await tab.press("Retry");
-  assert.deepEqual(tab.starts, [DRAFT.task, DRAFT.task]);
+  assert.deepEqual(tab.starts, [DRAFT.prompt, DRAFT.prompt]);
 });
 
 test("a Start refused because the workspace's GitHub was removed or suspended offers Reconnect GitHub", async () => {
@@ -322,7 +322,7 @@ test("a Start refused because the repository's owner is connected to another wor
   assert.equal(tab.words(), "Acme/Relay is connected to Acme Team, not this workspace.");
   await tab.press("Move plan to Acme Team");
   assert.deepEqual(tab.remedies, [`move:${PLAN_ID}:team-1`]);
-  assert.deepEqual(tab.starts, [DRAFT.task, DRAFT.task]);
+  assert.deepEqual(tab.starts, [DRAFT.prompt, DRAFT.prompt]);
   assert.equal(tab.note(), undefined);
 });
 

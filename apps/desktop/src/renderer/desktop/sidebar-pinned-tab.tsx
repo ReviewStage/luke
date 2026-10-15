@@ -92,7 +92,7 @@ function pinAgentId({ tab }: PinnedTab): string | undefined {
  * A pin's actions in the groups a rule divides: an agent's two copies of
  * its transcript, read whole from the service, then Unpin. Note that the
  * copies stand only while the agent's plan is open, because a copy heads its
- * brief as the plan or the task the agent was handed, which only the open
+ * brief as the plan or the prompt the agent was handed, which only the open
  * plan's agents say.
  */
 function pinActionGroups(

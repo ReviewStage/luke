@@ -26,7 +26,7 @@ import { CONNECTION_TOOL } from "../integrations/connection-tools.js";
  * past, so a note names the lines and the commit, and says to read just
  * those. The plan, or
  * one of its sections, is not: a coding agent has no tool to read the plan
- * again, and one started on a task never saw it. So the message carries one
+ * again, and one started on a prompt never saw it. So the message carries one
  * more part after its words, the plan or each section it named as it stood
  * at the send, under a heading eve's receipt is read back by
  * (`attached-file-parts.ts`). Only the agent's own plan is read, the plan the

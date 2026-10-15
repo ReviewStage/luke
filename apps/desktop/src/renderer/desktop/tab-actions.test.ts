@@ -98,7 +98,7 @@ function mountEveryTab(chosen: { main: MainTab; side: SidePanelTab }): HTMLEleme
       agentIds: [AGENT.id],
       draft: {
         id: "draft-1",
-        task: "",
+        prompt: "",
         attachments: [],
         choice: undefined,
         disabledServers: [],

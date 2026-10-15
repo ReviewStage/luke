@@ -120,6 +120,7 @@ const TOOL_INPUT = verbatimJsonSchema(WireValueSchema, {
  * The two task controls eve adds beside any task, which a coding agent's
  * \`delegate\` is (\`coder/tools/delegate.ts\`): eve runs them, so they are no
  * tool of Luke's, but a turn that waits on its worker or stops one names them.
+ * Their tasks are eve's subagent tasks, not a Luke task.
  */
 const CODER_TASK_TOOL = {
   TASK_WAIT: "task_wait",

@@ -150,8 +150,8 @@ export const INBOX_RESPONSE = {
   APPROVAL: "approval",
   /** An open answer in the developer's own words. */
   TEXT: "text",
-  /** Something the developer does by hand, such as a setting on GitHub, marked done or not possible. */
-  TASK: "task",
+  /** A to-do: something the developer does by hand, such as a setting on GitHub, marked done or not possible. The wire value stays "task", because stored items and a released desktop name it so. */
+  TODO: "task",
   /** Typed fields the developer fills in. */
   FORM: "form",
   /** Nothing but an acknowledgement: something the developer should know. */
@@ -211,7 +211,7 @@ const INBOX_REPLIES_OF = {
   [INBOX_RESPONSE.CHOICE]: [INBOX_REPLY.CHOSE, INBOX_REPLY.ANSWERED],
   [INBOX_RESPONSE.APPROVAL]: [INBOX_REPLY.APPROVED, INBOX_REPLY.DECLINED],
   [INBOX_RESPONSE.TEXT]: [INBOX_REPLY.ANSWERED],
-  [INBOX_RESPONSE.TASK]: [INBOX_REPLY.DONE, INBOX_REPLY.NOT_DONE],
+  [INBOX_RESPONSE.TODO]: [INBOX_REPLY.DONE, INBOX_REPLY.NOT_DONE],
   [INBOX_RESPONSE.FORM]: [INBOX_REPLY.SUBMITTED],
   [INBOX_RESPONSE.NONE]: [INBOX_REPLY.ACKNOWLEDGED],
 } as const satisfies Record<InboxResponseType, readonly InboxReplyKind[]>;
@@ -361,7 +361,7 @@ export const inboxResponseSchema = EffectSchema.Union([
     type: EffectSchema.Literal(INBOX_RESPONSE.TEXT),
     placeholder: EffectSchema.optionalKey(boundedText(INBOX_BOUNDS.MAX_LABEL_CHARS)),
   }),
-  EffectSchema.Struct({ type: EffectSchema.Literal(INBOX_RESPONSE.TASK) }),
+  EffectSchema.Struct({ type: EffectSchema.Literal(INBOX_RESPONSE.TODO) }),
   EffectSchema.Struct({
     type: EffectSchema.Literal(INBOX_RESPONSE.FORM),
     fields: EffectSchema.Array(inboxFieldSchema).check(

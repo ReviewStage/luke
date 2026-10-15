@@ -31,8 +31,8 @@ import { conversations } from "./storage.js";
  * the smaller standard one, which is also what an agent started before the
  * window could be chosen ran on and keeps; the snapshot
  * is the exact plan text the agent was handed, kept whole because the plan
- * keeps being edited after, or where the developer started it on a task of
- * their own, the snapshot is null and the task is what it was handed, so
+ * keeps being edited after, or where the developer started it on a prompt of
+ * their own, the snapshot is null and the prompt is what it was handed, so
  * exactly one of the two stands; the repository is `owner/name`; the branch
  * is the one checked out in the agent's sandbox as its last turn ended,
  * which is where its pull request is looked up, and null until a turn ends
@@ -116,10 +116,10 @@ export const codingAgent = pgTable(
       .$type<ContextWindow>()
       .notNull()
       .default(CONTEXT_WINDOW.LONG),
-    /** The plan's document exactly as the agent was given it; null for an agent handed a task instead. */
+    /** The plan's document exactly as the agent was given it; null for an agent handed a prompt instead. */
     planSnapshot: text("plan_snapshot"),
     /** The developer's own words the agent was handed in the plan's place; null for an agent handed the plan. */
-    task: text("task"),
+    prompt: text("task"),
     /** The GitHub repository the agent works in, as `owner/name`: the first of `repositories`. */
     repository: text("repository").notNull(),
     /** Every repository the agent works in, `owner/name` each, the first where it starts; one until full multi-repo. */

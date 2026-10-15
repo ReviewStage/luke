@@ -27,7 +27,7 @@ import { CURSOR_START } from "./transcript.js";
  * answered, each cut to an excerpt, as a chat is
  * named from its opening rather than from the plan it was started under:
  * an agent started from the plan said the plan first, so the plan is what
- * names it, and one started on a task of its own is named for that task.
+ * names it, and one started on a prompt of its own is named for that prompt.
  * An exchange that names no task yet, a greeting or a file with no words,
  * is answered with nothing, and the next turn's end asks again, for the
  * agent's first `CODER.TITLE_TURNS` turns; a call that fails, times out, or

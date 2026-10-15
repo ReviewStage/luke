@@ -79,7 +79,7 @@ const openAgent = Effect.gen(function* () {
     model: "anthropic/claude-opus-5.5",
     effort: "high",
     planSnapshot: "# Terminal tab\n",
-    task: null,
+    prompt: null,
     repository: "acme/relay",
   });
   assert.ok(Option.isSome(started));

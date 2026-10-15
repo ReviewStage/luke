@@ -58,9 +58,9 @@ import { anthropicFastAccess } from "./account-keys.js";
  * agent and its conversation are made under the ask's key, and a retry
  * carrying the same key is the same agent and opens nothing again; a new
  * agent's eve session opens with the plan's document as the Markdown Copy
- * would put on the clipboard, or with the ask's task in the plan's place
- * and the files attached to it, which only a task carries. An agent
- * started with no plan is handed a task in a workspace the account is a
+ * would put on the clipboard, or with the ask's prompt in the plan's place
+ * and the files attached to it, which only a prompt carries. An agent
+ * started with no plan is handed a prompt in a workspace the account is a
  * member of, on a repository named by the ask and read through that
  * workspace's installation as a plan's is.
  * An eve that did not take the opening leaves no agent behind, so the retry
@@ -72,17 +72,17 @@ import { anthropicFastAccess } from "./account-keys.js";
  * (`coder-host/channel.ts`).
  */
 
-/** Where a Start puts the agent: on a plan, handed the plan or a task in its place, or in a workspace with no plan, on a repository, handed a task. */
+/** Where a Start puts the agent: on a plan, handed the plan or a prompt in its place, or in a workspace with no plan, on a repository, handed a prompt. */
 export type StartPlace =
-  | { readonly planId: string; readonly task: string | undefined }
+  | { readonly planId: string; readonly prompt: string | undefined }
   | {
       readonly planId: null;
       readonly organizationId: string;
       readonly repository: string;
-      readonly task: string;
+      readonly prompt: string;
     };
 
-/** What a Start asks: where it goes, the key a retry carries again, the choice where one was made, the files attached to a task, the MCP servers its draft switched off, and the automation whose run asks. */
+/** What a Start asks: where it goes, the key a retry carries again, the choice where one was made, the files attached to a prompt, the MCP servers its draft switched off, and the automation whose run asks. */
 export type StartAsk = StartPlace & {
   readonly idempotencyKey: string;
   readonly choice: ModelChoice | undefined;
@@ -142,7 +142,7 @@ interface StartLanding {
   readonly place: CodingAgentPlace;
 }
 
-/** The plan read as the account, its repository required, or the workspace the account must be a member of; either refused as naming nothing. On a plan the agent is handed its document or the task; in a workspace, the task. */
+/** The plan read as the account, its repository required, or the workspace the account must be a member of; either refused as naming nothing. On a plan the agent is handed its document or the prompt; in a workspace, the prompt. */
 const landingOf = Effect.fnUntraced(function* (
   userId: string,
   place: StartPlace,
@@ -159,7 +159,7 @@ const landingOf = Effect.fnUntraced(function* (
         planId: null,
         organizationId: place.organizationId,
         planSnapshot: null,
-        task: place.task,
+        prompt: place.prompt,
       },
     };
   }
@@ -173,9 +173,9 @@ const landingOf = Effect.fnUntraced(function* (
     plan,
     mover: ownerId === userId ? userId : undefined,
     place:
-      place.task === undefined
-        ? { planId: place.planId, planSnapshot: planMarkdown(plan), task: null }
-        : { planId: place.planId, planSnapshot: null, task: place.task },
+      place.prompt === undefined
+        ? { planId: place.planId, planSnapshot: planMarkdown(plan), prompt: null }
+        : { planId: place.planId, planSnapshot: null, prompt: place.prompt },
   };
 });
 
@@ -199,14 +199,15 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
       contextWindow: choice.contextWindow,
       repository: landing.repository,
       disabledServers: ask.disabledServers,
-      // The servers the task mentions are its first turn's, whatever the switches say.
-      mentionedServers: brief.task === null ? [] : mentionedServers(brief.task, landing.repository),
+      // The servers the prompt mentions are its first turn's, whatever the switches say.
+      mentionedServers:
+        brief.prompt === null ? [] : mentionedServers(brief.prompt, landing.repository),
     }),
   );
   if (Option.isNone(started)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const { agent, created } = started.value;
   if (!created) return { agent, created };
-  // The session opens with the plan or the task as its first message; an eve that did not take
+  // The session opens with the plan or the prompt as its first message; an eve that did not take
   // it leaves no agent behind, so the retry under the same key starts afresh.
   const sessions = yield* eve;
   const opened = yield* sessions
@@ -214,12 +215,12 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
       conversationId: agent.conversationId,
       turn: BRAIN_HOST_TURN.TYPED,
       message:
-        brief.task === null
+        brief.prompt === null
           ? brief.planSnapshot
           : eveContent(
-              brief.task,
+              brief.prompt,
               ask.attachments ?? [],
-              mentionedContext(brief.task, landing.plan),
+              mentionedContext(brief.prompt, landing.plan),
             ),
     })
     .pipe(

@@ -60,7 +60,8 @@ export type AgentTool = (typeof AGENT_TOOL)[keyof typeof AGENT_TOOL];
  * The tools eve gives a planning session of its own, which its transcript
  * carries: its subagent tool for the worker, which earlier transcripts name
  * where the planning model now calls its own `delegate`, and the two task
- * controls it adds beside any task.
+ * controls it adds beside any task. Note that their names are eve's own and
+ * the tasks they name are eve's subagent tasks, not a Luke task.
  */
 export const EVE_TOOL = {
   WORKER: "worker",

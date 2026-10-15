@@ -122,7 +122,7 @@ import {
  * model and effort checked against the catalog, the account's default where
  * the request names none, the plan's repository confirmed reachable through
  * the Luke GitHub App, the agent and its conversation made, and its eve
- * session opened with the plan's document, or the task the request named in
+ * session opened with the plan's document, or the prompt the request named in
  * its place, as the first message, here under the developer's own bearer so
  * eve's door admits it as the developer. A retry carrying the same key is
  * the same agent, and opens nothing again. The list (`GET /api/plans/{id}/agents`) reads each agent's
@@ -350,7 +350,7 @@ const startEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   const body = yield* readJsonBodyEffect(MAXIMUM_START_BODY_BYTES);
   const asked = readEither(codingAgentStartRequestSchema)(body);
   if (Result.isFailure(asked)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  const { idempotencyKey, model, effort, contextWindow, task, attachments, disabledServers } =
+  const { idempotencyKey, model, effort, contextWindow, prompt, attachments, disabledServers } =
     asked.success;
   // A choice is one thing: a model without its effort, or the reverse, names nothing to run on,
   // and a window without them is a window of no model.
@@ -369,7 +369,7 @@ const startEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
       planId,
       idempotencyKey,
       choice,
-      task,
+      prompt,
       attachments,
       disabledServers,
     }),

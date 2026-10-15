@@ -131,7 +131,7 @@ const NOTE_PLACEHOLDER = {
   [INBOX_RESPONSE.CHOICE]: "Add a note, or answer in your own words",
   [INBOX_RESPONSE.APPROVAL]: "Add a note for the agent",
   [INBOX_RESPONSE.TEXT]: "Your answer",
-  [INBOX_RESPONSE.TASK]: "Add a note for the agent",
+  [INBOX_RESPONSE.TODO]: "Add a note for the agent",
   [INBOX_RESPONSE.FORM]: "Add a note for the agent",
   [INBOX_RESPONSE.NONE]: "Add a note for the agent",
 } as const;

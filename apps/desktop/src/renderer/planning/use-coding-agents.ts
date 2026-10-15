@@ -48,7 +48,7 @@ import type { InboxAnswerer, InboxImageReader, InboxReader } from "./use-plan-in
 /** No words to listen for, one array so a render that has none hands down the same one. */
 const NO_KEYWORDS: readonly string[] = [];
 /**
- * use-coding-agents.ts -- the open plan's coding agents as one control: the agents and their status, the Start button, a draft agent started on a task, the Stop, a message to one, a change of one's model, and the models the menus offer.
+ * use-coding-agents.ts -- the open plan's coding agents as one control: the agents and their status, the Start button, a draft agent started on a prompt, the Stop, a message to one, a change of one's model, and the models the menus offer.
  *
  * The agents are read when a plan opens, again after a Start or a Stop,
  * and as the plan's column's "+" opens, and never on a clock; an agent's status moves between those reads only
@@ -123,7 +123,9 @@ export interface CodingAgentsControl {
   /** Opens a draft agent on the open plan, or answers the one it has, by its key. */
   onNewDraft: () => string;
   /** Writes the open plan's draft: the words in its box, the choice on its chip, or the MCP servers it switched off. */
-  onDraftChange: (change: Partial<Pick<AgentDraft, "task" | "choice" | "disabledServers">>) => void;
+  onDraftChange: (
+    change: Partial<Pick<AgentDraft, "prompt" | "choice" | "disabledServers">>,
+  ) => void;
   /** Changes the open plan's draft's files from those it holds as the change lands. */
   onDraftAttachments: (
     next: (held: readonly CodingAgentAttachment[]) => readonly CodingAgentAttachment[],
@@ -131,15 +133,15 @@ export interface CodingAgentsControl {
   /** Lets the draft go; nothing was started, so nothing is left behind. */
   onDiscardDraft: (draftId: string) => void;
   /**
-   * Starts the draft's agent with the words as its task, never the plan,
+   * Starts the draft's agent with the words as its prompt, never the plan,
    * and the files attached to them, on the choice where one was made and else the account's default,
    * with the MCP servers the draft switched off; the
    * agent's tab opens as a Start's does. Answers why it did not start, or
    * nothing once it did.
    */
-  startTask: (
+  startPrompt: (
     draftId: string,
-    task: string,
+    prompt: string,
     choice: ModelChoice | undefined,
     attachments: readonly CodingAgentAttachment[],
     disabledServers?: readonly IntegrationProvider[],
@@ -208,7 +210,7 @@ export interface CodingAgentsControl {
 /** An agent not yet started: the key its first message starts it under, the words written so far, the files attached to them, the choice made on its chip, none while it runs on the account's default, and the MCP servers switched off for it. */
 export interface AgentDraft {
   readonly id: string;
-  readonly task: string;
+  readonly prompt: string;
   readonly attachments: readonly CodingAgentAttachment[];
   readonly choice: ModelChoice | undefined;
   readonly disabledServers: readonly IntegrationProvider[];
@@ -479,13 +481,19 @@ export function useCodingAgents(input: {
     if (draft !== undefined) return draft.id;
     const id = mintKey();
     if (planId !== undefined) {
-      withDraft(planId, { id, task: "", attachments: [], choice: undefined, disabledServers: [] });
+      withDraft(planId, {
+        id,
+        prompt: "",
+        attachments: [],
+        choice: undefined,
+        disabledServers: [],
+      });
     }
     return id;
   };
 
   const onDraftChange = (
-    change: Partial<Pick<AgentDraft, "task" | "choice" | "disabledServers">>,
+    change: Partial<Pick<AgentDraft, "prompt" | "choice" | "disabledServers">>,
   ) => {
     if (planId !== undefined && draft !== undefined) withDraft(planId, { ...draft, ...change });
   };
@@ -510,9 +518,9 @@ export function useCodingAgents(input: {
   // Note that the draft's key is the Start's every time it is sent, because
   // nothing a refused send asked was made, and a send whose answer was lost
   // is answered with the agent it already made.
-  const startTask = async (
+  const startPrompt = async (
     draftId: string,
-    task: string,
+    prompt: string,
     choice: ModelChoice | undefined,
     attachments: readonly CodingAgentAttachment[],
     disabledServers: readonly IntegrationProvider[] = [],
@@ -522,7 +530,7 @@ export function useCodingAgents(input: {
     if (archived) return { reason: FAILURE_REASON.OTHER, text: START_ARCHIVED };
     const answer = await askStart(planId, {
       idempotencyKey: draftId,
-      task,
+      prompt,
       ...(attachments.length === 0 ? undefined : { attachments }),
       ...(disabledServers.length === 0 ? undefined : { disabledServers }),
       ...(choice === undefined ? undefined : choiceRequest(choice)),
@@ -766,7 +774,7 @@ export function useCodingAgents(input: {
     onDraftChange,
     onDraftAttachments,
     onDiscardDraft,
-    startTask,
+    startPrompt,
     listFailed,
     onRetryList: readAgain,
     models,

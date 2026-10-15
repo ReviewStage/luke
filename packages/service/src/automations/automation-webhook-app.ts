@@ -20,7 +20,7 @@ import {
 import { ANY_METHOD, type WebRoutes } from "../route.js";
 
 /**
- * automation-webhook-app.ts -- an automation's webhook address: a call under the trigger's secret queues one run, its body kept for the agent's task.
+ * automation-webhook-app.ts -- an automation's webhook address: a call under the trigger's secret queues one run, its body kept for the agent's prompt.
  *
  * The caller is whatever the developer handed the address to, Sentry, a CI
  * job, a script, so it carries no account bearer: it is admitted by the
