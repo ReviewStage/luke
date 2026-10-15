@@ -970,45 +970,45 @@ export function usePlansTab(input: {
     },
     [act, fixture, openPlanId],
   );
-  // A leave is asked rather than told, so a refused one takes its ask back
-  // too; `onLeft` runs once the plan is left.
-  const leavePlan = useCallback(
-    (onLeft: () => void = () => undefined) => {
-      setStandIn(undefined);
-      if (fixture !== undefined) {
-        onLeft();
-        return;
-      }
-      const ask = { planId: undefined, over: openPlanId };
-      setAsked(ask);
-      act(ACT_KIND.PLANNING_CLOSE).then(onLeft, () =>
-        setAsked((held) => (held === ask ? undefined : held)),
-      );
-    },
-    [act, fixture, openPlanId],
-  );
+  // A leave is asked rather than told, so a refused one takes its ask back too.
+  const leavePlan = useCallback(() => {
+    setStandIn(undefined);
+    if (fixture !== undefined) return;
+    const ask = { planId: undefined, over: openPlanId };
+    setAsked(ask);
+    act(ACT_KIND.PLANNING_CLOSE).catch(() => setAsked((held) => (held === ask ? undefined : held)));
+  }, [act, fixture, openPlanId]);
+  // Every navigation a press asked for, counted, so an answer that lands
+  // after a newer one was asked for changes nothing the newer one decided.
+  const navigations = useRef(0);
   // A workspace chosen on purpose, from the switcher, a workspace made, or
-  // one left, lists it, and the plan on screen follows: the plan last open
-  // there opens again, where it is still that workspace's and not archived,
-  // or else the home page, so the plan on screen is always the listed
-  // workspace's. Note that the workspace is listed only once the plan on
-  // screen followed, because a plan that stays must not drop out of the
-  // sidebar beside it; a remembered plan that would not open gives way to
-  // the home page.
+  // one left, is listed at once, and the plan on screen follows: the plan
+  // last open there opens again, where it is still that workspace's and not
+  // archived, or else the home page, so the plan on screen is the listed
+  // workspace's. A remembered plan that would not open gives way to the home
+  // page, unless the developer went somewhere else meanwhile.
   const switchWorkspace = useCallback(
     (workspaceId: string) => {
-      if (openWorkspaceId === undefined || openWorkspaceId === workspaceId) {
-        chooseListed(workspaceId);
-        return;
-      }
-      const listIt = () => chooseListed(workspaceId);
+      navigations.current += 1;
+      const mine = navigations.current;
+      chooseListed(workspaceId);
+      if (openWorkspaceId === undefined || openWorkspaceId === workspaceId) return;
       const last = lastOpenIn.current.get(workspaceId);
       const reopens = plansNow.some(
         (plan) =>
           plan.id === last && plan.workspaceId === workspaceId && plan.archivedAt === undefined,
       );
-      if (last !== undefined && reopens) openPlan(last, listIt, () => leavePlan(listIt));
-      else leavePlan(listIt);
+      if (last === undefined || !reopens) {
+        leavePlan();
+        return;
+      }
+      openPlan(
+        last,
+        () => undefined,
+        () => {
+          if (navigations.current === mine) leavePlan();
+        },
+      );
     },
     [chooseListed, openWorkspaceId, plansNow, openPlan, leavePlan],
   );
@@ -1017,26 +1017,40 @@ export function usePlansTab(input: {
   const standingNow = useRef({ listed: listedId, open: openPlanId });
   standingNow.current = { listed: listedId, open: openPlanId };
   // A plan opened from another workspace, from the palette, the Inbox, a
-  // notice, or the history, lists its workspace, so the sidebar holds the
-  // plan open, and says so in a toast whose Back lists the workspace left
-  // and returns to what stood open there, once that has opened again. Back
-  // does nothing once the window has moved on from the switch it reports.
+  // notice, or the history, lists its workspace once it opened, so the
+  // sidebar holds the plan open, and says so in a toast whose Back lists the
+  // workspace left and returns to what stood open there. An open answered
+  // after the developer went somewhere else lists nothing, and Back does
+  // nothing once the window has moved on from the switch it reports.
   const select = useCallback(
     (planId: string) => {
+      navigations.current += 1;
+      const mine = navigations.current;
       const planWorkspace = plansNow.find((plan) => plan.id === planId)?.workspaceId;
       const target = workspacesNow.find((each) => each.id === planWorkspace);
       const from = workspacesNow.find((each) => each.id === listedId);
       const over = openPlanId;
       openPlan(planId, () => {
+        if (navigations.current !== mine) return;
         if (target === undefined || target.id === listedId) return;
         chooseListed(target.id);
         if (from === undefined) return;
         const back = () => {
           const now = standingNow.current;
           if (now.listed !== target.id || now.open !== planId) return;
-          const listFrom = () => chooseListed(from.id);
-          if (over === undefined) leavePlan(listFrom);
-          else openPlan(over, listFrom);
+          navigations.current += 1;
+          const backed = navigations.current;
+          chooseListed(from.id);
+          if (over === undefined) leavePlan();
+          else {
+            openPlan(
+              over,
+              () => undefined,
+              () => {
+                if (navigations.current === backed) leavePlan();
+              },
+            );
+          }
         };
         toast({
           words: switchedNote(target.name),

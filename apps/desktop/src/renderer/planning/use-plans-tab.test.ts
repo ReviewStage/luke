@@ -1002,6 +1002,32 @@ test("a remembered plan that moved to another workspace since, or would not open
   assert.equal(refused.control().workspace?.id, ACME.id);
 });
 
+test("a workspace chosen is listed at once, and a reopen answered after another was chosen leaves the newer choice standing", async () => {
+  const three = [PERSONAL, ACME, PLATFORM];
+  const held = Promise.withResolvers<boolean>();
+  const tab = mount(
+    { shown: true, planning: { ...TWO_WORKSPACES, workspaces: three, activePlanId: "alerts" } },
+    { ...OPENS, [ACT_KIND.PLANNING_SELECT]: () => held.promise },
+  );
+  tab.stand({ planning: { ...TWO_WORKSPACES, workspaces: three, activePlanId: "notes" } });
+
+  act(() => tab.control().onChooseWorkspace(ACME.id));
+  const listedAtOnce = tab.control().workspace?.id;
+  act(() => tab.control().onChooseWorkspace(PLATFORM.id));
+  await settle();
+  const leaves = tab.told.filter((kind) => kind === ACT_KIND.PLANNING_CLOSE).length;
+  held.resolve(false);
+  await settle();
+
+  assert.equal(listedAtOnce, ACME.id);
+  assert.equal(tab.control().workspace?.id, PLATFORM.id);
+  assert.equal(
+    tab.told.filter((kind) => kind === ACT_KIND.PLANNING_CLOSE).length,
+    leaves,
+    "the refused reopen leaves nothing the newer choice opened",
+  );
+});
+
 test("a switch toast's Back does nothing once the window has moved on from the switch it reports", async () => {
   const three = [PERSONAL, ACME, PLATFORM];
   const tab = mount(
