@@ -79,8 +79,11 @@ import type { AppInboxSlice, AppInboxWaitingItem } from "./app-state.js";
  * across the account's plans, every open inbox item, on the service's held
  * read, for as long as an account is signed in, so an item an agent posts
  * is heard whichever plan is open, or none, and whichever Mac started the
- * agent. Each answer is written whole as each plan's open items, which the
- * sidebar counts, and the Dock's badge is their number. The first answer
+ * agent. Of those, only the items of agents the account started wait on
+ * it, since an agent runs on its starter's keys and asks its starter: each
+ * answer is written whole as each plan's open items of those, which the
+ * sidebar counts, and the Dock's badge is their number, while every plan
+ * holding any member's item is listed for the Inbox. The first answer
  * for an account is where it stands and announces nothing; after it, an
  * item that opens, newly posted or posted again under the key of one the
  * developer answered or the agent closed, is announced once, by the same
@@ -186,6 +189,8 @@ export interface AgentNoticesDependencies {
   notifying: () => boolean;
   /** Who is signed in now, by the account's own key, or nobody. */
   signedInAs: () => string | undefined;
+  /** The signed-in account's id, which an agent's starter is named by; none for an identity stored without one, which is told of every agent. */
+  accountId: () => string | undefined;
   /** The account as each change of it says, for as long as the subscription stands: the ledger is no one else's. */
   onAccountChanged: (listener: (signedInAs: string | undefined) => void) => () => void;
   /** An agent started or ended, or a read found it published something new: the plan list is read again, so its rows say so. */
@@ -330,6 +335,24 @@ function inboxNoticeText(
 ): Pick<AgentNotice, "title" | "body"> {
   const agent = item.agentTitle ?? modelLabel(item.agentModel, models);
   return { title: planName ?? UNNAMED_PLAN_TITLE, body: `${agent}: ${item.title}` };
+}
+
+/**
+ * The answer as it waits on the account: the items of the agents it
+ * started, a plan's and one with no plan alike, since an agent runs on its starter's keys and asks its starter,
+ * and the plans holding any item whole, since every member's Inbox lists
+ * them. An item whose starter the service does not say, or an account whose
+ * id is not known, is the account's own, as every item was before.
+ */
+function startedBy(answer: AccountInboxAnswer, accountId: string | undefined): AccountInboxAnswer {
+  if (accountId === undefined) return answer;
+  const ownOf = (item: { readonly startedBy?: string }) =>
+    item.startedBy === undefined || item.startedBy === accountId;
+  return {
+    ...answer,
+    items: answer.items.filter(ownOf),
+    ...(answer.planless === undefined ? undefined : { planless: answer.planless.filter(ownOf) }),
+  };
 }
 
 /** The items each plan holds waiting, the plan whose item changed latest first, as the read answered them latest first. */
@@ -601,7 +624,12 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
      */
     function observeWaiting(answer: AccountInboxAnswer): void {
       const was = waiting;
-      if (was?.answer.cursor === answer.cursor) {
+      // Note that an answer at the same cursor holding fewer of the account's own items is news, because the account's id, which picks them, may have arrived since.
+      if (
+        was?.answer.cursor === answer.cursor &&
+        was.answer.items.length === answer.items.length &&
+        (was.answer.planless?.length ?? 0) === (answer.planless?.length ?? 0)
+      ) {
         // Note that the plans and automations holding items, and what an item with no plan is named
         // by, may move with nothing waiting moving, an archive, a rename, or a hold let go, so they are written alone.
         if (
@@ -662,7 +690,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
             return yield* Effect.sleep(interval);
           }
           cursor = answer.cursor;
-          observeWaiting(answer);
+          observeWaiting(startedBy(answer, dependencies.accountId()));
         });
         // A look that died is reported and asked again on the watch's clock, as a tick of the watch is.
         return Effect.forever(

@@ -237,6 +237,10 @@ export function composeDesktop(
           state.snapshot().settings?.stored.agentNotifications ??
           APP_SETTING_SCHEMA.agentNotifications.default,
         signedInAs: () => accountKey(state.snapshot().account),
+        accountId: () => {
+          const { account } = state.snapshot();
+          return account.status === ACCOUNT_STATUS.SIGNED_IN ? account.id : undefined;
+        },
         onAccountChanged: (listener) =>
           operator.host.onAccountChanged((account) => listener(accountKey(account))),
         // An agent starting or ending, or a new pull request, is read on the sidebar's rows from the list.

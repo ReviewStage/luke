@@ -167,9 +167,10 @@ stored with the item under the account of whichever member gave it, which
 every member of the plan's workspace sees by name beside the answer, and,
 where the agent asked to hear back, handed to it as one of your messages,
 kept in its transcript. While you are signed in, Luke
-on your Mac keeps a read open to our service for every item waiting on you,
-each in brief (its plan, agent, and title), and for every plan holding an item,
-to count them in its sidebar and on its Dock icon. Opening the Inbox reads
+on your Mac keeps a read open to our service for every item waiting in your
+workspaces, each in brief (its plan, agent, title, and the account that started
+the agent), and for every plan holding an item; it counts in its sidebar and on
+its Dock icon, and tells you of, only the items of agents you started. Opening the Inbox reads
 each of those plans' items whole, the ones you settled included, with what
 each offered and the answer you picked; Luke holds them in memory only, never
 on disk. While its window is behind, a Mac notification names a new item by

@@ -160,6 +160,11 @@ it.layer(getTestDB())("the inbox store", (it) => {
           theirs.automations?.map((group) => [group.automationId, group.items]),
           [[automationId, 1]],
         );
+        assert.deepEqual(
+          theirs.planless?.map((entry) => entry.startedBy),
+          [agent.userId],
+          "the teammate's read names who started the agent, whom it asks",
+        );
         assert.ok(!theirs.items.some((entry) => entry.id === posted.success.id));
         assert.deepEqual([others.planless, others.automations], [[], []]);
 
@@ -366,6 +371,11 @@ it.layer(getTestDB())("the inbox store", (it) => {
         assert.deepEqual(
           (yield* accountWaitingItems(teammate)).map((each) => each.id).sort(),
           [id, posted2.success.id].sort(),
+        );
+        assert.deepEqual(
+          (yield* accountWaitingItems(teammate)).map((each) => each.startedBy),
+          [agent.userId, agent.userId],
+          "the teammate's read names who started the agent, whom it asks",
         );
         assert.deepEqual(
           (yield* accountInboxPlans(teammate)).map((each) => each.planId),

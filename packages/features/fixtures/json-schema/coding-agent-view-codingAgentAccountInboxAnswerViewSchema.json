@@ -36,6 +36,9 @@
               "agentModel": {
                 "type": "string"
               },
+              "startedBy": {
+                "type": "string"
+              },
               "title": {
                 "type": "string"
               },
@@ -119,6 +122,9 @@
                 ]
               },
               "agentModel": {
+                "type": "string"
+              },
+              "startedBy": {
                 "type": "string"
               },
               "automationId": {

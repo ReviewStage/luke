@@ -95,6 +95,7 @@ function fixture() {
   let focus: ((focused: boolean) => void) | undefined;
   let accountChanged: ((signedInAs: string | undefined) => void) | undefined;
   let signedInAs: string | undefined = ACCOUNT;
+  let accountId: string | undefined = ACCOUNT_ID;
   let notifying = true;
   let listReads = 0;
   const notices = Effect.gen(function* () {
@@ -125,6 +126,7 @@ function fixture() {
       },
       notifying: () => notifying,
       signedInAs: () => signedInAs,
+      accountId: () => accountId,
       onAccountChanged: (listener) => {
         accountChanged = listener;
         return () => {
@@ -188,6 +190,10 @@ function fixture() {
     badges,
     inboxToasted,
     openedInboxes,
+    /** The signed-in account's id as its identity now holds it: none for one stored without it. */
+    knowAccountId: (next: string | undefined) => {
+      accountId = next;
+    },
     /** The developer's setting for notifications. */
     notify: (on: boolean) => {
       notifying = on;
@@ -243,6 +249,9 @@ function waitingItem(id: string, patch: Partial<AccountInboxEntry> = {}): Accoun
     ...patch,
   };
 }
+
+/** The signed-in account's id, which names the agents it started. */
+const ACCOUNT_ID = "user-dana";
 
 /** When the service read each answer, by its clock: the instant every item is posted at unless a test says. */
 const READ_AT = 1_800_000_000_000;
@@ -433,5 +442,121 @@ it.effect(
         f.planless.at(-1)?.map((item) => item.automationName),
         ["Flake sweep, nightly"],
       );
+    }),
+);
+
+it.effect(
+  "only the items of agents the account started wait on it: a teammate's agent's questions are neither counted, badged, nor announced, while its plan is still listed",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      yield* f.notices;
+      f.focus(false);
+      const teammate = "user-charles";
+      const teamPlan = "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32";
+      f.answerInbox({
+        items: [
+          waitingItem(ITEM_A, { startedBy: ACCOUNT_ID }),
+          waitingItem(ITEM_B, { planId: teamPlan, startedBy: teammate }),
+        ],
+        plans: [
+          { planId: PLAN_ID, items: 1, updatedAt: READ_AT },
+          { planId: teamPlan, items: 1, updatedAt: READ_AT },
+        ],
+        cursor: "1",
+        readAt: READ_AT,
+      });
+      yield* settled;
+      f.answerInbox({
+        items: [
+          waitingItem(ITEM_A, { startedBy: ACCOUNT_ID }),
+          waitingItem(ITEM_B, { planId: teamPlan, startedBy: teammate }),
+          waitingItem(ITEM_C, { planId: teamPlan, startedBy: teammate, updatedAt: READ_AT + 1 }),
+        ],
+        plans: [
+          { planId: PLAN_ID, items: 1, updatedAt: READ_AT },
+          { planId: teamPlan, items: 2, updatedAt: READ_AT + 1 },
+        ],
+        cursor: "2",
+        readAt: READ_AT + 1,
+      });
+      yield* settled;
+
+      assert.deepEqual(
+        f.waiting.at(-1)?.map((plan) => plan.planId),
+        [PLAN_ID],
+      );
+      assert.equal(f.badges.at(-1), 1);
+      assert.deepEqual(f.said(), []);
+      assert.deepEqual(
+        f.holding.at(-1)?.map((holding) => holding.planId),
+        [PLAN_ID, teamPlan],
+      );
+    }),
+);
+
+it.effect(
+  "an item whose starter the service does not say waits on the account, as every item did before",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      yield* f.notices;
+      f.answerInbox({ items: [waitingItem(ITEM_A)], cursor: "1", readAt: READ_AT });
+      yield* settled;
+
+      assert.equal(f.badges.at(-1), 1);
+    }),
+);
+
+it.effect(
+  "an account whose id arrives after its first read stops counting a teammate's agent's questions at the next answer, though nothing past the cursor changed",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      f.knowAccountId(undefined);
+      yield* f.notices;
+      const teammate = "user-charles";
+      const answer = {
+        items: [
+          waitingItem(ITEM_A, { startedBy: ACCOUNT_ID }),
+          waitingItem(ITEM_B, { startedBy: teammate }),
+        ],
+        cursor: "1",
+        readAt: READ_AT,
+      };
+      f.answerInbox(answer);
+      yield* settled;
+      const before = f.badges.at(-1);
+      f.knowAccountId(ACCOUNT_ID);
+      f.answerInbox(answer);
+      yield* settled;
+
+      assert.equal(before, 2);
+      assert.equal(f.badges.at(-1), 1);
+    }),
+);
+
+it.effect(
+  "a question from a teammate's agent with no plan is neither counted, badged, nor announced to the account, while its own is",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      yield* f.notices;
+      f.focus(false);
+      f.answerInbox({ items: [], planless: [], cursor: "1", readAt: READ_AT });
+      yield* settled;
+      f.answerInbox({
+        items: [],
+        planless: [
+          planlessItem(ITEM_A, { startedBy: ACCOUNT_ID, updatedAt: READ_AT + 1 }),
+          planlessItem(ITEM_B, { startedBy: "user-charles", updatedAt: READ_AT + 1 }),
+        ],
+        cursor: "2",
+        readAt: READ_AT + 1,
+      });
+      yield* settled;
+
+      assert.equal(f.badges.at(-1), 1);
+      assert.equal(f.said().length, 1);
     }),
 );

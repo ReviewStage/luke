@@ -10,8 +10,9 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
  * with what waits, count each plan's open items, and list every plan
  * holding an item, open or settled, in its Inbox. It
  * carries no item whole, only what those three draw: the item's id, plan,
- * agent, title, revision, and instants, and the agent as its row names it
- * now, its title or else its model, so an agent this Mac has never listed,
+ * agent, title, revision, and instants, the agent as its row names it
+ * now, its title or else its model, and who started it, since an agent's
+ * questions are its starter's to be told of, so an agent this Mac has never listed,
  * one started on another, is still named. It carries every open item,
  * however long ago it changed, as a plan's read carries every open one
  * apart from its bound: the open items an agent may hold at once keep them
@@ -37,6 +38,12 @@ export const accountInboxEntrySchema = EffectSchema.Struct({
   agentTitle: EffectSchema.NullOr(EffectSchema.String),
   /** The model the agent runs on, which names it until it has a title. */
   agentModel: EffectSchema.String,
+  /**
+   * The account that started the agent, the one it asks and the one the
+   * desktop badges and tells; absent from a service that does not say,
+   * which the desktop reads as the reader's own, as it told everyone before.
+   */
+  startedBy: EffectSchema.optionalKey(EffectSchema.String),
   title: EffectSchema.String,
   revision: countedNumber,
   /** When the agent first posted the item under its key. */
@@ -71,6 +78,8 @@ export const accountPlanlessEntrySchema = EffectSchema.Struct({
   agentId: wireUuidSchema,
   agentTitle: EffectSchema.NullOr(EffectSchema.String),
   agentModel: EffectSchema.String,
+  /** The account that started the agent, as an item of a plan's agent says it, and on the same terms. */
+  startedBy: EffectSchema.optionalKey(EffectSchema.String),
   automationId: EffectSchema.NullOr(wireUuidSchema),
   automationName: EffectSchema.NullOr(EffectSchema.String),
   repository: EffectSchema.String,
