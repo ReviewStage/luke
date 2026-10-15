@@ -119,10 +119,11 @@ pasted link to an integration's page is a chip that brings its server along.
 
 Everyone is drawn one way: a person on a circle with their picture, and Luke,
 a coding agent, or an automation on a rounded square. A plan's "Edited by"
-line, its section bylines, and its ⋯ menu name whoever wrote it, and the time
-opens the history. A teammate's call is headed by their face and name, their
-messages in an agent's tab carry it, and an agent a teammate started, an Inbox
-answer, and a command run on someone's Mac each say whose it was.
+line and its section bylines name whoever wrote it, the time opening the
+history, and a task's ⋯ menu ends with who created and last edited it. A
+teammate's call is headed by their face and name, their messages in an
+agent's tab carry it, and an agent a teammate started, an Inbox answer, and a
+command run on someone's Mac each say whose it was.
 ([#2784](https://github.com/ReviewStage/luke/pull/2784),
 [#2794](https://github.com/ReviewStage/luke/pull/2794),
 [#2796](https://github.com/ReviewStage/luke/pull/2796),
@@ -144,13 +145,13 @@ answer, and a command run on someone's Mac each say whose it was.
 ### Workspaces, clearer
 
 The workspace heads the sidebar by its tile, its photo or first letter, and
-who shares it, and the window's title, New plan, and the plan's crumbs say
-where you are: "acme › relay" and "5 can edit" over a plan's title. Switching
-workspaces opens its last plan or its home, the Inbox follows, and Search
+who shares it, and the window's title, New task, and a task's crumbs say
+where you are: "acme › relay" and "5 can edit" over its title. Switching
+workspaces opens its last task or its home, the Inbox follows, and Search
 names the others. A personal workspace takes your name. Owners and admins
 rename a workspace and set its photo, the owner makes members admins and hands
 the workspace over to leave it, and an invite stays good after whoever sent it
-leaves. A plan whose repository its workspace cannot reach says so over every
+leaves. A task whose repository its workspace cannot reach says so over every
 tab and offers Move to workspace, which says who loses and gains it.
 ([#2718](https://github.com/ReviewStage/luke/pull/2718),
 [#2712](https://github.com/ReviewStage/luke/pull/2712),
@@ -177,16 +178,27 @@ tab and offers Move to workspace, which says who loses and gains it.
 [#2761](https://github.com/ReviewStage/luke/pull/2761),
 [#2771](https://github.com/ReviewStage/luke/pull/2771),
 [#2803](https://github.com/ReviewStage/luke/pull/2803),
-[#2804](https://github.com/ReviewStage/luke/pull/2804))
+[#2804](https://github.com/ReviewStage/luke/pull/2804),
+[#2870](https://github.com/ReviewStage/luke/pull/2870))
 
 ![The sidebar headed by acme's mark and its five members, its switcher open on Dean's personal workspace, acme, and Harbor Labs, over acme's plans.](apps/web/public/changelog/0.14.0/workspaces-clearer.png)
 
+### Tasks
+
+What you work through with Luke is now a task, and the plan is the document
+inside it: the sidebar, New task, ⌘K, the Tasks menu, and every notice say
+so. A coding agent's own instructions, and an automation's, are its Prompt.
+([#2835](https://github.com/ReviewStage/luke/pull/2835),
+[#2841](https://github.com/ReviewStage/luke/pull/2841),
+[#2844](https://github.com/ReviewStage/luke/pull/2844),
+[#2848](https://github.com/ReviewStage/luke/pull/2848))
+
 ### Luke links
 
-A plan's link is copied from its ⋯ menu or the ⋯ beside its title, and opens
-the plan in Luke at its section: pressed in the window, from another app
-through tryluke://, or from a browser through a page whose one press opens
-Luke and which says what to check when nothing opens.
+Copy link to task, in a task's ⋯ menu or the ⋯ beside its title, copies a
+link that opens the task in Luke at its section: pressed in the window, from
+another app through tryluke://, or from a browser through a page whose one
+press opens Luke and which says what to check when nothing opens.
 ([#2695](https://github.com/ReviewStage/luke/pull/2695),
 [#2696](https://github.com/ReviewStage/luke/pull/2696),
 [#2697](https://github.com/ReviewStage/luke/pull/2697),
@@ -199,9 +211,9 @@ Settings › Experimental turns on features before they are finished. Automation
 start a coding agent on a schedule, on a GitHub event in the workspace's
 repositories, or from a webhook, for you or the whole workspace, and its page
 lists its runs, each opening the agent it started. An agent an automation
-started needs no plan: it has a page of its own, its questions wait in the
-Inbox under its automation, and it says what started it. The Factory is a
-read-only board of every plan, from Plan to Build to Ship, beside the Inbox.
+started belongs to no task: it has a page of its own, its questions wait in
+the Inbox under its automation, and it says what started it. The Factory is a
+read-only board of every task, from Plan to Build to Ship, beside the Inbox.
 ([#2709](https://github.com/ReviewStage/luke/pull/2709),
 [#2699](https://github.com/ReviewStage/luke/pull/2699),
 [#2692](https://github.com/ReviewStage/luke/pull/2692),
@@ -244,9 +256,12 @@ read-only board of every plan, from Plan to Build to Ship, beside the Inbox.
   ([#2635](https://github.com/ReviewStage/luke/pull/2635),
   [#2700](https://github.com/ReviewStage/luke/pull/2700))
 - A window too narrow for the sidebar folds it to float over the work, and a
-  narrow Inbox shows the list or the item, with a way back
+  narrow Inbox opens on its item, the list a press of ‹ Inbox away
   ([#2679](https://github.com/ReviewStage/luke/pull/2679),
-  [#2680](https://github.com/ReviewStage/luke/pull/2680))
+  [#2680](https://github.com/ReviewStage/luke/pull/2680),
+  [#2879](https://github.com/ReviewStage/luke/pull/2879))
+- An Inbox option the agent recommends wears a Recommended badge
+  ([#2881](https://github.com/ReviewStage/luke/pull/2881))
 - A repository out of reach says why under the composer and offers what mends
   it ([#2573](https://github.com/ReviewStage/luke/pull/2573),
   [#2588](https://github.com/ReviewStage/luke/pull/2588))
@@ -258,7 +273,7 @@ read-only board of every plan, from Plan to Build to Ship, beside the Inbox.
   ([#2834](https://github.com/ReviewStage/luke/pull/2834))
 - Each column's ⋯ offers the chosen tab's actions, and tab housekeeping stays
   on the right-click ([#2783](https://github.com/ReviewStage/luke/pull/2783))
-- The sidebar sets an unread plan in semibold and a read one in a quieter ink,
+- The sidebar sets an unread task in semibold and a read one in a quieter ink,
   every row 30px tall ([#2801](https://github.com/ReviewStage/luke/pull/2801))
 - Every window draws its words without the Mac's font smoothing
   ([#2807](https://github.com/ReviewStage/luke/pull/2807))
@@ -270,7 +285,7 @@ read-only board of every plan, from Plan to Build to Ship, beside the Inbox.
 
 ### Fixes
 
-- Fixed a sidebar group not listing its plans newest updated first
+- Fixed a sidebar group not listing its tasks newest updated first
   ([#2818](https://github.com/ReviewStage/luke/pull/2818))
 - Fixed Settings saying Connected for a GitHub installation that GitHub
   removed or suspended
@@ -298,6 +313,9 @@ read-only board of every plan, from Plan to Build to Ship, beside the Inbox.
   [#2813](https://github.com/ReviewStage/luke/pull/2813))
 - Fixed a transparent workspace photo showing its letter tile behind it
   ([#2769](https://github.com/ReviewStage/luke/pull/2769))
+- Fixed an agent's to-do list sitting off its rows' text, its item in progress
+  now wearing the working mark
+  ([#2874](https://github.com/ReviewStage/luke/pull/2874))
 - Fixed an inline chip sitting off its line's baseline, a section's byline
   sitting off its ⋯, and a page's empty state sitting low
   ([#2856](https://github.com/ReviewStage/luke/pull/2856),
