@@ -2,6 +2,24 @@ import type { AccountProvider, AccountSnapshot } from "@luke/credentials/snapsho
 import { WORKSPACE_CALL_FAILURE } from "@luke/features";
 import type { ProductEventName, ProductEventPropertiesFor } from "@luke/features/analytics";
 import {
+  AUTOMATION_CALL_FAILURE,
+  type AutomationChangeParams,
+  type AutomationCreateParams,
+  type AutomationDeletedView,
+  type AutomationIdParams,
+  type AutomationListParams,
+  type AutomationListView,
+  type AutomationRunParams,
+  type AutomationRunsView,
+  type AutomationRunView,
+  type AutomationView,
+  automationDeletedViewSchema,
+  automationListViewSchema,
+  automationRunsViewSchema,
+  automationRunViewSchema,
+  automationViewSchema,
+} from "@luke/features/automation-view";
+import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAccountInboxAnswerView,
   type CodingAgentAccountInboxParams,
@@ -389,6 +407,18 @@ export interface HostOperator {
   codingAgentArchive(params: CodingAgentArchiveParams): Effect.Effect<CodingAgentAgentAnswer>;
   /** One agent read whole as its own page, on a plan or with none; or why there is no answer. */
   codingAgentPage(params: CodingAgentPageParams): Effect.Effect<CodingAgentPageAnswerView>;
+  /** The account's automations, or one plan's or one workspace's; or why there are none. */
+  automationList(params: AutomationListParams): Effect.Effect<AutomationListView>;
+  /** An automation made; the automation as the service kept it, or why it was not made. */
+  automationCreate(params: AutomationCreateParams): Effect.Effect<AutomationView>;
+  /** One automation changed; the automation as it then stands, or why it is unchanged. */
+  automationChange(params: AutomationChangeParams): Effect.Effect<AutomationView>;
+  /** One automation deleted with its history; or why it stands. */
+  automationDelete(params: AutomationIdParams): Effect.Effect<AutomationDeletedView>;
+  /** One automation run now under the window's key; the run as it came out, or why there is none. */
+  automationRun(params: AutomationRunParams): Effect.Effect<AutomationRunView>;
+  /** One automation's runs, newest first; or why there are none. */
+  automationRuns(params: AutomationIdParams): Effect.Effect<AutomationRunsView>;
   /** What one agent published: its branch and pull request as GitHub holds them; or why there is no answer. */
   codingAgentPullRequest(
     params: CodingAgentPullRequestParams,
@@ -548,6 +578,9 @@ function answered<Value>(value: UnparsedWireValue): Value | undefined {
 /** What a coding-agent call the host could not answer is drawn as. */
 const CODING_AGENT_UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
 
+/** An automation call that reached no answer, as every automation method answers one. */
+const AUTOMATION_UNANSWERED = { failure: AUTOMATION_CALL_FAILURE.UNANSWERED } as const;
+
 /** What an integration call the host could not answer is drawn as. */
 const INTEGRATION_UNANSWERED = { failure: INTEGRATION_CALL_FAILURE.UNANSWERED } as const;
 
@@ -599,6 +632,14 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       (answer.ok
         ? Result.getOrUndefined(readEither(schema, { excess: EXCESS_KEYS.DROP })(answer.result))
         : undefined) ?? CODING_AGENT_UNANSWERED;
+
+  /** An automation answer as the host's method documents it, or unanswered, on the same terms as a coding-agent answer. */
+  const automationAnswer =
+    <Answer, Encoded>(schema: EffectSchema.Codec<Answer, Encoded>) =>
+    (answer: GatewayCallResult): Answer | typeof AUTOMATION_UNANSWERED =>
+      (answer.ok
+        ? Result.getOrUndefined(readEither(schema, { excess: EXCESS_KEYS.DROP })(answer.result))
+        : undefined) ?? AUTOMATION_UNANSWERED;
 
   /** An integration answer as the host's method documents it, or unanswered, on the same terms as a coding-agent answer. */
   const integrationAnswer =
@@ -1122,6 +1163,36 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_PAGE, { agentId: params.agentId }),
         codingAgentAnswer(codingAgentPageAnswerViewSchema),
+      ),
+    automationList: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.AUTOMATIONS_LIST, params),
+        automationAnswer(automationListViewSchema),
+      ),
+    automationCreate: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.AUTOMATIONS_CREATE, params),
+        automationAnswer(automationViewSchema),
+      ),
+    automationChange: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.AUTOMATIONS_CHANGE, params),
+        automationAnswer(automationViewSchema),
+      ),
+    automationDelete: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.AUTOMATIONS_DELETE, params),
+        automationAnswer(automationDeletedViewSchema),
+      ),
+    automationRun: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.AUTOMATIONS_RUN, params),
+        automationAnswer(automationRunViewSchema),
+      ),
+    automationRuns: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.AUTOMATIONS_RUNS, params),
+        automationAnswer(automationRunsViewSchema),
       ),
     codingAgentPullRequest: (params) =>
       Effect.map(

@@ -110,6 +110,12 @@ export const GATEWAY_METHOD = {
   CODING_AGENTS_ARCHIVE: "codingAgents.archive",
   /** What one agent published: the branch it pushed and the pull request from it, as GitHub holds them now. */
   CODING_AGENTS_PAGE: "codingAgents.page",
+  AUTOMATIONS_LIST: "automations.list",
+  AUTOMATIONS_CREATE: "automations.create",
+  AUTOMATIONS_CHANGE: "automations.change",
+  AUTOMATIONS_DELETE: "automations.delete",
+  AUTOMATIONS_RUN: "automations.run",
+  AUTOMATIONS_RUNS: "automations.runs",
   CODING_AGENTS_PULL_REQUEST: "codingAgents.pullRequest",
   /** One agent's changes: the files of its pull request as GitHub holds them now, each with its patch. */
   CODING_AGENTS_CHANGES: "codingAgents.changes",

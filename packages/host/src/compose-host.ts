@@ -1,4 +1,5 @@
 import {
+  HostedAutomationClient,
   HostedCodingAgentClient,
   HostedGitHubConnectionClient,
   HostedIntegrationsClient,
@@ -25,6 +26,7 @@ import type * as FileSystem from "effect/FileSystem";
 import type * as Path from "effect/Path";
 import type { ChildProcessSpawner } from "effect/process";
 import { composeAccount } from "./compose-account.js";
+import { composeAutomations } from "./compose-automations.js";
 import { composeCodingAgents } from "./compose-coding-agents.js";
 import { composeIntegrations } from "./compose-integrations.js";
 import { composeLive } from "./compose-live.js";
@@ -48,13 +50,14 @@ import { HOST_NODE_CAPABILITY } from "./node-capabilities.js";
 import { createGatewayService } from "./service.js";
 import { openTerminalSocketOverWs } from "./terminal/socket-over-ws.js";
 
-/** The seven concerns, by the name each is built under. */
+/** The concerns, by the name each is built under. */
 const HOST_CONCERN = {
   SETTINGS: "settings",
   ACCOUNT: "account",
   LIVE: "live",
   PLANNING: "planning",
   CODING_AGENTS: "codingAgents",
+  AUTOMATIONS: "automations",
   INTEGRATIONS: "integrations",
   MAC_COMMANDS: "macCommands",
   TERMINALS: "terminals",
@@ -72,6 +75,7 @@ const HOST_START_ORDER: readonly HostConcern[] = [
   HOST_CONCERN.LIVE,
   HOST_CONCERN.PLANNING,
   HOST_CONCERN.CODING_AGENTS,
+  HOST_CONCERN.AUTOMATIONS,
   HOST_CONCERN.INTEGRATIONS,
   HOST_CONCERN.MAC_COMMANDS,
 ];
@@ -157,6 +161,14 @@ export const hostAssemblyLayer: Layer.Layer<
       account,
       client: codingAgentClient,
     });
+    const automations = yield* composeAutomations({
+      kernel,
+      account,
+      client: new HostedAutomationClient({
+        serviceBaseUrl: kernel.hostedServiceBaseUrl,
+        ...account.token,
+      }),
+    });
     const integrations = yield* composeIntegrations({
       kernel,
       account,
@@ -240,6 +252,7 @@ export const hostAssemblyLayer: Layer.Layer<
       [HOST_CONCERN.LIVE]: live,
       [HOST_CONCERN.PLANNING]: planning,
       [HOST_CONCERN.CODING_AGENTS]: codingAgents,
+      [HOST_CONCERN.AUTOMATIONS]: automations,
       [HOST_CONCERN.INTEGRATIONS]: integrations,
       [HOST_CONCERN.MAC_COMMANDS]: macCommands,
       [HOST_CONCERN.TERMINALS]: terminals,
