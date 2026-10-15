@@ -1,6 +1,32 @@
 # Proposal: images in plans, and which other media follow
 
-Status: **proposed, for Dean's decisions in §9.** Nothing is built.
+Status: **decided by Dean on 2026-10-15**: "Mostly looks great to me. I
+don't feel like the uploading fits in with our app, let's redesign that.
+Also we don't need Image added or Image removed chips in the version
+history, the red/green is enough. I agree with everything else and think we
+should do v1 and not more." So v1 is images and Mermaid, the twelve
+decisions in §9 as recommended, and nothing beyond. Two changes from the
+text below, recorded under "As decided": the uploading state is option A
+of the show's redesign, which Dean chose ("I agree with A"), and a version
+marks a picture only with the change's red or green.
+
+## As decided
+
+- **Uploading, option A.** The picture stands at its final size at half
+  strength, with the window's 16 px spinner and "Uploading" where its
+  caption will stand; a failed keep says so there, in the failure note's
+  words, with Retry and Remove. The veil of §3 is gone. Option B, a bar
+  along the picture's edge, was not taken. The show's "Uploading" section
+  draws both.
+- **No labels on history's pictures.** A picture written in wears the
+  green edge, and one struck out is dimmed behind the red, as words are;
+  "Image added" and "Image removed" are gone.
+- **General names.** The picture vocabulary
+  (`@luke/features/picture-wire`), the window's picture cache, and its
+  picture block are named for pictures rather than plans, so the agents'
+  transcript pictures can share them.
+- **Shipped so far:** #2886 (PR 1, the editor's bug), #2890 (PR 7,
+  Mermaid). PRs 2 to 6 follow.
 
 The show is `docs/proposals/plan-media/index.html`, one self-contained file
 that fetches nothing. Open it in a browser. Each frame uses main's compiled
@@ -103,14 +129,14 @@ from ⌘K and the Edit menu while editing, which opens the file picker. The
 picture goes in as its own block under the caret's paragraph.
 
 1. The renderer runs `encodeImage(file, 1_500_000)` and shows the picture at
-   once from the local bytes, under a veil reading "Uploading".
+   once from the local bytes at half strength, "Uploading" under it.
 2. `planning.attachFile` (main, on the account's bearer) posts the raw bytes
    to `POST /api/plans/:id/files`. The service sniffs the type, checks the
    reader can reach the plan, stores the row, and answers its id.
 3. The node's address becomes the file's. **A picture still uploading writes
    nothing to the text**, so a `data:` address is never saved and a
-   half-done upload never reaches a revision. A failed upload says so on the
-   veil, with Try again and Remove.
+   half-done upload never reaches a revision. A failed upload says so where
+   its caption will stand, with Retry and Remove (as decided, option A).
 
 Once a picture stands, selecting it shows its tools: **Alt text**,
 **Caption**, **Enlarge** and **Delete**. Backspace removes it, ⌘Z brings it
@@ -242,10 +268,10 @@ address gives nothing to someone who cannot read the plan.
     `![b](u2)` diffs letter runs inside the URL, which leaves broken
     Markdown.
   - `drawEdit` wraps a picture in the mark its token wears.
-  - A picture written in wears the green edge and "Image added". One struck
-    out is dimmed behind a red dashed edge and reads "Image removed". A
-    replacement shows both, the struck one first. Neither reads by colour
-    alone.
+  - A picture written in wears the green edge. One struck out is dimmed
+    behind a red dashed edge. A replacement shows both, the struck one
+    first. As decided, no label is added: the red and green say it, as they
+    do for words.
   - A changed alt text or caption is a replaced picture, which is honest:
     what a reader is told changed.
 
@@ -417,7 +443,7 @@ tests included.
 | 1 | `fix(desktop,features)`: a plan's image opens in the editor as a block, not an invalid inline node at the top level. `plan-diff` reads an image as one token. `mentionLinksIn` stops counting `![@…]`. The serializer escapes `]` and `"`. | S · ~200 |
 | 2 | `feat(database,service,web)`: `plan_attachment` and its migration; `POST /api/plans/:id/files` and `GET /api/plans/:id/files/:file` for the plan's readers; `first_saved_at` on save and the sweep's delete; the Open page's rewrite for file addresses; `@luke/features/plan-file-link`; PRIVACY.md's paragraph. Store tests on `getTestDB()`, including that a non-member cannot read another workspace's file. | M · ~550 |
 | 3 | `feat(host,desktop)`: the read view draws a plan's pictures: `planning.fileRead`, the window's cache by id, `PlanImage` and its states, the viewer walking the plan's pictures, the version history's marks. | M · ~450 |
-| 4 | `feat(desktop)`: paste, drop and Insert image in the plan editor; the upload veil, retry and remove; alt text and caption; `planning.copyFile` for a picture pasted from another plan. | M · ~500 |
+| 4 | `feat(desktop)`: paste, drop and Insert image in the plan editor; the upload state (option A), Retry and Remove; alt text and caption; a picture pasted from another plan kept again on this one. | M · ~500 |
 | 5 | `feat(service)`: `look_at_plan_file` for coding agents and the planning model, its image kept out of the stored transcript and traces; `keepsFiles` for the notetaker's and agents' corrections. | M · ~300 |
 | 6 | `feat(service)`: `edit_plan`'s image note, reading a sandbox file through the inbox's intake. | S–M · ~250 |
 | 7 | `feat(desktop)`: Mermaid fences draw as diagrams in the read view and under their code in the editor; the lazy `diagram` entry and its budget line. | M · ~400 |
