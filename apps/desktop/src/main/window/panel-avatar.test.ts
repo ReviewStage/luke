@@ -66,6 +66,17 @@ describe("the call's avatar relay", () => {
     assert.deepEqual(w.panel.sent, [{ channel: channels.onAvatarSession, payload: GRANT }]);
   });
 
+  it("hands a page that reloads mid-call the grant standing again", () => {
+    const w = windows();
+    w.draw(w.panel);
+    w.relay.showAvatarSession(GRANT);
+    w.relay.pageDrew();
+    assert.deepEqual(w.panel.sent, [
+      { channel: channels.onAvatarSession, payload: GRANT },
+      { channel: channels.onAvatarSession, payload: GRANT },
+    ]);
+  });
+
   it("hands a page that draws after the session closed nothing", () => {
     const w = windows();
     w.relay.showAvatarSession(GRANT);

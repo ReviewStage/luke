@@ -347,10 +347,19 @@ export class PanelManager {
     this.#windows.set(displayId, window);
 
     refuseForeignNavigation(window, this.#rendererUrl);
-    window.once("ready-to-show", () => {
+    // Each page the window loads, a reload's included, is handed the avatar's
+    // grant standing, since the renderer it replaced ran the session and the
+    // voice window stays muted while the avatar reads as up. Note that the
+    // first page is handed it twice, which the renderer reads as one grant.
+    const drew = () => {
       if (window.isDestroyed()) return;
       this.#drawn.add(window);
       this.#avatar.pageDrew();
+    };
+    window.webContents.on("did-finish-load", drew);
+    window.once("ready-to-show", () => {
+      if (window.isDestroyed()) return;
+      drew();
       if (placement.zoomed) window.maximize();
       // A capture run is a camera, not a person: it shows the window without
       // taking the keyboard from whatever else is running.
