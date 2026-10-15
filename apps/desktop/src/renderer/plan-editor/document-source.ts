@@ -144,13 +144,9 @@ function blockMarkdown(manager: MarkdownManager, node: PmNode, held: HeldSources
 export function documentMarkdown(manager: MarkdownManager, doc: PmNode, held: HeldSources): string {
   let out = held.lead;
   doc.forEach((node, _offset, index) => {
-    if (
-      held.sources.get(node) === undefined &&
-      node.type.name === "paragraph" &&
-      node.content.size === 0
-    )
-      return;
     const block = blockMarkdown(manager, node, held);
+    // Note that a new block that writes nothing, an empty paragraph or a picture still being kept, writes no blank line either.
+    if (held.sources.get(node) === undefined && block.trim() === "") return;
     out += index === doc.childCount - 1 ? block.trimEnd() + held.ending : block;
   });
   return out;

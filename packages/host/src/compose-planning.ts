@@ -39,6 +39,7 @@ import {
   type PlanningMoveAnswer,
   type PlanningPageAnswer,
   type PlanningPictureAnswer,
+  type PlanningPictureKeepAnswer,
   type PlanningRepositoriesAnswer,
   type PlanningRevisionAnswer,
   type PlanningRevisionsAnswer,
@@ -64,6 +65,7 @@ import {
   planningMessagesParamsSchema,
   planningMoveParamsSchema,
   planningPageParamsSchema,
+  planningPictureKeepParamsSchema,
   planningPictureParamsSchema,
   planningPinParamsSchema,
   planningPinRepositoryParamsSchema,
@@ -291,6 +293,7 @@ export type PlanningClient = Pick<
   | "readPages"
   | "readPageVersion"
   | "readPicture"
+  | "keepPicture"
   | "restore"
   | "repositories"
   | "setRepository"
@@ -1280,6 +1283,22 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
           FetchHttpClient.layer,
         );
         return carried<PlanningPictureAnswer>(picture);
+      }),
+    // The picture is kept and its id answered to the editor that took it;
+    // the plan's text names it once the editor lays its address in.
+    [GATEWAY_METHOD.PLANNING_PICTURE_KEEP]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(planningPictureKeepParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read))
+          return yield* invalid("keeping a picture names a plan and the picture");
+        if (!gate()) {
+          return carried<PlanningPictureKeepAnswer>({ failure: PLAN_CALL_FAILURE.UNANSWERED });
+        }
+        const kept = yield* Effect.provide(
+          client.keepPicture(read.success.planId, read.success.picture),
+          FetchHttpClient.layer,
+        );
+        return carried<PlanningPictureKeepAnswer>(kept);
       }),
     // The service answers the plan as restored, so the list's row and the
     // open document take it in place and nothing is read again.

@@ -21,6 +21,7 @@ import type {
 } from "../plan-editor/contract";
 import { rendererRuntime } from "../renderer-runtime";
 import { RetryButton } from "../retry-button";
+import { useEditorPictures } from "./editor-pictures";
 import {
   type MentionDoors,
   MentionNodeChip,
@@ -575,6 +576,7 @@ export function PlanDocumentEditor({
   const room = useRef<HTMLElement>(null);
   const chips = useEditorDrawings<MentionNode>();
   const diagrams = useEditorDrawings<EditorDiagram>();
+  const pictures = useEditorPictures(plan.id, mentions?.place.workspace, handle);
   // Note that the editor's own text is read, since the draft is handed over only once typing pauses.
   const text = () => handle.current?.markdown() ?? editor.draft;
   const picker = useMentionPicker({
@@ -624,6 +626,7 @@ export function PlanDocumentEditor({
               decodeMention(target, mentions.place.repository) !== undefined,
           },
     drawDiagram: diagrams.draw,
+    pictures: pictures.pictures,
   };
   return (
     <section
@@ -636,6 +639,7 @@ export function PlanDocumentEditor({
     >
       <MountedPlanEditor module={module.value} props={props} handle={handle} />
       <DocumentNote editor={editor} editing={editing} />
+      {pictures.drawn}
       {mentions === undefined ? null : picker.menu}
       {mentions === undefined
         ? null

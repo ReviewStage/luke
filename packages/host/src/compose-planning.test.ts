@@ -37,6 +37,7 @@ import {
 } from "@luke/features/plan-wire";
 import {
   GITHUB_DISCONNECT_FAILURE,
+  PICTURE_KEEP_FAILURE,
   PLAN_CALL_FAILURE,
   PLANNING_READ,
   type PlanCallFailure,
@@ -266,6 +267,17 @@ function fakeService(plans: Plan[]): FakeService {
     pageLines: {},
     readPages: (planId) => Effect.sync(() => service.pageLines[planId]),
     pictures: new Map(),
+    // The service keeps a picture under the next id, and refuses one more where the plan holds two, a bound small enough to reach.
+    keepPicture: (planId, picture) =>
+      Effect.sync(() => {
+        const held = service.pictures.get(planId) ?? new Map();
+        service.pictures.set(planId, held);
+        if (held.size >= 2) return { failure: PICTURE_KEEP_FAILURE.TOO_MANY };
+        const id = `kept-${held.size + 1}`;
+        const [, base64 = ""] = picture.split(",");
+        held.set(id, { contentType: PICTURE_TYPE.PNG, base64 });
+        return { id };
+      }),
     readPicture: (planId, attachmentId) =>
       Effect.sync(
         () =>
@@ -845,6 +857,27 @@ it.effect(
       assert.deepEqual(read, picture);
       assert.deepEqual(gone, { failure: PLAN_CALL_FAILURE.NOT_FOUND });
       assert.equal(told.length, 0, "a picture's bytes are never told in the view");
+    }),
+);
+
+it.effect(
+  "a picture the editor took is kept on the service and read back by the id it answered, and one past the plan's bound is refused in so many words",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([plan(INVITES, "Teammate invitations", "# Invites", 10)]);
+      const { call } = yield* subject(service);
+      const picture = "data:image/png;base64,iVBORw0KGgo=";
+
+      const kept = yield* call(GATEWAY_METHOD.PLANNING_PICTURE_KEEP, { planId: INVITES, picture });
+      yield* call(GATEWAY_METHOD.PLANNING_PICTURE_KEEP, { planId: INVITES, picture });
+      const third = yield* call(GATEWAY_METHOD.PLANNING_PICTURE_KEEP, { planId: INVITES, picture });
+
+      assert.deepEqual(kept, { id: "kept-1" });
+      assert.deepEqual(
+        yield* call(GATEWAY_METHOD.PLANNING_PICTURE, { planId: INVITES, attachmentId: "kept-1" }),
+        { contentType: PICTURE_TYPE.PNG, base64: "iVBORw0KGgo=" },
+      );
+      assert.deepEqual(third, { failure: PICTURE_KEEP_FAILURE.TOO_MANY });
     }),
 );
 

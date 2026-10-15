@@ -17,7 +17,7 @@ import {
   pageVersionNumberSchema,
   planPageVersionAnswerSchema,
 } from "./page-wire.js";
-import { pictureTypeSchema } from "./picture-wire.js";
+import { pictureDataUrlSchema, pictureTypeSchema } from "./picture-wire.js";
 import { PLAN_EDIT_REFUSAL, planEditRequestSchema, planEditValueSchema } from "./plan-edit.js";
 import {
   codeRefSchema,
@@ -774,6 +774,29 @@ export const planningPictureAnswerSchema = EffectSchema.Union([
 ]);
 
 export type PlanningPictureAnswer = typeof planningPictureAnswerSchema.Type;
+
+/** A picture kept on a plan, as the editor that took it asks: the plan, and the picture as a `data:` URL. */
+export const planningPictureKeepParamsSchema = EffectSchema.Struct({
+  planId: EffectSchema.NonEmptyString,
+  picture: pictureDataUrlSchema,
+});
+
+export type PlanningPictureKeepParams = typeof planningPictureKeepParamsSchema.Type;
+
+/** Why a picture was not kept: the plan holds its bound of pictures, the plan is not the account's to write, or no answer. */
+export const PICTURE_KEEP_FAILURE = {
+  TOO_MANY: "too-many",
+  NOT_FOUND: PLAN_CALL_FAILURE.NOT_FOUND,
+  UNANSWERED: PLAN_CALL_FAILURE.UNANSWERED,
+} as const;
+
+/** A picture kept, as the editor hears it: the id its text names it by, or why it was not kept. */
+export const planningPictureKeepAnswerSchema = EffectSchema.Union([
+  EffectSchema.Struct({ id: EffectSchema.NonEmptyString }),
+  EffectSchema.Struct({ failure: EffectSchema.Literals(Object.values(PICTURE_KEEP_FAILURE)) }),
+]);
+
+export type PlanningPictureKeepAnswer = typeof planningPictureKeepAnswerSchema.Type;
 
 /** One version of one page of a plan, as the frame drawing it names it. */
 export const planningPageParamsSchema = EffectSchema.Struct({

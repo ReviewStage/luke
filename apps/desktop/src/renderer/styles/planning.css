@@ -3396,6 +3396,132 @@ button.picture-frame {
   vertical-align: -0.12em;
 }
 
+/* A picture in the plan's editor (`editor-pictures.tsx`): the read view's
+   block, ringed while selected, its tools over its top corner. */
+.editor-picture {
+  display: block;
+}
+
+.editor-picture-drawn {
+  position: relative;
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+}
+
+.editor-picture-drawn[data-selected="true"] .picture-frame {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.picture-tools {
+  position: absolute;
+  top: calc(var(--space-12) + var(--space-8));
+  right: var(--space-8);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 9px;
+  background: var(--surface-popover);
+  box-shadow: 0 6px 18px var(--shadow-deep);
+}
+
+.picture-tool {
+  display: inline-flex;
+  height: 26px;
+  align-items: center;
+  gap: var(--space-4);
+  padding: 0 var(--space-8);
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.picture-tool:hover {
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+}
+
+.picture-tool > svg {
+  width: 14px;
+  height: 14px;
+}
+
+.picture-tool[data-tone="danger"] {
+  color: var(--danger-text);
+}
+
+/* A field under a picture that describes it anew, in Settings' well. */
+.picture-describe {
+  display: grid;
+  width: min(360px, 100%);
+  gap: var(--space-6);
+  margin: var(--space-6) 0 var(--space-12);
+  font-size: 12.5px;
+}
+
+.picture-describe label {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.picture-describe-label {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.picture-describe-field {
+  padding: 6px 9px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 7px;
+  background: var(--desktop-well);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+}
+
+.picture-describe-field:focus {
+  border-color: var(--focus-ring);
+  outline: none;
+}
+
+.picture-describe-hint {
+  color: var(--text-tertiary);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+/* A picture waiting on its upload: the Mac's own bytes at half strength,
+   and the wait said where its caption will stand with the window's own
+   spinner; a failed upload says so there, as every failure does. */
+.picture-block[data-upload] .picture-image {
+  opacity: 0.5;
+}
+
+.picture-status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  margin-top: var(--space-6);
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.picture-status.failure-note {
+  gap: var(--space-4);
+  color: var(--danger-text);
+}
+
+.picture-status .failure-note-words {
+  margin-right: var(--space-4);
+}
+
 /* A version's change to a picture: written in on the green edge, struck out
    dimmed behind the red, as its words would be (`markdown-message.tsx`'s
    change marks); the mark lends it no wash of its own. */

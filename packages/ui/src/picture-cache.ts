@@ -76,6 +76,14 @@ function keptPicture(owner: string, id: string, read: () => Promise<PictureAnswe
   return kept;
 }
 
+/** A picture this window made itself, kept as read under the id it was given, so no place reads it back. */
+export function keepPictureRead(owner: string, id: string, url: string): void {
+  const pictures = keptPictures.get(owner) ?? new Map<string, KeptPicture>();
+  keptPictures.set(owner, pictures);
+  const state: PictureState = { kind: PICTURE_STATE.READY, url };
+  pictures.set(id, { state, read: Promise.resolve(state) });
+}
+
 /** Where the picture stands now, without reading it; reading where no place has asked yet. */
 export function pictureNow(owner: string, id: string): PictureState {
   return keptPictures.get(owner)?.get(id)?.state ?? READING;
