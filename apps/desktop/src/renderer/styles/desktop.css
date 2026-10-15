@@ -1169,6 +1169,25 @@ body,
   margin-right: var(--space-4);
 }
 
+/* A plan whose repository belongs to another workspace wears the attention
+   mark in that place, the white exclamation on its orange disc
+   (`attention-mark.tsx`), a size under the glyph's, so the disc's edge
+   reads at the time's height. */
+.plan-mark-attention {
+  margin-right: var(--space-4);
+}
+
+.plan-mark-attention .attention-mark {
+  width: 12px;
+  height: 12px;
+  vertical-align: -1.5px; /* off-scale */
+}
+
+.plan-mark-attention .attention-mark svg {
+  width: 10px;
+  height: 10px;
+}
+
 /* Pin and Archive stand in the time's slot, which is always as wide as the
    two of them, while the row is hovered or holds the keyboard: the time
    steps out and they step in over the name's first line, so the name is cut

@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import { PLAN_ACTOR, type Plan, type PlanSummary } from "@luke/features/plan-wire";
+import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { DOCUMENT_REGION, PLANS_PAGE, type PlanMark } from "@luke/ui/planning-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { act, createElement, type ReactElement } from "react";
@@ -15,6 +16,7 @@ import { NO_LOOKS } from "../planning/use-plan-looks";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { DesktopPlans } from "./desktop-plans";
 import { SidebarPlan } from "./plan-actions";
+import { planCardOf } from "./plan-card";
 
 const PLAN: Plan = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
@@ -326,4 +328,79 @@ test("Start and the plan's ⋯ stand in the toolbar on the Plan tab alone", () =
 
   assert.deepEqual(drawn(MAIN_TAB.PLAN), ["Start a coding agent", "Plan actions"]);
   assert.deepEqual(drawn(MAIN_TAB.INBOX), []);
+});
+
+/** Dean's own workspace, with no GitHub connected, and the team's, whose GitHub reaches acme-corp's repositories. */
+const PERSONAL: Workspace = {
+  id: "workspace-personal",
+  name: "Dean Stratakos",
+  role: WORKSPACE_ROLE.OWNER,
+  github: null,
+  memberCount: 1,
+};
+const STAGE: Workspace = {
+  id: "workspace-stage",
+  name: "Stage",
+  role: WORKSPACE_ROLE.MEMBER,
+  github: { login: "acme-corp", active: true },
+  memberCount: 6,
+};
+
+/** Dean's plan in his own workspace on a repository only Stage's GitHub reaches: stranded there. */
+const STRANDED: PlanSummary = {
+  ...OTHER,
+  repository: "acme-corp/relay",
+  ownerId: DEAN.userId,
+};
+
+/** The words a reader hears in an element: its text but for a mark hidden from a screen reader, a workspace's tile's letter among them. */
+function heard(node: Node): string {
+  if (node instanceof Element && node.getAttribute("aria-hidden") === "true") return "";
+  if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? "";
+  return [...node.childNodes].map(heard).join("");
+}
+
+test("a sidebar plan whose repository belongs to another of the account's workspaces wears the attention mark before its time, its card naming that workspace, until it is moved there", () => {
+  const { asked } = openTab();
+  const plans = plansControl({ me: DEAN.userId, workspaces: [PERSONAL, STAGE] });
+  const container = mount(sidebarPlan(plans, STRANDED, asked));
+  const mark = () => container.querySelector(".sidebar-plan-time .attention-mark");
+  const card = mount(planCardOf(plans, STRANDED, STRANDED.updatedAt));
+
+  assert.notEqual(mark(), null, "the row wears the attention mark");
+  assert.match(heard(container), /\(repository belongs to Stage\)/u);
+  assert.deepEqual([...card.querySelectorAll(".plan-card-detail")].map(heard), [
+    "acme-corp/relay",
+    "Repository belongs to Stage",
+  ]);
+
+  act(() => roots[0]?.render(sidebarPlan(plans, { ...STRANDED, workspaceId: STAGE.id }, asked)));
+  assert.equal(mark(), null, "moved to Stage, the row wears it no longer");
+});
+
+test("no sidebar plan wears the attention mark where its own workspace reaches its repository, no other workspace does, a teammate owns it, or it is archived", () => {
+  const { asked } = openTab();
+  const reaching = { ...PERSONAL, github: { login: "acme-corp", active: true } };
+  const cases: [PlanSummary, readonly Workspace[]][] = [
+    [STRANDED, [reaching, STAGE]],
+    [STRANDED, [PERSONAL]],
+    [{ ...STRANDED, ownerId: CHARLES.userId }, [PERSONAL, STAGE]],
+    [{ ...STRANDED, archivedAt: 6 }, [PERSONAL, STAGE]],
+  ];
+  const marked = cases.map(([plan, workspaces]) => {
+    const plans = plansControl({ me: DEAN.userId, workspaces: [...workspaces] });
+    const row = mount(sidebarPlan(plans, plan, asked));
+    const card = mount(planCardOf(plans, plan, plan.updatedAt));
+    const found = [
+      row.querySelector(".attention-mark") !== null,
+      card.querySelector(".attention-mark") !== null,
+    ];
+    unmountAll();
+    return found;
+  });
+
+  assert.deepEqual(
+    marked,
+    cases.map(() => [false, false]),
+  );
 });

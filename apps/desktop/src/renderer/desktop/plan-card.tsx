@@ -2,8 +2,10 @@ import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { moreText, PLAN_ROW_MARK, planRowMark } from "@luke/features/plan-agents-model";
 import type { PlanAgentLine, PlanPullRequestLine, PlanSummary } from "@luke/features/plan-wire";
+import type { Workspace } from "@luke/features/workspace-wire";
 import { ProviderMark } from "@luke/ui";
 import { repositoryPageUrl } from "@luke/ui/planning-model";
+import { AttentionMark } from "../attention-mark";
 import { CardHead, CardRule, HoverCard } from "../hover-card";
 import { agentTabLabel, pullRequestNumberLabel } from "../planning/coding-agent-model";
 import { PullRequestMark } from "../planning/pull-request-mark";
@@ -13,6 +15,8 @@ import type { PlansControl } from "../planning/use-plans-tab";
 import { RepositoryPicture } from "../repository-picture";
 import { GLYPH_STATE, StateGlyph } from "../state-glyph";
 import { Tooltip } from "../tooltip";
+import { strandedHome } from "./move-plan-dialog";
+import { WorkspaceRef } from "./workspace-ref";
 
 /**
  * plan-card.tsx -- a sidebar plan's agents at a glance: the one mark at its row's end, and the card its row hangs while the pointer rests on it.
@@ -44,8 +48,28 @@ const CARD_ROWS = {
   PULL_REQUESTS: 2,
 } as const;
 
-/** The one mark at a plan row's end, before its time: an agent at work, else its pull request, else nothing. */
-export function PlanStatusMark({ plan }: { plan: PlanSummary }): React.JSX.Element | null {
+/**
+ * The one mark at a plan row's end, before its time: the attention mark on
+ * a plan whose repository belongs to another of the account's workspaces,
+ * which its card names (`strandedHome`); else an agent at work, else its
+ * pull request, else nothing.
+ */
+export function PlanStatusMark({
+  plan,
+  stranded,
+}: {
+  plan: PlanSummary;
+  /** The workspace the plan's repository belongs to, where the reader may move it there. */
+  stranded?: Workspace | undefined;
+}): React.JSX.Element | null {
+  if (stranded !== undefined) {
+    return (
+      <span className="plan-mark-attention">
+        <AttentionMark />
+        <span className="visually-hidden">{`(repository belongs to ${stranded.name})`}</span>
+      </span>
+    );
+  }
   const mark = planRowMark(plan.agents);
   switch (mark.kind) {
     case PLAN_ROW_MARK.WORKING:
@@ -210,6 +234,7 @@ export function PlanCard({
   now,
   onOpenGitHub,
   onShowAgent,
+  stranded,
 }: {
   plan: PlanSummary;
   /** The catalog as last read, which names each agent's model; empty before the first read. */
@@ -222,6 +247,8 @@ export function PlanCard({
   onOpenGitHub: (url: string) => void;
   /** Opens the plan on one of its agents' tabs. */
   onShowAgent: (agentId: string) => void;
+  /** The workspace the plan's repository belongs to, where the reader may move it there, which the card names under the repository. */
+  stranded?: Workspace | undefined;
 }): React.JSX.Element {
   const { agents, repository } = plan;
   const agentRows = agents?.agents.slice(0, CARD_ROWS.AGENTS) ?? [];
@@ -234,6 +261,16 @@ export function PlanCard({
       />
       {repository === null ? null : (
         <RepositoryDetail repository={repository} pictures={pictures} onOpenGitHub={onOpenGitHub} />
+      )}
+      {stranded === undefined ? null : (
+        <span className="plan-card-detail">
+          <span className="plan-card-glyph">
+            <AttentionMark />
+          </span>
+          <span className="plan-card-label">
+            Repository belongs to <WorkspaceRef workspace={stranded} />
+          </span>
+        </span>
       )}
       {agents === undefined || agentRows.length === 0 ? null : (
         <>
@@ -276,13 +313,14 @@ export function PlanCard({
  * Inbox's crumb. An agent's line opens the plan on that agent's tab.
  */
 export function planCardOf(
-  plans: Pick<PlansControl, "agents" | "repositories" | "onShowAgent">,
+  plans: Pick<PlansControl, "agents" | "repositories" | "onShowAgent" | "me" | "workspaces">,
   plan: PlanSummary,
   now: number,
 ): React.JSX.Element {
   return (
     <PlanCard
       plan={plan}
+      stranded={strandedHome(plans, plan)}
       models={plans.agents.models ?? []}
       pictures={plans.repositories.pictures}
       now={now}
