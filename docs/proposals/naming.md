@@ -1,10 +1,10 @@
 # Research: a better domain, or a better name
 
 Status: research for Dean's ask, written 2026-10-15 against main at
-`5ff5948d`. Three passes ran the same day, each on a new ask from Dean.
-§1–4 cover the domain and the first rename brainstorm, §5–6 cover the .com
-pass, and §7 covers abstract devtool names. **§7 is the current
-recommendation**: the second and third asks overruled the voice- and
+`5ff5948d`. Four passes ran the same day, each on a new ask from Dean.
+§1–4 cover the domain and the first rename brainstorm, §5–6 the .com pass,
+§7 abstract devtool names, and §8 two-word compounds like Fernrail. **§8 is
+the current recommendation.** The later asks overruled the voice- and
 planning-themed names of §3 and §5. Nothing was registered, bought, or reserved,
 and no seller was contacted. Each domain below was checked from the sandbox
 on 2026-10-15: RDAP at the TLD's registry (WHOIS where a TLD has no RDAP),
@@ -16,10 +16,22 @@ Dean's ask: "Kick off a worker to brainstorm better product/domain names.
 tryluke.dev sucks." Then: "Look for .com URLs." And: the name "doesn't have
 to be a person's name". Then: "it can be any random devtool sounding domain
 and I don't want it to be tied to talking or speaking or even planning."
+Then: "I like the simple combo of two names like fernrail. Easy to
+pronounce and spell. Let's do more of those."
 
 ## TL;DR
 
-**Current (third pass, §7):** rename the product to **Tyndo**.
+**Current (fourth pass, §8):** pick one of three two-word names. The
+teammate keeps the name Luke inside the product either way.
+
+- **Flintdeck:** flintdeck.com is **$499** buy-now on Afternic, and .dev
+  and .app are free. Nothing uses the name.
+- **Birchrail:** .com, .dev, and .app are all unregistered.
+- **Copperdeck:** copperdeck.com is $1,788, and .dev and .app are free.
+- **Fernrail** is clean as a name, but Fern (Postman's SDK and docs tool)
+  is a dev brand, so it may read as a Fern product.
+
+Third pass (§7), superseded: rename the product to **Tyndo**.
 
 - **Domains:** tyndo.com is about **$1,118** buy-now on its own sale page.
   tyndo.dev and tyndo.app are unregistered.
@@ -583,7 +595,7 @@ itself, which is distinctive enough that the `try` prefix #2697 needed for
 `luke://` isn't needed. The app goes on registering and reading `tryluke:`
 for links already written.
 
-### 7.4 Recommendation (current)
+### 7.4 Recommendation (third pass, superseded by §8)
 
 1. **Rename the product to Tyndo, and keep Luke as the teammate.**
    - **Domains:** the cheapest clean bare .com found (about $1,118
@@ -619,6 +631,120 @@ for links already written.
      registrar's and not a scraped page's.
    - Nothing was bought, offered on, or reserved here, and no seller was
      contacted.
+
+## 8. Fourth pass: two-word compounds
+
+Dean's brief: two short, concrete, everyday words joined into one, like
+Fernrail. 7–10 letters, spelled the way it sounds, easy to say, and a
+devtool feel. Nothing about talking, voice, or planning.
+
+### 8.1 Method
+
+- **Generation:** 66 first words × 47 second words, all nature, materials,
+  tools, places, and craft (fern, moss, birch, flint, slate, tin, copper,
+  cedar, tarn, glen, cliff, harbor, pier, keel, anvil, rivet… +
+  rail, deck, dock, yard, mill, loft, crest, line, path, way, kiln…). Pairs
+  where the first word ends on the letter the second begins with were
+  dropped (cedar+rail would spell "cedarrail"). Pairs outside 7–10
+  letters were dropped too.
+- **The .com check:** 2,286 compounds, Verisign RDAP and NS records.
+  **435 unregistered** and 404 parked at a marketplace (Afternic,
+  HugeDomains, Atom, Spaceship, Sedo, BrandBucket, Dan).
+- **Shortlist:** about 35 unregistered names that read and spell cleanly.
+  .dev and .app were free for all but tidefern.app. 19 Afternic listings
+  were priced.
+- **Conflict pass:** 28 finalists checked on web, GitHub, npm, the App
+  Store, and Trademarkia (exact names; a search, not clearance). Every one
+  had 0 exact trademarks and a free npm name. The risk lives in the halves:
+  Fern, Harbor, Kiln, Rivet, Anvil, Flint, Cobalt, Basalt, and Elm are each
+  already a dev or AI tool.
+
+Listed under ~$5k (buy-now, Afternic): flintdeck.com **$499**,
+tinmill.com $1,500, copperdeck.com $1,788, loomline.com $1,970,
+harbordeck.com $2,495, frostrail.com $2,999, pinedock.com $3,395,
+copperloft.com $3,995, oakdeck.com $4,795, and reedline.com and
+frostpine.com at $5,000. Over budget: cedarway.com ($8,488),
+copperdock.com ($9,995), ironlane.com ($10,499), ironpine.com ($19,888),
+cedarmill.com ($58,888), and tinyard.com and fernyard.com ($6,895 and
+$5,800).
+
+Cut in the conflict pass:
+
+- **Frostrail:** FROSTRAIL is a registered mark (classes 9 and 41) for
+  FakeFish's 2026 video game.
+- **Oakdeck:** a live class 9 OAKDECK mark, the GitHub name is held, and
+  the AI-agent CLI Overdeck is one letter off.
+- **Loomline:** loomline.dev is "Loomline — EU-hosted SEO monitoring"
+  (2026).
+- **Copperloft:** COPPERLOFT is registered for pillows and mattress pads.
+- **Kilndock and Kilnline:** Microsoft holds KILN in class 9, and Kiln AI
+  is a desktop AI dev app.
+- **Rivetdock:** Rivet (rivet.dev) is a 6k-star actors framework for AI
+  agents that runs on Vercel.
+- **Anvilway:** Anvil (anvil.works) is an app builder.
+- **Tidefern:** tidefern.app was registered in 2026.
+
+### 8.2 The best fifteen
+
+| # | Name | .com | Price | .dev / .app | Conflict | Feel | Scheme |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | **Flintdeck** | for sale | $499 (Afternic) | free / free | Low (Flint AI shares a half) | Hard and crisp: a deck of controls | `flintdeck://` |
+| 2 | **Birchrail** | unregistered | ~$11/yr | free / free | Low | Fernrail's feel without the Fern clash | `birchrail://` |
+| 3 | **Copperdeck** | for sale | $1,788 (Afternic) | free / free | Low (Copper CRM shares a half) | Warm metal, solid deck | `copperdeck://` |
+| 4 | Tincrest | unregistered | ~$11/yr | free / free | Low | Short and bright, nothing near it | `tincrest://` |
+| 5 | Pinedock | for sale | $3,395 (Afternic) | free / free | Low | Calm: where work comes in to dock | `pinedock://` |
+| 6 | Cliffdeck | unregistered | ~$11/yr | free / free | Low | Bold, outdoorsy | `cliffdeck://` |
+| 7 | Tarnyard | unregistered | ~$11/yr | free / free | Low | A workyard by a mountain lake; "tarn" is less familiar | `tarnyard://` |
+| 8 | Fernrail | unregistered | ~$11/yr | free / free | Medium (Fern is Postman's SDK tool) | The one Dean liked | `fernrail://` |
+| 9 | Tinmill | for sale | $1,500 (Afternic) | free / free | Low (GitHub name held, empty) | A small factory in seven letters | `tinmill://` |
+| 10 | Glendeck | unregistered | ~$11/yr | free / free | Low | Soft, easy, less edge | `glendeck://` |
+| 11 | Brookrail | unregistered | ~$11/yr | free / free | Low | Flowing, friendly | `brookrail://` |
+| 12 | Pinerail | unregistered | ~$11/yr | free / free | Low | Plain, sturdy | `pinerail://` |
+| 13 | Mossrail | unregistered | ~$11/yr | free / free | Low (one letter off Crossrail) | Soft, green, near Fernrail | `mossrail://` |
+| 14 | Harbordeck | for sale | $2,495 (Afternic) | free / free | Medium (Harbor is the CNCF registry) | Where ships come in | `harbordeck://` |
+| 15 | Tinrail | unregistered | ~$11/yr | free / free | Low (GitHub name held, dormant) | Short, metallic | `tinrail://` |
+
+Close behind: Frostloft (clean, GitHub name held), Glenlight (clean, but
+reads as lighting), and Elmrail, Cobaltford, Basaltmill, and Flintpine
+(clean as names, crowded halves). Each scheme is the name itself, unique
+enough to need no `try` prefix. The app goes on registering and reading
+`tryluke:` for links already written.
+
+### 8.3 Recommendation (current)
+
+1. **Flintdeck**
+   - **Price:** at $499 it costs less than a year of most SaaS seats, and
+     its .dev and .app are free beside it.
+   - **Conflicts:** none on the exact name. The nearest is Flint AI, which
+     shares only the half.
+   - **Sound:** two hard consonant clusters, easy to say and spell from
+     hearing it.
+   - **Fit:** "deck" fits a product whose window is a control surface
+     (Inbox, Factory, terminal). `flintdeck.com/acme/plan/…` reads well.
+2. **Birchrail**, if the .com must be unregistered.
+   - **Domains:** .com, .dev, and .app are all free.
+   - **Conflicts:** nothing anywhere.
+   - **Fit:** the same soft nature-plus-rail shape as Fernrail, without
+     the Fern half.
+3. **Copperdeck** ($1,788) for a warmer version of the same idea.
+4. **Fernrail:** the name is unregistered everywhere, but Fern is a
+   well-known dev-tool brand. Developers will hear "Fern" first, so a
+   different first word gets the same feel without the borrowed
+   association.
+
+The move itself is unchanged from §7.4:
+
+- Point the link host at the new domain, once.
+- Read tryluke.dev and `tryluke:` links forever.
+- Keep tryluke.dev serving the APIs for builds already in the field.
+- Migrate the app's state directory and Keychain entry.
+- Keep the bundle id and `@luke/*`.
+- Redraw the mark (two eyes over the new initial).
+
+Before buying: trademark clearance in classes 9 and 42 for the two-word
+form as well as the joined one, and the price confirmed through a
+registrar. Nothing was bought, offered on, or reserved, and no seller was
+contacted.
 
 ## Sources
 
@@ -663,6 +789,14 @@ Conflicts come from [getluke.app](https://www.getluke.app),
 [Trademarkia: tessar](https://www.trademarkia.com/search/trademarks?q=tessar),
 [Morvo on Shopify](https://apps.shopify.com/morvo),
 [Nymbo on Hugging Face](https://huggingface.co/Nymbo), and
-[Kiln-AI](https://github.com/Kiln-AI/Kiln). The mock page with each shortlisted
+[Kiln-AI](https://github.com/Kiln-AI/Kiln),
+[Afternic: flintdeck.com](https://www.afternic.com/domain/flintdeck.com),
+[Afternic: copperdeck.com](https://www.afternic.com/domain/copperdeck.com),
+[Afternic: pinedock.com](https://www.afternic.com/domain/pinedock.com),
+[Afternic: tinmill.com](https://www.afternic.com/domain/tinmill.com),
+[Afternic: harbordeck.com](https://www.afternic.com/domain/harbordeck.com),
+[Frostrail (Gematsu)](https://www.gematsu.com/games/frostrail),
+[Fern (YC)](https://www.ycombinator.com/companies/fern), and
+[Rivet](https://www.rivet.dev). The mock page with each shortlisted
 name in a title bar, link, and icon tile is served through `conductor
 preview` from a copy outside the repository.
