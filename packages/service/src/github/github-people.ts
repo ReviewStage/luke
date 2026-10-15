@@ -75,20 +75,38 @@ const linkedMembers = /* @__PURE__ */ Effect.fnUntraced(function* (
   return new Map(rows.map((row) => [Number(row.githubId), row.userId]));
 });
 
+/** A person as the wire names them, while what is known of them is added. */
+interface PersonBeingNamed {
+  login: string;
+  bot: boolean;
+  avatarUrl?: string;
+  luke?: boolean;
+  userId?: string;
+}
+
+/** The people as the wire carries them, while who opened the pull request is added where GitHub names them. */
+interface PeopleBeingNamed {
+  author?: GitHubPerson;
+  reviewers: NonNullable<ChangesPeople["reviewers"]>;
+  commitAuthors: NonNullable<ChangesPeople["commitAuthors"]>;
+  comments: NonNullable<ChangesPeople["comments"]>;
+}
+
 /** One account as the wire names it, the member it is linked to and Luke's own bot marked. */
 function personOf(
   held: GitHubAccount,
   linked: ReadonlyMap<number, string>,
   lukeBotId: number | undefined,
 ): GitHubPerson {
-  const userId = linked.get(held.id);
-  return {
+  const person: PersonBeingNamed = {
     login: held.login,
     bot: held.bot,
-    ...(held.avatarUrl === undefined ? {} : { avatarUrl: held.avatarUrl }),
-    ...(held.id === lukeBotId ? { luke: true } : {}),
-    ...(userId === undefined ? {} : { userId }),
   };
+  if (held.avatarUrl !== undefined) person.avatarUrl = held.avatarUrl;
+  if (held.id === lukeBotId) person.luke = true;
+  const userId = linked.get(held.id);
+  if (userId !== undefined) person.userId = userId;
+  return person;
 }
 
 /** The people as the wire carries them. */
@@ -98,8 +116,7 @@ function changesPeopleOf(
   lukeBotId: number | undefined,
 ): ChangesPeople {
   const person = (held: GitHubAccount) => personOf(held, linked, lukeBotId);
-  return {
-    ...(people.author === undefined ? {} : { author: person(people.author) }),
+  const answer: PeopleBeingNamed = {
     reviewers: people.reviewers.map(({ account: held, state }) => ({ by: person(held), state })),
     commitAuthors: people.commitAuthors.map(person),
     comments: people.comments.map(({ account: held, state, excerpt, at }) => ({
@@ -109,6 +126,8 @@ function changesPeopleOf(
       at,
     })),
   };
+  if (people.author !== undefined) answer.author = person(people.author);
+  return answer;
 }
 
 /**

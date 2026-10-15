@@ -42,6 +42,9 @@ function githubUser(
   };
 }
 
+/** An account as GitHub records it. */
+type GitHubRecord = ReturnType<typeof githubUser>;
+
 const CHARLES = githubUser(1001, "charlespan");
 const PRIYA = githubUser(1002, "priyan");
 const STRANGER = githubUser(1003, "octostranger", "https://evil.example.com/a.png");
@@ -49,7 +52,7 @@ const DEVIN = githubUser(1004, "devin-ai-integration[bot]");
 const LUKE = githubUser(GITHUB_FIXTURE_BOT.id, GITHUB_FIXTURE_BOT.login);
 
 /** A review as GitHub lists one. */
-function review(by: object, state: string, body: string, at: string) {
+function review(by: GitHubRecord, state: string, body: string, at: string) {
   return { user: by, state, body, submitted_at: at };
 }
 
