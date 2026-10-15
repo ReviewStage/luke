@@ -332,13 +332,17 @@
    line, its kind's glyph and its name cut at a width so one long name
    never takes the line, on the raised fill a skill's chip wears, washed
    as a button is under the pointer. A mention whose subject is gone keeps
-   its name, struck through, on an outline alone. */
+   its name, struck through, on an outline alone. Its name sits on the
+   line's baseline, and the pill stands proud of the name's own line on
+   padding its margins take back, so a line holding a chip is no taller
+   than a line of words. */
 .mention-chip {
   display: inline-flex;
   max-width: 240px;
   align-items: center;
   gap: var(--space-4);
-  padding: 0 var(--space-6) 0 var(--space-4);
+  margin-block: -0.075em;
+  padding: 0.075em var(--space-6) 0.075em var(--space-4);
   border: 0;
   border-radius: 5px;
   background: var(--raised-strong);
@@ -346,7 +350,7 @@
   cursor: pointer;
   font: inherit;
   font-weight: 500;
-  line-height: 1.35;
+  line-height: 1.2;
   vertical-align: baseline;
   white-space: nowrap;
 }
@@ -370,8 +374,13 @@
   height: 13px;
 }
 
+/* Note that the name alone is baseline-aligned, because a flex box takes
+   its baseline from the items that are, and otherwise from its first item,
+   the glyph, whose baseline is its bottom edge, lifting the name above the
+   line's words. */
 .mention-chip-label {
   min-width: 0;
+  align-self: baseline;
   overflow: hidden;
   text-overflow: ellipsis;
 }
