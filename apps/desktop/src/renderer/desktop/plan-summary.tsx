@@ -329,9 +329,11 @@ function withCards(
     files: readonly string[];
     changes: readonly ChangesOffer[];
     repository: string | null;
+    /** Opens an agent's tab in the plan's column, handing it the keys, as a pull request's card offers. */
+    onOpenAgent: (agentId: string) => void;
   },
 ): SummaryEntry[] {
-  const { plans, inbox, held, workers, files, changes, repository } = input;
+  const { plans, inbox, held, workers, files, changes, repository, onOpenAgent } = input;
   const { agents, mainTabs } = plans;
   const models = agents.models ?? [];
   const shown = plans.shownCode ?? [];
@@ -357,13 +359,14 @@ function withCards(
       // Note that a pull request's row is named by its page (`panelEntries`).
       const offer = changes.find((each) => each.pullRequest.url === row.id);
       if (offer === undefined) return entry;
-      const subject = agentSubject(agents, offer.agent.id, held, false);
+      const chosen = sameTab({ agent: offer.agent.id }, mainTabs.tab);
+      const subject = agentSubject(agents, offer.agent.id, held, chosen);
       const card = (
         <ChangesCard
           subject={subject}
           models={agents.models}
           pullRequest={offer.pullRequest}
-          onOpenAgent={() => mainTabs.onChoose({ agent: offer.agent.id })}
+          onOpenAgent={() => onOpenAgent(offer.agent.id)}
         />
       );
       return { ...entry, card };
@@ -387,6 +390,7 @@ function summarySections(
   inbox: InboxBoardView,
   held: HeldTranscripts,
   repository: string | null,
+  onOpenAgent: (agentId: string) => void,
 ): SummarySection[] {
   const { sidePanel, mainTabs, agents, work } = plans;
   const workers = planWorkers(workRowsOf(work.conversation, work.callLive));
@@ -418,6 +422,7 @@ function summarySections(
     files: paths,
     changes,
     repository,
+    onOpenAgent,
   });
   // Coding agents stands while only archived agents are left, so their fold has a heading.
   const archived = (agents.archived?.length ?? 0) > 0;
@@ -723,6 +728,7 @@ export function PlanSummary({
   inbox,
   held,
   repository,
+  onOpenAgent,
 }: {
   plans: PlansControl;
   layout: SummaryLayout;
@@ -733,8 +739,10 @@ export function PlanSummary({
   held: HeldTranscripts;
   /** The plan's repository, whose showings alone a file row's card reads its note from. */
   repository: string | null;
+  /** Opens an agent's tab in the plan's column, handing it the keys, as a pull request's card offers. */
+  onOpenAgent: (agentId: string) => void;
 }): React.JSX.Element {
-  const sections = summarySections(plans, inbox, held, repository);
+  const sections = summarySections(plans, inbox, held, repository, onOpenAgent);
   // The rail draws the panel's kinds alone, so the Inbox leading Tabs is left off it.
   const kinds = (sections.find(({ heading }) => heading === TABS_SECTION)?.entries ?? []).filter(
     (entry) => entry.row.id !== INBOX_ROW,
