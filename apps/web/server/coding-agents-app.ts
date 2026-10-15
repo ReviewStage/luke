@@ -75,7 +75,7 @@ import { ANY_METHOD, type WebRoutes } from "@luke/service/route";
 import { readEither } from "@luke/wire/effect";
 import { Cache, Clock, Effect, Layer, Option, Result } from "effect";
 import { type HttpClient, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
-import { reachedAgent, reachedAnyAgent, resolvedUserId, uuidOf } from "./hosted/agent-reach.js";
+import { reachedAgent, resolvedUserId, uuidOf } from "./hosted/agent-reach.js";
 import { accountInboxPast, planInboxPast } from "./hosted/coder-host/inbox-page.js";
 import {
   agentPullRequestReach,
@@ -84,7 +84,7 @@ import {
   withPublishedCache,
 } from "./hosted/coder-host/published.js";
 import { acceptedAgentChoice, startCodingAgent } from "./hosted/coder-host/start.js";
-import { codingAgentPage, codingAgentSummary, plannedAgent } from "./hosted/coder-host/status.js";
+import { codingAgentPage, codingAgentSummary } from "./hosted/coder-host/status.js";
 import { steerCodingAgent } from "./hosted/coder-host/steer.js";
 import {
   type EveReach,
@@ -364,7 +364,7 @@ const startEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
       disabledServers,
     }),
   );
-  if (!created || !plannedAgent(agent)) {
+  if (!created) {
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { agent: yield* summaryOf(agent) });
   }
   const names = yield* hostedStoreOrUnavailable(readAccountNames([agent.userId]));
@@ -409,9 +409,9 @@ const planAgentsEndpoint = /* @__PURE__ */ Effect.fn("web/planAgentsEndpoint")(f
   );
   const now = yield* Clock.currentTimeMillis;
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
-    agents: agents
-      .filter(plannedAgent)
-      .map((agent) => codingAgentSummary(agent, standing(agent.conversationId), now, names)),
+    agents: agents.map((agent) =>
+      codingAgentSummary(agent, standing(agent.conversationId), now, names),
+    ),
   });
 });
 
@@ -592,7 +592,7 @@ const agentEndpoint = /* @__PURE__ */ Effect.fn("web/agentEndpoint")(function* (
   const incoming = yield* HttpServerRequest.HttpServerRequest;
   if (incoming.method !== HTTP_METHOD.GET) return yield* changeEndpoint(seams, writer);
   const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-  const { agent } = yield* reachedAnyAgent(seams, request);
+  const { agent } = yield* reachedAgent(seams, request);
   const standing = yield* standingsOf([agent.conversationId]);
   const names = yield* hostedStoreOrUnavailable(readAccountNames([agent.userId]));
   const now = yield* Clock.currentTimeMillis;

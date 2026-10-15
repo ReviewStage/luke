@@ -26,7 +26,7 @@ import {
 } from "@luke/service/http/http-effect";
 import { Clock, DateTime, Effect, Redacted, Result } from "effect";
 import type { HttpClient } from "effect/http";
-import { type AgentTurnStanding, codingAgentSummary, plannedAgent } from "./status.js";
+import { type AgentTurnStanding, codingAgentSummary } from "./status.js";
 
 /**
  * stop.ts -- the one Stop: eve's cancel of a coding agent's turn under way, then the row's stamp.
@@ -86,8 +86,6 @@ export const standingsOf = /* @__PURE__ */ Effect.fnUntraced(function* (
 export const summaryOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   agent: CodingAgent,
 ): Effect.fn.Return<CodingAgentSummary, HostedRefusal, DatabaseServices> {
-  // An agent with no plan has no summary on the wire yet, so it reads as none.
-  if (!plannedAgent(agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const standing = yield* standingsOf([agent.conversationId]);
   const names = yield* hostedStoreOrUnavailable(readAccountNames([agent.userId]));
   return codingAgentSummary(

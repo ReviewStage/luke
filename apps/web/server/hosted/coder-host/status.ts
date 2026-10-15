@@ -144,19 +144,7 @@ export function codingAgentRunStartedAt(
   return (turn === undefined ? standing.createdAt : (turn.startedAt ?? turn.queuedAt)).getTime();
 }
 
-/** An agent that works on a plan, which the wire's summary names. */
-export type PlannedCodingAgent = CodingAgent & { readonly planId: string };
-
-/**
- * Whether the agent works on a plan. Note that an agent with no plan has no
- * summary on the wire, since the summary names a plan; it is read whole as
- * its own page instead (`codingAgentPage`).
- */
-export function plannedAgent(agent: CodingAgent): agent is PlannedCodingAgent {
-  return agent.planId !== null;
-}
-
-/** What every read of one agent says of it but its plan, its status read at `now`, and the member who started it named by `names` where theirs stands. */
+/** What every read of one agent says of it but its plan, its status read at `now`. */
 function summaryFields(
   agent: CodingAgent,
   standing: AgentTurnStanding,
@@ -193,11 +181,12 @@ function summaryFields(
 }
 
 /**
- * One agent as the tabs draw it, its status read at `now`, and the member who
- * started it named by `names`, the accounts' names by id, where theirs stands.
+ * One agent as the tabs draw it, on a plan or with none, its status read at
+ * `now`, and the member who started it named by `names`, the accounts' names
+ * by id, where theirs stands.
  */
 export function codingAgentSummary(
-  agent: PlannedCodingAgent,
+  agent: CodingAgent,
   standing: AgentTurnStanding,
   now: number,
   names: ReadonlyMap<string, string>,

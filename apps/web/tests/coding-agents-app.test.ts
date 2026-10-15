@@ -934,11 +934,11 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   );
 
   it.effect(
-    "an agent with no plan reads as not found to every route, before a message reaches eve, since the wire's summary names a plan",
+    "an agent with no plan is messaged and read like any other, its summary naming no plan, by a member of its workspace",
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { owner, plan, agent, ask } = yield* startedAgent(eve, { running: true });
+        const { owner, plan, agent, sessionId, ask } = yield* startedAgent(eve, { running: false });
         // An automation's run leaves an agent so: in its workspace, on no plan.
         yield* Database.use((db) =>
           db
@@ -947,14 +947,25 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
             .where(eq(codingAgent.id, agent.id)),
         );
 
-        const sent = yield* ask(
-          messageAs(owner, agent.id, { text: "Rebase on main.", clientKey: randomUUID() }),
+        const sent = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.ACCEPTED,
+          yield* ask(
+            messageAs(owner, agent.id, { text: "Rebase on main.", clientKey: randomUUID() }),
+          ),
         );
-        const read = yield* ask(request(AGENT_MESSAGES, owner, { id: agent.id }));
+        const read = readAnswer(
+          codingAgentMessagesAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(AGENT_MESSAGES, owner, { id: agent.id })),
+        );
 
-        assert.deepEqual(sent, refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND));
-        assert.deepEqual(read, refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND));
-        assert.deepEqual(eve.sent, []);
+        assert.deepEqual([sent.agent.id, sent.agent.planId], [agent.id, null]);
+        assert.deepEqual(userTexts(read), [SNAPSHOT, "Rebase on main."]);
+        assert.deepEqual(
+          eve.sent.map((each) => each.sessionId),
+          [sessionId],
+        );
       }),
   );
 
