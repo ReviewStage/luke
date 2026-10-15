@@ -285,57 +285,28 @@ test("each workspace in the menu wears its tile, its first letter, and a rename 
   assert.equal(tiles([{ ...PERSONAL, name: "🐙 Octo" }])[0]?.[0], "🐙");
 });
 
-test("the head says who shares the workspace, to the eye and to a screen reader: its members counted, only you for a workspace of one, and nothing where the service counts none", () => {
-  const shared = (memberCount?: number) => {
+test("the head says who shares the workspace, to the eye and to a screen reader: its members counted beside a people glyph, the account's own first workspace of one as personal in words alone, a team of one as its one member, and nothing where the service counts none", () => {
+  const shared = (memberCount?: number, first = true) => {
     const workspace = memberCount === undefined ? ACME : { ...ACME, memberCount };
-    const page = mount({ workspaces: [workspace], workspace });
+    const page = mount({
+      workspaces: first ? [workspace, PERSONAL] : [PERSONAL, workspace],
+      workspace,
+    });
     const head = page.switcher();
-    const said = head?.querySelector(".sidebar-workspace-shared")?.textContent ?? null;
+    const line = head?.querySelector(".sidebar-workspace-shared");
+    const said = line ? [line.textContent, line.querySelectorAll("svg").length] : null;
     const heard = head?.getAttribute("aria-label");
     for (const root of roots.splice(0)) act(() => root.unmount());
     document.body.innerHTML = "";
     return [head?.querySelector(".workspace-tile")?.textContent, said, heard];
   };
 
-  assert.deepEqual(shared(5), ["A", "5 members", "Workspace: acme, 5 members"]);
-  assert.deepEqual(shared(1), ["A", "Only you", "Workspace: acme, Only you"]);
+  assert.deepEqual(shared(5), ["A", ["5 members", 1], "Workspace: acme, 5 members"]);
+  assert.deepEqual(shared(1), [
+    "A",
+    ["Personal workspace", 0],
+    "Workspace: acme, Personal workspace",
+  ]);
+  assert.deepEqual(shared(1, false), ["A", ["1 member", 1], "Workspace: acme, 1 member"]);
   assert.deepEqual(shared(undefined), ["A", null, "Workspace: acme"]);
-});
-
-test("the menu counts what waits in each other workspace, and the head says something does, to the eye and to a screen reader", () => {
-  const listedOnly = mount({
-    workspaces: [PERSONAL, ACME],
-    workspace: PERSONAL,
-    waitingIn: new Map([[PERSONAL.id, 3]]),
-  });
-  const quiet = {
-    label: listedOnly.switcher()?.getAttribute("aria-label"),
-    dot: listedOnly.switcher()?.querySelector(".sidebar-workspace-waiting") ?? null,
-  };
-  for (const root of roots.splice(0)) act(() => root.unmount());
-
-  const page = mount({
-    workspaces: [PERSONAL, ACME],
-    workspace: PERSONAL,
-    waitingIn: new Map([
-      [PERSONAL.id, 3],
-      [ACME.id, 2],
-    ]),
-  });
-  open(page.switcher());
-  const ends = menuItems().map((item) => [
-    labelOf(item),
-    item.querySelector(".menu-item-waiting")?.textContent,
-  ]);
-
-  assert.deepEqual(quiet, { label: "Workspace: Personal", dot: null });
-  assert.equal(
-    page.switcher()?.getAttribute("aria-label"),
-    "Workspace: Personal, 2 waiting in other workspaces",
-  );
-  assert.ok(page.switcher()?.querySelector(".sidebar-workspace-waiting"), "a dot marks the head");
-  assert.deepEqual(ends.slice(0, 2), [
-    ["Personal", undefined],
-    ["acme", "2"],
-  ]);
 });

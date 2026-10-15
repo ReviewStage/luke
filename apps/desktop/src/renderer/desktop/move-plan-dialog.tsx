@@ -60,8 +60,14 @@ function reaches(workspace: Workspace, repository: string | null): boolean {
 }
 
 /** A row's line: who shares the workspace, or why it cannot take the plan. */
-function rowLine(workspace: Workspace, repository: string | null): string | undefined {
-  if (reaches(workspace, repository)) return sharedWords(workspace.memberCount);
+function rowLine(
+  workspace: Workspace,
+  repository: string | null,
+  personalId: string | undefined,
+): string | undefined {
+  if (reaches(workspace, repository)) {
+    return sharedWords(workspace.memberCount, workspace.id === personalId);
+  }
   const github =
     workspace.github === null ? "No GitHub connected" : `${workspace.github.login} on GitHub`;
   return `${github} · can’t reach ${repository}`;
@@ -93,6 +99,7 @@ function gainLine(to: Workspace): string {
 /** The workspaces as a radio group: a tile, a name, and a line each, the chosen one checked and the keyboard's one stop. */
 function WorkspaceChoices({
   workspaces,
+  personalId,
   repository,
   chosen,
   disabled,
@@ -100,6 +107,8 @@ function WorkspaceChoices({
   onChoose,
 }: {
   workspaces: readonly Workspace[];
+  /** The account's own first workspace, which a row calls personal while no one else is in it. */
+  personalId: string | undefined;
   repository: string | null;
   chosen: Workspace | undefined;
   disabled: boolean;
@@ -124,7 +133,7 @@ function WorkspaceChoices({
   return (
     <div className="move-list" role="radiogroup" aria-label="Workspace" onKeyDown={onKeyDown}>
       {workspaces.map((workspace) => {
-        const line = rowLine(workspace, repository);
+        const line = rowLine(workspace, repository, personalId);
         const checked = workspace.id === chosen?.id;
         return (
           // biome-ignore lint/a11y/useSemanticElements: a row is drawn as a button holding a tile and two lines, which a native radio cannot be, and speaks as the radio it behaves as.
@@ -157,6 +166,7 @@ function MovePlanCard({
   plan,
   from,
   workspaces,
+  personalId,
   chosen,
   onChoose,
 }: {
@@ -164,6 +174,7 @@ function MovePlanCard({
   plan: PlanSummary;
   from: Workspace | undefined;
   workspaces: readonly Workspace[];
+  personalId: string | undefined;
   chosen: Workspace | undefined;
   onChoose: (workspaceId: string) => void;
 }): React.JSX.Element {
@@ -190,6 +201,7 @@ function MovePlanCard({
       </h2>
       <WorkspaceChoices
         workspaces={workspaces}
+        personalId={personalId}
         repository={plan.repository}
         chosen={chosen}
         disabled={moving}
@@ -288,6 +300,7 @@ export function useMovePlanDialog(
           plan={plan}
           from={plans.workspaces.find((workspace) => workspace.id === plan.workspaceId)}
           workspaces={others}
+          personalId={plans.workspaces[0]?.id}
           chosen={chosen}
           onChoose={setPicked}
         />

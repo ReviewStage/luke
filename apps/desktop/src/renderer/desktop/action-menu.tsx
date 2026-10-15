@@ -74,8 +74,6 @@ export interface MenuAction {
   disabled?: boolean;
   /** A setting rather than an action: whether it is on, a check at the item's end saying so. */
   checked?: boolean;
-  /** How many wait on the developer behind the item, at its end in the attention colour; none where none wait. */
-  waiting?: number;
 }
 
 /** An item that opens a menu of its own beside it rather than acting. */
@@ -250,9 +248,6 @@ function ItemEnd({ action }: { action: MenuAction }): React.JSX.Element | null {
         <CheckIcon aria-hidden="true" />
       </span>
     );
-  }
-  if (action.waiting !== undefined && action.waiting > 0) {
-    return <span className="menu-item-end menu-item-waiting">{action.waiting}</span>;
   }
   if (action.command === undefined) return null;
   return <Shortcut chord={APP_SHORTCUTS[action.command].chord} className="menu-item-hint" />;

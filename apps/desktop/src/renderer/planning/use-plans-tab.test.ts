@@ -847,7 +847,7 @@ function waitingIn(planId: string, count: number): AppInboxPlan {
   };
 }
 
-test("the Inbox lists the chosen workspace's share of what waits, and every workspace counts its own", () => {
+test("the Inbox lists the chosen workspace's share of what waits, and a plan the list has not read yet is in neither share", () => {
   const tab = mount({
     shown: true,
     planning: TWO_WORKSPACES,
@@ -868,14 +868,6 @@ test("the Inbox lists the chosen workspace's share of what waits, and every work
 
   assert.deepEqual(personal, { inbox: ["notes"], inboxPlans: ["notes"] });
   assert.deepEqual(share(), { inbox: ["alerts"], inboxPlans: ["alerts"] });
-  assert.deepEqual(
-    [...tab.control().waitingIn],
-    [
-      [PERSONAL.id, 1],
-      [ACME.id, 2],
-    ],
-    "a plan the list has not read yet counts in no workspace",
-  );
 });
 
 test("an Inbox item chosen in one workspace gives way as another is listed, so main is not told its plan's Inbox still shows", () => {
