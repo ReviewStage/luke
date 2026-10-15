@@ -149,6 +149,8 @@ test("an address that names no place in Luke names nothing", () => {
     `${HOME}/agent/${AGENT}/changes`,
     `${HOME}/agent/${AGENT}/worker/toolu_01`,
     `${HOME}/agent/Fix%20the%20billing%20export`,
+    `${HOME}/task/Fix%20billing`,
+    `${HOME}/plan/Fix%20billing#rollout`,
     `${HOME}/plan/${PLAN}/version/latest`,
     `${HOME}/plan/${PLAN}/call/call_9/more`,
     `${HOME}/inbox/${OTHER}`,

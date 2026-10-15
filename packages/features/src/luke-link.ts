@@ -322,9 +322,14 @@ function placeFields(steps: readonly string[]) {
 function taskLink(workspace: string, planId: string, hash: string): LinkPlace | undefined {
   const written = `${LINK_ORIGIN}/${encodedStep(workspace)}/${STEP.PLAN}/${encodedStep(planId)}${hash}`;
   const mention = decodeMention(written, null);
-  if (mention?.kind === MENTION_KIND.PLAN) return { kind: LINK_PLACE.TASK, planId: mention.planId };
+  // Note that the place is read again as every place is, so a task's id is held to the ids the service mints, as any other's is, where a mention takes any.
+  if (mention?.kind === MENTION_KIND.PLAN) {
+    return Option.getOrUndefined(readPlace({ kind: LINK_PLACE.TASK, planId: mention.planId }));
+  }
   if (mention?.kind === MENTION_KIND.SECTION) {
-    return { kind: LINK_PLACE.SECTION, planId: mention.planId, anchor: mention.anchor };
+    return Option.getOrUndefined(
+      readPlace({ kind: LINK_PLACE.SECTION, planId: mention.planId, anchor: mention.anchor }),
+    );
   }
   return undefined;
 }
