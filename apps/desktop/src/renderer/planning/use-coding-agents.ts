@@ -10,6 +10,7 @@ import {
   CONTEXT_WINDOW,
   type CodingAgentAttachment,
   type CodingAgentChangesPeople,
+  type CodingAgentOrigin,
   type CodingAgentPullRequest,
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
@@ -122,6 +123,8 @@ export interface CodingAgentsControl {
   workspaceId?: string | undefined;
   /** The repository of the one agent read as its page, `owner/name`, on the same terms as its workspace. */
   agentRepository?: string | undefined;
+  /** The automation's run that started the one agent read as its page; none on a plan, for an agent started by hand, and before the page's read lands. */
+  origin?: CodingAgentOrigin | undefined;
   /** The agent tabs the panel may show, by agent id; nothing before the first read lands. */
   agentIds: readonly string[] | undefined;
   /** Every agent of the plan by id, an archived one among them, which its Inbox stands on, since an archived agent's items still stand; nothing before the first read lands. */
@@ -275,6 +278,13 @@ function startReason(
   return repository === null ? START_NEEDS_REPOSITORY : undefined;
 }
 
+/** A list as read: the plan's agents, or the one agent read as its page, with its workspace, its repository, and the run that started it. */
+type PageList = CodingAgentListAnswer & {
+  readonly workspaceId?: string;
+  readonly repository?: string;
+  readonly origin?: CodingAgentOrigin;
+};
+
 /**
  * The read a list is taken from: the plan's agents, archived ones among
  * them, where a plan is open, and else the one agent named, read as its
@@ -284,29 +294,21 @@ function listRead(
   act: ActHandle["act"],
   planId: string | undefined,
   agentId: string | undefined,
-): Promise<
-  CodingAgentListAnswer & { readonly workspaceId?: string; readonly repository?: string }
-> {
+): Promise<PageList> {
   if (planId !== undefined) {
     return act(ACT_KIND.CODING_AGENTS_LIST, { planId, includeArchived: true });
   }
   // Note that a page names no automation by null where a summary leaves the key out.
-  return act(ACT_KIND.CODING_AGENTS_PAGE, { agentId: agentId ?? "" }).then(
-    (
-      answer,
-    ): CodingAgentListAnswer & {
-      readonly workspaceId?: string;
-      readonly repository?: string;
-    } => {
-      if ("failure" in answer) return answer;
-      const { automationId, ...agent } = answer.agent;
-      return {
-        agents: [automationId === null ? agent : { ...agent, automationId }],
-        workspaceId: answer.agent.workspaceId,
-        repository: answer.agent.repository,
-      };
-    },
-  );
+  return act(ACT_KIND.CODING_AGENTS_PAGE, { agentId: agentId ?? "" }).then((answer): PageList => {
+    if ("failure" in answer) return answer;
+    const { automationId, origin, ...agent } = answer.agent;
+    return {
+      agents: [automationId === null ? agent : { ...agent, automationId }],
+      workspaceId: answer.agent.workspaceId,
+      repository: answer.agent.repository,
+      ...(origin === undefined ? undefined : { origin }),
+    };
+  });
 }
 
 /** Whether two choices ask the same of a Start, read as `choiceRequest` sends them: only the standard window is a window apart. */
@@ -359,6 +361,7 @@ export function useCodingAgents(input: {
     failed: boolean;
     workspaceId?: string | undefined;
     repository?: string | undefined;
+    origin?: CodingAgentOrigin | undefined;
   }>({ planId: undefined, agentId: undefined, agents: undefined, failed: false });
   const listOf = planId === undefined ? agentId : undefined;
   const ours = (was: { planId: string | undefined; agentId: string | undefined }) =>
@@ -410,6 +413,7 @@ export function useCodingAgents(input: {
                 failed: true,
                 workspaceId: ours(was) ? was.workspaceId : undefined,
                 repository: ours(was) ? was.repository : undefined,
+                origin: ours(was) ? was.origin : undefined,
               }
             : {
                 planId,
@@ -418,6 +422,7 @@ export function useCodingAgents(input: {
                 failed: false,
                 workspaceId: answer.workspaceId,
                 repository: answer.repository,
+                origin: answer.origin,
               },
         );
       },
@@ -431,6 +436,7 @@ export function useCodingAgents(input: {
             failed: true,
             workspaceId: ours(was) ? was.workspaceId : undefined,
             repository: ours(was) ? was.repository : undefined,
+            origin: ours(was) ? was.origin : undefined,
           }));
       },
     );
@@ -872,6 +878,7 @@ export function useCodingAgents(input: {
     archived: archivedAgents,
     workspaceId,
     agentRepository,
+    origin: ours(list) ? list.origin : undefined,
     agentIds: agents?.map((agent) => agent.id),
     heldIds: held?.map((agent) => agent.id),
     draft,
