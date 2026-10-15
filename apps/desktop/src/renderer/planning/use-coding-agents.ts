@@ -3,6 +3,7 @@ import {
   type CodingAgentAgentAnswer,
   type CodingAgentChangesAnswerView,
   type CodingAgentDefaultAnswer,
+  type CodingAgentListAnswer,
   type CodingAgentModelsAnswer,
 } from "@luke/features/coding-agent-view";
 import {
@@ -229,6 +230,24 @@ function startReason(
   return repository === null ? START_NEEDS_REPOSITORY : undefined;
 }
 
+/**
+ * The read a list is taken from: the plan's agents, archived ones among
+ * them, where a plan is open, and else the one agent named, read as its
+ * page and held as a list of one.
+ */
+function listRead(
+  act: ActHandle["act"],
+  planId: string | undefined,
+  agentId: string | undefined,
+): Promise<CodingAgentListAnswer> {
+  if (planId !== undefined) {
+    return act(ACT_KIND.CODING_AGENTS_LIST, { planId, includeArchived: true });
+  }
+  return act(ACT_KIND.CODING_AGENTS_PAGE, { agentId: agentId ?? "" }).then(
+    (answer): CodingAgentListAnswer => ("failure" in answer ? answer : { agents: [answer.agent] }),
+  );
+}
+
 /** Whether two choices ask the same of a Start, read as `choiceRequest` sends them: only the standard window is a window apart. */
 function sameChoice(a: ModelChoice | undefined, b: ModelChoice | undefined): boolean {
   return (
@@ -243,6 +262,12 @@ export function useCodingAgents(input: {
   acts: Pick<ActHandle, "act">;
   /** The open plan, or none; a fixture run's plans have no agents. */
   planId: string | undefined;
+  /**
+   * The one agent read by its id where no plan is open, as the agent page
+   * reads an agent with no plan: the list holds that agent alone, so every
+   * answer that moves it moves the page's agent too.
+   */
+  agentId?: string | undefined;
   /** The open plan's repository, or null while it names none. */
   repository: string | null;
   /** Whether the open plan is archived, which starts nothing on it. */
@@ -262,14 +287,19 @@ export function useCodingAgents(input: {
   /** Mints one press's key. */
   mintKey?: () => string;
 }): CodingAgentsControl {
-  const { planId, repository, archived } = input;
+  const { planId, agentId, repository, archived } = input;
   const { act } = input.acts;
   const mintKey = input.mintKey ?? (() => crypto.randomUUID());
+  // Note that the list is held under the agent too, where it is the page's one agent, so another agent's page holds nothing of the last.
   const [list, setList] = useState<{
     planId: string | undefined;
+    agentId: string | undefined;
     agents: readonly CodingAgentSummary[] | undefined;
     failed: boolean;
-  }>({ planId: undefined, agents: undefined, failed: false });
+  }>({ planId: undefined, agentId: undefined, agents: undefined, failed: false });
+  const listOf = planId === undefined ? agentId : undefined;
+  const ours = (was: { planId: string | undefined; agentId: string | undefined }) =>
+    was.planId === planId && was.agentId === listOf;
   const [models, setModels] = useState<readonly CatalogModel[] | undefined>(undefined);
   const [starting, setStarting] = useState(false);
   // Each plan's draft, by the plan's id.
@@ -290,25 +320,25 @@ export function useCodingAgents(input: {
   latest.current = input;
 
   // The list is this plan's: another plan's, or none, is nothing to draw.
-  const held = list.planId === planId ? list.agents : undefined;
+  const held = ours(list) ? list.agents : undefined;
   const agents = useMemo(() => held?.filter((agent) => agent.archivedAt === undefined), [held]);
   const archivedAgents = useMemo(
     () => held?.filter((agent) => agent.archivedAt !== undefined),
     [held],
   );
-  const listFailed = list.planId === planId && list.failed;
+  const listFailed = ours(list) && list.failed;
 
-  // Read when the plan opens, and again when a Start or a Stop asks (`reads`).
+  // Read when the plan opens, or the page's agent where no plan is, and again when a Start or a Stop asks (`reads`).
   useEffect(() => {
-    if (planId === undefined) return;
+    if (planId === undefined && agentId === undefined) return;
     let live = true;
-    latest.current.acts.act(ACT_KIND.CODING_AGENTS_LIST, { planId, includeArchived: true }).then(
+    listRead(latest.current.acts.act, planId, agentId).then(
       (answer) => {
         if (!live) return;
         setList((was) =>
           "failure" in answer
-            ? { planId, agents: was.planId === planId ? was.agents : undefined, failed: true }
-            : { planId, agents: answer.agents, failed: false },
+            ? { planId, agentId: listOf, agents: ours(was) ? was.agents : undefined, failed: true }
+            : { planId, agentId: listOf, agents: answer.agents, failed: false },
         );
       },
       () => {
@@ -316,7 +346,8 @@ export function useCodingAgents(input: {
         if (live)
           setList((was) => ({
             planId,
-            agents: was.planId === planId ? was.agents : undefined,
+            agentId: listOf,
+            agents: ours(was) ? was.agents : undefined,
             failed: true,
           }));
       },
@@ -324,7 +355,7 @@ export function useCodingAgents(input: {
     return () => {
       live = false;
     };
-  }, [planId, reads]);
+  }, [planId, agentId, reads]);
 
   const readAgain = useCallback(() => setReads((count) => count + 1), []);
 
@@ -635,19 +666,16 @@ export function useCodingAgents(input: {
   };
 
   const readAgent = useCallback(
-    async (agentId: string): Promise<CodingAgentSummary | undefined> => {
-      if (planId === undefined) return undefined;
-      const answer = await act(ACT_KIND.CODING_AGENTS_LIST, {
-        planId,
-        includeArchived: true,
-      }).catch(() => undefined);
+    async (named: string): Promise<CodingAgentSummary | undefined> => {
+      if (planId === undefined && agentId === undefined) return undefined;
+      const answer = await listRead(act, planId, agentId).catch(() => undefined);
       if (answer === undefined || "failure" in answer) return undefined;
       setList((was) =>
-        was.planId === planId ? { planId, agents: answer.agents, failed: false } : was,
+        ours(was) ? { planId, agentId: listOf, agents: answer.agents, failed: false } : was,
       );
-      return answer.agents.find((agent) => agent.id === agentId);
+      return answer.agents.find((agent) => agent.id === named);
     },
-    [act, planId],
+    [act, planId, agentId],
   );
 
   const onTitle = useCallback((agentId: string, title: string | null) => {

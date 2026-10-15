@@ -186,6 +186,31 @@ interface InboxViewControl {
   readonly onChoose: (chosen: InboxChoice) => void;
 }
 
+/**
+ * One agent's page, standing in the plan's place beside the sidebar as the
+ * Inbox does: the agent an automation started with no plan, which has no
+ * plan's column to stand in, drawn as its tab would be. It is the window's
+ * alone, as the Inbox is, so it leaves the plan the host has open as it
+ * stands; opening any plan, the Inbox, or home leaves it.
+ */
+interface AgentViewControl {
+  /** The agent whose page stands, none while none does. */
+  readonly agentId: string | undefined;
+  readonly onOpen: (agentId: string) => void;
+  readonly onClose: () => void;
+}
+
+/** What may stand in the plan's place, the window's own rather than the plan's. */
+const STAND_IN = {
+  INBOX: "inbox",
+  AGENT: "agent",
+} as const;
+
+/** The window's Inbox with the item chosen in it, or one agent's page. */
+type StandIn =
+  | { readonly kind: typeof STAND_IN.INBOX; readonly chosen: InboxChoice | undefined }
+  | { readonly kind: typeof STAND_IN.AGENT; readonly agentId: string };
+
 /** Everything the Plans tab draws and presses, handed to the panel body whole. */
 export interface PlansControl {
   page: PlansPage;
@@ -308,6 +333,8 @@ export interface PlansControl {
   inboxPlans: readonly AppInboxPlanHolding[];
   /** The window's Inbox: whether it stands in the plan's place, the plan chosen in it, and its presses. */
   inboxView: InboxViewControl;
+  /** One agent's page: which agent's stands in the plan's place, if any, and its presses. */
+  agentView: AgentViewControl;
   /** Opens a plan's file in its side panel at the commit named, the reference's lines lit, opening the plan first where it is not the open one: what an inbox item's code opens. */
   onShowFile: (planId: string, ref: CodeRef, commit: string) => void;
   /** Opens a tab pinned to the sidebar: its plan, where it is not the open one, and the tab in its column, opening the side panel for one of its own. */
@@ -547,10 +574,10 @@ export function usePlansTab(input: {
    * opened on, none for the plan as it stands.
    */
   const [historyFor, setHistoryFor] = useState<HistoryOpening | undefined>(undefined);
-  /** The window's Inbox while it stands, and the item chosen in it. */
-  const [inboxView, setInboxView] = useState<
-    { readonly chosen: InboxChoice | undefined } | undefined
-  >(undefined);
+  /** What stands in the plan's place while one does: the window's Inbox and the item chosen in it, or one agent's page. */
+  const [standIn, setStandIn] = useState<StandIn | undefined>(undefined);
+  const inboxView = standIn?.kind === STAND_IN.INBOX ? standIn : undefined;
+  const agentView = standIn?.kind === STAND_IN.AGENT ? standIn : undefined;
   /** A file an inbox item opens on a plan not yet open, opened once the host has it open. */
   const [fileFor, setFileFor] = useState<
     { readonly planId: string; readonly ref: CodeRef; readonly commit: string } | undefined
@@ -758,10 +785,16 @@ export function usePlansTab(input: {
   const columnShown =
     shown &&
     historyFor === undefined &&
-    inboxView === undefined &&
+    standIn === undefined &&
     fixture === undefined &&
     !sidePanel.fullScreen;
-  const shownAgent = columnShown && isAgentTab(mainTabs.tab) ? mainTabs.tab.agent : null;
+  // An agent's page stands in the plan's place, showing its agent as its tab would.
+  const shownAgent =
+    shown && fixture === undefined && agentView !== undefined
+      ? agentView.agentId
+      : columnShown && isAgentTab(mainTabs.tab)
+        ? mainTabs.tab.agent
+        : null;
   const shownInbox =
     shown && fixture === undefined && inboxView !== undefined
       ? (inboxView.chosen?.planId ?? null)
@@ -819,7 +852,7 @@ export function usePlansTab(input: {
   // Opening a plan, or leaving one, is leaving the window's Inbox for it.
   const select = useCallback(
     (planId: string) => {
-      setInboxView(undefined);
+      setStandIn(undefined);
       const planWorkspace = plansNow.find((plan) => plan.id === planId)?.workspaceId;
       const target = workspacesNow.find((each) => each.id === planWorkspace);
       const ask = { planId, over: openPlanId };
@@ -840,7 +873,7 @@ export function usePlansTab(input: {
   );
   // A leave is asked rather than told, so a refused one takes its ask back too.
   const leavePlan = useCallback(() => {
-    setInboxView(undefined);
+    setStandIn(undefined);
     if (fixture !== undefined) return;
     const ask = { planId: undefined, over: openPlanId };
     setAsked(ask);
@@ -1279,7 +1312,7 @@ export function usePlansTab(input: {
       (answer) => {
         if ("failure" in answer) return repositoryFailureNote(answer.failure);
         setNewPlanAsk(undefined);
-        setInboxView(undefined);
+        setStandIn(undefined);
         setHistoryFor(undefined);
         if (callingNow.current) {
           askOnOpen.current = answer.planId;
@@ -1303,7 +1336,7 @@ export function usePlansTab(input: {
   // A plan's version history opens over the plan, so another plan opens first.
   const openHistory = (opening: HistoryOpening) => {
     if (opening.planId !== boundFor) select(opening.planId);
-    setInboxView(undefined);
+    setStandIn(undefined);
     setHistoryFor(opening);
   };
 
@@ -1312,7 +1345,7 @@ export function usePlansTab(input: {
   // window over it.
   const showColumnTab = (planId: string, tab: MainTab) => {
     if (planId !== planning.activePlanId) select(planId);
-    setInboxView(undefined);
+    setStandIn(undefined);
     setHistoryFor(undefined);
     if (sidePanel.fullScreen) sidePanel.onToggleFullScreen();
     mainTabs.onShow(planId, tab);
@@ -1321,7 +1354,7 @@ export function usePlansTab(input: {
   // An inbox item's code opens in its plan's File tab; on a plan not yet
   // open, once the host has it open, since the panel draws the open plan's.
   const showFile = (planId: string, ref: CodeRef, commit: string) => {
-    setInboxView(undefined);
+    setStandIn(undefined);
     setHistoryFor(undefined);
     if (planId === planning.activePlanId) {
       sidePanel.onOpenFile(ref, commit);
@@ -1409,7 +1442,7 @@ export function usePlansTab(input: {
   // One the plan no longer draws, read only once a reopen opened its plan, opens nothing.
   const reopenHere = (closed: ClosedTab) => {
     if (!drawsAgain(closed)) return;
-    setInboxView(undefined);
+    setStandIn(undefined);
     setHistoryFor(undefined);
     if (closed.strip === CLOSED_TAB_STRIP.SIDE_PANEL) {
       sidePanel.onReopen(closed.tab, closed.at, closed.file);
@@ -1573,10 +1606,24 @@ export function usePlansTab(input: {
       chosen: inboxView?.chosen,
       onOpen: () => {
         setHistoryFor(undefined);
-        setInboxView((held) => held ?? { chosen: undefined });
+        setStandIn((held) =>
+          held?.kind === STAND_IN.INBOX ? held : { kind: STAND_IN.INBOX, chosen: undefined },
+        );
       },
-      onClose: () => setInboxView(undefined),
-      onChoose: (chosen) => setInboxView((held) => held && { chosen }),
+      onClose: () => setStandIn(undefined),
+      onChoose: (chosen) =>
+        setStandIn((held) =>
+          held?.kind === STAND_IN.INBOX ? { kind: STAND_IN.INBOX, chosen } : held,
+        ),
+    },
+    // An agent's page stands over the plan's place as the Inbox does, so a version history there gives way.
+    agentView: {
+      agentId: agentView?.agentId,
+      onOpen: (agentId) => {
+        setHistoryFor(undefined);
+        setStandIn({ kind: STAND_IN.AGENT, agentId });
+      },
+      onClose: () => setStandIn(undefined),
     },
     onShowFile: showFile,
     // A version's Open lands where its writer wrote it: an agent's tab as a
@@ -1587,7 +1634,7 @@ export function usePlansTab(input: {
         showColumnTab(planId, { agent: source.agentId });
         return;
       }
-      setInboxView(undefined);
+      setStandIn(undefined);
       setHistoryFor(undefined);
       setReveal({ planId, source });
       sidePanel.onShow(planId, SIDE_PANEL_TAB.CALL);
@@ -1615,7 +1662,7 @@ export function usePlansTab(input: {
       const { tab } = pin;
       setChosen({ pin, over: openPlanId });
       if (pin.plan !== planning.activePlanId) select(pin.plan);
-      setInboxView(undefined);
+      setStandIn(undefined);
       setHistoryFor(undefined);
       if (!inColumn(tab)) {
         sidePanel.onShow(pin.plan, tab);
@@ -1666,7 +1713,7 @@ export function usePlansTab(input: {
     onLeavePlan: leavePlan,
     // Home is the page with no plan open, so where none is, only the Inbox
     // standing over it is put away, and the host is asked nothing.
-    onGoHome: () => (boundFor === undefined ? setInboxView(undefined) : leavePlan()),
+    onGoHome: () => (boundFor === undefined ? setStandIn(undefined) : leavePlan()),
     onRenamePlan: renamePlan,
     onDraftName: draftName,
     onMarkPlan: (planId, mark) => markPlan(planId, mark),

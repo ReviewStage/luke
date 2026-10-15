@@ -3110,6 +3110,20 @@ body:has(.app-stage[data-capture="true"])
   color: var(--text-primary);
 }
 
+/* One agent's page stands in the plan's place as the Inbox does: its toolbar
+   over the agent's tab, which fills the rest as it fills a plan's column. */
+.agent-page {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.agent-page-note {
+  padding: var(--section-gap) var(--space-12);
+}
+
 .inbox-view-items {
   display: flex;
   min-width: 0;

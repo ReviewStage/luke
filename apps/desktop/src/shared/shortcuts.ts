@@ -53,6 +53,7 @@ export const APP_COMMAND = {
   HOME: "home",
   INBOX: "inbox",
   EXIT_INBOX: "exit-inbox",
+  EXIT_AGENT_PAGE: "exit-agent-page",
   BACK: "back",
   FORWARD: "forward",
   SEND_FEEDBACK: "send-feedback",
@@ -324,6 +325,10 @@ export const APP_SHORTCUTS = {
     label: "Exit inbox",
     chord: { key: SHORTCUT_KEY.ESCAPE, bare: true },
   },
+  [APP_COMMAND.EXIT_AGENT_PAGE]: {
+    label: "Exit agent page",
+    chord: { key: SHORTCUT_KEY.ESCAPE, bare: true },
+  },
   [APP_COMMAND.BACK]: { label: "Back", chord: { key: SHORTCUT_KEY.OPEN_BRACKET } },
   [APP_COMMAND.FORWARD]: { label: "Forward", chord: { key: SHORTCUT_KEY.CLOSE_BRACKET } },
   [APP_COMMAND.COMMAND_PALETTE]: { label: "Command palette", chord: { key: SHORTCUT_KEY.K } },
@@ -366,6 +371,7 @@ export const APP_SHORTCUT_GROUPS = [
       APP_COMMAND.HOME,
       APP_COMMAND.INBOX,
       APP_COMMAND.EXIT_INBOX,
+      APP_COMMAND.EXIT_AGENT_PAGE,
     ],
   },
   {

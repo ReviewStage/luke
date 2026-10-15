@@ -699,8 +699,9 @@ export function DesktopSidebar({
 }): React.JSX.Element {
   const onPlans = tab === PANEL_TAB.PLANS;
   const overlay = useFloatingSidebar(sidebar);
-  // The window's Inbox stands in the plan's place, so while it does no plan is the place shown.
+  // The window's Inbox stands in the plan's place, so while it does no plan is the place shown, nor while an agent's page does.
   const inInbox = onPlans && plans.inboxView.open;
+  const standingIn = inInbox || (onPlans && plans.agentView.agentId !== undefined);
   // A press in the list is always about plans, so it brings the Plans tab
   // forward from Settings as well as choosing.
   const openPlan = (planId: string) => {
@@ -725,7 +726,7 @@ export function DesktopSidebar({
   };
   // The home page is the place shown while no plan is open, the Inbox is not
   // standing in its place, and no launch is still reopening a plan.
-  const atHome = onPlans && !inInbox && plans.page === PLANS_PAGE.HOME && !plans.restoring;
+  const atHome = onPlans && !standingIn && plans.page === PLANS_PAGE.HOME && !plans.restoring;
   const newPlanIn = (repository: string) => {
     if (!onPlans) onTabChange(PANEL_TAB.PLANS);
     plans.onNewPlanIn(repository);
@@ -737,7 +738,7 @@ export function DesktopSidebar({
   });
   const now = useMinute();
   const edge = useSidebarEdge(sidebar, sidebar.onToggle);
-  const current = (planId: string) => onPlans && !inInbox && planId === plans.activePlanId;
+  const current = (planId: string) => onPlans && !standingIn && planId === plans.activePlanId;
   // The list is the chosen workspace's; the unread marks above read every plan.
   const unlisted = plans.listed.plans.length === 0 && plans.listed.archived.length === 0;
   const pinned = plans.listed.plans.filter((plan) => plan.pinnedAt !== undefined);

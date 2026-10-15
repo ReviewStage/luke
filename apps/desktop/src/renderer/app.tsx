@@ -314,13 +314,14 @@ export function App(): React.JSX.Element {
   );
   // The call card, while this window has the keyboard and its call bar is not
   // on screen: another plan, the home page, Settings, or the plan itself
-  // under its version history, the Inbox, or a side panel filling the window.
+  // under its version history, the Inbox, an agent's page, or a side panel filling the window.
   const focused = useWindowFocused();
   const planShown = callBarPlanId({
     plansTab: tab === PANEL_TAB.PLANS,
     documentPage: plans.page === PLANS_PAGE.DOCUMENT,
     historyOpen: plans.history.open,
     inboxOpen: plans.inboxView.open,
+    agentPageOpen: plans.agentView.agentId !== undefined,
     sidePanelFullScreen: plans.sidePanel.fullScreen,
     activePlanId: state?.planning.activePlanId,
   });
@@ -448,6 +449,7 @@ export function App(): React.JSX.Element {
       if (runAppCommand(APP_COMMAND.EXIT_SETTINGS)) return;
       if (runAppCommand(APP_COMMAND.EXIT_VERSION_HISTORY)) return;
       if (runAppCommand(APP_COMMAND.EXIT_INBOX)) return;
+      if (runAppCommand(APP_COMMAND.EXIT_AGENT_PAGE)) return;
       // An open plan unwinds to the home page, which leaves it and ends
       // its call. That page is home, so a press there does nothing.
       plans.back();
