@@ -53,6 +53,7 @@ import {
   newestTodos,
   settledPlanEdits,
   showsPublishedRow,
+  teammateStarter,
   WORKING_PHASE_WORDS,
   workerLines,
   workerStatusOf,
@@ -583,6 +584,7 @@ function AgentTranscriptView({
   overComposer = false,
   earlierOmitted = false,
   briefTitle,
+  briefSender,
 }: {
   messages: readonly CodingAgentMessage[];
   /** What the agent was handed first: the plan, drawn as the plan's card, or a task, drawn as the developer's message; nothing reads as the plan. */
@@ -614,16 +616,17 @@ function AgentTranscriptView({
   earlierOmitted?: boolean;
   /** The plan's or task's card line, where it is named otherwise than by its first line, as a planning worker is by its job. */
   briefTitle?: string | undefined;
+  /** The teammate who handed the agent its task, named over the task's message; none for the reader's own agent. */
+  briefSender?: string | undefined;
 }): React.JSX.Element {
   if (messages.length > 0) {
     const todos = todosPlace(messages, working);
     // The plan is the first of the developer's messages, unless the agent
     // was handed a task in its place, which is the developer's message as
     // any other is; the rest the developer sent since.
-    const plan =
-      brief === CODING_AGENT_BRIEF.TASK
-        ? undefined
-        : messages.find((message) => message.role === MESSAGE_ROLE.USER);
+    const first = messages.find((message) => message.role === MESSAGE_ROLE.USER);
+    const plan = brief === CODING_AGENT_BRIEF.TASK ? undefined : first;
+    const task = brief === CODING_AGENT_BRIEF.TASK ? first : undefined;
     return (
       <Conversation>
         {/* The plan's card stands off the tab row by the gap between a column's groups. */}
@@ -642,6 +645,7 @@ function AgentTranscriptView({
                 delegation={delegation}
                 todos={todos}
                 briefTitle={briefTitle}
+                sender={message === task ? briefSender : undefined}
               />
               {earlierOmitted && message === plan ? (
                 <TranscriptNote>Earlier steps are not shown.</TranscriptNote>
@@ -718,6 +722,7 @@ function AgentTabView({
   onOpenApiKeys,
   keywords,
   skills,
+  starter,
 }: {
   agent: CodingAgentSummary;
   models: readonly CatalogModel[] | undefined;
@@ -749,6 +754,8 @@ function AgentTabView({
   keywords?: readonly string[] | undefined;
   /** Where the skills a `/` in the box offers are read from; nothing where it offers none. */
   skills?: SkillSource | undefined;
+  /** The teammate who started the agent (`teammateStarter`), whose key and task the tab names; none for the reader's own. */
+  starter?: string | undefined;
 }): React.JSX.Element {
   const lines = agentLines(transcript.messages, composer.sent);
   const working = agentStillWriting(agent.status);
@@ -757,6 +764,7 @@ function AgentTabView({
       <AgentTranscriptView
         messages={lines}
         brief={agent.brief}
+        briefSender={starter}
         delegation={{
           models,
           own: { model: agent.model, effort: agent.effort },
@@ -771,8 +779,8 @@ function AgentTabView({
         working={working}
         sessionStarting={agent.status === CODING_AGENT_STATUS.STARTING}
         startedAt={startedAt}
-        ended={endLine(agent.status, transcript.failure, transcript.turnUsage)}
-        endReason={endLineReason(transcript.failure)}
+        ended={endLine(agent.status, transcript.failure, transcript.turnUsage, starter)}
+        endReason={endLineReason(transcript.failure, starter)}
         onOpenApiKeys={onOpenApiKeys}
         onRetry={transcript.onRetry}
         footer={
@@ -919,6 +927,7 @@ export function AgentTab({
       onOpenApiKeys={control.onOpenApiKeys}
       keywords={control.keywords}
       skills={control.readSkills}
+      starter={teammateStarter(agent.startedBy, control.me)}
     />
   );
 }

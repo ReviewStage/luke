@@ -11,7 +11,12 @@ import {
   heldLatest,
   lastFinished,
 } from "./agent-tab-card";
-import { agentStateWords, agentStillWriting, agentTabLabel } from "./coding-agent-model";
+import {
+  agentStateWords,
+  agentStillWriting,
+  agentTabLabel,
+  teammateStarter,
+} from "./coding-agent-model";
 import { agentTranscript } from "./transcript-copy";
 import type { CodingAgentsControl } from "./use-coding-agents";
 
@@ -64,6 +69,7 @@ export function agentCardReading(
   label: string,
   held: HeldTranscripts,
   chosen: boolean,
+  readerId: string | undefined,
 ): () => CardReading {
   return () => {
     const { archivedAt } = agent;
@@ -80,6 +86,7 @@ export function agentCardReading(
       }),
       choice: { model: agent.model, effort: agent.effort },
       transcript: messages && agentTranscript({ title: label, messages, brief: agent.brief }),
+      startedBy: teammateStarter(agent.startedBy, readerId),
     };
   };
 }
@@ -110,7 +117,7 @@ export function lineSubject(
  * once the list has been read, and nothing more before.
  */
 export function agentSubject(
-  agents: Pick<CodingAgentsControl, "agents" | "archived" | "models">,
+  agents: Pick<CodingAgentsControl, "agents" | "archived" | "models" | "me">,
   agentId: string,
   held: HeldTranscripts,
   chosen: boolean,
@@ -120,7 +127,7 @@ export function agentSubject(
     agents.archived?.find((each) => each.id === agentId);
   if (agent !== undefined) {
     const name = agentTabLabel(agent, agents.models);
-    return { name, agent, read: agentCardReading(agent, name, held, chosen) };
+    return { name, agent, read: agentCardReading(agent, name, held, chosen, agents.me) };
   }
   const reading: CardReading = {
     corner: cardCorner({

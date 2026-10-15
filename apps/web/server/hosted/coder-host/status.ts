@@ -155,12 +155,17 @@ export function plannedAgent(agent: CodingAgent): agent is PlannedCodingAgent {
   return agent.planId !== null;
 }
 
-/** One agent as the tabs draw it, its status read at `now`. */
+/**
+ * One agent as the tabs draw it, its status read at `now`, and the member who
+ * started it named by `names`, the accounts' names by id, where theirs stands.
+ */
 export function codingAgentSummary(
   agent: PlannedCodingAgent,
   standing: AgentTurnStanding,
   now: number,
+  names: ReadonlyMap<string, string>,
 ): CodingAgentSummary {
+  const starter = names.get(agent.userId);
   const summary: CodingAgentSummary = {
     id: agent.id,
     planId: agent.planId,
@@ -182,6 +187,7 @@ export function codingAgentSummary(
     ...(agent.disabledServers.length === 0
       ? undefined
       : { disabledServers: agent.disabledServers }),
+    ...(starter === undefined ? undefined : { startedBy: { userId: agent.userId, name: starter } }),
   };
   const started = codingAgentRunStartedAt(standing.turn, {
     createdAt: agent.createdAt,

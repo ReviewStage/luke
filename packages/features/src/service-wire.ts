@@ -187,3 +187,14 @@ const trimmedUuidText = EffectSchema.Trim.check(
 export const wireUuidSchema = trimmedUuidText
   .pipe(EffectSchema.decodeTo(EffectSchema.String, SchemaTransformation.toLowerCase()))
   .check(EffectSchema.makeFilter(isWireUuid));
+
+/**
+ * A member named where the service attributes work to one: their account's
+ * id, and the name it holds now, a member who has since left the workspace
+ * among them. The window calls the member You only where the id is its own
+ * account's.
+ */
+export const memberRefSchema = EffectSchema.Struct({
+  userId: EffectSchema.String,
+  name: EffectSchema.String,
+});

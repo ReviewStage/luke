@@ -6,7 +6,7 @@ import {
   type IntegrationProvider,
   integrationProviderFromWire,
 } from "./integration-wire.js";
-import { countedNumber, wireUuidSchema } from "./service-wire.js";
+import { countedNumber, memberRefSchema, wireUuidSchema } from "./service-wire.js";
 
 /**
  * coding-agent-wire.ts -- a plan's coding agents, as the desktop starts, lists, reads, messages, and stops them.
@@ -424,6 +424,12 @@ export const codingAgentSummarySchema = EffectSchema.Struct({
   archivedAt: EffectSchema.optionalKey(countedNumber),
   /** The MCP servers switched off for the agent; absent where none is, and from a service before the switch. */
   disabledServers: EffectSchema.optionalKey(disabledServersSchema),
+  /**
+   * The member who started the agent, whose provider key pays for it and
+   * whose Mac its commands run on, whichever member messages it; absent once
+   * their account is gone, and from a service before it.
+   */
+  startedBy: EffectSchema.optionalKey(memberRefSchema),
 });
 
 export type CodingAgentSummary = typeof codingAgentSummarySchema.Type;

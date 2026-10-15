@@ -31,6 +31,7 @@ import {
   type ModelChoice,
   type ModelProvider,
 } from "@luke/features/models-wire";
+import type { PlanEditor } from "@luke/features/plan-wire";
 import {
   REPOSITORY_UNREACHED,
   type RepositoryUnreached,
@@ -113,17 +114,57 @@ const AGENT_FAILURE_WORDS = {
   [CODING_AGENT_FAILURE.OTHER]: undefined,
 } as const satisfies Record<CodingAgentFailure, string | undefined>;
 
-/** The quiet line a transcript ends on once its turn failed or was stopped, with what the turn cost where known; nothing for an agent still writing or one that completed. */
+/**
+ * The teammate who started an agent, by name, whose key pays for it and whose
+ * Mac its commands run on; none for the reader's own agent, one whose starter
+ * the service names nobody for, or one read with no account id. Note that an
+ * agent read with no id names nobody, because whose it is cannot be told,
+ * and taking the reader's own for a teammate's would hide the Settings that
+ * mend the reader's own key.
+ */
+export function teammateStarter(
+  startedBy: PlanEditor | undefined,
+  readerId: string | undefined,
+): string | undefined {
+  if (startedBy === undefined || readerId === undefined || startedBy.userId === readerId) {
+    return undefined;
+  }
+  return startedBy.name;
+}
+
+/** What a failed turn's end line says of a teammate's key, which the reader has no Settings to mend. */
+function teammateKeyWords(failure: CodingAgentFailure, starter: string): string | undefined {
+  if (failure === CODING_AGENT_FAILURE.PROVIDER_KEY) {
+    return `${starter}'s API key was refused or can't be read`;
+  }
+  if (failure === CODING_AGENT_FAILURE.FAST_ON_OWN_KEY) {
+    return `Fast isn't available on ${starter}'s own API key; choose the model with Fast off`;
+  }
+  return AGENT_FAILURE_WORDS[failure];
+}
+
+/**
+ * The quiet line a transcript ends on once its turn failed or was stopped,
+ * with what the turn cost where known; nothing for an agent still writing or
+ * one that completed. A teammate's agent names its starter's key, since it
+ * runs on theirs and not the reader's.
+ */
 export function endLine(
   status: CodingAgentStatus,
   failure: CodingAgentFailure | undefined,
   turnUsage?: CodingAgentUsage,
+  starter?: string,
 ): string | undefined {
   switch (status) {
     case CODING_AGENT_STATUS.CANCELLED:
       return withCost("Stopped", turnUsage);
     case CODING_AGENT_STATUS.FAILED: {
-      const words = failure === undefined ? undefined : AGENT_FAILURE_WORDS[failure];
+      const words =
+        failure === undefined
+          ? undefined
+          : starter === undefined
+            ? AGENT_FAILURE_WORDS[failure]
+            : teammateKeyWords(failure, starter);
       return withCost(words === undefined ? "Failed" : `Failed: ${words}`, turnUsage);
     }
     case CODING_AGENT_STATUS.STARTING:
@@ -134,8 +175,12 @@ export function endLine(
 }
 
 /** What mends a failed turn from its end line: the API keys' page for a key refused; nothing else there is the developer's to mend. */
-export function endLineReason(failure: CodingAgentFailure | undefined): FailureReason {
-  return failure === CODING_AGENT_FAILURE.PROVIDER_KEY
+export function endLineReason(
+  failure: CodingAgentFailure | undefined,
+  starter?: string,
+): FailureReason {
+  // A teammate's key is theirs to mend, so the reader is offered no Settings of their own.
+  return failure === CODING_AGENT_FAILURE.PROVIDER_KEY && starter === undefined
     ? FAILURE_REASON.API_KEY
     : FAILURE_REASON.OTHER;
 }

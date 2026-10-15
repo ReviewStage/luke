@@ -87,6 +87,22 @@
                 "maxLength": 64
               },
               "maxItems": 32
+            },
+            "startedBy": {
+              "type": "object",
+              "properties": {
+                "userId": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "userId",
+                "name"
+              ],
+              "additionalProperties": false
             }
           },
           "required": [

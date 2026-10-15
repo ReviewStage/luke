@@ -651,6 +651,7 @@ export function usePlansTab(input: {
     },
     onOpenIntegrations: input.onOpenIntegrations,
     onOpenApiKeys: input.onOpenApiKeys,
+    me: input.accountId,
     onStarted: (agentId) => mainRef.current?.onChoose({ agent: agentId }),
     keywords: dictationWords,
   });

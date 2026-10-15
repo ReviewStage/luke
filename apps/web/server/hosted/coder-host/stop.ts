@@ -7,6 +7,7 @@ import {
   RUNNING_TURN_STATUSES,
 } from "@luke/database/models/coding-agent-store";
 import { recordedRuntimeSession } from "@luke/database/models/recorded-session";
+import { readAccountNames } from "@luke/database/models/workspace-store";
 import type { StoreWriter } from "@luke/database/models/writer";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
@@ -88,7 +89,13 @@ export const summaryOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   // An agent with no plan has no summary on the wire yet, so it reads as none.
   if (!plannedAgent(agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const standing = yield* standingsOf([agent.conversationId]);
-  return codingAgentSummary(agent, standing(agent.conversationId), yield* Clock.currentTimeMillis);
+  const names = yield* hostedStoreOrUnavailable(readAccountNames([agent.userId]));
+  return codingAgentSummary(
+    agent,
+    standing(agent.conversationId),
+    yield* Clock.currentTimeMillis,
+    names,
+  );
 });
 
 /** Whether the turn is one a Stop has something to stop: still running, with eve's id to name, and no Stop on it yet. */

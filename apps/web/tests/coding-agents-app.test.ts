@@ -877,11 +877,11 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     });
 
   it.effect(
-    "a member of the plan's workspace lists, reads, and messages an agent a teammate started, the line landing in the starter's conversation",
+    "a member of the plan's workspace lists, reads, and messages an agent a teammate started, named as its starter, the line landing in the starter's conversation",
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { other, plan, agent, sessionId, ask, transcript } = yield* startedAgent(eve, {
+        const { owner, other, plan, agent, sessionId, ask, transcript } = yield* startedAgent(eve, {
           running: false,
         });
         const asOther = (text: string) =>
@@ -901,6 +901,11 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           listed.agents.map((each) => [each.id, each.status]),
           [[agent.id, CODING_AGENT_STATUS.COMPLETED]],
         );
+        // The teammate reads whose agent it is, which the window says as "Started by".
+        assert.deepEqual(
+          listed.agents.map((each) => each.startedBy?.userId),
+          [owner],
+        );
         const read = readAnswer(
           codingAgentMessagesAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
@@ -914,6 +919,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           yield* asOther("Rename the subject line too."),
         );
         assert.equal(sent.agent.status, CODING_AGENT_STATUS.RUNNING);
+        assert.equal(sent.agent.startedBy?.userId, owner);
         assert.deepEqual(
           eve.sent.map((each) => [each.authorization, each.sessionId]),
           [[`Bearer ${other}`, sessionId]],

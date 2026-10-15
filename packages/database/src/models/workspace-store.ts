@@ -5,7 +5,7 @@ import {
   WORKSPACE_ROLE,
   type WorkspaceRole,
 } from "@luke/features/workspace-wire";
-import { and, asc, eq, exists, type SQL, type SQLWrapper, sql } from "drizzle-orm";
+import { and, asc, eq, exists, inArray, type SQL, type SQLWrapper, sql } from "drizzle-orm";
 import { type Cause, DateTime, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import {
@@ -105,6 +105,18 @@ const findAccountName = SqlSchema.findOneOption({
   Result: Schema.Struct({ name: Schema.String }),
   execute: (userId) =>
     Database.use((db) => db.select({ name: user.name }).from(user).where(eq(user.id, userId))),
+});
+
+const findAccountNames = SqlSchema.findAll({
+  Request: Schema.Array(Schema.String),
+  Result: Schema.Struct({ id: Schema.String, name: Schema.String }),
+  execute: (ids) =>
+    Database.use((db) =>
+      db
+        .select({ id: user.id, name: user.name })
+        .from(user)
+        .where(inArray(user.id, [...ids])),
+    ),
 });
 
 const findOrganizationBySlug = SqlSchema.findOneOption({
@@ -429,5 +441,21 @@ export function createWorkspace(
     [slug, `${slug}-${randomUUID().slice(0, 8)}`],
     () => Effect.succeed(false),
     seams,
+  );
+}
+
+/**
+ * The name each account named holds now, by its id, for the window to say
+ * who did a piece of work: a member who has since left a workspace is still
+ * named, and an account that is gone is left out.
+ */
+export function readAccountNames(
+  ids: readonly string[],
+): WorkspaceStoreEffect<ReadonlyMap<string, string>> {
+  const asked = [...new Set(ids)];
+  if (asked.length === 0) return Effect.succeed(new Map());
+  return Effect.map(
+    findAccountNames(asked),
+    (rows) => new Map(rows.map((row) => [row.id, row.name])),
   );
 }

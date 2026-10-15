@@ -11,6 +11,7 @@ import {
 } from "@luke/database/models/coding-agent-store";
 import { childConversationId } from "@luke/database/models/ids";
 import { readPlan } from "@luke/database/models/plan-store";
+import { readAccountNames } from "@luke/database/models/workspace-store";
 import {
   type ConversationTarget,
   type StoreWriter,
@@ -366,11 +367,13 @@ const startEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (!created || !plannedAgent(agent)) {
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { agent: yield* summaryOf(agent) });
   }
+  const names = yield* hostedStoreOrUnavailable(readAccountNames([agent.userId]));
   return hostedJsonResponse(HOSTED_HTTP_STATUS.CREATED, {
     agent: codingAgentSummary(
       agent,
       { turn: undefined, lineAwaits: false },
       yield* Clock.currentTimeMillis,
+      names,
     ),
   });
 });
@@ -401,11 +404,14 @@ const planAgentsEndpoint = /* @__PURE__ */ Effect.fn("web/planAgentsEndpoint")(f
     listCodingAgents(userId, planId, { includeArchived: listsArchived(request) }),
   );
   const standing = yield* standingsOf(agents.map((agent) => agent.conversationId));
+  const names = yield* hostedStoreOrUnavailable(
+    readAccountNames(agents.map((agent) => agent.userId)),
+  );
   const now = yield* Clock.currentTimeMillis;
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
     agents: agents
       .filter(plannedAgent)
-      .map((agent) => codingAgentSummary(agent, standing(agent.conversationId), now)),
+      .map((agent) => codingAgentSummary(agent, standing(agent.conversationId), now, names)),
   });
 });
 
