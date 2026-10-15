@@ -75,6 +75,7 @@ test("each kind of actor stands on its own kind of mark, which a screen reader s
     AGENT,
     { kind: ACTOR_KIND.AUTOMATION, name: "Morning triage", state: ACTOR_STATE.REST },
     { kind: ACTOR_KIND.SOMEONE, reason: SOMEONE_REASON.FORMER, name: "Lee Park" },
+    { kind: ACTOR_KIND.GITHUB, login: "octocat", bot: false },
   ];
   const view = draw(
     createElement(
@@ -87,7 +88,7 @@ test("each kind of actor stands on its own kind of mark, which a screen reader s
 
   assert.deepEqual(
     marks.map((mark) => mark.dataset.kind),
-    ["person", "luke", "agent", "automation", "someone"],
+    ["person", "luke", "agent", "automation", "someone", "github"],
   );
   assert.ok(marks.every((mark) => mark.getAttribute("aria-hidden") === "true"));
   assert.ok(view.querySelector('[data-kind="luke"] .luke-face'), "Luke wears his face");
@@ -122,4 +123,68 @@ test("a facepile draws its first few and counts the rest only where its words do
     createElement(ActorStack, { actors: [DANA, SAM, LEE], drawn: 2, counted: false }),
   );
   assert.equal(uncounted.querySelector(".actor-stack-more"), null);
+});
+
+/** The words of the card an actor named in a line hangs once the pointer rests on its name. */
+function cardOf(actor: Actor): Element {
+  const view = draw(createElement(ActorRef, { actor }));
+  const named = view.querySelector(".actor-ref") ?? assert.fail("the actor is named");
+  act(() => {
+    named.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+  });
+  return (
+    document.querySelector('.tooltip-card [data-actor-card="github"]') ??
+    assert.fail("a card hangs")
+  );
+}
+
+test("someone on GitHub stands by their avatar, a person on a circle with their letter until it loads, and an App's bot on a square with its robot, never a letter", () => {
+  const avatar = "https://avatars.githubusercontent.com/u/1";
+  const view = draw(
+    createElement(
+      "div",
+      null,
+      createElement(ActorMark, {
+        actor: { kind: ACTOR_KIND.GITHUB, login: "octocat", bot: false, avatarUrl: avatar },
+      }),
+      createElement(ActorMark, {
+        actor: {
+          kind: ACTOR_KIND.GITHUB,
+          login: "devin-ai-integration[bot]",
+          bot: true,
+          avatarUrl: avatar,
+        },
+      }),
+    ),
+  );
+  const [person, bot] = [...view.querySelectorAll<HTMLElement>('.actor-mark[data-kind="github"]')];
+  assert.ok(person && bot);
+  assert.equal(person.dataset.bot, undefined, "a person stands on a circle");
+  assert.equal(person.querySelector(".actor-face")?.textContent, "O");
+  assert.equal(bot.dataset.bot, "true", "a bot stands on a square");
+  assert.equal(bot.querySelector(".actor-face")?.textContent, "", "a bot's square holds no letter");
+  assert.ok(bot.querySelector(".lucide-bot"), "a bot wears its robot until its avatar loads");
+  const picture = bot.querySelector("img") ?? assert.fail("the avatar is asked for");
+  act(() => picture.dispatchEvent(new Event("load")));
+  assert.equal(
+    bot.querySelector(".lucide-bot"),
+    null,
+    "the avatar stands in the robot's place once loaded",
+  );
+});
+
+test("someone on GitHub hangs a card saying who they are there and that a person is no member here, an App's bot that it is an app, and opens nothing", () => {
+  const person = cardOf({ kind: ACTOR_KIND.GITHUB, login: "octocat", bot: false });
+  assert.equal(person.querySelector(".card-name")?.textContent, "@octocat");
+  assert.equal(person.querySelector(".card-sub")?.textContent, "GitHub user");
+  assert.equal(person.querySelector(".card-corner")?.textContent, "Not in this workspace");
+  assert.equal(document.querySelector('.actor-ref[data-kind="github"]')?.tagName, "SPAN");
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  const bot = cardOf({ kind: ACTOR_KIND.GITHUB, login: "devin-ai-integration[bot]", bot: true });
+  assert.equal(bot.querySelector(".card-name")?.textContent, "@devin-ai-integration[bot]");
+  assert.equal(bot.querySelector(".card-sub")?.textContent, "GitHub app");
+  assert.equal(bot.querySelector(".card-corner"), null);
+  assert.equal(document.querySelector(".actor-ref-name")?.textContent, "devin-ai-integration");
 });

@@ -865,7 +865,13 @@ body,
   --actor-size: 32px;
 }
 
-.actor-mark:is([data-kind="luke"], [data-kind="agent"], [data-kind="automation"]) {
+/* An App's bot on GitHub stands on the same square, its avatar on the neutral tile. */
+.actor-mark:is(
+  [data-kind="luke"],
+  [data-kind="agent"],
+  [data-kind="automation"],
+  [data-kind="github"][data-bot="true"]
+) {
   border-radius: calc(var(--actor-size) * 0.36);
 }
 
@@ -876,8 +882,8 @@ body,
   color: var(--voice-luke);
 }
 
-/* A person's picture keeps its edge on a ground of its own colour. */
-.actor-mark[data-kind="person"]::after {
+/* A person's picture keeps its edge on a ground of its own colour, a GitHub user's too. */
+.actor-mark:is([data-kind="person"], [data-kind="github"]:not([data-bot="true"]))::after {
   position: absolute;
   inset: 0;
   border-radius: inherit;

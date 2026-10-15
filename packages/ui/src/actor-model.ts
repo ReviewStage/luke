@@ -1,3 +1,4 @@
+import type { GitHubPerson } from "@luke/features/coding-agent-wire";
 import type { ModelProvider } from "@luke/features/models-wire";
 import {
   PLAN_ACTOR,
@@ -39,6 +40,7 @@ export const ACTOR_KIND = {
   AGENT: "agent",
   AUTOMATION: "automation",
   SOMEONE: "someone",
+  GITHUB: "github",
 } as const;
 
 /** Where an agent's or an automation's work stands, as its tile wears it: the same three a tab's glyph wears. */
@@ -92,7 +94,17 @@ export type Actor =
       readonly reason: SomeoneReason;
       /** The name the service still holds for a member who left; none for the rest. */
       readonly name?: string;
-    };
+    }
+  | GitHubActor;
+
+/** Someone GitHub names who is no member of the workspace, or an App's bot: by their login and their GitHub avatar. */
+export interface GitHubActor {
+  readonly kind: typeof ACTOR_KIND.GITHUB;
+  readonly login: string;
+  readonly avatarUrl?: string;
+  /** Whether it is an App's bot, drawn on a square as Luke and the agents are, rather than a person's circle. */
+  readonly bot: boolean;
+}
 
 /** The most sections an activity names before it counts the rest. */
 const NAMED_SECTIONS = 3;
@@ -143,6 +155,16 @@ export function identityLetter(name: string): string {
   return first === undefined ? "" : first.segment.toUpperCase();
 }
 
+/** The suffix GitHub gives an App's bot's login, which its name drops since its square says it is one. */
+const BOT_LOGIN_SUFFIX = "[bot]";
+
+/** What a GitHub account is called: its login, an App's bot's without the suffix GitHub gives it. */
+function githubName(actor: GitHubActor): string {
+  return actor.bot && actor.login.endsWith(BOT_LOGIN_SUFFIX)
+    ? actor.login.slice(0, -BOT_LOGIN_SUFFIX.length)
+    : actor.login;
+}
+
 /** Lower-cases a line's opening word where the name stands inside a sentence. */
 function inSentence(words: string, sentence: boolean): string {
   return sentence ? words.charAt(0).toLowerCase() + words.slice(1) : words;
@@ -172,6 +194,8 @@ export function actorName(
         return "Luke";
       case ACTOR_KIND.SOMEONE:
         return actor.name ?? inSentence(SOMEONE_WORDS[actor.reason], sentence);
+      case ACTOR_KIND.GITHUB:
+        return githubName(actor);
     }
   })();
   return possessive ? `${name}’s` : name;
@@ -384,7 +408,7 @@ function sameAgent(
   return one.agentId === other.agentId;
 }
 
-/** Whether two actors are one: a member by their id, an agent as `sameAgent` says, an automation by its name, someone by why and the name they go by. */
+/** Whether two actors are one: a member by their id, an agent as `sameAgent` says, an automation by its name, someone by why and the name they go by, someone on GitHub by their login in any case. */
 function sameActor(one: Actor, other: Actor): boolean {
   switch (one.kind) {
     case ACTOR_KIND.PERSON:
@@ -399,10 +423,46 @@ function sameActor(one: Actor, other: Actor): boolean {
       return (
         other.kind === ACTOR_KIND.SOMEONE && other.reason === one.reason && other.name === one.name
       );
+    case ACTOR_KIND.GITHUB:
+      // Note that GitHub reads a login whatever its case, and its answers do not always spell one alike.
+      return (
+        other.kind === ACTOR_KIND.GITHUB && other.login.toLowerCase() === one.login.toLowerCase()
+      );
   }
 }
 
 /** Each actor once, where it first stands, as a facepile draws who did a thing. */
 export function distinctActors(actors: readonly Actor[]): readonly Actor[] {
   return actors.filter((actor, at) => actors.findIndex((each) => sameActor(each, actor)) === at);
+}
+
+/**
+ * Where someone a pull request names on GitHub is drawn: the workspace's
+ * members as read and the reader's id, which name a teammate, and the agent
+ * whose pull request it is, where the window knows it.
+ */
+export interface GitHubPlace {
+  readonly members: readonly WorkspaceMember[] | undefined;
+  readonly readerId: string | undefined;
+  readonly agent: Actor | undefined;
+}
+
+/**
+ * Someone a pull request names on GitHub, as the window draws them. Luke's
+ * own App's bot is the agent whose pull request it is, where the window
+ * knows it, since that agent's commits and pull request are the bot's,
+ * else Luke. A GitHub account linked to a member is that member, by the
+ * name the members read gives them, or the login while it is unread.
+ * Anyone else is themself on GitHub: a person's circle, or an App's
+ * bot's square.
+ */
+export function githubActor(person: GitHubPerson, place: GitHubPlace): Actor {
+  if (person.luke === true) return place.agent ?? LUKE_ACTOR;
+  if (person.userId !== undefined) {
+    const member = place.members?.find((each) => each.userId === person.userId);
+    const ref = { userId: person.userId, name: member?.name ?? person.login };
+    return personActor(ref, place.members, place.readerId);
+  }
+  const actor: GitHubActor = { kind: ACTOR_KIND.GITHUB, login: person.login, bot: person.bot };
+  return person.avatarUrl === undefined ? actor : { ...actor, avatarUrl: person.avatarUrl };
 }
