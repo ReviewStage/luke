@@ -292,6 +292,8 @@ export const AUTOMATION_RUN_REASON = {
   PAUSED: "paused",
   /** It waited queued past the hour it could still be started in, the sweep down or failing all that while. */
   MISSED: "missed",
+  /** The agent the automation hands each run to is gone, archived, or no longer its creator's to reach. */
+  AGENT_GONE: "agent-gone",
 } as const;
 
 export type AutomationRunReason =

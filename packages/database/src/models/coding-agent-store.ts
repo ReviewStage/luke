@@ -1035,6 +1035,30 @@ export function archiveCodingAgent(
   );
 }
 
+const findAgentConversation = SqlSchema.findOneOption({
+  Request: Schema.String,
+  Result: Schema.Struct({ userId: Schema.String, conversationId: Schema.String }),
+  execute: (agentId) =>
+    Database.use((db) =>
+      db
+        .select({ userId: codingAgent.userId, conversationId: codingAgent.conversationId })
+        .from(codingAgent)
+        .where(eq(codingAgent.id, agentId)),
+    ),
+});
+
+/**
+ * The agent's conversation under the member who started it, whoever asks;
+ * nothing where no such agent stands. Only for an id the service recorded
+ * itself, such as the agent a run was claimed for, because it reads past
+ * any account's gate.
+ */
+export function codingAgentConversation(
+  agentId: string,
+): CodingAgentStoreEffect<Option.Option<ConversationTarget>> {
+  return findAgentConversation(agentId);
+}
+
 /**
  * Archives the agent as `archiveCodingAgent` does, but only where it stands
  * unarchived and its conversation's lines have run no further than the

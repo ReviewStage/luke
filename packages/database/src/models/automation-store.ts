@@ -810,13 +810,17 @@ const lockAutomationRow = SqlSchema.findAll({
 });
 
 const writeClaim = SqlSchema.findAll({
-  Request: Schema.Struct({ id: Schema.String, now: Schema.Date }),
+  Request: Schema.Struct({
+    id: Schema.String,
+    claimedAgentId: Schema.NullOr(Schema.String),
+    now: Schema.Date,
+  }),
   Result: Schema.Struct({ id: Schema.String }),
-  execute: ({ id, now }) =>
+  execute: ({ id, claimedAgentId, now }) =>
     Database.use((db) =>
       db
         .update(automationRun)
-        .set({ status: AUTOMATION_RUN_STATUS.STARTED, settledAt: now })
+        .set({ status: AUTOMATION_RUN_STATUS.STARTED, claimedAgentId, settledAt: now })
         .where(
           and(eq(automationRun.id, id), eq(automationRun.status, AUTOMATION_RUN_STATUS.QUEUED)),
         )
@@ -885,7 +889,12 @@ const findClaimed = SqlSchema.findAll({
 
 const findStranded = SqlSchema.findAll({
   Request: Schema.Struct({ before: Schema.Date, limit: Schema.Int }),
-  Result: Schema.Struct({ id: Schema.String, automationId: Schema.String, userId: Schema.String }),
+  Result: Schema.Struct({
+    id: Schema.String,
+    automationId: Schema.String,
+    userId: Schema.String,
+    claimedAgentId: Schema.NullOr(Schema.String),
+  }),
   execute: ({ before, limit }) =>
     Database.use((db) =>
       db
@@ -893,6 +902,7 @@ const findStranded = SqlSchema.findAll({
           id: automationRun.id,
           automationId: automationRun.automationId,
           userId: automationRun.userId,
+          claimedAgentId: automationRun.claimedAgentId,
         })
         .from(automationRun)
         .where(and(CLAIMED, lte(automationRun.settledAt, before)))
@@ -1199,10 +1209,13 @@ export function withAutomationLocked<A, E, R>(
   );
 }
 
-/** Claims a queued run for its start: started, with no agent yet; false where it was not queued. */
-export function claimAutomationRun(runId: string): PlanStoreEffect<boolean> {
+/** Claims a queued run for its start: started, with no agent yet, and the agent it is to be sent to where it is handed to one; false where it was not queued. */
+export function claimAutomationRun(
+  runId: string,
+  claimedAgentId: string | null = null,
+): PlanStoreEffect<boolean> {
   return Effect.flatMap(DateTime.nowAsDate, (now) =>
-    Effect.map(writeClaim({ id: runId, now }), (rows) => rows.length > 0),
+    Effect.map(writeClaim({ id: runId, claimedAgentId, now }), (rows) => rows.length > 0),
   );
 }
 
@@ -1233,6 +1246,8 @@ export interface StrandedRun {
   readonly id: string;
   readonly automationId: string;
   readonly userId: string;
+  /** The agent the run was claimed to be sent to, where it was handed to one; null where it was to start its own. */
+  readonly claimedAgentId: string | null;
 }
 
 /** Claimed runs whose start never settled by `before`, a function that died between the claim and the agent: oldest first, at most `limit`. */

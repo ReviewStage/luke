@@ -17,14 +17,20 @@ import {
 } from "@luke/database/models/automation-store";
 import {
   awaitingLinesOfReached,
+  codingAgentConversation,
   discardCodingAgent,
   latestTurnsOfReached,
+  readCodingAgent,
   readCodingAgentByKey,
 } from "@luke/database/models/coding-agent-store";
+import { sentLineId } from "@luke/database/models/ids";
+import { sentLineStands } from "@luke/database/models/message-reads";
+import { storeWriter } from "@luke/database/models/writer";
 import {
   AUTOMATION_FIRING,
   AUTOMATION_RUN_REASON,
   AUTOMATION_RUN_STATUS,
+  AUTOMATION_TARGET,
   AUTOMATION_TRIGGER,
   type AutomationRunReason,
   GITHUB_TRIGGER_EVENT,
@@ -38,6 +44,8 @@ import type { EveSessions } from "../agents/brain-host/eve-sessions.js";
 import { CODER } from "../agents/coder-host/bounds.js";
 import { type StartServices, startCodingAgent } from "../agents/coder-host/start.js";
 import { codingAgentStatusOf } from "../agents/coder-host/status.js";
+import { steerCodingAgent } from "../agents/coder-host/steer.js";
+import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import { HOSTED_API_ERROR } from "../http/http.js";
 import type { HostedRefusal } from "../http/http-effect.js";
 import type { ModelChoiceRefused } from "../providers/model-catalog.js";
@@ -179,11 +187,98 @@ function reasonOfRefusal(refusal: HostedRefusal | ModelChoiceRefused): Automatio
   }
 }
 
-/** How many of the agents the automation's runs started are still at work at `now`. */
+/**
+ * The fixed word for why a run's line was not handed to the automation's
+ * agent: one gone, retired, or archived is gone; one still coming up, or a
+ * service that did not take the line, is unavailable, so the next firing
+ * tries again; and a repository or plan out of reach is said as a start's.
+ */
+function reasonOfSteerRefusal(refusal: HostedRefusal): AutomationRunReason {
+  switch (refusal.error) {
+    case HOSTED_API_ERROR.NOT_FOUND:
+    case HOSTED_API_ERROR.AGENT_RETIRED:
+      return AUTOMATION_RUN_REASON.AGENT_GONE;
+    case HOSTED_API_ERROR.PLAN_ARCHIVED:
+      return AUTOMATION_RUN_REASON.PLAN_UNREACHABLE;
+    case HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE:
+      return AUTOMATION_RUN_REASON.REPOSITORY_UNREACHABLE;
+    default:
+      return AUTOMATION_RUN_REASON.UNAVAILABLE;
+  }
+}
+
+/** A claimed run failed for the reason given, answered as its outcome. */
+const failedRun = Effect.fnUntraced(function* (run: AutomationRun, reason: AutomationRunReason) {
+  yield* failClaimedRun(run.id, reason);
+  const outcome: AutomationRunOutcome = { status: AUTOMATION_RUN_STATUS.FAILED, reason };
+  return outcome;
+});
+
+/**
+ * A claimed run of an automation that hands every run to the same agent:
+ * the run's task sent to that agent as a message of the creator's, under
+ * the run's own key, as the developer's own message is sent
+ * (`coder-host/steer.ts`), so a run acted on twice sends it once; the run
+ * settled with that agent, or failed in one fixed word. An agent gone or
+ * archived takes no run, since a run that cannot reach it has nowhere to go.
+ */
+const steerClaimed = Effect.fnUntraced(function* (
+  eveFor: EveForAccount,
+  automation: Automation,
+  run: AutomationRun,
+  agentId: string,
+) {
+  const found = yield* readCodingAgent(automation.userId, agentId);
+  if (Option.isNone(found) || found.value.archivedAt !== null) {
+    return yield* failedRun(run, AUTOMATION_RUN_REASON.AGENT_GONE);
+  }
+  const eve = yield* Effect.result(eveFor(automation.userId));
+  if (Result.isFailure(eve)) return yield* failedRun(run, reasonOfSteerRefusal(eve.failure));
+  const sent = yield* Effect.result(
+    steerCodingAgent(
+      eve.success,
+      storeWriter({ tools: CODER_TOOL_SET }),
+      automation.userId,
+      found.value,
+      { text: automationTask(automation, run), clientKey: run.id },
+    ),
+  );
+  if (Result.isFailure(sent)) return yield* failedRun(run, reasonOfSteerRefusal(sent.failure));
+  yield* attachRunAgent(run.id, agentId);
+  const outcome: AutomationRunOutcome = {
+    status: AUTOMATION_RUN_STATUS.STARTED,
+    codingAgentId: agentId,
+  };
+  return outcome;
+});
+
+/**
+ * How many of the agents the automation's runs started are still at work at
+ * `now`, and the agent it hands every run to among them whatever started it,
+ * so a run waits on that agent's own work as on its earlier runs'.
+ */
 const workingAgents = Effect.fnUntraced(function* (automation: Automation, now: number) {
   // An agent's run is bounded by its sandbox's day, so a run older than that holds no agent at work.
   const since = new Date(now - CODER.SANDBOX_TIMEOUT_MS - Duration.toMillis(Duration.hours(1)));
-  const agents = yield* startedRunAgents(automation.id, since);
+  const started = yield* startedRunAgents(automation.id, since);
+  const target =
+    automation.targetKind === AUTOMATION_TARGET.SAME_AGENT && automation.targetAgentId !== null
+      ? yield* readCodingAgent(automation.userId, automation.targetAgentId)
+      : Option.none();
+  const agents = [
+    ...started.filter((agent) =>
+      Option.match(target, {
+        onNone: () => true,
+        onSome: (held) => agent.codingAgentId !== held.id,
+      }),
+    ),
+    ...Option.match(target, {
+      onNone: () => [],
+      onSome: (held) => [
+        { codingAgentId: held.id, conversationId: held.conversationId, createdAt: held.createdAt },
+      ],
+    }),
+  ];
   const conversations = agents.map((agent) => agent.conversationId);
   const turns = yield* latestTurnsOfReached(conversations);
   const awaiting = yield* awaitingLinesOfReached(conversations);
@@ -285,7 +380,10 @@ const decide = (automationId: string, run: AutomationRun) =>
           ? ({ kind: DECISION.HELD, reason: held, automation } satisfies Decision)
           : ({ kind: DECISION.TAKEN } satisfies Decision);
       }
-      const claimed = yield* claimAutomationRun(run.id);
+      // A run handed to the same agent is claimed for that agent as it stands now, which its recovery reads.
+      const claimedFor =
+        automation.targetKind === AUTOMATION_TARGET.SAME_AGENT ? automation.targetAgentId : null;
+      const claimed = yield* claimAutomationRun(run.id, claimedFor);
       return claimed
         ? ({ kind: DECISION.CLAIMED, automation } satisfies Decision)
         : ({ kind: DECISION.TAKEN } satisfies Decision);
@@ -304,6 +402,13 @@ const startClaimed = Effect.fnUntraced(function* (
   automation: Automation,
   run: AutomationRun,
 ) {
+  // An automation that hands every run to the same agent sends it there rather than starting one,
+  // and one whose agent was deleted since, its target let go, has nowhere to send it.
+  if (automation.targetKind === AUTOMATION_TARGET.SAME_AGENT) {
+    return automation.targetAgentId === null
+      ? yield* failedRun(run, AUTOMATION_RUN_REASON.AGENT_GONE)
+      : yield* steerClaimed(eveFor, automation, run, automation.targetAgentId);
+  }
   const [repository] = automation.repositories;
   const { organizationId } = automation;
   if (organizationId === null || repository === undefined) {
@@ -407,11 +512,33 @@ export const executeAutomationRun = /* @__PURE__ */ Effect.fn("web/executeAutoma
  * A claimed run whose function died between the claim and its agent,
  * settled as the start its key made where that agent's session ran, and
  * failed as unavailable where none did, an agent made but never opened let
- * go with it, so no run is left starting for good.
+ * go with it, so no run is left starting for good. A run handed to the
+ * same agent is settled with the agent it was claimed for, where that
+ * agent holds the line it sent under its key, and failed as unavailable
+ * where it does not.
  */
 export const recoverStrandedRun = /* @__PURE__ */ Effect.fn("web/recoverStrandedRun")(function* (
   stranded: StrandedRun,
 ): Effect.fn.Return<void, unknown, DatabaseServices> {
+  // A run handed to the same agent made none: it is the start of the agent it was claimed for, where
+  // that agent holds the line it sent under its key, and of no other agent whatever its lines hold.
+  if (stranded.claimedAgentId !== null) {
+    // Read past the creator's gate, since a creator who left after the line landed still sent it.
+    const agent = yield* codingAgentConversation(stranded.claimedAgentId);
+    const sent =
+      Option.isSome(agent) &&
+      (yield* sentLineStands(
+        agent.value.userId,
+        agent.value.conversationId,
+        sentLineId(stranded.id),
+      ));
+    if (sent) {
+      yield* attachRunAgent(stranded.id, stranded.claimedAgentId);
+      return;
+    }
+    yield* failClaimedRun(stranded.id, AUTOMATION_RUN_REASON.UNAVAILABLE);
+    return;
+  }
   const started = yield* readCodingAgentByKey(stranded.userId, stranded.id);
   // Note that an agent made under the key whose session never ran a turn was never opened, the
   // function gone between making it and eve taking it, so it is let go rather than taken as started.
