@@ -782,9 +782,11 @@ export function TranscriptSubagent({
  * A line that folds the rows beneath it: a run of calls, or a finished
  * turn's lead. Note that it stays in the muted ink, summary and all,
  * unlike a call's line, because it counts rows rather than saying what one
- * did, and the rows it opens onto are what a reader scans. It wears no
- * icon, because its count already says what it holds and the rows it
- * opens onto wear their own.
+ * did, and the rows it opens onto are what a reader scans. It wears the
+ * fold's chevron in a row's icon column, as the plan's card does at its
+ * head, because its count already says what it holds, so what is left to
+ * say is whether it is open, and an icon of its own would read as one more
+ * of the calls it opens onto.
  */
 function TurnFold({
   summary,
@@ -800,6 +802,7 @@ function TurnFold({
   return (
     <Fold className="text-[12.5px]" defaultOpen={open} data-turn-fold="">
       <FoldSummary className="flex h-7 cursor-pointer items-center gap-2 rounded-md px-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
+        <FoldChevron />
         {running ? <Shimmer>{summary}</Shimmer> : <span>{summary}</span>}
       </FoldSummary>
       <FoldBody className="ml-6 flex flex-col gap-1 pt-1">{children}</FoldBody>
