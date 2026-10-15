@@ -8,7 +8,7 @@ import { ACT_KIND } from "@luke/host/acts";
 import type { AppInboxPlanHolding } from "@luke/host/app-state";
 import { EXPERIMENT } from "@luke/settings";
 import { InboxIcon } from "lucide-react";
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "../act";
 import { useAppCommand } from "../app-commands";
@@ -35,7 +35,7 @@ import { useInboxItems } from "../planning/use-inbox-items";
 import { useOpenLink } from "../planning/use-open-link";
 import { usePlanInbox } from "../planning/use-plan-inbox";
 import { usePlanlessInboxItems } from "../planning/use-planless-inbox-items";
-import { AUTOMATIONS_PAGE, type PlansControl } from "../planning/use-plans-tab";
+import { AUTOMATIONS_PAGE, type InboxChoice, type PlansControl } from "../planning/use-plans-tab";
 import { ReadFailure } from "../read-failure";
 import { SPINNER_SIZE, Spinner } from "../spinner";
 import { useExperiment } from "../use-app-state";
@@ -218,11 +218,15 @@ export function DesktopInbox({ plans }: { plans: PlansControl }): React.JSX.Elem
     holdings.some((holding) => !read.items.has(holding.planId)) ||
     plans.inboxPlanless.some((each) => !planless.items.has(each.agentId));
   const columns = useInboxColumns(chosen?.item.id);
-  // A choice that asks for its item opens it, the one column the Inbox shows being the item's.
+  // A choice that asks for its item opens it once, the one column the Inbox shows being the
+  // item's; Back from it then stands on the list, the choice taken already.
   const opensItem = asked?.opened === true && chosen?.item.id === asked.itemId;
+  const taken = useRef<InboxChoice | undefined>(undefined);
   const openColumn = columns.onOpen;
   useEffect(() => {
-    if (opensItem && asked !== undefined) openColumn(asked.itemId);
+    if (!opensItem || asked === undefined || taken.current === asked) return;
+    taken.current = asked;
+    openColumn(asked.itemId);
   }, [opensItem, asked, openColumn]);
   const onRetry = () => {
     read.onRetry();

@@ -1039,4 +1039,12 @@ test("an item chosen by a notification's click, in an Inbox showing one column, 
 
   assert.equal(page.querySelector(".inbox-view")?.getAttribute("data-columns"), "item");
   assert.equal(page.querySelector("[data-inbox-title]")?.textContent, "Skip the slow suite?");
+
+  act(() => page.querySelector<HTMLButtonElement>(".inbox-back")?.click());
+  await settle();
+  assert.equal(
+    page.querySelector(".inbox-view")?.getAttribute("data-columns"),
+    "list",
+    "Back stands on the list, the notification's ask taken once",
+  );
 });
