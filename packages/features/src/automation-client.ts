@@ -94,6 +94,15 @@ function jsonOf(response: Response): Effect.Effect<WireBoundaryInput> {
   return Effect.promise((): Promise<WireBoundaryInput> => response.json().catch(() => undefined));
 }
 
+/**
+ * A body that says nothing let go unread: cancelled rather than read, so its
+ * stream is not left open and a body that stalls past its headers holds up
+ * no answer.
+ */
+function cancelled(response: Response): Effect.Effect<void> {
+  return Effect.ignore(Effect.tryPromise(() => response.body?.cancel() ?? Promise.resolve()));
+}
+
 /** The refusal a refused answer carries, where it is one this client names, with why a repository is out of reach where the service said; unanswered otherwise. */
 function refusedAs(payload: UnparsedWireValue, named: NamedRefusals): Failed {
   const refusal = Result.getOrUndefined(readServiceAnswer(hostedErrorSchema)(payload));
@@ -199,11 +208,9 @@ export class HostedAutomationClient {
       this.#call.send({ method: HTTP_METHOD.DELETE, path: automationPath(params.automationId) }),
       (answer): Effect.Effect<AutomationDeletedView> => {
         if (!callAnswered(answer)) return Effect.succeed(UNANSWERED);
-        // Note that a deletion's body is read even where it says nothing, so its stream is not left open.
-        return Effect.map(
-          jsonOf(answer.response),
-          (body): AutomationDeletedView =>
-            answer.response.ok ? { deleted: true } : refusedAs(unparsedWire(body), REFUSALS),
+        if (answer.response.ok) return Effect.as(cancelled(answer.response), { deleted: true });
+        return Effect.map(jsonOf(answer.response), (body) =>
+          refusedAs(unparsedWire(body), REFUSALS),
         );
       },
     );
