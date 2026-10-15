@@ -208,6 +208,7 @@ const SETTINGS_WORD = "Settings";
 /** The commands the palette lists: the Keyboard shortcuts page's, then the menu bar's own dialogs. */
 const PALETTE_COMMANDS: readonly AppCommand[] = [
   ...APP_SHORTCUT_GROUPS.flatMap((group) => group.commands),
+  APP_COMMAND.NEW_TERMINAL,
   APP_COMMAND.SEND_FEEDBACK,
   APP_COMMAND.SUGGEST_FEATURE,
 ];

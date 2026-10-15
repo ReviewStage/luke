@@ -1,4 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
+import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { SANDBOX_STATE, type TerminalSummary } from "@luke/features/terminal-wire";
 import { CloseIcon, PlusIcon } from "@luke/ui";
@@ -232,4 +233,23 @@ export function TerminalCardFoot({ agentId }: { agentId: string }): React.JSX.El
       {shells}
     </>
   );
+}
+
+/**
+ * How an agent and its sandbox stand, as a terminal's row in the panel's "+"
+ * says it after the agent's name: at work or idle, then its shells as the
+ * window last read them, or its sandbox stopped.
+ */
+export function TerminalStanding({ agent }: { agent: CodingAgentSummary }): React.JSX.Element {
+  const listed = useAtomValue(sandboxRead(agent.id));
+  const working = agentStillWriting(agent.status) ? "Working" : "Idle";
+  const sandbox =
+    listed === undefined
+      ? undefined
+      : listed.sandbox === SANDBOX_STATE.RUNNING
+        ? `${listed.terminals.length} ${listed.terminals.length === 1 ? "shell" : "shells"}`
+        : listed.sandbox === SANDBOX_STATE.STOPPED
+          ? "Sandbox stopped"
+          : "No sandbox yet";
+  return <>{sandbox === undefined ? working : `${working} · ${sandbox}`}</>;
 }

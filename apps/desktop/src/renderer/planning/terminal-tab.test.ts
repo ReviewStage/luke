@@ -28,6 +28,7 @@ import { onRegistry } from "#testing/copy-feedback";
 import { codingAgentsControl } from "#testing/plans-control";
 import "../terminal/index";
 import { TerminalCardFoot } from "./terminal-shells";
+import { shellsAsked } from "./terminal-store";
 import { TerminalTab } from "./terminal-tab";
 
 /**
@@ -219,13 +220,18 @@ async function settle(): Promise<void> {
 }
 
 /** The tab mounted for the agent, shown or not, with what it draws. */
-async function mount(shown = true, shellsOpen = true) {
+async function mount(
+  shown = true,
+  shellsOpen = true,
+  before?: (registry: AtomRegistry.AtomRegistry) => void,
+) {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
   const agents = codingAgentsControl({ agents: [AGENT], agentIds: [AGENT.id] });
   const registry = AtomRegistry.make();
+  before?.(registry);
   let closed = 0;
   let toggled = 0;
   const render = (on: boolean) =>
@@ -980,4 +986,67 @@ test("an idle close is the shown shell's alone: one said on a shell no longer sh
     cols: 80,
     rows: 24,
   });
+});
+
+test("a new shell asked for before the tab opens is started in place of attaching to the oldest", async () => {
+  const tab = await mount(true, true, (registry) => registry.set(shellsAsked(AGENT.id), 1));
+  assert.deepEqual(tab.kinds(), ["terminal.list", "terminal.create", "terminal.attach"]);
+  assert.equal(tab.registry.get(shellsAsked(AGENT.id)), 0);
+  assert.deepEqual(lastPayload(ACT_KIND.TERMINAL_ATTACH), {
+    agentId: AGENT.id,
+    terminalId: MADE,
+    cols: 80,
+    rows: 24,
+  });
+});
+
+test("a new shell asked for while a shell is connected starts at once, and shows", async () => {
+  const tab = await mount();
+  main.post(OLDEST).say({ type: "state", state: "attached" });
+  const before = main.sent.length;
+  act(() => {
+    tab.registry.update(shellsAsked(AGENT.id), (asked) => asked + 1);
+  });
+  await settle();
+  assert.deepEqual(tab.kinds(before), ["terminal.create", "terminal.attach", "terminal.list"]);
+  assert.equal(tab.registry.get(shellsAsked(AGENT.id)), 0);
+});
+
+test("two new shells asked for at once start two shells, each ask its own", async () => {
+  const tab = await mount(true, true, (registry) => registry.set(shellsAsked(AGENT.id), 2));
+  assert.deepEqual(tab.kinds(), ["terminal.list", "terminal.create", "terminal.attach"]);
+  main.post(MADE).say({ type: "state", state: "attached" });
+  await settle();
+  assert.equal(tab.kinds().filter((kind) => kind === "terminal.create").length, 2);
+  assert.equal(tab.registry.get(shellsAsked(AGENT.id)), 0);
+});
+
+test("a new shell asked for after an idle close connects again and starts it, as a key would", async () => {
+  const tab = await mount();
+  main.post(OLDEST).say({ type: "state", state: "idle" });
+  const before = main.sent.length;
+  act(() => {
+    tab.registry.update(shellsAsked(AGENT.id), (asked) => asked + 1);
+  });
+  await settle();
+  assert.deepEqual(tab.kinds(before), ["terminal.list", "terminal.create", "terminal.attach"]);
+  assert.equal(tab.registry.get(shellsAsked(AGENT.id)), 0);
+});
+
+test("a new shell asked for while the tab is hidden waits for a stopped sandbox's Resume, and is not lost", async () => {
+  const tab = await mount();
+  main.post(OLDEST).say({ type: "state", state: "attached" });
+  await tab.render(false);
+  main.listed = { sandbox: SANDBOX_STATE.STOPPED, terminals: [] };
+  act(() => {
+    tab.registry.update(shellsAsked(AGENT.id), (asked) => asked + 1);
+  });
+  await tab.render(true);
+  assert.equal(tab.bar(), "Sandbox stopped.");
+  assert.equal(tab.registry.get(shellsAsked(AGENT.id)), 1);
+  assert.ok(!tab.kinds().includes("terminal.create"));
+  await act(async () => tab.action()?.click());
+  await settle();
+  assert.equal(tab.registry.get(shellsAsked(AGENT.id)), 0);
+  assert.equal(tab.kinds().filter((kind) => kind === "terminal.create").length, 1);
 });

@@ -389,6 +389,8 @@ interface HeldState extends Omit<SidePanelState, "tabs" | "tab" | "plans" | "pin
   readonly pages: readonly PageStripTab[];
   /** The open Terminal tabs, by agent, in the order opened. */
   readonly terminals: readonly TerminalStripTab[];
+  /** The agent whose Terminal tab was shown last on each plan, by plan. */
+  readonly lastTerminals: Readonly<Record<string, string>>;
   readonly plans: Readonly<Record<string, PlanTabs>>;
   readonly pins: readonly PinnedTab[];
 }
@@ -447,6 +449,8 @@ export interface SidePanelControl {
   pages: readonly PageStripTab[];
   /** The open Terminal tabs in the order opened, after the page tabs; only those of the open plan's agents are drawn. */
   terminals: readonly TerminalStripTab[];
+  /** The agent whose Terminal tab was shown last on the open plan, which ⌘J goes to among several. */
+  lastTerminal: string | undefined;
   /** The open plan's tabs of every kind as the strip draws them, in its order. */
   strip: readonly SidePanelTab[];
   /** The tab shown, which is none only while the open plan has no tab open. */
@@ -739,15 +743,20 @@ function withTab(held: HeldState, tab: SidePanelTab, planId: string | undefined)
     isTerminalTab(tab) && !held.terminals.some((each) => sameTab(each, tab))
       ? [...held.terminals, tab]
       : held.terminals;
+  const lastTerminals =
+    isTerminalTab(tab) && planId !== undefined && held.lastTerminals[planId] !== tab.terminal
+      ? { ...held.lastTerminals, [planId]: tab.terminal }
+      : held.lastTerminals;
   const chosen = open ?? tab;
   return opened === held &&
     subagents === held.subagents &&
     files === held.files &&
     pages === held.pages &&
     terminals === held.terminals &&
+    lastTerminals === held.lastTerminals &&
     chosen === held.tab
     ? held
-    : { ...opened, subagents, files, pages, terminals, tab: chosen };
+    : { ...opened, subagents, files, pages, terminals, lastTerminals, tab: chosen };
 }
 
 /** The range a reference lights, none for a whole file. */
@@ -1190,6 +1199,7 @@ function settled(state: SidePanelState): HeldState {
     files: [],
     pages: [],
     terminals: [],
+    lastTerminals: {},
     plans: currentPlans(state.plans),
     pins:
       pins === undefined
@@ -1577,6 +1587,7 @@ export function useSidePanel(
     changes: planTabs(state, planId).changes ?? NO_CHANGES,
     pages: state.pages,
     terminals: state.terminals,
+    lastTerminal: planId === undefined ? undefined : state.lastTerminals[planId],
     files: state.files,
     tab: shownIn(state, drawn),
     width: state.width,

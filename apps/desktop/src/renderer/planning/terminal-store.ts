@@ -15,3 +15,10 @@ import * as Atom from "effect/reactivity/Atom";
 export const sandboxRead = Atom.family((_agentId: string) =>
   Atom.keepAlive(Atom.make<TerminalsAnswer | undefined>(undefined)),
 );
+
+/**
+ * How many new shells were asked for in the agent's sandbox and not yet
+ * started: New terminal asks, from ⌘K or the panel's "+", and the agent's
+ * Terminal tab, once its sandbox runs, starts them and counts them off.
+ */
+export const shellsAsked = Atom.family((_agentId: string) => Atom.keepAlive(Atom.make(0)));

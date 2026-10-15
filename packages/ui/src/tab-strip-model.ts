@@ -134,6 +134,17 @@ export function isPageTab(tab: StripTab): tab is PageStripTab {
   return tab instanceof Object && "page" in tab;
 }
 
+/**
+ * The coding agent a tab is one of the agent's own: its tab, its Changes
+ * tab, or its Terminal tab, which is where a terminal command means that
+ * agent (`terminal-entry.ts`); none for any other tab.
+ */
+export function agentOfTab(tab: StripTab): string | undefined {
+  if (isAgentTab(tab)) return tab.agent;
+  if (isChangesTab(tab)) return tab.changes;
+  return isTerminalTab(tab) ? tab.terminal : undefined;
+}
+
 /** Whether two tabs are the same tab. A delegated worker's call names it within its agent, as the service names its conversation, so its tab is the pair. */
 export function sameTab(a: StripTab, b: StripTab): boolean {
   if (isAgentTab(a)) return isAgentTab(b) && a.agent === b.agent;

@@ -29,7 +29,7 @@ import {
   type TerminalState,
   terminalLook,
 } from "./terminal-model";
-import { sandboxRead } from "./terminal-store";
+import { sandboxRead, shellsAsked } from "./terminal-store";
 import { useOpenLink } from "./use-open-link";
 
 /**
@@ -256,6 +256,13 @@ export function useTerminalSession(
   const rereadLater = useAtomSet(rereadAtom);
   const listed = useAtomValue(sandboxRead(agentId));
   const setListed = useAtomSet(sandboxRead(agentId));
+  const asked = useAtomValue(shellsAsked(agentId));
+  const setAsked = useAtomSet(shellsAsked(agentId));
+  // Note that the ask is read through a ref too, because a connect under way reads it as it lands.
+  const askedNow = useRef(asked);
+  useLayoutEffect(() => {
+    askedNow.current = asked;
+  });
   const [shell, setShell] = useState<string | undefined>(undefined);
   const show = useToast();
   const failedToast = useCallback(
@@ -345,18 +352,21 @@ export function useTerminalSession(
       setListed(listed);
       if (listed.sandbox === SANDBOX_STATE.STOPPED) return wait({ kind: TERMINAL_STATE.STOPPED });
       if (listed.sandbox === SANDBOX_STATE.STARTING) return wait({ kind: TERMINAL_STATE.STARTING });
+      // A new shell asked for is started in place of the one held.
+      const fresh = askedNow.current > 0;
+      if (fresh) setAsked((was) => Math.max(0, was - 1));
       const held = listed.terminals.find((each) => each.id === live.current.shell);
       const oldest = held ?? listed.terminals[0];
-      if (oldest !== undefined) return attach(oldest.id);
+      if (oldest !== undefined && !fresh) return attach(oldest.id);
       const made = await act(ACT_KIND.TERMINAL_CREATE, { agentId });
       if (!current()) return;
       if ("refused" in made) return wait(refusedState(made.refused));
-      setListed({ ...listed, terminals: [made.terminal] });
+      setListed({ ...listed, terminals: [...listed.terminals, made.terminal] });
       attach(made.terminal.id);
     } catch {
       if (current()) enter({ kind: TERMINAL_STATE.UNREACHABLE });
     }
-  }, [act, agentId, attach, enter, letGo, relistLater, setListed]);
+  }, [act, agentId, attach, enter, letGo, relistLater, setAsked, setListed]);
 
   // The list as an answer says it, every read since let go.
   const writeList = useCallback(
@@ -643,6 +653,22 @@ export function useTerminalSession(
     void connect();
     return letGo;
   }, [shown, handle, connect, letGo]);
+
+  // A new shell asked for while a shell is attached starts at once, each ask
+  // its own shell; one asked for of a connection the host ended is the key
+  // that connects again, starting it; one asked for before is started by
+  // the connect, once the sandbox runs, which a stopped one waits on Resume
+  // for. Note that attached means a port held too, because a hidden tab let
+  // its port go and its state stands as it was until it is shown again.
+  useEffect(() => {
+    if (!shown || asked === 0) return;
+    if (state.kind === TERMINAL_STATE.ATTACHED && live.current.port !== undefined) {
+      setAsked((was) => Math.max(0, was - 1));
+      void onCreate();
+      return;
+    }
+    if (state.kind === TERMINAL_STATE.IDLE || state.kind === TERMINAL_STATE.EXITED) void connect();
+  }, [shown, asked, state.kind, setAsked, onCreate, connect]);
 
   // While shown, the shells are read again every few seconds and whenever
   // the window takes the keyboard back, so a shell started or ended
