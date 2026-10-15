@@ -68,10 +68,12 @@ export function taskTime(plan: PlanSummary, order: TaskOrder): number {
   return Math.max(plan.updatedAt, plan.agents?.activityAt ?? 0);
 }
 
-/** Two plans in the order chosen; a tie in name falls to the newer update. */
+/** Two plans in the order chosen; a tie in name falls to the later activity. */
 function byOrder(order: TaskOrder): (a: PlanSummary, b: PlanSummary) => number {
   if (order === TASK_ORDER.NAME) {
-    return (a, b) => a.name.localeCompare(b.name) || b.updatedAt - a.updatedAt;
+    return (a, b) =>
+      a.name.localeCompare(b.name) ||
+      taskTime(b, TASK_ORDER.UPDATED) - taskTime(a, TASK_ORDER.UPDATED);
   }
   return (a, b) => taskTime(b, order) - taskTime(a, order);
 }

@@ -186,3 +186,20 @@ test("an agent's activity older than the plan's own edit leaves the plan's time 
   expect(taskTime(plan, TASK_ORDER.UPDATED)).toBe(900);
   expect(taskTime(plan, TASK_ORDER.CREATED)).toBe(1);
 });
+
+test("ordered by name, two tasks of one name stand by their later activity, the time each row shows", () => {
+  const edited = task("Deploy", "acme/relay", 1, 500);
+  const worked = {
+    ...task("Deploy", "acme/relay", 2, 100),
+    agents: {
+      total: 1,
+      working: 0,
+      activityAt: 800,
+      agents: [],
+      pullRequestTotal: 0,
+      pullRequests: [],
+    },
+  };
+  const [group] = repositoryGroups([edited, worked], TASK_ORDER.NAME);
+  expect(group?.plans.map((plan) => plan.createdAt)).toEqual([2, 1]);
+});

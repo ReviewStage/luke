@@ -46,11 +46,12 @@ const WORKING_STATUSES: ReadonlySet<CodingAgentStatus> = new Set([
   CODING_AGENT_STATUS.RUNNING,
 ]);
 
-/** One agent read for the list: its line, when it was started, which orders the lines, and when it last did something settled. */
+/** One agent read for the list: its line, when it was started, which orders the lines, when it last did something settled, and whether it was archived, which leaves it out of all but the activity. */
 interface ReadAgent {
   readonly line: PlanAgentLine;
   readonly createdAt: number;
   readonly activityAt: number;
+  readonly archived: boolean;
   readonly published: PublishedCodingAgent["published"];
 }
 
@@ -83,6 +84,7 @@ function agentLine(
     },
     createdAt: agent.createdAt.getTime(),
     activityAt: codingAgentActivityAt(turn, agent),
+    archived: agent.archivedAt !== null,
     published: held.published,
   };
 }
@@ -102,10 +104,12 @@ const PULL_REQUEST_RANK = {
  * repository changed may hold two of one number, those still open first, then
  * merged, then closed, newest agent's first within each, so the few a row
  * names always hold the one its mark is drawn for; and the latest settled
- * activity of every agent, named or not, which the plan's last update is
- * read beside.
+ * activity of every agent, named or not and archived or not, which the
+ * plan's last update is read beside. A plan whose every agent is archived
+ * carries its activity alone, with no agent and no pull request counted.
  */
-function summaryOf(agents: readonly ReadAgent[]): PlanAgentsSummary {
+function summaryOf(read: readonly ReadAgent[]): PlanAgentsSummary {
+  const agents = read.filter((agent) => !agent.archived);
   const newest = [...agents].sort((a, b) => b.createdAt - a.createdAt);
   const working = newest.filter((agent) => WORKING_STATUSES.has(agent.line.status));
   const resting = newest.filter((agent) => !WORKING_STATUSES.has(agent.line.status));
@@ -118,9 +122,9 @@ function summaryOf(agents: readonly ReadAgent[]): PlanAgentsSummary {
   return {
     total: agents.length,
     working: working.length,
-    ...(agents.length === 0
+    ...(read.length === 0
       ? undefined
-      : { activityAt: Math.max(...agents.map((agent) => agent.activityAt)) }),
+      : { activityAt: Math.max(...read.map((agent) => agent.activityAt)) }),
     agents: [...working, ...resting]
       .slice(0, PLAN_AGENTS_BOUNDS.MAX_AGENTS)
       .map((agent) => agent.line),
@@ -137,9 +141,12 @@ export function withPlanAgents(
   plans: readonly PlanSummary[],
 ): CodingAgentStoreEffect<readonly PlanSummary[]> {
   return Effect.gen(function* () {
+    // Note that the archived agents are read too, because the work one did
+    // is still the task's activity, though the row names it no more.
     const held = yield* listPublishedCodingAgents(
       userId,
       plans.map((plan) => plan.id),
+      { includeArchived: true },
     );
     const conversationIds = held.map(({ agent }) => agent.conversationId);
     // The agents were read through the plans' gate, and each conversation is its starter's, a teammate's as often as the account's.
