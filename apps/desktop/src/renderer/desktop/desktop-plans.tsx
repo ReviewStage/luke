@@ -650,6 +650,7 @@ function PlanDocument({
                             workspace={home}
                             repository={plan.repository}
                             archived={archived}
+                            created={plan}
                             doors={{
                               personal: plans.workspaces[0]?.id === home.id,
                               onOpenWorkspace: () => {

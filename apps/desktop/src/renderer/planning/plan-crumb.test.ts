@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import type { PlanSummary } from "@luke/features/plan-wire";
 import type { PlanningRepositoriesAnswer } from "@luke/features/planning-view";
 import {
   WORKSPACE_ROLE,
@@ -96,6 +97,7 @@ async function crumb(
   repository: string | null,
   members: readonly WorkspaceMember[] | undefined,
   archived = false,
+  created?: Pick<PlanSummary, "createdBy" | "ownerId" | "createdAt">,
 ) {
   const links: SettingsLink[] = [];
   /** What the crumb's doors were asked, in order. */
@@ -131,6 +133,7 @@ async function crumb(
                 workspace: shown,
                 repository,
                 archived,
+                created,
                 doors: {
                   personal: false,
                   onOpenWorkspace: () => asked.push(`home ${shown.id}`),
@@ -320,4 +323,58 @@ test("a member joining while the members read again fails leaves the new count s
 
   assert.equal(page.current().textContent, "AAcmerelay4 can edit");
   assert.equal(page.current().querySelector(".actor-stack"), null);
+});
+
+test("the task's creator leads the faces and the people card, which says who created it and marks their row", async () => {
+  const created = {
+    createdBy: { userId: "user-lee", name: "Lee Park" },
+    ownerId: "user-lee",
+    createdAt: 1,
+  };
+  const { nav } = await crumb(ACME, "acme-corp/relay", MEMBERS, false, created);
+
+  const faces = [...nav.querySelectorAll(".actor-stack .actor-mark")];
+  assert.deepEqual(
+    faces.map((face) => face.textContent),
+    ["L", "D", "S"],
+  );
+  const people =
+    nav.querySelector<HTMLElement>(".plan-crumb-people") ?? assert.fail("who can edit");
+  act(() => {
+    people.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+  });
+  const card = document.querySelector("[data-people-card]") ?? assert.fail("the people card");
+  assert.match(card.textContent ?? "", /Created by L Lee Park · /u);
+  assert.deepEqual(
+    [...card.querySelectorAll(".plan-crumb-people-list li")].map(
+      (row) =>
+        `${row.querySelector(".plan-crumb-person")?.textContent}: ${row.querySelector(".plan-crumb-role")?.textContent}`,
+    ),
+    ["Lee Park: Creator · Member", "Dana Reyes: Owner", "Sam Okafor: Admin"],
+  );
+});
+
+test("the reader's own task says it was created by you, and a task whose creator nobody names says nothing of it", async () => {
+  const mine = {
+    createdBy: { userId: "user-sam", name: "Sam Okafor" },
+    ownerId: "user-sam",
+    createdAt: 1,
+  };
+  const said = async (created?: Pick<PlanSummary, "createdBy" | "ownerId" | "createdAt">) => {
+    const { nav } = await crumb(ACME, "acme-corp/relay", MEMBERS, false, created);
+    const people =
+      nav.querySelector<HTMLElement>(".plan-crumb-people") ?? assert.fail("who can edit");
+    act(() => {
+      people.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+    });
+    const card = document.querySelector("[data-people-card]") ?? assert.fail("the people card");
+    const line = card.querySelector(".plan-crumb-created")?.textContent ?? undefined;
+    act(() => root?.unmount());
+    root = undefined;
+    document.body.innerHTML = "";
+    return line?.replace(/ · .*$/u, "");
+  };
+
+  assert.equal(await said(mine), "Created by S you");
+  assert.equal(await said(undefined), undefined);
 });

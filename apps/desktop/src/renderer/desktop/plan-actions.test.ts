@@ -481,3 +481,31 @@ test("Copy link to task copies the plan's address on tryluke.dev, alike from the
 
   assert.deepEqual(copied, [link, link, link]);
 });
+
+test("a task's card says who created it where others share its workspace, the reader as you, and nothing in a workspace of one", () => {
+  /** The card's lines under its name, as Dean hears them with the creation's time left off. */
+  const details = (plan: PlanSummary, workspace: Workspace) => {
+    const plans = plansControl({ me: DEAN.userId, workspaces: [workspace] });
+    const card = mount(
+      createElement(MemberDirectory, {
+        workspace: undefined,
+        readerId: DEAN.userId,
+        children: planCardOf(plans, { ...plan, workspaceId: workspace.id }, plan.updatedAt),
+      }),
+    );
+    const lines = [...card.querySelectorAll(".plan-card-detail")].map((line) =>
+      heard(line).replace(/ · .*$/u, ""),
+    );
+    unmountAll();
+    return lines;
+  };
+  const charles = { ...OTHER, createdAt: 60_000, ownerId: CHARLES.userId, createdBy: CHARLES };
+
+  assert.deepEqual(details(charles, STAGE), ["Created by Charles Pan"]);
+  assert.deepEqual(details({ ...charles, ownerId: DEAN.userId, createdBy: DEAN }, STAGE), [
+    "Created by you",
+  ]);
+  assert.deepEqual(details(charles, PERSONAL), []);
+  // A service that names no creator leaves the card as it was.
+  assert.deepEqual(details(OTHER, STAGE), []);
+});
