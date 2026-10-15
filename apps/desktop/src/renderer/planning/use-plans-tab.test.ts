@@ -889,6 +889,8 @@ test("an Inbox item chosen in one workspace gives way as another is listed, so m
   assert.equal(chosen, "notes");
   assert.equal(tab.control().inboxView.chosen, undefined);
   assert.equal(tab.shownInboxes.at(-1), null);
+});
+
 /** The plans each open the tab asked of main named, in order. */
 function opensAsked(payloads: readonly { readonly kind: ActKind; readonly payload: unknown }[]) {
   return payloads
