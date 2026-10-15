@@ -465,9 +465,16 @@ function ListSkeleton(): React.JSX.Element {
   );
 }
 
-/** How many items wait on the developer across every plan, and from agents with no plan: what the Dock's badge counts too. */
+/**
+ * How many items wait on the developer: those of the listed workspace's
+ * plans, the sum of the Inbox's row counts, and every one from an agent
+ * with no plan, which names no workspace to be counted in.
+ */
 function waitingItems(plans: PlansControl): number {
-  return plans.inbox.reduce((sum, plan) => sum + plan.items.length, plans.inboxPlanless.length);
+  return plans.listed.inbox.reduce(
+    (sum, plan) => sum + plan.items.length,
+    plans.inboxPlanless.length,
+  );
 }
 
 /**

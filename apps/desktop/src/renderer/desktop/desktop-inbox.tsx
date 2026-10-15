@@ -32,12 +32,13 @@ import { useInboxPlanFolds, useInboxViewChoices } from "./folded-groups";
 import { planCardOf } from "./plan-card";
 
 /**
- * desktop-inbox.tsx -- the window's Inbox: every item of every plan holding one in a list of its own, and the chosen item read beside it.
+ * desktop-inbox.tsx -- the window's Inbox: every item of every plan of the listed workspace holding one in a list of its own, and the chosen item read beside it.
  *
  * It stands in the plan's place beside the sidebar, whose Inbox row is
  * marked while it does, the way a mail app's mailbox stands beside its
- * folders. The list (`inbox-list.tsx`) holds the items of each plan main
- * says holds one, needing the developer or settled, each plan read whole
+ * folders. The list (`inbox-list.tsx`) holds the items of each plan of the
+ * workspace the sidebar lists that main says holds one (the switcher counts
+ * what waits in the others), needing the developer or settled, each plan read whole
  * as main says it changed (`use-inbox-items.ts`), under its plan or newest
  * first, all or only what needs them, as the developer last chose; Needs
  * you is the Inbox's one name for an item not yet answered
@@ -59,7 +60,7 @@ import { planCardOf } from "./plan-card";
 /** What the list says where a plan's read did not answer. */
 const NOT_READ = "Some items could not be read.";
 
-/** The plans the list holds items of, in main's order: each holding one that the account's list holds, so an archived plan, or one not yet read, is listed nowhere. */
+/** The plans the list holds items of, in main's order: each holding one that the listed workspace's list holds, so an archived plan, one not yet read, or another workspace's is listed nowhere. */
 function listedHoldings(
   holdings: PlansControl["inboxPlans"],
   listed: PlansControl["plans"],
@@ -104,7 +105,7 @@ export function DesktopInbox({ plans }: { plans: PlansControl }): React.JSX.Elem
     (params: CodingAgentInboxParams) => act(ACT_KIND.CODING_AGENTS_INBOX, params),
     [act],
   );
-  const { inboxPlans, plans: listedPlans } = plans;
+  const { inboxPlans, plans: listedPlans } = plans.listed;
   const holdings = useMemo(
     () => listedHoldings(inboxPlans, listedPlans),
     [inboxPlans, listedPlans],

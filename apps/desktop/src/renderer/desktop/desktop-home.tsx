@@ -30,8 +30,8 @@ import { PlanStatusMark } from "./plan-card";
  * desktop-home.tsx -- the home page: the column the window rests on with no plan open, saying what needs the developer and the plans saved latest, and offering New plan.
  *
  * It is one column at a reading measure, as a chat app's empty page is: a
- * greeting with New plan beside it, then Inbox, every Inbox item
- * waiting on the developer's answer as the Inbox's own row draws it, the
+ * greeting with New plan beside it, then Inbox, every Inbox item of the
+ * workspace listed waiting on the developer's answer as the Inbox's own row draws it, the
  * plan it is about after its title, a press opening the Inbox on it; then
  * Recent, the plans of the workspace listed saved latest, each as the
  * sidebar draws a plan, with its repository after its name, a press opening
@@ -67,7 +67,7 @@ function recentPlans(plans: readonly PlanSummary[]): PlanSummary[] {
 /**
  * Every Inbox item waiting on the developer, the latest changed first, read
  * as the window's Inbox reads them: each plan main says holds a waiting item
- * and the account's list holds, read whole.
+ * and the listed workspace's list holds, read whole.
  */
 function useWaitingItems(plans: PlansControl) {
   const { act } = useAct();
@@ -75,7 +75,7 @@ function useWaitingItems(plans: PlansControl) {
     (params: CodingAgentInboxParams) => act(ACT_KIND.CODING_AGENTS_INBOX, params),
     [act],
   );
-  const { inbox, inboxPlans, plans: listed } = plans;
+  const { inbox, inboxPlans, plans: listed } = plans.listed;
   const holdings = useMemo(
     () =>
       inboxPlans.filter(

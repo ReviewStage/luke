@@ -301,3 +301,41 @@ test("the head says who shares the workspace, to the eye and to a screen reader:
   assert.deepEqual(shared(1), ["A", "Only you", "Workspace: acme, Only you"]);
   assert.deepEqual(shared(undefined), ["A", null, "Workspace: acme"]);
 });
+
+test("the menu counts what waits in each other workspace, and the head says something does, to the eye and to a screen reader", () => {
+  const listedOnly = mount({
+    workspaces: [PERSONAL, ACME],
+    workspace: PERSONAL,
+    waitingIn: new Map([[PERSONAL.id, 3]]),
+  });
+  const quiet = {
+    label: listedOnly.switcher()?.getAttribute("aria-label"),
+    dot: listedOnly.switcher()?.querySelector(".sidebar-workspace-waiting") ?? null,
+  };
+  for (const root of roots.splice(0)) act(() => root.unmount());
+
+  const page = mount({
+    workspaces: [PERSONAL, ACME],
+    workspace: PERSONAL,
+    waitingIn: new Map([
+      [PERSONAL.id, 3],
+      [ACME.id, 2],
+    ]),
+  });
+  open(page.switcher());
+  const ends = menuItems().map((item) => [
+    labelOf(item),
+    item.querySelector(".menu-item-waiting")?.textContent,
+  ]);
+
+  assert.deepEqual(quiet, { label: "Workspace: Personal", dot: null });
+  assert.equal(
+    page.switcher()?.getAttribute("aria-label"),
+    "Workspace: Personal, 2 waiting in other workspaces",
+  );
+  assert.ok(page.switcher()?.querySelector(".sidebar-workspace-waiting"), "a dot marks the head");
+  assert.deepEqual(ends.slice(0, 2), [
+    ["Personal", undefined],
+    ["acme", "2"],
+  ]);
+});

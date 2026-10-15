@@ -133,7 +133,7 @@ function mount(overrides: Partial<PlansControl> = {}, accountName = "Dean Strata
   const opened: Opened = { plans: [], inbox: [], newPlans: 0 };
   const plans = plansControl({
     plans: PLANS,
-    listed: { plans: PLANS, archived: [] },
+    listed: { plans: PLANS, archived: [], ...HOLDING },
     ...HOLDING,
     onSelect: (planId) => opened.plans.push(planId),
     onNewPlan: () => {
@@ -229,7 +229,7 @@ test("the waiting items stand under the Inbox's name, the place a press on one o
 });
 
 test("with nothing waiting, the home's Inbox says so in the Inbox's own words, as a line with no glyph", async () => {
-  const { page } = mount({ inbox: [], inboxPlans: [] });
+  const { page } = mount({ listed: { plans: PLANS, archived: [], inbox: [], inboxPlans: [] } });
   await settle();
 
   const section = page.querySelector('section[aria-labelledby="home-inbox"]');
@@ -241,7 +241,7 @@ test("with nothing waiting, the home's Inbox says so in the Inbox's own words, a
 test("an account with no plan yet is welcomed with New plan, and nothing the page says names the sidebar", () => {
   const { page } = mount({
     plans: [],
-    listed: { plans: [], archived: [] },
+    listed: { plans: [], archived: [], inbox: [], inboxPlans: [] },
     inbox: [],
     inboxPlans: [],
   });
@@ -281,12 +281,12 @@ test("↑ and ↓ move the focus through the rows from the window, Search all in
   assert.match(focused(), /^Search all 8 plans/u);
 });
 
-test("a workspace with no plan of its own, in an account with plans elsewhere, still says what needs it rather than welcoming a new account", async () => {
-  const { page } = mount({ listed: { plans: [], archived: [] } });
+test("a workspace with no plan of its own, in an account with plans elsewhere, welcomes the account back rather than as new, and lists none of the others' Inbox", async () => {
+  const { page } = mount({ listed: { plans: [], archived: [], inbox: [], inboxPlans: [] } });
   await settle();
 
   assert.equal(page.querySelector("h1")?.textContent, "Welcome back, Dean");
-  assert.equal(rows(page, "home-inbox").length, 2);
+  assert.equal(rows(page, "home-inbox").length, 0);
   assert.equal(page.querySelector('section[aria-labelledby="home-recent"]'), null);
 });
 

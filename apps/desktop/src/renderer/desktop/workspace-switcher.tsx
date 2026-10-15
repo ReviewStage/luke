@@ -16,7 +16,9 @@ import { TILE_SIZE, WorkspaceTile } from "./workspace-tile";
  * variant A): the workspace's tile, its name, and under it who shares it,
  * "5 members", or "Only you" for a workspace of one. A press drops the menu
  * of every workspace the account is a member of from its left edge, each by
- * its tile, the listed one checked, then New workspace, which asks a name
+ * its tile, the listed one checked and each other counting what waits on the
+ * developer there, as a dot by the head's chevron says something does
+ * (`use-plans-tab.ts`), then New workspace, which asks a name
  * and lists the workspace made, and Workspace settings, which opens Settings
  * on the listed workspace's page, where its members and its GitHub are
  * managed. Nothing else stands in the menu. The head stands whenever an
@@ -25,7 +27,16 @@ import { TILE_SIZE, WorkspaceTile } from "./workspace-tile";
  * then the sidebar's head is Luke's.
  */
 
-/** The menu's items: every workspace by its tile, the listed one checked; then New workspace and Workspace settings. */
+/** How many items wait in the workspaces not listed, which the head marks and the menu counts. */
+function waitingElsewhere(listed: Workspace, plans: PlansControl): number {
+  let count = 0;
+  for (const [workspaceId, waiting] of plans.waitingIn) {
+    if (workspaceId !== listed.id) count += waiting;
+  }
+  return count;
+}
+
+/** The menu's items: every workspace by its tile, the listed one checked and each other counting what waits in it; then New workspace and Workspace settings. */
 function workspaceMenuGroups(
   listed: Workspace,
   plans: PlansControl,
@@ -36,6 +47,7 @@ function workspaceMenuGroups(
       label: workspace.name,
       icon: <WorkspaceTile workspace={workspace} />,
       checked: workspace.id === listed.id,
+      waiting: plans.waitingIn.get(workspace.id) ?? 0,
       onSelect: () => plans.onChooseWorkspace(workspace.id),
     }),
   );
@@ -82,13 +94,18 @@ export function WorkspaceSwitcher({
   const menu = useActionMenu(plans.shown && inSight);
   const listed = plans.workspace;
   if (listed === undefined) return null;
+  const elsewhere = waitingElsewhere(listed, plans);
   return (
     <div className="sidebar-workspace">
       <button
         type="button"
         className="sidebar-workspace-toggle"
         // The name a reader hears says who shares it too, since the label stands for the button's text.
-        aria-label={[`Workspace: ${listed.name}`, sharedWords(listed.memberCount)]
+        aria-label={[
+          `Workspace: ${listed.name}`,
+          sharedWords(listed.memberCount),
+          elsewhere > 0 ? `${elsewhere} waiting in other workspaces` : undefined,
+        ]
           .filter((part) => part !== undefined)
           .join(", ")}
         {...menu.trigger(dropBelowStart)}
@@ -98,6 +115,7 @@ export function WorkspaceSwitcher({
           <span className="sidebar-workspace-name">{listed.name}</span>
           <SharedLine count={listed.memberCount} />
         </span>
+        {elsewhere > 0 ? <span className="sidebar-workspace-waiting" aria-hidden="true" /> : null}
         <ChevronDownIcon />
       </button>
       {menu.drawn === undefined ? null : (
