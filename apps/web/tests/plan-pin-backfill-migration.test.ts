@@ -15,7 +15,7 @@ import * as SqlClient from "effect/sql/SqlClient";
  * plan never pinned becomes nobody's. Synthetic accounts throughout.
  */
 
-const BACKFILL = "20261015201907_plan_pin_per_account";
+const BACKFILL = "20261015211326_plan_pin_per_account";
 
 const PINNED_AT = "2026-10-01T09:30:00.000Z";
 

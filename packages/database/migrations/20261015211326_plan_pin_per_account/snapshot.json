@@ -1,8 +1,8 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "5e154455-3f22-4e26-85f1-0c4a94ef64b6",
-  "prevIds": ["34f83773-5663-49e6-b6bc-9bda48c92e40"],
+  "id": "44526a45-ccb5-4d9b-8eef-7b86a0d91562",
+  "prevIds": ["12729ea9-eb30-4e90-8c13-fddef797d0be"],
   "ddl": [
     {
       "isRlsEnabled": false,
@@ -3517,19 +3517,6 @@
       "table": "github_install_intent"
     },
     {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "organization_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "github_installation"
-    },
-    {
       "type": "bigint",
       "typeSchema": null,
       "notNull": true,
@@ -3538,6 +3525,19 @@
       "generated": null,
       "identity": null,
       "name": "installation_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "github_installation"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "organization_id",
       "entityType": "columns",
       "schema": "public",
       "table": "github_installation"
@@ -7031,6 +7031,27 @@
       "nameExplicit": true,
       "columns": [
         {
+          "value": "organization_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "github_installation_organization_id_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "github_installation"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
           "value": "agent_id",
           "isExpression": false,
           "asc": true,
@@ -9000,7 +9021,7 @@
       "entityType": "pks"
     },
     {
-      "columns": ["organization_id"],
+      "columns": ["installation_id"],
       "nameExplicit": false,
       "name": "github_installation_pkey",
       "schema": "public",
@@ -9231,15 +9252,6 @@
       "name": "user_email_unique",
       "schema": "public",
       "table": "user",
-      "entityType": "uniques"
-    },
-    {
-      "nameExplicit": false,
-      "columns": ["installation_id"],
-      "nullsNotDistinct": false,
-      "name": "github_installation_installation_id_key",
-      "schema": "public",
-      "table": "github_installation",
       "entityType": "uniques"
     },
     {
