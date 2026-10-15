@@ -17,6 +17,7 @@ import { CardHead, CardNote, HoverCard } from "../hover-card";
 import type { HeadingsChange, MentionNode } from "../plan-editor/contract";
 import { Tooltip } from "../tooltip";
 import { FileCard } from "./file-ref";
+import { shortCommit } from "./file-tab-model";
 import { FileTypeIcon } from "./file-type-icon";
 import { useOpenLink } from "./use-open-link";
 
@@ -166,6 +167,16 @@ function noteOf(mention: Mention, state: MentionState): string | undefined {
   return undefined;
 }
 
+/** What a file's card says of the lines a mention pins: where they run, and the commit they were read at. */
+function linesNote(lines: MentionLines | undefined): string | undefined {
+  if (lines === undefined) return undefined;
+  const span =
+    lines.startLine === lines.endLine
+      ? `Line ${lines.startLine}`
+      : `Lines ${lines.startLine}–${lines.endLine}`;
+  return `${span} at ${shortCommit(lines.commit)}`;
+}
+
 /** The card a chip hangs: a file's own card, or its glyph and whole name, and why it is gone where it is. */
 function MentionCard({
   mention,
@@ -176,7 +187,9 @@ function MentionCard({
   name: string;
   state: MentionState;
 }): React.JSX.Element {
-  if (mention.kind === MENTION_KIND.FILE) return <FileCard path={mention.path} note={undefined} />;
+  if (mention.kind === MENTION_KIND.FILE) {
+    return <FileCard path={mention.path} note={linesNote(mention.lines)} />;
+  }
   const whole = mention.kind === MENTION_KIND.FOLDER ? `${mention.path}/` : name;
   const note = noteOf(mention, state);
   return (

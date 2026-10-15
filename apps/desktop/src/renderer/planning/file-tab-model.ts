@@ -26,10 +26,11 @@ export const FILE_READ = {
   FAILED: "failed",
 } as const;
 
-/** The lines read so far, one run from `firstLine`, of a file of `lineCount` lines, read on `branch`. */
+/** The lines read so far, one run from `firstLine`, of a file of `lineCount` lines, read on `branch`, at `commit` where the service named the commit. */
 export interface FileLines {
   readonly repository: string;
   readonly branch: string;
+  readonly commit: string | undefined;
   readonly lineCount: number;
   readonly firstLine: number;
   readonly lines: PlanCode["lines"];
@@ -211,11 +212,13 @@ export function withWindow(held: FileRead, read: PlanFileShown): FileLines {
   const window: FileLines = {
     repository: read.repository,
     branch: read.branch,
+    commit: read.commit,
     lineCount: read.lineCount,
     firstLine: read.firstLine,
     lines: read.lines,
   };
-  if (held.kind !== FILE_READ.READY) return window;
+  // Note that lines read at another commit are never laid beside these, since they may be other lines.
+  if (held.kind !== FILE_READ.READY || held.commit !== read.commit) return window;
   if (holdsLines(held, read.firstLine, read.firstLine + read.lines.length - 1)) {
     return { ...window, firstLine: held.firstLine, lines: held.lines };
   }

@@ -630,11 +630,12 @@ export const planningFileParamsSchema = EffectSchema.Struct({
 
 export type PlanningFileParams = typeof planningFileParamsSchema.Type;
 
-/** A window of a file as the File tab draws it: its place and the branch it was read on, how long the whole file is, and its lines as this Mac coloured them. */
+/** A window of a file as the File tab draws it: its place, the branch it was read on and the commit where the service named it, how long the whole file is, and its lines as this Mac coloured them. */
 const planFileShownSchema = EffectSchema.Struct({
   path: EffectSchema.String,
   repository: EffectSchema.String,
   branch: EffectSchema.String,
+  commit: EffectSchema.optionalKey(EffectSchema.String),
   firstLine: EffectSchema.Int,
   lineCount: EffectSchema.Int,
   lines: codeLinesSchema,

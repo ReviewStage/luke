@@ -413,3 +413,19 @@ test("a page's address pasted on the line after a closing fence is laid in as it
 
   assert.deepEqual(box.drawn, [`LUKE-142/fix-the-thing ${ISSUE_URL}`]);
 });
+
+test("a mention laid in from elsewhere stands where the caret is, a space after it, and none is laid in past the box's bound", () => {
+  const box = mountedWithMentions("Fix  first");
+  const lines = {
+    name: "invite.ts:2–3",
+    target: "https://github.com/acme/relay/blob/HEAD/src/invite.ts#L2-L3",
+  };
+  const full = mounted("12345678", { maxLength: 10 });
+
+  box.caretAt(1 + "Fix ".length);
+  box.handle.insertMention(lines);
+  full.handle.insertMention(lines);
+
+  assert.equal(box.drafts.at(-1), `Fix [@invite.ts:2–3](${lines.target}) first`);
+  assert.deepEqual(full.drafts, []);
+});

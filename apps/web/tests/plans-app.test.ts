@@ -932,6 +932,55 @@ it.layer(getTestDB())("the plan routes", (it) => {
   );
 
   it.effect(
+    "a window of the default branch names the commit its head stands at, and is read at that commit, so lines picked from it pin to it",
+    () =>
+      Effect.gen(function* () {
+        const head = "0123456789abcdef0123456789abcdef01234567";
+        const relay = relayInstallation(7011);
+        const github = githubReaching([relay], undefined, {}, (sent) =>
+          new URL(sent.url).pathname === "/repos/Acme/Relay/git/ref/heads/main"
+            ? Response.json({ ref: "refs/heads/main", object: { type: "commit", sha: head } })
+            : contentsOf(sent),
+        );
+        const { owner, ask } = yield* openAccounts(github);
+        const workspaceId = yield* openConnectedWorkspace(owner, relay);
+        const planId = startedId(
+          yield* ask(
+            request(PLANS, owner, {
+              method: "POST",
+              body: { ...RELAY, workspaceId, repository: "acme/relay" },
+            }),
+          ),
+        );
+
+        const read = readAnswer(
+          planFileAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(
+            request(FILE, owner, {
+              id: planId,
+              query: { path: "src/invite.ts", first: "1", last: "2" },
+            }),
+          ),
+        );
+
+        assert.deepEqual(read, {
+          file: {
+            path: "src/invite.ts",
+            repository: "Acme/Relay",
+            branch: "main",
+            commit: head,
+            firstLine: 1,
+            lineCount: 4,
+            lines: ["one", "two"],
+          },
+        });
+        const asked = github.sent.find((sent) => CONTENTS_PATH.test(new URL(sent.url).pathname));
+        assert.equal(new URL(asked?.url ?? ORIGIN).searchParams.get("ref"), head);
+      }),
+  );
+
+  it.effect(
     "a file is refused by the rule show_code keeps: a secret file and a path leaving the tree before GitHub is asked, and a missing file, a directory, a link, and a file too large or not text by name, one GitHub found nothing at naming the branch it was looked for on",
     () =>
       Effect.gen(function* () {

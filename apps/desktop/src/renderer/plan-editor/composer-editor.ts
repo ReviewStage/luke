@@ -620,6 +620,31 @@ function choseChip(editor: Editor, word: ReturnType<typeof triggerAt>, chip: PmN
   );
 }
 
+/**
+ * A mention made elsewhere laid in where the caret stands, over what is
+ * selected, a space after it unless one follows, the caret after the
+ * mention and the box focused; nothing where the box takes no words now, or the mention's link
+ * has no room left under the bound, as a key typed past it is not written.
+ */
+function laidInMention(
+  editor: Editor,
+  state: ComposerState,
+  maxLength: number,
+  mention: MentionNode,
+): void {
+  if (state.input !== COMPOSER_INPUT.EDITABLE) return;
+  const { doc, selection, schema } = editor.state;
+  const room =
+    maxLength - textOf(doc).length + textBetween(doc, selection.from, selection.to).length;
+  const spaced =
+    doc.textBetween(selection.to, Math.min(selection.to + 1, doc.content.size)) === SPACE;
+  if (mentionLink(mention).length + (spaced ? 0 : SPACE.length) > room) return;
+  const chip = schema.node(MENTION_NODE, { name: mention.name, target: mention.target });
+  const tr = editor.state.tr.replaceSelectionWith(chip, false);
+  editor.view.dispatch((spaced ? tr : tr.insertText(SPACE)).scrollIntoView());
+  editor.view.focus();
+}
+
 /** A mark of the caret where it stands, carried through every change until its words land or it is let go. */
 function marked(editor: Editor, state: ComposerState, maxLength: number): ComposerMark {
   const mark = Symbol("mark");
@@ -698,6 +723,7 @@ export function mountComposer(host: HTMLElement, props: ComposerEditorProps): Co
         state.mentionTrigger,
         editor.schema.node(MENTION_NODE, { name: mention.name, target: mention.target }),
       ),
+    insertMention: (mention) => laidInMention(editor, state, props.maxLength, mention),
     chooseSkillAtMention: (name) =>
       choseChip(editor, state.mentionTrigger, editor.schema.node(SKILL_NODE, { name })),
     setSkills: (skills) => {

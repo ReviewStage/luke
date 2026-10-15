@@ -353,6 +353,8 @@ function fullMenuTemplate(appName: string, update?: UpdateMenu): MenuItemConstru
           ],
         },
         SEPARATOR,
+        commandItem(APP_COMMAND.MENTION_LINES),
+        SEPARATOR,
         {
           label: "Speech",
           submenu: [{ role: "startSpeaking" }, { role: "stopSpeaking" }],

@@ -20,7 +20,11 @@ import { CONNECTION_TOOL } from "./connection-tools.js";
  * A message names things as links whose label starts with `@`
  * (`@luke/features/mention-link`). The words go to the model as written,
  * links and all. A file or a folder is the agent's to read from its own
- * checkout, on its own branch, so nothing of it is added here. The plan, or
+ * checkout, on its own branch, so nothing of it is added here, but for a
+ * file's lines the developer picked (`file.ts:12–20`): those are pinned to
+ * the commit they were read at, which the agent's branch may have moved
+ * past, so a note names the lines and the commit, and says to read just
+ * those. The plan, or
  * one of its sections, is not: a coding agent has no tool to read the plan
  * again, and one started on a task never saw it. So the message carries one
  * more part after its words, the plan or each section it named as it stood
@@ -95,7 +99,7 @@ interface NamedMention {
 
 /** A mention the part hands its agent something of, and the name it was written with: the agent's own plan or one of its sections, or an MCP server or one of its tools. */
 interface HandedMention {
-  readonly mention: PlanMention | ServerMention;
+  readonly mention: PlanMention | ServerMention | LinesMention;
   readonly name: string;
 }
 
@@ -123,6 +127,19 @@ function excerptOf({ mention, name }: NamedMention, plan: Plan): string {
   return `The plan's section "${section.heading}":\n\n${cutOnLine(section.text, MENTIONED_BOUNDS.SECTION_CHARS)}`;
 }
 
+/** A mention of a file, which the part hands a note for where it pins the file's lines. */
+type LinesMention = Extract<Mention, { readonly kind: typeof MENTION_KIND.FILE }>;
+
+/** What a mention of a file's lines is handed as: the lines, the commit they were read at, and how to read just those; nothing for a whole file. */
+function linesNoteOf({ path, lines }: LinesMention): string {
+  if (lines === undefined) return "";
+  const span =
+    lines.startLine === lines.endLine
+      ? `line ${lines.startLine}`
+      : `lines ${lines.startLine}–${lines.endLine}`;
+  return `The developer pointed you at ${span} of \`${path}\` as they stood at commit \`${lines.commit}\` for this message: read just those lines, as \`git show ${lines.commit}:${path}\` holds them, since your branch may have moved them.`;
+}
+
 /** What a mention of an MCP server or one of its tools is handed as: which the developer pointed the agent at, and how to reach it. */
 function noteOf(mention: ServerMention): string {
   const server = `the ${INTEGRATION_NAME[mention.provider]} MCP server (connection \`${mention.provider}\`)`;
@@ -140,7 +157,7 @@ function noteOf(mention: ServerMention): string {
 function handedMention(
   mention: Mention,
   plan: Plan | undefined,
-): PlanMention | ServerMention | undefined {
+): PlanMention | ServerMention | LinesMention | undefined {
   switch (mention.kind) {
     case MENTION_KIND.PLAN:
     case MENTION_KIND.SECTION:
@@ -149,7 +166,9 @@ function handedMention(
     case MENTION_KIND.TOOL:
     case MENTION_KIND.LINK:
       return mention;
+    // A whole file is the agent's to read; only lines the developer picked are handed a note.
     case MENTION_KIND.FILE:
+      return mention.lines === undefined ? undefined : mention;
     case MENTION_KIND.FOLDER:
       return undefined;
   }
@@ -157,10 +176,18 @@ function handedMention(
 
 /** The same mention, each named once whatever times the message names it. */
 function sameMention(
-  first: PlanMention | ServerMention,
-  second: PlanMention | ServerMention,
+  first: PlanMention | ServerMention | LinesMention,
+  second: PlanMention | ServerMention | LinesMention,
 ): boolean {
   switch (first.kind) {
+    case MENTION_KIND.FILE:
+      return (
+        second.kind === MENTION_KIND.FILE &&
+        first.path === second.path &&
+        first.lines?.commit === second.lines?.commit &&
+        first.lines?.startLine === second.lines?.startLine &&
+        first.lines?.endLine === second.lines?.endLine
+      );
     case MENTION_KIND.PLAN:
       return second.kind === MENTION_KIND.PLAN;
     case MENTION_KIND.SECTION:
@@ -183,7 +210,7 @@ function handedAs({ mention, name }: HandedMention, plan: Plan | undefined): str
   if (mention.kind === MENTION_KIND.PLAN || mention.kind === MENTION_KIND.SECTION) {
     return plan === undefined ? "" : excerptOf({ mention, name }, plan);
   }
-  return noteOf(mention);
+  return mention.kind === MENTION_KIND.FILE ? linesNoteOf(mention) : noteOf(mention);
 }
 
 /** The MCP servers the words mention, by themselves, by one of their tools, or by a page of theirs, each once: the ones the turn the words open is handed whatever the agent's switches say. */

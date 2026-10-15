@@ -631,7 +631,8 @@ export type PlanFileRequest = typeof planFileRequestSchema.Type;
 /**
  * A window of a file of the plan's repository as it stands now on its
  * default branch, or at the commit the request pinned, read through the
- * Luke GitHub App: the path, the repository and the branch or commit read, the line the first carried line is, how
+ * Luke GitHub App: the path, the repository and the branch or commit read,
+ * the commit the lines were read at where GitHub named one, the line the first carried line is, how
  * many lines the whole file has, and the lines, each cut as `show_code`
  * cuts it. A window past the file's end carries no lines.
  */
@@ -639,6 +640,7 @@ export const planFileWindowSchema = EffectSchema.Struct({
   path: EffectSchema.String,
   repository: githubRepositoryFullNameSchema,
   branch: EffectSchema.String,
+  commit: EffectSchema.optionalKey(commitShaSchema),
   firstLine: codeLineSchema,
   lineCount: EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(1)),
   lines: EffectSchema.Array(
