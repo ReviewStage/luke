@@ -495,6 +495,19 @@ export function inboxSteps(
   return { at: at + 1, total: rowed.length, previous: rowed[at - 1], next: rowed[at + 1] };
 }
 
+/** The first row after the chosen one whose item needs the developer, in the list's order, wrapping round to its top, a folded group's left out; none where nothing else does. */
+export function nextNeedingYou(
+  view: InboxListView,
+  chosen: string | undefined,
+  folded: (key: string) => boolean,
+): InboxListed | undefined {
+  const listed = rowedItems(view, folded, chosen);
+  const at = listed.findIndex(({ item }) => item.id === chosen);
+  return [...listed.slice(at + 1), ...listed.slice(0, Math.max(at, 0))].find(
+    ({ item }) => item.status === INBOX_STATUS.OPEN && item.id !== chosen,
+  );
+}
+
 /** The item that stands chosen where none is: the first listed that waits, else the first listed. */
 export function firstChoice(view: InboxListView): InboxListed | undefined {
   const listed = listedItems(view);

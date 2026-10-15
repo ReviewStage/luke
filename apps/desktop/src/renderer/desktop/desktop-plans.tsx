@@ -18,16 +18,17 @@ import { FindScope } from "../find-in-tab";
 import { MemberDirectory } from "../member-directory";
 import { ArchivedBanner } from "../planning/archived-plan";
 import { INBOX_COLUMNS, useInboxColumns } from "../planning/inbox-columns";
-import { InboxList } from "../planning/inbox-list";
+import { InboxList, ItemMark } from "../planning/inbox-list";
 import {
   firstChoice,
   INBOX_GROUPING,
+  type InboxListed,
   inboxList,
   listedItems,
   NEEDS_YOU,
   planHolder,
 } from "../planning/inbox-model";
-import { useInboxPager } from "../planning/inbox-pager";
+import { inboxNext, useInboxPager } from "../planning/inbox-pager";
 import { type InboxCodeDoors, InboxPane } from "../planning/inbox-pane";
 import { PlanBody, type SectionLinks } from "../planning/plan-body";
 import { PlanCrumb } from "../planning/plan-crumb";
@@ -195,11 +196,26 @@ function PlanInboxTab({
   });
   const chosen = listedItems(list).find(({ item }) => item.id === asked) ?? firstChoice(list);
   const columns = useInboxColumns(chosen?.item.id, listedItems(list).length > 1);
+  const choose = ({ item }: InboxListed) => setAsked(item.id);
   // Note that the column is hidden, though drawn, while the side panel fills the window.
-  const pager = useInboxPager(list, chosen?.item.id, ({ item }) => setAsked(item.id), {
+  const pager = useInboxPager(list, chosen?.item.id, choose, {
     shown: plans.shown && !plans.sidePanel.fullScreen,
     folded: NO_FOLDS,
   });
+  const next = inboxNext(
+    list,
+    chosen,
+    ({ holder, item }) => (
+      <ItemMark
+        holder={holder}
+        agentId={item.agentId}
+        models={plans.agents.models}
+        readerId={plans.me}
+      />
+    ),
+    choose,
+    NO_FOLDS,
+  );
   return (
     <section
       ref={columns.ref}
@@ -251,6 +267,7 @@ function PlanInboxTab({
           hidden={columns.shown === INBOX_COLUMNS.LIST}
           onBack={columns.onBack}
           pager={columns.shown === INBOX_COLUMNS.ITEM ? pager : undefined}
+          next={next}
           doors={{
             onOpenHolder: onOpenPlan,
             planCard: planCardOf(plans, plan, now),

@@ -1,8 +1,11 @@
+import { INBOX_STATUS } from "@luke/features/inbox-wire";
 import { ChevronDownIcon, ChevronUpIcon } from "lucide-react";
-import { APP_COMMAND } from "#shared/shortcuts";
+import { APP_COMMAND, APP_SHORTCUTS, shortcutAria } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
+import { Shortcut } from "../shortcut";
 import { Tooltip } from "../tooltip";
-import { type InboxListed, type InboxListView, inboxSteps } from "./inbox-model";
+import { type InboxListed, type InboxListView, inboxSteps, nextNeedingYou } from "./inbox-model";
+import { cardTitle } from "./tool-call-model";
 
 /**
  * inbox-pager.tsx -- stepping through the Inbox's items one at a time: where the chosen one stands, "2 of 8", and the presses and keys that choose the one above or below it.
@@ -16,8 +19,14 @@ import { type InboxListed, type InboxListView, inboxSteps } from "./inbox-model"
  * Inbox has them: split, they move the chosen row and the item beside it;
  * one column wide, the item standing alone, whose bar draws the pager with
  * its up and down arrows, as Mail's message toolbar does while its list is
- * hidden.
+ * hidden. Once an item is settled, the place its box stood offers the next
+ * item that needs the developer, wrapping round the list, so answering one
+ * leads to the next without the list in between; it never moves on by
+ * itself, so an answer is seen landing before the developer leaves it.
  */
+
+/** J, the chord that chooses the item below. */
+const NEXT_CHORD = APP_SHORTCUTS[APP_COMMAND.NEXT_INBOX_ITEM].chord;
 
 /** What the pager draws and steps by. */
 export interface InboxPager {
@@ -27,6 +36,53 @@ export interface InboxPager {
   readonly onPrevious: (() => void) | undefined;
   /** Chooses the item below the chosen one; none at the list's foot. */
   readonly onNext: (() => void) | undefined;
+}
+
+/** The next item that needs the developer, as a settled item offers it: its agent's tile and title, whether J reaches it too, and the press that opens it. */
+export interface InboxNext {
+  readonly title: string;
+  readonly mark: React.ReactNode;
+  /** Whether it is also the item J chooses, the one just below in the list, so the row may name the key. */
+  readonly byKey: boolean;
+  readonly onOpen: () => void;
+}
+
+/** The next item that needs the developer after the chosen one among the rows, offered where it is settled; none while it waits, or where nothing else does. */
+export function inboxNext(
+  view: InboxListView,
+  chosen: InboxListed | undefined,
+  mark: (listed: InboxListed) => React.ReactNode,
+  onChoose: (listed: InboxListed) => void,
+  folded: (key: string) => boolean,
+): InboxNext | undefined {
+  if (chosen === undefined || chosen.item.status === INBOX_STATUS.OPEN) return undefined;
+  const next = nextNeedingYou(view, chosen.item.id, folded);
+  if (next === undefined) return undefined;
+  return {
+    title: cardTitle(next.item.title),
+    mark: mark(next),
+    byKey: inboxSteps(view, chosen.item.id, folded)?.next?.item.id === next.item.id,
+    onOpen: () => onChoose(next),
+  };
+}
+
+/** The row a settled item's foot offers: Next, the item's agent's tile and title, and J where J reaches it. */
+export function InboxNextUp({ next }: { next: InboxNext }): React.JSX.Element {
+  return (
+    <div className="inbox-next-dock">
+      <button
+        type="button"
+        className="inbox-next"
+        aria-keyshortcuts={next.byKey ? shortcutAria(NEXT_CHORD) : undefined}
+        onClick={next.onOpen}
+      >
+        <span className="inbox-next-lead">Next</span>
+        <span className="inbox-row-mark">{next.mark}</span>
+        <span className="inbox-next-title">{next.title}</span>
+        {next.byKey ? <Shortcut chord={NEXT_CHORD} /> : null}
+      </button>
+    </div>
+  );
 }
 
 /** Where the Inbox stands: whether it is on screen, and which of its groups are folded away. */

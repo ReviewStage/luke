@@ -16,7 +16,7 @@ import { AutomationDirectory } from "../automation-directory";
 import { EmptyState } from "../empty-state";
 import { MemberDirectory } from "../member-directory";
 import { INBOX_COLUMNS, useInboxColumns } from "../planning/inbox-columns";
-import { InboxList } from "../planning/inbox-list";
+import { InboxList, ItemMark } from "../planning/inbox-list";
 import {
   anyNeedsYou,
   firstChoice,
@@ -30,7 +30,7 @@ import {
   planHolder,
   planlessGroups,
 } from "../planning/inbox-model";
-import { useInboxPager } from "../planning/inbox-pager";
+import { inboxNext, useInboxPager } from "../planning/inbox-pager";
 import { InboxPane, type InboxPaneDoors } from "../planning/inbox-pane";
 import { useMinute } from "../planning/plan-time";
 import { useCodingAgents } from "../planning/use-coding-agents";
@@ -239,6 +239,15 @@ export function DesktopInbox({ plans }: { plans: PlansControl }): React.JSX.Elem
     shown: plans.shown,
     folded: folds.folded,
   });
+  const next = inboxNext(
+    list,
+    chosen,
+    ({ holder, item }) => (
+      <ItemMark holder={holder} agentId={item.agentId} models={named.models} readerId={plans.me} />
+    ),
+    choose,
+    folds.folded,
+  );
   // A choice that asks for its item opens it once, the one column the Inbox shows being the
   // item's; Back from it then stands on the list, the choice taken already.
   const opensItem = asked?.opened === true && chosen?.item.id === asked.itemId;
@@ -301,6 +310,7 @@ export function DesktopInbox({ plans }: { plans: PlansControl }): React.JSX.Elem
               hidden={columns.shown === INBOX_COLUMNS.LIST}
               onBack={columns.onBack}
               pager={columns.shown === INBOX_COLUMNS.ITEM ? pager : undefined}
+              next={next}
               doors={paneDoors(plans, chosen.holder, { act, openLink, now, automationsOn })}
             />
           )}

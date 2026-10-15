@@ -2743,7 +2743,8 @@ ul.actor-stack {
 .desktop-agent .agent-todos-dock,
 .desktop-agent .agent-composer,
 .desktop-inbox .inbox-board,
-.desktop-inbox .agent-composer {
+.desktop-inbox .agent-composer,
+.desktop-inbox .inbox-next-dock {
   padding-inline: max(var(--content-inset), var(--reading-room));
 }
 
@@ -3880,6 +3881,47 @@ body:has(.app-stage[data-capture="true"])
 .inbox-crumb:active {
   background: var(--raised-strong);
   color: var(--text-primary);
+}
+
+/* A settled item's foot, where its box stood: the next item that needs the
+   developer as one wide press in the options' fill (`inbox-pager.tsx`), led
+   by Next in the meta voice, then its agent's tile and its title in the
+   unread weight, cut short at the row's end, and J where J reaches it. */
+.inbox-next-dock {
+  padding-bottom: var(--space-12);
+}
+
+.inbox-next {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: var(--space-8);
+  padding: var(--space-12);
+  border-radius: var(--control-radius);
+  background: var(--raised);
+  color: var(--text-primary);
+  font-size: 13px;
+  text-align: left;
+  transition: background-color var(--duration-hover) ease;
+}
+
+.inbox-next:hover {
+  background: var(--raised-strong);
+}
+
+.inbox-next-lead {
+  flex: none;
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.inbox-next-title {
+  overflow: hidden;
+  min-width: 0;
+  flex: 1;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* An item standing alone ends its bar in the pager (`inbox-pager.tsx`):

@@ -1056,6 +1056,23 @@ test("the chosen item keeps its place when its own plan folds, so J still reache
   act(() => keys.unmount());
 });
 
+test("a settled item offers, where its box stood, the next item that needs you, by its agent's tile and title and J where J reaches it, a press opening it; an item that waits offers none", async () => {
+  const { page } = mount();
+  await settle();
+  const offered = () =>
+    page.querySelector<HTMLButtonElement>(".inbox-view-items button.inbox-next");
+  assert.equal(offered(), null, "the item chosen waits on its box");
+
+  act(() => rowNamed(page, "How is a failed email retried?").click());
+  const next = offered();
+  assert.ok(next, "the settled item offers the next");
+  assert.equal(wordsOf(next), "NextAlert at 80%?J");
+  assert.ok(wearsAgentTile(next), "the next item's agent stands by its tile");
+  act(() => next.click());
+  assert.equal(readTitle(page), "Alert at 80%?");
+  assert.equal(offered(), null);
+});
+
 /** An answer the act gives the renderer, the view it carries settled now. */
 function answered(value: CodingAgentInboxAnswerView): Promise<ReadOutcome> {
   return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });

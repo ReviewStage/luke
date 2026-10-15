@@ -26,6 +26,7 @@ import {
   inboxBoard,
   inboxList,
   inboxReply,
+  nextNeedingYou,
   planHolder,
   planlessGroups,
   proposedOptions,
@@ -410,6 +411,36 @@ test("with nothing chosen, the first listed item that waits stands chosen, else 
     "done",
   );
   assert.equal(firstChoice(inboxList([], { ...all, grouping: INBOX_GROUPING.PLAN })), undefined);
+});
+
+test("the next item that needs you follows the chosen one in the list's order, wrapping round to its top, never the chosen one itself, and none where nothing else needs you", () => {
+  const newest = inboxList(PLANS, {
+    grouping: INBOX_GROUPING.NEWEST,
+    waitingOnly: false,
+    chosen: undefined,
+  });
+  assert.deepEqual(
+    ["retry", "expiry", "threshold", "channel"].map(
+      (id) => nextNeedingYou(newest, id, () => false)?.item.id,
+    ),
+    ["expiry", "threshold", "expiry", "expiry"],
+  );
+  const settled = inboxList(
+    [
+      {
+        holder: planHolder(BILLING),
+        items: [
+          item({ id: "done", status: INBOX_STATUS.ANSWERED }),
+          item({ id: "only", updatedAt: 5 }),
+        ],
+      },
+    ],
+    { grouping: INBOX_GROUPING.NEWEST, waitingOnly: false, chosen: undefined },
+  );
+  assert.equal(
+    nextNeedingYou(settled, "only", () => false),
+    undefined,
+  );
 });
 
 test("a note past the wire's bound is no answer, so the card offers no send for it", () => {
