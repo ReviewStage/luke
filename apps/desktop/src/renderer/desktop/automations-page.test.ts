@@ -981,6 +981,7 @@ test("the list's Owner column draws the workspace by its tile, the account's own
 });
 
 test("a new agent's MCP servers are the owner's connected ones until switched off, and a switch saves with the task", async () => {
+  standing = [{ ...SWEEP, mine: true }];
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
   await settle();
   assert.match(page.textContent ?? "", /2 of 2 on\./u);
@@ -1000,6 +1001,29 @@ test("a new agent's MCP servers are the owner's connected ones until switched of
     automationId: SWEEP.id,
     change: { action: { ...SWEEP.action, disabledServers: [INTEGRATION_PROVIDER.SENTRY] } },
   });
+});
+
+test("another member's automation says which servers its creator switched off, offering no switch of the reader's own", async () => {
+  standing = [
+    {
+      ...SWEEP,
+      mine: false,
+      action: { ...SWEEP.action, disabledServers: [INTEGRATION_PROVIDER.SENTRY] },
+    },
+  ];
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+
+  assert.match(
+    page.textContent ?? "",
+    /Its creator's connected servers, but Sentry switched off\./u,
+  );
+  assert.equal(
+    [...page.querySelectorAll("button")].find(
+      (each) => each.getAttribute("aria-label") === "MCP servers",
+    ),
+    undefined,
+  );
 });
 
 test("the Runs panel hides and shows by its toggle and by the side panel's chord, and stays as it was left", async () => {
