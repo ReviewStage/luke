@@ -540,25 +540,32 @@ function settingRows(
   }));
 }
 
+/**
+ * Whether a row's creator explains why the query found it: their name holds a
+ * word of the query, or the query reaches the row through no other of its
+ * words, as a loose match on the name does.
+ */
+function creatorExplains(row: PaletteRow, query: string, tokens: readonly string[]): boolean {
+  const { creator } = row;
+  if (creator === undefined || tokens.length === 0) return false;
+  if (matchRanges(creator, tokens).length > 0) return true;
+  const others = row.terms.filter((term) => term !== creator).join(" ");
+  return fuzzyScore(others, query) === 0 && fuzzyScore(creator, query) > 0;
+}
+
 function PaletteItem({
   row,
   value,
+  query,
   tokens,
 }: {
   row: PaletteRow;
   value: string;
+  query: string;
   tokens: readonly string[];
 }): React.JSX.Element {
-  // A task found by its creator's name says the name after its detail, so the match is in sight,
-  // and so does one the query reaches by no word in sight, which only its creator's name can explain.
-  const unexplained =
-    matchRanges(row.label, tokens).length === 0 &&
-    matchRanges(row.detail ?? "", tokens).length === 0;
-  const named =
-    row.creator !== undefined &&
-    tokens.length > 0 &&
-    (matchRanges(row.creator, tokens).length > 0 || unexplained);
-  const detail = named
+  // A task found by its creator's name says the name after its detail, so the match is in sight.
+  const detail = creatorExplains(row, query, tokens)
     ? [row.detail, row.creator].filter((words) => words !== undefined).join(" · ")
     : row.detail;
   const item = (
@@ -903,7 +910,15 @@ export function CommandPalette({
           <Command.Group key={section.kind} heading={FILTER_LABEL[section.kind]}>
             {section.rows.map((row) => {
               place += 1;
-              return <PaletteItem key={place} row={row} value={String(place)} tokens={tokens} />;
+              return (
+                <PaletteItem
+                  key={place}
+                  row={row}
+                  value={String(place)}
+                  query={query}
+                  tokens={tokens}
+                />
+              );
             })}
           </Command.Group>
         ))}

@@ -639,7 +639,10 @@ test("a teammate's task wears its creator's face at its row's end, and is found 
   );
   type("charles");
   assert.deepEqual(rows(), ["Retry budget · acme/relay · Charles Pan"]);
-  // A query the creator's name answers only loosely still shows the name it was found by.
+  // A query the creator's name answers only loosely still shows the name it was found by,
+  // and one the task's other words answer, however loosely, leaves the name unsaid.
   type("chrls");
   assert.deepEqual(rows(), ["Retry budget · acme/relay · Charles Pan"]);
+  type("rtry");
+  assert.equal(rows()[0], "Retry budget · acme/relay");
 });
