@@ -10,6 +10,8 @@ import {
   sessionSandboxesLayer,
   sweepSessionSandboxes,
 } from "@luke/service/agents/session-sandboxes";
+import type { EveForAccount } from "@luke/service/automations/automation-runs";
+import { sweepAutomations } from "@luke/service/automations/automation-sweep";
 import { HostedEnvironment } from "@luke/service/environment";
 import type { GitHubApp } from "@luke/service/github/github-app";
 import {
@@ -23,8 +25,6 @@ import type { ModelCatalog } from "@luke/service/providers/model-catalog";
 import { ANY_METHOD, type WebRoutes } from "@luke/service/route";
 import { Effect, Layer, Redacted } from "effect";
 import { HttpClient, HttpRouter } from "effect/http";
-import type { EveForAccount } from "./hosted/automation-runs.js";
-import { sweepAutomations } from "./hosted/automation-sweep.js";
 import { HOSTED_TOOL_SET } from "./hosted/brain-tool-set.js";
 import { handleMaintenanceSweep } from "./hosted/maintenance-sweep.js";
 import { createLiveUpstream } from "./voice/openai.js";

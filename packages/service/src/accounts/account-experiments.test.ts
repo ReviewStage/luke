@@ -16,15 +16,6 @@ import {
 } from "@luke/database/models/plan-template-revisions";
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB } from "@luke/database/testing";
-import { anthropicFastAccess } from "@luke/service/agents/coder-host/account-keys";
-import { HostedEnvironment, type HostedEnvironmentValues } from "@luke/service/environment";
-import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "@luke/service/http/http";
-import { modelCatalogOf } from "@luke/service/providers/model-catalog";
-import {
-  CONNECTOR_ASKED_NOTHING,
-  integrationConnectOf,
-} from "@luke/service/testing/integration-connect";
-import { noNetwork } from "@luke/service/testing/no-network";
 import { EXPERIMENT } from "@luke/settings";
 import {
   HTTP_METHOD,
@@ -36,7 +27,13 @@ import {
 import { Clock, Effect, Layer, Option } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
-import { accountApp } from "../server/account-app";
+import { anthropicFastAccess } from "../agents/coder-host/account-keys.js";
+import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
+import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
+import { modelCatalogOf } from "../providers/model-catalog.js";
+import { CONNECTOR_ASKED_NOTHING, integrationConnectOf } from "../testing/integration-connect.js";
+import { noNetwork } from "../testing/no-network.js";
+import { accountApp } from "./account-app.js";
 
 /**
  * The experiments part of the account's preferences snapshot, answered by

@@ -23,9 +23,9 @@ import {
   type AutomationTrigger,
 } from "@luke/features/automation-wire";
 import { CODING_AGENT_STATUS, type CodingAgentStatus } from "@luke/features/coding-agent-wire";
-import type { StartServices } from "@luke/service/agents/coder-host/start";
-import { codingAgentStatusOf } from "@luke/service/agents/coder-host/status";
 import { Effect } from "effect";
+import type { StartServices } from "../agents/coder-host/start.js";
+import { codingAgentStatusOf } from "../agents/coder-host/status.js";
 import { type EveForAccount, executeAutomationRun, recoverStrandedRun } from "./automation-runs.js";
 
 /**

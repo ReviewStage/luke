@@ -136,7 +136,7 @@ const publishedOnGitHub = /* @__PURE__ */ Effect.fnUntraced(function* (
 /**
  * What the agent published as GitHub holds it now, written on its row as
  * read. The routes read it through the cache below; the voice brain's read
- * of one agent (`hosted/coding-agent-tools.ts`) reads it afresh, once per
+ * of one agent (`agents/coding-agent-tools.ts`) reads it afresh, once per
  * ask.
  */
 export const agentPublished = /* @__PURE__ */ Effect.fn("web/agentPublished")(function* (

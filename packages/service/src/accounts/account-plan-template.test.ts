@@ -28,21 +28,18 @@ import {
   planTemplateAnswerSchema,
   planTemplateRevisionsAnswerSchema,
 } from "@luke/features/plan-document-template";
-import { anthropicFastAccess } from "@luke/service/agents/coder-host/account-keys";
-import { HostedEnvironment, type HostedEnvironmentValues } from "@luke/service/environment";
-import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "@luke/service/http/http";
-import { modelCatalogOf } from "@luke/service/providers/model-catalog";
-import {
-  CONNECTOR_ASKED_NOTHING,
-  integrationConnectOf,
-} from "@luke/service/testing/integration-connect";
-import { noNetwork } from "@luke/service/testing/no-network";
 import { HTTP_METHOD, unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Clock, Effect, Layer, Option, Result } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
-import { accountApp } from "../server/account-app";
+import { anthropicFastAccess } from "../agents/coder-host/account-keys.js";
+import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
+import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
+import { modelCatalogOf } from "../providers/model-catalog.js";
+import { CONNECTOR_ASKED_NOTHING, integrationConnectOf } from "../testing/integration-connect.js";
+import { noNetwork } from "../testing/no-network.js";
+import { accountApp } from "./account-app.js";
 
 /**
  * The account's plan template, answered by the account group the way its

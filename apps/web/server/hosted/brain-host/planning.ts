@@ -12,6 +12,17 @@ import {
 import { PLAN_ACTOR, PLAN_FIELD } from "@luke/features/plan-wire";
 import { AGENT_ROLE } from "@luke/service/agents/agent-runtime/role";
 import { AGENT_TOOL, toolsOf } from "@luke/service/agents/agent-runtime/tools";
+import {
+  type CodingAgentCall,
+  LIST_CODING_AGENTS_TOOL,
+  MESSAGE_CODING_AGENT_TOOL,
+  READ_CODING_AGENT_TOOL,
+  runListCodingAgents,
+  runMessageCodingAgent,
+  runReadCodingAgent,
+  runStartCodingAgent,
+  START_CODING_AGENT_TOOL,
+} from "@luke/service/agents/coding-agent-tools";
 import { COMMAND_DESCRIPTION_INSTRUCTION } from "@luke/service/agents/command-description";
 import { RUN_ON_MAC_TOOL, runOnMacTool } from "@luke/service/agents/mac-command";
 import {
@@ -49,17 +60,6 @@ import type { ToolSet } from "ai";
 import { Effect, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { ToolDefinition } from "eve/tools";
-import {
-  type CodingAgentCall,
-  LIST_CODING_AGENTS_TOOL,
-  MESSAGE_CODING_AGENT_TOOL,
-  READ_CODING_AGENT_TOOL,
-  runListCodingAgents,
-  runMessageCodingAgent,
-  runReadCodingAgent,
-  runStartCodingAgent,
-  START_CODING_AGENT_TOOL,
-} from "../coding-agent-tools.js";
 
 /**
  * planning.ts -- what a plan conversation's turns run under: the planning model's instructions, its document, and its tools.

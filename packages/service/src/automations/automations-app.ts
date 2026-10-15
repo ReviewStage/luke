@@ -37,14 +37,16 @@ import {
   automationCreateRequestSchema,
   automationRunRequestSchema,
 } from "@luke/features/automation-wire";
-import { acceptedAgentChoice } from "@luke/service/agents/coder-host/start";
-import {
-  type AgentTurnStanding,
-  codingAgentStatusOf,
-} from "@luke/service/agents/coder-host/status";
-import { type EveReach, eveFor, standingsOf } from "@luke/service/agents/coder-host/stop";
-import type { GitHubApp } from "@luke/service/github/github-app";
-import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
+import { unparsedWire } from "@luke/wire";
+import { readEither } from "@luke/wire/effect";
+import { Clock, Effect, Layer, Option, Result } from "effect";
+import { HttpRouter, HttpServerRequest, type HttpServerResponse } from "effect/http";
+import type * as HttpClient from "effect/http/HttpClient";
+import { acceptedAgentChoice } from "../agents/coder-host/start.js";
+import { type AgentTurnStanding, codingAgentStatusOf } from "../agents/coder-host/status.js";
+import { type EveReach, eveFor, standingsOf } from "../agents/coder-host/stop.js";
+import type { GitHubApp } from "../github/github-app.js";
+import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
   HOSTED_REFUSAL,
   type HostedRefusal,
@@ -54,15 +56,10 @@ import {
   hostedStoreOrUnavailable,
   readJsonBodyEffect,
   type UserIdResolver,
-} from "@luke/service/http/http-effect";
-import type { ModelCatalog } from "@luke/service/providers/model-catalog";
-import { ANY_METHOD, type WebRoutes } from "@luke/service/route";
-import { unparsedWire } from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
-import { Clock, Effect, Layer, Option, Result } from "effect";
-import { HttpRouter, HttpServerRequest, type HttpServerResponse } from "effect/http";
-import type * as HttpClient from "effect/http/HttpClient";
-import { executeAutomationRun } from "./hosted/automation-runs.js";
+} from "../http/http-effect.js";
+import type { ModelCatalog } from "../providers/model-catalog.js";
+import { ANY_METHOD, type WebRoutes } from "../route.js";
+import { executeAutomationRun } from "./automation-runs.js";
 
 /**
  * automations-app.ts -- the account's automations: list and make them, change and delete one, run one now, and read its runs.
@@ -82,7 +79,7 @@ import { executeAutomationRun } from "./hosted/automation-runs.js";
  *
  * "Run now" records a manual firing under the client's key and acts on it
  * at once, through the same guards and the same start a scheduled run
- * takes (`hosted/automation-runs.ts`), reaching eve as the developer under
+ * takes (`automations/automation-runs.ts`), reaching eve as the developer under
  * the request's own bearer; the same key again answers the run it made. A
  * run's agent is summarized with its status as the agent's tab reads it.
  */

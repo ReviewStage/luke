@@ -30,7 +30,7 @@ message box.
    nothing checks it afterwards.
 5. **No agent mentions for now.** Coding agents have no tool to see or
    message another agent; only Luke's planning model has list, read, message
-   and start (`apps/web/server/hosted/coding-agent-tools.ts`). Agent
+   and start (`packages/service/src/agents/coding-agent-tools.ts`). Agent
    mentions wait until coding agents get such tools.
 6. **No person mentions yet.**
 7. **The plan document takes mentions too** (§5).

@@ -20,6 +20,13 @@ import {
 } from "@luke/service/agents/brain-host/conversation";
 import { STEER_OUTCOME } from "@luke/service/agents/coder-host/steer";
 import {
+  CODING_AGENT_TOOL_REFUSAL,
+  LIST_CODING_AGENTS_TOOL,
+  MESSAGE_CODING_AGENT_TOOL,
+  START_CODING_AGENT_REFUSAL,
+  START_CODING_AGENT_TOOL,
+} from "@luke/service/agents/coding-agent-tools";
+import {
   ACTION_RESULT_STATUS,
   BRAIN_TURN_TRIGGER,
   isRecord,
@@ -45,13 +52,6 @@ import { type BrainHost, brainHost } from "../server/hosted/brain-host/host";
 import { planningToolDeclarations } from "../server/hosted/brain-host/planning";
 import type { BrainHostSeams } from "../server/hosted/brain-host/production";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
-import {
-  CODING_AGENT_TOOL_REFUSAL,
-  LIST_CODING_AGENTS_TOOL,
-  MESSAGE_CODING_AGENT_TOOL,
-  START_CODING_AGENT_REFUSAL,
-  START_CODING_AGENT_TOOL,
-} from "../server/hosted/coding-agent-tools";
 
 /**
  * The planning tools as eve runs them through the host's `runTool`, over the

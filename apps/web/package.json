@@ -35,7 +35,6 @@
     "@luke/live": "workspace:*",
     "@luke/runtime": "workspace:*",
     "@luke/service": "workspace:*",
-    "@luke/settings": "workspace:*",
     "@luke/brand": "workspace:*",
     "@luke/ui": "workspace:*",
     "@luke/voice": "workspace:*",

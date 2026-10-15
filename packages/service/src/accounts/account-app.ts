@@ -20,28 +20,6 @@ import {
 import { planRevisionSeqSchema } from "@luke/features/plan-wire";
 import type { FastAccess } from "@luke/features/provider-key-wire";
 import { failureKind } from "@luke/runtime/effect";
-import { type EveReach, eveFor } from "@luke/service/agents/coder-host/stop";
-import { retireSessions } from "@luke/service/agents/retire-sessions";
-import { HostedEnvironment } from "@luke/service/environment";
-import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
-import {
-  HOSTED_REFUSAL,
-  type HostedRefusal,
-  hostedJsonResponse,
-  hostedMethod,
-  hostedNotFoundRoute,
-  hostedRefusalResponse,
-  hostedStoreOrUnavailable,
-  readJsonBodyEffect,
-  type UserIdResolver,
-} from "@luke/service/http/http-effect";
-import {
-  type IntegrationConnect,
-  revokeIntegrationGrants,
-} from "@luke/service/integrations/integration-connect";
-import { acceptedModelChoice, type ModelCatalog } from "@luke/service/providers/model-catalog";
-import { forgetPosthogPersonEffect } from "@luke/service/providers/posthog";
-import { ANY_METHOD, type WebRoutes } from "@luke/service/route";
 import { accountPreferencesFromWire, experimentChoicesFrom, NO_EXPERIMENTS } from "@luke/settings";
 import { isRecord, type UnparsedWireValue, unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
@@ -52,6 +30,28 @@ import {
   HttpServerRequest,
   type HttpServerResponse,
 } from "effect/http";
+import { type EveReach, eveFor } from "../agents/coder-host/stop.js";
+import { retireSessions } from "../agents/retire-sessions.js";
+import { HostedEnvironment } from "../environment.js";
+import { HOSTED_HTTP_STATUS } from "../http/http.js";
+import {
+  HOSTED_REFUSAL,
+  type HostedRefusal,
+  hostedJsonResponse,
+  hostedMethod,
+  hostedNotFoundRoute,
+  hostedRefusalResponse,
+  hostedStoreOrUnavailable,
+  readJsonBodyEffect,
+  type UserIdResolver,
+} from "../http/http-effect.js";
+import {
+  type IntegrationConnect,
+  revokeIntegrationGrants,
+} from "../integrations/integration-connect.js";
+import { acceptedModelChoice, type ModelCatalog } from "../providers/model-catalog.js";
+import { forgetPosthogPersonEffect } from "../providers/posthog.js";
+import { ANY_METHOD, type WebRoutes } from "../route.js";
 
 /**
  * The account group: the signed-in desktop's own delete, preferences, and

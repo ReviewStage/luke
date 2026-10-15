@@ -5,22 +5,6 @@ import {
   type GitHubInstallationStatus,
 } from "@luke/database/github-installation-vocabulary";
 import { listCodingAgentsOnBranches } from "@luke/database/models/coding-agent-store";
-import { agentPublished } from "@luke/service/agents/coder-host/published";
-import { queueGithubRuns } from "@luke/service/automations/automation-github";
-import { HostedEnvironment } from "@luke/service/environment";
-import { clearRevokedAuthorization, type GitHubApp } from "@luke/service/github/github-app";
-import { setInstallationStatus } from "@luke/service/github/github-installations";
-import {
-  HOSTED_REFUSAL,
-  type HostedRefusal,
-  hostedJsonResponse,
-  hostedNotFoundRoute,
-  hostedRefusing,
-  hostedStoreOrUnavailable,
-  parseJsonBytes,
-  readBodyBytesEffect,
-} from "@luke/service/http/http-effect";
-import { ANY_METHOD, type WebRoutes } from "@luke/service/route";
 import { EXCESS_KEYS, type UnparsedWireValue } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Effect, Layer, Redacted, Result, Schema } from "effect";
@@ -30,6 +14,22 @@ import {
   HttpServerRequest,
   type HttpServerResponse,
 } from "effect/http";
+import { agentPublished } from "../agents/coder-host/published.js";
+import { queueGithubRuns } from "../automations/automation-github.js";
+import { HostedEnvironment } from "../environment.js";
+import {
+  HOSTED_REFUSAL,
+  type HostedRefusal,
+  hostedJsonResponse,
+  hostedNotFoundRoute,
+  hostedRefusing,
+  hostedStoreOrUnavailable,
+  parseJsonBytes,
+  readBodyBytesEffect,
+} from "../http/http-effect.js";
+import { ANY_METHOD, type WebRoutes } from "../route.js";
+import { clearRevokedAuthorization, type GitHubApp } from "./github-app.js";
+import { setInstallationStatus } from "./github-installations.js";
 
 /**
  * github-webhook-app.ts -- the Luke GitHub App's webhook: a delivery about a pull request or its checks reads what the agents on that branch published again, one about an installation marks its workspace active or not, and a revoked authorization clears that GitHub user's tokens.

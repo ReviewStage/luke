@@ -11,13 +11,13 @@ import {
   type FastAccess,
   PROVIDER_KEY_PROVIDER,
 } from "@luke/features/provider-key-wire";
-import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
-import { type ModelCatalog, modelCatalogOf } from "@luke/service/providers/model-catalog";
 import type { WireBoundaryInput } from "@luke/wire";
 import { Effect, Layer, Logger, Option } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
-import { modelsApp } from "../server/models-app";
+import { HOSTED_HTTP_STATUS } from "../http/http.js";
+import { type ModelCatalog, modelCatalogOf } from "../providers/model-catalog.js";
+import { modelsApp } from "./models-app.js";
 
 /**
  * The models route, answered by the group the way a function answers it,
