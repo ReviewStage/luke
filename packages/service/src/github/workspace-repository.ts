@@ -1,17 +1,17 @@
 /**
- * workspace-repository.ts -- a repository a workspace's plan may use: one the workspace's GitHub installation reaches.
+ * workspace-repository.ts -- a repository a workspace's plan may use: one the workspace's GitHub installation on its owner reaches.
  *
  * A plan names its repository at its start or in a change, and an agent is
  * started on the repository its plan names, so the rule is read at each of
  * those moments rather than once when the plan is written: an installation
- * disconnected or replaced after the plan named its repository still decides
- * whether an agent may start on it. A workspace with no installation
- * reaches no repository at all.
+ * suspended, removed, or reinstalled after the plan named its repository
+ * still decides whether an agent may start on it. A workspace with no
+ * installation reaches no repository at all.
  *
  * A refusal says why (`@luke/features/repository-reach-wire`), and where
  * the owner's installation stands for another workspace the plan's owner is
- * in, it names that workspace, since one installation stands for one
- * workspace and moving the plan there is the one thing that reaches the
+ * in, it names that workspace, since an installation stands for one
+ * workspace alone and moving the plan there is the one thing that reaches the
  * repository again: a plan written in a workspace before its repositories
  * came only from its own installation (#2524) is left that way.
  */

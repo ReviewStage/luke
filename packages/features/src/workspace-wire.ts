@@ -10,18 +10,23 @@ import { countedNumber } from "./service-wire.js";
  * A workspace is a team in Luke: the first one, made for the account when it
  * first signs in, or one a member created; either way teammates join by
  * invitation. Membership has nothing
- * to do with GitHub. A workspace's repositories come from at most one
- * installation of the Luke GitHub App, which an owner or admin connects:
- * `POST /api/workspaces/github/connect` answers the App's install address
- * carrying a short-lived, single-use intent bound to the account and the
- * workspace, and GitHub's return through the Setup URL links the
- * installation the account's own GitHub token can see to that workspace.
- * One installation, and so one GitHub account or organization, stands for
- * one workspace. `GET /api/workspaces` answers every workspace the account
- * is a member of, its first one first and the rest by name, each with the
- * account's role in it and its connected GitHub account, if any: its login,
- * and whether the installation is active, which a suspended or removed one
- * is not. A workspace's id is the one a plan's summary names, `plan-wire.ts`'s
+ * to do with GitHub. A workspace's repositories come from the installations
+ * of the Luke GitHub App an owner or admin connects to it, one per GitHub
+ * account: `POST /api/workspaces/github/connect` answers the App's install
+ * address carrying a short-lived, single-use intent bound to the account
+ * and the workspace, and GitHub's return through the Setup URL adds the
+ * installation the account's own GitHub token can see to that workspace,
+ * beside those it holds. An installation, and so its GitHub account or
+ * organization, stands for exactly one workspace. Which installations and
+ * repositories a workspace holds is managed on GitHub; nothing here removes
+ * one. `GET /api/workspaces` answers every workspace the account is a
+ * member of, its first one first and the rest by name, each with the
+ * account's role in it and its connected GitHub accounts, the first linked
+ * first: each one's login, and whether its installation is active, which a
+ * suspended or removed one is not. `githubInstallations` is every one, and
+ * absent from a service from before there could be several; `github` is
+ * the first still active, else the first, or null, as a desktop from
+ * before them reads it. A workspace's id is the one a plan's summary names, `plan-wire.ts`'s
  * `workspaceIdSchema`.
  *
  * A member of a workspace reads its members; an owner or an admin renames
@@ -186,6 +191,14 @@ export const workspaceGithubSchema = EffectSchema.Struct({
   active: EffectSchema.Boolean,
 });
 
+/** One installation connected to a workspace: GitHub's id for it, the login of the account it is on, and whether it is active. */
+export const workspaceGithubInstallationSchema = EffectSchema.Struct({
+  installationId: EffectSchema.Number,
+  login: EffectSchema.String,
+  /** False where the installation was suspended or removed on GitHub: its repositories are out of reach. */
+  active: EffectSchema.Boolean,
+});
+
 /**
  * One workspace the account is a member of. The name is held to no bound
  * here, because a name the service already holds must not make the whole
@@ -201,8 +214,12 @@ export const workspaceSchema = EffectSchema.Struct({
    */
   slug: EffectSchema.optionalKey(EffectSchema.String),
   role: EffectSchema.Literals(Object.values(WORKSPACE_ROLE)),
-  /** The GitHub account its connected installation is on, or null where none is connected. */
+  /** The GitHub account of its first-linked installation still active, else its first-linked, or null where none is connected: what a desktop from before several installations reads. */
   github: EffectSchema.NullOr(workspaceGithubSchema),
+  /** Every installation connected to it, the first linked first; absent from a service from before several, where `github` is the whole of it. */
+  githubInstallations: EffectSchema.optionalKey(
+    EffectSchema.Array(workspaceGithubInstallationSchema),
+  ),
   /** How many members it has, the account among them, which the window says as who shares it; absent from a service before it. */
   memberCount: EffectSchema.optionalKey(countedNumber),
   /**
@@ -239,7 +256,7 @@ export const workspacesAnswerSchema = EffectSchema.Struct({
 
 export type WorkspacesAnswer = typeof workspacesAnswerSchema.Type;
 
-/** One workspace: the one created, renamed, or given a photo, or the one whose GitHub organization was disconnected. */
+/** One workspace: the one created, renamed, or given a photo. */
 export const workspaceAnswerSchema = EffectSchema.Struct({ workspace: workspaceSchema });
 
 /** A workspace created (POST): its name, its ends trimmed; the account creating it is its owner. */
@@ -262,7 +279,7 @@ export const workspacePhotoSetRequestSchema = EffectSchema.Struct({
   photo: EffectSchema.NullOr(workspacePhotoUrlSchema),
 });
 
-/** The workspace a GitHub organization is connected to or disconnected from (POST), by an owner or admin of it. */
+/** The workspace a GitHub account is connected to (POST), by an owner or admin of it. */
 export const workspaceGithubRequestSchema = EffectSchema.Struct({
   workspaceId: workspaceIdSchema,
 });

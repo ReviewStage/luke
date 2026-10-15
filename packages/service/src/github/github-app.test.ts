@@ -32,7 +32,7 @@ import {
 } from "../testing/github-app-fake.js";
 import { GITHUB_REPOSITORY_SELECTION, GitHubApp } from "./github-app.js";
 import {
-  installationOfWorkspace,
+  installationsOfWorkspace,
   mendInstallationStatus,
   setInstallationStatus,
 } from "./github-installations.js";
@@ -354,20 +354,20 @@ it.layer(getTestDB())("a workspace's repositories through its installation", (it
         const owner = yield* openGithubUser();
         const workspace = yield* openWorkspace(owner);
         yield* connectWorkspaceGitHub(workspace, running);
-        const read = yield* installationOfWorkspace(workspace);
-        assert.ok(Option.isSome(read));
+        const [read] = yield* installationsOfWorkspace(workspace);
+        assert.ok(read !== undefined);
 
         yield* TestClock.adjust("1 second");
         yield* setInstallationStatus(running.id, GITHUB_INSTALLATION_STATUS.SUSPENDED);
-        yield* mendInstallationStatus(read.value, GITHUB_INSTALLATION_STATUS.DELETED);
+        yield* mendInstallationStatus(read, GITHUB_INSTALLATION_STATUS.DELETED);
         const listed = yield* listWorkspaces(owner);
 
         assert.deepEqual(
           listed.filter((each) => each.id === workspace).map((each) => each.github?.active),
           [false],
         );
-        const after = yield* installationOfWorkspace(workspace);
-        assert.equal(Option.getOrUndefined(after)?.status, GITHUB_INSTALLATION_STATUS.SUSPENDED);
+        const [after] = yield* installationsOfWorkspace(workspace);
+        assert.equal(after?.status, GITHUB_INSTALLATION_STATUS.SUSPENDED);
       }),
   );
 

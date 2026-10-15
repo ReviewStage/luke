@@ -43,11 +43,7 @@ import { type Cause, Clock, Effect, Layer, Option, Result } from "effect";
 import { type HttpClient, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { unparsedWire } from "../core.js";
 import { GitHubApp } from "../github/github-app.js";
-import {
-  createConnectIntent,
-  disconnectInstallation,
-  GITHUB_CONNECT_ROLES,
-} from "../github/github-installations.js";
+import { createConnectIntent, GITHUB_CONNECT_ROLES } from "../github/github-installations.js";
 import { logGitHubReadFailure } from "../github/github-refusal.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
@@ -67,7 +63,7 @@ import { invitationOffer } from "./invitation-offers.js";
 import { listMembers, memberIdOf } from "./workspace-members.js";
 
 /**
- * workspaces-app.ts -- the account's workspaces as the Mac reads and asks for them: the list, a workspace created, renamed, given a photo, or handed over, a GitHub organization connected or disconnected, and its members read, removed, given a role, or left.
+ * workspaces-app.ts -- the account's workspaces as the Mac reads and asks for them: the list, a workspace created, renamed, given a photo, or handed over, a GitHub account connected, and its members read, removed, given a role, or left.
  *
  * `GET /api/workspaces` answers every workspace the bearer's account is a
  * member of, the one made for it first and the rest by name, each with the
@@ -78,11 +74,14 @@ import { listMembers, memberIdOf } from "./workspace-members.js";
  * server-only create, the account its owner. `POST /api/workspaces/github/connect`
  * answers where the browser goes to connect GitHub: the Luke GitHub App's
  * install address with a single-use intent as its `state`, which the connect's
- * callback spends (`github-install-app.ts`); and `.../disconnect` removes the
- * workspace's connected installation; both take an owner or admin of the
- * workspace, and a workspace the account is not in answers as none does. A
- * workspace's repositories are its installation's alone, so one with nothing
- * connected has none.
+ * callback spends (`github-install-app.ts`), adding the installation beside
+ * any the workspace holds; it takes an owner or admin of the workspace, and
+ * a workspace the account is not in answers as none does. Which
+ * installations and repositories a workspace holds is managed on GitHub, so
+ * `.../disconnect`, which a Mac from before several installations still
+ * sends, is refused as not permitted and removes nothing. A workspace's
+ * repositories are its installations' alone, so one with nothing connected
+ * has none.
  * `GET /api/workspaces/members` answers a workspace's
  * members to a member of it. `POST /api/workspaces/members/remove` lets the
  * owner remove an admin or a member, and an admin a member alone;
@@ -391,7 +390,13 @@ const connectEndpoint = Effect.fn("web/workspaceGithubConnectEndpoint")(function
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { url: url.toString() });
 });
 
-/** POST: the workspace's connected installation removed, answering the workspace. */
+/**
+ * POST: refused as not permitted to every account, removing nothing. A Mac
+ * from before several installations offered Disconnect, which removed the
+ * workspace's one; a workspace's installations are now managed on GitHub,
+ * where uninstalling one reaches the webhook, so the old press must not
+ * remove every installation the workspace holds.
+ */
 const disconnectEndpoint = Effect.fn("web/workspaceGithubDisconnectEndpoint")(function* (
   seams: WorkspacesAppSeams,
 ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, Requirements> {
@@ -399,12 +404,8 @@ const disconnectEndpoint = Effect.fn("web/workspaceGithubDisconnectEndpoint")(fu
   if (incoming.method !== HTTP_METHOD.POST) {
     return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
   }
-  const userId = yield* accountOf(seams);
-  const workspace = yield* administeredWorkspace(userId);
-  yield* hostedStoreOrUnavailable(disconnectInstallation(workspace.id));
-  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
-    workspace: yield* answeredWorkspace(userId, workspace.id),
-  });
+  yield* accountOf(seams);
+  return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
 });
 
 /** GET: a workspace's members, to a member of it. */

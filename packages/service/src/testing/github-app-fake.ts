@@ -317,6 +317,7 @@ export const connectWorkspaceGitHub = (organizationId: string, installation: Ins
     accountId: installation.accountId ?? 50_000 + installation.id,
     accountLogin: installation.login,
     accountType: installation.accountType ?? "User",
+    suspended: installation.suspendedAt !== undefined,
   });
 
 /** A sealed token as Better Auth writes one on the account row. */

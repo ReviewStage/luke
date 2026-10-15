@@ -93,6 +93,37 @@ it.effect("reads a workspace from a service before slugs travelled, its slug lef
   }),
 );
 
+it.effect(
+  "reads every installation a service with several connections lists, and a service from before them as its one GitHub account alone",
+  () =>
+    Effect.gen(function* () {
+      const several = {
+        ...ACME,
+        github: { login: "acme", active: true },
+        githubInstallations: [
+          { installationId: 11, login: "acme", active: true },
+          { installationId: 12, login: "acme-labs", active: false },
+        ],
+      };
+      const current = fakeCloudApi({
+        "GET /api/workspaces": { answer: () => ({ workspaces: [several] }) },
+      });
+      const before = fakeCloudApi({
+        "GET /api/workspaces": { answer: () => ({ workspaces: [ACME] }) },
+      });
+
+      const read = yield* Effect.provide(client().list(), current.layer);
+      const older = yield* Effect.provide(client().list(), before.layer);
+
+      assert.deepEqual(read, { workspaces: [several] });
+      assert.deepEqual(older, { workspaces: [ACME] });
+      assert.equal(
+        older?.workspaces[0] !== undefined && "githubInstallations" in older.workspaces[0],
+        false,
+      );
+    }),
+);
+
 it.effect("creates a workspace with its name trimmed, and a blank name never travels", () =>
   Effect.gen(function* () {
     const created = { ...ACME, role: WORKSPACE_ROLE.OWNER, github: null };

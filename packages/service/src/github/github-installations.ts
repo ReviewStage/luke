@@ -6,36 +6,42 @@ import {
   type GitHubAccountType,
   type GitHubInstallationStatus,
 } from "@luke/database/github-installation-vocabulary";
-import { WORKSPACE_NAME } from "@luke/database/models/workspace-store";
+import { roleOf, WORKSPACE_NAME } from "@luke/database/models/workspace-store";
 import { member, organization } from "@luke/database/schemas/auth";
 import { githubInstallIntent } from "@luke/database/schemas/github-install-intent";
 import { githubInstallation } from "@luke/database/schemas/github-installation";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
-import { and, eq, gt, ne, or, sql } from "drizzle-orm";
+import { and, asc, eq, gt, ne, sql } from "drizzle-orm";
 import { DateTime, Duration, Effect, Option, Schema } from "effect";
-import { SqlSchema } from "effect/sql";
+import { SqlClient, SqlSchema } from "effect/sql";
 import type { StoreFailure } from "../http/store-failure.js";
 
 /**
- * github-installations.ts -- the GitHub App installation connected to a workspace.
+ * github-installations.ts -- the GitHub App installations connected to a workspace.
  *
- * A workspace's repositories come from the one installation of the Luke
- * GitHub App connected to it and from nothing else; an owner or admin
- * connects it, tied to it by a
- * `github_installation` row keyed on GitHub's own ids. One installation, and
- * so one GitHub account, stands for one workspace. A connect is an intent
- * first: a random state bound to the account and the workspace, stored only
- * as its SHA-256, carried to GitHub on the install address. At the Setup URL
- * the installation GitHub named and a PKCE code verifier are written on it,
- * and it is spent once GitHub returns the browser from a one-time
- * authorization of the App, where the installation is linked only after the
- * user who authorized shows they can see it (`github-install-app.ts`). The installation webhook keeps each row's
- * status, and any read of the installation from GitHub mends a status the
- * webhook missed (`github-app.ts`); a disconnect deletes the row, which is
- * Luke's own, and the workspace's outstanding intents with it.
+ * A workspace's repositories come from the installations of the Luke GitHub
+ * App connected to it and from nothing else; an owner or admin connects
+ * each, tied to it by a `github_installation` row keyed on GitHub's own ids.
+ * A workspace may hold several, one per GitHub account, and an
+ * installation, and so its GitHub account, stands for exactly one
+ * workspace: connecting another adds it beside those standing, and an
+ * installation already standing for another workspace is refused there
+ * rather than moved. A connect is an intent first: a random state bound to
+ * the account and the workspace, stored only as its SHA-256, carried to
+ * GitHub on the install address. At the Setup URL the installation GitHub
+ * named and a PKCE code verifier are written on it, and it is spent once
+ * GitHub returns the browser from a one-time authorization of the App, where
+ * the installation is linked only after the user who authorized shows they
+ * can see it (`github-install-app.ts`) and only while they are still an
+ * owner or admin of the workspace. The installation webhook keeps each
+ * row's status, by installation, and any read of an installation from
+ * GitHub mends a status the webhook missed (`github-app.ts`). Which
+ * installations and repositories a workspace holds is managed on GitHub,
+ * and Luke deletes no row of its own accord: a row leaves with its
+ * workspace.
  */
 
-/** The roles that connect and disconnect a workspace's GitHub organization: an owner or an admin. */
+/** The roles that connect GitHub to a workspace: an owner or an admin. */
 export const GITHUB_CONNECT_ROLES: ReadonlySet<string> = new Set([
   WORKSPACE_ROLE.OWNER,
   WORKSPACE_ROLE.ADMIN,
@@ -47,18 +53,24 @@ const INTENT_LIFETIME = Duration.hours(1);
 /** The random bytes a connect intent's state is spelled from. */
 const STATE_BYTES = 32;
 
-/** The installation a connect links: GitHub's ids for it and its account, as the account's token read them. */
+/** The installation a connect links: GitHub's ids for it and its account, as the account's token read them, and whether its account suspended it. */
 export interface ConnectedInstallation {
   readonly installationId: number;
   readonly accountId: number;
   readonly accountLogin: string;
   readonly accountType: GitHubAccountType;
+  readonly suspended: boolean;
 }
 
-/** What a link settles on: linked, or refused because the installation already stands for another workspace. */
+/**
+ * What a link settles on: linked; refused because the installation's
+ * GitHub account already stands for another workspace; or refused because
+ * the account linking is no longer an owner or admin of the workspace.
+ */
 export const LINK_OUTCOME = {
   LINKED: "linked",
   ALREADY_CONNECTED: "already-connected",
+  NOT_PERMITTED: "not-permitted",
 } as const;
 
 export type LinkOutcome = (typeof LINK_OUTCOME)[keyof typeof LINK_OUTCOME];
@@ -70,6 +82,8 @@ export interface ConnectIntent {
   readonly installationId: number | null;
   readonly codeVerifier: string | null;
 }
+
+const InstallationStatusSchema = Schema.Literals(Object.values(GITHUB_INSTALLATION_STATUS));
 
 /** A state's stored form. */
 function stateHashOf(state: string): string {
@@ -140,56 +154,70 @@ const deleteIntent = SqlSchema.findOneOption({
     ),
 });
 
-const findLinkedElsewhere = SqlSchema.findOneOption({
-  Request: Schema.Struct({
-    organizationId: Schema.String,
-    installationId: Schema.Number,
-    accountId: Schema.Number,
-  }),
-  Result: Schema.Struct({ organizationId: Schema.String }),
-  execute: ({ organizationId, installationId, accountId }) =>
-    Database.use((db) =>
-      db
-        .select({ organizationId: githubInstallation.organizationId })
-        .from(githubInstallation)
-        .where(
-          and(
-            ne(githubInstallation.organizationId, organizationId),
-            or(
-              eq(githubInstallation.installationId, installationId),
-              eq(githubInstallation.accountId, accountId),
-            ),
-          ),
-        )
-        .limit(1),
-    ),
-});
-
-const upsertInstallation = SqlSchema.void({
+/**
+ * The installation written to the workspace in one statement, keyed on its
+ * GitHub account: a new account's row is added beside the workspace's
+ * others; the account's own row, where it stands for this workspace, takes
+ * the installation's id, which a reinstall on the account changes, and its
+ * login and kind; and a row standing for any other workspace is left as it
+ * is and answers nothing. The row keeps the moment it was first linked, and
+ * a relink of the installation it already holds keeps the status last
+ * written, so a callback's read of an installation since suspended does not
+ * bring it back.
+ */
+const upsertInstallation = SqlSchema.findOneOption({
   Request: Schema.Struct({
     organizationId: Schema.String,
     installationId: Schema.Number,
     accountId: Schema.Number,
     accountLogin: Schema.String,
     accountType: Schema.Literals(Object.values(GITHUB_ACCOUNT_TYPE)),
+    status: InstallationStatusSchema,
     now: Schema.Date,
   }),
-  execute: (row) => {
-    const linked = {
-      installationId: row.installationId,
-      accountId: row.accountId,
-      accountLogin: row.accountLogin,
-      accountType: row.accountType,
-      status: GITHUB_INSTALLATION_STATUS.ACTIVE,
-      updatedAt: row.now,
-    };
-    return Database.use((db) =>
+  Result: Schema.Struct({ installationId: Schema.Number }),
+  execute: (row) =>
+    Database.use((db) =>
       db
         .insert(githubInstallation)
-        .values({ organizationId: row.organizationId, ...linked, createdAt: row.now })
-        .onConflictDoUpdate({ target: githubInstallation.organizationId, set: linked }),
-    );
-  },
+        .values({
+          organizationId: row.organizationId,
+          installationId: row.installationId,
+          accountId: row.accountId,
+          accountLogin: row.accountLogin,
+          accountType: row.accountType,
+          status: row.status,
+          createdAt: row.now,
+          updatedAt: row.now,
+        })
+        .onConflictDoUpdate({
+          target: githubInstallation.accountId,
+          set: {
+            installationId: row.installationId,
+            accountLogin: row.accountLogin,
+            accountType: row.accountType,
+            status: sql`case when ${githubInstallation.installationId} = ${row.installationId} then ${githubInstallation.status} else ${row.status} end`,
+            updatedAt: row.now,
+          },
+          setWhere: eq(githubInstallation.organizationId, row.organizationId),
+        })
+        .returning({ installationId: githubInstallation.installationId }),
+    ),
+});
+
+/** The account's role text in the workspace, its member row held against a change until the transaction ends. */
+const lockMemberRole = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, organizationId: Schema.String }),
+  Result: Schema.Struct({ role: Schema.String }),
+  execute: ({ userId, organizationId }) =>
+    Database.use((db) =>
+      db
+        .select({ role: member.role })
+        .from(member)
+        .where(and(eq(member.userId, userId), eq(member.organizationId, organizationId)))
+        .limit(1)
+        .for("share"),
+    ),
 });
 
 const findMemberWorkspaceOnOwner = SqlSchema.findOneOption({
@@ -218,11 +246,12 @@ const findMemberWorkspaceOnOwner = SqlSchema.findOneOption({
     ),
 });
 
-const findInstallationOfWorkspace = SqlSchema.findOneOption({
+const findInstallationsOfWorkspace = SqlSchema.findAll({
   Request: Schema.String,
   Result: Schema.Struct({
     installationId: Schema.Number,
-    status: Schema.Literals(Object.values(GITHUB_INSTALLATION_STATUS)),
+    accountLogin: Schema.String,
+    status: InstallationStatusSchema,
     updatedAt: Schema.Date,
   }),
   execute: (organizationId) =>
@@ -230,11 +259,13 @@ const findInstallationOfWorkspace = SqlSchema.findOneOption({
       db
         .select({
           installationId: githubInstallation.installationId,
+          accountLogin: githubInstallation.accountLogin,
           status: githubInstallation.status,
           updatedAt: githubInstallation.updatedAt,
         })
         .from(githubInstallation)
-        .where(eq(githubInstallation.organizationId, organizationId)),
+        .where(eq(githubInstallation.organizationId, organizationId))
+        .orderBy(asc(githubInstallation.createdAt), asc(githubInstallation.installationId)),
     ),
 });
 
@@ -271,22 +302,6 @@ const mendStatus = SqlSchema.void({
             eq(githubInstallation.updatedAt, row.readAt),
           ),
         ),
-    ),
-});
-
-const deleteInstallation = SqlSchema.void({
-  Request: Schema.String,
-  execute: (organizationId) =>
-    Database.use((db) =>
-      db.delete(githubInstallation).where(eq(githubInstallation.organizationId, organizationId)),
-    ),
-});
-
-const deleteWorkspaceIntents = SqlSchema.void({
-  Request: Schema.String,
-  execute: (organizationId) =>
-    Database.use((db) =>
-      db.delete(githubInstallIntent).where(eq(githubInstallIntent.organizationId, organizationId)),
     ),
 });
 
@@ -337,21 +352,44 @@ export function spendConnectIntent(
 }
 
 /**
- * The installation linked to the workspace, replacing one it had; refused
- * where the installation, or another installation on the same GitHub
- * account, already stands for another workspace.
+ * The installation linked to the workspace beside any it holds, or the
+ * workspace's row for the same GitHub account moved onto it; refused where
+ * that account already stands for another workspace, which keeps it.
  */
 export function linkInstallation(
   organizationId: string,
   installation: ConnectedInstallation,
 ): Effect.Effect<LinkOutcome, StoreFailure, DatabaseServices> {
   return Effect.gen(function* () {
-    const elsewhere = yield* findLinkedElsewhere({ organizationId, ...installation });
-    if (Option.isSome(elsewhere)) return LINK_OUTCOME.ALREADY_CONNECTED;
     const now = yield* DateTime.nowAsDate;
-    yield* upsertInstallation({ organizationId, ...installation, now });
-    return LINK_OUTCOME.LINKED;
+    const { suspended, ...ids } = installation;
+    const status = suspended
+      ? GITHUB_INSTALLATION_STATUS.SUSPENDED
+      : GITHUB_INSTALLATION_STATUS.ACTIVE;
+    const written = yield* upsertInstallation({ organizationId, ...ids, status, now });
+    return Option.isSome(written) ? LINK_OUTCOME.LINKED : LINK_OUTCOME.ALREADY_CONNECTED;
   });
+}
+
+/**
+ * The link a connect's callback makes for the account that asked: the
+ * account's role read again, its member row held until the write commits,
+ * because GitHub's authorization ran in between, and the installation
+ * linked only where the account is still an owner or admin.
+ */
+export function linkInstallationAs(
+  userId: string,
+  organizationId: string,
+  installation: ConnectedInstallation,
+): Effect.Effect<LinkOutcome, StoreFailure, DatabaseServices> {
+  const checked = Effect.gen(function* () {
+    const standing = yield* lockMemberRole({ userId, organizationId });
+    if (Option.isNone(standing) || !GITHUB_CONNECT_ROLES.has(roleOf(standing.value.role))) {
+      return LINK_OUTCOME.NOT_PERMITTED;
+    }
+    return yield* linkInstallation(organizationId, installation);
+  });
+  return Effect.flatMap(SqlClient.SqlClient, (client) => client.withTransaction(checked));
 }
 
 /** Where the installation now stands, as its webhook said; an installation no workspace is connected to moves nothing. */
@@ -379,38 +417,27 @@ export function mendInstallationStatus(
   );
 }
 
-/**
- * The workspace's installation disconnected, and every connect intent still
- * outstanding for it spent with it, so a return through the Setup URL begun
- * before the disconnect cannot link it again; a workspace with none
- * connected moves nothing.
- */
-export function disconnectInstallation(
-  organizationId: string,
-): Effect.Effect<void, StoreFailure, DatabaseServices> {
-  return Effect.andThen(deleteWorkspaceIntents(organizationId), deleteInstallation(organizationId));
-}
-
-/** The installation connected to the workspace as Luke last stored it, and when the row last moved. */
+/** One installation connected to the workspace as Luke last stored it: its account's login, its status, and when the row last moved. */
 export interface WorkspaceInstallation {
   readonly installationId: number;
+  readonly accountLogin: string;
   readonly status: GitHubInstallationStatus;
   readonly updatedAt: Date;
 }
 
-/** GitHub's id for the installation connected to the workspace, and its stored status, whatever it is; none for a workspace with none connected. */
-export function installationOfWorkspace(
+/** Every installation connected to the workspace, whatever its status, the first linked first; none for a workspace with none connected. */
+export function installationsOfWorkspace(
   organizationId: string,
-): Effect.Effect<Option.Option<WorkspaceInstallation>, StoreFailure, DatabaseServices> {
-  return findInstallationOfWorkspace(organizationId);
+): Effect.Effect<readonly WorkspaceInstallation[], StoreFailure, DatabaseServices> {
+  return findInstallationsOfWorkspace(organizationId);
 }
 
 /**
  * The workspace, other than the one given, whose active installation is on
  * the GitHub account given, where the account asking is a member of it:
  * where a plan of the one given could move to reach that account's
- * repositories. One installation stands for one workspace, so there is at
- * most one.
+ * repositories. A GitHub account's installation stands for one workspace,
+ * so there is at most one.
  */
 export function memberWorkspaceOnOwner(
   userId: string,

@@ -291,6 +291,7 @@ const EFFECT_MODULE_SCHEMAS = {
   "workspace-wire": {
     workspacePhotoTypeSchema: workspaceWire.workspacePhotoTypeSchema,
     workspaceGithubSchema: workspaceWire.workspaceGithubSchema,
+    workspaceGithubInstallationSchema: workspaceWire.workspaceGithubInstallationSchema,
     workspaceSchema: workspaceWire.workspaceSchema,
     workspacesAnswerSchema: workspaceWire.workspacesAnswerSchema,
     workspaceAnswerSchema: workspaceWire.workspaceAnswerSchema,

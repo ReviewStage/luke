@@ -70,7 +70,8 @@ const PHOTO_VERSION_CHARS = 16;
 
 /**
  * One workspace as its members see it: the account's role in it and the
- * GitHub account its connected installation is on, if any.
+ * GitHub accounts its connected installations are on, the first linked
+ * first.
  */
 export type Workspace = WireWorkspace;
 
@@ -105,10 +106,6 @@ const WorkspaceRowSchema = Schema.Struct({
   personal: Schema.Boolean,
   /** The plugin's role text, which may list several roles comma-separated. */
   role: Schema.String,
-  /** The login of the GitHub account the workspace's installation is on, or null where none is connected. */
-  login: Schema.NullOr(Schema.String),
-  /** The workspace's installation's status, or null where none is connected. */
-  status: Schema.NullOr(Schema.String),
   /** How many members the workspace has, the account among them. */
   memberCount: Schema.Number,
   /** The plugin's `logo` text, which holds the workspace's photo as a `data:` URL where it has one. */
@@ -116,6 +113,17 @@ const WorkspaceRowSchema = Schema.Struct({
   /** The account's own sign-in picture where this workspace is the first one made for it, else null. */
   ownerImage: Schema.NullOr(Schema.String),
 });
+
+const InstallationRowSchema = Schema.Struct({
+  organizationId: Schema.String,
+  installationId: Schema.Number,
+  /** The login of the GitHub account the installation is on. */
+  login: Schema.String,
+  /** The installation's status as its webhook, or a read of GitHub, last wrote it. */
+  status: Schema.String,
+});
+
+type InstallationRow = typeof InstallationRowSchema.Type;
 
 const findPersonalWorkspace = SqlSchema.findOneOption({
   Request: Schema.String,
@@ -247,8 +255,6 @@ function workspaceRows(db: DatabaseShape, userId: string, organizationId?: strin
       personalOf: personalWorkspace.userId,
       personal: sql<boolean>`exists(select 1 from ${personalWorkspace} as "first" where "first"."organization_id" = ${organization.id})`,
       role: member.role,
-      login: githubInstallation.accountLogin,
-      status: githubInstallation.status,
       memberCount: sql<number>`(select count(*)::int from ${member} as "members" where "members"."organization_id" = ${organization.id})`,
       logo: organization.logo,
       ownerImage: user.image,
@@ -263,7 +269,6 @@ function workspaceRows(db: DatabaseShape, userId: string, organizationId?: strin
       ),
     )
     .leftJoin(user, eq(user.id, personalWorkspace.userId))
-    .leftJoin(githubInstallation, eq(githubInstallation.organizationId, organization.id))
     .where(
       and(
         eq(member.userId, userId),
@@ -271,6 +276,59 @@ function workspaceRows(db: DatabaseShape, userId: string, organizationId?: strin
       ),
     )
     .orderBy(asc(WORKSPACE_NAME), asc(organization.id));
+}
+
+/**
+ * The installations connected to the workspaces the account is a member of,
+ * or to the one named among them, each workspace's first linked first. A
+ * read of its own rather than a join on the workspaces', because a
+ * workspace holding several would otherwise be listed once for each.
+ */
+function installationRows(db: DatabaseShape, userId: string, organizationId?: string) {
+  return db
+    .select({
+      organizationId: githubInstallation.organizationId,
+      installationId: githubInstallation.installationId,
+      login: githubInstallation.accountLogin,
+      status: githubInstallation.status,
+    })
+    .from(githubInstallation)
+    .innerJoin(member, eq(member.organizationId, githubInstallation.organizationId))
+    .where(
+      and(
+        eq(member.userId, userId),
+        organizationId === undefined
+          ? undefined
+          : eq(githubInstallation.organizationId, organizationId),
+      ),
+    )
+    .orderBy(asc(githubInstallation.createdAt), asc(githubInstallation.installationId));
+}
+
+const findAllInstallations = SqlSchema.findAll({
+  Request: Schema.String,
+  Result: InstallationRowSchema,
+  execute: (userId) => Database.use((db) => installationRows(db, userId)),
+});
+
+const findInstallations = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String, organizationId: Schema.String }),
+  Result: InstallationRowSchema,
+  execute: ({ userId, organizationId }) =>
+    Database.use((db) => installationRows(db, userId, organizationId)),
+});
+
+/** The installation rows by the workspace they stand for, each list in the order read. */
+function installationsByWorkspace(
+  rows: readonly InstallationRow[],
+): ReadonlyMap<string, readonly InstallationRow[]> {
+  const grouped = new Map<string, InstallationRow[]>();
+  for (const row of rows) {
+    const listed = grouped.get(row.organizationId);
+    if (listed === undefined) grouped.set(row.organizationId, [row]);
+    else listed.push(row);
+  }
+  return grouped;
 }
 
 const findWorkspaces = SqlSchema.findAll({
@@ -307,17 +365,30 @@ function faceOfRow(
   return pictureUrl === undefined ? {} : { pictureUrl };
 }
 
-/** One row as the wire carries the workspace. */
-function workspaceOfRow(row: typeof WorkspaceRowSchema.Type): Workspace {
+/**
+ * One row as the wire carries the workspace, with its installations: every
+ * one, and again the first linked that is still active, else the first
+ * linked, as the one a desktop from before several reads.
+ */
+function workspaceOfRow(
+  row: typeof WorkspaceRowSchema.Type,
+  installations: readonly InstallationRow[],
+): Workspace {
+  const githubInstallations = installations.map((installation) => ({
+    installationId: installation.installationId,
+    login: installation.login,
+    active: installation.status === GITHUB_INSTALLATION_STATUS.ACTIVE,
+  }));
+  // Note that a desktop from before several reads one account alone, so it reads the first one
+  // still active, because the first linked may have lapsed while another runs.
+  const first = githubInstallations.find((one) => one.active) ?? githubInstallations[0];
   const workspace: Workspace = {
     id: row.id,
     name: row.name,
     slug: row.slug,
     role: roleOf(row.role),
-    github:
-      row.login === null
-        ? null
-        : { login: row.login, active: row.status === GITHUB_INSTALLATION_STATUS.ACTIVE },
+    github: first === undefined ? null : { login: first.login, active: first.active },
+    githubInstallations,
     memberCount: row.memberCount,
     ...faceOfRow(row),
   };
@@ -474,17 +545,20 @@ export function isWorkspaceMember(
 
 /**
  * Every workspace the account is a member of, its first one first and the
- * rest by name. A workspace whose installation was suspended or removed is
- * listed with its GitHub account inactive rather than left out, so its plans
- * stay reachable; GitHub refuses its repository work on its own.
+ * rest by name, each once however many installations it holds. An
+ * installation suspended or removed is listed inactive rather than left
+ * out, so its workspace's plans stay reachable; GitHub refuses its
+ * repository work on its own.
  */
 export function listWorkspaces(userId: string): WorkspaceStoreEffect<readonly Workspace[]> {
-  return Effect.map(findWorkspaces(userId), (rows) =>
-    [
+  return Effect.gen(function* () {
+    const rows = yield* findWorkspaces(userId);
+    const installations = installationsByWorkspace(yield* findAllInstallations(userId));
+    return [
       ...rows.filter((row) => row.personalOf !== null),
       ...rows.filter((row) => row.personalOf === null),
-    ].map(workspaceOfRow),
-  );
+    ].map((row) => workspaceOfRow(row, installations.get(row.id) ?? []));
+  });
 }
 
 /** One workspace the account is a member of, as its list carries it; nothing for one it is not in. */
@@ -492,7 +566,12 @@ export function workspaceOf(
   userId: string,
   organizationId: string,
 ): WorkspaceStoreEffect<Option.Option<Workspace>> {
-  return Effect.map(findWorkspace({ userId, organizationId }), Option.map(workspaceOfRow));
+  return Effect.gen(function* () {
+    const row = yield* findWorkspace({ userId, organizationId });
+    if (Option.isNone(row)) return Option.none();
+    const installations = yield* findInstallations({ userId, organizationId });
+    return Option.some(workspaceOfRow(row.value, installations));
+  });
 }
 
 /** One workspace's photo as its bytes, to a member of it alone; nothing for a workspace it is not in, or one that holds no photo. */

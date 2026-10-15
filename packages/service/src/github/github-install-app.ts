@@ -29,8 +29,11 @@
  * owner or admin of the workspace; and the
  * installation must be among those the code's user access token reaches
  * (`GET /user/installations`), read once before the token is revoked
- * (`GitHubApp.authorizedInstallations`). Only then is it linked, and one
- * already standing for another workspace is refused.
+ * (`GitHubApp.authorizedInstallations`). Only then is it linked, beside any
+ * other installation the workspace holds, with the account's role read
+ * again in the write's own transaction; one whose GitHub account already
+ * stands for another workspace is refused. A callback replayed after its
+ * intent was spent lands as expired and writes nothing.
  *
  * GitHub's "Request user authorization (OAuth) during installation" is left
  * off: it disables the Setup URL and returns the code to the App's first
@@ -61,7 +64,8 @@ import {
   type ConnectedInstallation,
   GITHUB_CONNECT_ROLES,
   LINK_OUTCOME,
-  linkInstallation,
+  type LinkOutcome,
+  linkInstallationAs,
   recordConnectAuthorization,
   spendConnectIntent,
 } from "./github-installations.js";
@@ -88,6 +92,13 @@ const SETUP_ACTION = {
   /** A member asked an organization's owner to install; there is no installation yet. */
   REQUEST: "request",
 } as const;
+
+/** The status each link outcome lands on: a role lost while GitHub authorized lands as the spent intent it is. */
+const LANDED_ON_LINK = {
+  [LINK_OUTCOME.LINKED]: GITHUB_INSTALL_STATUS.CONNECTED,
+  [LINK_OUTCOME.ALREADY_CONNECTED]: GITHUB_INSTALL_STATUS.ALREADY_CONNECTED,
+  [LINK_OUTCOME.NOT_PERMITTED]: GITHUB_INSTALL_STATUS.EXPIRED,
+} as const satisfies Readonly<Record<LinkOutcome, GitHubInstallStatus>>;
 
 /** A browser is sent on with 303, so a POST GitHub might one day send becomes the GET the page is. */
 const HTTP_STATUS = { SEE_OTHER: 303 } as const;
@@ -174,11 +185,11 @@ const authorizedInstallation = /* @__PURE__ */ Effect.fn("web/authorizedInstalla
     (installation) => installation.id === installationId,
   );
   if (reached === undefined) return Option.none();
-  const { accountId, accountLogin, accountType } = reached;
+  const { accountId, accountLogin, accountType, suspended } = reached;
   if (accountId === undefined || accountLogin === undefined || accountType === undefined) {
     return Option.none();
   }
-  return Option.some({ installationId, accountId, accountLogin, accountType });
+  return Option.some({ installationId, accountId, accountLogin, accountType, suspended });
 });
 
 /** The status a workspace's connect settles on at the callback, once its intent is spent and the installation confirmed with the user who authorized. */
@@ -208,10 +219,7 @@ const connectInstallation = /* @__PURE__ */ Effect.fn("web/connectInstallation")
     redirectUri: callback,
   });
   if (Option.isNone(installation)) return GITHUB_INSTALL_STATUS.NOT_FOUND;
-  const outcome = yield* linkInstallation(organizationId, installation.value);
-  return outcome === LINK_OUTCOME.LINKED
-    ? GITHUB_INSTALL_STATUS.CONNECTED
-    : GITHUB_INSTALL_STATUS.ALREADY_CONNECTED;
+  return LANDED_ON_LINK[yield* linkInstallationAs(userId, organizationId, installation.value)];
 });
 
 /** A failure on the way to a status, as the status it lands on: GitHub or the store unavailable. */

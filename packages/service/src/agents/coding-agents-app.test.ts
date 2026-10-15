@@ -18,6 +18,7 @@ import { ensurePersonalWorkspace } from "@luke/database/models/workspace-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { user } from "@luke/database/schemas/auth";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
+import { githubInstallation } from "@luke/database/schemas/github-installation";
 import { conversations } from "@luke/database/schemas/storage";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import {
@@ -94,11 +95,7 @@ import {
   userMetadataOf,
 } from "../core.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
-import {
-  disconnectInstallation,
-  LINK_OUTCOME,
-  linkInstallation,
-} from "../github/github-installations.js";
+import { LINK_OUTCOME, linkInstallation } from "../github/github-installations.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { answerInboxItem, type InboxImage, postInboxItem } from "../inbox/inbox-store.js";
 import { plansApp } from "../plans/plans-app.js";
@@ -599,15 +596,16 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
   );
 
   it.effect(
-    "a Start on a plan whose workspace since connected an installation GitHub does not know is refused as a connection that lapsed, and opens nothing",
+    "a Start on a plan whose workspace's account since reinstalled the App under an id GitHub does not know is refused as a connection that lapsed, and opens nothing",
     () =>
       Effect.gen(function* () {
         const { owner, plan, installation, eve, ask } = yield* openPlan();
         const linked = yield* linkInstallation(plan.workspaceId, {
           installationId: installation.id + 10_000,
-          accountId: 9_008,
-          accountLogin: "elsewhere",
+          accountId: installation.accountId ?? 50_000 + installation.id,
+          accountLogin: installation.login,
           accountType: GITHUB_ACCOUNT_TYPE.ORGANIZATION,
+          suspended: false,
         });
         assert.equal(linked, LINK_OUTCOME.LINKED);
 
@@ -1228,12 +1226,16 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   );
 
   it.effect(
-    "a message to an agent whose plan's workspace was disconnected since is refused, saying nothing is connected, and sends nothing",
+    "a message to an agent whose plan's workspace holds no installation any more is refused, saying nothing is connected, and sends nothing",
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
         const { owner, plan, agent, ask } = yield* startedAgent(eve, { running: true });
-        yield* disconnectInstallation(plan.workspaceId);
+        yield* Database.use((db) =>
+          db
+            .delete(githubInstallation)
+            .where(eq(githubInstallation.organizationId, plan.workspaceId)),
+        );
 
         const sent = yield* ask(
           messageAs(owner, agent.id, { text: "Rebase on main.", clientKey: randomUUID() }),
