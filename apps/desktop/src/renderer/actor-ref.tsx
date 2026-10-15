@@ -7,6 +7,7 @@ import {
   actorName,
   identityHue,
   identityLetter,
+  LUKE_ACTOR,
   type PersonActor,
   ROLE_WORDS,
   SOMEONE_REASON,
@@ -178,7 +179,7 @@ function ActorHead({
 }
 
 /** A person's card: their face, name, email, and role, then what they last did here where the place knows. Read, never followed. */
-function PersonCard({
+export function PersonCard({
   actor,
   latest,
 }: {
@@ -193,6 +194,29 @@ function PersonCard({
         sub={actor.email}
         corner={actor.role === undefined ? undefined : ROLE_WORDS[actor.role]}
       />
+      {latest === undefined ? null : (
+        <>
+          <CardRule />
+          <CardNote>{latest}</CardNote>
+        </>
+      )}
+    </HoverCard>
+  );
+}
+
+/** Luke's card: his face, whose call he wrote on and when, then what he wrote here where the place knows. Read, never followed. */
+export function LukeCard({
+  sub,
+  latest,
+}: {
+  /** When he wrote, and on whose call: "During Charles Pan’s call · 2h ago". */
+  sub?: ReactNode;
+  /** What he last wrote in this plan, in a line: "Edited Rollout and Risks". */
+  latest?: ReactNode;
+}): React.JSX.Element {
+  return (
+    <HoverCard data-actor-card={ACTOR_KIND.LUKE}>
+      <ActorHead actor={LUKE_ACTOR} sub={sub} />
       {latest === undefined ? null : (
         <>
           <CardRule />
@@ -255,7 +279,7 @@ export function ActorRef({
 }: {
   actor: Actor;
   card?: ReactNode;
-  onOpen?: () => void;
+  onOpen?: (() => void) | undefined;
   /** Whether the name stands inside a sentence: "you" rather than "You". */
   sentence?: boolean;
   /** Whether the name says whose: "your Mac", "Charles Pan’s call". */

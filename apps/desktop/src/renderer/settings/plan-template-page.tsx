@@ -9,11 +9,13 @@ import { PLAN_CALL_FAILURE, type PlanningEditAnswer } from "@luke/features/plann
 import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
 import { ResetIcon } from "@luke/ui";
+import type { PersonActor } from "@luke/ui/actor-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { HistoryIcon, InfoIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type ActHandle, useAct } from "../act";
-import { type EditReader, PlanBody } from "../planning/plan-body";
+import type { PlanReader } from "../planning/edit-ref";
+import { PlanBody } from "../planning/plan-body";
 import type { PlanEditDoor } from "../planning/use-plan-editing";
 import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { TOAST_TONE, useToast } from "../toast";
@@ -67,9 +69,6 @@ const PAGE_LINE = {
 
 /** The id the template is drawn under as a plan's document, which names no plan of the account's. */
 export const TEMPLATE_DOCUMENT_ID = "plan-template";
-
-/** Who reads the template: its account, whose every edit it is. */
-const TEMPLATE_READER: EditReader = { id: undefined, own: true };
 
 /** The workspace the template's document names: none, since the template is the account's own and stands in no workspace. */
 const TEMPLATE_WORKSPACE_ID = "plan-template";
@@ -346,9 +345,12 @@ function TitleActions({
 /** The template read: the note, the template as a plan's document, and the reset's question. */
 function TemplateDocument({
   template,
+  reader,
   onShowHistory,
 }: {
   template: TemplateControl;
+  /** The account reading it, whose every edit it is. */
+  reader: PlanReader;
   onShowHistory: () => void;
 }): React.JSX.Element {
   const reset = useConfirmDialog({ subject: template.custom, surfaceOpen: true }, template.reset);
@@ -358,7 +360,7 @@ function TemplateDocument({
         <PlanBody
           plan={templateDocument(template.text, template.lastEdit)}
           live={false}
-          reader={TEMPLATE_READER}
+          reader={reader}
           onEdit={template.edit}
           onShowHistory={onShowHistory}
           page={{
@@ -421,21 +423,27 @@ function TemplateState({
  * line, a section's opening it on the template as it stands.
  */
 export function PlanTemplatePage({
-  signedIn,
+  account,
   onShowHistory,
 }: {
-  signedIn: boolean;
+  /** The signed-in account, whose every edit of the template is; none while signed out. */
+  account: PersonActor | undefined;
   onShowHistory: () => void;
 }): React.JSX.Element {
+  const signedIn = account !== undefined;
   const { act } = useAct();
   const template = useTemplate(signedIn, act);
-  const drawn = signedIn && template.read === TEMPLATE_READ.READ;
+  const drawn = account !== undefined && template.read === TEMPLATE_READ.READ;
   return (
     <section className="settings-page" aria-label={TEMPLATE_TITLE}>
       {/* Settings has no top bar: the page's title and its actions stand in the page. */}
       <div className="desktop-drag-strip" />
       {drawn ? (
-        <TemplateDocument template={template} onShowHistory={() => onShowHistory()} />
+        <TemplateDocument
+          template={template}
+          reader={{ readerId: account.userId, owner: account }}
+          onShowHistory={() => onShowHistory()}
+        />
       ) : (
         <TemplateState signedIn={signedIn} template={template} />
       )}

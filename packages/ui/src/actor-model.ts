@@ -1,9 +1,11 @@
 import type { ModelProvider } from "@luke/features/models-wire";
+import { PLAN_ACTOR, type PlanLastEdit, type PlanSectionEdit } from "@luke/features/plan-wire";
 import {
   WORKSPACE_ROLE,
   type WorkspaceMember,
   type WorkspaceRole,
 } from "@luke/features/workspace-wire";
+import { TAB_WORDS } from "./tab-strip-model.js";
 
 /**
  * actor-model.ts -- whoever did something, as the window names them: a person, Luke, a coding agent, an automation, or someone it cannot name.
@@ -18,6 +20,11 @@ import {
  * `{userId, name}` is read against the workspace's members, which add the
  * picture, email, and role, so the wire's every person field needs no
  * picture of its own; a member the read no longer lists has left.
+ *
+ * A plan's edit is named by its actor (`editActor`), and Luke's also by
+ * whose call he wrote it on (`editCallOwner`). A person's or Luke's card
+ * says what they last did in the plan, read off who last changed each of
+ * its sections (`latestActivity`), which the window already holds.
  */
 
 /** The kinds of actor the window names. */
@@ -79,6 +86,15 @@ export type Actor =
       /** The name the service still holds for a member who left; none for the rest. */
       readonly name?: string;
     };
+
+/** The most sections an activity names before it counts the rest. */
+const NAMED_SECTIONS = 3;
+
+/** What an activity calls the words a plan holds before its first heading, as the version history does. */
+const OPENING_SECTION = "Opening";
+
+/** Joins a few names as a reader says them: "Goal, Rollout, and Risks". */
+const NAMES = new Intl.ListFormat("en", { style: "long", type: "conjunction" });
 
 /** A member's role in their workspace, in the words a row and a card say it. */
 export const ROLE_WORDS = {
@@ -187,4 +203,151 @@ export function memberActor(member: WorkspaceMember, readerId: string | undefine
     you: readerId !== undefined && member.userId === readerId,
   };
   return member.pictureUrl === undefined ? person : { ...person, pictureUrl: member.pictureUrl };
+}
+
+/**
+ * The signed-in account as the window draws it: the reader, by the name and
+ * picture their sign-in holds. Note that an account stored without an id is
+ * hued by its address, which names it as surely.
+ */
+export function accountActor(account: {
+  readonly id?: string | undefined;
+  readonly email: string;
+  readonly name?: string | undefined;
+  readonly pictureUrl?: string | undefined;
+}): PersonActor {
+  const person: PersonActor = {
+    kind: ACTOR_KIND.PERSON,
+    userId: account.id ?? account.email,
+    name: account.name ?? account.email,
+    you: true,
+  };
+  const { pictureUrl } = account;
+  return pictureUrl === undefined ? person : { ...person, pictureUrl };
+}
+
+/**
+ * Who reads a plan's edits, as each is named for them: the workspace's
+ * members as read, the reader's own account id, and, where every edit is
+ * the reader's own, as the account's template's are, the reader as their
+ * account names them.
+ */
+export interface EditReader {
+  readonly members: readonly WorkspaceMember[] | undefined;
+  readonly readerId: string | undefined;
+  readonly owner?: PersonActor | undefined;
+}
+
+/** A coding agent an edit names, as the window found it among the plan's agents: its harness and where its work stands. */
+export interface EditAgent {
+  readonly provider: ModelProvider | undefined;
+  readonly state: ActorState;
+}
+
+/** The member an edit names, for the reader: the owner where every edit is theirs, a member as the directory reads them otherwise. */
+function editPerson(edit: PlanLastEdit, reader: EditReader): Actor {
+  return reader.owner ?? personActor(edit.by, reader.members, reader.readerId);
+}
+
+/**
+ * Who wrote an edit: a member, the reader among them; Luke; a coding agent
+ * as its row names it now, wearing the harness and state of `agent` where
+ * the window found it; nobody for the one revision from before history.
+ */
+export function editActor(
+  edit: PlanLastEdit,
+  reader: EditReader,
+  agent?: EditAgent,
+): Actor | undefined {
+  switch (edit.actor) {
+    case PLAN_ACTOR.DEVELOPER:
+      return editPerson(edit, reader);
+    case PLAN_ACTOR.NOTETAKER:
+      return LUKE_ACTOR;
+    case PLAN_ACTOR.AGENT:
+      return {
+        kind: ACTOR_KIND.AGENT,
+        name: edit.label ?? TAB_WORDS.CODING_AGENT,
+        provider: agent?.provider,
+        state: agent?.state ?? ACTOR_STATE.REST,
+      };
+    case PLAN_ACTOR.EARLIER:
+      return undefined;
+  }
+}
+
+/** Whose call an edit was written on: the member it names, the reader among them; nobody for an edit off a call, or a call the service names nobody for. */
+export function editCallOwner(edit: PlanLastEdit, reader: EditReader): Actor | undefined {
+  if (!edit.duringCall) return undefined;
+  if (reader.owner === undefined && edit.by === undefined) return undefined;
+  return editPerson(edit, reader);
+}
+
+/** What an actor last did in a plan: the sections whose last change is theirs, in the plan's order, and the newest of those changes. */
+export interface ActorActivity {
+  readonly sections: readonly string[];
+  readonly at: number;
+}
+
+/** Whether a section's last change is the actor's: a member's by their id, Luke's, or a coding agent's by its name. */
+function changedBy(edit: PlanLastEdit, actor: Actor): boolean {
+  switch (actor.kind) {
+    case ACTOR_KIND.PERSON:
+      return edit.actor === PLAN_ACTOR.DEVELOPER && edit.by?.userId === actor.userId;
+    case ACTOR_KIND.LUKE:
+      return edit.actor === PLAN_ACTOR.NOTETAKER;
+    case ACTOR_KIND.AGENT:
+      return edit.actor === PLAN_ACTOR.AGENT && edit.label === actor.name;
+    default:
+      return false;
+  }
+}
+
+/**
+ * What an actor last did in a plan, read off who last changed each of its
+ * sections: none where no section's last change is theirs, and none for an
+ * automation or someone the window cannot name, whom no section names.
+ */
+export function latestActivity(
+  edits: readonly PlanSectionEdit[],
+  actor: Actor,
+): ActorActivity | undefined {
+  const theirs = edits.filter((edit) => changedBy(edit, actor));
+  if (theirs.length === 0) return undefined;
+  return {
+    sections: theirs.map((edit) => (edit.section === "" ? OPENING_SECTION : edit.section)),
+    at: Math.max(...theirs.map((edit) => edit.at)),
+  };
+}
+
+/** An activity in a line: "Edited Rollout and Risks", or "Edited Goal, Rollout, and 3 more" past a few. */
+export function activityWords(activity: ActorActivity): string {
+  const { sections } = activity;
+  const named =
+    sections.length <= NAMED_SECTIONS
+      ? sections
+      : [...sections.slice(0, NAMED_SECTIONS - 1), `${sections.length - NAMED_SECTIONS + 1} more`];
+  return `Edited ${NAMES.format(named)}`;
+}
+
+/** Whether two actors are one: a member by their id, an agent or an automation by its name, someone by why and the name they go by. */
+function sameActor(one: Actor, other: Actor): boolean {
+  switch (one.kind) {
+    case ACTOR_KIND.PERSON:
+      return other.kind === ACTOR_KIND.PERSON && other.userId === one.userId;
+    case ACTOR_KIND.LUKE:
+      return other.kind === ACTOR_KIND.LUKE;
+    case ACTOR_KIND.AGENT:
+    case ACTOR_KIND.AUTOMATION:
+      return other.kind === one.kind && other.name === one.name;
+    case ACTOR_KIND.SOMEONE:
+      return (
+        other.kind === ACTOR_KIND.SOMEONE && other.reason === one.reason && other.name === one.name
+      );
+  }
+}
+
+/** Each actor once, where it first stands, as a facepile draws who did a thing. */
+export function distinctActors(actors: readonly Actor[]): readonly Actor[] {
+  return actors.filter((actor, at) => actors.findIndex((each) => sameActor(each, actor)) === at);
 }

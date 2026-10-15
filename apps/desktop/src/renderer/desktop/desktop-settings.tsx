@@ -11,6 +11,7 @@ import {
   type SettingsView,
 } from "@luke/settings/settings-views";
 import { BackIcon } from "@luke/ui";
+import { accountActor } from "@luke/ui/actor-model";
 import { integrationNamed } from "@luke/ui/integration-search";
 import { useEffect, useRef, useState } from "react";
 import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
@@ -261,7 +262,11 @@ export function DesktopSettings({
       </nav>
       {settings.view === SETTINGS_VIEW.PLAN_TEMPLATE ? (
         <PlanTemplatePage
-          signedIn={settings.account.status === ACCOUNT_STATUS.SIGNED_IN}
+          account={
+            settings.account.status === ACCOUNT_STATUS.SIGNED_IN
+              ? accountActor(settings.account)
+              : undefined
+          }
           onShowHistory={() => setTemplateHistory(true)}
         />
       ) : (

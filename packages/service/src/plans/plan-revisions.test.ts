@@ -242,6 +242,30 @@ it.layer(getTestDB())("a plan's history", (it) => {
   );
 
   it.effect(
+    "a coding agent's edit names the agent, on the plan's last edit and on the sections it changed, so the window can find it",
+    () =>
+      Effect.gen(function* () {
+        const { userId, planId } = yield* openPlan;
+        yield* saveNotes(
+          { userId, planId },
+          [added(PLAN_HEADING.GOAL, "Members invite.")],
+          DEVELOPER,
+        );
+        const agentId = yield* startAgent(userId, planId);
+        yield* saveNotes({ userId, planId }, [added(PLAN_HEADING.APPROACH, "Invites expire.")], {
+          actor: PLAN_ACTOR.AGENT,
+          agentId,
+        });
+
+        const { plan } = Option.getOrThrow(yield* readPlan(userId, planId));
+        assert.equal(plan.lastEdit?.agentId, agentId);
+        const bySection = new Map(plan.sectionEdits?.map((edit) => [edit.section, edit.agentId]));
+        assert.equal(bySection.get(PLAN_HEADING.APPROACH), agentId);
+        assert.equal(bySection.get(PLAN_HEADING.GOAL), undefined);
+      }),
+  );
+
+  it.effect(
     "a coding agent's revision names no member, and a member whose account is gone is named by nobody",
     () =>
       Effect.gen(function* () {

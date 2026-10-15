@@ -43,9 +43,6 @@ import { dayAndTimeText } from "./plan-time";
  * as the revision it moved on. Everything here is pure.
  */
 
-/** How a person's revision is named where the service names no member: their account is gone, or it predates writers being kept. */
-export const UNNAMED_MEMBER = "Someone";
-
 /** A section as a version compares it: its heading and its words, wherever they stood. */
 type SectionWords = Pick<PlanSection, "heading" | "text">;
 

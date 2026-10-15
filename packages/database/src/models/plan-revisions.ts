@@ -174,6 +174,7 @@ const LastEditRowSchema = Schema.Struct({
   editorName: Schema.NullOr(Schema.String),
   liveSessionId: Schema.NullOr(Schema.String),
   at: InstantColumnSchema,
+  agentId: Schema.NullOr(Schema.String),
   agentModel: Schema.NullOr(Schema.String),
   agentTitle: Schema.NullOr(Schema.String),
 });
@@ -190,6 +191,7 @@ const findLastEdit = SqlSchema.findOneOption({
           editorName: user.name,
           liveSessionId: planRevision.liveSessionId,
           at: planRevision.at,
+          agentId: planRevision.agentId,
           agentModel: codingAgent.model,
           agentTitle: codingAgent.title,
         })
@@ -207,7 +209,6 @@ const restored = alias(planRevision, "restored");
 
 const RevisionLineRowSchema = Schema.Struct({
   ...LastEditRowSchema.fields,
-  agentId: Schema.NullOr(Schema.String),
   callId: Schema.NullOr(Schema.String),
   seq: Schema.Number,
   startedAt: InstantColumnSchema,
@@ -366,6 +367,7 @@ function lastEditOf(row: LastEditRow): PlanLastEdit {
     ...(row.actor === PLAN_ACTOR.AGENT
       ? { label: row.agentTitle ?? row.agentModel ?? UNKNOWN_AGENT_LABEL }
       : undefined),
+    ...(row.agentId === null ? undefined : { agentId: row.agentId }),
     at: row.at.getTime(),
     duringCall: row.liveSessionId !== null,
   };

@@ -265,12 +265,12 @@
 
 .plan-unit-byline {
   min-width: 0;
-  overflow: hidden;
+  /* Past the ring an actor's hover fill bleeds by, so the ring is drawn whole. */
+  overflow: clip;
+  overflow-clip-margin: 3px;
   color: var(--text-secondary);
   font-size: 12px;
   line-height: 1.4;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   opacity: 0;
   pointer-events: none;
   transition: opacity var(--duration-hover) ease;
@@ -395,23 +395,13 @@
   position: relative;
 }
 
-/* Where the window offers the version history, the line opens it on the
-   section's last change, so it is a press drawn as the quiet line it was,
-   underlined only under the pointer or the keyboard, as the line over the
-   document is. Note that it takes the pointer although it fades out, because
-   a pointer on it is on its section, which shows it. */
-button.plan-unit-byline {
-  border-radius: 4px;
-  background: none;
+/* The byline's writer hangs their card, and its time, where the window
+   offers the version history, opens it on the section's last change, a
+   press drawn as the line over the document's is. Note that both take the
+   pointer although the line fades out, because a pointer on them is on
+   their section, which shows it. */
+.plan-unit-byline > :is(.actor-ref, .plan-edit-link) {
   pointer-events: auto;
-  text-align: left;
-}
-
-button.plan-unit-byline:hover,
-button.plan-unit-byline:focus-visible {
-  color: var(--text-primary);
-  text-decoration: underline;
-  text-underline-offset: 0.2em;
 }
 
 /* A section changed since the developer last looked: a still wash of Luke's
