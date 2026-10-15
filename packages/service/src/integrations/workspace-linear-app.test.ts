@@ -90,19 +90,19 @@ const standing = Effect.gen(function* () {
     { disableLogger: true },
   );
   yield* Effect.addFinalizer(() => Effect.promise(() => app.dispose()));
-  const fetch = (path: string, init: { userId?: string; body?: WireBoundaryInput } = {}) =>
-    Effect.promise(() =>
-      app.handler(
-        new Request(new URL(path, ORIGIN), {
-          method: init.body === undefined ? "GET" : "POST",
-          headers: init.userId === undefined ? {} : { authorization: `Bearer ${init.userId}` },
-          ...(init.body === undefined ? undefined : { body: JSON.stringify(init.body) }),
-        }),
-      ),
-    );
+  const fetch = (path: string) =>
+    Effect.promise(() => app.handler(new Request(new URL(path, ORIGIN))));
   const post = (path: string, userId: string, body: WireBoundaryInput) =>
     Effect.gen(function* () {
-      const response = yield* fetch(path, { userId, body });
+      const response = yield* Effect.promise(() =>
+        app.handler(
+          new Request(new URL(path, ORIGIN), {
+            method: "POST",
+            headers: { authorization: `Bearer ${userId}` },
+            body: JSON.stringify(body),
+          }),
+        ),
+      );
       // SAFETY: the group answers JSON; the test compares it as the wire value it is.
       const answer = (yield* Effect.promise(() => response.json())) as WireBoundaryInput;
       return { status: response.status, body: answer };
