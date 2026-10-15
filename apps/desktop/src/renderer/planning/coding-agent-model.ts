@@ -14,6 +14,7 @@ import {
   type CodingAgentMessage,
   type CodingAgentPullRequest,
   type CodingAgentPullRequestAnswer,
+  type CodingAgentSender,
   type CodingAgentStatus,
   type CodingAgentSummary,
   type CodingAgentTodos,
@@ -130,6 +131,23 @@ export function teammateStarter(
     return undefined;
   }
   return startedBy.name;
+}
+
+/**
+ * What sent one of the developer's messages to an agent, as named over it:
+ * a teammate by name, a former member, Luke, or an automation; none for
+ * the reader's own, a message whose sender was not kept, or a member's
+ * read with no account id, for the reason `teammateStarter` gives.
+ */
+export function lineSender(
+  sentBy: CodingAgentSender | undefined,
+  readerId: string | undefined,
+): string | undefined {
+  if (sentBy === undefined) return undefined;
+  if (sentBy.userId !== undefined && (readerId === undefined || sentBy.userId === readerId)) {
+    return undefined;
+  }
+  return sentBy.name;
 }
 
 /** What a failed turn's end line says of a teammate's key, which the reader has no Settings to mend. */
