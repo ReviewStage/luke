@@ -622,6 +622,19 @@ body,
   white-space: nowrap;
 }
 
+/* A workspace's card leads with its tile at the sidebar head's size, the
+   photo large enough to know it by, as an actor's card leads with its mark. */
+.workspace-card-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+.workspace-card-head > .card-head {
+  min-width: 0;
+  flex: 1;
+}
+
 .workspace-ref-line {
   color: var(--text-secondary);
   font-size: 12px;

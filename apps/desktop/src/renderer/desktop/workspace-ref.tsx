@@ -61,11 +61,10 @@ export function WorkspaceCard({
 }): React.JSX.Element {
   return (
     <HoverCard data-workspace-card="">
-      <CardHead
-        glyph={<WorkspaceTile workspace={workspace} size={TILE_SIZE.HEAD} />}
-        name={workspace.name}
-        sub={sharedWords(workspace.memberCount, personal)}
-      />
+      <div className="workspace-card-head">
+        <WorkspaceTile workspace={workspace} size={TILE_SIZE.HEAD} />
+        <CardHead name={workspace.name} sub={sharedWords(workspace.memberCount, personal)} />
+      </div>
     </HoverCard>
   );
 }
