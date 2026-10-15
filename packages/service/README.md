@@ -913,7 +913,11 @@ row (`plan.agent_edits`, the last fifty, the agent's id and its notes as
 taken) and named from the agent's row at read time, so the window's "Updated
 by" line and Luke's "recent edits by coding agents" say what the
 row says now; the developer reads them on their next call while the
-agent runs on, and a turn may take only so many notes. The
+agent runs on, and a turn may take only so many notes. `edit_plan` and
+`show_page` resolve at each turn's start (`tool-set.ts`'s `planToolsOf`):
+an agent on no plan, as an automation's run starts one, is offered
+neither, and one handed a prompt on a plan only `show_page`, so no agent is
+offered a tool its every call would refuse. The
 extension itself is not mounted, since its `worker` subagent runs on an AI
 Gateway model and its `gh` tool on Vercel Connect, and Luke runs neither.
 `gh` and `git` run through the shell, authenticated at the firewall. The

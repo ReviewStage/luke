@@ -16,7 +16,7 @@ import { BRAIN_HOST_TURN_POLICY } from "../brain-host/channel.js";
 import { CODER_DEPLOYMENT_TURNS, coderChannelInput } from "./channel.js";
 import { INBOX_TOOLS } from "./inbox.js";
 import { coderInstructions } from "./instructions.js";
-import { CODER_TOOL } from "./tool-set.js";
+import { CODER_TOOL, planToolsOf } from "./tool-set.js";
 
 const SECRET = "cron-secret-1";
 const ACCOUNT = "user-a";
@@ -139,6 +139,18 @@ test("an agent on a task is told of the task's links and pages, and one an autom
     assert.ok(planless.includes("## The developer's inbox"), "a planless agent keeps its inbox");
     assert.ok(!planless.includes("luke://plan/"), "nor an older message's plan link");
   }
+});
+
+test("an agent handed its task's plan is offered edit_plan and show_page, one handed a prompt on a task show_page alone, and one an automation started with no task neither", () => {
+  const offered = (agent: Parameters<typeof planToolsOf>[0]) => [...planToolsOf(agent)].sort();
+  assert.deepEqual(offered({ planId: "plan-1", prompt: null }), [
+    CODER_TOOL.EDIT_PLAN,
+    CODER_TOOL.SHOW_PAGE,
+  ]);
+  assert.deepEqual(offered({ planId: "plan-1", prompt: "Fix the flaky test." }), [
+    CODER_TOOL.SHOW_PAGE,
+  ]);
+  assert.deepEqual(offered({ planId: null, prompt: "Sweep the flaky tests." }), []);
 });
 
 test("the session and the post tool are told never to ask for a credential or a secret in a form, since the answer reaches the transcript", () => {
