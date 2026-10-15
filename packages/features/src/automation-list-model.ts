@@ -1,0 +1,161 @@
+import { SCHEDULE_PRESET } from "./automation-schedule.js";
+import {
+  AUTOMATION_RUN_STATUS,
+  AUTOMATION_SCOPE,
+  AUTOMATION_TRIGGER,
+  type AutomationRunSummary,
+  type AutomationScope,
+  type AutomationSummary,
+  type AutomationTrigger,
+} from "./automation-wire.js";
+import { CODING_AGENT_STATUS } from "./coding-agent-wire.js";
+
+/**
+ * automation-list-model.ts -- the Automations list as a window draws it: grouped by who owns each, with its trigger in words, where its newest run stands, and when it runs next.
+ *
+ * Who owns an automation is the one thing the list must never leave in
+ * doubt, so the list falls into the workspace's automations, then the
+ * account's personal ones, and each row names its owner besides. A schedule
+ * is said in words where its cron is one the picker writes, and as its cron
+ * otherwise, with its zone named by its city. Nothing here formats a date:
+ * when a row's next run falls is handed back as an instant for the window to
+ * say on its own clock.
+ */
+
+/** The days of the week as cron numbers them, as a schedule says them. */
+const WEEKDAY_NAMES = [
+  "Sundays",
+  "Mondays",
+  "Tuesdays",
+  "Wednesdays",
+  "Thursdays",
+  "Fridays",
+  "Saturdays",
+] as const;
+
+/** The order the owners' groups stand in: the workspace's first, as the ones every member shares. */
+const OWNER_ORDER = [AUTOMATION_SCOPE.WORKSPACE, AUTOMATION_SCOPE.PERSONAL] as const;
+
+/** Where an automation's newest run stands, as its row's glyph wears it. */
+export const AUTOMATION_RUN_STANDING = {
+  /** Its agent is at work. */
+  WORKING: "working",
+  /** It could not start, or its agent failed. */
+  FAILED: "failed",
+  /** Nothing to say: it finished, was skipped as asked, or has not run. */
+  REST: "rest",
+} as const;
+
+export type AutomationRunStanding =
+  (typeof AUTOMATION_RUN_STANDING)[keyof typeof AUTOMATION_RUN_STANDING];
+
+/** When an automation runs next, as its row ends. */
+export const AUTOMATION_NEXT = {
+  /** It is turned off. */
+  OFF: "off",
+  /** The service paused it. */
+  PAUSED: "paused",
+  /** No instant is due: it fires on an event, or its schedule has no next run. */
+  UNSCHEDULED: "unscheduled",
+  /** It is due at an instant. */
+  AT: "at",
+} as const;
+
+export type AutomationNext =
+  | { readonly kind: typeof AUTOMATION_NEXT.OFF }
+  | { readonly kind: typeof AUTOMATION_NEXT.PAUSED }
+  | { readonly kind: typeof AUTOMATION_NEXT.UNSCHEDULED }
+  | { readonly kind: typeof AUTOMATION_NEXT.AT; readonly at: number };
+
+/** One owner's automations, in the order the service listed them. */
+export interface AutomationGroup {
+  readonly owner: AutomationScope;
+  readonly automations: readonly AutomationSummary[];
+}
+
+/** A time of day as a schedule says it, the minute in two figures. */
+function clockText(hour: number, minute: number): string {
+  return `${hour}:${String(minute).padStart(2, "0")}`;
+}
+
+/** A whole number a cron field spells, or nothing for any other field. */
+function cronNumber(field: string | undefined): number | undefined {
+  return field !== undefined && /^\d+$/u.test(field) ? Number(field) : undefined;
+}
+
+/** The city of an IANA zone, its underscores spaced: "America/New_York" is "New York". */
+function zoneCity(timezone: string): string {
+  return (timezone.split("/").at(-1) ?? timezone).replaceAll("_", " ");
+}
+
+/** A schedule in words where the picker could have written it, and its cron otherwise. */
+function scheduleText(cron: string, timezone: string): string {
+  const spelled = cron.trim();
+  const city = zoneCity(timezone);
+  if (spelled === SCHEDULE_PRESET.HOURLY) return `Every hour · ${city}`;
+  const [minuteField, hourField, dayOfMonth, month, dayOfWeek] = spelled.split(/\s+/u);
+  const minute = cronNumber(minuteField);
+  const hour = cronNumber(hourField);
+  const daily = dayOfMonth === "*" && month === "*";
+  if (minute === undefined || hour === undefined || !daily) return `${spelled} · ${city}`;
+  const at = clockText(hour, minute);
+  if (dayOfWeek === "*") return `Every day at ${at} · ${city}`;
+  if (dayOfWeek === "1-5") return `Weekdays at ${at} · ${city}`;
+  const day = cronNumber(dayOfWeek);
+  const name = day === undefined ? undefined : WEEKDAY_NAMES[day % 7];
+  return name === undefined ? `${spelled} · ${city}` : `${name} at ${at} · ${city}`;
+}
+
+/** Who owns an automation; one a service before scopes answered is its creator's own. */
+export function automationOwner(automation: AutomationSummary): AutomationScope {
+  return automation.scope ?? AUTOMATION_SCOPE.PERSONAL;
+}
+
+/** The list grouped by owner, the workspace's first, an owner with none left out. */
+export function automationGroups(
+  automations: readonly AutomationSummary[],
+): readonly AutomationGroup[] {
+  return OWNER_ORDER.map((owner) => ({
+    owner,
+    automations: automations.filter((automation) => automationOwner(automation) === owner),
+  })).filter((group) => group.automations.length > 0);
+}
+
+/** A trigger in one line, as a row says what fires it. */
+export function automationTriggerText(trigger: AutomationTrigger): string {
+  switch (trigger.kind) {
+    case AUTOMATION_TRIGGER.SCHEDULE:
+      return scheduleText(trigger.cron, trigger.timezone);
+    case AUTOMATION_TRIGGER.GITHUB:
+      return "On a GitHub event";
+    case AUTOMATION_TRIGGER.WEBHOOK:
+      return "When its webhook is called";
+  }
+}
+
+/**
+ * Where a run stands: working while its agent works, failed where it could
+ * not start or its agent failed, and at rest otherwise, a skip included,
+ * since a skip is the automation doing as it was asked.
+ */
+export function automationRunStanding(run: AutomationRunSummary | null): AutomationRunStanding {
+  if (run === null) return AUTOMATION_RUN_STANDING.REST;
+  if (run.status === AUTOMATION_RUN_STATUS.FAILED) return AUTOMATION_RUN_STANDING.FAILED;
+  switch (run.agent?.status) {
+    case CODING_AGENT_STATUS.STARTING:
+    case CODING_AGENT_STATUS.RUNNING:
+      return AUTOMATION_RUN_STANDING.WORKING;
+    case CODING_AGENT_STATUS.FAILED:
+      return AUTOMATION_RUN_STANDING.FAILED;
+    default:
+      return AUTOMATION_RUN_STANDING.REST;
+  }
+}
+
+/** When an automation runs next: off and paused before any instant, since neither fires at all. */
+export function automationNext(automation: AutomationSummary): AutomationNext {
+  if (!automation.enabled) return { kind: AUTOMATION_NEXT.OFF };
+  if (automation.pausedReason !== null) return { kind: AUTOMATION_NEXT.PAUSED };
+  if (automation.nextRunAt === null) return { kind: AUTOMATION_NEXT.UNSCHEDULED };
+  return { kind: AUTOMATION_NEXT.AT, at: automation.nextRunAt };
+}

@@ -24,7 +24,7 @@ import {
 } from "@luke/ui/planning-model";
 import { sameTab } from "@luke/ui/tab-strip-model";
 import type { UpdateControl } from "@luke/voice/settings-controls";
-import { FactoryIcon, HouseIcon, InboxIcon } from "lucide-react";
+import { FactoryIcon, HouseIcon, InboxIcon, ZapIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
 import { runAppCommand, useAppCommand } from "../app-commands";
@@ -679,6 +679,36 @@ function SidebarFactoryRow({
 }
 
 /**
+ * The Automations page's row, after Factory's and drawn as it is: the
+ * zap, its name, and its chord. A press opens the window's Automations page
+ * (`automations-page.tsx`), and the row is the place shown while it stands.
+ */
+function SidebarAutomationsRow({
+  current,
+  disabled,
+  onOpen,
+}: {
+  current: boolean;
+  disabled: boolean;
+  onOpen: () => void;
+}): React.JSX.Element {
+  return (
+    <button
+      type="button"
+      className="sidebar-search sidebar-automations"
+      aria-current={current ? "page" : undefined}
+      aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.AUTOMATIONS)}
+      disabled={disabled}
+      onClick={onOpen}
+    >
+      <ZapIcon />
+      Automations
+      <Shortcut chord={APP_SHORTCUTS[APP_COMMAND.AUTOMATIONS].chord} className="row-shortcut" />
+    </button>
+  );
+}
+
+/**
  * The window's left column: at its head the workspace chosen, by its tile
  * and name and who shares it, with the menu that chooses another
  * (`workspace-switcher.tsx`), or Luke while no workspace is read; the way to
@@ -688,7 +718,7 @@ function SidebarFactoryRow({
  * Inbox's, and Factory's follow Search above the rule: Home's goes to the
  * home page, the Inbox's counts what waits on the developer and opens the
  * window's Inbox, and Factory's, while its experiment is on, opens the
- * window's Factory. The pinned plans, and the side panel tabs
+ * window's Factory, and the Automations page's likewise opens it. The pinned plans, and the side panel tabs
  * pinned to the sidebar, stand in a section of their own above the rest
  * while any are pinned, newest pinned first, under a header that folds as
  * a repository's does, every row one line whose hover card says the rest;
@@ -740,12 +770,15 @@ export function DesktopSidebar({
 }): React.JSX.Element {
   const onPlans = tab === PANEL_TAB.PLANS;
   const overlay = useFloatingSidebar(sidebar);
-  // The window's Inbox, an agent's page, and Factory stand in the plan's place, so while one does no plan is the place shown.
+  // The window's Inbox, an agent's page, Factory, and the Automations page stand in the plan's place, so while one does no plan is the place shown.
   const inInbox = onPlans && plans.inboxView.open;
   const inFactory = onPlans && plans.factoryView.open;
-  const standingIn = inInbox || inFactory || (onPlans && plans.agentView.agentId !== undefined);
-  // Factory is an experiment: its row stands only while the account has it on.
+  const inAutomations = onPlans && plans.automationsView.open;
+  const standingIn =
+    inInbox || inFactory || inAutomations || (onPlans && plans.agentView.agentId !== undefined);
+  // Factory and the Automations page are experiments: each row stands only while the account has it on.
   const factoryOn = useExperiment(EXPERIMENT.FACTORY);
+  const automationsOn = useExperiment(EXPERIMENT.AUTOMATIONS);
   // A press in the list is always about plans, so it brings the Plans tab
   // forward from Settings as well as choosing.
   const openPlan = (planId: string) => {
@@ -767,6 +800,10 @@ export function DesktopSidebar({
   const openFactory = () => {
     if (!onPlans) onTabChange(PANEL_TAB.PLANS);
     plans.factoryView.onOpen();
+  };
+  const openAutomations = () => {
+    if (!onPlans) onTabChange(PANEL_TAB.PLANS);
+    plans.automationsView.onOpen();
   };
   const goHome = () => {
     if (!onPlans) onTabChange(PANEL_TAB.PLANS);
@@ -916,6 +953,13 @@ export function DesktopSidebar({
           current={inFactory}
           disabled={!plans.signedIn}
           onOpen={chosen(openFactory)}
+        />
+      ) : null}
+      {automationsOn ? (
+        <SidebarAutomationsRow
+          current={inAutomations}
+          disabled={!plans.signedIn}
+          onOpen={chosen(openAutomations)}
         />
       ) : null}
       <hr className="sidebar-rule" />

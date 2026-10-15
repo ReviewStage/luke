@@ -56,6 +56,8 @@ export const APP_COMMAND = {
   EXIT_AGENT_PAGE: "exit-agent-page",
   FACTORY: "factory",
   EXIT_FACTORY: "exit-factory",
+  AUTOMATIONS: "automations",
+  EXIT_AUTOMATIONS: "exit-automations",
   BACK: "back",
   FORWARD: "forward",
   SEND_FEEDBACK: "send-feedback",
@@ -120,6 +122,7 @@ export const SHORTCUT_KEY = {
   K: { accelerator: "K", glyph: "K", key: "k", code: "KeyK" },
   J: { accelerator: "J", glyph: "J", key: "j", code: "KeyJ" },
   I: { accelerator: "I", glyph: "I", key: "i", code: "KeyI" },
+  U: { accelerator: "U", glyph: "U", key: "u", code: "KeyU" },
   ZERO: { accelerator: "0", glyph: "0", key: "0", code: "Digit0" },
   // ⌘+ answers ⌘= as well, so zooming in never needs Shift, as in Chrome and
   // VS Code.
@@ -341,6 +344,16 @@ export const APP_SHORTCUTS = {
     chord: { key: SHORTCUT_KEY.ESCAPE, bare: true },
     experiment: EXPERIMENT.FACTORY,
   },
+  [APP_COMMAND.AUTOMATIONS]: {
+    label: "Automations",
+    chord: { key: SHORTCUT_KEY.U, shift: true },
+    experiment: EXPERIMENT.AUTOMATIONS,
+  },
+  [APP_COMMAND.EXIT_AUTOMATIONS]: {
+    label: "Exit automations",
+    chord: { key: SHORTCUT_KEY.ESCAPE, bare: true },
+    experiment: EXPERIMENT.AUTOMATIONS,
+  },
   [APP_COMMAND.BACK]: { label: "Back", chord: { key: SHORTCUT_KEY.OPEN_BRACKET } },
   [APP_COMMAND.FORWARD]: { label: "Forward", chord: { key: SHORTCUT_KEY.CLOSE_BRACKET } },
   [APP_COMMAND.COMMAND_PALETTE]: { label: "Command palette", chord: { key: SHORTCUT_KEY.K } },
@@ -386,6 +399,8 @@ export const APP_SHORTCUT_GROUPS = [
       APP_COMMAND.EXIT_AGENT_PAGE,
       APP_COMMAND.FACTORY,
       APP_COMMAND.EXIT_FACTORY,
+      APP_COMMAND.AUTOMATIONS,
+      APP_COMMAND.EXIT_AUTOMATIONS,
     ],
   },
   {

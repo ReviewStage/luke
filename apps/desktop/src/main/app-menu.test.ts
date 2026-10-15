@@ -28,6 +28,7 @@ describe("the menu bar's gate", () => {
       "Home",
       "Inbox",
       "Factory",
+      "Automations",
       "-",
       "Back",
       "Forward",
@@ -40,7 +41,14 @@ describe("the menu bar's gate", () => {
       undefined,
       (command) => command !== APP_COMMAND.INBOX,
     );
-    assert.deepEqual(labelsOf(withoutInbox, "Go"), ["Home", "Factory", "-", "Back", "Forward"]);
+    assert.deepEqual(labelsOf(withoutInbox, "Go"), [
+      "Home",
+      "Factory",
+      "Automations",
+      "-",
+      "Back",
+      "Forward",
+    ]);
 
     const withoutPlaces = appMenuTemplate(
       "Luke",
@@ -48,9 +56,21 @@ describe("the menu bar's gate", () => {
       (command) =>
         command !== APP_COMMAND.HOME &&
         command !== APP_COMMAND.INBOX &&
-        command !== APP_COMMAND.FACTORY,
+        command !== APP_COMMAND.FACTORY &&
+        command !== APP_COMMAND.AUTOMATIONS,
     );
     assert.deepEqual(labelsOf(withoutPlaces, "Go"), ["Back", "Forward"]);
+  });
+});
+
+describe("the Automations item", () => {
+  test("stands under Go only while the account has its experiment on", () => {
+    const off = appMenuTemplate("Luke", undefined, (command) => shortcutShown(command, {}));
+    assert.ok(!labelsOf(off, "Go").includes("Automations"));
+    const on = appMenuTemplate("Luke", undefined, (command) =>
+      shortcutShown(command, experimentsOn(EXPERIMENT.AUTOMATIONS)),
+    );
+    assert.ok(labelsOf(on, "Go").includes("Automations"));
   });
 });
 

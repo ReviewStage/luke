@@ -21,6 +21,7 @@ import type { SettingsPanelProps } from "../settings/settings-panel";
 import { SignInGate } from "../sign-in-gate";
 import { Tooltip } from "../tooltip";
 import { useExperiment } from "../use-app-state";
+import { AutomationsPage } from "./automations-page";
 import { useColumnDock } from "./column-dock";
 import { DesktopAgentPage } from "./desktop-agent-page";
 import { DesktopFactory } from "./desktop-factory";
@@ -151,6 +152,17 @@ function usePlaceCommands(
         }
       : undefined,
   );
+  // The Automations page is an experiment on the same terms as Factory.
+  const automationsOn = useExperiment(EXPERIMENT.AUTOMATIONS);
+  useAppCommand(
+    APP_COMMAND.AUTOMATIONS,
+    pastGate && plans.signedIn && automationsOn
+      ? () => {
+          if (tab !== PANEL_TAB.PLANS) onTabChange(PANEL_TAB.PLANS);
+          plans.automationsView.onOpen();
+        }
+      : undefined,
+  );
   const { onReopenClosedTab } = plans;
   useAppCommand(
     APP_COMMAND.REOPEN_CLOSED_TAB,
@@ -239,7 +251,7 @@ function transcriptStreaming(plans: PlansControl): boolean {
 /**
  * What the window's title names: Settings alone, whose pages are not one
  * workspace's; the Inbox in the listed workspace, whatever plan its item is
- * from; Factory in the listed workspace; the plan on screen in its own workspace, or alone while that is not
+ * from; Factory and the Automations page in the listed workspace; the plan on screen in its own workspace, or alone while that is not
  * read; else the listed workspace.
  */
 function titleSubject(
@@ -254,6 +266,9 @@ function titleSubject(
     return { signedIn, subject: "Agent", workspace: plans.workspace };
   }
   if (plans.factoryView.open) return { signedIn, subject: "Factory", workspace: plans.workspace };
+  if (plans.automationsView.open) {
+    return { signedIn, subject: "Automations", workspace: plans.workspace };
+  }
   if (shownPlan === undefined) return { signedIn, subject: undefined, workspace: plans.workspace };
   // Note that a plan whose workspace is not read yet is named alone, because the listed one may not be its.
   const workspace = plans.workspaces.find((each) => each.id === shownPlan.workspaceId);
@@ -322,17 +337,25 @@ export function DesktopShell({
   useEffect(() => {
     if (factoryShown && !factoryOn) closeFactory();
   }, [factoryShown, factoryOn, closeFactory]);
+  const automationsOn = useExperiment(EXPERIMENT.AUTOMATIONS);
+  const { open: automationsShown, onClose: closeAutomations } = plans.automationsView;
+  useEffect(() => {
+    if (automationsShown && !automationsOn) closeAutomations();
+  }, [automationsShown, automationsOn, closeAutomations]);
   const { region } = plans;
   // The folded sidebar's call card stands over the column's foot, clear of its dock.
   useColumnDock(
     shell,
     plans.sidePanel.fullScreen,
-    `${tab}:${plans.page}:${plans.history.open}:${plans.inboxView.open}:${plans.agentView.agentId}:${plans.factoryView.open}:${sidebar.collapsed}`,
+    `${tab}:${plans.page}:${plans.history.open}:${plans.inboxView.open}:${plans.agentView.agentId}:${plans.factoryView.open}:${plans.automationsView.open}:${sidebar.collapsed}`,
   );
   // The window's title names what stands in it, the plan only while it is on screen, and its workspace;
-  // the Inbox, an agent's page, or Factory standing in its place is not the plan.
+  // the Inbox, an agent's page, Factory, or the Automations page standing in its place is not the plan.
   const standingIn =
-    plans.inboxView.open || plans.agentView.agentId !== undefined || plans.factoryView.open;
+    plans.inboxView.open ||
+    plans.agentView.agentId !== undefined ||
+    plans.factoryView.open ||
+    plans.automationsView.open;
   const shownPlan =
     tab === PANEL_TAB.PLANS && !standingIn && region.kind === DOCUMENT_REGION.READY
       ? region.plan
@@ -397,10 +420,11 @@ export function DesktopShell({
   }
   // Note that the shell says whether the panel's toggle stands, because the
   // toolbar beneath it leaves the toggle room then and only then. The Inbox
-  // an agent's page, and Factory stand in the plan's place, so they draw no panel to toggle.
+  // an agent's page, Factory, and the Automations page stand in the plan's place, so they draw no panel to toggle.
   const inboxOpen = plans.inboxView.open;
   const pageAgent = plans.agentView.agentId;
   const factoryOpen = plans.factoryView.open && factoryOn;
+  const automationsOpen = plans.automationsView.open && automationsOn;
   const panelToggle = plans.page === PLANS_PAGE.DOCUMENT && !standingIn;
   const planDrawn = panelToggle && plans.region.kind === DOCUMENT_REGION.READY;
   // Note that a panel filling the window hides the plan's column, call bar
@@ -437,6 +461,8 @@ export function DesktopShell({
           <DesktopAgentPage key={pageAgent} plans={plans} agentId={pageAgent} />
         ) : factoryOpen ? (
           <DesktopFactory plans={plans} />
+        ) : automationsOpen ? (
+          <AutomationsPage plans={plans} />
         ) : (
           <DesktopPlans
             plans={plans}

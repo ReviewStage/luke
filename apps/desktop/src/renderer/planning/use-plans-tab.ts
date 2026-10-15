@@ -205,16 +205,25 @@ const STAND_IN = {
   INBOX: "inbox",
   AGENT: "agent",
   FACTORY: "factory",
+  AUTOMATIONS: "automations",
 } as const;
 
-/** The window's Inbox with the item chosen in it, one agent's page, or Factory. */
+/** The window's Inbox with the item chosen in it, one agent's page, Factory, or the Automations page. */
 type StandIn =
   | { readonly kind: typeof STAND_IN.INBOX; readonly chosen: InboxChoice | undefined }
   | { readonly kind: typeof STAND_IN.AGENT; readonly agentId: string }
-  | { readonly kind: typeof STAND_IN.FACTORY };
+  | { readonly kind: typeof STAND_IN.FACTORY }
+  | { readonly kind: typeof STAND_IN.AUTOMATIONS };
 
 /** The window's Factory: whether it stands in the plan's place, and the presses that open and leave it. */
 interface FactoryViewControl {
+  readonly open: boolean;
+  readonly onOpen: () => void;
+  readonly onClose: () => void;
+}
+
+/** The window's Automations page: whether it stands in the plan's place, and the presses that open and leave it. */
+interface AutomationsViewControl {
   readonly open: boolean;
   readonly onOpen: () => void;
   readonly onClose: () => void;
@@ -359,6 +368,8 @@ export interface PlansControl {
   agentView: AgentViewControl;
   /** The window's Factory: whether it stands in the plan's place, and its presses (`desktop-factory.tsx`). */
   factoryView: FactoryViewControl;
+  /** The window's Automations page: whether it stands in the plan's place, and its presses (`automations-page.tsx`). */
+  automationsView: AutomationsViewControl;
   /** The plan the call in progress on this Mac is about, or none: what Factory marks as being planned. */
   callPlanId: string | undefined;
   /** Opens a plan's file in its side panel at the commit named, the reference's lines lit, opening the plan first where it is not the open one: what an inbox item's code opens. */
@@ -1817,6 +1828,15 @@ export function usePlansTab(input: {
       onOpen: () => {
         setHistoryFor(undefined);
         setStandIn({ kind: STAND_IN.FACTORY });
+      },
+      onClose: () => setStandIn(undefined),
+    },
+    // The Automations page stands over the plan's place as Factory does, each giving way to the others.
+    automationsView: {
+      open: standIn?.kind === STAND_IN.AUTOMATIONS,
+      onOpen: () => {
+        setHistoryFor(undefined);
+        setStandIn({ kind: STAND_IN.AUTOMATIONS });
       },
       onClose: () => setStandIn(undefined),
     },

@@ -452,7 +452,7 @@ export function App(): React.JSX.Element {
       // A dialog that took the press for itself is the nearest layer of all.
       if (event.defaultPrevented) return;
       // Otherwise it closes the nearest thing that is open, one layer at a
-      // time: Settings, a plan's version history, the Inbox, or Factory, back to wherever it was
+      // time: Settings, a plan's version history, the Inbox, Factory, or the Automations page, back to wherever it was
       // opened from, then a side panel filling the window back beside its
       // plan, then an open plan back to the home page. A menu and the
       // settings search answer their own Escapes and keep them — the search
@@ -462,6 +462,7 @@ export function App(): React.JSX.Element {
       if (runAppCommand(APP_COMMAND.EXIT_INBOX)) return;
       if (runAppCommand(APP_COMMAND.EXIT_AGENT_PAGE)) return;
       if (runAppCommand(APP_COMMAND.EXIT_FACTORY)) return;
+      if (runAppCommand(APP_COMMAND.EXIT_AUTOMATIONS)) return;
       // An open plan unwinds to the home page, which leaves it and ends
       // its call. That page is home, so a press there does nothing.
       plans.back();

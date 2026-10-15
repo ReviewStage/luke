@@ -47,4 +47,5 @@ export const SETTINGS_SEARCH_ROW = {
  */
 export const EXPERIMENT_ANCHOR = {
   [EXPERIMENT.FACTORY]: "experiment-factory",
+  [EXPERIMENT.AUTOMATIONS]: "experiment-automations",
 } as const satisfies Record<Experiment, string>;

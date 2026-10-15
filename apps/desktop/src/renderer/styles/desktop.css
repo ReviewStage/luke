@@ -441,19 +441,22 @@ body,
 .sidebar-new-plan:disabled,
 .sidebar-home:disabled,
 .sidebar-inbox:disabled,
-.sidebar-factory:disabled {
+.sidebar-factory:disabled,
+.sidebar-automations:disabled {
   opacity: 0.45;
 }
 
 /* The Home row is the place shown while the home page stands, the Inbox
-   row while the window's Inbox does, and Factory's while Factory does, each
+   row while the window's Inbox does, Factory's while Factory does, and the
+   Automations row while the Automations page does, each
    filled as the open plan's row is.
    The Inbox's count of what waits on the developer stands at its end in a
    group count's ink, and gives way to its chord while the row is hovered
    or reached from the keyboard, as the rows above show theirs. */
 .sidebar-home[aria-current="page"],
 .sidebar-inbox[aria-current="page"],
-.sidebar-factory[aria-current="page"] {
+.sidebar-factory[aria-current="page"],
+.sidebar-automations[aria-current="page"] {
   background: var(--raised-strong);
 }
 
@@ -3409,6 +3412,110 @@ body:has(.app-stage[data-capture="true"])
   margin-top: var(--space-48);
   color: var(--text-secondary);
   font-size: 13px;
+}
+
+/* Automations ---------------------------------------------------------------- */
+
+/* A window-wide place beside the sidebar, as Factory is: its toolbar, then
+   each owner's automations in a Settings card, at a Settings measure. */
+.automations-view {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.automations-scroll {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-16) var(--content-inset) var(--space-32);
+}
+
+.automation-group {
+  max-width: 820px; /* off-scale */
+}
+
+.automation-group + .automation-group {
+  margin-top: var(--space-24);
+}
+
+/* One automation's row: its clock wearing its newest run's state, its name
+   over what fires it, its owner, when it runs next in the tertiary ink, a
+   failure's mark, and its switch, divided by the card's hairlines. */
+.automation-row {
+  display: flex;
+  min-height: 52px; /* off-scale */
+  align-items: center;
+  gap: var(--space-12);
+  padding: var(--space-8) var(--space-16);
+}
+
+.automation-row > .state-glyph {
+  color: var(--text-secondary);
+}
+
+.automation-row-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px; /* off-scale */
+}
+
+.automation-row-name,
+.automation-row-detail {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.automation-row-name {
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.automation-row-detail,
+.automation-row-when {
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.automation-row-when {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+
+/* An automation turned off reads as set aside: its name in the secondary ink. */
+.automation-row[data-enabled="false"] .automation-row-name {
+  color: var(--text-secondary);
+}
+
+/* Who owns it, never in doubt: the workspace in the primary ink beside its
+   building, Personal in the secondary beside its lock, in a column of its
+   own so the owners line up down the card. */
+.automation-owner {
+  display: inline-flex;
+  width: 112px; /* off-scale */
+  flex: none;
+  align-items: center;
+  gap: var(--space-6);
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.automation-owner svg {
+  width: 13px;
+  height: 13px;
+  flex: none;
+}
+
+.automation-owner[data-owner="workspace"] {
+  color: var(--text-primary);
 }
 
 /* Settings ------------------------------------------------------------------- */
