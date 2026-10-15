@@ -121,6 +121,14 @@ export {
   wireUuidSchema,
 } from "./service-wire.js";
 export {
+  HostedTerminalClient,
+  type HostedTerminalClientOptions,
+  TERMINAL_UNANSWERED,
+  type TerminalRelayAsk,
+  type TerminalUnanswered,
+  terminalRelayAddress,
+} from "./terminal-client.js";
+export {
   TURN_END,
   TURN_EVENT_KIND,
   TURN_SLOW_STEP,
