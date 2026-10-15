@@ -11,7 +11,7 @@ import { AUTOMATION_CALL_FAILURE, type AutomationView } from "@luke/features/aut
 import type { AutomationScope, AutomationSummary } from "@luke/features/automation-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { EXPERIMENT } from "@luke/settings";
-import { ClockIcon, PlusIcon, ZapIcon } from "lucide-react";
+import { PlusIcon, ZapIcon } from "lucide-react";
 import { Fragment, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
@@ -25,7 +25,7 @@ import { Switch } from "../switch";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { AutomationEditor } from "./automation-editor";
 import { OWNER_MARK_SIZE, OwnerMark } from "./automation-owner";
-import { STANDING_GLYPH } from "./automation-runs-panel";
+import { FiringGlyph, STANDING_GLYPH } from "./automation-runs-panel";
 import { automationNextText, automationOwnerName } from "./automation-words";
 import { useAutomations } from "./use-automations";
 
@@ -77,7 +77,7 @@ function OwnerCell({
 }
 
 /**
- * One automation's row: its schedule's clock wearing where its newest run
+ * One automation's row: the glyph of what fires it wearing where its newest run
  * stands, its name over what fires it, its owner, when it runs next, a
  * failure's mark, and its switch.
  */
@@ -99,7 +99,7 @@ function AutomationRow({
   return (
     <div className="automation-row" data-enabled={String(automation.enabled)}>
       <button type="button" className="automation-row-open" onClick={onOpen}>
-        <StateGlyph glyph={<ClockIcon />} state={state} />
+        <StateGlyph glyph={<FiringGlyph kind={automation.trigger.kind} />} state={state} />
         <span className="automation-row-copy">
           <span className="automation-row-name">{automation.name}</span>
           <span className="automation-row-detail">
