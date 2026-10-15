@@ -64,13 +64,22 @@ from it.
 
 ## Code access
 
-Nothing reads code on your Mac. Luke's service checks the task's repository
+Nothing reads code on your Mac unless you run a pull request there yourself
+(below). Luke's service checks the task's repository
 out in a Vercel Sandbox, with a token the Luke GitHub App mints for that one
 repository and sets at the sandbox's firewall, never inside it, and Luke
 runs commands such as `ls`, `grep`, or `cat` there. A coding
 agent you start works in a sandbox of its own, on a full checkout, and pushes
-its branch and pull request through the same App, as the App's own bot. See
-[PRIVACY.md](PRIVACY.md) for details.
+its branch and pull request through the same App, as the App's own bot.
+
+You can also run a coding agent's pull request on your Mac: Run on this Mac,
+in the pull request's menu, fetches its newest commit into a checkout Luke
+keeps for it under its application data, with a one-repository read token the
+same App mints and Luke gives back once the fetch ends, and runs the command
+you set for that repository in Settings › This Mac from the checkout's root,
+its output live in a tab of its own. Nothing runs until you press it, and the
+pull request never chooses the command. See [PRIVACY.md](PRIVACY.md) for
+details.
 
 ## Contributing
 

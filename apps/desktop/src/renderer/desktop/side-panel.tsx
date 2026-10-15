@@ -20,9 +20,12 @@ import {
   isChangesTab,
   isFileTab,
   isPageTab,
+  isPrRunTab,
   isSubagentTab,
   isTerminalTab,
   type PageStripTab,
+  type PrRunStripTab,
+  prRunLabelOf,
   type StripTab,
   type SubagentStripTab,
   sameTab,
@@ -62,6 +65,7 @@ import { FileView } from "../planning/file-view";
 import { PagePane } from "../planning/page-pane";
 import { PlanBoard } from "../planning/plan-board";
 import { PlanCall } from "../planning/plan-call";
+import { PrRunTab } from "../planning/pr-run-tab";
 import { type KindLook, TAB_KIND, tabLook } from "../planning/tab-look";
 import { useOpenTerminal } from "../planning/terminal-commands";
 import { TerminalCardFoot, TerminalStanding } from "../planning/terminal-shells";
@@ -77,6 +81,7 @@ import type { CodingAgentsControl } from "../planning/use-coding-agents";
 import {
   type DrawnTabs,
   drawsChanges,
+  drawsPrRun,
   drawsSubagent,
   drawsTerminal,
   type FileHistoryStep,
@@ -472,6 +477,7 @@ function stripTabs(input: {
   changes: readonly ChangesStripTab[];
   pages: readonly DrawnPage[];
   terminals: readonly TerminalStripTab[];
+  prRuns: readonly PrRunStripTab[];
   /** Every code Luke showed on the plan, whose newest note on a file its tab's card says. */
   shown: readonly PlanCodeShowing[];
   /** The plan's repository, whose showings alone a file tab's card reads its note from. */
@@ -484,9 +490,11 @@ function stripTabs(input: {
   onOpenAgent: (agentId: string) => void;
   /** The agent whose tab the plan's column shows, whose card follows its run. */
   shownAgent: string | undefined;
+  /** Stops a pull request's run as its tab closes; the checkout stays. */
+  onClosePrRun: (tab: PrRunStripTab) => void;
 }): DrawnTab[] {
   const { panel, unread, agents, subagents, files, changes, pages, terminals, shown, held } = input;
-  const { repository, copied, readWorker, onOpenAgent, shownAgent } = input;
+  const { repository, copied, readWorker, onOpenAgent, shownAgent, prRuns, onClosePrRun } = input;
   const chosen = (tab: SidePanelTab) => panel.tab !== undefined && sameTab(tab, panel.tab);
   const models = agents.models ?? [];
   const look = (tab: SidePanelTab, drawn: Omit<TabLook, "selected" | "onSelect">) => ({
@@ -592,7 +600,27 @@ function stripTabs(input: {
       close: () => panel.onClose(tab),
     };
   });
-  return [...fixed, ...subagentTabs, ...fileTabs, ...changesTabs, ...pageTabs, ...terminalTabs];
+  // A pull request run's tab names the pull request; closing it stops the run, whichever way it closes.
+  const prRunTabs = prRuns.map((tab) => ({
+    tab,
+    look: look(tab, {
+      ...tabLook({ kind: TAB_KIND.PR_RUN, number: tab.pullRequest.number }),
+      detail: tab.pullRequest.repository,
+    }),
+    close: () => {
+      onClosePrRun(tab);
+      panel.onClose(tab);
+    },
+  }));
+  return [
+    ...fixed,
+    ...subagentTabs,
+    ...fileTabs,
+    ...changesTabs,
+    ...pageTabs,
+    ...terminalTabs,
+    ...prRunTabs,
+  ];
 }
 
 /**
@@ -629,6 +657,7 @@ function PanelTabs({
   changes,
   pages,
   terminals,
+  prRuns,
   shownFiles,
   shown,
   repository,
@@ -658,6 +687,8 @@ function PanelTabs({
   pages: readonly DrawnPage[];
   /** The open Terminal tabs of the plan's agents, in the order opened. */
   terminals: readonly TerminalStripTab[];
+  /** The open pull request run tabs of the plan's agents, in the order opened. */
+  prRuns: readonly PrRunStripTab[];
   /** Each file Luke showed on the plan, which the "+" offers. */
   shownFiles: readonly ShownFile[];
   /** Every code Luke showed on the plan, whose notes the file tabs' cards say. */
@@ -677,6 +708,7 @@ function PanelTabs({
   /** The agent whose tab the plan's column shows, whose Changes card follows its run. */
   shownAgent: string | undefined;
 }): React.JSX.Element {
+  const { tell } = useAct();
   const copied = useTranscriptCopier();
   // The panel's "+" asks for a new shell where the panel already holds the keys.
   const openTerminal = useOpenTerminal(panel, noFocusMove);
@@ -689,6 +721,7 @@ function PanelTabs({
     changes,
     pages,
     terminals,
+    prRuns,
     shown,
     repository,
     held,
@@ -696,6 +729,7 @@ function PanelTabs({
     readWorker: (callId) => readWholeTranscript(readWorker, { agentId: planId, callId }),
     onOpenAgent,
     shownAgent,
+    onClosePrRun: (tab) => tell(ACT_KIND.PR_RUN_CLOSE, tab.pullRequest),
   });
   const strip = inPlanOrder(kinds, panel.order, (entry) => entry.tab);
   // ⌘W closes the tab chosen, as its menu's Close does; with none, the key
@@ -1142,6 +1176,7 @@ function TabContent({
   shellsList: { readonly open: boolean; readonly onToggle: () => void };
 }): React.JSX.Element {
   const { act, tell } = useAct();
+  if (isPrRunTab(tab)) return <PrRunTab key={tabKey(tab)} tab={tab} shown={shown} />;
   if (isTerminalTab(tab)) {
     return (
       <TerminalTab
@@ -1589,6 +1624,8 @@ export function SidePanel({
   const terminals = panel.terminals.filter((each) =>
     drawsTerminal(each, { planAgents: agents.agentIds }),
   );
+  // A pull request run's tab stands while its agent is the plan's, as its Terminal tab does.
+  const prRuns = panel.prRuns.filter((each) => drawsPrRun(each, { planAgents: agents.agentIds }));
   // A page's tab stands while the plan lists the page.
   const planPages = pages ?? NO_PAGES;
   const pageTabs = panel.pages.flatMap((tab) => {
@@ -1608,7 +1645,9 @@ export function SidePanel({
               ? pageTabs.find((each) => sameTab(each.tab, tab))?.line.title
               : isTerminalTab(tab)
                 ? TAB_WORDS.TERMINAL
-                : tabLook({ kind: TAB_KIND.PANEL, tab }).label;
+                : isPrRunTab(tab)
+                  ? prRunLabelOf(tab.pullRequest.number)
+                  : tabLook({ kind: TAB_KIND.PANEL, tab }).label;
   const openSubagent = useCallback(
     (callId: string) => panel.onChoose({ subagent: callId }),
     [panel.onChoose],
@@ -1661,6 +1700,7 @@ export function SidePanel({
             changes={changes}
             pages={pageTabs}
             terminals={terminals}
+            prRuns={prRuns}
             shownFiles={offered}
             shown={shownCode ?? []}
             repository={repository}

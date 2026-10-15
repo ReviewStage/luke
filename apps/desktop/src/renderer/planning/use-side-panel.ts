@@ -10,11 +10,13 @@ import {
   isChangesTab,
   isFileTab,
   isPageTab,
+  isPrRunTab,
   isSubagentTab,
   isTerminalTab,
   movedOrder,
   openedOrder,
   type PageStripTab,
+  type PrRunStripTab,
   replacementOf,
   type StripTab,
   type SubagentStripTab,
@@ -173,7 +175,8 @@ export type SidePanelTab =
   | FileStripTab
   | ChangesStripTab
   | TerminalStripTab
-  | PageStripTab;
+  | PageStripTab
+  | PrRunStripTab;
 
 /**
  * A file's tab as the panel holds it: the file, the lines lit in it, none
@@ -391,6 +394,8 @@ interface HeldState extends Omit<SidePanelState, "tabs" | "tab" | "plans" | "pin
   readonly terminals: readonly TerminalStripTab[];
   /** The agent whose Terminal tab was shown last on each plan, by plan. */
   readonly lastTerminals: Readonly<Record<string, string>>;
+  /** The open pull request run tabs, by agent, in the order opened. */
+  readonly prRuns: readonly PrRunStripTab[];
   readonly plans: Readonly<Record<string, PlanTabs>>;
   readonly pins: readonly PinnedTab[];
 }
@@ -451,6 +456,8 @@ export interface SidePanelControl {
   terminals: readonly TerminalStripTab[];
   /** The agent whose Terminal tab was shown last on the open plan, which ⌘J goes to among several. */
   lastTerminal: string | undefined;
+  /** The open pull request run tabs in the order opened, after the Terminal tabs; only those of the open plan's agents are drawn. */
+  prRuns: readonly PrRunStripTab[];
   /** The open plan's tabs of every kind as the strip draws them, in its order. */
   strip: readonly SidePanelTab[];
   /** The tab shown, which is none only while the open plan has no tab open. */
@@ -747,16 +754,22 @@ function withTab(held: HeldState, tab: SidePanelTab, planId: string | undefined)
     isTerminalTab(tab) && planId !== undefined && held.lastTerminals[planId] !== tab.terminal
       ? { ...held.lastTerminals, [planId]: tab.terminal }
       : held.lastTerminals;
-  const chosen = open ?? tab;
+  const prRuns =
+    isPrRunTab(tab) && !held.prRuns.some((each) => sameTab(each, tab))
+      ? [...held.prRuns, tab]
+      : held.prRuns;
+  const chosen =
+    open ?? (isPrRunTab(tab) ? (prRuns.find((each) => sameTab(each, tab)) ?? tab) : tab);
   return opened === held &&
     subagents === held.subagents &&
     files === held.files &&
     pages === held.pages &&
     terminals === held.terminals &&
     lastTerminals === held.lastTerminals &&
+    prRuns === held.prRuns &&
     chosen === held.tab
     ? held
-    : { ...opened, subagents, files, pages, terminals, lastTerminals, tab: chosen };
+    : { ...opened, subagents, files, pages, terminals, lastTerminals, prRuns, tab: chosen };
 }
 
 /** The range a reference lights, none for a whole file. */
@@ -933,6 +946,11 @@ export function drawsTerminal(
   return drawn.planAgents?.includes(tab.terminal) === true;
 }
 
+/** Whether the plan draws the agent's pull request run tab: on the same terms as its Terminal tab (`drawsTerminal`). */
+export function drawsPrRun(tab: PrRunStripTab, drawn: Pick<DrawnTabs, "planAgents">): boolean {
+  return drawn.planAgents?.includes(tab.prRun) === true;
+}
+
 /** The open file tabs of files shown on the plan, by path, in the strip's order. */
 function drawnFiles(held: HeldState, drawn: DrawnTabs): readonly string[] {
   return held.files.flatMap((each) => (drawn.files.includes(each.path) ? [each.path] : []));
@@ -963,6 +981,7 @@ function stripOf(held: HeldState, drawn: DrawnTabs): readonly SidePanelTab[] {
     ...drawnChanges(held, drawn),
     ...held.pages.filter((each) => drawn.pages.includes(each.page)),
     ...held.terminals.filter((each) => drawsTerminal(each, drawn)),
+    ...held.prRuns.filter((each) => drawsPrRun(each, drawn)),
   ];
   return inPlanOrder(kinds, orderOn(held, drawn.plan.id), (tab) => tab);
 }
@@ -1025,7 +1044,9 @@ function withoutTab(held: HeldState, tab: SidePanelTab, drawn: DrawnTabs): HeldS
           ? { ...held, pages: held.pages.filter((each) => !sameTab(each, tab)) }
           : isTerminalTab(tab)
             ? { ...held, terminals: held.terminals.filter((each) => !sameTab(each, tab)) }
-            : { ...held, files: held.files.filter((each) => each.path !== tab.file) };
+            : isPrRunTab(tab)
+              ? { ...held, prRuns: held.prRuns.filter((each) => !sameTab(each, tab)) }
+              : { ...held, files: held.files.filter((each) => each.path !== tab.file) };
   if (closed === undefined) return held;
   const forgotten = withoutViewed(closed, drawn.plan.id, tab);
   const shown = shownIn(held, drawn);
@@ -1200,6 +1221,7 @@ function settled(state: SidePanelState): HeldState {
     pages: [],
     terminals: [],
     lastTerminals: {},
+    prRuns: [],
     plans: currentPlans(state.plans),
     pins:
       pins === undefined
@@ -1297,6 +1319,7 @@ function shownTab(
   if (isChangesTab(kept)) return changes.some((each) => sameTab(each, kept)) ? kept : tabs[0];
   if (isPageTab(kept)) return drawn.pages.includes(kept.page) ? kept : tabs[0];
   if (isTerminalTab(kept)) return drawsTerminal(kept, drawn) ? kept : tabs[0];
+  if (isPrRunTab(kept)) return drawsPrRun(kept, drawn) ? kept : tabs[0];
   return drawsSubagent(kept, drawn) ? kept : tabs[0];
 }
 
@@ -1588,6 +1611,7 @@ export function useSidePanel(
     pages: state.pages,
     terminals: state.terminals,
     lastTerminal: planId === undefined ? undefined : state.lastTerminals[planId],
+    prRuns: state.prRuns,
     files: state.files,
     tab: shownIn(state, drawn),
     width: state.width,

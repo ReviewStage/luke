@@ -38,6 +38,7 @@
     "./plan-template": "./src/plan-template.js",
     "./plan-wire": "./src/plan-wire.js",
     "./pr-fetch-wire": "./src/pr-fetch-wire.js",
+    "./pr-run-store": "./src/pr-run-store.js",
     "./pr-run-view": "./src/pr-run-view.js",
     "./planning-view": "./src/planning-view.js",
     "./provider-key-wire": "./src/provider-key-wire.js",

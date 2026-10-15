@@ -37,6 +37,11 @@ export const TAB_WORDS = {
   TERMINAL: "Terminal",
 } as const;
 
+/** A pull request run tab's name: the word for what it shows, and the pull request's number. */
+export function prRunLabelOf(number: number): string {
+  return `Run #${number}`;
+}
+
 /** A Changes tab's name for its agent's: the agent's own, after the word for what it shows. */
 export function changesLabelOf(agentLabel: string): string {
   return `${TAB_WORDS.CHANGES}: ${agentLabel}`;
@@ -85,6 +90,20 @@ export interface PageStripTab {
   readonly page: string;
 }
 
+/**
+ * One agent's pull request run on this Mac, named by the agent that
+ * published the pull request, with the pull request it runs: its
+ * workspace, repository, and number.
+ */
+export interface PrRunStripTab {
+  readonly prRun: string;
+  readonly pullRequest: {
+    readonly workspaceId: string;
+    readonly repository: string;
+    readonly number: number;
+  };
+}
+
 /** A tab of either strip: a word of its column's own, or one naming what it shows. */
 export type StripTab =
   | string
@@ -94,7 +113,8 @@ export type StripTab =
   | FileStripTab
   | ChangesStripTab
   | TerminalStripTab
-  | PageStripTab;
+  | PageStripTab
+  | PrRunStripTab;
 
 /**
  * Whether a tab is one agent's. Note that each kind is told by the field
@@ -132,6 +152,11 @@ export function isTerminalTab(tab: StripTab): tab is TerminalStripTab {
 /** Whether a tab is one page's. */
 export function isPageTab(tab: StripTab): tab is PageStripTab {
   return tab instanceof Object && "page" in tab;
+}
+
+/** Whether a tab is one agent's pull request run on this Mac. */
+export function isPrRunTab(tab: StripTab): tab is PrRunStripTab {
+  return tab instanceof Object && "prRun" in tab;
 }
 
 /**
@@ -172,6 +197,7 @@ export function sameTab(a: StripTab, b: StripTab): boolean {
   if (isChangesTab(a)) return isChangesTab(b) && a.changes === b.changes;
   if (isTerminalTab(a)) return isTerminalTab(b) && a.terminal === b.terminal;
   if (isPageTab(a)) return isPageTab(b) && a.page === b.page;
+  if (isPrRunTab(a)) return isPrRunTab(b) && a.prRun === b.prRun;
   return a === b;
 }
 
@@ -190,6 +216,17 @@ function terminalKey(agentId: string): string {
   return made;
 }
 
+/** The key each agent's pull request run tab is drawn under, made the first time it is asked for, on the same terms as a Terminal tab's. */
+const prRunKeys = new Map<string, string>();
+
+function prRunKey(agentId: string): string {
+  const held = prRunKeys.get(agentId);
+  if (held !== undefined) return held;
+  const made = crypto.randomUUID();
+  prRunKeys.set(agentId, made);
+  return made;
+}
+
 /**
  * A tab's key for a list that draws one element per tab: a word tab's word,
  * the agent's, call's, or draft's own id, which no word spells, or the
@@ -201,6 +238,7 @@ function terminalKey(agentId: string): string {
 export function tabKey(tab: StripTab): string {
   if (isAgentTab(tab)) return tab.agent;
   if (isTerminalTab(tab)) return terminalKey(tab.terminal);
+  if (isPrRunTab(tab)) return prRunKey(tab.prRun);
   if (isDraftTab(tab)) return tab.draft;
   if (isFileTab(tab)) return tab.file;
   if (isChangesTab(tab)) return tab.changes;

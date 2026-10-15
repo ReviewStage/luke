@@ -35,7 +35,7 @@ import { useMemberDirectory, usePerson } from "../member-directory";
 import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { SPINNER_SIZE, Spinner } from "../spinner";
 import { AgentComposer } from "./agent-composer";
-import { type PublishedDoors, PublishedRow } from "./agent-published";
+import { type PublishedDoors, PublishedRow, type RunOnMacDoors } from "./agent-published";
 import type { AgentServersControl } from "./agent-servers";
 import type { HeldTranscript } from "./agent-tab-card";
 import { ArchivedComposerNote } from "./archived-plan";
@@ -863,6 +863,7 @@ export function AgentTab({
   onOpenTarget,
   cards,
   onHeld,
+  runOnMac,
 }: {
   agent: CodingAgentSummary;
   control: CodingAgentsControl;
@@ -878,6 +879,8 @@ export function AgentTab({
   onOpenChanges?: (() => void) | undefined;
   /** Hears the transcript the tab holds each time it moves, which the tab's hover card previews once the tab is not shown. */
   onHeld: (agentId: string, held: HeldTranscript) => void;
+  /** Running its pull request on this Mac, from the pull request's menu; none where no panel draws the run. */
+  runOnMac?: RunOnMacDoors | undefined;
 }): React.JSX.Element {
   const { tell } = useAct();
   const transcript = useAgentTranscript({
@@ -942,6 +945,7 @@ export function AgentTab({
         openGitHub,
         copy: copyWithToast,
         openChanges: onOpenChanges,
+        runOnMac,
       }}
       startedAt={shown ? agent.runStartedAt : undefined}
       delegationStarts={shown ? transcript.delegations : undefined}

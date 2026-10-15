@@ -9,6 +9,7 @@ import { inPlanOrder, isDraftTab, type StripTab, sameTab, tabKey } from "@luke/u
 import { useEffect, useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
+import type { RunOnMacDoors } from "../planning/agent-published";
 import { agentCardReading } from "../planning/agent-ref";
 import { AgentTab } from "../planning/agent-tab";
 import { AgentTabCard } from "../planning/agent-tab-card";
@@ -559,6 +560,7 @@ export function MainTabContent({
   onOpenChanges,
   onOpenTarget,
   cards,
+  runOnMac,
 }: {
   tab: Exclude<MainTab, typeof MAIN_TAB.PLAN | typeof MAIN_TAB.INBOX>;
   agents: CodingAgentsControl;
@@ -577,6 +579,8 @@ export function MainTabContent({
   onOpenTarget: (target: ToolTarget) => void;
   /** The cards the transcript's rows that open a tab hang, as those tabs hang them. */
   cards: PlanCards;
+  /** Running an agent's pull request on this Mac, by the agent, in a tab of the side panel's own. */
+  runOnMac: (agentId: string) => RunOnMacDoors;
 }): React.JSX.Element {
   if (isDraftTab(tab)) {
     // The tab stands for a draft the plan no longer holds only until the
@@ -600,6 +604,7 @@ export function MainTabContent({
       shown={shown}
       onOpenSubagent={(callId, task, status) => onOpenDelegation(agent.id, callId, task, status)}
       onOpenChanges={() => onOpenChanges(agent.id)}
+      runOnMac={runOnMac(agent.id)}
       onOpenTarget={onOpenTarget}
       cards={cards.agent(agent.id)}
       onHeld={views.onAgentHeld}

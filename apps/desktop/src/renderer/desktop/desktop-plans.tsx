@@ -1,6 +1,8 @@
+import { RegistryContext } from "@effect/atom-react";
 import type { CodingAgentStatus } from "@luke/features/coding-agent-wire";
 import { type MentionLines, sectionAnchors } from "@luke/features/mention-link";
 import { planSections } from "@luke/features/plan-document";
+import { runsAsked } from "@luke/features/pr-run-store";
 import { TERMINAL_ASK } from "@luke/features/terminal-entry";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
@@ -13,7 +15,7 @@ import {
 } from "@luke/ui/planning-model";
 import { agentOfTab, followedAgent, sameTab } from "@luke/ui/tab-strip-model";
 import { InboxIcon } from "lucide-react";
-import { Fragment, useCallback, useEffect, useId, useMemo, useState } from "react";
+import { Fragment, useCallback, useContext, useEffect, useId, useMemo, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "../act";
 import { useAppCommand } from "../app-commands";
@@ -21,6 +23,7 @@ import { AutomationDirectory } from "../automation-directory";
 import { EmptyState } from "../empty-state";
 import { FindScope } from "../find-in-tab";
 import { MemberDirectory } from "../member-directory";
+import type { RunOnMacDoors } from "../planning/agent-published";
 import { ArchivedBanner } from "../planning/archived-plan";
 import { INBOX_COLUMNS, useInboxColumns } from "../planning/inbox-columns";
 import { InboxList } from "../planning/inbox-list";
@@ -54,6 +57,7 @@ import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { ConfirmDialog } from "../settings/confirm-dialog";
 import { Skeleton } from "../skeleton";
 import { SPINNER_SIZE, Spinner } from "../spinner";
+import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { useExperiment } from "../use-app-state";
 import { DesktopHome } from "./desktop-home";
 import { MainTabContent, MainTabStrip, mainTabLabel } from "./main-tabs";
@@ -279,6 +283,8 @@ function PlanDocument({
   const drawing = useSidePanelDrawing(plans.sidePanel);
   const views = useTabViews();
   const { act } = useAct();
+  const registry = useContext(RegistryContext);
+  const toast = useToast();
   const openLink = useOpenLink();
   const inboxPlanId = region.kind === DOCUMENT_REGION.READY ? region.plan.id : undefined;
   const inbox = usePlanInbox({
@@ -460,6 +466,21 @@ function PlanDocument({
   // tab, in the one tab the "+" offers for that pull request (`changesTabOf`).
   const openChanges = (agentId: string) =>
     sidePanel.onChoose(changesTabOf(agents, agentId, sidePanel.changes));
+  // An agent's pull request runs on this Mac in a tab of the side panel's own,
+  // which starts the run asked of it once it stands (`pr-run-tab.tsx`).
+  const runOnMac = (agentId: string): RunOnMacDoors => ({
+    workspaceId: plan.workspaceId,
+    run: (pullRequest) => {
+      registry.update(runsAsked(agentId), (asked) => asked + 1);
+      sidePanel.onChoose({ prRun: agentId, pullRequest });
+    },
+    showInFinder: (pullRequest) => {
+      act(ACT_KIND.PR_RUN_SHOW_IN_FINDER, pullRequest).catch((refused: Error) =>
+        toast({ words: refused.message, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED }),
+      );
+    },
+    deleteCheckout: (pullRequest) => act(ACT_KIND.PR_RUN_DELETE_CHECKOUT, pullRequest),
+  });
   // A row that opens a tab of this column, as a coding agent's start on the
   // Call tab opens the agent's, first has a panel filling the window over it
   // give way, and hands the keys to this column, so ⌘W closes the tab it opened.
@@ -696,6 +717,7 @@ function PlanDocument({
                         views={views}
                         onOpenDelegation={openDelegation}
                         onOpenChanges={openChanges}
+                        runOnMac={runOnMac}
                         onOpenTarget={openTarget}
                         cards={cards}
                       />

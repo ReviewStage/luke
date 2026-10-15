@@ -193,6 +193,7 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
       changes: [],
       pages: [],
       terminals: [],
+      prRuns: [],
       lastTerminal: undefined,
       strip: SIDE_PANEL_TABS,
       tab: SIDE_PANEL_TAB.BOARD,

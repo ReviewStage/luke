@@ -1,8 +1,8 @@
 import type { CodingAgentStatus } from "@luke/features/coding-agent-wire";
 import type { ModelProvider } from "@luke/features/models-wire";
 import { CodingAgentsIcon, DocumentIcon, PlusIcon } from "@luke/ui";
-import { changesLabelOf, TAB_WORDS } from "@luke/ui/tab-strip-model";
-import { AppWindowIcon, BotIcon, FileDiffIcon, InboxIcon } from "lucide-react";
+import { changesLabelOf, prRunLabelOf, TAB_WORDS } from "@luke/ui/tab-strip-model";
+import { AppWindowIcon, BotIcon, FileDiffIcon, InboxIcon, PlayIcon } from "lucide-react";
 import { HarnessMark } from "../harness-marks";
 import { GLYPH_STATE, type GlyphState, StateGlyph, stateEndMark } from "../state-glyph";
 import { agentGlyphState, providerOf } from "./coding-agent-model";
@@ -37,6 +37,8 @@ export const TAB_KIND = {
   TERMINAL: "terminal",
   FILE: "file",
   PAGE: "page",
+  /** One pull request run on this Mac, named by its number. */
+  PR_RUN: "prRun",
 } as const;
 
 /** Where an agent stands as its glyph wears it: its model, and where it stands where that is known. */
@@ -75,7 +77,8 @@ export type TabSubject =
       readonly agent: AgentStanding | undefined;
     }
   | { readonly kind: typeof TAB_KIND.FILE; readonly path: string }
-  | { readonly kind: typeof TAB_KIND.PAGE; readonly title: string };
+  | { readonly kind: typeof TAB_KIND.PAGE; readonly title: string }
+  | { readonly kind: typeof TAB_KIND.PR_RUN; readonly number: number };
 
 /** A tab's look: its glyph and its name. */
 export interface KindLook {
@@ -173,5 +176,7 @@ export function tabLook(subject: TabSubject): KindLook {
     }
     case TAB_KIND.PAGE:
       return { icon: <AppWindowIcon />, label: subject.title };
+    case TAB_KIND.PR_RUN:
+      return { icon: <PlayIcon />, label: prRunLabelOf(subject.number) };
   }
 }

@@ -247,7 +247,8 @@ export function prRunActRows(dependencies: PrRunActsDependencies): Pick<ActRows,
     [ACT_KIND.PR_RUN_CLOSE]: (pullRequest, sender) => {
       refuseUnlessPanel(ACT_KIND.PR_RUN_CLOSE, sender);
       const drawn = takenDrawn(sender.sender, pullRequest);
-      return drawn === undefined ? Effect.void : release(drawn);
+      // Note that a tab closed while out of sight draws no connection, and its run is stopped all the same.
+      return drawn === undefined ? host.prRunStop(pullRequest) : release(drawn);
     },
     [ACT_KIND.PR_RUN_SHOW_IN_FINDER]: (pullRequest, sender) => {
       refuseUnlessPanel(ACT_KIND.PR_RUN_SHOW_IN_FINDER, sender);
