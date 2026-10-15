@@ -135,6 +135,20 @@ export function isPageTab(tab: StripTab): tab is PageStripTab {
 }
 
 /**
+ * The agent whose tab follows its run now: the one the plan's column
+ * shows, while the column is on screen, the plan's page shown and no panel
+ * filling the window over it; none otherwise, since a tab out of sight
+ * stops following its transcript, and what it last held is no longer the
+ * agent's latest step.
+ */
+export function followedAgent(
+  tab: StripTab,
+  column: { readonly shown: boolean; readonly covered: boolean },
+): string | undefined {
+  return column.shown && !column.covered && isAgentTab(tab) ? tab.agent : undefined;
+}
+
+/**
  * The coding agent a tab is one of the agent's own: its tab, its Changes
  * tab, or its Terminal tab, which is where a terminal command means that
  * agent (`terminal-entry.ts`); none for any other tab.

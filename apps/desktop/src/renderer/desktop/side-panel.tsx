@@ -1531,7 +1531,7 @@ export function SidePanel({
   agents: CodingAgentsControl;
   /** The plan's agents whose tabs stand open in the plan's column, whose workers' tabs stand here; nothing while unread. */
   openAgents: readonly string[] | undefined;
-  /** The agent whose tab the plan's column shows, whose card follows its run; none while another tab is shown. */
+  /** The agent whose tab follows its run in the plan's column, whose card previews its latest step (`followedAgent`); none while another tab is shown or the column is out of sight. */
   shownAgent: string | undefined;
   /** What the agents' and the workers' tabs last drew and said, which the workers' tabs and cards read. */
   views: TabViews;

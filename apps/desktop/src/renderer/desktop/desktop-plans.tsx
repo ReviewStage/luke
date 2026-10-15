@@ -5,7 +5,7 @@ import { TERMINAL_ASK } from "@luke/features/terminal-entry";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
 import { DOCUMENT_REGION, PLAN_MARK, PLANS_PAGE } from "@luke/ui/planning-model";
-import { agentOfTab, isAgentTab, sameTab } from "@luke/ui/tab-strip-model";
+import { agentOfTab, followedAgent, sameTab } from "@luke/ui/tab-strip-model";
 import { InboxIcon } from "lucide-react";
 import { Fragment, useCallback, useEffect, useId, useMemo, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
@@ -740,7 +740,10 @@ function PlanDocument({
                 work={plans.work}
                 agents={agents}
                 openAgents={mainTabs.openAgents}
-                shownAgent={isAgentTab(mainTabs.tab) ? mainTabs.tab.agent : undefined}
+                shownAgent={followedAgent(mainTabs.tab, {
+                  shown: plans.shown,
+                  covered: sidePanel.fullScreen,
+                })}
                 views={views}
                 shown={plans.shown}
                 focused={sideFocused}
