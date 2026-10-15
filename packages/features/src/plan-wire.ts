@@ -220,6 +220,11 @@ const planSummaryFields = {
   pinnedAt: EffectSchema.optionalKey(countedNumber),
   /** Epoch milliseconds the plan was archived; absent while it is not, and from a service before archiving. */
   archivedAt: EffectSchema.optionalKey(countedNumber),
+  /**
+   * The account that started the plan, its owner, which alone may move it to
+   * another workspace; absent from a service before it was sent.
+   */
+  ownerId: EffectSchema.optionalKey(EffectSchema.String),
 };
 
 /** How much of a plan's coding agents and their pull requests one row of the list names; its counts say how many stand in all. */

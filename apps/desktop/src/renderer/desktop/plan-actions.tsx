@@ -14,7 +14,7 @@ import {
 } from "@luke/ui";
 import { confirmAsked } from "@luke/ui/confirm-state";
 import { DOCUMENT_REGION, PLAN_MARK, type PlanMark } from "@luke/ui/planning-model";
-import { HistoryIcon } from "lucide-react";
+import { FolderInputIcon, HistoryIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
@@ -23,6 +23,7 @@ import type { PlansControl } from "../planning/use-plans-tab";
 import { ConfirmDialog, type DialogQuestion, useConfirmDialog } from "../settings/confirm-dialog";
 import { Tooltip } from "../tooltip";
 import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
+import { useMovePlanDialog } from "./move-plan-dialog";
 import { PlanStatusMark, planCardOf } from "./plan-card";
 import { PlanNameField, usePlanRename } from "./plan-name-field";
 
@@ -39,6 +40,9 @@ import { PlanNameField, usePlanRename } from "./plan-name-field";
  * where it is not the open one, the one item that moves it. Pin and Archive
  * move the plan in the sidebar at once, and each is undone from the same
  * menu; a sidebar row also offers both as buttons at its end on hover.
+ * Move to workspace… opens a dialog listing the account's other workspaces
+ * and what the move does (`move-plan-dialog.tsx`), offered on a plan the
+ * reader started.
  * Permanently delete cannot be undone, so choosing it asks first in a dialog
  * over the window that names the plan and offers Archive as the way to keep
  * it, whichever door it was chosen from.
@@ -141,16 +145,17 @@ function SidebarPlanMarks({
  * One plan's actions in the groups a rule divides, offering only those that
  * apply to it now. Copy formats the document drawn, so only the open plan
  * offers it, ahead of Rename and Version history; Pin and Archive follow; the repository is
- * changed from any plan and opened on GitHub where there is one; Permanently
- * delete is last and alone. An archived plan takes nothing until it is
- * brought back, so it offers neither Rename nor Change repository, only
- * what reads it, its version history (which restores nothing), Unarchive,
- * and Permanently delete.
+ * changed from any plan and opened on GitHub where there is one, beside
+ * Move to workspace… where the plan may be moved; Permanently delete is
+ * last and alone. An archived plan takes nothing until it is brought back,
+ * so it offers neither Rename, Change repository, nor a move, only what
+ * reads it, its version history (which restores nothing), Unarchive, and
+ * Permanently delete.
  */
 function planActionGroups(
   plans: PlansControl,
   planId: string,
-  doors: { rename: () => void; askDelete: () => void },
+  doors: { rename: () => void; askDelete: () => void; askMove: (() => void) | undefined },
 ): MenuAction[][] {
   const { region } = plans;
   const drawn = region.kind === DOCUMENT_REGION.READY && region.plan.id === planId;
@@ -168,6 +173,10 @@ function planActionGroups(
     icon: <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />,
     onSelect: () => plans.onChangeRepository(planId),
   };
+  const move: MenuAction[] =
+    doors.askMove === undefined
+      ? []
+      : [{ label: "Move to workspace…", icon: <FolderInputIcon />, onSelect: doors.askMove }];
   const open: MenuAction = {
     label: "Open on GitHub",
     icon: <ExternalIcon />,
@@ -176,7 +185,11 @@ function planActionGroups(
   const groups: MenuAction[][] = [
     [...(drawn ? [copy] : []), ...(archived ? [] : [rename]), versions],
     placeActions(plans, plan),
-    [...(archived ? [] : [change]), ...((plan?.repository ?? null) === null ? [] : [open])],
+    [
+      ...(archived ? [] : [change]),
+      ...move,
+      ...((plan?.repository ?? null) === null ? [] : [open]),
+    ],
     [
       {
         label: "Permanently delete",
@@ -223,6 +236,7 @@ function usePlanMenu(
   const deletion = useConfirmDialog({ subject: plan !== undefined, surfaceOpen: plans.shown }, () =>
     plans.onDeletePlan(planId),
   );
+  const moving = useMovePlanDialog(plans, plan);
   const { open, drawn, close, trigger, contextMenu } = useActionMenu(plans.shown && doors.drawn);
   const menu =
     drawn === undefined ? null : (
@@ -232,15 +246,19 @@ function usePlanMenu(
         groups={planActionGroups(plans, planId, {
           rename: doors.rename,
           askDelete: deletion.ask,
+          askMove: moving.ask,
         })}
         onClose={close}
       />
     );
   const dialog = (
-    <ConfirmDialog
-      confirm={deletion}
-      question={deleteQuestion(name, plan?.archivedAt !== undefined)}
-    />
+    <>
+      <ConfirmDialog
+        confirm={deletion}
+        question={deleteQuestion(name, plan?.archivedAt !== undefined)}
+      />
+      {moving.dialog}
+    </>
   );
   return { deletion, open: open !== undefined, close, trigger, contextMenu, menu, dialog };
 }

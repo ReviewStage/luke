@@ -52,6 +52,9 @@
             "type": "number",
             "minimum": 0
           },
+          "ownerId": {
+            "type": "string"
+          },
           "agents": {
             "type": "object",
             "properties": {

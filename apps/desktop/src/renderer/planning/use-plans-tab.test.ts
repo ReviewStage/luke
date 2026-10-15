@@ -1276,6 +1276,24 @@ test("a plan moved lists the workspace it moved to while it is still open, and a
   assert.equal(tab.control().workspace?.id, ACME.id);
 });
 
+test("a refused move says so in a toast, unless its caller says it itself", async () => {
+  const tab = mount(
+    { shown: true, planning: { ...TWO_WORKSPACES, activePlanId: "billing" } },
+    { [ACT_KIND.PLANNING_MOVE]: () => Promise.resolve({ failure: PLAN_CALL_FAILURE.UNANSWERED }) },
+  );
+
+  const quiet = await tab.control().onMovePlan("billing", ACME.id, { quiet: true });
+  await settle();
+  const saidQuietly = newestToastSays();
+  const told = await tab.control().onMovePlan("billing", ACME.id);
+  await settle();
+
+  const refused = "The plan could not be moved. Try again.";
+  assert.deepEqual([quiet, told], [false, false]);
+  assert.notEqual(saidQuietly, refused, "the caller says the refusal, so no toast does");
+  assert.equal(newestToastSays(), refused);
+});
+
 test("a move pressed before the workspaces were read still lists the workspace it moved to once they land", async () => {
   const answers: ((answer: { workspaceId: string }) => void)[] = [];
   const tab = mount(

@@ -6122,6 +6122,79 @@ body:has(.app-stage[data-capture="true"])
   margin-right: auto;
 }
 
+/* Move to workspace (`move-plan-dialog.tsx`): the other workspaces as rows,
+   a tile and two lines each, the chosen one ringed and one that cannot take
+   the plan dimmed, then what the move does in a well under them. */
+.move-dialog {
+  width: min(440px, 100%);
+  gap: var(--space-12);
+}
+
+.move-list {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.move-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-12);
+  padding: var(--space-8);
+  border: 0;
+  border-radius: var(--control-radius);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  transition: background-color var(--duration-hover) ease;
+}
+
+.move-row:hover:not(:disabled) {
+  background: var(--raised);
+}
+
+.move-row[aria-checked="true"] {
+  background: var(--raised-strong);
+  box-shadow: inset 0 0 0 1px var(--selected-edge);
+}
+
+.move-row:disabled {
+  opacity: 0.55;
+}
+
+.move-row-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px; /* off-scale */
+}
+
+.move-row-name {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.move-row-line {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.move-effects {
+  display: grid;
+  gap: var(--space-4);
+  margin: 0;
+  padding: var(--space-12) var(--space-12) var(--space-12) var(--space-24);
+  border-radius: var(--control-radius);
+  background: var(--raised);
+  color: var(--text-body);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 /* The window's passing notices (`toast.tsx`): up to three cards stacked in
    its bottom-right corner, newest at the bottom, in the corner itself
    whatever stands at the window's foot: a call bar, the side panel, or the

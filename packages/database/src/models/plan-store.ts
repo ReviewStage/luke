@@ -135,6 +135,7 @@ export interface PlanChanges {
  */
 const PLAN_SUMMARY_COLUMNS = {
   id: plan.id,
+  userId: plan.userId,
   organizationId: plan.organizationId,
   name: plan.name,
   repository: plan.repository,
@@ -147,7 +148,6 @@ const PLAN_SUMMARY_COLUMNS = {
 /** The columns every other read and every `returning` projects, so a row decodes one way whatever wrote it. */
 const PLAN_COLUMNS = {
   ...PLAN_SUMMARY_COLUMNS,
-  userId: plan.userId,
   agentEdits: plan.agentEdits,
   document: plan.document,
   conversationId: plan.conversationId,
@@ -155,6 +155,7 @@ const PLAN_COLUMNS = {
 
 const PlanSummaryRowSchema = Schema.Struct({
   id: Schema.String,
+  userId: Schema.String,
   organizationId: Schema.String,
   name: Schema.String,
   repository: Schema.NullOr(Schema.String),
@@ -168,7 +169,6 @@ type PlanSummaryRow = typeof PlanSummaryRowSchema.Type;
 
 const PlanRowSchema = Schema.Struct({
   ...PlanSummaryRowSchema.fields,
-  userId: Schema.String,
   agentEdits: Schema.Array(planAgentEditSchema),
   // Every plan is one document since the backfill, so a row with none is the store breaking its own contract.
   document: Schema.String,
@@ -316,6 +316,7 @@ function summaryOf(row: PlanSummaryRow): PlanSummary {
     updatedAt: row.updatedAt.getTime(),
     repository: row.repository,
     openedAt: createdAt,
+    ownerId: row.userId,
     ...(row.pinnedAt === null ? undefined : { pinnedAt: row.pinnedAt.getTime() }),
     ...(row.archivedAt === null ? undefined : { archivedAt: row.archivedAt.getTime() }),
   };

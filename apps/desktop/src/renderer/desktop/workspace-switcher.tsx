@@ -61,7 +61,7 @@ function workspaceMenuGroups(
 }
 
 /** Who shares a workspace in words: "Only you" for a workspace of one, its members counted otherwise, nothing from a service that does not count them. */
-function sharedWords(count: number | undefined): string | undefined {
+export function sharedWords(count: number | undefined): string | undefined {
   if (count === undefined) return undefined;
   return count <= 1 ? "Only you" : `${count} members`;
 }
