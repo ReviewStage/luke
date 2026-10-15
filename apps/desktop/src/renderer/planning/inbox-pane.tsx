@@ -14,6 +14,7 @@ import {
   type InboxItem,
   type InboxReadResponse,
   type InboxReplyKind,
+  inboxAnswerHeard,
   knownBlock,
   knownResponse,
 } from "@luke/features/inbox-wire";
@@ -720,8 +721,7 @@ function AgentName({ by }: { by: ItemAgent }): React.JSX.Element {
 
 /** What a settled item's line says of where the answer went: to the agent as a message, its name its reference, or, a bare press on an item asking nothing back, kept for it to read. */
 function Delivered({ item, by }: { item: InboxItem; by: ItemAgent }): React.JSX.Element {
-  // Note that a typed note reaches the agent whether or not the item asked to be heard back (`coding-agents-app.ts`).
-  if (!item.needsReply && (item.answer?.note ?? "").trim() === "") {
+  if (item.answer === undefined || !inboxAnswerHeard(item, item.answer)) {
     return <>Saved for the agent to read</>;
   }
   return (

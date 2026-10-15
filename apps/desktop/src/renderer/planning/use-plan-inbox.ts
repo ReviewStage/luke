@@ -13,6 +13,7 @@ import {
   INBOX_STATUS,
   type InboxItem,
   type InboxReplyKind,
+  inboxAnswerHeard,
   knownBlock,
 } from "@luke/features/inbox-wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -302,7 +303,8 @@ export function usePlanInbox(input: {
             next.delete(item.id);
             return next;
           });
-          if (item.needsReply) latest.current.onRetryList();
+          // Note that an answer the agent hears may open its turn, so the agents are read again.
+          if (inboxAnswerHeard(item, reply)) latest.current.onRetryList();
         });
     },
     [sending, note, planId],

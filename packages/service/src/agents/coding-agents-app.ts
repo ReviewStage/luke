@@ -42,6 +42,7 @@ import {
   INBOX_STATUS,
   type InboxItem,
   type InboxReply,
+  inboxAnswerHeard,
   inboxAnswerMessage,
   inboxAnswerRequestSchema,
   inboxCursorSchema,
@@ -851,17 +852,6 @@ function inboxAnswered(item: InboxItem, taken: boolean): HttpServerResponse.Http
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { item, taken });
 }
 
-/**
- * Whether an answer is handed to the agent as a message: every answer to an
- * item that asks to be heard back, and any other carrying words the
- * developer typed, since words are written to be read; a bare press on an
- * item that asks nothing back, Done or Got it, is kept for the agent to
- * read in its own time.
- */
-function heardBack(item: InboxItem, answer: InboxReply): boolean {
-  return item.needsReply || (answer.note ?? "").trim() !== "";
-}
-
 /** Whether a hand-off was refused because the agent's session has ended for good, so no message will ever reach it. */
 function retiredRefusal(refusal: HostedRefusal): boolean {
   return refusal.error === HOSTED_REFUSAL.AGENT_RETIRED.error;
@@ -910,7 +900,7 @@ const inboxAnswerEndpoint = /* @__PURE__ */ Effect.fn("web/inboxAnswerEndpoint")
     if (Option.isNone(now)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
     return inboxAnswered(now.value.item, now.value.answerKey === clientKey);
   }
-  if (taken.answer === undefined || !heardBack(taken, taken.answer)) {
+  if (taken.answer === undefined || !inboxAnswerHeard(taken, taken.answer)) {
     return inboxAnswered(taken, true);
   }
   const answer = taken.answer;

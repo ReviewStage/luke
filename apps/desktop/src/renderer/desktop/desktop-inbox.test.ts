@@ -1175,6 +1175,63 @@ test("an item that needs no reply, once settled, says a note was sent to the age
   assert.match(where("Add the secret") ?? "", /Saved for the agent to read$/u);
 });
 
+test("a note answered on an item that needs no reply reaches the agent, so the window reads its agents again, as it does for no bare press", async () => {
+  const todo = (id: string, title: string): InboxItem => ({
+    ...item(id, title, 6_000),
+    response: { type: INBOX_RESPONSE.TODO },
+    needsReply: false,
+  });
+  const noted = todo("a1b2c3d4-0000-4000-8000-000000000012", "Turn on the flag");
+  const bare = todo("a1b2c3d4-0000-4000-8000-000000000013", "Add the secret");
+  inboxes = new Map([
+    [BILLING.id, [noted, bare]],
+    [INVITES.id, [EXPIRY]],
+  ]);
+  const { page } = mount();
+  await settle();
+  const listReads: Act[] = [];
+  const bridge = window.luke;
+  Object.defineProperty(window, "luke", {
+    configurable: true,
+    value: {
+      ...bridge,
+      act: (request: Act) => {
+        if (request.kind === ACT_KIND.CODING_AGENTS_LIST) listReads.push(request);
+        if (request.kind === ACT_KIND.CODING_AGENTS_INBOX_ANSWER) {
+          const asked = request.payload.itemId === noted.id ? noted : bare;
+          const answered = { ...asked, status: INBOX_STATUS.ANSWERED, answeredBy: READER };
+          return Promise.resolve({
+            status: ACT_OUTCOME_STATUS.DONE,
+            value: { item: answered, taken: true },
+          });
+        }
+        return bridge.act(request);
+      },
+    },
+  });
+  const press = (name: string) =>
+    [...page.querySelectorAll<HTMLButtonElement>(".inbox-view-items button")].find(
+      (button) => button.textContent === name,
+    );
+
+  act(() => rowNamed(page, "Add the secret").click());
+  await act(async () => press("Done")?.click());
+  await settle();
+  assert.equal(listReads.length, 0, "a bare Done reaches no one, so nothing about the agent moved");
+
+  act(() => rowNamed(page, "Turn on the flag").click());
+  const box = page.querySelector<HTMLTextAreaElement>(".inbox-view-items textarea");
+  assert.ok(box);
+  const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+  act(() => {
+    setValue?.call(box, "On preview too.");
+    box.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await act(async () => press("Done")?.click());
+  await settle();
+  assert.ok(listReads.length > 0, "the agent heard the note, so its list is read again");
+});
+
 /** An answer the act gives the renderer, the view it carries settled now. */
 function answered(value: CodingAgentInboxAnswerView): Promise<ReadOutcome> {
   return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
