@@ -196,3 +196,26 @@ it.effect(
       assert.ok(!JSON.stringify([replaced, toWebhook]).includes("a-secret-the-service-minted"));
     }),
 );
+
+it.effect(
+  "a webhook automation is read with the address its caller posts to on the service this client reaches, and any other with none",
+  () =>
+    Effect.gen(function* () {
+      const hooked = {
+        ...SUMMARY,
+        id: "5a6b7c8d-9e0f-4a1b-8c2d-3e4f5a6b7c8d",
+        trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK },
+      };
+      const api = fakeCloudApi({
+        "GET /api/automations": { answer: () => ({ automations: [SUMMARY, hooked] }) },
+      });
+
+      const listed = yield* Effect.provide(client().list({}), api.layer);
+
+      assert.ok(!("failure" in listed));
+      assert.deepEqual(
+        listed.automations.map((each) => each.webhookUrl),
+        [undefined, `https://tryluke.dev/api/automations/${hooked.id}/webhook`],
+      );
+    }),
+);

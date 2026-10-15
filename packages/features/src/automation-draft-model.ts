@@ -139,7 +139,7 @@ function cronNumber(field: string | undefined, most: number): number | undefined
 }
 
 /** The repositories a draft's runs work in: the one shown first, then the others it kept, the first among them once. */
-function repositoriesOf(draft: AutomationDraft): readonly string[] {
+export function draftRepositories(draft: AutomationDraft): readonly string[] {
   if (draft.repository === null) return draft.alsoRepositories;
   const first = draft.repository;
   return [first, ...draft.alsoRepositories.filter((repository) => repository !== first)];
@@ -174,7 +174,7 @@ function targetOf(draft: AutomationDraft): AutomationTarget {
 }
 
 /** The trigger a draft writes: its schedule's cron and zone, its GitHub event with the filters it kept, or its webhook. */
-function triggerOf(draft: AutomationDraft): AutomationTrigger {
+export function draftTrigger(draft: AutomationDraft): AutomationTrigger {
   switch (draft.triggerKind) {
     case AUTOMATION_TRIGGER.SCHEDULE:
       return {
@@ -354,13 +354,13 @@ export function createRequestOf(
   const made = {
     workspaceId,
     name: draft.name.trim(),
-    trigger: triggerOf(draft),
+    trigger: draftTrigger(draft),
     action: actionOf(draft),
     scope: draft.owner,
     target: targetOf(draft),
     archiveSuccessful: draft.archiveSuccessful,
   } as const;
-  return draft.repository === null ? made : { ...made, repositories: repositoriesOf(draft) };
+  return draft.repository === null ? made : { ...made, repositories: draftRepositories(draft) };
 }
 
 /** Whether two drafts say the same: what a page compares to know whether anything was written into it. */
@@ -405,7 +405,7 @@ export function changeOf(
   const repositoryMoved = automation.planId === null && draft.repository !== was.repository;
   const change: ChangeDraft = {};
   if (draft.name.trim() !== was.name) change.name = draft.name.trim();
-  if (triggerMoved) change.trigger = triggerOf(draft);
+  if (triggerMoved) change.trigger = draftTrigger(draft);
   if (actionMoved) change.action = actionOf(draft);
   if (targetMoved && (draft.target === AUTOMATION_TARGET.NEW_AGENT || draft.agentId !== null)) {
     change.target = targetOf(draft);
@@ -413,7 +413,7 @@ export function changeOf(
   if (draft.archiveSuccessful !== was.archiveSuccessful) {
     change.archiveSuccessful = draft.archiveSuccessful;
   }
-  if (repositoryMoved && draft.repository !== null) change.repositories = repositoriesOf(draft);
+  if (repositoryMoved && draft.repository !== null) change.repositories = draftRepositories(draft);
   if (draft.owner !== was.owner) change.scope = draft.owner;
   return Object.keys(change).length === 0 ? undefined : change;
 }

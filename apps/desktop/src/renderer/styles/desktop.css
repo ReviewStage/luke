@@ -3760,6 +3760,37 @@ body:has(.app-stage[data-capture="true"])
   gap: var(--space-8);
 }
 
+/* The trigger said as one sentence under its segments. */
+.automation-trigger-sentence {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+/* A webhook's address with its copy, its fresh-secret button, and what to send. */
+.automation-webhook {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-8);
+}
+
+.automation-webhook-address {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: var(--space-6);
+}
+
+.automation-webhook-url {
+  min-width: 0;
+  flex: 1;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+}
+
 /* Choose a model hangs its menu from itself, as the agent box's model chip does. */
 .automation-model-picker {
   position: relative;

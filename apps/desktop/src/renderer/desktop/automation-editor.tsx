@@ -8,18 +8,22 @@ import {
   type DraftProblems,
   draftNextRuns,
   draftProblems,
+  draftRepositories,
+  draftTrigger,
   SCHEDULE_KIND,
   type ScheduleDraft,
   type ScheduleKind,
   sameDraft,
   withRepository,
 } from "@luke/features/automation-draft-model";
+import { automationTriggerText } from "@luke/features/automation-list-model";
 import {
   AUTOMATION_CALL_FAILURE,
   type AutomationCallFailure,
   type AutomationChangeParams,
   type AutomationCreateParams,
   type AutomationDeletedView,
+  type AutomationSecretCopiedView,
   type AutomationView,
 } from "@luke/features/automation-view";
 import {
@@ -29,6 +33,9 @@ import {
   type AutomationScope,
   type AutomationSummary,
   type AutomationTargetKind,
+  type AutomationTriggerKind,
+  GITHUB_TRIGGER_EVENT,
+  type GitHubTriggerEvent,
 } from "@luke/features/automation-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
@@ -46,6 +53,7 @@ import { APP_COMMAND } from "#shared/shortcuts";
 import { AnchoredPopover, POPOVER_ALIGN } from "../anchored-popover";
 import { useAppCommand } from "../app-commands";
 import { CHIP_LOOK, Chip } from "../chip";
+import { CopyGlyph, copyHint, useCopyFeedback } from "../copy-feedback";
 import { AgentModelChip } from "../planning/agent-model-chip";
 import { ModelMenu } from "../planning/model-menu";
 import { dayAndTimeText, sinceText, useMinute } from "../planning/plan-time";
@@ -85,6 +93,8 @@ export interface AutomationWrites {
   change(params: AutomationChangeParams): Promise<AutomationView>;
   toggle(automationId: string, enabled: boolean): Promise<AutomationView>;
   remove(automationId: string): Promise<AutomationDeletedView>;
+  /** Mints a webhook's secret again onto the clipboard; the window hears only that it was copied. */
+  copyWebhookSecret(automationId: string): Promise<AutomationSecretCopiedView>;
   /** Reads the list again, as a Run now settling moves an automation's newest run. */
   reload(): void;
 }
@@ -96,6 +106,24 @@ const SCHEDULE_KINDS: readonly { value: ScheduleKind; label: string }[] = [
   { value: SCHEDULE_KIND.WEEKDAYS, label: "Weekdays" },
   { value: SCHEDULE_KIND.WEEKLY, label: "Weekly" },
   { value: SCHEDULE_KIND.CUSTOM, label: "Custom" },
+];
+
+/** What may fire an automation, as the Trigger row's segments name them. */
+const TRIGGERS: readonly { value: AutomationTriggerKind; label: string }[] = [
+  { value: AUTOMATION_TRIGGER.SCHEDULE, label: "Schedule" },
+  { value: AUTOMATION_TRIGGER.GITHUB, label: "GitHub event" },
+  { value: AUTOMATION_TRIGGER.WEBHOOK, label: "Webhook" },
+];
+
+/** The GitHub events the event menu offers, in its order. */
+const GITHUB_EVENTS: readonly { value: GitHubTriggerEvent; label: string }[] = [
+  { value: GITHUB_TRIGGER_EVENT.PULL_REQUEST_UPDATED, label: "Pull request opened or updated" },
+  { value: GITHUB_TRIGGER_EVENT.PULL_REQUEST_OPENED, label: "Pull request opened" },
+  { value: GITHUB_TRIGGER_EVENT.PULL_REQUEST_LABELED, label: "Pull request labelled" },
+  { value: GITHUB_TRIGGER_EVENT.ISSUE_OPENED, label: "Issue opened" },
+  { value: GITHUB_TRIGGER_EVENT.ISSUE_LABELED, label: "Issue labelled" },
+  { value: GITHUB_TRIGGER_EVENT.CHECK_FAILED, label: "Checks failed" },
+  { value: GITHUB_TRIGGER_EVENT.PUSH, label: "Commits pushed" },
 ];
 
 /** The days of the week as cron numbers them. */
@@ -428,6 +456,91 @@ function EditorToolbar({
   );
 }
 
+/** Why a fresh secret could not be copied, as the line under the button says it. */
+const COPY_SECRET_REFUSAL_WORDS = {
+  ...SAVE_REFUSAL_WORDS,
+  [AUTOMATION_CALL_FAILURE.UNANSWERED]: "Couldn't copy a new secret. Try again.",
+} as const satisfies Record<AutomationCallFailure, string>;
+
+/**
+ * A webhook's address and secret: the address to copy once it is saved as
+ * a webhook, and a fresh secret copied on a press. Note that the secret is
+ * never shown, because a secret never enters a Gateway answer: the host
+ * mints it and puts it on the clipboard, and this hears only that it did.
+ */
+function WebhookControl({
+  automation,
+  writes,
+}: {
+  automation: AutomationSummary | undefined;
+  writes: AutomationWrites;
+}): React.JSX.Element {
+  const address = useCopyFeedback();
+  const [copying, setCopying] = useState(false);
+  const [said, setSaid] = useState<string | undefined>(undefined);
+  const url =
+    automation?.trigger.kind === AUTOMATION_TRIGGER.WEBHOOK ? automation.webhookUrl : undefined;
+  if (automation === undefined || url === undefined) {
+    return (
+      <p className="automation-form-note">
+        Save it as a webhook to get its address and a secret to call it with.
+      </p>
+    );
+  }
+  const copySecret = () => {
+    setCopying(true);
+    setSaid(undefined);
+    writes.copyWebhookSecret(automation.id).then((answer) => {
+      setCopying(false);
+      setSaid(
+        "failure" in answer
+          ? COPY_SECRET_REFUSAL_WORDS[answer.failure]
+          : "A new secret is on your clipboard. Paste it into your sender now: Luke never shows it, and the one before has stopped working.",
+      );
+    });
+  };
+  return (
+    <div className="automation-webhook">
+      <div className="automation-webhook-address">
+        <input
+          className="settings-input automation-webhook-url"
+          aria-label="Webhook address"
+          readOnly
+          value={url}
+        />
+        <button
+          type="button"
+          className="icon-button"
+          aria-label={copyHint(address.state, "Copy address")}
+          onClick={() => address.copy(url)}
+        >
+          <CopyGlyph state={address.state} />
+        </button>
+      </div>
+      <button
+        type="button"
+        className="toolbar-button bordered-button"
+        disabled={copying}
+        onClick={copySecret}
+      >
+        <BusyLabel busy={copying} label="Copying">
+          Copy a new secret
+        </BusyLabel>
+      </button>
+      {said === undefined ? null : (
+        <p className="automation-form-note" role="status">
+          {said}
+        </p>
+      )}
+      <p className="automation-form-note">
+        POST to the address with the secret as <code>Authorization: Bearer</code>. Copying a new
+        secret stops the one before. Don't send secrets in the body: Luke hands the body to the
+        run's agent, and it shows in the run's transcript.
+      </p>
+    </div>
+  );
+}
+
 /** Where a run may land, as the row's segments name them. */
 const TARGETS: readonly { value: AutomationTargetKind; label: string }[] = [
   { value: AUTOMATION_TARGET.NEW_AGENT, label: "New agent each run" },
@@ -639,9 +752,11 @@ function RunsLandIn({
   );
 }
 
-/** The form: its schedule, task, repository, and, where the workspace is shared, its owner. */
+/** The form: its trigger, task, repository, and, where the workspace is shared, its owner. */
 function EditorForm({
   draft,
+  automation,
+  writes,
   problems,
   planBacked,
   workspace,
@@ -650,6 +765,8 @@ function EditorForm({
   onDraft,
 }: {
   draft: AutomationDraft;
+  automation: AutomationSummary | undefined;
+  writes: AutomationWrites;
   problems: DraftProblems;
   planBacked: boolean;
   workspace: Workspace | undefined;
@@ -662,7 +779,16 @@ function EditorForm({
   const also = draft.alsoRepositories.filter((repository) => repository !== draft.repository);
   return (
     <div className="settings-card automation-form">
-      <FormRow label="Schedule" problem={problems[DRAFT_FIELD.SCHEDULE]}>
+      <FormRow label="Trigger" problem={problems[DRAFT_FIELD.SCHEDULE]}>
+        <Segmented
+          legend="Trigger"
+          options={TRIGGERS}
+          value={draft.triggerKind}
+          onChange={(triggerKind) => onDraft({ triggerKind })}
+        />
+        <p className="automation-trigger-sentence">
+          {automationTriggerText(draftTrigger(draft), draftRepositories(draft))}
+        </p>
         {draft.triggerKind === AUTOMATION_TRIGGER.SCHEDULE ? (
           <>
             <ScheduleControl
@@ -673,10 +799,30 @@ function EditorForm({
             />
             <NextRuns draft={draft} />
           </>
+        ) : draft.triggerKind === AUTOMATION_TRIGGER.GITHUB ? (
+          <>
+            <select
+              className="settings-input automation-select"
+              aria-label="GitHub event"
+              value={draft.githubEvent}
+              onChange={(event) => {
+                const chosen = GITHUB_EVENTS.find((each) => each.value === event.target.value);
+                if (chosen !== undefined) onDraft({ githubEvent: chosen.value });
+              }}
+            >
+              {GITHUB_EVENTS.map((each) => (
+                <option key={each.value} value={each.value}>
+                  {each.label}
+                </option>
+              ))}
+            </select>
+            <p className="automation-form-note">
+              Heard through the workspace's GitHub App, in the repositories below. Events Luke's own
+              agents cause, and draft pull requests, start nothing.
+            </p>
+          </>
         ) : (
-          <p className="automation-form-note">
-            It runs on an event rather than a schedule, which this page leaves as it is.
-          </p>
+          <WebhookControl automation={automation} writes={writes} />
         )}
       </FormRow>
       <FormRow label="Task" problem={problems[DRAFT_FIELD.PROMPT]}>
@@ -907,6 +1053,8 @@ export function AutomationEditor({
             )}
             <EditorForm
               draft={draft}
+              automation={automation}
+              writes={writes}
               problems={shownProblems ? problems : {}}
               planBacked={planBacked}
               workspace={workspace}

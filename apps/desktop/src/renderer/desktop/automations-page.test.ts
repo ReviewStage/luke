@@ -144,8 +144,15 @@ let changeRefusal:
   | (typeof AUTOMATION_CALL_FAILURE)[keyof typeof AUTOMATION_CALL_FAILURE]
   | undefined;
 
+/** The automations a fresh webhook secret was asked for. */
+let secretsAsked: string[] = [];
+/** What the window handed main's clipboard itself. */
+let copied: string[] = [];
+
 beforeEach(() => {
   installScrollIntoView();
+  secretsAsked = [];
+  copied = [];
   standing = [DIGEST, SWEEP, FAILING];
   lists = [];
   listHeld = false;
@@ -249,6 +256,19 @@ beforeEach(() => {
           } as const;
           runs = [made, ...runs];
           return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { run: made } });
+        }
+        if (request.kind === ACT_KIND.AUTOMATIONS_COPY_WEBHOOK_SECRET) {
+          secretsAsked.push(request.payload.automationId);
+          const automation = standing.find((each) => each.id === request.payload.automationId);
+          const value =
+            automation === undefined
+              ? { failure: AUTOMATION_CALL_FAILURE.NOT_FOUND }
+              : { automation, secretCopied: true };
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+        }
+        if (request.kind === ACT_KIND.WINDOW_COPY_TEXT) {
+          copied.push(request.payload.words);
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
         }
         if (request.kind === ACT_KIND.AUTOMATIONS_DELETE) {
           deletes.push(request.payload.automationId);
@@ -797,16 +817,23 @@ test("a new automation's page moved to another workspace starts afresh in that w
   );
 });
 
-test("an automation fired by an event shows its trigger as it is, and a save leaves it so", async () => {
+test("an automation fired by an event says its trigger in one sentence, and a save of its task leaves the trigger so", async () => {
   const onEvent = automation(7, {
     name: "Triage new bugs",
-    trigger: { kind: AUTOMATION_TRIGGER.GITHUB, event: "issue-opened" },
+    trigger: { kind: AUTOMATION_TRIGGER.GITHUB, event: "issue-opened", labels: ["bug"] },
   });
   standing = [onEvent];
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: onEvent.id });
   await settle();
 
-  assert.match(page.textContent ?? "", /It runs on an event rather than a schedule/u);
+  assert.equal(
+    page.querySelector(".automation-trigger-sentence")?.textContent,
+    "When an issue is opened in acme/ledger labelled bug",
+  );
+  assert.equal(
+    page.querySelector<HTMLSelectElement>("[aria-label='GitHub event']")?.value,
+    "issue-opened",
+  );
   assert.equal(page.querySelector("[aria-label='Time zone']"), null);
   type(page.querySelector("textarea[aria-label='Task']"), "Reproduce the bug first.");
   act(() => button("Save").click());
@@ -1066,5 +1093,69 @@ test("a GitHub automation's row says its trigger as one sentence, naming the rep
   assert.equal(
     rowOf(page, "Code review").querySelector(".automation-row-detail")?.textContent,
     "When a pull request is opened or updated in acme/ledger",
+  );
+});
+
+test("a new automation set to a GitHub event is created on it, the trigger said as one sentence, and the list's row says it too", async () => {
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
+  await settle();
+
+  act(() => button("GitHub event").click());
+  assert.equal(
+    page.querySelector(".automation-trigger-sentence")?.textContent,
+    "When a pull request is opened or updated in acme/ledger",
+  );
+  type(page.querySelector("input[aria-label='Automation name']"), "Code review");
+  type(page.querySelector("textarea[aria-label='Task']"), "Review this pull request.");
+  act(() => button("Create").click());
+  await settle();
+
+  assert.deepEqual(creates[0]?.trigger, {
+    kind: AUTOMATION_TRIGGER.GITHUB,
+    event: "pull-request-updated",
+  });
+  act(() => button("Automations").click());
+  await settle();
+  assert.equal(
+    rowOf(page, "Code review").querySelector(".automation-row-detail")?.textContent,
+    "When a pull request is opened or updated in acme/ledger",
+  );
+});
+
+test("a saved webhook shows its address to copy, and a new secret goes to the clipboard by the host, never into the window", async () => {
+  const hooked = automation(8, {
+    name: "Fix Sentry alerts",
+    trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK },
+    webhookUrl: "https://tryluke.dev/api/automations/hooked/webhook",
+  });
+  standing = [hooked];
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: hooked.id });
+  await settle();
+
+  assert.equal(
+    page.querySelector<HTMLInputElement>("input[aria-label='Webhook address']")?.value,
+    hooked.webhookUrl,
+  );
+  act(() => button("Copy address").click());
+  act(() => button("Copy a new secret").click());
+  await settle();
+
+  assert.deepEqual(copied, [hooked.webhookUrl]);
+  assert.deepEqual(secretsAsked, [hooked.id]);
+  assert.match(page.textContent ?? "", /A new secret is on your clipboard/u);
+  assert.match(page.textContent ?? "", /Don't send secrets in the body/u);
+});
+
+test("a webhook not yet saved as one says it gets its address once it is saved", async () => {
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+
+  act(() => button("Webhook").click());
+
+  assert.equal(page.querySelector("input[aria-label='Webhook address']"), null);
+  assert.match(page.textContent ?? "", /Save it as a webhook to get its address/u);
+  assert.equal(
+    page.querySelector(".automation-trigger-sentence")?.textContent,
+    "When its webhook is called",
   );
 });
