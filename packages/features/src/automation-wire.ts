@@ -62,6 +62,8 @@ export type AutomationTriggerKind = (typeof AUTOMATION_TRIGGER)[keyof typeof AUT
 export const GITHUB_TRIGGER_EVENT = {
   PULL_REQUEST_OPENED: "pull-request-opened",
   PULL_REQUEST_LABELED: "pull-request-labeled",
+  /** A pull request ready for review opened, reopened, marked ready, or pushed to: what a review runs on. */
+  PULL_REQUEST_UPDATED: "pull-request-updated",
   ISSUE_OPENED: "issue-opened",
   ISSUE_LABELED: "issue-labeled",
   /** A check suite on a branch completed without passing. */

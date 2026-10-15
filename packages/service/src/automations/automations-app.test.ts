@@ -283,7 +283,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
   );
 
   it.effect(
-    "an automation on a workspace is refused for an account outside it, with a plan beside it, with no repositories, on a repository its installation does not reach, or on a GitHub event, and one on a plan takes no other repository",
+    "an automation on a workspace is refused for an account outside it, with a plan beside it, with no repositories, or on a repository its installation does not reach, is made on a GitHub event, and one on a plan takes no other repository",
     () =>
       Effect.gen(function* () {
         const { owner, other, plan, ask } = yield* openAccounts;
@@ -328,7 +328,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
             HOSTED_HTTP_STATUS.BAD_REQUEST,
             HOSTED_HTTP_STATUS.BAD_REQUEST,
             HOSTED_HTTP_STATUS.FORBIDDEN,
-            HOSTED_HTTP_STATUS.BAD_REQUEST,
+            HOSTED_HTTP_STATUS.CREATED,
             HOSTED_HTTP_STATUS.BAD_REQUEST,
           ],
         );
