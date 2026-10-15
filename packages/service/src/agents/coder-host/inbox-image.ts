@@ -6,7 +6,7 @@ import type { SandboxSession } from "eve/sandbox";
 import type { InboxImage } from "../../inbox/inbox-store.js";
 
 /**
- * inbox-image.ts -- an image block's picture read from the agent's sandbox: the file at the path the agent posted, bounded, and sniffed for what it is.
+ * inbox-image.ts -- a picture read from the agent's sandbox, an image block's or one `show_image` shows: the file at the path the agent named, bounded, and sniffed for what it is.
  *
  * The agent names a file in its sandbox, a screenshot it took of what it
  * rendered, and nothing else of the picture: no address, no type. The
@@ -29,7 +29,24 @@ type InboxSandbox = Pick<SandboxSession, "readFile">;
 export type InboxSandboxDoor = () => Promise<InboxSandbox>;
 
 /** Why a picture was not read, in the words the model reads; each is followed by the path. */
-const INBOX_IMAGE_REFUSAL = {
+interface SandboxImageRefusals {
+  readonly NO_FILE: string;
+  readonly NOT_IMAGE: string;
+  readonly TOO_LARGE: string;
+  readonly UNREADABLE: string;
+}
+
+/**
+ * What one tool's read of a picture holds it to: the most bytes it may be,
+ * and the sentence each refusal opens with, which names the tool's own act.
+ */
+export interface SandboxImageTerms {
+  readonly maxBytes: number;
+  readonly refusals: SandboxImageRefusals;
+}
+
+/** Why an image block's picture was not read, in the words the model reads; each is followed by the path. */
+const INBOX_IMAGE_REFUSAL: SandboxImageRefusals = {
   NO_FILE: "Not posted: an image block names no file in your sandbox:",
   NOT_IMAGE: "Not posted: an image block names a file that is not a PNG, JPEG, or WebP image:",
   TOO_LARGE: `Not posted: an image block names a file larger than ${(INBOX_BOUNDS.MAX_IMAGE_BYTES / 1_000_000).toFixed(1)} MB; render it smaller, or at one screen scale:`,
@@ -61,7 +78,10 @@ type StreamRefusal = (typeof STREAM_REFUSAL)[keyof typeof STREAM_REFUSAL];
  * cancelled however the read ends, so a stream refused, or one that failed
  * mid-way, holds nothing open behind it.
  */
-const readImageStream = Effect.fnUntraced(function* (stream: ReadableStream<Uint8Array>) {
+const readImageStream = Effect.fnUntraced(function* (
+  stream: ReadableStream<Uint8Array>,
+  maxBytes: number,
+) {
   const reader = stream.getReader();
   const chunks: Uint8Array[] = [];
   let length = 0;
@@ -72,7 +92,7 @@ const readImageStream = Effect.fnUntraced(function* (stream: ReadableStream<Uint
       if (next.done) break;
       chunks.push(next.value);
       length += next.value.byteLength;
-      if (length > INBOX_BOUNDS.MAX_IMAGE_BYTES) return Result.fail(STREAM_REFUSAL.TOO_LARGE);
+      if (length > maxBytes) return Result.fail(STREAM_REFUSAL.TOO_LARGE);
       if (contentType === undefined && length >= SIGNATURE_BYTES) {
         contentType = sniffImageType(joined(chunks, length).subarray(0, SIGNATURE_BYTES));
         if (contentType === undefined) return Result.fail(STREAM_REFUSAL.NOT_IMAGE);
@@ -93,31 +113,47 @@ function refused(refusal: string, path: string): Result.Result<InboxImage, strin
 }
 
 /** The stream's refusal in the words the model reads. */
-function streamRefused(refusal: StreamRefusal, path: string): Result.Result<InboxImage, string> {
+function streamRefused(
+  refusal: StreamRefusal,
+  refusals: SandboxImageRefusals,
+  path: string,
+): Result.Result<InboxImage, string> {
   return refused(
-    refusal === STREAM_REFUSAL.TOO_LARGE
-      ? INBOX_IMAGE_REFUSAL.TOO_LARGE
-      : INBOX_IMAGE_REFUSAL.NOT_IMAGE,
+    refusal === STREAM_REFUSAL.TOO_LARGE ? refusals.TOO_LARGE : refusals.NOT_IMAGE,
     path,
   );
 }
 
 /**
- * The picture at the path, read from the sandbox and held to the bound and
- * the three types, or the one sentence refusing it. A path is resolved
- * from the checkout: inside it when relative, as written when absolute.
+ * The picture at the path, read from the sandbox and held to the terms'
+ * bound and the three types, or the one sentence refusing it in the terms'
+ * words. A path is resolved from the checkout: inside it when relative, as
+ * written when absolute.
  */
-export function readInboxImage(
+export function readSandboxImage(
   door: InboxSandboxDoor,
   checkout: string,
   path: string,
+  terms: SandboxImageTerms,
 ): Effect.Effect<Result.Result<InboxImage, string>> {
   const resolved = posix.resolve(checkout, path);
   return Effect.gen(function* () {
     const sandbox = yield* Effect.tryPromise(() => door());
     const stream = yield* Effect.tryPromise(() => sandbox.readFile({ path: resolved }));
-    if (stream === null) return refused(INBOX_IMAGE_REFUSAL.NO_FILE, path);
-    const read = yield* readImageStream(stream);
-    return Result.isFailure(read) ? streamRefused(read.failure, path) : read;
-  }).pipe(Effect.catch(() => Effect.succeed(refused(INBOX_IMAGE_REFUSAL.UNREADABLE, path))));
+    if (stream === null) return refused(terms.refusals.NO_FILE, path);
+    const read = yield* readImageStream(stream, terms.maxBytes);
+    return Result.isFailure(read) ? streamRefused(read.failure, terms.refusals, path) : read;
+  }).pipe(Effect.catch(() => Effect.succeed(refused(terms.refusals.UNREADABLE, path))));
+}
+
+/** An image block's picture at the path, held to the inbox's bound, or the one sentence refusing it. */
+export function readInboxImage(
+  door: InboxSandboxDoor,
+  checkout: string,
+  path: string,
+): Effect.Effect<Result.Result<InboxImage, string>> {
+  return readSandboxImage(door, checkout, path, {
+    maxBytes: INBOX_BOUNDS.MAX_IMAGE_BYTES,
+    refusals: INBOX_IMAGE_REFUSAL,
+  });
 }

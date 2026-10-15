@@ -54,6 +54,7 @@ export const CODER_TOOL = {
   LOAD_SKILL: AGENT_TOOL.LOAD_SKILL,
   SHOW_PAGE: AGENT_TOOL.SHOW_PAGE,
   RUN_ON_MAC: AGENT_TOOL.RUN_ON_MAC,
+  SHOW_IMAGE: AGENT_TOOL.SHOW_IMAGE,
 } as const;
 
 /** The tools that act on the agent's plan: `edit_plan`, which takes notes in it, and `show_page`, which shows a page on it. */
@@ -98,6 +99,7 @@ const SANDBOX_TOOLS: ReadonlySet<string> = new Set([
   CODER_TOOL.GLOB,
   CODER_TOOL.GREP,
   CODER_TOOL.APPLY_PATCH,
+  CODER_TOOL.SHOW_IMAGE,
 ]);
 
 /**

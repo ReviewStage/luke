@@ -13,6 +13,7 @@ import {
   type CoderHostSeams,
   productionCoderHostSeams,
 } from "@luke/service/agents/coder-host/production";
+import { showImageRejected } from "@luke/service/agents/coder-host/show-image";
 import {
   type CODER_TOOL,
   type PlanTool,
@@ -229,6 +230,31 @@ export function runShowPageTool(
       return yield* host.showPage(admitted.success, input, sandbox);
     }),
   );
+}
+
+/** One `show_image` call run under the agent's session, its pictures read through the session's sandbox door, for the tool, which runs here rather than at an edge of its own. */
+export function runShowImageTool(
+  auth: SessionAuth,
+  sessionId: string,
+  input: UnparsedWireValue,
+  sandbox: InboxSandboxDoor,
+): Promise<WireRecord> {
+  return runAgent(
+    Effect.gen(function* () {
+      const admitted = yield* host.admit(auth, sessionId);
+      if (Result.isFailure(admitted)) return showImageRejected(admitted.failure);
+      return yield* host.showImage(admitted.success, input, sandbox);
+    }),
+  );
+}
+
+/** One of a worker's `show_image` calls, its pictures kept beside the worker's own transcript, for the worker's tool. */
+export function runDelegatedShowImageTool(
+  session: Parameters<CoderHost["showDelegatedImage"]>[0],
+  input: UnparsedWireValue,
+  sandbox: InboxSandboxDoor,
+): Promise<WireRecord> {
+  return runAgent(host.showDelegatedImage(session, input, sandbox));
 }
 
 /**

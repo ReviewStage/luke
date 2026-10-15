@@ -6,12 +6,14 @@ import {
   createCodingAgent,
   latestTurnsOf,
 } from "@luke/database/models/coding-agent-store";
-import { hostTurnId } from "@luke/database/models/ids";
+import { readConversationPicture } from "@luke/database/models/conversation-pictures";
+import { childConversationId, hostTurnId } from "@luke/database/models/ids";
 import { keepPlanAttachment, PLAN_ATTACHMENT_KEEP } from "@luke/database/models/plan-attachments";
 import { openPlanConversation, readPlan } from "@luke/database/models/plan-store";
 import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
-import { turns } from "@luke/database/schemas/storage";
+import { conversations, turns } from "@luke/database/schemas/storage";
+import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
 import { getTestDB, startPlan } from "@luke/database/testing";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
@@ -34,6 +36,7 @@ import {
   TURN_ORIGIN,
   TURN_STATUS,
   unparsedWire,
+  type WireRecord,
 } from "../../core.js";
 import { PICTURE_LOOK_STATUS } from "../../plans/picture-look.js";
 import { modelCatalogOf, type OfferedModel } from "../../providers/model-catalog.js";
@@ -546,6 +549,69 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
         assert.equal(yield* host.sandboxHeld(held.admitted), true);
         assert.equal(yield* host.sandboxHeld(lapsed.admitted), false);
         assert.equal(yield* host.sandboxHeld(untouched.admitted), false);
+      }),
+  );
+
+  it.effect(
+    "show_image keeps an agent's pictures beside its own transcript, and a worker's beside the worker's",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { target, auth, admitted } = yield* openAgent(host);
+        const header = new Uint8Array(33);
+        header.set([
+          0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52,
+        ]);
+        new DataView(header.buffer).setUint32(16, 1200);
+        new DataView(header.buffer).setUint32(20, 720);
+        const sandbox = () =>
+          Promise.resolve({
+            readFile: () =>
+              Promise.resolve(
+                new ReadableStream<Uint8Array>({
+                  start(controller) {
+                    controller.enqueue(header);
+                    controller.close();
+                  },
+                }),
+              ),
+          });
+        const input = unparsedWire({ images: [{ path: "shot.png", caption: "Members page" }] });
+        const shownId = (answer: WireRecord) => {
+          const read = Schema.decodeUnknownSync(
+            Schema.Struct({ pictures: Schema.Tuple([Schema.Struct({ id: Schema.String })]) }),
+          )(answer);
+          return read.pictures[0].id;
+        };
+        const workerCall = "call-worker";
+        const child = childConversationId(target.conversationId, workerCall);
+        const db = yield* Database;
+        yield* db.insert(conversations).values({
+          id: child,
+          userId: target.userId,
+          kind: CONVERSATION_KIND.CHILD,
+          parentConversationId: target.conversationId,
+        });
+        const turn = { id: "turn_0", sequence: 0 };
+        const worker = {
+          id: mintSession(),
+          auth,
+          turn,
+          parent: { callId: workerCall, rootSessionId: "root", sessionId: "root", turn },
+        };
+
+        const agentPicture = shownId(yield* host.showImage(admitted, input, sandbox));
+        const workerPicture = shownId(yield* host.showDelegatedImage(worker, input, sandbox));
+
+        assert.ok(
+          Option.isSome(yield* readConversationPicture(target.conversationId, agentPicture)),
+        );
+        assert.ok(Option.isSome(yield* readConversationPicture(child, workerPicture)));
+        assert.deepEqual(
+          yield* readConversationPicture(target.conversationId, workerPicture),
+          Option.none(),
+          "a worker's picture is its own transcript's",
+        );
       }),
   );
 });
