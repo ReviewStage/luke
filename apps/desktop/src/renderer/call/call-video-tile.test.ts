@@ -5,7 +5,6 @@ import { AVATAR_STATUS } from "@luke/voice/avatar";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
-import { CALL_CONTROL_LABEL } from "../planning/planning-parts";
 import { AvatarVoice, CALL_VIDEO_LABEL, CallVideoTile } from "./call-video-tile";
 
 type TileProps = Parameters<typeof CallVideoTile>[0];
@@ -39,9 +38,7 @@ function tile(props: Partial<TileProps> = {}): React.ReactElement<TileProps> {
   return createElement(CallVideoTile, {
     video: undefined,
     status: AVATAR_STATUS.STARTING,
-    onVideoOff: () => undefined,
-    onRestart: () => undefined,
-    onHangUp: () => undefined,
+    onSetVideo: () => undefined,
     ...props,
   });
 }
@@ -77,16 +74,15 @@ function playing(element: HTMLMediaElement | null): readonly MediaStreamTrack[] 
   return source?.tracks;
 }
 
-test("an avatar that is off draws no tile", () => {
-  const { container } = mountRoot(tile({ status: AVATAR_STATUS.OFF }));
+test("no call in progress, or the experiment off, draws nothing", () => {
+  const { container } = mountRoot(tile({ status: undefined }));
   assert.equal(container.querySelector("section"), null);
 });
 
-test("a connecting avatar says so and offers video off and end call, not a restart", () => {
+test("a connecting avatar says so and offers video off, not a restart", () => {
   const { container } = mountRoot(tile({ status: AVATAR_STATUS.STARTING }));
   assert.match(container.textContent ?? "", new RegExp(CALL_VIDEO_LABEL.CONNECTING));
   assert.ok(button(container, CALL_VIDEO_LABEL.VIDEO_OFF));
-  assert.ok(button(container, CALL_CONTROL_LABEL.END_CALL));
   assert.equal(button(container, CALL_VIDEO_LABEL.RESTART), undefined);
   assert.equal(container.querySelector("video"), null);
 });
@@ -104,23 +100,38 @@ test("a live avatar with no video track draws Luke's face as a still frame", () 
   assert.equal(button(container, CALL_VIDEO_LABEL.RESTART), undefined);
 });
 
-test("an ended avatar offers Restart video, and the press restarts it", () => {
-  const onRestart = vi.fn();
-  const { container } = mountRoot(tile({ status: AVATAR_STATUS.ENDED, onRestart }));
+test("an ended avatar offers Restart video, and the press puts video up again", () => {
+  const onSetVideo = vi.fn();
+  const { container } = mountRoot(tile({ status: AVATAR_STATUS.ENDED, onSetVideo }));
   assert.match(container.textContent ?? "", new RegExp(CALL_VIDEO_LABEL.ENDED));
   act(() => button(container, CALL_VIDEO_LABEL.RESTART)?.click());
-  assert.equal(onRestart.mock.calls.length, 1);
+  assert.deepEqual(onSetVideo.mock.calls, [[true]]);
 });
 
-test("video off and end call each answer their own press", () => {
-  const onVideoOff = vi.fn();
-  const onHangUp = vi.fn();
-  const { container } = mountRoot(tile({ status: AVATAR_STATUS.LIVE, onVideoOff, onHangUp }));
+test("the tile has no hang-up of its own, which the call bar already is", () => {
+  for (const status of [AVATAR_STATUS.STARTING, AVATAR_STATUS.LIVE, AVATAR_STATUS.ENDED]) {
+    const { container } = mountRoot(tile({ status, video: VIDEO }));
+    const labels = [...container.querySelectorAll("button")].map((each) =>
+      each.getAttribute("aria-label"),
+    );
+    assert.equal(labels.includes("End call"), false, status);
+    assert.equal(container.querySelector(".call-end"), null, status);
+  }
+});
+
+test("video off collapses the tile to a strip whose one button turns video on again", () => {
+  const onSetVideo = vi.fn();
+  const { container, root } = mountRoot(
+    tile({ status: AVATAR_STATUS.LIVE, video: VIDEO, onSetVideo }),
+  );
   act(() => button(container, CALL_VIDEO_LABEL.VIDEO_OFF)?.click());
-  assert.equal(onVideoOff.mock.calls.length, 1);
-  assert.equal(onHangUp.mock.calls.length, 0);
-  act(() => button(container, CALL_CONTROL_LABEL.END_CALL)?.click());
-  assert.equal(onHangUp.mock.calls.length, 1);
+  // Main answers the off with the avatar ended by the developer, which the model reads as OFF.
+  act(() => root.render(tile({ status: AVATAR_STATUS.OFF, video: undefined, onSetVideo })));
+  assert.equal(container.querySelector("video"), null);
+  assert.equal(button(container, CALL_VIDEO_LABEL.VIDEO_OFF), undefined);
+  assert.match(container.textContent ?? "", new RegExp(CALL_VIDEO_LABEL.TURNED_OFF));
+  act(() => button(container, CALL_VIDEO_LABEL.VIDEO_ON)?.click());
+  assert.deepEqual(onSetVideo.mock.calls, [[false], [true]]);
 });
 
 test("the tile draws no sound of its own, which the panel plays apart from it", () => {
