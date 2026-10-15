@@ -43,7 +43,7 @@ function typesIn(by: typeof DEAN): boolean {
   const root = createRoot(container);
   roots.push(root);
   const registry = AtomRegistry.make();
-  const reader = { id: DEAN.userId, own: false };
+  const reader = { readerId: DEAN.userId };
   const plan = (body: string, at: number): Plan => ({
     ...DOCUMENT_PLAN,
     document: { body, assumptions: [] },

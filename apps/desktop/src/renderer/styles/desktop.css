@@ -879,6 +879,17 @@ body,
   color: var(--text-primary);
 }
 
+/* A line that names an actor: its words and the actor in one row centred on
+   the disc, so the disc never rides above the words' baseline. Note that
+   its spaces stand inside its words, because a row drops a run that is
+   spaces alone, and that it keeps them as typed. */
+.actor-line {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  white-space: pre;
+}
+
 /* A facepile: each disc cut from the ground behind it, overlapping the one
    before, then how many more in a pill of the same height. */
 .actor-stack {
@@ -2147,11 +2158,13 @@ body,
   font-size: 12px;
 }
 
+/* Each a line naming an actor (`.actor-line`), whose spaces it keeps; a
+   name too long for the menu is cut short. It clips past the ring an
+   actor's hover fill bleeds by, so the ring is drawn whole. */
 .plan-menu-note {
   margin: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow: clip;
+  overflow-clip-margin: 3px;
 }
 
 .account-menu-name,

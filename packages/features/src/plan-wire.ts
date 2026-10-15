@@ -357,6 +357,8 @@ export const planLastEditSchema = EffectSchema.Struct({
   by: EffectSchema.optionalKey(planEditorSchema),
   /** The coding agent as its row names it now; present only where a coding agent wrote it. */
   label: EffectSchema.optionalKey(trimmedText(PLAN_BOUNDS.MAX_NAME_CHARS)),
+  /** The coding agent that wrote it, which the window finds among the plan's agents; absent for any other writer and from a service before it. */
+  agentId: EffectSchema.optionalKey(wireUuidSchema),
   /** Epoch milliseconds of the revision's latest save. */
   at: countedNumber,
   /** Whether the revision was written on one of the plan's calls. */

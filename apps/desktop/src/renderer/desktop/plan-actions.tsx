@@ -1,5 +1,6 @@
+import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import type { PlanSummary } from "@luke/features/plan-wire";
+import { PLAN_ACTOR, type PlanSummary } from "@luke/features/plan-wire";
 import {
   ArchiveIcon,
   CopyIcon,
@@ -12,19 +13,22 @@ import {
   UnarchiveIcon,
   UnpinIcon,
 } from "@luke/ui";
+import { accountActor, creatorActor } from "@luke/ui/actor-model";
 import { confirmAsked } from "@luke/ui/confirm-state";
 import { DOCUMENT_REGION, PLAN_MARK, type PlanMark } from "@luke/ui/planning-model";
 import { FolderInputIcon, HistoryIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
+import { ActorRef } from "../actor-ref";
 import { useAppCommand } from "../app-commands";
-import { editedByText, lastEditOf } from "../planning/plan-body";
-import { UNNAMED_MEMBER } from "../planning/plan-history-model";
+import { EditedBy, type EditPlace, useEditReader } from "../planning/edit-ref";
+import { lastEditOf } from "../planning/plan-body";
 import { useMinute } from "../planning/plan-time";
 import { RelativeTime } from "../planning/relative-time";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { ConfirmDialog, type DialogQuestion, useConfirmDialog } from "../settings/confirm-dialog";
 import { Tooltip } from "../tooltip";
+import { useAppState } from "../use-app-state";
 import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
 import { useMovePlanDialog } from "./move-plan-dialog";
 import { PlanStatusMark, planCardOf } from "./plan-card";
@@ -206,20 +210,15 @@ function planActionGroups(
   return groups.filter((group) => group.length > 0);
 }
 
-/** Who created a plan, in the reader's words: "you" only for the reader's own, a teammate by name, and "someone" where the service names no member. */
-function creatorOf(plan: PlanSummary, me: string | undefined): string {
-  const ownerId = plan.createdBy?.userId ?? plan.ownerId;
-  if (me !== undefined && ownerId === me) return "you";
-  return plan.createdBy?.name ?? UNNAMED_MEMBER.toLowerCase();
-}
-
 /**
  * The menu's quiet foot, as Notion, Linear, and Google Docs end a document's
- * menu: "Created by Charles Pan · 3d ago" and "Last edited by you · 2h ago".
- * The last editor is named only for the plan the window has open, whose
- * newest revision it holds, in the words its "Edited by" line uses; another
- * plan is said only by when it was last saved, and one nobody has saved
- * since it started says only who created it.
+ * menu: "Created by [Charles] Charles Pan · 3d ago" and "Last edited by
+ * [you] you · 2h ago", each person on their face hanging their card. The
+ * last editor is named only for the plan the window has open, whose newest
+ * revision it holds, as its "Edited by" line names them; another plan is
+ * said only by when it was last saved, and one nobody has saved since it
+ * started says only who created it. Nothing here is a press: the menu's
+ * items are.
  */
 function PlanMenuFooter({
   plans,
@@ -229,19 +228,32 @@ function PlanMenuFooter({
   plan: PlanSummary;
 }): React.JSX.Element {
   const now = useMinute();
+  const reader = useEditReader({ readerId: plans.me });
+  const account = useAppState()?.account;
+  const you = account?.status === ACCOUNT_STATUS.SIGNED_IN ? accountActor(account) : undefined;
   const { region } = plans;
-  const open = region.kind === DOCUMENT_REGION.READY && region.plan.id === plan.id;
-  const edit = open ? lastEditOf(region.plan) : undefined;
-  const editor = edit === undefined ? "" : editedByText(edit, { id: plans.me, own: false });
+  const opened = region.kind === DOCUMENT_REGION.READY && region.plan.id === plan.id;
+  const edit = opened ? lastEditOf(region.plan) : undefined;
+  const place: EditPlace = {
+    reader,
+    sections: (opened ? region.plan.sectionEdits : undefined) ?? [],
+    agents: { control: plans.agents, onOpen: undefined },
+    now,
+  };
+  const named = edit !== undefined && edit.actor !== PLAN_ACTOR.EARLIER;
   return (
     <>
-      <p className="plan-menu-note">
-        {`Created by ${creatorOf(plan, plans.me)} · `}
+      <p className="plan-menu-note actor-line">
+        {"Created by "}
+        <ActorRef actor={creatorActor(plan, reader, you)} sentence />
+        {" · "}
         <RelativeTime at={plan.createdAt} now={now} ago />
       </p>
       {edit === undefined && plan.updatedAt <= plan.createdAt ? null : (
-        <p className="plan-menu-note">
-          {`Last edited${editor} · `}
+        <p className="plan-menu-note actor-line">
+          {named ? "Last edited by " : "Last edited"}
+          {edit === undefined ? null : <EditedBy edit={edit} place={place} sentence />}
+          {" · "}
           <RelativeTime at={edit?.at ?? plan.updatedAt} now={now} ago />
         </p>
       )}

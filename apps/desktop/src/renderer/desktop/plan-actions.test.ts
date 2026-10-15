@@ -7,6 +7,7 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { lineWords } from "#testing/actor-line";
 import { plansControl, UNPINNED_SUMMARY } from "#testing/plans-control";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { MAIN_TAB, type MainTab } from "../planning/use-main-tabs";
@@ -274,12 +275,21 @@ function sharedTab(me: string, tab: MainTab = MAIN_TAB.PLAN): PlansControl {
 /** The lines under the open menu's items, each with its time left off. */
 function menuFooter(): string[] {
   const notes = document.querySelectorAll('[role="menu"] .plan-menu-footer p');
-  return [...notes].map((note) => (note.textContent ?? "").replace(/ · .*$/u, ""));
+  return [...notes].map((note) => (lineWords(note) ?? "").replace(/ · .*$/u, ""));
 }
 
 test("the plan's ⋯ menu ends with who created the plan and who last edited it, the reader's own as you and a teammate's by name", () => {
   openMenu(mountToolbar(sharedTab(DEAN.userId)));
   assert.deepEqual(menuFooter(), ["Created by Charles Pan", "Last edited by you"]);
+  // Each person stands on their face, their letter until a picture is read.
+  const faces = document.querySelectorAll('[role="menu"] .plan-menu-footer .actor-mark');
+  assert.deepEqual(
+    [...faces].map((face) => [face.getAttribute("data-kind"), face.textContent]),
+    [
+      ["person", "C"],
+      ["person", "D"],
+    ],
+  );
   const times = document.querySelectorAll('[role="menu"] .plan-menu-footer time');
   assert.deepEqual(
     [...times].map((time) => time.getAttribute("datetime")),

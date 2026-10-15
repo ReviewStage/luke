@@ -8,13 +8,23 @@ import {
 } from "@luke/features/mention-link";
 import { PLAN_ACTOR, type Plan, type PlanLastEdit } from "@luke/features/plan-wire";
 import { EllipsisIcon } from "@luke/ui";
+import { actorName } from "@luke/ui/actor-model";
 import { LinkIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { ActorStack } from "../actor-ref";
 import { useCopyToast } from "../copy-feedback";
 import { ActionMenu, useActionMenu } from "../desktop/action-menu";
 import { type LinkDrawer, MarkdownMessage } from "../markdown-message";
 import { Tooltip } from "../tooltip";
 import { prefersReducedMotion } from "../use-reduced-motion";
+import {
+  type EditAgents,
+  EditedBy,
+  type EditPlace,
+  editorsOf,
+  type PlanReader,
+  useEditReader,
+} from "./edit-ref";
 import { type MentionDoors, mentionLinkDrawer } from "./mention-chip";
 import {
   DOCUMENT_BLOCK_CLASS,
@@ -22,7 +32,6 @@ import {
   EditableTitle,
   PlanDocumentEditor,
 } from "./plan-document-editor";
-import { UNNAMED_MEMBER } from "./plan-history-model";
 import {
   type ChaseState,
   chaseBehind,
@@ -47,15 +56,17 @@ import { NO_LOOKS, type PlanLooks } from "./use-plan-looks";
  * developer has scrolled the document themselves, and lights each unit as it settles. Opening
  * a plan draws it whole, and reduced motion draws each document at once. The
  * typing grows the scrolled document and never the surface. A plan anyone has written
- * says who last did in one muted line above the document: the developer,
- * Luke (the notetaker), or a coding agent named as its row names it now,
- * whether it was on a call, and how long ago, moved on once a minute. The
- * line opens the plan's version history, where each earlier version is. Each
- * section says the same of the save that last changed it, quietly, while the
- * pointer or the keyboard is on it, and its line opens the version history on
- * the revision that save made. The sections changed since the developer
- * last looked at the plan on this Mac wear a still tint, counted under that
- * line, until they dismiss them or leave the plan (`use-plan-looks.ts`).
+ * says who last did in one muted line above the document: a member, Luke
+ * (the notetaker), or a coding agent, each on their own face hanging their
+ * card (`edit-ref.tsx`), whose call it was on where Luke wrote it on one,
+ * and how long ago, moved on once a minute. The time opens the plan's
+ * version history, where each earlier version is. Each section says the
+ * same of the save that last changed it, quietly, while the pointer or the
+ * keyboard is on it, leading with the writer's face, and its time opens the
+ * version history on the revision that save made. The sections changed since
+ * the developer last looked at the plan on this Mac wear a still tint,
+ * counted under that line beside a face for each who changed them, until
+ * they dismiss them or leave the plan (`use-plan-looks.ts`).
  * The plan's name is drawn as the title over its text (`plan-title.tsx`),
  * and each section is known by its heading, and its link by the heading's
  * anchor (`sectionAnchors`).
@@ -126,105 +137,126 @@ export function lastEditOf(plan: Plan): PlanLastEdit | undefined {
   // The journal is oldest first, so the newest save is its last.
   const journaled = plan.agentEdits?.at(-1);
   if (journaled === undefined) return undefined;
-  return { actor: PLAN_ACTOR.AGENT, label: journaled.label, at: journaled.at, duringCall: false };
+  return {
+    actor: PLAN_ACTOR.AGENT,
+    label: journaled.label,
+    agentId: journaled.agentId,
+    at: journaled.at,
+    duringCall: false,
+  };
 }
 
-/**
- * Who reads the plan, as its edits are named for them: the signed-in
- * account's id, whose own edits read as "you", and whether every edit is
- * theirs, as the account's own template's are. Nobody, as a capture or a
- * test draws it, reads no edit as theirs.
- */
-export interface EditReader {
-  readonly id: string | undefined;
-  readonly own: boolean;
-}
+/** Nobody, as a capture or a test draws the plan, who reads no edit as theirs. */
+const NO_READER: PlanReader = { readerId: undefined };
 
-const NO_READER: EditReader = { id: undefined, own: false };
-
-/** Whether the member an edit names is the reader. */
-function isReader(edit: PlanLastEdit, reader: EditReader): boolean {
-  return reader.own || (reader.id !== undefined && edit.by?.userId === reader.id);
-}
-
-/**
- * Who wrote an edit, in the reader's words: "you" only for the reader's own,
- * a teammate by name, and "someone" where the service names no member; nobody
- * for a revision from before history.
- */
-function editorOf(edit: PlanLastEdit, reader: EditReader): string | undefined {
-  switch (edit.actor) {
-    case PLAN_ACTOR.DEVELOPER:
-      return isReader(edit, reader) ? "you" : (edit.by?.name ?? UNNAMED_MEMBER.toLowerCase());
-    case PLAN_ACTOR.NOTETAKER:
-      return "Luke";
-    case PLAN_ACTOR.AGENT:
-      return edit.label ?? "a coding agent";
-    case PLAN_ACTOR.EARLIER:
-      return undefined;
-  }
-}
-
-/** Whose call Luke wrote an edit on: the reader's, a teammate's by name, or a call nobody can be named for. */
-function callOf(edit: PlanLastEdit, reader: EditReader): string {
-  if (isReader(edit, reader)) return " during your call";
-  return edit.by === undefined ? " during a call" : ` during ${edit.by.name}'s call`;
-}
-
-/** What follows "Edited" in a line naming an edit: " by Luke during your call", or nothing for a revision from before history. */
-export function editedByText(edit: PlanLastEdit, reader: EditReader): string {
-  const editor = editorOf(edit, reader);
-  const by = editor === undefined ? "" : ` by ${editor}`;
-  const call = edit.duringCall ? callOf(edit, reader) : "";
-  return `${by}${call}`;
-}
-
-/** The line over the document, and each section's: "Edited by Luke during your call · 2h ago". */
-function editedLine(edit: PlanLastEdit, now: number, reader: EditReader): string {
-  return `Edited${editedByText(edit, reader)} · ${agoText(edit.at, now)}`;
+/** Whether the reader wrote an edit: theirs where every edit is, as the template's are, or where it names their account. */
+function isReader(edit: PlanLastEdit, reader: PlanReader): boolean {
+  if (reader.owner !== undefined) return true;
+  return reader.readerId !== undefined && edit.by?.userId === reader.readerId;
 }
 
 /** Opens the plan's version history on the revision that made the save at a moment, or on the plan as it stands. */
 type ShowHistory = (save: number | undefined) => void;
 
-/** The line over the document, which opens the plan's history where the window offers it. */
+/**
+ * How long ago an edit was, in a line naming it, as the press that opens the
+ * version history on it where the window offers one, and as words otherwise.
+ * `label` is what the press is called. Note that the press stops there,
+ * because a click into a section opens its editor.
+ */
+function EditTime({
+  at,
+  now,
+  label,
+  onShow,
+}: {
+  at: number;
+  now: number;
+  label: string;
+  onShow: (() => void) | undefined;
+}): React.JSX.Element {
+  const ago = agoText(at, now);
+  if (onShow === undefined) return <span>{ago}</span>;
+  return (
+    <button
+      type="button"
+      className="plan-edit-link"
+      aria-label={label}
+      onClick={(event) => {
+        event.stopPropagation();
+        onShow();
+      }}
+    >
+      {ago}
+    </button>
+  );
+}
+
+/**
+ * The line over the document: "Edited by [Charles] Charles Pan · 2h ago".
+ * The writer hangs their card, and the time opens the plan's history where
+ * the window offers it.
+ */
 function EditedLine({
   edit,
-  reader,
+  place,
   onShowHistory,
 }: {
   edit: PlanLastEdit;
-  reader: EditReader;
+  place: EditPlace;
   onShowHistory: ShowHistory | undefined;
 }): React.JSX.Element {
-  const now = useMinute();
-  const line = editedLine(edit, now, reader);
-  if (onShowHistory === undefined) return <p className="plan-edit-note">{line}</p>;
+  const ago = agoText(edit.at, place.now);
   return (
-    <p className="plan-edit-note">
-      <button
-        type="button"
-        className="plan-edit-link"
-        aria-label={`${line}. Show version history`}
-        onClick={() => onShowHistory(undefined)}
-      >
-        {line}
-      </button>
+    <p className="plan-edit-note actor-line">
+      {edit.actor === PLAN_ACTOR.EARLIER ? "Edited" : "Edited by "}
+      <EditedBy edit={edit} place={place} sentence />
+      {" · "}
+      <EditTime
+        at={edit.at}
+        now={place.now}
+        label={`Edited ${ago}. Show version history`}
+        onShow={onShowHistory === undefined ? undefined : () => onShowHistory(undefined)}
+      />
     </p>
   );
 }
 
-/** How many sections changed since the last look, as the line under "Edited by" counts them. */
-function changedLine(count: number): string {
-  return `Changed since you last looked · ${count} ${count === 1 ? "section" : "sections"}`;
+/** How many sections changed since the last look, as the line under "Edited by" counts them, and by whom where any is named. */
+function changedLine(count: number, named: boolean): string {
+  const sections = `${count} ${count === 1 ? "section" : "sections"}`;
+  return `Changed since you last looked · ${sections}${named ? " by " : ""}`;
 }
 
-/** The line under "Edited by" while sections changed since the last look stand lit, with their dismissal. */
-function ChangedLine({ looks }: { looks: PlanLooks }): React.JSX.Element | null {
+/**
+ * The line under "Edited by" while sections changed since the last look
+ * stand lit, a face for each who last changed them, with their dismissal.
+ * Note that the faces are named in words a screen reader reads, since a
+ * facepile is hidden from it.
+ */
+function ChangedLine({
+  looks,
+  marks,
+}: {
+  looks: PlanLooks;
+  marks: SectionMarks;
+}): React.JSX.Element | null {
   if (looks.changed.size === 0) return null;
+  const edits = [...looks.changed].flatMap((heading) => marks.edits.get(heading) ?? []);
+  const editors = editorsOf(edits, marks.place);
   return (
     <p className="plan-changed-note">
-      <span>{changedLine(looks.changed.size)}</span>
+      <span className="actor-line">
+        {changedLine(looks.changed.size, editors.length > 0)}
+        {editors.length === 0 ? null : (
+          <>
+            <ActorStack actors={editors} />
+            <span className="visually-hidden">
+              {editors.map((actor) => actorName(actor, { sentence: true })).join(", ")}
+            </span>
+          </>
+        )}
+      </span>
       <span aria-hidden="true">·</span>
       <button type="button" className="toolbar-button quiet-button" onClick={looks.dismiss}>
         Dismiss
@@ -235,43 +267,40 @@ function ChangedLine({ looks }: { looks: PlanLooks }): React.JSX.Element | null 
 
 /**
  * What each unit says of its section: the save that last changed each, which
- * changed since the last look, the minute it counts from, and the way into
- * the version history where the window offers one, each by its heading.
+ * changed since the last look, what names who made it, and the way into the
+ * version history where the window offers one, each by its heading.
  */
 interface SectionMarks {
   readonly edits: ReadonlyMap<string, PlanLastEdit>;
   readonly changed: ReadonlySet<string>;
-  readonly now: number;
-  readonly reader: EditReader;
+  readonly place: EditPlace;
   readonly onShowHistory: ShowHistory | undefined;
 }
 
 /**
  * The section's quiet line: who last changed the section under `heading`,
- * and when, shown while the pointer or the keyboard is on it; none where no
- * save has. Where the window offers the version history, it opens it on the
+ * on their face, and when, "[Luke] Luke during Charles Pan’s call · 2h ago",
+ * shown while the pointer or the keyboard is on it; none where no save has.
+ * Where the window offers the version history, the time opens it on the
  * revision that save made.
  */
 function bylineOf(marks: SectionMarks, heading: string): React.JSX.Element | null {
   const edit = marks.edits.get(heading);
   if (edit === undefined) return null;
-  const line = editedLine(edit, marks.now, marks.reader);
-  const { onShowHistory } = marks;
-  if (onShowHistory === undefined) return <span className="plan-unit-byline">{line}</span>;
-  const named = heading === "" ? line : `${heading}: ${line}`;
+  const { onShowHistory, place } = marks;
+  const ago = agoText(edit.at, place.now);
+  const named = heading === "" ? `Edited ${ago}` : `${heading}: edited ${ago}`;
   return (
-    <button
-      type="button"
-      className="plan-unit-byline"
-      aria-label={`${named}. Show version history`}
-      onClick={(event) => {
-        // Note that the press stops here, because a click into the section opens its editor.
-        event.stopPropagation();
-        onShowHistory(edit.at);
-      }}
-    >
-      {line}
-    </button>
+    <span className="plan-unit-byline actor-line">
+      {edit.actor === PLAN_ACTOR.EARLIER ? "Edited" : <EditedBy edit={edit} place={place} />}
+      {" · "}
+      <EditTime
+        at={edit.at}
+        now={place.now}
+        label={`${named}. Show version history`}
+        onShow={onShowHistory === undefined ? undefined : () => onShowHistory(edit.at)}
+      />
+    </span>
   );
 }
 
@@ -308,7 +337,7 @@ function opened(plan: Plan): Chase {
  * plan, a fresh start for another. Note that only the reader's own edit lands
  * at once, because a teammate's arrives unseen and types in as Luke's does.
  */
-function aimed(chase: Chase, plan: Plan, reader: EditReader): Chase {
+function aimed(chase: Chase, plan: Plan, reader: PlanReader): Chase {
   if (chase.planId !== plan.id) return opened(plan);
   const { body } = plan.document;
   // The reader's own edit lands at once: they watched it being typed already.
@@ -329,7 +358,7 @@ function aimed(chase: Chase, plan: Plan, reader: EditReader): Chase {
  * behind. A document arriving mid-typing is aimed at from what is shown, so
  * the typing carries on toward it without a jump.
  */
-function usePlanChase(plan: Plan, live: boolean, reader: EditReader): PlanChase {
+function usePlanChase(plan: Plan, live: boolean, reader: PlanReader): PlanChase {
   const [chase, setChase] = useState(() => opened(plan));
   let current = chase;
   if (chase.planId !== plan.id || chase.body !== plan.document.body) {
@@ -556,6 +585,7 @@ export function PlanBody({
   page,
   sectionLinks,
   reader = NO_READER,
+  agents,
   crumb,
 }: {
   plan: Plan;
@@ -572,7 +602,9 @@ export function PlanBody({
   /** What the plan's own page does with its sections' links; without it, sections have none and mentions are words. */
   sectionLinks?: SectionLinks;
   /** Who reads it, whose own edits are named "you"; without it, no edit is. */
-  reader?: EditReader;
+  reader?: PlanReader;
+  /** The plan's coding agents, among which an agent's edit is found and opened; without them, an agent is named alone. */
+  agents?: EditAgents;
   /** Where the plan lives and who can edit it, over the "Edited by" line; a Settings page draws none. */
   crumb?: React.ReactNode;
 }): React.JSX.Element {
@@ -580,12 +612,13 @@ export function PlanBody({
   const editable = onEdit !== undefined;
   const text = editable ? plan.document.body : undefined;
   const editing = usePlanEditing(plan.id, text, onEdit ?? NO_EDIT);
+  const editReader = useEditReader(reader);
   const now = useMinute();
+  const place: EditPlace = { reader: editReader, sections: plan.sectionEdits ?? [], agents, now };
   const marks: SectionMarks = {
-    edits: new Map((plan.sectionEdits ?? []).map(({ section, ...edit }) => [section, edit])),
+    edits: new Map(place.sections.map(({ section, ...edit }) => [section, edit])),
     changed: looks.changed,
-    now,
-    reader,
+    place,
     onShowHistory,
   };
   const scroller = useRef<HTMLDivElement>(null);
@@ -726,13 +759,13 @@ export function PlanBody({
   );
   const editedNote =
     edited === undefined ? null : (
-      <EditedLine edit={edited} reader={reader} onShowHistory={onShowHistory} />
+      <EditedLine edit={edited} place={place} onShowHistory={onShowHistory} />
     );
   return (
     <div ref={scroller} className="plan-document-scroll">
       {page === undefined ? crumb : null}
       {page === undefined ? editedNote : null}
-      <ChangedLine looks={looks} />
+      <ChangedLine looks={looks} marks={marks} />
       <div className="plan-body">
         {editable && onRename !== undefined ? (
           // Keyed by the plan, so words typed for one are saved to it as another opens.

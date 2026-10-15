@@ -4,7 +4,7 @@ import { ACT_KIND } from "@luke/host/acts";
 import { UPDATE_STATUS } from "@luke/settings/update";
 import { updateInSidebar } from "@luke/settings/update-row";
 import { ExternalIcon, GearIcon, KeyboardIcon, ProviderMark, UpdateIcon } from "@luke/ui";
-import { ACTOR_KIND, type Actor, type PersonActor, SOMEONE_REASON } from "@luke/ui/actor-model";
+import { ACTOR_KIND, type Actor, accountActor, SOMEONE_REASON } from "@luke/ui/actor-model";
 import type { UpdateControl } from "@luke/voice/settings-controls";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import {
@@ -47,20 +47,7 @@ function AccountAvatar({ account }: { account: AccountSnapshot }): React.JSX.Ele
   if (account.status !== ACCOUNT_STATUS.SIGNED_IN) {
     return <ActorMark actor={NOBODY_SIGNED_IN} size={ACTOR_SIZE.ACCOUNT} />;
   }
-  // Note that an account stored without an id is hued by its address, which names it as surely.
-  const person: PersonActor = {
-    kind: ACTOR_KIND.PERSON,
-    userId: account.id ?? account.email,
-    name: account.name ?? account.email,
-    you: true,
-  };
-  const { pictureUrl } = account;
-  return (
-    <ActorMark
-      actor={pictureUrl === undefined ? person : { ...person, pictureUrl }}
-      size={ACTOR_SIZE.ACCOUNT}
-    />
-  );
+  return <ActorMark actor={accountActor(account)} size={ACTOR_SIZE.ACCOUNT} />;
 }
 
 /**

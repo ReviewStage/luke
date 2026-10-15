@@ -235,6 +235,7 @@ function sectionEditOf(
     section,
     actor,
     ...(actor === PLAN_ACTOR.AGENT ? { label: label ?? UNKNOWN_AGENT_LABEL } : undefined),
+    ...(writer.agentId === undefined ? undefined : { agentId: writer.agentId }),
     ...(writer.by === undefined ? undefined : { by: writer.by }),
     at,
     duringCall: writer.duringCall === true,
@@ -247,7 +248,13 @@ function sectionEditOf(
  * thing the service can name a writer for.
  */
 function journaledEdit(edit: LabelledAgentEdit): PlanLastEdit {
-  return { actor: PLAN_ACTOR.AGENT, label: edit.label, at: edit.at, duringCall: false };
+  return {
+    actor: PLAN_ACTOR.AGENT,
+    label: edit.label,
+    agentId: edit.agentId,
+    at: edit.at,
+    duringCall: false,
+  };
 }
 
 /** The text the row's plan started as (`readStartedText`). */

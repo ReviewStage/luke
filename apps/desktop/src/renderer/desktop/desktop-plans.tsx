@@ -585,7 +585,8 @@ function PlanDocument({
                     key={String(archived)}
                     plan={plan}
                     live={plans.live}
-                    reader={{ id: plans.me, own: false }}
+                    reader={{ readerId: plans.me }}
+                    agents={{ control: agents, onOpen: (agent) => mainTabs.onChoose({ agent }) }}
                     onShowHistory={(save) => plans.history.onOpen(plan.id, save)}
                     {...(archived
                       ? {}
