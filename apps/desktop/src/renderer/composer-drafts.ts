@@ -225,9 +225,15 @@ const draftsOf = Atom.family((owner: Owner) => {
             ? was
             : { ...kept, attachments: was.attachments };
         });
-        const filesAlone = held.filter(
-          (kept) => !stored(kept) && !read.some((each) => Equal.equals(each.place, kept.place)),
-        );
+        // Note that files storage has no word of stay as a draft of files alone, even where another
+        // window let the words beside them go, because they live in this window and nowhere else.
+        const filesAlone = held
+          .filter(
+            (kept) =>
+              kept.attachments.length > 0 &&
+              !read.some((each) => Equal.equals(each.place, kept.place)),
+          )
+          .map((kept) => ({ ...EMPTY_DRAFT, place: kept.place, attachments: kept.attachments }));
         const standing = [...filesAlone, ...read];
         // A read again takes what another window or a move wrote, and writes nothing of its own.
         if ("reread" in change) {

@@ -29,7 +29,11 @@ import { useDraftsOwner } from "./composer-drafts";
 import { DesktopPlans } from "./desktop/desktop-plans";
 import { SidebarPlan } from "./desktop/plan-actions";
 import { DRAFT_WORD } from "./draft-mark";
-import type { MessageSender } from "./planning/use-agent-composer";
+import {
+  type AgentComposerControl,
+  type MessageSender,
+  useAgentComposer,
+} from "./planning/use-agent-composer";
 import { MAIN_TAB } from "./planning/use-main-tabs";
 import { type PlanInboxControl, usePlanInbox } from "./planning/use-plan-inbox";
 import { NO_LOOKS } from "./planning/use-plan-looks";
@@ -564,4 +568,34 @@ test("an account's drafts moved from its address reach a window that read its id
 
   await app.show(INVITES, { account: DEAN });
   assert.equal(app.box(), "Check the export");
+});
+
+test("files attached in this window stay as its draft when another window lets the words beside them go", async () => {
+  const notes = { name: "notes.md", mediaType: "text/plain", data: "IyBOb3Rlcw==" } as const;
+  let composer: AgentComposerControl | undefined;
+  function Box(): null {
+    useDraftsOwner(DEAN);
+    composer = useAgentComposer({
+      agentId: INVITES.agent.id,
+      planId: INVITES.plan.id,
+      messages: [],
+      send: NEVER_ANSWERED,
+      onStatus: () => undefined,
+    });
+    return null;
+  }
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(root);
+  await act(async () => root.render(onRegistry(AtomRegistry.make(), createElement(Box))));
+  const box = () => composer ?? assert.fail("the box is drawn");
+  act(() => box().setDraft("Review this"));
+  act(() => box().setAttachments((held) => [...held, notes]));
+
+  // The other window let the words go, which is all of the draft storage holds.
+  window.localStorage.setItem("luke.composerDrafts", JSON.stringify([]));
+  act(() => {
+    window.dispatchEvent(new StorageEvent("storage", { key: "luke.composerDrafts" }));
+  });
+  await settle();
+  assert.deepEqual([box().draft, box().attachments], ["", [notes]]);
 });
