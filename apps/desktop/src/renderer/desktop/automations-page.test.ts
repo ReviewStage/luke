@@ -15,6 +15,7 @@ import {
   AUTOMATION_TRIGGER,
   type AutomationRunSummary,
   type AutomationSummary,
+  GITHUB_TRIGGER_EVENT,
 } from "@luke/features/automation-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
@@ -1234,6 +1235,67 @@ test("Same agent is chosen from the workspace's agents on the automation's repos
       automationId: SWEEP.id,
       change: { target: { kind: AUTOMATION_TARGET.SAME_AGENT, agentId: CI_DIGEST.id } },
     },
+  ]);
+});
+
+/** What each glyph inside `within` draws, in order: GitHub's mark, or the lucide icon's name. */
+function glyphs(within: Element | null, rows: string): string[] {
+  return [...(within?.querySelectorAll(rows) ?? [])].map((row) => {
+    if (row.querySelector(".provider-mark") !== null) return "github";
+    const icon = row.querySelector(".state-glyph svg");
+    const named = [...(icon?.classList ?? [])].find(
+      (name) => name.startsWith("lucide-") && name !== "lucide-icon",
+    );
+    return named?.slice("lucide-".length) ?? "none";
+  });
+}
+
+test("each run and each automation wears what fires it: a schedule's clock, GitHub's mark, a webhook's hook, or Run now's play", async () => {
+  standing = [
+    SWEEP,
+    automation(7, {
+      name: "Review pull requests",
+      trigger: { kind: AUTOMATION_TRIGGER.GITHUB, event: GITHUB_TRIGGER_EVENT.PULL_REQUEST_OPENED },
+    }),
+    automation(8, {
+      name: "Deploy hook",
+      trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK },
+      webhookUrl: "https://tryluke.dev/api/automations/8/webhook",
+    }),
+  ];
+  const list = mountPages({ kind: AUTOMATIONS_PAGE.LIST });
+  await settle();
+  assert.deepEqual(glyphs(list, ".automation-row"), ["clock", "github", "webhook"]);
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  const fired = (n: number, firing: AutomationRunSummary["firing"]): AutomationRunSummary => ({
+    id: `1c2d3e4f-5a6b-4c7d-8e9f-${String(n).padStart(12, "0")}`,
+    firing,
+    status: AUTOMATION_RUN_STATUS.SKIPPED,
+    reason: null,
+    agent: null,
+    firedAt: n,
+    settledAt: n,
+  });
+  runs = [
+    fired(4, { kind: AUTOMATION_TRIGGER.SCHEDULE, dueAt: 4 }),
+    fired(3, {
+      kind: AUTOMATION_TRIGGER.GITHUB,
+      event: GITHUB_TRIGGER_EVENT.PULL_REQUEST_OPENED,
+      repository: "acme/ledger",
+      number: 12,
+    }),
+    fired(2, { kind: AUTOMATION_TRIGGER.WEBHOOK, bytes: 40 }),
+    fired(1, { kind: "manual" }),
+  ];
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+  assert.deepEqual(glyphs(page.querySelector("aside[aria-label='Runs']"), ".automation-run"), [
+    "clock",
+    "github",
+    "webhook",
+    "play",
   ]);
 });
 
