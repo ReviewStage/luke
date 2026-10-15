@@ -1600,8 +1600,8 @@ function SidebarColumn({
         disabled={!tasks.signedIn}
         onOpen={chosen(openInbox)}
       />
-      {/* Chat's row stands only while the account has it on and a chat is read, which only a fixture run stages yet. */}
-      {chatOn && tasks.signedIn && tasks.chatView.chat !== undefined ? (
+      {/* Chat's row stands while the account has it on wherever there is a chat to read: a signed-in run, or a fixture's staged one. */}
+      {chatOn && tasks.signedIn && tasks.chatView.available ? (
         <SidebarChatRow
           waiting={waitingMessages(tasks)}
           current={inChat}

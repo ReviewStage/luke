@@ -30,7 +30,13 @@ import {
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { DIALOG_TONE, type DialogConfirm, type DialogQuestion, useConfirmDialog } from "@luke/ui";
 import { callCard } from "@luke/ui/call-card-model";
-import { type ChatAskAnswer, type ChatPlace, type ChatPost, FOR_YOU } from "@luke/ui/chat-model";
+import {
+  CHAT_PLACE,
+  type ChatAskAnswer,
+  type ChatPlace,
+  type ChatPost,
+  FOR_YOU,
+} from "@luke/ui/chat-model";
 import {
   isAgentTab,
   isChangesTab,
@@ -114,6 +120,7 @@ import { useCopyToast } from "../copy-feedback";
 import { useChosenWorkspace } from "../desktop/chosen-workspace";
 import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast";
 import type { FixtureChat, Staged } from "./chat-fixture";
+import { useChatOn } from "./chat-gate";
 import {
   CLOSED_TAB_STRIP,
   type ClosedTab,
@@ -157,6 +164,7 @@ import {
   type TaskHolds,
   useSidePanel,
 } from "./use-side-panel";
+import { useWorkspaceChat } from "./use-workspace-chat";
 import { sayRestored } from "./version-view";
 import { agentListCallIds, workerCallIds, workRowsOf } from "./work-model";
 
@@ -342,14 +350,19 @@ interface AutomationsViewControl {
  * The window's Chat, standing in the plan's place beside the sidebar as the
  * Inbox does and on the same terms: the workspace's channels in a rail of
  * their own, and For you or the channel chosen beside it. It gives way to
- * the Inbox, an agent's page, Factory, and the Automations page, and they to it. The chat is the
- * one read, which a fixture run stages and nothing else reads yet, so its
- * sidebar row is drawn only where there is one.
+ * the Inbox, an agent's page, Factory, and the Automations page, and they to it. A live run reads
+ * the listed workspace's chat from the service (`use-workspace-chat.ts`) while
+ * the account has Chat on; a fixture run stages its own.
  */
 interface ChatViewControl {
   readonly open: boolean;
-  /** The chat as last read, with the agent lines that name its agents; none where nothing reads one. */
+  /** Whether there is a chat to read at all: a live run signed in, or a fixture run's staged one. */
+  readonly available: boolean;
+  /** The chat as last read, with the agent lines that name its agents beyond the plans'; none before the first read answers. */
   readonly chat: FixtureChat | undefined;
+  /** Whether the last read did not answer, so Chat offers to try again. */
+  readonly failed: boolean;
+  readonly onRetry: () => void;
   /** For you or the channel shown, For you until another is chosen. */
   readonly place: ChatPlace;
   readonly onOpen: () => void;
@@ -1168,6 +1181,21 @@ export function useTasksTab(input: {
     [inboxWaiting, inboxTasks, tasks.tasks, listedWorkspaceId],
   );
   const signedIn = fixture !== undefined || input.signedIn;
+  // Outside a fixture run, Chat reads the listed workspace's chat from the service, while the account has it on.
+  const chatOn = useChatOn();
+  const liveChat = useWorkspaceChat({
+    workspaceId: listedWorkspace?.id,
+    active: fixture === undefined && input.signedIn && chatOn,
+    reading: shown && standIn?.kind === STAND_IN.CHAT && standIn.place.kind === CHAT_PLACE.CHANNEL,
+    readChat: (params) => act(ACT_KIND.CODING_AGENTS_CHAT, params),
+    writeChat: (params) => act(ACT_KIND.CODING_AGENTS_CHAT_POST, params),
+  });
+  const liveRun = fixture === undefined;
+  const shownChat: FixtureChat | undefined = liveRun
+    ? liveChat.chat === undefined
+      ? undefined
+      : { answer: liveChat.chat, agents: [] }
+    : chat;
   const page = tasksPage(tasks);
   const region = documentRegion(tasks);
   // A started agent's tab opens selected; the column's tabs are built after
@@ -2709,7 +2737,10 @@ export function useTasksTab(input: {
     // Chat stands over the plan's place on the Inbox's terms, each giving way to the other.
     chatView: {
       open: standIn?.kind === STAND_IN.CHAT,
-      chat,
+      available: liveRun ? input.signedIn && chatOn : chat !== undefined,
+      chat: shownChat,
+      failed: liveRun && liveChat.failed,
+      onRetry: liveChat.onRetry,
       place: standIn?.kind === STAND_IN.CHAT ? standIn.place : FOR_YOU,
       onOpen: guard(() => {
         setHistoryFor(undefined);
@@ -2726,9 +2757,14 @@ export function useTasksTab(input: {
         setHistoryFor(undefined);
         setStandIn({ kind: STAND_IN.CHAT, place });
       }),
-      onPost: (post) => stage((held, staging) => staging.stagedPost(held, post, Date.now())),
+      onPost: (post) =>
+        liveRun
+          ? liveChat.onPost(post)
+          : stage((held, staging) => staging.stagedPost(held, post, Date.now())),
       onAnswer: (answer) =>
-        stage((held, staging) => staging.stagedAnswer(held, answer, Date.now())),
+        liveRun
+          ? liveChat.onAnswer(answer)
+          : stage((held, staging) => staging.stagedAnswer(held, answer, Date.now())),
     },
     // An agent's page stands over the task's place as the Inbox does, so a version history there gives way.
     agentView: {

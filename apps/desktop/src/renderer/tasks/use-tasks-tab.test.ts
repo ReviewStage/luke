@@ -23,7 +23,9 @@ import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { ACT, ACT_KIND, type ActKind, type ActResultFor } from "@luke/host/acts";
 import { type AppInboxTask, type AppInboxTaskHolding, RUN_PROFILE } from "@luke/host/app-state";
 import { LIVE_STATUS } from "@luke/live";
+import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
+import { experimentsOn } from "@luke/settings/testing";
 import { FOR_YOU } from "@luke/ui/chat-model";
 import { SECTION_WRITE_FAILED_NOTE } from "@luke/ui/task-sections-model";
 import { DOCUMENT_REGION, PIN_MOVE_FAILED_NOTE, TASKS_PAGE } from "@luke/ui/tasks-model";
@@ -41,10 +43,12 @@ import {
 } from "@luke/voice/voice-view";
 import { Duration, Effect, Option, Schema } from "effect";
 import type { AtomRegistry } from "effect/reactivity/AtomRegistry";
+import * as AtomRegistryModule from "effect/reactivity/AtomRegistry";
 import { TestClock } from "effect/testing";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
+import { handState } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { newestToastAction, newestToastSays } from "#testing/toast";
@@ -2348,4 +2352,19 @@ test("opening Chat on a place, as a chat notice's Open in Chat does, asks first 
   assert.equal(asked.length, 1);
   act(() => asked[0]?.());
   assert.equal(tab.control().chatView.open, true);
+});
+
+test("a live run reads the listed workspace's chat only while the account has Chat on", async () => {
+  handState({});
+  const off = mount({ shown: true, tasks: TWO_WORKSPACES }, {}, AtomRegistryModule.make());
+  await settle();
+  assert.ok(!off.agentActs.includes(ACT_KIND.CODING_AGENTS_CHAT), "Chat off reads no chat");
+  assert.equal(off.control().chatView.available, false);
+
+  handState(experimentsOn(EXPERIMENT.CHAT));
+  const on = mount({ shown: true, tasks: TWO_WORKSPACES }, {}, AtomRegistryModule.make());
+  await vi.waitFor(async () => {
+    await settle();
+    assert.ok(on.agentActs.includes(ACT_KIND.CODING_AGENTS_CHAT), "Chat on reads its chat");
+  });
 });
