@@ -18,8 +18,10 @@ import {
 import {
   WORKSPACE_BOUNDS,
   WORKSPACE_PHOTO_BOUNDS,
+  WORKSPACE_PHOTO_TYPE,
   WORKSPACE_ROLE,
   type Workspace,
+  type WorkspacePhotoType,
   workspaceAnswerSchema,
   workspaceGithubConnectAnswerSchema,
   workspacesAnswerSchema,
@@ -1052,16 +1054,16 @@ it.effect(
 
 /** A photo's `data:` URL of the type given, holding `bytes` bytes. */
 /** Each photo type's signature, which a photo's bytes must open with to be the image its label names. */
-const PHOTO_SIGNATURES: Readonly<Record<string, readonly number[]>> = {
-  "image/png": [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a],
-  "image/jpeg": [0xff, 0xd8, 0xff],
-  "image/webp": [0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x45, 0x42, 0x50],
-};
+const PHOTO_SIGNATURES = {
+  [WORKSPACE_PHOTO_TYPE.PNG]: [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a],
+  [WORKSPACE_PHOTO_TYPE.JPEG]: [0xff, 0xd8, 0xff],
+  [WORKSPACE_PHOTO_TYPE.WEBP]: [0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x45, 0x42, 0x50],
+} as const satisfies Record<WorkspacePhotoType, readonly number[]>;
 
 /** A photo of `bytes` bytes of the type given as its `data:` URL: its signature, then filler. */
-const photoOfBytes = (type: string, bytes: number) => {
+const photoOfBytes = (type: WorkspacePhotoType, bytes: number) => {
   const buffer = Buffer.alloc(bytes, 7);
-  buffer.set(PHOTO_SIGNATURES[type] ?? []);
+  buffer.set(PHOTO_SIGNATURES[type]);
   return `data:${type};base64,${buffer.toString("base64")}`;
 };
 
@@ -1152,7 +1154,7 @@ it.effect(
         const ada = yield* openGithubAccount("Ada Lovelace");
         const mallory = yield* openGithubAccount("Mallory");
         const acme = yield* openTeam(plugin.api, ada, []);
-        const atBound = photoOfBytes("image/jpeg", WORKSPACE_PHOTO_BOUNDS.MAX_BYTES);
+        const atBound = photoOfBytes(WORKSPACE_PHOTO_TYPE.JPEG, WORKSPACE_PHOTO_BOUNDS.MAX_BYTES);
 
         const refusals = [];
         for (const photo of [
@@ -1161,7 +1163,7 @@ it.effect(
           "https://example.test/acme.png",
           "data:image/png;base64,not base64",
           "data:image/png;base64,aGVsbG8=",
-          photoOfBytes("image/png", WORKSPACE_PHOTO_BOUNDS.MAX_BYTES + 1),
+          photoOfBytes(WORKSPACE_PHOTO_TYPE.PNG, WORKSPACE_PHOTO_BOUNDS.MAX_BYTES + 1),
         ]) {
           refusals.push(yield* settingPhoto(plugin, ada, acme, photo));
         }
