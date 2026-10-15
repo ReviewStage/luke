@@ -13,6 +13,7 @@ import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
 import { useAppCommand } from "../app-commands";
 import { type CallCardInput, ColumnFoot } from "../call/call-card";
+import { FIND_PAGE, PageFind } from "../find-in-tab";
 import type { NavigationHistory } from "../navigation-history";
 import { centreWithin } from "../planning/code-pane";
 import {
@@ -776,11 +777,13 @@ export function DesktopVersionHistory({
         <SidebarResizeEdge edge={edge} />
       </nav>
       <section className="version-page ph-no-capture" aria-label="Version">
-        <VersionPage
-          subject={subject}
-          restore={restore}
-          section={opened === undefined ? undefined : unit}
-        />
+        <PageFind page={FIND_PAGE.VERSION_HISTORY} at={String(versions.selected)} active>
+          <VersionPage
+            subject={subject}
+            restore={restore}
+            section={opened === undefined ? undefined : unit}
+          />
+        </PageFind>
       </section>
     </div>
   );

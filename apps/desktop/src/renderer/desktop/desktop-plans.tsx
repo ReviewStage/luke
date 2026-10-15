@@ -14,7 +14,7 @@ import { useAct } from "../act";
 import { useAppCommand } from "../app-commands";
 import { AutomationDirectory } from "../automation-directory";
 import { EmptyState } from "../empty-state";
-import { FindScope } from "../find-in-tab";
+import { FIND_PAGE, FindScope, PageFind } from "../find-in-tab";
 import { MemberDirectory } from "../member-directory";
 import { ArchivedBanner } from "../planning/archived-plan";
 import { INBOX_COLUMNS, useInboxColumns } from "../planning/inbox-columns";
@@ -829,9 +829,11 @@ export function DesktopPlans({
       return (
         <>
           <div className="desktop-drag-strip" />
-          <section className="home" aria-label="Home">
-            <DesktopHome plans={plans} accountName={accountName} />
-          </section>
+          <PageFind page={FIND_PAGE.HOME} active={plans.shown}>
+            <section className="home" aria-label="Home">
+              <DesktopHome plans={plans} accountName={accountName} />
+            </section>
+          </PageFind>
           {secondCall}
         </>
       );
