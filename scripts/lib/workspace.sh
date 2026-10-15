@@ -149,11 +149,10 @@ luke_require_node() {
     fi
 }
 
-# A script that launches Electron is not useful until the workspace has been
-# bootstrapped; running bootstrap here keeps `run.sh` and `evidence.sh` from
-# each restating that guard.
+# A script that launches Electron runs bootstrap first, every time. Note that
+# we do not guard on the Electron binary, because it survives a pull that
+# changes the lockfile and the launch then runs on stale dependencies; a
+# frozen install with nothing to change is quick.
 luke_ensure_dependencies() {
-    if [[ ! -x "$LUKE_ELECTRON_BIN" ]]; then
-        "$LUKE_REPO_ROOT/scripts/bootstrap.sh"
-    fi
+    "$LUKE_REPO_ROOT/scripts/bootstrap.sh"
 }
