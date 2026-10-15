@@ -24,7 +24,9 @@
  * down; like theirs, it is the pointer's preview, which the keyboard never
  * enters, so what a card's buttons do is offered elsewhere too. One tooltip
  * stands in the window at a time: the next to show takes a lingering card
- * down at once. A card hung from a row may name the row (`cardRegion`):
+ * down at once, unless its control stands on that card, as a person named
+ * on an agent's card is, when its card hangs over the one beneath, which
+ * goes when the pointer leaves both and takes it along. A card hung from a row may name the row (`cardRegion`):
  * the row's other controls, a list row's Pin and Archive, are then part of
  * its control, so the pointer crossing onto them leaves the card standing
  * and their own pills yield to it, while a press anywhere in the row takes
@@ -101,20 +103,43 @@ type TooltipSide = (typeof TOOLTIP_SIDE)[keyof typeof TOOLTIP_SIDE];
 /** Until when a newly rested-on control shows its pill at once: the window's one warm spell. */
 let warmUntil = 0;
 
-/** The way to take down the one tooltip standing in the window, while one stands. */
-let standingHide: (() => void) | undefined;
+/** A tooltip standing in the window: the way to take it down, the row its card was hung from, and whether a node stands on its card. */
+interface Standing {
+  readonly hide: () => void;
+  /** The row the card was hung from, whose other controls raise nothing of their own while it stands. */
+  readonly region: HTMLElement | undefined;
+  readonly holds: (node: Node) => boolean;
+}
 
-/** The row the standing card was hung from, whose other controls raise nothing of their own while it stands. */
-let standingRegion: HTMLElement | undefined;
+/**
+ * The tooltips standing in the window: one, and over it each card hung
+ * from a control on the card beneath it, as a person named on an agent's
+ * card hangs their own.
+ */
+const standing: Standing[] = [];
+
+/** Takes down every tooltip standing over the `depth` beneath it, the topmost first, other than the one asking (`own`). */
+function takeDownOver(depth: number, own: () => void): void {
+  for (const each of standing.slice(depth).reverse()) if (each.hide !== own) each.hide();
+}
+
+/** Takes a tooltip off the window's stack, where it stands. */
+function unstack(hide: () => void): void {
+  const at = standing.findIndex((each) => each.hide === hide);
+  if (at !== -1) standing.splice(at, 1);
+}
 
 /**
  * A card's linger, as an atom whose work is the wait: it takes the card down
- * once it has run out. There is one, since one card stands at a time; a new
- * linger starts it afresh and an interrupt calls it off. Note that the way
+ * once it has run out. Each tooltip has its own, by its id, held for as long
+ * as the tooltip is mounted: a new linger starts it afresh and an interrupt
+ * calls it off. Note that a card hung over another lingers apart from it,
+ * because the pointer leaving the stack lets both linger at once, and the
+ * pointer back on either calls off that one's alone. Note too that the way
  * down is handed inside a record, because a function handed to an atom's
  * setter is read as an update of its value and called at once.
  */
-const cardLingerAtom = Atom.keepAlive(
+const cardLingerAtom = Atom.family((_tooltip: string) =>
   rendererRuntime.fn(({ leave }: { readonly leave: () => void }) =>
     Effect.andThen(Effect.sleep(CARD_LINGER), Effect.sync(leave)),
   ),
@@ -351,7 +376,7 @@ export function Tooltip({
     () => (carded ? (cardRegion?.current ?? undefined) : undefined),
     [carded, cardRegion],
   );
-  const linger = useAtomSet(cardLingerAtom);
+  const linger = useAtomSet(cardLingerAtom(id));
   // Note that this is a ref, because the window's key listener reads it,
   // which no render stands between.
   const overCard = useRef(false);
@@ -364,17 +389,26 @@ export function Tooltip({
   }
   const [seen, setSeen] = useState(false);
   const pill = useDisclosure(asked !== undefined);
+  const pillElement = useRef<HTMLElement | null>(null);
+  const holdPill = pill.ref;
+  const drawPill = useCallback(
+    (element: HTMLElement | null) => {
+      pillElement.current = element;
+      holdPill(element);
+    },
+    [holdPill],
+  );
   // A pill that was on screen warms the window for the next; one still
   // waiting leaves it as it was.
   const hide = useCallback(() => {
-    const standing = latest();
-    if (standing === undefined) return;
-    setSeen(visible(standing));
-    if (visible(standing)) warmUntil = performance.now() + WARM_MS;
-    if (standingHide === hide) {
-      standingHide = undefined;
-      standingRegion = undefined;
-    }
+    const shownNow = latest();
+    if (shownNow === undefined) return;
+    setSeen(visible(shownNow));
+    if (visible(shownNow)) warmUntil = performance.now() + WARM_MS;
+    // A card going takes down the cards hung from its controls with it.
+    const at = standing.findIndex((each) => each.hide === hide);
+    if (at !== -1) takeDownOver(at + 1, hide);
+    unstack(hide);
     overCard.current = false;
     linger(Atom.Interrupt);
     setShown(undefined);
@@ -387,8 +421,13 @@ export function Tooltip({
       return;
     }
     // A control in the standing card's row is part of that row, and leaves the card standing.
-    if (standingHide !== hide && standingRegion?.contains(anchor) === true) return;
-    if (standingHide !== hide) standingHide?.();
+    const top = standing.at(-1);
+    if (top !== undefined && top.hide !== hide && top.region?.contains(anchor) === true) return;
+    // Note that a control on a standing card hangs its own over it and
+    // leaves the card beneath standing, because the pointer is still on it.
+    const beneath = standing.findLastIndex((each) => each.hide !== hide && each.holds(anchor));
+    takeDownOver(beneath + 1, hide);
+    unstack(hide);
     const now = performance.now();
     const name = anchor.getAttribute("aria-label") ?? anchor.textContent?.trim();
     setShown({
@@ -397,8 +436,11 @@ export function Tooltip({
       instant: now < warmUntil,
       describes: card !== undefined || name !== label,
     });
-    standingHide = hide;
-    standingRegion = region();
+    standing.push({
+      hide,
+      region: region(),
+      holds: (node) => pillElement.current?.contains(node) === true,
+    });
   };
   // A card on screen lingers for the pointer crossing to it; a pill, or a
   // card still waiting, goes at once.
@@ -428,9 +470,8 @@ export function Tooltip({
   // A control that goes while its card stands takes the card, and its linger, with it.
   useEffect(
     () => () => {
-      if (standingHide !== hide) return;
-      standingHide = undefined;
-      standingRegion = undefined;
+      if (!standing.some((each) => each.hide === hide)) return;
+      unstack(hide);
       linger(Atom.Interrupt);
     },
     [hide, linger],
@@ -526,7 +567,7 @@ export function Tooltip({
           card={card}
           cardBeside={cardBeside}
           leaving={pill.leaving ? (seen ? PILL_LEAVING.SEEN : PILL_LEAVING.UNSEEN) : undefined}
-          ref={pill.ref}
+          ref={drawPill}
           onCard={onCard}
           onCardPress={onCardPress}
           onCardChoice={hide}

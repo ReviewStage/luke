@@ -140,8 +140,8 @@ export type ToolHeaderProps = Omit<FoldSummaryProps, "children"> & {
   subjectIsCode?: boolean;
   /** Whether the body says the subject whole, as a command's does, so an open row drops it. */
   subjectInBody?: boolean;
-  /** Where the call ran, as a quiet tag at the line's end, for a call that ran somewhere other than its tab says ("On your Mac"); none for the rest. */
-  place?: string | undefined;
+  /** Where the call ran, as a quiet tag at the line's end, for a call that ran somewhere other than its tab says ("On your Mac", or whose Mac by their disc and name); none for the rest. */
+  place?: ReactNode | undefined;
 };
 
 /**
@@ -204,7 +204,8 @@ export function ToolLine({
       </span>
       {place === undefined ? null : (
         <span className="shrink-0 rounded border border-border px-1 text-[11px] text-muted-foreground">
-          {` ${place}`}
+          {" "}
+          {place}
         </span>
       )}
       <ToolStateMark state={state} />

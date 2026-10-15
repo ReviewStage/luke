@@ -44,6 +44,7 @@ import {
   ACTOR_KIND,
   ACTOR_STATE,
   type Actor,
+  type ActorState,
   LUKE_ACTOR,
   personActor,
   SOMEONE_REASON,
@@ -137,10 +138,53 @@ export function teammateStarter(
   startedBy: PlanEditor | undefined,
   readerId: string | undefined,
 ): string | undefined {
+  return teammateRef(startedBy, readerId)?.name;
+}
+
+/** The teammate who started an agent, as the wire names them, for a card to draw; none where `teammateStarter` names nobody. */
+export function teammateRef(
+  startedBy: PlanEditor | undefined,
+  readerId: string | undefined,
+): PlanEditor | undefined {
   if (startedBy === undefined || readerId === undefined || startedBy.userId === readerId) {
     return undefined;
   }
-  return startedBy.name;
+  return startedBy;
+}
+
+/**
+ * Whose Mac an agent's Mac commands ran on, as their row names it: its
+ * starter, the reader's own among them; none where the service names
+ * nobody or the reader's id is not known, when the row says the reader's
+ * own as it always has, for the reason `teammateStarter` gives.
+ */
+export function macOwnerOf(
+  startedBy: PlanEditor | undefined,
+  members: readonly WorkspaceMember[] | undefined,
+  readerId: string | undefined,
+): Actor | undefined {
+  if (startedBy === undefined || readerId === undefined) return undefined;
+  return personActor(startedBy, members, readerId);
+}
+
+/** Where an actor's work stands, as a tab's glyph state says it. */
+const ACTOR_STATE_OF_GLYPH = {
+  [GLYPH_STATE.WORKING]: ACTOR_STATE.WORKING,
+  [GLYPH_STATE.FAILED]: ACTOR_STATE.FAILED,
+  [GLYPH_STATE.REST]: ACTOR_STATE.REST,
+} as const satisfies Record<GlyphState, ActorState>;
+
+/** An agent as its tile draws it: its harness, read off its model, wearing where it stands, under the name it goes by. */
+export function agentActor(
+  agent: { readonly model: string; readonly status: CodingAgentStatus },
+  name: string,
+): Actor {
+  return {
+    kind: ACTOR_KIND.AGENT,
+    name,
+    provider: providerOf(agent.model),
+    state: ACTOR_STATE_OF_GLYPH[agentGlyphState(agent.status)],
+  };
 }
 
 /**

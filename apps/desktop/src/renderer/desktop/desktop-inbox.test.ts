@@ -298,6 +298,15 @@ function listed(page: HTMLElement): string[] {
   });
 }
 
+/** What an element says to a reader, the discs beside the names in it left out; nothing for no element. */
+function wordsOf(element: Element | null | undefined): string | null {
+  if (element === null || element === undefined) return null;
+  const copy = element.cloneNode(true);
+  assert.ok(copy instanceof Element);
+  for (const disc of copy.querySelectorAll(".actor-mark")) disc.remove();
+  return copy.textContent;
+}
+
 function rowNamed(page: HTMLElement, title: string): HTMLButtonElement {
   const row = [...page.querySelectorAll<HTMLButtonElement>(".inbox-plans .sidebar-plan")].find(
     (each) => each.querySelector(".sidebar-plan-name")?.textContent === title,
@@ -355,7 +364,7 @@ test("a settled choice keeps every option its agent offered with the developer's
     [...pane.querySelectorAll<HTMLElement>("li.inbox-option")].map((option) => [
       option.dataset.picked,
       option.querySelector(".font-medium")?.textContent,
-      option.querySelector(".inbox-picked")?.textContent ?? null,
+      wordsOf(option.querySelector(".inbox-picked")),
     ]),
     [
       ["true", "Retry 3 times over an hour", "Your pick"],
@@ -366,10 +375,32 @@ test("a settled choice keeps every option its agent offered with the developer's
   const reply = pane.querySelector<HTMLElement>(".is-user");
   assert.ok(reply, "the developer's reply is their own bubble");
   assert.equal(reply.querySelector("p")?.textContent, "And page on-call if all three fail.");
-  assert.match(
-    reply.textContent ?? "",
-    /You chose Retry 3 times over an hour · .+ · Sent to Alerts/u,
-  );
+  assert.match(wordsOf(reply) ?? "", /You chose Retry 3 times over an hour · .+ · Sent to Alerts/u);
+  assert.ok(reply.querySelector(".actor-ref[data-kind='person']"), "the answerer by their disc");
+});
+
+test("a teammate's answer names them by their disc and name, beside their pick and over what they chose, and their name hangs their card", async () => {
+  const CHARLES = { userId: "user-charles", name: "Charles Pan" };
+  inboxes.set(BILLING.id, [THRESHOLD, { ...RETRY, answeredBy: CHARLES }]);
+  const { page } = mount();
+  await settle();
+  act(() => rowNamed(page, "How is a failed email retried?").click());
+  await settle();
+
+  const pane = page.querySelector<HTMLElement>(".inbox-view-items");
+  assert.ok(pane, "the pane is drawn");
+  const picked = pane.querySelector(".inbox-picked") ?? assert.fail("the pick is marked");
+  assert.equal(wordsOf(picked), "Charles Pan’s pick");
+  assert.equal(picked.querySelector<HTMLElement>(".actor-mark")?.dataset.kind, "person");
+  const reply = pane.querySelector<HTMLElement>(".is-user") ?? assert.fail("their reply");
+  assert.match(wordsOf(reply) ?? "", /Charles Pan chose Retry 3 times over an hour · /u);
+
+  const answerer = reply.querySelector(".actor-ref") ?? assert.fail("the answerer is named");
+  act(() => {
+    answerer.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+  });
+  const card = document.querySelector(".tooltip-card [data-actor-card='person']");
+  assert.match(card?.textContent ?? "", /Charles Pan/u);
 });
 
 test("a form's select fields are radio groups, an optional one's pick taken back by pressing it again and a required one's kept, and its yes-or-no field a switch", async () => {
@@ -555,7 +586,7 @@ test("an item's mark hangs a card naming the teammate who started its agent, as 
     act(() => {
       mark.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
     });
-    const words = document.querySelector(".tooltip-card [data-tab-card]")?.textContent;
+    const words = wordsOf(document.querySelector(".tooltip-card [data-tab-card]"));
     act(() => root?.unmount());
     root = undefined;
     document.body.innerHTML = "";

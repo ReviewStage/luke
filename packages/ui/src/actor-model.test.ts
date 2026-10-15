@@ -59,12 +59,13 @@ test("an actor is named as the reader says them, in a sentence and as whose", ()
       actorName(you),
       actorName(you, { sentence: true }),
       actorName(you, { possessive: true }),
+      actorName(you, { sentence: true, possessive: true }),
       actorName(sam, { possessive: true }),
       actorName(LUKE_ACTOR, { sentence: true }),
       actorName(agent, { sentence: true }),
       actorName({ kind: ACTOR_KIND.SOMEONE, reason: SOMEONE_REASON.UNNAMED }, { sentence: true }),
     ],
-    ["You", "you", "your", "Sam Okafor’s", "Luke", "Fix auth flow", "someone"],
+    ["You", "you", "Your", "your", "Sam Okafor’s", "Luke", "Fix auth flow", "someone"],
   );
 });
 

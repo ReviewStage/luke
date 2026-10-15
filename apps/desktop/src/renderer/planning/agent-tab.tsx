@@ -53,6 +53,7 @@ import {
   endLine,
   endLineReason,
   lineSender,
+  macOwnerOf,
   messageWords,
   newestTodos,
   settledPlanEdits,
@@ -779,15 +780,16 @@ function AgentTabView({
   skills?: SkillSource | undefined;
   /** The teammate who started the agent (`teammateStarter`), whose key and task the tab names; none for the reader's own. */
   starter?: string | undefined;
-  /** The reader's own account id, whose messages the transcript names nobody over. */
+  /** The reader's own account id, whose messages the transcript names nobody over, and whose Mac its Mac commands say is theirs. */
   readerId?: string | undefined;
 }): React.JSX.Element {
   const lines = agentLines(transcript.messages, composer.sent);
   const working = agentStillWriting(agent.status);
   const starterActor = usePerson(agent.startedBy);
+  const { members } = useMemberDirectory();
   return (
     <section className="agent-tab ph-no-capture" aria-label={agentTabLabel(agent, models)}>
-      <MacOwnerProvider value={starter}>
+      <MacOwnerProvider value={macOwnerOf(agent.startedBy, members, readerId)}>
         <AgentTranscriptView
           messages={lines}
           brief={agent.brief}
@@ -1004,7 +1006,8 @@ export function AgentSubagentTab({
   const owner =
     control.agents?.find((each) => each.id === agentId) ??
     control.archived?.find((each) => each.id === agentId);
-  const macOwner = teammateStarter(owner?.startedBy, control.me);
+  const { members } = useMemberDirectory();
+  const macOwner = macOwnerOf(owner?.startedBy, members, control.me);
   // As an agent's: dated by the page it was read from, with the worker's own title.
   useEffect(() => {
     if (pageStatus === undefined || messages.length === 0) return;

@@ -48,7 +48,10 @@ const ACTOR_OF_GLYPH = {
 
 /** The plan's coding agents, among which an agent's edit is found, and what opens one's tab where the place offers it. */
 export interface EditAgents {
-  readonly control: Pick<CodingAgentsControl, "agents" | "archived" | "models" | "me">;
+  readonly control: Pick<
+    CodingAgentsControl,
+    "agents" | "archived" | "models" | "me" | "pullRequests"
+  >;
   readonly onOpen: ((agentId: string) => void) | undefined;
 }
 

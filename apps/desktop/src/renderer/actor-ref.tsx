@@ -307,6 +307,30 @@ export function ActorRef({
   );
 }
 
+/** A card's way to the page of what it is about, under its rule: "Open agent". Choosing it takes the card down (`tooltip.tsx`). */
+export function CardDoor({
+  label,
+  onOpen,
+}: {
+  label: string;
+  onOpen: () => void;
+}): React.JSX.Element {
+  return (
+    <button type="button" className="card-door" data-card-choice="" onClick={onOpen}>
+      {label}
+    </button>
+  );
+}
+
+/**
+ * Words naming an actor in one row, centred on its disc: the words and the
+ * `ActorRef` among them, each word string keeping its own spaces, since a
+ * row drops a run of spaces standing alone.
+ */
+export function ActorLine({ children }: { children: ReactNode }): React.JSX.Element {
+  return <span className="actor-words">{children}</span>;
+}
+
 /**
  * Many actors as a facepile: the first `drawn`, each cut from the ground
  * behind it by a ring of that ground, then how many more where `counted`;

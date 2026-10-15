@@ -44,7 +44,7 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** What the worker's tab says once its page is read, as `reader` sees it. */
+/** Where the worker's tab says its Mac command ran once its page is read, as `reader` sees it. */
 async function workerTabFor(reader: string): Promise<string> {
   // Note that only the first read answers, because a read past the cursor waits on the service, and one answered at once would be read again without end.
   let reads = 0;
@@ -98,7 +98,10 @@ async function workerTabFor(reader: string): Promise<string> {
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
-  return container.textContent ?? "";
+  // The place's words, the owner's disc left out of them.
+  const place = container.querySelector(".actor-words") ?? assert.fail("the row says whose Mac");
+  const disc = place.querySelector(".actor-mark") ?? assert.fail("by the owner's disc");
+  return (place.textContent ?? "").replace(disc.textContent ?? "", "");
 }
 
 test("a command a teammate's agent's worker ran on a Mac says it ran on theirs, and the reader's own agent's worker's on the reader's", async () => {
@@ -106,6 +109,6 @@ test("a command a teammate's agent's worker ran on a Mac says it ran on theirs, 
   act(() => root?.unmount());
   const charlesReads = await workerTabFor(CHARLES.userId);
 
-  assert.match(deanReads, /On Charles Pan's Mac/u);
-  assert.match(charlesReads, /On your Mac/u);
+  assert.equal(deanReads, "On Charles Pan’s Mac");
+  assert.equal(charlesReads, "On your Mac");
 });

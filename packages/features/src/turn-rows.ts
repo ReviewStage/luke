@@ -104,11 +104,10 @@ export function isCommandKind(kind: CallKind): boolean {
 /**
  * Where a call ran, as its row says beside its line, or nothing for a call
  * that ran where its tab says. A command on a Mac ran on the Mac of the
- * agent's starter, so a teammate's agent's says whose, by `macOwner`.
+ * agent's starter, whom a row that knows them draws in these words' place.
  */
-export function callPlace(kind: CallKind, macOwner?: string): string | undefined {
-  if (kind !== CALL_KIND.MAC_COMMAND) return undefined;
-  return macOwner === undefined ? ON_YOUR_MAC : `On ${macOwner}'s Mac`;
+export function callPlace(kind: CallKind): string | undefined {
+  return kind === CALL_KIND.MAC_COMMAND ? ON_YOUR_MAC : undefined;
 }
 
 /** What a call's line says: the verb, or a described command's purpose, then the subject, and whether the subject is code. */
