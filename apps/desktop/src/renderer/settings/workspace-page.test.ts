@@ -1,6 +1,12 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import {
+  AUTOMATION_ACTION,
+  AUTOMATION_DEFAULT_GUARDS,
+  AUTOMATION_TRIGGER,
+  type AutomationSummary,
+} from "@luke/features/automation-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import type { WorkspaceInvitation } from "@luke/features/workspace-invitation-wire";
 import {
@@ -109,6 +115,33 @@ let refuseGitHubDisconnect = false;
 let refuseRename = false;
 /** Whether the service refuses a photo for the account's role. */
 let refusePhoto = false;
+/** Whether the service refuses a role change for the account's role. */
+let refuseRole = false;
+/** The automations the workspace holds, as the list answers them; absent, the list is not answered. */
+let automations: { name: string; mine?: boolean }[] | undefined;
+
+/** One automation of the workspace's, named and the reader's or not, as the list answers it. */
+function automationOf(
+  { name, mine }: { name: string; mine?: boolean },
+  at: number,
+): AutomationSummary {
+  const summary: AutomationSummary = {
+    id: `3f0e6f5c-7d1a-4f6e-9a55-${String(at + 1).padStart(12, "0")}`,
+    planId: null,
+    planName: null,
+    workspaceId: ACME.id,
+    name,
+    enabled: true,
+    pausedReason: null,
+    trigger: { kind: AUTOMATION_TRIGGER.SCHEDULE, cron: "0 9 * * 1-5", timezone: "UTC" },
+    action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: "Triage today's issues." },
+    guards: AUTOMATION_DEFAULT_GUARDS,
+    nextRunAt: null,
+    lastRun: null,
+    createdAt: 1,
+  };
+  return mine === undefined ? summary : { ...summary, mine };
+}
 
 const done = (value: ActResultFor<ActKind>): ActOutcome => ({
   status: ACT_OUTCOME_STATUS.DONE,
@@ -205,6 +238,32 @@ function answer(request: Act): Promise<ActOutcome> {
       return Promise.resolve(
         done(request.payload.photo === null ? ACME : { ...ACME, photoVersion: "v2" }),
       );
+    case ACT_KIND.WORKSPACE_MEMBER_ROLE: {
+      if (refuseRole) {
+        return Promise.resolve({
+          status: ACT_OUTCOME_STATUS.REFUSED,
+          reason: WORKSPACE_NOT_PERMITTED_REFUSAL,
+        });
+      }
+      const { userId, role } = request.payload;
+      stored = stored.map((member) => (member.userId === userId ? { ...member, role } : member));
+      return Promise.resolve(done(stored));
+    }
+    case ACT_KIND.WORKSPACE_TRANSFER: {
+      const { userId } = request.payload;
+      stored = stored.map((member) =>
+        member.userId === userId
+          ? { ...member, role: WORKSPACE_ROLE.OWNER }
+          : member.userId === READER_ID
+            ? { ...member, role: WORKSPACE_ROLE.ADMIN }
+            : member,
+      );
+      return Promise.resolve(done(stored));
+    }
+    case ACT_KIND.AUTOMATIONS_LIST:
+      if (automations === undefined)
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
+      return Promise.resolve(done({ automations: automations.map(automationOf) }));
     case ACT_KIND.WORKSPACE_LEAVE:
     case ACT_KIND.WINDOW_COPY_TEXT:
       return Promise.resolve(done(undefined));
@@ -232,6 +291,8 @@ beforeEach(() => {
   refuseGitHubDisconnect = false;
   refuseRename = false;
   refusePhoto = false;
+  refuseRole = false;
+  automations = undefined;
   Object.defineProperty(window, "luke", {
     configurable: true,
     value: { act: answer, recordSurfaceEvent: () => undefined },
@@ -589,7 +650,7 @@ test("the chosen team workspace's members are listed with their email and role, 
   const { page } = await mount(ACME);
 
   assert.deepEqual(
-    sent.map((request) => request.kind),
+    sent.filter((request) => request.kind.startsWith("workspace.")).map((request) => request.kind),
     [ACT_KIND.WORKSPACE_MEMBERS_READ],
   );
   assert.equal(rowNamed(page, "Dana").querySelector("small")?.textContent, "dana@example.com");
@@ -612,7 +673,7 @@ test("where some members' rows carry a ⋯, a row without one keeps its room, so
 
   assert.notEqual(rowNamed(page, "Dana").querySelector(".settings-act-slot"), null);
   assert.equal(rowNamed(page, "Sam").querySelector(".settings-act-slot"), null);
-  assert.deepEqual(rowActions(rowNamed(page, "Sam")), ["Remove from workspace"]);
+  assert.deepEqual(rowActions(rowNamed(page, "Sam")), ["Make admin", "Remove from workspace"]);
 });
 
 test("each member's row leads with their face, their picture where the read lists one and their letter where it lists none, and the reader's own wears You", async () => {
@@ -711,7 +772,170 @@ test("an admin is offered no Remove on another admin, and the owner is, as the s
   const asOwner = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
 
   assert.deepEqual(adminSees, []);
-  assert.deepEqual(rowActions(rowNamed(asOwner.page, "Ola")), ["Remove from workspace"]);
+  assert.deepEqual(rowActions(rowNamed(asOwner.page, "Ola")), [
+    "Make member",
+    "Make owner",
+    "Remove from workspace",
+  ]);
+});
+
+/** The role changes and handovers the page asked for, by kind and payload. */
+const roleSent = () =>
+  sent.flatMap((request) =>
+    request.kind === ACT_KIND.WORKSPACE_MEMBER_ROLE || request.kind === ACT_KIND.WORKSPACE_TRANSFER
+      ? [[request.kind, request.payload]]
+      : [],
+  );
+
+/** An admin of the workspace beside the owner and a member. */
+const ADMIN_OLA: WorkspaceMember = {
+  userId: "user-ola",
+  name: "Ola",
+  email: "ola@example.com",
+  role: WORKSPACE_ROLE.ADMIN,
+};
+
+test("the owner makes a member an admin from the member's ⋯ at once, and the row says Admin", async () => {
+  const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
+
+  assert.deepEqual(rowActions(rowNamed(page, "Sam")), ["Make admin", "Remove from workspace"]);
+  await chooseAction(rowNamed(page, "Sam"), "Make admin");
+
+  assert.deepEqual(roleSent(), [
+    [
+      ACT_KIND.WORKSPACE_MEMBER_ROLE,
+      { workspaceId: ACME.id, userId: MEMBER.userId, role: WORKSPACE_ROLE.ADMIN },
+    ],
+  ]);
+  assert.equal(rowNamed(page, "Sam").querySelector(".settings-row-value")?.textContent, "Admin");
+  assert.equal(document.querySelector('[role="alertdialog"]'), null, "nothing asked first");
+});
+
+test("the owner's ⋯ on an admin holds Make member, Make owner, and Remove, and Make owner asks first, then hands the workspace over", async () => {
+  stored = [OWNER, ADMIN_OLA, MEMBER];
+  const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
+
+  assert.deepEqual(rowActions(rowNamed(page, "Ola")), [
+    "Make member",
+    "Make owner",
+    "Remove from workspace",
+  ]);
+  await chooseAction(rowNamed(page, "Ola"), "Make owner");
+  const askedFirst = roleSent().length === 0;
+  const question = dialog().querySelector(".confirm-dialog-title")?.textContent;
+  await confirm("Make owner");
+
+  assert.equal(askedFirst, true);
+  assert.equal(question, "Make Ola the owner of acme?");
+  assert.deepEqual(roleSent(), [
+    [ACT_KIND.WORKSPACE_TRANSFER, { workspaceId: ACME.id, userId: ADMIN_OLA.userId }],
+  ]);
+  assert.equal(rowNamed(page, "Ola").querySelector(".settings-row-value")?.textContent, "Owner");
+});
+
+test("an admin of the account's own first workspace is never offered Make owner, since it is named for its creator", async () => {
+  stored = [OWNER, ADMIN_OLA];
+  const { page } = await mount({ ...FIRST, role: WORKSPACE_ROLE.OWNER });
+
+  assert.deepEqual(rowActions(rowNamed(page, "Ola")), ["Make member", "Remove from workspace"]);
+});
+
+test("an admin is offered no role change, and a role change the service refuses is said under the row", async () => {
+  const asAdmin = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
+  const adminSees = rowActions(rowNamed(asAdmin.page, "Sam"));
+  refuseRole = true;
+  const asOwner = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
+  await chooseAction(rowNamed(asOwner.page, "Sam"), "Make admin");
+
+  assert.deepEqual(adminSees, ["Remove from workspace"]);
+  assert.equal(
+    rowNamed(asOwner.page, "Sam").nextElementSibling?.textContent,
+    WORKSPACE_NOT_PERMITTED_REFUSAL,
+  );
+});
+
+/** The page's last group, the way out of the workspace, where it draws one. */
+const leaveGroup = (page: HTMLElement) =>
+  page.querySelector<HTMLElement>(
+    `[${SETTINGS_SEARCH_ANCHOR_ATTRIBUTE}="${SETTINGS_SECTION.LEAVE}"]`,
+  );
+
+test("the owner cannot leave until the workspace is handed over: its row says so and Transfer ownership hands it to the admin chosen, the first unless another is", async () => {
+  const other: WorkspaceMember = {
+    ...ADMIN_OLA,
+    userId: "user-kim",
+    name: "Kim",
+    email: "kim@example.com",
+  };
+  stored = [OWNER, ADMIN_OLA, other, MEMBER];
+  const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
+  const group = leaveGroup(page) ?? assert.fail("no leave");
+  const line = group.querySelector("small")?.textContent;
+  act(() => button(group, "Transfer ownership").click());
+  const chip =
+    dialog().querySelector<HTMLButtonElement>('button[aria-label^="New owner"]') ??
+    assert.fail("no new owner");
+  const first = chip.getAttribute("aria-label");
+  act(() => chip.click());
+  const offered = [...document.querySelectorAll<HTMLElement>('[role="menu"] [role^="menuitem"]')];
+  const names = offered.map((item) => item.textContent);
+  act(() => offered.find((item) => item.textContent?.includes("kim@example.com"))?.click());
+  await confirm("Transfer ownership");
+
+  assert.equal(line, "You're its owner. Make an admin the owner first, then you can leave.");
+  assert.deepEqual(buttons(group, "Leave"), []);
+  assert.equal(first, "New owner: Ola");
+  assert.deepEqual(
+    names.map((name) => name?.replace(/^[A-Z]/u, "")),
+    ["Olaola@example.com", "Kimkim@example.com"],
+  );
+  assert.deepEqual(roleSent(), [
+    [ACT_KIND.WORKSPACE_TRANSFER, { workspaceId: ACME.id, userId: "user-kim" }],
+  ]);
+});
+
+test("the owner with no admin is told to make one first and offered no handover, and the owner of the account's own workspace sees no leave at all", async () => {
+  const team = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
+  const group = leaveGroup(team.page) ?? assert.fail("no leave");
+  const own = await mount({ ...FIRST, role: WORKSPACE_ROLE.OWNER });
+
+  assert.equal(
+    group.querySelector("small")?.textContent,
+    "You're its owner. Make a member an admin, then make them the owner, and you can leave.",
+  );
+  assert.deepEqual(buttons(group, "Transfer ownership"), []);
+  assert.equal(leaveGroup(own.page), null);
+});
+
+test("the leave names the automations the reader made where the service says whose they are, and leaves them out where none is the reader's", async () => {
+  /** The leave dialog's lines for the automations the workspace holds. */
+  const linesFor = async (held: { name: string; mine?: boolean }[]) => {
+    automations = held;
+    const { page } = await mount(ACME);
+    act(() => button(leaveGroup(page) ?? assert.fail("no leave"), "Leave").click());
+    const lines = [...dialog().querySelectorAll(".leave-consequences li")].map(
+      (li) => li.textContent,
+    );
+    act(() => button(dialog(), "Cancel").click());
+    return lines;
+  };
+
+  const named = await linesFor([
+    { name: "Nightly triage", mine: true },
+    { name: "Weekly digest", mine: true },
+    { name: "Sam's sweep", mine: false },
+  ]);
+  const one = await linesFor([{ name: "Nightly triage", mine: true }]);
+  const none = await linesFor([{ name: "Sam's sweep", mine: false }]);
+  const unsaid = await linesFor([{ name: "Nightly triage" }]);
+
+  assert.equal(named[2], "2 automations you created stop running: Nightly triage, Weekly digest.");
+  assert.equal(one[2], "An automation you created stops running: Nightly triage.");
+  assert.equal(
+    none.some((line) => line?.includes("automation")),
+    false,
+  );
+  assert.equal(unsaid[2], "Automations you created stop running.");
 });
 
 test("a removal the account's role does not allow says so in the dialog that asked", async () => {

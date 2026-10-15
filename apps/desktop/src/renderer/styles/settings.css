@@ -557,6 +557,34 @@
   flex: none;
 }
 
+/* The handover dialog's admin to make the owner: a field chip leading with
+   their face, wide enough for a name. */
+.workspace-heir {
+  min-width: 220px;
+  justify-content: flex-start;
+  gap: var(--space-8);
+}
+
+.workspace-heir > svg:last-child {
+  margin-left: auto;
+}
+
+/* A dialog's labelled control under its body, the label over it as a form
+   row's. */
+.dialog-field {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-6);
+  margin-top: var(--space-12);
+}
+
+.dialog-field-label {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
 /* What a leave keeps and stops, under the leave dialog's body, in its
    muted words. */
 .leave-consequences {
