@@ -633,6 +633,13 @@ test("a teammate's task wears its creator's face at its row's end, and is found 
 
   assert.deepEqual(rows(), ["Retry budget · acme/relay", "Rate limits · acme/relay"]);
   assert.deepEqual(faces(), ["C", null]);
+  assert.match(
+    document.querySelector(".menu-item-end")?.textContent ?? "",
+    /\(created by Charles Pan\)/u,
+  );
   type("charles");
+  assert.deepEqual(rows(), ["Retry budget · acme/relay · Charles Pan"]);
+  // A query the creator's name answers only loosely still shows the name it was found by.
+  type("chrls");
   assert.deepEqual(rows(), ["Retry budget · acme/relay · Charles Pan"]);
 });

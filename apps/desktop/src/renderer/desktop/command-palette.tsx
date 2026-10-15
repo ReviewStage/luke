@@ -65,7 +65,7 @@ import {
   SHORTCUT_KEY,
   type ShortcutChord,
 } from "#shared/shortcuts";
-import { ACTOR_SIZE, ActorMark } from "../actor-ref";
+import { ACTOR_SIZE, ActorMark, CreatorHeard } from "../actor-ref";
 import { appCommandOffered, runAppCommand, useAppCommand } from "../app-commands";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { AgentCard, agentSubject, NOTHING_HELD } from "../planning/agent-ref";
@@ -404,7 +404,12 @@ function planRows(
       detail: planDetail(plan, archived),
       workspace: elsewhere,
       endMark:
-        creator === undefined ? undefined : <ActorMark actor={creator} size={ACTOR_SIZE.MARK} />,
+        creator === undefined ? undefined : (
+          <>
+            <ActorMark actor={creator} size={ACTOR_SIZE.MARK} />
+            <CreatorHeard actor={creator} />
+          </>
+        ),
       creator: createdBy ?? undefined,
       terms: [plan.name, plan.repository, elsewhere?.name ?? null, createdBy].filter(
         (term) => term !== null,
@@ -544,8 +549,15 @@ function PaletteItem({
   value: string;
   tokens: readonly string[];
 }): React.JSX.Element {
-  // A task found by its creator's name says the name after its detail, so the match is in sight.
-  const named = row.creator !== undefined && matchRanges(row.creator, tokens).length > 0;
+  // A task found by its creator's name says the name after its detail, so the match is in sight,
+  // and so does one the query reaches by no word in sight, which only its creator's name can explain.
+  const unexplained =
+    matchRanges(row.label, tokens).length === 0 &&
+    matchRanges(row.detail ?? "", tokens).length === 0;
+  const named =
+    row.creator !== undefined &&
+    tokens.length > 0 &&
+    (matchRanges(row.creator, tokens).length > 0 || unexplained);
   const detail = named
     ? [row.detail, row.creator].filter((words) => words !== undefined).join(" · ")
     : row.detail;
