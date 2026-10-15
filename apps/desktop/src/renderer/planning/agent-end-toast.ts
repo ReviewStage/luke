@@ -1,7 +1,7 @@
 /**
  * agent-end-toast.ts -- says in the window's toast that a coding agent's turn ended while the window was focused elsewhere in it, with a View that opens the agent, until that agent is seen.
  *
- * Main decides which ends the window hears (`main/agent-notices.ts`): one
+ * Main decides which ends the window hears (`@luke/host/agent-notices`): one
  * for each turn, and only while the window is focused, the OS's
  * notification saying it while the window is behind. The toast says what
  * the notification would, the plan's name on its second line, and its View

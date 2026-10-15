@@ -1,8 +1,8 @@
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
+import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SECTION, SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { ChevronRightIcon, LockIcon } from "lucide-react";
 import { useEffect, useState } from "react";
-import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";
 import { TILE_SIZE, WorkspaceTile } from "../desktop/workspace-tile";
 import { CardHead, CardNote, CardRule, HoverCard } from "../hover-card";

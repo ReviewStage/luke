@@ -1,11 +1,11 @@
 import path from "node:path";
+import type { AppLinkInbox } from "@luke/features/app-links";
 import { type RunMode, runModeFor } from "@luke/host";
 import { buildCarriesDeveloperIdSigning, resolveAppName } from "@luke/host/app-identity";
+import { RUN_PROFILE } from "@luke/host/app-state";
 import { buildCommit } from "@luke/host/build-commit";
-import { RUN_PROFILE } from "#shared/messages/app-state";
 import type { MenuBarChange } from "./app-menu";
 import type { DesktopConfig } from "./services/desktop-config";
-import type { AppLinkInbox } from "./window/app-links";
 
 /**
  * What the launch reads of Electron's own `app` before anything else exists.

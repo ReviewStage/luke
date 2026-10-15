@@ -1,9 +1,9 @@
 import type { CodingAgentInboxParams } from "@luke/features/coding-agent-view";
 import type { InboxItem } from "@luke/features/inbox-wire";
+import { ACT_KIND } from "@luke/host/acts";
+import type { AppInboxPlanHolding } from "@luke/host/app-state";
 import { InboxIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo } from "react";
-import { ACT_KIND } from "#shared/messages/acts";
-import type { AppInboxPlanHolding } from "#shared/messages/app-state";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "../act";
 import { useAppCommand } from "../app-commands";

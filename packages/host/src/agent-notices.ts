@@ -21,7 +21,7 @@ import type { CatalogModel } from "@luke/features/models-wire";
 import type { PlanningView } from "@luke/features/planning-view";
 import { scheduleOnce } from "@luke/runtime/effect";
 import { Context, Duration, Effect, Queue, Schedule, type Scope, Stream } from "effect";
-import type { AppInboxSlice, AppInboxWaitingItem } from "#shared/messages/app-state";
+import type { AppInboxSlice, AppInboxWaitingItem } from "./app-state.js";
 
 /**
  * agent-notices.ts -- tells the developer when a coding agent's turn ends or an inbox item lands: the ledger of where each agent stands, the poll that keeps it current while no tab does, the held read of what waits across the account, and the notification, toast, and badge they announce by.

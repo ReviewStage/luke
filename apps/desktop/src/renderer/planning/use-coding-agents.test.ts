@@ -9,11 +9,11 @@ import {
 } from "@luke/features/coding-agent-wire";
 import type { Failure } from "@luke/features/failure-remedy";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import { ACT_KIND, type ActKind, type ActPayload, type ActResultFor } from "@luke/host/acts";
 import type { AtomRegistry } from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
-import { ACT_KIND, type ActKind, type ActPayload, type ActResultFor } from "#shared/messages/acts";
 import { onRegistry } from "#testing/copy-feedback";
 import { ToastHost } from "../toast";
 import { type CodingAgentsControl, useCodingAgents } from "./use-coding-agents";

@@ -2,11 +2,11 @@
 
 import assert from "node:assert/strict";
 import { MENTION_KIND, type PlanMention } from "@luke/features/mention-link";
+import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { Effect } from "effect";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "#shared/messages/acts";
 import { markdownHtmlParserLanded } from "#testing/markdown";
 import { TranscriptWords } from "./transcript-blocks";
 import { OpenPlanProvider } from "./use-open-link";

@@ -9,9 +9,6 @@ import {
   PROVIDER_KEY_STATUS,
   type ProviderKeySummary,
 } from "@luke/features/provider-key-wire";
-import { act, createElement } from "react";
-import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
 import {
   ACT_KIND,
   ACT_OUTCOME_STATUS,
@@ -19,7 +16,10 @@ import {
   type ActKind,
   type ActOutcome,
   type ActResultFor,
-} from "#shared/messages/acts";
+} from "@luke/host/acts";
+import { act, createElement } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, test } from "vitest";
 import {
   focusedSegment,
   pressKeyIn,

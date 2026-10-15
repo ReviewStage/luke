@@ -1,3 +1,4 @@
+import { appLinkInArguments, appLinkInbox } from "@luke/features/app-links";
 import { desktopQuit, QUIT_STAGE } from "@luke/host/quit";
 import { reportToStderr, tolerateClosedStderr } from "@luke/host/stderr-report";
 import { Duration, Effect, Fiber, ManagedRuntime, Option } from "effect";
@@ -6,7 +7,6 @@ import { menuBarDrawer } from "./app-menu";
 import { bootstrapDesktop } from "./bootstrap";
 import { composeDesktop, DesktopTag } from "./services/compose-desktop";
 import { initializeCrashReporting } from "./services/telemetry-service";
-import { appLinkInArguments, appLinkInbox } from "./window/app-links";
 import { PAGE_SCHEME_PRIVILEGES } from "./window/page-protocol";
 
 /**

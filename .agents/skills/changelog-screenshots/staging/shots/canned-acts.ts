@@ -9,7 +9,7 @@
  * answer lands is answered once and then held.
  */
 
-import { ACT_OUTCOME_STATUS, type Act, type ActKind, type ActOutcome } from "#shared/messages/acts";
+import { ACT_OUTCOME_STATUS, type Act, type ActKind, type ActOutcome } from "@luke/host/acts";
 import { currentShot } from "./shot-profiles";
 import { NEVER, type ShotAnswer } from "./shot-spec";
 

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { IDLE_PLANNING_VIEW, type PlanningView } from "@luke/features/planning-view";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { test } from "vitest";
-import { noticePlanTitle } from "./agent-notices";
+import { noticePlanTitle } from "./agent-notices.js";
 
 /**
  * notice-title.test.ts -- a notice names the plan it is about, and, once the

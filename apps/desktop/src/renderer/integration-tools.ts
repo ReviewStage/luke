@@ -3,8 +3,8 @@ import {
   type IntegrationToolsView,
 } from "@luke/features/integration-view";
 import type { IntegrationProvider } from "@luke/features/integration-wire";
+import { ACT_KIND } from "@luke/host/acts";
 import { useEffect, useRef, useState } from "react";
-import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "./act";
 
 /**

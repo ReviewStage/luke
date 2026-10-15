@@ -1,6 +1,6 @@
 import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
 import type { PlanAgentLine, PlanPullRequestLine, PlanSummary } from "@luke/features/plan-wire";
-import type { AppInboxPlan, AppInboxWaitingItem } from "#shared/messages/app-state";
+import type { AppInboxPlan, AppInboxWaitingItem } from "@luke/host/app-state";
 import { agentStillWriting } from "../planning/coding-agent-model";
 
 /**

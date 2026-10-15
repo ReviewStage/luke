@@ -10,6 +10,7 @@ import type { ModelChoice } from "@luke/features/models-wire";
 import type { PageLine } from "@luke/features/page-wire";
 import type { CodeRef } from "@luke/features/plan-wire";
 import { PLAN_WORK_STATE, type PlanCodeShowing } from "@luke/features/planning-view";
+import { ACT_KIND } from "@luke/host/acts";
 import { CollapseIcon, ExpandIcon, SidePanelIcon } from "@luke/ui";
 import {
   agentOfTab,
@@ -31,7 +32,6 @@ import {
 import { type ShownFile, shownFiles } from "@luke/voice/code-pane-model";
 import { TRANSCRIPT_REGION, type TranscriptRegion } from "@luke/voice/transcript-model";
 import { Fragment, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ACT_KIND } from "#shared/messages/acts";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "../act";
 import { useAppCommand } from "../app-commands";

@@ -1,10 +1,10 @@
+import { ACT, ACT_KIND, type SettingUpdatePayload } from "@luke/host/acts";
 import type { HostOperator } from "@luke/host/host-operator";
 import { APP_SETTING_FIELDS, APP_SETTING_SCHEMA, type AppSettingField } from "@luke/settings";
 import type { AppSettings, SettingsUpdateResult } from "@luke/settings/wire";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { Effect, Option } from "effect";
 import type { WebContents } from "electron";
-import { ACT, ACT_KIND, type SettingUpdatePayload } from "#shared/messages/acts";
 import { ActRefused, type ActRows } from "../act-router";
 import type { MediaDuckController } from "../native/media-duck";
 import { HOTKEY_RANK, type HotkeyRegistrar } from "../window/hotkey-registrar";

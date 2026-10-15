@@ -1,8 +1,8 @@
 import type { AccountSnapshot } from "@luke/credentials/snapshot";
 import { PLAN_ACTOR, type PlanRevisionLine } from "@luke/features/plan-wire";
 import { PLAN_CALL_FAILURE } from "@luke/features/planning-view";
+import { ACT_KIND } from "@luke/host/acts";
 import { useEffect, useMemo, useRef } from "react";
-import { ACT_KIND } from "#shared/messages/acts";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "../act";
 import { useAppCommand } from "../app-commands";

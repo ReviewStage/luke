@@ -8,10 +8,6 @@ import {
   type ProviderKeyRejection,
   type ProviderKeySummary,
 } from "@luke/features/provider-key-wire";
-import type { AtomRegistry } from "effect/reactivity/AtomRegistry";
-import { act, createElement } from "react";
-import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
 import {
   ACT_KIND,
   ACT_OUTCOME_STATUS,
@@ -19,7 +15,11 @@ import {
   type ActKind,
   type ActOutcome,
   type ActResultFor,
-} from "#shared/messages/acts";
+} from "@luke/host/acts";
+import type { AtomRegistry } from "effect/reactivity/AtomRegistry";
+import { act, createElement } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, test } from "vitest";
 import { onRegistry } from "#testing/copy-feedback";
 import { ApiKeysSection } from "./api-keys-section";
 

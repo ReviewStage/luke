@@ -3,10 +3,10 @@
 import assert from "node:assert/strict";
 import type { CodingAgentAgentAnswer } from "@luke/features/coding-agent-view";
 import type { PlanningFileAnswer } from "@luke/features/planning-view";
+import { ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "#shared/messages/acts";
 import { APP_COMMAND } from "#shared/shortcuts";
 import {
   composerEditor,

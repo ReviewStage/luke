@@ -1,6 +1,6 @@
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
+import { ACT_KIND } from "@luke/host/acts";
 import { useCallback, useContext, useState } from "react";
-import { ACT_KIND } from "#shared/messages/acts";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "../act";
 import { useAppCommand } from "../app-commands";

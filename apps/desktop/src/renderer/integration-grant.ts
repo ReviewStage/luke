@@ -4,8 +4,8 @@ import {
   INTEGRATION_GRANT_OF,
   type IntegrationProvider,
 } from "@luke/features/integration-wire";
+import { ACT_KIND } from "@luke/host/acts";
 import { useCallback } from "react";
-import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "./act";
 import { useGitHubConnection } from "./github-connect";
 import type { IntegrationStatuses } from "./integration-statuses";

@@ -1,7 +1,7 @@
+import type { AppLinkInbox } from "@luke/features/app-links";
 import type { RunMode } from "@luke/host";
 import type { BuildCommit } from "@luke/settings/update";
 import type { MenuBarChange } from "../app-menu";
-import type { AppLinkInbox } from "../window/app-links";
 
 /**
  * What the launch's own arguments said, parsed once in `main` and never read

@@ -25,7 +25,7 @@ import type {
   PlanningTreeAnswer,
 } from "@luke/features/planning-view";
 import type { WireRecord, WireValue } from "@luke/wire";
-import { ACT_KIND } from "#shared/messages/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import { FIXTURE_CLOSED_PANEL } from "../planning/planning-fixture";
 import { ago } from "./clock";
 import { codingAgentAnswers, MODEL, shotAgents } from "./coding-agent";

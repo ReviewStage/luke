@@ -8,10 +8,10 @@ import {
   mentionMarkdown,
 } from "@luke/features/mention-link";
 import type { Plan } from "@luke/features/plan-wire";
+import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "#shared/messages/acts";
 import { DOCUMENT_PLAN } from "#testing/document-plan";
 import { PlanBody, type SectionLinks } from "./plan-body";
 

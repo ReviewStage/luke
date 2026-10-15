@@ -8,9 +8,9 @@ import {
   type IntegrationProvider,
   type IntegrationStatus,
 } from "@luke/features/integration-wire";
+import { ACT, ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { Effect } from "effect";
 import type { WebContents } from "electron";
-import { ACT, ACT_KIND, ACT_OUTCOME_STATUS } from "#shared/messages/acts";
 import { type ActRows, type ActSender, createActRouter } from "../act-router";
 import { integrationActRows } from "./integration-acts";
 

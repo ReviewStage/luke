@@ -1,3 +1,4 @@
+import type { AppAudioSlice } from "@luke/host/app-state";
 import type { DesktopService } from "@luke/host/desktop-service";
 import {
   MICROPHONE_STATUS,
@@ -7,7 +8,6 @@ import {
 } from "@luke/voice/audio";
 import { Schema } from "effect";
 import { systemPreferences } from "electron";
-import type { AppAudioSlice } from "#shared/messages/app-state";
 import type { AppStateStore } from "../app-state";
 import { MediaDuckController } from "../native/media-duck";
 import {

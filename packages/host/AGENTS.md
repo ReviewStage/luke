@@ -71,3 +71,11 @@ its next answer.
 `account-preferences-client.ts` would belong beside the plan client in
 `@luke/features`, but the snapshot it carries is `@luke/settings` vocabulary
 and `settings` already reaches `features`. This is the lowest package holding both.
+
+## Two doors the renderer reads
+
+`@luke/host/acts` and `@luke/host/app-state` are the desktop's
+renderer-and-main vocabulary, kept here because this is the lowest package that
+reaches every package they name (`@luke/gateway` cannot, since `@luke/voice`
+already depends on it); the renderer may import only these two doors from this
+package, so they and everything they import stay free of Node.

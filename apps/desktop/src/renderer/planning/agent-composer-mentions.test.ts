@@ -16,11 +16,11 @@ import {
   mentionMarkdown,
 } from "@luke/features/mention-link";
 import { PLAN_TREE_ENTRY } from "@luke/features/plan-wire";
+import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { Effect } from "effect";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "#shared/messages/acts";
 import {
   composerEditor,
   installEditorBundle,

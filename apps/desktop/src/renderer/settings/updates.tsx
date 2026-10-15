@@ -1,8 +1,8 @@
+import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
 import { UPDATE_ROW_ACTION, type UpdateRowAction, updateRow } from "@luke/settings/update-row";
 import { CheckIcon, ExternalIcon } from "@luke/ui";
 import type { UpdateControl } from "@luke/voice/settings-controls";
-import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";
 import { BusyLabel } from "../spinner";
 import { SettingsGroup } from "./settings-group";

@@ -1,5 +1,9 @@
+import type {
+  AgentEndToast,
+  AgentNoticeDoorsSurface,
+  InboxItemToast,
+} from "@luke/host/agent-notices";
 import { app, Notification } from "electron";
-import type { AgentEndToast, AgentNoticeDoorsSurface, InboxItemToast } from "../agent-notices";
 
 /**
  * notice-doors.ts -- the doors an agent's announcement leaves this process through: Electron's `Notification`, shown once with its click handed back, the panel's own toast, or the Dock's badge.

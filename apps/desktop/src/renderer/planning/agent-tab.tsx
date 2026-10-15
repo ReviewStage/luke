@@ -12,11 +12,11 @@ import {
 import { FAILURE_REASON, type FailureReason } from "@luke/features/failure-remedy";
 import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
 import { CALL_KIND, CALL_WORDS } from "@luke/features/turn-rows";
+import { ACT_KIND } from "@luke/host/acts";
 import { DocumentIcon } from "@luke/ui";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { BotIcon } from "lucide-react";
 import { Fragment, type ReactNode, useEffect, useRef } from "react";
-import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";
 import {
   Conversation,

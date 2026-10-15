@@ -1,10 +1,10 @@
 import { PRODUCT_EVENT, type RecordProductEvent } from "@luke/features/analytics";
+import { ACT_KIND } from "@luke/host/acts";
 import type { HostOperator } from "@luke/host/host-operator";
 import { type LiveDiagnostics, liveExchangeActive } from "@luke/live";
 import { Effect, Option } from "effect";
 import type { BrowserWindow, WebContents } from "electron";
 import { channels } from "#shared/bridge";
-import { ACT_KIND } from "#shared/messages/acts";
 import type { ActRows } from "../act-router";
 import type { AppStateStore } from "../app-state";
 import type { ReportHandlers } from "../bridge-host";

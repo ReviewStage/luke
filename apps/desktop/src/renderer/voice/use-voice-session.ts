@@ -1,6 +1,7 @@
 import { useAtomValue } from "@effect/atom-react/Hooks";
 import { PRODUCT_EXCHANGE_KIND } from "@luke/features/analytics";
 import { sanitizedTraceEvent } from "@luke/gateway/devtrace";
+import { ACT_KIND } from "@luke/host/acts";
 import { appSettingsView } from "@luke/settings/wire";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { hostedVoiceUnavailableNote } from "@luke/voice/microphone-access";
@@ -14,7 +15,6 @@ import { outputSilent } from "@luke/voice/volume-hint";
 import { Duration, Effect, Schedule } from "effect";
 import * as Atom from "effect/reactivity/Atom";
 import { type RefObject, useCallback, useEffect, useRef } from "react";
-import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";
 import { rendererRegistry, rendererServicesNow } from "../renderer-runtime";
 import { appSettingsNow, appStateNow, useAppState } from "../use-app-state";

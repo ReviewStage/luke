@@ -13,6 +13,8 @@ import {
 } from "@luke/features/planning-view";
 import { managesWorkspace } from "@luke/features/workspace-role";
 import type { Workspace } from "@luke/features/workspace-wire";
+import { ACT_KIND } from "@luke/host/acts";
+import type { AppInboxPlan, AppInboxPlanHolding } from "@luke/host/app-state";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import {
   isAgentTab,
@@ -37,8 +39,6 @@ import {
 import { callInProgress, VOICE_COMMAND, type VoiceView } from "@luke/voice/voice-view";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ACT_KIND } from "#shared/messages/acts";
-import type { AppInboxPlan, AppInboxPlanHolding } from "#shared/messages/app-state";
 import type { ActHandle } from "../act";
 import { callCard } from "../call/call-card-model";
 import { useCopyToast } from "../copy-feedback";
@@ -148,7 +148,7 @@ import { startedAgentCallIds, workerCallIds, workRowsOf } from "./work-model";
  * their workers' in the side panel. Main is told which agent's tab is shown, so the notification it
  * posts when an agent ends is held back while the developer is looking at
  * that agent, and the agents main says ended unseen read in semibold until their
- * tab is shown (`main/agent-notices.ts`). The open plan's history is the
+ * tab is shown (`@luke/host/agent-notices`). The open plan's history is the
  * tab's as well (`use-plan-history.ts`): its version history, opened from
  * the plan's menu or its "Edited by" line, or from a section's on the
  * revision that last changed the section, takes the whole window in the

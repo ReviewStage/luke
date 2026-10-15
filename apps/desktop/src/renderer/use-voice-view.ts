@@ -1,3 +1,5 @@
+import { ACT_KIND } from "@luke/host/acts";
+import { RUN_PROFILE, type RunProfile } from "@luke/host/app-state";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import {
   IDLE_VOICE_VIEW,
@@ -6,8 +8,6 @@ import {
   type VoiceView,
 } from "@luke/voice/voice-view";
 import { useCallback } from "react";
-import { ACT_KIND } from "#shared/messages/acts";
-import { RUN_PROFILE, type RunProfile } from "#shared/messages/app-state";
 import { useAct } from "./act";
 import { useCallCommands } from "./call-commands";
 import { useAppState } from "./use-app-state";
