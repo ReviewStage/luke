@@ -1,5 +1,10 @@
 import type { ModelProvider } from "@luke/features/models-wire";
-import { PLAN_ACTOR, type PlanLastEdit, type PlanSectionEdit } from "@luke/features/plan-wire";
+import {
+  PLAN_ACTOR,
+  type PlanEditor,
+  type PlanLastEdit,
+  type PlanSectionEdit,
+} from "@luke/features/plan-wire";
 import {
   WORKSPACE_ROLE,
   type WorkspaceMember,
@@ -71,6 +76,8 @@ export type Actor =
   | { readonly kind: typeof ACTOR_KIND.LUKE }
   | {
       readonly kind: typeof ACTOR_KIND.AGENT;
+      /** The agent's id, which tells two agents of one name apart; absent where an older service named none. */
+      readonly agentId?: string | undefined;
       readonly name: string;
       readonly provider: ModelProvider | undefined;
       readonly state: ActorState;
@@ -220,10 +227,34 @@ export function accountActor(account: {
     kind: ACTOR_KIND.PERSON,
     userId: account.id ?? account.email,
     name: account.name ?? account.email,
+    email: account.email,
     you: true,
   };
   const { pictureUrl } = account;
   return pictureUrl === undefined ? person : { ...person, pictureUrl };
+}
+
+/**
+ * Who created a plan, for the reader: the member `createdBy` names, read
+ * against the members. Note that a service before `createdBy` names only
+ * the owner's id, so the reader's own plan is drawn as their `account`, as
+ * the members list them where they do, and another member's as the members
+ * list that id; where neither knows a name, the creator is someone unnamed,
+ * never a face with no name.
+ */
+export function creatorActor(
+  plan: { readonly createdBy?: PlanEditor | undefined; readonly ownerId?: string | undefined },
+  reader: EditReader,
+  account: PersonActor | undefined,
+): Actor {
+  const { createdBy, ownerId } = plan;
+  if (createdBy !== undefined || ownerId === undefined) {
+    return personActor(createdBy, reader.members, reader.readerId);
+  }
+  const member = reader.members?.find((each) => each.userId === ownerId);
+  if (member !== undefined) return memberActor(member, reader.readerId);
+  if (ownerId === reader.readerId && account !== undefined) return account;
+  return { kind: ACTOR_KIND.SOMEONE, reason: SOMEONE_REASON.UNNAMED };
 }
 
 /**
@@ -267,6 +298,7 @@ export function editActor(
     case PLAN_ACTOR.AGENT:
       return {
         kind: ACTOR_KIND.AGENT,
+        ...(edit.agentId === undefined ? undefined : { agentId: edit.agentId }),
         name: edit.label ?? TAB_WORDS.CODING_AGENT,
         provider: agent?.provider,
         state: agent?.state ?? ACTOR_STATE.REST,
@@ -297,7 +329,12 @@ function changedBy(edit: PlanLastEdit, actor: Actor): boolean {
     case ACTOR_KIND.LUKE:
       return edit.actor === PLAN_ACTOR.NOTETAKER;
     case ACTOR_KIND.AGENT:
-      return edit.actor === PLAN_ACTOR.AGENT && edit.label === actor.name;
+      return (
+        edit.actor === PLAN_ACTOR.AGENT &&
+        (edit.agentId !== undefined && actor.agentId !== undefined
+          ? edit.agentId === actor.agentId
+          : edit.label === actor.name)
+      );
     default:
       return false;
   }
@@ -330,7 +367,17 @@ export function activityWords(activity: ActorActivity): string {
   return `Edited ${NAMES.format(named)}`;
 }
 
-/** Whether two actors are one: a member by their id, an agent or an automation by its name, someone by why and the name they go by. */
+/** Whether two agents are one: by their ids where both carry one, since two agents may share a title, and by name only where an older service named no id. */
+function sameAgent(
+  one: Extract<Actor, { kind: typeof ACTOR_KIND.AGENT }>,
+  other: Extract<Actor, { kind: typeof ACTOR_KIND.AGENT }>,
+): boolean {
+  if (one.agentId !== undefined && other.agentId !== undefined)
+    return one.agentId === other.agentId;
+  return one.name === other.name;
+}
+
+/** Whether two actors are one: a member by their id, an agent as `sameAgent` says, an automation by its name, someone by why and the name they go by. */
 function sameActor(one: Actor, other: Actor): boolean {
   switch (one.kind) {
     case ACTOR_KIND.PERSON:
@@ -338,6 +385,7 @@ function sameActor(one: Actor, other: Actor): boolean {
     case ACTOR_KIND.LUKE:
       return other.kind === ACTOR_KIND.LUKE;
     case ACTOR_KIND.AGENT:
+      return other.kind === ACTOR_KIND.AGENT && sameAgent(one, other);
     case ACTOR_KIND.AUTOMATION:
       return other.kind === one.kind && other.name === one.name;
     case ACTOR_KIND.SOMEONE:

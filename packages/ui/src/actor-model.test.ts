@@ -7,8 +7,10 @@ import {
   ACTOR_STATE,
   type Actor,
   type ActorActivity,
+  accountActor,
   activityWords,
   actorName,
+  creatorActor,
   distinctActors,
   type EditReader,
   editActor,
@@ -190,4 +192,53 @@ test("a facepile of who did a thing draws each of them once, where they first st
     LUKE_ACTOR,
     sam,
   ]);
+});
+
+test("two agents of one name each keep a face, told apart by their ids, and agents an older service sent no id for are told apart by name", () => {
+  const edit = (agentId?: string) => ({
+    actor: PLAN_ACTOR.AGENT,
+    label: "claude-opus-5.5",
+    ...(agentId === undefined ? undefined : { agentId }),
+    at: 0,
+    duringCall: false,
+  });
+  const editors = (edits: ReturnType<typeof edit>[]) =>
+    distinctActors(edits.flatMap((each) => editActor(each, SAM_READS) ?? []));
+
+  assert.equal(editors([edit("agent-1"), edit("agent-2"), edit("agent-1")]).length, 2);
+  assert.equal(editors([edit(), edit()]).length, 1);
+});
+
+test("a plan's creator is the member it names, or, from a service that names only the owner's id, the reader as their account or a member the read lists, and never a face with no name", () => {
+  const you = accountActor({ id: SAM.userId, email: SAM.email, name: SAM.name });
+  const someone = { kind: ACTOR_KIND.SOMEONE, reason: SOMEONE_REASON.UNNAMED };
+  const unread: EditReader = { members: undefined, readerId: SAM.userId };
+
+  assert.equal(
+    called(creatorActor({ createdBy: DANA_REF, ownerId: DANA.userId }, SAM_READS, you)),
+    "Dana Reyes",
+  );
+  assert.deepEqual(creatorActor({ ownerId: SAM.userId }, unread, you), you);
+  assert.equal(called(creatorActor({ ownerId: DANA.userId }, SAM_READS, you)), "Dana Reyes");
+  assert.deepEqual(creatorActor({ ownerId: SAM.userId }, unread, undefined), someone);
+  assert.deepEqual(creatorActor({ ownerId: DANA.userId }, unread, you), someone);
+});
+
+test("the signed-in account is drawn as the reader, by the name, address, and picture their sign-in holds", () => {
+  assert.deepEqual(
+    accountActor({
+      id: SAM.userId,
+      email: SAM.email,
+      name: SAM.name,
+      pictureUrl: "https://avatars.githubusercontent.com/u/4",
+    }),
+    {
+      kind: ACTOR_KIND.PERSON,
+      userId: SAM.userId,
+      name: SAM.name,
+      email: SAM.email,
+      pictureUrl: "https://avatars.githubusercontent.com/u/4",
+      you: true,
+    },
+  );
 });

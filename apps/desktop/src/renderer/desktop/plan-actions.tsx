@@ -1,3 +1,4 @@
+import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { PLAN_ACTOR, type PlanSummary } from "@luke/features/plan-wire";
 import {
@@ -12,7 +13,7 @@ import {
   UnarchiveIcon,
   UnpinIcon,
 } from "@luke/ui";
-import { type Actor, type EditReader, personActor } from "@luke/ui/actor-model";
+import { accountActor, creatorActor } from "@luke/ui/actor-model";
 import { confirmAsked } from "@luke/ui/confirm-state";
 import { DOCUMENT_REGION, PLAN_MARK, type PlanMark } from "@luke/ui/planning-model";
 import { FolderInputIcon, HistoryIcon } from "lucide-react";
@@ -27,6 +28,7 @@ import { RelativeTime } from "../planning/relative-time";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { ConfirmDialog, type DialogQuestion, useConfirmDialog } from "../settings/confirm-dialog";
 import { Tooltip } from "../tooltip";
+import { useAppState } from "../use-app-state";
 import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
 import { useMovePlanDialog } from "./move-plan-dialog";
 import { PlanStatusMark, planCardOf } from "./plan-card";
@@ -209,19 +211,6 @@ function planActionGroups(
 }
 
 /**
- * Who created a plan, as the members read names them: the reader as you,
- * and someone unnamed where the service names nobody. Note that a service
- * before createdBy names only the owner's id, which is enough to say the
- * reader's own plan is theirs.
- */
-function creatorOf(plan: PlanSummary, reader: EditReader): Actor {
-  const { createdBy, ownerId } = plan;
-  const yours = createdBy === undefined && ownerId !== undefined && ownerId === reader.readerId;
-  const ref = yours ? { userId: ownerId, name: "" } : createdBy;
-  return personActor(ref, reader.members, reader.readerId);
-}
-
-/**
  * The menu's quiet foot, as Notion, Linear, and Google Docs end a document's
  * menu: "Created by [Charles] Charles Pan · 3d ago" and "Last edited by
  * [you] you · 2h ago", each person on their face hanging their card. The
@@ -240,6 +229,8 @@ function PlanMenuFooter({
 }): React.JSX.Element {
   const now = useMinute();
   const reader = useEditReader({ readerId: plans.me });
+  const account = useAppState()?.account;
+  const you = account?.status === ACCOUNT_STATUS.SIGNED_IN ? accountActor(account) : undefined;
   const { region } = plans;
   const opened = region.kind === DOCUMENT_REGION.READY && region.plan.id === plan.id;
   const edit = opened ? lastEditOf(region.plan) : undefined;
@@ -254,7 +245,7 @@ function PlanMenuFooter({
     <>
       <p className="plan-menu-note actor-line">
         {"Created by "}
-        <ActorRef actor={creatorOf(plan, reader)} sentence />
+        <ActorRef actor={creatorActor(plan, reader, you)} sentence />
         {" · "}
         <RelativeTime at={plan.createdAt} now={now} ago />
       </p>
