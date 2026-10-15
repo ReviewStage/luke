@@ -383,7 +383,7 @@ function planlessItem(id: string, patch: Partial<AccountPlanlessEntry> = {}): Ac
   };
 }
 it.effect(
-  "an item of an agent with no plan waits beside the plans' and counts on the badge, and one opened since is announced by its automation, its click opening the agent's own page",
+  "an item of an agent with no plan waits beside the plans' with its workspace and counts on the badge, and one opened since is announced by its automation, its click opening the agent's own page",
   () =>
     Effect.gen(function* () {
       const f = fixture();
@@ -394,7 +394,7 @@ it.effect(
 
       f.answerInbox({
         items: [waitingItem(ITEM_A)],
-        planless: [planlessItem(ITEM_B, { updatedAt: READ_AT + 1 })],
+        planless: [planlessItem(ITEM_B, { updatedAt: READ_AT + 1, workspaceId: "workspace-acme" })],
         automations: [
           {
             automationId: "5a0c4d2e-8f1b-4c3a-9e7d-2b6f1a8c9d04",
@@ -417,6 +417,11 @@ it.effect(
       ]);
       f.posted.at(-1)?.onClick();
       assert.deepEqual(f.opened, [{ planId: null, agentId: AGENT_ID }]);
+      assert.deepEqual(
+        f.planless.at(-1)?.map((item) => item.workspaceId),
+        ["workspace-acme"],
+        "the window is told whose workspace's list the item stands in",
+      );
     }),
 );
 it.effect(

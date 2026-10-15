@@ -384,6 +384,7 @@ function waitingPlanless(items: readonly AccountPlanlessEntry[]): AppInboxSlice[
     automationId: item.automationId,
     automationName: item.automationName,
     repository: item.repository,
+    ...(item.workspaceId === undefined ? undefined : { workspaceId: item.workspaceId }),
   }));
 }
 
