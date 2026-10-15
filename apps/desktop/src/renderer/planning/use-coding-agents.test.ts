@@ -245,3 +245,31 @@ test("with no plan open, the agent named is read as its page and held as a list 
   act(() => tab.control().onTitle(AGENT, "Sweep the flaky tests"));
   assert.equal(tab.control().agents?.[0]?.title, "Sweep the flaky tests");
 });
+
+test("another agent named with no plan open holds nothing of the last, even where its read does not land", async () => {
+  const OTHER = "3c2d1e0f-4a5b-4c6d-8e7f-9a0b1c2d3e4f";
+  const page = (id: string) => ({
+    agent: {
+      ...STARTED,
+      id,
+      planId: null,
+      automationId: null,
+      workspaceId: "workspace-1",
+      repository: "acme/relay",
+    },
+  });
+  const tab = mount({ planId: undefined, agentId: AGENT, repository: null });
+  tab.answer(ACT_KIND.CODING_AGENTS_PAGE, page(AGENT), {
+    failure: CODING_AGENT_CALL_FAILURE.UNANSWERED,
+  });
+  await tab.mount();
+  assert.deepEqual(
+    tab.control().agents?.map((agent) => agent.id),
+    [AGENT],
+  );
+
+  await tab.stand({ agentId: OTHER });
+
+  assert.equal(tab.control().agents, undefined, "the last agent is not drawn for the next");
+  assert.equal(tab.control().listFailed, true);
+});

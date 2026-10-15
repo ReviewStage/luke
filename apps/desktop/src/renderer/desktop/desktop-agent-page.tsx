@@ -18,9 +18,10 @@ import { SPINNER_SIZE, Spinner } from "../spinner";
  * servers, and what it published, each through the same control a plan's
  * agents are driven by, here holding the one agent read by its id
  * (`use-coding-agents.ts`'s `agentId`). Its title names the agent as its tab
- * would. Its workers open nowhere yet, since a worker opens in the side
- * panel a plan's column keeps. Escape leaves it for wherever it was opened
- * from, and so does any row of the sidebar.
+ * would. An archived agent takes no message, so its composer gives way to
+ * its own Unarchive. Its workers open nowhere yet, since a worker opens in
+ * the side panel a plan's column keeps. Escape leaves it for wherever it
+ * was opened from, and so does any row of the sidebar.
  */
 
 /** What the page says where the agent could not be read. */
@@ -49,10 +50,23 @@ export function DesktopAgentPage({
     onOpenIntegrations: plans.agents.onOpenIntegrations,
     onOpenApiKeys: plans.agents.onOpenApiKeys,
     onStarted: nothing,
+    me: plans.me,
   });
   const agent = agents.agents?.[0] ?? agents.archived?.[0];
-  // Note that the models come from the open plan's agents where this page has not read them, so the agent is named alike in both.
-  const control = { ...agents, models: agents.models ?? plans.agents.models };
+  // Note that the models come from the open plan's agents where this page has not read them, so
+  // the agent is named alike in both; and that an archived agent, which takes no message, is
+  // brought back by its own Unarchive, there being no plan to bring back with it.
+  const { onArchive } = agents;
+  const control = {
+    ...agents,
+    models: agents.models ?? plans.agents.models,
+    onUnarchive:
+      agent?.archivedAt === undefined
+        ? undefined
+        : () => {
+            void onArchive(agentId, false);
+          },
+  };
   return (
     <section className="agent-page" aria-label="Agent">
       <header className="desktop-toolbar">

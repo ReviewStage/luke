@@ -410,7 +410,8 @@ export function DesktopShell({
         {inboxOpen ? (
           <DesktopInbox plans={plans} />
         ) : pageAgent !== undefined ? (
-          <DesktopAgentPage plans={plans} agentId={pageAgent} />
+          // Keyed by the agent, so another agent's page is a page of its own, holding nothing of the last.
+          <DesktopAgentPage key={pageAgent} plans={plans} agentId={pageAgent} />
         ) : (
           <DesktopPlans
             plans={plans}

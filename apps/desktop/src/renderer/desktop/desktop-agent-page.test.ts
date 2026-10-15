@@ -42,16 +42,24 @@ let root: Root | undefined;
 let pages: CodingAgentPageAnswerView[] = [];
 /** Every agent whose page was read, in order. */
 let read: string[] = [];
+/** Every archive or Unarchive asked, as the act carried it. */
+let archives: { agentId: string; archived: boolean }[] = [];
 
 beforeEach(() => {
   pages = [{ agent: PAGE }];
   read = [];
+  archives = [];
   Object.defineProperty(window, "luke", {
     configurable: true,
     value: {
       onMenuCommand: () => () => undefined,
       recordSurfaceEvent: () => undefined,
       act: (request: Act) => {
+        if (request.kind === ACT_KIND.CODING_AGENTS_ARCHIVE) {
+          archives.push(request.payload);
+          const value = { agent: { ...PAGE, archivedAt: undefined } };
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+        }
         if (request.kind === ACT_KIND.CODING_AGENTS_PAGE) {
           read.push(request.payload.agentId);
           const value = pages.length > 1 ? pages.shift() : pages[0];
@@ -115,4 +123,19 @@ test("a read that did not land says so, and Retry reads the agent again and draw
 
   assert.deepEqual(read, [AGENT_ID, AGENT_ID]);
   assert.equal(page.querySelector("h1")?.textContent, "Sweep the flaky tests");
+});
+
+test("an archived agent's page offers Unarchive in its composer's place, which brings the agent back", async () => {
+  pages = [{ agent: { ...PAGE, archivedAt: 2 } }];
+  const page = mount();
+  await settle();
+
+  const unarchive = [...page.querySelectorAll("button")].find(
+    (each) => each.textContent === "Unarchive",
+  );
+  assert.ok(unarchive, "the archived agent offers Unarchive");
+  act(() => unarchive.click());
+  await settle();
+
+  assert.deepEqual(archives, [{ agentId: AGENT_ID, archived: false }]);
 });

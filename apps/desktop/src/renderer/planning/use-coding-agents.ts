@@ -290,11 +290,16 @@ export function useCodingAgents(input: {
   const { planId, agentId, repository, archived } = input;
   const { act } = input.acts;
   const mintKey = input.mintKey ?? (() => crypto.randomUUID());
+  // Note that the list is held under the agent too, where it is the page's one agent, so another agent's page holds nothing of the last.
   const [list, setList] = useState<{
     planId: string | undefined;
+    agentId: string | undefined;
     agents: readonly CodingAgentSummary[] | undefined;
     failed: boolean;
-  }>({ planId: undefined, agents: undefined, failed: false });
+  }>({ planId: undefined, agentId: undefined, agents: undefined, failed: false });
+  const listOf = planId === undefined ? agentId : undefined;
+  const ours = (was: { planId: string | undefined; agentId: string | undefined }) =>
+    was.planId === planId && was.agentId === listOf;
   const [models, setModels] = useState<readonly CatalogModel[] | undefined>(undefined);
   const [starting, setStarting] = useState(false);
   // Each plan's draft, by the plan's id.
@@ -315,13 +320,13 @@ export function useCodingAgents(input: {
   latest.current = input;
 
   // The list is this plan's: another plan's, or none, is nothing to draw.
-  const held = list.planId === planId ? list.agents : undefined;
+  const held = ours(list) ? list.agents : undefined;
   const agents = useMemo(() => held?.filter((agent) => agent.archivedAt === undefined), [held]);
   const archivedAgents = useMemo(
     () => held?.filter((agent) => agent.archivedAt !== undefined),
     [held],
   );
-  const listFailed = list.planId === planId && list.failed;
+  const listFailed = ours(list) && list.failed;
 
   // Read when the plan opens, or the page's agent where no plan is, and again when a Start or a Stop asks (`reads`).
   useEffect(() => {
@@ -332,8 +337,8 @@ export function useCodingAgents(input: {
         if (!live) return;
         setList((was) =>
           "failure" in answer
-            ? { planId, agents: was.planId === planId ? was.agents : undefined, failed: true }
-            : { planId, agents: answer.agents, failed: false },
+            ? { planId, agentId: listOf, agents: ours(was) ? was.agents : undefined, failed: true }
+            : { planId, agentId: listOf, agents: answer.agents, failed: false },
         );
       },
       () => {
@@ -341,7 +346,8 @@ export function useCodingAgents(input: {
         if (live)
           setList((was) => ({
             planId,
-            agents: was.planId === planId ? was.agents : undefined,
+            agentId: listOf,
+            agents: ours(was) ? was.agents : undefined,
             failed: true,
           }));
       },
@@ -665,7 +671,7 @@ export function useCodingAgents(input: {
       const answer = await listRead(act, planId, agentId).catch(() => undefined);
       if (answer === undefined || "failure" in answer) return undefined;
       setList((was) =>
-        was.planId === planId ? { planId, agents: answer.agents, failed: false } : was,
+        ours(was) ? { planId, agentId: listOf, agents: answer.agents, failed: false } : was,
       );
       return answer.agents.find((agent) => agent.id === named);
     },
