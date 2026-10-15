@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { openHostedStoreTestDatabase, startPlan } from "@luke/database/testing";
+import { NO_GITHUB, openGithubUser } from "@luke/service/testing/github-app-fake";
 import { Effect, Layer, Option, Result } from "effect";
 import type { SessionAuth, SessionContext } from "eve/context";
 import { afterAll, test } from "vitest";
@@ -18,7 +19,6 @@ import {
 import { type CoderHost, coderHost } from "../server/hosted/coder-host/host";
 import { CODER_TOOL_SET } from "../server/hosted/coder-host/tool-set";
 import type { WebAgentRun } from "../server/runtime";
-import { NO_GITHUB, openGithubUser } from "./support/github-app-fake";
 import { CONNECTOR_ASKED_NOTHING, integrationConnectOf } from "./support/integration-connect";
 
 /**

@@ -5,6 +5,7 @@ import {
   type GitHubInstallationStatus,
 } from "@luke/database/github-installation-vocabulary";
 import { listCodingAgentsOnBranches } from "@luke/database/models/coding-agent-store";
+import { clearRevokedAuthorization, type GitHubApp } from "@luke/service/github/github-app";
 import { setInstallationStatus } from "@luke/service/github/github-installations";
 import {
   HOSTED_REFUSAL,
@@ -26,7 +27,6 @@ import {
   HttpServerRequest,
   type HttpServerResponse,
 } from "effect/http";
-import { clearRevokedAuthorization, type GitHubApp } from "./github/github-app.js";
 import { queueGithubRuns } from "./hosted/automation-github.js";
 import { agentPublished } from "./hosted/coder-host/published.js";
 import { HostedEnvironment } from "./hosted/environment.js";

@@ -46,6 +46,9 @@ import {
 } from "@luke/features/inbox-wire";
 import { modelChoiceSchema } from "@luke/features/models-wire";
 import { isRecord, isWireString, type UnparsedWireValue, unparsedWire } from "@luke/service/core";
+import type { GitHubApp } from "@luke/service/github/github-app";
+import { githubReadOrRefusal } from "@luke/service/github/github-refusal";
+import { pullRequestFiles } from "@luke/service/github/pull-requests";
 import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import {
   HOSTED_REFUSAL,
@@ -62,9 +65,6 @@ import { ANY_METHOD, type WebRoutes } from "@luke/service/route";
 import { readEither } from "@luke/wire/effect";
 import { Cache, Clock, Effect, Layer, Option, Result } from "effect";
 import { type HttpClient, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
-import type { GitHubApp } from "./github/github-app.js";
-import { githubReadOrRefusal } from "./github/github-refusal.js";
-import { pullRequestFiles } from "./github/pull-requests.js";
 import { reachedAgent, reachedAnyAgent, resolvedUserId, uuidOf } from "./hosted/agent-reach.js";
 import { accountInboxPast, planInboxPast } from "./hosted/coder-host/inbox-page.js";
 import {

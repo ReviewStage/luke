@@ -1254,7 +1254,7 @@ Two existing rules carry over unchanged:
   the masking, since every word in it is the developer's or Luke's.
 - **Secrets.** No credential or account secret enters the document, a caption,
   a counted event, or a trace. The GitHub user token is sealed on the
-  `account` row and read only by `apps/web/server/github/github-app.ts`; the
+  `account` row and read only by `packages/service/src/github/github-app.ts`; the
   installation tokens it mints are set at the sandbox's firewall and never
   enter the sandbox; and the model is told to keep secrets out of the plan.
   Nothing scans for this, so each owning issue holds it by construction.
@@ -1342,7 +1342,7 @@ changes when a check is run, not when one is planned.
   developer can reach, with the App's registered permissions, contents and
   pull requests read and write among them. The server reads it only to list
   installations and repositories and to confirm a plan's repository is
-  reachable (`apps/web/server/github/github-app.ts`); a planning checkout
+  reachable (`packages/service/src/github/github-app.ts`); a planning checkout
   runs on an installation token cut to contents read, and a coding agent on
   one cut to contents and pull requests write. An account that signed in
   under the earlier OAuth App may still hold its classic `repo` token until

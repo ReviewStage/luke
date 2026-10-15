@@ -22,6 +22,8 @@ import {
 } from "@luke/features";
 import { workspaceIdSchema } from "@luke/features/plan-wire";
 import { type GitHubRepository, unparsedWire } from "@luke/service/core";
+import { GitHubApp } from "@luke/service/github/github-app";
+import { githubReadOrRefusal } from "@luke/service/github/github-refusal";
 import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import {
   HOSTED_REFUSAL,
@@ -42,8 +44,6 @@ import {
   HttpServerRequest,
   type HttpServerResponse,
 } from "effect/http";
-import { GitHubApp } from "./github/github-app.js";
-import { githubReadOrRefusal } from "./github/github-refusal.js";
 
 const HTTP_METHOD = { GET: "GET" } as const;
 

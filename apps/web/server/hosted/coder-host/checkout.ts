@@ -1,9 +1,9 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import type { CodingAgent } from "@luke/database/models/coding-agent-store";
 import type { ConversationTarget } from "@luke/database/models/writer";
+import { GitHubApp, noreplyAddress } from "@luke/service/github/github-app";
 import { Data, Effect, Option, type Redacted } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
-import { GitHubApp, noreplyAddress } from "../../github/github-app.js";
 import {
   type CheckoutIdentity,
   cloneRepository,

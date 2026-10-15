@@ -29,11 +29,11 @@
  */
 
 import { PLAN_SKILL_BOUNDS } from "@luke/features/plan-wire";
+import type { GitHubUnavailable } from "@luke/service/github/github-app";
+import { readRepositoryFile } from "@luke/service/github/repository-file";
+import { GIT_ENTRY, readRepositoryFolder } from "@luke/service/github/repository-folder";
 import { Effect, Option, type Redacted, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
-import type { GitHubUnavailable } from "../github/github-app.js";
-import { readRepositoryFile } from "../github/repository-file.js";
-import { GIT_ENTRY, readRepositoryFolder } from "../github/repository-folder.js";
 
 /** Where a repository keeps its skills, in the order a name is looked for. */
 const SKILL_ROOT = {

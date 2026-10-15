@@ -15,14 +15,20 @@
     "./core": "./src/core.js",
     "./db": "./src/db/index.js",
     "./db/sql-client": "./src/db/sql-client.js",
+    "./github/github-app": "./src/github/github-app.js",
     "./github/github-installations": "./src/github/github-installations.js",
+    "./github/github-refusal": "./src/github/github-refusal.js",
+    "./github/pull-requests": "./src/github/pull-requests.js",
+    "./github/repository-file": "./src/github/repository-file.js",
+    "./github/repository-folder": "./src/github/repository-folder.js",
     "./http/http": "./src/http/http.js",
     "./http/http-effect": "./src/http/http-effect.js",
     "./http/store-failure": "./src/http/store-failure.js",
     "./providers/openai": "./src/providers/openai.js",
     "./providers/posthog": "./src/providers/posthog.js",
     "./route": "./src/route.js",
-    "./run": "./src/run.js"
+    "./run": "./src/run.js",
+    "./testing/github-app-fake": "./src/testing/github-app-fake.js"
   },
   "scripts": {
     "test:vitest:1": "vitest run --shard=1/3",

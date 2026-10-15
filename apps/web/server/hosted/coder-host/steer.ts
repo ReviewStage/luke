@@ -11,6 +11,7 @@ import type { StoreWriter } from "@luke/database/models/writer";
 import { STORE_WRITE_REFUSAL } from "@luke/database/models/writer";
 import { CODING_AGENT_STATUS, type CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import { causeKind } from "@luke/runtime/effect";
+import type { GitHubApp } from "@luke/service/github/github-app";
 import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import {
   HOSTED_REFUSAL,
@@ -19,7 +20,6 @@ import {
 } from "@luke/service/http/http-effect";
 import { Clock, Effect, Option, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
-import type { GitHubApp } from "../../github/github-app.js";
 import { eveContent } from "../attached-files.js";
 import { BRAIN_HOST_TURN } from "../brain-host/bounds.js";
 import {

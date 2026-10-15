@@ -22,7 +22,9 @@ import { readPlan } from "@luke/database/models/plan-store";
 import { isWorkspaceMember } from "@luke/database/models/workspace-store";
 import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
 import type { GitHubRepository } from "@luke/service/core";
+import { GitHubApp } from "@luke/service/github/github-app";
 import { memberWorkspaceOnOwner } from "@luke/service/github/github-installations";
+import { githubReachOrRefusal, logWorkspaceReadFailure } from "@luke/service/github/github-refusal";
 import {
   type HostedRefusal,
   hostedStoreOrUnavailable,
@@ -31,8 +33,6 @@ import {
 import type { StoreFailure } from "@luke/service/http/store-failure";
 import { Effect, Option, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
-import { GitHubApp } from "../github/github-app.js";
-import { githubReachOrRefusal, logWorkspaceReadFailure } from "../github/github-refusal.js";
 
 /**
  * The workspace of a plan the account reaches, whose installation every

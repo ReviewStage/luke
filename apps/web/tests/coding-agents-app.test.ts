@@ -67,6 +67,14 @@ import {
   linkInstallation,
 } from "@luke/service/github/github-installations";
 import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
+import {
+  connectWorkspaceGitHub,
+  type FakeGitHub,
+  githubReaching,
+  type InstallationFixture,
+  openGithubUser,
+  type RepositoryScript,
+} from "@luke/service/testing/github-app-fake";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { eq } from "drizzle-orm";
@@ -101,14 +109,6 @@ import { HostedEnvironment, type HostedEnvironmentValues } from "../server/hoste
 import { answerInboxItem, type InboxImage, postInboxItem } from "../server/hosted/inbox-store";
 import { modelCatalogOf, type OfferedModel } from "../server/hosted/model-catalog";
 import { plansApp } from "../server/plans-app";
-import {
-  connectWorkspaceGitHub,
-  type FakeGitHub,
-  githubReaching,
-  type InstallationFixture,
-  openGithubUser,
-  type RepositoryScript,
-} from "./support/github-app-fake";
 
 /**
  * The coding-agent routes, answered by the group the way a function answers

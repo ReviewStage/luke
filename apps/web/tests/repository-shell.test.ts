@@ -1,16 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { getTestDB, startPlan } from "@luke/database/testing";
-import { unparsedWire } from "@luke/wire";
-import { Effect, type Layer } from "effect";
-import type * as HttpClient from "effect/http/HttpClient";
-import type { GitHubApp } from "../server/github/github-app";
-import {
-  REPOSITORY_SHELL_REFUSAL,
-  REPOSITORY_SHELL_STATUS,
-  type RepositoryCall,
-  runInRepository,
-} from "../server/hosted/repository-shell";
+import type { GitHubApp } from "@luke/service/github/github-app";
 import {
   connectWorkspaceGitHub,
   GITHUB_FIXTURE_INSTALLATION_TOKEN,
@@ -18,7 +9,16 @@ import {
   type InstallationFixture,
   openGithubUser,
   type SentToGitHub,
-} from "./support/github-app-fake";
+} from "@luke/service/testing/github-app-fake";
+import { unparsedWire } from "@luke/wire";
+import { Effect, type Layer } from "effect";
+import type * as HttpClient from "effect/http/HttpClient";
+import {
+  REPOSITORY_SHELL_REFUSAL,
+  REPOSITORY_SHELL_STATUS,
+  type RepositoryCall,
+  runInRepository,
+} from "../server/hosted/repository-shell";
 import { type CommandTable, sandboxDouble } from "./support/repository-sandbox";
 
 /**

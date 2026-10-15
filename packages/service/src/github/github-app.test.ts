@@ -6,16 +6,12 @@ import { GITHUB_ACCOUNT_TYPE } from "@luke/database/github-installation-vocabula
 import { account } from "@luke/database/schemas/auth";
 import { getTestDB, openWorkspace } from "@luke/database/testing";
 import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
-import {
-  AUTH_SECRET_ENVIRONMENT,
-  GITHUB_APP_ENVIRONMENT,
-} from "@luke/service/auth/auth-deployment";
 import { generateCodeChallenge } from "better-auth/oauth2";
 import { eq } from "drizzle-orm";
 import { Clock, Effect, Option, Redacted, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { afterEach, beforeEach, vi } from "vitest";
-import { GITHUB_REPOSITORY_SELECTION, GitHubApp } from "../server/github/github-app";
+import { AUTH_SECRET_ENVIRONMENT, GITHUB_APP_ENVIRONMENT } from "../auth/auth-deployment.js";
 import {
   connectWorkspaceGitHub,
   fakeGitHub,
@@ -29,7 +25,8 @@ import {
   type InstallationFixture,
   openGithubUser,
   standingGithubRow,
-} from "./support/github-app-fake";
+} from "../testing/github-app-fake.js";
+import { GITHUB_REPOSITORY_SELECTION, GitHubApp } from "./github-app.js";
 
 /**
  * The Luke GitHub App's server client with GitHub a fake behind the

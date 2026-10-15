@@ -12,18 +12,18 @@ import {
 } from "@luke/database/testing";
 import { githubRepositoriesAnswerSchema, HOSTED_SERVICE_PATH } from "@luke/features";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "@luke/service/http/http";
+import {
+  type FakeGitHub,
+  GITHUB_FIXTURE,
+  githubReaching,
+  openGithubUser,
+} from "@luke/service/testing/github-app-fake";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Clock, Effect, Layer, Option, Result } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { githubRepositoriesApp } from "../server/github-repositories-app";
-import {
-  type FakeGitHub,
-  GITHUB_FIXTURE,
-  githubReaching,
-  openGithubUser,
-} from "./support/github-app-fake";
 
 /**
  * The repositories route over the real `GitHubApp`, a GitHub the test

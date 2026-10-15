@@ -8,6 +8,14 @@ import { storeWriter } from "@luke/database/models/writer";
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB, startPlan } from "@luke/database/testing";
 import { type PlanDocument, planDocumentSchema } from "@luke/features/plan-wire";
+import type { GitHubApp } from "@luke/service/github/github-app";
+import {
+  connectWorkspaceGitHub,
+  GITHUB_FIXTURE_INSTALLATION_TOKEN,
+  githubReaching,
+  NO_GITHUB,
+  openGithubUser,
+} from "@luke/service/testing/github-app-fake";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import {
   generateText,
@@ -29,7 +37,6 @@ import {
   SCRIPTED_READ_REPLY,
   scriptedModel,
 } from "../eve/scripted-model";
-import type { GitHubApp } from "../server/github/github-app";
 import {
   BRAIN_HOST_ATTRIBUTE,
   BRAIN_HOST_TURN,
@@ -44,13 +51,6 @@ import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { modelCatalogOf } from "../server/hosted/model-catalog";
 import type { RepositorySandboxDoor } from "../server/hosted/repository-shell";
 import { stampedEveEvent } from "./support/eve-events";
-import {
-  connectWorkspaceGitHub,
-  GITHUB_FIXTURE_INSTALLATION_TOKEN,
-  githubReaching,
-  NO_GITHUB,
-  openGithubUser,
-} from "./support/github-app-fake";
 import { noNetwork } from "./support/no-network";
 import { sandboxDouble } from "./support/repository-sandbox";
 

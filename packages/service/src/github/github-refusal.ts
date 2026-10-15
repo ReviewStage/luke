@@ -10,9 +10,9 @@
  * refused as its own kind, so the desktop says GitHub, not Luke, failed.
  */
 
-import { HOSTED_REFUSAL, type HostedRefusal } from "@luke/service/http/http-effect";
-import { logStoreFailure } from "@luke/service/http/store-failure";
 import { Effect } from "effect";
+import { HOSTED_REFUSAL, type HostedRefusal } from "../http/http-effect.js";
+import { logStoreFailure } from "../http/store-failure.js";
 import type { GitHubReadFailure, GitHubWorkspaceReadFailure } from "./github-app.js";
 
 /** The failure as one warning line of kinds alone. */

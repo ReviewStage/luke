@@ -5,6 +5,12 @@ import { readCodingAgent } from "@luke/database/models/coding-agent-store";
 import { getTestDB, joinWorkspace, openWorkspace } from "@luke/database/testing";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { HOSTED_REFUSAL } from "@luke/service/http/http-effect";
+import {
+  connectWorkspaceGitHub,
+  githubReaching,
+  type InstallationFixture,
+  openGithubUser,
+} from "@luke/service/testing/github-app-fake";
 import { Effect, Layer, Option, Result } from "effect";
 import {
   EVE_CANCEL_OUTCOME,
@@ -15,12 +21,6 @@ import {
 } from "../server/hosted/brain-host/eve-sessions";
 import { type StartAsk, startCodingAgent } from "../server/hosted/coder-host/start";
 import { modelCatalogOf } from "../server/hosted/model-catalog";
-import {
-  connectWorkspaceGitHub,
-  githubReaching,
-  type InstallationFixture,
-  openGithubUser,
-} from "./support/github-app-fake";
 
 /**
  * coder-start.test.ts -- an agent started in a workspace with no plan, as an automation's run starts one.

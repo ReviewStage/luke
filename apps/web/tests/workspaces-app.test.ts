@@ -23,6 +23,12 @@ import {
   workspacesAnswerSchema,
 } from "@luke/features/workspace-wire";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "@luke/service/http/http";
+import {
+  type FakeGitHub,
+  GITHUB_FIXTURE_REFUSED_CODE,
+  githubReaching,
+  openGithubUser,
+} from "@luke/service/testing/github-app-fake";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { eq } from "drizzle-orm";
@@ -32,12 +38,6 @@ import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { githubInstallApp } from "../server/github-install-app";
 import { type WorkspacesAppSeams, workspacesApp } from "../server/workspaces-app";
-import {
-  type FakeGitHub,
-  GITHUB_FIXTURE_REFUSED_CODE,
-  githubReaching,
-  openGithubUser,
-} from "./support/github-app-fake";
 import { openWorkspacePlugin } from "./support/workspace-plugin";
 
 /**

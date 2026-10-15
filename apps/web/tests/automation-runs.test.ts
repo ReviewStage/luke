@@ -27,6 +27,12 @@ import {
 } from "@luke/features/automation-wire";
 import { INBOX_RESPONSE } from "@luke/features/inbox-wire";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
+import {
+  connectWorkspaceGitHub,
+  githubReaching,
+  type InstallationFixture,
+  openGithubUser,
+} from "@luke/service/testing/github-app-fake";
 import { TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@luke/wire";
 import { eq } from "drizzle-orm";
 import { Clock, Effect, Layer, Option, Result } from "effect";
@@ -41,12 +47,6 @@ import {
 } from "../server/hosted/brain-host/eve-sessions";
 import { closeInboxItem, postInboxItem } from "../server/hosted/inbox-store";
 import { modelCatalogOf, type OfferedModel } from "../server/hosted/model-catalog";
-import {
-  connectWorkspaceGitHub,
-  githubReaching,
-  type InstallationFixture,
-  openGithubUser,
-} from "./support/github-app-fake";
 
 /**
  * An automation's runs acted on, over a real dialect: a due schedule starts

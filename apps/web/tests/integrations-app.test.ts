@@ -12,13 +12,18 @@ import {
   INTEGRATION_STATUS,
   integrationLandingPath,
 } from "@luke/features/integration-wire";
+import { GitHubApp } from "@luke/service/github/github-app";
 import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
+import {
+  GITHUB_APP_SETTINGS,
+  openGithubUser,
+  standingGithubRow,
+} from "@luke/service/testing/github-app-fake";
 import type { WireBoundaryInput } from "@luke/wire";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
 import { Clock, Effect, Layer, Option, Redacted } from "effect";
 import { type HttpClient, HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
-import { GitHubApp } from "../server/github/github-app";
 import {
   CONNECT_SIGN_IN_RESULT,
   type ConnectSignInResult,
@@ -37,7 +42,6 @@ import {
   integrationsApp,
   mintIntegrationState,
 } from "../server/integrations-app";
-import { GITHUB_APP_SETTINGS, openGithubUser, standingGithubRow } from "./support/github-app-fake";
 import {
   GRANTING_SIGN_IN_URL,
   GRANTING_SIGN_IN_VERIFIER,

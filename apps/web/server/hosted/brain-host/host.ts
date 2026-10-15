@@ -16,13 +16,13 @@ import {
   type UnparsedWireValue,
   type WireRecord,
 } from "@luke/service/core";
+import type { GitHubApp } from "@luke/service/github/github-app";
 import { isTextUIPart } from "ai";
 import { Effect, Option, Result, type Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionContext } from "eve/context";
 import type { ToolContext as EveToolContext } from "eve/tools";
-import type { GitHubApp } from "../../github/github-app.js";
 import { delegatedChildOf, type HostAdmission, hostAdmission } from "../agent-runtime/host-core.js";
 import { type AgentSkill, repositorySkills } from "../agent-runtime/skills.js";
 import { HOSTED_TOOL_SET } from "../brain-tool-set.js";

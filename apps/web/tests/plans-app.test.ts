@@ -53,6 +53,16 @@ import {
 import { TRANSCRIPT_SPEAKER } from "@luke/live";
 import { LINK_OUTCOME } from "@luke/service/github/github-installations";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "@luke/service/http/http";
+import {
+  connectWorkspaceGitHub,
+  type FakeGitHub,
+  GITHUB_FIXTURE_INSTALLATION_TOKEN,
+  githubReaching,
+  type InstallationFixture,
+  NO_GITHUB,
+  openGithubUser,
+  type SentToGitHub,
+} from "@luke/service/testing/github-app-fake";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Clock, Duration, Effect, Layer, Option, Result, type Schema } from "effect";
@@ -63,16 +73,6 @@ import { DRAW_ON_BOARD_STATUS, runDrawOnBoard } from "../server/hosted/board-too
 import { modelCatalogOf } from "../server/hosted/model-catalog";
 import { PLAN_SAVE_STATUS, saveNotes } from "../server/hosted/plan-notes";
 import { plansApp } from "../server/plans-app";
-import {
-  connectWorkspaceGitHub,
-  type FakeGitHub,
-  GITHUB_FIXTURE_INSTALLATION_TOKEN,
-  githubReaching,
-  type InstallationFixture,
-  NO_GITHUB,
-  openGithubUser,
-  type SentToGitHub,
-} from "./support/github-app-fake";
 import { added } from "./support/plan-contents";
 import {
   INVITATIONS_TEXT,

@@ -12,9 +12,10 @@ import {
   INTEGRATION_PROVIDER_LIST,
   type IntegrationProvider,
 } from "@luke/features/integration-wire";
+import { GitHubApp } from "@luke/service/github/github-app";
+import { GITHUB_APP_SETTINGS, openGithubUser } from "@luke/service/testing/github-app-fake";
 import { Effect, Layer, Option, Result } from "effect";
 import type { SessionAuth } from "eve/context";
-import { GitHubApp } from "../server/github/github-app";
 import { CONNECTION_POLICY } from "../server/hosted/agent-runtime/role";
 import { type ServerStanding, turnServers } from "../server/hosted/agent-runtime/servers";
 import {
@@ -23,7 +24,6 @@ import {
 } from "../server/hosted/brain-host/bounds";
 import { type CoderHost, coderHost } from "../server/hosted/coder-host/host";
 import { CODER_TOOL_SET } from "../server/hosted/coder-host/tool-set";
-import { GITHUB_APP_SETTINGS, openGithubUser } from "./support/github-app-fake";
 import {
   CONNECTOR_ASKED_NOTHING,
   integrationConnectOf,

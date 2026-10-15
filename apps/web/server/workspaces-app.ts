@@ -30,11 +30,13 @@ import {
   workspaceMemberRemovalSchema,
 } from "@luke/features/workspace-wire";
 import { unparsedWire } from "@luke/service/core";
+import { GitHubApp } from "@luke/service/github/github-app";
 import {
   createConnectIntent,
   disconnectInstallation,
   GITHUB_CONNECT_ROLES,
 } from "@luke/service/github/github-installations";
+import { logGitHubReadFailure } from "@luke/service/github/github-refusal";
 import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import {
   HOSTED_REFUSAL,
@@ -57,8 +59,6 @@ import {
   HttpServerRequest,
   type HttpServerResponse,
 } from "effect/http";
-import { GitHubApp } from "./github/github-app.js";
-import { logGitHubReadFailure } from "./github/github-refusal.js";
 import { listMembers, memberIdOf } from "./hosted/workspace-members.js";
 
 /**

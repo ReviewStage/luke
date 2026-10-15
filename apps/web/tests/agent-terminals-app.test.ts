@@ -11,6 +11,7 @@ import {
   type SandboxState,
   type TerminalSummary,
 } from "@luke/features/terminal-wire";
+import { openGithubUser } from "@luke/service/testing/github-app-fake";
 import { Clock, Effect, Layer, Option, Result } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
@@ -20,7 +21,6 @@ import {
   type AgentSandboxService,
   SHELL_REFUSAL,
 } from "../server/hosted/terminal/agent-sandbox";
-import { openGithubUser } from "./support/github-app-fake";
 import { noNetwork } from "./support/no-network";
 
 /**

@@ -43,6 +43,7 @@ import {
   unparsedWire,
   wireUuidSchema,
 } from "@luke/service/core";
+import type { GitHubApp } from "@luke/service/github/github-app";
 import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import {
   HOSTED_REFUSAL,
@@ -64,7 +65,6 @@ import {
   HttpServerRequest,
   type HttpServerResponse,
 } from "effect/http";
-import type { GitHubApp } from "./github/github-app.js";
 import { HOSTED_TOOL_SET } from "./hosted/brain-tool-set.js";
 import { type EveReach, eveFor, stoppedForGood } from "./hosted/coder-host/stop.js";
 import { CODER_TOOL_SET } from "./hosted/coder-host/tool-set.js";
