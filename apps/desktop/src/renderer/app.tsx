@@ -62,12 +62,10 @@ import { usePlansTab } from "./planning/use-plans-tab";
 import { applySessionReplay } from "./session-replay";
 import { settingsRowsInput } from "./settings/settings-panel";
 import { followSettingsLink, useSettingsWorkspace } from "./settings-link";
-import { useSignInFaceCycle } from "./sign-in-gate";
 import { ToastHost } from "./toast";
 import { useUpdatedToast } from "./update-toast";
 import { useAppState, useExperiment } from "./use-app-state";
 import { useCaptionPresentation } from "./use-caption-presentation";
-import { usePrefersReducedMotion } from "./use-reduced-motion";
 import { useSignIn } from "./use-sign-in";
 import { FIXTURE_SPEAKING_CAPTIONS, fixtureVoice, useVoiceView } from "./use-voice-view";
 import { useWindowFullScreen } from "./window-full-screen";
@@ -172,13 +170,6 @@ export function App(): React.JSX.Element {
   /** True while sign-in stands between Luke and anything to watch: the gate is then what the window shows. */
   const accountGated =
     state?.run.accountRequired === true && account?.status !== ACCOUNT_STATUS.SIGNED_IN;
-
-  /**
-   * The one signed-out Luke's introduction cycle — sway, pirouette, double
-   * blink, curious tilt, nod — walked over the sign-in gate. Still while
-   * signed in, so the timer is not left running under the plans.
-   */
-  const signInFace = useSignInFaceCycle(usePrefersReducedMotion() || !accountGated);
 
   const signIn = useSignIn();
   const lastSignIn = useLastSignIn(account, state?.run.fixtureMode === true);
@@ -602,7 +593,6 @@ export function App(): React.JSX.Element {
                         lastSignIn,
                         onBeginSignIn: signIn.beginSignIn,
                         onCancelSignIn: signIn.cancelSignIn,
-                        signInFace,
                       }}
                       tab={tab}
                       onTabChange={changeTab}
