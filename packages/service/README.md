@@ -868,7 +868,7 @@ service beside `eve` on the same terms (the root `vercel.ts`): its own
 `package.json` (`@luke/coder`, whose one dependency is `eve`), a flat layout
 eve resolves as an app root, and a build that prewarms its sandbox snapshot
 under the same Vercel Sandbox credentials. It stands at eve's named mount:
-the public route is `/eve/coder/v1/*`, which the deployment's first rewrite
+the public route is `/eve/coder/v1/*`, which the deployment's first top-level route
 carries into the service, whose own one `routes` entry turns it back into
 `/eve/v1/*` with a `request.path` transform before eve's router reads it,
 and whose build exports `EVE_PUBLIC_ROUTE_PREFIX=/eve/coder` so the callback

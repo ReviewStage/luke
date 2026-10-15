@@ -9,10 +9,10 @@
  * Node, which takes a JSON table and not the generator's dependencies.
  */
 
-import type { Rewrite, VercelConfig } from "@vercel/config/v1";
+import type { VercelConfig } from "@vercel/config/v1";
 import apiRewrites from "./api-rewrites.json" with { type: "json" };
 
-/** The three services, by the names the public rewrites address them by. */
+/** The three services, by the names the public routes address them by. */
 export const SERVICE = { WEB: "web", EVE: "eve", CODER: "coder" } as const;
 type ServiceName = (typeof SERVICE)[keyof typeof SERVICE];
 
@@ -47,14 +47,21 @@ interface Service {
   readonly routes?: readonly (PathRoute | TransformRoute)[];
 }
 
-/** A public rewrite into a service, which `@vercel/config`'s `Rewrite` types as a URL string only. */
-type ServiceRewrite = Omit<Rewrite, "destination"> & {
-  readonly destination: { readonly service: ServiceName };
+/**
+ * A public route into a service. Vercel's `vercel.ts` schema refuses a
+ * service destination on a top-level rewrite (`rewrites[0].destination
+ * should be string`), though `vercel.json` takes one, so the public routing
+ * is top-level `routes`, each naming its service as eve's `vercel.ts` guide
+ * writes them; `@vercel/config` types a route as `any`.
+ */
+type ServiceRoute = {
+  readonly src: string;
+  readonly destination: { readonly type: "service"; readonly service: ServiceName };
 };
 
-type ServicesConfig = Omit<VercelConfig, "rewrites"> & {
+type ServicesConfig = Omit<VercelConfig, "rewrites" | "routes"> & {
   readonly services: Readonly<Record<ServiceName, Service>>;
-  readonly rewrites: readonly ServiceRewrite[];
+  readonly routes: readonly ServiceRoute[];
 };
 
 /**
@@ -108,9 +115,9 @@ export const config: ServicesConfig = {
     },
   },
   crons: [{ path: "/api/maintenance/sweep", schedule: "* * * * *" }],
-  rewrites: [
-    { source: "/eve/coder/v1/(.*)", destination: { service: SERVICE.CODER } },
-    { source: "/eve/v1/(.*)", destination: { service: SERVICE.EVE } },
-    { source: "/(.*)", destination: { service: SERVICE.WEB } },
+  routes: [
+    { src: "^/eve/coder/v1/(.*)$", destination: { type: "service", service: SERVICE.CODER } },
+    { src: "^/eve/v1/(.*)$", destination: { type: "service", service: SERVICE.EVE } },
+    { src: "^/(.*)$", destination: { type: "service", service: SERVICE.WEB } },
   ],
 };

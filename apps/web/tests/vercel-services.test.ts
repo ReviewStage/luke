@@ -21,8 +21,22 @@ test("the /api/ rewrites are generated into the web service's routes, ahead of i
     [],
   );
   assert.equal(await rewritesDrifted(WEB), false);
-  // Vercel ignores a top-level `routes` key in services mode, so a route left there would 404 in production.
-  assert.equal("routes" in config, false);
+});
+
+test("every public route enters a service, and none is a top-level rewrite, which Vercel's vercel.ts schema refuses with a service destination", () => {
+  assert.equal("rewrites" in config, false);
+  for (const route of config.routes) {
+    assert.equal(route.destination.type, "service", route.src);
+    assert.ok(Object.values(SERVICE).includes(route.destination.service), route.src);
+  }
+  assert.deepEqual(
+    config.routes.map((route) => [route.src, route.destination.service]),
+    [
+      ["^/eve/coder/v1/(.*)$", SERVICE.CODER],
+      ["^/eve/v1/(.*)$", SERVICE.EVE],
+      ["^/(.*)$", SERVICE.WEB],
+    ],
+  );
 });
 
 /** The first step of a path, where it is spelled as itself rather than matched. */
@@ -31,7 +45,7 @@ const FIRST_STEP = /^\^?\/([a-z0-9-]+)(?:\/|$)/u;
 test("no workspace's slug can be the first step of a page the web app serves under its own name", () => {
   const routed = [
     ...webRoutes.map((route) => route.src),
-    ...config.rewrites.map((rewrite) => rewrite.source),
+    ...config.routes.map((route) => route.src),
   ];
   const pages = readdirSync(WEB)
     .filter((name) => name.endsWith(".html"))

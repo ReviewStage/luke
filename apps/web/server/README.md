@@ -369,14 +369,15 @@ isolated declaration with no shared keys, so replacing it with a generated
 service later is removing a block rather than untangling one (LUKE-183).
 `coder` is the coding-agent service, a second eve app root at `apps/web/coder/` built
 and deployed on the same terms ("The coding-agent service" below).
-Public routing is the top-level `rewrites`:
-`/eve/coder/v1/*` enters the coder service, `/eve/v1/*` the eve service, and
-everything else the web service, and a
-service's own routes run only once a request has entered it. That is why the
-generated `/api/` rewrites live under the web service's `routes`, and
-`tests/vercel-services.test.ts` refuses a `routes` key at the top level beside
-`services`: Vercel ignores one there rather than erroring, so a route left
-there would pass every check and 404 in production. The project's
+Public routing is the top-level `routes`, each naming the service a request
+enters (`destination: { type: "service" }`): `/eve/coder/v1/*` enters the
+coder service, `/eve/v1/*` the eve service, and everything else the web
+service. They are not top-level `rewrites`, because Vercel's `vercel.ts`
+schema refuses a service destination on a rewrite (`rewrites[0].destination
+should be string`) although `vercel.json` takes one; the first production
+deploy of `vercel.ts` failed on exactly that. A service's own routes run only
+once a request has entered it, which is why the generated `/api/` rewrites
+live under the web service's `routes` rather than among the top-level ones. The project's
 environment variables reach all three services alike, and each service's own
 `ignoreCommand` is what skips its build, so a commit that changes nothing under
 `apps/web`, `packages`, the workspace manifests, `vercel.ts`, or
