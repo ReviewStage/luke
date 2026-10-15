@@ -4,10 +4,12 @@ import assert from "node:assert/strict";
 import type { CodingAgentAttachment, CodingAgentMessage } from "@luke/features/coding-agent-wire";
 import type { SkillOption } from "@luke/ui/skill-mention";
 import { MESSAGE_ROLE } from "@luke/wire";
+import { Effect } from "effect";
 import { act, createElement, type ReactNode, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { installEditorBundle, installEditorLayout, QUIET_COMPOSER } from "#testing/composer";
+import { markdownHtmlParserLanded } from "#testing/markdown";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { AgentComposer } from "./agent-composer";
 import { AGENT_LEAD, AgentMessage } from "./agent-tab";
@@ -33,6 +35,9 @@ const roots: Root[] = [];
 
 // Set before any composer renders, since the box reads the editor bundle once per window.
 installEditorBundle();
+
+// A sent message is drawn once the parser has landed, as the panel lands it after its first paint.
+beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
 beforeEach(() => {
   installScrollIntoView();
