@@ -70,8 +70,7 @@ import { ReadFailed, SettingsGroup } from "./settings-group";
  * Manage's one item chooses repositories on GitHub, where which accounts and
  * repositories Luke reaches is managed, so nothing here disconnects one. A
  * member sees the same list, or is told to ask. Linear, which plans start
- * from: an owner or an admin connects it once for every member, told first
- * that every member then reads whatever their Linear account reaches, and
+ * from: an owner or an admin connects it once for every member, and
  * disconnects it from Manage; a member sees whether it is connected. Last, anyone but the owner leaves, and the
  * owner hands the workspace to an admin first.
  *
@@ -208,17 +207,6 @@ const LINEAR_LINE = {
   MANAGES: "Not connected.",
   MEMBER: "Not connected. Ask an owner or admin.",
 } as const;
-
-/**
- * What an owner or admin is asked before connecting Linear: the grant is
- * the workspace's, so what it reaches, every member reads.
- */
-const LINEAR_CONNECT_QUESTION = (workspace: string) => ({
-  title: `Connect Linear for everyone in ${workspace}?`,
-  body: "You sign in to Linear once for the whole workspace. Every member can then start plans from, and have Luke read, any issue your Linear account can see, private teams' issues included, and Luke's changes to issues show as yours.",
-  verb: "Continue to Linear",
-  running: "Opening Linear",
-});
 
 /**
  * What a refused act answers in the dialog that asked: its refusal's own
@@ -1123,19 +1111,22 @@ function LinearCopy({
 
 /**
  * The workspace's Linear, for an owner or an admin: Connect while none is,
- * or Connect again once Linear stopped honouring it, which first says that
- * every member reads whatever the admin's Linear account reaches, private
- * teams' issues included, then opens Linear's sign-in in the browser; and
- * Manage once one stands, whose menu holds Disconnect, which asks first. A
+ * or Connect again once Linear stopped honouring it, which opens Linear's
+ * sign-in in the browser, a sign-in that could not be begun saying why
+ * under the row; and Manage once one stands, whose menu holds Disconnect, which asks first. A
  * plan already started from an issue keeps what it read.
  */
 function ManagedLinear({ workspace }: { workspace: Workspace }): React.JSX.Element {
   const { act } = useAct();
   const { linear } = workspace;
   const workspaceId = workspace.id;
-  const connect = useConfirmDialog({ subject: true, surfaceOpen: true }, () =>
-    act(ACT_KIND.WORKSPACE_LINEAR_CONNECT, { workspaceId }).then(() => ACCEPTED, refusedWith),
-  );
+  const [refusal, setRefusal] = useState<string>();
+  const connect = () => {
+    setRefusal(undefined);
+    act(ACT_KIND.WORKSPACE_LINEAR_CONNECT, { workspaceId }).catch((refused: Error) =>
+      setRefusal(refused.message),
+    );
+  };
   const disconnect = useConfirmDialog({ subject: linear !== undefined, surfaceOpen: true }, () =>
     act(ACT_KIND.WORKSPACE_LINEAR_DISCONNECT, { workspaceId }).then(() => ACCEPTED, refusedWith),
   );
@@ -1151,12 +1142,16 @@ function ManagedLinear({ workspace }: { workspace: Workspace }): React.JSX.Eleme
         </span>
         <LinearCopy linear={linear} manages />
         {linear?.active === true ? null : (
-          <button type="button" className="toolbar-button bordered-button" onClick={connect.ask}>
+          <button type="button" className="toolbar-button bordered-button" onClick={connect}>
             {linear === undefined ? "Connect" : "Connect again"}
           </button>
         )}
       </MenuRow>
-      <ConfirmDialog confirm={connect} question={LINEAR_CONNECT_QUESTION(workspace.name)} />
+      {refusal === undefined ? null : (
+        <p className="error-message" role="alert">
+          {refusal}
+        </p>
+      )}
       {linear === undefined ? null : (
         <ConfirmDialog
           confirm={disconnect}

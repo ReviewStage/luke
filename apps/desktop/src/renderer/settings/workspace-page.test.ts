@@ -1627,21 +1627,16 @@ const linearSent = () =>
       : [],
   );
 
-test("an admin's Linear row in Integrations asks first, saying every member reads what the connection reaches, private teams' issues included, then connects for the workspace", async () => {
+test("an admin's Linear row in Integrations connects Linear for the workspace at once, asking nothing first", async () => {
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
   const row = rowNamed(githubGroup(page), "Linear");
   const before = rowWords(row);
 
   act(() => button(row, "Connect").click());
   await settle();
-  const body = dialog().querySelector("p")?.textContent ?? "";
-  const beforeConfirm = linearSent();
-  await confirm("Continue to Linear");
 
   assert.deepEqual(before, ["Linear", "Not connected."]);
-  assert.match(body, /Every member/u);
-  assert.match(body, /private teams' issues included/u);
-  assert.deepEqual(beforeConfirm, []);
+  assert.equal(document.querySelector('[role="alertdialog"]'), null);
   assert.deepEqual(linearSent(), [[ACT_KIND.WORKSPACE_LINEAR_CONNECT, { workspaceId: ACME.id }]]);
 });
 
