@@ -7115,6 +7115,11 @@ button.automation-run:hover {
   padding: 0 var(--row-inset);
 }
 
+/* The way to the rest of their tasks, standing under the section's rows. */
+.person-section-foot {
+  margin: calc(-1 * var(--space-20)) 0 0;
+}
+
 /* A new account's welcome: Luke's face on a tile, a title, a line, and New plan, centred. */
 .home-welcome {
   display: flex;

@@ -1042,3 +1042,52 @@ test("on an agent's page in another workspace than the one listed, ⌥⌘C names
 
   assert.deepEqual(copied, [`https://tryluke.dev/beta/agent/${LINKED_AGENT}`]);
 });
+
+test("People lists the listed workspace's members by name and role, the reader as You, found by email too, and a choice opens their page", async () => {
+  const members = [
+    {
+      userId: "user-dean",
+      name: "Dean Stratakos",
+      email: "dean@example.com",
+      role: WORKSPACE_ROLE.OWNER,
+    },
+    {
+      userId: "user-charles",
+      name: "Charles Pan",
+      email: "charles@example.com",
+      role: WORKSPACE_ROLE.MEMBER,
+    },
+  ];
+  Object.defineProperty(window, "luke", {
+    configurable: true,
+    value: {
+      recordSurfaceEvent: () => undefined,
+      act: (request: Act): Promise<ActOutcome> =>
+        Promise.resolve(
+          request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
+            ? { status: ACT_OUTCOME_STATUS.DONE, value: members }
+            : { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." },
+        ),
+    },
+  });
+  const opened: string[] = [];
+  const base = plansControl();
+  const sent = openPalette(
+    plansControl({
+      me: "user-dean",
+      workspace: { id: "workspace-acme", name: "Acme", role: WORKSPACE_ROLE.OWNER, github: null },
+      personView: { ...base.personView, onOpen: (userId) => opened.push(userId) },
+    }),
+  );
+  await act(async () => {
+    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+  });
+  chooseFilter("People");
+
+  assert.deepEqual(rows(), ["Dean Stratakos · You · Owner", "Charles Pan · Member"]);
+  type("charles@");
+  assert.deepEqual(rows(), ["Charles Pan · Member"]);
+  act(() => document.querySelector<HTMLElement>(".menu-item")?.click());
+  assert.deepEqual(opened, ["user-charles"]);
+  assert.deepEqual(sent.tabs, []);
+});

@@ -11,6 +11,7 @@ import { afterEach, beforeEach, test, vi } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { onRegistry } from "#testing/copy-feedback";
 import { useAppCommand } from "../app-commands";
+import { OpenPersonProvider } from "../person-door";
 import { SidebarFoot } from "./sidebar-foot";
 
 /**
@@ -61,7 +62,11 @@ function HelpOffers({ ran }: { ran: string[] }): null {
 
 function mount(
   account: AccountSnapshot,
-  options: { onSignOut?: () => Promise<void>; ran?: string[] } = {},
+  options: {
+    onSignOut?: () => Promise<void>;
+    ran?: string[];
+    openPerson?: (userId: string) => void;
+  } = {},
 ): HTMLButtonElement {
   const container = document.createElement("div");
   document.body.append(container);
@@ -72,28 +77,32 @@ function mount(
       onRegistry(
         AtomRegistry.make(),
         createElement(
-          "div",
-          null,
-          createElement(SidebarFoot, {
-            account,
-            updates: {
-              update: {
-                status: UPDATE_STATUS.IDLE,
-                currentVersion: "1.0.0",
-                installSupported: true,
-                upToDate: true,
+          OpenPersonProvider,
+          { value: options.openPerson },
+          createElement(
+            "div",
+            null,
+            createElement(SidebarFoot, {
+              account,
+              updates: {
+                update: {
+                  status: UPDATE_STATUS.IDLE,
+                  currentVersion: "1.0.0",
+                  installSupported: true,
+                  upToDate: true,
+                },
+                build: { packaged: false },
+                onCheck: () => Promise.resolve(),
+                onInstall: () => undefined,
+                onOpenLatest: () => undefined,
               },
-              build: { packaged: false },
-              onCheck: () => Promise.resolve(),
-              onInstall: () => undefined,
-              onOpenLatest: () => undefined,
-            },
-            shown: true,
-            settingsOpen: false,
-            onSettings: () => undefined,
-            onSignOut: options.onSignOut ?? (() => Promise.resolve()),
-          }),
-          createElement(HelpOffers, { ran: options.ran ?? [] }),
+              shown: true,
+              settingsOpen: false,
+              onSettings: () => undefined,
+              onSignOut: options.onSignOut ?? (() => Promise.resolve()),
+            }),
+            createElement(HelpOffers, { ran: options.ran ?? [] }),
+          ),
         ),
       ),
     ),
@@ -307,4 +316,17 @@ test("signed out, the account says so and its menu names no one and offers no Lo
     "Keyboard shortcuts ⌘/",
     "Contact us",
   ]);
+});
+
+test("in the window, the account's menu opens with the reader's own profile, once their account's id is known", () => {
+  const opened: string[] = [];
+  const button = mount(
+    { ...DEAN, id: "user-dean" },
+    { openPerson: (userId) => opened.push(userId) },
+  );
+  act(() => button.click());
+
+  assert.equal(accountMenuLines()[2], "Your profile");
+  act(() => accountItem("Your profile").click());
+  assert.deepEqual(opened, ["user-dean"]);
 });

@@ -48,7 +48,7 @@ import type { PlanCodeShowing, PlanningTreeAnswer } from "@luke/features/plannin
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { SETTINGS_PAGE_LIST, type SettingsView } from "@luke/settings/settings-views";
 import { GearIcon, SearchIcon } from "@luke/ui";
-import { teammateCreator } from "@luke/ui/actor-model";
+import { memberActor, ROLE_WORDS, teammateCreator } from "@luke/ui/actor-model";
 import { DOCUMENT_REGION } from "@luke/ui/planning-model";
 import { matchesTokens, matchRanges, searchTokens } from "@luke/ui/search-tokens";
 import { orderTasks, TASK_ORDER } from "@luke/ui/task-list-model";
@@ -101,6 +101,7 @@ const PALETTE_FILTER = {
   ALL: "all",
   PLANS: "plans",
   AGENTS: "agents",
+  PEOPLE: "people",
   FILES: "files",
   ACTIONS: "actions",
   SETTINGS: "settings",
@@ -118,6 +119,7 @@ const FILTER_LABEL = {
   [PALETTE_FILTER.ALL]: "All",
   [PALETTE_FILTER.PLANS]: "Tasks",
   [PALETTE_FILTER.AGENTS]: "Agents",
+  [PALETTE_FILTER.PEOPLE]: "People",
   [PALETTE_FILTER.FILES]: "Files",
   [PALETTE_FILTER.ACTIONS]: "Actions",
   [PALETTE_FILTER.SETTINGS]: "Settings",
@@ -125,9 +127,10 @@ const FILTER_LABEL = {
 
 /** What the search field asks for under each filter. */
 const FILTER_PLACEHOLDER = {
-  [PALETTE_FILTER.ALL]: "Search tasks, agents, files, actions, and settings…",
+  [PALETTE_FILTER.ALL]: "Search tasks, agents, people, files, actions, and settings…",
   [PALETTE_FILTER.PLANS]: "Search tasks…",
   [PALETTE_FILTER.AGENTS]: "Search agents…",
+  [PALETTE_FILTER.PEOPLE]: "Search people…",
   [PALETTE_FILTER.FILES]: "Search files…",
   [PALETTE_FILTER.ACTIONS]: "Search actions…",
   [PALETTE_FILTER.SETTINGS]: "Search settings…",
@@ -497,6 +500,26 @@ function agentRows(plans: PlansControl, show: (pick: () => void) => void): reado
       ),
     terms: [...(row.terms ?? [row.label]), ...(planName === undefined ? [] : [planName])],
     onChoose: () => show(onPick),
+  }));
+}
+
+/**
+ * The listed workspace's members, the reader among them, each by their
+ * face, name, and role, found by their name and email, a choice opening
+ * their page; none until the members are read.
+ */
+function peopleRows(
+  members: readonly WorkspaceMember[] | undefined,
+  readerId: string | undefined,
+  open: (userId: string) => void,
+): readonly PaletteRow[] {
+  return (members ?? []).map((member) => ({
+    icon: <ActorMark actor={memberActor(member, readerId)} />,
+    label: member.name,
+    detail:
+      member.userId === readerId ? `You · ${ROLE_WORDS[member.role]}` : ROLE_WORDS[member.role],
+    terms: [member.name, member.email],
+    onChoose: () => open(member.userId),
   }));
 }
 
@@ -934,6 +957,9 @@ export function CommandPalette({
       plans.signedIn ? planRows(plans, members, (id) => onPlans(() => plans.onSelect(id))) : [],
     ],
     [PALETTE_FILTER.AGENTS]: () => [agentRows(plans, onPlans)],
+    [PALETTE_FILTER.PEOPLE]: () => [
+      peopleRows(members, plans.me, (userId) => onPlans(() => plans.personView.onOpen(userId))),
+    ],
     [PALETTE_FILTER.FILES]: () => [],
     [PALETTE_FILTER.ACTIONS]: () => [
       [

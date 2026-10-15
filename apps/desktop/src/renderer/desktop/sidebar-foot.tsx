@@ -14,11 +14,13 @@ import {
   MailIcon,
   MessageSquareIcon,
   NewspaperIcon,
+  UserRoundIcon,
 } from "lucide-react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "../act";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
 import { runAppCommand } from "../app-commands";
+import { useOpenPerson } from "../person-door";
 import { ConfirmDialog, DIALOG_TONE, useConfirmDialog } from "../settings/confirm-dialog";
 import { Tooltip } from "../tooltip";
 import { ActionMenu, type MenuEntry, riseAbove, useActionMenu } from "./action-menu";
@@ -106,13 +108,16 @@ function AccountHeading({
 }
 
 /**
- * The account's menu, in Cursor's order: Settings; what the Help menu
+ * The account's menu, in Cursor's order: the reader's own page where the
+ * window offers one, then Settings; what the Help menu
  * offers, the changelog before it, and the ways to write to the people who
  * make Luke after it; then Log out, while anyone is signed in to leave.
  */
 function accountMenuGroups(
   signedIn: boolean,
   acts: {
+    /** Opens the reader's own page; none outside the window, or before the account's id is known. */
+    onProfile: (() => void) | undefined;
     onSettings: () => void;
     onOpenChangelog: () => void;
     onOpenIssues: () => void;
@@ -120,8 +125,13 @@ function accountMenuGroups(
     onLogOut: () => void;
   },
 ): MenuEntry[][] {
+  const profile =
+    acts.onProfile === undefined
+      ? []
+      : [{ label: "Your profile", icon: <UserRoundIcon />, onSelect: acts.onProfile }];
   const groups: MenuEntry[][] = [
     [
+      ...profile,
       {
         label: "Settings",
         icon: <GearIcon />,
@@ -200,7 +210,11 @@ function AccountMenu({
       }
     },
   );
+  const openPerson = useOpenPerson();
+  const accountId = account.status === ACCOUNT_STATUS.SIGNED_IN ? account.id : undefined;
   const groups = accountMenuGroups(signedIn, {
+    onProfile:
+      openPerson === undefined || accountId === undefined ? undefined : () => openPerson(accountId),
     onSettings,
     onOpenChangelog: () => tell(ACT_KIND.UPDATE_OPEN_CHANGELOG),
     onOpenIssues: () => tell(ACT_KIND.GITHUB_OPEN, { url: ISSUES_URL }),
