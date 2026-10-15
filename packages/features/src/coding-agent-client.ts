@@ -30,6 +30,7 @@ import {
   type CodingAgentListAnswer,
   type CodingAgentMessagesAnswerView,
   type CodingAgentModelsAnswer,
+  type CodingAgentPageAnswerView,
   type CodingAgentPullRequestAnswerView,
   type DictationTranscribeAnswerView,
   type DictationTranscribeParams,
@@ -57,6 +58,7 @@ import {
   codingAgentListAnswerSchema,
   codingAgentMessageRequestSchema,
   codingAgentMessagesAnswerSchema,
+  codingAgentPageAnswerSchema,
   codingAgentPullRequestAnswerSchema,
   codingAgentRenameRequestSchema,
   codingAgentServersRequestSchema,
@@ -609,6 +611,14 @@ export class HostedCodingAgentClient {
     return Effect.flatMap(
       this.#call.send({ method: HTTP_METHOD.POST, path: agentStopPath(agentId) }),
       (answer) => readAnswer(answer, codingAgentAnswerSchema, ROW_REFUSALS),
+    );
+  }
+
+  /** One agent read whole as its own page by its id, on a plan or with none. */
+  agent(agentId: string): Effect.Effect<CodingAgentPageAnswerView, never, HttpClient.HttpClient> {
+    return Effect.flatMap(
+      this.#call.send({ method: HTTP_METHOD.GET, path: agentPath(agentId) }),
+      (answer) => readAnswer(answer, codingAgentPageAnswerSchema, ROW_REFUSALS),
     );
   }
 

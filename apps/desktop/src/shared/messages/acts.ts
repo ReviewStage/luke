@@ -10,6 +10,7 @@ import {
   type CodingAgentListAnswer,
   type CodingAgentMessagesAnswerView,
   type CodingAgentModelsAnswer,
+  type CodingAgentPageAnswerView,
   type CodingAgentPullRequestAnswerView,
   codingAgentAgentAnswerSchema,
   codingAgentArchiveParamsSchema,
@@ -29,6 +30,8 @@ import {
   codingAgentMessagesAnswerViewSchema,
   codingAgentMessagesParamsSchema,
   codingAgentModelsAnswerSchema,
+  codingAgentPageAnswerViewSchema,
+  codingAgentPageParamsSchema,
   codingAgentPullRequestAnswerViewSchema,
   codingAgentPullRequestParamsSchema,
   codingAgentRenameParamsSchema,
@@ -331,6 +334,7 @@ export const ACT_KIND = {
    * is held back by, and what clears an agent's tab's unseen dot.
    */
   CODING_AGENTS_SHOWN: "codingAgents.shown",
+  CODING_AGENTS_PAGE: "codingAgents.page",
   CODING_AGENTS_PULL_REQUEST: "codingAgents.pullRequest",
   /** One agent's changes, its pull request's files with their patches, which its Changes tab draws. */
   CODING_AGENTS_CHANGES: "codingAgents.changes",
@@ -991,6 +995,11 @@ export const ACT = {
     }),
     result: answersNothing,
     refusal: "Could not note which agent is shown on this system.",
+  },
+  [ACT_KIND.CODING_AGENTS_PAGE]: {
+    payload: actSchema(codingAgentPageParamsSchema),
+    result: wireResult<CodingAgentPageAnswerView>(isReadable(codingAgentPageAnswerViewSchema)),
+    refusal: "Could not read the agent on this system.",
   },
   [ACT_KIND.CODING_AGENTS_PULL_REQUEST]: {
     payload: actSchema(codingAgentPullRequestParamsSchema),

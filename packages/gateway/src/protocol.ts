@@ -109,6 +109,7 @@ export const GATEWAY_METHOD = {
   /** One agent archived, a turn it still runs stopped first, or brought back; the agent as it then stands, or why it is unchanged. */
   CODING_AGENTS_ARCHIVE: "codingAgents.archive",
   /** What one agent published: the branch it pushed and the pull request from it, as GitHub holds them now. */
+  CODING_AGENTS_PAGE: "codingAgents.page",
   CODING_AGENTS_PULL_REQUEST: "codingAgents.pullRequest",
   /** One agent's changes: the files of its pull request as GitHub holds them now, each with its patch. */
   CODING_AGENTS_CHANGES: "codingAgents.changes",

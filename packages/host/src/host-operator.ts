@@ -22,6 +22,8 @@ import {
   type CodingAgentMessagesAnswerView,
   type CodingAgentMessagesParams,
   type CodingAgentModelsAnswer,
+  type CodingAgentPageAnswerView,
+  type CodingAgentPageParams,
   type CodingAgentPullRequestAnswerView,
   type CodingAgentPullRequestParams,
   type CodingAgentRenameParams,
@@ -38,6 +40,7 @@ import {
   codingAgentListAnswerViewSchema,
   codingAgentMessagesAnswerViewSchema,
   codingAgentModelsAnswerSchema,
+  codingAgentPageAnswerViewSchema,
   codingAgentPullRequestAnswerViewSchema,
   type DictationTranscribeAnswerView,
   type DictationTranscribeParams,
@@ -383,6 +386,8 @@ export interface HostOperator {
   codingAgentStop(params: CodingAgentStopParams): Effect.Effect<CodingAgentAgentAnswer>;
   /** One agent archived, a turn it still runs stopped first, or brought back; the agent as it then stands, or why it is unchanged. */
   codingAgentArchive(params: CodingAgentArchiveParams): Effect.Effect<CodingAgentAgentAnswer>;
+  /** One agent read whole as its own page, on a plan or with none; or why there is no answer. */
+  codingAgentPage(params: CodingAgentPageParams): Effect.Effect<CodingAgentPageAnswerView>;
   /** What one agent published: its branch and pull request as GitHub holds them; or why there is no answer. */
   codingAgentPullRequest(
     params: CodingAgentPullRequestParams,
@@ -1107,6 +1112,11 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           archived: params.archived,
         }),
         codingAgentAnswer(codingAgentAgentAnswerSchema),
+      ),
+    codingAgentPage: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_PAGE, { agentId: params.agentId }),
+        codingAgentAnswer(codingAgentPageAnswerViewSchema),
       ),
     codingAgentPullRequest: (params) =>
       Effect.map(

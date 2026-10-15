@@ -11,6 +11,7 @@ import {
   type CodingAgentListAnswer,
   type CodingAgentMessagesAnswerView,
   type CodingAgentModelsAnswer,
+  type CodingAgentPageAnswerView,
   type CodingAgentPullRequestAnswerView,
   codingAgentAccountInboxParamsSchema,
   codingAgentArchiveParamsSchema,
@@ -22,6 +23,7 @@ import {
   codingAgentListParamsSchema,
   codingAgentMessageParamsSchema,
   codingAgentMessagesParamsSchema,
+  codingAgentPageParamsSchema,
   codingAgentPullRequestParamsSchema,
   codingAgentRenameParamsSchema,
   codingAgentServersParamsSchema,
@@ -82,6 +84,7 @@ export type CodingAgentClient = Pick<
   | "switchServers"
   | "archive"
   | "stop"
+  | "agent"
   | "pullRequest"
   | "changes"
   | "readProviderKeys"
@@ -322,6 +325,16 @@ function composed(dependencies: CodingAgentsDependencies): CodingAgentsComposer 
         );
         const answer = yield* asked(client.stop(agentId));
         return carried<CodingAgentAgentAnswer>(answer);
+      }),
+    [GATEWAY_METHOD.CODING_AGENTS_PAGE]: (params) =>
+      Effect.gen(function* () {
+        const { agentId } = yield* read(
+          codingAgentPageParamsSchema,
+          params,
+          "reading an agent's page names one agent",
+        );
+        const answer = yield* asked(client.agent(agentId));
+        return carried<CodingAgentPageAnswerView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_PULL_REQUEST]: (params) =>
       Effect.gen(function* () {
