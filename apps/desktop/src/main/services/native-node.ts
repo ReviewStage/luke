@@ -7,7 +7,7 @@ import {
   type OutputAudioState,
 } from "@luke/voice/audio";
 import { Schema } from "effect";
-import { systemPreferences } from "electron";
+import { clipboard, systemPreferences } from "electron";
 import type { AppStateStore } from "../app-state";
 import { MediaDuckController } from "../native/media-duck";
 import {
@@ -29,6 +29,8 @@ const readMicrophoneStatusWord = Schema.decodeUnknownSync(
 export interface NativeNodeCapabilities {
   /** Hands an address to the operating system; a throw is an open that did not land. */
   openExternal: (url: string) => Promise<void>;
+  /** Puts text on the system clipboard: a webhook's fresh secret, which no window is handed. */
+  copyText: (text: string) => void;
 }
 
 interface NativeNodeDependencies {
@@ -96,6 +98,7 @@ export function createNativeNode(dependencies: NativeNodeDependencies): NativeNo
     name: "native",
     capabilities: {
       openExternal: config.openExternal,
+      copyText: (text) => clipboard.writeText(text),
     },
     mediaDuck,
     setMediaDuckEnabled: (enabled) => mediaDuck.setEnabled(enabled),

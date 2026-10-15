@@ -1,3 +1,4 @@
+import { createHash, randomBytes } from "node:crypto";
 import type { HostedAutomationClient } from "@luke/features";
 import {
   AUTOMATION_CALL_FAILURE,
@@ -5,6 +6,7 @@ import {
   type AutomationListView,
   type AutomationRunsView,
   type AutomationRunView,
+  type AutomationSecretCopiedView,
   type AutomationView,
   automationChangeParamsSchema,
   automationCreateParamsSchema,
@@ -28,24 +30,33 @@ import type { RunMode } from "./run-mode.js";
  * Nothing is held here. The window holds the automations it draws and asks
  * when its page opens and after each write, and every ask is one call of
  * the service answered whole. Behind a closed account gate, or on a run
- * that sends nothing, every ask answers unanswered.
+ * that sends nothing, every ask answers unanswered. A webhook's secret is
+ * the one thing here that goes no further: minted at the window's ask, it
+ * is put on the clipboard and only then sent to the service as its
+ * SHA-256, and the window hears only that it was copied, since a secret
+ * never enters a Gateway answer.
  */
 
 /** The service's side of the automations, as this concern asks it. */
 export type AutomationsClient = Pick<
   HostedAutomationClient,
-  "list" | "create" | "change" | "remove" | "runNow" | "runs"
+  "list" | "create" | "change" | "remove" | "runNow" | "runs" | "replaceWebhookSecret"
 >;
 
 export interface AutomationsDependencies {
   kernel: { runMode: Pick<RunMode, "sendsNetwork"> };
   account: Pick<AccountComposer, "capabilitiesActive">;
   client: AutomationsClient;
+  /** Puts text on the system clipboard, answering whether it landed. */
+  copyText: (text: string) => Effect.Effect<boolean>;
 }
 
 export type AutomationsComposer = Composer;
 
 const UNANSWERED = { failure: AUTOMATION_CALL_FAILURE.UNANSWERED } as const;
+
+/** The bytes of randomness in a webhook secret the host mints, as many as the service's own. */
+const WEBHOOK_SECRET_BYTES = 32;
 
 export function composeAutomations(
   dependencies: AutomationsDependencies,
@@ -55,7 +66,7 @@ export function composeAutomations(
 
 /** The composer's one table, built from its seams; nothing here starts anything. */
 function composed(dependencies: AutomationsDependencies): AutomationsComposer {
-  const { kernel, account, client } = dependencies;
+  const { kernel, account, client, copyText } = dependencies;
   const gate = () => kernel.runMode.sendsNetwork && account.capabilitiesActive();
 
   /** The service asked behind the gate, over the ambient fetch client. */
@@ -115,6 +126,30 @@ function composed(dependencies: AutomationsDependencies): AutomationsComposer {
           "a run names an automation and a key",
         );
         return carried<AutomationRunView>(yield* asked(client.runNow(run)));
+      }),
+    [GATEWAY_METHOD.AUTOMATIONS_COPY_WEBHOOK_SECRET]: (params) =>
+      Effect.gen(function* () {
+        const named = yield* read(automationIdParamsSchema, params, "a copy names an automation");
+        if (!gate()) return carried<AutomationSecretCopiedView>(UNANSWERED);
+        // Note that the secret is on the clipboard before its hash is sent, because a copy that
+        // fails then replaces nothing, and the secret before goes on admitting calls.
+        const secret = randomBytes(WEBHOOK_SECRET_BYTES).toString("base64url");
+        if (!(yield* copyText(secret))) return carried<AutomationSecretCopiedView>(UNANSWERED);
+        const replaced = yield* asked(
+          client.replaceWebhookSecret({
+            automationId: named.automationId,
+            webhookSecretHash: createHash("sha256").update(secret).digest("hex"),
+          }),
+        );
+        if ("failure" in replaced) {
+          // The secret was not taken, so the clipboard is cleared rather than left holding one that admits nothing.
+          yield* copyText("");
+          return carried<AutomationSecretCopiedView>(replaced);
+        }
+        return carried<AutomationSecretCopiedView>({
+          automation: replaced.automation,
+          secretCopied: true,
+        });
       }),
     [GATEWAY_METHOD.AUTOMATIONS_RUNS]: (params) =>
       Effect.gen(function* () {

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { it } from "@effect/vitest";
 import { AUTOMATION_CALL_FAILURE } from "@luke/features/automation-view";
 import {
@@ -54,7 +55,7 @@ const CREATE = {
 };
 
 /** The service as a script that writes down every ask it hears, as the ask runs. */
-function fakeService() {
+function fakeService(options: { replaceRefused?: boolean } = {}) {
   const asked: unknown[] = [];
   const answer =
     <A>(name: string, value: A) =>
@@ -70,24 +71,44 @@ function fakeService() {
     remove: answer("remove", { deleted: true } as const),
     runNow: answer("run", { failure: AUTOMATION_CALL_FAILURE.NOT_FOUND }),
     runs: answer("runs", { runs: [] }),
+    replaceWebhookSecret: answer(
+      "replace",
+      options.replaceRefused === true
+        ? { failure: AUTOMATION_CALL_FAILURE.NOT_PERMITTED }
+        : { automation: SUMMARY },
+    ),
   };
   return { client, asked };
 }
 
-function subject(options: { signedIn?: boolean; sendsNetwork?: boolean } = {}) {
+function subject(
+  options: {
+    signedIn?: boolean;
+    sendsNetwork?: boolean;
+    clipboardTakes?: boolean;
+    replaceRefused?: boolean;
+  } = {},
+) {
   return Effect.gen(function* () {
-    const service = fakeService();
+    const service = fakeService(options);
+    const clipboard: string[] = [];
     const composer = yield* composeAutomations({
       kernel: { runMode: { sendsNetwork: options.sendsNetwork ?? true } },
       account: { capabilitiesActive: () => options.signedIn ?? true },
       client: service.client,
+      copyText: (text) =>
+        Effect.sync(() => {
+          if (options.clipboardTakes === false) return false;
+          clipboard.push(text);
+          return true;
+        }),
     });
     const call = (method: GatewayMethod, params: WireRecord = {}) => {
       const handler = composer.methods[method];
       assert.ok(handler, `no handler for ${method}`);
       return handler(params, context);
     };
-    return { call, asked: service.asked };
+    return { call, asked: service.asked, clipboard };
   });
 }
 
@@ -149,4 +170,48 @@ it.effect("params of the wrong shape are refused before anything travels", () =>
     assert.equal(refused._tag, "InvalidParamsRefusal");
     assert.deepEqual(asked, []);
   }),
+);
+
+it.effect(
+  "a webhook's fresh secret is on the clipboard before its hash alone is sent, the window hears only that it was copied, and a clipboard that refuses it replaces nothing",
+  () =>
+    Effect.gen(function* () {
+      const { call, asked, clipboard } = yield* subject();
+      const refusing = yield* subject({ clipboardTakes: false });
+      const named = { automationId: AUTOMATION_ID };
+
+      const copied = yield* call(GATEWAY_METHOD.AUTOMATIONS_COPY_WEBHOOK_SECRET, named);
+      const refused = yield* refusing.call(GATEWAY_METHOD.AUTOMATIONS_COPY_WEBHOOK_SECRET, named);
+
+      const [secret = ""] = clipboard;
+      assert.deepEqual(copied, { automation: SUMMARY, secretCopied: true });
+      assert.ok(secret.length >= 40, "a secret of 32 random bytes is copied");
+      assert.deepEqual(asked, [
+        [
+          "replace",
+          { ...named, webhookSecretHash: createHash("sha256").update(secret).digest("hex") },
+        ],
+      ]);
+      assert.deepEqual(refused, { failure: AUTOMATION_CALL_FAILURE.UNANSWERED });
+      assert.deepEqual(refusing.asked, [], "a copy that failed replaces nothing");
+      assert.ok(
+        !JSON.stringify([copied, refused]).includes(secret),
+        "no answer carries the secret",
+      );
+    }),
+);
+
+it.effect(
+  "a replacement the service refuses leaves the clipboard cleared, not holding a secret that admits nothing",
+  () =>
+    Effect.gen(function* () {
+      const { call, clipboard } = yield* subject({ replaceRefused: true });
+
+      const refused = yield* call(GATEWAY_METHOD.AUTOMATIONS_COPY_WEBHOOK_SECRET, {
+        automationId: AUTOMATION_ID,
+      });
+
+      assert.deepEqual(refused, { failure: AUTOMATION_CALL_FAILURE.NOT_PERMITTED });
+      assert.equal(clipboard.at(-1), "");
+    }),
 );

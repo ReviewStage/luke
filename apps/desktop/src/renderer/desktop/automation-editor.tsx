@@ -25,6 +25,7 @@ import {
 import {
   AUTOMATION_SCOPE,
   AUTOMATION_TARGET,
+  AUTOMATION_TRIGGER,
   type AutomationScope,
   type AutomationSummary,
   type AutomationTargetKind,
@@ -662,7 +663,7 @@ function EditorForm({
   return (
     <div className="settings-card automation-form">
       <FormRow label="Schedule" problem={problems[DRAFT_FIELD.SCHEDULE]}>
-        {draft.scheduled ? (
+        {draft.triggerKind === AUTOMATION_TRIGGER.SCHEDULE ? (
           <>
             <ScheduleControl
               schedule={draft.schedule}

@@ -200,6 +200,25 @@ export class HostedAutomationClient {
     );
   }
 
+  /**
+   * A webhook trigger's secret replaced by one the host minted, sent by its
+   * SHA-256 alone, so the secret itself never leaves this machine; answering
+   * the automation as it then stands.
+   */
+  replaceWebhookSecret(params: {
+    readonly automationId: string;
+    readonly webhookSecretHash: string;
+  }): Effect.Effect<AutomationView, never, HttpClient.HttpClient> {
+    return Effect.flatMap(
+      this.#call.send({
+        method: HTTP_METHOD.PATCH,
+        path: automationPath(params.automationId),
+        body: JSON.stringify({ webhookSecretHash: params.webhookSecretHash }),
+      }),
+      (answer) => Effect.map(readAnswer(answer, automationAnswerSchema), summaryOnly),
+    );
+  }
+
   /** One automation deleted with its history. */
   remove(
     params: AutomationIdParams,

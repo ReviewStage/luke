@@ -1,6 +1,5 @@
-import { Schema as EffectSchema } from "effect";
+import { Schema as EffectSchema, Struct } from "effect";
 import {
-  AUTOMATION_TRIGGER,
   automationChangeRequestSchema,
   automationCreateRequestSchema,
   automationListAnswerSchema,
@@ -17,10 +16,11 @@ import { wireUuidSchema } from "./service-wire.js";
  * The host asks the service on the window's behalf and answers the window
  * one of the shapes here. A repository the automation's workspace does not
  * reach is refused with why, as a Start is, so the window can say which
- * press mends it. The window writes a schedule and no other trigger: a
- * webhook's secret is answered once, by the write that mints it, and no
- * answer here carries a secret, so a webhook made through the window could
- * never be told its secret.
+ * press mends it. The window writes any trigger, but no answer here carries
+ * a webhook's secret, since a secret never enters a Gateway answer: the
+ * secret a write mints is dropped, and one the developer asks for is minted
+ * again and put on the system clipboard by the host, the window hearing only
+ * that it was copied.
  */
 
 /** Why an automation call answered nothing a window can draw. */
@@ -56,27 +56,15 @@ export const automationListParamsSchema = EffectSchema.Struct({
 
 export type AutomationListParams = typeof automationListParamsSchema.Type;
 
-/** Whether a trigger, where one is written, is a schedule: the one trigger the window writes. */
-const scheduled = (trigger: { readonly kind: string } | undefined): boolean =>
-  trigger === undefined || trigger.kind === AUTOMATION_TRIGGER.SCHEDULE;
-
-/** An automation to make, as the service takes it, on a schedule. */
-export const automationCreateParamsSchema = automationCreateRequestSchema.check(
-  EffectSchema.makeFilter((made: typeof automationCreateRequestSchema.Type) =>
-    scheduled(made.trigger),
-  ),
-);
+/** An automation to make, as the service takes it. */
+export const automationCreateParamsSchema = automationCreateRequestSchema;
 
 export type AutomationCreateParams = typeof automationCreateParamsSchema.Type;
 
-/** A change to one automation, its trigger, where it changes, a schedule. */
+/** A change to one automation. A webhook's secret is replaced by the copy's own ask, never a change's. */
 export const automationChangeParamsSchema = EffectSchema.Struct({
   automationId: wireUuidSchema,
-  change: automationChangeRequestSchema.check(
-    EffectSchema.makeFilter((change: typeof automationChangeRequestSchema.Type) =>
-      scheduled(change.trigger),
-    ),
-  ),
+  change: automationChangeRequestSchema.mapFields(Struct.omit(["webhookSecretHash"])),
 });
 
 export type AutomationChangeParams = typeof automationChangeParamsSchema.Type;
@@ -106,6 +94,17 @@ export const automationViewSchema = EffectSchema.Union([
 ]);
 
 export type AutomationView = typeof automationViewSchema.Type;
+
+/** A webhook's fresh secret put on the clipboard, as the window hears it: the automation, and that it was copied, never the secret. */
+export const automationSecretCopiedViewSchema = EffectSchema.Union([
+  EffectSchema.Struct({
+    automation: automationSummarySchema,
+    secretCopied: EffectSchema.Literal(true),
+  }),
+  failed,
+]);
+
+export type AutomationSecretCopiedView = typeof automationSecretCopiedViewSchema.Type;
 
 /** A deletion as the window hears it. */
 export const automationDeletedViewSchema = EffectSchema.Union([

@@ -12,11 +12,13 @@ import {
   type AutomationRunParams,
   type AutomationRunsView,
   type AutomationRunView,
+  type AutomationSecretCopiedView,
   type AutomationView,
   automationDeletedViewSchema,
   automationListViewSchema,
   automationRunsViewSchema,
   automationRunViewSchema,
+  automationSecretCopiedViewSchema,
   automationViewSchema,
 } from "@luke/features/automation-view";
 import {
@@ -437,6 +439,10 @@ export interface HostOperator {
   automationRun(params: AutomationRunParams): Effect.Effect<AutomationRunView>;
   /** One automation's runs, newest first; or why there are none. */
   automationRuns(params: AutomationIdParams): Effect.Effect<AutomationRunsView>;
+  /** A webhook's secret minted again and put on the clipboard; the automation and that it was copied, never the secret. */
+  automationCopyWebhookSecret(
+    params: AutomationIdParams,
+  ): Effect.Effect<AutomationSecretCopiedView>;
   /** What one agent published: its branch and pull request as GitHub holds them; or why there is no answer. */
   codingAgentPullRequest(
     params: CodingAgentPullRequestParams,
@@ -1237,6 +1243,11 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.AUTOMATIONS_RUNS, params),
         automationAnswer(automationRunsViewSchema),
+      ),
+    automationCopyWebhookSecret: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.AUTOMATIONS_COPY_WEBHOOK_SECRET, params),
+        automationAnswer(automationSecretCopiedViewSchema),
       ),
     codingAgentPullRequest: (params) =>
       Effect.map(

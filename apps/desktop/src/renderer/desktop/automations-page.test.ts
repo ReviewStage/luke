@@ -1052,3 +1052,19 @@ test("a default model that could not be read is said as unknown, and a model can
     "opening the menu chooses nothing",
   );
 });
+
+test("a GitHub automation's row says its trigger as one sentence, naming the repository it is heard in", async () => {
+  standing = [
+    automation(9, {
+      name: "Code review",
+      trigger: { kind: AUTOMATION_TRIGGER.GITHUB, event: "pull-request-updated" },
+    }),
+  ];
+  const page = mount();
+  await settle();
+
+  assert.equal(
+    rowOf(page, "Code review").querySelector(".automation-row-detail")?.textContent,
+    "When a pull request is opened or updated in acme/ledger",
+  );
+});
