@@ -1149,10 +1149,11 @@ VoiceOver, since CI can't see the Mac.
 | 4 | The plan draws mentions as chips; Luke keeps them | merged, #2593 |
 | 3 | `@` in the plan editor; a heading rename renames its mentions | merged, #2603 |
 | 5 | `@` in the agent's message box; a sent message's chips | merged, #2624 |
-| 6a | MCP server and tool mentions on the server: the note, and the turn-only hand-over | #2643 |
-| 6b | The MCP servers group in the `@` list | #2653 |
-| 8 | The Skills group in the `@` list | #2664 |
-| 11 | A pasted page of an integration's becomes a chip | #2668 |
+| 6a | MCP server and tool mentions on the server: the note, and the turn-only hand-over | merged, #2643 |
+| 6b | The MCP servers group in the `@` list | merged, #2653 |
+| 8 | The Skills group in the `@` list | merged, #2664 |
+| 11 | A pasted page of an integration's becomes a chip | merged, #2668 |
+| links | The settled link format, tryluke.dev and GitHub addresses (worker 273) | merged, #2683 |
 
 ## 9. Risks
 
