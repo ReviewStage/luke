@@ -59,7 +59,15 @@ import { PlanActions } from "./plan-actions";
 import { planCardOf } from "./plan-card";
 import { usePlanRename } from "./plan-name-field";
 import { PlanSummary, SummaryButton, type SummaryPin, useSummaryLayout } from "./plan-summary";
-import { changesTabOf, planCards, SidePanel, useSidePanelDrawing } from "./side-panel";
+import {
+  COLUMN,
+  changesTabOf,
+  planCards,
+  SIDE_PANEL_HOLDER,
+  SidePanel,
+  useColumnFocus,
+  useSidePanelDrawing,
+} from "./side-panel";
 import { StartAgentButton } from "./start-agent-button";
 import { useStrandedPlanBanner } from "./stranded-plan-banner";
 import { useTabViews } from "./strip-tabs";
@@ -111,14 +119,6 @@ import { useTabViews } from "./strip-tabs";
  * no repository is chosen, Start, a new agent, and the call's start are not
  * drawn, and a version viewed is not restored (`../planning/archived-plan.tsx`).
  */
-
-/** Which of the plan's two columns holds the window's focus, which ⌘T, ⌘W, and ⌘F answer to. */
-const COLUMN = {
-  MAIN: "main",
-  SIDE: "side",
-} as const;
-
-type Column = (typeof COLUMN)[keyof typeof COLUMN];
 
 /**
  * The strip across the top of the work column, which is also the window's
@@ -327,8 +327,7 @@ function PlanDocument({
     waiting: plans.inbox.some((plan) => plan.planId === inboxPlanId),
     agents: plans.agents,
   });
-  const [focus, setFocus] = useState<Column>(COLUMN.MAIN);
-  const [area, setArea] = useState<HTMLDivElement | null>(null);
+  const { onArea: setArea, focus, setFocus } = useColumnFocus();
   const [column, setColumn] = useState<HTMLDivElement | null>(null);
   const summaryLayout = useSummaryLayout(summary, column, plans.sidePanel.fullScreen);
   const summaryCard = useId();
@@ -341,22 +340,6 @@ function PlanDocument({
     (automationId: string) => onOpenAutomations({ kind: AUTOMATIONS_PAGE.EDIT, automationId }),
     [onOpenAutomations],
   );
-  // The column the pointer or the focus last went into holds the keys. Note
-  // that it is heard on the plan's area as it bubbles, because the columns
-  // are no controls of their own to hear it.
-  useEffect(() => {
-    if (area === null) return;
-    const hear = (event: Event) => {
-      const side = event.target instanceof Element && event.target.closest(".side-panel") !== null;
-      setFocus(side ? COLUMN.SIDE : COLUMN.MAIN);
-    };
-    area.addEventListener("pointerdown", hear);
-    area.addEventListener("focusin", hear);
-    return () => {
-      area.removeEventListener("pointerdown", hear);
-      area.removeEventListener("focusin", hear);
-    };
-  }, [area]);
   const planId = region.kind === DOCUMENT_REGION.READY ? region.plan.id : undefined;
   // What waits in the plan's inbox opens its Inbox tab where an item did
   // not wait at the last read (`use-main-tabs.ts`). Note that only a read
@@ -772,6 +755,7 @@ function PlanDocument({
                 {...drawing}
                 panel={drawing.panel}
                 unread={plans.unreadTabs}
+                holder={SIDE_PANEL_HOLDER.PLAN}
                 planId={plan.id}
                 repository={plan.repository}
                 board={plans.board}

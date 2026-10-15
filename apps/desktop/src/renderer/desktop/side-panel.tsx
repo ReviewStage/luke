@@ -32,7 +32,15 @@ import {
 } from "@luke/ui/tab-strip-model";
 import { type ShownFile, shownFiles } from "@luke/voice/code-pane-model";
 import { TRANSCRIPT_REGION, type TranscriptRegion } from "@luke/voice/transcript-model";
-import { Fragment, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "../act";
 import { useAppCommand } from "../app-commands";
@@ -200,6 +208,70 @@ function ResizeEdge({ edge }: { edge: ResizableEdgeProps }): React.JSX.Element {
 
 /** A plan with no page, the same array every render. */
 const NO_PAGES: readonly PageLine[] = [];
+
+/**
+ * What the panel stands beside: a plan's page, whose panel holds every kind
+ * of tab, or the page of an agent no plan holds, whose panel holds that
+ * agent's workers, its Changes, and its Terminal, and no plan's Board,
+ * Code, Call, files, or pages. A tab of an agent's page is no plan's to
+ * pin, so none is offered.
+ */
+export const SIDE_PANEL_HOLDER = {
+  PLAN: "plan",
+  AGENT: "agent",
+} as const;
+
+type SidePanelHolder = (typeof SIDE_PANEL_HOLDER)[keyof typeof SIDE_PANEL_HOLDER];
+
+/** No fixed kind, the same array every render. */
+const NO_KINDS: readonly FixedSidePanelTab[] = [];
+
+/** The fixed kinds each holder's panel offers. */
+const HOLDER_KINDS = {
+  [SIDE_PANEL_HOLDER.PLAN]: SIDE_PANEL_TABS,
+  [SIDE_PANEL_HOLDER.AGENT]: NO_KINDS,
+} as const satisfies Record<SidePanelHolder, readonly FixedSidePanelTab[]>;
+
+/** Which of a page's two columns holds the window's focus, which ⌘T, ⌘W, and ⌘F answer to: its own, or the side panel beside it. */
+export const COLUMN = {
+  MAIN: "main",
+  SIDE: "side",
+} as const;
+
+type Column = (typeof COLUMN)[keyof typeof COLUMN];
+
+/** The column holding the keys, the door its page's area is handed through, and the door a press that hands the keys over goes through. */
+export interface ColumnFocus {
+  readonly onArea: (area: HTMLDivElement | null) => void;
+  readonly focus: Column;
+  readonly setFocus: (column: Column) => void;
+}
+
+/**
+ * The column of a page with a side panel that holds the keys: the one the
+ * pointer or the focus last went into, and the door a press that hands the
+ * keys over goes through. Note that it is heard on the page's area, handed
+ * through `onArea`, as it bubbles, because the columns are no controls of
+ * their own to hear it.
+ */
+export function useColumnFocus(): ColumnFocus {
+  const [focus, setFocus] = useState<Column>(COLUMN.MAIN);
+  const [area, onArea] = useState<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (area === null) return;
+    const hear = (event: Event) => {
+      const side = event.target instanceof Element && event.target.closest(".side-panel") !== null;
+      setFocus(side ? COLUMN.SIDE : COLUMN.MAIN);
+    };
+    area.addEventListener("pointerdown", hear);
+    area.addEventListener("focusin", hear);
+    return () => {
+      area.removeEventListener("pointerdown", hear);
+      area.removeEventListener("focusin", hear);
+    };
+  }, [area]);
+  return { onArea, focus, setFocus };
+}
 
 /** The "+" menu's sections after the fixed kinds, which the plan's summary lists under the same headings. */
 export const ADD_SECTION = {
@@ -620,6 +692,7 @@ function stripTabs(input: {
  */
 function PanelTabs({
   panel,
+  holder,
   planId,
   keys,
   unread,
@@ -641,6 +714,7 @@ function PanelTabs({
   shownAgent,
 }: {
   panel: SidePanelControl;
+  holder: SidePanelHolder;
   /** The open plan, which a tab's pin is of. */
   planId: string;
   /** Whether the panel offers its keys: on screen, not on its way out, and holding the window's focus. */
@@ -704,7 +778,7 @@ function PanelTabs({
   const chosen = strip.find((entry) => entry.look.selected);
   useAppCommand(APP_COMMAND.CLOSE_TAB, keys ? chosen?.close : undefined);
   const pinOf = ({ tab, look }: DrawnTab): TabPin | undefined => {
-    if (!isPinnable(tab)) return undefined;
+    if (holder !== SIDE_PANEL_HOLDER.PLAN || !isPinnable(tab)) return undefined;
     const pinned = panel.pins.some((pin) => pin.plan === planId && sameTab(pin.tab, tab));
     return {
       pinned,
@@ -751,7 +825,7 @@ function PanelTabs({
         noMatch="No tabs match"
         entries={panelEntries({
           panel,
-          kinds: SIDE_PANEL_TABS,
+          kinds: HOLDER_KINDS[holder],
           workers,
           files: shownFiles,
           changes: changesOffers(agents, changes),
@@ -771,11 +845,17 @@ function PanelTabs({
 }
 
 /** The panel with every tab closed: what it holds, offered as the "+" menu offers it. */
-function NoTabs({ onChoose }: { onChoose: (tab: FixedSidePanelTab) => void }): React.JSX.Element {
+function NoTabs({
+  kinds,
+  onChoose,
+}: {
+  kinds: readonly FixedSidePanelTab[];
+  onChoose: (tab: FixedSidePanelTab) => void;
+}): React.JSX.Element {
   return (
     <div className="side-panel-no-tabs">
       <p className="side-panel-no-tabs-line">No tabs open</p>
-      {SIDE_PANEL_TABS.map((kind) => {
+      {kinds.map((kind) => {
         const action = kindAction(kind, onChoose);
         return <MenuItem key={kind} action={action} inMenu={false} onChoose={action.onSelect} />;
       })}
@@ -1499,6 +1579,7 @@ export function SidePanel({
   onLeft,
   edge,
   unread,
+  holder,
   planId,
   repository,
   board,
@@ -1519,6 +1600,8 @@ export function SidePanel({
   panel: SidePanelControl;
   /** The tabs holding something that arrived while another was shown, each in semibold until it is shown. */
   unread: readonly StripTab[];
+  holder: SidePanelHolder;
+  /** The plan the panel stands beside, or the agent where it stands beside the agent's own page. */
   planId: string;
   /** The plan's repository, `owner/name`, or none before one is chosen. */
   repository: string | null;
@@ -1652,6 +1735,7 @@ export function SidePanel({
         <div className="side-panel-bar">
           <PanelTabs
             panel={panel}
+            holder={holder}
             planId={planId}
             keys={keys && focused}
             unread={unread}
@@ -1684,7 +1768,9 @@ export function SidePanel({
             any; one whose tabs were closed offers them again in place. */}
         {tab === undefined ? (
           <div className="side-panel-content">
-            {panel.closedTabs.length === 0 ? null : <NoTabs onChoose={panel.onChoose} />}
+            {panel.closedTabs.length === 0 ? null : (
+              <NoTabs kinds={HOLDER_KINDS[holder]} onChoose={panel.onChoose} />
+            )}
           </div>
         ) : (
           // The Board is drawn on a canvas, which keeps a find of its own, and

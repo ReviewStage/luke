@@ -616,6 +616,12 @@ const NO_PENDING_PINS: PendingRepositoryPins = new Map();
 /** A plan with no page, the same array every render, so the arrivals read no change in it. */
 const NO_PAGES: NonNullable<PlanningView["pages"]> = [];
 
+/** What an agent's page holds of the plan's panel kinds: nothing, its tabs being the agent's own. */
+const NO_HOLDS: PlanHolds = {};
+
+/** No ids, the same array every render. */
+const NO_IDS: readonly string[] = [];
+
 /** What the toast says once Copy plan has put the plan on the clipboard. */
 const PLAN_COPIED_NOTE = "Plan copied";
 
@@ -944,14 +950,23 @@ export function usePlansTab(input: {
   mainRef.current = mainTabs;
   // A page's tab is held to the pages agents wrote for the plan.
   const pages = useMemo(() => (viewed.pages ?? []).map((page) => page.id), [viewed.pages]);
+  // While an agent's page stands, the panel is that agent's: its workers', its Changes', and its
+  // Terminal's tabs, and nothing of the plan the host has open beneath it, which keeps its own.
+  const pageAgent = agentView?.agentId;
+  const pageAgents = useMemo(
+    () => (pageAgent === undefined ? undefined : [pageAgent]),
+    [pageAgent],
+  );
   const sidePanel = useSidePanel(
     fixtureSidePanel(input.run),
-    { id: viewed.activePlanId, holds: planHolds(viewed, transcript) },
-    mainTabs.openAgents,
-    workers,
-    files,
-    pages,
-    agents.agentIds,
+    pageAgents === undefined
+      ? { id: viewed.activePlanId, holds: planHolds(viewed, transcript) }
+      : { id: pageAgent, holds: NO_HOLDS },
+    pageAgents ?? mainTabs.openAgents,
+    pageAgents === undefined ? workers : NO_IDS,
+    pageAgents === undefined ? files : NO_IDS,
+    pageAgents === undefined ? pages : NO_IDS,
+    pageAgents ?? agents.agentIds,
   );
   // An agent pinned to the sidebar is named there as its tab is named now,
   // so a pin made before the agent had its title, or before a rename,
@@ -1420,7 +1435,8 @@ export function usePlansTab(input: {
   // A fixture's staged plan has nothing arriving on it, and code arrives
   // only on a call, since what a plan opens with it already held.
   const arrivedTabs = usePanelArrivals({
-    planId: fixture === undefined ? planning.activePlanId : undefined,
+    // Note that nothing arrives while an agent's page holds the panel, so the plan's visit ends, and what it gained meanwhile counts as seen.
+    planId: fixture === undefined && pageAgent === undefined ? planning.activePlanId : undefined,
     board: planning.board,
     code: live ? (planning.shownCode ?? []) : undefined,
     pages: live ? (planning.pages ?? NO_PAGES) : undefined,

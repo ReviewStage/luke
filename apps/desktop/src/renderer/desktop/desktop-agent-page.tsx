@@ -1,7 +1,9 @@
+import type { CodingAgentStatus } from "@luke/features/coding-agent-wire";
 import { dictationKeywords } from "@luke/features/dictation-keywords";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import { ACT_KIND } from "@luke/host/acts";
-import { sameTab } from "@luke/ui/tab-strip-model";
+import { type StripTab, sameTab } from "@luke/ui/tab-strip-model";
+import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { useMemo } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
@@ -19,7 +21,15 @@ import { ReadFailure } from "../read-failure";
 import { SPINNER_SIZE, Spinner } from "../spinner";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { AgentPane } from "./main-tabs";
-import { planCards } from "./side-panel";
+import {
+  COLUMN,
+  changesTabOf,
+  planCards,
+  SIDE_PANEL_HOLDER,
+  SidePanel,
+  useColumnFocus,
+  useSidePanelDrawing,
+} from "./side-panel";
 import { useTabViews } from "./strip-tabs";
 
 /**
@@ -39,7 +49,11 @@ import { useTabViews } from "./strip-tabs";
  * opens the skill's `SKILL.md` on GitHub, as a file it names does, since no
  * File tab reads a repository no plan names; and a dictation listens for its repository and
  * its title. A row of its inbox calls opens the window's Inbox, since the
- * agent's items stand there and no plan's Inbox tab does. Its title names the agent as
+ * agent's items stand there and no plan's Inbox tab does. Beside it stands
+ * the window's side panel, held by the agent while its page stands
+ * (`use-plans-tab.ts`): a delegation's row opens its worker there, and its
+ * Changes chip its pull request's changes, as on a task, and its toggle,
+ * its width, and its keys are the plan's own. Its title names the agent as
  * its tab would. An archived agent takes no message, so its composer gives
  * way to its own Unarchive. Whoever sent it a message is read against its
  * workspace's members, as on a plan. Escape leaves it for wherever it was
@@ -52,6 +66,15 @@ const NOT_READ = "This agent could not be read.";
 /** Nothing to do, for the doors a plan's column opens and this page does not have. */
 const nothing = (): void => undefined;
 
+/** No tab arrived anything: arrivals are a plan's. */
+const NO_UNREAD: readonly StripTab[] = [];
+
+/** What the panel says of calls on an agent's page: none, there being no plan to call about. */
+const NO_CALLS = {
+  region: { kind: TRANSCRIPT_REGION.EMPTY },
+  onRetry: nothing,
+} as const;
+
 /** The page's mentions, once there are any to hand; until then the box takes an `@` as the letter it is. */
 function AgentMentions({
   value,
@@ -59,12 +82,8 @@ function AgentMentions({
 }: {
   value: PlanMentionsValue | undefined;
   children: React.ReactNode;
-}): React.JSX.Element {
-  return value === undefined ? (
-    <>{children}</>
-  ) : (
-    <PlanMentions value={value}>{children}</PlanMentions>
-  );
+}): React.ReactNode {
+  return value === undefined ? children : <PlanMentions value={value}>{children}</PlanMentions>;
 }
 
 /** One agent's page, in the plan's place: the agent read by its id, drawn as the task column's agent pane. */
@@ -78,6 +97,12 @@ export function DesktopAgentPage({
   useAppCommand(APP_COMMAND.EXIT_AGENT_PAGE, plans.agentView.onClose);
   const { act, tell } = useAct();
   const views = useTabViews();
+  const { sidePanel } = plans;
+  const drawing = useSidePanelDrawing(sidePanel);
+  const { onArea, focus } = useColumnFocus();
+  // The panel holds the keys while the focus went into it last, or while it fills the window over the page.
+  const sideFocused = sidePanel.open && (focus === COLUMN.SIDE || sidePanel.fullScreen);
+  const openAgents = useMemo(() => [agentId], [agentId]);
   const agents = useCodingAgents({
     acts: { act },
     planId: undefined,
@@ -131,13 +156,34 @@ export function DesktopAgentPage({
   const openTarget = (target: ToolTarget) => {
     if (target.kind === TOOL_TARGET.INBOX) plans.inboxView.onOpen();
   };
+  // A delegation's row opens its worker in the side panel, and the Changes chip the pull request's changes, as on a task.
+  const openDelegation = (
+    agent: string,
+    callId: string,
+    task: string,
+    status: CodingAgentStatus,
+  ) => {
+    views.onWorkerStatus(callId, status);
+    sidePanel.onChoose({ subagent: callId, delegation: { agent, task } });
+  };
+  const openChanges = (changed: string) =>
+    sidePanel.onChoose(changesTabOf(control, changed, sidePanel.changes));
+  const shown = plans.shown && !sidePanel.fullScreen;
   const cards = planCards({
     agents: control,
     workRows: [],
     held: views.held,
-    chosen: (opened) => sameTab(opened, tab),
+    chosen: (opened) =>
+      sameTab(opened, tab) || (sidePanel.tab !== undefined && sameTab(opened, sidePanel.tab)),
     shownCode: [],
   });
+  // An agent's workers are its delegations, read through its own transcript, so the panel's plan's work is none.
+  const work = {
+    conversation: undefined,
+    callLive: false,
+    onLoadEarlier: () => Promise.resolve(),
+    readWorker: control.readTranscript,
+  };
   // A skill's file opens where a file the agent names does: its page on GitHub.
   const openSkill = (skill: { readonly path: string }) => {
     if (agentRepository === undefined) return;
@@ -153,42 +199,82 @@ export function DesktopAgentPage({
           { workspace: listed?.slug ?? workspaceId, workspaceId, repository: agentRepository },
           plans.onShowMention,
         );
+  const toolbar = (
+    <header className="desktop-toolbar">
+      <div className="desktop-toolbar-heading">
+        {agent === undefined ? null : (
+          <h1 className="desktop-toolbar-title">{agentTabLabel(agent, control.models)}</h1>
+        )}
+      </div>
+    </header>
+  );
+  if (agent === undefined) {
+    return (
+      <section className="agent-page" aria-label="Agent">
+        {toolbar}
+        {agents.listFailed ? (
+          <div className="agent-page-note">
+            <ReadFailure line={NOT_READ} onRetry={agents.onRetryList} />
+          </div>
+        ) : (
+          <Spinner label="Loading agent" size={SPINNER_SIZE.INLINE} />
+        )}
+      </section>
+    );
+  }
   return (
-    <section className="agent-page" aria-label="Agent">
-      <header className="desktop-toolbar">
-        <div className="desktop-toolbar-heading">
-          {agent === undefined ? null : (
-            <h1 className="desktop-toolbar-title">{agentTabLabel(agent, control.models)}</h1>
-          )}
-        </div>
-      </header>
-      {agent !== undefined ? (
-        <MemberDirectory workspace={workspace} readerId={plans.me}>
-          <SkillFiles source={control.readSkills} onOpen={openSkill}>
-            <AgentMentions value={mentions}>
-              <FindScope className="desktop-plan-column" active={plans.shown} subject={tab}>
+    <MemberDirectory workspace={workspace} readerId={plans.me}>
+      <SkillFiles source={control.readSkills} onOpen={openSkill}>
+        <AgentMentions value={mentions}>
+          <div ref={onArea} className="desktop-plan" data-panel-open={String(sidePanel.open)}>
+            {/* Hidden rather than left out while the panel fills the window, as a plan's column is. */}
+            <section className="agent-page" aria-label="Agent" hidden={sidePanel.fullScreen}>
+              {toolbar}
+              <FindScope
+                className="desktop-plan-column"
+                active={plans.shown && !sideFocused}
+                subject={tab}
+              >
                 <AgentPane
                   label={agentTabLabel(agent, control.models)}
                   tabbed={false}
                   tab={tab}
                   agents={control}
-                  shown={plans.shown}
+                  shown={shown}
                   views={views}
-                  onOpenDelegation={nothing}
+                  onOpenDelegation={openDelegation}
+                  onOpenChanges={openChanges}
                   onOpenTarget={openTarget}
                   cards={cards}
                 />
               </FindScope>
-            </AgentMentions>
-          </SkillFiles>
-        </MemberDirectory>
-      ) : agents.listFailed ? (
-        <div className="agent-page-note">
-          <ReadFailure line={NOT_READ} onRetry={agents.onRetryList} />
-        </div>
-      ) : (
-        <Spinner label="Loading agent" size={SPINNER_SIZE.INLINE} />
-      )}
-    </section>
+            </section>
+            {drawing.panel ? (
+              <SidePanel
+                {...drawing}
+                panel={drawing.panel}
+                unread={NO_UNREAD}
+                holder={SIDE_PANEL_HOLDER.AGENT}
+                planId={agentId}
+                repository={agentRepository ?? null}
+                board={undefined}
+                shownCode={undefined}
+                pages={undefined}
+                transcript={NO_CALLS}
+                work={work}
+                agents={control}
+                openAgents={openAgents}
+                shownAgent={shown ? agentId : undefined}
+                views={views}
+                shown={plans.shown}
+                focused={sideFocused}
+                onOpenTarget={openTarget}
+                cards={cards}
+              />
+            ) : null}
+          </div>
+        </AgentMentions>
+      </SkillFiles>
+    </MemberDirectory>
   );
 }

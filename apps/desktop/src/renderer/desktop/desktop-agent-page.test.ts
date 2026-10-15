@@ -23,9 +23,11 @@ import { APP_COMMAND } from "#shared/shortcuts";
 import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
 import { plansControl } from "#testing/plans-control";
+import { installScrollIntoView } from "#testing/scroll-into-view";
 import { runAppCommand } from "../app-commands";
 import { archiveWords } from "../planning/coding-agent-model";
 import type { PlansControl } from "../planning/use-plans-tab";
+import { useSidePanel } from "../planning/use-side-panel";
 import { ToastHost } from "../toast";
 import { DesktopAgentPage } from "./desktop-agent-page";
 
@@ -196,6 +198,77 @@ test("the page draws the task column's agent pane, at its reading width, and ⌘
   assert.equal(offered, true);
   assert.ok(page.querySelector(".desktop-agent")?.closest(".find-scope"), "the pane finds");
   assert.ok(page.querySelector("search[aria-label='Find']"), "⌘F opens the find bar");
+});
+
+/** The page over the window's own side panel, held by the agent as the window holds it while the page stands. */
+function PanelPage(): React.JSX.Element {
+  const agents = [AGENT_ID];
+  const sidePanel = useSidePanel(
+    undefined,
+    { id: AGENT_ID, holds: {} },
+    agents,
+    [],
+    [],
+    [],
+    agents,
+  );
+  return createElement(DesktopAgentPage, {
+    plans: { ...plansControl({}), sidePanel },
+    agentId: AGENT_ID,
+  });
+}
+
+test("a delegation's row opens its worker in the side panel beside the agent's page, whose + offers none of a task's Board, Code, or Call", async () => {
+  localStorage.clear();
+  installScrollIntoView();
+  transcript = {
+    messages: [
+      { id: "brief", role: MESSAGE_ROLE.USER, parts: [{ type: "text", text: "Sweep the tests." }] },
+      {
+        id: "answer",
+        role: MESSAGE_ROLE.ASSISTANT,
+        parts: [
+          {
+            type: "tool-delegate",
+            toolCallId: "call-1",
+            state: "output-available",
+            input: { task: "Find the flakiest test." },
+            output: "Started task delegate-7k2m9q.",
+          },
+        ],
+      },
+    ],
+    cursor: "1:0",
+    status: CODING_AGENT_STATUS.COMPLETED,
+    title: null,
+  };
+  const container = document.createElement("div");
+  document.body.append(container);
+  root = createRoot(container);
+  act(() => root?.render(onRegistry(AtomRegistry.make(), createElement(PanelPage))));
+  await settle();
+
+  const row = container.querySelector<HTMLButtonElement>("button[data-subagent-row]");
+  assert.ok(row, "the delegation's row opens its worker");
+  act(() => row.click());
+  await settle();
+  const panel = container.querySelector("aside.side-panel");
+  const opened = [...(panel?.querySelectorAll("[role='tab']") ?? [])].map((tab) => tab.textContent);
+  const add = panel?.querySelector<HTMLButtonElement>("button[aria-label='Open a tab']");
+  assert.ok(add, "the panel offers its +");
+  act(() => add.click());
+  await settle();
+  const offered = [...document.querySelectorAll("[role='option']")].map((each) => each.textContent);
+
+  assert.ok(
+    opened.some((label) => label?.includes("Find the flakiest test.")),
+    `the worker's tab stands in the panel: ${opened.join(", ")}`,
+  );
+  assert.deepEqual(
+    offered.filter((label) => /^(Board|Code|Call)$/u.test(label ?? "")),
+    [],
+    "no task's kind is offered",
+  );
 });
 
 test("a skill a message names is its chip, which opens the skill's SKILL.md on GitHub, there being no File tab for a repository no plan names", async () => {

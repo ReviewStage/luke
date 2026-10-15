@@ -732,6 +732,33 @@ function pressReturn(page: HTMLElement): void {
 
 const PLACES = Object.values(PLACE);
 
+test("the side panel's toggle stands on a plan and on an agent's page, which keeps a panel of its own, and nowhere else the plan's place is taken", async () => {
+  await handBridge();
+  const container = document.createElement("div");
+  document.body.append(container);
+  root = createRoot(container);
+  const registry = AtomRegistry.make();
+  const toggled: Partial<Record<Place, boolean>> = {};
+  for (const place of PLACES) {
+    act(() =>
+      root?.render(onRegistry(registry, createElement(CallShell, { place, folded: false }))),
+    );
+    await settle();
+    toggled[place] = container.querySelector("button.side-panel-toggle") !== null;
+  }
+  assert.deepEqual(toggled, {
+    [PLACE.HOME]: false,
+    [PLACE.OTHER_PLAN]: true,
+    [PLACE.INBOX]: false,
+    [PLACE.AGENT_PAGE]: true,
+    [PLACE.FACTORY]: false,
+    [PLACE.AUTOMATIONS]: false,
+    [PLACE.SIDE_PANEL_FULL_SCREEN]: true,
+    [PLACE.SETTINGS]: false,
+    [PLACE.VERSION_HISTORY]: false,
+  });
+});
+
 test("walking every place in the window during a call about another plan, the card stays at the foot of the column at the window's left, and its way back asks for the call's plan from each", async () => {
   await handBridge();
   const container = document.createElement("div");

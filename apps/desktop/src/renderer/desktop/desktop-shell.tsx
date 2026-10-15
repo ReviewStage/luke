@@ -435,14 +435,16 @@ export function DesktopShell({
     );
   }
   // Note that the shell says whether the panel's toggle stands, because the
-  // toolbar beneath it leaves the toggle room then and only then. The Inbox
-  // an agent's page, Factory, and the Automations page stand in the plan's place, so they draw no panel to toggle.
+  // toolbar beneath it leaves the toggle room then and only then. The Inbox,
+  // Factory, and the Automations page stand in the plan's place, so they draw
+  // no panel to toggle; an agent's page draws the agent's own.
   const inboxOpen = plans.inboxView.open;
   const pageAgent = plans.agentView.agentId;
   const factoryOpen = plans.factoryView.open && factoryOn;
   const automationsOpen = plans.automationsView.open && automationsOn;
-  const panelToggle = plans.page === PLANS_PAGE.DOCUMENT && !standingIn;
-  const planDrawn = panelToggle && plans.region.kind === DOCUMENT_REGION.READY;
+  const planToggle = plans.page === PLANS_PAGE.DOCUMENT && !standingIn;
+  const panelToggle = planToggle || pageAgent !== undefined;
+  const planDrawn = planToggle && plans.region.kind === DOCUMENT_REGION.READY;
   // Note that a panel filling the window hides the plan's column, call bar
   // and all, so the captions float in its place then.
   const captionsInColumn = planDrawn && !plans.sidePanel.fullScreen;
@@ -514,7 +516,7 @@ export function DesktopShell({
         <div className="title-bar-controls" data-edge="end">
           <SidePanelToggle
             panel={plans.sidePanel}
-            disabled={plans.region.kind !== DOCUMENT_REGION.READY}
+            disabled={planToggle && plans.region.kind !== DOCUMENT_REGION.READY}
           />
         </div>
       ) : null}
