@@ -49,6 +49,7 @@ import {
   dockedTodos,
   endLine,
   endLineReason,
+  lineSender,
   messageWords,
   newestTodos,
   settledPlanEdits,
@@ -586,6 +587,7 @@ function AgentTranscriptView({
   earlierOmitted = false,
   briefTitle,
   briefSender,
+  readerId,
 }: {
   messages: readonly CodingAgentMessage[];
   /** What the agent was handed first: the plan, drawn as the plan's card, or a task, drawn as the developer's message; nothing reads as the plan. */
@@ -619,6 +621,8 @@ function AgentTranscriptView({
   briefTitle?: string | undefined;
   /** The teammate who handed the agent its task, named over the task's message; none for the reader's own agent. */
   briefSender?: string | undefined;
+  /** The reader's own account id, whose messages are drawn with no name over them (`lineSender`). */
+  readerId?: string | undefined;
 }): React.JSX.Element {
   if (messages.length > 0) {
     const todos = todosPlace(messages, working);
@@ -646,7 +650,7 @@ function AgentTranscriptView({
                 delegation={delegation}
                 todos={todos}
                 briefTitle={briefTitle}
-                sender={message === task ? briefSender : undefined}
+                sender={message === task ? briefSender : lineSender(message.sentBy, readerId)}
               />
               {earlierOmitted && message === plan ? (
                 <TranscriptNote>Earlier steps are not shown.</TranscriptNote>
@@ -724,6 +728,7 @@ function AgentTabView({
   keywords,
   skills,
   starter,
+  readerId,
 }: {
   agent: CodingAgentSummary;
   models: readonly CatalogModel[] | undefined;
@@ -757,6 +762,8 @@ function AgentTabView({
   skills?: SkillSource | undefined;
   /** The teammate who started the agent (`teammateStarter`), whose key and task the tab names; none for the reader's own. */
   starter?: string | undefined;
+  /** The reader's own account id, whose messages the transcript names nobody over. */
+  readerId?: string | undefined;
 }): React.JSX.Element {
   const lines = agentLines(transcript.messages, composer.sent);
   const working = agentStillWriting(agent.status);
@@ -767,6 +774,7 @@ function AgentTabView({
           messages={lines}
           brief={agent.brief}
           briefSender={starter}
+          readerId={readerId}
           delegation={{
             models,
             own: { model: agent.model, effort: agent.effort },
@@ -931,6 +939,7 @@ export function AgentTab({
       keywords={control.keywords}
       skills={control.readSkills}
       starter={teammateStarter(agent.startedBy, control.me)}
+      readerId={control.me}
     />
   );
 }
