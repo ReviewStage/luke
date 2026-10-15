@@ -719,7 +719,6 @@ body,
   background: var(--raised-strong);
 }
 
-.sidebar-plan-name,
 /* Whoever did something (`actor-ref.tsx`): a person on a circle, their
    picture or their letter on a hue; Luke, an agent, or an automation on a
    solid rounded square; someone the window cannot name on a quiet outline.
@@ -945,6 +944,7 @@ body,
   line-height: 16px;
 }
 
+.sidebar-plan-name,
 .sidebar-account-name {
   overflow: hidden;
   text-overflow: ellipsis;
