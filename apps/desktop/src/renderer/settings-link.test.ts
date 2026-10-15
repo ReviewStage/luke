@@ -48,8 +48,8 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-test("a link turns to Settings, its page, and its workspace, and lands on its section's group as the page draws it", () => {
-  const turned: (PanelTab | SettingsView | string | undefined)[] = [];
+test("a link lists its workspace, turns to Settings and its page, and lands on its section's group as the page draws it", () => {
+  const turned: (PanelTab | SettingsView | string)[] = [];
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -60,7 +60,6 @@ test("a link turns to Settings, its page, and its workspace, and lands on its se
         control: {
           workspaces: [ACME],
           workspaceId: ACME.id,
-          onChooseWorkspace: () => undefined,
           listFailed: false,
           onRetryList: () => undefined,
           onLeft: () => undefined,
@@ -79,7 +78,7 @@ test("a link turns to Settings, its page, and its workspace, and lands on its se
     {
       changeTab: (tab) => turned.push(tab),
       changeView: (view) => turned.push(view),
-      changeWorkspace: (workspaceId) => turned.push(workspaceId),
+      chooseWorkspace: (workspaceId) => turned.push(workspaceId),
       land: (anchor) => {
         landed.on = document.querySelector(`[${SETTINGS_SEARCH_ANCHOR_ATTRIBUTE}="${anchor}"]`);
         return () => undefined;
@@ -87,8 +86,8 @@ test("a link turns to Settings, its page, and its workspace, and lands on its se
     },
   );
 
-  assert.deepEqual(turned, [PANEL_TAB.SETTINGS, SETTINGS_VIEW.WORKSPACE, ACME.id]);
-  assert.equal(landed.on?.querySelector("h2")?.textContent, "Integrations");
+  assert.deepEqual(turned, [ACME.id, PANEL_TAB.SETTINGS, SETTINGS_VIEW.WORKSPACE]);
+  assert.equal(landed.on?.querySelector("h2")?.textContent, "GitHub");
   assert.ok(
     [...(landed.on?.querySelectorAll(".settings-row strong") ?? [])].some(
       (name) => name.textContent === "GitHub",
@@ -97,8 +96,8 @@ test("a link turns to Settings, its page, and its workspace, and lands on its se
   );
 });
 
-test("a link naming no section or workspace lands on the page's head, with the sidebar's workspace", () => {
-  const turned: (PanelTab | SettingsView | string | undefined)[] = [];
+test("a link naming no section or workspace lands on the page's head, and leaves the sidebar's workspace listed", () => {
+  const turned: (PanelTab | SettingsView | string)[] = [];
   let landings = 0;
 
   followSettingsLink(
@@ -106,7 +105,7 @@ test("a link naming no section or workspace lands on the page's head, with the s
     {
       changeTab: (tab) => turned.push(tab),
       changeView: (view) => turned.push(view),
-      changeWorkspace: (workspaceId) => turned.push(workspaceId),
+      chooseWorkspace: (workspaceId) => turned.push(workspaceId),
       land: () => {
         landings += 1;
         return () => undefined;
@@ -114,6 +113,6 @@ test("a link naming no section or workspace lands on the page's head, with the s
     },
   );
 
-  assert.deepEqual(turned, [PANEL_TAB.SETTINGS, SETTINGS_VIEW.WORKSPACE, undefined]);
+  assert.deepEqual(turned, [PANEL_TAB.SETTINGS, SETTINGS_VIEW.WORKSPACE]);
   assert.equal(landings, 0);
 });

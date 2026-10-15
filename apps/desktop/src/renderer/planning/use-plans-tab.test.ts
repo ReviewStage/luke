@@ -42,6 +42,7 @@ import { createRoot } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import { onRegistry } from "#testing/copy-feedback";
 import { newestToastAction, newestToastSays } from "#testing/toast";
+import { followSettingsLink } from "../settings-link";
 import { ToastHost } from "../toast";
 import { MAIN_TAB } from "./use-main-tabs";
 import { type PlansControl, usePlansTab } from "./use-plans-tab";
@@ -832,6 +833,26 @@ test("opening a plan of another workspace lists that workspace once it opened, o
     tab.control().listed.plans.map((plan) => plan.id),
     ["alerts"],
   );
+});
+
+test("a Settings link naming another workspace, as the repository chip's Open Settings names a plan's own, lists that workspace in the sidebar", () => {
+  const tab = mount({ shown: true, planning: TWO_WORKSPACES });
+  const listedBefore = tab.control().workspace?.id;
+
+  act(() => tab.control().onOpenWorkspaceGitHub("alerts"));
+  const [link] = tab.links;
+  assert.ok(link, "the chip opened Settings");
+  act(() => {
+    followSettingsLink(link, {
+      changeTab: () => undefined,
+      changeView: () => undefined,
+      chooseWorkspace: tab.control().onChooseWorkspace,
+      land: () => () => undefined,
+    });
+  });
+
+  assert.equal(listedBefore, PERSONAL.id);
+  assert.equal(tab.control().workspace?.id, ACME.id);
 });
 
 /** A plan's inbox waiting on the developer: `count` open items, each asked by one agent. */

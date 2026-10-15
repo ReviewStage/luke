@@ -118,9 +118,9 @@ function press(listed: string): void {
   act(() => row.click());
 }
 
-/** The Settings pages in the sidebar's order, which the palette lists them in. */
+/** The Settings pages by their names, in the order the palette lists them: Account's own page is Profile, and the Workspace page, whose head names the listed workspace, is Workspace here. */
 const SETTINGS_PAGES = [
-  "Account",
+  "Profile",
   "Workspace",
   "Coding agents",
   "Integrations",
@@ -134,7 +134,7 @@ const SETTINGS_PAGES = [
   "Keyboard shortcuts",
 ];
 
-test("the Settings filter lists every Settings page by the sidebar's names, ahead of the settings", () => {
+test("the Settings filter lists every Settings page by its name, ahead of the settings", () => {
   openPalette();
   chooseFilter("Settings");
 

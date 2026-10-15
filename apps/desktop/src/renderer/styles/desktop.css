@@ -3997,6 +3997,22 @@ button.automation-run:hover {
   list-style: none;
 }
 
+/* The page list's three groups, a section's gap apart, each under its
+   heading; the first is headed by the listed workspace's tile and name, in
+   the primary ink, as the plans' sidebar heads its list
+   (`desktop-settings.tsx`). */
+.settings-nav-group + .settings-nav-group {
+  margin-top: var(--section-gap);
+}
+
+.settings-nav-workspace {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-6);
+  color: var(--text-primary);
+}
+
 /* A page that needs a hand wears the front page's own mark at the row's end,
    where the front page's row wears it before its chevron. */
 .settings-pages .sidebar-item .settings-attention {

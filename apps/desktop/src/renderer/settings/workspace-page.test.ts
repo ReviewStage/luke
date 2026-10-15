@@ -31,15 +31,16 @@ import { focusedSegment, pressKeyIn, readSegmented, segmentedGroup } from "#test
 import { WorkspacePage, type WorkspaceSettingsControl } from "./workspace-page";
 
 /**
- * Settings' Workspace page over a bridge answering as the host would: the
- * picker chooses the workspace the page shows, an owner or an admin renames
+ * Settings' Workspace page over a bridge answering as the host would: it
+ * shows the workspace the sidebar lists, with no picker of its own, and the
+ * account's role in it, an owner or an admin renames
  * it in place and uploads or removes its photo while a member is offered
  * neither, a team workspace's members
  * are read and listed, the page holding itself back while they are, an
  * owner or an admin is offered Remove in a row's ⋯ for anyone but an owner,
  * a member leaves, a refusal the role earns says so, an owner or admin
  * invites by address and role and copies or cancels what is pending, and
- * every workspace's Integrations group, the first one's too, holds GitHub:
+ * every workspace's GitHub group, the first one's too, holds GitHub:
  * an owner's or an admin's to connect, or to manage from its one Manage
  * menu once connected, and a member's to read. Synthetic accounts.
  */
@@ -241,7 +242,7 @@ async function settle(): Promise<void> {
   });
 }
 
-/** The page over `workspace` beside the account's first one, its picker choosing for itself, and how often a leave asked to fall back. */
+/** The page over `workspace` listed beside the account's first one, and how often a leave asked to fall back. */
 async function mount(workspace: Workspace, others: readonly Workspace[] = []) {
   const pressed = { left: 0 };
   const workspaces = [FIRST, workspace, ...others].filter(
@@ -255,7 +256,6 @@ async function mount(workspace: Workspace, others: readonly Workspace[] = []) {
     const control: WorkspaceSettingsControl = {
       workspaces,
       workspaceId,
-      onChooseWorkspace: (chosen) => render(chosen),
       listFailed: false,
       onRetryList: () => undefined,
       onLeft: () => {
@@ -266,7 +266,7 @@ async function mount(workspace: Workspace, others: readonly Workspace[] = []) {
   };
   render(workspace.id);
   await settle();
-  /** Stands the page again over another workspace, as a link naming it does. */
+  /** Stands the page again over another workspace, as the sidebar listing it does. */
   const relist = async (next: Workspace) => {
     workspaces.push(next);
     render(next.id);
@@ -332,9 +332,9 @@ async function confirm(verb: string): Promise<void> {
   await settle();
 }
 
-/** What the Workspace picker says under its name: the account's role. */
-const pickerLine = (page: HTMLElement) =>
-  rowNamed(page, "Workspace").querySelector("small")?.textContent;
+/** The account's role, as the page's head says it. */
+const roleLine = (page: HTMLElement) =>
+  rowNamed(page, "Your role").querySelector("small")?.textContent;
 
 /** The renames the page asked for, by their payloads. */
 const renames = () =>
@@ -380,7 +380,7 @@ test("an admin's rename the service refuses says so under the row, and a member 
   );
 
   const member = await mount(ACME);
-  assert.ok(rowNamed(member.page, "Workspace").textContent?.includes(ACME.name));
+  assert.equal(roleLine(member.page), "Member");
   assert.equal(buttons(member.page, "Rename").length, 0);
   assert.equal(member.page.querySelector(".workspace-name") === null, true);
 });
@@ -559,7 +559,6 @@ test("while the members are being read the page holds itself back, and a read th
   const control: WorkspaceSettingsControl = {
     workspaces: [FIRST, ACME],
     workspaceId: ACME.id,
-    onChooseWorkspace: () => undefined,
     onLeft: () => undefined,
     listFailed: false,
     onRetryList: () => undefined,
@@ -639,7 +638,7 @@ test("the account's first workspace reads like any other: its role, its members 
   act(() => button(row, "Connect").click());
   await settle();
 
-  assert.equal(pickerLine(page), "Your role: Owner");
+  assert.equal(roleLine(page), "Owner");
   assert.ok(page.querySelector(".workspace-invite"));
   assert.equal(
     rowNamed(page, "Dana").querySelector("small")?.textContent,
@@ -657,11 +656,11 @@ const CONNECTED: Workspace = {
   github: { login: "acme-org", active: true },
 };
 
-/** The Workspace page's Integrations group, found by the anchor its links have always named. */
-const integrationsGroup = (page: HTMLElement) =>
+/** The Workspace page's GitHub group, found by the anchor its links have always named. */
+const githubGroup = (page: HTMLElement) =>
   page.querySelector<HTMLElement>(
     `[${SETTINGS_SEARCH_ANCHOR_ATTRIBUTE}="${SETTINGS_SECTION.GITHUB_REPOSITORIES}"]`,
-  ) ?? assert.fail("no Integrations group");
+  ) ?? assert.fail("no GitHub group");
 
 /** What a row says: its name, and the line under it. */
 const rowWords = (row: HTMLElement) => [
@@ -687,13 +686,13 @@ const githubSent = () =>
       : [],
   );
 
-test("an owner or an admin of a connected workspace sees Integrations' GitHub row, Connected, led by GitHub's mark, with Manage its one control", async () => {
+test("an owner or an admin of a connected workspace sees the GitHub group's GitHub row, Connected, led by GitHub's mark, with Manage its one control", async () => {
   for (const role of [WORKSPACE_ROLE.OWNER, WORKSPACE_ROLE.ADMIN]) {
     const { page } = await mount({ ...CONNECTED, role });
-    const group = integrationsGroup(page);
+    const group = githubGroup(page);
     const row = rowNamed(group, "GitHub");
 
-    assert.equal(group.querySelector("h2")?.textContent, "Integrations");
+    assert.equal(group.querySelector("h2")?.textContent, "GitHub");
     assert.deepEqual(rowWords(row), ["GitHub", "Connected"]);
     assert.equal(
       row.querySelector(".settings-row-mark")?.innerHTML,
@@ -799,7 +798,7 @@ test("a GitHub page the browser could not open is said under the row, from Manag
 
   for (const { page } of [connected, unconnected]) {
     assert.equal(
-      integrationsGroup(page).querySelector('.error-message[role="alert"]')?.textContent,
+      githubGroup(page).querySelector('.error-message[role="alert"]')?.textContent,
       "Luke could not open your browser.",
     );
   }
@@ -856,7 +855,7 @@ test("a member reads that GitHub is connected, or is told to ask an owner or adm
   }
 });
 
-test("the picker shows another workspace on the page, the account's role, and its own members", async () => {
+test("the page has no workspace picker of its own, and shows another workspace, the account's role in it, and its own members once the sidebar lists it", async () => {
   const beta: Workspace = {
     ...ACME,
     id: "workspace-beta",
@@ -864,21 +863,18 @@ test("the picker shows another workspace on the page, the account's role, and it
     slug: "beta",
     role: WORKSPACE_ROLE.ADMIN,
   };
-  const { page } = await mount(ACME, [beta]);
-  const chip =
-    page.querySelector<HTMLButtonElement>('button[aria-label="Workspace: acme"]') ??
-    assert.fail("no picker naming acme");
+  const { page, relist } = await mount(ACME, [beta]);
+  const rowNames = [...page.querySelectorAll(".settings-row strong")].map(
+    (name) => name.textContent,
+  );
+  const listedRole = roleLine(page);
 
-  act(() => chip.click());
-  const option =
-    [...page.querySelectorAll<HTMLElement>('[role="option"]')].find(
-      (each) => each.textContent === "Beta",
-    ) ?? assert.fail("no Beta in the picker");
-  act(() => option.click());
-  await settle();
+  await relist(beta);
 
-  assert.ok(page.querySelector('button[aria-label="Workspace: Beta"]'), "the picker names Beta");
-  assert.equal(pickerLine(page), "Your role: Admin");
+  assert.equal(page.querySelector('button[aria-label^="Workspace:"]'), null, "no picker");
+  assert.equal(rowNames.includes("Workspace"), false, "no Workspace row");
+  assert.equal(listedRole, "Member");
+  assert.equal(roleLine(page), "Admin");
   assert.deepEqual(
     sent
       .filter((request) => request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ)
@@ -1112,7 +1108,6 @@ test("a workspaces read that failed says so with Retry, which asks for them agai
   const control: WorkspaceSettingsControl = {
     workspaces: [],
     workspaceId: undefined,
-    onChooseWorkspace: () => undefined,
     onLeft: () => undefined,
     listFailed: true,
     onRetryList: () => {
