@@ -926,6 +926,7 @@ test("Back from a switch made on the home page lists the workspace left and its 
   const fromHome = mount({ shown: true, planning: TWO_WORKSPACES }, OPENS);
   act(() => fromHome.control().onSelect("alerts"));
   await settle();
+  fromHome.stand({ planning: { ...TWO_WORKSPACES, activePlanId: "alerts" } });
   act(() => newestToastAction()?.click());
   await settle();
 
@@ -964,6 +965,62 @@ test("a workspace chosen while a plan is open opens the plan last open there, or
     tab.told.includes(ACT_KIND.PLANNING_CLOSE),
     "a workspace with no plan opened shows home",
   );
+});
+
+test("a remembered plan that moved to another workspace since, or would not open, gives way to the home page of the workspace chosen", async () => {
+  const three = [PERSONAL, ACME, PLATFORM];
+  const moved = {
+    ...TWO_WORKSPACES,
+    workspaces: three,
+    plans: TWO_WORKSPACES.plans.map((plan) =>
+      plan.id === "alerts" ? { ...plan, workspaceId: PLATFORM.id } : plan,
+    ),
+  };
+  const tab = mount(
+    { shown: true, planning: { ...TWO_WORKSPACES, workspaces: three, activePlanId: "alerts" } },
+    OPENS,
+  );
+  tab.stand({ planning: { ...moved, activePlanId: "notes" } });
+  act(() => tab.control().onChooseWorkspace(ACME.id));
+  await settle();
+
+  assert.deepEqual(opensAsked(tab.payloads), []);
+  assert.ok(tab.told.includes(ACT_KIND.PLANNING_CLOSE));
+  assert.equal(tab.control().workspace?.id, ACME.id);
+
+  window.localStorage.clear();
+  const refused = mount(
+    { shown: true, planning: { ...TWO_WORKSPACES, workspaces: three, activePlanId: "alerts" } },
+    { ...OPENS, [ACT_KIND.PLANNING_SELECT]: () => Promise.resolve(false) },
+  );
+  refused.stand({ planning: { ...TWO_WORKSPACES, workspaces: three, activePlanId: "notes" } });
+  act(() => refused.control().onChooseWorkspace(ACME.id));
+  await settle();
+
+  assert.deepEqual(opensAsked(refused.payloads), ["alerts"]);
+  assert.ok(refused.told.includes(ACT_KIND.PLANNING_CLOSE), "the home page stands in for it");
+  assert.equal(refused.control().workspace?.id, ACME.id);
+});
+
+test("a switch toast's Back does nothing once the window has moved on from the switch it reports", async () => {
+  const three = [PERSONAL, ACME, PLATFORM];
+  const tab = mount(
+    { shown: true, planning: { ...TWO_WORKSPACES, workspaces: three, activePlanId: "notes" } },
+    OPENS,
+  );
+  act(() => tab.control().onSelect("alerts"));
+  await settle();
+  tab.stand({ planning: { ...TWO_WORKSPACES, workspaces: three, activePlanId: "alerts" } });
+  const back = newestToastAction() ?? assert.fail("the toast offers a way back");
+  act(() => tab.control().onChooseWorkspace(PLATFORM.id));
+  await settle();
+  tab.stand({ planning: { ...TWO_WORKSPACES, workspaces: three, activePlanId: undefined } });
+
+  act(() => back.click());
+  await settle();
+
+  assert.equal(tab.control().workspace?.id, PLATFORM.id);
+  assert.deepEqual(opensAsked(tab.payloads), ["alerts"]);
 });
 
 test("a workspace chosen from the home page lists it and opens nothing", async () => {
