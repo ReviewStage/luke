@@ -2,8 +2,8 @@ import {
   REPOSITORY_SHELL_STATUS,
   RUN_IN_REPOSITORY_TOOL,
 } from "@luke/service/agents/repository-shell";
+import { stampedEveEvent } from "@luke/service/testing/eve-events";
 import type { MessageStreamEvent } from "eve/client";
-import { stampedEveEvent } from "./eve-events";
 
 /**
  * Whole turns as eve emits them, for the tests that drive one through the

@@ -17,6 +17,9 @@ import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import { planSections } from "@luke/features/plan-document";
 import { FAST_ACCESS } from "@luke/features/provider-key-wire";
 import { BRAIN_HOST_ATTRIBUTE, BRAIN_HOST_TURN } from "@luke/service/agents/brain-host/bounds";
+import { memoryRelayState } from "@luke/service/agents/brain-host/relay";
+import { CODER_REFUSAL } from "@luke/service/agents/coder-host/bounds";
+import { CODER_TOOL, CODER_TOOL_SET } from "@luke/service/agents/coder-host/tool-set";
 import {
   ACTION_RESULT_STATUS,
   MESSAGE_AUTHOR,
@@ -28,6 +31,7 @@ import {
   unparsedWire,
 } from "@luke/service/core";
 import { modelCatalogOf, type OfferedModel } from "@luke/service/providers/model-catalog";
+import { stampedEveEvent } from "@luke/service/testing/eve-events";
 import { githubReaching, openGithubUser } from "@luke/service/testing/github-app-fake";
 import { noNetwork } from "@luke/service/testing/no-network";
 import { isReasoningUIPart, isTextUIPart, isToolUIPart, type LanguageModel } from "ai";
@@ -35,15 +39,11 @@ import { eq } from "drizzle-orm";
 import { Clock, Effect, Layer, Option, Redacted, Result, Schema } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
-import { memoryRelayState } from "../server/hosted/brain-host/relay";
-import { CODER_REFUSAL } from "../server/hosted/coder-host/bounds";
 import { type CoderHost, coderHost } from "../server/hosted/coder-host/host";
 import type { ProviderKeys } from "../server/hosted/coder-host/model";
 import type { CoderHostSeams } from "../server/hosted/coder-host/production";
 import { codingAgentStatusOf } from "../server/hosted/coder-host/status";
-import { CODER_TOOL, CODER_TOOL_SET } from "../server/hosted/coder-host/tool-set";
 import { CURSOR_START, transcriptPast } from "../server/hosted/coder-host/transcript";
-import { stampedEveEvent } from "./support/eve-events";
 
 /**
  * The coding-agent host through the same functions the coder project's

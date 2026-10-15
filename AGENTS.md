@@ -202,7 +202,7 @@ host through, composed with `Effect.runSync` as it loads for the same reason
 `apps/web/eve/host.ts` is. Not
 every seam under `apps/web/server/hosted/` is an effect down to its floor:
 `hosted/brain-host/production.ts`'s `spend` is
-the AI SDK's async middleware, and `hosted/brain-host/door.ts`'s
+the AI SDK's async middleware, and `packages/service/src/agents/brain-host/door.ts`'s
 `SessionOwnership` speaks eve's own `AuthFn<Request>` — two promise-shaped
 foreign boundaries the effects around them compose over rather than
 replace, `apps/web/server/db/migrate.ts` (the migration command, through

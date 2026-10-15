@@ -8,6 +8,9 @@ import {
   conversationReachableBy,
   runtimeSessionReachableBy,
 } from "@luke/service/agents/brain-host/conversation";
+import type { SessionOwnership } from "@luke/service/agents/brain-host/door";
+import { CODER_ENVIRONMENT, CODER_MODEL_FIXTURE } from "@luke/service/agents/coder-host/bounds";
+import { CODER_TOOL_SET } from "@luke/service/agents/coder-host/tool-set";
 import {
   MeterUnavailable,
   type ResearchAccess,
@@ -20,11 +23,8 @@ import { HostedEnvironment } from "@luke/service/environment";
 import type { WebStoreRun } from "@luke/service/run";
 import type { LanguageModel } from "ai";
 import { Effect, type Redacted } from "effect";
-import type { SessionOwnership } from "../brain-host/door.js";
 import { accountProviderKeys } from "./account-keys.js";
-import { CODER_ENVIRONMENT, CODER_MODEL_FIXTURE } from "./bounds.js";
 import { type LukeKeys, type ProviderKeys, titleModel } from "./model.js";
-import { CODER_TOOL_SET } from "./tool-set.js";
 
 /**
  * production.ts -- the deployment's real seams behind the coding-agent service's authored files.

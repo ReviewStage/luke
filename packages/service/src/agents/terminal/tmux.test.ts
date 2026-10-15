@@ -1,12 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import {
-  killTerminal,
-  renameTerminal,
-  startTerminal,
-  TMUX,
-  terminalsOf,
-} from "../server/hosted/terminal/tmux";
+import { killTerminal, renameTerminal, startTerminal, TMUX, terminalsOf } from "./tmux.js";
 
 /**
  * A Terminal tab's shells as tmux sessions in the agent's sandbox: the

@@ -1,6 +1,6 @@
+import { CODER } from "@luke/service/agents/coder-host/bounds";
 import { Effect, Result } from "effect";
 import { defineAgent, defineDynamic } from "eve";
-import { CODER } from "../server/hosted/coder-host/bounds.js";
 import { runWeb } from "../server/runtime.js";
 import { host, readStepStarted, seams, stepTurnId } from "./host.js";
 import { scriptedModel } from "./scripted-model.js";
@@ -8,7 +8,7 @@ import { scriptedModel } from "./scripted-model.js";
 /**
  * Luke's coding agent, as an eve agent. eve's default tools are off and the
  * tools it runs are authored one file each under `tools/`, so the set is
- * exactly the one the store writer registers (`server/hosted/coder-host/tool-set.ts`):
+ * exactly the one the store writer registers (`packages/service/src/agents/coder-host/tool-set.ts`):
  * its shell and file tools, the code extension's patch and search, the
  * provider-run web reads, the delegation to its own declared worker, and
  * eve's two tools over the account's integrations (`connections/integrations.ts`).

@@ -6,6 +6,11 @@ import {
   terminalCreateRequestSchema,
   terminalRenameRequestSchema,
 } from "@luke/features/terminal-wire";
+import {
+  AgentSandbox,
+  SHELL_REFUSAL,
+  type ShellRefusal,
+} from "@luke/service/agents/terminal/agent-sandbox";
 import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import {
   HOSTED_REFUSAL,
@@ -26,7 +31,6 @@ import {
   type HttpServerResponse,
 } from "effect/http";
 import { type AccountResolving, reachedAgent, uuidOf } from "./hosted/agent-reach.js";
-import { AgentSandbox, SHELL_REFUSAL, type ShellRefusal } from "./hosted/terminal/agent-sandbox.js";
 
 /**
  * The agent terminals group: a coding agent's shells as its Terminal tab

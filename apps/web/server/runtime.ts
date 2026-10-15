@@ -1,14 +1,10 @@
-import type { DatabaseServices } from "@luke/database/core/query";
 import { webSqlClient } from "@luke/service/db/sql-client";
 import { hostedEnvironment } from "@luke/service/environment";
-import { type GitHubApp, githubAppFromEnvironment } from "@luke/service/github/github-app";
-import {
-  type IntegrationConnect,
-  integrationConnectFromEnvironment,
-} from "@luke/service/integrations/integration-connect";
+import { githubAppFromEnvironment } from "@luke/service/github/github-app";
+import { integrationConnectFromEnvironment } from "@luke/service/integrations/integration-connect";
 import { modelCatalogLayer } from "@luke/service/providers/model-catalog";
 import { ConfigProvider, Effect, Layer, Logger, ManagedRuntime } from "effect";
-import { FetchHttpClient, type HttpClient } from "effect/http";
+import { FetchHttpClient } from "effect/http";
 
 /**
  * The deployment's own environment, read as these services are built rather
@@ -99,20 +95,6 @@ function webRuntime(): ManagedRuntime.ManagedRuntime<WebServices, WebServicesErr
 export function runWeb<A, E>(effect: Effect.Effect<A, E, WebServices>): Promise<A> {
   return webRuntime().runPromise(effect);
 }
-
-/** What the doors an eve root opens onto the agent runtime may require (`hosted/agent-runtime/edge.ts`). */
-export type WebAgentServices =
-  | DatabaseServices
-  | HttpClient.HttpClient
-  | GitHubApp
-  | IntegrationConnect;
-
-/**
- * The edge's own runner as an eve root's doors are handed one, on the same
- * terms as `WebStoreRun` (`@luke/service/run`): the root's `host.ts` hands it `runWeb`, and a test
- * the runner over its own test database and fakes of the rest.
- */
-export type WebAgentRun = <A, E>(effect: Effect.Effect<A, E, WebAgentServices>) => Promise<A>;
 
 /**
  * Releases what the layer acquired and leaves the next call to build it again.

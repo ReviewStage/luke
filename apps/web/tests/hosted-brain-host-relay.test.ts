@@ -12,6 +12,12 @@ import {
 } from "@luke/database/testing";
 import { BRAIN_HOST_TURN, type BrainHostTurn } from "@luke/service/agents/brain-host/bounds";
 import {
+  memoryRelayState,
+  type RelayStanding,
+  redactCredentials,
+  StreamRelay,
+} from "@luke/service/agents/brain-host/relay";
+import {
   REPOSITORY_SHELL_STATUS,
   RUN_IN_REPOSITORY_TOOL,
 } from "@luke/service/agents/repository-shell";
@@ -25,18 +31,12 @@ import {
   TURN_ORIGIN,
   TURN_STATUS,
 } from "@luke/service/core";
+import { stampedEveEvent } from "@luke/service/testing/eve-events";
 import { isToolUIPart } from "ai";
 import { Effect, Result } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll } from "vitest";
-import {
-  memoryRelayState,
-  type RelayStanding,
-  redactCredentials,
-  StreamRelay,
-} from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
-import { stampedEveEvent } from "./support/eve-events";
 import { spokenTurn } from "./support/eve-turns";
 
 /**

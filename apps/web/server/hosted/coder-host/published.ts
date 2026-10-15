@@ -8,6 +8,7 @@ import type {
   CodingAgentPullRequest,
   CodingAgentPullRequestAnswer,
 } from "@luke/features/coding-agent-wire";
+import { CODER } from "@luke/service/agents/coder-host/bounds";
 import {
   GitHubApp,
   type GitHubRepositoryToken,
@@ -24,7 +25,6 @@ import { agentWorkspace } from "@luke/service/github/workspace-repository";
 import type { StoreFailure } from "@luke/service/http/store-failure";
 import { Cache, Data, Duration, Effect, Exit, type Layer, Option, type Redacted } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
-import { CODER } from "./bounds.js";
 
 /**
  * published.ts -- what a coding agent published: the branch its sandbox stands on and the pull request from it, confirmed on GitHub.

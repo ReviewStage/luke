@@ -6,6 +6,7 @@ import {
   TERMINAL_RELAY_CLOSE,
   TERMINAL_RELAY_FRAME,
 } from "@luke/features/terminal-wire";
+import type { AgentSandboxService } from "@luke/service/agents/terminal/agent-sandbox";
 import {
   type Cause,
   Deferred,
@@ -18,7 +19,6 @@ import {
   Stream,
 } from "effect";
 import { TestClock } from "effect/testing";
-import type { AgentSandboxService } from "../server/hosted/terminal/agent-sandbox";
 import {
   type RelayAgent,
   type RelayDependencies,

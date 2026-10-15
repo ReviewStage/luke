@@ -11,6 +11,7 @@ import {
   conversationReachableBy,
   runtimeSessionReachableBy,
 } from "@luke/service/agents/brain-host/conversation";
+import type { SessionOwnership } from "@luke/service/agents/brain-host/door";
 import { deploymentEveOrigin } from "@luke/service/agents/brain-host/eve-origin";
 import { auth } from "@luke/service/auth/auth";
 import { oauthUserInfoFromAuthAnswer, type UserInfoEndpoint } from "@luke/service/auth/bearer";
@@ -21,7 +22,6 @@ import type { LanguageModel } from "ai";
 import { Effect, type Redacted } from "effect";
 import { HOSTED_TOOL_SET } from "../brain-tool-set.js";
 import { titleModel } from "../coder-host/model.js";
-import type { SessionOwnership } from "./door.js";
 
 /**
  * The deployment's real seams behind the eve project's authored files, built

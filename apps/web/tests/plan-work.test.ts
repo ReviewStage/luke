@@ -32,6 +32,11 @@ import {
 import { BRAIN_HOST_TURN, RELAY_TURN } from "@luke/service/agents/brain-host/bounds";
 import { openChildConversation } from "@luke/service/agents/brain-host/conversation";
 import {
+  memoryRelayState,
+  type RelayStanding,
+  StreamRelay,
+} from "@luke/service/agents/brain-host/relay";
+import {
   REPOSITORY_SHELL_STATUS,
   RUN_IN_REPOSITORY_TOOL,
 } from "@luke/service/agents/repository-shell";
@@ -43,6 +48,7 @@ import {
   TURN_STATUS,
 } from "@luke/service/core";
 import { SHOW_CODE_TOOL } from "@luke/service/plans/show-code";
+import { stampedEveEvent } from "@luke/service/testing/eve-events";
 import { isRecord, isWireString, TURN_ORIGIN, type WireRecord, type WireValue } from "@luke/wire";
 import { eq } from "drizzle-orm";
 import { Effect, Fiber, Option } from "effect";
@@ -50,11 +56,6 @@ import { TestClock } from "effect/testing";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll, test } from "vitest";
 import { PLANNER_DELEGATE_TOOL } from "../server/hosted/brain-host/planning";
-import {
-  memoryRelayState,
-  type RelayStanding,
-  StreamRelay,
-} from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { readPlanCode, readPlanWork } from "../server/hosted/plan-work-store";
 import {
@@ -66,7 +67,6 @@ import {
   plannerWorkerSession,
 } from "../server/hosted/planner-transcript";
 import { planWorkOf } from "../server/voice/plan-work";
-import { stampedEveEvent } from "./support/eve-events";
 import { FIRST_EVE_TURN } from "./support/eve-turns";
 
 /**

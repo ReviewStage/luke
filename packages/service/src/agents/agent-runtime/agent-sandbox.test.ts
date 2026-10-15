@@ -1,15 +1,11 @@
 import assert from "node:assert/strict";
-import { AGENT_ROLE } from "@luke/service/agents/agent-runtime/role";
 import { Duration } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { test } from "vitest";
-import {
-  renewsCredential,
-  type SandboxRecord,
-  stopsAtTurnEnd,
-} from "../server/hosted/agent-runtime/sandbox";
-import { CODER } from "../server/hosted/coder-host/bounds";
-import { stampedEveEvent } from "./support/eve-events";
+import { stampedEveEvent } from "../../testing/eve-events.js";
+import { CODER } from "../coder-host/bounds.js";
+import { AGENT_ROLE } from "./role.js";
+import { renewsCredential, type SandboxRecord, stopsAtTurnEnd } from "./sandbox.js";
 
 /**
  * The coding agent's sandbox lifecycle as its root's store hook reads it:

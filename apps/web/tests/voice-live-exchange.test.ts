@@ -29,6 +29,11 @@ import {
   type EveMessage,
   type EveSessions,
 } from "@luke/service/agents/brain-host/eve-sessions";
+import {
+  memoryRelayState,
+  type RelayStanding,
+  StreamRelay,
+} from "@luke/service/agents/brain-host/relay";
 import { MESSAGE_ROLE } from "@luke/service/core";
 import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import { added } from "@luke/service/testing/plan-contents";
@@ -39,11 +44,6 @@ import { Deferred, Effect, Exit, Option, Schema, Scope } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll } from "vitest";
 import { PLANNING_EXPLORE_ASK } from "../server/hosted/brain-host/planning";
-import {
-  memoryRelayState,
-  type RelayStanding,
-  StreamRelay,
-} from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { hostedLiveExchange } from "../server/voice/live-exchange";
 import type { PlanDraft } from "../server/voice/plan-scribe";

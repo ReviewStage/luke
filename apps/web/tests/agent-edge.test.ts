@@ -6,11 +6,14 @@ import assert from "node:assert/strict";
 import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { openHostedStoreTestDatabase, startPlan } from "@luke/database/testing";
+import { type EdgeKit, edgeKit } from "@luke/service/agents/agent-runtime/edge";
 import { AGENT_ROLE, type AgentRole } from "@luke/service/agents/agent-runtime/role";
 import {
   BRAIN_HOST_ATTRIBUTE,
   BRAIN_HOST_PRINCIPAL_TYPE,
 } from "@luke/service/agents/brain-host/bounds";
+import { CODER_TOOL_SET } from "@luke/service/agents/coder-host/tool-set";
+import type { WebAgentRun } from "@luke/service/run";
 import { NO_GITHUB, openGithubUser } from "@luke/service/testing/github-app-fake";
 import {
   CONNECTOR_ASKED_NOTHING,
@@ -19,10 +22,7 @@ import {
 import { Effect, Layer, Option, Result } from "effect";
 import type { SessionAuth, SessionContext } from "eve/context";
 import { afterAll, test } from "vitest";
-import { type EdgeKit, edgeKit } from "../server/hosted/agent-runtime/edge";
 import { type CoderHost, coderHost } from "../server/hosted/coder-host/host";
-import { CODER_TOOL_SET } from "../server/hosted/coder-host/tool-set";
-import type { WebAgentRun } from "../server/runtime";
 
 /**
  * A session over another account's conversation is handed nothing under

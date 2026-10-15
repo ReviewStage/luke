@@ -649,7 +649,7 @@ was withdrawn.
 
 **How Luke hands an agent its servers today:**
 - **Attached per turn.** An agent's servers are attached as the turn
-  starts (`apps/web/server/hosted/agent-runtime/connections.ts`), one MCP
+  starts (`packages/service/src/agents/agent-runtime/connections.ts`), one MCP
   connection per provider the turn is handed (`servers.ts`).
 - **Tools are found by search, not loaded up front.** eve offers them
   through its own two tools: `connection_search` lists a connection's tools,

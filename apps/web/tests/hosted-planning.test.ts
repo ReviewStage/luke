@@ -15,9 +15,11 @@ import {
   type BrainHostTurn,
 } from "@luke/service/agents/brain-host/bounds";
 import { readRecentMessages } from "@luke/service/agents/brain-host/context";
+import { memoryRelayState, type RelayStateStore } from "@luke/service/agents/brain-host/relay";
 import type { RepositorySandboxDoor } from "@luke/service/agents/repository-shell";
 import type { GitHubApp } from "@luke/service/github/github-app";
 import { modelCatalogOf } from "@luke/service/providers/model-catalog";
+import { stampedEveEvent } from "@luke/service/testing/eve-events";
 import {
   connectWorkspaceGitHub,
   GITHUB_FIXTURE_INSTALLATION_TOKEN,
@@ -50,9 +52,7 @@ import {
 } from "../eve/scripted-model";
 import { type BrainHost, brainHost } from "../server/hosted/brain-host/host";
 import type { BrainHostSeams } from "../server/hosted/brain-host/production";
-import { memoryRelayState, type RelayStateStore } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
-import { stampedEveEvent } from "./support/eve-events";
 
 /**
  * The planning model as the hosted brain runs it, end to end in one process:

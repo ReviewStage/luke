@@ -11,17 +11,17 @@ import {
   type SandboxState,
   type TerminalSummary,
 } from "@luke/features/terminal-wire";
+import {
+  AgentSandbox,
+  type AgentSandboxService,
+  SHELL_REFUSAL,
+} from "@luke/service/agents/terminal/agent-sandbox";
 import { openGithubUser } from "@luke/service/testing/github-app-fake";
 import { noNetwork } from "@luke/service/testing/no-network";
 import { Clock, Effect, Layer, Option, Result } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { AGENT_TERMINALS_PATH, agentTerminalsApp } from "../server/agent-terminals-app";
-import {
-  AgentSandbox,
-  type AgentSandboxService,
-  SHELL_REFUSAL,
-} from "../server/hosted/terminal/agent-sandbox";
 
 /**
  * A coding agent's terminals as its tab reaches them, over a real dialect and

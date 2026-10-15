@@ -26,12 +26,6 @@
  */
 
 import { createHash } from "node:crypto";
-import {
-  type AgentRole,
-  ROLE_PROFILE,
-  SANDBOX_POLICY,
-  type SandboxPolicy,
-} from "@luke/service/agents/agent-runtime/role";
 import { Duration } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { installCodeTooling } from "eve/extensions/code/sandbox";
@@ -39,6 +33,7 @@ import type { SandboxSession } from "eve/sandbox";
 import { VercelSandbox, type VercelSandboxRuntimeOptions } from "eve/sandbox/vercel";
 import { CODER } from "../coder-host/bounds.js";
 import { PREPARE_TMUX } from "../terminal/tmux.js";
+import { type AgentRole, ROLE_PROFILE, SANDBOX_POLICY, type SandboxPolicy } from "./role.js";
 
 /** The commands `prepare` runs on the snapshot, after the code extension's tooling. */
 const PREPARE_SCRIPT = [

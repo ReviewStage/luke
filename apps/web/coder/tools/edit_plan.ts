@@ -1,20 +1,20 @@
 import { pinnedState } from "@luke/service/agents/brain-host/pinned-state";
-import { ACTION_RESULT_STATUS, unparsedWire, type WireBoundaryInput } from "@luke/wire";
-import { emitJsonSchema } from "@luke/wire/effect";
-import { defineTool } from "eve/tools";
 import {
   EDIT_PLAN_TOOL,
   requestedNotes,
   reserveNotes,
   settleNotes,
   takenInTurn,
-} from "../../server/hosted/coder-host/plan-edit.js";
+} from "@luke/service/agents/coder-host/plan-edit";
+import { ACTION_RESULT_STATUS, unparsedWire, type WireBoundaryInput } from "@luke/wire";
+import { emitJsonSchema } from "@luke/wire/effect";
+import { defineTool } from "eve/tools";
 import { editPlanNotes } from "../host.js";
 import { planNotesTaken } from "../session-prompt.js";
 
 /**
  * Luke's own `edit_plan`: the notetaker's notes, taken into the agent's plan
- * (`server/hosted/coder-host/plan-edit.ts`). The call reaches the store
+ * (`packages/service/src/agents/coder-host/plan-edit.ts`). The call reaches the store
  * through the host's door (`../host.ts`), as the delegation does, and the
  * turn's count of notes is the session's own state, pinned before anything
  * awaits (`packages/service/src/agents/brain-host/pinned-state.ts`). Note that the call's

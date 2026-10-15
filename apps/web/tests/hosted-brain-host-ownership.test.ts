@@ -16,10 +16,12 @@ import {
   BRAIN_HOST_REFUSAL,
   BRAIN_HOST_TURN,
 } from "@luke/service/agents/brain-host/bounds";
+import { brainHostChannelInput, DEPLOYMENT_TURNS } from "@luke/service/agents/brain-host/channel";
 import {
   conversationReachableBy,
   runtimeSessionReachableBy,
 } from "@luke/service/agents/brain-host/conversation";
+import type { SessionOwnership } from "@luke/service/agents/brain-host/door";
 import { ACTION_RESULT_STATUS, BRAIN_TURN_TRIGGER } from "@luke/service/core";
 import { QUEUE_QUESTION_TOOL } from "@luke/service/plans/queue-question";
 import { modelCatalogOf } from "@luke/service/providers/model-catalog";
@@ -30,8 +32,6 @@ import { routeAuth } from "eve/channels/auth";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
 import type { ToolContext as EveToolContext } from "eve/tools";
 import { afterAll, test } from "vitest";
-import { brainHostChannelInput, DEPLOYMENT_TURNS } from "../server/hosted/brain-host/channel";
-import type { SessionOwnership } from "../server/hosted/brain-host/door";
 import {
   type BrainHost,
   brainHost,

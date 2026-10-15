@@ -1,8 +1,8 @@
+import { CODER_TOOL } from "@luke/service/agents/coder-host/tool-set";
 import { SEARCH_WEB_TOOL } from "@luke/service/agents/public-research";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { emitJsonSchema } from "@luke/wire/effect";
 import { defineTool } from "eve/tools";
-import { CODER_TOOL } from "../../server/hosted/coder-host/tool-set.js";
 import { host, runResearchTool } from "../host.js";
 
 /**

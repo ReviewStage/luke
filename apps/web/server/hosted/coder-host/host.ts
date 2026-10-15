@@ -13,6 +13,12 @@ import { sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
 import { CODING_AGENT_BRIEF, CONTEXT_WINDOW } from "@luke/features/coding-agent-wire";
 import { INBOX_TOOL } from "@luke/features/inbox-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
+import {
+  delegatedChildOf,
+  type HostAdmission,
+  hostAdmission,
+} from "@luke/service/agents/agent-runtime/host-core";
+import type { AgentSkill } from "@luke/service/agents/agent-runtime/skills";
 import { turnKindOf } from "@luke/service/agents/brain-host/auth";
 import { RELAY_TURN } from "@luke/service/agents/brain-host/bounds";
 import {
@@ -22,6 +28,25 @@ import {
   claimRuntimeSession,
   SESSION_STANDING,
 } from "@luke/service/agents/brain-host/conversation";
+import {
+  type RelayStanding,
+  type RelayStateStore,
+  StreamRelay,
+} from "@luke/service/agents/brain-host/relay";
+import {
+  CODER,
+  CODER_MODEL_FIXTURE,
+  CODER_REFUSAL,
+  type CoderRefusal,
+} from "@luke/service/agents/coder-host/bounds";
+import type { InboxSandboxDoor } from "@luke/service/agents/coder-host/inbox-image";
+import {
+  PLAN_EDIT_REFUSAL,
+  type PlanEditResult,
+  planEditRejected,
+  recordPlanEdit,
+} from "@luke/service/agents/coder-host/plan-edit";
+import { CODER_TOOL } from "@luke/service/agents/coder-host/tool-set";
 import {
   type ReadWebPageResult,
   ResearchBudget,
@@ -42,12 +67,8 @@ import { Effect, Option, type Redacted, Result, type Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionContext } from "eve/context";
-import { delegatedChildOf, type HostAdmission, hostAdmission } from "../agent-runtime/host-core.js";
-import type { AgentSkill } from "../agent-runtime/skills.js";
 import type { SessionPromptRecord } from "../brain-host/host.js";
-import { type RelayStanding, type RelayStateStore, StreamRelay } from "../brain-host/relay.js";
 import { anthropicFastAccess } from "./account-keys.js";
-import { CODER, CODER_MODEL_FIXTURE, CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
 import {
   agentCiReadable,
   agentRepositoryToken,
@@ -67,19 +88,11 @@ import {
   postToInbox,
   readOwnInbox,
 } from "./inbox.js";
-import type { InboxSandboxDoor } from "./inbox-image.js";
 import { coderInstructions } from "./instructions.js";
 import { type CoderModelSelection, coderModel } from "./model.js";
-import {
-  PLAN_EDIT_REFUSAL,
-  type PlanEditResult,
-  planEditRejected,
-  recordPlanEdit,
-} from "./plan-edit.js";
 import type { CoderHostSeams } from "./production.js";
 import { agentSkills } from "./skills.js";
 import { titleCodingAgent, titleSubagent } from "./title.js";
-import { CODER_TOOL } from "./tool-set.js";
 
 /**
  * host.ts -- the coding-agent host composed over eve and the store: what the coder project's authored files call.

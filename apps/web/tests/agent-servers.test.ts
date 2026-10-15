@@ -13,10 +13,12 @@ import {
   type IntegrationProvider,
 } from "@luke/features/integration-wire";
 import { CONNECTION_POLICY } from "@luke/service/agents/agent-runtime/role";
+import { type ServerStanding, turnServers } from "@luke/service/agents/agent-runtime/servers";
 import {
   BRAIN_HOST_ATTRIBUTE,
   BRAIN_HOST_PRINCIPAL_TYPE,
 } from "@luke/service/agents/brain-host/bounds";
+import { CODER_TOOL_SET } from "@luke/service/agents/coder-host/tool-set";
 import { GitHubApp } from "@luke/service/github/github-app";
 import { GITHUB_APP_SETTINGS, openGithubUser } from "@luke/service/testing/github-app-fake";
 import {
@@ -27,9 +29,7 @@ import {
 import { noNetwork } from "@luke/service/testing/no-network";
 import { Effect, Layer, Option, Result } from "effect";
 import type { SessionAuth } from "eve/context";
-import { type ServerStanding, turnServers } from "../server/hosted/agent-runtime/servers";
 import { type CoderHost, coderHost } from "../server/hosted/coder-host/host";
-import { CODER_TOOL_SET } from "../server/hosted/coder-host/tool-set";
 
 /**
  * The MCP servers an agent's turn is handed, read as the turn starts under

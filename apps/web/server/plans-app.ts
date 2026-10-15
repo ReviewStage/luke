@@ -35,6 +35,7 @@ import {
   planRevisionSeqSchema,
   planTreeRequestSchema,
 } from "@luke/features/plan-wire";
+import { CODER_TOOL_SET } from "@luke/service/agents/coder-host/tool-set";
 import { retireSessions } from "@luke/service/agents/retire-sessions";
 import {
   PLAN_LIST_ARCHIVED,
@@ -79,7 +80,6 @@ import {
 } from "effect/http";
 import { HOSTED_TOOL_SET } from "./hosted/brain-tool-set.js";
 import { type EveReach, eveFor, stoppedForGood } from "./hosted/coder-host/stop.js";
-import { CODER_TOOL_SET } from "./hosted/coder-host/tool-set.js";
 import {
   CURSOR_START,
   cursorOfWire,

@@ -1,6 +1,7 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import type { CodingAgent } from "@luke/database/models/coding-agent-store";
 import type { ConversationTarget } from "@luke/database/models/writer";
+import { CODER, CODER_REFUSAL, type CoderRefusal } from "@luke/service/agents/coder-host/bounds";
 import {
   type CheckoutIdentity,
   cloneRepository,
@@ -13,7 +14,6 @@ import { GitHubApp, noreplyAddress } from "@luke/service/github/github-app";
 import { agentWorkspace as workspaceOfAgent } from "@luke/service/github/workspace-repository";
 import { Data, Effect, Option, type Redacted } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
-import { CODER, CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
 
 /**
  * checkout.ts -- a coding agent's checkout of its repository, and the credential its sandbox pushes through.
