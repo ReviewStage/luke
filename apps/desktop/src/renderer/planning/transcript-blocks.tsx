@@ -32,9 +32,7 @@ import {
   HourglassIcon,
   InboxIcon,
   LaptopIcon,
-  LayersIcon,
   LayoutListIcon,
-  ListIcon,
   ListTodoIcon,
   type LucideIcon,
   MessageCircleQuestionIcon,
@@ -725,16 +723,16 @@ export function TranscriptSubagent({
  * A line that folds the rows beneath it: a run of calls, or a finished
  * turn's lead. Note that it stays in the muted ink, summary and all,
  * unlike a call's line, because it counts rows rather than saying what one
- * did, and the rows it opens onto are what a reader scans.
+ * did, and the rows it opens onto are what a reader scans. It wears no
+ * icon, because its count already says what it holds and the rows it
+ * opens onto wear their own.
  */
 function TurnFold({
-  icon,
   summary,
   running,
   open = false,
   children,
 }: {
-  icon: ReactNode;
   summary: string;
   running: boolean;
   open?: boolean;
@@ -743,12 +741,6 @@ function TurnFold({
   return (
     <Fold className="text-[12.5px]" defaultOpen={open} data-turn-fold="">
       <FoldSummary className="flex h-7 cursor-pointer items-center gap-2 rounded-md px-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
-        <span
-          className="flex size-4 shrink-0 items-center justify-center [&>svg]:size-4"
-          aria-hidden="true"
-        >
-          {icon}
-        </span>
         {running ? <Shimmer>{summary}</Shimmer> : <span>{summary}</span>}
       </FoldSummary>
       <FoldBody className="ml-6 flex flex-col gap-1 pt-1">{children}</FoldBody>
@@ -774,10 +766,9 @@ function TurnRowView<B>({
           {trailer}
         </>
       );
-    // A run of calls wears a stack, its calls laid one on another, which no call's own icon is; a finished lead wears a list.
     case TURN_ROW.GROUP:
       return (
-        <TurnFold icon={<LayersIcon />} summary={row.summary} running={row.running} open={row.open}>
+        <TurnFold summary={row.summary} running={row.running} open={row.open}>
           {row.blocks.map((block, index) => (
             <Fragment key={index}>{children(block)}</Fragment>
           ))}
@@ -786,7 +777,7 @@ function TurnRowView<B>({
       );
     case TURN_ROW.FOLDED:
       return (
-        <TurnFold icon={<ListIcon />} summary={row.summary} running={false}>
+        <TurnFold summary={row.summary} running={false}>
           <TranscriptRows rows={row.rows} trailer={trailer}>
             {children}
           </TranscriptRows>
