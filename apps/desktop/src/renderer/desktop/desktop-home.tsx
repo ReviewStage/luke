@@ -144,7 +144,7 @@ function useRowKeys(page: HTMLElement | null, shown: boolean): void {
 }
 
 /** New plan, with its chord: the home page's, and the empty Factory's (`desktop-factory.tsx`). */
-export function NewPlanButton({ plans }: { plans: PlansControl }): React.JSX.Element {
+function NewPlanButton({ plans }: { plans: PlansControl }): React.JSX.Element {
   return (
     <button
       type="button"

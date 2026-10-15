@@ -4,7 +4,7 @@
  * Only a whole tab or pane that stands empty draws one, or one whose thing
  * cannot be shown (`not-found.tsx`), and only where the glyph says what will
  * stand there: the Inbox, the side panel's Code,
- * Transcript, and Work, Automations and an automation's runs, and a Settings
+ * Transcript, and Work, Factory, Automations and an automation's runs, and a Settings
  * page with nothing on it (Experimental, between experiments). A small note
  * inside a list, a menu, or a search with no match says its line alone, as do
  * a wait and a failure, which are not empty. The glyph is the tab's own, so
