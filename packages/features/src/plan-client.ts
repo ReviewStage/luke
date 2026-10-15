@@ -20,12 +20,14 @@ import {
   type GitHubRepositoriesAnswer,
   githubRepositoriesAnswerSchema,
 } from "./github-repositories-wire.js";
+import { imageBodyOf } from "./image-body.js";
 import {
   type PageLine,
   type PageVersion,
   planPagesAnswerSchema,
   planPageVersionAnswerSchema,
 } from "./page-wire.js";
+import { pictureTypeSchema } from "./picture-wire.js";
 import {
   type PlanEditAnswer,
   type PlanEditRequest,
@@ -68,6 +70,7 @@ import {
   PLAN_CALL_FAILURE,
   type PlanCallFailure,
   type PlanCodeAnswer,
+  type PlanningPictureAnswer,
   type PlanWorkAnswer,
   planCodeAnswerSchema,
   planWorkAnswerSchema,
@@ -76,6 +79,7 @@ import {
 } from "./planning-view.js";
 import {
   HOSTED_SERVICE_PATH,
+  planAttachmentPath,
   planBoardPath,
   planCodePath,
   planEditPath,
@@ -144,6 +148,11 @@ const MOVE_REFUSALS = {
   [HOSTED_API_ERROR.NOT_FOUND]: PLAN_CALL_FAILURE.NOT_FOUND,
   [HOSTED_API_ERROR.PLAN_ARCHIVED]: PLAN_CALL_FAILURE.PLAN_ARCHIVED,
   [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE]: PLAN_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
+} as const;
+
+/** The refusal a read of one of the plan's own rows can answer with: the plan or the row not the account's. */
+const NOT_FOUND_REFUSAL = {
+  [HOSTED_API_ERROR.NOT_FOUND]: PLAN_CALL_FAILURE.NOT_FOUND,
 } as const;
 
 /** The refusal a refused answer carries, where it is one the caller names; unanswered otherwise. */
@@ -448,6 +457,33 @@ export class HostedPlanClient {
       ),
       (answer) => answer?.revision,
     );
+  }
+
+  /**
+   * One picture of one plan, fetched under the account: its bytes in base64
+   * under its media type, where the service answered with a type a picture
+   * may be; not found where the plan is not one the account reaches or holds
+   * no such picture; unanswered for anything else, another media type
+   * included, so nothing a window draws is a type it did not expect.
+   */
+  readPicture(
+    planId: string,
+    attachmentId: string,
+  ): Effect.Effect<PlanningPictureAnswer, never, HttpClient.HttpClient> {
+    const send = this.#call.send;
+    return Effect.gen(function* () {
+      const answer = yield* send({
+        method: HTTP_METHOD.GET,
+        path: planAttachmentPath(planId, attachmentId),
+      });
+      if (!callAnswered(answer)) return { failure: PLAN_CALL_FAILURE.UNANSWERED };
+      if (!answer.response.ok) {
+        const refused = refusedAs(unparsedWire(yield* jsonOf(answer.response)), NOT_FOUND_REFUSAL);
+        return { failure: refused.ok ? PLAN_CALL_FAILURE.UNANSWERED : refused.failure };
+      }
+      const picture = yield* imageBodyOf(answer.response, pictureTypeSchema);
+      return picture ?? { failure: PLAN_CALL_FAILURE.UNANSWERED };
+    });
   }
 
   /** One plan's pages, each by its newest version; nothing where the service did not answer them. */

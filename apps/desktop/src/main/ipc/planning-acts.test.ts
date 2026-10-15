@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { WORKSPACE_CALL_FAILURE } from "@luke/features";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
+import { PICTURE_TYPE } from "@luke/features/picture-wire";
 import { PLAN_FILE_REFUSAL } from "@luke/features/plan-wire";
 import {
   GITHUB_DISCONNECT_FAILURE,
@@ -27,6 +28,9 @@ import { type ActRows, type ActSender, createActRouter } from "../act-router";
 import { planningActRows } from "./planning-acts";
 
 // SAFETY: the router reads the sender by identity alone; one inert object is one window.
+
+/** The one picture the fake host holds. */
+const PICTURE_ID = "picture-1";
 const SENDER = {} as WebContents;
 
 const PANEL: ActSender = { sender: SENDER, panel: true, voice: false, call: false };
@@ -204,6 +208,13 @@ function fixture() {
         Effect.sync(() => {
           asked.push(`restore:${params.seq}`);
           return true;
+        }),
+      planningPicture: (params) =>
+        Effect.sync(() => {
+          asked.push(`picture:${params.planId}:${params.attachmentId}`);
+          return params.attachmentId === PICTURE_ID
+            ? { contentType: PICTURE_TYPE.WEBP, base64: "UklGRg==" }
+            : ({ failure: PLAN_CALL_FAILURE.NOT_FOUND } as const);
         }),
       planningPage: (params) =>
         Effect.sync(() => {
@@ -608,6 +619,32 @@ it.effect(
         `role:${ACME.id}:${GRACE.userId}:${WORKSPACE_ROLE.ADMIN}`,
         `transfer:${ACME.id}:${GRACE.userId}`,
       ]);
+    }),
+);
+
+it.effect(
+  "a plan's picture is read through the host from a panel, its absence answered rather than refused, and never from the voice window",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const ask = (attachmentId: string) => ({
+        kind: ACT_KIND.PLANNING_PICTURE_READ,
+        payload: { planId: "plan-1", attachmentId },
+      });
+
+      const read = yield* f.router.performAct(ask(PICTURE_ID), PANEL);
+      const gone = yield* f.router.performAct(ask("picture-gone"), PANEL);
+      const fromVoice = yield* f.router.performAct(ask(PICTURE_ID), VOICE);
+
+      assert.deepEqual(read, {
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: { contentType: PICTURE_TYPE.WEBP, base64: "UklGRg==" },
+      });
+      assert.deepEqual(gone, {
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: { failure: PLAN_CALL_FAILURE.NOT_FOUND },
+      });
+      assert.equal(fromVoice.status, ACT_OUTCOME_STATUS.REFUSED);
     }),
 );
 

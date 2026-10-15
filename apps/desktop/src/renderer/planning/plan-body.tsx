@@ -33,6 +33,7 @@ import {
   PlanDocumentEditor,
 } from "./plan-document-editor";
 import { copyPlanLinkItem, renamePlanItem, versionHistoryItem } from "./plan-menu-items";
+import { PlanPictures, usePlanPictureDrawer } from "./plan-pictures";
 import {
   type ChaseState,
   chaseBehind,
@@ -588,6 +589,7 @@ function DocumentUnit({
 }): React.JSX.Element {
   const changed = marks.changed.has(view.heading);
   const openLink = useOpenLink();
+  const picture = usePlanPictureDrawer();
   const drawn = (
     <MarkdownMessage
       words={view.words}
@@ -596,6 +598,7 @@ function DocumentUnit({
       link={link}
       openLink={openLink}
       diagrams
+      picture={picture}
     />
   );
   const menu =
@@ -821,51 +824,53 @@ export function PlanBody({
       />
     );
   return (
-    <div ref={scroller} className="plan-document-scroll">
-      {page === undefined ? crumb : null}
-      {page === undefined ? editedNote : null}
-      <ChangedLine looks={looks} marks={marks} />
-      <div className="plan-body">
-        {titled ? (
-          attributed(
-            // Keyed by the plan, so words typed for one are saved to it as another opens.
-            <EditableTitle
-              key={plan.id}
-              name={plan.name}
-              entry={entry === EDITOR_PLACE.TITLE}
+    <PlanPictures planId={plan.id} text={plan.document.body}>
+      <div ref={scroller} className="plan-document-scroll">
+        {page === undefined ? crumb : null}
+        {page === undefined ? editedNote : null}
+        <ChangedLine looks={looks} marks={marks} />
+        <div className="plan-body">
+          {titled ? (
+            attributed(
+              // Keyed by the plan, so words typed for one are saved to it as another opens.
+              <EditableTitle
+                key={plan.id}
+                name={plan.name}
+                entry={entry === EDITOR_PLACE.TITLE}
+                editing={editing}
+                renaming={renaming}
+                onRename={onRename}
+                onDraft={onDraftName}
+              />,
+              null,
+              titleMenu,
+            )
+          ) : page === undefined ? (
+            attributed(<PlanTitle name={plan.name} />, null, titleMenu)
+          ) : (
+            <header className="plan-page-head">
+              <div className="plan-title-line">
+                <PlanTitle name={plan.name} />
+                {page.actions}
+              </div>
+              {editedNote}
+              {page.note}
+            </header>
+          )}
+          {editing.editor === undefined ? (
+            sections
+          ) : (
+            <PlanDocumentEditor
+              plan={plan}
+              editor={editing.editor}
               editing={editing}
-              renaming={renaming}
-              onRename={onRename}
-              onDraft={onDraftName}
-            />,
-            null,
-            titleMenu,
-          )
-        ) : page === undefined ? (
-          attributed(<PlanTitle name={plan.name} />, null, titleMenu)
-        ) : (
-          <header className="plan-page-head">
-            <div className="plan-title-line">
-              <PlanTitle name={plan.name} />
-              {page.actions}
-            </div>
-            {editedNote}
-            {page.note}
-          </header>
-        )}
-        {editing.editor === undefined ? (
-          sections
-        ) : (
-          <PlanDocumentEditor
-            plan={plan}
-            editor={editing.editor}
-            editing={editing}
-            drawn={sections}
-            hostOf={(section) => views[section]?.id ?? EDITOR_PLACE.TITLE}
-            mentions={mentionDoors}
-          />
-        )}
+              drawn={sections}
+              hostOf={(section) => views[section]?.id ?? EDITOR_PLACE.TITLE}
+              mentions={mentionDoors}
+            />
+          )}
+        </div>
       </div>
-    </div>
+    </PlanPictures>
   );
 }

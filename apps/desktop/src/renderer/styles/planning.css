@@ -3317,6 +3317,104 @@ button.inbox-option:hover:not(:disabled) {
   height: auto;
 }
 
+/* A picture in written words (`picture-block.tsx`): its own block, at its
+   own width up to the column's and no taller than a screenful's worth, on
+   the section's fill while its bytes are read, a press opening the file
+   viewer. Its caption stands under it in the secondary ink. */
+.picture-block {
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  margin: var(--space-12) 0;
+}
+
+.picture-frame {
+  position: relative;
+  display: block;
+  max-width: 100%;
+  padding: 0;
+  border: 1px solid var(--hairline);
+  border-radius: var(--control-radius);
+  background: var(--section-fill);
+  cursor: zoom-in;
+  overflow: clip;
+}
+
+.picture-image {
+  display: block;
+  max-width: 100%;
+  max-height: 520px;
+  height: auto;
+  object-fit: contain;
+}
+
+.picture-caption {
+  display: block;
+  margin-top: var(--space-6);
+  color: var(--text-secondary);
+  font-size: 0.9em;
+  line-height: 1.45;
+}
+
+/* While the bytes are read: a quiet box of a screenshot's shape. */
+.picture-pending {
+  display: grid;
+  width: 480px;
+  max-width: 100%;
+  aspect-ratio: 16 / 10;
+  place-items: center;
+  cursor: default;
+}
+
+/* A picture this reader cannot reach, or whose bytes are gone: its words. */
+.picture-missing {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  width: min(480px, 100%);
+  padding: var(--space-12);
+  border-style: dashed;
+  color: var(--text-secondary);
+  cursor: default;
+  font-size: 0.92em;
+}
+
+.picture-missing > svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+/* A picture from outside Luke is a link to it, never fetched. */
+.picture-outside-glyph {
+  width: 0.95em;
+  height: 0.95em;
+  margin-right: 0.25em;
+  vertical-align: -0.12em;
+}
+
+/* A version's change to a picture: written in on the green edge, struck out
+   dimmed behind the red, as its words would be (`markdown-message.tsx`'s
+   change marks); the mark lends it no wash of its own. */
+.markdown-inserted:has(> .picture-block),
+.markdown-deleted:has(> .picture-block) {
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  background: none;
+}
+
+.markdown-inserted > .picture-block .picture-frame {
+  outline: 2px solid color-mix(in srgb, var(--state-complete) 75%, transparent);
+  outline-offset: 2px;
+}
+
+.markdown-deleted > .picture-block .picture-frame {
+  opacity: 0.45;
+  outline: 2px dashed color-mix(in srgb, var(--danger) 70%, transparent);
+  outline-offset: 2px;
+}
+
 /* A form's text field takes Settings' well, but in the card's body type:
    Settings' tracking is for a key's characters, not an answer's words. */
 .inbox-field-input {

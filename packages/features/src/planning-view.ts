@@ -16,6 +16,7 @@ import {
   pageVersionNumberSchema,
   planPageVersionAnswerSchema,
 } from "./page-wire.js";
+import { pictureTypeSchema } from "./picture-wire.js";
 import { PLAN_EDIT_REFUSAL, planEditRequestSchema, planEditValueSchema } from "./plan-edit.js";
 import {
   codeRefSchema,
@@ -722,6 +723,30 @@ export const planningRevisionAnswerSchema = EffectSchema.Union([
 ]);
 
 export type PlanningRevisionAnswer = typeof planningRevisionAnswerSchema.Type;
+
+/** One picture of a plan, as the window drawing it names it: the plan, and the picture's id its text names. */
+export const planningPictureParamsSchema = EffectSchema.Struct({
+  planId: EffectSchema.NonEmptyString,
+  attachmentId: EffectSchema.NonEmptyString,
+});
+
+export type PlanningPictureParams = typeof planningPictureParamsSchema.Type;
+
+/**
+ * One picture of a plan, as the window hears it: its bytes in base64 under
+ * its media type, which the window draws from a `data:` URL of its own
+ * making, or why there is none: not the account's to read, or no answer.
+ * The host fetched it under the account, so the window holds no bearer and
+ * no address.
+ */
+export const planningPictureAnswerSchema = EffectSchema.Union([
+  EffectSchema.Struct({ contentType: pictureTypeSchema, base64: EffectSchema.String }),
+  EffectSchema.Struct({
+    failure: EffectSchema.Literals([PLAN_CALL_FAILURE.NOT_FOUND, PLAN_CALL_FAILURE.UNANSWERED]),
+  }),
+]);
+
+export type PlanningPictureAnswer = typeof planningPictureAnswerSchema.Type;
 
 /** One version of one page of a plan, as the frame drawing it names it. */
 export const planningPageParamsSchema = EffectSchema.Struct({
