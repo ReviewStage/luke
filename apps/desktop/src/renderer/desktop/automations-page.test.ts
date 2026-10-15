@@ -219,7 +219,9 @@ beforeEach(() => {
             action,
             scope: scope ?? AUTOMATION_SCOPE.PERSONAL,
             repositories: repositories ?? [],
-            ...(hooked ? { webhookUrl: "https://tryluke.dev/api/automations/made/webhook" } : {}),
+            ...(hooked
+              ? { webhookUrl: "https://tryluke.dev/api/automations/made/webhook" }
+              : undefined),
           });
           standing = [made, ...standing];
           // A webhook's secret is answered once, by the write that minted it.

@@ -1,15 +1,16 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { it } from "@effect/vitest";
-import { AUTOMATION_CALL_FAILURE } from "@luke/features/automation-view";
+import { AUTOMATION_CALL_FAILURE, automationViewSchema } from "@luke/features/automation-view";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
   AUTOMATION_TRIGGER,
 } from "@luke/features/automation-wire";
 import { GATEWAY_CLIENT_ROLE, GATEWAY_METHOD, type GatewayMethod } from "@luke/gateway";
-import { isRecord, type WireRecord } from "@luke/wire";
-import { Effect } from "effect";
+import { unparsedWire, type WireRecord } from "@luke/wire";
+import { readEither } from "@luke/wire/effect";
+import { Effect, Result } from "effect";
 import { type AutomationsClient, composeAutomations } from "./compose-automations.js";
 
 /**
@@ -173,8 +174,11 @@ it.effect(
       const refused = yield* refusing.call(GATEWAY_METHOD.AUTOMATIONS_NEW_WEBHOOK_SECRET, named);
       const unasked = yield* closed.call(GATEWAY_METHOD.AUTOMATIONS_NEW_WEBHOOK_SECRET, named);
 
+      const read = readEither(automationViewSchema)(unparsedWire(made));
       const secret =
-        isRecord(made) && typeof made.webhookSecret === "string" ? made.webhookSecret : "";
+        Result.isSuccess(read) && "webhookSecret" in read.success
+          ? (read.success.webhookSecret ?? "")
+          : "";
       assert.ok(secret.length >= 40, "a secret of 32 random bytes is answered");
       assert.deepEqual(made, { automation: SUMMARY, webhookSecret: secret });
       assert.deepEqual(asked, [
