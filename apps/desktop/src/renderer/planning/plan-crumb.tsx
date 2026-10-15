@@ -184,7 +184,8 @@ function People({
         />
       }
     >
-      <span className="plan-crumb-item plan-crumb-people">
+      {/* biome-ignore lint/a11y/noNoninteractiveTabindex: it takes the keyboard though it presses nowhere, because its card is the only place the members are listed. */}
+      <span className="plan-crumb-item plan-crumb-people" tabIndex={0}>
         {only ? (
           <>
             <LockIcon aria-hidden="true" />

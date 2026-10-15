@@ -235,6 +235,25 @@ test("who can edit is no press: a click on the faces or the count opens nothing,
   assert.deepEqual(asked, []);
 });
 
+test("who can edit takes the keyboard and hangs its card there, and Return or Space on it opens nothing", async () => {
+  const { nav, links, asked } = await crumb(ACME, "acme-corp/relay", MEMBERS);
+  const people =
+    nav.querySelector<HTMLElement>(".plan-crumb-people") ?? assert.fail("who can edit stands");
+
+  const card = cardOf(people, "data-people-card");
+  for (const key of ["Enter", " "]) {
+    act(() => {
+      people.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+      people.dispatchEvent(new KeyboardEvent("keyup", { key, bubbles: true }));
+    });
+  }
+
+  assert.equal(document.activeElement, people);
+  assert.match(card.textContent ?? "", /Everyone in Acme/u);
+  assert.deepEqual(links, []);
+  assert.deepEqual(asked, []);
+});
+
 test("the repository says its name alone, as the sidebar does, and is no press: it drops no menu", async () => {
   const { nav, asked } = await crumb(ACME, "acme-corp/relay", MEMBERS);
   const repository =
