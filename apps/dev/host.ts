@@ -27,6 +27,7 @@ import {
   type PullRequestToolResult,
   pullRequestRejected,
 } from "@luke/service/agents/coder-host/pull-request";
+import { showImageRejected } from "@luke/service/agents/coder-host/show-image";
 import {
   type CODER_TOOL,
   type PlanTool,
