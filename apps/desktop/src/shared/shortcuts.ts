@@ -17,7 +17,7 @@
 import { EXPERIMENT, type Experiment, type ExperimentChoices, experimentOn } from "@luke/settings";
 import { isWireString, type UnparsedWireValue } from "@luke/wire";
 
-/** What a shortcut does. A command is one entry here and one row in {@link APP_SHORTCUTS} or {@link MENU_COMMAND_LABELS}. */
+/** What a shortcut does. A command is one entry here and one row in {@link APP_SHORTCUTS}, {@link MENU_COMMAND_LABELS}, or {@link PALETTE_COMMAND_LABELS}. */
 export const APP_COMMAND = {
   NEW_PLAN: "new-plan",
   COPY_PLAN: "copy-plan",
@@ -70,6 +70,16 @@ export const APP_COMMAND = {
   SHOW_TERMINAL: "show-terminal",
   NEW_TERMINAL: "new-terminal",
   MENTION_LINES: "mention-lines",
+  GROUP_TASKS_BY_REPOSITORY: "group-tasks-by-repository",
+  GROUP_TASKS_BY_CREATOR: "group-tasks-by-creator",
+  LIST_TASKS_UNGROUPED: "list-tasks-ungrouped",
+  ORDER_TASKS_BY_UPDATED: "order-tasks-by-updated",
+  ORDER_TASKS_BY_CREATED: "order-tasks-by-created",
+  ORDER_TASKS_BY_NAME: "order-tasks-by-name",
+  SHOW_MY_TASKS: "show-my-tasks",
+  SHOW_EVERYONES_TASKS: "show-everyones-tasks",
+  SHOW_ARCHIVED_TASKS: "show-archived-tasks",
+  HIDE_ARCHIVED_TASKS: "hide-archived-tasks",
 } as const;
 
 export type AppCommand = (typeof APP_COMMAND)[keyof typeof APP_COMMAND];
@@ -87,8 +97,33 @@ export const MENU_COMMAND_LABELS = {
 
 export type MenuCommand = keyof typeof MENU_COMMAND_LABELS;
 
-/** A command a chord reaches: every command the menu bar does not keep to itself. */
-export type KeyedCommand = Exclude<AppCommand, MenuCommand>;
+/**
+ * The commands ⌘K alone offers, by the name it gives them: the sidebar's
+ * view of its tasks, which its View options menu sets too, so no chord or
+ * menu bar item spends a key on them.
+ */
+const PALETTE_COMMAND_LABELS = {
+  [APP_COMMAND.GROUP_TASKS_BY_REPOSITORY]: "Group tasks by repository",
+  [APP_COMMAND.GROUP_TASKS_BY_CREATOR]: "Group tasks by creator",
+  [APP_COMMAND.LIST_TASKS_UNGROUPED]: "Show tasks in one list",
+  [APP_COMMAND.ORDER_TASKS_BY_UPDATED]: "Order tasks by last updated",
+  [APP_COMMAND.ORDER_TASKS_BY_CREATED]: "Order tasks by created",
+  [APP_COMMAND.ORDER_TASKS_BY_NAME]: "Order tasks by name",
+  [APP_COMMAND.SHOW_MY_TASKS]: "Show my tasks",
+  [APP_COMMAND.SHOW_EVERYONES_TASKS]: "Show everyone's tasks",
+  [APP_COMMAND.SHOW_ARCHIVED_TASKS]: "Show archived tasks",
+  [APP_COMMAND.HIDE_ARCHIVED_TASKS]: "Hide archived tasks",
+} as const;
+
+export type PaletteCommand = keyof typeof PALETTE_COMMAND_LABELS;
+
+/** Every command ⌘K alone offers, in the order the table declares them. */
+export const PALETTE_COMMANDS = Object.keys(PALETTE_COMMAND_LABELS).filter(
+  (command): command is PaletteCommand => Object.hasOwn(PALETTE_COMMAND_LABELS, command),
+);
+
+/** A command a chord reaches: every command neither the menu bar nor ⌘K keeps to itself. */
+export type KeyedCommand = Exclude<AppCommand, MenuCommand | PaletteCommand>;
 
 /**
  * A key a chord ends in, spelt each way it is needed: Electron's accelerator,
@@ -471,9 +506,14 @@ export const APP_SHORTCUT_GROUPS = [
 /** Every command, in the order the table declares them. */
 const APP_COMMANDS: readonly AppCommand[] = Object.values(APP_COMMAND);
 
-/** Whether a chord reaches the command, rather than the menu bar alone. */
+/** Whether the menu bar alone offers the command. */
+function isMenuCommand(command: AppCommand): command is MenuCommand {
+  return Object.hasOwn(MENU_COMMAND_LABELS, command);
+}
+
+/** Whether a chord reaches the command, rather than the menu bar or ⌘K alone. */
 export function isKeyedCommand(command: AppCommand): command is KeyedCommand {
-  return !Object.hasOwn(MENU_COMMAND_LABELS, command);
+  return !isMenuCommand(command) && !Object.hasOwn(PALETTE_COMMAND_LABELS, command);
 }
 
 /** Every command a chord reaches, in the order the table declares them. */
@@ -499,9 +539,10 @@ export function shownShortcutGroups(
   })).filter((group) => group.commands.length > 0);
 }
 
-/** A command's name as the window says it, keyed or the menu bar's own. */
+/** A command's name as the window says it, keyed, the menu bar's own, or ⌘K's own. */
 export function appCommandLabel(command: AppCommand): string {
-  return isKeyedCommand(command) ? APP_SHORTCUTS[command].label : MENU_COMMAND_LABELS[command];
+  if (isKeyedCommand(command)) return APP_SHORTCUTS[command].label;
+  return isMenuCommand(command) ? MENU_COMMAND_LABELS[command] : PALETTE_COMMAND_LABELS[command];
 }
 
 /** Whether a value that crossed a process boundary names a command this build knows. */

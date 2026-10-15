@@ -62,6 +62,7 @@ import {
   commandForKey,
   isKeyedCommand,
   type KeyedCommand,
+  PALETTE_COMMANDS,
   SHORTCUT_KEY,
   type ShortcutChord,
 } from "#shared/shortcuts";
@@ -210,12 +211,13 @@ const FILTER_HINT = {
 /** The word a Settings page is also found by, beside its own name, so "settings" lists the pages. */
 const SETTINGS_WORD = "Settings";
 
-/** The commands the palette lists: the Keyboard shortcuts page's, then the menu bar's own dialogs. */
-const PALETTE_COMMANDS: readonly AppCommand[] = [
+/** The commands the palette lists: the Keyboard shortcuts page's, then the menu bar's own dialogs, then its own, the sidebar's view of its tasks. */
+const LISTED_COMMANDS: readonly AppCommand[] = [
   ...APP_SHORTCUT_GROUPS.flatMap((group) => group.commands),
   APP_COMMAND.NEW_TERMINAL,
   APP_COMMAND.SEND_FEEDBACK,
   APP_COMMAND.SUGGEST_FEATURE,
+  ...PALETTE_COMMANDS,
 ];
 
 /** One row as the palette draws it, the words its search reads, and what choosing it does. */
@@ -479,7 +481,7 @@ function agentRows(plans: PlansControl, show: (pick: () => void) => void): reado
 
 /** The commands offered now, the palette's own left out, each with its chord. */
 function actionRows(run: (command: AppCommand) => void): readonly PaletteRow[] {
-  return PALETTE_COMMANDS.filter(
+  return LISTED_COMMANDS.filter(
     (command) => command !== APP_COMMAND.COMMAND_PALETTE && appCommandOffered(command),
   ).map((command) => ({
     label: appCommandLabel(command),

@@ -64,6 +64,7 @@ import {
   type ArchivedView,
   SidebarSectionHead,
   TaskViewOptions,
+  useTaskViewCommands,
   ViewChips,
 } from "./sidebar-task-view";
 import { useTaskListView } from "./task-list-view";
@@ -1090,6 +1091,13 @@ function SidebarColumn({
     shown: archivedIn !== undefined && archivedIn === plans.workspace?.id,
     onShown: (shown) => setArchivedIn(shown ? plans.workspace?.id : undefined),
   };
+  useTaskViewCommands({
+    offered: plans.signedIn && plans.workspace !== undefined,
+    control: taskView,
+    shared,
+    readerId: plans.me,
+    archive,
+  });
   const unread = useUnreadPlans([...plans.plans, ...plans.archived], {
     listRead: plans.listRead,
     staged: sidebar.staged,
