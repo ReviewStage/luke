@@ -78,6 +78,8 @@ export const accountPlanlessEntrySchema = EffectSchema.Struct({
   agentId: wireUuidSchema,
   agentTitle: EffectSchema.NullOr(EffectSchema.String),
   agentModel: EffectSchema.String,
+  /** The account that started the agent, as an item of a plan's agent says it, and on the same terms. */
+  startedBy: EffectSchema.optionalKey(EffectSchema.String),
   automationId: EffectSchema.NullOr(wireUuidSchema),
   automationName: EffectSchema.NullOr(EffectSchema.String),
   repository: EffectSchema.String,

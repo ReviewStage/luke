@@ -124,6 +124,9 @@
               "agentModel": {
                 "type": "string"
               },
+              "startedBy": {
+                "type": "string"
+              },
               "automationId": {
                 "anyOf": [
                   {

@@ -535,3 +535,28 @@ it.effect(
       assert.equal(f.badges.at(-1), 1);
     }),
 );
+
+it.effect(
+  "a question from a teammate's agent with no plan is neither counted, badged, nor announced to the account, while its own is",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      yield* f.notices;
+      f.focus(false);
+      f.answerInbox({ items: [], planless: [], cursor: "1", readAt: READ_AT });
+      yield* settled;
+      f.answerInbox({
+        items: [],
+        planless: [
+          planlessItem(ITEM_A, { startedBy: ACCOUNT_ID, updatedAt: READ_AT + 1 }),
+          planlessItem(ITEM_B, { startedBy: "user-charles", updatedAt: READ_AT + 1 }),
+        ],
+        cursor: "2",
+        readAt: READ_AT + 1,
+      });
+      yield* settled;
+
+      assert.equal(f.badges.at(-1), 1);
+      assert.equal(f.said().length, 1);
+    }),
+);

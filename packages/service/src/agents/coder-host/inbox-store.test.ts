@@ -160,6 +160,11 @@ it.layer(getTestDB())("the inbox store", (it) => {
           theirs.automations?.map((group) => [group.automationId, group.items]),
           [[automationId, 1]],
         );
+        assert.deepEqual(
+          theirs.planless?.map((entry) => entry.startedBy),
+          [agent.userId],
+          "the teammate's read names who started the agent, whom it asks",
+        );
         assert.ok(!theirs.items.some((entry) => entry.id === posted.success.id));
         assert.deepEqual([others.planless, others.automations], [[], []]);
 

@@ -339,17 +339,20 @@ function inboxNoticeText(
 
 /**
  * The answer as it waits on the account: the items of the agents it
- * started, since an agent runs on its starter's keys and asks its starter,
+ * started, a plan's and one with no plan alike, since an agent runs on its starter's keys and asks its starter,
  * and the plans holding any item whole, since every member's Inbox lists
  * them. An item whose starter the service does not say, or an account whose
  * id is not known, is the account's own, as every item was before.
  */
 function startedBy(answer: AccountInboxAnswer, accountId: string | undefined): AccountInboxAnswer {
   if (accountId === undefined) return answer;
-  const own = answer.items.filter(
-    (item) => item.startedBy === undefined || item.startedBy === accountId,
-  );
-  return own.length === answer.items.length ? answer : { ...answer, items: own };
+  const ownOf = (item: { readonly startedBy?: string }) =>
+    item.startedBy === undefined || item.startedBy === accountId;
+  return {
+    ...answer,
+    items: answer.items.filter(ownOf),
+    ...(answer.planless === undefined ? undefined : { planless: answer.planless.filter(ownOf) }),
+  };
 }
 
 /** The items each plan holds waiting, the plan whose item changed latest first, as the read answered them latest first. */
@@ -622,7 +625,11 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     function observeWaiting(answer: AccountInboxAnswer): void {
       const was = waiting;
       // Note that an answer at the same cursor holding fewer of the account's own items is news, because the account's id, which picks them, may have arrived since.
-      if (was?.answer.cursor === answer.cursor && was.answer.items.length === answer.items.length) {
+      if (
+        was?.answer.cursor === answer.cursor &&
+        was.answer.items.length === answer.items.length &&
+        (was.answer.planless?.length ?? 0) === (answer.planless?.length ?? 0)
+      ) {
         // Note that the plans and automations holding items, and what an item with no plan is named
         // by, may move with nothing waiting moving, an archive, a rename, or a hold let go, so they are written alone.
         if (
