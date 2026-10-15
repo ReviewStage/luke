@@ -88,7 +88,7 @@ vercel env run --environment production --scope stage-review -- \
 ```
 
 Better Auth runs on its Drizzle adapter over `packages/database/src/schemas/auth.ts`
-(`server/auth-database.ts`), not its Kysely one: the migrations declare the
+(`packages/service/src/auth/auth-database.ts`), not its Kysely one: the migrations declare the
 OAuth tables' `scopes`, `redirect_uris`, `grant_types`, and `response_types`
 as `text[]`, which the Drizzle adapter writes as native arrays and the Kysely
 adapter as JSON strings Postgres refuses. `auth-database.test.ts` writes an
@@ -190,14 +190,14 @@ each over the plugin on PGlite, and `tests/member-seams.test.ts` the
 plugin's own refusals.
 
 Dynamic client registration stays disabled. One public client is compiled in:
-**`luke-desktop`** (`server/oauth-clients.ts`), the macOS companion app. It
+**`luke-desktop`** (`packages/service/src/auth/oauth-clients.ts`), the macOS companion app. It
 accepts loopback callbacks (`http://127.0.0.1/callback`) via a local HTTP server
 during sign-in, holds no client secret, requires PKCE, and skips consent as a
 trusted first-party app.
 
 Google's callback is `${BETTER_AUTH_URL}/api/auth/callback/google`; GitHub's is
 `${BETTER_AUTH_URL}/api/auth/callback/github`. The GitHub provider requests no
-OAuth scope (`GITHUB_SIGN_IN` in `server/auth-policy.ts`): it is a GitHub App's
+OAuth scope (`GITHUB_SIGN_IN` in `packages/service/src/auth/auth-policy.ts`): it is a GitHub App's
 user authorization, and a GitHub App has permissions rather than scopes, the
 App's "Email addresses: read" among them, which is what answers the email
 read Luke requires for its account snapshot, and what Better Auth's GitHub
@@ -221,7 +221,7 @@ App" below).
 
 "Sign in with GitHub" is the Luke GitHub App's user authorization: the
 provider's client is the App's (`GITHUB_APP_CLIENT_ID`,
-`GITHUB_APP_CLIENT_SECRET`, read by `authSecrets` in `server/auth-deployment.ts`;
+`GITHUB_APP_CLIENT_SECRET`, read by `authSecrets` in `packages/service/src/auth/auth-deployment.ts`;
 the admin dashboard's "GitHub sign-in" row reads the same client), so the
 token a sign-in leaves on the `account` row is a GitHub App user token, which
 reaches only the repositories where the App is installed and the user
@@ -232,7 +232,7 @@ integration's grant ("GitHub's grant" under Integrations). An account that
 signed in through the OAuth App before this is the same GitHub user id, so
 Better Auth signs it in to the user it already has and
 (`updateAccountOnSignIn`) replaces the row's tokens with the App's;
-`tests/auth-github-sign-in.test.ts` holds that. The App's user tokens expire
+`packages/service/src/auth/auth-github-sign-in.test.ts` holds that. The App's user tokens expire
 after eight hours and come with a refresh token good for six months; Better
 Auth stores both sealed under `BETTER_AUTH_SECRET` (`encryptOAuthTokens`), with
 their expiries beside them. Better Auth's own `/get-access-token` and
@@ -748,42 +748,6 @@ speaks: one schema per refusal, each annotated with the status it answers, and
 rather than as a `Schema.TaggedError`, because `error` is already the
 discriminant the desktop's hosted clients read and a `_tag` beside it would be
 a byte they never asked for.
-
-## The auth group
-
-`server/auth-app.ts` is the auth route group: Better Auth's own `fetch`
-handler on the path set `vercel.json` routes here, and the hosted
-vocabulary's `not-found` on any other path, which nothing routes to this
-function. The handler is held as a passthrough rather than described as
-endpoints — an `HttpApi` declaring them would be a second copy of a contract
-Better Auth already versions, and the first to drift would be the one Luke
-ships. The request handed over is the very `Request` the function was invoked
-with, and the answer travels back as a raw body, so the status, the headers,
-every `set-cookie`, and the bytes are the handler's own. Nothing is mirrored
-onto the `HttpServerResponse` beside it, because the platform writes such a
-record onto the answer's own `Headers` and a redirect's are immutable; a HEAD
-is the exception, where that record is all the web handler reads, and there
-the status and headers are carried and the body dropped.
-`fixtures/auth-route/` records what the group answers for a sign-in, a
-provider redirect, an unknown endpoint, a refused method, a HEAD, and a path
-outside the group, and `tests/auth-app.test.ts` answers each twice — through
-the group and by calling the handler the way the route called it before — and
-compares the two.
-
-The organization plugin is served in the group with `ORGANIZATION_OPTIONS`
-(`server/auth-policy.ts`): no workspace is deleted, and no signed-in user
-creates one (`allowUserToCreateOrganization: false`). Every organization
-write a browser could reach is in `DISABLED_AUTH_PATHS` and answers 404,
-because a workspace is adopted by its slug, and a session free to create an
-organization or rename its own could take a team's slug first. That covers
-create, update, delete, check-slug, set-active, member removal, role changes,
-leave, every invitation endpoint (Luke sends no invitation mail), and the
-team and role endpoints this deployment does not mount. `disabledPaths` is
-read by the HTTP router alone, so the server-only `auth.api` calls a hosted
-route makes still run, and a create that names a `userId` and carries no
-session passes the creation rule as a system action.
-`auth-database.test.ts` holds both sides with an account signed up through
-`auth.api.signUpEmail`.
 
 ## The events and maintenance groups
 
@@ -1770,7 +1734,7 @@ Mac's claim and settle routes, and the Mac's command runner are gone
 
 `server/admin-app.ts` is the dashboard's route group: its four reads and the
 Users tab's one star write, each its own function, with the group declaring
-all five addresses from `ADMIN_ROUTE_PATH` in `server/admin/http.ts` — the
+all five addresses from `ADMIN_ROUTE_PATH` in `packages/service/src/admin/http.ts` — the
 same constants the page composes its calls from, so an address cannot drift
 between the two ends. A path the group declares no route for is the admin
 vocabulary's own `not-found`; nothing routes one there, since each address is
@@ -1803,12 +1767,12 @@ own wildcards escaped.
 
 Every admin answer is viewer-gated account data, refusals included, so each
 one carries `no-store`, the five refusals the group answers itself included,
-in the bytes the promise-shaped vocabulary in `server/admin/http.ts` gives.
+in the bytes the promise-shaped vocabulary in `packages/service/src/admin/http.ts` gives.
 
 ## Signing in on a Preview deployment
 
 A Preview deployment answers on hostnames minted for the branch, so
-`server/auth-deployment.ts` reads the deployment's own address rather than
+`packages/service/src/auth/auth-deployment.ts` reads the deployment's own address rather than
 assuming one: on a Preview, `VERCEL_URL` is the base URL and `VERCEL_BRANCH_URL`
 joins it as a trusted origin, and `BETTER_AUTH_URL` stays what it has always
 been, the production address whose callback the two providers registered.

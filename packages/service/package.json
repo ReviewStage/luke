@@ -4,6 +4,14 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./admin/admin-access": "./src/admin/admin-access.js",
+    "./admin/http": "./src/admin/http.js",
+    "./auth/auth": "./src/auth/auth.js",
+    "./auth/auth-app": "./src/auth/auth-app.js",
+    "./auth/auth-database": "./src/auth/auth-database.js",
+    "./auth/auth-deployment": "./src/auth/auth-deployment.js",
+    "./auth/auth-policy": "./src/auth/auth-policy.js",
+    "./auth/oauth-clients": "./src/auth/oauth-clients.js",
     "./core": "./src/core.js",
     "./db": "./src/db/index.js",
     "./db/sql-client": "./src/db/sql-client.js",
@@ -23,11 +31,15 @@
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
+    "@better-auth/drizzle-adapter": "1.7.7",
+    "@better-auth/electron": "1.7.7",
+    "@better-auth/oauth-provider": "1.7.7",
     "@effect/sql-pg": "catalog:",
     "@luke/database": "workspace:*",
     "@luke/features": "workspace:*",
     "@luke/runtime": "workspace:*",
     "@luke/wire": "workspace:*",
+    "better-auth": "1.7.7",
     "drizzle-orm": "catalog:",
     "effect": "catalog:",
     "pg": "8.23.0"

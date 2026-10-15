@@ -1,4 +1,4 @@
-import { auth } from "../../../auth.js";
+import { auth } from "@luke/service/auth/auth";
 import { githubConnectionApp } from "../../../github-connection-app.js";
 import { resolveHostedUserId } from "../../../hosted/bearer.js";
 import { resolveBrowserSessionUserId } from "../../../hosted/browser-session.js";

@@ -1,10 +1,10 @@
+import { ADMIN_ERROR, ADMIN_HTTP_STATUS } from "@luke/service/admin/http";
 import { HttpServerResponse } from "effect/http";
-import { ADMIN_ERROR, ADMIN_HTTP_STATUS } from "./http.js";
 
 /**
  * The admin response vocabulary as the refusals the dashboard's route group
  * answers with, carrying the same statuses and the same bytes
- * `server/admin/http.ts` answers with. It stays the admin's own rather than
+ * `@luke/service/admin/http` answers with. It stays the admin's own rather than
  * the hosted tier's for the reason that module gives: these slugs are a
  * browser's, not the desktop wire contract's.
  *

@@ -1,9 +1,9 @@
 import { PROVIDER_KEY_ENCRYPTION_ENVIRONMENT } from "@luke/database/models/provider-key-seal";
+import { GITHUB_APP_ENVIRONMENT } from "@luke/service/auth/auth-deployment";
 import { text } from "@luke/service/core";
 import { HOSTED_OPENAI_ENVIRONMENT } from "@luke/service/providers/openai";
 import { POSTHOG_ENVIRONMENT } from "@luke/service/providers/posthog";
 import { Config, ConfigProvider, Context, Effect, Layer, Option, Redacted } from "effect";
-import { GITHUB_APP_ENVIRONMENT } from "../auth-deployment.js";
 import { HOSTED_ANTHROPIC_ENVIRONMENT } from "./anthropic.js";
 import { CRON_ENVIRONMENT } from "./maintenance-bounds.js";
 

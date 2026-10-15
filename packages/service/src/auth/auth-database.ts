@@ -1,8 +1,8 @@
 import { type DB, drizzleAdapter } from "@better-auth/drizzle-adapter";
 import * as schema from "@luke/database/schemas/auth";
-import { getPool } from "@luke/service/db";
 import { drizzle, type NodePgClient } from "drizzle-orm/node-postgres";
 import type { Pool, PoolClient } from "pg";
+import { getPool } from "../db/index.js";
 
 /**
  * Better Auth's adapter over the auth schema, and the one place the choice of

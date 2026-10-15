@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { betterAuth } from "better-auth";
 import { memoryAdapter } from "better-auth/adapters/memory";
 import { test } from "vitest";
-import { authDeployment } from "../server/auth-deployment";
+import { authDeployment } from "./auth-deployment.js";
 
 const PRODUCTION_URL = "https://tryluke.dev";
 

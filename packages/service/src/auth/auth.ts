@@ -4,7 +4,7 @@ import { betterAuth } from "better-auth";
 import { APIError, createAuthMiddleware } from "better-auth/api";
 import { bearer, jwt, lastLoginMethod, oAuthProxy, organization } from "better-auth/plugins";
 import { Redacted } from "effect";
-import { USER_ROLE } from "./admin/admin-access.js";
+import { USER_ROLE } from "../admin/admin-access.js";
 import { authDatabase, authDatabaseAdapter } from "./auth-database.js";
 import {
   type AuthSecrets,

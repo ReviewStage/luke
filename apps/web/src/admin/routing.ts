@@ -11,7 +11,7 @@ import {
   ADMIN_USERS_SEARCH_PARAM,
   type AdminMetricsWindow,
   isUtcDayKey,
-} from "../../server/admin/http";
+} from "@luke/service/admin/http";
 
 export const METRICS_PATH = ADMIN_ROUTE_PATH.METRICS;
 

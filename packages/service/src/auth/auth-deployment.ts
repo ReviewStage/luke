@@ -24,8 +24,8 @@
  * preview pattern matches, which is the security model the docs set out.
  */
 
-import { text } from "@luke/service/core";
 import { Redacted } from "effect";
+import { text } from "../core.js";
 
 /** The Vercel environment a deployment runs as, as its own `VERCEL_ENV` names it. */
 const DEPLOYMENT_ENVIRONMENT = {

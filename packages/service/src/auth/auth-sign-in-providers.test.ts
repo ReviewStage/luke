@@ -4,8 +4,8 @@ import { betterAuth } from "better-auth";
 import { drizzle } from "drizzle-orm/pglite";
 import { Schema } from "effect";
 import { afterEach, beforeEach, test, vi } from "vitest";
-import { authDatabaseAdapter } from "../server/auth-database";
-import { authSecrets } from "../server/auth-deployment";
+import { authDatabaseAdapter } from "./auth-database.js";
+import { authSecrets } from "./auth-deployment.js";
 
 /**
  * The deployment's ways in, the providers `auth.ts` hands Better Auth, stood
@@ -40,7 +40,7 @@ afterEach(() => {
 });
 
 test("a Google press and a GitHub press each start their own provider's sign-in", async () => {
-  const { socialProviders } = await import("../server/auth");
+  const { socialProviders } = await import("./auth.js");
   const client = await openMigratedPglite();
   try {
     const auth = betterAuth({

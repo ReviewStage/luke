@@ -1,10 +1,10 @@
-import { useEffect, useState } from "react";
-import type { AdminUserList, AdminUserListRow } from "../../../server/admin/admin-users";
 import {
   ADMIN_USER_ID_PARAM,
   ADMIN_USERS_SEARCH_MAX_LENGTH,
   type AdminMetricsWindow,
-} from "../../../server/admin/http";
+} from "@luke/service/admin/http";
+import { useEffect, useState } from "react";
+import type { AdminUserList, AdminUserListRow } from "../../../server/admin/admin-users";
 import { ACCOUNTS_TABLE_MIN_WIDTH, AccountsTable } from "../accounts-table/accounts-table";
 import { ACCOUNTS_SORT_KEY, type AccountsDetailColumn } from "../accounts-table/sort";
 import { AdminErrorCard, ForbiddenCard, SignInCard } from "../chrome/cards";

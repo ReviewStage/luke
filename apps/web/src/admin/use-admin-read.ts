@@ -1,5 +1,5 @@
+import { ADMIN_HTTP_STATUS } from "@luke/service/admin/http";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ADMIN_HTTP_STATUS } from "../../server/admin/http";
 import { SIGN_IN_CHOSEN } from "./prefs";
 
 /**
