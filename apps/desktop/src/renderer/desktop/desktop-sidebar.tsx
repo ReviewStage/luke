@@ -1238,6 +1238,24 @@ function SidebarColumn({
           {plans.signedIn && unlisted && plans.listRead && !plans.listFailed && !archive.shown ? (
             <p className="sidebar-note">No tasks yet.</p>
           ) : null}
+          {/* Every task archived, the list would stand empty with no word of where they went. */}
+          {plans.signedIn &&
+          !archive.shown &&
+          plans.listRead &&
+          !plans.listFailed &&
+          plans.listed.plans.length === 0 &&
+          plans.listed.archived.length > 0 ? (
+            <p className="sidebar-note">
+              Every task is archived.{" "}
+              <button
+                type="button"
+                className="toolbar-button quiet-button"
+                onClick={() => archive.onShown(true)}
+              >
+                Show archived
+              </button>
+            </p>
+          ) : null}
           {plans.signedIn ? null : <p className="sidebar-note">Sign in to start a task.</p>}
           <TaskGroups
             sections={sections}

@@ -524,3 +524,14 @@ test("before the list is first read, the archived view says nothing of being emp
   assert.ok(!notes.includes("No archived tasks."), "nothing is said before the read");
   assert.ok(!notes.includes("No tasks yet."), "nor that no task stands");
 });
+
+test("with every task archived, the list says so and offers the archived tasks", async () => {
+  const sidebar = await mountRead(ACME, [], ARCHIVED);
+  const note = [...sidebar.querySelectorAll(".sidebar-note")].find((each) =>
+    each.textContent?.startsWith("Every task is archived."),
+  );
+  const show = note?.querySelector("button");
+  assert.ok(show, "the note offers Show archived");
+  act(() => show.click());
+  assert.equal(headName(sidebar), "Archived tasks");
+});

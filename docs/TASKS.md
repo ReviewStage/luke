@@ -142,8 +142,8 @@ new-task page, which leaves the task, and the new-task page closes the panel. Es
   header's chevron folds the group, remembered on this Mac, and a
   repository's + (shown on hover or focus) opens the new-task page with that
   repository already chosen. Each row shows the task's name and, muted at its
-  end, the time the order chooses (its last update, or under Created when it
-  was started: "now", "5m", "3h", "2d", "3w", then the date), moved on each
+  end, the time the order chooses (its last activity, the later of its plan's
+  last save and its agents' last turn, or under Created when it was started: "now", "5m", "3h", "2d", "3w", then the date), moved on each
   minute, the full moment on hover. A row says what its group does not: a
   teammate's face under a repository's header, its repository's name under a
   creator's, and both in one run.
