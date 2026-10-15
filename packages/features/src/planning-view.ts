@@ -658,11 +658,25 @@ export const planningFileAnswerSchema = EffectSchema.Union([
 
 export type PlanningFileAnswer = typeof planningFileAnswerSchema.Type;
 
-/** One folder of a plan's repository, as the File tab's tree asks the host for it: the plan, and the folder's path from the root. */
-export const planningTreeParamsSchema = EffectSchema.Struct({
-  planId: EffectSchema.NonEmptyString,
-  ...planTreeRequestSchema.fields,
-});
+/**
+ * A repository as a read with no plan names it, as an agent an automation
+ * started names its own: the workspace whose installation reaches it, and
+ * the repository.
+ */
+const repositoryPlaceFields = {
+  workspaceId: workspaceIdSchema,
+  repository: githubRepositoryFullNameSchema,
+};
+
+/**
+ * One folder of a repository, as the File tab's tree or an `@` list asks
+ * the host for it: the plan whose repository it is, or the workspace and
+ * the repository where no plan names it, and the folder's path from the root.
+ */
+export const planningTreeParamsSchema = EffectSchema.Union([
+  EffectSchema.Struct({ planId: EffectSchema.NonEmptyString, ...planTreeRequestSchema.fields }),
+  EffectSchema.Struct({ ...repositoryPlaceFields, ...planTreeRequestSchema.fields }),
+]);
 
 export type PlanningTreeParams = typeof planningTreeParamsSchema.Type;
 
@@ -675,10 +689,11 @@ export const planningTreeAnswerSchema = EffectSchema.Union([
 
 export type PlanningTreeAnswer = typeof planningTreeAnswerSchema.Type;
 
-/** The skills a developer may choose of a plan's repository, as the window asks the host for them: the plan. */
-export const planningSkillsParamsSchema = EffectSchema.Struct({
-  planId: EffectSchema.NonEmptyString,
-});
+/** The skills a developer may choose of a repository, as the window asks the host for them: the plan whose repository it is, or the workspace and the repository where no plan names it. */
+export const planningSkillsParamsSchema = EffectSchema.Union([
+  EffectSchema.Struct({ planId: EffectSchema.NonEmptyString }),
+  EffectSchema.Struct(repositoryPlaceFields),
+]);
 
 export type PlanningSkillsParams = typeof planningSkillsParamsSchema.Type;
 

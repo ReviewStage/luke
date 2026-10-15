@@ -90,6 +90,9 @@ import {
   planTranscriptPath,
   planTreePath,
   planWorkPath,
+  type RepositoryPlace,
+  repositorySkillsPath,
+  repositoryTreePath,
 } from "./service-paths.js";
 import {
   HOSTED_API_ERROR,
@@ -421,6 +424,34 @@ export class HostedPlanClient {
   ): Effect.Effect<PlanSkillsAnswer | undefined, never, HttpClient.HttpClient> {
     return this.#call.ask(
       { method: HTTP_METHOD.GET, path: planSkillsPath(planId) },
+      planSkillsAnswerSchema,
+    );
+  }
+
+  /**
+   * One folder of a repository the workspace's installation reaches, as
+   * `readTree` reads a plan's, for a place with no plan to name it by;
+   * nothing where the service did not answer, or where the folder asked is
+   * not one the wire admits.
+   */
+  readRepositoryTree(
+    place: RepositoryPlace,
+    folder: PlanTreeRequest,
+  ): Effect.Effect<PlanTreeAnswer | undefined, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(readEither(planTreeRequestSchema)(folder));
+    if (admitted === undefined) return Effect.succeed(undefined);
+    return this.#call.ask(
+      { method: HTTP_METHOD.GET, path: repositoryTreePath(place, admitted) },
+      planTreeAnswerSchema,
+    );
+  }
+
+  /** The skills a developer may choose of a repository the workspace's installation reaches, as `readSkills` reads a plan's; nothing where the service did not answer. */
+  readRepositorySkills(
+    place: RepositoryPlace,
+  ): Effect.Effect<PlanSkillsAnswer | undefined, never, HttpClient.HttpClient> {
+    return this.#call.ask(
+      { method: HTTP_METHOD.GET, path: repositorySkillsPath(place) },
       planSkillsAnswerSchema,
     );
   }

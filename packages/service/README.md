@@ -148,6 +148,13 @@ names the workspace the listing is for, to a member of it; none named is the
 account's first workspace. One the account is not in is `not-found`
 (404), and the query given twice is `invalid-request`. A GitHub or a store
 the service could not reach is `unavailable`.
+`GET /api/github/repositories/tree` and `GET /api/github/repositories/skills`
+read one repository of that installation for a place no task names, such as
+an agent an automation started: the `workspaceId` and `repository` queries
+name it, each exactly once, and the answer is a task's own tree or skills
+read (`src/plans/plan-tree.ts`, `src/plans/plan-skills.ts`), through the
+same reach, to a member of the workspace; a repository the installation does
+not reach is refused as `not-reachable`, as a task's is.
 `src/github/github-repositories-app.test.ts` holds the route and
 `src/github/github-app.test.ts` the reads beneath it, over
 `src/testing/github-app-fake.ts`.

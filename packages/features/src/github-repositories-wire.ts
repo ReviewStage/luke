@@ -51,8 +51,16 @@ export const githubRepositorySchema = EffectSchema.Struct({
 
 export type GitHubRepository = typeof githubRepositorySchema.Type;
 
-/** The query naming the workspace a listing is for; a workspace of a GitHub App installation lists only that installation's repositories. */
-export const GITHUB_REPOSITORIES_QUERY = { WORKSPACE_ID: "workspaceId" } as const;
+/**
+ * The queries a repositories read names: the workspace a listing is for,
+ * since a workspace of a GitHub App installation lists only that
+ * installation's repositories, and, for a read of one repository's tree or
+ * skills, the repository, `owner/name`.
+ */
+export const GITHUB_REPOSITORIES_QUERY = {
+  WORKSPACE_ID: "workspaceId",
+  REPOSITORY: "repository",
+} as const;
 
 /** The repositories (GET): every one the App reaches for the developer, or for the workspace named, most recently updated first. */
 export const githubRepositoriesAnswerSchema = EffectSchema.Struct({

@@ -7,12 +7,16 @@ import {
   PLAN_TREE_ENTRY,
   type PlanTreeAnswer,
   type PlanTreeRequest,
+  planTreeRequestSchema,
 } from "@luke/features/plan-wire";
-import { Effect, Option } from "effect";
+import { unparsedWire } from "@luke/wire";
+import { readEither } from "@luke/wire/effect";
+import { Effect, Option, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { GitHubApp } from "../github/github-app.js";
 import { logGitHubReadFailure } from "../github/github-refusal.js";
 import { GIT_ENTRY, readRepositoryFolder } from "../github/repository-folder.js";
+import { HOSTED_REFUSAL, type HostedRefusal } from "../http/http-effect.js";
 import { reachPlanRepository, refused } from "./plan-file.js";
 import { isSecretFile } from "./shown-file.js";
 
@@ -43,6 +47,39 @@ import { isSecretFile } from "./shown-file.js";
  * listing saying it was cut, since it is then not the whole repository.
  */
 
+/** The query naming a folder of the repository from its root, the root itself where it is absent or empty. */
+const TREE_PATH_QUERY = "path";
+
+/** The query asking everything under the folder rather than its own entries, `1` where it asks. */
+const TREE_RECURSIVE_QUERY = "recursive";
+
+/**
+ * The folder the query names, named at most once, the root where it is not
+ * named, and whether everything under it is asked, or the invalid-request
+ * refusal.
+ */
+export const treeRequestOf = /* @__PURE__ */ Effect.fnUntraced(function* (
+  request: Request,
+): Effect.fn.Return<PlanTreeRequest, HostedRefusal> {
+  const query = new URL(request.url).searchParams;
+  const named = query.getAll(TREE_PATH_QUERY);
+  const recursive = query.getAll(TREE_RECURSIVE_QUERY);
+  if (
+    named.length > 1 ||
+    recursive.length > 1 ||
+    (recursive.length === 1 && recursive[0] !== "1")
+  ) {
+    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  }
+  const folder = {
+    path: named[0] ?? "",
+    ...(recursive.length === 1 ? { recursive: true } : undefined),
+  };
+  const read = readEither(planTreeRequestSchema)(unparsedWire(folder));
+  if (Result.isFailure(read)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  return read.success;
+});
+
 /** Whether a folder is, or stands inside, one whose name is a secret file's. */
 function withinSecret(path: string): boolean {
   return path.split("/").some(isSecretFile);
@@ -72,14 +109,30 @@ export function readPlanTree(
     if (Option.isNone(stored)) return Option.none();
     const repository = stored.value.plan.repository;
     if (repository === null) return Option.some(refused(PLAN_FILE_REFUSAL.NO_REPOSITORY));
-    if (withinSecret(request.path)) return Option.some(refused(PLAN_FILE_REFUSAL.SECRET));
-    const answer = yield* readFolder(stored.value.plan.workspaceId, repository, request).pipe(
-      Effect.catchTag("GitHubUnavailable", (failure) =>
-        Effect.as(logGitHubReadFailure(failure), refused(PLAN_FILE_REFUSAL.UNAVAILABLE)),
-      ),
+    return Option.some(
+      yield* readRepositoryTree(stored.value.plan.workspaceId, repository, request),
     );
-    return Option.some(answer);
   });
+}
+
+/**
+ * The folder the request names, of a repository the workspace's
+ * installation reaches, as GitHub holds it now, or why it is not listed: a
+ * plan's tree read by the place its plan names, and the read of a place no
+ * plan names, such as an agent an automation started, whose caller has
+ * already confirmed the account is a member of the workspace.
+ */
+export function readRepositoryTree(
+  workspaceId: string,
+  repository: string,
+  request: PlanTreeRequest,
+): Effect.Effect<PlanTreeAnswer, never, DatabaseServices | HttpClient.HttpClient | GitHubApp> {
+  if (withinSecret(request.path)) return Effect.succeed(refused(PLAN_FILE_REFUSAL.SECRET));
+  return readFolder(workspaceId, repository, request).pipe(
+    Effect.catchTag("GitHubUnavailable", (failure) =>
+      Effect.as(logGitHubReadFailure(failure), refused(PLAN_FILE_REFUSAL.UNAVAILABLE)),
+    ),
+  );
 }
 
 /** The folder listed through the App's reach, or the refusal the reach answers. */
