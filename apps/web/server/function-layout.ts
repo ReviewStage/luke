@@ -7,7 +7,7 @@ import { type FunctionDefinition, functionDefinitions } from "./function-duratio
  * `scripts/bundle-functions.ts` builds from them under `dist-functions/`, and
  * the public path each function answers on, which is the `.func` name in the
  * Build Output tree (`build-output.ts`) and the destination the `/api/`
- * rewrites of `vercel.ts` carry. Nothing under `api/` exists any more:
+ * rewrites of `vercel.json` carry. Nothing under `api/` exists any more:
  * Vercel's zero-config pass built whatever it found there, beside the tree,
  * and two builders claimed one path.
  */

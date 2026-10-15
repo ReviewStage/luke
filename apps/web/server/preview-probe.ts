@@ -1,17 +1,18 @@
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { withoutTrailingSlash } from "@luke/wire";
 import { Clock, Duration, Effect, Option, Redacted, Schedule, Schema } from "effect";
 import * as Headers from "effect/http/Headers";
 import * as HttpClient from "effect/http/HttpClient";
 import type * as HttpClientError from "effect/http/HttpClientError";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
-import { config } from "../../../vercel.js";
 import { checkApiCallers, PROBE_SEGMENT, RESOLUTION } from "./api-callers.js";
 
 /**
  * The deployed shape, read from a deployment's own answers. On 2026-09-11
  * five production deploys failed in a row while every PR was green, because
  * nothing in CI could see what Vercel had built: the Framework Preset and
- * the configuration's `services` key must agree, and only a deployment shows
+ * `vercel.json`'s `services` key must agree, and only a deployment shows
  * whether they did. A deployment distinguishes the states — a services build
  * serves eve at `/eve/v1/health` and every `/api/` function; the single-app
  * build answers `NOT_FOUND` for eve; a preset without the key fails to build
@@ -66,7 +67,7 @@ const METHOD_BY_DOOR = {
 const SITE_ROOT_PATH = "/";
 /**
  * eve's own `EVE_HEALTH_ROUTE_PATH`, which the package keeps off its public
- * exports; the root `vercel.ts`'s `/eve/v1/(.*)` rewrite is what lands it on the
+ * exports; `vercel.json`'s `/eve/v1/(.*)` rewrite is what lands it on the
  * eve service, so its answer is the eve service being served.
  */
 const EVE_HEALTH_PATH = "/eve/v1/health";
@@ -125,7 +126,7 @@ interface ProbePaths {
    * route, and Vercel answers it with its own `NOT_FOUND`.
    */
   readonly callers: readonly string[];
-  /** The paths the root `vercel.ts`'s `crons` call. */
+  /** The paths `vercel.json`'s `crons` call. */
   readonly crons: readonly string[];
 }
 
@@ -138,20 +139,31 @@ export function planProbes(door: ProbeDoor, paths: ProbePaths): readonly Planned
   return [...unique].sort().map((path) => ({ method, path, expected: expected.get(path) }));
 }
 
-/** The caller paths of the checkout, read the way the callers check reads them, and the cron paths of the root `vercel.ts`. */
+const VERCEL_CONFIG_FILE = "vercel.json";
+const VercelCrons = Schema.Struct({
+  crons: Schema.Array(Schema.Struct({ path: Schema.String })).pipe(
+    Schema.withDecodingDefaultType(Effect.succeed([])),
+  ),
+});
+const decodeVercelCrons = Schema.decodeUnknownEffect(Schema.fromJsonString(VercelCrons));
+
+/** The caller paths of the checkout, read the way the callers check reads them, and the cron paths of its `vercel.json`. */
 export function readProbePaths(input: {
   readonly repoRoot: string;
   readonly web: string;
-}): Effect.Effect<ProbePaths> {
+}): Effect.Effect<ProbePaths, Schema.SchemaError> {
   return Effect.gen(function* () {
     const report = yield* Effect.promise(() => checkApiCallers(input));
+    const config = yield* decodeVercelCrons(
+      yield* Effect.promise(() => readFile(join(input.web, VERCEL_CONFIG_FILE), "utf8")),
+    );
     return {
       callers: report.resolved.map((entry) =>
         entry.resolution === RESOLUTION.PREFIX
           ? `${withoutTrailingSlash(entry.caller.probe)}/${PROBE_SEGMENT}`
           : entry.caller.probe,
       ),
-      crons: (config.crons ?? []).map((cron) => cron.path),
+      crons: config.crons.map((cron) => cron.path),
     };
   });
 }
