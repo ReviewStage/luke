@@ -11,6 +11,7 @@ import {
   INBOX_LIST_WIDTH,
   type InboxPlanFolds,
   type InboxViewChoices,
+  type InboxWaitingOnly,
   useInboxListWidth,
 } from "../desktop/folded-groups";
 import { SidebarGroupHeader } from "../desktop/sidebar-group-header";
@@ -61,8 +62,9 @@ import { cardTitle } from "./tool-call-model";
  * developer, filtered out or not, its pressed fill alone saying the filter
  * is on and its tooltip what a press does; and one whose menu says
  * how the list groups its items, by plan or newest first, the choice
- * checked; both are kept across launches. The plan page's own Inbox lists
- * one plan's items, so its list has neither head nor groups. Either list
+ * checked; both are kept across launches. A task's own Inbox lists one
+ * task's items in one run, so its head offers Needs you alone, kept apart
+ * from the window's, and its list has no groups. Either list
  * is resized from its right edge as the sidebar is, and keeps one width
  * between them across launches; an Inbox showing one column at a time
  * draws its list the whole Inbox wide, with no edge, and hides it while an
@@ -335,20 +337,15 @@ function NeedsYouOnly({
 }
 
 /**
- * The window's head: the Inbox's name, and Needs you and the view's menu
- * at the list's top right. Its heading and its buttons glide as the
- * sidebar folds, the name moving to the list's middle, clear of the
- * sidebar's toggle, and the buttons keeping to the list's edge.
+ * The list's head: the Inbox's name, and Needs you and, on the window's
+ * Inbox, the view's menu at the list's top right; a task's own Inbox lists
+ * one task's items in one run, so it has no menu. On the window's Inbox its
+ * heading and its buttons glide as the sidebar folds, the name moving to the
+ * list's middle, clear of the sidebar's toggle, and the buttons keeping to
+ * the list's edge.
  */
-function ListHead({
-  shown,
-  choices,
-  waiting,
-}: {
-  shown: boolean;
-  choices: InboxViewChoices;
-  waiting: boolean;
-}): React.JSX.Element {
+function ListHead({ head }: { head: InboxListHead }): React.JSX.Element {
+  const { shown, needsYou, view, waiting } = head;
   return (
     <header className="desktop-toolbar inbox-plans-bar">
       <div className="desktop-toolbar-heading">
@@ -357,21 +354,28 @@ function ListHead({
       <div className="desktop-toolbar-actions">
         <NeedsYouOnly
           waiting={waiting}
-          waitingOnly={choices.waitingOnly}
-          onWaitingOnly={choices.onWaitingOnly}
+          waitingOnly={needsYou.waitingOnly}
+          onWaitingOnly={needsYou.onWaitingOnly}
         />
-        <ViewOptions shown={shown} grouping={choices.grouping} onGrouping={choices.onGrouping} />
+        {view === undefined ? null : (
+          <ViewOptions
+            shown={shown}
+            grouping={view.choices.grouping}
+            onGrouping={view.choices.onGrouping}
+          />
+        )}
       </div>
     </header>
   );
 }
 
-/** What the list's head offers, on the window's Inbox: absent on a plan's own, which lists one plan's items alone. */
+/** What the list's head offers: Needs you on every Inbox, and on the window's how it groups its items and which plans are folded. */
 export interface InboxListHead {
   /** Whether the list is on screen, for its menu not to outlive it. */
   readonly shown: boolean;
-  readonly choices: InboxViewChoices;
-  readonly folds: InboxPlanFolds;
+  readonly needsYou: InboxWaitingOnly;
+  /** The window's Inbox's grouping and its plans' folds; none on a task's own, which lists one task's items in one run. */
+  readonly view: { readonly choices: InboxViewChoices; readonly folds: InboxPlanFolds } | undefined;
   /** Whether any item needs the developer, filtered out or not, for Needs you's dot. */
   readonly waiting: boolean;
 }
@@ -394,7 +398,7 @@ export function InboxList({
   models: readonly CatalogModel[] | undefined;
   /** The signed-in account's id, whose own agents' cards name no starter, where a teammate's name theirs. */
   readerId: string | undefined;
-  head: InboxListHead | undefined;
+  head: InboxListHead;
   /** What stands under the rows: the list's empty line, a spinner, or a read that did not answer. */
   note: React.ReactNode;
   /** Which of the Inbox's columns stand. */
@@ -429,23 +433,21 @@ export function InboxList({
       hidden={columns === INBOX_COLUMNS.ITEM}
       style={{ width: drawnWidth(width, columns !== INBOX_COLUMNS.BOTH) }}
     >
-      {head === undefined ? null : (
-        <ListHead shown={head.shown} choices={head.choices} waiting={head.waiting} />
-      )}
+      <ListHead head={head} />
       <div className="inbox-plans-scroll">
         {view.grouping === INBOX_GROUPING.NEWEST ? (
           <ul className="sidebar-plans">{view.items.map(row)}</ul>
         ) : (
           view.groups.map(({ holder, items }) => {
             const key = holderKey(holder);
-            const folded = head?.folds.folded(key) ?? false;
+            const folded = head.view?.folds.folded(key) ?? false;
             return (
               <div key={key} className="sidebar-repository">
                 <HolderHeader
                   holder={holder}
                   folded={folded}
                   count={items.filter(({ status }) => status === INBOX_STATUS.OPEN).length}
-                  onToggle={() => head?.folds.toggle(key)}
+                  onToggle={() => head.view?.folds.toggle(key)}
                 />
                 {folded ? null : (
                   <ul className="sidebar-plans">{items.map((item) => row({ holder, item }))}</ul>

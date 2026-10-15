@@ -3836,14 +3836,14 @@ body:has(.app-stage[data-capture="true"])
   padding-right: var(--column-inset);
 }
 
-/* While the sidebar is folded the list is the window's first column, so its
+/* While the sidebar is folded the window's Inbox's list is its first column, so its
    name stands centred over the list, as a sidebar's title does, rather than
    pushed past the title bar's buttons. Each side of the name holds at least
    what stands there, the title bar's buttons at the left and the list's own
    at the right, so the name moves aside only once it would meet them, and is
    cut short only once it no longer fits between them. The bar is inset alike
    on both sides, so centred in the bar is centred in the list. */
-.desktop-shell[data-sidebar-collapsed="true"] .desktop-main .inbox-plans-bar {
+.desktop-shell[data-sidebar-collapsed="true"] .desktop-main > .inbox-view .inbox-plans-bar {
   display: grid;
   grid-template-columns:
     minmax(calc(var(--sidebar-toggle-clearance) - var(--column-inset) - var(--control-gap)), 1fr)
@@ -3852,20 +3852,36 @@ body:has(.app-stage[data-capture="true"])
   padding-left: var(--column-inset);
 }
 
-.desktop-shell[data-sidebar-collapsed="true"] .inbox-plans-bar .desktop-toolbar-heading {
+.desktop-shell[data-sidebar-collapsed="true"]
+  .desktop-main
+  > .inbox-view
+  .inbox-plans-bar
+  .desktop-toolbar-heading {
   grid-column: 2;
 }
 
-.desktop-shell[data-sidebar-collapsed="true"] .inbox-plans-bar .desktop-toolbar-actions {
+.desktop-shell[data-sidebar-collapsed="true"]
+  .desktop-main
+  > .inbox-view
+  .inbox-plans-bar
+  .desktop-toolbar-actions {
   grid-column: 3;
   justify-self: end;
+}
+
+/* A task's own Inbox stands under its column's tab strip, clear of the title
+   bar's buttons at either end, so its list's head and its item's bar keep the
+   column's own inset whether the sidebar is folded or the panel's toggle is
+   drawn. */
+.desktop-shell[data-sidebar-collapsed] .desktop-plan-main .inbox-view .desktop-toolbar {
+  padding-inline: var(--column-inset);
 }
 
 /* The list standing alone is a page rather than a column, so its name leads
    its bar past the title bar's buttons, as a page's title does. */
 .desktop-shell[data-sidebar-collapsed="true"]
   .desktop-main
-  .inbox-view[data-columns="list"]
+  > .inbox-view[data-columns="list"]
   .inbox-plans-bar {
   display: flex;
   padding-left: var(--sidebar-toggle-clearance);
