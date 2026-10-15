@@ -140,6 +140,21 @@ call that has ended, and within a minute or so of its end for a call still
 open. Deleting your account removes every task. Pinning or archiving a task
 stores only when you did it and deletes nothing.
 
+**A plan's pictures.** When you paste, drop, or choose a picture into a
+task's plan, Luke re-encodes it on your Mac to at most 1.5 MB and sends it
+to our service, which keeps it in our database beside the task, under the
+task rather than your account, with which member added it. The plan's text
+names the picture by an address on tryluke.dev; our service serves its bytes
+only to Luke signed in as a member of the task's workspace, and opening the
+address in a browser shows a page that opens the task in Luke and nothing of
+the picture. Every member of the workspace sees it, as they see the plan.
+Pictures are stored as sent and readable by our own operators, like the plan.
+A picture stays as long as the task does, even once the plan no longer shows
+it, so every earlier version still shows its pictures; one no save of the
+plan ever showed, pasted and undone, is deleted a day after it was sent.
+Deleting the task deletes its pictures; deleting your account leaves the
+pictures you added to a task that stays, as it leaves the words you wrote.
+
 **Your plan template.** The template a new task's plan starts from is kept with your
 account preferences on our service, as you write it in Settings › Plan
 template (up to 20,000 characters; a built-in one until you do), sent as you

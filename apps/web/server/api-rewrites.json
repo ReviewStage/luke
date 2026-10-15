@@ -60,6 +60,14 @@
     "dest": "/api/default.js?route=plans/edit&id=$1"
   },
   {
+    "src": "/api/plans/([^/]+)/attachments/([^/]+)",
+    "dest": "/api/default.js?route=plans/attachment&id=$1&attachment=$2"
+  },
+  {
+    "src": "/api/plans/([^/]+)/attachments",
+    "dest": "/api/default.js?route=plans/attachments&id=$1"
+  },
+  {
     "src": "/api/plans/([^/]+)/agents",
     "dest": "/api/default.js?route=plans/agents&id=$1"
   },

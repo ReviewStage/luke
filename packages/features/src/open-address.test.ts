@@ -30,6 +30,16 @@ test("a plan's address, or a section's, opens that plan in the app, whichever ho
   );
 });
 
+test("a picture's address opens the plan it is of, and nothing else of it", () => {
+  const picture = "0b6f6b52-2c1e-4f8e-9a4d-7f1c2e9d5a01";
+
+  assert.equal(
+    appLinkFromAddress(`/acme/plan/${PLAN_ID}/files/${picture}`, ""),
+    `tryluke://tryluke.dev/acme/plan/${PLAN_ID}`,
+  );
+  assert.equal(appLinkFromAddress(`/acme/plan/${PLAN_ID}/files/not-an-id`, ""), undefined);
+});
+
 test("an address that names no plan opens nothing", () => {
   for (const [pathname, hash] of [
     ["/acme/plans/x", ""],

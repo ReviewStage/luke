@@ -1,0 +1,33 @@
+{
+  "anyOf": [
+    {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 36
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "refused": {
+          "type": "string",
+          "enum": [
+            "too-many"
+          ]
+        }
+      },
+      "required": [
+        "refused"
+      ],
+      "additionalProperties": false
+    }
+  ]
+}

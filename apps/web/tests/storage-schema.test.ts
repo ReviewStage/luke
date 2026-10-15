@@ -74,6 +74,7 @@ const DECLARED_TABLES = [
   "organization",
   "personal_workspace",
   "plan",
+  "plan_attachment",
   "plan_board",
   "plan_page_version",
   "plan_pin",

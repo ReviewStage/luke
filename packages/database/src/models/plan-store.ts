@@ -1,4 +1,5 @@
 import { AUTOMATION_SCOPE } from "@luke/features/automation-wire";
+import { planAttachmentIdsIn } from "@luke/features/plan-attachment-link";
 import type { PlanSectionWriter } from "@luke/features/plan-document";
 import { DEFAULT_PLAN_TEMPLATE } from "@luke/features/plan-document-template";
 import { type PlanAgentEdit, planAgentEditSchema } from "@luke/features/plan-template";
@@ -26,6 +27,7 @@ import { voiceSessions } from "../schemas/voice.js";
 import { CONVERSATION_KIND } from "../storage-vocabulary.js";
 import { readPlanTemplate } from "./account-store.js";
 import { InstantColumnSchema } from "./columns.js";
+import { stampSavedAttachments } from "./plan-attachments.js";
 import { readLastEdit, readSectionWriters, UNKNOWN_AGENT_LABEL } from "./plan-revisions.js";
 import { readTemplateAt } from "./plan-template-revisions.js";
 import { planReachableBy, reachablePlan, readAccountNames } from "./workspace-store.js";
@@ -744,7 +746,7 @@ export interface PlanTextSaveExtras {
 
 /**
  * Replaces the text of a plan that is one document, with the agents' journal
- * where it is handed, and answers
+ * where it is handed, stamps the plan's pictures the text names as saved, and answers
  * the plan as saved, or nothing where the account reaches no such plan; nothing
  * is ever created here.
  */
@@ -757,6 +759,8 @@ export function savePlanText(
   return Effect.gen(function* () {
     const now = yield* DateTime.nowAsDate;
     const row = yield* replaceText({ userId, planId, text, ...extras, now });
+    // The pictures the text names are saved now, so the sweep leaves them for as long as the plan stands.
+    if (Option.isSome(row)) yield* stampSavedAttachments(planId, planAttachmentIdsIn(text, planId));
     return yield* Effect.transposeOption(Option.map(row, (saved) => planOf(userId, saved)));
   });
 }
