@@ -223,6 +223,7 @@ const findInstallationOfWorkspace = SqlSchema.findOneOption({
   Result: Schema.Struct({
     installationId: Schema.Number,
     status: Schema.Literals(Object.values(GITHUB_INSTALLATION_STATUS)),
+    updatedAt: Schema.Date,
   }),
   execute: (organizationId) =>
     Database.use((db) =>
@@ -230,6 +231,7 @@ const findInstallationOfWorkspace = SqlSchema.findOneOption({
         .select({
           installationId: githubInstallation.installationId,
           status: githubInstallation.status,
+          updatedAt: githubInstallation.updatedAt,
         })
         .from(githubInstallation)
         .where(eq(githubInstallation.organizationId, organizationId)),
@@ -248,6 +250,27 @@ const updateInstallationStatus = SqlSchema.void({
         .update(githubInstallation)
         .set({ status: row.status, updatedAt: row.now })
         .where(eq(githubInstallation.installationId, row.installationId)),
+    ),
+});
+
+const mendStatus = SqlSchema.void({
+  Request: Schema.Struct({
+    installationId: Schema.Number,
+    status: Schema.Literals(Object.values(GITHUB_INSTALLATION_STATUS)),
+    readAt: Schema.Date,
+    now: Schema.Date,
+  }),
+  execute: (row) =>
+    Database.use((db) =>
+      db
+        .update(githubInstallation)
+        .set({ status: row.status, updatedAt: row.now })
+        .where(
+          and(
+            eq(githubInstallation.installationId, row.installationId),
+            eq(githubInstallation.updatedAt, row.readAt),
+          ),
+        ),
     ),
 });
 
@@ -331,13 +354,28 @@ export function linkInstallation(
   });
 }
 
-/** Where the installation now stands, as its webhook or a read from GitHub said; an installation no workspace is connected to moves nothing. */
+/** Where the installation now stands, as its webhook said; an installation no workspace is connected to moves nothing. */
 export function setInstallationStatus(
   installationId: number,
   status: GitHubInstallationStatus,
 ): Effect.Effect<void, StoreFailure, DatabaseServices> {
   return Effect.flatMap(DateTime.nowAsDate, (now) =>
     updateInstallationStatus({ installationId, status, now }),
+  );
+}
+
+/**
+ * Where the installation stands as a read from GitHub found it, written
+ * only where its row has not moved since it was read: a webhook or a connect
+ * that landed while GitHub was being asked is newer than the read, so the
+ * read leaves it be.
+ */
+export function mendInstallationStatus(
+  read: WorkspaceInstallation,
+  status: GitHubInstallationStatus,
+): Effect.Effect<void, StoreFailure, DatabaseServices> {
+  return Effect.flatMap(DateTime.nowAsDate, (now) =>
+    mendStatus({ installationId: read.installationId, status, readAt: read.updatedAt, now }),
   );
 }
 
@@ -353,10 +391,11 @@ export function disconnectInstallation(
   return Effect.andThen(deleteWorkspaceIntents(organizationId), deleteInstallation(organizationId));
 }
 
-/** The installation connected to the workspace as Luke last stored it. */
+/** The installation connected to the workspace as Luke last stored it, and when the row last moved. */
 export interface WorkspaceInstallation {
   readonly installationId: number;
   readonly status: GitHubInstallationStatus;
+  readonly updatedAt: Date;
 }
 
 /** GitHub's id for the installation connected to the workspace, and its stored status, whatever it is; none for a workspace with none connected. */

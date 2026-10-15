@@ -82,7 +82,7 @@ import { type GitHubRepository, text } from "../core.js";
 import type { StoreFailure } from "../http/store-failure.js";
 import {
   installationOfWorkspace,
-  setInstallationStatus,
+  mendInstallationStatus,
   type WorkspaceInstallation,
 } from "./github-installations.js";
 
@@ -1012,7 +1012,8 @@ function githubAppService(
    * the status on every read, because GitHub never redelivers a failed
    * installation delivery on its own, and Settings reads the stored status:
    * a missed removal or suspension, or a missed return, is set right by the
-   * next chip opened or agent started rather than never.
+   * next chip opened or agent started rather than never. A row a webhook
+   * or a connect moved while GitHub was being asked is left as it stands.
    */
   const connectedInstallation = (connected: WorkspaceInstallation) =>
     Effect.gen(function* () {
@@ -1022,9 +1023,7 @@ function githubAppService(
         onSome: (on) =>
           on.suspended ? GITHUB_INSTALLATION_STATUS.SUSPENDED : GITHUB_INSTALLATION_STATUS.ACTIVE,
       });
-      if (status !== connected.status) {
-        yield* setInstallationStatus(connected.installationId, status);
-      }
+      if (status !== connected.status) yield* mendInstallationStatus(connected, status);
       return reached;
     });
 
