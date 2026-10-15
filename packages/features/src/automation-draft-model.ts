@@ -476,8 +476,11 @@ export function sameDraft(one: AutomationDraft, other: AutomationDraft): boolean
       (one.githubEvent === other.githubEvent &&
         sameFilters(one.githubFilters, other.githubFilters) &&
         sameSettings(one.githubSettings, other.githubSettings))) &&
-    one.guards?.maxConcurrentRuns === other.guards?.maxConcurrentRuns &&
-    one.guards?.dailyRunCap === other.guards?.dailyRunCap &&
+    // A new draft's guards, unset, are whatever the service sets, so they differ from none.
+    (one.guards === null ||
+      other.guards === null ||
+      (one.guards.maxConcurrentRuns === other.guards.maxConcurrentRuns &&
+        one.guards.dailyRunCap === other.guards.dailyRunCap)) &&
     cronOf(one.schedule) === cronOf(other.schedule) &&
     one.timezone === other.timezone &&
     one.repository === other.repository &&

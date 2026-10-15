@@ -521,7 +521,7 @@ test("a move to another GitHub event lets go of the filters the event before was
   });
 });
 
-test("a preset's guards are the draft's, so a draft that only took them is not the same as before, and a saved automation opens on its own", () => {
+test("a preset's guards are the draft's and are what it is made with, a saved automation opens on its own, and a draft that set none is the same as the automation made from it", () => {
   const fresh = automationDraft(undefined, DEFAULTS);
   const preset = {
     name: "Code review",
@@ -533,7 +533,8 @@ test("a preset's guards are the draft's, so a draft that only took them is not t
   } as const;
   const taken = presetDraft(fresh, preset);
 
-  assert.ok(!sameDraft({ ...taken, guards: null }, taken));
+  assert.ok(!sameDraft({ ...taken, guards: { maxConcurrentRuns: 1, dailyRunCap: 10 } }, taken));
+  assert.ok(sameDraft(fresh, { ...fresh, guards: { maxConcurrentRuns: 1, dailyRunCap: 10 } }));
   assert.deepEqual(createRequestOf(taken, "workspace-1").guards, preset.guards);
   assert.deepEqual(
     automationDraft({ ...SAVED, guards: preset.guards }, DEFAULTS).guards,
