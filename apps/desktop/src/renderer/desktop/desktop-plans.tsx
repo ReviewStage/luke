@@ -16,6 +16,7 @@ import { AutomationDirectory } from "../automation-directory";
 import { EmptyState } from "../empty-state";
 import { FIND_PAGE, FindScope, PageFind } from "../find-in-tab";
 import { MemberDirectory } from "../member-directory";
+import { NOT_FOUND_THING, NotFound } from "../not-found";
 import { ArchivedBanner } from "../planning/archived-plan";
 import { INBOX_COLUMNS, useInboxColumns } from "../planning/inbox-columns";
 import { InboxList, ItemMark } from "../planning/inbox-list";
@@ -395,9 +396,13 @@ function PlanDocument({
     const line =
       region.kind === DOCUMENT_REGION.FAILED
         ? "The task could not be read."
-        : region.kind === DOCUMENT_REGION.MISSING
-          ? "This task no longer exists."
-          : "Choose a task, or start a new one.";
+        : "Choose a task, or start a new one.";
+    // A plan that cannot be drawn offers no menu, so its way back to the home page is said here.
+    const close = (
+      <button type="button" className="toolbar-button" onClick={plans.onLeavePlan}>
+        Close task
+      </button>
+    );
     return (
       <>
         <Toolbar
@@ -409,26 +414,25 @@ function PlanDocument({
             </div>
           }
         />
-        <section className="desktop-empty">
-          {region.kind === DOCUMENT_REGION.READING ? (
-            <Spinner label="Loading task" size={SPINNER_SIZE.REGION} />
-          ) : region.kind === DOCUMENT_REGION.FAILED ? (
-            <ReadFailure
-              line={line}
-              onRetry={plans.onRetryDocument}
-              place={READ_FAILURE_PLACE.CENTRED}
-            />
-          ) : (
-            <p role="alert">{line}</p>
-          )}
-          {/* A plan that cannot be drawn offers no menu, so its way back to
-              the home page is said here. */}
-          {region.kind === DOCUMENT_REGION.FAILED || region.kind === DOCUMENT_REGION.MISSING ? (
-            <button type="button" className="toolbar-button" onClick={plans.onLeavePlan}>
-              Close task
-            </button>
-          ) : null}
-        </section>
+        {/* A plan the service would not hand the reader is not there for them, whether it was deleted or never theirs. */}
+        {region.kind === DOCUMENT_REGION.MISSING ? (
+          <NotFound thing={NOT_FOUND_THING.TASK} action={close} />
+        ) : (
+          <section className="desktop-empty">
+            {region.kind === DOCUMENT_REGION.READING ? (
+              <Spinner label="Loading task" size={SPINNER_SIZE.REGION} />
+            ) : region.kind === DOCUMENT_REGION.FAILED ? (
+              <ReadFailure
+                line={line}
+                onRetry={plans.onRetryDocument}
+                place={READ_FAILURE_PLACE.CENTRED}
+              />
+            ) : (
+              <p role="alert">{line}</p>
+            )}
+            {region.kind === DOCUMENT_REGION.FAILED ? close : null}
+          </section>
+        )}
       </>
     );
   }

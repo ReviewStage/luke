@@ -52,6 +52,39 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+test("a task the service will not hand the reader, as a link to another workspace's may name, is not found, its Close the one way on", () => {
+  const left: string[] = [];
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  act(() =>
+    root.render(
+      createElement(DesktopPlans, {
+        summary: UNPINNED_SUMMARY,
+        looks: NO_LOOKS,
+        plans: plansControl({
+          page: PLANS_PAGE.DOCUMENT,
+          activePlanId: PLAN.id,
+          region: { kind: DOCUMENT_REGION.MISSING },
+          onLeavePlan: () => left.push(PLAN.id),
+        }),
+      }),
+    ),
+  );
+  const close = [...container.querySelectorAll("button")].find(
+    (each) => each.textContent === "Close task",
+  );
+  act(() => close?.click());
+
+  assert.match(
+    container.textContent ?? "",
+    /Not foundThis task doesn't exist, or you don't have access to it\./u,
+  );
+  assert.deepEqual(left, [PLAN.id]);
+  act(() => root.unmount());
+  container.remove();
+});
+
 test("the Call tab draws each call's spoken lines as the developer's bubbles and Luke's messages, left out of the screen recording", () => {
   const markup = renderToStaticMarkup(
     createElement(DesktopPlans, {

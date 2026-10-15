@@ -459,6 +459,22 @@ test("a read that did not land says so, and Retry reads the agent again and draw
   assert.equal(page.querySelector("h1")?.textContent, "Sweep the flaky tests");
 });
 
+test("an agent the service will not hand the reader, as a link to another workspace's may name, is not found, and nothing of it is drawn", async () => {
+  pages = [{ failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND }];
+  const page = mount();
+  await settle();
+
+  assert.match(
+    page.textContent ?? "",
+    /Not foundThis agent doesn't exist, or you don't have access to it\./u,
+  );
+  assert.equal(page.querySelector("h1"), null);
+  assert.equal(
+    [...page.querySelectorAll("button")].some((each) => /Retry/u.test(each.textContent ?? "")),
+    false,
+  );
+});
+
 test("an archived agent's page offers Unarchive in its composer's place, which brings the agent back", async () => {
   pages = [{ agent: { ...PAGE, archivedAt: 2 } }];
   const page = mount();

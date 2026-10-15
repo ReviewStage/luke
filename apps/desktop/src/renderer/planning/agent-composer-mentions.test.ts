@@ -9,12 +9,12 @@ import {
   type IntegrationProvider,
   type IntegrationStatus,
 } from "@luke/features/integration-wire";
+import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
 import {
   MENTION_KIND,
   type Mention,
   type MentionPlace,
   mentionMarkdown,
-  type PlanMention,
 } from "@luke/features/mention-link";
 import { PLAN_TREE_ENTRY } from "@luke/features/plan-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
@@ -39,7 +39,7 @@ import { PlanMentions, type PlanMentionsValue, planlessMentions } from "./plan-m
 import type { SkillSource } from "./skill-picker";
 import { TranscriptWords } from "./transcript-blocks";
 import { type MessageSender, useAgentComposer } from "./use-agent-composer";
-import { OpenPlanProvider } from "./use-open-link";
+import { OpenLinkProvider } from "./use-open-link";
 
 /**
  * `@` in an agent's message box and its transcript, on a plan's page and
@@ -325,11 +325,11 @@ test("a sent message's mention is drawn on a plan's page as the chip that opens 
 });
 
 test("off a plan's page a sent message's mention is still its chip, which opens through the window's opener", () => {
-  const opened: PlanMention[] = [];
+  const opened: ReadLink[] = [];
   const container = drawn(
     createElement(
-      OpenPlanProvider,
-      { value: (mention: PlanMention) => opened.push(mention) },
+      OpenLinkProvider,
+      { value: (link: ReadLink) => opened.push(link) },
       createElement(TranscriptWords, {
         text: `Follow ${mentionMarkdown(ROLLOUT, "Rollout", PLACE)}.`,
       }),
@@ -342,7 +342,9 @@ test("off a plan's page a sent message's mention is still its chip, which opens 
   act(() => chip.click());
 
   assert.equal(container.textContent, "Follow Rollout.");
-  assert.deepEqual(opened, [ROLLOUT]);
+  assert.deepEqual(opened, [
+    { workspace: "", place: { kind: LINK_PLACE.SECTION, planId: PLAN_ID, anchor: "rollout" } },
+  ]);
   assert.equal(carryingTarget(container), undefined);
 });
 

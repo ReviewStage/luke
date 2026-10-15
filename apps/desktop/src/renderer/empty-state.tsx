@@ -1,8 +1,9 @@
 /**
  * empty-state.tsx -- a whole tab with nothing in it yet: a large, muted glyph of what belongs there above one short line.
  *
- * Only a whole tab or pane that stands empty draws one, and only where the
- * glyph says what will stand there: the Inbox, the side panel's Code,
+ * Only a whole tab or pane that stands empty draws one, or one whose thing
+ * cannot be shown (`not-found.tsx`), and only where the glyph says what will
+ * stand there: the Inbox, the side panel's Code,
  * Transcript, and Work, Automations and an automation's runs, and a Settings
  * page with nothing on it (Experimental, between experiments). A small note
  * inside a list, a menu, or a search with no match says its line alone, as do
@@ -19,15 +20,18 @@ import { ConversationEmptyState } from "./ai-elements/conversation";
  * A whole tab with nothing in it yet: `icon`, the tab's own glyph, drawn
  * large and muted over the line `children` says, and where the line alone
  * would not say what the place is, a `title` over it, drawn as the log's own
- * empty state draws its title (`ConversationEmptyState`).
+ * empty state draws its title (`ConversationEmptyState`); under it, where
+ * one is given, the one way on from the place.
  */
 export function EmptyState({
   icon,
   title,
+  action,
   children,
 }: {
   icon: React.ReactNode;
   title?: string | undefined;
+  action?: React.ReactNode;
   children: React.ReactNode;
 }): React.JSX.Element {
   return (
@@ -44,6 +48,7 @@ export function EmptyState({
             <p className="m-0">{children}</p>
           </div>
         )}
+        {action}
       </ConversationEmptyState>
     </div>
   );

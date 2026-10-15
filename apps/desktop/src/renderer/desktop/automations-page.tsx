@@ -17,6 +17,7 @@ import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 import { EmptyState } from "../empty-state";
 import { ExperimentTag, SendFeedbackButton } from "../experiment-marks";
+import { NOT_FOUND_THING, NotFound } from "../not-found";
 import { momentText, useMinute } from "../planning/plan-time";
 import { AUTOMATIONS_PAGE, type PlansControl } from "../planning/use-plans-tab";
 import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
@@ -268,7 +269,7 @@ function UnreadPage({
   );
 }
 
-/** One automation's page that names an automation the list no longer holds: it was deleted, or is not this workspace's. */
+/** One automation's page that names an automation the list does not hold: it was deleted, or is of a workspace the reader is not in, as a link may name. */
 function GonePage({ onBack }: { onBack: () => void }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, onBack);
   return (
@@ -282,9 +283,7 @@ function GonePage({ onBack }: { onBack: () => void }): React.JSX.Element {
         </div>
       </header>
       <div className="automations-scroll">
-        <EmptyState icon={<ZapIcon />} title="This automation is gone">
-          It was deleted, or it belongs to another workspace.
-        </EmptyState>
+        <NotFound thing={NOT_FOUND_THING.AUTOMATION} />
       </div>
     </section>
   );

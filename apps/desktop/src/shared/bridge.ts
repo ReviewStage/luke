@@ -7,6 +7,7 @@ import {
   productEventFromWire,
 } from "@luke/features/analytics";
 import { type AvatarGrant, avatarGrantFromWire } from "@luke/features/avatar-grant";
+import { isLinkPlace, type ReadLink } from "@luke/features/luke-link";
 import { type VoiceLiveSessionChanged, voiceLiveSessionChangedSchema } from "@luke/gateway";
 import { type AgentWireTrace, isAgentWireTrace } from "@luke/gateway/devtrace";
 import { type Act, type ActOutcome, isActOutcome, parsedAct } from "@luke/host/acts";
@@ -336,19 +337,16 @@ export const BRIDGE = {
     result: result<{ planId: string }>((value) => isRecord(value) && isWireString(value.planId)),
   }),
   /**
-   * A Luke link the system handed the app: the panel is to open its plan,
-   * scrolled to its section where it names one. An event, as a click is,
+   * A Luke link the system handed the app: the panel is to open the place it
+   * names, in the workspace it was written under. An event, as a click is,
    * because it is an ask the window answers once.
    */
   onShowLink: entry({
     kind: "subscribe",
     channel: "app:show-link",
     args: noArgs,
-    result: result<{ planId: string; anchor?: string }>(
-      (value) =>
-        isRecord(value) &&
-        isWireString(value.planId) &&
-        (value.anchor === undefined || isWireString(value.anchor)),
+    result: result<ReadLink>(
+      (value) => isRecord(value) && isWireString(value.workspace) && isLinkPlace(value.place),
     ),
   }),
   /**

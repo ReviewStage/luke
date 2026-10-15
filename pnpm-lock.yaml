@@ -939,6 +939,9 @@ importers:
       '@luke/live':
         specifier: workspace:*
         version: link:../live
+      '@luke/settings':
+        specifier: workspace:*
+        version: link:../settings
       '@luke/voice':
         specifier: workspace:*
         version: link:../voice
