@@ -100,6 +100,33 @@ test("a link pasted with a trailing slash, a query, or a fragment its kind has n
   });
 });
 
+test("a task's own link, or a section's, is read under /task/ and with a slash after its id, as under /plan/", () => {
+  for (const target of [
+    `${HOME}/task/${PLAN}#rollout`,
+    `${HOME}/plan/${PLAN}/#rollout`,
+    `tryluke://tryluke.dev/acme/task/${PLAN}/#Rollout`,
+  ]) {
+    assert.deepEqual(
+      readLink(target),
+      { workspace: "acme", place: { kind: LINK_PLACE.SECTION, planId: PLAN, anchor: "rollout" } },
+      target,
+    );
+  }
+  assert.equal(appLinkOf(`${HOME}/task/${PLAN}/`), `tryluke://tryluke.dev/acme/plan/${PLAN}`);
+});
+
+test("a section headed by the longest heading a plan takes, percent-encoded, is still its link", () => {
+  const anchor = "語".repeat(1_000);
+  const link = linkOf({ kind: LINK_PLACE.SECTION, planId: PLAN, anchor }, "acme");
+
+  assert.ok(link.length > 4_000);
+  assert.deepEqual(readLink(link), {
+    workspace: "acme",
+    place: { kind: LINK_PLACE.SECTION, planId: PLAN, anchor },
+  });
+  assert.equal(appLinkOf(link), link.replace("https:", "tryluke:"));
+});
+
 test("a task's places are read under the name the unit of work is taking, /task/, as under /plan/", () => {
   assert.deepEqual(readLink(`${HOME}/task/${PLAN}/agent/${AGENT}`), {
     workspace: "acme",

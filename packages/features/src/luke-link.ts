@@ -87,8 +87,8 @@ const STEP = {
 const TASK_STEPS: ReadonlySet<string> = new Set([STEP.PLAN, STEP.TASK]);
 
 const LINK_BOUNDS = {
-  /** The most characters a link may spell before it is read. */
-  MAX_LINK_CHARS: 4_000,
+  /** The most characters a link may spell before it is read: a section's at the mention codec's own bound, its anchor a long heading percent-encoded. */
+  MAX_LINK_CHARS: 24_000,
   /** The most characters a workspace's slug, or an id, may spell. */
   MAX_STEP_CHARS: 200,
 } as const;
@@ -314,9 +314,14 @@ function placeFields(steps: readonly string[]) {
   }
 }
 
-/** A task's or a section's link, read by the codec that writes a mention of either. */
-function taskLink(target: string): LinkPlace | undefined {
-  const mention = decodeMention(target, null);
+/**
+ * A task's or a section's link, read by the codec that writes a mention of
+ * either, as the form it writes: `/plan/`, whichever step named the task,
+ * with no slash after the id, and the fragment as it came.
+ */
+function taskLink(workspace: string, planId: string, hash: string): LinkPlace | undefined {
+  const written = `${LINK_ORIGIN}/${encodedStep(workspace)}/${STEP.PLAN}/${encodedStep(planId)}${hash}`;
+  const mention = decodeMention(written, null);
   if (mention?.kind === MENTION_KIND.PLAN) return { kind: LINK_PLACE.TASK, planId: mention.planId };
   if (mention?.kind === MENTION_KIND.SECTION) {
     return { kind: LINK_PLACE.SECTION, planId: mention.planId, anchor: mention.anchor };
@@ -411,9 +416,11 @@ export function readLink(target: string): ReadLink | undefined {
   if (workspace.length > LINK_BOUNDS.MAX_STEP_CHARS) return undefined;
   if (!after.every((step): step is string => step !== undefined && step !== "")) return undefined;
   // A task's own link, or a section's, is read by the codec that writes a mention of either.
-  const fields =
-    after.length === 2 && TASK_STEPS.has(after[0] ?? "") ? undefined : placeFields(after);
-  const place = fields === undefined ? taskLink(target) : Option.getOrUndefined(readPlace(fields));
+  const [step, planId, ...rest] = after;
+  const place =
+    step !== undefined && TASK_STEPS.has(step) && planId !== undefined && rest.length === 0
+      ? taskLink(workspace, planId, url.hash)
+      : Option.getOrUndefined(readPlace(placeFields(after)));
   return place === undefined ? undefined : { workspace, place };
 }
 
