@@ -2,14 +2,11 @@
 
 import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
-import { IDLE_PLANNING_VIEW } from "@luke/features/planning-view";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
-import { WINDOW_ROLE } from "@luke/gateway/window-session";
 import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
-import type { AppStateSnapshot } from "@luke/host/app-state";
-import { EXPERIMENT, type ExperimentChoices } from "@luke/settings";
+import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
-import { appSettingsWire, experimentsOn, settingsView } from "@luke/settings/testing";
+import { experimentsOn } from "@luke/settings/testing";
 import { UPDATE_STATUS } from "@luke/settings/update";
 import { DOCUMENT_REGION, PLANS_PAGE } from "@luke/ui/planning-model";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
@@ -19,6 +16,7 @@ import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
+import { handState } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { DOCUMENT_NAME, DOCUMENT_PLAN } from "#testing/document-plan";
 import { plansControl } from "#testing/plans-control";
@@ -301,53 +299,6 @@ test("the window is called by what stands in it: the plan on screen in its own w
   });
   assert.equal(document.title, "Factory — Acme");
 });
-
-/** The panel's snapshot of main's document with the account's experiments as given, everything else as a launch begins it. */
-function snapshotWith(experiments: ExperimentChoices): AppStateSnapshot {
-  return {
-    version: 1,
-    run: {
-      profile: "test",
-      packaged: false,
-      platform: "darwin",
-      appVersion: "1.0.0",
-      captureMode: false,
-      fixtureMode: false,
-      accountRequired: false,
-      agentTraceEnabled: false,
-    },
-    settings: appSettingsWire(settingsView({ experiments })),
-    account: SETTINGS.account,
-    update: {
-      status: UPDATE_STATUS.IDLE,
-      currentVersion: "1.0.0",
-      installSupported: true,
-      upToDate: false,
-    },
-    audio: { microphoneStatus: MICROPHONE_STATUS.GRANTED },
-    hotkeys: { talkHeld: true },
-    voice: {},
-    planning: IDLE_PLANNING_VIEW,
-    codingAgents: { unseen: [] },
-    inbox: { waiting: [], plans: [], planless: [], automations: [] },
-    notifications: { refused: false },
-    sessionReplay: { permitted: false, halted: false },
-    window: { role: WINDOW_ROLE.PANEL, fullScreen: false },
-  };
-}
-
-/** Main's document as the bridge hands it, with the account's experiments as given. */
-function handState(experiments: ExperimentChoices): void {
-  const snapshot = snapshotWith(experiments);
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      ...window.luke,
-      onAppState: () => () => undefined,
-      requestAppState: () => Promise.resolve(snapshot),
-    },
-  });
-}
 
 /** Lets every promise settled so far run its continuations. */
 async function settle(): Promise<void> {

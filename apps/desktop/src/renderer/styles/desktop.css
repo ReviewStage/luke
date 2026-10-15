@@ -3670,11 +3670,16 @@ body:has(.app-stage[data-capture="true"])
   padding: var(--space-8) var(--column-inset) var(--column-inset);
 }
 
-/* An item's row is a sidebar row led by its agent's mark, centred on the
-   line as a pinned tab's is, with no Unpin to leave room for. */
+/* An item's row is a sidebar row led by its agent's tile (`actor-ref.tsx`),
+   centred on the line as a pinned tab's is, with no Unpin to leave room for. */
 .inbox-row .sidebar-plan-line {
   align-items: center;
   gap: var(--space-6);
+}
+
+.inbox-row-mark {
+  display: flex;
+  flex: none;
 }
 
 /* An item that needs the developer wears a mail app's unread dot in the system
@@ -3703,9 +3708,18 @@ body:has(.app-stage[data-capture="true"])
   transform: translateY(-50%);
 }
 
-/* The pane's words under the agent's byline start where its name does, past its mark. */
+/* The agent's byline names it in the thread's own ink, as a message's sender is named. */
+.inbox-byline-agent {
+  display: flex;
+  min-width: 0;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+/* The pane's words under the agent's byline start where its name does, past
+   its tile: an inline actor's 16px and its 5px gap (`.actor-ref`). */
 .inbox-indent {
-  padding-left: calc(var(--control-glyph) + var(--glyph-gap));
+  padding-left: 21px;
 }
 
 /* The pane's crumbs are drawn as the plan's column's tabs (`.tab`), parted

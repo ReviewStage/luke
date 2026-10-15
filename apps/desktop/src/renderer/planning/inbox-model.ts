@@ -293,7 +293,15 @@ export const INBOX_HOLDER = {
   AUTOMATION: "automation",
 } as const;
 
-/** The plan holding an item, or the automation holding an item of an agent with no plan, named as its group's header names it; none for the agents no automation the reader may read started. */
+/** An agent with no plan as main's read of what waits on the developer names it: its title, its model, and the automation that started it. */
+type InboxAgentLine = Pick<AppInboxPlanlessItem, "agentTitle" | "agentModel" | "automationId">;
+
+/**
+ * The plan holding an item, or the automation holding an item of an agent
+ * with no plan, named as its group's header names it, and its agents as
+ * main's read names them, by id; none for the agents no automation the
+ * reader may read started.
+ */
 export type InboxHolder =
   | { readonly kind: typeof INBOX_HOLDER.PLAN; readonly plan: PlanSummary }
   | {
@@ -301,6 +309,7 @@ export type InboxHolder =
       readonly automationId: string | null;
       readonly name: string;
       readonly repository: string;
+      readonly agents: ReadonlyMap<string, InboxAgentLine>;
     };
 
 /** The key a holder's group is folded and drawn by: the plan's id, the automation's, or one key for the agents no automation names. */
@@ -326,6 +335,23 @@ const NO_AUTOMATION_KEY = "no-automation";
 const NO_AUTOMATION_NAME = "Other agents";
 
 /**
+ * Whether a waiting item of an agent with no plan is listed in the workspace
+ * given: one of that workspace's agents', or one whose workspace the service
+ * does not name. Note that with no workspace listed every agent's items
+ * stand, as every plan's do.
+ */
+export function listedIn(
+  entry: Pick<AppInboxPlanlessItem, "workspaceId">,
+  workspaceId: string | undefined,
+): boolean {
+  return (
+    workspaceId === undefined ||
+    entry.workspaceId === undefined ||
+    entry.workspaceId === workspaceId
+  );
+}
+
+/**
  * The groups the items of agents with no plan stand in: one per automation
  * that started them, by its name, and one for the agents no automation the
  * reader may read names, each holding every item its agents' reads hold,
@@ -338,28 +364,28 @@ export function planlessGroups(
   read: ReadonlyMap<string, readonly InboxItem[]>,
   workspaceId: string | undefined,
 ): readonly InboxGroup[] {
-  const groups = new Map<string, { holder: InboxHolder; agents: Set<string> }>();
+  const groups = new Map<string, { holder: InboxHolder; agents: Map<string, InboxAgentLine> }>();
   for (const entry of waiting) {
-    // Note that with no workspace listed every agent's items stand, as every plan's do.
-    const elsewhere =
-      workspaceId !== undefined &&
-      entry.workspaceId !== undefined &&
-      entry.workspaceId !== workspaceId;
-    if (elsewhere) continue;
-    const holder: InboxHolder = {
+    if (!listedIn(entry, workspaceId)) continue;
+    const key = entry.automationId ?? NO_AUTOMATION_KEY;
+    const agents = groups.get(key)?.agents ?? new Map<string, InboxAgentLine>();
+    agents.set(entry.agentId, {
+      agentTitle: entry.agentTitle,
+      agentModel: entry.agentModel,
+      automationId: entry.automationId,
+    });
+    const holder: InboxHolder = groups.get(key)?.holder ?? {
       kind: INBOX_HOLDER.AUTOMATION,
       automationId: entry.automationId,
       name: entry.automationName ?? NO_AUTOMATION_NAME,
       repository: entry.repository,
+      agents,
     };
-    const key = holderKey(holder);
-    const group = groups.get(key) ?? { holder, agents: new Set<string>() };
-    group.agents.add(entry.agentId);
-    groups.set(key, group);
+    groups.set(key, { holder, agents });
   }
   return [...groups.values()].map(({ holder, agents }) => ({
     holder,
-    items: [...agents].flatMap((agentId) => read.get(agentId) ?? []),
+    items: [...agents.keys()].flatMap((agentId) => read.get(agentId) ?? []),
   }));
 }
 

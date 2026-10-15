@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
 import { useAct } from "../act";
 import { runAppCommand } from "../app-commands";
+import { MemberDirectory } from "../member-directory";
 import { InboxItemRow } from "../planning/inbox-list";
 import {
   holderName,
@@ -220,20 +221,23 @@ function HomeInbox({ plans, now }: { plans: PlansControl; now: number }): React.
         {empty ? null : <span className="home-section-count">{waiting.items.length}</span>}
       </h2>
       {empty ? null : (
-        <ul className="sidebar-plans">
-          {waiting.items.map((listed) => (
-            <InboxItemRow
-              key={listed.item.id}
-              listed={listed}
-              chosen={false}
-              now={now}
-              models={plans.agents.models}
-              readerId={plans.me}
-              context={holderName(listed.holder)}
-              onChoose={open}
-            />
-          ))}
-        </ul>
+        // The rows' agent cards name who started each agent, read against the listed workspace's members.
+        <MemberDirectory workspace={plans.workspace} readerId={plans.me}>
+          <ul className="sidebar-plans">
+            {waiting.items.map((listed) => (
+              <InboxItemRow
+                key={listed.item.id}
+                listed={listed}
+                chosen={false}
+                now={now}
+                models={plans.agents.models}
+                readerId={plans.me}
+                context={holderName(listed.holder)}
+                onChoose={open}
+              />
+            ))}
+          </ul>
+        </MemberDirectory>
       )}
       {waiting.failed ? (
         <div className="sidebar-note flex items-center gap-2" role="alert">
