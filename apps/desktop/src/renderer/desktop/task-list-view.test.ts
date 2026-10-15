@@ -41,10 +41,14 @@ const MEMBERS: readonly WorkspaceMember[] = [
   { userId: "user-maya", name: "Maya Okafor", email: "maya@acme.dev", role: "member" },
 ];
 
+/** The Tasks section, named for the tasks or for the archived ones it stands turned to. */
+const TASK_LIST = 'nav:is([aria-label="Tasks"], [aria-label="Archived tasks"])';
+
 const roots: Root[] = [];
 
 beforeEach(() => {
   window.localStorage.clear();
+  window.sessionStorage.clear();
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
     value: () => ({
@@ -166,7 +170,7 @@ function choose(sidebar: HTMLElement, submenu: string, choice: string): void {
 
 /** The Tasks section's group headers, in order. */
 function groupNames(sidebar: HTMLElement): string[] {
-  const tasks = sidebar.querySelector('nav[aria-label="Tasks"]');
+  const tasks = sidebar.querySelector(TASK_LIST);
   assert.ok(tasks, "the Tasks section stands");
   return [...tasks.querySelectorAll(".sidebar-repository-name")].map(
     (name) => name.textContent ?? "",
@@ -177,7 +181,7 @@ function groupNames(sidebar: HTMLElement): string[] {
 function taskRows(
   sidebar: HTMLElement,
 ): { name: string; repository: string | undefined; face: boolean }[] {
-  const tasks = sidebar.querySelector('nav[aria-label="Tasks"]');
+  const tasks = sidebar.querySelector(TASK_LIST);
   assert.ok(tasks, "the Tasks section stands");
   return [...tasks.querySelectorAll(".sidebar-plan")].map((row) => ({
     name: row.querySelector(".sidebar-plan-name")?.textContent ?? "",
@@ -226,7 +230,7 @@ test("ordered by Created, the tasks run newest started first and each row shows 
     taskRows(sidebar).map((row) => row.name),
     ["Fix flaky deploy", "Billing empty states", "Retry webhooks"],
   );
-  const times = [...sidebar.querySelectorAll('nav[aria-label="Tasks"] .sidebar-plan time')];
+  const times = [...sidebar.querySelectorAll(`${TASK_LIST} .sidebar-plan time`)];
   assert.deepEqual(
     times.map((time) => time.getAttribute("datetime")),
     [30, 20, 10].map((at) => new Date(at).toISOString()),
@@ -393,10 +397,7 @@ test("an empty workspace under a filter says only that it holds no tasks", async
 
 /** The Tasks section's head, as it names the section. */
 function headName(sidebar: HTMLElement): string | undefined {
-  return (
-    sidebar.querySelector('nav[aria-label="Tasks"] .sidebar-section-head-name')?.textContent ??
-    undefined
-  );
+  return sidebar.querySelector(`${TASK_LIST} .sidebar-section-head-name`)?.textContent ?? undefined;
 }
 
 /** Turns the Tasks section to the archived tasks, or back, from View options. */
@@ -442,6 +443,8 @@ test("the archived view filters by creator as the list does, and is not kept for
     ["Old dashboard charts"],
   );
   unmountAll();
+  // A launch opens a window with nothing held for its session.
+  window.sessionStorage.clear();
 
   const relaunched = await mountRead(ACME);
   assert.equal(headName(relaunched), "Tasks");
@@ -580,4 +583,16 @@ test("a creator grouping kept for a workspace nobody shares now reads as by repo
   assert.deepEqual(groupNames(sidebar), ["console", "relay"]);
   assert.equal(appCommandOffered(APP_COMMAND.GROUP_TASKS_BY_REPOSITORY), false);
   assert.equal(appCommandOffered(APP_COMMAND.LIST_TASKS_UNGROUPED), true);
+});
+
+test("the sidebar stepping aside for Settings and coming back finds the archived view as it was, named so to a screen reader", async () => {
+  toggleArchived(await mountRead(ACME));
+  unmountAll();
+
+  const back = await mountRead(ACME);
+  assert.equal(headName(back), "Archived tasks");
+  assert.ok(
+    back.querySelector('nav[aria-label="Archived tasks"]'),
+    "the list is named for the archive",
+  );
 });

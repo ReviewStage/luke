@@ -32,7 +32,7 @@ import {
 } from "@luke/ui/task-list-model";
 import type { UpdateControl } from "@luke/voice/settings-controls";
 import { FactoryIcon, HouseIcon, InboxIcon, ZapIcon } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
 import { runAppCommand, useAppCommand } from "../app-commands";
@@ -60,13 +60,12 @@ import { SidebarFoot } from "./sidebar-foot";
 import { type CountNoun, SidebarGroupHeader } from "./sidebar-group-header";
 import { SidebarPinnedTab } from "./sidebar-pinned-tab";
 import {
-  type ArchivedView,
   SidebarSectionHead,
   TaskViewOptions,
   useTaskViewCommands,
   ViewChips,
 } from "./sidebar-task-view";
-import { useTaskListView } from "./task-list-view";
+import { useArchivedView, useTaskListView } from "./task-list-view";
 import { EDGE_SIDE, type ResizableEdgeProps, useResizableEdge } from "./use-resizable-edge";
 import { WorkspaceSwitcher } from "./workspace-switcher";
 
@@ -1003,17 +1002,7 @@ function SidebarColumn({
   const { memberCount } = plans.workspace ?? {};
   const shared = memberCount === undefined ? (reader.members?.length ?? 0) > 1 : memberCount > 1;
   const createdBy = shared ? taskView.view.createdBy : undefined;
-  // The archived tasks stand in the list's place for the workspace they were
-  // turned to in, and no longer: another workspace, or the next launch,
-  // opens on its tasks.
-  const [archivedIn, setArchivedIn] = useState<string | undefined>(undefined);
-  // Note that the view is let go of as the workspace changes, rather than
-  // only hidden, so coming back to the workspace opens on its tasks.
-  if (archivedIn !== undefined && archivedIn !== plans.workspace?.id) setArchivedIn(undefined);
-  const archive: ArchivedView = {
-    shown: archivedIn !== undefined && archivedIn === plans.workspace?.id,
-    onShown: (shown) => setArchivedIn(shown ? plans.workspace?.id : undefined),
-  };
+  const archive = useArchivedView(plans.workspace?.id, sidebar.staged);
   useTaskViewCommands({
     offered: plans.signedIn && plans.workspace !== undefined,
     control: taskView,
@@ -1193,7 +1182,7 @@ function SidebarColumn({
             onOpenTab={chosen(openPinnedTab)}
           />
         ) : null}
-        <nav className="sidebar-group" aria-label="Tasks">
+        <nav className="sidebar-group" aria-label={archive.shown ? "Archived tasks" : "Tasks"}>
           {plans.signedIn ? (
             <SidebarSectionHead name={archive.shown ? "Archived tasks" : "Tasks"}>
               <TaskViewOptions
