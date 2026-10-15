@@ -66,6 +66,11 @@ export function useAutomations(workspaceId: string | undefined) {
     };
     act(ACT_KIND.AUTOMATIONS_LIST, { workspaceId }).then(taken, () => taken(UNANSWERED));
   }, [act, workspaceId]);
+  // Note that a write settles by reading the workspace listed then, through
+  // the newest reload, so one made before the window moved to another
+  // workspace reads that one's list rather than the list it was made in.
+  const reloadNow = useRef(reload);
+  reloadNow.current = reload;
   // Note that the minute is read so the list is read again each minute the page stands.
   useEffect(() => {
     void now;
@@ -83,7 +88,7 @@ export function useAutomations(workspaceId: string | undefined) {
           const { automation } = answer;
           setHeld((was) => was && { ...was, read: replaced(was.read, automation) });
         }
-        reload();
+        reloadNow.current();
         return answer;
       };
       return act(ACT_KIND.AUTOMATIONS_CHANGE, { automationId, change: { enabled } }).then(
@@ -91,7 +96,7 @@ export function useAutomations(workspaceId: string | undefined) {
         () => settled(UNANSWERED),
       );
     },
-    [act, newestWrite, reload],
+    [act, newestWrite],
   );
   const read = held?.workspaceId === workspaceId ? held?.read : undefined;
   return { read, reload, toggle };

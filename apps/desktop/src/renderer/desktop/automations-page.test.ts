@@ -107,7 +107,10 @@ beforeEach(() => {
         if (request.kind === ACT_KIND.AUTOMATIONS_LIST) {
           listed.push(request.payload.workspaceId);
           if (listHeld) return new Promise(() => undefined);
-          const value = lists.shift() ?? { automations: standing };
+          const theirs = standing.filter(
+            (each) => each.workspaceId === request.payload.workspaceId,
+          );
+          const value = lists.shift() ?? { automations: theirs };
           return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
         }
         if (request.kind === ACT_KIND.AUTOMATIONS_CHANGE) {
@@ -141,15 +144,15 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The Automations page, standing in the plan's place over the workspace listed. */
-function mount(plans = plansControl({ workspace: WORKSPACE })): HTMLElement {
-  const container = document.createElement("div");
-  document.body.append(container);
-  root = createRoot(container);
+/** The registry every render of one mount shares, so a render again is the same window. */
+let registry = AtomRegistry.make();
+
+/** The page as drawn over the plans control given, rendered again in place where one stands. */
+function render(plans: ReturnType<typeof plansControl>): void {
   act(() =>
     root?.render(
       onRegistry(
-        AtomRegistry.make(),
+        registry,
         createElement(
           Fragment,
           null,
@@ -159,6 +162,15 @@ function mount(plans = plansControl({ workspace: WORKSPACE })): HTMLElement {
       ),
     ),
   );
+}
+
+/** The Automations page, standing in the plan's place over the workspace listed. */
+function mount(plans = plansControl({ workspace: WORKSPACE })): HTMLElement {
+  const container = document.createElement("div");
+  document.body.append(container);
+  root = createRoot(container);
+  registry = AtomRegistry.make();
+  render(plans);
   return container;
 }
 
@@ -286,6 +298,29 @@ test("once a switch settles the list is read again, so what changed elsewhere me
     ["Dependency bumps, weekly", "Acme"],
     ["Morning digest", "Personal"],
   ]);
+});
+
+test("a switch that settles after the window moved to another workspace reads that workspace's list", async () => {
+  const beta: Workspace = { ...WORKSPACE, id: "workspace-beta", name: "Beta" };
+  const betaAutomation = automation(9, { name: "Beta's digest", workspaceId: beta.id });
+  standing = [...standing, betaAutomation];
+  heldChanges = [];
+  const page = mount();
+  await settle();
+
+  act(() =>
+    rowOf(page, "Nightly flaky-test sweep")
+      .querySelector<HTMLButtonElement>("[role=switch]")
+      ?.click(),
+  );
+  await settle();
+  render(plansControl({ workspace: beta }));
+  await settle();
+  heldChanges[0]?.();
+  await settle();
+
+  assert.deepEqual(rows(page), [["Beta's digest", "Personal"]]);
+  assert.equal(listed.at(-1), beta.id);
 });
 
 test("a switch the service refuses stays where it was and says who may move it", async () => {
