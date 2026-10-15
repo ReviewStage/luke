@@ -382,3 +382,49 @@ test("a press on Factory's row in a floating sidebar puts the sidebar away, as e
   act(() => row.click());
   assert.deepEqual(told, [SIDEBAR_OVERLAY.CLOSED]);
 });
+
+test("the Automations page's sidebar row and its command stand only while the account has its experiment on", async () => {
+  handState({});
+  const off = mount(false);
+  await settle();
+  assert.equal(off.querySelector(".sidebar-automations"), null);
+  assert.equal(runAppCommand(APP_COMMAND.AUTOMATIONS), false);
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  handState(experimentsOn(EXPERIMENT.AUTOMATIONS));
+  const on = mount(false);
+  await settle();
+  assert.ok(on.querySelector(".sidebar-automations"));
+  assert.equal(runAppCommand(APP_COMMAND.AUTOMATIONS), true);
+});
+
+test("the Automations page stands in the plan's place, titled for the listed workspace, and gives it back once its experiment is off", async () => {
+  const closed: string[] = [];
+  const automationsView = {
+    open: true,
+    onOpen: ignore,
+    onClose: () => closed.push("closed"),
+  };
+  const overrides = {
+    workspaces: [ACME],
+    workspace: ACME,
+    automationsView,
+    region: { kind: DOCUMENT_REGION.READY, plan: DOCUMENT_PLAN },
+  };
+
+  handState(experimentsOn(EXPERIMENT.AUTOMATIONS));
+  const on = mount(false, false, overrides);
+  await settle();
+  assert.ok(on.querySelector("section[aria-label=Automations]"));
+  assert.equal(document.title, "Automations — Acme");
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+  closed.length = 0;
+
+  handState({});
+  const off = mount(false, false, overrides);
+  await settle();
+  assert.equal(off.querySelector("section[aria-label=Automations]"), null);
+  assert.deepEqual(closed, ["closed"]);
+});

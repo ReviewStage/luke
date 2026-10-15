@@ -10,6 +10,8 @@ import { Option, Schema } from "effect";
 export const EXPERIMENT = {
   /** The read-only Plan → Build → Ship board beside the Inbox. */
   FACTORY: "factory",
+  /** Coding agents started on a schedule, listed and made on their own page. */
+  AUTOMATIONS: "automations",
 } as const;
 
 export type Experiment = (typeof EXPERIMENT)[keyof typeof EXPERIMENT];
@@ -33,6 +35,14 @@ export interface ExperimentEntry {
  * there is no status to drift and every experiment is off until turned on.
  */
 export const EXPERIMENTS = [
+  {
+    key: EXPERIMENT.AUTOMATIONS,
+    name: "Automations",
+    detail:
+      "Start a coding agent on a schedule, for you or for the whole workspace, from the Automations page in the sidebar.",
+    owner: "Dean",
+    since: "2026-10-15",
+  },
   {
     key: EXPERIMENT.FACTORY,
     name: "Factory",
