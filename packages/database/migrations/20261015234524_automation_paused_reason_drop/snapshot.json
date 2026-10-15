@@ -1,8 +1,8 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "fc972962-5a97-424f-abcf-36b63f98f4a1",
-  "prevIds": ["57bea710-3279-4bdf-8264-bf0e87f65633", "9ab34f59-231f-4d22-9950-ca0e2b1d84f2"],
+  "id": "432586bb-c3a7-452b-aae4-d1b3109225c0",
+  "prevIds": ["3441dcf4-626b-4597-a013-0165962548fc", "6c33933a-c64a-4be6-a3b7-17870c42c3a2"],
   "ddl": [
     {
       "isRlsEnabled": false,
@@ -289,6 +289,12 @@
     {
       "isRlsEnabled": false,
       "name": "voice_session_usage",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "voice_avatar_sessions",
       "entityType": "tables",
       "schema": "public"
     },
@@ -4140,6 +4146,19 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "integration_connection"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
       "name": "user_id",
       "entityType": "columns",
       "schema": "public",
@@ -4154,6 +4173,58 @@
       "generated": null,
       "identity": null,
       "name": "provider",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "integration_connection"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "connect_subject",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "integration_connection"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "connection_name",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "integration_connection"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "label",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "integration_connection"
+    },
+    {
+      "type": "boolean",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "false",
+      "generated": null,
+      "identity": null,
+      "name": "is_primary",
       "entityType": "columns",
       "schema": "public",
       "table": "integration_connection"
@@ -6314,6 +6385,110 @@
       "name": "id",
       "entityType": "columns",
       "schema": "public",
+      "table": "voice_avatar_sessions"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "voice_session_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "voice_avatar_sessions"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "user_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "voice_avatar_sessions"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "persona_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "voice_avatar_sessions"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "started_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "voice_avatar_sessions"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "ended_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "voice_avatar_sessions"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "seconds",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "voice_avatar_sessions"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "end_reason",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "voice_avatar_sessions"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
       "table": "voice_sessions"
     },
     {
@@ -7602,6 +7777,62 @@
       "nameExplicit": true,
       "columns": [
         {
+          "value": "user_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "connection_name",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "integration_connection_user_name_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "integration_connection"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "provider",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "connect_subject",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "integration_connection_provider_subject_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "integration_connection"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
           "value": "state",
           "isExpression": false,
           "asc": true,
@@ -7615,6 +7846,34 @@
       "method": "btree",
       "concurrently": false,
       "name": "integration_connection_state_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "integration_connection"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "user_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "provider",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "integration_connection_user_provider_idx",
       "entityType": "indexes",
       "schema": "public",
       "table": "integration_connection"
@@ -8129,6 +8388,27 @@
       "entityType": "indexes",
       "schema": "public",
       "table": "turns"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "voice_session_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": "\"ended_at\" is null",
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "voice_avatar_sessions_open",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "voice_avatar_sessions"
     },
     {
       "nameExplicit": true,
@@ -9281,6 +9561,32 @@
     },
     {
       "nameExplicit": false,
+      "columns": ["voice_session_id"],
+      "schemaTo": "public",
+      "tableTo": "voice_sessions",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "voice_avatar_sessions_voice_session_id_voice_sessions_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "voice_avatar_sessions"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["user_id"],
+      "schemaTo": "public",
+      "tableTo": "user",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "voice_avatar_sessions_user_id_user_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "voice_avatar_sessions"
+    },
+    {
+      "nameExplicit": false,
       "columns": ["user_id"],
       "schemaTo": "public",
       "tableTo": "user",
@@ -9346,14 +9652,6 @@
       "entityType": "pks",
       "schema": "public",
       "table": "admin_favorite"
-    },
-    {
-      "columns": ["user_id", "provider"],
-      "nameExplicit": false,
-      "name": "integration_connection_user_id_provider_pk",
-      "entityType": "pks",
-      "schema": "public",
-      "table": "integration_connection"
     },
     {
       "columns": ["user_id", "plan_id"],
@@ -9614,6 +9912,14 @@
     {
       "columns": ["id"],
       "nameExplicit": false,
+      "name": "integration_connection_pkey",
+      "schema": "public",
+      "table": "integration_connection",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["id"],
+      "nameExplicit": false,
       "name": "mac_command_pkey",
       "schema": "public",
       "table": "mac_command",
@@ -9729,6 +10035,14 @@
       "name": "voice_session_usage_pkey",
       "schema": "public",
       "table": "voice_session_usage",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["id"],
+      "nameExplicit": false,
+      "name": "voice_avatar_sessions_pkey",
+      "schema": "public",
+      "table": "voice_avatar_sessions",
       "entityType": "pks"
     },
     {
