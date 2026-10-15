@@ -319,10 +319,22 @@ function callFailure(text: string): Failure {
  * Settings; the repository given to Luke on GitHub; another repository
  * chosen; or the plan moved to the workspace whose GitHub reaches it. A
  * service that said nothing more says the bare sentence, which Retry
- * answers.
+ * answers, and so does an agent with no plan wherever the remedy is pressed
+ * on the plan: only giving the repository to Luke on GitHub is not.
  */
-function unreachedFailure(unreached: RepositoryUnreached | undefined, planId: string): Failure {
-  if (unreached === undefined) {
+function unreachedFailure(
+  unreached: RepositoryUnreached | undefined,
+  planId: string | null,
+): Failure {
+  if (unreached?.reason === REPOSITORY_UNREACHED.NOT_SELECTED) {
+    return {
+      reason: FAILURE_REASON.ADD_REPOSITORY,
+      text: `Luke on GitHub doesn't have access to ${unreached.repository}.`,
+      repository: unreached.repository,
+      settingsUrl: unreached.settingsUrl,
+    };
+  }
+  if (unreached === undefined || planId === null) {
     return callFailure(SHARED_FAILURE_NOTE[CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE]);
   }
   const { repository } = unreached;
@@ -347,13 +359,6 @@ function unreachedFailure(unreached: RepositoryUnreached | undefined, planId: st
             ? `${repository} isn't under the GitHub account this workspace is connected to.`
             : `${repository} isn't under ${unreached.connectedTo}, the GitHub account this workspace is connected to.`,
         planId,
-      };
-    case REPOSITORY_UNREACHED.NOT_SELECTED:
-      return {
-        reason: FAILURE_REASON.ADD_REPOSITORY,
-        text: `Luke on GitHub doesn't have access to ${repository}.`,
-        repository,
-        settingsUrl: unreached.settingsUrl,
       };
     case REPOSITORY_UNREACHED.GONE:
       return {
@@ -392,13 +397,9 @@ function startFailureWords(failure: CodingAgentCallFailure): string {
   }
 }
 
-/**
- * What a message that did not reach the agent says under the composer, and
- * what mends it. Note that an agent with no plan says its words alone,
- * because every remedy of a repository out of reach is pressed on the plan.
- */
+/** What a message that did not reach the agent says under the composer, and what mends it, on a plan or, for an agent with none, where the remedy needs no plan. */
 export function messageFailureNote(refused: RefusedCall, planId: string | null): Failure {
-  return refused.failure === CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE && planId !== null
+  return refused.failure === CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE
     ? unreachedFailure(refused.unreached, planId)
     : callFailure(messageFailureWords(refused.failure));
 }

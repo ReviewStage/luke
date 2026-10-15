@@ -475,7 +475,7 @@ test("a planning transcript's raw parts read as the agent tab reads them: eve's 
   assert.equal(startedAgentOf(worker), undefined);
 });
 
-test("a message refused for a repository out of reach names the plan's remedy on a plan, and says its words alone on an agent with no plan", () => {
+test("a message refused for a repository out of reach names the plan's remedy on a plan, and on an agent with no plan says its words alone but where the remedy needs no plan", () => {
   const refused = {
     failure: CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
     unreached: { reason: REPOSITORY_UNREACHED.NOT_CONNECTED, repository: "acme/relay" },
@@ -488,5 +488,23 @@ test("a message refused for a repository out of reach names the plan's remedy on
   assert.deepEqual(planless, {
     reason: FAILURE_REASON.OTHER,
     text: messageFailureWords(CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE),
+  });
+  // Giving the repository to Luke on GitHub is pressed on GitHub, not the plan, so it stands for an agent with no plan.
+  const notSelected = messageFailureNote(
+    {
+      failure: CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
+      unreached: {
+        reason: REPOSITORY_UNREACHED.NOT_SELECTED,
+        repository: "acme/relay",
+        settingsUrl: "https://github.com/settings/installations/7",
+      },
+    },
+    null,
+  );
+  assert.deepEqual(notSelected, {
+    reason: FAILURE_REASON.ADD_REPOSITORY,
+    text: "Luke on GitHub doesn't have access to acme/relay.",
+    repository: "acme/relay",
+    settingsUrl: "https://github.com/settings/installations/7",
   });
 });
