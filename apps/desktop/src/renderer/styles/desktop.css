@@ -3718,8 +3718,12 @@ body:has(.app-stage[data-capture="true"])
 }
 
 /* The pane's words under the agent's byline start where its name does, past
-   its tile: an inline actor's 16px and its 5px gap (`.actor-ref`). */
+   its tile: an inline actor's 16px and its 5px gap (`.actor-ref`). They clip
+   what runs past them, as a message does, though not the keyboard's ring on
+   an option laid edge to edge in them. */
 .inbox-indent {
+  overflow: clip;
+  overflow-clip-margin: var(--focus-ring-reach);
   padding-left: 21px;
 }
 

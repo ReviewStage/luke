@@ -3098,6 +3098,45 @@ button.inbox-option:hover:not(:disabled) {
   opacity: 0.4;
 }
 
+/* An option's head (`inbox-pane.tsx`'s `OptionHead`): its label, and the
+   agent's recommendation as a badge at the option's top right, so it stands
+   in one place however the label wraps. The badge is the app's badge
+   (`.integration-tool-badge`) in the accent's fill, the primary button's,
+   while the item waits, and steps back to the quiet badge once it is
+   settled. It sits on the label's first line, centred on its 13px words. */
+.inbox-option-head {
+  display: flex;
+  width: 100%;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-8);
+}
+
+/* The label gives the badge its room: it shrinks past its longest word,
+   and a word too long for what is left, a path or an identifier, breaks
+   anywhere rather than pushing the badge out past the option's edge. */
+.inbox-option-label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.inbox-recommended {
+  flex: none;
+  margin-top: 3px;
+  padding: 0 var(--space-6);
+  border-radius: 4px;
+  background: var(--message-sent);
+  color: var(--on-accent);
+  font-size: 10.5px;
+  font-weight: 560;
+  line-height: 16px;
+}
+
+.inbox-recommended[data-settled="true"] {
+  background: var(--raised-strong);
+  color: var(--text-secondary);
+}
+
 /* An image block on the Inbox (`inbox-pane.tsx`): the picture the
    agent took, at the card's own reading width and no wider than itself, a
    press on it opening the attached-file viewer. The spinner's room stands
