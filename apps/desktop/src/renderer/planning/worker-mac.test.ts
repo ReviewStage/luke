@@ -1,7 +1,10 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
+import {
+  CODING_AGENT_CALL_FAILURE,
+  type CodingAgentMessagesAnswerView,
+} from "@luke/features/coding-agent-view";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -48,7 +51,7 @@ async function workerTabFor(reader: string): Promise<string> {
   const control = codingAgentsControl({
     agents: [AGENT],
     me: reader,
-    readTranscript: () => {
+    readTranscript: (): Promise<CodingAgentMessagesAnswerView> => {
       reads += 1;
       if (reads > 1) return Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
       return Promise.resolve({
@@ -69,6 +72,7 @@ async function workerTabFor(reader: string): Promise<string> {
         ],
         cursor: "1:0",
         status: CODING_AGENT_STATUS.COMPLETED,
+        title: null,
       });
     },
   });
