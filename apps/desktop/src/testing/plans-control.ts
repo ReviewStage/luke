@@ -10,7 +10,11 @@ import type { SummaryPin } from "../renderer/desktop/plan-summary";
 import type { CodingAgentsControl } from "../renderer/planning/use-coding-agents";
 import { MAIN_TAB } from "../renderer/planning/use-main-tabs";
 import { HISTORY_READ } from "../renderer/planning/use-plan-history";
-import type { PlansControl, VersionHistoryControl } from "../renderer/planning/use-plans-tab";
+import {
+  AUTOMATIONS_PAGE,
+  type PlansControl,
+  type VersionHistoryControl,
+} from "../renderer/planning/use-plans-tab";
 import {
   SIDE_PANEL_TAB,
   SIDE_PANEL_TABS,
@@ -259,7 +263,12 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
     agentView: { agentId: undefined, onOpen: ignore, onClose: ignore },
     inboxPlanless: [],
     factoryView: { open: false, onOpen: ignore, onClose: ignore },
-    automationsView: { open: false, onOpen: ignore, onClose: ignore },
+    automationsView: {
+      open: false,
+      place: { kind: AUTOMATIONS_PAGE.LIST },
+      onOpen: ignore,
+      onClose: ignore,
+    },
     callPlanId: undefined,
     onShowFile: ignore,
     onOpenPinnedTab: ignore,

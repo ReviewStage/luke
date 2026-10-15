@@ -3472,10 +3472,6 @@ body:has(.app-stage[data-capture="true"])
   padding: var(--space-8) var(--space-16);
 }
 
-.automation-row > .state-glyph {
-  color: var(--text-secondary);
-}
-
 .automation-row-copy {
   display: flex;
   min-width: 0;
@@ -3542,6 +3538,188 @@ body:has(.app-stage[data-capture="true"])
 
 .automation-owner[data-owner="workspace"] {
   color: var(--text-primary);
+}
+
+/* A row's name and schedule are its press, which opens its page; the owner,
+   the next run, and the switch beside them are not, so the switch stays a
+   switch. */
+.automation-row-open {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: var(--space-12);
+  margin: calc(-1 * var(--space-8)) 0;
+  padding: var(--space-8) 0;
+  background: none;
+  color: inherit;
+  text-align: left;
+}
+
+.automation-row-open > .state-glyph {
+  color: var(--text-secondary);
+}
+
+.automation-row:has(.automation-row-open:hover) {
+  background: var(--raised);
+}
+
+/* An automation's page: crumbs back to the list naming its owner, then its
+   name, the line saying who sees it, and its form at a Settings measure. */
+.automation-crumbs {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-4);
+  color: var(--text-secondary);
+}
+
+.automation-crumbs > svg {
+  width: 13px;
+  height: 13px;
+  flex: none;
+}
+
+.automation-crumb {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.automation-editor-status {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.automation-editor-status[data-dirty="true"] {
+  color: var(--text-secondary);
+}
+
+.automation-editor {
+  display: flex;
+  max-width: 780px; /* off-scale */
+  flex-direction: column;
+  gap: var(--space-12);
+}
+
+.automation-editor-name {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-primary);
+  font-size: 20px;
+  font-weight: 650;
+  outline: none;
+}
+
+.automation-editor-name::placeholder {
+  color: var(--text-tertiary);
+}
+
+.automation-owner-line {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: 12.5px;
+}
+
+.automation-owner-line .automation-owner {
+  width: auto;
+  padding: var(--space-2) var(--space-8) var(--space-2) var(--space-6);
+  border: 1px solid var(--hairline-strong);
+  border-radius: 999px;
+}
+
+.automation-crumbs .automation-owner {
+  width: auto;
+}
+
+.automation-save-refusal,
+.automation-form-problem {
+  margin: 0;
+  font-size: 12px;
+}
+
+/* The form: a label column on the left, each control and its problem on the
+   right, divided by the card's hairlines. */
+.automation-form-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-16);
+  padding: var(--space-12) var(--space-16);
+}
+
+.automation-form-row + .automation-form-row {
+  border-top: 1px solid var(--hairline);
+}
+
+.automation-form-label {
+  width: 120px; /* off-scale */
+  flex: none;
+  padding-top: var(--space-6);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.automation-form-control {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-8);
+}
+
+.automation-form-note {
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.automation-form-row[data-invalid="true"] .settings-input {
+  border-color: var(--danger);
+}
+
+.automation-schedule,
+.automation-schedule-at {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+.automation-schedule {
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.automation-select,
+.automation-time {
+  width: auto;
+  padding-block: var(--space-6);
+}
+
+.automation-zone {
+  max-width: 240px; /* off-scale */
+}
+
+.automation-cron {
+  width: 200px; /* off-scale */
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+.automation-prompt {
+  min-height: 120px; /* off-scale */
+  resize: vertical;
+  letter-spacing: 0;
+  line-height: 1.5;
 }
 
 /* Settings ------------------------------------------------------------------- */

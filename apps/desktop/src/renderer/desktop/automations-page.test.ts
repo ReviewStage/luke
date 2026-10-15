@@ -1,7 +1,11 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { AUTOMATION_CALL_FAILURE, type AutomationListView } from "@luke/features/automation-view";
+import {
+  AUTOMATION_CALL_FAILURE,
+  type AutomationCreateParams,
+  type AutomationListView,
+} from "@luke/features/automation-view";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -13,11 +17,15 @@ import {
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement, Fragment } from "react";
+import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { APP_COMMAND } from "#shared/shortcuts";
 import { onRegistry } from "#testing/copy-feedback";
 import { plansControl } from "#testing/plans-control";
+import { installScrollIntoView } from "#testing/scroll-into-view";
+import { runAppCommand } from "../app-commands";
+import { AUTOMATIONS_PAGE, type AutomationsPlace } from "../planning/use-plans-tab";
 import { ToastHost } from "../toast";
 import { AutomationsPage } from "./automations-page";
 
@@ -49,6 +57,7 @@ function automation(n: number, patch: Partial<AutomationSummary> = {}): Automati
     nextRunAt: null,
     lastRun: null,
     createdAt: 1,
+    repositories: ["acme/ledger"],
     ...patch,
   };
 }
@@ -85,18 +94,25 @@ let heldChanges: (() => void)[] | undefined;
 let listed: (string | undefined)[] = [];
 /** Every change asked, as the act carried it. */
 let changes: unknown[] = [];
+/** Every automation made, as the act carried it. */
+let creates: AutomationCreateParams[] = [];
+/** Every automation deleted, by its id. */
+let deletes: string[] = [];
 /** What a change answers: the automation as changed, or why not. */
 let changeRefusal:
   | (typeof AUTOMATION_CALL_FAILURE)[keyof typeof AUTOMATION_CALL_FAILURE]
   | undefined;
 
 beforeEach(() => {
+  installScrollIntoView();
   standing = [DIGEST, SWEEP, FAILING];
   lists = [];
   listHeld = false;
   heldChanges = undefined;
   listed = [];
   changes = [];
+  creates = [];
+  deletes = [];
   changeRefusal = undefined;
   Object.defineProperty(window, "luke", {
     configurable: true,
@@ -131,6 +147,25 @@ beforeEach(() => {
           const told = { ...automation, name: `${was.name}, write ${held.length + 1}` };
           const done = { status: ACT_OUTCOME_STATUS.DONE, value: { automation: told } };
           return new Promise((resolve) => held.push(() => resolve(done)));
+        }
+        if (request.kind === ACT_KIND.AUTOMATIONS_CREATE) {
+          creates.push(request.payload);
+          const { workspaceId, name, trigger, action, scope, repositories } = request.payload;
+          const made = automation(42, {
+            workspaceId: workspaceId ?? WORKSPACE.id,
+            name,
+            trigger,
+            action,
+            scope: scope ?? AUTOMATION_SCOPE.PERSONAL,
+            repositories: repositories ?? [],
+          });
+          standing = [made, ...standing];
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { automation: made } });
+        }
+        if (request.kind === ACT_KIND.AUTOMATIONS_DELETE) {
+          deletes.push(request.payload.automationId);
+          standing = standing.filter((each) => each.id !== request.payload.automationId);
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { deleted: true } });
         }
         return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
       },
@@ -373,4 +408,362 @@ test("with no automations the page says what one is, and with no workspace liste
   mount(plansControl({ workspace: undefined }));
   await settle();
   assert.deepEqual(listed, []);
+});
+
+/** The workspace the account made first, its personal one, where everything is its own. */
+const PERSONAL: Workspace = { ...WORKSPACE, id: "workspace-personal", name: "Ada" };
+
+/** Every page the Automations pages stood on, in order, as the window moved them. */
+let places: AutomationsPlace[] = [];
+
+/** Lists another workspace under the mounted pages, as the switcher would. */
+let moveTo: (workspace: Workspace) => void = () => undefined;
+
+/**
+ * The Automations pages as the window holds them, standing on `start` and
+ * moved by their own presses, over the workspace listed, the personal one
+ * first among the account's.
+ */
+function mountPages(start: AutomationsPlace, workspace: Workspace = WORKSPACE): HTMLElement {
+  places = [start];
+  function Pages() {
+    const [place, setPlace] = useState(start);
+    const [listed, setListed] = useState(workspace);
+    moveTo = setListed;
+    const plans = plansControl({
+      workspace: listed,
+      workspaces: [PERSONAL, WORKSPACE],
+      automationsView: {
+        open: true,
+        place,
+        onOpen: (next = { kind: AUTOMATIONS_PAGE.LIST }) => {
+          places.push(next);
+          setPlace(next);
+        },
+        onClose: () => undefined,
+      },
+    });
+    const base = plans.newPlan;
+    return createElement(AutomationsPage, {
+      plans: {
+        ...plans,
+        newPlan: {
+          ...base,
+          repositoriesIn: () => ({
+            ...base.repositoriesIn(listed.id),
+            scope: listed.id,
+            recent: listed.id === WORKSPACE.id ? ["acme/ledger", "acme/web"] : ["beta/app"],
+          }),
+        },
+      },
+    });
+  }
+  const container = document.createElement("div");
+  document.body.append(container);
+  root = createRoot(container);
+  registry = AtomRegistry.make();
+  act(() =>
+    root?.render(
+      onRegistry(
+        registry,
+        createElement(Fragment, null, createElement(Pages), createElement(ToastHost)),
+      ),
+    ),
+  );
+  return container;
+}
+
+/** The button named, wherever it is drawn. */
+function button(name: string): HTMLButtonElement {
+  const found = [...document.querySelectorAll<HTMLButtonElement>("button")].find(
+    (each) => each.textContent === name || each.getAttribute("aria-label") === name,
+  );
+  assert.ok(found, `no button ${name}`);
+  return found;
+}
+
+/** Types into a field as a developer would, so React hears the change. */
+function type(field: HTMLInputElement | HTMLTextAreaElement | null, value: string): void {
+  assert.ok(field, "the field is drawn");
+  const prototype =
+    field instanceof HTMLTextAreaElement
+      ? HTMLTextAreaElement.prototype
+      : HTMLInputElement.prototype;
+  const setter = Object.getOwnPropertyDescriptor(prototype, "value")?.set;
+  act(() => {
+    setter?.call(field, value);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
+/** The crumbs' words, in order. */
+function crumbs(page: HTMLElement): string {
+  return page.querySelector(".automation-crumbs")?.textContent ?? "";
+}
+
+test("a row opens its automation's page, under crumbs naming its owner, with what it was saved as", async () => {
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.LIST });
+  await settle();
+
+  act(() =>
+    rowOf(page, "Nightly flaky-test sweep")
+      .querySelector<HTMLButtonElement>(".automation-row-open")
+      ?.click(),
+  );
+  await settle();
+
+  assert.deepEqual(places.at(-1), { kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  assert.equal(crumbs(page), "AutomationsAcmeNightly flaky-test sweep");
+  assert.equal(
+    page.querySelector<HTMLInputElement>("input[aria-label='Automation name']")?.value,
+    SWEEP.name,
+  );
+  assert.match(
+    page.textContent ?? "",
+    /A workspace automation: everyone in Acme sees and runs it\./u,
+  );
+  assert.equal(page.querySelector(".automation-editor-status")?.textContent, "Saved");
+});
+
+test("a new automation is created only once it is named and told its task, and then stands as its own page", async () => {
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
+  await settle();
+  assert.equal(crumbs(page), "AutomationsPersonalNew automation");
+
+  act(() => button("Create").click());
+  await settle();
+  assert.deepEqual(creates, []);
+  assert.match(page.textContent ?? "", /Name it\./u);
+  assert.match(page.textContent ?? "", /Tell the agent what to do\./u);
+
+  type(page.querySelector("input[aria-label='Automation name']"), "Morning triage");
+  type(page.querySelector("textarea[aria-label='Task']"), "Triage the issues opened overnight.");
+  act(() => button("Create").click());
+  await settle();
+
+  assert.equal(creates.length, 1);
+  assert.deepEqual(creates[0], {
+    workspaceId: WORKSPACE.id,
+    name: "Morning triage",
+    trigger: {
+      kind: AUTOMATION_TRIGGER.SCHEDULE,
+      cron: "0 9 * * 1-5",
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    },
+    action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: "Triage the issues opened overnight." },
+    scope: AUTOMATION_SCOPE.PERSONAL,
+    repositories: ["acme/ledger"],
+  });
+  assert.equal(places.at(-1)?.kind, AUTOMATIONS_PAGE.EDIT);
+  assert.equal(crumbs(page), "AutomationsPersonalMorning triage");
+});
+
+test("an edit says it is unsaved and saves only what moved", async () => {
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+
+  type(page.querySelector("textarea[aria-label='Task']"), "Fix the two flakiest tests.");
+  assert.equal(page.querySelector(".automation-editor-status")?.textContent, "Unsaved changes");
+  act(() => button("Save").click());
+  await settle();
+
+  assert.deepEqual(changes, [
+    {
+      automationId: SWEEP.id,
+      change: { action: { ...SWEEP.action, prompt: "Fix the two flakiest tests." } },
+    },
+  ]);
+  assert.equal(page.querySelector(".automation-editor-status")?.textContent, "Saved");
+});
+
+test("a save the service refuses keeps the draft and says why under the name", async () => {
+  changeRefusal = AUTOMATION_CALL_FAILURE.NOT_PERMITTED;
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+
+  type(page.querySelector("input[aria-label='Automation name']"), "Sweep");
+  act(() => button("Save").click());
+  await settle();
+
+  assert.equal(
+    page.querySelector(".automation-save-refusal")?.textContent,
+    "Only its creator, or the workspace's owners and admins, can change it.",
+  );
+  assert.equal(
+    page.querySelector<HTMLInputElement>("input[aria-label='Automation name']")?.value,
+    "Sweep",
+  );
+  assert.equal(page.querySelector(".automation-editor-status")?.textContent, "Unsaved changes");
+});
+
+test("a deletion asks first, then goes back to the list without the automation", async () => {
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+
+  act(() => button(`Delete ${SWEEP.name}`).click());
+  await settle();
+  assert.deepEqual(deletes, []);
+  act(() => button("Delete").click());
+  await settle();
+
+  assert.deepEqual(deletes, [SWEEP.id]);
+  assert.deepEqual(places.at(-1), { kind: AUTOMATIONS_PAGE.LIST });
+  assert.ok(!rows(page).some(([name]) => name === SWEEP.name));
+});
+
+test("Escape leaves a page with nothing unsaved for the list, and keeps one whose draft would be lost", async () => {
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+
+  type(page.querySelector("input[aria-label='Automation name']"), "Sweep");
+  act(() => runAppCommand(APP_COMMAND.EXIT_AUTOMATIONS));
+  assert.equal(places.length, 1, "the unsaved draft stands");
+
+  type(page.querySelector("input[aria-label='Automation name']"), SWEEP.name);
+  act(() => runAppCommand(APP_COMMAND.EXIT_AUTOMATIONS));
+  assert.deepEqual(places.at(-1), { kind: AUTOMATIONS_PAGE.LIST });
+});
+
+test("the Owner row stands in a shared workspace, and not in the account's personal one", async () => {
+  const shared = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
+  await settle();
+  assert.ok(shared.querySelector("[aria-label='Owner']"));
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  const personal = mountPages({ kind: AUTOMATIONS_PAGE.NEW }, PERSONAL);
+  await settle();
+  assert.equal(personal.querySelector("[aria-label='Owner']"), null);
+  assert.match(personal.textContent ?? "", /Your automation, in your personal workspace\./u);
+});
+
+test("a page naming an automation the list no longer holds says it is gone", async () => {
+  const page = mountPages({
+    kind: AUTOMATIONS_PAGE.EDIT,
+    automationId: "3f0e6f5c-7d1a-4f6e-9a55-999999999999",
+  });
+  await settle();
+
+  assert.match(page.textContent ?? "", /This automation is gone/u);
+});
+
+test("what is typed while a save is out stands, unsaved, once the save lands", async () => {
+  heldChanges = [];
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+
+  type(page.querySelector("input[aria-label='Automation name']"), "Sweep");
+  act(() => button("Save").click());
+  await settle();
+  type(page.querySelector("textarea[aria-label='Task']"), "Fix the two flakiest tests.");
+  heldChanges[0]?.();
+  await settle();
+
+  assert.equal(
+    page.querySelector<HTMLTextAreaElement>("textarea[aria-label='Task']")?.value,
+    "Fix the two flakiest tests.",
+  );
+  assert.equal(page.querySelector(".automation-editor-status")?.textContent, "Unsaved changes");
+});
+
+test("an automation's page whose list could not be read says so with Retry, rather than calling it gone", async () => {
+  lists = [{ failure: AUTOMATION_CALL_FAILURE.UNANSWERED }];
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+
+  assert.match(page.textContent ?? "", /The automations could not be read\./u);
+  assert.doesNotMatch(page.textContent ?? "", /gone/u);
+  act(() => button("Retry").click());
+  await settle();
+
+  assert.equal(
+    page.querySelector<HTMLInputElement>("input[aria-label='Automation name']")?.value,
+    SWEEP.name,
+  );
+});
+
+test("a new automation's page moved to another workspace starts afresh in that workspace's repository", async () => {
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
+  await settle();
+  type(page.querySelector("input[aria-label='Automation name']"), "Morning triage");
+
+  act(() => moveTo({ ...WORKSPACE, id: "workspace-beta", name: "Beta" }));
+  await settle();
+  type(page.querySelector("input[aria-label='Automation name']"), "Beta triage");
+  type(page.querySelector("textarea[aria-label='Task']"), "Triage Beta's issues.");
+  act(() => button("Create").click());
+  await settle();
+
+  assert.equal(creates.length, 1);
+  assert.deepEqual(
+    [creates[0]?.workspaceId, creates[0]?.repositories],
+    ["workspace-beta", ["beta/app"]],
+  );
+});
+
+test("an automation fired by an event shows its trigger as it is, and a save leaves it so", async () => {
+  const onEvent = automation(7, {
+    name: "Triage new bugs",
+    trigger: { kind: AUTOMATION_TRIGGER.GITHUB, event: "issue-opened" },
+  });
+  standing = [onEvent];
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: onEvent.id });
+  await settle();
+
+  assert.match(page.textContent ?? "", /It runs on an event rather than a schedule/u);
+  assert.equal(page.querySelector("[aria-label='Time zone']"), null);
+  type(page.querySelector("textarea[aria-label='Task']"), "Reproduce the bug first.");
+  act(() => button("Save").click());
+  await settle();
+
+  assert.deepEqual(changes, [
+    {
+      automationId: onEvent.id,
+      change: { action: { ...onEvent.action, prompt: "Reproduce the bug first." } },
+    },
+  ]);
+});
+
+test("Escape keeps a new page whose schedule was changed, though nothing was typed", async () => {
+  mountPages({ kind: AUTOMATIONS_PAGE.NEW });
+  await settle();
+
+  act(() => button("Daily").click());
+  act(() => runAppCommand(APP_COMMAND.EXIT_AUTOMATIONS));
+
+  assert.equal(places.length, 1);
+});
+
+test("a refresh that fails while an automation's page stands keeps the page and what was typed in it", async () => {
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+  type(page.querySelector("input[aria-label='Automation name']"), "Sweep");
+
+  lists = [{ failure: AUTOMATION_CALL_FAILURE.UNANSWERED }];
+  act(() => page.querySelector<HTMLButtonElement>(".automations-view [role=switch]")?.click());
+  await settle();
+
+  assert.equal(
+    page.querySelector<HTMLInputElement>("input[aria-label='Automation name']")?.value,
+    "Sweep",
+  );
+  assert.doesNotMatch(page.textContent ?? "", /could not be read/u);
+});
+
+test("the repository chosen first is not said again among the others its runs work in", async () => {
+  const several = automation(8, {
+    name: "Cross-repo sweep",
+    repositories: ["acme/ledger", "acme/web"],
+  });
+  standing = [several];
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: several.id });
+  await settle();
+  assert.match(page.textContent ?? "", /also work in acme\/web\./u);
+
+  act(() => page.querySelector<HTMLButtonElement>(".automation-form .chip")?.click());
+  await settle();
+  act(() => button("acme/web").click());
+  await settle();
+
+  assert.doesNotMatch(page.textContent ?? "", /also work in/u);
 });

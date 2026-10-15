@@ -213,7 +213,7 @@ type StandIn =
   | { readonly kind: typeof STAND_IN.INBOX; readonly chosen: InboxChoice | undefined }
   | { readonly kind: typeof STAND_IN.AGENT; readonly agentId: string }
   | { readonly kind: typeof STAND_IN.FACTORY }
-  | { readonly kind: typeof STAND_IN.AUTOMATIONS };
+  | { readonly kind: typeof STAND_IN.AUTOMATIONS; readonly place: AutomationsPlace };
 
 /** The window's Factory: whether it stands in the plan's place, and the presses that open and leave it. */
 interface FactoryViewControl {
@@ -222,10 +222,28 @@ interface FactoryViewControl {
   readonly onClose: () => void;
 }
 
-/** The window's Automations page: whether it stands in the plan's place, and the presses that open and leave it. */
+/** Which Automations page stands: the list, a new automation's editor, or one automation's. */
+export const AUTOMATIONS_PAGE = {
+  LIST: "list",
+  NEW: "new",
+  EDIT: "edit",
+} as const;
+
+export type AutomationsPlace =
+  | { readonly kind: typeof AUTOMATIONS_PAGE.LIST }
+  | { readonly kind: typeof AUTOMATIONS_PAGE.NEW }
+  | { readonly kind: typeof AUTOMATIONS_PAGE.EDIT; readonly automationId: string };
+
+/** The list, where the Automations pages open with none asked for. */
+const AUTOMATIONS_LIST: AutomationsPlace = { kind: AUTOMATIONS_PAGE.LIST };
+
+/** The window's Automations pages: whether one stands in the plan's place, which, and the presses that open, move between, and leave them. */
 interface AutomationsViewControl {
   readonly open: boolean;
-  readonly onOpen: () => void;
+  /** The page standing, the list while none does. */
+  readonly place: AutomationsPlace;
+  /** Opens the page asked for, the list where none is. */
+  readonly onOpen: (place?: AutomationsPlace) => void;
   readonly onClose: () => void;
 }
 
@@ -1834,9 +1852,10 @@ export function usePlansTab(input: {
     // The Automations page stands over the plan's place as Factory does, each giving way to the others.
     automationsView: {
       open: standIn?.kind === STAND_IN.AUTOMATIONS,
-      onOpen: () => {
+      place: standIn?.kind === STAND_IN.AUTOMATIONS ? standIn.place : AUTOMATIONS_LIST,
+      onOpen: (place = AUTOMATIONS_LIST) => {
         setHistoryFor(undefined);
-        setStandIn({ kind: STAND_IN.AUTOMATIONS });
+        setStandIn({ kind: STAND_IN.AUTOMATIONS, place });
       },
       onClose: () => setStandIn(undefined),
     },

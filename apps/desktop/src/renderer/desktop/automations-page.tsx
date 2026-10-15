@@ -16,17 +16,19 @@ import {
   type AutomationSummary,
 } from "@luke/features/automation-wire";
 import { EXPERIMENT } from "@luke/settings";
-import { BuildingIcon, ClockIcon, LockIcon, ZapIcon } from "lucide-react";
+import { BuildingIcon, ClockIcon, LockIcon, PlusIcon, ZapIcon } from "lucide-react";
+import { Fragment, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 import { EmptyState } from "../empty-state";
 import { useOpenFeedback } from "../open-feedback";
 import { dayAndTimeText, momentText, useMinute } from "../planning/plan-time";
-import type { PlansControl } from "../planning/use-plans-tab";
+import { AUTOMATIONS_PAGE, type PlansControl } from "../planning/use-plans-tab";
 import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { GLYPH_STATE, type GlyphState, StateGlyph, stateEndMark } from "../state-glyph";
 import { Switch } from "../switch";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
+import { AutomationEditor } from "./automation-editor";
 import { useAutomations } from "./use-automations";
 
 /**
@@ -124,22 +126,26 @@ function AutomationRow({
   automation,
   workspaceName,
   now,
+  onOpen,
   onToggle,
 }: {
   automation: AutomationSummary;
   workspaceName: string | undefined;
   now: number;
+  onOpen: () => void;
   onToggle: (enabled: boolean) => void;
 }): React.JSX.Element {
   const state = STANDING_GLYPH[automationRunStanding(automation.lastRun)];
   const next = automationNext(automation);
   return (
     <div className="automation-row" data-enabled={String(automation.enabled)}>
-      <StateGlyph glyph={<ClockIcon />} state={state} />
-      <span className="automation-row-copy">
-        <span className="automation-row-name">{automation.name}</span>
-        <span className="automation-row-detail">{automationTriggerText(automation.trigger)}</span>
-      </span>
+      <button type="button" className="automation-row-open" onClick={onOpen}>
+        <StateGlyph glyph={<ClockIcon />} state={state} />
+        <span className="automation-row-copy">
+          <span className="automation-row-name">{automation.name}</span>
+          <span className="automation-row-detail">{automationTriggerText(automation.trigger)}</span>
+        </span>
+      </button>
       <OwnerCell owner={automationOwner(automation)} workspaceName={workspaceName} />
       <span
         className="automation-row-when"
@@ -162,11 +168,13 @@ function AutomationList({
   groups,
   workspaceName,
   now,
+  onOpen,
   onToggle,
 }: {
   groups: readonly AutomationGroup[];
   workspaceName: string | undefined;
   now: number;
+  onOpen: (automation: AutomationSummary) => void;
   onToggle: (automation: AutomationSummary, enabled: boolean) => void;
 }): React.JSX.Element {
   return (
@@ -187,6 +195,7 @@ function AutomationList({
                 automation={automation}
                 workspaceName={workspaceName}
                 now={now}
+                onOpen={() => onOpen(automation)}
                 onToggle={(enabled) => onToggle(automation, enabled)}
               />
             ))}
@@ -197,14 +206,21 @@ function AutomationList({
   );
 }
 
-/** The window's Automations page, in the plan's place: the listed workspace's automations as they stand. */
-export function AutomationsPage({ plans }: { plans: PlansControl }): React.JSX.Element {
-  useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, plans.automationsView.onClose);
+/** The list's page: the listed workspace's automations, a new one a press away. */
+function ListPage({
+  plans,
+  automations,
+}: {
+  plans: PlansControl;
+  automations: ReturnType<typeof useAutomations>;
+}): React.JSX.Element {
+  const view = plans.automationsView;
+  useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, view.onClose);
   const openFeedback = useOpenFeedback();
   const toast = useToast();
   const now = useMinute();
   const workspace = plans.workspace;
-  const { read, reload, toggle } = useAutomations(workspace?.id);
+  const { read, reload, toggle } = automations;
   const onToggle = (automation: AutomationSummary, enabled: boolean) => {
     toggle(automation.id, enabled).then((answer) => {
       const refusal = toggleRefusal(answer, enabled);
@@ -213,6 +229,7 @@ export function AutomationsPage({ plans }: { plans: PlansControl }): React.JSX.E
       }
     });
   };
+  const openNew = () => view.onOpen({ kind: AUTOMATIONS_PAGE.NEW });
   const groups =
     read !== undefined && "automations" in read ? automationGroups(read.automations) : [];
   return (
@@ -230,6 +247,15 @@ export function AutomationsPage({ plans }: { plans: PlansControl }): React.JSX.E
           >
             Send feedback
           </button>
+          <button
+            type="button"
+            className="toolbar-button bordered-button"
+            disabled={workspace === undefined}
+            onClick={openNew}
+          >
+            <PlusIcon />
+            New automation
+          </button>
         </div>
       </header>
       <div className="automations-scroll">
@@ -245,10 +271,117 @@ export function AutomationsPage({ plans }: { plans: PlansControl }): React.JSX.E
             groups={groups}
             workspaceName={workspace?.name}
             now={now}
+            onOpen={(automation) =>
+              view.onOpen({ kind: AUTOMATIONS_PAGE.EDIT, automationId: automation.id })
+            }
             onToggle={onToggle}
           />
         )}
       </div>
     </section>
+  );
+}
+
+/** One automation's page whose list could not be read: said so, with Retry, rather than called gone. */
+function UnreadPage({
+  onBack,
+  onRetry,
+}: {
+  onBack: () => void;
+  onRetry: () => void;
+}): React.JSX.Element {
+  useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, onBack);
+  return (
+    <section className="automations-view" aria-label="Automation">
+      <header className="desktop-toolbar">
+        <div className="desktop-toolbar-heading">
+          <button type="button" className="toolbar-button" onClick={onBack}>
+            <ZapIcon />
+            Automations
+          </button>
+        </div>
+      </header>
+      <div className="automations-scroll">
+        <ReadFailure line={UNREAD_LINE} onRetry={onRetry} place={READ_FAILURE_PLACE.CENTRED} />
+      </div>
+    </section>
+  );
+}
+
+/** One automation's page that names an automation the list no longer holds: it was deleted, or is not this workspace's. */
+function GonePage({ onBack }: { onBack: () => void }): React.JSX.Element {
+  useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, onBack);
+  return (
+    <section className="automations-view" aria-label="Automation">
+      <header className="desktop-toolbar">
+        <div className="desktop-toolbar-heading">
+          <button type="button" className="toolbar-button" onClick={onBack}>
+            <ZapIcon />
+            Automations
+          </button>
+        </div>
+      </header>
+      <div className="automations-scroll">
+        <EmptyState icon={<ZapIcon />} title="This automation is gone">
+          It was deleted, or it belongs to another workspace.
+        </EmptyState>
+      </div>
+    </section>
+  );
+}
+
+/**
+ * The window's Automations pages, in the plan's place: the list, or one
+ * automation's editor, or a new one's. The list is read once for all of
+ * them, so an automation opened from it opens as it was listed, and an
+ * edit is in the list the moment it lands.
+ */
+export function AutomationsPage({ plans }: { plans: PlansControl }): React.JSX.Element {
+  const view = plans.automationsView;
+  const workspace = plans.workspace;
+  const automations = useAutomations(workspace?.id);
+  // The automation the new page made, whose page is that same editor still, so what was typed while it was made stands.
+  const [made, setMade] = useState<string | undefined>(undefined);
+  const back = () => view.onOpen({ kind: AUTOMATIONS_PAGE.LIST });
+  const { place } = view;
+  if (place.kind === AUTOMATIONS_PAGE.LIST) {
+    return <ListPage plans={plans} automations={automations} />;
+  }
+  const { read, reload } = automations;
+  if (read !== undefined && "failure" in read) {
+    return <UnreadPage onBack={back} onRetry={reload} />;
+  }
+  const listedAutomations = read === undefined ? [] : read.automations;
+  const opened =
+    place.kind === AUTOMATIONS_PAGE.EDIT
+      ? listedAutomations.find((automation) => automation.id === place.automationId)
+      : undefined;
+  if (place.kind === AUTOMATIONS_PAGE.EDIT && opened === undefined) {
+    return read === undefined ? (
+      <section className="automations-view" aria-label="Automation" />
+    ) : (
+      <GonePage onBack={back} />
+    );
+  }
+  // Note that the account's first workspace is its personal one, where everything is its own.
+  const offersOwner = workspace !== undefined && plans.workspaces[0]?.id !== workspace.id;
+  const editing = opened === undefined || opened.id === made ? AUTOMATIONS_PAGE.NEW : opened.id;
+  return (
+    // Keyed by the workspace, then by what it edits, so another workspace's page or another automation's holds nothing of the last's draft.
+    <Fragment key={workspace?.id}>
+      <AutomationEditor
+        key={editing}
+        automation={opened}
+        workspace={workspace}
+        offersOwner={offersOwner}
+        repositories={plans.newPlan.repositoriesIn(workspace?.id)}
+        writes={automations}
+        onBack={back}
+        onCreated={(automationId) => {
+          setMade(automationId);
+          view.onOpen({ kind: AUTOMATIONS_PAGE.EDIT, automationId });
+        }}
+      />
+    </Fragment>
   );
 }
