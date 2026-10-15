@@ -2,12 +2,14 @@ import type { CodingAgentInboxParams } from "@luke/features/coding-agent-view";
 import type { PlanSummary } from "@luke/features/plan-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { FolderIcon, SearchIcon, WingFace } from "@luke/ui";
+import { teammateCreator } from "@luke/ui/actor-model";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
 import { useAct } from "../act";
+import { ACTOR_SIZE, ActorMark, CreatorHeard } from "../actor-ref";
 import { runAppCommand } from "../app-commands";
-import { MemberDirectory } from "../member-directory";
+import { MemberDirectory, useMemberDirectory } from "../member-directory";
 import { InboxItemRow } from "../planning/inbox-list";
 import {
   holderName,
@@ -158,7 +160,7 @@ export function NewPlanButton({ plans }: { plans: PlansControl }): React.JSX.Ele
   );
 }
 
-/** A plan as the sidebar draws it, its repository after its name: the owner's picture, the name, the repository, and its mark and time. */
+/** A plan as the sidebar draws it, its repository after its name: the owner's picture, the name, the repository, and its mark and time, led by its creator's face where a teammate created it. */
 function RecentRow({
   plan,
   pictures,
@@ -170,6 +172,7 @@ function RecentRow({
   now: number;
   onOpen: () => void;
 }): React.JSX.Element {
+  const creator = teammateCreator(plan, useMemberDirectory());
   return (
     <li className="sidebar-plan-item home-row">
       <button type="button" className="sidebar-plan" onClick={onOpen}>
@@ -187,7 +190,9 @@ function RecentRow({
           </span>
           <span className="sidebar-plan-name">{plan.name}</span>
           <span className="home-row-context">{plan.repository ?? "No repository"}</span>
+          {creator === undefined ? null : <CreatorHeard actor={creator} />}
           <span className="sidebar-plan-time">
+            {creator === undefined ? null : <ActorMark actor={creator} size={ACTOR_SIZE.MARK} />}
             <PlanStatusMark plan={plan} />
             <RelativeTime at={plan.updatedAt} now={now} />
           </span>
@@ -221,23 +226,20 @@ function HomeInbox({ plans, now }: { plans: PlansControl; now: number }): React.
         {empty ? null : <span className="home-section-count">{waiting.items.length}</span>}
       </h2>
       {empty ? null : (
-        // The rows' agent cards name who started each agent, read against the listed workspace's members.
-        <MemberDirectory workspace={plans.workspace} readerId={plans.me}>
-          <ul className="sidebar-plans">
-            {waiting.items.map((listed) => (
-              <InboxItemRow
-                key={listed.item.id}
-                listed={listed}
-                chosen={false}
-                now={now}
-                models={plans.agents.models}
-                readerId={plans.me}
-                context={holderName(listed.holder)}
-                onChoose={open}
-              />
-            ))}
-          </ul>
-        </MemberDirectory>
+        <ul className="sidebar-plans">
+          {waiting.items.map((listed) => (
+            <InboxItemRow
+              key={listed.item.id}
+              listed={listed}
+              chosen={false}
+              now={now}
+              models={plans.agents.models}
+              readerId={plans.me}
+              context={holderName(listed.holder)}
+              onChoose={open}
+            />
+          ))}
+        </ul>
       )}
       {waiting.failed ? (
         <div className="sidebar-note flex items-center gap-2" role="alert">
@@ -288,44 +290,48 @@ export function DesktopHome({
   if (!plans.listFailed && fresh) return <Welcome plans={plans} />;
   const recent = recentPlans(listed.plans);
   return (
-    <div className="home-scroll">
-      <div className="home-column" ref={setColumn}>
-        <header className="home-head">
-          <h1 className="home-title">{greeting(accountName)}</h1>
-          <NewPlanButton plans={plans} />
-        </header>
-        <HomeInbox plans={plans} now={now} />
-        {recent.length === 0 ? null : (
-          <section className="home-section" aria-labelledby="home-recent">
-            <h2 className="home-section-title" id="home-recent">
-              Recent
-            </h2>
-            <ul className="sidebar-plans">
-              {recent.map((plan) => (
-                <RecentRow
-                  key={plan.id}
-                  plan={plan}
-                  pictures={plans.repositories.pictures}
-                  now={now}
-                  onOpen={() => plans.onSelect(plan.id)}
-                />
-              ))}
-            </ul>
-            {listed.plans.length > RECENT_COUNT ? (
-              <button
-                type="button"
-                className="home-more"
-                aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.COMMAND_PALETTE)}
-                onClick={() => runAppCommand(APP_COMMAND.COMMAND_PALETTE)}
-              >
-                <SearchIcon />
-                Search all {listed.plans.length} tasks
-                <Shortcut chord={APP_SHORTCUTS[APP_COMMAND.COMMAND_PALETTE].chord} />
-              </button>
-            ) : null}
-          </section>
-        )}
+    // The Inbox's agent cards name who started each agent, and Recent's rows
+    // who created each teammate's task, read against the listed workspace's members.
+    <MemberDirectory workspace={plans.workspace} readerId={plans.me}>
+      <div className="home-scroll">
+        <div className="home-column" ref={setColumn}>
+          <header className="home-head">
+            <h1 className="home-title">{greeting(accountName)}</h1>
+            <NewPlanButton plans={plans} />
+          </header>
+          <HomeInbox plans={plans} now={now} />
+          {recent.length === 0 ? null : (
+            <section className="home-section" aria-labelledby="home-recent">
+              <h2 className="home-section-title" id="home-recent">
+                Recent
+              </h2>
+              <ul className="sidebar-plans">
+                {recent.map((plan) => (
+                  <RecentRow
+                    key={plan.id}
+                    plan={plan}
+                    pictures={plans.repositories.pictures}
+                    now={now}
+                    onOpen={() => plans.onSelect(plan.id)}
+                  />
+                ))}
+              </ul>
+              {listed.plans.length > RECENT_COUNT ? (
+                <button
+                  type="button"
+                  className="home-more"
+                  aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.COMMAND_PALETTE)}
+                  onClick={() => runAppCommand(APP_COMMAND.COMMAND_PALETTE)}
+                >
+                  <SearchIcon />
+                  Search all {listed.plans.length} tasks
+                  <Shortcut chord={APP_SHORTCUTS[APP_COMMAND.COMMAND_PALETTE].chord} />
+                </button>
+              ) : null}
+            </section>
+          )}
+        </div>
       </div>
-    </div>
+    </MemberDirectory>
   );
 }

@@ -603,3 +603,35 @@ test("a question of another workspace's automation, which Home does not list, re
 
   assert.deepEqual(automationReads, []);
 });
+
+test("a recent task a teammate created wears their face before its time, and the reader's own wears none", async () => {
+  const plans = PLANS.map((each) =>
+    each.id === INVITES.id
+      ? { ...each, ownerId: CHARLES.userId, createdBy: CHARLES }
+      : {
+          ...each,
+          ownerId: "user-dean",
+          createdBy: { userId: "user-dean", name: "Dean Stratakos" },
+        },
+  );
+  const { page } = mount({
+    me: "user-dean",
+    workspace: {
+      id: "workspace-personal",
+      name: "Personal",
+      role: WORKSPACE_ROLE.OWNER,
+      github: null,
+      memberCount: 2,
+    },
+    plans,
+    listed: { plans, archived: [], ...HOLDING },
+  });
+  await settle();
+
+  const region = page.querySelector('section[aria-labelledby="home-recent"]');
+  const faces = [...(region?.querySelectorAll(".sidebar-plan") ?? [])].flatMap((row) => {
+    const face = row.querySelector<HTMLImageElement>(".sidebar-plan-time .actor-mark img");
+    return face === null ? [] : [[row.querySelector(".sidebar-plan-name")?.textContent, face.src]];
+  });
+  assert.deepEqual(faces, [[INVITES.name, CHARLES_PICTURE]]);
+});

@@ -1257,6 +1257,11 @@ ul.actor-stack {
   margin-right: var(--space-4);
 }
 
+/* Home's time sets its parts apart by its own gap. */
+.home-row .sidebar-plan-time > .actor-mark {
+  margin-right: 0;
+}
+
 .plan-mark-glyph {
   display: inline-block;
   width: 12px;
