@@ -593,6 +593,17 @@ body,
   vertical-align: middle;
 }
 
+/* In a line of words the name sits on the line's baseline, as an actor's
+   does, standing at least the tile's height so the tile stays centred on it. */
+.workspace-ref[data-size="inline"] {
+  vertical-align: baseline;
+}
+
+.workspace-ref[data-size="inline"] > .workspace-ref-name {
+  align-self: baseline;
+  padding-block: max(0px, calc((14px - 1lh) / 2));
+}
+
 .workspace-ref[data-size="row"] {
   gap: var(--space-6);
 }
@@ -949,7 +960,8 @@ body,
 /* An actor named in a line: its mark and its name as one target, in the
    line's own ink, rising to the primary on hover as the crumb's presses do.
    The hover fill bleeds by a ring of its own colour rather than padding, so
-   the words around it keep their spacing. */
+   the words around it keep their spacing. Its name sits on the baseline of
+   the words around it. */
 .actor-ref {
   display: inline-flex;
   min-width: 0;
@@ -962,12 +974,17 @@ body,
   color: inherit;
   font: inherit;
   line-height: inherit;
-  vertical-align: middle;
+  vertical-align: baseline;
   white-space: nowrap;
 }
 
+/* Note that the name alone is baseline-aligned, so the ref takes its
+   baseline from the name rather than the mark, and stands at least the
+   16px mark's height, so the mark stays centred on it. */
 .actor-ref-name {
   min-width: 0;
+  align-self: baseline;
+  padding-block: max(0px, calc((16px - 1lh) / 2));
   overflow: hidden;
   text-overflow: ellipsis;
 }
