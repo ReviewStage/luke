@@ -19,6 +19,8 @@ import * as integrationView from "./integration-view.js";
 import * as integrationWire from "./integration-wire.js";
 import * as liveContract from "./live-contract.js";
 import * as modelsWire from "./models-wire.js";
+import * as pictureWire from "./picture-wire.js";
+import * as planAttachmentWire from "./plan-attachment-wire.js";
 import * as planDocumentTemplate from "./plan-document-template.js";
 import * as planEdit from "./plan-edit.js";
 import * as planWire from "./plan-wire.js";
@@ -220,6 +222,14 @@ const EFFECT_MODULE_SCHEMAS = {
     planEditAnswerSchema: planEdit.planEditAnswerSchema,
     planEditValueSchema: planEdit.planEditValueSchema,
   } satisfies RecordedEffectJsonSchemas<typeof planEdit>,
+  "picture-wire": {
+    pictureTypeSchema: pictureWire.pictureTypeSchema,
+    pictureDataUrlSchema: pictureWire.pictureDataUrlSchema,
+  } satisfies RecordedEffectJsonSchemas<typeof pictureWire>,
+  "plan-attachment-wire": {
+    planAttachmentRequestSchema: planAttachmentWire.planAttachmentRequestSchema,
+    planAttachmentAnswerSchema: planAttachmentWire.planAttachmentAnswerSchema,
+  } satisfies RecordedEffectJsonSchemas<typeof planAttachmentWire>,
   "plan-wire": {
     workspaceIdSchema: planWire.workspaceIdSchema,
     agentEditLineSchema: planWire.agentEditLineSchema,

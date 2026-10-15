@@ -155,6 +155,19 @@ membership of the plan's workspace rather than on the plan's starter. Past
 that gate a shared plan's transcript and a new call's earlier calls are
 every member's calls about it.
 
+A plan's pictures are its own rows, `plan_attachment`, with their bytes in a
+`bytea` column held to `PICTURE_BOUNDS.MAX_BYTES` (`@luke/features/picture-wire`)
+(`packages/database/src/models/plan-attachments.ts`), gated by the same
+`planReachableBy`. `POST /api/plans/<id>/attachments { picture }` keeps one, a
+`data:` URL of a PNG, JPEG, or WebP whose bytes sniff as its label, on a plan
+that is not archived and holds fewer than `MAX_PER_PLAN`, answering `{ id }`
+or `{ refused: "too-many" }`; `GET /api/plans/<id>/attachments/<picture>`
+serves the bytes under their sniffed type, `nosniff` and `private, no-store`,
+to a member alone, anyone else reading `not-found`. The plan's text names a
+picture by its address (`@luke/features/plan-attachment-link`), which
+`savePlanText` reads to stamp the picture `saved_at`, and the scheduled sweep
+deletes, a day on, a picture no save stamped.
+
 A plan's conversation keeps the member who opened it as its `user_id`, the
 address its messages, turns, and asks are written under, and is reached by
 every member of the plan's workspace: `conversationReachableBy` in
