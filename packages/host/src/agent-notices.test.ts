@@ -451,6 +451,34 @@ it.effect(
 );
 
 it.effect(
+  "a workspace first named for an item, its cursor the same, as a service newly naming it answers, is written to the window",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      yield* f.notices;
+      const answer = (workspaceId: string | undefined) => ({
+        items: [],
+        planless: [
+          workspaceId === undefined ? planlessItem(ITEM_A) : planlessItem(ITEM_A, { workspaceId }),
+        ],
+        automations: [],
+        cursor: "5",
+        readAt: READ_AT,
+      });
+      f.answerInbox(answer(undefined));
+      yield* settled;
+
+      f.answerInbox(answer("workspace-acme"));
+      yield* settled;
+
+      assert.deepEqual(
+        f.planless.at(-1)?.map((item) => item.workspaceId),
+        ["workspace-acme"],
+      );
+    }),
+);
+
+it.effect(
   "only the items of agents the account started wait on it: a teammate's agent's questions are neither counted, badged, nor announced, while its plan is still listed",
   () =>
     Effect.gen(function* () {
