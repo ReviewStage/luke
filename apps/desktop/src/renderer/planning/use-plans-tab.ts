@@ -37,7 +37,7 @@ import {
 import { callInProgress, VOICE_COMMAND, type VoiceView } from "@luke/voice/voice-view";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ACT_KIND, type ActResultFor } from "#shared/messages/acts";
+import { ACT_KIND } from "#shared/messages/acts";
 import type { AppInboxPlan, AppInboxPlanHolding } from "#shared/messages/app-state";
 import type { ActHandle } from "../act";
 import { callCard } from "../call/call-card-model";
@@ -345,8 +345,18 @@ export interface PlansControl {
     open: boolean;
     /** The repository the press that opened the dialog chose, where it chose one. */
     preset: { readonly repository: string } | undefined;
-    /** Starts the plan on the repository given, or none, which closes the dialog and opens the plan; answers why it did not start, or nothing once it has. */
-    start: (name: string, repository: string | null) => Promise<string | undefined>;
+    /** The workspaces a plan may start in, the account's every one. */
+    workspaces: readonly Workspace[];
+    /** The workspace the dialog starts the plan in until another is chosen: the one listed; none before the workspaces are read. */
+    workspaceId: string | undefined;
+    /** The repository chip's list for a workspace, as the dialog chooses which the plan starts in. */
+    repositoriesIn: (workspaceId: string | undefined) => RepositoryChooser;
+    /** Starts the plan on the repository given, or none, in the workspace given, which closes the dialog and opens the plan; answers why it did not start, or nothing once it has. */
+    start: (
+      name: string,
+      repository: string | null,
+      workspaceId: string | undefined,
+    ) => Promise<string | undefined>;
     /** Puts the dialog away with nothing started. */
     onClose: () => void;
   };
@@ -1105,19 +1115,40 @@ export function usePlansTab(input: {
   // plan's, else the one New plan starts in.
   const repositoriesOf =
     region.kind === DOCUMENT_REGION.READY ? region.plan.workspaceId : listedWorkspace?.id;
-  // A workspace not yet read is taken as managed, so the chip still points somewhere.
-  const chooserWorkspace = viewed.workspaces.find((each) => each.id === repositoriesOf);
-  const managesChosen = chooserWorkspace === undefined || managesWorkspace(chooserWorkspace);
-  const readRepositories = (): Promise<ActResultFor<typeof ACT_KIND.PLANNING_REPOSITORIES>> =>
-    fixture !== undefined
-      ? Promise.resolve(fixtureRepositories())
-      : act(
-          ACT_KIND.PLANNING_REPOSITORIES,
-          repositoriesOf === undefined ? {} : { workspaceId: repositoriesOf },
-        ).catch(() => ({
-          failure: PLAN_CALL_FAILURE.UNANSWERED,
-        }));
   const openGitHub = (url: string) => tell(ACT_KIND.GITHUB_OPEN, { url });
+  /**
+   * The repository chip's list for one workspace: the repositories its plans
+   * were about lately, newest first, so a plan never starts on another
+   * workspace's; a read of every repository its GitHub reaches; where they
+   * come from, which the list's heading says; and whether the account
+   * manages it, so can connect its GitHub. A workspace not yet read is taken
+   * as managed, so the chip still points somewhere.
+   */
+  const repositoriesIn = (workspaceId: string | undefined): RepositoryChooser => {
+    const workspace = viewed.workspaces.find((each) => each.id === workspaceId);
+    return {
+      recent: recentRepositories(
+        workspaceId === undefined
+          ? planning.plans
+          : planning.plans.filter((plan) => plan.workspaceId === workspaceId),
+      ),
+      read: () =>
+        fixture !== undefined
+          ? Promise.resolve(fixtureRepositories())
+          : act(
+              ACT_KIND.PLANNING_REPOSITORIES,
+              workspaceId === undefined ? {} : { workspaceId },
+            ).catch(() => ({ failure: PLAN_CALL_FAILURE.UNANSWERED })),
+      openGitHub,
+      pictures: fixture === undefined,
+      scope: workspaceId,
+      manages: workspace === undefined || managesWorkspace(workspace),
+      ...(workspace === undefined ? undefined : { workspaceName: workspace.name }),
+      ...(workspace?.github == null
+        ? undefined
+        : { source: `${workspace.github.login} on GitHub · ${workspace.name}` }),
+    };
+  };
   // A fixture's GitHub is connected nowhere. Connecting opens the service's
   // page, and the connection arrives on the view once the panel comes forward
   // again; disconnecting asks the service under the Mac's session, and the
@@ -1235,11 +1266,15 @@ export function usePlansTab(input: {
   // service starts it in the account's first one. A start opens its
   // plan's call at once, except over a call standing about another plan,
   // which main leaves for this question to end or keep.
-  const startPlan = (name: string, repository: string | null): Promise<string | undefined> =>
+  const startPlan = (
+    name: string,
+    repository: string | null,
+    workspaceId: string | undefined,
+  ): Promise<string | undefined> =>
     act(ACT_KIND.PLANNING_START, {
       name,
       ...(repository === null ? undefined : { repository }),
-      ...(listedWorkspace === undefined ? undefined : { workspaceId: listedWorkspace.id }),
+      ...(workspaceId === undefined ? undefined : { workspaceId }),
     }).then(
       (answer) => {
         if ("failure" in answer) return repositoryFailureNote(answer.failure);
@@ -1591,20 +1626,7 @@ export function usePlansTab(input: {
     },
     chosenPin: chosen !== undefined && chosen.pin.plan === boundFor ? chosen.pin : undefined,
     onReopenClosedTab: reopenable.length === 0 ? undefined : reopenClosedTab,
-    repositories: {
-      // The recent repositories are the chip's workspace's own, so a new
-      // plan never starts on another workspace's repository.
-      recent: recentRepositories(
-        repositoriesOf === undefined
-          ? planning.plans
-          : planning.plans.filter((plan) => plan.workspaceId === repositoriesOf),
-      ),
-      read: readRepositories,
-      openGitHub,
-      pictures: fixture === undefined,
-      scope: repositoriesOf,
-      manages: managesChosen,
-    },
+    repositories: repositoriesIn(repositoriesOf),
     repositoryMenu,
     onChangeRepository: changeRepository,
     onSetRepository: setRepository,
@@ -1635,6 +1657,9 @@ export function usePlansTab(input: {
     newPlan: {
       open: newPlanAsk !== undefined,
       preset: newPlanAsk?.preset,
+      workspaces: viewed.workspaces,
+      workspaceId: listedWorkspace?.id,
+      repositoriesIn,
       start: startPlan,
       onClose: () => setNewPlanAsk(undefined),
     },

@@ -82,12 +82,11 @@ function NewPlanOwner({ shown }: OwnerProps): ReactElement {
     () => setOpen(true),
     createElement(NewPlanDialog, {
       newPlan: {
+        ...control.newPlan,
         open: open && shown,
-        preset: undefined,
-        start: () => Promise.resolve(undefined),
+        repositoriesIn: () => ({ ...control.repositories, recent: ["acme/web"] }),
         onClose: () => setOpen(false),
       },
-      repositories: { ...control.repositories, recent: ["acme/web"] },
     }),
   );
 }

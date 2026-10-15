@@ -56,6 +56,15 @@ function versionHistoryControl(
   };
 }
 
+/** A repository chip's list read from nowhere, which answers that the service did not. */
+const NO_REPOSITORIES = {
+  recent: [],
+  read: () => Promise.resolve({ failure: PLAN_CALL_FAILURE.UNANSWERED }),
+  openGitHub: ignore,
+  pictures: true,
+  manages: true,
+} as const satisfies PlansControl["repositories"];
+
 /** A plan with no agents and no repository, every press ignored. */
 export function codingAgentsControl(
   overrides: Partial<CodingAgentsControl> = {},
@@ -245,13 +254,7 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
     onOpenPinnedTab: ignore,
     onReopenClosedTab: undefined,
     chosenPin: undefined,
-    repositories: {
-      recent: [],
-      read: () => Promise.resolve({ failure: PLAN_CALL_FAILURE.UNANSWERED }),
-      openGitHub: ignore,
-      pictures: true,
-      manages: true,
-    },
+    repositories: NO_REPOSITORIES,
     repositoryMenu: undefined,
     onChangeRepository: ignore,
     onSetRepository: () => Promise.resolve(undefined),
@@ -263,6 +266,9 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
     newPlan: {
       open: false,
       preset: undefined,
+      workspaces: [],
+      workspaceId: undefined,
+      repositoriesIn: () => NO_REPOSITORIES,
       start: () => Promise.resolve(undefined),
       onClose: ignore,
     },

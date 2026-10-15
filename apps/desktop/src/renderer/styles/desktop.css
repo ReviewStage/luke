@@ -1829,6 +1829,11 @@ body,
   -webkit-app-region: no-drag;
 }
 
+/* A menu opened from a modal's card stands over the window the modal dims. */
+.plan-menu[data-layer="dialog"] {
+  z-index: calc(var(--z-dialog) + 1);
+}
+
 .plan-menu-label {
   min-width: 0;
   flex: 1;
@@ -5465,6 +5470,20 @@ body:has(.app-stage[data-capture="true"])
 .new-plan-dialog {
   width: min(460px, 100%);
   gap: var(--space-12);
+}
+
+/* The title says where the plan starts, "New plan in", then the workspace's
+   chip in the title's own line, as Linear's team chip stands in its title. */
+.new-plan-title {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-6);
+}
+
+.new-plan-workspace {
+  position: relative;
+  min-width: 0;
 }
 
 .dialog-name-field {
