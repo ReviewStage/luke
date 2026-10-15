@@ -57,6 +57,7 @@ const EFFECT_MODULE_SCHEMAS = {
     accountTasklessEntrySchema: accountInboxWire.accountTasklessEntrySchema,
     accountInboxAutomationSchema: accountInboxWire.accountInboxAutomationSchema,
     accountFailedRunSchema: accountInboxWire.accountFailedRunSchema,
+    accountChatEntrySchema: accountInboxWire.accountChatEntrySchema,
     accountInboxAnswerSchema: accountInboxWire.accountInboxAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof accountInboxWire>,
   "board-wire": {

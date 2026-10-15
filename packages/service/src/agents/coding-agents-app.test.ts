@@ -25,6 +25,7 @@ import {
   postAsk,
   postMessage,
   readAttachment,
+  readTo,
   roster,
   unreadFor,
 } from "@luke/database/models/chat-store";
@@ -62,7 +63,7 @@ import {
   startTask,
 } from "@luke/database/testing";
 import { HOSTED_API_ERROR } from "@luke/features";
-import { accountInboxAnswerSchema } from "@luke/features/account-inbox-wire";
+import { ACCOUNT_CHAT_REASON, accountInboxAnswerSchema } from "@luke/features/account-inbox-wire";
 import {
   firstMessageParts,
   firstMessageText,
@@ -216,8 +217,15 @@ import {
   resolveAsAgent,
 } from "./coder-host/chat.js";
 import { ASK_REFUSAL } from "./coder-host/chat-ask.js";
-import { type ChatTelling, HELD_DOORS, postChat, tellMessage } from "./coder-host/chat-notify.js";
+import {
+  CHAT_DOORS,
+  type ChatTelling,
+  HELD_DOORS,
+  postChat,
+  tellMessage,
+} from "./coder-host/chat-notify.js";
 import type { InboxSandboxDoor } from "./coder-host/inbox-image.js";
+import { accountInboxPast } from "./coder-host/inbox-page.js";
 import { REPLAY_BOUNDS } from "./coder-host/replay.js";
 import type { SummaryModelOf } from "./coder-host/replay-summary.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
@@ -3378,6 +3386,90 @@ it.layer(getTestDB())("telling a chat message to the agents it addresses", (it) 
         const told = yield* chat.post(chat.first.member, "Done now.", { channelId: dm.id });
         assert.deepEqual(told.receipt.told, ["agent-2"]);
         assert.equal(eve.sent.length, 2);
+      }),
+  );
+
+  it.effect(
+    "an account with Chat off reads nothing waiting in chat, a message addressed to its person among it",
+    () =>
+      Effect.gen(function* () {
+        const chat = yield* openChat();
+        yield* chooseChat(chat.owner, false);
+        const telling = { ...chat.telling, doors: CHAT_DOORS };
+        const dm = Option.getOrThrow(
+          yield* findOrMakeDm(chat.owner, chat.workspace, chat.first.member.id, chat.person.id),
+        );
+        const before = yield* accountInboxPast(chat.owner, INBOX_CURSOR_START);
+        yield* postChat(telling, {
+          authorMemberId: chat.first.member.id,
+          to: { channelId: dm.id },
+          blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: "Can I take the invite file too?" }],
+          mentions: [],
+          clientKey: randomUUID(),
+        }).pipe(Effect.provide(chat.github.layer));
+        const after = yield* accountInboxPast(chat.owner, INBOX_CURSOR_START);
+        assert.deepEqual(after.chat, []);
+        assert.equal(after.cursor, before.cursor, "nothing in chat moves the read");
+      }),
+  );
+
+  it.effect(
+    "a person a message addresses is told through their account's read once, a second before they read is held, and the read carries who and where until they read past it, with none of its words",
+    () =>
+      Effect.gen(function* () {
+        const chat = yield* openChat();
+        yield* chooseChat(chat.owner, true);
+        const telling = { ...chat.telling, doors: CHAT_DOORS };
+        const dm = Option.getOrThrow(
+          yield* findOrMakeDm(chat.owner, chat.workspace, chat.first.member.id, chat.person.id),
+        );
+        const say = (text: string) =>
+          postChat(telling, {
+            authorMemberId: chat.first.member.id,
+            to: { channelId: dm.id },
+            blocks: [{ type: CHAT_BLOCK.MARKDOWN, text }],
+            mentions: [],
+            clientKey: randomUUID(),
+          }).pipe(Effect.provide(chat.github.layer));
+        const before = yield* accountInboxPast(chat.owner, INBOX_CURSOR_START);
+        assert.deepEqual(before.chat, []);
+
+        const first = yield* say("Can I take the invite file too?");
+        assert.deepEqual(first.receipt.told, [chat.person.handle]);
+        const second = yield* say("Or should I wait for #214?");
+        assert.deepEqual(second.receipt.held, [chat.person.handle]);
+
+        const waiting = yield* accountInboxPast(chat.owner, before.cursor);
+        assert.notEqual(waiting.cursor, before.cursor);
+        assert.deepEqual(
+          waiting.chat?.map(({ seq, reason, from, workspaceId }) => ({
+            seq,
+            reason,
+            from,
+            workspaceId,
+          })),
+          [
+            {
+              seq: first.message.seq,
+              reason: ACCOUNT_CHAT_REASON.DIRECT,
+              from: "agent-1",
+              workspaceId: chat.workspace,
+            },
+          ],
+        );
+        assert.ok(!JSON.stringify(waiting.chat).includes("invite file"));
+
+        yield* readTo(
+          chat.owner,
+          chat.workspace,
+          chat.person.id,
+          second.message.channelId,
+          second.message.seq,
+        );
+        const read = yield* accountInboxPast(chat.owner, waiting.cursor);
+        assert.deepEqual(read.chat, []);
+        const third = yield* say("Going ahead.");
+        assert.deepEqual(third.receipt.told, [chat.person.handle]);
       }),
   );
 

@@ -68,6 +68,7 @@ import { applySessionReplay } from "./session-replay";
 import { settingsRowsInput } from "./settings/settings-panel";
 import { followSettingsLink, useSettingsWorkspace } from "./settings-link";
 import { type AgentPlace, useAgentEndToasts } from "./tasks/agent-end-toast";
+import { useChatToasts } from "./tasks/chat-toast";
 import { useInboxToasts } from "./tasks/inbox-toast";
 import { MessageRevealProvider } from "./tasks/message-links";
 import { type RepositoryRemedyDoors, RepositoryRemedyProvider } from "./tasks/repository-remedy";
@@ -459,6 +460,16 @@ export function App(): React.JSX.Element {
     state?.version ?? 0,
     tasks.inboxShown,
   );
+  // A chat notification clicked, or a waiting message's toast's View: the Tasks tab, on the window's Chat.
+  // Note that Chat's own open asks first while a page stands its ask, as every way into Chat does.
+  const showChat = useRef(tasks.chatView.onOpen);
+  showChat.current = tasks.chatView.onOpen;
+  const openChat = useCallback(() => {
+    changeTab(PANEL_TAB.TASKS);
+    showChat.current();
+  }, [changeTab]);
+  useEffect(() => appBridge().onShowChat(() => openChat()), [openChat]);
+  useChatToasts(openChat, tasks.chatView.open);
   // Where the window has stood, for back and forward, from the moment it
   // knows where it stands.
   const history = useWindowHistory({

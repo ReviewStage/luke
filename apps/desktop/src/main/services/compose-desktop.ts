@@ -240,6 +240,7 @@ export function composeDesktop(
         toPanels: windows.toastAgentEnd,
         inboxToPanels: windows.toastInboxItem,
         failedRunToPanels: windows.toastFailedRun,
+        chatToPanels: windows.toastChatMessage,
         onAnswered: (status) => {
           if (state.snapshot().notifications.status !== status) {
             state.update({ notifications: { status } });
@@ -292,6 +293,12 @@ export function composeDesktop(
             state.snapshot().settings?.experiments ?? NO_EXPERIMENTS,
             EXPERIMENT.AUTOMATIONS,
           ),
+        openChat: () => {
+          windows.panels.focusExpanded();
+          windows.showChat();
+        },
+        chatOn: () =>
+          experimentOn(state.snapshot().settings?.experiments ?? NO_EXPERIMENTS, EXPERIMENT.CHAT),
         report: config.report,
       }).pipe(Effect.provideService(AgentNoticeDoors, noticeDoors));
       // The agents with no plan each list read carries are the notices' to

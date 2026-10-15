@@ -1258,6 +1258,7 @@ export const ACT = {
     payload: record({
       agentId: EffectSchema.NullOr(exactId),
       inboxTaskId: EffectSchema.NullOr(exactId),
+      chatShown: EffectSchema.optionalKey(EffectSchema.Boolean),
     }),
     result: answersNothing,
     refusal: "Could not note which agent is shown on this system.",

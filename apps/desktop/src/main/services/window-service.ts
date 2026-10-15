@@ -8,6 +8,7 @@ import { WINDOW_ROLE } from "@luke/gateway/window-session";
 import type {
   AgentEndToast,
   AgentPlace,
+  ChatMessageToast,
   FailedRunPlace,
   FailedRunToast,
   InboxItemToast,
@@ -115,6 +116,10 @@ export interface WindowService extends DesktopService {
   showFailedRun: (place: FailedRunPlace) => void;
   /** Asks the panels to say a run failed to start in their toast: one that failed while the window is focused. */
   toastFailedRun: (run: FailedRunToast) => void;
+  /** Asks the panels to open their Chat: a chat notification's click. */
+  showChat: () => void;
+  /** Asks the panels to say a chat message waits in their toast: one that came to wait while the window is focused. */
+  toastChatMessage: (message: ChatMessageToast) => void;
   /**
    * The panel window coming forward or going behind, for as long as the
    * subscription stands. The hidden voice window is never the key window, so
@@ -315,6 +320,14 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     panels.broadcast(channels.onRunFailed, { ...place, words, detail });
   }
 
+  function showChat(): void {
+    panels.broadcast(channels.onShowChat, {});
+  }
+
+  function toastChatMessage(message: ChatMessageToast): void {
+    panels.broadcast(channels.onChatMessageWaiting, message);
+  }
+
   function onPanelFocusChanged(listener: (focused: boolean) => void): () => void {
     const focused = (_event: Electron.Event, window: BrowserWindow) => {
       if (panels.owns(window.webContents)) listener(true);
@@ -463,6 +476,8 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     toastInboxItem,
     showFailedRun,
     toastFailedRun,
+    showChat,
+    toastChatMessage,
     toastAgentEnd,
     onPanelFocusChanged,
     reporterOf,
