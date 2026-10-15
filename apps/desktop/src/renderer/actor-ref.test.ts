@@ -254,3 +254,39 @@ test("someone on GitHub hangs a card saying who they are there and that a person
   assert.equal(bot.querySelector(".card-corner"), null);
   assert.equal(document.querySelector(".actor-ref-name")?.textContent, "devin-ai-integration");
 });
+
+test("a member who left keeps their own face, grayed, their picture or else their letter, and a screen reader hears that they left", () => {
+  const picture = "https://avatars.githubusercontent.com/u/7";
+  const lee: Actor = {
+    kind: ACTOR_KIND.SOMEONE,
+    reason: SOMEONE_REASON.FORMER,
+    name: "Lee Park",
+    userId: "user-lee",
+    pictureUrl: picture,
+  };
+  const unpictured: Actor = {
+    kind: ACTOR_KIND.SOMEONE,
+    reason: SOMEONE_REASON.FORMER,
+    name: "Lee Park",
+    userId: "user-lee",
+  };
+  const view = draw(
+    createElement(
+      "p",
+      null,
+      createElement(ActorRef, { actor: lee }),
+      createElement(ActorMark, { actor: unpictured }),
+      createElement(ActorMark, {
+        actor: { kind: ACTOR_KIND.SOMEONE, reason: SOMEONE_REASON.UNNAMED },
+      }),
+    ),
+  );
+  const [withPicture, withLetter, unnamed] = [...view.querySelectorAll<HTMLElement>(".actor-mark")];
+
+  assert.equal(withPicture?.dataset.left, "true");
+  assert.equal(withPicture?.querySelector("img")?.getAttribute("src"), picture);
+  assert.equal(withLetter?.dataset.left, "true");
+  assert.equal(withLetter?.querySelector(".actor-face")?.textContent, "L");
+  assert.equal(unnamed?.dataset.left, undefined);
+  assert.equal(view.querySelector(".actor-ref")?.textContent, "LLee Park (former member)");
+});

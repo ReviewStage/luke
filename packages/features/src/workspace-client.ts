@@ -40,6 +40,7 @@ import {
   workspaceInviteRequestSchema,
 } from "./workspace-invitation-wire.js";
 import {
+  type FormerMember,
   type LinearIssuesRequest,
   linearIssuesRequestSchema,
   WORKSPACE_MEMBERS_QUERY,
@@ -261,15 +262,20 @@ export class HostedWorkspaceClient {
     );
   }
 
-  /** One workspace's members, owners first; or why there are none: not a member, not permitted, or no answer. */
-  members(
-    workspaceId: string,
-  ): Effect.Effect<WorkspaceCallResult<readonly WorkspaceMember[]>, never, HttpClient.HttpClient> {
+  /** One workspace's members, owners first, and who its work names but left; or why there are none: not a member, not permitted, or no answer. */
+  people(workspaceId: string): Effect.Effect<
+    WorkspaceCallResult<{
+      readonly members: readonly WorkspaceMember[];
+      readonly former: readonly FormerMember[];
+    }>,
+    never,
+    HttpClient.HttpClient
+  > {
     const query = new URLSearchParams({ [WORKSPACE_MEMBERS_QUERY.WORKSPACE_ID]: workspaceId });
     return this.#answered(
       { method: HTTP_METHOD.GET, path: `${HOSTED_SERVICE_PATH.WORKSPACES_MEMBERS}?${query}` },
       workspaceMembersAnswerSchema,
-      (answer) => answer.members,
+      (answer) => ({ members: answer.members, former: answer.former ?? [] }),
     );
   }
 

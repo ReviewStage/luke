@@ -7,6 +7,7 @@ import {
   type PlanSectionEdit,
 } from "@luke/features/plan-wire";
 import {
+  type FormerMember,
   WORKSPACE_ROLE,
   type WorkspaceMember,
   type WorkspaceRole,
@@ -96,6 +97,8 @@ export type Actor =
       readonly name?: string;
       /** A member who left's account id, which their page is opened by; none for the rest. */
       readonly userId?: string;
+      /** A member who left's sign-in picture, which the window draws grayed; none where the service names none. */
+      readonly pictureUrl?: string;
     }
   | GitHubActor;
 
@@ -208,23 +211,26 @@ export function actorName(
  * workspace's `members` for their picture, email, and role, and as the
  * reader where the id is the reader's own. While the members are unread
  * the wire's name stands alone; once read, a member they no longer list has
- * left the workspace. A ref the service named nobody for is someone unnamed.
+ * left the workspace, and keeps the picture `former` names them by. A ref the service named nobody for is someone unnamed.
  */
 export function personActor(
   ref: { readonly userId: string; readonly name: string } | undefined,
   members: readonly WorkspaceMember[] | undefined,
   readerId: string | undefined,
+  former?: readonly FormerMember[] | undefined,
 ): Actor {
   if (ref === undefined) return { kind: ACTOR_KIND.SOMEONE, reason: SOMEONE_REASON.UNNAMED };
   const you = readerId !== undefined && ref.userId === readerId;
   const member = members?.find((each) => each.userId === ref.userId);
   if (members !== undefined && member === undefined && !you) {
-    return {
+    const left = {
       kind: ACTOR_KIND.SOMEONE,
       reason: SOMEONE_REASON.FORMER,
       name: ref.name,
       userId: ref.userId,
-    };
+    } as const;
+    const pictureUrl = former?.find((each) => each.userId === ref.userId)?.pictureUrl;
+    return pictureUrl === undefined ? left : { ...left, pictureUrl };
   }
   const person: PersonActor = { kind: ACTOR_KIND.PERSON, userId: ref.userId, name: ref.name, you };
   return member === undefined ? person : memberActor(member, readerId);
@@ -280,7 +286,7 @@ export function creatorActor(
 ): Actor {
   const { createdBy, ownerId } = plan;
   if (createdBy !== undefined || ownerId === undefined) {
-    return personActor(createdBy, reader.members, reader.readerId);
+    return personActor(createdBy, reader.members, reader.readerId, reader.former);
   }
   const member = reader.members?.find((each) => each.userId === ownerId);
   if (member !== undefined) return memberActor(member, reader.readerId);
@@ -319,6 +325,8 @@ export function teammateCreator(
 export interface EditReader {
   readonly members: readonly WorkspaceMember[] | undefined;
   readonly readerId: string | undefined;
+  /** Who the workspace's work names but left, whose pictures they keep, grayed. */
+  readonly former?: readonly FormerMember[] | undefined;
   readonly owner?: PersonActor | undefined;
 }
 
@@ -330,7 +338,7 @@ export interface EditAgent {
 
 /** The member an edit names, for the reader: the owner where every edit is theirs, a member as the directory reads them otherwise. */
 function editPerson(edit: PlanLastEdit, reader: EditReader): Actor {
-  return reader.owner ?? personActor(edit.by, reader.members, reader.readerId);
+  return reader.owner ?? personActor(edit.by, reader.members, reader.readerId, reader.former);
 }
 
 /**

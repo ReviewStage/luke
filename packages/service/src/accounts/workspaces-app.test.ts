@@ -9,6 +9,7 @@ import {
 } from "@luke/database/models/workspace-seams";
 import { ensurePersonalWorkspace } from "@luke/database/models/workspace-store";
 import { member, organization, user } from "@luke/database/schemas/auth";
+import { plan } from "@luke/database/schemas/plan";
 import { joinWorkspace } from "@luke/database/testing";
 import { GITHUB_INSTALL_STATUS, HOSTED_SERVICE_PATH } from "@luke/features";
 import {
@@ -1052,6 +1053,50 @@ it.effect(
           bearerRequest(photoAt(acme), mallory),
         );
         assert.deepEqual(refusal.body, { error: HOSTED_API_ERROR.NOT_FOUND });
+      }).pipe(Effect.provide(database));
+    }),
+);
+
+it.effect(
+  "a members read names who the workspace's work credits but left, with their picture, and nobody who left without work there",
+  () =>
+    Effect.gen(function* () {
+      const plugin = yield* openWorkspacePlugin;
+      const { api, seams, database } = plugin;
+      yield* Effect.gen(function* () {
+        const ada = yield* openGithubAccount("Ada Lovelace");
+        const grace = yield* openGithubAccount("Grace Hopper");
+        const alan = yield* openGithubAccount("Alan Turing");
+        const acme = yield* openTeam(api, ada, [
+          { userId: grace, role: "member" },
+          { userId: alan, role: "member" },
+        ]);
+        yield* pictured(grace, "https://avatars.githubusercontent.com/u/1?v=4");
+        yield* Database.use((db) =>
+          db
+            .insert(plan)
+            .values({ userId: grace, organizationId: acme, name: "Relay retries", document: "" }),
+        );
+        yield* leaving(plugin, grace, acme);
+        yield* removing(plugin, ada, acme, alan);
+
+        const answered = yield* readMembers(seams, ada, membersAt(acme));
+
+        assert.deepEqual(answered, {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: {
+            members: [
+              { userId: ada, name: "Ada Lovelace", email: `${ada}@luke.test`, role: "owner" },
+            ],
+            former: [
+              {
+                userId: grace,
+                name: "Grace Hopper",
+                pictureUrl: "https://avatars.githubusercontent.com/u/1?v=4",
+              },
+            ],
+          },
+        });
       }).pipe(Effect.provide(database));
     }),
 );

@@ -337,6 +337,7 @@ const EFFECT_MODULE_SCHEMAS = {
     workspaceLinearConnectAnswerSchema: workspaceWire.workspaceLinearConnectAnswerSchema,
     linearIssuesRequestSchema: workspaceWire.linearIssuesRequestSchema,
     workspaceMemberSchema: workspaceWire.workspaceMemberSchema,
+    formerMemberSchema: workspaceWire.formerMemberSchema,
     workspaceMembersAnswerSchema: workspaceWire.workspaceMembersAnswerSchema,
     workspaceMemberRemovalSchema: workspaceWire.workspaceMemberRemovalSchema,
     workspaceMemberRoleSchema: workspaceWire.workspaceMemberRoleSchema,

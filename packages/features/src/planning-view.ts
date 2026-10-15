@@ -47,6 +47,7 @@ import {
   workspaceInviteRequestSchema,
 } from "./workspace-invitation-wire.js";
 import {
+  formerMemberSchema,
   linearIssuesRequestSchema,
   workspaceCreateRequestSchema,
   workspaceGithubRequestSchema,
@@ -900,7 +901,11 @@ export type PlanningWorkspaceTransferParams = typeof planningWorkspaceTransferPa
 
 /** A workspace's members, as the window hears them after a read, a removal, a role changed, or a handover: the members as they then stand, or why there are none. */
 export const planningWorkspaceMembersAnswerSchema = EffectSchema.Union([
-  EffectSchema.Struct({ members: EffectSchema.Array(workspaceMemberSchema) }),
+  EffectSchema.Struct({
+    members: EffectSchema.Array(workspaceMemberSchema),
+    /** Who the workspace's work names but left, on a read; absent after a change, and from a service before it. */
+    former: EffectSchema.optionalKey(EffectSchema.Array(formerMemberSchema)),
+  }),
   workspaceCallFailureSchema,
 ]);
 

@@ -339,9 +339,28 @@ export const workspaceMemberSchema = EffectSchema.Struct({
 
 export type WorkspaceMember = typeof workspaceMemberSchema.Type;
 
-/** A workspace's members, owners first, then admins, then members, each by name (GET, and after a removal, a role changed, or a handover). */
+/**
+ * Someone the workspace's work still names who is no longer a member of it:
+ * their account, the name it holds now, and their sign-in picture on the
+ * same terms as a member's.
+ */
+export const formerMemberSchema = EffectSchema.Struct({
+  userId: EffectSchema.String,
+  name: EffectSchema.String,
+  pictureUrl: EffectSchema.optionalKey(EffectSchema.String),
+});
+
+export type FormerMember = typeof formerMemberSchema.Type;
+
+/**
+ * A workspace's members, owners first, then admins, then members, each by
+ * name (GET, and after a removal, a role changed, or a handover); and on a
+ * read, who the workspace's work still names but left, by name, absent where
+ * nobody did and from a service before it.
+ */
 export const workspaceMembersAnswerSchema = EffectSchema.Struct({
   members: EffectSchema.Array(workspaceMemberSchema),
+  former: EffectSchema.optionalKey(EffectSchema.Array(formerMemberSchema)),
 });
 
 /** The query a members read names its workspace under. */

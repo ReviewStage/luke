@@ -1,9 +1,9 @@
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import type { PlanSummary } from "@luke/features/plan-wire";
-import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
+import type { FormerMember, Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { type Actor, accountActor, creatorActor, personActor } from "@luke/ui/actor-model";
 import { createContext, type ReactNode, useContext } from "react";
-import { useWorkspaceMembers } from "./planning/use-workspace-members";
+import { useFormerMembers, useWorkspaceMembers } from "./planning/use-workspace-members";
 import { useAppState } from "./use-app-state";
 
 /**
@@ -12,21 +12,27 @@ import { useAppState } from "./use-app-state";
  * The wire names a person by `{userId, name}` alone, so a byline, the Call
  * tab, an agent's card, and an Inbox answer each read the person against the
  * workspace's members for their picture, email, and role, and the reader's
- * own id to say You (`@luke/ui/actor-model`'s `personActor`). The plan reads
+ * own id to say You (`@luke/ui/actor-model`'s `personActor`), and someone
+ * who left keeps their picture, grayed, from who the read says left. The plan reads
  * the members once, here, rather than once for every line naming someone,
  * and again whenever the workspace's count changes. Outside a directory, or
  * while the members are unread, a person stands by the wire's name alone.
  */
 
-/** The members as read, the reader's own account id, and the workspace they are the members of. */
+/** The members as read, the reader's own account id, who the workspace's work names but left, and the workspace they are the members of. */
 interface Directory {
   readonly members: readonly WorkspaceMember[] | undefined;
   readonly readerId: string | undefined;
+  readonly former: readonly FormerMember[] | undefined;
   /** The workspace whose members these are, which a person named here is opened in. */
   readonly workspaceId?: string | undefined;
 }
 
-const DirectoryContext = createContext<Directory>({ members: undefined, readerId: undefined });
+const DirectoryContext = createContext<Directory>({
+  members: undefined,
+  readerId: undefined,
+  former: undefined,
+});
 
 /** Reads the workspace's members for everything inside it; none for no workspace. */
 export function MemberDirectory({
@@ -39,8 +45,9 @@ export function MemberDirectory({
   children: ReactNode;
 }): React.JSX.Element {
   const members = useWorkspaceMembers(workspace);
+  const former = useFormerMembers(workspace);
   return (
-    <DirectoryContext.Provider value={{ members, readerId, workspaceId: workspace?.id }}>
+    <DirectoryContext.Provider value={{ members, readerId, former, workspaceId: workspace?.id }}>
       {children}
     </DirectoryContext.Provider>
   );
@@ -55,8 +62,8 @@ export function useMemberDirectory(): Directory {
 export function usePerson(
   ref: { readonly userId: string; readonly name: string } | undefined,
 ): Actor {
-  const { members, readerId } = useMemberDirectory();
-  return personActor(ref, members, readerId);
+  const { members, readerId, former } = useMemberDirectory();
+  return personActor(ref, members, readerId, former);
 }
 
 /**

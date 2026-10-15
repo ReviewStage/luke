@@ -192,7 +192,7 @@ test("Luke's notes on a teammate's call name whose call it was, the teammate on 
   assert.equal(charles.querySelectorAll(".plan-edit-note .actor-mark").length, 1);
 });
 
-test("an edit the service names no member for, or read without an account id, is never yours, and a member who left stands on an outline", async () => {
+test("an edit the service names no member for, or read without an account id, is never yours, and a member who left keeps their face, grayed, and is heard as having left", async () => {
   const unnamed = { actor: PLAN_ACTOR.DEVELOPER, duringCall: false };
 
   assert.equal(
@@ -204,10 +204,10 @@ test("an edit the service names no member for, or read without an account id, is
     "Edited by Dean Stratakos · now",
   );
   const former = await draw(editedAs({ ...unnamed, by: LEE }), { readerId: DEAN.userId });
-  assert.equal(editedLines(former)[0], "Edited by Lee Park · now");
+  assert.equal(editedLines(former)[0], "Edited by Lee Park (former member) · now");
   assert.equal(
-    former.querySelector(".plan-edit-note .actor-mark")?.getAttribute("data-kind"),
-    "someone",
+    former.querySelector(".plan-edit-note .actor-mark")?.getAttribute("data-left"),
+    "true",
   );
 });
 
