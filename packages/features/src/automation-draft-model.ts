@@ -19,8 +19,12 @@ import {
   type AutomationTargetKind,
   type AutomationTrigger,
   type AutomationTriggerKind,
+  GITHUB_DEFAULT_SENDERS,
   GITHUB_TRIGGER_EVENT,
+  type GitHubSender,
   type GitHubTriggerEvent,
+  PULL_REQUEST_DEFAULT_MOMENTS,
+  type PullRequestMoment,
 } from "./automation-wire.js";
 import type { ModelChoice } from "./models-wire.js";
 
@@ -86,6 +90,8 @@ export interface AutomationDraft {
     readonly labels?: readonly string[];
     readonly branches?: readonly string[];
   };
+  /** Whose events, at which moments, and whether drafts and forks fire a GitHub trigger: the row of choices under its sentence. */
+  readonly githubSettings: GitHubTriggerSettings;
   /** The repository a run starts in, `owner/name`, or none chosen yet. */
   readonly repository: string | null;
   /** Any other repositories its runs work in, kept behind the first as they were given. */
@@ -100,6 +106,22 @@ export interface AutomationDraft {
   /** Whether a run's agent is archived once it finishes without failing. */
   readonly archiveSuccessful: boolean;
 }
+
+/** A GitHub trigger's settings as its editor holds them, each stated where the trigger leaves it to a default. */
+export interface GitHubTriggerSettings {
+  readonly senders: readonly GitHubSender[];
+  readonly moments: readonly PullRequestMoment[];
+  readonly drafts: boolean;
+  readonly forks: boolean;
+}
+
+/** A GitHub trigger's settings where it names none: people's events, at every moment, no drafts, no forks. */
+export const GITHUB_DEFAULT_SETTINGS: GitHubTriggerSettings = {
+  senders: GITHUB_DEFAULT_SENDERS,
+  moments: PULL_REQUEST_DEFAULT_MOMENTS,
+  drafts: false,
+  forks: false,
+};
 
 /** What a draft starts from where nothing is written: nine on weekdays, in the zone the window is in. */
 export interface DraftDefaults {
@@ -173,14 +195,27 @@ function targetOf(draft: AutomationDraft): AutomationTarget {
     : { kind: AUTOMATION_TARGET.NEW_AGENT };
 }
 
-/** Whether two GitHub triggers keep to the same labels and branches, in the order given. */
+/** Whether two lists hold the same words, in any order. */
+function sameSet(one: readonly string[] = [], other: readonly string[] = []): boolean {
+  return one.length === other.length && one.every((each) => other.includes(each));
+}
+
+/** Whether two GitHub triggers keep to the same labels and branches. */
 function sameFilters(
   one: AutomationDraft["githubFilters"],
   other: AutomationDraft["githubFilters"],
 ) {
-  const same = (a: readonly string[] = [], b: readonly string[] = []) =>
-    a.length === b.length && a.every((each, index) => each === b[index]);
-  return same(one.labels, other.labels) && same(one.branches, other.branches);
+  return sameSet(one.labels, other.labels) && sameSet(one.branches, other.branches);
+}
+
+/** Whether two GitHub triggers' settings say the same. */
+function sameSettings(one: GitHubTriggerSettings, other: GitHubTriggerSettings): boolean {
+  return (
+    sameSet(one.senders, other.senders) &&
+    sameSet(one.moments, other.moments) &&
+    one.drafts === other.drafts &&
+    one.forks === other.forks
+  );
 }
 
 /** The trigger a draft writes: its schedule's cron and zone, its GitHub event with the filters it kept, or its webhook. */
@@ -192,8 +227,20 @@ export function draftTrigger(draft: AutomationDraft): AutomationTrigger {
         cron: cronOf(draft.schedule),
         timezone: draft.timezone,
       };
-    case AUTOMATION_TRIGGER.GITHUB:
-      return { kind: AUTOMATION_TRIGGER.GITHUB, event: draft.githubEvent, ...draft.githubFilters };
+    case AUTOMATION_TRIGGER.GITHUB: {
+      const { senders, moments, drafts, forks } = draft.githubSettings;
+      // The moments speak to an update alone, so no other event carries them.
+      const updated = draft.githubEvent === GITHUB_TRIGGER_EVENT.PULL_REQUEST_UPDATED;
+      return {
+        kind: AUTOMATION_TRIGGER.GITHUB,
+        event: draft.githubEvent,
+        ...draft.githubFilters,
+        senders,
+        ...(updated ? { moments } : undefined),
+        drafts,
+        forks,
+      };
+    }
     case AUTOMATION_TRIGGER.WEBHOOK:
       return { kind: AUTOMATION_TRIGGER.WEBHOOK };
   }
@@ -262,6 +309,7 @@ export function automationDraft(
       triggerKind: AUTOMATION_TRIGGER.SCHEDULE,
       githubEvent: GITHUB_TRIGGER_EVENT.PULL_REQUEST_UPDATED,
       githubFilters: {},
+      githubSettings: GITHUB_DEFAULT_SETTINGS,
       repository: null,
       alsoRepositories: [],
       owner: defaults.owner,
@@ -287,6 +335,14 @@ export function automationDraft(
           ...(trigger.branches === undefined ? undefined : { branches: trigger.branches }),
         }
       : {},
+    githubSettings: github
+      ? {
+          senders: trigger.senders ?? GITHUB_DEFAULT_SETTINGS.senders,
+          moments: trigger.moments ?? GITHUB_DEFAULT_SETTINGS.moments,
+          drafts: trigger.drafts ?? GITHUB_DEFAULT_SETTINGS.drafts,
+          forks: trigger.forks ?? GITHUB_DEFAULT_SETTINGS.forks,
+        }
+      : GITHUB_DEFAULT_SETTINGS,
     repository: automation.repositories?.[0] ?? null,
     alsoRepositories: automation.repositories?.slice(1) ?? [],
     owner: automation.scope ?? AUTOMATION_SCOPE.PERSONAL,
@@ -325,7 +381,9 @@ export function draftProblems(
   const schedule =
     draft.triggerKind === AUTOMATION_TRIGGER.SCHEDULE && Result.isFailure(read)
       ? SCHEDULE_REFUSAL_WORDS[read.failure]
-      : undefined;
+      : draft.triggerKind === AUTOMATION_TRIGGER.GITHUB
+        ? githubSettingsProblem(draft)
+        : undefined;
   const repository =
     !planBacked && draft.repository === null ? "Choose the repository it works in." : undefined;
   const agent =
@@ -339,6 +397,18 @@ export function draftProblems(
   if (repository !== undefined) problems[DRAFT_FIELD.REPOSITORY] = repository;
   if (agent !== undefined) problems[DRAFT_FIELD.AGENT] = agent;
   return problems;
+}
+
+/** What stops a GitHub trigger's settings saving: no one whose events fire it, or an update at no moment. */
+function githubSettingsProblem(draft: AutomationDraft): string | undefined {
+  const { senders, moments } = draft.githubSettings;
+  if (draft.githubEvent !== GITHUB_TRIGGER_EVENT.CHECK_FAILED && senders.length === 0) {
+    return "Choose whose events start it.";
+  }
+  if (draft.githubEvent === GITHUB_TRIGGER_EVENT.PULL_REQUEST_UPDATED && moments.length === 0) {
+    return "Choose when it starts.";
+  }
+  return undefined;
 }
 
 /** The next instants a draft's schedule is due after `now`, as many as asked; none for one Luke cannot read. */
@@ -382,7 +452,8 @@ export function sameDraft(one: AutomationDraft, other: AutomationDraft): boolean
     // A GitHub event and its filters, chosen and left behind for another trigger kind, are no change.
     (one.triggerKind !== AUTOMATION_TRIGGER.GITHUB ||
       (one.githubEvent === other.githubEvent &&
-        sameFilters(one.githubFilters, other.githubFilters))) &&
+        sameFilters(one.githubFilters, other.githubFilters) &&
+        sameSettings(one.githubSettings, other.githubSettings))) &&
     cronOf(one.schedule) === cronOf(other.schedule) &&
     one.timezone === other.timezone &&
     one.repository === other.repository &&
@@ -412,7 +483,9 @@ export function changeOf(
   // Note that filters let go of on the way to another event and back are a change, because the editor then shows none.
   const eventMoved =
     draft.triggerKind === AUTOMATION_TRIGGER.GITHUB &&
-    (draft.githubEvent !== was.githubEvent || !sameFilters(draft.githubFilters, was.githubFilters));
+    (draft.githubEvent !== was.githubEvent ||
+      !sameFilters(draft.githubFilters, was.githubFilters) ||
+      !sameSettings(draft.githubSettings, was.githubSettings));
   const triggerMoved = draft.triggerKind !== was.triggerKind || scheduleMoved || eventMoved;
   const actionMoved = draft.prompt.trim() !== was.prompt || !sameChoice(draft.choice, was.choice);
   const targetMoved = draft.target !== was.target || landingAgent(draft) !== landingAgent(was);

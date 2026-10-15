@@ -662,6 +662,18 @@ function pick(page: HTMLElement, label: string, option: string): void {
   act(() => row.click());
 }
 
+/** The switch named, wherever it is drawn. */
+function switchNamed(name: string): HTMLButtonElement {
+  const found = document.querySelector<HTMLButtonElement>(`[role=switch][aria-label="${name}"]`);
+  assert.ok(found, `no switch ${name}`);
+  return found;
+}
+
+/** Whether the switch named is on. */
+function isOn(name: string): boolean {
+  return switchNamed(name).getAttribute("aria-checked") === "true";
+}
+
 /** The crumbs' words, in order. */
 function crumbs(page: HTMLElement): string {
   return page.querySelector(".automation-crumbs")?.textContent ?? "";
@@ -893,7 +905,10 @@ test("an automation fired by an event says its trigger in one sentence, and a sa
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: onEvent.id });
   await settle();
 
-  assert.equal(pickerDetail(page, "Type"), "When an issue is opened in acme/ledger labelled bug");
+  assert.equal(
+    pickerDetail(page, "Type"),
+    "When an issue by people is opened in acme/ledger labelled bug",
+  );
   assert.equal(picked(page, "Event"), "Issue opened");
   assert.equal(page.querySelector("button[aria-label^='Time zone: ']"), null);
   type(page.querySelector("textarea[aria-label='Prompt']"), "Reproduce the bug first.");
@@ -1193,18 +1208,25 @@ test("a GitHub automation's row says its trigger as one sentence, naming the rep
 
   assert.equal(
     rowOf(page, "Code review").querySelector(".automation-row-detail")?.textContent,
-    "When a pull request is opened or updated in acme/ledger",
+    "When a pull request by people is opened, marked ready, or pushed to in acme/ledger",
   );
 });
 
-test("a new automation set to a GitHub event is created on it, the trigger said as one sentence, and the list's row says it too", async () => {
+test("a new automation set to a GitHub event takes its settings as switches in the Trigger card, is created on them, and the list's row says it too", async () => {
   const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
   await settle();
 
   pick(page, "Type", "GitHub event");
   assert.equal(
     pickerDetail(page, "Type"),
-    "When a pull request is opened or updated in acme/ledger",
+    "When a pull request by people is opened, marked ready, or pushed to in acme/ledger",
+  );
+  act(() => switchNamed("From Luke's agents").click());
+  assert.equal(isOn("Skip drafts"), true);
+  assert.equal(isOn("Include forks"), false);
+  assert.equal(
+    pickerDetail(page, "Type"),
+    "When a pull request by people or Luke's agents is opened, marked ready, or pushed to in acme/ledger",
   );
   type(page.querySelector("input[aria-label='Automation name']"), "Code review");
   type(page.querySelector("textarea[aria-label='Prompt']"), "Review this pull request.");
@@ -1214,12 +1236,16 @@ test("a new automation set to a GitHub event is created on it, the trigger said 
   assert.deepEqual(creates[0]?.trigger, {
     kind: AUTOMATION_TRIGGER.GITHUB,
     event: "pull-request-updated",
+    senders: ["people", "luke-agents"],
+    moments: ["opened", "ready", "pushed"],
+    drafts: false,
+    forks: false,
   });
   act(() => button("Automations").click());
   await settle();
   assert.equal(
     rowOf(page, "Code review").querySelector(".automation-row-detail")?.textContent,
-    "When a pull request is opened or updated in acme/ledger",
+    "When a pull request by people or Luke's agents is opened, marked ready, or pushed to in acme/ledger",
   );
 });
 

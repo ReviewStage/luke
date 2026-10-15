@@ -111,17 +111,59 @@ const scheduleTriggerSchema = EffectSchema.Struct({
   ),
 });
 
+/** Who caused a GitHub event, as a trigger chooses whose events fire it. */
+export const GITHUB_SENDER = {
+  /** A person's own account. */
+  PEOPLE: "people",
+  /** The Luke GitHub App, which Luke's coding agents act as. */
+  LUKE_AGENTS: "luke-agents",
+  /** Any other App or bot account: Dependabot, Renovate, and their like. */
+  OTHER_BOTS: "other-bots",
+} as const;
+
+export type GitHubSender = (typeof GITHUB_SENDER)[keyof typeof GITHUB_SENDER];
+
+/** The moments of a pull request a `pull-request-updated` trigger may fire on. */
+export const PULL_REQUEST_MOMENT = {
+  /** Opened, or reopened. */
+  OPENED: "opened",
+  /** A draft marked ready for review. */
+  READY: "ready",
+  /** New commits pushed to it. */
+  PUSHED: "pushed",
+} as const;
+
+export type PullRequestMoment = (typeof PULL_REQUEST_MOMENT)[keyof typeof PULL_REQUEST_MOMENT];
+
+/** Whose events a trigger hears where it names none: people's alone, so no automation hears its own agents unasked. */
+export const GITHUB_DEFAULT_SENDERS: readonly GitHubSender[] = [GITHUB_SENDER.PEOPLE];
+
+/** The moments a `pull-request-updated` trigger fires on where it names none: every one. */
+export const PULL_REQUEST_DEFAULT_MOMENTS: readonly PullRequestMoment[] =
+  Object.values(PULL_REQUEST_MOMENT);
+
 /**
- * An event of the plan's repository. `labels` keeps a labelled event to
- * those labels and `branches` an event to those branches (a pull request's
- * base, a push's or a check's branch); an empty or absent list keeps
- * nothing out.
+ * An event of the automation's repositories. `labels` keeps a labelled
+ * event to those labels and `branches` an event to those branches (a pull
+ * request's base, a push's or a check's branch); an empty or absent list
+ * keeps nothing out. `senders` says whose events fire it, people's alone
+ * where absent; `moments` which moments of a pull request an update fires
+ * on, every one where absent. A draft pull request fires it only where
+ * `drafts` is true, and one from a fork only where `forks` is.
  */
 const githubTriggerSchema = EffectSchema.Struct({
   kind: EffectSchema.Literal(AUTOMATION_TRIGGER.GITHUB),
   event: EffectSchema.Literals(Object.values(GITHUB_TRIGGER_EVENT)),
   labels: EffectSchema.optionalKey(filterValuesSchema),
   branches: EffectSchema.optionalKey(filterValuesSchema),
+  senders: EffectSchema.optionalKey(
+    EffectSchema.Array(EffectSchema.Literals(Object.values(GITHUB_SENDER))),
+  ),
+  moments: EffectSchema.optionalKey(
+    EffectSchema.Array(EffectSchema.Literals(Object.values(PULL_REQUEST_MOMENT))),
+  ),
+  drafts: EffectSchema.optionalKey(EffectSchema.Boolean),
+  forks: EffectSchema.optionalKey(EffectSchema.Boolean),
 });
 
 /** A call to the automation's own address; the secret that admits it is the store's, never on this wire. */
