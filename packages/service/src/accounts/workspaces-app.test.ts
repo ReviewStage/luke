@@ -268,7 +268,7 @@ it.effect("a request without a bearer is refused and makes no workspace", () =>
 );
 
 it.effect(
-  "the first read makes the account's first workspace, owned and with no GitHub account",
+  "the first read makes the account's first workspace, called Personal, owned and with no GitHub account",
   () =>
     Effect.gen(function* () {
       const { seams, database } = yield* openWorkspacePlugin;
@@ -282,7 +282,7 @@ it.effect(
         assert.deepEqual(first, [
           {
             id: first[0]?.id,
-            name: "Ada Lovelace",
+            name: "Personal",
             slug: `personal-${ada}`,
             role: WORKSPACE_ROLE.OWNER,
             github: null,
@@ -327,7 +327,7 @@ it.effect(
         assert.match(again.slug ?? "", /^acme-platform-[0-9a-f]{8}$/u);
         assert.deepEqual(
           (yield* workspacesOf(seams, github, ada)).map(({ name }) => name),
-          ["Ada Lovelace", "Acme Platform", "Acme Platform"],
+          ["Personal", "Acme Platform", "Acme Platform"],
         );
         assert.deepEqual(
           yield* Database.use((db) =>
