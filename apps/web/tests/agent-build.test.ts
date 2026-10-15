@@ -1,6 +1,13 @@
 import { readFileSync } from "node:fs";
 import { AGENT_EXTERNAL_DEPENDENCIES } from "@luke/service/agents/agent-runtime/build";
+import { Schema } from "effect";
 import { describe, expect, it } from "vitest";
+
+const decodeManifest = Schema.decodeUnknownSync(
+  Schema.fromJsonString(
+    Schema.Struct({ dependencies: Schema.Record(Schema.String, Schema.String) }),
+  ),
+);
 
 /**
  * eve refuses an external dependency its agent's `package.json` does not
@@ -10,9 +17,9 @@ import { describe, expect, it } from "vitest";
 describe("the agents' external dependencies", () => {
   for (const agent of ["eve", "coder"]) {
     it(`are each declared by the ${agent} agent's package`, () => {
-      const manifest = JSON.parse(
+      const manifest = decodeManifest(
         readFileSync(new URL(`../${agent}/package.json`, import.meta.url), "utf8"),
-      ) as { dependencies: Record<string, string> };
+      );
       const undeclared = AGENT_EXTERNAL_DEPENDENCIES.filter(
         (name) => manifest.dependencies[name] === undefined,
       );
