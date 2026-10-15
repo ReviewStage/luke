@@ -470,6 +470,12 @@ export const codingAgentSummarySchema = EffectSchema.Struct({
   startedBy: EffectSchema.optionalKey(memberRefSchema),
   /** The automation whose run started the agent; absent for one started by hand, once that automation is deleted, and from a service before it. */
   automationId: EffectSchema.optionalKey(wireUuidSchema),
+  /**
+   * The name of the automation whose run started the agent, as it stood when
+   * the run started, kept once that automation is deleted; absent for one
+   * started by hand, and from a service before it.
+   */
+  automationName: EffectSchema.optionalKey(EffectSchema.String),
 });
 
 export type CodingAgentSummary = typeof codingAgentSummarySchema.Type;
@@ -478,15 +484,40 @@ export type CodingAgentSummary = typeof codingAgentSummarySchema.Type;
 export const codingAgentAnswerSchema = EffectSchema.Struct({ agent: codingAgentSummarySchema });
 
 /**
+ * The run of an automation that started an agent, as its page opens on it:
+ * the automation's prompt alone, without the lines Luke adds of the firing,
+ * then what fired it, each where the firing has one: the issue or pull
+ * request a GitHub event names, a webhook call's body as its caller sent
+ * it, cut as the agent was handed it, and the member who asked for a run
+ * now, absent once their account is gone.
+ */
+export const codingAgentOriginSchema = EffectSchema.Struct({
+  prompt: EffectSchema.String,
+  subject: EffectSchema.optionalKey(
+    EffectSchema.Struct({
+      number: countedNumber,
+      title: EffectSchema.optionalKey(EffectSchema.String),
+      url: EffectSchema.optionalKey(EffectSchema.String),
+    }),
+  ),
+  body: EffectSchema.optionalKey(EffectSchema.String),
+  runBy: EffectSchema.optionalKey(memberRefSchema),
+});
+
+export type CodingAgentOrigin = typeof codingAgentOriginSchema.Type;
+
+/**
  * One agent as its own page reads it, which is how an agent an automation
  * started with no plan is read, having no plan's tab to stand in: the
  * summary the tabs draw, the automation whose run started it or none, the
- * workspace it belongs to, and the repository it works in. An agent on a
- * plan reads so too, by the same id.
+ * run that did where one did, the workspace it belongs to, and the
+ * repository it works in. An agent on a plan reads so too, by the same id.
  */
 export const codingAgentPageSchema = EffectSchema.Struct({
   ...codingAgentSummarySchema.fields,
   automationId: EffectSchema.NullOr(wireUuidSchema),
+  /** The run that started the agent; absent for one started by hand, and from a service before it. */
+  origin: EffectSchema.optionalKey(codingAgentOriginSchema),
   workspaceId: EffectSchema.String,
   repository: EffectSchema.String,
 });

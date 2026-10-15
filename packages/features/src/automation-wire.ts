@@ -267,9 +267,10 @@ export const AUTOMATION_FIRING = {
 
 /**
  * What fired a run, in brief: the instant a schedule was due, the GitHub
- * event with the issue or pull request it names, or a webhook call with how
- * large its body was. Only what the run's history shows is kept; a
- * webhook's body reaches the agent's prompt and is kept nowhere else here.
+ * event with the issue or pull request it names, a webhook call with how
+ * large its body was, or a "Run now" with who asked for it. Only what the
+ * run's history shows is kept; a webhook's body reaches the agent's prompt
+ * and is kept nowhere else here.
  */
 export const automationFiringSchema = EffectSchema.Union([
   EffectSchema.Struct({
@@ -293,6 +294,8 @@ export const automationFiringSchema = EffectSchema.Union([
   }),
   EffectSchema.Struct({
     kind: EffectSchema.Literal(AUTOMATION_FIRING.MANUAL),
+    /** The member who asked for the run; absent on a run recorded before it was kept. */
+    userId: EffectSchema.optionalKey(EffectSchema.String),
   }),
 ]);
 

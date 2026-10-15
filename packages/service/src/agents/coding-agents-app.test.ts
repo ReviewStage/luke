@@ -34,8 +34,11 @@ import { accountInboxAnswerSchema } from "@luke/features/account-inbox-wire";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
+  AUTOMATION_FIRING,
   AUTOMATION_SCOPE,
   AUTOMATION_TRIGGER,
+  type AutomationFiring,
+  GITHUB_TRIGGER_EVENT,
 } from "@luke/features/automation-wire";
 import {
   CODING_AGENT_BOUNDS,
@@ -1189,6 +1192,55 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           outside,
           refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
         );
+      }),
+  );
+
+  it.effect(
+    "an automation's agent reads as its page with the run that started it: the automation's name, the prompt alone, the pull request its event named, and who asked for a run now",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, plan, agent, ask } = yield* startedAgent(eve, { running: false });
+        const ranAs = (firing: AutomationFiring) =>
+          Effect.gen(function* () {
+            yield* Database.use((db) =>
+              db
+                .update(codingAgent)
+                .set({
+                  planId: null,
+                  organizationId: plan.workspaceId,
+                  automationOrigin: { name: "Code review", firing, prompt: "Review it." },
+                })
+                .where(eq(codingAgent.id, agent.id)),
+            );
+            return readAnswer(
+              codingAgentPageAnswerSchema,
+              HOSTED_HTTP_STATUS.OK,
+              yield* ask(request(AGENT, owner, { id: agent.id })),
+            ).agent;
+          });
+
+        const reviewed = yield* ranAs({
+          kind: AUTOMATION_FIRING.GITHUB,
+          event: GITHUB_TRIGGER_EVENT.PULL_REQUEST_OPENED,
+          repository: RELAY_FULL_NAME,
+          number: 2905,
+          title: "View commands",
+          url: "https://github.com/acme/relay/pull/2905",
+        });
+        const ranNow = yield* ranAs({ kind: AUTOMATION_FIRING.MANUAL, userId: owner });
+
+        assert.equal(reviewed.automationName, "Code review");
+        assert.deepEqual(reviewed.origin, {
+          prompt: "Review it.",
+          subject: {
+            number: 2905,
+            title: "View commands",
+            url: "https://github.com/acme/relay/pull/2905",
+          },
+        });
+        assert.equal(ranNow.origin?.runBy?.userId, owner);
+        assert.equal(ranNow.origin?.subject, undefined);
       }),
   );
 
