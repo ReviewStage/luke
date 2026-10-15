@@ -4,6 +4,7 @@ import {
   type AutomationChangeParams,
   type AutomationCreateParams,
   type AutomationDeletedView,
+  type AutomationSecretCopiedView,
   type AutomationView,
 } from "@luke/features/automation-view";
 import type { AutomationSummary } from "@luke/features/automation-wire";
@@ -128,7 +129,7 @@ export function useAutomations(workspaceId: string | undefined) {
     [newestWrite],
   );
   /** A write's answer taken into the list of the workspace it is of, in its place, and into no other's. */
-  const landAutomation = useCallback((answer: AutomationView) => {
+  const landAutomation = useCallback((answer: AutomationView | AutomationSecretCopiedView) => {
     if (!("automation" in answer)) return;
     const { automation } = answer;
     setHeld((was) =>
@@ -176,6 +177,17 @@ export function useAutomations(workspaceId: string | undefined) {
       ),
     [act, written],
   );
+  /** A webhook's fresh secret put on the clipboard by the host; the automation's row takes the answer in its place. */
+  const copyWebhookSecret = useCallback(
+    (automationId: string) =>
+      written<AutomationSecretCopiedView>(
+        automationId,
+        act(ACT_KIND.AUTOMATIONS_COPY_WEBHOOK_SECRET, { automationId }),
+        UNANSWERED,
+        landAutomation,
+      ),
+    [act, written, landAutomation],
+  );
   const read = held?.workspaceId === workspaceId ? held?.read : undefined;
-  return { read, reload, create, change, toggle, remove };
+  return { read, reload, create, change, toggle, remove, copyWebhookSecret };
 }

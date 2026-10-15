@@ -11,6 +11,7 @@ import {
   SCHEDULE_KIND,
   sameDraft,
   scheduleDraftOf,
+  withGithubEvent,
   withRepository,
 } from "./automation-draft-model.js";
 import {
@@ -388,4 +389,31 @@ test("a move to another repository lets go of the agent chosen, and a hidden cho
   const chosenThenLeft = { ...fresh, agentId: AGENT_ID };
   assert.ok(sameDraft(chosenThenLeft, fresh));
   assert.equal(changeOf(chosenThenLeft, SAVED, DEFAULTS), undefined);
+});
+
+test("a move to another GitHub event lets go of the filters the event before was given, so a push never keeps an issue's label filter", () => {
+  const filtered = {
+    ...SAVED,
+    trigger: {
+      kind: AUTOMATION_TRIGGER.GITHUB,
+      event: GITHUB_TRIGGER_EVENT.ISSUE_OPENED,
+      labels: ["bug"],
+    },
+  };
+  const opened = automationDraft(filtered, DEFAULTS);
+
+  assert.deepEqual(
+    changeOf(withGithubEvent(opened, GITHUB_TRIGGER_EVENT.PUSH), filtered, DEFAULTS),
+    { trigger: { kind: AUTOMATION_TRIGGER.GITHUB, event: GITHUB_TRIGGER_EVENT.PUSH } },
+  );
+  assert.equal(withGithubEvent(opened, GITHUB_TRIGGER_EVENT.ISSUE_OPENED), opened);
+  // Away and back again, the filters let go of are a change the editor can save, since it now shows none.
+  const back = withGithubEvent(
+    withGithubEvent(opened, GITHUB_TRIGGER_EVENT.PUSH),
+    GITHUB_TRIGGER_EVENT.ISSUE_OPENED,
+  );
+  assert.ok(!sameDraft(opened, back));
+  assert.deepEqual(changeOf(back, filtered, DEFAULTS), {
+    trigger: { kind: AUTOMATION_TRIGGER.GITHUB, event: GITHUB_TRIGGER_EVENT.ISSUE_OPENED },
+  });
 });

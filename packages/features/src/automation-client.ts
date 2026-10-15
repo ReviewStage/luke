@@ -33,6 +33,8 @@ import {
 } from "./automation-view.js";
 import {
   AUTOMATION_LIST_QUERY,
+  AUTOMATION_TRIGGER,
+  type AutomationSummary,
   automationAnswerSchema,
   automationListAnswerSchema,
   automationRunAnswerSchema,
@@ -43,6 +45,7 @@ import {
   automationPath,
   automationRunPath,
   automationRunsPath,
+  automationWebhookPath,
   HOSTED_SERVICE_PATH,
 } from "./service-paths.js";
 import {
@@ -128,8 +131,17 @@ function readAnswer<Answer, Encoded>(
 }
 
 /** A write's answer as the window hears it: the summary alone. */
-function summaryOnly(read: typeof automationAnswerSchema.Type | Failed): AutomationView {
-  return "failure" in read ? read : { automation: read.automation };
+function summaryOnly(
+  serviceBaseUrl: string,
+  read: typeof automationAnswerSchema.Type | Failed,
+): AutomationView {
+  return "failure" in read ? read : { automation: withWebhookUrl(serviceBaseUrl, read.automation) };
+}
+
+/** A webhook automation with the address its caller posts to, on the service this client reaches; any other as it came. */
+function withWebhookUrl(serviceBaseUrl: string, automation: AutomationSummary): AutomationSummary {
+  if (automation.trigger.kind !== AUTOMATION_TRIGGER.WEBHOOK) return automation;
+  return { ...automation, webhookUrl: `${serviceBaseUrl}${automationWebhookPath(automation.id)}` };
 }
 
 /** The list's query: one plan's or one workspace's, or none for every automation the account reads. */
@@ -146,8 +158,10 @@ function listQuery(params: AutomationListParams): string {
 /** The window's reads and writes of the account's automations. */
 export class HostedAutomationClient {
   readonly #call: AccountCallEffects;
+  readonly #serviceBaseUrl: string;
 
   constructor(options: HostedAutomationClientOptions) {
+    this.#serviceBaseUrl = options.serviceBaseUrl;
     this.#call = accountCall({
       baseUrl: options.serviceBaseUrl,
       credential: accountBearer(options),
@@ -164,7 +178,16 @@ export class HostedAutomationClient {
         method: HTTP_METHOD.GET,
         path: `${HOSTED_SERVICE_PATH.AUTOMATIONS}${listQuery(params)}`,
       }),
-      (answer) => readAnswer(answer, automationListAnswerSchema),
+      (answer) =>
+        Effect.map(readAnswer(answer, automationListAnswerSchema), (read) =>
+          "failure" in read
+            ? read
+            : {
+                automations: read.automations.map((each) =>
+                  withWebhookUrl(this.#serviceBaseUrl, each),
+                ),
+              },
+        ),
     );
   }
 
@@ -180,7 +203,10 @@ export class HostedAutomationClient {
         path: HOSTED_SERVICE_PATH.AUTOMATIONS,
         body: JSON.stringify(admitted),
       }),
-      (answer) => Effect.map(readAnswer(answer, automationAnswerSchema), summaryOnly),
+      (answer) =>
+        Effect.map(readAnswer(answer, automationAnswerSchema), (read) =>
+          summaryOnly(this.#serviceBaseUrl, read),
+        ),
     );
   }
 
@@ -196,7 +222,10 @@ export class HostedAutomationClient {
         path: automationPath(admitted.automationId),
         body: JSON.stringify(admitted.change),
       }),
-      (answer) => Effect.map(readAnswer(answer, automationAnswerSchema), summaryOnly),
+      (answer) =>
+        Effect.map(readAnswer(answer, automationAnswerSchema), (read) =>
+          summaryOnly(this.#serviceBaseUrl, read),
+        ),
     );
   }
 
@@ -215,7 +244,10 @@ export class HostedAutomationClient {
         path: automationPath(params.automationId),
         body: JSON.stringify({ webhookSecretHash: params.webhookSecretHash }),
       }),
-      (answer) => Effect.map(readAnswer(answer, automationAnswerSchema), summaryOnly),
+      (answer) =>
+        Effect.map(readAnswer(answer, automationAnswerSchema), (read) =>
+          summaryOnly(this.#serviceBaseUrl, read),
+        ),
     );
   }
 

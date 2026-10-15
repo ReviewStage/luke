@@ -373,6 +373,12 @@ export const automationSummarySchema = EffectSchema.Struct({
     ]),
   ),
   archiveSuccessful: EffectSchema.optionalKey(EffectSchema.Boolean),
+  /**
+   * The address a webhook trigger's caller posts to, as the client that read
+   * the automation reaches the service; the service sends none, since the
+   * one origin that holds is the caller's.
+   */
+  webhookUrl: EffectSchema.optionalKey(EffectSchema.String),
 });
 
 export type AutomationSummary = typeof automationSummarySchema.Type;

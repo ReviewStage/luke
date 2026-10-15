@@ -139,7 +139,7 @@ function cronNumber(field: string | undefined, most: number): number | undefined
 }
 
 /** The repositories a draft's runs work in: the one shown first, then the others it kept, the first among them once. */
-function repositoriesOf(draft: AutomationDraft): readonly string[] {
+export function draftRepositories(draft: AutomationDraft): readonly string[] {
   if (draft.repository === null) return draft.alsoRepositories;
   const first = draft.repository;
   return [first, ...draft.alsoRepositories.filter((repository) => repository !== first)];
@@ -173,8 +173,18 @@ function targetOf(draft: AutomationDraft): AutomationTarget {
     : { kind: AUTOMATION_TARGET.NEW_AGENT };
 }
 
+/** Whether two GitHub triggers keep to the same labels and branches, in the order given. */
+function sameFilters(
+  one: AutomationDraft["githubFilters"],
+  other: AutomationDraft["githubFilters"],
+) {
+  const same = (a: readonly string[] = [], b: readonly string[] = []) =>
+    a.length === b.length && a.every((each, index) => each === b[index]);
+  return same(one.labels, other.labels) && same(one.branches, other.branches);
+}
+
 /** The trigger a draft writes: its schedule's cron and zone, its GitHub event with the filters it kept, or its webhook. */
-function triggerOf(draft: AutomationDraft): AutomationTrigger {
+export function draftTrigger(draft: AutomationDraft): AutomationTrigger {
   switch (draft.triggerKind) {
     case AUTOMATION_TRIGGER.SCHEDULE:
       return {
@@ -354,13 +364,13 @@ export function createRequestOf(
   const made = {
     workspaceId,
     name: draft.name.trim(),
-    trigger: triggerOf(draft),
+    trigger: draftTrigger(draft),
     action: actionOf(draft),
     scope: draft.owner,
     target: targetOf(draft),
     archiveSuccessful: draft.archiveSuccessful,
   } as const;
-  return draft.repository === null ? made : { ...made, repositories: repositoriesOf(draft) };
+  return draft.repository === null ? made : { ...made, repositories: draftRepositories(draft) };
 }
 
 /** Whether two drafts say the same: what a page compares to know whether anything was written into it. */
@@ -369,8 +379,10 @@ export function sameDraft(one: AutomationDraft, other: AutomationDraft): boolean
     one.name.trim() === other.name.trim() &&
     one.prompt.trim() === other.prompt.trim() &&
     one.triggerKind === other.triggerKind &&
-    // A GitHub event chosen and left behind for another trigger kind is no change.
-    (one.triggerKind !== AUTOMATION_TRIGGER.GITHUB || one.githubEvent === other.githubEvent) &&
+    // A GitHub event and its filters, chosen and left behind for another trigger kind, are no change.
+    (one.triggerKind !== AUTOMATION_TRIGGER.GITHUB ||
+      (one.githubEvent === other.githubEvent &&
+        sameFilters(one.githubFilters, other.githubFilters))) &&
     cronOf(one.schedule) === cronOf(other.schedule) &&
     one.timezone === other.timezone &&
     one.repository === other.repository &&
@@ -397,15 +409,17 @@ export function changeOf(
   const scheduleMoved =
     draft.triggerKind === AUTOMATION_TRIGGER.SCHEDULE &&
     (cronOf(draft.schedule) !== cronOf(was.schedule) || draft.timezone !== was.timezone);
+  // Note that filters let go of on the way to another event and back are a change, because the editor then shows none.
   const eventMoved =
-    draft.triggerKind === AUTOMATION_TRIGGER.GITHUB && draft.githubEvent !== was.githubEvent;
+    draft.triggerKind === AUTOMATION_TRIGGER.GITHUB &&
+    (draft.githubEvent !== was.githubEvent || !sameFilters(draft.githubFilters, was.githubFilters));
   const triggerMoved = draft.triggerKind !== was.triggerKind || scheduleMoved || eventMoved;
   const actionMoved = draft.prompt.trim() !== was.prompt || !sameChoice(draft.choice, was.choice);
   const targetMoved = draft.target !== was.target || landingAgent(draft) !== landingAgent(was);
   const repositoryMoved = automation.planId === null && draft.repository !== was.repository;
   const change: ChangeDraft = {};
   if (draft.name.trim() !== was.name) change.name = draft.name.trim();
-  if (triggerMoved) change.trigger = triggerOf(draft);
+  if (triggerMoved) change.trigger = draftTrigger(draft);
   if (actionMoved) change.action = actionOf(draft);
   if (targetMoved && (draft.target === AUTOMATION_TARGET.NEW_AGENT || draft.agentId !== null)) {
     change.target = targetOf(draft);
@@ -413,9 +427,24 @@ export function changeOf(
   if (draft.archiveSuccessful !== was.archiveSuccessful) {
     change.archiveSuccessful = draft.archiveSuccessful;
   }
-  if (repositoryMoved && draft.repository !== null) change.repositories = repositoriesOf(draft);
+  if (repositoryMoved && draft.repository !== null) change.repositories = draftRepositories(draft);
   if (draft.owner !== was.owner) change.scope = draft.owner;
   return Object.keys(change).length === 0 ? undefined : change;
+}
+
+/**
+ * A draft moved to another GitHub event. The label and branch filters a
+ * trigger was given go with the event they were given for, since the
+ * editor does not show them and one event's filter can match nothing of
+ * another's: a label filter on a push, whose delivery has no labels, would
+ * keep the trigger from ever firing.
+ */
+export function withGithubEvent(
+  draft: AutomationDraft,
+  event: GitHubTriggerEvent,
+): AutomationDraft {
+  if (event === draft.githubEvent) return draft;
+  return { ...draft, githubEvent: event, githubFilters: {} };
 }
 
 /**
