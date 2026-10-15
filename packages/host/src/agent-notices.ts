@@ -18,6 +18,7 @@ import {
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
 import { INBOX_CURSOR_START } from "@luke/features/inbox-wire";
+import { linkLabels } from "@luke/features/mention-link";
 import { modelLabel } from "@luke/features/model-label";
 import type { CatalogModel } from "@luke/features/models-wire";
 import type { PlanningView } from "@luke/features/planning-view";
@@ -332,7 +333,8 @@ function noticeText(input: {
 
 /**
  * What an inbox item's announcement says: the plan's name over the agent,
- * by its title or else its model's name, and the item's title, and nothing
+ * by its title or else its model's name, and the item's title, a link in
+ * it said by its name rather than its address (`linkLabels`), and nothing
  * of what the item details.
  */
 function inboxNoticeText(
@@ -341,7 +343,7 @@ function inboxNoticeText(
   models: readonly CatalogModel[] | undefined,
 ): Pick<AgentNotice, "title" | "body"> {
   const agent = item.agentTitle ?? modelLabel(item.agentModel, models);
-  return { title: planName ?? UNNAMED_PLAN_TITLE, body: `${agent}: ${item.title}` };
+  return { title: planName ?? UNNAMED_PLAN_TITLE, body: `${agent}: ${linkLabels(item.title)}` };
 }
 
 /**
@@ -405,7 +407,10 @@ function planlessNoticeText(
   models: readonly CatalogModel[] | undefined,
 ): Pick<AgentNotice, "title" | "body"> {
   const agent = item.agentTitle ?? modelLabel(item.agentModel, models);
-  return { title: item.automationName ?? item.repository, body: `${agent}: ${item.title}` };
+  return {
+    title: item.automationName ?? item.repository,
+    body: `${agent}: ${linkLabels(item.title)}`,
+  };
 }
 
 /** What an answer of the inbox read carries that the window and the Dock are told of. */

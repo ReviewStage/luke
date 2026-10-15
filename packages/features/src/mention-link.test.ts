@@ -7,6 +7,7 @@ import {
   encodeMention,
   isMentionableTool,
   isMentionLabel,
+  linkLabels,
   linkMention,
   MENTION_KIND,
   type Mention,
@@ -645,4 +646,17 @@ test("a GitHub page that is a file of the plan stays the file's mention, while o
   ]) {
     assert.equal(decodeMention(target, REPOSITORY)?.kind, MENTION_KIND.LINK, target);
   }
+});
+
+test("a plain place says each link by its name, a mention's without its @, and never its address", () => {
+  assert.equal(
+    linkLabels(
+      `Review [@store.ts](https://github.com/${REPOSITORY}/blob/HEAD/store.ts) and [LUKE-142](https://linear.app/acme/issue/LUKE-142) for [the \\[draft\\]](https://example.com/a)`,
+    ),
+    "Review store.ts and LUKE-142 for the [draft]",
+  );
+  assert.equal(
+    linkLabels("See https://linear.app/acme/issue/LUKE-9"),
+    "See https://linear.app/acme/issue/LUKE-9",
+  );
 });

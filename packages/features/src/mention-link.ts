@@ -867,3 +867,19 @@ export function mentionsIn(
   }
   return found;
 }
+
+/** A Markdown link inline: its label, brackets and backslashes escaped inside it, and its target. */
+const MARKDOWN_LINK = /\[((?:\\[[\]\\]|[^[\]\\])*)\]\([^()\s]*\)/gu;
+
+/**
+ * Words with each Markdown link written as its name, as a place that draws
+ * plain words says it, a notification or a list's title: a mention's label
+ * without its `@`, as its chip names it, and any other link's label, never
+ * its address. A bare address is words, and stays as written. Note that
+ * code is not told apart, since such a place says one line of words.
+ */
+export function linkLabels(words: string): string {
+  return words.replace(MARKDOWN_LINK, (_link, label: string) =>
+    mentionName(label.replace(LABEL_ESCAPE, "$1")),
+  );
+}
