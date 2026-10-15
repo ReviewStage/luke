@@ -53,7 +53,8 @@ import { useTabViews } from "./strip-tabs";
  * the window's side panel, held by the agent while its page stands
  * (`use-plans-tab.ts`): a delegation's row opens its worker there, and its
  * Changes chip its pull request's changes, as on a task, and its toggle,
- * its width, and its keys are the plan's own. Its title names the agent as
+ * its width, and its keys are the plan's own; ⌘T opens its "+", the page's
+ * one, since the agent's own column opens no tab. Its title names the agent as
  * its tab would. An archived agent takes no message, so its composer gives
  * way to its own Unarchive. Whoever sent it a message is read against its
  * workspace's members, as on a plan. Escape leaves it for wherever it was
@@ -99,10 +100,15 @@ export function DesktopAgentPage({
   const views = useTabViews();
   const { sidePanel } = plans;
   const drawing = useSidePanelDrawing(sidePanel);
-  const { onArea, focus } = useColumnFocus();
+  const { onArea, focus, setFocus } = useColumnFocus();
   // The panel holds the keys while the focus went into it last, or while it fills the window over the page.
   const sideFocused = sidePanel.open && (focus === COLUMN.SIDE || sidePanel.fullScreen);
   const openAgents = useMemo(() => [agentId], [agentId]);
+  // ⌘T opens the panel's "+", the page's one, handing it the keys: the agent's own column opens no tab of its own.
+  useAppCommand(APP_COMMAND.NEW_TAB, () => {
+    setFocus(COLUMN.SIDE);
+    sidePanel.onNewTab();
+  });
   const agents = useCodingAgents({
     acts: { act },
     planId: undefined,
@@ -147,6 +153,7 @@ export function DesktopAgentPage({
   const control = {
     ...agents,
     agents: agent === undefined ? agents.agents : [agent],
+    agentIds: agent === undefined ? agents.agentIds : [agent.id],
     models: agents.models ?? plans.agents.models,
     keywords,
     onUnarchive: agent?.archivedAt === undefined ? undefined : unarchive,

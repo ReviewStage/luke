@@ -549,6 +549,53 @@ test("an agent's Changes row is named as its tab is, with its pull request's num
   assert.ok(rows().includes(changes), "found by its pull request's title");
 });
 
+test("while an agent's page holds the side panel, ⌘K offers none of the open plan's panel tabs, workers, or Changes, which would open beside the agent", () => {
+  const agent = {
+    id: "agent-7",
+    planId: "plan-1",
+    model: "anthropic/claude-opus-5.5",
+    effort: "high",
+    title: "Invoice export",
+    createdAt: 1,
+    status: CODING_AGENT_STATUS.COMPLETED,
+    turnId: null,
+  };
+  const control = plansControl({});
+  openPalette(
+    plansControl({
+      activePlanId: DOCUMENT_PLAN.id,
+      region: { kind: DOCUMENT_REGION.READY, plan: DOCUMENT_PLAN },
+      agentView: { ...control.agentView, agentId: "agent-page-1" },
+      agents: codingAgentsControl({
+        agents: [agent],
+        agentIds: [agent.id],
+        pullRequests: new Map([
+          [
+            agent.id,
+            {
+              number: 42,
+              title: "Export invoices as CSV",
+              url: "https://github.com/acme/billing/pull/42",
+              state: PULL_REQUEST_STATE.OPEN,
+              checks: CHECK_SUMMARY.PASSING,
+              additions: 120,
+              deletions: 8,
+              changedFiles: 4,
+            },
+          ],
+        ]),
+      }),
+    }),
+  );
+
+  type("#42");
+  const changes = rows().filter((row) => row.startsWith("Changes"));
+  type("Show board");
+  const board = rows().filter((row) => row.startsWith("Show board"));
+
+  assert.deepEqual([changes, board], [[], []]);
+});
+
 test('a file found wears the look the side panel\'s "+" gives it, hangs its card with Luke\'s note, and opens through the panel\'s one door for a file, as the "+" row of a file whose tab stands does', async () => {
   const path = "src/invites/accept.ts";
   const note = "A used invite is refused here.";

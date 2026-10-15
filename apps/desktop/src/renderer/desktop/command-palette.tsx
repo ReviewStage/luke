@@ -467,13 +467,16 @@ function agentRows(plans: PlansControl, show: (pick: () => void) => void): reado
     ...entry,
     onPick: () => plans.onShowAgent(planId, entry.row.id),
   }));
-  const subagents = panelEntries({
-    panel: plans.sidePanel,
-    kinds: [],
-    workers,
-    files: [],
-    changes: changesOffers(plans.agents, plans.sidePanel.changes),
-  }).map((entry) => ({ ...entry, onPick: () => shownOverHistory(plans, entry.onPick) }));
+  // Note that the plan's workers and Changes open in its panel, which an agent's page holds while it stands.
+  const subagents = holdsPlanPanel(plans)
+    ? panelEntries({
+        panel: plans.sidePanel,
+        kinds: [],
+        workers,
+        files: [],
+        changes: changesOffers(plans.agents, plans.sidePanel.changes),
+      }).map((entry) => ({ ...entry, onPick: () => shownOverHistory(plans, entry.onPick) }))
+    : [];
   const entries = [...inbox, ...agents, ...subagents];
   return entries.map(({ row, endMark, onPick, agent }) => ({
     icon: row.icon,
@@ -504,19 +507,25 @@ function actionRows(run: (command: AppCommand) => void): readonly PaletteRow[] {
   }));
 }
 
+/** Whether the side panel is the open plan's, as it is but while an agent's page holds it (`use-plans-tab.ts`). */
+function holdsPlanPanel(plans: PlansControl): boolean {
+  return plans.agentView.agentId === undefined;
+}
+
 /**
  * The side panel's kinds, listed with the commands as Show board and the
  * rest, a command's verb before the name its tab wears, each wearing its
  * kind's glyph as its tab does (`tab-look.tsx`) and showing the panel on
  * its tab as the panel's "+" does, over the version history; none while
- * the plan is not drawn, since there is no panel to show. No chord reaches
+ * the plan is not drawn, since there is no panel to show, nor while an
+ * agent's page holds the panel, which is that agent's. No chord reaches
  * them.
  */
 function panelTabRows(
   plans: PlansControl,
   show: (pick: () => void) => void,
 ): readonly PaletteRow[] {
-  if (plans.region.kind !== DOCUMENT_REGION.READY) return [];
+  if (plans.region.kind !== DOCUMENT_REGION.READY || !holdsPlanPanel(plans)) return [];
   return SIDE_PANEL_TABS.map((tab) => {
     const look = tabLook({ kind: TAB_KIND.PANEL, tab });
     const label = `Show ${look.label.toLowerCase()}`;
@@ -903,7 +912,7 @@ export function CommandPalette({
     onPlans(() => shownOverHistory(plans, () => plans.sidePanel.onOpenFile({ path })));
   const rowsFor = (kind: PaletteKind): readonly PaletteRow[] =>
     kind === PALETTE_FILTER.FILES
-      ? matchedPaths.map((path) =>
+      ? (holdsPlanPanel(plans) ? matchedPaths : []).map((path) =>
           fileRow(path, { shown: plans.shownCode ?? [], repository }, openFile),
         )
       : tiersOf[kind]()
