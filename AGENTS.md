@@ -350,6 +350,12 @@ The model is Redis. Full rules with sources and examples in `docs/STYLE.md`.
   we X, because Y." Design comments sit above the function. No trivial
   comments.
 
+## Commits
+
+Commit messages and PR titles follow Conventional Commits 1.0.0
+(https://www.conventionalcommits.org/en/v1.0.0/) and branch names follow
+Conventional Branch 1.1.0 (https://conventionalbranch.org/), both exactly.
+
 ## TypeScript
 
 - No stringly typed fixed value sets. Use `as const` SCREAMING_SNAKE_CASE objects,
