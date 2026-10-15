@@ -660,3 +660,18 @@ test("a plain place says each link by its name, a mention's without its @, and n
     "See https://linear.app/acme/issue/LUKE-9",
   );
 });
+
+test("a plain place reads a link as markdown does: balanced parentheses and a title in its destination, the inner of nested brackets, and a bare address by its chip's name", () => {
+  assert.equal(
+    linkLabels("Review [Plan](https://www.notion.so/Plan-(draft)) now"),
+    "Review Plan now",
+  );
+  assert.equal(linkLabels('See [the docs](https://example.com/docs "Docs").'), "See the docs.");
+  assert.equal(linkLabels("outer [inner](https://example.com/b) end"), "outer inner end");
+  assert.equal(
+    linkLabels("[https://linear.app/acme/issue/LUKE-9](https://linear.app/acme/issue/LUKE-9)"),
+    "acme/issue/LUKE-9",
+  );
+  assert.equal(linkLabels("Ask [@alice](https://example.com/profile)"), "Ask @alice");
+  assert.equal(linkLabels("[a](b c d) and [x]"), "[a](b c d) and [x]");
+});

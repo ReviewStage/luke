@@ -868,30 +868,71 @@ export function mentionsIn(
   return found;
 }
 
-/** A link's target as a plain place passes over it: no space, and no parenthesis inside it. */
-const PLAIN_TARGET = /^[^()\s]*$/u;
+/** The quotes a link's title may stand between, after its destination. */
+const TITLE_QUOTES: ReadonlySet<string> = new Set(['"', "'"]);
+
+/**
+ * Where an inline link's destination ends, read from just after its `(`:
+ * the destination, its parentheses balanced, perhaps a title in quotes
+ * after a space, and the `)` that closes it; nothing where the words hold
+ * no such link. Note that it reads no further than a page's address may
+ * spell, so a run of unclosed links costs a reader no more than one pass.
+ */
+function destinationEnd(
+  words: string,
+  open: number,
+): { readonly target: string; readonly end: number } | undefined {
+  const bound = Math.min(words.length, open + MENTION_BOUNDS.MAX_URL_CHARS + 1);
+  let depth = 0;
+  let at = open;
+  for (; at < bound; at += 1) {
+    const character = words[at] ?? "";
+    if (character === "\\") at += 1;
+    else if (character === "(") depth += 1;
+    else if (character === ")" && depth > 0) depth -= 1;
+    else if (character === ")" || /\s/u.test(character)) break;
+  }
+  const target = words.slice(open, at);
+  if (words[at] === ")") return { target, end: at };
+  // A title in quotes may follow the destination, after a space, and before its `)`.
+  const space = /^[ \t]+/u.exec(words.slice(at, bound))?.[0].length ?? 0;
+  const quote = words[at + space] ?? "";
+  if (space === 0 || !TITLE_QUOTES.has(quote)) return undefined;
+  const closing = words.indexOf(quote, at + space + 1);
+  if (closing === -1 || closing >= bound || words[closing + 1] !== ")") return undefined;
+  return { target, end: closing + 1 };
+}
 
 /**
  * Words with each Markdown link written as its name, as a place that draws
- * plain words says it, a notification or a list's title: a mention's label
- * without its `@`, as its chip names it, and any other link's label, never
- * its address. A bare address is words, and stays as written. Note that
- * code is not told apart, since such a place says one line of words, and
- * that the words are walked rather than matched, so no spelling of them
- * sends a pattern back over what it read.
+ * plain words says it, a notification or a list's title: a link naming a
+ * mention by the name its chip says (`linkMention`, read with no
+ * repository, as a place off a plan's page draws it), and any other link
+ * by its label, never its address. A bare address is words, and stays as
+ * written. The words are read once, front to back: a label is the words
+ * since the last `[` on its line, so of nested brackets the inner link is
+ * the link, as markdown reads them. Note that code is not told apart,
+ * since such a place says one line of words.
  */
 export function linkLabels(words: string): string {
   let said = "";
   let from = 0;
-  for (let at = words.indexOf("["); at !== -1; at = words.indexOf("[", at + 1)) {
-    const close = labelEnd(words, at);
-    if (close === undefined || words[close + 1] !== "(") continue;
-    const targetEnd = words.indexOf(")", close + 2);
-    if (targetEnd === -1 || !PLAIN_TARGET.test(words.slice(close + 2, targetEnd))) continue;
-    said +=
-      words.slice(from, at) + mentionName(words.slice(at + 1, close).replace(LABEL_ESCAPE, "$1"));
-    from = targetEnd + 1;
-    at = targetEnd;
+  let open: number | undefined;
+  for (let at = 0; at < words.length; at += 1) {
+    const character = words[at];
+    if (character === "\\") at += 1;
+    else if (character === "\n") open = undefined;
+    else if (character === "[") open = at;
+    else if (character === "]" && open !== undefined) {
+      const link = words[at + 1] === "(" ? destinationEnd(words, at + 2) : undefined;
+      if (link !== undefined) {
+        const label = words.slice(open + 1, at).replace(LABEL_ESCAPE, "$1");
+        said += words.slice(from, open) + (linkMention(label, link.target, null)?.name ?? label);
+        from = link.end + 1;
+        at = link.end;
+      }
+      open = undefined;
+    }
   }
   return said + words.slice(from);
 }
