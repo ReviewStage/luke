@@ -109,6 +109,9 @@ function fixture() {
       shownInbox: (planId) => {
         noted.push(`inbox:${planId}`);
       },
+      shownChat: (shown) => {
+        noted.push(`chat:${shown}`);
+      },
     },
     host: {
       codingAgentModels: () =>

@@ -134,6 +134,7 @@ export interface CodingAgentActsDependencies {
     | "observePlanGone"
     | "shown"
     | "shownInbox"
+    | "shownChat"
   >;
 }
 
@@ -256,10 +257,11 @@ export function codingAgentActRows(
       refuseUnlessPanel(ACT_KIND.CODING_AGENTS_ARCHIVE, sender);
       return notedAgent(host.codingAgentArchive(params));
     },
-    [ACT_KIND.CODING_AGENTS_SHOWN]: ({ agentId, inboxPlanId }, sender) => {
+    [ACT_KIND.CODING_AGENTS_SHOWN]: ({ agentId, inboxPlanId, chatShown }, sender) => {
       refuseUnlessPanel(ACT_KIND.CODING_AGENTS_SHOWN, sender);
       notices.shown(agentId);
       notices.shownInbox(inboxPlanId);
+      notices.shownChat(chatShown === true);
     },
     [ACT_KIND.CODING_AGENTS_PAGE]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.CODING_AGENTS_PAGE, sender);

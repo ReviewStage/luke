@@ -22,7 +22,7 @@ import {
 import { channels } from "#shared/bridge";
 import type { AppHotkeysSlice, AppStateSnapshot, AppWindowFacts } from "#shared/messages/app-state";
 import { APP_COMMAND } from "#shared/shortcuts";
-import type { AgentEndToast, AgentPlace, InboxItemToast } from "../agent-notices";
+import type { AgentEndToast, AgentPlace, ChatMessageToast, InboxItemToast } from "../agent-notices";
 import { type AppStateStore, voiceWindowState } from "../app-state";
 import { APP_LINK_SCHEME, type AppLinkPlace } from "../window/app-links";
 import { CallWindow } from "../window/call-window";
@@ -97,6 +97,10 @@ export interface WindowService extends DesktopService {
   showSettings: () => void;
   /** Asks the panels to say an inbox item opened in their toast: one that opened while the window is focused. */
   toastInboxItem: (item: InboxItemToast) => void;
+  /** Asks the panels to open their Chat: a chat notification's click. */
+  showChat: () => void;
+  /** Asks the panels to say a chat message waits in their toast: one that came to wait while the window is focused. */
+  toastChatMessage: (message: ChatMessageToast) => void;
   /**
    * The panel window coming forward or going behind, for as long as the
    * subscription stands. The hidden voice window is never the key window, so
@@ -274,6 +278,14 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     panels.broadcast(channels.onInboxItemOpened, item);
   }
 
+  function showChat(): void {
+    panels.broadcast(channels.onShowChat, {});
+  }
+
+  function toastChatMessage(message: ChatMessageToast): void {
+    panels.broadcast(channels.onChatMessageWaiting, message);
+  }
+
   function onPanelFocusChanged(listener: (focused: boolean) => void): () => void {
     const focused = (_event: Electron.Event, window: BrowserWindow) => {
       if (panels.owns(window.webContents)) listener(true);
@@ -416,6 +428,8 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     showInbox,
     showSettings,
     toastInboxItem,
+    showChat,
+    toastChatMessage,
     toastAgentEnd,
     onPanelFocusChanged,
     reporterOf,

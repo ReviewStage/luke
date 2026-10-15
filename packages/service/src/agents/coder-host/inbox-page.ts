@@ -16,6 +16,7 @@ import {
   planInboxStamps,
 } from "../../inbox/inbox-store.js";
 import { CODER } from "./bounds.js";
+import { chatWaitingEntries, chatWaitingStamps } from "./chat-waiting.js";
 
 /**
  * inbox-page.ts -- a plan's inbox as the desktop reads it, and what waits across the account: each held open while nothing changed since the reader's cursor.
@@ -40,7 +41,10 @@ import { CODER } from "./bounds.js";
  * `ACCOUNT_INBOX_POLL` rather than `MESSAGES_POLL`, because a desktop holds
  * it for as long as it is signed in rather than while a tab is on screen.
  * The open items of agents with no plan, and the automations holding them,
- * ride beside the plans' under keys of their own, and move the same cursor.
+ * ride beside the plans' under keys of their own, and move the same cursor,
+ * and so does what waits on the account in chat (`chat-waiting.ts`): its
+ * stamps are digested with the items', so an ask or a notice landing wakes
+ * the held read as an item does.
  */
 
 /** How many characters of the digest a cursor carries: far more than any two inboxes of a plan could share by chance. */
@@ -105,6 +109,15 @@ export function planInboxPast(
   );
 }
 
+/** Where everything that waits on the account stands: its open items, its planless agents' among them, and what waits in chat. */
+function accountStamps(userId: string): InboxStoreEffect<readonly InboxStamp[]> {
+  return Effect.gen(function* () {
+    const items = yield* accountWaitingStamps(userId);
+    const chat = yield* chatWaitingStamps(userId);
+    return [...items, ...chat];
+  });
+}
+
 /**
  * What waits on the developer across the account, held while its cursor is
  * still the reader's, and when it was read. Note that the instant is taken
@@ -117,16 +130,18 @@ export function accountInboxPast(
 ): InboxStoreEffect<AccountInboxAnswer> {
   const read = Effect.gen(function* () {
     const readAt = yield* Clock.currentTimeMillis;
+    // Note that the cursor is read before what it stands for, so a change landing between them wakes the reader again rather than being lost.
+    const cursor = cursorOf(yield* accountStamps(userId));
     const rows = yield* accountWaitingItems(userId);
     const plans = yield* accountInboxPlans(userId);
     const planlessRows = yield* accountPlanlessItems(userId);
     const automations = yield* accountInboxAutomations(userId);
+    const chat = yield* chatWaitingEntries(userId);
     const items = rows.map(({ status: _status, ...entry }) => entry);
     const planless = planlessRows.map(({ status: _status, ...entry }) => entry);
-    const cursor = cursorOf([...rows, ...planlessRows]);
-    return { items, plans, planless, automations, cursor, readAt };
+    return { items, plans, planless, automations, chat, cursor, readAt };
   });
-  return heldUntilMoved(accountWaitingStamps(userId), after, CODER.ACCOUNT_INBOX_POLL).pipe(
+  return heldUntilMoved(accountStamps(userId), after, CODER.ACCOUNT_INBOX_POLL).pipe(
     Effect.andThen(read),
   );
 }

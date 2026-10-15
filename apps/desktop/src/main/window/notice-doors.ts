@@ -1,5 +1,10 @@
 import { app, Notification } from "electron";
-import type { AgentEndToast, AgentNoticeDoorsSurface, InboxItemToast } from "../agent-notices";
+import type {
+  AgentEndToast,
+  AgentNoticeDoorsSurface,
+  ChatMessageToast,
+  InboxItemToast,
+} from "../agent-notices";
 
 /**
  * notice-doors.ts -- the doors an agent's announcement leaves this process through: Electron's `Notification`, shown once with its click handed back, the panel's own toast, or the Dock's badge.
@@ -21,11 +26,12 @@ import type { AgentEndToast, AgentNoticeDoorsSurface, InboxItemToast } from "../
 export function electronNoticeDoors(dependencies: {
   toPanels: (end: AgentEndToast) => void;
   inboxToPanels: (item: InboxItemToast) => void;
+  chatToPanels: (message: ChatMessageToast) => void;
   /** macOS refused a notification, or showed one: whether notifications are off for Luke. */
   onRefused: (refused: boolean) => void;
   report: (line: string) => void;
 }): AgentNoticeDoorsSurface {
-  const { toPanels, inboxToPanels, onRefused, report } = dependencies;
+  const { toPanels, inboxToPanels, chatToPanels, onRefused, report } = dependencies;
   const standing = new Set<Notification>();
   return {
     post: (notice) => {
@@ -48,6 +54,7 @@ export function electronNoticeDoors(dependencies: {
     },
     toast: toPanels,
     toastInbox: inboxToPanels,
+    toastChat: chatToPanels,
     badge: (count) => {
       app.setBadgeCount(count);
     },

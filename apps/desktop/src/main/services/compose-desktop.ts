@@ -250,6 +250,10 @@ export function composeDesktop(
           windows.panels.focusExpanded();
           windows.showInbox(planId);
         },
+        openChat: () => {
+          windows.panels.focusExpanded();
+          windows.showChat();
+        },
         report: config.report,
       }).pipe(
         Effect.provideService(
@@ -257,6 +261,7 @@ export function composeDesktop(
           electronNoticeDoors({
             toPanels: windows.toastAgentEnd,
             inboxToPanels: windows.toastInboxItem,
+            chatToPanels: windows.toastChatMessage,
             onRefused: (refused) => {
               if (state.snapshot().notifications.refused !== refused) {
                 state.update({ notifications: { refused } });

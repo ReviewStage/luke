@@ -26,6 +26,14 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
  * which name a plan: a build that reads only those drops the keys it does
  * not know, as every service answer is read (`readServiceAnswer`), and
  * never meets an item it cannot place.
+ *
+ * What waits on the developer in the workspaces' chat rides beside them
+ * under a key of its own (`chat`), on the same terms: every open ask
+ * someone else posted, and the one direct message or mention their member
+ * was last told of and has not read past. Each says only enough to be
+ * announced and opened, who posted it by handle and the plan of the
+ * channel it stands in, and none of its words, which the window reads
+ * from the chat itself. A build that predates it reads none.
  */
 
 /** One open item as the account's read carries it: where it waits, who posted it, and what it is called. */
@@ -91,6 +99,36 @@ export const accountInboxAutomationSchema = EffectSchema.Struct({
 
 export type AccountInboxAutomation = typeof accountInboxAutomationSchema.Type;
 
+/** Why a chat message waits on the developer. */
+export const ACCOUNT_CHAT_REASON = {
+  /** An ask someone else posted, still open. */
+  ASK: "ask",
+  /** A direct message to the developer they have not read past. */
+  DIRECT: "direct",
+  /** A message mentioning the developer, or replying in a thread of theirs, they have not read past. */
+  MENTION: "mention",
+} as const;
+
+/**
+ * One chat message that waits on the developer, as the account's read
+ * carries it: the message by its id and its place in its workspace's chat,
+ * the workspace, why it waits, who posted it by handle, the plan of the
+ * channel it stands in where it stands in a plan's, the place it last
+ * changed at, which an ask posted again moves, and when it last changed.
+ */
+export const accountChatEntrySchema = EffectSchema.Struct({
+  messageId: wireUuidSchema,
+  seq: countedNumber,
+  workspaceId: EffectSchema.String,
+  reason: EffectSchema.Literals(Object.values(ACCOUNT_CHAT_REASON)),
+  from: EffectSchema.String,
+  planId: EffectSchema.NullOr(wireUuidSchema),
+  touchedSeq: countedNumber,
+  updatedAt: countedNumber,
+});
+
+export type AccountChatEntry = typeof accountChatEntrySchema.Type;
+
 /**
  * Every item that waits on the developer across the account's plans, the
  * latest changed first, the cursor to read on from, and when the service
@@ -102,13 +140,14 @@ export type AccountInboxAutomation = typeof accountInboxAutomationSchema.Type;
  * items were all answered holds no open one, so only this names it. The
  * items of agents with no plan wait in `planless`, listed by automation in
  * `automations`, on the same terms; a service that predates them sends
- * neither.
+ * neither. What waits in chat rides in `chat`, the latest changed first.
  */
 export const accountInboxAnswerSchema = EffectSchema.Struct({
   items: EffectSchema.Array(accountInboxEntrySchema),
   plans: EffectSchema.Array(accountInboxPlanSchema),
   planless: EffectSchema.optionalKey(EffectSchema.Array(accountPlanlessEntrySchema)),
   automations: EffectSchema.optionalKey(EffectSchema.Array(accountInboxAutomationSchema)),
+  chat: EffectSchema.optionalKey(EffectSchema.Array(accountChatEntrySchema)),
   cursor: EffectSchema.String,
   readAt: countedNumber,
 });

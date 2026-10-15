@@ -1,7 +1,9 @@
-import type {
-  AccountInboxAnswer,
-  AccountInboxEntry,
-  AccountInboxPlan,
+import {
+  ACCOUNT_CHAT_REASON,
+  type AccountChatEntry,
+  type AccountInboxAnswer,
+  type AccountInboxEntry,
+  type AccountInboxPlan,
 } from "@luke/features/account-inbox-wire";
 import {
   CODING_AGENT_CALL_FAILURE,
@@ -88,7 +90,13 @@ import type { AppInboxSlice, AppInboxWaitingItem } from "#shared/messages/app-st
  * unless the developer turned notifications off. An item the agent posts
  * again while it is still open is the same ask kept current, and announces
  * nothing, and so does one whose plan comes back from the archive, which
- * changed before the last answer was read. Another account, or nobody,
+ * changed before the last answer was read. What waits in chat rides on the
+ * same read (`chat`): an ask someone else posted, or a direct message or a
+ * mention of the developer's, each announced once as it first waits, by
+ * the same doors and gates, nowhere while the window is focused on its
+ * Chat, and counted in the Dock's badge beside the items. A chat
+ * announcement says who and why, "@agent-2 messaged you", under the plan of
+ * the channel it stands in, and nothing of what was said. Another account, or nobody,
  * ends the read held for the last, and lets go of its items, its counts,
  * and its badge before anything of the next is read. A read that did not
  * answer is asked again on the watch's clock.
@@ -140,6 +148,23 @@ export interface AgentEndToast {
   failed: boolean;
 }
 
+/** What a chat announcement says of who and why, by the reason the message waits. */
+const CHAT_NOTICE_WORDS = {
+  [ACCOUNT_CHAT_REASON.ASK]: "asked you",
+  [ACCOUNT_CHAT_REASON.DIRECT]: "messaged you",
+  [ACCOUNT_CHAT_REASON.MENTION]: "mentioned you",
+} as const;
+
+/** What a chat announcement is titled where its channel stands in no plan main holds a name for. */
+const CHAT_NOTICE_TITLE = "Chat";
+
+/** A chat message that came to wait as the window's own toast says it: the message, the words, and the plan's name under them. */
+export interface ChatMessageToast {
+  messageId: string;
+  words: string;
+  detail: string;
+}
+
 /** An inbox item that opened as the window's own toast says it: the plan and the item, the words, and the plan's name under them. */
 export interface InboxItemToast {
   planId: string;
@@ -159,7 +184,8 @@ export interface AgentNoticeDoorsSurface {
   post(notice: AgentNotice): void;
   toast(end: AgentEndToast): void;
   toastInbox(item: InboxItemToast): void;
-  /** How many inbox items wait across the account, which the Dock's badge counts; none clears it. */
+  toastChat(message: ChatMessageToast): void;
+  /** How many inbox items and chat messages wait across the account, which the Dock's badge counts; none clears it. */
   badge(count: number): void;
 }
 
@@ -196,6 +222,8 @@ export interface AgentNoticesDependencies {
   onInboxChanged: (inbox: AppInboxSlice) => void;
   /** Brings Luke forward on the plan with its Inbox tab open: an inbox notification's click. */
   openInbox: (planId: string) => void;
+  /** Brings Luke forward on its Chat: a chat notification's click. */
+  openChat: () => void;
   watchInterval?: Duration.Duration;
   report: (line: string) => void;
 }
@@ -219,6 +247,8 @@ export interface AgentNotices {
   shown(agentId: string | null): void;
   /** The panel said which plan's Inbox tab it shows, or none. */
   shownInbox(planId: string | null): void;
+  /** The panel said whether its Chat is on screen. */
+  shownChat(shown: boolean): void;
 }
 
 /** What the ledger keeps of one agent: enough to watch it, to name it, and to tell one turn's end from the next's. */
@@ -330,6 +360,17 @@ function inboxNoticeText(
   return { title: planName ?? UNNAMED_PLAN_TITLE, body: `${agent}: ${item.title}` };
 }
 
+/** What a chat message's announcement says: who and why, under the plan of its channel, and nothing of what was said. */
+function chatNoticeText(
+  entry: AccountChatEntry,
+  planName: string | undefined,
+): Pick<AgentNotice, "title" | "body"> {
+  return {
+    title: planName ?? CHAT_NOTICE_TITLE,
+    body: `@${entry.from} ${CHAT_NOTICE_WORDS[entry.reason]}`,
+  };
+}
+
 /** The items each plan holds waiting, the plan whose item changed latest first, as the read answered them latest first. */
 function waitingPlans(items: readonly AccountInboxEntry[]): AppInboxSlice["waiting"] {
   const plans = new Map<string, AppInboxWaitingItem[]>();
@@ -385,13 +426,18 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     let focused = false;
     /** Whose agents the ledger holds: read as it takes its first, and moved only by another account. */
     let holder: string | undefined;
-    /** The inbox read's last answer for the account signed in, and its items by id; none before its first. */
+    /** The inbox read's last answer for the account signed in, and its items and chat messages by id; none before its first. */
     let waiting:
-      | { readonly answer: AccountInboxAnswer; readonly items: ReadonlySet<string> }
+      | {
+          readonly answer: AccountInboxAnswer;
+          readonly items: ReadonlySet<string>;
+          readonly chat: ReadonlySet<string>;
+        }
       | undefined;
     /** The highest revision any answer for the account held of each item, so one back unchanged is known. */
     const seenRevision = new Map<string, number>();
     let shownInbox: string | null = null;
+    let shownChat = false;
 
     function publishUnseen(): void {
       onUnseenChanged([...unseen]);
@@ -477,9 +523,24 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     function publishWaiting(
       items: readonly AccountInboxEntry[],
       plans: readonly AccountInboxPlan[],
+      chat: readonly AccountChatEntry[],
     ): void {
       dependencies.onInboxChanged({ waiting: waitingPlans(items), plans });
-      doors.badge(items.length);
+      doors.badge(items.length + chat.length);
+    }
+
+    /** A chat message came to wait: told nowhere on Chat in front, in the toast elsewhere in front, and as a notification behind. */
+    function announceChat(entry: AccountChatEntry): void {
+      if (focused && shownChat) return;
+      const text = chatNoticeText(
+        entry,
+        entry.planId === null ? undefined : planName(entry.planId),
+      );
+      if (focused) {
+        doors.toastChat({ messageId: entry.messageId, words: text.body, detail: text.title });
+        return;
+      }
+      if (dependencies.notifying()) doors.post({ ...text, onClick: dependencies.openChat });
     }
 
     /** An item opened: told nowhere on its plan's Inbox in front, in the toast elsewhere in front, and as a notification behind. */
@@ -521,8 +582,17 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         });
         return;
       }
-      waiting = { answer, items: new Set(answer.items.map((item) => item.id)) };
-      publishWaiting(answer.items, answer.plans);
+      const chat = answer.chat ?? [];
+      waiting = {
+        answer,
+        items: new Set(answer.items.map((item) => item.id)),
+        chat: new Set(chat.map((entry) => entry.messageId)),
+      };
+      publishWaiting(answer.items, answer.plans, chat);
+      // A chat message is news once, as it first waits: the first answer is where the account stands.
+      for (const entry of chat) {
+        if (was !== undefined && !was.chat.has(entry.messageId)) announceChat(entry);
+      }
       const since =
         was === undefined ? undefined : was.answer.readAt - Duration.toMillis(READ_SKEW);
       for (const item of answer.items) {
@@ -546,7 +616,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       Effect.suspend(() => {
         waiting = undefined;
         seenRevision.clear();
-        publishWaiting([], []);
+        publishWaiting([], [], []);
         if (reader === undefined) return Effect.void;
         let cursor = INBOX_CURSOR_START;
         const look = Effect.gen(function* () {
@@ -679,6 +749,9 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       shown: (agentId) => {
         shownAgent = agentId;
         seen(agentId);
+      },
+      shownChat: (shown) => {
+        shownChat = shown;
       },
       shownInbox: (planId) => {
         shownInbox = planId;

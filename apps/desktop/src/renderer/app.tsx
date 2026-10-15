@@ -50,6 +50,7 @@ import { OpenFeedbackProvider } from "./open-feedback";
 import { OpenSettingsProvider } from "./open-settings";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
 import { useAgentEndToasts } from "./planning/agent-end-toast";
+import { useChatToasts } from "./planning/chat-toast";
 import { useLinkOpener } from "./planning/held-link";
 import { useInboxToasts } from "./planning/inbox-toast";
 import { PLANS_PAGE } from "./planning/planning-model";
@@ -360,6 +361,15 @@ export function App(): React.JSX.Element {
     state?.version ?? 0,
     plans.inboxShown,
   );
+  // A chat notification clicked, or a waiting message's toast's View: the Plans tab, on the window's Chat.
+  const showChat = useRef(plans.chatView.onOpen);
+  showChat.current = plans.chatView.onOpen;
+  const openChat = useCallback(() => {
+    changeTab(PANEL_TAB.PLANS);
+    showChat.current();
+  }, [changeTab]);
+  useEffect(() => window.luke.onShowChat(() => openChat()), [openChat]);
+  useChatToasts(openChat, plans.chatView.open);
   // Where the window has stood, for back and forward, from the moment it
   // knows where it stands.
   const history = useWindowHistory({

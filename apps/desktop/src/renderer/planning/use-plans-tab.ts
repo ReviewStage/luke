@@ -918,15 +918,25 @@ export function usePlansTab(input: {
       : columnShown && mainTabs.tab === MAIN_TAB.INBOX
         ? (viewed.activePlanId ?? null)
         : null;
-  const reportedTab = useRef<{ agentId: string | null; inboxPlanId: string | null } | undefined>(
-    undefined,
-  );
+  // Chat on screen, the window's or a plan's Chat tab, is where what waits in chat is read, so main announces none of it then.
+  const chatOnScreen =
+    shown && (standIn?.kind === STAND_IN.CHAT || (columnShown && mainTabs.tab === MAIN_TAB.CHAT));
+  const reportedTab = useRef<
+    { agentId: string | null; inboxPlanId: string | null; chatShown: boolean } | undefined
+  >(undefined);
   useEffect(() => {
     const was = reportedTab.current;
-    if (was?.agentId === shownAgent && was.inboxPlanId === shownInbox) return;
-    reportedTab.current = { agentId: shownAgent, inboxPlanId: shownInbox };
-    tell(ACT_KIND.CODING_AGENTS_SHOWN, { agentId: shownAgent, inboxPlanId: shownInbox });
-  }, [shownAgent, shownInbox, tell]);
+    if (
+      was?.agentId === shownAgent &&
+      was.inboxPlanId === shownInbox &&
+      was.chatShown === chatOnScreen
+    ) {
+      return;
+    }
+    const now = { agentId: shownAgent, inboxPlanId: shownInbox, chatShown: chatOnScreen };
+    reportedTab.current = now;
+    tell(ACT_KIND.CODING_AGENTS_SHOWN, now);
+  }, [shownAgent, shownInbox, chatOnScreen, tell]);
 
   // The tab showing is what asks the host to read the plans again; the open
   // plan and its call stand through it going away, and a call's drafts reach
