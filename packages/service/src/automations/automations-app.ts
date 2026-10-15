@@ -451,7 +451,8 @@ const automationsEndpoint = /* @__PURE__ */ Effect.fn("web/automationsEndpoint")
 
 /**
  * The store's changes for a request against the automation as it stands:
- * the trigger and model checked, the due instant computed afresh whenever
+ * the trigger and model checked, a GitHub event refused one with no plan,
+ * the due instant computed afresh whenever
  * the automation ends up enabled with a schedule and either was resumed or
  * given a new trigger, cleared while paused, and the owner's pause or resume
  * clearing why the service paused it. A webhook sent again is no change; a
@@ -474,6 +475,11 @@ const changesOf = /* @__PURE__ */ Effect.fnUntraced(function* (
     standing.trigger.kind === AUTOMATION_TRIGGER.WEBHOOK
       ? undefined
       : asked.trigger;
+  // Note that an automation with no plan fires on its schedule alone while GitHub triggers stay
+  // dormant, as one is refused a GitHub event when made, so a change cannot give it one either.
+  if (newTrigger?.kind === AUTOMATION_TRIGGER.GITHUB && standing.planId === null) {
+    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  }
   const trigger = newTrigger ?? standing.trigger;
   const enabled = asked.enabled ?? standing.enabled;
   const due = yield* firstDue(trigger, now);
