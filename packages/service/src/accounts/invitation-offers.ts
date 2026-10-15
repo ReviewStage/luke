@@ -1,4 +1,5 @@
 import { Database } from "@luke/database/core/query";
+import { WORKSPACE_NAME } from "@luke/database/models/workspace-store";
 import { invitation, member, organization, user } from "@luke/database/schemas/auth";
 import {
   INVITATION_OFFER_REFUSAL,
@@ -21,6 +22,8 @@ import { SqlSchema } from "effect/sql";
  * is still a member, which would turn a teammate's leaving into a dead link.
  * The inviter is named only while they are still a member; the plugin's
  * `acceptInvitation`, which the page calls next, asks nothing of the inviter.
+ * The workspace is named as its members read it (`WORKSPACE_NAME`), an
+ * account's first workspace by its owner's name as it stands now.
  */
 
 /** The plugin's status for an invitation still waiting on its recipient. */
@@ -49,7 +52,7 @@ const findInvitation = SqlSchema.findOneOption({
           expiresAt: invitation.expiresAt,
           organizationId: invitation.organizationId,
           inviterId: invitation.inviterId,
-          workspaceName: organization.name,
+          workspaceName: WORKSPACE_NAME,
         })
         .from(invitation)
         .innerJoin(organization, eq(organization.id, invitation.organizationId))

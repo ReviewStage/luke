@@ -1792,6 +1792,39 @@ it.effect(
 );
 
 it.effect(
+  "an invitation to an account's first workspace is offered under its owner's name as it stands now",
+  () =>
+    Effect.gen(function* () {
+      const plugin = yield* openWorkspacePlugin;
+      yield* Effect.gen(function* () {
+        const ada = yield* openGithubAccount("Ada Lovelace");
+        const alan = yield* openGithubAccount("Alan Turing");
+        const alanAddress = yield* verified(alan);
+        const first = Option.getOrThrow(yield* ensurePersonalWorkspace(ada, plugin.seams));
+        const made = readAs(
+          yield* inviting(plugin, ada, first, alanAddress),
+          workspaceInvitationAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+        ).invitation;
+        yield* Database.use((db) =>
+          db.update(user).set({ name: "Dr Ada Lovelace" }).where(eq(user.id, ada)),
+        );
+
+        const offered = yield* readInSession(plugin, alan, offerAt(made.id));
+
+        assert.deepEqual(offered.body, {
+          offer: {
+            id: made.id,
+            workspaceName: "Dr Ada Lovelace",
+            role: "member",
+            inviter: { name: "Dr Ada Lovelace", email: `${ada}@luke.test` },
+          },
+        });
+      }).pipe(Effect.provide(plugin.database));
+    }),
+);
+
+it.effect(
   "the accept page's read says an invitation canceled or expired is spent, one for another address or an unverified one is refused, and asks for a session",
   () =>
     Effect.gen(function* () {
