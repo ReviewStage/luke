@@ -88,6 +88,8 @@ after.
 [#2814](https://github.com/ReviewStage/luke/pull/2814),
 [#2817](https://github.com/ReviewStage/luke/pull/2817))
 
+![A coding agent's Terminal tab full screen: pnpm test src/members has just passed 54 tests in the agent's sandbox, beside its shells, tests, a running dev server, and psql.](apps/web/public/changelog/0.14.0/the-terminal-tab.png)
+
 ### @-mentions
 
 Type @ in the plan or in a coding agent's message box to mention a file, a
@@ -110,6 +112,8 @@ pasted link to an integration's page is a chip that brings its server along.
 [#2721](https://github.com/ReviewStage/luke/pull/2721),
 [#2792](https://github.com/ReviewStage/luke/pull/2792),
 [#2795](https://github.com/ReviewStage/luke/pull/2795))
+
+![An agent's message box with a memberships.ts chip and @migr typed, its @ list offering the migrations folder and a migration file, the plan's Migration section, the db-migrations skill, and Neon's migration tools.](apps/web/public/changelog/0.14.0/at-mentions.png)
 
 ### Who did what
 
@@ -134,6 +138,8 @@ answer, and a command run on someone's Mac each say whose it was.
 [#2638](https://github.com/ReviewStage/luke/pull/2638),
 [#2853](https://github.com/ReviewStage/luke/pull/2853),
 [#2854](https://github.com/ReviewStage/luke/pull/2854))
+
+![A plan edited by Dana Moreno on her face, its sections signed by Dana, Luke during your call, a coding agent, and Jordan Lee, and its ⋯ menu ending with who created and last edited it.](apps/web/public/changelog/0.14.0/who-did-what.png)
 
 ### Workspaces, clearer
 
@@ -172,6 +178,8 @@ tab and offers Move to workspace, which says who loses and gains it.
 [#2771](https://github.com/ReviewStage/luke/pull/2771),
 [#2803](https://github.com/ReviewStage/luke/pull/2803),
 [#2804](https://github.com/ReviewStage/luke/pull/2804))
+
+![The sidebar headed by acme's mark and its five members, its switcher open on Dean's personal workspace, acme, and Harbor Labs, over acme's plans.](apps/web/public/changelog/0.14.0/workspaces-clearer.png)
 
 ### Luke links
 
@@ -215,6 +223,8 @@ read-only board of every plan, from Plan to Build to Ship, beside the Inbox.
 [#2767](https://github.com/ReviewStage/luke/pull/2767),
 [#2601](https://github.com/ReviewStage/luke/pull/2601),
 [#2608](https://github.com/ReviewStage/luke/pull/2608))
+
+![The Morning Sentry triage automation's page: weekdays at 9:00 on a schedule, its task, repositories, and model, and its runs beside it, one working now and four finished.](apps/web/public/changelog/0.14.0/automations.png)
 
 ### Improvements
 
