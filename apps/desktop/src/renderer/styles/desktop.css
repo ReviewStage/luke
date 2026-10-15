@@ -390,11 +390,6 @@ body,
   padding: 0 var(--column-inset) var(--column-inset);
   border-right: 1px solid var(--hairline);
   background: var(--desktop-sidebar);
-  /* Note that the sidebar draws its words without the Mac's font smoothing,
-     as Linear, Slack, and the website do, because the smoothing thickens
-     every stroke, light on dark most of all, until a regular name reads
-     nearly as heavy as an unread one. */
-  -webkit-font-smoothing: antialiased;
 }
 
 .luke-identity {
@@ -1036,8 +1031,7 @@ body,
    heavier weight and the primary ink until they look, as a chat app's
    channels do. Only what waits on them, the Inbox item, also wears the
    blue dot (`.inbox-row-dot`). In the sidebar, where a read name is in the
-   quieter ink and drawn without the Mac's smoothing, the ink carries half
-   the step, so a semibold is enough. */
+   quieter ink, the ink carries half the step, so a semibold is enough. */
 .sidebar-plan[data-unread="true"] .sidebar-plan-name,
 .tab[data-unread="true"] .tab-label {
   color: var(--text-primary);

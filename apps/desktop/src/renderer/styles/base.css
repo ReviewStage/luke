@@ -2,6 +2,12 @@
   color-scheme: dark;
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif;
   font-synthesis: none;
+  /* Note that every window draws its words without the Mac's font
+     smoothing, as Linear, Slack, and the website do, because the smoothing
+     thickens every stroke, light on dark most of all, until a regular reads
+     nearly as heavy as a semibold. */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   background: transparent;
   /* The one monospace stack, for code, a path, a branch, or a command,
      wherever it is drawn: a hand-written rule spends it, and so does
