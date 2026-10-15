@@ -403,15 +403,16 @@ wire (`@luke/features/terminal-wire`): a shell is `id` and `title`.
 - `agent-not-ready`: `create` before the agent opened its sandbox.
 - `not-found`: no such agent or shell, or another workspace's.
 - `gone`: an archived agent.
-- `sandbox-unanswered`: the service answered and Vercel Sandbox did not (the
-  route's `upstream-error`, 502), so the caller may retry.
+- `sandbox-unanswered`: the service answered and the agent's sandbox did not,
+  Vercel Sandbox's API or tmux in it (the route's `upstream-error`, 502), so
+  the caller may retry.
 
 So `list`, `rename` and `kill` answer `TerminalsAnswer | { refused }`,
 `create` answers `{ terminal } | { refused }`, and `resume` answers
 `{ sandbox } | { refused }`. An outage of the service itself (it could not be
 reached, or did not answer, so the caller may retry) is the act's own refusal
 sentence instead. The tab's "unreachable" bar names which of the three it was:
-Luke's service, Vercel Sandbox, or no such agent or shell.
+Luke's service, the agent's sandbox, or no such agent or shell.
 
 ### The port (`terminal:port`)
 

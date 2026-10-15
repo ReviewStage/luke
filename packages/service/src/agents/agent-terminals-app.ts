@@ -102,7 +102,8 @@ const reachedSession = /* @__PURE__ */ Effect.fnUntraced(function* (
 /**
  * A sandbox Vercel could not be asked about, as the upstream's refusal a
  * caller may retry, apart from the store's own unavailable, so the tab can
- * say it was Vercel Sandbox that did not answer. The log names the status
+ * say it was the agent's sandbox that did not answer: Vercel Sandbox's API,
+ * or tmux in a sandbox that API answered for. The log names the status
  * Vercel answered, where it answered one.
  */
 function sandboxOrUpstream<A, R>(

@@ -26,7 +26,7 @@ import { SandboxUnavailable } from "./vercel-sandbox-api.js";
  * every agent route keeps, so another account reads it as none, an archived
  * agent is gone, and a list answers the sandbox's shells and where it
  * stands; a shell is refused in a stopped sandbox, and only the resume path
- * wakes one; and a sandbox Vercel did not answer for is the upstream's
+ * wakes one; and a sandbox that did not answer is the upstream's
  * failure, apart from the service's own. Synthetic accounts, plans, and sessions throughout.
  */
 
@@ -201,7 +201,7 @@ it.layer(getTestDB())("the agent terminals routes", (it) => {
   );
 
   it.effect(
-    "a sandbox Vercel did not answer for is refused as the upstream's failure, not the service's own",
+    "a sandbox that did not answer is refused as the upstream's failure, not the service's own",
     () =>
       Effect.gen(function* () {
         const { userId, agent } = yield* openAgent;

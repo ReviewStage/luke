@@ -59,7 +59,7 @@ const TERMINAL_REFUSALS: ReadonlyMap<HostedApiError, TerminalRefusal> = new Map(
   [HOSTED_API_ERROR.AGENT_RETIRED, TERMINAL_REFUSAL.GONE],
   [HOSTED_API_ERROR.AGENT_NOT_READY, TERMINAL_REFUSAL.AGENT_NOT_READY],
   [HOSTED_API_ERROR.SANDBOX_STOPPED, TERMINAL_REFUSAL.SANDBOX_STOPPED],
-  // The terminal routes' upstream is Vercel Sandbox alone, so its failure is the sandbox's.
+  // The terminal routes' upstream is the agent's sandbox alone, Vercel Sandbox's API or tmux in it, so its failure is the sandbox's.
   [HOSTED_API_ERROR.UPSTREAM_ERROR, TERMINAL_REFUSAL.SANDBOX_UNANSWERED],
 ]);
 

@@ -567,11 +567,11 @@ test("a shell or agent the service cannot find shows the bar that asks again, an
   assert.equal(tab.closed(), 0);
 });
 
-test("a sandbox Vercel did not answer for says it was Vercel Sandbox, and its action asks again", async () => {
+test("a sandbox that did not answer says it was the agent's sandbox, and its action asks again", async () => {
   main.listRefused = TERMINAL_REFUSAL.SANDBOX_UNANSWERED;
   const tab = await mount();
   assert.equal(tab.standing(), "· sandbox · unreachable");
-  assert.equal(tab.bar(), "Vercel Sandbox didn’t answer.");
+  assert.equal(tab.bar(), "The agent’s sandbox didn’t answer.");
   main.listRefused = undefined;
   await act(async () => tab.action()?.click());
   await settle();

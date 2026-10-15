@@ -139,7 +139,7 @@ function returnAction(state: TerminalState): TerminalAction | undefined {
 /**
  * Where a refusal leaves the tab: a stopped sandbox's bar, the wait for an
  * agent that has not opened its sandbox, or the bar that asks again for a
- * shell or agent not found or a sandbox Vercel did not answer for, saying
+ * shell or agent not found or a sandbox that did not answer, saying
  * which; nothing for an agent archived or retired, whose tab closes, as its
  * Changes tab does.
  */

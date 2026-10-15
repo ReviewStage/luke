@@ -25,7 +25,7 @@ export const TERMINAL_REFUSAL = {
   AGENT_NOT_READY: "agent-not-ready",
   /** No such agent or shell, or another workspace's. */
   NOT_FOUND: "not-found",
-  /** The service answered, and Vercel Sandbox, which it asks for the agent's sandbox, did not; asking again may be answered. */
+  /** The service answered, and the agent's sandbox did not, Vercel Sandbox's API or tmux in it; asking again may be answered. */
   SANDBOX_UNANSWERED: "sandbox-unanswered",
   /** The agent was archived. */
   GONE: "gone",

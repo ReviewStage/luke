@@ -78,7 +78,7 @@ export const HOSTED_REFUSAL = {
   UNKNOWN_TOOL: { error: HOSTED_API_ERROR.UNKNOWN_TOOL },
   REQUEST_TOO_LARGE: { error: HOSTED_API_ERROR.REQUEST_TOO_LARGE },
   UNAVAILABLE: { error: HOSTED_API_ERROR.UNAVAILABLE },
-  /** A service this one asks on the caller's behalf — Vercel Sandbox for a terminal — refused or did not answer; nothing was changed, and a retry may be taken. */
+  /** What this service asks on the caller's behalf, a terminal's sandbox, refused or did not answer; nothing was changed, and a retry may be taken. */
   UPSTREAM_ERROR: { error: HOSTED_API_ERROR.UPSTREAM_ERROR },
   /** The workspace's GitHub installation reaches no such repository, or it has none; nothing was written. */
   REPOSITORY_NOT_REACHABLE: { error: HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE },
