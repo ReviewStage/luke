@@ -156,8 +156,14 @@ function rightClickChosen(strip: HTMLElement): string[] {
   return readAndClose();
 }
 
-/** A column's bar: the plan's column's toolbar, or the side panel's. */
-function bars(container: HTMLElement): { main: HTMLElement; side: HTMLElement } {
+/** The two columns' bars: the plan's column's toolbar, and the side panel's. */
+interface Bars {
+  main: HTMLElement;
+  side: HTMLElement;
+}
+
+/** The two columns' bars, as the plan's page draws them. */
+function bars(container: HTMLElement): Bars {
   const main = container.querySelector<HTMLElement>(".desktop-plan-main .desktop-toolbar");
   const side = container.querySelector<HTMLElement>(".side-panel-bar");
   assert.ok(main && side, "both columns draw their bars");

@@ -87,16 +87,19 @@ export interface TabDoors {
   archive?: MenuAction | undefined;
 }
 
-/**
- * What a tab's menu offers on what the tab shows, rather than on the tab
- * itself: an agent's Rename, a transcript's two copies, and an agent's
- * Archive, which takes the tab with it. Each is empty where the tab has none.
- */
-function contentActions(doors: TabDoors): {
+/** What a tab's menu offers on what the tab shows, each empty where the tab has none. */
+interface ContentActions {
   rename: MenuAction[];
   copies: MenuAction[];
   archive: MenuAction[];
-} {
+}
+
+/**
+ * What a tab's menu offers on what the tab shows, rather than on the tab
+ * itself: an agent's Rename, a transcript's two copies, and an agent's
+ * Archive, which takes the tab with it.
+ */
+function contentActions(doors: TabDoors): ContentActions {
   const { onCopy, onRename, archive } = doors;
   return {
     rename:
