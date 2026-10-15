@@ -41,6 +41,17 @@ const DesktopSettings = lazy(() =>
   import("./desktop-settings").then((loaded) => ({ default: loaded.DesktopSettings })),
 );
 
+/**
+ * What stands while Settings' chunk loads: nothing drawn, but Settings' own
+ * way out, so Escape pressed in that frame leaves Settings as it would once
+ * drawn, rather than falling through to the plan behind it. It is gone as
+ * Settings stands and offers the same command itself.
+ */
+function SettingsLoading({ onExit }: { onExit: () => void }): null {
+  useAppCommand(APP_COMMAND.EXIT_SETTINGS, onExit);
+  return null;
+}
+
 /** What stands between the developer and the window's own content: the account sign-in. */
 export interface DesktopGates {
   accountRequired: boolean;
@@ -319,15 +330,16 @@ export function DesktopShell({
   }
   // Settings takes the whole window, its pages listed where the plans were.
   if (tab === PANEL_TAB.SETTINGS) {
+    const exitSettings = history.canGoBack ? history.onBack : () => onTabChange(PANEL_TAB.PLANS);
     return (
       <div className="desktop-shell">
-        <Suspense fallback={null}>
+        <Suspense fallback={<SettingsLoading onExit={exitSettings} />}>
           <DesktopSettings
             sidebar={sidebar}
             history={history}
             settings={settings}
             call={call}
-            onExit={history.canGoBack ? history.onBack : () => onTabChange(PANEL_TAB.PLANS)}
+            onExit={exitSettings}
           />
         </Suspense>
         <CaptionStrip {...captions} />
