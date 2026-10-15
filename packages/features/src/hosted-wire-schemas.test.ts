@@ -185,6 +185,7 @@ const EFFECT_MODULE_SCHEMAS = {
     integrationToolAnnotationsSchema: integrationWire.integrationToolAnnotationsSchema,
     integrationToolParameterSchema: integrationWire.integrationToolParameterSchema,
     integrationToolsAnswerSchema: integrationWire.integrationToolsAnswerSchema,
+    integrationRemoteCallSchema: integrationWire.integrationRemoteCallSchema,
   } satisfies RecordedEffectJsonSchemas<typeof integrationWire>,
   "live-contract": {
     sessionCreateFrameSchema: liveContract.sessionCreateFrameSchema,

@@ -70,6 +70,17 @@ export const EVE_TOOL = {
 } as const;
 
 /**
+ * eve's own two tools for a connection, which any agent's transcript may
+ * carry: one lists a connection's tools and one runs one. The call it ran
+ * is stored beside the run, under its integration's remote name
+ * (`integration-wire.ts`'s `INTEGRATION_REMOTE_TOOL`).
+ */
+export const CONNECTION_TOOL = {
+  SEARCH: "connection_search",
+  EXECUTE: "connection_execute",
+} as const;
+
+/**
  * eve's provider-run web reads, which coding agents ran before they had the
  * public reads: no agent is offered them now, but a transcript written then
  * names them.

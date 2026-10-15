@@ -4,13 +4,14 @@
  * An integration is a provider's own hosted MCP server, reached with a grant
  * Vercel Connect holds for the account under one connector of this
  * deployment's, or, for GitHub, with the account's own GitHub sign-in
- * (`INTEGRATION_GRANT_OF`, `github-integration.ts`). The table is the whole
+ * (`INTEGRATION_GRANT_OF`, `github-integration.ts`). The table, beside the
+ * names the wire gives it (`@luke/features/integration-wire`, the name a
+ * nested call of one of its tools is stored under among them), is the whole
  * of what makes a provider one: the variable its connector's UID is read
  * from and the one naming the accounts it is offered to
- * (`integration-connect.ts`), the
+ * (`integration-connect.ts`), and the
  * server every agent's connection is opened to and what the model is told of
- * it (`integration-connection.ts`), and the name a nested call of one of its
- * tools is stored under in a transcript (`connection-tools.ts`). Its routes,
+ * it (`integration-connection.ts`). Its routes,
  * its row, and its landing page are the same for every provider. Every tool
  * a provider's server lists is offered, the ones that write and the ones
  * that answer a credential among them (`AGENTS.md`'s carve-out for
@@ -42,8 +43,6 @@ export interface IntegrationDefinition {
   readonly MCP_URL: string;
   /** What the model is told of the connection, so it can choose which one to search. */
   readonly DESCRIPTION: string;
-  /** The fixed name a nested call of one of the provider's tools is stored under. */
-  readonly REMOTE_TOOL: string;
 }
 
 export const INTEGRATION = {
@@ -63,7 +62,6 @@ export const INTEGRATION = {
     MCP_URL: "https://mcp.executor.sh/mcp",
     DESCRIPTION:
       "Executor, the developer's gateway to the apps they set up in it (MCP servers, OpenAPI and GraphQL APIs, skills, and automations), as their own account sees it: read the apps' skills, search and describe their tools, and call them or run a script over them, writes included. A call that pauses for an approval or for input answers with a request id: put the question to the developer, and resume it only with their answer.",
-    REMOTE_TOOL: "executor_remote",
   },
   /*
    * GitHub's server takes the GitHub App user token the account's own
@@ -74,7 +72,6 @@ export const INTEGRATION = {
     MCP_URL: "https://api.githubcopilot.com/mcp/x/all",
     DESCRIPTION:
       "GitHub, the developer's code host, as their own account sees it through the Luke GitHub App: find, read, create, and update repositories, files, branches, issues, pull requests and their reviews, discussions, Actions runs and their logs, and code search, on the repositories the App is installed on.",
-    REMOTE_TOOL: "github_remote",
   },
   [INTEGRATION_PROVIDER.GRANOLA]: {
     CONNECTOR_VARIABLE: "GRANOLA_CONNECTOR_UID",
@@ -82,7 +79,6 @@ export const INTEGRATION = {
     MCP_URL: "https://mcp.granola.ai/mcp",
     DESCRIPTION:
       "Granola, the developer's meeting notes, as their own account sees it: search and read meetings, their notes, transcripts, attachments, and folders.",
-    REMOTE_TOOL: "granola_remote",
   },
   [INTEGRATION_PROVIDER.LINEAR]: {
     CONNECTOR_VARIABLE: "LINEAR_CONNECTOR_UID",
@@ -90,7 +86,6 @@ export const INTEGRATION = {
     MCP_URL: "https://mcp.linear.app/mcp",
     DESCRIPTION:
       "Linear, the developer's issue tracker, as their own account sees it: find, read, create, and update issues, projects, cycles, documents, and comments.",
-    REMOTE_TOOL: "linear_remote",
   },
   [INTEGRATION_PROVIDER.MERCURY]: {
     CONNECTOR_VARIABLE: "MERCURY_CONNECTOR_UID",
@@ -98,7 +93,6 @@ export const INTEGRATION = {
     MCP_URL: "https://mcp.mercury.com/mcp",
     DESCRIPTION:
       "Mercury, the developer's company banking, as their own account sees it: read accounts, balances, transactions, cards, recipients, invoices, and treasury, categorize and annotate transactions, and request payments and transfers, which an approver confirms in Mercury.",
-    REMOTE_TOOL: "mercury_remote",
   },
   [INTEGRATION_PROVIDER.NEON]: {
     CONNECTOR_VARIABLE: "NEON_CONNECTOR_UID",
@@ -106,7 +100,6 @@ export const INTEGRATION = {
     MCP_URL: "https://mcp.neon.tech/mcp",
     DESCRIPTION:
       "Neon, the developer's serverless Postgres, as their own account sees it: find and manage projects, branches, databases, roles, and computes, read schemas, run SQL, and prepare and apply migrations.",
-    REMOTE_TOOL: "neon_remote",
   },
   [INTEGRATION_PROVIDER.NOTION]: {
     CONNECTOR_VARIABLE: "NOTION_CONNECTOR_UID",
@@ -114,7 +107,6 @@ export const INTEGRATION = {
     MCP_URL: "https://mcp.notion.com/mcp",
     DESCRIPTION:
       "Notion, the developer's workspace of pages and databases, as their own account sees it: search, read, create, and update pages, databases, and comments.",
-    REMOTE_TOOL: "notion_remote",
   },
   /*
    * PostHog's server picks its mode by the client it sees, and most get its
@@ -128,7 +120,6 @@ export const INTEGRATION = {
     MCP_URL: "https://mcp.posthog.com/mcp?mode=tools",
     DESCRIPTION:
       "PostHog, the developer's product analytics, as their own account sees it: query events and insights with SQL, and read and change dashboards, feature flags, experiments, surveys, error tracking, and session recordings.",
-    REMOTE_TOOL: "posthog_remote",
   },
   [INTEGRATION_PROVIDER.SENTRY]: {
     CONNECTOR_VARIABLE: "SENTRY_CONNECTOR_UID",
@@ -136,7 +127,6 @@ export const INTEGRATION = {
     MCP_URL: "https://mcp.sentry.dev/mcp",
     DESCRIPTION:
       "Sentry, the developer's error and performance monitoring, as their own account sees it: find and read issues, errors, events, traces, logs, and releases, and update issues where the account allows it.",
-    REMOTE_TOOL: "sentry_remote",
   },
   [INTEGRATION_PROVIDER.SLACK]: {
     CONNECTOR_VARIABLE: "SLACK_CONNECTOR_UID",
@@ -144,7 +134,6 @@ export const INTEGRATION = {
     MCP_URL: "https://mcp.slack.com/mcp",
     DESCRIPTION:
       "Slack, the developer's team chat, as their own account sees it: search messages, files, channels, and people, read channels, threads, canvases, and profiles, and send and schedule messages, react, and write canvases as the developer.",
-    REMOTE_TOOL: "slack_remote",
   },
   [INTEGRATION_PROVIDER.SUPABASE]: {
     CONNECTOR_VARIABLE: "SUPABASE_CONNECTOR_UID",
@@ -152,7 +141,6 @@ export const INTEGRATION = {
     MCP_URL: "https://mcp.supabase.com/mcp",
     DESCRIPTION:
       "Supabase, the developer's Postgres backend, as their own account sees it: find and manage projects and branches, read schemas, run SQL, apply migrations, read logs, and deploy edge functions.",
-    REMOTE_TOOL: "supabase_remote",
   },
   [INTEGRATION_PROVIDER.VERCEL]: {
     CONNECTOR_VARIABLE: "VERCEL_CONNECTOR_UID",
@@ -160,7 +148,6 @@ export const INTEGRATION = {
     MCP_URL: "https://mcp.vercel.com",
     DESCRIPTION:
       "Vercel, the developer's hosting, as their own account sees it: find and manage teams, projects, deployments, domains, and environment variables, read build and runtime logs and errors, and search Vercel's documentation.",
-    REMOTE_TOOL: "vercel_remote",
   },
   [INTEGRATION_PROVIDER.YCOMBINATOR]: {
     CONNECTOR_VARIABLE: "YCOMBINATOR_CONNECTOR_UID",
@@ -168,7 +155,6 @@ export const INTEGRATION = {
     MCP_URL: "https://api.ycombinator.com/v1/mcp",
     DESCRIPTION:
       "Y Combinator's Bookface, as the developer's own YC account sees it: search YC companies, founders, investors, forum posts, launches, and the startup library, and work with the company's hiring, fundraising, launches, office hours, and profile.",
-    REMOTE_TOOL: "ycombinator_remote",
   },
 } as const satisfies Record<IntegrationProvider, IntegrationDefinition>;
 

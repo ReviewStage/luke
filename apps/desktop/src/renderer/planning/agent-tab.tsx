@@ -237,6 +237,7 @@ function ToolCallView({
       data-call-id={part.callId}
       state={part.state}
       kind={view.kind}
+      provider={view.provider}
       subject={view.subject}
       description={view.description}
       input={view.input}

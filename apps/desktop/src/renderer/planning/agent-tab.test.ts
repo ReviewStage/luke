@@ -7,9 +7,12 @@ import {
   type CodingAgentSubagentStanding,
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
+import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import { ProviderMark } from "@luke/ui";
 import { MESSAGE_ROLE, type WireRecord } from "@luke/wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, test } from "vitest";
 import { codingAgentsControl } from "#testing/plans-control";
 import { planCards } from "../desktop/side-panel";
@@ -23,7 +26,9 @@ import { TOOL_TARGET, type ToolTarget } from "./tool-call-model";
  * folds open in place; a run of calls and a finished turn's lead fold under
  * a line led by a chevron saying whether it is open, while the calls under
  * it, a list of the agents among them, keep their own icons. A row that opens an agent's or a worker's tab
- * hangs that tab's card.
+ * hangs that tab's card. A call of an integration's own tool is one row
+ * wearing the integration's mark, with the `connection_execute` that ran it
+ * left out.
  */
 
 const roots: Root[] = [];
@@ -485,4 +490,66 @@ test("in an agent's transcript, a call about an agent hangs that agent's tab's c
   assert.match(corner ?? "", /^Archived · /u);
   assert.deepEqual(cardOn(row("start_coding_agent")), ["Coding agent", "Not found"]);
   assert.deepEqual(cardOn(row("delegate")), ["Audit the retry paths", "Working…"]);
+});
+
+/** eve's `connection_execute` running Linear's `list_issues`, and the call it ran as the record keeps it, under Linear's remote name. */
+const LINEAR_RUN = [
+  toolPart(
+    "connection_execute",
+    { connection: "linear", tool: "list_issues", input: { team: "LUKE" } },
+    { issues: [] },
+  ),
+  toolPart(
+    "linear_remote",
+    { remoteTool: "list_issues", parentCallId: "call-connection_execute", input: { team: "LUKE" } },
+    { issues: [] },
+  ),
+];
+
+test("a call of an integration's tool is one row wearing the integration's mark, saying the tool it used, and opening on the input that tool was sent", () => {
+  const { container } = drawn(assistant(LINEAR_RUN), true);
+  // Note that an element is never handed to assert, because a failure would print all of jsdom.
+  assert.ok(
+    container.querySelector('[data-call-id="call-connection_execute"]') === null,
+    "the connection_execute that ran it draws no row of its own",
+  );
+  assert.equal(container.querySelector("[data-turn-fold] > summary")?.textContent, "1 tool called");
+  const row = container.querySelector<HTMLElement>('[data-call-id="call-linear_remote"] summary');
+  assert.ok(row, "the call's row is a fold's line");
+  assert.match(row.textContent ?? "", /^Used\s*list_issues/u);
+  assert.equal(
+    row.querySelector("svg")?.outerHTML,
+    renderToStaticMarkup(createElement(ProviderMark, { provider: INTEGRATION_PROVIDER.LINEAR })),
+    "the row wears Linear's mark in the wrench's place",
+  );
+  act(() => row.click());
+  const body = container.querySelector('[data-call-id="call-linear_remote"]')?.textContent ?? "";
+  assert.ok(body.includes('"team": "LUKE"'), "the body holds the input list_issues was sent");
+  assert.ok(!body.includes("parentCallId"), "the body holds no envelope around it");
+});
+
+test("a connection_execute with no integration's call under it keeps its own row", () => {
+  const [execute] = LINEAR_RUN;
+  assert.ok(execute);
+  const { container } = drawn(assistant([execute]), true);
+  const row = container.querySelector('[data-call-id="call-connection_execute"] summary');
+  assert.match(row?.textContent ?? "", /^Used\s*connection_execute/u);
+});
+
+test("a connection_execute that failed keeps its own row beside the call it ran, so its error is read", () => {
+  const [execute, remote] = LINEAR_RUN;
+  assert.ok(execute && remote);
+  const failed = { ...execute, state: "output-error", errorText: "Linear stopped answering." };
+  const { container } = drawn(assistant([failed, remote]), true);
+  const row = container.querySelector<HTMLElement>(
+    '[data-call-id="call-connection_execute"] summary',
+  );
+  assert.ok(row, "the failed wrapper's row stands");
+  act(() => row.click());
+  const body = container.querySelector('[data-call-id="call-connection_execute"]')?.textContent;
+  assert.ok(body?.includes("Linear stopped answering."), "its error is read under it");
+  assert.ok(
+    container.querySelector('[data-call-id="call-linear_remote"]') !== null,
+    "the call it ran keeps its row too",
+  );
 });

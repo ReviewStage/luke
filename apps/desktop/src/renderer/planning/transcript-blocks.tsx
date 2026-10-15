@@ -3,6 +3,7 @@ import {
   type CodingAgentTodoStatus,
   type CodingAgentTodos,
 } from "@luke/features/coding-agent-wire";
+import type { IntegrationProvider } from "@luke/features/integration-wire";
 import { linkMention, mayNameMention } from "@luke/features/mention-link";
 import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
 import {
@@ -15,7 +16,7 @@ import {
   TURN_ROW,
   type TurnRow,
 } from "@luke/features/turn-rows";
-import { cn } from "@luke/ui";
+import { cn, ProviderMark } from "@luke/ui";
 import type { Actor } from "@luke/ui/actor-model";
 import {
   AppWindowIcon,
@@ -389,6 +390,8 @@ export const MacOwnerProvider = MacOwnerContext.Provider;
 export type TranscriptToolProps = Omit<ComponentProps<typeof Tool>, "children"> &
   Pick<ToolHeaderProps, "state" | "subject"> & {
     kind: CallKind;
+    /** For a call of an integration's own tool, the integration, whose mark the row wears in its kind's icon's place. */
+    provider?: IntegrationProvider | undefined;
     /** For a command, the plain words the model said it is for, which the row says in its verb's place; the closed row previews the command's first line after them, and the body holds it whole. */
     description?: string | undefined;
     input: ToolBlock;
@@ -407,6 +410,7 @@ export type TranscriptToolProps = Omit<ComponentProps<typeof Tool>, "children"> 
 export function TranscriptTool({
   state,
   kind,
+  provider,
   subject,
   description,
   input,
@@ -422,7 +426,13 @@ export function TranscriptTool({
     <Tool {...props}>
       <ToolHeader
         state={state}
-        icon={<Icon aria-hidden="true" />}
+        icon={
+          provider === undefined ? (
+            <Icon aria-hidden="true" />
+          ) : (
+            <ProviderMark provider={provider} />
+          )
+        }
         label={line.verb}
         subject={line.subject}
         subjectIsCode={line.code}

@@ -1,3 +1,5 @@
+import { WireValueSchema } from "@luke/wire";
+import { verbatimJsonSchema } from "@luke/wire/effect";
 import { Schema as EffectSchema } from "effect";
 
 /**
@@ -131,6 +133,58 @@ export function integrationProviderFromWire(value: string | null): IntegrationPr
 }
 
 export const integrationProviderSchema = EffectSchema.Literals(INTEGRATION_PROVIDER_LIST);
+
+/**
+ * The fixed name a nested call of each provider's own MCP tools is stored
+ * under in an agent's transcript, whatever the provider's server names the
+ * tool itself: the service records the call under it
+ * (`packages/service/src/integrations/connection-tools.ts`), and the desktop
+ * draws the provider's mark on its row.
+ */
+export const INTEGRATION_REMOTE_TOOL = {
+  [INTEGRATION_PROVIDER.EXECUTOR]: "executor_remote",
+  [INTEGRATION_PROVIDER.GITHUB]: "github_remote",
+  [INTEGRATION_PROVIDER.GRANOLA]: "granola_remote",
+  [INTEGRATION_PROVIDER.LINEAR]: "linear_remote",
+  [INTEGRATION_PROVIDER.MERCURY]: "mercury_remote",
+  [INTEGRATION_PROVIDER.NEON]: "neon_remote",
+  [INTEGRATION_PROVIDER.NOTION]: "notion_remote",
+  [INTEGRATION_PROVIDER.POSTHOG]: "posthog_remote",
+  [INTEGRATION_PROVIDER.SENTRY]: "sentry_remote",
+  [INTEGRATION_PROVIDER.SLACK]: "slack_remote",
+  [INTEGRATION_PROVIDER.SUPABASE]: "supabase_remote",
+  [INTEGRATION_PROVIDER.VERCEL]: "vercel_remote",
+  [INTEGRATION_PROVIDER.YCOMBINATOR]: "ycombinator_remote",
+} as const satisfies Record<IntegrationProvider, string>;
+
+/** The provider a stored call's tool name is the remote name of; nothing for any other tool. */
+export function integrationOfRemoteTool(tool: string): IntegrationProvider | undefined {
+  return INTEGRATION_PROVIDER_LIST.find((provider) => INTEGRATION_REMOTE_TOOL[provider] === tool);
+}
+
+/**
+ * A remote tool's own name as a stored call keeps it: the characters MCP
+ * allows a tool's name, dots among them (Y Combinator's `hiring.list_jobs`),
+ * and nothing shaped like a sentence.
+ */
+const REMOTE_TOOL_PATTERN = /^[A-Za-z0-9_.-]{1,128}$/;
+
+/**
+ * A nested call of an integration's tool as a transcript stores it, under
+ * its provider's `INTEGRATION_REMOTE_TOOL`: the service holds the call it
+ * records to this schema, and the desktop reads the stored part back
+ * through it, so the two read one envelope.
+ */
+export const integrationRemoteCallSchema = EffectSchema.Struct({
+  /** The provider's own name for the tool, without the connection's. */
+  remoteTool: EffectSchema.String.check(EffectSchema.isPattern(REMOTE_TOOL_PATTERN)),
+  /** The `connection_execute` call it ran under. */
+  parentCallId: EffectSchema.String,
+  /** The input eve validated against the tool's schema and sent; empty where it sent none. */
+  input: verbatimJsonSchema(WireValueSchema, { type: "object", additionalProperties: true }),
+});
+
+export type IntegrationRemoteCall = typeof integrationRemoteCallSchema.Type;
 
 /** Where an account's connection to one provider stands. */
 export const INTEGRATION_STATUS = {

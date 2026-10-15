@@ -12,6 +12,12 @@ import {
   type InboxPostBlock,
   inboxPostInputSchema,
 } from "@luke/features/inbox-wire";
+import {
+  type IntegrationProvider,
+  type IntegrationRemoteCall,
+  integrationOfRemoteTool,
+  integrationRemoteCallSchema,
+} from "@luke/features/integration-wire";
 import { linkLabels } from "@luke/features/mention-link";
 import type { ModelChoice } from "@luke/features/models-wire";
 import type { PlanNote } from "@luke/features/plan-template";
@@ -42,6 +48,9 @@ import { shortCommit } from "./file-tab-model";
  * through it too, its row naming the item the Inbox tab draws. A call
  * about something the window opens elsewhere, a page, the board, an agent,
  * code shown, names it as its target (`toolTarget`), which its row opens.
+ * A call of an integration's own MCP tool, stored under its provider's
+ * remote name, is drawn as the tool it ran: the provider's mark, the
+ * remote tool's own name, and the input it was sent (`remoteCallOf`).
  * Nothing here draws.
  */
 
@@ -54,6 +63,8 @@ export interface ToolCallView {
   readonly input: ToolBlock;
   /** Nothing while the call has not answered. */
   readonly output: ToolBlock | undefined;
+  /** For a call of an integration's own tool, the integration, whose mark its row wears in its kind's icon's place. */
+  readonly provider?: IntegrationProvider;
 }
 
 /** The escape every terminal colour and cursor sequence starts with. */
@@ -569,6 +580,36 @@ function planningToolView(
   }
 }
 
+const readRemoteCall = Schema.decodeUnknownOption(integrationRemoteCallSchema);
+
+/** A call of an integration's own tool, as its stored part names it: the integration, and the envelope the call is kept in; nothing for any other call, or an envelope that does not read. */
+export function remoteCallOf(
+  tool: string,
+  input: WireValue | undefined,
+): { readonly provider: IntegrationProvider; readonly call: IntegrationRemoteCall } | undefined {
+  const provider = integrationOfRemoteTool(tool);
+  if (provider === undefined) return undefined;
+  const call = readRemoteCall(input);
+  return Option.isSome(call) ? { provider, call: call.value } : undefined;
+}
+
+/** A call of an integration's own tool, drawn as the tool it ran: the integration's mark, the tool's own name, and the input the tool was sent. */
+function remoteToolView(
+  tool: string,
+  input: WireValue | undefined,
+  output: WireValue | undefined,
+): ToolCallView | undefined {
+  const remote = remoteCallOf(tool, input);
+  if (remote === undefined) return undefined;
+  return {
+    kind: CALL_KIND.OTHER,
+    subject: remote.call.remoteTool,
+    provider: remote.provider,
+    input: jsonBlock(remote.call.input),
+    output: output === undefined ? undefined : jsonBlock(output),
+  };
+}
+
 /** How one tool call is drawn: its row and its body, from the part's input and output, a stop naming the worker it stopped by its job where `jobs` knows it. */
 export function toolCallView(input: {
   readonly tool: string;
@@ -578,7 +619,8 @@ export function toolCallView(input: {
 }): ToolCallView {
   return (
     knownToolView(input.tool, input.input, input.output) ??
-    planningToolView(input.tool, input.input, input.output, input.jobs) ?? {
+    planningToolView(input.tool, input.input, input.output, input.jobs) ??
+    remoteToolView(input.tool, input.input, input.output) ?? {
       kind: CALL_KIND.OTHER,
       subject: input.tool,
       input: input.input === undefined ? textBlock("") : jsonBlock(input.input),

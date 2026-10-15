@@ -597,7 +597,11 @@ remote call as a call of its own nested under the `connection_execute` that
 ran it, named `<provider>__<tool>`, with id `<wrapper>:1`. The relay stores
 the nested call under the provider's fixed name (`linear_remote` for
 Linear), whose input is `{ remoteTool, parentCallId, input }`, and settles it
-with what the provider answered, before the wrapper's own result. Every name
+with what the provider answered, before the wrapper's own result. Both the
+names and that envelope are the wire's (`@luke/features/integration-wire`'s
+`INTEGRATION_REMOTE_TOOL` and `integrationRemoteCallSchema`), because the
+desktop draws the nested call as the provider's tool, under the provider's
+mark, and leaves its wrapper's row out. Every name
 is in both agents' tool sets whatever any account's connections stand at, so
 a transcript reads back the same after a Disconnect. Rows hold provider
 content (Linear's issues and comments, Notion's pages); no token reaches a
