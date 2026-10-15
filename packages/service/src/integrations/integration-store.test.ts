@@ -15,6 +15,7 @@ import {
   INTEGRATION_ROW_STATUS,
   readIntegrationConnection,
   readIntegrationConnections,
+  renameIntegrationConnection,
 } from "./integration-store.js";
 
 /**
@@ -240,6 +241,59 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the integration connection row
             [LINEAR, userId, INTEGRATION_ROW_STATUS.CONNECTED],
             [NOTION, userId, INTEGRATION_ROW_STATUS.CONNECTED],
           ],
+        );
+      }),
+  );
+
+  it.effect(
+    "a grant's name labels an account that carries none, and never one the developer named",
+    () =>
+      Effect.gen(function* () {
+        const userId = yield* openGithubUser();
+        const begin = (state: string) =>
+          beginIntegrationSignIn(
+            userId,
+            firstIntegrationAccount(userId, NOTION),
+            state,
+            Redacted.make("verifier-label"),
+          );
+        yield* begin("state-label-1");
+        yield* completeIntegrationSignIn(userId, NOTION, "state-label-1", "Acme");
+        assert.equal((yield* readIntegrationConnection(userId, NOTION))?.label, "Acme");
+
+        yield* renameIntegrationConnection(userId, NOTION, "Work");
+        yield* begin("state-label-2");
+        yield* completeIntegrationSignIn(userId, NOTION, "state-label-2", "Acme");
+        assert.equal((yield* readIntegrationConnection(userId, NOTION))?.label, "Work");
+      }),
+  );
+
+  it.effect(
+    "a sign-in for another account that minted a name already taken does not take, and leaves the account it would have overtaken as it stood",
+    () =>
+      Effect.gen(function* () {
+        const userId = yield* openGithubUser();
+        const named = (connectSubject: string) => ({
+          provider: NOTION,
+          connectionName: "notion-2",
+          connectSubject,
+        });
+        const first = yield* beginIntegrationSignIn(
+          userId,
+          named("subject-a"),
+          `state-race-a-${userId}`,
+          Redacted.make("verifier-a"),
+        );
+        const second = yield* beginIntegrationSignIn(
+          userId,
+          named("subject-b"),
+          `state-race-b-${userId}`,
+          Redacted.make("verifier-b"),
+        );
+        const row = yield* readIntegrationConnection(userId, "notion-2");
+        assert.deepEqual(
+          [first, second, row?.connectSubject, row?.state],
+          [true, false, "subject-a", `state-race-a-${userId}`],
         );
       }),
   );

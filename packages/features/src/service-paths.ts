@@ -235,6 +235,16 @@ export function integrationDisconnectPath(provider: IntegrationProvider): string
   return `${HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS}/${encodeURIComponent(provider)}/disconnect`;
 }
 
+/** Names one of the account's accounts at a provider (POST), the label it then carries. */
+export function integrationRenamePath(provider: IntegrationProvider): string {
+  return `${HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS}/${encodeURIComponent(provider)}/rename`;
+}
+
+/** Makes one of the account's accounts at a provider its primary (POST). */
+export function integrationPrimaryPath(provider: IntegrationProvider): string {
+  return `${HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS}/${encodeURIComponent(provider)}/primary`;
+}
+
 /** One of the account's automations: change it (PATCH) or delete it with its history (DELETE). */
 export function automationPath(automationId: string): string {
   return `${HOSTED_SERVICE_PATH.AUTOMATIONS}/${encodeURIComponent(automationId)}`;

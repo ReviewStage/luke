@@ -52,6 +52,16 @@ const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
     route: "account/integrations/disconnect",
     query: "provider=$1",
   },
+  {
+    src: "/api/account/integrations/([^/]+)/rename",
+    route: "account/integrations/rename",
+    query: "provider=$1",
+  },
+  {
+    src: "/api/account/integrations/([^/]+)/primary",
+    route: "account/integrations/primary",
+    query: "provider=$1",
+  },
   { src: "/api/plans/([^/]+)/board", route: "plans/board", query: "id=$1" },
   { src: "/api/plans/([^/]+)/transcript", route: "plans/transcript", query: "id=$1" },
   { src: "/api/plans/([^/]+)/work", route: "plans/work", query: "id=$1" },

@@ -173,6 +173,9 @@ const EFFECT_MODULE_SCHEMAS = {
   } satisfies RecordedEffectJsonSchemas<typeof githubRepositoriesWire>,
   "integration-view": {
     integrationProviderParamsSchema: integrationView.integrationProviderParamsSchema,
+    integrationAccountParamsSchema: integrationView.integrationAccountParamsSchema,
+    integrationRenameParamsSchema: integrationView.integrationRenameParamsSchema,
+    integrationAccountViewSchema: integrationView.integrationAccountViewSchema,
     integrationStatusesViewSchema: integrationView.integrationStatusesViewSchema,
     integrationStatusViewSchema: integrationView.integrationStatusViewSchema,
     integrationConnectViewSchema: integrationView.integrationConnectViewSchema,
@@ -181,6 +184,9 @@ const EFFECT_MODULE_SCHEMAS = {
   "integration-wire": {
     integrationProviderSchema: integrationWire.integrationProviderSchema,
     integrationConnectionNameSchema: integrationWire.integrationConnectionNameSchema,
+    integrationAccountSchema: integrationWire.integrationAccountSchema,
+    integrationRenameRequestSchema: integrationWire.integrationRenameRequestSchema,
+    integrationAccountAnswerSchema: integrationWire.integrationAccountAnswerSchema,
     integrationSignInFailureSchema: integrationWire.integrationSignInFailureSchema,
     integrationStatusesAnswerSchema: integrationWire.integrationStatusesAnswerSchema,
     integrationStatusAnswerSchema: integrationWire.integrationStatusAnswerSchema,

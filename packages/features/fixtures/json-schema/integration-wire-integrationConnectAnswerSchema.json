@@ -3,6 +3,9 @@
   "properties": {
     "url": {
       "type": "string"
+    },
+    "connection": {
+      "type": "string"
     }
   },
   "required": [

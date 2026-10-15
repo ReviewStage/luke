@@ -9,7 +9,7 @@
  * nested call of one of its tools is stored under among them), is the whole
  * of what makes a provider one: the variable its connector's UID is read
  * from and the one naming the accounts it is offered to
- * (`integration-connect.ts`), and the
+ * (`integration-connect.ts`) and the one that holds it to one account, the
  * server every agent's connection is opened to and what the model is told of
  * it (`integration-connection.ts`). Its routes,
  * its row, and its landing page are the same for every provider. Every tool
@@ -39,6 +39,19 @@ export interface IntegrationDefinition {
    * the connector's is.
    */
   readonly ALLOWED_ACCOUNTS_VARIABLE?: string;
+  /**
+   * The variable that holds the provider to one account per Luke account,
+   * set to `off`, `false`, or `0`; present only for a provider that offers
+   * more than one by default, whose grant at the provider is one workspace's
+   * or one organization's, so a second account reaches what the first does
+   * not. Unset, the provider offers more than one; a provider with no such
+   * variable offers one. It is what switches a provider back off at once
+   * where a second grant turns out to cost the first (a provider that keeps
+   * one grant per user and client).
+   */
+  readonly MULTIPLE_ACCOUNTS_VARIABLE?: string;
+  /** The OAuth `prompt` a sign-in for another account asks the provider for, where the provider documents one that shows its workspace picker. */
+  readonly ADD_ACCOUNT_PROMPT?: string;
   /** The provider's own hosted MCP server. */
   readonly MCP_URL: string;
   /** What the model is told of the connection, so it can choose which one to search. */
@@ -59,6 +72,7 @@ export const INTEGRATION = {
   [INTEGRATION_PROVIDER.EXECUTOR]: {
     CONNECTOR_VARIABLE: "EXECUTOR_CONNECTOR_UID",
     ALLOWED_ACCOUNTS_VARIABLE: "EXECUTOR_ALLOWED_ACCOUNTS",
+    MULTIPLE_ACCOUNTS_VARIABLE: "EXECUTOR_MULTIPLE_ACCOUNTS",
     MCP_URL: "https://mcp.executor.sh/mcp",
     DESCRIPTION:
       "Executor, the developer's gateway to the apps they set up in it (MCP servers, OpenAPI and GraphQL APIs, skills, and automations), as their own account sees it: read the apps' skills, search and describe their tools, and call them or run a script over them, writes included. A call that pauses for an approval or for input answers with a request id: put the question to the developer, and resume it only with their answer.",
@@ -83,6 +97,9 @@ export const INTEGRATION = {
   [INTEGRATION_PROVIDER.LINEAR]: {
     CONNECTOR_VARIABLE: "LINEAR_CONNECTOR_UID",
     ALLOWED_ACCOUNTS_VARIABLE: "LINEAR_ALLOWED_ACCOUNTS",
+    MULTIPLE_ACCOUNTS_VARIABLE: "LINEAR_MULTIPLE_ACCOUNTS",
+    // Linear's own OAuth guide: `prompt=consent` "to connect multiple workspaces".
+    ADD_ACCOUNT_PROMPT: "consent",
     MCP_URL: "https://mcp.linear.app/mcp",
     DESCRIPTION:
       "Linear, the developer's issue tracker, as their own account sees it: find, read, create, and update issues, projects, cycles, documents, and comments.",
@@ -104,6 +121,7 @@ export const INTEGRATION = {
   [INTEGRATION_PROVIDER.NOTION]: {
     CONNECTOR_VARIABLE: "NOTION_CONNECTOR_UID",
     ALLOWED_ACCOUNTS_VARIABLE: "NOTION_ALLOWED_ACCOUNTS",
+    MULTIPLE_ACCOUNTS_VARIABLE: "NOTION_MULTIPLE_ACCOUNTS",
     MCP_URL: "https://mcp.notion.com/mcp",
     DESCRIPTION:
       "Notion, the developer's workspace of pages and databases, as their own account sees it: search, read, create, and update pages, databases, and comments.",
@@ -117,6 +135,7 @@ export const INTEGRATION = {
   [INTEGRATION_PROVIDER.POSTHOG]: {
     CONNECTOR_VARIABLE: "POSTHOG_CONNECTOR_UID",
     ALLOWED_ACCOUNTS_VARIABLE: "POSTHOG_ALLOWED_ACCOUNTS",
+    MULTIPLE_ACCOUNTS_VARIABLE: "POSTHOG_MULTIPLE_ACCOUNTS",
     MCP_URL: "https://mcp.posthog.com/mcp?mode=tools",
     DESCRIPTION:
       "PostHog, the developer's product analytics, as their own account sees it: query events and insights with SQL, and read and change dashboards, feature flags, experiments, surveys, error tracking, and session recordings.",
@@ -131,6 +150,7 @@ export const INTEGRATION = {
   [INTEGRATION_PROVIDER.SLACK]: {
     CONNECTOR_VARIABLE: "SLACK_CONNECTOR_UID",
     ALLOWED_ACCOUNTS_VARIABLE: "SLACK_ALLOWED_ACCOUNTS",
+    MULTIPLE_ACCOUNTS_VARIABLE: "SLACK_MULTIPLE_ACCOUNTS",
     MCP_URL: "https://mcp.slack.com/mcp",
     DESCRIPTION:
       "Slack, the developer's team chat, as their own account sees it: search messages, files, channels, and people, read channels, threads, canvases, and profiles, and send and schedule messages, react, and write canvases as the developer.",
@@ -138,6 +158,7 @@ export const INTEGRATION = {
   [INTEGRATION_PROVIDER.SUPABASE]: {
     CONNECTOR_VARIABLE: "SUPABASE_CONNECTOR_UID",
     ALLOWED_ACCOUNTS_VARIABLE: "SUPABASE_ALLOWED_ACCOUNTS",
+    MULTIPLE_ACCOUNTS_VARIABLE: "SUPABASE_MULTIPLE_ACCOUNTS",
     MCP_URL: "https://mcp.supabase.com/mcp",
     DESCRIPTION:
       "Supabase, the developer's Postgres backend, as their own account sees it: find and manage projects and branches, read schemas, run SQL, apply migrations, read logs, and deploy edge functions.",

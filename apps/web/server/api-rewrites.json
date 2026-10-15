@@ -20,6 +20,14 @@
     "dest": "/api/default.js?route=account/integrations/disconnect&provider=$1"
   },
   {
+    "src": "/api/account/integrations/([^/]+)/rename",
+    "dest": "/api/default.js?route=account/integrations/rename&provider=$1"
+  },
+  {
+    "src": "/api/account/integrations/([^/]+)/primary",
+    "dest": "/api/default.js?route=account/integrations/primary&provider=$1"
+  },
+  {
     "src": "/api/plans/([^/]+)/board",
     "dest": "/api/default.js?route=plans/board&id=$1"
   },

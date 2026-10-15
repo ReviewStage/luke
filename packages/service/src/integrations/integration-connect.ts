@@ -36,6 +36,7 @@ import {
 import {
   ConnectError,
   ConnectorInstallationRequiredError,
+  type ConnectTokenResponse,
   getTokenResponse,
   NoValidTokenError,
   revokeToken,
@@ -84,6 +85,8 @@ export interface IntegrationToken {
   readonly token: Redacted.Redacted;
   /** When it stops being good, in milliseconds since the epoch. */
   readonly expiresAt: number;
+  /** The account's name at the provider, where Connect's grant names one shaped like no credential: a label, never logged. */
+  readonly accountName?: string;
 }
 
 /** A browser sign-in Connect began: the address the browser opens, and the handle that asks Connect how it ended. */
@@ -129,10 +132,15 @@ export interface ConnectorService {
   readonly configured: boolean;
   /** The accounts the deployment offers this provider to; absent, it is offered to every account. */
   readonly allowedAccounts?: AllowedAccounts;
+  /** Whether a Luke account may hold more than one account at this provider (`integrations.ts`). */
+  readonly multipleAccounts: boolean;
+  /** The OAuth `prompt` a sign-in for another account asks the provider for, where the provider documents one. */
+  readonly addAccountPrompt?: string;
   /** Begins a browser sign-in for the account under `subject`, which Connect returns to `callbackUrl`; answers the address the browser opens and Connect's handle on it. */
   readonly authorize: (
     subject: string,
     callbackUrl: string,
+    options?: { readonly prompt?: string },
   ) => Effect.Effect<IntegrationAuthorization, IntegrationConnectFailure>;
   /** How the sign-in Connect answered this handle for stands now, which is all Luke hears of one that never came back. */
   readonly signInResult: (
@@ -196,6 +204,7 @@ const NOT_CONFIGURED = new IntegrationConnectFailure({
 /** The connector of a provider this deployment names none for: nothing is ever asked. */
 const UNCONFIGURED_CONNECTOR: ConnectorService = {
   configured: false,
+  multipleAccounts: false,
   authorize: () => Effect.fail(NOT_CONFIGURED),
   signInResult: () => Effect.fail(NOT_CONFIGURED),
   token: () => Effect.fail(NOT_CONFIGURED),
@@ -295,6 +304,63 @@ function signInResultOf(
   }
 }
 
+/** The longest account name a grant's fields are read as a label for. */
+const ACCOUNT_NAME_MAX = 64;
+
+/** Where in a grant's metadata an account's name may stand, each read alone so one of the wrong shape hides none of the others. */
+const GRANT_NAME_READS = [
+  (response: ConnectTokenResponse) =>
+    Option.map(
+      Schema.decodeUnknownOption(Schema.Struct({ workspace_name: Schema.String }))(
+        response.metadata,
+      ),
+      (read) => read.workspace_name,
+    ),
+  (response: ConnectTokenResponse) =>
+    Option.map(
+      Schema.decodeUnknownOption(Schema.Struct({ team: Schema.Struct({ name: Schema.String }) }))(
+        response.metadata,
+      ),
+      (read) => read.team.name,
+    ),
+  (response: ConnectTokenResponse) =>
+    Option.map(
+      Schema.decodeUnknownOption(
+        Schema.Struct({ organization: Schema.Struct({ name: Schema.String }) }),
+      )(response.metadata),
+      (read) => read.organization.name,
+    ),
+  (response: ConnectTokenResponse) =>
+    Option.map(
+      Schema.decodeUnknownOption(Schema.Struct({ organization_name: Schema.String }))(
+        response.metadata,
+      ),
+      (read) => read.organization_name,
+    ),
+] as const;
+
+/**
+ * The account's name at the provider as Connect's grant carries it, for an
+ * account's label: Notion's `workspace_name`, Slack's team, an
+ * organization's name, or the grant's own `name` where it is not the
+ * connector's id. Note that each field is read only where it is a short line
+ * shaped like no credential, because what Connect's driver stores is no
+ * contract Luke can vouch for.
+ */
+function grantAccountName(response: ConnectTokenResponse): string | undefined {
+  const candidates = [
+    ...GRANT_NAME_READS.flatMap((read) => Option.toArray(read(response))),
+    ...(response.name !== undefined ? [response.name] : []),
+  ];
+  for (const candidate of candidates) {
+    const line = credentialFreeLine(candidate);
+    if (line === undefined || line.length > ACCOUNT_NAME_MAX) continue;
+    if (line === response.connector.uid || line === response.connector.id) continue;
+    return line;
+  }
+  return undefined;
+}
+
 /** One connector, asking Vercel Connect itself, or the SDK a test hands it. */
 export function vercelConnector(
   connector: string,
@@ -302,9 +368,14 @@ export function vercelConnector(
 ): ConnectorService {
   return {
     configured: true,
-    authorize: (subject, callbackUrl) =>
+    multipleAccounts: false,
+    authorize: (subject, callbackUrl, options) =>
       Effect.tryPromise({
-        try: () => sdk.startAuthorization(connector, subjectOf(subject), { callbackUrl }),
+        try: () =>
+          sdk.startAuthorization(connector, subjectOf(subject), {
+            callbackUrl,
+            ...(options?.prompt !== undefined ? { prompt: options.prompt } : undefined),
+          }),
         catch: failureOf,
       }).pipe(
         Effect.flatMap(({ url, verifier }) =>
@@ -325,10 +396,14 @@ export function vercelConnector(
         try: () => sdk.getTokenResponse(connector, subjectOf(subject), { forceRefresh: fresh }),
         catch: failureOf,
       }).pipe(
-        Effect.map((response) => ({
-          token: Redacted.make(response.token),
-          expiresAt: response.expiresAt,
-        })),
+        Effect.map((response): IntegrationToken => {
+          const accountName = grantAccountName(response);
+          return {
+            token: Redacted.make(response.token),
+            expiresAt: response.expiresAt,
+            ...(accountName !== undefined ? { accountName } : undefined),
+          };
+        }),
       ),
     revoke: (subject) =>
       Effect.tryPromise({
@@ -466,10 +541,22 @@ export const accountIntegrationConnect = /* @__PURE__ */ Effect.fn("web/accountI
   },
 );
 
-/** One provider's connector as this deployment's environment configures it: the UID its variable names and the accounts its allowlist does, or none. */
+/** The words that hold a provider to one account where its multiple-accounts variable is set. */
+const SINGLE_ACCOUNT_WORDS: ReadonlySet<string> = new Set(["off", "false", "0"]);
+
+/**
+ * One provider's connector as this deployment's environment configures it:
+ * the UID its variable names, the accounts its allowlist does, and whether
+ * it offers more than one account, which a provider with a multiple-accounts
+ * variable does unless that variable holds it to one.
+ */
 function connectorFromEnvironment(provider: IntegrationProvider) {
-  const { CONNECTOR_VARIABLE, ALLOWED_ACCOUNTS_VARIABLE }: IntegrationDefinition =
-    INTEGRATION[provider];
+  const {
+    CONNECTOR_VARIABLE,
+    ALLOWED_ACCOUNTS_VARIABLE,
+    MULTIPLE_ACCOUNTS_VARIABLE,
+    ADD_ACCOUNT_PROMPT,
+  }: IntegrationDefinition = INTEGRATION[provider];
   // A provider granted by the account's own sign-in has no connector to read.
   if (CONNECTOR_VARIABLE === undefined || ALLOWED_ACCOUNTS_VARIABLE === undefined) {
     return Effect.succeed(UNCONFIGURED_CONNECTOR);
@@ -478,11 +565,23 @@ function connectorFromEnvironment(provider: IntegrationProvider) {
     Config.all([
       Config.option(Config.String(CONNECTOR_VARIABLE)),
       Config.option(Config.String(ALLOWED_ACCOUNTS_VARIABLE)),
+      MULTIPLE_ACCOUNTS_VARIABLE === undefined
+        ? Config.succeed(Option.none<string>())
+        : Config.option(Config.String(MULTIPLE_ACCOUNTS_VARIABLE)),
     ]),
-    ([connectorRead, allowedRead]): ConnectorService => {
+    ([connectorRead, allowedRead, multipleRead]): ConnectorService => {
       const connector = text(Option.getOrUndefined(connectorRead));
       if (connector === undefined) return UNCONFIGURED_CONNECTOR;
-      const configured = vercelConnector(connector);
+      const multipleAccounts =
+        MULTIPLE_ACCOUNTS_VARIABLE !== undefined &&
+        !Option.exists(multipleRead, (word) => SINGLE_ACCOUNT_WORDS.has(word.trim().toLowerCase()));
+      const configured: ConnectorService = {
+        ...vercelConnector(connector),
+        multipleAccounts,
+        ...(ADD_ACCOUNT_PROMPT !== undefined
+          ? { addAccountPrompt: ADD_ACCOUNT_PROMPT }
+          : undefined),
+      };
       return Option.match(allowedRead, {
         onNone: () => configured,
         onSome: (listed) => ({ ...configured, allowedAccounts: allowedAccountsOf(listed) }),

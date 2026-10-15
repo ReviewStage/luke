@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { INTEGRATION_PROVIDER, INTEGRATION_PROVIDER_LIST } from "@luke/features/integration-wire";
-import { type ConnectAuthorizationResponse, UserAuthorizationRequiredError } from "@vercel/connect";
+import {
+  type ConnectAuthorizationResponse,
+  type ConnectTokenResponse,
+  UserAuthorizationRequiredError,
+} from "@vercel/connect";
 import { Effect, Redacted, Result } from "effect";
 import { CONNECTOR_ASKED_NOTHING, integrationConnectOf } from "../testing/integration-connect.js";
 import {
@@ -214,5 +218,35 @@ it.effect(
           `${INTEGRATION_PROVIDER.NOTION} subject-2`,
         ].toSorted(),
       );
+    }),
+);
+
+it.effect(
+  "a grant's workspace name is the account's name at the provider, and nothing shaped like a credential or the connector's own id is",
+  () =>
+    Effect.gen(function* () {
+      const answering = (fields: Partial<ConnectTokenResponse>) => {
+        const sdk: ConnectSdk = {
+          startAuthorization: () => Promise.reject(new Error("this suite begins no sign-in")),
+          getTokenResponse: () =>
+            Promise.resolve({
+              token: "token-acme",
+              expiresAt: 0,
+              connector: { id: "c_1", uid: "oauth/notion", type: "oauth" },
+              ...fields,
+            }),
+          revokeToken: () => Promise.reject(new Error("this suite revokes nothing")),
+          readAuthorizationResult: () => Promise.resolve({ status: 404, body: undefined }),
+        };
+        return Effect.map(
+          vercelConnector("oauth/notion", sdk).token("user-1", { fresh: true }),
+          (issued) => issued.accountName,
+        );
+      };
+      assert.equal(yield* answering({ metadata: { workspace_name: "Acme" } }), "Acme");
+      assert.equal(yield* answering({ metadata: { team: { name: "Acme Eng" } } }), "Acme Eng");
+      assert.equal(yield* answering({ name: "oauth/notion" }), undefined);
+      assert.equal(yield* answering({ metadata: { workspace_name: "Bearer 0000" } }), undefined);
+      assert.equal(yield* answering({}), undefined);
     }),
 );
