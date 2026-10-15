@@ -232,15 +232,19 @@ export const BRIDGE = {
   }),
   /**
    * A coding agent's notification clicked: the panel is to open the plan on
-   * that agent's tab. An event rather than a slice of the document, because a
-   * click is an ask the window answers once, not a state it bootstraps from.
+   * that agent's tab, or the agent's own page for an agent with no plan. An
+   * event rather than a slice of the document, because a click is an ask the
+   * window answers once, not a state it bootstraps from.
    */
   onShowAgent: entry({
     kind: "subscribe",
     channel: "app:show-agent",
     args: noArgs,
-    result: result<{ planId: string; agentId: string }>(
-      (value) => isRecord(value) && isWireString(value.planId) && isWireString(value.agentId),
+    result: result<{ planId: string | null; agentId: string }>(
+      (value) =>
+        isRecord(value) &&
+        (value.planId === null || isWireString(value.planId)) &&
+        isWireString(value.agentId),
     ),
   }),
   /**

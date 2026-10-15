@@ -274,16 +274,20 @@ export function App(): React.JSX.Element {
     onOpenIntegrations: () => openSettings({ page: SETTINGS_VIEW.INTEGRATIONS }),
     onOpenApiKeys: () => openSettings({ page: SETTINGS_VIEW.CODING_AGENTS }),
   });
-  // A coding agent's notification clicked: the Plans tab, on that agent.
-  // Read through a ref, because the tab hands a new closure each render and
-  // the subscription is owed to the window, not to a render.
+  // A coding agent's notification clicked: the Plans tab, on that agent,
+  // its plan's tab or its own page where it has no plan. Read through refs,
+  // because the tab hands new closures each render and the subscription is
+  // owed to the window, not to a render.
   const showAgent = useRef(plans.onShowAgent);
   showAgent.current = plans.onShowAgent;
+  const showAgentPage = useRef(plans.agentView.onOpen);
+  showAgentPage.current = plans.agentView.onOpen;
   useEffect(
     () =>
       window.luke.onShowAgent(({ planId, agentId }) => {
         changeTab(PANEL_TAB.PLANS);
-        showAgent.current(planId, agentId);
+        if (planId === null) showAgentPage.current(agentId);
+        else showAgent.current(planId, agentId);
       }),
     [changeTab],
   );

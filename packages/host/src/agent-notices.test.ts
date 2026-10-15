@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import type { AccountInboxEntry } from "@luke/features/account-inbox-wire";
+import type { AccountInboxEntry, AccountPlanlessEntry } from "@luke/features/account-inbox-wire";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAccountInboxAnswerView,
@@ -351,5 +351,59 @@ it.effect(
       assert.equal(f.listReads(), 0);
       assert.deepEqual(f.listed, []);
       assert.deepEqual(f.posted, []);
+    }),
+);
+/** An item of an agent with no plan waiting on the developer, as the account's inbox read carries it. */
+function planlessItem(id: string, patch: Partial<AccountPlanlessEntry> = {}): AccountPlanlessEntry {
+  return {
+    id,
+    agentId: AGENT_ID,
+    agentTitle: "Sweep the flaky tests",
+    agentModel: MODEL,
+    automationId: "5a0c4d2e-8f1b-4c3a-9e7d-2b6f1a8c9d04",
+    automationName: "Nightly flake sweep",
+    repository: "acme/relay",
+    title: "Quarantine the flaky test?",
+    revision: 1,
+    postedAt: READ_AT,
+    updatedAt: READ_AT,
+    ...patch,
+  };
+}
+it.effect(
+  "an item of an agent with no plan waits beside the plans' and counts on the badge, and one opened since is announced by its automation, its click opening the agent's own page",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      yield* f.notices;
+      f.focus(false);
+      f.answerInbox({ items: [waitingItem(ITEM_A)], cursor: "1", readAt: READ_AT });
+      yield* settled;
+
+      f.answerInbox({
+        items: [waitingItem(ITEM_A)],
+        planless: [planlessItem(ITEM_B, { updatedAt: READ_AT + 1 })],
+        automations: [
+          {
+            automationId: "5a0c4d2e-8f1b-4c3a-9e7d-2b6f1a8c9d04",
+            items: 1,
+            updatedAt: READ_AT + 1,
+          },
+        ],
+        cursor: "2",
+        readAt: READ_AT + 2,
+      });
+      yield* settled;
+
+      assert.equal(
+        f.badges.at(-1),
+        2,
+        "the badge counts a plan's item and an agent's with no plan alike",
+      );
+      assert.deepEqual(f.said(), [
+        { title: "Nightly flake sweep", body: "Sweep the flaky tests: Quarantine the flaky test?" },
+      ]);
+      f.posted.at(-1)?.onClick();
+      assert.deepEqual(f.opened, [{ planId: null, agentId: AGENT_ID }]);
     }),
 );

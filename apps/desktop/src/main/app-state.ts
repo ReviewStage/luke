@@ -165,7 +165,7 @@ export function initialAppState(
     voice: {},
     planning: IDLE_PLANNING_VIEW,
     codingAgents: { unseen: [] },
-    inbox: { waiting: [], plans: [] },
+    inbox: { waiting: [], plans: [], planless: [], automations: [] },
     notifications: { refused: false },
     sessionReplay: { permitted: runMode.sendsNetwork, halted: false },
   };

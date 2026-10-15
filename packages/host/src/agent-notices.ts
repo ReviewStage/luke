@@ -1,7 +1,9 @@
 import type {
   AccountInboxAnswer,
+  AccountInboxAutomation,
   AccountInboxEntry,
   AccountInboxPlan,
+  AccountPlanlessEntry,
 } from "@luke/features/account-inbox-wire";
 import {
   CODING_AGENT_CALL_FAILURE,
@@ -126,9 +128,9 @@ export interface AgentNotice {
   onClick: () => void;
 }
 
-/** Where a notification's click takes the developer: the plan, on the agent's tab. */
+/** Where a notification's click takes the developer: the plan, on the agent's tab, or the agent's own page for one with no plan. */
 export interface AgentPlace {
-  planId: string;
+  planId: string | null;
   agentId: string;
 }
 
@@ -347,6 +349,56 @@ function waitingPlans(items: readonly AccountInboxEntry[]): AppInboxSlice["waiti
   return [...plans].map(([planId, held]) => ({ planId, items: held }));
 }
 
+/** The open items of agents with no plan as the window holds them: each with its agent and the automation and repository standing in a plan's place. */
+function waitingPlanless(items: readonly AccountPlanlessEntry[]): AppInboxSlice["planless"] {
+  return items.map((item) => ({
+    id: item.id,
+    agentId: item.agentId,
+    title: item.title,
+    postedAt: item.postedAt,
+    agentTitle: item.agentTitle,
+    agentModel: item.agentModel,
+    automationId: item.automationId,
+    automationName: item.automationName,
+    repository: item.repository,
+  }));
+}
+
+/**
+ * What an announcement of an item of an agent with no plan says: the
+ * automation's name, or the repository where the reader may not read it,
+ * over the agent and the item's title, as a plan's item says its plan.
+ */
+function planlessNoticeText(
+  item: AccountPlanlessEntry,
+  models: readonly CatalogModel[] | undefined,
+): Pick<AgentNotice, "title" | "body"> {
+  const agent = item.agentTitle ?? modelLabel(item.agentModel, models);
+  return { title: item.automationName ?? item.repository, body: `${agent}: ${item.title}` };
+}
+
+/** What an answer of the inbox read carries that the window and the Dock are told of. */
+type InboxAnswered = Pick<AccountInboxAnswer, "items" | "plans" | "planless" | "automations">;
+
+/** Whether two answers list the same automations holding items, alike in order, count, and instant. */
+function sameAutomations(
+  one: readonly AccountInboxAutomation[],
+  other: readonly AccountInboxAutomation[],
+): boolean {
+  return (
+    one.length === other.length &&
+    one.every((held, at) => {
+      const was = other[at];
+      return (
+        was !== undefined &&
+        was.automationId === held.automationId &&
+        was.items === held.items &&
+        was.updatedAt === held.updatedAt
+      );
+    })
+  );
+}
+
 /** Whether two answers list the same plans holding items, alike in order, count, and instant. */
 function samePlans(one: readonly AccountInboxPlan[], other: readonly AccountInboxPlan[]): boolean {
   return (
@@ -473,13 +525,29 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     // Each announce suspends on the queue itself, so the loop need not yield between ends: the ends queued together are posted together.
     yield* Effect.forkScoped(Effect.forever(announce, { disableYield: true }));
 
-    /** Writes what waits, each plan's items and every plan holding one for the window, and their number for the Dock. */
-    function publishWaiting(
-      items: readonly AccountInboxEntry[],
-      plans: readonly AccountInboxPlan[],
-    ): void {
-      dependencies.onInboxChanged({ waiting: waitingPlans(items), plans });
-      doors.badge(items.length);
+    /** What the window holds of an answer: each plan's items and every plan holding one, and beside them the items of agents with no plan and the automations holding them. */
+    function sliceOf(answer: InboxAnswered): AppInboxSlice {
+      return {
+        waiting: waitingPlans(answer.items),
+        plans: answer.plans,
+        planless: waitingPlanless(answer.planless ?? []),
+        automations: answer.automations ?? [],
+      };
+    }
+
+    /** Writes what waits for the window, and its number, a plan's items and an agent's with no plan alike, for the Dock. */
+    function publishWaiting(answer: InboxAnswered): void {
+      dependencies.onInboxChanged(sliceOf(answer));
+      doors.badge(answer.items.length + (answer.planless?.length ?? 0));
+    }
+
+    /** An item of an agent with no plan opened: told nowhere in front, since the window's toast opens a plan and the window's Inbox lists it, and as a notification behind, which opens the agent's page. */
+    function announcePlanless(item: AccountPlanlessEntry): void {
+      if (focused) return;
+      if (dependencies.notifying()) {
+        const text = planlessNoticeText(item, models);
+        doors.post({ ...text, onClick: () => open({ planId: null, agentId: item.agentId }) });
+      }
     }
 
     /** An item opened: told nowhere on its plan's Inbox in front, in the toast elsewhere in front, and as a notification behind. */
@@ -512,17 +580,21 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     function observeWaiting(answer: AccountInboxAnswer): void {
       const was = waiting;
       if (was?.answer.cursor === answer.cursor) {
-        // Note that the plans holding items may move with nothing waiting moving, an archive or a hold let go, so they are written alone.
-        if (samePlans(was.answer.plans, answer.plans)) return;
-        waiting = { ...was, answer: { ...was.answer, plans: answer.plans } };
-        dependencies.onInboxChanged({
-          waiting: waitingPlans(was.answer.items),
-          plans: answer.plans,
-        });
+        // Note that the plans and automations holding items may move with nothing waiting moving, an archive or a hold let go, so they are written alone.
+        if (
+          samePlans(was.answer.plans, answer.plans) &&
+          sameAutomations(was.answer.automations ?? [], answer.automations ?? [])
+        ) {
+          return;
+        }
+        const moved = { ...was.answer, plans: answer.plans, automations: answer.automations ?? [] };
+        waiting = { ...was, answer: moved };
+        dependencies.onInboxChanged(sliceOf(moved));
         return;
       }
-      waiting = { answer, items: new Set(answer.items.map((item) => item.id)) };
-      publishWaiting(answer.items, answer.plans);
+      const planless = answer.planless ?? [];
+      waiting = { answer, items: new Set([...answer.items, ...planless].map((item) => item.id)) };
+      publishWaiting(answer);
       const since =
         was === undefined ? undefined : was.answer.readAt - Duration.toMillis(READ_SKEW);
       for (const item of answer.items) {
@@ -530,6 +602,12 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         seenRevision.set(item.id, Math.max(known ?? 0, item.revision));
         if (since === undefined || was?.items.has(item.id) === true) continue;
         if ((known ?? 0) < item.revision && item.updatedAt > since) announceItem(item);
+      }
+      for (const item of planless) {
+        const known = seenRevision.get(item.id);
+        seenRevision.set(item.id, Math.max(known ?? 0, item.revision));
+        if (since === undefined || was?.items.has(item.id) === true) continue;
+        if ((known ?? 0) < item.revision && item.updatedAt > since) announcePlanless(item);
       }
     }
 
@@ -546,7 +624,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       Effect.suspend(() => {
         waiting = undefined;
         seenRevision.clear();
-        publishWaiting([], []);
+        publishWaiting({ items: [], plans: [] });
         if (reader === undefined) return Effect.void;
         let cursor = INBOX_CURSOR_START;
         const look = Effect.gen(function* () {
