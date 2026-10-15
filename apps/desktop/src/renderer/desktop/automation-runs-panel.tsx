@@ -78,7 +78,9 @@ function RunRow({
       <StateGlyph glyph={glyph} state={state} />
       <span className="automation-row-copy">
         <span className="automation-row-name">{automationRunTitle(run)}</span>
-        <span className="automation-row-detail">{automationRunLine(run)}</span>
+        <span className="automation-row-detail" title={automationRunLine(run)}>
+          {automationRunLine(run)}
+        </span>
       </span>
       <span className="automation-row-when" title={momentText(run.firedAt)}>
         {sinceText(run.firedAt, now)}
