@@ -471,7 +471,10 @@ function ListSkeleton(): React.JSX.Element {
  * with no plan, which names no workspace to be counted in.
  */
 function waitingItems(plans: PlansControl): number {
-  return plans.listed.inbox.reduce((sum, plan) => sum + plan.items.length, plans.inboxPlanless.length);
+  return plans.listed.inbox.reduce(
+    (sum, plan) => sum + plan.items.length,
+    plans.inboxPlanless.length,
+  );
 }
 
 /**
