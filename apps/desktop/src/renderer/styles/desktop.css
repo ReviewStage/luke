@@ -3875,6 +3875,14 @@ body:has(.app-stage[data-capture="true"])
   justify-self: end;
 }
 
+/* A task's own Inbox stands under its column's tab strip, clear of the title
+   bar's buttons at either end, so its list's head and its item's bar keep the
+   column's own inset whether the sidebar is folded or the panel's toggle is
+   drawn. */
+.desktop-shell[data-sidebar-collapsed] .desktop-plan-main .inbox-view .desktop-toolbar {
+  padding-inline: var(--column-inset);
+}
+
 /* The list standing alone is a page rather than a column, so its name leads
    its bar past the title bar's buttons, as a page's title does. */
 .desktop-shell[data-sidebar-collapsed="true"]

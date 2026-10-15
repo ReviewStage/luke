@@ -200,6 +200,8 @@ function PlanInboxTab({
   });
   const listed = listedItems(list);
   const chosen = listed.find(({ item }) => item.id === asked) ?? firstChoice(list);
+  // Note that the item standing chosen is kept as asked, so Needs you keeps it listed once it is answered, as the window's Inbox keeps its stand-in.
+  if (chosen !== undefined && chosen.item.id !== asked) setAsked(chosen.item.id);
   // Note that the way back counts every item, filtered out or not, since the list holds Needs you.
   const columns = useInboxColumns(chosen?.item.id, items.length > 1);
   const shown = plans.shown && !plans.sidePanel.fullScreen;
@@ -248,7 +250,7 @@ function PlanInboxTab({
         note={
           inbox.reading ? (
             <Spinner label="Loading inbox" size={SPINNER_SIZE.INLINE} />
-          ) : inbox.failed && items.length === 0 ? (
+          ) : inbox.failed && listed.length === 0 ? (
             <div className="sidebar-note">
               <ReadFailure line="The inbox could not be read." onRetry={inbox.onRetry} />
             </div>
