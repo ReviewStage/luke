@@ -868,18 +868,30 @@ export function mentionsIn(
   return found;
 }
 
-/** A Markdown link inline: its label, brackets and backslashes escaped inside it, and its target. */
-const MARKDOWN_LINK = /\[((?:\\[[\]\\]|[^[\]\\])*)\]\([^()\s]*\)/gu;
+/** A link's target as a plain place passes over it: no space, and no parenthesis inside it. */
+const PLAIN_TARGET = /^[^()\s]*$/u;
 
 /**
  * Words with each Markdown link written as its name, as a place that draws
  * plain words says it, a notification or a list's title: a mention's label
  * without its `@`, as its chip names it, and any other link's label, never
  * its address. A bare address is words, and stays as written. Note that
- * code is not told apart, since such a place says one line of words.
+ * code is not told apart, since such a place says one line of words, and
+ * that the words are walked rather than matched, so no spelling of them
+ * sends a pattern back over what it read.
  */
 export function linkLabels(words: string): string {
-  return words.replace(MARKDOWN_LINK, (_link, label: string) =>
-    mentionName(label.replace(LABEL_ESCAPE, "$1")),
-  );
+  let said = "";
+  let from = 0;
+  for (let at = words.indexOf("["); at !== -1; at = words.indexOf("[", at + 1)) {
+    const close = labelEnd(words, at);
+    if (close === undefined || words[close + 1] !== "(") continue;
+    const targetEnd = words.indexOf(")", close + 2);
+    if (targetEnd === -1 || !PLAIN_TARGET.test(words.slice(close + 2, targetEnd))) continue;
+    said +=
+      words.slice(from, at) + mentionName(words.slice(at + 1, close).replace(LABEL_ESCAPE, "$1"));
+    from = targetEnd + 1;
+    at = targetEnd;
+  }
+  return said + words.slice(from);
 }
