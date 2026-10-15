@@ -651,14 +651,6 @@ function PlanDocument({
                               repository: {
                                 pictures: plans.repositories.pictures,
                                 read: plans.newPlan.repositoriesIn(home.id).read,
-                                onOpenGitHub: () => plans.onOpenOnGitHub(plan.id),
-                                onNewPlanIn: (repository) => {
-                                  listHome();
-                                  plans.onNewPlanIn(repository);
-                                },
-                                onChange: archived
-                                  ? undefined
-                                  : () => plans.onChangeRepository(plan.id),
                               },
                             }}
                           />

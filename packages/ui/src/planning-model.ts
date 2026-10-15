@@ -448,7 +448,7 @@ export function repositoryGroups(plans: readonly PlanSummary[]): readonly Reposi
 }
 
 /** A repository's name without its owner: `relay` of `acme/relay`. */
-function nameOf(repository: string): string {
+export function repositoryNameOf(repository: string): string {
   return repository.slice(repository.indexOf("/") + 1);
 }
 
@@ -458,12 +458,12 @@ function nameOf(repository: string): string {
  * shares the name, where both say `owner/name` so neither is mistaken.
  */
 export function repositoryLabel(repository: string, groups: readonly RepositoryGroup[]): string {
-  const name = nameOf(repository);
+  const name = repositoryNameOf(repository);
   const shared = groups.some(
     (group) =>
       group.repository !== null &&
       group.repository !== repository &&
-      nameOf(group.repository) === name,
+      repositoryNameOf(group.repository) === name,
   );
   return shared ? repository : name;
 }
