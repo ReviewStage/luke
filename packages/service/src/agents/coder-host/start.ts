@@ -106,6 +106,8 @@ export type StartAsk = StartPlace & {
   readonly automationId?: string | undefined;
   /** That automation's run as it starts the agent, which the agent keeps; none for a Start by hand. */
   readonly automationOrigin?: StoredAutomationOrigin | undefined;
+  /** The agent's title from the start, a run's fixed name, which no model is asked for; none for a Start the model names. */
+  readonly title?: string | undefined;
 };
 
 /** What a Start came to: the agent, and whether this ask made it or found it under its key. */
@@ -219,6 +221,7 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
       ...brief,
       automationId: ask.automationId,
       automationOrigin: ask.automationOrigin,
+      title: ask.title,
       idempotencyKey: ask.idempotencyKey,
       model: choice.model,
       effort: choice.effort,

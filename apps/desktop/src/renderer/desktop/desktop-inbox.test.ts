@@ -1582,3 +1582,13 @@ test("an item chosen by a notification's click, in an Inbox showing its list alo
     "Back stands on the list, the notification's ask taken once",
   );
 });
+
+test("an untitled agent an automation started goes by its automation's name in the Inbox, as on its own page", async () => {
+  agentInboxes = new Map([[SWEEP_AGENT, [QUARANTINE]]]);
+  const { page } = mount([waitingPlanless(QUARANTINE)]);
+  await settle();
+
+  const mark = rowNamed(page, "Quarantine the flaky test?").querySelector("[data-agent-ref]");
+  assert.ok(mark, "the planless agent's row hangs its card");
+  assert.match(hoveredCard(mark, "[data-tab-card]") ?? "", /^Nightly flake sweep/u);
+});

@@ -194,6 +194,8 @@ export type NewCodingAgent = CodingAgentPlace & {
   readonly automationId?: string | undefined;
   /** That automation's run as it starts the agent; none for one started by hand. */
   readonly automationOrigin?: StoredAutomationOrigin | undefined;
+  /** The agent's title from the start, a run's fixed name; none where it is named later. */
+  readonly title?: string | undefined;
   readonly idempotencyKey: string;
   readonly model: string;
   readonly effort: string;
@@ -377,6 +379,7 @@ const insertAgent = SqlSchema.findOne({
     organizationId: Schema.String,
     automationId: Schema.NullOr(Schema.String),
     automationOrigin: AutomationOriginColumnSchema,
+    title: Schema.NullOr(Schema.String),
     idempotencyKey: Schema.String,
     model: Schema.String,
     effort: Schema.String,
@@ -399,6 +402,7 @@ const insertAgent = SqlSchema.findOne({
           organizationId: write.organizationId,
           automationId: write.automationId,
           automationOrigin: write.automationOrigin,
+          title: write.title,
           conversationId: write.conversationId,
           model: write.model,
           effort: write.effort,
@@ -857,6 +861,7 @@ export function createCodingAgent(
           organizationId: reached.value.organizationId,
           automationId: started.automationId ?? null,
           automationOrigin: started.automationOrigin ?? null,
+          title: started.title ?? null,
           idempotencyKey: started.idempotencyKey,
           model: started.model,
           effort: started.effort,
