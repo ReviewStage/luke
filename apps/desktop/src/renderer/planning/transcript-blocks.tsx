@@ -22,7 +22,6 @@ import {
   BookOpenIcon,
   BotIcon,
   CircleCheckIcon,
-  CircleDotIcon,
   CircleIcon,
   CircleStopIcon,
   CodeXmlIcon,
@@ -69,6 +68,7 @@ import {
   type ToolState,
   ToolStateMark,
 } from "../ai-elements/tool";
+import { GLYPH_STATE, StateGlyph } from "../state-glyph";
 import { TextLink } from "../text-link";
 import { Tooltip } from "../tooltip";
 import { useClipped } from "../use-clipped";
@@ -497,7 +497,16 @@ export function TranscriptOpeningCall({
   );
 }
 
-/** How a to-do of each status is drawn: its mark, the mark's colour, how its words are set, and what the mark says aloud. */
+/**
+ * How a to-do of each status is drawn: its glyph and the glyph's ink, how
+ * its words are set, and what the glyph says aloud. Pending is an empty
+ * circle, done a check in the muted ink with its words muted beside it, as
+ * Linear and Things mark a finished item, and in progress wears the
+ * working mark an agent at work wears (`state-glyph.tsx`), in the full ink,
+ * so the one item the list is at is the one that stands out. Note that a
+ * done item is not struck through, because a rule through two or three
+ * wrapped lines reads as noise over words the muted ink already quiets.
+ */
 const TODO_LOOK = {
   [CODING_AGENT_TODO_STATUS.PENDING]: {
     Icon: CircleIcon,
@@ -506,20 +515,20 @@ const TODO_LOOK = {
     label: "Pending",
   },
   [CODING_AGENT_TODO_STATUS.IN_PROGRESS]: {
-    Icon: CircleDotIcon,
-    mark: "text-luke",
+    Icon: undefined,
+    mark: "text-foreground",
     words: "",
     label: "In progress",
   },
   [CODING_AGENT_TODO_STATUS.DONE]: {
     Icon: CircleCheckIcon,
     mark: "text-muted-foreground",
-    words: "text-muted-foreground line-through",
+    words: "text-muted-foreground",
     label: "Done",
   },
 } as const satisfies Record<
   CodingAgentTodoStatus,
-  { Icon: LucideIcon; mark: string; words: string; label: string }
+  { Icon: LucideIcon | undefined; mark: string; words: string; label: string }
 >;
 
 export type TranscriptTodosProps = Omit<ComponentProps<typeof Tool>, "children"> &
@@ -528,16 +537,42 @@ export type TranscriptTodosProps = Omit<ComponentProps<typeof Tool>, "children">
     errorText: string | undefined;
   };
 
-/** A to-do list's items, each behind the mark of where it stands, a done item struck through. */
-function TodoItems({ todos }: { todos: CodingAgentTodos["todos"] }): ReactNode {
+/**
+ * A to-do list's items, each behind the glyph of where it stands. The
+ * glyph sits in a 16px column, as a call's icon does, with the call's 8px
+ * gap after it, so a list set at a row's text column, or at its card's
+ * icon, keeps its words on that row's words. The glyph is centred on its
+ * item's first line, which at a 20px line centres it on the capitals, and
+ * a wrapped line hangs under the words rather than the glyph.
+ */
+function TodoItems({
+  todos,
+  className,
+}: {
+  todos: CodingAgentTodos["todos"];
+  className?: string;
+}): ReactNode {
   return (
-    <ul className="m-0 flex list-none flex-col gap-1 px-3 py-2">
+    <ul
+      className={cn(
+        "m-0 flex list-none flex-col gap-1 p-0 leading-5 [--state-glyph-size:14px]",
+        className,
+      )}
+    >
       {todos.map((todo, index) => {
         const look = TODO_LOOK[todo.status];
         return (
           <li key={index} className="flex items-start gap-2" data-todo-status={todo.status}>
-            <span className="flex h-[1lh] shrink-0 items-center" role="img" aria-label={look.label}>
-              <look.Icon className={cn("size-3.5", look.mark)} aria-hidden="true" />
+            <span
+              className={cn("flex h-[1lh] w-4 shrink-0 items-center justify-center", look.mark)}
+              role="img"
+              aria-label={look.label}
+            >
+              {look.Icon === undefined ? (
+                <StateGlyph state={GLYPH_STATE.WORKING} />
+              ) : (
+                <StateGlyph state={GLYPH_STATE.REST} glyph={<look.Icon aria-hidden="true" />} />
+              )}
             </span>
             <span className={cn("min-w-0 [overflow-wrap:anywhere]", look.words)}>
               {todo.content}
@@ -551,8 +586,13 @@ function TodoItems({ todos }: { todos: CodingAgentTodos["todos"] }): ReactNode {
 
 /**
  * One write of an agent's to-do list: a call's row saying how far the list
- * has got, which opens onto the list itself. Whether it starts open is the
- * caller's, since only the newest list is worth reading unasked.
+ * has got, which opens onto the list itself, set bare at the row's text
+ * column as Claude Code and Codex hang theirs under the call, since it is
+ * words rather than the code a call's card holds, and selectable as a
+ * call's body is; a failure is said under it as a subagent's is. Whether it starts open is the caller's, since only
+ * the newest list is worth reading unasked. Its working mark holds still
+ * (planning.css), since a row's list is a record of one write, and the
+ * list the agent is at is docked above the composer while it works.
  */
 export function TranscriptTodos({
   state,
@@ -571,10 +611,17 @@ export function TranscriptTodos({
         subject={subject}
         subjectIsCode={words.code}
       />
-      <ToolContent>
+      <FoldBody className="mt-0.5 mb-1 ml-7 select-text">
         <TodoItems todos={todos} />
-        <ToolOutput block={undefined} errorText={errorText} />
-      </ToolContent>
+        {errorText === undefined ? null : (
+          <p
+            className="m-0 mt-1 text-danger whitespace-pre-wrap [overflow-wrap:anywhere]"
+            role="alert"
+          >
+            {errorText}
+          </p>
+        )}
+      </FoldBody>
     </Tool>
   );
 }
@@ -613,7 +660,7 @@ export function TranscriptTodosDock({
         <FoldChevron className="ml-auto" />
       </FoldSummary>
       <FoldBody className="border-t border-border">
-        <TodoItems todos={todos} />
+        <TodoItems todos={todos} className="px-3 py-2" />
       </FoldBody>
     </Fold>
   );
