@@ -1,6 +1,6 @@
+import { PLANNER_DELEGATE_TOOL } from "@luke/service/agents/brain-host/planning";
 import { emitJsonSchema } from "@luke/wire/effect";
 import { defineWorkflowTool, type WorkflowServeReceive } from "eve/tools";
-import { PLANNER_DELEGATE_TOOL } from "../../server/hosted/brain-host/planning.js";
 
 /**
  * delegate.ts -- the planning model hands one job to the worker, which always runs in the background.

@@ -1,14 +1,14 @@
 import { edgeKit } from "@luke/service/agents/agent-runtime/edge";
 import { AGENT_ROLE } from "@luke/service/agents/agent-runtime/role";
 import type { AgentSkill } from "@luke/service/agents/agent-runtime/skills";
-import { hostedEnvironment } from "@luke/service/environment";
-import { Effect } from "effect";
-import type { SessionAuth } from "eve/context";
-import { type BrainHost, brainHost } from "../server/hosted/brain-host/host.js";
+import { type BrainHost, brainHost } from "@luke/service/agents/brain-host/host";
 import {
   type BrainHostSeams,
   productionBrainHostSeams,
-} from "../server/hosted/brain-host/production.js";
+} from "@luke/service/agents/brain-host/production";
+import { hostedEnvironment } from "@luke/service/environment";
+import { Effect } from "effect";
+import type { SessionAuth } from "eve/context";
 import { runWeb } from "../server/runtime.js";
 
 /**

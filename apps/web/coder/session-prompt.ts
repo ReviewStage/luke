@@ -1,7 +1,7 @@
 import type { SandboxRecord } from "@luke/service/agents/agent-runtime/sandbox";
+import type { CoderSessionPromptRecord } from "@luke/service/agents/coder-host/host";
 import { NO_NOTES_TAKEN, type NotesTaken } from "@luke/service/agents/coder-host/plan-edit";
 import { defineState } from "eve/context";
-import type { CoderSessionPromptRecord } from "../server/hosted/coder-host/host.js";
 
 /**
  * The session's prompt as its content address, and whether it said the

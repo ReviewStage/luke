@@ -8,7 +8,17 @@ import { user } from "@luke/database/schemas/auth";
 import { conversations } from "@luke/database/schemas/storage";
 import { readMessagesByConversationTyped, readTurnById, startPlan } from "@luke/database/testing";
 import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "@luke/service/agents/brain-host/bounds";
+import {
+  PLANNER_DELEGATE_TOOL,
+  planningToolDeclarations,
+} from "@luke/service/agents/brain-host/planning";
 import { REPOSITORY_SHELL_REFUSAL } from "@luke/service/agents/repository-shell";
+import {
+  SCRIPTED_DELEGATE,
+  SCRIPTED_NOT_READ_REPLY,
+  SCRIPTED_PLANNING_REPLY,
+  SCRIPTED_READ,
+} from "@luke/service/testing/eve-scripted-model";
 import {
   EXCESS_KEYS,
   MESSAGE_AUTHOR,
@@ -24,16 +34,6 @@ import { isTextUIPart, isToolUIPart } from "ai";
 import { eq } from "drizzle-orm";
 import { Effect, ManagedRuntime, Option, Result, Schema } from "effect";
 import { defineEval } from "eve/evals";
-import {
-  PLANNER_DELEGATE_TOOL,
-  planningToolDeclarations,
-} from "../../server/hosted/brain-host/planning";
-import {
-  SCRIPTED_DELEGATE,
-  SCRIPTED_NOT_READ_REPLY,
-  SCRIPTED_PLANNING_REPLY,
-  SCRIPTED_READ,
-} from "../scripted-model";
 
 /**
  * The whole host under eve, end to end: eve's runtime runs a typed ask in a

@@ -6,12 +6,12 @@ import { readPlan } from "@luke/database/models/plan-store";
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB, startPlan, type TestPlan } from "@luke/database/testing";
 import { NOTE_KIND, PLAN_HEADING } from "@luke/features/plan-template";
-import { added } from "@luke/service/testing/plan-contents";
 import { Duration, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
-import { PLAN_SCRIBE, type PlanDraft, planScribe } from "../server/voice/plan-scribe";
-import { heard, said } from "./support/live-events";
-import { type ScribeAnswer, scriptedScribeModel } from "./support/scribe-model";
+import { heard, said } from "../testing/live-events.js";
+import { added } from "../testing/plan-contents.js";
+import { type ScribeAnswer, scriptedScribeModel } from "../testing/scribe-model.js";
+import { PLAN_SCRIBE, type PlanDraft, planScribe } from "./plan-scribe.js";
 
 /**
  * The planning call's notetaker over a real plan row: a scripted model stands

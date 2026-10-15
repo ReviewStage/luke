@@ -32,6 +32,13 @@ import {
   MESSAGE_ROLE,
   type UserMessageMetadata,
 } from "@luke/service/core";
+import {
+  delegated,
+  heard,
+  said,
+  sessionStarted,
+  thinkingAppended,
+} from "@luke/service/testing/live-events";
 import { liveBrainLayer, liveRecordLayer } from "@luke/voice/effect";
 import {
   LIVE_BRAIN_CANCEL,
@@ -55,7 +62,6 @@ import { afterAll } from "vitest";
 import { z } from "zod";
 import { hostedLiveRecord } from "../server/voice/live-record";
 import { observedSideband } from "../server/voice/live-sideband";
-import { delegated, heard, said, sessionStarted, thinkingAppended } from "./support/live-events";
 import { settled } from "./support/settle";
 
 /**

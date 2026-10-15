@@ -31,14 +31,22 @@ import {
   type EveMessage,
   type EveSessions,
 } from "@luke/service/agents/brain-host/eve-sessions";
+import { PLANNING_EXPLORE_ASK } from "@luke/service/agents/brain-host/planning";
 import { memoryRelayState, StreamRelay } from "@luke/service/agents/brain-host/relay";
 import { HOSTED_API_ERROR, MESSAGE_ROLE } from "@luke/service/core";
 import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
+import { HOSTED_TOOL_SET } from "@luke/service/plans/brain-tool-set";
+import { FIRST_EVE_TURN, spokenTurn } from "@luke/service/testing/eve-turns";
+import {
+  appended,
+  delegated,
+  heard,
+  sessionStarted,
+  thinkingAppended,
+} from "@luke/service/testing/live-events";
 import { isRecord, unparsedWire, type WireRecord } from "@luke/wire";
 import { Effect, Exit, Option, Redacted, Schema, Scope } from "effect";
 import { afterAll } from "vitest";
-import { PLANNING_EXPLORE_ASK } from "../server/hosted/brain-host/planning";
-import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { deploymentExchange } from "../server/voice/deployment-exchange";
 import type { AttachedSession } from "../server/voice/live-exchange";
 import { LOG_EVENT, type LogEntry } from "../server/voice/log";
@@ -49,14 +57,6 @@ import {
   voiceServer,
 } from "../server/voice/service";
 import { SOCKET_CLOSE_CODE } from "../server/voice/socket";
-import { FIRST_EVE_TURN, spokenTurn } from "./support/eve-turns";
-import {
-  appended,
-  delegated,
-  heard,
-  sessionStarted,
-  thinkingAppended,
-} from "./support/live-events";
 import {
   connect,
   fakeAccounts,

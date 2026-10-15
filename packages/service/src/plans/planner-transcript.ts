@@ -21,12 +21,12 @@ import {
   type CodingAgentSubagentTitle,
 } from "@luke/features/coding-agent-wire";
 import { PLAN_WORK_BOUNDS, PLAN_WORK_STATE, type PlanWorkTurn } from "@luke/features/planning-view";
-import { CODER } from "@luke/service/agents/coder-host/bounds";
-import type { TitleAwaited } from "@luke/service/agents/coder-host/transcript";
-import { MESSAGE_ROLE, TURN_STATUS, type TurnOrigin } from "@luke/service/core";
 import { Clock, Duration, Effect, Option, Schedule, type Schema } from "effect";
-import { planWorkOf, workerSessionCallsOf } from "../voice/plan-work.js";
+import { CODER } from "../agents/coder-host/bounds.js";
+import type { TitleAwaited } from "../agents/coder-host/transcript.js";
+import { MESSAGE_ROLE, TURN_STATUS, type TurnOrigin } from "../core.js";
 import { HOSTED_TOOL_SET } from "./brain-tool-set.js";
+import { planWorkOf, workerSessionCallsOf } from "./plan-work.js";
 import {
   plannerDelegationJournalsOf,
   plannerDelegationRowsOf,
@@ -43,7 +43,7 @@ import {
  * Three things are the planner's own. A planning conversation holds many
  * turns and the voice's rows between them, which the Call tab draws from
  * the call's transcript, so the page carries the turns' journals alone, each
- * as the plan's work projects it (`voice/plan-work.ts`): its newest parts,
+ * as the plan's work projects it (`plans/plan-work.ts`): its newest parts,
  * every string cut to the bound and no page's HTML, with the spoken lines
  * the turn took as its ask. A plan may have planned on for a long time, so a
  * reader opens on its newest turns and pages back a turn page at a time

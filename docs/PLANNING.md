@@ -359,7 +359,7 @@ sidebar does (`desktop/side-panel.tsx`, `planning/use-side-panel.ts`).
   column beside the plan's own ("Agent tabs" below). The Work tab, what the planning model wrote
   and ran on the plan's calls, is told live during a call and read back
   from the plan's conversation when the plan opens
-  (`GET /api/plans/{id}/work`, `hosted/plan-work-store.ts`), so a restart
+  (`GET /api/plans/{id}/work`, `packages/service/src/plans/plan-work-store.ts`), so a restart
   or a switch to another plan and back loses neither it nor the code. The
   read answers twenty turns a page, the newest first; scrolling to the
   oldest turn drawn reads the page before it (`?before=<turn>`), and the
@@ -568,7 +568,7 @@ of the turn's words under it (`planning/plan-transcript.tsx`,
 ### The notetaker
 
 A planning call's plan is written by a notetaker beside the call
-(`apps/web/server/voice/plan-scribe.ts`), following GPT-Live's guidance to
+(`packages/service/src/plans/plan-scribe.ts`), following GPT-Live's guidance to
 react to the transcript on a small model while speech goes on. It keeps both
 speakers' words from the call's sideband and the planning model's replies as
 research notes. Once the developer has been quiet for about a second, it makes
@@ -1240,7 +1240,7 @@ the exact shape.
 | Microphone and notices | `microphoneAccessRow`, `voiceAttentionNote`, `MICROPHONE_UNGRANTED_NOTE`, `hostedVoiceUnavailableNote` (`@luke/voice/microphone-access`) | None. |
 | The call | The hidden `VoiceWindow` and `VoiceHost` / `useVoiceSession` / `LiveCall` (`renderer/voice/`); `LiveVoiceOrchestrator` (`@luke/voice`); the sessions route `/api/voice/sessions` with client delegation | The call is associated with the open plan, and the orchestrator gains the Plans tab's toggle beside the held talk key (LUKE-340); the talk key names the open plan while one is open (LUKE-347). |
 | Start, agent tabs, Settings › Coding agents | The toolbar and the plan's column's tabs (`desktop/main-tabs.tsx`, `planning/use-main-tabs.ts`), on the side panel's strip (`desktop/strip-tabs.tsx`, `@luke/ui/tab-strip-model`); the Transcript tab's AI Elements components; the account preferences route | The split button (`desktop/start-agent-button.tsx`), the agent tab (`planning/agent-tab.tsx`), their control (`planning/use-coding-agents.ts`) and the held transcript read (`planning/use-agent-transcript.ts`), and the Settings page (`settings/coding-agents-page.tsx`). |
-| Planning model and document | Hosted storage and the brain host (`apps/web/server/hosted/`); the account client (`packages/features`, `packages/credentials`) | The plan record and its one write, `saveNotes` (LUKE-334), the instructions (LUKE-336), research (LUKE-339), the default template (`packages/features/src/plan-document-template.ts`), the headings and notes it is written in (`packages/features/src/plan-template.ts`, LUKE-352), and the notetaker that writes the plan during a call (`apps/web/server/voice/plan-scribe.ts`). |
+| Planning model and document | Hosted storage and the brain host (`apps/web/server/hosted/`); the account client (`packages/features`, `packages/credentials`) | The plan record and its one write, `saveNotes` (LUKE-334), the instructions (LUKE-336), research (LUKE-339), the default template (`packages/features/src/plan-document-template.ts`), the headings and notes it is written in (`packages/features/src/plan-template.ts`, LUKE-352), and the notetaker that writes the plan during a call (`packages/service/src/plans/plan-scribe.ts`). |
 
 Two existing rules carry over unchanged:
 
@@ -1280,7 +1280,7 @@ changes when a check is run, not when one is planned.
     a coding agent's checkout on the same terms
     (`packages/service/src/agents/coder-host/checkout.test.ts`); and the Start, list,
     messages, and Stop routes over a fake eve
-    (`apps/web/tests/coding-agents-app.test.ts`);
+    (`packages/service/src/agents/coding-agents-app.test.ts`);
   - the notetaker saves what the developer said once they are quiet a beat,
     and its drafts are drawn on the Mac as the model writes them;
   - a spoken turn reaching the planning model in the plan's own

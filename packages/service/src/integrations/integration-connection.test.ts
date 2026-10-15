@@ -6,45 +6,39 @@ import { storeWriter } from "@luke/database/models/writer";
 import { account } from "@luke/database/schemas/auth";
 import { getTestDB, joinWorkspace, startPlan } from "@luke/database/testing";
 import { INTEGRATION_PROVIDER, INTEGRATION_PROVIDER_LIST } from "@luke/features/integration-wire";
-import {
-  BRAIN_HOST_ATTRIBUTE,
-  BRAIN_HOST_PRINCIPAL_TYPE,
-  BRAIN_HOST_TURN,
-} from "@luke/service/agents/brain-host/bounds";
-import { GitHubApp } from "@luke/service/github/github-app";
-import {
-  type ConnectorService,
-  INTEGRATION_CONNECT_FAILURE,
-  IntegrationConnectFailure,
-  vercelConnector,
-} from "@luke/service/integrations/integration-connect";
-import {
-  type IntegrationAdmission,
-  integrationAccessToken,
-  integrationConnection,
-  integrationUnavailable,
-} from "@luke/service/integrations/integration-connection";
-import {
-  beginIntegrationSignIn,
-  completeIntegrationSignIn,
-} from "@luke/service/integrations/integration-store";
-import {
-  GITHUB_APP_SETTINGS,
-  openGithubUser,
-  standingGithubRow,
-} from "@luke/service/testing/github-app-fake";
-import {
-  CONNECTOR_ASKED_NOTHING,
-  integrationConnectOf,
-} from "@luke/service/testing/integration-connect";
-import { noNetwork } from "@luke/service/testing/no-network";
 import { ConnectError } from "@vercel/connect";
 import { eq } from "drizzle-orm";
 import { Effect, Layer, Logger, Option, Redacted, Result } from "effect";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
 import { test } from "vitest";
-import { type BrainHost, brainHost } from "../server/hosted/brain-host/host";
-import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
+import {
+  BRAIN_HOST_ATTRIBUTE,
+  BRAIN_HOST_PRINCIPAL_TYPE,
+  BRAIN_HOST_TURN,
+} from "../agents/brain-host/bounds.js";
+import { type BrainHost, brainHost } from "../agents/brain-host/host.js";
+import { GitHubApp } from "../github/github-app.js";
+import { HOSTED_TOOL_SET } from "../plans/brain-tool-set.js";
+import {
+  GITHUB_APP_SETTINGS,
+  openGithubUser,
+  standingGithubRow,
+} from "../testing/github-app-fake.js";
+import { CONNECTOR_ASKED_NOTHING, integrationConnectOf } from "../testing/integration-connect.js";
+import { noNetwork } from "../testing/no-network.js";
+import {
+  type ConnectorService,
+  INTEGRATION_CONNECT_FAILURE,
+  IntegrationConnectFailure,
+  vercelConnector,
+} from "./integration-connect.js";
+import {
+  type IntegrationAdmission,
+  integrationAccessToken,
+  integrationConnection,
+  integrationUnavailable,
+} from "./integration-connection.js";
+import { beginIntegrationSignIn, completeIntegrationSignIn } from "./integration-store.js";
 
 /**
  * The one connection per integration all four agents register, through the

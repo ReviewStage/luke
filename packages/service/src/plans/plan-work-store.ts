@@ -16,19 +16,19 @@ import {
   type PlanShownCode,
   type PlanWorkAnswer,
 } from "@luke/features/planning-view";
-import { isStoredToolPart, storedToolName } from "@luke/service/core";
-import { SHOW_CODE_TOOL, shownCodeOf } from "@luke/service/plans/show-code";
 import { Effect, Option } from "effect";
+import { PLANNER_DELEGATION_TOOLS } from "../agents/brain-host/planning.js";
+import { isStoredToolPart, storedToolName } from "../core.js";
+import { HOSTED_TOOL_SET } from "./brain-tool-set.js";
+import { subagentRecordsByCall } from "./child-models.js";
 import {
   callsSendingToEarlierTasks,
   planWorkOf,
   SUBAGENT_JOURNALS,
   type SubagentJournal,
   workerSessionCallsOf,
-} from "../voice/plan-work.js";
-import { PLANNER_DELEGATION_TOOLS } from "./brain-host/planning.js";
-import { HOSTED_TOOL_SET } from "./brain-tool-set.js";
-import { subagentRecordsByCall } from "./child-models.js";
+} from "./plan-work.js";
+import { SHOW_CODE_TOOL, shownCodeOf } from "./show-code.js";
 
 /**
  * plan-work-store.ts -- a plan's Work tab read back from the record, a page of turns at a time, and every code Luke showed on it.
@@ -37,7 +37,7 @@ import { subagentRecordsByCall } from "./child-models.js";
  * relay journals each as eve runs it, so the plan's work is that
  * conversation's turns, newest first a page at a time, each projected from
  * its row and its journal exactly as a call tells it live
- * (`voice/plan-work.ts`), a worker's session and its title read from its
+ * (`plans/plan-work.ts`), a worker's session and its title read from its
  * child conversation beside it, and the spoken lines each took as its ask
  * read from the rows the turn holds. The code is every answered `show_code` call in
  * the conversation's journals, oldest first, read by the same rule that puts

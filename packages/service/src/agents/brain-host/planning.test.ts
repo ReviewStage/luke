@@ -8,27 +8,6 @@ import { storeWriter } from "@luke/database/models/writer";
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB, startPlan } from "@luke/database/testing";
 import { type PlanDocument, planDocumentSchema } from "@luke/features/plan-wire";
-import {
-  BRAIN_HOST_ATTRIBUTE,
-  BRAIN_HOST_TURN,
-  BRAIN_HOST_TURN_KIND,
-  type BrainHostTurn,
-} from "@luke/service/agents/brain-host/bounds";
-import { readRecentMessages } from "@luke/service/agents/brain-host/context";
-import { memoryRelayState, type RelayStateStore } from "@luke/service/agents/brain-host/relay";
-import type { RepositorySandboxDoor } from "@luke/service/agents/repository-shell";
-import type { GitHubApp } from "@luke/service/github/github-app";
-import { modelCatalogOf } from "@luke/service/providers/model-catalog";
-import { stampedEveEvent } from "@luke/service/testing/eve-events";
-import {
-  connectWorkspaceGitHub,
-  GITHUB_FIXTURE_INSTALLATION_TOKEN,
-  githubReaching,
-  NO_GITHUB,
-  openGithubUser,
-} from "@luke/service/testing/github-app-fake";
-import { noNetwork } from "@luke/service/testing/no-network";
-import { sandboxDouble } from "@luke/service/testing/repository-sandbox";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import {
   generateText,
@@ -44,15 +23,36 @@ import type * as HttpClient from "effect/http/HttpClient";
 import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
 import type { ToolContext as EveToolContext } from "eve/tools";
+import type { GitHubApp } from "../../github/github-app.js";
+import { HOSTED_TOOL_SET } from "../../plans/brain-tool-set.js";
+import { modelCatalogOf } from "../../providers/model-catalog.js";
+import { stampedEveEvent } from "../../testing/eve-events.js";
 import {
   SCRIPTED_PLANNING_REPLY,
   SCRIPTED_READ,
   SCRIPTED_READ_REPLY,
   scriptedModel,
-} from "../eve/scripted-model";
-import { type BrainHost, brainHost } from "../server/hosted/brain-host/host";
-import type { BrainHostSeams } from "../server/hosted/brain-host/production";
-import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
+} from "../../testing/eve-scripted-model.js";
+import {
+  connectWorkspaceGitHub,
+  GITHUB_FIXTURE_INSTALLATION_TOKEN,
+  githubReaching,
+  NO_GITHUB,
+  openGithubUser,
+} from "../../testing/github-app-fake.js";
+import { noNetwork } from "../../testing/no-network.js";
+import { sandboxDouble } from "../../testing/repository-sandbox.js";
+import type { RepositorySandboxDoor } from "../repository-shell.js";
+import {
+  BRAIN_HOST_ATTRIBUTE,
+  BRAIN_HOST_TURN,
+  BRAIN_HOST_TURN_KIND,
+  type BrainHostTurn,
+} from "./bounds.js";
+import { readRecentMessages } from "./context.js";
+import { type BrainHost, brainHost } from "./host.js";
+import type { BrainHostSeams } from "./production.js";
+import { memoryRelayState, type RelayStateStore } from "./relay.js";
 
 /**
  * The planning model as the hosted brain runs it, end to end in one process:

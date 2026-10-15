@@ -19,8 +19,8 @@ import { VOICE_SEGMENT_ROLE } from "@luke/database/voice-vocabulary";
 import { LIVE_DEFAULTS } from "@luke/live";
 import { Result, Schema } from "effect";
 import { afterAll, test } from "vitest";
-import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
-import { heard, said } from "./support/live-events";
+import { heard, said } from "../testing/live-events.js";
+import { HOSTED_TOOL_SET } from "./brain-tool-set.js";
 
 /**
  * The voice writer over the real migrations on PGlite, fed a synthetic Live

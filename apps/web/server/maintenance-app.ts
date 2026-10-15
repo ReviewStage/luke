@@ -21,11 +21,11 @@ import {
 } from "@luke/service/http/http-effect";
 import { MAINTENANCE_SWEEP_PATH } from "@luke/service/maintenance/maintenance-bounds";
 import { sweepTerminalLeases } from "@luke/service/maintenance/terminal-lease-sweep";
+import { HOSTED_TOOL_SET } from "@luke/service/plans/brain-tool-set";
 import type { ModelCatalog } from "@luke/service/providers/model-catalog";
 import { ANY_METHOD, type WebRoutes } from "@luke/service/route";
 import { Effect, Layer, Redacted } from "effect";
 import { HttpClient, HttpRouter } from "effect/http";
-import { HOSTED_TOOL_SET } from "./hosted/brain-tool-set.js";
 import { handleMaintenanceSweep } from "./hosted/maintenance-sweep.js";
 import { createLiveUpstream } from "./voice/openai.js";
 import {

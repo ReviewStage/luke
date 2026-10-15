@@ -8,50 +8,46 @@ import { type ConversationTarget, storeWriter } from "@luke/database/models/writ
 import { joinWorkspace, openHostedStoreTestDatabase, startPlan } from "@luke/database/testing";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
-import {
-  BRAIN_HOST_ATTRIBUTE,
-  BRAIN_HOST_HEADER,
-  BRAIN_HOST_TURN,
-} from "@luke/service/agents/brain-host/bounds";
-import {
-  claimRuntimeSession,
-  conversationReachableBy,
-  runtimeSessionReachableBy,
-} from "@luke/service/agents/brain-host/conversation";
-import { STEER_OUTCOME } from "@luke/service/agents/coder-host/steer";
-import {
-  CODING_AGENT_TOOL_REFUSAL,
-  LIST_CODING_AGENTS_TOOL,
-  MESSAGE_CODING_AGENT_TOOL,
-  START_CODING_AGENT_REFUSAL,
-  START_CODING_AGENT_TOOL,
-} from "@luke/service/agents/coding-agent-tools";
+import { Effect, Layer, Option, Redacted, Result } from "effect";
+import type * as HttpClient from "effect/http/HttpClient";
+import type { SessionAuth, SessionAuthContext } from "eve/context";
+import type { ToolContext as EveToolContext } from "eve/tools";
+import { afterAll, test } from "vitest";
 import {
   ACTION_RESULT_STATUS,
   BRAIN_TURN_TRIGGER,
   isRecord,
   isWireString,
   type WireRecord,
-} from "@luke/service/core";
-import type { GitHubApp } from "@luke/service/github/github-app";
-import { LINK_OUTCOME } from "@luke/service/github/github-installations";
-import { END_CALL_TOOL } from "@luke/service/plans/end-call";
-import { modelCatalogOf, type OfferedModel } from "@luke/service/providers/model-catalog";
+} from "../../core.js";
+import type { GitHubApp } from "../../github/github-app.js";
+import { LINK_OUTCOME } from "../../github/github-installations.js";
+import { HOSTED_TOOL_SET } from "../../plans/brain-tool-set.js";
+import { END_CALL_TOOL } from "../../plans/end-call.js";
+import { modelCatalogOf, type OfferedModel } from "../../providers/model-catalog.js";
 import {
   connectWorkspaceGitHub,
   githubReaching,
   type InstallationFixture,
   NO_GITHUB,
-} from "@luke/service/testing/github-app-fake";
-import { Effect, Layer, Option, Redacted, Result } from "effect";
-import type * as HttpClient from "effect/http/HttpClient";
-import type { SessionAuth, SessionAuthContext } from "eve/context";
-import type { ToolContext as EveToolContext } from "eve/tools";
-import { afterAll, test } from "vitest";
-import { type BrainHost, brainHost } from "../server/hosted/brain-host/host";
-import { planningToolDeclarations } from "../server/hosted/brain-host/planning";
-import type { BrainHostSeams } from "../server/hosted/brain-host/production";
-import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
+} from "../../testing/github-app-fake.js";
+import { STEER_OUTCOME } from "../coder-host/steer.js";
+import {
+  CODING_AGENT_TOOL_REFUSAL,
+  LIST_CODING_AGENTS_TOOL,
+  MESSAGE_CODING_AGENT_TOOL,
+  START_CODING_AGENT_REFUSAL,
+  START_CODING_AGENT_TOOL,
+} from "../coding-agent-tools.js";
+import { BRAIN_HOST_ATTRIBUTE, BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "./bounds.js";
+import {
+  claimRuntimeSession,
+  conversationReachableBy,
+  runtimeSessionReachableBy,
+} from "./conversation.js";
+import { type BrainHost, brainHost } from "./host.js";
+import { planningToolDeclarations } from "./planning.js";
+import type { BrainHostSeams } from "./production.js";
 
 /**
  * The planning tools as eve runs them through the host's `runTool`, over the

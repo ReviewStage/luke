@@ -1,4 +1,4 @@
-import { WORKER_TOOL_NAMES } from "../../../../server/hosted/brain-host/planning.js";
+import { WORKER_TOOL_NAMES } from "@luke/service/agents/brain-host/planning";
 import { host } from "../../../host.js";
 import { hostedTools } from "../../../tools/brain.js";
 

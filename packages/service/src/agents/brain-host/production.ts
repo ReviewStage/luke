@@ -2,26 +2,20 @@ import { spendHostedMeter } from "@luke/database/models/quota";
 import { type StoreWriter, storeWriter } from "@luke/database/models/writer";
 import { BRAIN_OPENAI_DEFAULTS } from "@luke/features/brain";
 import type { ModelChoice } from "@luke/features/models-wire";
-import { accountMeter } from "@luke/service/agents/agent-runtime/meter";
-import {
-  BRAIN_HOST_ENVIRONMENT,
-  BRAIN_HOST_MODEL_FIXTURE,
-} from "@luke/service/agents/brain-host/bounds";
-import {
-  conversationReachableBy,
-  runtimeSessionReachableBy,
-} from "@luke/service/agents/brain-host/conversation";
-import type { SessionOwnership } from "@luke/service/agents/brain-host/door";
-import { deploymentEveOrigin } from "@luke/service/agents/brain-host/eve-origin";
-import { titleModel } from "@luke/service/agents/coder-host/model";
-import { auth } from "@luke/service/auth/auth";
-import { oauthUserInfoFromAuthAnswer, type UserInfoEndpoint } from "@luke/service/auth/bearer";
-import { unparsedWire, type WireBoundaryInput } from "@luke/service/core";
-import { HostedEnvironment } from "@luke/service/environment";
-import type { WebStoreRun } from "@luke/service/run";
 import type { LanguageModel } from "ai";
 import { Effect, type Redacted } from "effect";
-import { HOSTED_TOOL_SET } from "../brain-tool-set.js";
+import { auth } from "../../auth/auth.js";
+import { oauthUserInfoFromAuthAnswer, type UserInfoEndpoint } from "../../auth/bearer.js";
+import { unparsedWire, type WireBoundaryInput } from "../../core.js";
+import { HostedEnvironment } from "../../environment.js";
+import { HOSTED_TOOL_SET } from "../../plans/brain-tool-set.js";
+import type { WebStoreRun } from "../../run.js";
+import { accountMeter } from "../agent-runtime/meter.js";
+import { titleModel } from "../coder-host/model.js";
+import { BRAIN_HOST_ENVIRONMENT, BRAIN_HOST_MODEL_FIXTURE } from "./bounds.js";
+import { conversationReachableBy, runtimeSessionReachableBy } from "./conversation.js";
+import type { SessionOwnership } from "./door.js";
+import { deploymentEveOrigin } from "./eve-origin.js";
 
 /**
  * The deployment's real seams behind the eve project's authored files, built

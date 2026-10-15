@@ -10,8 +10,31 @@ import {
   type PlanNote,
 } from "@luke/features/plan-template";
 import { PLAN_ACTOR, PLAN_FIELD } from "@luke/features/plan-wire";
-import { AGENT_ROLE } from "@luke/service/agents/agent-runtime/role";
-import { AGENT_TOOL, toolsOf } from "@luke/service/agents/agent-runtime/tools";
+import type { UnparsedWireValue, WireRecord } from "@luke/wire";
+import { emitJsonSchema } from "@luke/wire/effect";
+import type { ToolSet } from "ai";
+import { Effect, Schema } from "effect";
+import type * as HttpClient from "effect/http/HttpClient";
+import type { ToolDefinition } from "eve/tools";
+import { ACTION_RESULT_STATUS, wireValidatedTool } from "../../core.js";
+import type { GitHubApp } from "../../github/github-app.js";
+import { connectionToolEntries } from "../../integrations/connection-tools.js";
+import { INTEGRATION_NAMES_SAID } from "../../integrations/integrations.js";
+import { LOOK_AT_BOARD_TOOL, runLookAtBoard } from "../../plans/board-look.js";
+import { DRAW_ON_BOARD_TOOL, runDrawOnBoard } from "../../plans/board-tool.js";
+import { END_CALL_TOOL, runEndCall } from "../../plans/end-call.js";
+import { runShowPage, SHOW_PAGE_TOOL } from "../../plans/page-tool.js";
+import type { PlanDocumentBinding } from "../../plans/plan-notes.js";
+import {
+  QUEUE_QUESTION_TOOL,
+  runQueueQuestion,
+  runWithdrawQuestion,
+  WITHDRAW_QUESTION_TOOL,
+} from "../../plans/queue-question.js";
+import { runShowCode, SHOW_CODE_TOOL } from "../../plans/show-code.js";
+import type { ModelCatalog } from "../../providers/model-catalog.js";
+import { AGENT_ROLE } from "../agent-runtime/role.js";
+import { AGENT_TOOL, toolsOf } from "../agent-runtime/tools.js";
 import {
   type CodingAgentCall,
   LIST_CODING_AGENTS_TOOL,
@@ -22,44 +45,21 @@ import {
   runReadCodingAgent,
   runStartCodingAgent,
   START_CODING_AGENT_TOOL,
-} from "@luke/service/agents/coding-agent-tools";
-import { COMMAND_DESCRIPTION_INSTRUCTION } from "@luke/service/agents/command-description";
-import { RUN_ON_MAC_TOOL, runOnMacTool } from "@luke/service/agents/mac-command";
+} from "../coding-agent-tools.js";
+import { COMMAND_DESCRIPTION_INSTRUCTION } from "../command-description.js";
+import { RUN_ON_MAC_TOOL, runOnMacTool } from "../mac-command.js";
 import {
   READ_WEB_PAGE_TOOL,
   type ResearchCall,
   runReadWebPage,
   runSearchWeb,
   SEARCH_WEB_TOOL,
-} from "@luke/service/agents/public-research";
+} from "../public-research.js";
 import {
   type RepositoryCall,
   RUN_IN_REPOSITORY_TOOL,
   runInRepository,
-} from "@luke/service/agents/repository-shell";
-import { ACTION_RESULT_STATUS, wireValidatedTool } from "@luke/service/core";
-import type { GitHubApp } from "@luke/service/github/github-app";
-import { connectionToolEntries } from "@luke/service/integrations/connection-tools";
-import { INTEGRATION_NAMES_SAID } from "@luke/service/integrations/integrations";
-import { LOOK_AT_BOARD_TOOL, runLookAtBoard } from "@luke/service/plans/board-look";
-import { DRAW_ON_BOARD_TOOL, runDrawOnBoard } from "@luke/service/plans/board-tool";
-import { END_CALL_TOOL, runEndCall } from "@luke/service/plans/end-call";
-import { runShowPage, SHOW_PAGE_TOOL } from "@luke/service/plans/page-tool";
-import type { PlanDocumentBinding } from "@luke/service/plans/plan-notes";
-import {
-  QUEUE_QUESTION_TOOL,
-  runQueueQuestion,
-  runWithdrawQuestion,
-  WITHDRAW_QUESTION_TOOL,
-} from "@luke/service/plans/queue-question";
-import { runShowCode, SHOW_CODE_TOOL } from "@luke/service/plans/show-code";
-import type { ModelCatalog } from "@luke/service/providers/model-catalog";
-import type { UnparsedWireValue, WireRecord } from "@luke/wire";
-import { emitJsonSchema } from "@luke/wire/effect";
-import type { ToolSet } from "ai";
-import { Effect, Schema } from "effect";
-import type * as HttpClient from "effect/http/HttpClient";
-import type { ToolDefinition } from "eve/tools";
+} from "../repository-shell.js";
 
 /**
  * planning.ts -- what a plan conversation's turns run under: the planning model's instructions, its document, and its tools.
@@ -265,7 +265,7 @@ const SCRIBE_SECTIONS = Object.values(PLAN_FIELD)
 /**
  * The instructions the plan's notetaker runs under: the scribe that listens
  * to a planning call and takes notes into the plan while Luke and the
- * developer talk (`apps/web/server/voice/plan-scribe.ts`). It decides nothing
+ * developer talk (`plans/plan-scribe.ts`). It decides nothing
  * of the conversation; it records what was said, one note at a time.
  */
 export const SCRIBE_INSTRUCTIONS = `

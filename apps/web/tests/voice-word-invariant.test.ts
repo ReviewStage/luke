@@ -34,6 +34,13 @@ import {
   sessionKey,
   UI_PART_TYPE,
 } from "@luke/service/core";
+import {
+  delegated,
+  heard,
+  said,
+  sessionStarted,
+  thinkingAppended,
+} from "@luke/service/testing/live-events";
 import { liveBrainLayer, liveRecordLayer } from "@luke/voice/effect";
 import {
   LIVE_BRAIN_CANCEL,
@@ -56,7 +63,6 @@ import { afterAll } from "vitest";
 import { z } from "zod";
 import { hostedLiveRecord } from "../server/voice/live-record";
 import { observedSideband } from "../server/voice/live-sideband";
-import { delegated, heard, said, sessionStarted, thinkingAppended } from "./support/live-events";
 
 /**
  * The segments-to-rows word invariant, which is the property that failed on

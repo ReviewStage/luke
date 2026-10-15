@@ -22,7 +22,6 @@ import {
   TranscriptLedger,
   type TranscriptUtterance,
 } from "@luke/live";
-import { PLAN_SAVE_STATUS, saveNotes } from "@luke/service/plans/plan-notes";
 import { LIVE_BRAIN_RUN_EVENT, type LiveBrainRunEvent } from "@luke/voice/live-session";
 import {
   jsonRoundTrip,
@@ -34,7 +33,8 @@ import { emitJsonSchema } from "@luke/wire/effect";
 import { jsonSchema, type LanguageModel, Output, streamText } from "ai";
 import { Cause, Clock, Data, Duration, Effect, Option, Queue, type Scope, Stream } from "effect";
 import { SqlClient } from "effect/sql";
-import { DEVELOPER_FIELDS_MARKER, SCRIBE_INSTRUCTIONS } from "../hosted/brain-host/planning.js";
+import { DEVELOPER_FIELDS_MARKER, SCRIBE_INSTRUCTIONS } from "../agents/brain-host/planning.js";
+import { PLAN_SAVE_STATUS, saveNotes } from "./plan-notes.js";
 
 /**
  * plan-scribe.ts -- a planning call's notetaker: it listens to the call and writes the plan while Luke and the developer talk.

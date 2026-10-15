@@ -5,14 +5,14 @@ import {
   type EveSessionsComposer,
   eveSessionsComposer,
 } from "@luke/service/agents/brain-host/eve-sessions";
+import { openAiBrainModel } from "@luke/service/agents/brain-host/model";
+import { HOSTED_TOOL_SET } from "@luke/service/plans/brain-tool-set";
+import { PLAN_SCRIBE } from "@luke/service/plans/plan-scribe";
 import { Data, Effect, type Layer, type Redacted } from "effect";
 import { FetchHttpClient } from "effect/http";
 import type * as HttpClient from "effect/http/HttpClient";
-import { openAiBrainModel } from "../hosted/brain-host/model.js";
-import { HOSTED_TOOL_SET } from "../hosted/brain-tool-set.js";
 import { exchangeAttachment } from "./exchange-attachment.js";
 import type { ExchangeAttachment } from "./live-exchange.js";
-import { PLAN_SCRIBE } from "./plan-scribe.js";
 
 /**
  * The exchange attachment as the voice function passes it: `exchangeAttachment`

@@ -1,11 +1,11 @@
 import { AGENT_EXTERNAL_DEPENDENCIES } from "@luke/service/agents/agent-runtime/build";
 import { BRAIN_HOST, BRAIN_HOST_REFUSAL } from "@luke/service/agents/brain-host/bounds";
+import { scriptedModel } from "@luke/service/testing/eve-scripted-model";
 import { Result } from "effect";
 import { defineAgent, defineDynamic } from "eve";
 import type { SessionAuth } from "eve/context";
 import { runWeb } from "../server/runtime.js";
 import { host, seams } from "./host.js";
-import { scriptedModel } from "./scripted-model.js";
 
 /**
  * Luke's judgment on the hosted tier, as an eve agent. eve ships a default
