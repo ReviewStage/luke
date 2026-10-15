@@ -136,6 +136,7 @@ import {
   type PlanningWorkspaceLeaveAnswer,
   type PlanningWorkspaceLeaveParams,
   type PlanningWorkspaceMemberRemoveParams,
+  type PlanningWorkspaceMemberRoleParams,
   type PlanningWorkspaceMembersAnswer,
   type PlanningWorkspaceMembersParams,
   type PlanningWorkspaceParams,
@@ -143,6 +144,7 @@ import {
   type PlanningWorkspacePhotoParams,
   type PlanningWorkspacePhotoSetParams,
   type PlanningWorkspaceRenameParams,
+  type PlanningWorkspaceTransferParams,
   planningEditAnswerSchema,
   planningFileAnswerSchema,
   planningGitHubDisconnectAnswerSchema,
@@ -379,6 +381,14 @@ export interface HostOperator {
   /** One member removed from a workspace; the members who remain, or why none was removed. */
   workspaceMemberRemove(
     params: PlanningWorkspaceMemberRemoveParams,
+  ): Effect.Effect<PlanningWorkspaceMembersAnswer>;
+  /** Another member of a workspace made an admin or an admin a member by the owner; the members as they then stand, or why no role changed. */
+  workspaceMemberRole(
+    params: PlanningWorkspaceMemberRoleParams,
+  ): Effect.Effect<PlanningWorkspaceMembersAnswer>;
+  /** A workspace handed by its owner to one of its admins, the owner becoming an admin; the members as they then stand, or why it was not handed over. */
+  workspaceTransfer(
+    params: PlanningWorkspaceTransferParams,
   ): Effect.Effect<PlanningWorkspaceMembersAnswer>;
   /** One workspace left; or why it was not. */
   workspaceLeave(params: PlanningWorkspaceLeaveParams): Effect.Effect<PlanningWorkspaceLeaveAnswer>;
@@ -1002,6 +1012,23 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     workspaceMemberRemove: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.WORKSPACES_MEMBER_REMOVE, {
+          workspaceId: params.workspaceId,
+          userId: params.userId,
+        }),
+        workspaceAnswer(planningWorkspaceMembersAnswerSchema),
+      ),
+    workspaceMemberRole: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.WORKSPACES_MEMBER_ROLE, {
+          workspaceId: params.workspaceId,
+          userId: params.userId,
+          role: params.role,
+        }),
+        workspaceAnswer(planningWorkspaceMembersAnswerSchema),
+      ),
+    workspaceTransfer: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.WORKSPACES_TRANSFER, {
           workspaceId: params.workspaceId,
           userId: params.userId,
         }),

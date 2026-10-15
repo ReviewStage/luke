@@ -43,6 +43,7 @@ import type {
   PlanningWorkspaceLeaveAnswer,
   PlanningWorkspaceLeaveParams,
   PlanningWorkspaceMemberRemoveParams,
+  PlanningWorkspaceMemberRoleParams,
   PlanningWorkspaceMembersAnswer,
   PlanningWorkspaceMembersParams,
   PlanningWorkspaceParams,
@@ -50,6 +51,7 @@ import type {
   PlanningWorkspacePhotoParams,
   PlanningWorkspacePhotoSetParams,
   PlanningWorkspaceRenameParams,
+  PlanningWorkspaceTransferParams,
 } from "@luke/features/planning-view";
 import { GITHUB_DISCONNECT_FAILURE } from "@luke/features/planning-view";
 import {
@@ -124,6 +126,12 @@ export interface PlanningActsDependencies {
     workspaceMemberRemove(
       params: PlanningWorkspaceMemberRemoveParams,
     ): Effect.Effect<PlanningWorkspaceMembersAnswer>;
+    workspaceMemberRole(
+      params: PlanningWorkspaceMemberRoleParams,
+    ): Effect.Effect<PlanningWorkspaceMembersAnswer>;
+    workspaceTransfer(
+      params: PlanningWorkspaceTransferParams,
+    ): Effect.Effect<PlanningWorkspaceMembersAnswer>;
     workspaceLeave(
       params: PlanningWorkspaceLeaveParams,
     ): Effect.Effect<PlanningWorkspaceLeaveAnswer>;
@@ -195,6 +203,8 @@ type PlanningActKind =
   | typeof ACT_KIND.WORKSPACE_MEMBERS_READ
   | typeof ACT_KIND.WORKSPACE_PHOTO_READ
   | typeof ACT_KIND.WORKSPACE_MEMBER_REMOVE
+  | typeof ACT_KIND.WORKSPACE_MEMBER_ROLE
+  | typeof ACT_KIND.WORKSPACE_TRANSFER
   | typeof ACT_KIND.WORKSPACE_LEAVE;
 
 type WorkspaceActKind =
@@ -208,6 +218,8 @@ type WorkspaceActKind =
   | typeof ACT_KIND.WORKSPACE_GITHUB_DISCONNECT
   | typeof ACT_KIND.WORKSPACE_MEMBERS_READ
   | typeof ACT_KIND.WORKSPACE_MEMBER_REMOVE
+  | typeof ACT_KIND.WORKSPACE_MEMBER_ROLE
+  | typeof ACT_KIND.WORKSPACE_TRANSFER
   | typeof ACT_KIND.WORKSPACE_LEAVE;
 
 /**
@@ -534,6 +546,22 @@ export function planningActRows(
         "members" in answer
           ? Effect.succeed(answer.members)
           : refusedWorkspace(ACT_KIND.WORKSPACE_MEMBER_REMOVE, answer.failure),
+      );
+    },
+    [ACT_KIND.WORKSPACE_MEMBER_ROLE]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.WORKSPACE_MEMBER_ROLE, sender);
+      return Effect.flatMap(host.workspaceMemberRole(params), (answer) =>
+        "members" in answer
+          ? Effect.succeed(answer.members)
+          : refusedWorkspace(ACT_KIND.WORKSPACE_MEMBER_ROLE, answer.failure),
+      );
+    },
+    [ACT_KIND.WORKSPACE_TRANSFER]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.WORKSPACE_TRANSFER, sender);
+      return Effect.flatMap(host.workspaceTransfer(params), (answer) =>
+        "members" in answer
+          ? Effect.succeed(answer.members)
+          : refusedWorkspace(ACT_KIND.WORKSPACE_TRANSFER, answer.failure),
       );
     },
     [ACT_KIND.WORKSPACE_LEAVE]: (params, sender) => {

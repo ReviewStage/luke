@@ -78,6 +78,10 @@ export const GATEWAY_METHOD = {
   WORKSPACES_PHOTO: "workspaces.photo",
   /** One member removed from a workspace on the service, answered with the members who remain; the view's workspaces are read again. */
   WORKSPACES_MEMBER_REMOVE: "workspaces.memberRemove",
+  /** Another member made an admin or an admin a member on the service by the owner, answered with the members as they then stand; the view's workspaces are read again. */
+  WORKSPACES_MEMBER_ROLE: "workspaces.memberRole",
+  /** A workspace handed by its owner to one of its admins on the service, the owner becoming an admin, answered with the members as they then stand; the view's workspaces are read again, the account's role in it among them. */
+  WORKSPACES_TRANSFER: "workspaces.transfer",
   /** The account left one workspace on the service; the view's workspaces and plans are read again. */
   WORKSPACES_LEAVE: "workspaces.leave",
   /** One workspace's pending invitations, read from the service now; answered to the caller, never held in the view. */

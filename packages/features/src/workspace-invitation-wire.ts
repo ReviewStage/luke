@@ -1,6 +1,6 @@
 import { Schema as EffectSchema } from "effect";
 import { workspaceIdSchema } from "./plan-wire.js";
-import { WORKSPACE_ROLE } from "./workspace-wire.js";
+import { ASSIGNABLE_ROLE } from "./workspace-wire.js";
 
 /**
  * workspace-invitation-wire.ts -- a workspace invitation as the Mac asks for, lists, and cancels it, and the web page its invitee accepts it on.
@@ -53,12 +53,9 @@ export function invitationAcceptQuery(search: string): InvitationAcceptQuery {
 
 /**
  * The roles an invitation may carry. A workspace has one owner, its
- * creator, so nobody is invited as one.
+ * creator, so nobody is invited as one; and only the owner invites an admin.
  */
-export const INVITATION_ROLE = {
-  ADMIN: WORKSPACE_ROLE.ADMIN,
-  MEMBER: WORKSPACE_ROLE.MEMBER,
-} as const;
+export const INVITATION_ROLE = ASSIGNABLE_ROLE;
 
 const INVITATION_BOUNDS = {
   /** The most characters an address may spell (RFC 5321's path limit). */

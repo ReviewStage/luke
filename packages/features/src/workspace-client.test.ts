@@ -230,6 +230,75 @@ it.effect(
 );
 
 it.effect(
+  "changes a member's role and hands the workspace over under the Mac's session, answered with the members, sends an owner's role nowhere, and names a refusal",
+  () =>
+    Effect.gen(function* () {
+      const promoted = { ...GRACE, role: "admin" };
+      const handedOver = [
+        { ...GRACE, role: "owner" },
+        { ...ADA, role: "admin" },
+      ];
+      const api = fakeCloudApi({
+        "POST /api/workspaces/members/role": { answer: () => ({ members: [ADA, promoted] }) },
+        "POST /api/workspaces/transfer": { answer: () => ({ members: handedOver }) },
+      });
+      const forbidden = {
+        answer: () => ({ error: HOSTED_API_ERROR.NOT_PERMITTED }),
+        status: HTTP_STATUS.FORBIDDEN,
+      };
+      const refusing = fakeCloudApi({
+        "POST /api/workspaces/members/role": forbidden,
+        "POST /api/workspaces/transfer": forbidden,
+      });
+      const workspaces = client();
+
+      const changed = yield* Effect.provide(
+        workspaces.changeRole(ACME.id, GRACE.userId, WORKSPACE_ROLE.ADMIN),
+        api.layer,
+      );
+      const toOwner = yield* Effect.provide(
+        workspaces.changeRole(ACME.id, GRACE.userId, WORKSPACE_ROLE.OWNER),
+        api.layer,
+      );
+      const transferred = yield* Effect.provide(
+        workspaces.transfer(ACME.id, GRACE.userId),
+        api.layer,
+      );
+      const refused = yield* Effect.provide(
+        Effect.all([
+          workspaces.changeRole(ACME.id, GRACE.userId, WORKSPACE_ROLE.MEMBER),
+          workspaces.transfer(ACME.id, GRACE.userId),
+        ]),
+        refusing.layer,
+      );
+
+      assert.deepEqual(changed, { ok: true, answer: [ADA, promoted] });
+      assert.deepEqual(toOwner, { ok: false, failure: WORKSPACE_CALL_FAILURE.UNANSWERED });
+      assert.deepEqual(transferred, { ok: true, answer: handedOver });
+      const notPermitted = { ok: false, failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED };
+      assert.deepEqual(refused, [notPermitted, notPermitted]);
+      // Both write through Better Auth, so both carry the Mac's session, never its OAuth token.
+      assert.deepEqual(api.credentials(), ["session-1", "session-1"]);
+      assert.deepEqual(
+        api.requests().map(({ method, pathname, body }) => ({
+          route: `${method} ${pathname}`,
+          body: body === undefined ? undefined : JSON.parse(body),
+        })),
+        [
+          {
+            route: "POST /api/workspaces/members/role",
+            body: { workspaceId: ACME.id, userId: GRACE.userId, role: WORKSPACE_ROLE.ADMIN },
+          },
+          {
+            route: "POST /api/workspaces/transfer",
+            body: { workspaceId: ACME.id, userId: GRACE.userId },
+          },
+        ],
+      );
+    }),
+);
+
+it.effect(
   "renames a workspace under the Mac's session with its name trimmed, sends a blank name nowhere, and names a refusal",
   () =>
     Effect.gen(function* () {

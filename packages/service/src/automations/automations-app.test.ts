@@ -851,6 +851,50 @@ it.layer(getTestDB())("the automation routes", (it) => {
   );
 
   it.effect(
+    "each automation says whether the account reading it made it, the one it made, listed, and read alike",
+    () =>
+      Effect.gen(function* () {
+        const { owner, plan } = yield* openAccounts;
+        const member = yield* openGithubUser();
+        yield* joinWorkspace(plan.workspaceId, member, WORKSPACE_ROLE.MEMBER);
+        const { ask } = yield* standing(
+          new Map([
+            [`Bearer ${owner}`, owner],
+            [`Bearer ${member}`, member],
+          ]),
+        );
+        const shared = { ...weekdays(plan.id), scope: AUTOMATION_SCOPE.WORKSPACE };
+        const make = (by: string) =>
+          Effect.map(
+            ask(HOSTED_SERVICE_PATH.AUTOMATIONS, by, { method: "POST", body: shared }),
+            (answer) =>
+              readAnswer(automationAnswerSchema, HOSTED_HTTP_STATUS.CREATED, answer).automation,
+          );
+        const minesListed = (by: string) =>
+          Effect.map(ask(HOSTED_SERVICE_PATH.AUTOMATIONS, by), (answer) =>
+            Object.fromEntries(
+              readAnswer(automationListAnswerSchema, HOSTED_HTTP_STATUS.OK, answer).automations.map(
+                (each) => [each.id, each.mine],
+              ),
+            ),
+          );
+
+        const owners = yield* make(owner);
+        const members = yield* make(member);
+        const readByMember = readAnswer(
+          automationAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(automationPath(owners.id), member),
+        ).automation;
+
+        assert.deepEqual([owners.mine, members.mine], [true, true], "each made its own");
+        assert.deepEqual(yield* minesListed(owner), { [owners.id]: true, [members.id]: false });
+        assert.deepEqual(yield* minesListed(member), { [owners.id]: false, [members.id]: true });
+        assert.equal(readByMember.mine, false);
+      }),
+  );
+
+  it.effect(
     "sending enabled as it stands moves no due instant, and a plan filter that names no plan is refused as invalid",
     () =>
       Effect.gen(function* () {

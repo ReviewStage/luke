@@ -698,6 +698,22 @@ test("an admin is offered no Remove on their own row, since their way out is Lea
   assert.equal(buttons(page, "Leave").length, 1);
 });
 
+test("an admin is offered no Remove on another admin, and the owner is, as the service allows", async () => {
+  const admin: WorkspaceMember = {
+    userId: "user-ola",
+    name: "Ola",
+    email: "ola@example.com",
+    role: WORKSPACE_ROLE.ADMIN,
+  };
+  stored = [OWNER, admin, MEMBER];
+  const asAdmin = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
+  const adminSees = rowActions(rowNamed(asAdmin.page, "Ola"));
+  const asOwner = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
+
+  assert.deepEqual(adminSees, []);
+  assert.deepEqual(rowActions(rowNamed(asOwner.page, "Ola")), ["Remove from workspace"]);
+});
+
 test("a removal the account's role does not allow says so in the dialog that asked", async () => {
   refuseRemoval = true;
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
@@ -1030,8 +1046,8 @@ async function invite(page: HTMLElement, email: string, role: string, presses = 
   await settle();
 }
 
-test("an admin invites an address as a role, sees it pending with its link to copy, and cancels it from its ⋯", async () => {
-  const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
+test("the owner invites an address as a role, sees it pending with its link to copy, and cancels it from its ⋯", async () => {
+  const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
 
   await invite(page, "alan@example.com", WORKSPACE_ROLE.ADMIN);
   const row = invitationRows(page)[0] ?? assert.fail("no pending invitation");
@@ -1077,7 +1093,7 @@ test("an admin invites an address as a role, sees it pending with its link to co
 });
 
 test("an invitation's role is a field chip, Member by default, whose menu checks the role and says what each may do, and the invitation is sent as the role chosen", async () => {
-  const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
+  const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
   const form = page.querySelector<HTMLFormElement>(".workspace-invite") ?? assert.fail("no form");
   const before = roleChip(form).textContent;
   act(() => roleChip(form).click());
@@ -1096,6 +1112,28 @@ test("an invitation's role is a field chip, Member by default, whose menu checks
       request.kind === ACT_KIND.WORKSPACE_INVITE ? [request.payload.role] : [],
     ),
     [WORKSPACE_ROLE.ADMIN],
+  );
+});
+
+test("an admin's role menu offers Admin dimmed, since only the owner invites admins, and an admin invites a member", async () => {
+  const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
+  const form = page.querySelector<HTMLFormElement>(".workspace-invite") ?? assert.fail("no form");
+  act(() => roleChip(form).click());
+  const admin = roleItems().find((item) => item.textContent?.startsWith("Admin"));
+  const offered = [
+    admin?.textContent,
+    admin?.getAttribute("aria-disabled") === "true" || admin?.hasAttribute("disabled"),
+  ];
+  act(() => roleChip(form).click());
+
+  await invite(page, "alan@example.com", WORKSPACE_ROLE.MEMBER);
+
+  assert.deepEqual(offered, ["AdminOnly the owner invites admins", true]);
+  assert.deepEqual(
+    sent.flatMap((request) =>
+      request.kind === ACT_KIND.WORKSPACE_INVITE ? [request.payload.role] : [],
+    ),
+    [WORKSPACE_ROLE.MEMBER],
   );
 });
 

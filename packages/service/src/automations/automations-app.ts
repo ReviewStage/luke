@@ -227,7 +227,7 @@ const runSummaries = /* @__PURE__ */ Effect.fnUntraced(function* (
   return runs.map((run) => runSummaryOf(run, standingOf, now));
 });
 
-/** One automation for the wire, with its newest run. */
+/** One automation for the wire as the account reads it, with its newest run and whether the account made it. */
 const summaryOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   automation: Automation,
@@ -257,6 +257,7 @@ const summaryOf = /* @__PURE__ */ Effect.fnUntraced(function* (
         ? { kind: AUTOMATION_TARGET.SAME_AGENT, agentId: automation.targetAgentId }
         : { kind: AUTOMATION_TARGET.NEW_AGENT },
     archiveSuccessful: automation.archiveSuccessful,
+    mine: automation.userId === userId,
   };
 });
 

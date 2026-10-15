@@ -269,6 +269,18 @@ function fixture() {
           asked.push(`remove:${params.workspaceId}:${params.userId}`);
           return host.notPermitted ? refusal() : { members: [] };
         }),
+      workspaceMemberRole: (params) =>
+        Effect.sync(() => {
+          asked.push(`role:${params.workspaceId}:${params.userId}:${params.role}`);
+          return host.notPermitted ? refusal() : { members: [{ ...GRACE, role: params.role }] };
+        }),
+      workspaceTransfer: (params) =>
+        Effect.sync(() => {
+          asked.push(`transfer:${params.workspaceId}:${params.userId}`);
+          return host.notPermitted
+            ? refusal()
+            : { members: [{ ...GRACE, role: WORKSPACE_ROLE.OWNER }] };
+        }),
       workspaceLeave: (params) =>
         Effect.sync(() => {
           asked.push(`leave:${params.workspaceId}`);
@@ -544,6 +556,58 @@ it.effect(
         `leave:${ACME.id}`,
       ]);
       assert.deepEqual(f.opened, [INSTALL_URL]);
+    }),
+);
+
+it.effect(
+  "a member's role is changed and a workspace handed over through the host from a panel alone, each answered with the members, and one the account's role does not allow is refused in words that say so",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const role = {
+        kind: ACT_KIND.WORKSPACE_MEMBER_ROLE,
+        payload: { workspaceId: ACME.id, userId: GRACE.userId, role: WORKSPACE_ROLE.ADMIN },
+      } as const;
+      const transfer = {
+        kind: ACT_KIND.WORKSPACE_TRANSFER,
+        payload: { workspaceId: ACME.id, userId: GRACE.userId },
+      } as const;
+
+      const changed = yield* f.router.performAct(role, PANEL);
+      const handedOver = yield* f.router.performAct(transfer, PANEL);
+      const fromVoice = yield* Effect.all([
+        f.router.performAct(role, VOICE),
+        f.router.performAct(transfer, VOICE),
+      ]);
+      f.host.notPermitted = true;
+      const refused = yield* Effect.all([
+        f.router.performAct(role, PANEL),
+        f.router.performAct(transfer, PANEL),
+      ]);
+
+      assert.deepEqual(changed, {
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: [{ ...GRACE, role: WORKSPACE_ROLE.ADMIN }],
+      });
+      assert.deepEqual(handedOver, {
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: [{ ...GRACE, role: WORKSPACE_ROLE.OWNER }],
+      });
+      assert.deepEqual(fromVoice, [
+        { status: ACT_OUTCOME_STATUS.REFUSED, reason: ACT[ACT_KIND.WORKSPACE_MEMBER_ROLE].refusal },
+        { status: ACT_OUTCOME_STATUS.REFUSED, reason: ACT[ACT_KIND.WORKSPACE_TRANSFER].refusal },
+      ]);
+      const notPermitted = {
+        status: ACT_OUTCOME_STATUS.REFUSED,
+        reason: WORKSPACE_NOT_PERMITTED_REFUSAL,
+      };
+      assert.deepEqual(refused, [notPermitted, notPermitted]);
+      assert.deepEqual(f.asked, [
+        `role:${ACME.id}:${GRACE.userId}:${WORKSPACE_ROLE.ADMIN}`,
+        `transfer:${ACME.id}:${GRACE.userId}`,
+        `role:${ACME.id}:${GRACE.userId}:${WORKSPACE_ROLE.ADMIN}`,
+        `transfer:${ACME.id}:${GRACE.userId}`,
+      ]);
     }),
 );
 

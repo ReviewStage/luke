@@ -100,6 +100,9 @@ const ROLE_DETAIL = {
   [INVITATION_ROLE.ADMIN]: "Also manages members and GitHub",
 } as const satisfies Record<WorkspaceInvitation["role"], string>;
 
+/** What an admin's role menu says under Admin, which only the owner invites. */
+const OWNER_INVITES_ADMINS = "Only the owner invites admins";
+
 /** What the invitations say where none is pending: to the workspace's one member, and to a team. */
 const INVITATIONS_EMPTY = {
   ALONE: "Only you so far. Invite someone by email, then send them the link Luke makes.",
@@ -363,9 +366,7 @@ function TeamMembers({
             member={member}
             readerId={readerId}
             // Note that the reader's own row offers no Remove, because the way out of a workspace is Leave.
-            removable={
-              manages && member.role !== WORKSPACE_ROLE.OWNER && member.userId !== readerId
-            }
+            removable={member.userId !== readerId && removes(workspace.role, member.role)}
             slotted={manages}
             onRemoved={(items) => setRead({ items })}
           />
@@ -376,6 +377,15 @@ function TeamMembers({
 }
 
 /**
+ * Whether the reader's role removes a member of `role`: the owner an admin
+ * or a member, and an admin a member alone, as the service holds it.
+ */
+function removes(reader: Workspace["role"], role: WorkspaceMember["role"]): boolean {
+  if (reader === WORKSPACE_ROLE.OWNER) return role !== WORKSPACE_ROLE.OWNER;
+  return reader === WORKSPACE_ROLE.ADMIN && role === WORKSPACE_ROLE.MEMBER;
+}
+
+/**
  * The role an invitation is sent as: the field chip a Settings picker wears,
  * "Member ⌄", whose menu checks the role chosen and says under each what it
  * may do, as the composer's model chip stands beside its field and its send.
@@ -383,10 +393,13 @@ function TeamMembers({
 function RoleChip({
   value,
   disabled,
+  adminAllowed,
   onChange,
 }: {
   value: WorkspaceInvitation["role"];
   disabled: boolean;
+  /** Whether the reader may invite an admin, which only the owner may; an admin's menu offers Admin dimmed. */
+  adminAllowed: boolean;
   onChange: (role: WorkspaceInvitation["role"]) => void;
 }): React.JSX.Element {
   // The page is drawn whenever the chip is, so the menu closes with the chip unmounting.
@@ -410,12 +423,16 @@ function RoleChip({
           label="Invite as"
           menu={menu.drawn}
           groups={[
-            INVITATION_ROLES.map((role) => ({
-              label: ROLE_WORDS[role],
-              detail: ROLE_DETAIL[role],
-              checked: role === value,
-              onSelect: () => onChange(role),
-            })),
+            INVITATION_ROLES.map((role) => {
+              const barred = role === INVITATION_ROLE.ADMIN && !adminAllowed;
+              return {
+                label: ROLE_WORDS[role],
+                detail: barred ? OWNER_INVITES_ADMINS : ROLE_DETAIL[role],
+                checked: role === value,
+                disabled: barred,
+                onSelect: () => onChange(role),
+              };
+            }),
           ]}
           onClose={menu.close}
         />
@@ -434,9 +451,12 @@ function RoleChip({
  */
 function Invitations({
   workspaceId,
+  owner,
   alone,
 }: {
   workspaceId: string;
+  /** Whether the reader owns the workspace, the one role that invites an admin. */
+  owner: boolean;
   /** Whether the reader is the workspace's one member, which the empty list's line says. */
   alone: boolean;
 }): React.JSX.Element {
@@ -542,7 +562,7 @@ function Invitations({
           disabled={busy}
           onChange={(event) => setEmail(event.target.value)}
         />
-        <RoleChip value={role} disabled={busy} onChange={setRole} />
+        <RoleChip value={role} disabled={busy} adminAllowed={owner} onChange={setRole} />
         <button type="submit" className="toolbar-button bordered-button" disabled={busy}>
           Invite
         </button>
@@ -967,7 +987,11 @@ export function WorkspacePage({
       </SettingsGroup>
       {managesWorkspace(workspace) ? (
         <SettingsGroup title="Invitations" anchor={SETTINGS_SECTION.INVITATIONS}>
-          <Invitations workspaceId={workspace.id} alone={(workspace.memberCount ?? 2) <= 1} />
+          <Invitations
+            workspaceId={workspace.id}
+            owner={workspace.role === WORKSPACE_ROLE.OWNER}
+            alone={(workspace.memberCount ?? 2) <= 1}
+          />
         </SettingsGroup>
       ) : null}
       <SettingsGroup title="GitHub" anchor={SETTINGS_SECTION.GITHUB_REPOSITORIES}>

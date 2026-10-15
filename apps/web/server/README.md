@@ -188,8 +188,16 @@ and a workspace with no PNG, JPEG, or WebP photo, read `not-found`. The list
 carries only a digest of it as `photoVersion`, and the account's own first
 workspace with none carries the account's sign-in picture as `pictureUrl`
 where it is Google's or GitHub's (`@luke/features/account-picture`).
-`POST /api/workspaces/members/remove` lets an owner or an admin remove a
-member who is not an owner, `POST /api/workspaces/leave` lets anyone but
+`POST /api/workspaces/members/remove` lets the owner remove an admin or a
+member and an admin a member alone, `POST /api/workspaces/members/role
+{ workspaceId, userId, role }` lets the owner alone make another member an
+admin or an admin a member, and `POST /api/workspaces/transfer { workspaceId,
+userId }` lets the owner alone hand the workspace to an admin, becoming an
+admin, but for an account's first workspace; each answers `{ members }`, and
+none acts on the caller, whose way out is leaving, or on an owner.
+A handover is two of the plugin's role writes, the heir made owner first, so
+one cut short leaves two owners rather than none, and trying again finishes
+it. `POST /api/workspaces/leave` lets anyone but
 an owner leave, and `POST /api/workspaces/rename { workspaceId, name }` lets
 an owner or an admin rename a workspace, answering `{ workspace }` under its
 new name and the slug it already had, but for an account's first workspace,
@@ -200,10 +208,10 @@ admin set its photo, a `data:` URL of a PNG, JPEG, or WebP of at most
 `WORKSPACE_PHOTO_BOUNDS.MAX_BYTES` decoded, or remove it with `null`,
 answering `{ workspace }` with its new `photoVersion` or none; any other
 photo is `invalid-request`. They are the plugin's own
-`removeMember`, `leaveOrganization`, and `updateOrganization` (`memberSeams`
+`removeMember`, `updateMemberRole`, `leaveOrganization`, and `updateOrganization` (`memberSeams`
 in `workspace-seams.ts`, the last handed the name alone or the logo alone), called with the
 request's headers, which carry the Mac's own Better Auth session as a signed
-bearer token that the bearer plugin reads as the session cookie. So these four
+bearer token that the bearer plugin reads as the session cookie. So these six
 paths take the session, not the OAuth token, and the plugin checks the
 caller's role and membership again behind Luke's own rules. A workspace the
 account is not in is `not-found`; a role that does not allow it,
