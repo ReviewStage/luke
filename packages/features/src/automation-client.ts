@@ -28,12 +28,12 @@ import {
   type AutomationRunsView,
   type AutomationRunView,
   type AutomationView,
+  automationChangeParamsSchema,
   automationCreateParamsSchema,
 } from "./automation-view.js";
 import {
   AUTOMATION_LIST_QUERY,
   automationAnswerSchema,
-  automationChangeRequestSchema,
   automationListAnswerSchema,
   automationRunAnswerSchema,
   automationRunsAnswerSchema,
@@ -179,15 +179,13 @@ export class HostedAutomationClient {
   change(
     params: AutomationChangeParams,
   ): Effect.Effect<AutomationView, never, HttpClient.HttpClient> {
-    const admitted = Result.getOrUndefined(
-      readEither(automationChangeRequestSchema)(params.change),
-    );
+    const admitted = Result.getOrUndefined(readEither(automationChangeParamsSchema)(params));
     if (admitted === undefined) return Effect.succeed({ failure: AUTOMATION_CALL_FAILURE.INVALID });
     return Effect.flatMap(
       this.#call.send({
         method: HTTP_METHOD.PATCH,
-        path: automationPath(params.automationId),
-        body: JSON.stringify(admitted),
+        path: automationPath(admitted.automationId),
+        body: JSON.stringify(admitted.change),
       }),
       (answer) => Effect.map(readAnswer(answer, automationAnswerSchema), summaryOnly),
     );
@@ -201,9 +199,11 @@ export class HostedAutomationClient {
       this.#call.send({ method: HTTP_METHOD.DELETE, path: automationPath(params.automationId) }),
       (answer): Effect.Effect<AutomationDeletedView> => {
         if (!callAnswered(answer)) return Effect.succeed(UNANSWERED);
-        if (answer.response.ok) return Effect.succeed({ deleted: true });
-        return Effect.map(jsonOf(answer.response), (body) =>
-          refusedAs(unparsedWire(body), REFUSALS),
+        // Note that a deletion's body is read even where it says nothing, so its stream is not left open.
+        return Effect.map(
+          jsonOf(answer.response),
+          (body): AutomationDeletedView =>
+            answer.response.ok ? { deleted: true } : refusedAs(unparsedWire(body), REFUSALS),
         );
       },
     );

@@ -1,5 +1,6 @@
 import { Schema as EffectSchema } from "effect";
 import {
+  AUTOMATION_TRIGGER,
   automationChangeRequestSchema,
   automationCreateRequestSchema,
   automationListAnswerSchema,
@@ -16,7 +17,10 @@ import { wireUuidSchema } from "./service-wire.js";
  * The host asks the service on the window's behalf and answers the window
  * one of the shapes here. A repository the automation's workspace does not
  * reach is refused with why, as a Start is, so the window can say which
- * press mends it.
+ * press mends it. The window writes a schedule and no other trigger: a
+ * webhook's secret is answered once, by the write that mints it, and no
+ * answer here carries a secret, so a webhook made through the window could
+ * never be told its secret.
  */
 
 /** Why an automation call answered nothing a window can draw. */
@@ -52,15 +56,27 @@ export const automationListParamsSchema = EffectSchema.Struct({
 
 export type AutomationListParams = typeof automationListParamsSchema.Type;
 
-/** An automation to make, as the service takes it. */
-export const automationCreateParamsSchema = automationCreateRequestSchema;
+/** Whether a trigger, where one is written, is a schedule: the one trigger the window writes. */
+const scheduled = (trigger: { readonly kind: string } | undefined): boolean =>
+  trigger === undefined || trigger.kind === AUTOMATION_TRIGGER.SCHEDULE;
+
+/** An automation to make, as the service takes it, on a schedule. */
+export const automationCreateParamsSchema = automationCreateRequestSchema.check(
+  EffectSchema.makeFilter((made: typeof automationCreateRequestSchema.Type) =>
+    scheduled(made.trigger),
+  ),
+);
 
 export type AutomationCreateParams = typeof automationCreateParamsSchema.Type;
 
-/** A change to one automation. */
+/** A change to one automation, its trigger, where it changes, a schedule. */
 export const automationChangeParamsSchema = EffectSchema.Struct({
   automationId: wireUuidSchema,
-  change: automationChangeRequestSchema,
+  change: automationChangeRequestSchema.check(
+    EffectSchema.makeFilter((change: typeof automationChangeRequestSchema.Type) =>
+      scheduled(change.trigger),
+    ),
+  ),
 });
 
 export type AutomationChangeParams = typeof automationChangeParamsSchema.Type;

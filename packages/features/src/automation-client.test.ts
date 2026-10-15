@@ -126,7 +126,7 @@ it.effect("each call goes to its own path, and the list names its workspace in t
 );
 
 it.effect(
-  "a refusal is named in the window's words, with why a repository is out of reach, and a write the service would refuse by shape never travels",
+  "a refusal is named in the window's words, with why a repository is out of reach, and a write the service would refuse by shape, or on a trigger other than a schedule, never travels",
   () =>
     Effect.gen(function* () {
       const unreached = { reason: REPOSITORY_UNREACHED.NOT_CONNECTED, repository: "acme/web" };
@@ -149,6 +149,17 @@ it.effect(
         ask.change({ automationId: AUTOMATION_ID, change: { repositories: ["not a repository"] } }),
         api.layer,
       );
+      const webhook = yield* Effect.provide(
+        ask.create({ ...MADE, trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK } }),
+        api.layer,
+      );
+      const toWebhook = yield* Effect.provide(
+        ask.change({
+          automationId: AUTOMATION_ID,
+          change: { trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK } },
+        }),
+        api.layer,
+      );
 
       assert.deepEqual(outOfReach, {
         failure: AUTOMATION_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
@@ -157,6 +168,14 @@ it.effect(
       assert.deepEqual(gone, { failure: AUTOMATION_CALL_FAILURE.NOT_FOUND });
       assert.deepEqual(unnamed, { failure: AUTOMATION_CALL_FAILURE.INVALID });
       assert.deepEqual(unspelled, { failure: AUTOMATION_CALL_FAILURE.INVALID });
-      assert.equal(api.requests().length, 2, "neither unsendable write traveled");
+      assert.deepEqual(
+        [webhook, toWebhook],
+        [
+          { failure: AUTOMATION_CALL_FAILURE.INVALID },
+          { failure: AUTOMATION_CALL_FAILURE.INVALID },
+        ],
+        "the window writes a schedule alone, so no write it makes mints a secret it could not be told",
+      );
+      assert.equal(api.requests().length, 2, "no unsendable write traveled");
     }),
 );
