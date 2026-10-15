@@ -32,10 +32,10 @@ import { automationsApp } from "./automations-app.js";
 /**
  * An automation's webhook address, answered by its group the way a function
  * answers it, over a real dialect: a call under the trigger's secret, as a
- * bearer or as the address's token, queues one run with its body kept for
+ * bearer and never in the address, queues one run with its body kept for
  * the agent; a retry under the same key queues none; a paused automation
- * takes the call and queues nothing; a body past the bound or not UTF-8 is
- * refused; and a wrong secret, an id that names no webhook, a secret
+ * takes the call and queues nothing, its body unread; a body past the
+ * bound, not UTF-8, or holding a NUL is refused; and a wrong secret, an id that names no webhook, a secret
  * rotated away, and a departed owner's address are refused alike.
  * Synthetic accounts and words throughout.
  */
@@ -127,7 +127,7 @@ const INVALID = {
 
 it.layer(getTestDB())("an automation's webhook", (it) => {
   it.effect(
-    "a call under the secret queues one run with its body, a retry under the same key queues none, and the token query admits a sender that sets no header",
+    "a call under the secret queues one run with its body, a retry under the same key queues none, and a secret in the address admits nothing, since a request log keeps the address",
     () =>
       Effect.gen(function* () {
         const { owner, automation, secret } = yield* openWebhook;
@@ -137,18 +137,20 @@ it.layer(getTestDB())("an automation's webhook", (it) => {
 
         const first = yield* ask(path, call(secret, { key }));
         const retry = yield* ask(path, call(secret, { key }));
-        const byToken = yield* ask(path, {
+        const second = yield* ask(path, call(secret, { body: "plain text" }));
+        const byAddress = yield* ask(path, {
           method: "POST",
           body: "plain text",
-          query: `&${AUTOMATION_WEBHOOK.TOKEN_QUERY}=${secret}`,
+          query: `&token=${secret}`,
         });
 
         assert.deepEqual(
-          [first, retry, byToken],
+          [first, retry, second, byAddress],
           [
             { status: HOSTED_HTTP_STATUS.ACCEPTED, body: { queued: 1 } },
             { status: HOSTED_HTTP_STATUS.ACCEPTED, body: { queued: 0 } },
             { status: HOSTED_HTTP_STATUS.ACCEPTED, body: { queued: 1 } },
+            INVALID,
           ],
         );
         // The body rides only the queued run the sweep acts on, so it is read as the sweep reads it.
@@ -194,16 +196,19 @@ it.layer(getTestDB())("an automation's webhook", (it) => {
         });
 
         yield* updateAutomation(owner, automation.id, { enabled: false });
-        assert.deepEqual(yield* ask(path, call(fresh)), {
-          status: HOSTED_HTTP_STATUS.OK,
-          body: { queued: 0 },
-        });
+        // A paused automation acknowledges a call before its body is read, so even one it could not keep is not sent again.
+        for (const body of [ALERT, "x".repeat(AUTOMATION_WEBHOOK.MAX_BODY_BYTES + 1)]) {
+          assert.deepEqual(yield* ask(path, call(fresh, { body })), {
+            status: HOSTED_HTTP_STATUS.OK,
+            body: { queued: 0 },
+          });
+        }
         assert.equal((yield* listAutomationRuns(owner, automation.id)).length, 1);
       }),
   );
 
   it.effect(
-    "a body past the bound or not UTF-8 is refused, and a rotation asked of an automation that is no webhook is refused",
+    "a body past the bound, not UTF-8, or holding a NUL is refused, and a rotation asked of an automation that is no webhook is refused",
     () =>
       Effect.gen(function* () {
         const { owner, automation, secret } = yield* openWebhook;
@@ -219,6 +224,7 @@ it.layer(getTestDB())("an automation's webhook", (it) => {
           headers: { authorization: `Bearer ${secret}` },
           body: new Uint8Array([0xff, 0xfe, 0x00, 0x41]),
         });
+        const withNul = yield* ask(path, call(secret, { body: "a\u0000b" }));
         yield* updateAutomation(owner, automation.id, {
           trigger: { kind: AUTOMATION_TRIGGER.SCHEDULE, cron: "0 9 * * *", timezone: "UTC" },
         });
@@ -230,6 +236,7 @@ it.layer(getTestDB())("an automation's webhook", (it) => {
 
         assert.equal(tooLarge.status, HOSTED_HTTP_STATUS.PAYLOAD_TOO_LARGE);
         assert.deepEqual(binary.body, { error: HOSTED_API_ERROR.INVALID_REQUEST });
+        assert.deepEqual(withNul.body, { error: HOSTED_API_ERROR.INVALID_REQUEST });
         assert.equal(notWebhook.status, HOSTED_HTTP_STATUS.BAD_REQUEST);
         assert.equal((yield* listAutomationRuns(owner, automation.id)).length, 0);
       }),

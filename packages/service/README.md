@@ -1362,15 +1362,16 @@ workspace the account left, is `not-found`:
 A webhook trigger's address is `POST /api/automations/{id}/webhook`
 (`src/automations/automation-webhook-app.ts`), called by whatever the
 developer hands it to under the trigger's own secret rather than an account
-bearer: the `Authorization: Bearer` value, or the `token` query for a sender
-that can set no header, hashed and compared in constant time against the
-SHA-256 the row keeps. An id that names no webhook automation, one whose
+bearer: the `Authorization: Bearer` value, never the address, whose query a
+platform's request log keeps, hashed and compared in constant time against
+the SHA-256 the row keeps. An id that names no webhook automation, one whose
 owner left its workspace, and a secret that does not hold are all
 `invalid-token`, so the address says nothing of what stands behind it. A
-paused automation answers `200 { queued: 0 }`, so a sender does not retry;
+paused automation answers `200 { queued: 0 }` before its body is read, so a
+sender does not retry;
 otherwise the call is `202 { queued }`, the run recorded under the SHA-256 of
-the caller's `Idempotency-Key` where it sends one. The body, UTF-8 and at most
-64 KiB, is kept on the run's `payload`, read only by the act that starts the
+the caller's `Idempotency-Key` where it sends one. The body, UTF-8, at most
+64 KiB, and holding no NUL, is kept on the run's `payload`, read only by the act that starts the
 run, and handed to the agent fenced as the caller's own text, its angle
 brackets spelled as entities, cut with a note where it would push the task
 past its bound. The body reaches the run's agent task, transcript, and traces

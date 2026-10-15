@@ -419,13 +419,11 @@ export const automationCreateRequestSchema = EffectSchema.Struct({
 
 /**
  * How a webhook trigger's caller is admitted and deduplicated: the secret as
- * the `Authorization: Bearer` value, or, for a sender that can set no
- * header, as the `token` query of the address; a retry carrying the same
- * `Idempotency-Key` header is the same run. A body larger than the bound is
- * refused, and one that is no UTF-8 text too.
+ * the `Authorization: Bearer` value, never in the address; a retry carrying
+ * the same `Idempotency-Key` header is the same run. A body larger than the
+ * bound is refused, and one that is no UTF-8 text, or holds a NUL, too.
  */
 export const AUTOMATION_WEBHOOK = {
-  TOKEN_QUERY: "token",
   IDEMPOTENCY_HEADER: "idempotency-key",
   MAX_BODY_BYTES: 64 * 1024,
 } as const;

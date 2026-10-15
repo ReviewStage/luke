@@ -24,17 +24,19 @@ import { ANY_METHOD, type WebRoutes } from "../route.js";
  *
  * The caller is whatever the developer handed the address to, Sentry, a CI
  * job, a script, so it carries no account bearer: it is admitted by the
- * trigger's own secret, as the `Authorization: Bearer` value or, for a
- * sender that can set no header, the address's `token` query, hashed and
- * compared in constant time against the SHA-256 the store keeps. An id that
- * names no webhook automation, one whose owner left its workspace, and a
- * secret that does not hold are refused alike, so the address says nothing
- * of what stands behind it. A paused automation takes the call and queues
- * nothing, so a sender does not retry. The run is queued under the caller's
- * `Idempotency-Key` where it sends one, so a retry is the same run, with the
- * body as it came, UTF-8 up to its bound, beside it; the minute sweep starts
- * the agent, which is handed the body fenced as the caller's own text.
- * Nothing of the body or the secret is logged.
+ * trigger's own secret as the `Authorization: Bearer` value, hashed and
+ * compared in constant time against the SHA-256 the store keeps. Note that
+ * the secret is never read from the address, because a platform's request
+ * log keeps the address whole. An id that names no webhook automation, one
+ * whose owner left its workspace, and a secret that does not hold are
+ * refused alike, so the address says nothing of what stands behind it. A
+ * paused automation takes the call and queues nothing, its body unread, so
+ * a sender does not retry. The run is queued under the caller's
+ * `Idempotency-Key` where it sends one, so a retry is the same run, with
+ * the body as it came, UTF-8 up to its bound and holding no NUL, which a
+ * text column cannot keep, beside it; the minute sweep starts the agent,
+ * which is handed the body fenced as the caller's own text. Nothing of the
+ * body or the secret is logged.
  */
 
 /** The path a caller posts to; the rewrite moves the address's id into the `id` query. */
@@ -47,11 +49,12 @@ const QUERY = { ID: "id" } as const;
 /** What a bearer header leads with before the secret. */
 const BEARER_PREFIX = "Bearer ";
 
-/** The secret the call presents: the bearer's value, else the `token` query; nothing where it sends neither. */
+/** The secret the call presents as its bearer; nothing where it sends none. */
 function presentedSecret(request: Request): string | undefined {
   const authorization = request.headers.get("authorization") ?? "";
-  if (authorization.startsWith(BEARER_PREFIX)) return authorization.slice(BEARER_PREFIX.length);
-  return new URL(request.url).searchParams.get(AUTOMATION_WEBHOOK.TOKEN_QUERY) ?? undefined;
+  return authorization.startsWith(BEARER_PREFIX)
+    ? authorization.slice(BEARER_PREFIX.length)
+    : undefined;
 }
 
 /** Whether the secret's SHA-256 is the hash kept, compared in constant time. */
@@ -100,12 +103,14 @@ const webhookEndpoint = /* @__PURE__ */ Effect.fn("web/automationWebhookEndpoint
     ) {
       return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
     }
+    if (!automation.value.enabled) return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { queued: 0 });
     const body = yield* readBodyBytesEffect(AUTOMATION_WEBHOOK.MAX_BODY_BYTES);
     // Bytes that are no UTF-8 text could not be handed to the agent whole, so they are refused.
     const text = yield* Effect.try(() =>
       new TextDecoder("utf-8", { fatal: true }).decode(body),
     ).pipe(Effect.mapError(() => HOSTED_REFUSAL.INVALID_REQUEST));
-    if (!automation.value.enabled) return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { queued: 0 });
+    // A NUL is UTF-8 but no text a column keeps, so a body holding one is refused rather than lost.
+    if (text.includes("\u0000")) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
     const firedAt = new Date(yield* Clock.currentTimeMillis);
     const recorded = yield* hostedStoreOrUnavailable(
       recordAutomationRun(automation.value, {
