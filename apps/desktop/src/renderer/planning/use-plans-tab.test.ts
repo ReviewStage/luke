@@ -889,6 +889,96 @@ test("an Inbox item chosen in one workspace gives way as another is listed, so m
   assert.equal(chosen, "notes");
   assert.equal(tab.control().inboxView.chosen, undefined);
   assert.equal(tab.shownInboxes.at(-1), null);
+/** The plans each open the tab asked of main named, in order. */
+function opensAsked(payloads: readonly { readonly kind: ActKind; readonly payload: unknown }[]) {
+  return payloads
+    .filter((asked) => asked.kind === ACT_KIND.PLANNING_SELECT)
+    .map((asked) => Option.getOrUndefined(readOpened(asked.payload))?.planId);
+}
+
+const readOpened = Schema.decodeUnknownOption(Schema.Struct({ planId: Schema.String }));
+
+/** Main's answers: every open lands, and every leave. */
+const OPENS = {
+  [ACT_KIND.PLANNING_SELECT]: () => Promise.resolve(true),
+  [ACT_KIND.PLANNING_CLOSE]: () => Promise.resolve(undefined),
+};
+
+test("a plan opened from another workspace says the window switched, and Back lists the workspace left with the plan that stood open there", async () => {
+  const tab = mount({ shown: true, planning: { ...TWO_WORKSPACES, activePlanId: "notes" } }, OPENS);
+
+  act(() => tab.control().onSelect("alerts"));
+  await settle();
+  const switched = { workspace: tab.control().workspace?.id, says: newestToastSays() };
+  tab.stand({ planning: { ...TWO_WORKSPACES, activePlanId: "alerts" } });
+  const back = newestToastAction() ?? assert.fail("the toast offers a way back");
+  const backSays = back.textContent;
+  act(() => back.click());
+  await settle();
+
+  assert.deepEqual(switched, { workspace: ACME.id, says: "Switched to acmeBack to Personal" });
+  assert.equal(backSays, "Back to Personal");
+  assert.equal(tab.control().workspace?.id, PERSONAL.id);
+  assert.deepEqual(opensAsked(tab.payloads), ["alerts", "notes"]);
+});
+
+test("Back from a switch made on the home page lists the workspace left and its home page again", async () => {
+  const fromHome = mount({ shown: true, planning: TWO_WORKSPACES }, OPENS);
+  act(() => fromHome.control().onSelect("alerts"));
+  await settle();
+  act(() => newestToastAction()?.click());
+  await settle();
+
+  assert.equal(fromHome.control().workspace?.id, PERSONAL.id);
+  assert.ok(fromHome.told.includes(ACT_KIND.PLANNING_CLOSE), "Back from home returns home");
+});
+
+test("a workspace chosen while a plan is open opens the plan last open there, or the home page where none was", async () => {
+  const tab = mount(
+    {
+      shown: true,
+      planning: {
+        ...TWO_WORKSPACES,
+        workspaces: [PERSONAL, ACME, PLATFORM],
+        activePlanId: "alerts",
+      },
+    },
+    OPENS,
+  );
+  tab.stand({
+    planning: { ...TWO_WORKSPACES, workspaces: [PERSONAL, ACME, PLATFORM], activePlanId: "notes" },
+  });
+
+  act(() => tab.control().onChooseWorkspace(ACME.id));
+  await settle();
+  const reopened = opensAsked(tab.payloads);
+  tab.stand({
+    planning: { ...TWO_WORKSPACES, workspaces: [PERSONAL, ACME, PLATFORM], activePlanId: "alerts" },
+  });
+  act(() => tab.control().onChooseWorkspace(PLATFORM.id));
+  await settle();
+
+  assert.deepEqual(reopened, ["alerts"]);
+  assert.equal(tab.control().workspace?.id, PLATFORM.id);
+  assert.ok(
+    tab.told.includes(ACT_KIND.PLANNING_CLOSE),
+    "a workspace with no plan opened shows home",
+  );
+});
+
+test("a workspace chosen from the home page lists it and opens nothing", async () => {
+  const home = mount(
+    { shown: true, planning: { ...TWO_WORKSPACES, workspaces: [PERSONAL, ACME, PLATFORM] } },
+    OPENS,
+  );
+  act(() => home.control().onChooseWorkspace(ACME.id));
+  await settle();
+
+  assert.equal(home.control().workspace?.id, ACME.id);
+  assert.deepEqual(
+    [opensAsked(home.payloads), home.told.includes(ACT_KIND.PLANNING_CLOSE)],
+    [[], false],
+  );
 });
 
 test("the new-plan page's recent repositories are the chosen workspace's own, and the chip names its workspace", () => {

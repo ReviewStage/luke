@@ -8,6 +8,7 @@ import {
 } from "@luke/features/coding-agent-wire";
 import { PLAN_TREE_ENTRY } from "@luke/features/plan-wire";
 import type { PlanCodeShowing, PlanningTreeAnswer } from "@luke/features/planning-view";
+import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
 import { settingsView } from "@luke/settings/testing";
 import { shownFiles } from "@luke/voice/code-pane-model";
@@ -434,4 +435,43 @@ test('a file found wears the look the side panel\'s "+" gives it, hangs its card
   act(() => plus.onPick());
   // Both name the file alone, so the tab it has is shown as it stands.
   assert.deepEqual(opened, [[{ path }], [{ path }]]);
+});
+
+test("Search lists the listed workspace's plans first, then every other workspace's, each naming its workspace and found by it", () => {
+  const personal = {
+    id: "workspace-personal",
+    name: "Personal",
+    role: WORKSPACE_ROLE.OWNER,
+    github: null,
+  };
+  const northwind = {
+    id: "workspace-northwind",
+    name: "Northwind",
+    role: WORKSPACE_ROLE.MEMBER,
+    github: null,
+  };
+  const plan = (id: string, workspaceId: string, repository: string | null) => ({
+    id,
+    workspaceId,
+    name: id,
+    createdAt: 1,
+    updatedAt: 1,
+    repository,
+  });
+  openPalette(
+    plansControl({
+      workspaces: [personal, northwind],
+      workspace: personal,
+      plans: [
+        plan("Checkout retries", northwind.id, "northwind/shop"),
+        plan("Dotfiles sync", personal.id, null),
+      ],
+    }),
+  );
+  chooseFilter("Plans");
+  const listed = rows();
+  type("northwind");
+
+  assert.deepEqual(listed, ["Dotfiles sync", "Checkout retries · Northwind · northwind/shop"]);
+  assert.deepEqual(rows(), ["Checkout retries · Northwind · northwind/shop"]);
 });
