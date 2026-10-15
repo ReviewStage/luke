@@ -36,7 +36,7 @@ import {
   type StoredAgentStep,
 } from "../schemas/coding-agent.js";
 import { plan } from "../schemas/plan.js";
-import { conversations, turns } from "../schemas/storage.js";
+import { conversations, messages, turns } from "../schemas/storage.js";
 import { CONVERSATION_KIND } from "../storage-vocabulary.js";
 import { InstantColumnSchema } from "./columns.js";
 import {
@@ -1032,6 +1032,36 @@ export function archiveCodingAgent(
 ): CodingAgentStoreEffect<Option.Option<CodingAgent>> {
   return Effect.flatMap(DateTime.nowAsDate, (now) =>
     updateAgentArchived({ userId, agentId, archivedAt: archived ? now : null }),
+  );
+}
+
+const findAgentOfLine = SqlSchema.findOneOption({
+  Request: Schema.String,
+  Result: IdRowSchema,
+  execute: (clientId) =>
+    Database.use((db) =>
+      db
+        .select({ id: codingAgent.id })
+        .from(messages)
+        .innerJoin(codingAgent, eq(codingAgent.conversationId, messages.conversationId))
+        .where(eq(messages.clientId, clientId))
+        .limit(1),
+    ),
+});
+
+/**
+ * The agent whose conversation holds the line written under the client id,
+ * whoever's conversation it is, since a line sent to a teammate's agent
+ * stands under its starter; nothing where no such line stands. Only for a
+ * key no one but its sender could know, such as a run's own id, because it
+ * reads past any account's gate.
+ */
+export function codingAgentOfSentLine(
+  clientId: string,
+): CodingAgentStoreEffect<Option.Option<string>> {
+  return Effect.map(
+    findAgentOfLine(clientId),
+    Option.map((row) => row.id),
   );
 }
 
