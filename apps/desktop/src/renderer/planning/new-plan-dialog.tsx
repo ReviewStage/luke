@@ -1,6 +1,10 @@
 import { PLAN_BOUNDS } from "@luke/features/plan-wire";
+import type { Workspace } from "@luke/features/workspace-wire";
 import { useId, useRef, useState } from "react";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutAria } from "#shared/shortcuts";
+import { CHIP_LOOK, Chip } from "../chip";
+import { ActionMenu, dropBelowStart, type MenuAction, useActionMenu } from "../desktop/action-menu";
+import { WorkspaceTile } from "../desktop/workspace-tile";
 import { ModalShell } from "../modal-shell";
 import { Shortcut } from "../shortcut";
 import { BusyLabel } from "../spinner";
@@ -12,7 +16,10 @@ import type { PlansControl } from "./use-plans-tab";
  *
  * The window asks the way Linear's and Notion's "New …" ask: it dims over
  * whatever stood open, and a card holds the one field and the repository
- * chip. The chip leads the card's foot with Cancel and Create plan at its
+ * chip. Its title says where the plan will start, "New plan in Acme", the
+ * workspace a chip there that chooses another, as Linear's team chip and
+ * GitHub's Owner do; the repository chip then lists that workspace's
+ * repositories, under where they come from. The chip leads the card's foot with Cancel and Create plan at its
  * end, as the feedback dialog's screenshot button leads its own. The field
  * takes focus, Tab stays inside the card, and focus goes back to whatever
  * opened it. The name is one line, so Return creates the plan with any
@@ -32,19 +39,61 @@ import type { PlansControl } from "./use-plans-tab";
 const CREATE_CHORD: ShortcutChord = { key: SHORTCUT_KEY.ENTER, bare: true };
 
 /**
+ * The title's workspace: the one the plan starts in, by its tile and name, a
+ * press away from the menu of every workspace the account is in, the one
+ * chosen checked; nothing before the workspaces are read.
+ */
+function WorkspaceChip({
+  workspaces,
+  chosen,
+  disabled,
+  onChoose,
+}: {
+  workspaces: readonly Workspace[];
+  chosen: string | undefined;
+  disabled: boolean;
+  onChoose: (workspaceId: string) => void;
+}): React.JSX.Element | null {
+  const menu = useActionMenu(true);
+  const workspace = workspaces.find((each) => each.id === chosen);
+  if (workspace === undefined) return null;
+  const choices: MenuAction[] = workspaces.map((each) => ({
+    label: each.name,
+    icon: <WorkspaceTile workspace={each} />,
+    checked: each.id === workspace.id,
+    onSelect: () => onChoose(each.id),
+  }));
+  return (
+    <div className="new-plan-workspace">
+      <Chip
+        look={CHIP_LOOK.PILL}
+        aria-label={`Workspace: ${workspace.name}`}
+        disabled={disabled}
+        chevron
+        {...menu.trigger(dropBelowStart)}
+      >
+        <WorkspaceTile workspace={workspace} />
+        <span className="chip-name">{workspace.name}</span>
+      </Chip>
+      {menu.drawn === undefined ? null : (
+        <ActionMenu label="Workspace" menu={menu.drawn} groups={[choices]} onClose={menu.close} />
+      )}
+    </div>
+  );
+}
+
+/**
  * The card with its own state, mounted afresh on each opening so a
  * cancelled name is never offered again: the name, the repository chosen
  * over the press's or the last one used, and the start under way.
  */
-function NewPlanCard({
-  newPlan,
-  repositories,
-}: {
-  newPlan: PlansControl["newPlan"];
-  repositories: PlansControl["repositories"];
-}): React.JSX.Element {
+function NewPlanCard({ newPlan }: { newPlan: PlansControl["newPlan"] }): React.JSX.Element {
   const [name, setName] = useState("");
   const [chosen, setChosen] = useState(newPlan.preset?.repository);
+  // The workspace the plan starts in: the one listed, until the title's chip chooses another.
+  const [workspaceId, setWorkspaceId] = useState(newPlan.workspaceId);
+  const startsIn = workspaceId ?? newPlan.workspaceId;
+  const repositories = newPlan.repositoriesIn(startsIn);
   // A repository picked in one workspace is none of another's, so a switch
   // lets the pick go, in the render that brings it; the scope first
   // resolving keeps a pick made before the workspaces were read.
@@ -65,7 +114,7 @@ function NewPlanCard({
     setStarting(true);
     setNote(undefined);
     newPlan
-      .start(name.trim(), repository)
+      .start(name.trim(), repository, startsIn)
       .then(setNote)
       .finally(() => setStarting(false));
   };
@@ -89,9 +138,17 @@ function NewPlanCard({
       initialFocus={field}
       onDismiss={close}
     >
-      <h2 id={titleId} className="confirm-dialog-title">
-        New plan
-      </h2>
+      <div className="new-plan-title">
+        <h2 id={titleId} className="confirm-dialog-title">
+          {startsIn === undefined ? "New plan" : "New plan in"}
+        </h2>
+        <WorkspaceChip
+          workspaces={newPlan.workspaces}
+          chosen={startsIn}
+          disabled={starting}
+          onChoose={setWorkspaceId}
+        />
+      </div>
       <input
         ref={field}
         type="text"
@@ -143,11 +200,9 @@ function NewPlanCard({
 /** The card over the window while New plan is asked, in the window's one modal frame (`../modal-shell.tsx`); nothing otherwise. */
 export function NewPlanDialog({
   newPlan,
-  repositories,
 }: {
   newPlan: PlansControl["newPlan"];
-  repositories: PlansControl["repositories"];
 }): React.JSX.Element | null {
   if (!newPlan.open) return null;
-  return <NewPlanCard newPlan={newPlan} repositories={repositories} />;
+  return <NewPlanCard newPlan={newPlan} />;
 }

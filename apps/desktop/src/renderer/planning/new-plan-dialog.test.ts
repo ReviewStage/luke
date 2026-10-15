@@ -65,15 +65,16 @@ async function mount(
     const [open, setOpen] = useState(true);
     const dialog = createElement(NewPlanDialog, {
       newPlan: {
+        ...control.newPlan,
         open,
         preset: preset === undefined ? undefined : { repository: preset },
+        repositoriesIn: () => repositories,
         start: (name: string, repository: string | null) => {
           starts.push([name, repository]);
           return Promise.resolve(answer);
         },
         onClose: () => setOpen(false),
       },
-      repositories,
     });
     return createElement(
       OpenSettingsProvider,

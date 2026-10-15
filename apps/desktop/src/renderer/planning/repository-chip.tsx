@@ -50,6 +50,10 @@ export interface RepositoryChooser {
   scope?: string | undefined;
   /** Whether the account manages that workspace, so can connect its GitHub; a member is told to ask. */
   manages: boolean;
+  /** The workspace's name, which a list with no GitHub connected says it of. */
+  workspaceName?: string | undefined;
+  /** Where the repositories come from, as the list's heading says it: "acme-corp on GitHub · Acme"; none where no GitHub is connected. */
+  source?: string | undefined;
 }
 
 /** Where the chip stands, which is how it is sized. */
@@ -73,7 +77,10 @@ const CHOOSE_LABEL = "Choose repository";
 const MENU_NOTE = {
   NONE_REACHED: "Luke can't see any repository yet.",
   NOT_CONNECTED: "No GitHub is connected to this workspace yet.",
+  NOT_CONNECTED_IN: (workspace: string) => `${workspace} has no GitHub connected yet.`,
   ASK_TO_CONNECT: "Ask an owner or admin to connect GitHub.",
+  ASK_TO_CONNECT_IN: (workspace: string) =>
+    `Ask an owner or admin of ${workspace} to connect GitHub.`,
   NO_MATCH: "No repositories match",
 } as const;
 
@@ -180,7 +187,10 @@ export function RepositoryChip(props: {
   // The toolbar's chip is drawn only while the plan has no repository; the sidebar names one it has.
   const triggerDrawn = props.place !== CHIP_PLACE.TOOLBAR || props.value === null;
 
-  const rows = repositoryRows(chooser.recent, listed?.repositories, chooser.pictures);
+  // Every row stands under where the repositories come from, which the heading says.
+  const rows = repositoryRows(chooser.recent, listed?.repositories, chooser.pictures).map((row) =>
+    chooser.source === undefined ? row : { ...row, section: chooser.source },
+  );
   const note =
     failure !== undefined ? (
       <>
@@ -196,7 +206,11 @@ export function RepositoryChip(props: {
       // Only an owner or an admin can connect the workspace's GitHub, so a member is told to ask.
       chooser.manages ? (
         <>
-          <p className="plan-compose-menu-note">{MENU_NOTE.NOT_CONNECTED}</p>
+          <p className="plan-compose-menu-note">
+            {chooser.workspaceName === undefined
+              ? MENU_NOTE.NOT_CONNECTED
+              : MENU_NOTE.NOT_CONNECTED_IN(chooser.workspaceName)}
+          </p>
           <button
             type="button"
             className="menu-item"
@@ -207,7 +221,11 @@ export function RepositoryChip(props: {
           </button>
         </>
       ) : (
-        <p className="plan-compose-menu-note">{MENU_NOTE.ASK_TO_CONNECT}</p>
+        <p className="plan-compose-menu-note">
+          {chooser.workspaceName === undefined
+            ? MENU_NOTE.ASK_TO_CONNECT
+            : MENU_NOTE.ASK_TO_CONNECT_IN(chooser.workspaceName)}
+        </p>
       )
     ) : list === undefined ? (
       <div className="plan-compose-menu-note">

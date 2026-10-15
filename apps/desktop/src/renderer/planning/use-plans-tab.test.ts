@@ -399,12 +399,16 @@ test("New plan opens its dialog over the open plan, which stays open; a second p
 
   let note: string | undefined;
   await act(async () => {
-    note = await tab.control().newPlan.start("Dark mode", "acme/web");
+    note = await tab
+      .control()
+      .newPlan.start("Dark mode", "acme/web", tab.control().newPlan.workspaceId);
   });
   assert.ok(note, "a refusal says why");
   assert.equal(tab.control().newPlan.open, true, "a refusal keeps the dialog");
   await act(async () => {
-    note = await tab.control().newPlan.start("Dark mode", "acme/web");
+    note = await tab
+      .control()
+      .newPlan.start("Dark mode", "acme/web", tab.control().newPlan.workspaceId);
   });
   assert.equal(note, undefined);
   assert.equal(tab.control().newPlan.open, false, "a plan started closes the dialog");
@@ -774,9 +778,9 @@ test("the sidebar lists the first workspace's plans first, a workspace chosen li
     plans: tab.control().listed.plans.map((plan) => plan.id),
     archived: tab.control().listed.archived.map((plan) => plan.id),
   };
-  await tab.control().newPlan.start("Invites", null);
+  await tab.control().newPlan.start("Invites", null, tab.control().newPlan.workspaceId);
   act(() => tab.control().onChooseWorkspace(ACME.id));
-  await tab.control().newPlan.start("Usage", "acme/relay");
+  await tab.control().newPlan.start("Usage", "acme/relay", tab.control().newPlan.workspaceId);
 
   assert.deepEqual(personal, {
     workspace: PERSONAL.id,
@@ -873,7 +877,7 @@ test("a workspace chosen is chosen again on the next launch, and one the account
 test("before the workspaces are read every plan is listed and New plan names no workspace, so the service starts it in the first one", async () => {
   const tab = mount({ shown: true, planning: { ...TWO_WORKSPACES, workspaces: [] } }, UNSTARTED);
 
-  await tab.control().newPlan.start("Invites", null);
+  await tab.control().newPlan.start("Invites", null, tab.control().newPlan.workspaceId);
 
   assert.equal(tab.control().workspace, undefined);
   assert.deepEqual(

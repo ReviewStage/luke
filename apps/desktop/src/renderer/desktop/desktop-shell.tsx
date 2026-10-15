@@ -300,7 +300,7 @@ export function DesktopShell({
     );
   }
   // New plan asks over whatever stands, the plans or a version history.
-  const newPlanDialog = <NewPlanDialog newPlan={plans.newPlan} repositories={plans.repositories} />;
+  const newPlanDialog = <NewPlanDialog newPlan={plans.newPlan} />;
   // A plan's version history takes the whole window too, its versions listed
   // where the sidebar was, and hands the plan back as it found it.
   if (plans.history.open) {

@@ -5430,6 +5430,20 @@ body:has(.app-stage[data-capture="true"])
   gap: var(--space-12);
 }
 
+/* The title says where the plan starts, "New plan in", then the workspace's
+   chip in the title's own line, as Linear's team chip stands in its title. */
+.new-plan-title {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-6);
+}
+
+.new-plan-workspace {
+  position: relative;
+  min-width: 0;
+}
+
 .dialog-name-field {
   width: 100%;
   padding: var(--space-8) var(--space-12);
