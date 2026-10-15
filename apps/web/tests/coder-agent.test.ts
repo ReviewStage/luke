@@ -137,6 +137,7 @@ test("an agent on a plan is told of the plan's links and pages, and one an autom
       brief,
     );
     assert.ok(planless.includes("## The developer's inbox"), "a planless agent keeps its inbox");
+    assert.ok(!planless.includes("luke://plan/"), "nor an older message's plan link");
   }
 });
 

@@ -97,13 +97,14 @@ const CHECKS_WORDS = {
 const PLAN_PLACE_WORDS = {
   onPlan: {
     link: ` A \`https://tryluke.dev/<workspace>/plan/<id>\` link names the plan, or with \`#\` one of its sections: what it said when the message was sent follows the developer's words, under "${MENTIONED_HEADING}".`,
+    olderLinks: ", `luke://folder/<path>/`, and `luke://plan/<id>#<heading>`",
     pages: `
 
 ## Pages
 
 When a result reads better as something to look at or click through than as words, such as a chart of numbers you measured, a table of the cases you tested, or a mockup of a screen you are building, write it as one self-contained HTML file in your sandbox, its scripts and styles inline and any library from cdnjs, and show it with \`${CODER_TOOL.SHOW_PAGE}\` and its path: the developer sees it in Luke's side panel. To change it, show it again under the page it answered rather than making another.`,
   },
-  planless: { link: "", pages: "" },
+  planless: { link: "", olderLinks: " and `luke://folder/<path>/`", pages: "" },
 } as const;
 
 /** The instructions for one agent, on the repository its row names, worded for what it was handed, for whether its token reads the repository's CI, and for whether it works on a plan. */
@@ -138,7 +139,7 @@ Search the public web with \`${CODER_TOOL.SEARCH_WEB}\` and read a page it found
 
 A word like \`/name\` in the developer's message names one of the repository's skills, listed under Available skills: call \`${CODER_TOOL.LOAD_SKILL}\` with that name before anything else, and follow what it answers. The list is the repository's skills as your session began, so where \`${CODER_TOOL.LOAD_SKILL}\` knows no such skill, fetch the default branch and read the skill's \`SKILL.md\` from \`.agents/skills/<name>/\` or \`.claude/skills/<name>/\` on it, and follow that instead.
 
-A link in the developer's message whose label starts with \`@\`, such as \`[@session-store.ts](https://github.com/acme/app/blob/HEAD/apps/web/session-store.ts)\`, is something they pointed you at. A GitHub \`blob\` link into your repository names a file of your checkout: read it with \`read_file\` at that path before you act on it, since it may have changed on your branch; one pinned to a commit with \`#L3-L5\` names those lines as they stood at that commit. A GitHub \`tree\` link into your repository names a folder: look through it with \`glob\`.${place.link} Older messages write the same things as \`luke://file/<path>\`, \`luke://folder/<path>/\`, and \`luke://plan/<id>#<heading>\`. Write the name rather than a \`luke://\` link anywhere outside Luke, such as a commit or a pull request, where it leads nowhere; a GitHub or tryluke.dev link may be written as it is.
+A link in the developer's message whose label starts with \`@\`, such as \`[@session-store.ts](https://github.com/acme/app/blob/HEAD/apps/web/session-store.ts)\`, is something they pointed you at. A GitHub \`blob\` link into your repository names a file of your checkout: read it with \`read_file\` at that path before you act on it, since it may have changed on your branch; one pinned to a commit with \`#L3-L5\` names those lines as they stood at that commit. A GitHub \`tree\` link into your repository names a folder: look through it with \`glob\`.${place.link} Older messages write the same things as \`luke://file/<path>\`${place.olderLinks}. Write the name rather than a \`luke://\` link anywhere outside Luke, such as a commit or a pull request, where it leads nowhere; a GitHub or tryluke.dev link may be written as it is.
 
 ## The developer's inbox
 
