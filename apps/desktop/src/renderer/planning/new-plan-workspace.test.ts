@@ -14,8 +14,8 @@ import type { RepositoryChooser } from "./repository-chip";
 /**
  * new-plan-workspace.test.ts -- New plan says where the plan will start,
  * "New task in Acme", and the workspace chip there chooses another: the
- * repository chip then lists that workspace's repositories under where they
- * come from, and the plan starts there. Synthetic throughout.
+ * repository chip then lists that workspace's repositories, and the plan
+ * starts there. Synthetic throughout.
  */
 
 const PERSONAL: Workspace = {
@@ -78,7 +78,6 @@ function chooserFor(workspaceId: string | undefined): RepositoryChooser {
     recent: ["acme-corp/relay"],
     scope: ACME.id,
     workspaceName: ACME.name,
-    source: "acme-corp on GitHub · Acme",
     read: () =>
       Promise.resolve({
         repositories: {
@@ -99,7 +98,7 @@ function chooserFor(workspaceId: string | undefined): RepositoryChooser {
   };
 }
 
-test("New plan says the workspace it starts in, and the workspace chosen there lists its own repositories under their source and starts the plan", async () => {
+test("New plan says the workspace it starts in, and the workspace chosen there lists its own repositories and starts the plan", async () => {
   const starts: (string | undefined)[] = [];
   const control = plansControl();
   const root = createRoot(document.body.appendChild(document.createElement("div")));
@@ -147,10 +146,10 @@ test("New plan says the workspace it starts in, and the workspace chosen there l
     assert.fail("the repository chip stands");
   act(() => repositoryChip.click());
   await settle();
-  assert.match(
-    document.body.textContent ?? "",
-    /acme-corp on GitHub · Acme/u,
-    "the list says where its repositories come from",
+  assert.deepEqual(
+    [...document.querySelectorAll('[role="option"]')].map((row) => row.textContent),
+    ["acme-corp/relay"],
+    "the list is the chosen workspace's repositories",
   );
 
   const name = document.querySelector<HTMLInputElement>('input[aria-label="Task name"]');

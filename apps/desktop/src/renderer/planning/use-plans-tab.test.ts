@@ -41,8 +41,10 @@ import { act, createElement, Fragment, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import { onRegistry } from "#testing/copy-feedback";
+import { installScrollIntoView } from "#testing/scroll-into-view";
 import { newestToastAction, newestToastSays } from "#testing/toast";
 import { ToastHost } from "../toast";
+import { CHIP_PLACE, RepositoryChip } from "./repository-chip";
 import { MAIN_TAB } from "./use-main-tabs";
 import { type PlansControl, usePlansTab } from "./use-plans-tab";
 import { SIDE_PANEL_TAB } from "./use-side-panel";
@@ -1240,6 +1242,59 @@ test("the repository chip reads the chosen workspace's repositories on the new-p
     ACME.id,
     PLAN.workspaceId,
   ]);
+});
+
+test("the repository chip's list for a workspace with GitHub connected is its repositories alone, under no heading", async () => {
+  const listed = {
+    repositories: {
+      installed: true,
+      repositories: [
+        {
+          owner: "acme",
+          name: "relay",
+          fullName: "acme/relay",
+          defaultBranch: "main",
+          private: true,
+          updatedAt: 1,
+        },
+      ],
+      installationUrl: "https://github.com/apps/luke/installations/new",
+    },
+  };
+  const tab = mount(
+    {
+      shown: true,
+      planning: {
+        ...TWO_WORKSPACES,
+        workspaces: [PERSONAL, { ...ACME, github: { login: "acme", active: true } }],
+      },
+    },
+    { [ACT_KIND.PLANNING_REPOSITORIES]: () => Promise.resolve(listed) },
+  );
+  installScrollIntoView();
+  const chip = document.body.appendChild(document.createElement("div"));
+  act(() =>
+    createRoot(chip).render(
+      createElement(RepositoryChip, {
+        value: null,
+        chooser: tab.control().newPlan.repositoriesIn(ACME.id),
+        onChoose: () => undefined,
+        place: CHIP_PLACE.FIELD,
+      }),
+    ),
+  );
+  await settle();
+  act(() => chip.querySelector<HTMLButtonElement>(".chip")?.click());
+  await settle();
+
+  const menu = chip.querySelector('[aria-label="Repository"]') ?? assert.fail("the menu opens");
+  assert.deepEqual(
+    [
+      [...menu.querySelectorAll('[role="option"]')].map((row) => row.textContent),
+      [...menu.querySelectorAll('[role="group"]')].map((group) => group.getAttribute("aria-label")),
+    ],
+    [["acme/relay"], []],
+  );
 });
 
 test("a workspace made is asked for by its name and listed at once, and a refusal answers why", async () => {
