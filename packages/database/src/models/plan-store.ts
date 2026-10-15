@@ -9,7 +9,7 @@ import {
   type PlanSectionEdit,
   type PlanSummary,
 } from "@luke/features/plan-wire";
-import { and, desc, eq, exists, inArray, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, exists, inArray, isNotNull, isNull, type SQL, sql } from "drizzle-orm";
 import { Data, DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
@@ -19,6 +19,7 @@ import { inboxItem } from "../schemas/inbox.js";
 import { inboxAttachment } from "../schemas/inbox-attachment.js";
 import { personalWorkspace } from "../schemas/personal-workspace.js";
 import { plan } from "../schemas/plan.js";
+import { planPin } from "../schemas/plan-pin.js";
 import { conversations } from "../schemas/storage.js";
 import { voiceSessions } from "../schemas/voice.js";
 import { CONVERSATION_KIND } from "../storage-vocabulary.js";
@@ -36,8 +37,10 @@ import { planReachableBy, reachablePlan, readAccountNames } from "./workspace-st
  * runs for beside the plan and gates on that account's membership
  * (`workspace-store.ts`), so a plan of a workspace the account is not in
  * reads, saves, changes, and deletes exactly as an id that names nothing: as
- * no plan. A pin and an archive are stamps on the row, so they are the
- * workspace's and read alike for every member on every Mac. A plan's repository is kept here as
+ * no plan. An archive is a stamp on the row, so it is the workspace's and
+ * reads alike for every member on every Mac; a pin is the reading member's
+ * own (`plan-pin.ts`), so a plan of a shared workspace one member pinned
+ * reads pinned for them alone, on every Mac they sign in on. A plan's repository is kept here as
  * handed and confirmed nowhere here: whether the account reaches it through
  * the Luke GitHub App is the route's to settle before it calls, on the
  * service that reads GitHub (`github/github-app.ts`), and so is whether the
@@ -139,7 +142,6 @@ const PLAN_SUMMARY_COLUMNS = {
   organizationId: plan.organizationId,
   name: plan.name,
   repository: plan.repository,
-  pinnedAt: plan.pinnedAt,
   archivedAt: plan.archivedAt,
   createdAt: plan.createdAt,
   updatedAt: plan.updatedAt,
@@ -159,13 +161,18 @@ const PlanSummaryRowSchema = Schema.Struct({
   organizationId: Schema.String,
   name: Schema.String,
   repository: Schema.NullOr(Schema.String),
-  pinnedAt: Schema.NullOr(InstantColumnSchema),
   archivedAt: Schema.NullOr(InstantColumnSchema),
   createdAt: InstantColumnSchema,
   updatedAt: InstantColumnSchema,
 });
 
 type PlanSummaryRow = typeof PlanSummaryRowSchema.Type;
+
+/** A line of the list with the reader's own pin beside it; null where they hold none. */
+const PlanListRowSchema = Schema.Struct({
+  ...PlanSummaryRowSchema.fields,
+  pinnedAt: Schema.NullOr(InstantColumnSchema),
+});
 
 const PlanRowSchema = Schema.Struct({
   ...PlanSummaryRowSchema.fields,
@@ -180,6 +187,43 @@ type PlanRow = typeof PlanRowSchema.Type;
 const PlanKeySchema = Schema.Struct({ userId: Schema.String, planId: Schema.String });
 
 const PlanIdRowSchema = Schema.Struct({ id: Schema.String });
+
+/** The reader's own pin of the plan the row names, as a join reads it. */
+function readersPin(userId: string): SQL | undefined {
+  return and(eq(planPin.planId, plan.id), eq(planPin.userId, userId));
+}
+
+/** The reader's own pin of the plan; none where they hold none. */
+const findPin = SqlSchema.findOneOption({
+  Request: PlanKeySchema,
+  Result: Schema.Struct({ pinnedAt: InstantColumnSchema }),
+  execute: ({ userId, planId }) =>
+    Database.use((db) =>
+      db
+        .select({ pinnedAt: planPin.pinnedAt })
+        .from(planPin)
+        .where(and(eq(planPin.userId, userId), eq(planPin.planId, planId)))
+        .limit(1),
+    ),
+});
+
+/** The reader's pin of the plan, from now; one already standing keeps its instant. */
+const insertPin = SqlSchema.void({
+  Request: Schema.Struct({ userId: Schema.String, planId: Schema.String, now: Schema.Date }),
+  execute: ({ userId, planId, now }) =>
+    Database.use((db) =>
+      db.insert(planPin).values({ userId, planId, pinnedAt: now }).onConflictDoNothing(),
+    ),
+});
+
+/** The reader's pin of the plan taken away; every other member's stands. */
+const removePin = SqlSchema.void({
+  Request: PlanKeySchema,
+  execute: ({ userId, planId }) =>
+    Database.use((db) =>
+      db.delete(planPin).where(and(eq(planPin.userId, userId), eq(planPin.planId, planId))),
+    ),
+});
 
 /** The agents the journal names, as their rows name them now; a row that is gone names nothing. */
 const findAgentLabels = SqlSchema.findAll({
@@ -263,7 +307,8 @@ function startedText(row: PlanRow): PlanStoreEffect<string> {
 }
 
 /**
- * The row's plan, as the window and the model read it: its text as the
+ * The row's plan, as the window and the model read it for `userId`, the
+ * reader, whose own pin it carries: its text as the
  * document's body with no assumptions, since they are a section of the text,
  * and who last changed each section, as its revisions read. The row's own account is the one its
  * agents are read under. Its last edit is its newest revision, or, before its
@@ -271,9 +316,11 @@ function startedText(row: PlanRow): PlanStoreEffect<string> {
  * a save has moved its last save past its start, which no creation and no
  * carrying over does.
  */
-function storedPlanOf(row: PlanRow): PlanStoreEffect<StoredPlan> {
+function storedPlanOf(userId: string, row: PlanRow): PlanStoreEffect<StoredPlan> {
   return Effect.gen(function* () {
-    const summary = summaryOf(row, yield* readAccountNames([row.userId]));
+    const pin = yield* findPin({ userId, planId: row.id });
+    const pinnedAt = Option.match(pin, { onNone: () => null, onSome: (held) => held.pinnedAt });
+    const summary = summaryOf(row, pinnedAt, yield* readAccountNames([row.userId]));
     const sectionWriters = yield* readSectionWriters(row.id, startedText(row));
     const labels = yield* agentLabelsOf(row, sectionWriters);
     const agentEdits = row.agentEdits.map((edit) => ({
@@ -301,21 +348,25 @@ function storedPlanOf(row: PlanRow): PlanStoreEffect<StoredPlan> {
   });
 }
 
-/** The row's plan alone, for the writes that answer one. */
-function planOf(row: PlanRow): PlanStoreEffect<Plan> {
-  return Effect.map(storedPlanOf(row), (stored) => stored.plan);
+/** The row's plan alone, as the reader reads it, for the writes that answer one. */
+function planOf(userId: string, row: PlanRow): PlanStoreEffect<Plan> {
+  return Effect.map(storedPlanOf(userId, row), (stored) => stored.plan);
 }
 
 /**
  * The row as one line of the list, its owner named by `names`. Note that
  * `openedAt` is still answered, as the start, because a desktop through
  * v0.7.1 refuses a summary without it. It goes once a release whose decoder
- * treats it as optional has shipped and v0.7.1 is no longer supported. A pin
- * and an archive are answered only where they stand, so a plan that is
- * neither reads as every plan did before them; an owner whose account is gone
- * is named by nothing.
+ * treats it as optional has shipped and v0.7.1 is no longer supported. A pin,
+ * the reader's own `pinnedAt`, and an archive are answered only where they
+ * stand, so a plan that is neither reads as every plan did before them; an
+ * owner whose account is gone is named by nothing.
  */
-function summaryOf(row: PlanSummaryRow, names: ReadonlyMap<string, string>): PlanSummary {
+function summaryOf(
+  row: PlanSummaryRow,
+  pinnedAt: Date | null,
+  names: ReadonlyMap<string, string>,
+): PlanSummary {
   const createdAt = row.createdAt.getTime();
   const owner = names.get(row.userId);
   return {
@@ -328,7 +379,7 @@ function summaryOf(row: PlanSummaryRow, names: ReadonlyMap<string, string>): Pla
     openedAt: createdAt,
     ownerId: row.userId,
     ...(owner === undefined ? undefined : { createdBy: { userId: row.userId, name: owner } }),
-    ...(row.pinnedAt === null ? undefined : { pinnedAt: row.pinnedAt.getTime() }),
+    ...(pinnedAt === null ? undefined : { pinnedAt: pinnedAt.getTime() }),
     ...(row.archivedAt === null ? undefined : { archivedAt: row.archivedAt.getTime() }),
   };
 }
@@ -362,12 +413,13 @@ const insertPlan = SqlSchema.findOne({
 
 const findPlans = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String, includeArchived: Schema.Boolean }),
-  Result: PlanSummaryRowSchema,
+  Result: PlanListRowSchema,
   execute: ({ userId, includeArchived }) =>
     Database.use((db) =>
       db
-        .select(PLAN_SUMMARY_COLUMNS)
+        .select({ ...PLAN_SUMMARY_COLUMNS, pinnedAt: planPin.pinnedAt })
         .from(plan)
+        .leftJoin(planPin, readersPin(userId))
         .where(and(planReachableBy(userId), includeArchived ? undefined : isNull(plan.archivedAt)))
         .orderBy(desc(plan.createdAt), desc(plan.id)),
     ),
@@ -415,16 +467,22 @@ const lockPlan = SqlSchema.findOneOption({
     ),
 });
 
-/** The row changed: whichever of the name, the workspace, the repository, the pin, and the archive the change names, in one statement. */
+/** The columns of the row a change writes: the pin is the reader's own and none of the row's. */
+const PlanColumnChangesSchema = Schema.Struct({
+  name: Schema.optionalKey(Schema.String),
+  organizationId: Schema.optionalKey(Schema.String),
+  repository: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  archivedAt: Schema.optionalKey(Schema.NullOr(Schema.Date)),
+});
+
+type PlanColumnChanges = typeof PlanColumnChangesSchema.Type;
+
+/** The row changed: whichever of the name, the workspace, the repository, and the archive the change names, in one statement. */
 const applyChanges = SqlSchema.findOne({
   Request: Schema.Struct({
     userId: Schema.String,
     planId: Schema.String,
-    name: Schema.optionalKey(Schema.String),
-    organizationId: Schema.optionalKey(Schema.String),
-    repository: Schema.optionalKey(Schema.NullOr(Schema.String)),
-    pinnedAt: Schema.optionalKey(Schema.NullOr(Schema.Date)),
-    archivedAt: Schema.optionalKey(Schema.NullOr(Schema.Date)),
+    ...PlanColumnChangesSchema.fields,
   }),
   Result: PlanRowSchema,
   execute: ({ userId, planId, ...changes }) =>
@@ -620,7 +678,7 @@ export function createPlan(userId: string, started: NewPlan): PlanStoreEffect<Pl
       // An insert that returned no row is the database breaking its own contract, not an outcome.
       Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)),
     );
-    return yield* planOf(row);
+    return yield* planOf(userId, row);
   });
 }
 
@@ -638,7 +696,7 @@ export function listPlans(
   return Effect.gen(function* () {
     const rows = yield* findPlans({ userId, includeArchived: options.includeArchived === true });
     const names = yield* readAccountNames(rows.map((row) => row.userId));
-    return rows.map((row) => summaryOf(row, names));
+    return rows.map((row) => summaryOf(row, row.pinnedAt, names));
   });
 }
 
@@ -652,7 +710,7 @@ export function readPlan(
   planId: string,
 ): PlanStoreEffect<Option.Option<StoredPlan>> {
   return Effect.flatMap(findPlan({ userId, planId }), (found) =>
-    Effect.transposeOption(Option.map(found, storedPlanOf)),
+    Effect.transposeOption(Option.map(found, (row) => storedPlanOf(userId, row))),
   );
 }
 
@@ -666,7 +724,7 @@ export function readPlanForUpdate(
   planId: string,
 ): PlanStoreEffect<Option.Option<StoredPlan>> {
   return Effect.flatMap(lockPlan({ userId, planId }), (locked) =>
-    Effect.transposeOption(Option.map(locked, storedPlanOf)),
+    Effect.transposeOption(Option.map(locked, (row) => storedPlanOf(userId, row))),
   );
 }
 
@@ -691,18 +749,46 @@ export function savePlanText(
   return Effect.gen(function* () {
     const now = yield* DateTime.nowAsDate;
     const row = yield* replaceText({ userId, planId, text, ...extras, now });
-    return yield* Effect.transposeOption(Option.map(row, planOf));
+    return yield* Effect.transposeOption(Option.map(row, (saved) => planOf(userId, saved)));
   });
 }
 
 /**
- * The instant a pin or an archive stands from after a change: now where it
- * is asked for, the one already standing where it already was, so asking
- * twice moves nothing, and none where it is taken away.
+ * The instant an archive stands from after a change: now where it is asked
+ * for, the one already standing where it already was, so asking twice moves
+ * nothing, and none where it is taken away.
  */
 function stampOf(asked: boolean, standing: Date | null, now: Date): Date | null {
   if (!asked) return null;
   return standing ?? now;
+}
+
+/** The columns of the row the change names, its archive stamped from the one standing; none where it names only a pin. */
+function columnChangesOf(changes: PlanChanges, standing: PlanRow, now: Date): PlanColumnChanges {
+  return {
+    ...(changes.name === undefined ? undefined : { name: changes.name }),
+    ...(changes.organizationId === undefined
+      ? undefined
+      : { organizationId: changes.organizationId }),
+    ...(changes.repository === undefined ? undefined : { repository: changes.repository }),
+    ...(changes.archived === undefined
+      ? undefined
+      : { archivedAt: stampOf(changes.archived, standing.archivedAt, now) }),
+  };
+}
+
+/**
+ * The reader's own pin of the plan set as asked: from now, or from the
+ * instant already standing, as an archive's stamp is; or taken away. Every
+ * other member's pin stands as it was.
+ */
+function pinAsAsked(
+  userId: string,
+  planId: string,
+  pinned: boolean,
+  now: Date,
+): PlanStoreEffect<void> {
+  return pinned ? insertPin({ userId, planId, now }) : removePin({ userId, planId });
 }
 
 /**
@@ -758,7 +844,8 @@ const followingAgentsAndInbox = Effect.fnUntraced(function* (
  * arrive already read under the wire's rules, and a repository already
  * confirmed reachable; a move runs the caller's guard under the row's lock
  * on the repository the plan will name once it lands. A change is
- * not a save: the document's `updatedAt` and the list's order stand. A pin
+ * not a save: the document's `updatedAt` and the list's order stand. The pin
+ * is the account's own and no other member's, and a pin
  * and an archive are kept apart, so a pinned plan archived and brought back
  * is pinned again. An archived plan is neither renamed nor given another
  * repository, read under the same lock, unless the same change brings it
@@ -787,24 +874,16 @@ export function updatePlan<E = never, R = never>(
           );
         }
         const now = yield* DateTime.nowAsDate;
-        const row = yield* applyChanges({
-          userId,
-          planId,
-          ...(changes.name === undefined ? undefined : { name: changes.name }),
-          ...(changes.organizationId === undefined
-            ? undefined
-            : { organizationId: changes.organizationId }),
-          ...(changes.repository === undefined ? undefined : { repository: changes.repository }),
-          ...(changes.pinned === undefined
-            ? undefined
-            : { pinnedAt: stampOf(changes.pinned, locked.value.pinnedAt, now) }),
-          ...(changes.archived === undefined
-            ? undefined
-            : { archivedAt: stampOf(changes.archived, locked.value.archivedAt, now) }),
-        }).pipe(
-          // The row is held under this transaction's lock, so an update that missed it is the database breaking its own contract.
-          Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)),
-        );
+        if (changes.pinned !== undefined) yield* pinAsAsked(userId, planId, changes.pinned, now);
+        const columns = columnChangesOf(changes, locked.value, now);
+        // A change that names only a pin writes nothing of the row, and an update with nothing to set is no statement.
+        const row =
+          Object.keys(columns).length === 0
+            ? locked.value
+            : yield* applyChanges({ userId, planId, ...columns }).pipe(
+                // The row is held under this transaction's lock, so an update that missed it is the database breaking its own contract.
+                Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)),
+              );
         if (changes.organizationId !== undefined || changes.repository !== undefined) {
           yield* followingAutomations({
             planId,
@@ -815,7 +894,7 @@ export function updatePlan<E = never, R = never>(
         if (changes.organizationId !== undefined) {
           yield* followingAgentsAndInbox(planId, row.organizationId);
         }
-        return Option.some(yield* planOf(row));
+        return Option.some(yield* planOf(userId, row));
       }),
     ),
   );
@@ -939,6 +1018,6 @@ export function readPlanOfConversation(
   conversationId: string,
 ): PlanStoreEffect<Option.Option<StoredPlan>> {
   return Effect.flatMap(findPlanOfConversation({ userId, conversationId }), (found) =>
-    Effect.transposeOption(Option.map(found, storedPlanOf)),
+    Effect.transposeOption(Option.map(found, (row) => storedPlanOf(userId, row))),
   );
 }

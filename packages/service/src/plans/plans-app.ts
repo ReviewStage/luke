@@ -118,7 +118,8 @@ import {
  * (`packages/service/src/agents/coder-host/stop.ts`), and only then deletes the plan. Each
  * row of the list carries what the plan's coding agents are doing and what
  * they published, in brief, where it has any (`packages/service/src/agents/plan-agents.ts`). A pin
- * and an archive are changes like a rename, and the list leaves the archived
+ * and an archive are changes like a rename, though a pin is the asking
+ * member's own and reads pinned for no one else, and the list leaves the archived
  * plans out unless `archived=include` asks for them, so a build from before
  * archiving, which never asks, draws none of them rather than all of them.
  *

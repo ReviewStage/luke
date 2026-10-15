@@ -546,7 +546,11 @@ export function AgentMessage({
     );
   }
   const { startedAt, finishedAt } = message;
-  const workers = new Set(runningStandings(delegation?.standings).map((each) => each.callId));
+  const workers = new Map(
+    [...(delegation?.standings?.values() ?? [])].map(
+      (standing) => [standing.callId, workerToolState(standing.status)] as const,
+    ),
+  );
   const workedFor =
     moving || startedAt === undefined || finishedAt === undefined ? null : (
       <WorkedFor

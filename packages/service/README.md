@@ -1436,8 +1436,10 @@ in the account's first workspace, ensured first, where it names none,
 `GET /api/plans/{id}` opens one with its saved document,
 `PATCH /api/plans/{id}` changes its name, its repository, whether it is
 pinned, whether it is archived, the workspace it belongs to, or several at
-once, each pin and archive a stamp on the row (`pinned_at`, `archived_at`)
-answered as `pinnedAt` and `archivedAt` only where it stands; a move
+once, an archive a stamp on the row (`archived_at`) and a pin the
+account's own row of `plan_pin`, so one member's pin of a shared task is
+theirs alone, answered as `archivedAt` and `pinnedAt` only where it stands;
+a move
 (`workspaceId`) is the task's owner's alone (`not-permitted` for a
 teammate), into a workspace they are a member of (`not-found` otherwise)
 whose installation reaches the task's repository, refused as a repository

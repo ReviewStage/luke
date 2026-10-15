@@ -75,6 +75,7 @@ const DECLARED_TABLES = [
   "plan",
   "plan_board",
   "plan_page_version",
+  "plan_pin",
   "plan_revision",
   "repository_pin",
   "sandbox_terminal_lease",
