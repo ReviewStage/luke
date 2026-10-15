@@ -26,7 +26,7 @@ import { readPlanTemplate } from "./account-store.js";
 import { InstantColumnSchema } from "./columns.js";
 import { readLastEdit, readSectionWriters, UNKNOWN_AGENT_LABEL } from "./plan-revisions.js";
 import { readTemplateAt } from "./plan-template-revisions.js";
-import { planReachableBy, reachablePlan } from "./workspace-store.js";
+import { planReachableBy, reachablePlan, readAccountNames } from "./workspace-store.js";
 
 /**
  * plan-store.ts -- the named plans of an account's workspaces, and the one document each holds.
@@ -266,7 +266,7 @@ function startedText(row: PlanRow): PlanStoreEffect<string> {
  */
 function storedPlanOf(row: PlanRow): PlanStoreEffect<StoredPlan> {
   return Effect.gen(function* () {
-    const summary = summaryOf(row);
+    const summary = summaryOf(row, yield* readAccountNames([row.userId]));
     const sectionWriters = yield* readSectionWriters(row.id, startedText(row));
     const labels = yield* agentLabelsOf(row, sectionWriters);
     const agentEdits = row.agentEdits.map((edit) => ({
@@ -300,14 +300,17 @@ function planOf(row: PlanRow): PlanStoreEffect<Plan> {
 }
 
 /**
- * The row as one line of the list. Note that `openedAt` is still answered,
- * as the start, because a desktop through v0.7.1 refuses a summary without it.
- * It goes once a release whose decoder treats it as optional has shipped and
- * v0.7.1 is no longer supported. A pin and an archive are answered only where
- * they stand, so a plan that is neither reads as every plan did before them.
+ * The row as one line of the list, its owner named by `names`. Note that
+ * `openedAt` is still answered, as the start, because a desktop through
+ * v0.7.1 refuses a summary without it. It goes once a release whose decoder
+ * treats it as optional has shipped and v0.7.1 is no longer supported. A pin
+ * and an archive are answered only where they stand, so a plan that is
+ * neither reads as every plan did before them; an owner whose account is gone
+ * is named by nothing.
  */
-function summaryOf(row: PlanSummaryRow): PlanSummary {
+function summaryOf(row: PlanSummaryRow, names: ReadonlyMap<string, string>): PlanSummary {
   const createdAt = row.createdAt.getTime();
+  const owner = names.get(row.userId);
   return {
     id: row.id,
     workspaceId: row.organizationId,
@@ -317,6 +320,7 @@ function summaryOf(row: PlanSummaryRow): PlanSummary {
     repository: row.repository,
     openedAt: createdAt,
     ownerId: row.userId,
+    ...(owner === undefined ? undefined : { createdBy: { userId: row.userId, name: owner } }),
     ...(row.pinnedAt === null ? undefined : { pinnedAt: row.pinnedAt.getTime() }),
     ...(row.archivedAt === null ? undefined : { archivedAt: row.archivedAt.getTime() }),
   };
@@ -624,10 +628,11 @@ export function listPlans(
   userId: string,
   options: { readonly includeArchived?: boolean } = {},
 ): PlanStoreEffect<readonly PlanSummary[]> {
-  return Effect.map(
-    findPlans({ userId, includeArchived: options.includeArchived === true }),
-    (rows) => rows.map(summaryOf),
-  );
+  return Effect.gen(function* () {
+    const rows = yield* findPlans({ userId, includeArchived: options.includeArchived === true });
+    const names = yield* readAccountNames(rows.map((row) => row.userId));
+    return rows.map((row) => summaryOf(row, names));
+  });
 }
 
 /**

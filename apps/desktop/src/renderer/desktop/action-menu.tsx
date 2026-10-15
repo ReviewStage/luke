@@ -441,12 +441,14 @@ function Submenu({
  * The menu itself, drawn over the window at the point it hangs from. It is
  * measured before it is painted, so it is drawn once and where it fits. A
  * heading, where one is given, stands over the items, muted and pressed by
- * nothing: whose account the menu is about.
+ * nothing: whose account the menu is about. A footer, where one is given,
+ * stands under them on the same terms: who made what the menu is about.
  */
 export function ActionMenu({
   label,
   menu,
   heading,
+  footer,
   groups,
   onClose,
 }: {
@@ -454,6 +456,7 @@ export function ActionMenu({
   /** Where it hangs, and whether it is on its way out (`useActionMenu`'s `drawn`). */
   menu: DrawnMenu;
   heading?: React.ReactNode;
+  footer?: React.ReactNode;
   groups: readonly (readonly MenuEntry[])[];
   /** Closes the menu, handing focus back to its opener where nothing else has taken it. */
   onClose: (returnFocus: boolean) => void;
@@ -588,6 +591,14 @@ export function ActionMenu({
           )}
         </Fragment>
       ))}
+      {footer === undefined ? null : (
+        <>
+          <hr className="plan-menu-rule" />
+          <div className="plan-menu-footer" role="none">
+            {footer}
+          </div>
+        </>
+      )}
       {submenu === undefined
         ? null
         : createPortal(

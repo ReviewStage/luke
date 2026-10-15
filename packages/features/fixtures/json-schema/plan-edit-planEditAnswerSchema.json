@@ -55,6 +55,22 @@
             "ownerId": {
               "type": "string"
             },
+            "createdBy": {
+              "type": "object",
+              "properties": {
+                "userId": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "userId",
+                "name"
+              ],
+              "additionalProperties": false
+            },
             "document": {
               "type": "object",
               "properties": {

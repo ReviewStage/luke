@@ -18,6 +18,9 @@ import { FolderInputIcon, HistoryIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
+import { editedByText, lastEditOf } from "../planning/plan-body";
+import { UNNAMED_MEMBER } from "../planning/plan-history-model";
+import { useMinute } from "../planning/plan-time";
 import { RelativeTime } from "../planning/relative-time";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { ConfirmDialog, type DialogQuestion, useConfirmDialog } from "../settings/confirm-dialog";
@@ -45,7 +48,8 @@ import { PlanNameField, usePlanRename } from "./plan-name-field";
  * reader started.
  * Permanently delete cannot be undone, so choosing it asks first in a dialog
  * over the window that names the plan and offers Archive as the way to keep
- * it, whichever door it was chosen from.
+ * it, whichever door it was chosen from. Under the items, pressed by nothing,
+ * the menu says who created the plan and who last edited it, and when.
  */
 
 /** A plan as the list or the open document holds it, archived or not; nothing for a plan neither holds. */
@@ -202,6 +206,49 @@ function planActionGroups(
   return groups.filter((group) => group.length > 0);
 }
 
+/** Who created a plan, in the reader's words: "you" only for the reader's own, a teammate by name, and "someone" where the service names no member. */
+function creatorOf(plan: PlanSummary, me: string | undefined): string {
+  const ownerId = plan.createdBy?.userId ?? plan.ownerId;
+  if (me !== undefined && ownerId === me) return "you";
+  return plan.createdBy?.name ?? UNNAMED_MEMBER.toLowerCase();
+}
+
+/**
+ * The menu's quiet foot, as Notion, Linear, and Google Docs end a document's
+ * menu: "Created by Charles Pan · 3d ago" and "Last edited by you · 2h ago".
+ * The last editor is named only for the plan the window has open, whose
+ * newest revision it holds, in the words its "Edited by" line uses; another
+ * plan is said only by when it was last saved, and one nobody has saved
+ * since it started says only who created it.
+ */
+function PlanMenuFooter({
+  plans,
+  plan,
+}: {
+  plans: PlansControl;
+  plan: PlanSummary;
+}): React.JSX.Element {
+  const now = useMinute();
+  const { region } = plans;
+  const open = region.kind === DOCUMENT_REGION.READY && region.plan.id === plan.id;
+  const edit = open ? lastEditOf(region.plan) : undefined;
+  const editor = edit === undefined ? "" : editedByText(edit, { id: plans.me, own: false });
+  return (
+    <>
+      <p className="plan-menu-note">
+        {`Created by ${creatorOf(plan, plans.me)} · `}
+        <RelativeTime at={plan.createdAt} now={now} ago />
+      </p>
+      {edit === undefined && plan.updatedAt <= plan.createdAt ? null : (
+        <p className="plan-menu-note">
+          {`Last edited${editor} · `}
+          <RelativeTime at={edit?.at ?? plan.updatedAt} now={now} ago />
+        </p>
+      )}
+    </>
+  );
+}
+
 /**
  * The question Permanently delete asks, naming the plan. Deleting a plan
  * removes its document and its board and clears the conversation its
@@ -243,6 +290,7 @@ function usePlanMenu(
       <ActionMenu
         label="Plan actions"
         menu={drawn}
+        footer={plan === undefined ? undefined : <PlanMenuFooter plans={plans} plan={plan} />}
         groups={planActionGroups(plans, planId, {
           rename: doors.rename,
           askDelete: deletion.ask,

@@ -1918,6 +1918,24 @@ body,
   font-size: 12px;
 }
 
+/* Who made the plan a menu is about, under its items and pressed by nothing:
+   who created it and who last edited it, each on a muted line of its own. */
+.plan-menu-footer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--row-inset);
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.plan-menu-note {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .account-menu-name,
 .account-menu-email {
   overflow: hidden;
