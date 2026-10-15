@@ -223,8 +223,11 @@ export function automationTriggerText(
       return scheduleText(trigger.cron, trigger.timezone);
     case AUTOMATION_TRIGGER.GITHUB: {
       const words = GITHUB_EVENT_WORDS[trigger.event];
-      const senders = trigger.senders ?? GITHUB_DEFAULT_SENDERS;
-      const moments = trigger.moments ?? PULL_REQUEST_DEFAULT_MOMENTS;
+      // Note that each list is read in its own order and once, because a trigger may name one twice.
+      const named = trigger.senders ?? GITHUB_DEFAULT_SENDERS;
+      const senders = Object.values(GITHUB_SENDER).filter((sender) => named.includes(sender));
+      const fires = trigger.moments ?? PULL_REQUEST_DEFAULT_MOMENTS;
+      const moments = Object.values(PULL_REQUEST_MOMENT).filter((moment) => fires.includes(moment));
       // A check names no sender, so its sentence says by whom nothing.
       const by =
         trigger.event === GITHUB_TRIGGER_EVENT.CHECK_FAILED

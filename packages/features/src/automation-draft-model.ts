@@ -116,7 +116,7 @@ export interface GitHubTriggerSettings {
 }
 
 /** A GitHub trigger's settings where it names none: people's events, at every moment, no drafts, no forks. */
-export const GITHUB_DEFAULT_SETTINGS: GitHubTriggerSettings = {
+const GITHUB_DEFAULT_SETTINGS: GitHubTriggerSettings = {
   senders: GITHUB_DEFAULT_SENDERS,
   moments: PULL_REQUEST_DEFAULT_MOMENTS,
   drafts: false,

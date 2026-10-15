@@ -119,6 +119,20 @@ test("a GitHub event is said as what happens, by whom, where, and the labels, br
   assert.equal(
     automationTriggerText(
       event({
+        senders: [GITHUB_SENDER.PEOPLE, GITHUB_SENDER.PEOPLE, GITHUB_SENDER.OTHER_BOTS],
+        moments: [
+          PULL_REQUEST_MOMENT.PUSHED,
+          PULL_REQUEST_MOMENT.OPENED,
+          PULL_REQUEST_MOMENT.PUSHED,
+        ],
+      }),
+      ["acme/ledger"],
+    ),
+    "When a pull request by people or other bots is opened or pushed to in acme/ledger",
+  );
+  assert.equal(
+    automationTriggerText(
+      event({
         senders: Object.values(GITHUB_SENDER),
         moments: [PULL_REQUEST_MOMENT.OPENED, PULL_REQUEST_MOMENT.READY],
         labels: ["bug", "p1"],
