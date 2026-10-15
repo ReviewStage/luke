@@ -291,5 +291,9 @@ test("someone a pull request names on GitHub is Luke's agent for Luke's own bot,
     [actorName(stranger), actorName(devin, { possessive: true })],
     ["octocat", "devin-ai-integration’s"],
   );
-  assert.equal(distinctActors([stranger, devin, { ...stranger }]).length, 2);
+  assert.equal(
+    distinctActors([stranger, devin, { ...stranger, login: "OctoCat" }]).length,
+    2,
+    "one GitHub account is one face, whatever case its login is spelled in",
+  );
 });
