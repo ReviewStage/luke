@@ -4,7 +4,7 @@ import {
   type CodingAgentChangedFile,
   PATCH_OMITTED,
 } from "@luke/features/coding-agent-wire";
-import { parsePatch } from "diff";
+import { diffWordsWithSpace, parsePatch } from "diff";
 import {
   FILE_MARK,
   type FileMark,
@@ -32,6 +32,14 @@ import {
  * marked as an editor's source control marks it (`changeMarks`). A file's
  * patch is copied or saved as a whole unified diff (`filePatch`), headed
  * as git writes one, so `git apply` takes it as it is.
+ *
+ * A hunk may also be drawn side by side (`splitRows`), as a review tool's
+ * split view draws it: each run of removed lines beside the run of added
+ * lines that follows it, line for line, and a line of context on both
+ * sides. The same pairing marks the words a changed line changed
+ * (`markChangedWords`): a removed line and the added line beside it are
+ * diffed word by word, and each keeps its text cut into the spans that
+ * stand on both sides and the spans its own side alone holds.
  */
 
 /** What one row of a hunk is: a line of context, one added, one removed, or git's note on the line above it. */
@@ -44,12 +52,23 @@ export const DIFF_ROW = {
 
 type DiffRowKind = (typeof DIFF_ROW)[keyof typeof DIFF_ROW];
 
-/** One row of a hunk: what it is, its line number on each side it stands on, and its text without the mark before it. */
-interface DiffRow {
+/** A run of a changed line's text, and whether only its own side holds it. */
+interface DiffSpan {
+  readonly text: string;
+  readonly changed: boolean;
+}
+
+/**
+ * One row of a hunk: what it is, its line number on each side it stands
+ * on, its text without the mark before it, and, once its words are marked,
+ * that text cut into spans.
+ */
+export interface DiffRow {
   readonly kind: DiffRowKind;
   readonly oldLine: number | undefined;
   readonly newLine: number | undefined;
   readonly text: string;
+  readonly words?: readonly DiffSpan[];
 }
 
 /** One hunk: its `@@` header as written, and its rows. */
@@ -57,6 +76,15 @@ export interface DiffHunk {
   readonly header: string;
   readonly rows: readonly DiffRow[];
 }
+
+/** One row of a hunk drawn side by side: the row on the old side and the row on the new, either none where the other side's line has no partner. */
+export interface SplitRow {
+  readonly old: DiffRow | undefined;
+  readonly new: DiffRow | undefined;
+}
+
+/** The longest line whose words are diffed, past which a line is drawn whole, because a word diff grows with the square of its length. */
+const WORD_DIFF_MAX_LENGTH = 1000;
 
 /** The kind of row each mark starts in a patch; a line of context starts with a space. */
 const ROW_MARK = new Map<string, DiffRowKind>([
@@ -119,6 +147,120 @@ function rowsOf(lines: readonly string[], oldStart: number, newStart: number): D
     if (kind === DIFF_ROW.ADDED) return { kind, oldLine: undefined, newLine: newLine++, text };
     if (kind === DIFF_ROW.REMOVED) return { kind, oldLine: oldLine++, newLine: undefined, text };
     return { kind, oldLine: oldLine++, newLine: newLine++, text };
+  });
+}
+
+/** A run of a hunk as a split view lays it out: one line of context, or the removed lines and the added lines after them. */
+type ChangeRun =
+  | { readonly context: DiffRow }
+  | { readonly removed: readonly DiffRow[]; readonly added: readonly DiffRow[] };
+
+/**
+ * A hunk's rows as the runs a split view lays out. Note that git's note
+ * joins the run of the row it follows, and stands as context after a line
+ * of context, because it speaks of that line on both sides.
+ */
+function changeRuns(rows: readonly DiffRow[]): readonly ChangeRun[] {
+  const runs: ChangeRun[] = [];
+  let removed: DiffRow[] = [];
+  let added: DiffRow[] = [];
+  let last: DiffRowKind = DIFF_ROW.CONTEXT;
+  const flush = () => {
+    if (removed.length > 0 || added.length > 0) runs.push({ removed, added });
+    removed = [];
+    added = [];
+  };
+  for (const row of rows) {
+    const kind: DiffRowKind = row.kind === DIFF_ROW.NOTE ? last : row.kind;
+    // A removed line after added ones starts a run of its own.
+    if (kind === DIFF_ROW.REMOVED && added.length > 0) flush();
+    if (kind === DIFF_ROW.REMOVED) removed.push(row);
+    else if (kind === DIFF_ROW.ADDED) added.push(row);
+    else {
+      flush();
+      runs.push({ context: row });
+    }
+    last = kind;
+  }
+  flush();
+  return runs;
+}
+
+/** The lines of a run, git's notes left out, which pair line for line with the other side's. */
+function linesOf(run: readonly DiffRow[]): readonly DiffRow[] {
+  return run.filter((row) => row.kind !== DIFF_ROW.NOTE);
+}
+
+/** Joins each span to the one before it where both are changed or both are not. */
+function joinSpans(spans: readonly DiffSpan[]): readonly DiffSpan[] {
+  const joined: DiffSpan[] = [];
+  for (const span of spans) {
+    const before = joined.at(-1);
+    if (span.text === "") continue;
+    if (before?.changed === span.changed)
+      joined[joined.length - 1] = { ...before, text: before.text + span.text };
+    else joined.push(span);
+  }
+  return joined;
+}
+
+/**
+ * A removed line's text and the added line's beside it, each cut into the
+ * spans both hold and the spans its own side alone holds; none where the
+ * two hold no word in common, since a line rewritten whole reads better
+ * tinted whole, or where either is too long to diff.
+ */
+function changedWords(
+  oldText: string,
+  newText: string,
+): { readonly old: readonly DiffSpan[]; readonly new: readonly DiffSpan[] } | undefined {
+  if (oldText.length > WORD_DIFF_MAX_LENGTH || newText.length > WORD_DIFF_MAX_LENGTH)
+    return undefined;
+  const parts = diffWordsWithSpace(oldText, newText);
+  const shared = parts.filter((part) => !part.added && !part.removed).map((part) => part.value);
+  if (shared.join("").trim() === "") return undefined;
+  return {
+    old: joinSpans(
+      parts
+        .filter((part) => !part.added)
+        .map((part) => ({ text: part.value, changed: part.removed })),
+    ),
+    new: joinSpans(
+      parts
+        .filter((part) => !part.removed)
+        .map((part) => ({ text: part.value, changed: part.added })),
+    ),
+  };
+}
+
+/** A hunk's rows with each removed line and the added line it pairs with cut into their changed words. */
+export function markChangedWords(rows: readonly DiffRow[]): readonly DiffRow[] {
+  const marked = new Map<DiffRow, DiffRow>();
+  for (const run of changeRuns(rows)) {
+    if ("context" in run) continue;
+    const olds = linesOf(run.removed);
+    const news = linesOf(run.added);
+    olds.slice(0, news.length).forEach((old, at) => {
+      const partner = news[at];
+      const words = partner === undefined ? undefined : changedWords(old.text, partner.text);
+      if (partner === undefined || words === undefined) return;
+      marked.set(old, { ...old, words: words.old });
+      marked.set(partner, { ...partner, words: words.new });
+    });
+  }
+  return rows.map((row) => marked.get(row) ?? row);
+}
+
+/**
+ * A hunk's rows laid side by side: each removed line beside the added line
+ * at the same place in the run after it, the longer run's rest beside
+ * nothing, and each line of context on both sides.
+ */
+export function splitRows(rows: readonly DiffRow[]): readonly SplitRow[] {
+  return changeRuns(rows).flatMap((run) => {
+    if ("context" in run) return [{ old: run.context, new: run.context }];
+    const length = Math.max(run.removed.length, run.added.length);
+    return Array.from({ length }, (_, at) => ({ old: run.removed[at], new: run.added[at] }));
   });
 }
 
