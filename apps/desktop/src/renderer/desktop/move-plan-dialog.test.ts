@@ -1,0 +1,233 @@
+// @vitest-environment jsdom
+
+import assert from "node:assert/strict";
+import type { Plan } from "@luke/features/plan-wire";
+import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
+import { DOCUMENT_REGION, PLANS_PAGE } from "@luke/ui/planning-model";
+import { act, createElement } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, test } from "vitest";
+import { plansControl, UNPINNED_SUMMARY } from "#testing/plans-control";
+import { installScrollIntoView } from "#testing/scroll-into-view";
+import { NO_LOOKS } from "../planning/use-plan-looks";
+import type { PlansControl } from "../planning/use-plans-tab";
+import { DesktopPlans } from "./desktop-plans";
+
+/**
+ * move-plan-dialog.test.ts -- Move to workspace… in the open plan's ⋯: offered
+ * to the plan's owner while the account has another workspace, it lists the
+ * other workspaces, disables one whose GitHub cannot reach the plan's
+ * repository with the reason, says who loses and gains the plan, and moves
+ * it, closing on a move and staying up saying so on a refusal. Synthetic
+ * throughout.
+ */
+
+const DANA = "user-dana";
+const SAM = "user-sam";
+
+const STUDIO: Workspace = {
+  id: "ws-studio",
+  name: "Studio",
+  role: WORKSPACE_ROLE.OWNER,
+  github: null,
+  memberCount: 3,
+};
+const NORTHWIND: Workspace = {
+  id: "ws-northwind",
+  name: "Northwind",
+  role: WORKSPACE_ROLE.MEMBER,
+  github: null,
+  memberCount: 4,
+};
+const OCTO: Workspace = {
+  id: "ws-octo",
+  name: "Octo",
+  role: WORKSPACE_ROLE.ADMIN,
+  github: { login: "octo", active: true },
+  memberCount: 1,
+};
+const ACME: Workspace = {
+  id: "ws-acme",
+  name: "Acme",
+  role: WORKSPACE_ROLE.ADMIN,
+  github: { login: "acme-corp", active: true },
+  memberCount: 5,
+};
+
+const PLAN: Plan = {
+  id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
+  workspaceId: STUDIO.id,
+  name: "Checkout retries",
+  createdAt: 1,
+  updatedAt: 2,
+  repository: "acme-corp/relay",
+  ownerId: DANA,
+  document: { body: "# Checkout retries", assumptions: [] },
+};
+
+const roots: Root[] = [];
+
+beforeEach(installScrollIntoView);
+
+/** Takes down every mounted surface and the menus and dialogs they drew. */
+function unmountAll(): void {
+  act(() => {
+    for (const root of roots.splice(0)) root.unmount();
+  });
+  document.body.innerHTML = "";
+}
+
+afterEach(unmountAll);
+
+/** Lets a move's answer, and the redraw it causes, land. */
+async function settle(): Promise<void> {
+  await act(async () => {
+    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+  });
+}
+
+/** The open plan's tab, read by Dana, the plan as given open and listed. */
+function openTab(
+  plan: Plan,
+  workspaces: readonly Workspace[],
+  onMovePlan: PlansControl["onMovePlan"] = () => Promise.resolve(false),
+): PlansControl {
+  return plansControl({
+    page: PLANS_PAGE.DOCUMENT,
+    me: DANA,
+    plans: [plan],
+    activePlanId: plan.id,
+    region: { kind: DOCUMENT_REGION.READY, plan },
+    workspaces,
+    workspace: workspaces.find((workspace) => workspace.id === plan.workspaceId),
+    onMovePlan,
+  });
+}
+
+/** Mounts the tab's toolbar and opens its ⋯ menu. */
+function openMenu(plans: PlansControl): void {
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  act(() =>
+    root.render(createElement(DesktopPlans, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, plans })),
+  );
+  const more =
+    container.querySelector<HTMLButtonElement>('[aria-label="Plan actions"]') ??
+    assert.fail("the toolbar draws the plan's ⋯");
+  act(() => more.click());
+}
+
+function menuLabels(): string[] {
+  return [...document.querySelectorAll('[role="menu"] [role="menuitem"]')].map(
+    (item) => item.textContent ?? "",
+  );
+}
+
+function dialog(): HTMLElement | null {
+  return document.querySelector<HTMLElement>('[role="dialog"]');
+}
+
+/** Opens Move to workspace… from the menu standing. */
+function chooseMove(): HTMLElement {
+  const item = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
+    (candidate) => candidate.textContent === "Move to workspace…",
+  );
+  act(() => (item ?? assert.fail("the menu offers Move to workspace…")).click());
+  return dialog() ?? assert.fail("Move to workspace… opens a dialog");
+}
+
+/** The dialog's button with these words. */
+function button(within: HTMLElement, words: string): HTMLButtonElement {
+  return (
+    [...within.querySelectorAll<HTMLButtonElement>("button")].find(
+      (candidate) => candidate.textContent === words,
+    ) ?? assert.fail(`the dialog offers ${words}`)
+  );
+}
+
+test("the ⋯ offers Move to workspace… on the reader's own plan while the account has another workspace, and on no teammate's plan nor with one workspace", () => {
+  openMenu(openTab(PLAN, [STUDIO, ACME]));
+  const own = menuLabels();
+  unmountAll();
+  openMenu(openTab({ ...PLAN, ownerId: SAM }, [STUDIO, ACME]));
+  const teammates = menuLabels();
+  unmountAll();
+  openMenu(openTab(PLAN, [STUDIO]));
+  const alone = menuLabels();
+
+  assert.ok(own.includes("Move to workspace…"), "the owner is offered the move");
+  assert.ok(!teammates.includes("Move to workspace…"), "a teammate's plan is not theirs to move");
+  assert.ok(!alone.includes("Move to workspace…"), "a single workspace has nowhere to move to");
+});
+
+test("the dialog lists the other workspaces, disables one whose GitHub cannot reach the repository with why, chooses the first that can, says what the move does, and moves the plan there", async () => {
+  const moves: [string, string][] = [];
+  openMenu(
+    openTab(PLAN, [STUDIO, NORTHWIND, OCTO, ACME], (planId, workspaceId) => {
+      moves.push([planId, workspaceId]);
+      return Promise.resolve(true);
+    }),
+  );
+  const moving = chooseMove();
+
+  const title = document.getElementById(moving.getAttribute("aria-labelledby") ?? "");
+  assert.equal(title?.textContent, "Move “Checkout retries” to another workspace");
+  const rows = [...moving.querySelectorAll<HTMLButtonElement>('[role="radio"]')].map((row) => ({
+    words: row.textContent,
+    disabled: row.disabled,
+    checked: row.getAttribute("aria-checked"),
+  }));
+  assert.deepEqual(rows, [
+    {
+      words: "NNorthwindNo GitHub connected · can’t reach acme-corp/relay",
+      disabled: true,
+      checked: "false",
+    },
+    {
+      words: "OOctoocto on GitHub · can’t reach acme-corp/relay",
+      disabled: true,
+      checked: "false",
+    },
+    { words: "AAcme5 members", disabled: false, checked: "true" },
+  ]);
+  assert.deepEqual(
+    [...moving.querySelectorAll(".move-effects li")].map((line) => line.textContent),
+    [
+      "Members of Studio who aren't in Acme lose access to it, its calls, and its agents.",
+      "5 people in Acme can read and edit it.",
+      "Its agents keep running, now in Acme.",
+    ],
+  );
+  // The recording masks text alone, so no name may stand in an attribute.
+  for (const element of [moving, ...moving.querySelectorAll("*")]) {
+    for (const attribute of element.attributes) {
+      assert.doesNotMatch(attribute.value, /Checkout retries|Acme|Northwind|Octo/u, attribute.name);
+    }
+  }
+
+  act(() => button(moving, "Move to Acme").click());
+  await settle();
+
+  assert.deepEqual(moves, [[PLAN.id, ACME.id]]);
+  assert.equal(dialog(), null, "a move landed puts the dialog away");
+});
+
+test("a refused move keeps the dialog up, saying so under the list", async () => {
+  openMenu(openTab({ ...PLAN, repository: null }, [STUDIO, NORTHWIND]));
+  const moving = chooseMove();
+  assert.equal(
+    moving.querySelector('[aria-checked="true"]')?.textContent?.includes("Northwind"),
+    true,
+    "a plan with no repository can go to a workspace with no GitHub",
+  );
+
+  act(() => button(moving, "Move to Northwind").click());
+  await settle();
+
+  assert.equal(dialog(), moving, "the dialog stays up");
+  assert.equal(
+    moving.querySelector('[role="alert"]')?.textContent,
+    "The plan could not be moved. Try again.",
+  );
+});

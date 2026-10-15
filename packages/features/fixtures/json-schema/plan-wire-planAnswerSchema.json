@@ -50,6 +50,9 @@
           "type": "number",
           "minimum": 0
         },
+        "ownerId": {
+          "type": "string"
+        },
         "document": {
           "type": "object",
           "properties": {

@@ -413,9 +413,14 @@ export interface PlansControl {
   /**
    * Moves a plan to another of the account's workspaces, whose GitHub
    * reaches its repository, and lists that workspace so the plan stays in
-   * sight; answers whether it moved, a refusal saying why in a toast.
+   * sight; answers whether it moved, a refusal saying why in a toast unless
+   * the caller says it itself (`quiet`), as the Move dialog does under its list.
    */
-  onMovePlan: (planId: string, workspaceId: string) => Promise<boolean>;
+  onMovePlan: (
+    planId: string,
+    workspaceId: string,
+    told?: { readonly quiet: boolean },
+  ) => Promise<boolean>;
   onRetryList: () => void;
   onRetryDocument: () => void;
   /** Opens the New plan dialog over whatever stands open, which it leaves standing. */
@@ -1441,7 +1446,11 @@ export function usePlansTab(input: {
   // workspace's plans and the open plan must not drop out of it, but only
   // while that plan is still open and no workspace was chosen since, so a
   // move answered late never undoes where the developer went meanwhile.
-  const movePlan = (planId: string, workspaceId: string): Promise<boolean> => {
+  const movePlan = (
+    planId: string,
+    workspaceId: string,
+    told?: { readonly quiet: boolean },
+  ): Promise<boolean> => {
     if (fixture !== undefined) return Promise.resolve(false);
     const choicesThen = workspaceChoices.current;
     return act(ACT_KIND.PLANNING_MOVE, { planId, workspaceId })
@@ -1454,7 +1463,9 @@ export function usePlansTab(input: {
           }
           return true;
         }
-        toast({ words: MOVE_REFUSED_NOTE, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
+        if (told?.quiet !== true) {
+          toast({ words: MOVE_REFUSED_NOTE, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
+        }
         return false;
       });
   };

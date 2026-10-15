@@ -451,6 +451,31 @@ it.layer(getTestDB())("the plan routes", (it) => {
     }),
   );
 
+  it.effect("a shared plan names the account that started it, to every member alike", () =>
+    Effect.gen(function* () {
+      const { owner, other, ask } = yield* openAccounts();
+      const shared = yield* openWorkspace(other);
+      yield* joinWorkspace(shared, owner);
+      const planId = startedId(
+        yield* ask(
+          request(PLANS, owner, { method: "POST", body: { ...RELAY, workspaceId: shared } }),
+        ),
+      );
+
+      const ownersOf = (bearer: string) =>
+        Effect.map(ask(request(PLANS, bearer)), (listed) =>
+          readAnswer(planListAnswerSchema, HOSTED_HTTP_STATUS.OK, listed).plans.map(
+            (plan) => plan.ownerId,
+          ),
+        );
+      const opened = yield* ask(request(ONE_PLAN, other, { id: planId }));
+
+      assert.deepEqual(yield* ownersOf(owner), [owner]);
+      assert.deepEqual(yield* ownersOf(other), [owner], "the teammate reads who started it");
+      assert.equal(readAnswer(planAnswerSchema, HOSTED_HTTP_STATUS.OK, opened).plan.ownerId, owner);
+    }),
+  );
+
   it.effect(
     "a start in a workspace the account is not in answers as none, and starts nothing",
     () =>
