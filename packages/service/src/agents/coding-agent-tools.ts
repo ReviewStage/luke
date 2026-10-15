@@ -68,7 +68,8 @@ import { CODER_TOOL, CODER_TOOL_SET, RETIRED_CODER_TOOL } from "./coder-host/too
  * A start takes the one path the Start button's does
  * (`coder-host/start.ts`), on the call's plan and no other, under the same
  * key, so a call run again starts no second agent: the plan's document as
- * the agent's brief, or the developer's prompt in its place, on the model and
+ * the agent's brief, or the developer's prompt in its place, and the note the
+ * call carries after either, so one start says all it says, on the model and
  * effort the developer named or else the account's default, checked against
  * the catalog, whose choices the refusal lists so Luke can ask or try again.
  * Every answer is data the model reads, never a credential: a call's input
@@ -110,8 +111,8 @@ export const CODING_AGENT_TOOL_REFUSAL = {
 export const START_CODING_AGENT_REFUSAL = {
   UNREADABLE:
     "Not started: give a prompt as text of at most " +
-    `${CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS} characters, or none to start on the plan, and ` +
-    "a model with its effort, both or neither.",
+    `${CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS} characters, or none to start on the plan, a note ` +
+    "bounded the same or none, and a model with its effort, both or neither.",
   NO_SERVICE: "Not started: this deployment cannot reach the coding agents' service.",
   NO_REPOSITORY: "Not started: this task names no GitHub repository yet.",
   NOT_REACHABLE:
@@ -171,13 +172,27 @@ const START_PROMPT = Schema.Trim.check(
   Schema.isMaxLength(CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS),
 );
 
-/** A start names a prompt at most, and a model with its effort or neither; the catalog decides whether the two name anything. */
+/**
+ * A start names a prompt at most, a note at most, and a model with its
+ * effort or neither; the catalog decides whether the two name anything.
+ * Note that the note is what lets one start carry everything: without it a
+ * start on the plan had no room for what the developer said beyond the plan,
+ * so the planning model started the agent and then messaged it the rest.
+ */
 const START_CODING_AGENT_INPUT = Schema.Struct({
   prompt: Schema.optionalKey(
     describeWire(
       START_PROMPT,
       "What the agent should do, in the developer's words, typed to it as its first message; " +
         "leave it out to start the agent on the plan itself.",
+    ),
+  ),
+  note: Schema.optionalKey(
+    describeWire(
+      START_PROMPT,
+      "Everything else the developer said for the agent as they asked for it (what to start " +
+        "with, what to watch out for, what to leave alone), handed to it after the plan or the " +
+        "prompt in the same first message; leave it out where they said nothing beyond the plan.",
     ),
   ),
   model: Schema.optionalKey(
@@ -242,7 +257,10 @@ export const START_CODING_AGENT_TOOL = {
   name: AGENT_TOOL.START_CODING_AGENT,
   description:
     "Start a new coding agent on this task, exactly as the developer's Start button would: " +
-    "on the plan itself with no prompt, or on the prompt given in the plan's place. It runs on the " +
+    "on the plan itself with no prompt, or on the prompt given in the plan's place, with the " +
+    "note after either. This one call carries everything the agent is told as it starts, and " +
+    "the agent sets to work on it at once, so never follow it with a message to the agent it " +
+    "started; message it only when the developer later asks for a change. It runs on the " +
     "model and effort named, or on the developer's default with neither. Answers `accepted` " +
     "with the agent's id, model, the model's name to say it by, effort, and status once its " +
     "session is open, or `rejected` " +
@@ -569,7 +587,7 @@ export function runStartCodingAgent(
   ) {
     return Effect.succeed(rejected(START_CODING_AGENT_REFUSAL.UNREADABLE));
   }
-  const { model, effort } = asked.success;
+  const { model, effort, note } = asked.success;
   const prompt = asked.success.prompt ?? asked.success.task;
   const choice = model !== undefined && effort !== undefined ? { model, effort } : undefined;
   const eve = call.eve;
@@ -582,6 +600,7 @@ export function runStartCodingAgent(
         idempotencyKey: call.clientKey,
         choice,
         prompt,
+        note,
       }).pipe(Effect.result);
       if (Result.isFailure(started)) {
         const refusal = started.failure;

@@ -12,6 +12,8 @@ import { type ConversationTarget, storeWriter } from "@luke/database/models/writ
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { joinWorkspace, openHostedStoreTestDatabase, startPlan } from "@luke/database/testing";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
+import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { Effect, Layer, Option, Redacted, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
@@ -459,6 +461,59 @@ test("Luke starts an agent on the call's plan as the deployment acting for the a
     reason: START_CODING_AGENT_REFUSAL.NO_SERVICE,
   });
   assert.equal(eve.sent.length, 3);
+});
+
+test("Luke's one start carries what the developer said beyond the plan: the note rides after the plan, or after a prompt, in the agent's one opening message, and the agent is still handed the plan", async () => {
+  const userId = await database.createUser();
+  const plan = await planConversation(userId, RELAY_FULL_NAME);
+  const eve = await fakeCoderEve(plan.workspaceId);
+  const acting = brainHost({
+    ...seams,
+    deploymentSecret: () => Redacted.make(CRON_SECRET),
+    eveOrigin: () => EVE_ORIGIN,
+  });
+  const call = await callerOn(acting, plan, eve.services, CATALOG);
+
+  const started = await call(START_CODING_AGENT_TOOL.name, { note: INSTRUCTION });
+  assert.equal(started.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(started));
+  const agent = startedAgentOf(started);
+  const stored = Option.getOrThrow(await database.run(readCodingAgent(userId, agent.id)));
+  assert.equal(stored.prompt, null);
+  assert.equal(eve.sent.length, 1);
+  const opening: string = JSON.parse(eve.sent[0]?.body ?? "").message;
+  assert.match(opening, /^# Teammate invitations/u);
+  assert.ok(opening.endsWith(`\n\n## Note from the developer\n\n${INSTRUCTION}`), opening);
+
+  const tasked = await call(
+    START_CODING_AGENT_TOOL.name,
+    { prompt: TASK, note: INSTRUCTION },
+    "call-2",
+  );
+  assert.equal(tasked.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(tasked));
+  assert.equal(eve.sent.length, 2);
+  assert.equal(
+    JSON.parse(eve.sent[1]?.body ?? "").message,
+    `${TASK}\n\n## Note from the developer\n\n${INSTRUCTION}`,
+  );
+
+  // A note's mentions are handed as a message's are: an issue it links is named with its server.
+  const issue = mentionMarkdown(
+    {
+      kind: MENTION_KIND.LINK,
+      provider: INTEGRATION_PROVIDER.LINEAR,
+      url: "https://linear.app/acme/issue/LUKE-142/fix-the-thing",
+    },
+    "LUKE-142/fix-the-thing",
+    { workspace: "acme", repository: RELAY_FULL_NAME },
+  );
+  const linked = await call(START_CODING_AGENT_TOOL.name, { note: `Fix ${issue}.` }, "call-3");
+  assert.equal(linked.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(linked));
+  assert.equal(eve.sent.length, 3);
+  const parts: unknown = JSON.parse(eve.sent[2]?.body ?? "").message;
+  assert.ok(Array.isArray(parts), JSON.stringify(parts));
+  const texts = parts.map((part) => (isRecord(part) && isWireString(part.text) ? part.text : ""));
+  assert.match(texts[0] ?? "", /^# Teammate invitations[\s\S]*## Note from the developer\n\nFix /u);
+  assert.match(texts[1] ?? "", /pointed you at https:\/\/linear\.app\/acme\/issue\/LUKE-142/u);
 });
 
 test("end_call is the one planning tool eve is told ends its turn, so the model is asked for no step after the goodbye it was told to add nothing to", () => {
