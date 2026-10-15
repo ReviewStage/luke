@@ -22,7 +22,9 @@
  * is kept fresh on the rule the agent's own steps keep it by, claimed
  * through the lease so two windows mint one token between them; a renewal
  * that fails gives its claim back, is logged, and is tried again at the
- * next check.
+ * next check. The shell is said to be attached once the first renewal has
+ * ended, so a command typed at once finds the token set, and what was typed
+ * before waits for it, up to a bound past which the shell attaches at once.
  *
  * How the connection ended is the close code the desktop reads as the tab's
  * state (`@luke/features/terminal-wire`'s `TERMINAL_RELAY_CLOSE`).
@@ -37,10 +39,14 @@ import {
 import { unparsedWire } from "@luke/service/core";
 import { readEither } from "@luke/wire/effect";
 import {
+  type Cause,
   Clock,
+  Deferred,
   Duration,
   Effect,
+  Fiber,
   Option,
+  Queue,
   type Redacted,
   Ref,
   Result,
@@ -53,6 +59,7 @@ import { CODER } from "../hosted/coder-host/bounds.js";
 import type { AgentSandboxService } from "../hosted/terminal/agent-sandbox.js";
 import { attachTerminal, TMUX } from "../hosted/terminal/tmux.js";
 import type { InteractiveShell, SandboxUnavailable } from "../hosted/vercel-sandbox-api.js";
+import { frameBytes } from "../voice/socket.js";
 
 const TERMINAL_RELAY_BOUNDS = {
   /** How long a terminal stays connected past its last keystroke. */
@@ -63,6 +70,8 @@ const TERMINAL_RELAY_BOUNDS = {
   IDLE_CHECK_EVERY: Duration.seconds(30),
   /** How often a connection asks whether the GitHub token is due. */
   CREDENTIAL_CHECK_EVERY: Duration.minutes(5),
+  /** The most the desktop may send while its shell waits on its first token, a paste's largest piece; past it the shell attaches without waiting longer, so what was sent reaches it rather than piling up. */
+  HELD_MAX_BYTES: 1024 * 1024,
   /** The environment the shell's PTY starts in: a terminal that speaks colour, and text that is UTF-8. */
   ENV: ["TERM=xterm-256color", "COLORTERM=truecolor", "LANG=C.UTF-8"],
 } as const;
@@ -107,13 +116,19 @@ export interface RelayDependencies {
     shell: InteractiveShell,
   ) => Effect.Effect<RelaySocket, SandboxUnavailable, Scope.Scope>;
   readonly hold: (conversationId: string, heldUntil: Date) => Effect.Effect<void>;
+  /** Claims the token's renewal on the running sandbox session, once per lease per session within the refresh rule. */
   readonly claimRenewal: (
     conversationId: string,
+    sandboxSessionId: string,
     now: Date,
     renewedBefore: Date,
   ) => Effect.Effect<boolean>;
   /** Gives back a renewal claimed at the instant given that did not finish. */
-  readonly releaseRenewal: (conversationId: string, claimedAt: Date) => Effect.Effect<void>;
+  readonly releaseRenewal: (
+    conversationId: string,
+    sandboxSessionId: string,
+    claimedAt: Date,
+  ) => Effect.Effect<void>;
 }
 
 /** How the relay ends its own socket to the PTY, whatever ended the pipe: the shell goes on in tmux. */
@@ -149,7 +164,7 @@ function heldFrom(instant: Date): Date {
   return new Date(instant.getTime() + Duration.toMillis(reach));
 }
 
-/** The GitHub token renewed at the firewall where this connection claims it, on the agent's own rule; a failure gives the claim back, is logged, and the next check tries again. */
+/** The GitHub token renewed at the firewall where this connection claims it, on the agent's own rule; a renewal that failed or was cut off gives the claim back, and the next check tries again. */
 function renewCredential(
   deps: RelayDependencies,
   agent: RelayAgent,
@@ -158,18 +173,49 @@ function renewCredential(
   return Effect.gen(function* () {
     const at = yield* now;
     const renewedBefore = new Date(at.getTime() - Duration.toMillis(CODER.GITHUB_TOKEN_REFRESH));
-    if (!(yield* deps.claimRenewal(agent.conversationId, at, renewedBefore))) return;
+    const claimed = yield* deps.claimRenewal(
+      agent.conversationId,
+      sandboxSessionId,
+      at,
+      renewedBefore,
+    );
+    if (!claimed) return;
     yield* Effect.flatMap(agent.repositoryToken, (token) =>
       deps.sandbox.setGitHubToken(sandboxSessionId, token),
     ).pipe(
-      Effect.catch(() =>
-        Effect.andThen(
-          deps.releaseRenewal(agent.conversationId, at),
-          Effect.logWarning("a terminal's GitHub credential was not renewed"),
-        ),
-      ),
+      // Note that a connection closing mid-renewal interrupts it, and the claim goes back then too.
+      Effect.onError(() => deps.releaseRenewal(agent.conversationId, sandboxSessionId, at)),
+      Effect.catch(() => Effect.logWarning("a terminal's GitHub credential was not renewed")),
     );
   });
+}
+
+/**
+ * The desktop's frames read into the relay's own queue, which ends when the
+ * desktop goes. Until the shell attaches, `held` counts the bytes the queue
+ * holds for it, and `overheld` is done once they pass the bound, so a mint
+ * GitHub is slow to answer never has the relay hold whatever the desktop goes
+ * on sending and never drops a byte of it either; once the shell attaches
+ * `held` is none and the PTY takes what comes.
+ */
+function readDevice(
+  device: RelaySocket,
+  fromDevice: Queue.Queue<RelayFrame, Cause.Done>,
+  held: Ref.Ref<number | undefined>,
+  overheld: Deferred.Deferred<void>,
+): Effect.Effect<void> {
+  const read = Stream.runForEach(device.frames, (frame) =>
+    Effect.gen(function* () {
+      const bytes = yield* Ref.updateAndGet(held, (sum) =>
+        sum === undefined ? undefined : sum + frameBytes(frame),
+      );
+      if (bytes !== undefined && bytes > TERMINAL_RELAY_BOUNDS.HELD_MAX_BYTES) {
+        yield* Deferred.succeed(overheld, undefined);
+      }
+      yield* Queue.offer(fromDevice, frame);
+    }),
+  );
+  return Effect.ensuring(read, Queue.end(fromDevice));
 }
 
 /** The desktop's frames to the PTY: typing as it came, noted as this connection's last and moving the lease on at most once a minute, and a resize as the PTY's own frame. */
@@ -177,12 +223,12 @@ function deviceToPty(
   deps: RelayDependencies,
   agent: RelayAgent,
   lastTyped: Ref.Ref<number>,
-  device: RelaySocket,
+  fromDevice: Stream.Stream<RelayFrame>,
   pty: RelaySocket,
 ): Effect.Effect<PipeEnd> {
   return Effect.gen(function* () {
     const lastHeld = yield* Ref.make((yield* now).getTime());
-    yield* Stream.runForEach(device.frames, (frame) => {
+    yield* Stream.runForEach(fromDevice, (frame) => {
       if ("bytes" in frame) {
         return Effect.andThen(
           Effect.gen(function* () {
@@ -278,7 +324,21 @@ export function relayTerminal(
     const attachedAt = yield* now;
     const lastTyped = yield* Ref.make(attachedAt.getTime());
     yield* deps.hold(agent.conversationId, heldFrom(attachedAt));
-    yield* renewCredential(deps, agent, sandbox.sandboxSessionId);
+    // Note that the desktop's frames are read from here on into a queue of the relay's own, because the first renewal waits on the desktop leaving while what it typed waits for the shell.
+    const fromDevice = yield* Queue.make<RelayFrame, Cause.Done>();
+    const held = yield* Ref.make<number | undefined>(0);
+    const overheld = yield* Deferred.make<void>();
+    const deviceLeft = yield* Effect.forkScoped(readDevice(device, fromDevice, held, overheld));
+    const firstRenewed = yield* Deferred.make<void>();
+    yield* Effect.forkScoped(
+      Effect.repeat(
+        Effect.andThen(
+          renewCredential(deps, agent, sandbox.sandboxSessionId),
+          Deferred.succeed(firstRenewed, undefined),
+        ),
+        { schedule: Schedule.spaced(TERMINAL_RELAY_BOUNDS.CREDENTIAL_CHECK_EVERY) },
+      ),
+    );
     const pty = yield* Effect.result(deps.connect(sandbox.shell));
     if (Result.isFailure(pty)) return yield* device.close(TERMINAL_RELAY_CLOSE.UNAVAILABLE);
     const start = attachTerminal(ask.terminalId);
@@ -293,14 +353,18 @@ export function relayTerminal(
         rows: ask.rows,
       }),
     });
+    // A shell is attached once its sandbox's firewall holds a token, so a command typed at once reaches GitHub; a desktop that leaves first ends the renewal with the scope.
+    // Note that a desktop sending past the bound is attached at once instead, its renewal going on beside the pipe, because what it sent is owed to the shell.
+    const leftFirst = yield* Effect.raceAll([
+      Effect.as(Deferred.await(firstRenewed), false),
+      Effect.as(Deferred.await(overheld), false),
+      Effect.as(Fiber.join(deviceLeft), true),
+    ]);
+    yield* Ref.set(held, undefined);
+    if (leftFirst) return yield* pty.success.close(NORMAL_CLOSE);
     yield* device.send({ text: JSON.stringify({ type: TERMINAL_RELAY_FRAME.ATTACHED }) });
-    yield* Effect.forkScoped(
-      Effect.repeat(renewCredential(deps, agent, sandbox.sandboxSessionId), {
-        schedule: Schedule.spaced(TERMINAL_RELAY_BOUNDS.CREDENTIAL_CHECK_EVERY),
-      }),
-    );
     const end = yield* Effect.raceAll([
-      deviceToPty(deps, agent, lastTyped, device, pty.success),
+      deviceToPty(deps, agent, lastTyped, Stream.fromQueue(fromDevice), pty.success),
       ptyToDevice(device, pty.success),
       idleWatch(lastTyped),
     ]);

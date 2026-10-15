@@ -111,12 +111,12 @@ export const relayDependencies: Effect.Effect<RelayDependencies, never, RelaySer
         run(holdSandbox(conversationId, heldUntil)).pipe(
           Effect.catch(() => Effect.logWarning("a terminal's lease was not moved on")),
         ),
-      claimRenewal: (conversationId, now, renewedBefore) =>
-        run(claimCredentialRenewal(conversationId, now, renewedBefore)).pipe(
+      claimRenewal: (conversationId, sandboxSessionId, now, renewedBefore) =>
+        run(claimCredentialRenewal(conversationId, sandboxSessionId, now, renewedBefore)).pipe(
           Effect.orElseSucceed(() => false),
         ),
-      releaseRenewal: (conversationId, claimedAt) =>
-        run(releaseCredentialRenewal(conversationId, claimedAt)).pipe(
+      releaseRenewal: (conversationId, sandboxSessionId, claimedAt) =>
+        run(releaseCredentialRenewal(conversationId, sandboxSessionId, claimedAt)).pipe(
           Effect.catch(() => Effect.logWarning("a terminal's credential claim was not given back")),
         ),
     };

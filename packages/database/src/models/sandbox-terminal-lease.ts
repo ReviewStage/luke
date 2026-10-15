@@ -167,19 +167,21 @@ const deleteLapsed = SqlSchema.void({
 const claimCredential = SqlSchema.findAll({
   Request: Schema.Struct({
     conversationId: Schema.String,
+    sandboxSessionId: Schema.String,
     now: Schema.Date,
     renewedBefore: Schema.Date,
   }),
   Result: Schema.Struct({ conversationId: Schema.String }),
-  execute: ({ conversationId, now, renewedBefore }) =>
+  execute: ({ conversationId, sandboxSessionId, now, renewedBefore }) =>
     Database.use((db) =>
       db
         .update(sandboxTerminalLease)
-        .set({ credentialAt: now })
+        .set({ credentialAt: now, credentialSession: sandboxSessionId })
         .where(
           and(
             eq(sandboxTerminalLease.conversationId, conversationId),
-            sql`(${sandboxTerminalLease.credentialAt} is null or ${sandboxTerminalLease.credentialAt} < ${renewedBefore})`,
+            // Never renewed, renewed before the bound, or renewed on another session's firewall than this one.
+            sql`(${sandboxTerminalLease.credentialAt} is null or ${sandboxTerminalLease.credentialAt} < ${renewedBefore} or ${sandboxTerminalLease.credentialSession} is distinct from ${sandboxSessionId})`,
           ),
         )
         .returning({ conversationId: sandboxTerminalLease.conversationId }),
@@ -224,8 +226,12 @@ export function releaseLapsedLease(conversationId: string, lapsedBefore: Date): 
 }
 
 const unclaimCredential = SqlSchema.void({
-  Request: Schema.Struct({ conversationId: Schema.String, claimedAt: Schema.Date }),
-  execute: ({ conversationId, claimedAt }) =>
+  Request: Schema.Struct({
+    conversationId: Schema.String,
+    sandboxSessionId: Schema.String,
+    claimedAt: Schema.Date,
+  }),
+  execute: ({ conversationId, sandboxSessionId, claimedAt }) =>
     Database.use((db) =>
       db
         .update(sandboxTerminalLease)
@@ -234,32 +240,37 @@ const unclaimCredential = SqlSchema.void({
           and(
             eq(sandboxTerminalLease.conversationId, conversationId),
             eq(sandboxTerminalLease.credentialAt, claimedAt),
+            eq(sandboxTerminalLease.credentialSession, sandboxSessionId),
           ),
         ),
     ),
 });
 
 /**
- * Claims the renewal of the GitHub token at the sandbox's firewall, answering
- * whether this caller is to renew it now: once per lease when it was never
- * renewed or last renewed before the instant given, so two windows on one
- * sandbox mint one token between them.
+ * Claims the renewal of the GitHub token at the running sandbox session's
+ * firewall, answering whether this caller is to renew it now: once per lease
+ * when it was never renewed, last renewed before the instant given, or last
+ * renewed on another session, which a resumed sandbox is, so two windows on
+ * one session mint one token between them and a resumed one is never left
+ * without.
  */
 export function claimCredentialRenewal(
   conversationId: string,
+  sandboxSessionId: string,
   now: Date,
   renewedBefore: Date,
 ): LeaseEffect<boolean> {
   return Effect.map(
-    claimCredential({ conversationId, now, renewedBefore }),
+    claimCredential({ conversationId, sandboxSessionId, now, renewedBefore }),
     (rows) => rows.length > 0,
   );
 }
 
-/** Gives back a renewal this caller claimed at the instant given and could not finish, so the next check claims it again; a later claim stands. */
+/** Gives back a renewal this caller claimed on the session and at the instant given and could not finish, so the next check claims it again; a later claim, or another session's at the same instant, stands. */
 export function releaseCredentialRenewal(
   conversationId: string,
+  sandboxSessionId: string,
   claimedAt: Date,
 ): LeaseEffect<void> {
-  return unclaimCredential({ conversationId, claimedAt });
+  return unclaimCredential({ conversationId, sandboxSessionId, claimedAt });
 }
