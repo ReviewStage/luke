@@ -2411,9 +2411,16 @@ body,
   font-weight: 560;
 }
 
+/* The press gives way too, its words cut short at the end rather than the
+   press pushed out of a narrow column, and never takes more than half the
+   line; the whole of them stays its text, which a reader hears. */
 .plan-banner-action {
-  flex: none;
+  min-width: 0;
+  max-width: 50%;
+  flex: 0 1 auto;
   height: 22px;
+  overflow: hidden;
+  text-overflow: ellipsis;
   padding: 0 var(--space-8);
   border: 1px solid var(--hairline-strong);
   border-radius: 6px;
