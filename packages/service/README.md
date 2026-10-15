@@ -344,7 +344,7 @@ every agent did before the choice existed; the factors are what the tier
 past the boundary costs beside the first. No offered model needs a request
 option for either window, so the choice is the window eve compacts against
 and the context ring reads, nothing more. The read is the
-`ModelCatalog` service `apps/web/server/runtime.ts` builds once per instance, cached
+`ModelCatalog` service `src/runtime.ts`'s layer builds once per instance, cached
 for an hour on a success and for no time on a failure, so an outage at the
 gateway is retried on the next request rather than answered for the hour.
 The bearer is resolved before the read, as every hosted endpoint resolves

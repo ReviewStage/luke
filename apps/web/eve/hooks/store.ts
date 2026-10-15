@@ -3,8 +3,8 @@ import { EMPTY_RELAY_STATE, type RelayState } from "@luke/service/agents/brain-h
 import { Effect, Result } from "effect";
 import { defineState } from "eve/context";
 import { defineHook } from "eve/hooks";
-import { runWeb } from "../../server/runtime.js";
 import { host } from "../host.js";
+import { runAgent } from "../runtime.js";
 import { sessionPrompt } from "../session-prompt.js";
 
 /**
@@ -28,7 +28,7 @@ export default defineHook({
       // state and the prompt's hash are this session's (`packages/service/src/agents/brain-host/pinned-state.ts`).
       const state = pinnedState(relayState);
       const prompt = pinnedState(sessionPrompt);
-      return runWeb(
+      return runAgent(
         Effect.gen(function* () {
           if (event.type === "session.started") {
             const starting = yield* host.admitStarting(ctx.session.auth, ctx.session.id);

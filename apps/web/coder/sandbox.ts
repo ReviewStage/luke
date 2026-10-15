@@ -4,8 +4,8 @@ import { CheckoutRefused } from "@luke/service/agents/coder-host/checkout";
 import { Effect, Redacted, Result } from "effect";
 import { authenticateGitHub } from "eve/extensions/code/sandbox";
 import { defineSandbox } from "eve/sandbox";
-import { runWeb } from "../server/runtime.js";
 import { host } from "./host.js";
+import { runAgent } from "./runtime.js";
 
 /**
  * sandbox.ts -- the coding agent's sandbox: one Vercel Sandbox per eve session, with the agent's repository checked out in it.
@@ -33,7 +33,7 @@ export { environment };
 
 export default defineSandbox(async ({ session }) => {
   const sandbox = await openSandbox(AGENT_ROLE.CODER);
-  const token = await runWeb(
+  const token = await runAgent(
     Effect.gen(function* () {
       const admitted = yield* host.admitSandbox(session.auth, session.id);
       if (Result.isFailure(admitted)) {

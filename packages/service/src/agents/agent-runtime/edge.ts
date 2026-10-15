@@ -10,7 +10,7 @@
  * the doors are built here and each root's are one call.
  *
  * Nothing here runs an effect. The root hands in its own runner, which is
- * `runWeb` in production, as `productionBrainHostSeams` is handed one.
+ * `runAgent` in production, as `productionBrainHostSeams` is handed one.
  */
 
 import type { QueryError } from "@luke/database/core/query";

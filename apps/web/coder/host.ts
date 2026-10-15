@@ -33,7 +33,7 @@ import { emitJsonSchema } from "@luke/wire/effect";
 import { Effect, Result, Schema } from "effect";
 import type { SessionAuth } from "eve/context";
 import { defineTool } from "eve/tools";
-import { runWeb } from "../server/runtime.js";
+import { runAgent } from "./runtime.js";
 import { scriptedModel } from "./scripted-model.js";
 
 /**
@@ -50,7 +50,7 @@ import { scriptedModel } from "./scripted-model.js";
  * planning worker's do through `../eve/host.ts`.
  */
 export const seams: CoderHostSeams = Effect.runSync(
-  Effect.provide(productionCoderHostSeams(runWeb), hostedEnvironment),
+  Effect.provide(productionCoderHostSeams(runAgent), hostedEnvironment),
 );
 
 export const host: CoderHost = coderHost(seams);
@@ -77,7 +77,7 @@ export function stepTurnId(sessionId: string, started: typeof StepStartedSchema.
  * session is offered skills only once its conversation is read as an
  * agent's, whose repository they are read from.
  */
-const edge = edgeKit(runWeb, {
+const edge = edgeKit(runAgent, {
   host,
   skills: (admitted) =>
     Effect.gen(function* () {
@@ -101,7 +101,7 @@ export function makeDelegation(
   task: string,
   asked: DelegationAsk,
 ): Promise<Result.Result<ModelChoice, string>> {
-  return runWeb(
+  return runAgent(
     Effect.gen(function* () {
       const admitted = yield* host.admit(auth, sessionId);
       if (Result.isFailure(admitted)) return Result.fail(admitted.failure);
@@ -123,7 +123,7 @@ export async function selectDelegatedModel(
   turnId: string,
 ): Promise<CoderModelSelection> {
   const scripted = seams.scriptedModel() ? { model: scriptedModel() } : undefined;
-  const selected = await runWeb(
+  const selected = await runAgent(
     Effect.gen(function* () {
       const admitted = yield* host.admitDelegated(auth, sessionId);
       if (Result.isFailure(admitted)) return Result.fail(admitted.failure);
@@ -150,7 +150,7 @@ export function editPlanNotes(
   input: UnparsedWireValue,
   takenInTurn: number,
 ): Promise<PlanEditResult> {
-  return runWeb(
+  return runAgent(
     Effect.gen(function* () {
       const admitted = yield* host.admit(auth, sessionId);
       if (Result.isFailure(admitted)) return planEditRejected(admitted.failure);
@@ -165,7 +165,7 @@ export function runInboxTool(
   sessionId: string,
   call: InboxCall,
 ): Promise<InboxToolResult> {
-  return runWeb(
+  return runAgent(
     Effect.gen(function* () {
       const admitted = yield* host.admit(auth, sessionId);
       if (Result.isFailure(admitted)) return inboxRejected(admitted.failure);
@@ -181,7 +181,7 @@ export function runShowPageTool(
   input: UnparsedWireValue,
   sandbox: InboxSandboxDoor,
 ): Promise<WireRecord> {
-  return runWeb(
+  return runAgent(
     Effect.gen(function* () {
       const admitted = yield* host.admit(auth, sessionId);
       if (Result.isFailure(admitted)) return showPageRejected(admitted.failure);
@@ -202,7 +202,7 @@ export function runResearchTool(
   context: { readonly auth: SessionAuth; readonly sessionId: string; readonly turnId: string },
   input: UnparsedWireValue,
 ): Promise<UnparsedWireValue> {
-  return runWeb(
+  return runAgent(
     Effect.gen(function* () {
       const admitted = yield* admit(context.auth, context.sessionId);
       if (Result.isFailure(admitted)) {
@@ -250,7 +250,7 @@ export function runOnMacFor(admit: CoderHost["admit"]) {
     description: RUN_ON_MAC_TOOL.description,
     inputSchema: emitJsonSchema(RUN_ON_MAC_TOOL.inputSchema),
     execute: (input, ctx): Promise<MacCommandAnswer> =>
-      runWeb(
+      runAgent(
         Effect.gen(function* () {
           const admitted = yield* admit(ctx.session.auth, ctx.session.id);
           if (Result.isFailure(admitted)) {

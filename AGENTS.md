@@ -188,7 +188,10 @@ request, so there is no request fiber to compose it into),
 `apps/web/server/terminal/function.ts` (the terminal relay, stood for a
 function instance's life on the same terms) and
 `apps/web/server/seed-clients.ts` (the OAuth client seeding command, run as
-its own process), the eve project's authored files —
+its own process), each eve root's own module-scope memoized runtime,
+`apps/web/eve/runtime.ts` and `apps/web/coder/runtime.ts`, built over the
+same layer (`@luke/service/runtime`'s `webServices`) and holding its
+`runAgent`, the eve project's authored files —
 `apps/web/eve/agent.ts`, `apps/web/eve/channels/eve.ts`,
 `apps/web/eve/hooks/store.ts`, `apps/web/eve/instructions/prompt.ts`,
 `apps/web/eve/instructions/seed.ts`, and `apps/web/eve/tools/brain.ts` — each
@@ -221,8 +224,8 @@ any of them — which is where a `Runtime<R>` went, v4 having removed the type �
 belong nowhere else — everything between the edges returns an Effect and lets its caller
 decide — which the oxlint rule `no-run-promise-outside-edges` enforces against
 that same file's `runtimeEdges`, `runShims`, and `runOnHandedRuntime` lists,
-reading `apps/web/server/runtime.ts`'s own `runWeb` and `webRuntime` as the
-runs they are, so a module that holds the edge's runner rather than
+reading `apps/web/server/runtime.ts`'s own `runWeb` and `webRuntime`, and
+each eve root's `runAgent`, as the runs they are, so a module that holds the edge's runner rather than
 `Effect.runPromise` itself is no less visible to it;
 `no-raw-async-primitives` enforces the equivalent for `setTimeout`,
 `setInterval`, `new Promise`, `AbortController`, and `fs.watch` against its

@@ -2,8 +2,8 @@ import { AGENT_EXTERNAL_DEPENDENCIES } from "@luke/service/agents/agent-runtime/
 import { CODER } from "@luke/service/agents/coder-host/bounds";
 import { Effect, Result } from "effect";
 import { defineAgent, defineDynamic } from "eve";
-import { runWeb } from "../server/runtime.js";
 import { host, readStepStarted, seams, stepTurnId } from "./host.js";
+import { runAgent } from "./runtime.js";
 import { scriptedModel } from "./scripted-model.js";
 
 /**
@@ -32,7 +32,7 @@ export default defineAgent({
     events: {
       "step.started": async (event, ctx) => {
         const scripted = seams.scriptedModel() ? { model: scriptedModel() } : undefined;
-        const selected = await runWeb(
+        const selected = await runAgent(
           Effect.gen(function* () {
             const admitted = yield* host.admit(ctx.session.auth, ctx.session.id);
             if (Result.isFailure(admitted)) return Result.fail(admitted.failure);

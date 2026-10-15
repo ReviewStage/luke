@@ -9,7 +9,7 @@ import {
 import { hostedEnvironment } from "@luke/service/environment";
 import { Effect } from "effect";
 import type { SessionAuth } from "eve/context";
-import { runWeb } from "../server/runtime.js";
+import { runAgent } from "./runtime.js";
 
 /**
  * The one host every authored file of this eve project shares, over the
@@ -24,7 +24,7 @@ import { runWeb } from "../server/runtime.js";
  * runner of its own.
  */
 export const seams: BrainHostSeams = Effect.runSync(
-  Effect.provide(productionBrainHostSeams(runWeb), hostedEnvironment),
+  Effect.provide(productionBrainHostSeams(runAgent), hostedEnvironment),
 );
 
 export const host: BrainHost = brainHost(seams);
@@ -37,7 +37,7 @@ export const host: BrainHost = brainHost(seams);
  * first task the subagent received, and only the first title that lands
  * stands.
  */
-const edge = edgeKit(runWeb, { host, skills: host.skills, childTasked: host.titleChild });
+const edge = edgeKit(runAgent, { host, skills: host.skills, childTasked: host.titleChild });
 
 /** Relays one event of a subagent's session into its child conversation, for the subagent's own hook. */
 export function relayChildEvent(
