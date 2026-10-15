@@ -154,13 +154,23 @@ test("the dialog holds the name, then the repository chip leading Cancel and Cre
 
 test("Return creates the plan under the name as typed, trimmed, about the repository last used", async () => {
   const card = await mount();
-  assert.equal(card.button("Create task").disabled, true, "nothing to create before a name");
-  await card.press("Enter", card.field());
-  assert.deepEqual(card.starts, []);
   card.type("  Dark mode toggle  ");
-  assert.equal(card.button("Create task").disabled, false);
   await card.press("Enter", card.field());
   assert.deepEqual(card.starts, [["Dark mode toggle", "acme/web"]]);
+});
+
+test("the name is optional: with none, or only whitespace, Return and Create task each start the plan unnamed", async () => {
+  const card = await mount("refused");
+  assert.equal(card.field().placeholder, "Task name (optional)");
+  assert.equal(card.button("Create task").disabled, false);
+  await card.press("Enter", card.field());
+  card.type("   ");
+  act(() => card.button("Create task").click());
+  await settle();
+  assert.deepEqual(card.starts, [
+    ["", "acme/web"],
+    ["", "acme/web"],
+  ]);
 });
 
 test("a repository group's + opens the dialog on its repository rather than the last used", async () => {

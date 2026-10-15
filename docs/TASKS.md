@@ -212,9 +212,10 @@ composer card, and nothing spoken. Leaving or deleting a task lands here.
    meanwhile; nothing polls. The arrows move the highlight while the search
    field keeps focus, Enter picks, Escape closes the menu and hands focus
    back to the chip, and so does focus leaving it.
-3. **Start**, the round arrow at the card's other end, enabled once the name
-   is set; Enter presses it. Pressing it saves the task with its name, its
-   repository, and the untouched template as its plan, and opens it. If
+3. **Start**, the round arrow at the card's other end; Enter presses it.
+   The name is optional. Pressing it saves the task with its name, its
+   repository, and the untouched template as its plan, and opens it. A task
+   started with no name stands as "Untitled" until the developer renames it. If
    the service cannot be reached, or it refuses the repository (the App does
    not reach it, or the account must sign in with GitHub again), the reason
    shows under the card and the button can be pressed again.
