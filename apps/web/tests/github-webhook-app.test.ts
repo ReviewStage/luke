@@ -26,6 +26,7 @@ import {
   GITHUB_TRIGGER_EVENT,
 } from "@luke/features/automation-wire";
 import type { CodingAgentPullRequest } from "@luke/features/coding-agent-wire";
+import { HostedEnvironment, type HostedEnvironmentValues } from "@luke/service/environment";
 import { GITHUB_PROVIDER_ID, GitHubApp } from "@luke/service/github/github-app";
 import { LINK_OUTCOME } from "@luke/service/github/github-installations";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "@luke/service/http/http";
@@ -42,7 +43,6 @@ import { Clock, DateTime, Effect, Layer, Option, Redacted } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { githubWebhookApp } from "../server/github-webhook-app";
-import { HostedEnvironment, type HostedEnvironmentValues } from "../server/hosted/environment";
 
 /**
  * The Luke GitHub App's webhook, answered by its group the way a function

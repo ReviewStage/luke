@@ -27,6 +27,7 @@ import {
   TURN_STATUS,
   unparsedWire,
 } from "@luke/service/core";
+import { modelCatalogOf, type OfferedModel } from "@luke/service/providers/model-catalog";
 import { githubReaching, openGithubUser } from "@luke/service/testing/github-app-fake";
 import { noNetwork } from "@luke/service/testing/no-network";
 import { isReasoningUIPart, isTextUIPart, isToolUIPart, type LanguageModel } from "ai";
@@ -42,7 +43,6 @@ import type { CoderHostSeams } from "../server/hosted/coder-host/production";
 import { codingAgentStatusOf } from "../server/hosted/coder-host/status";
 import { CODER_TOOL, CODER_TOOL_SET } from "../server/hosted/coder-host/tool-set";
 import { CURSOR_START, transcriptPast } from "../server/hosted/coder-host/transcript";
-import { modelCatalogOf, type OfferedModel } from "../server/hosted/model-catalog";
 import { stampedEveEvent } from "./support/eve-events";
 
 /**

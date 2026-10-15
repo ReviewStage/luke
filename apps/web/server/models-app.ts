@@ -11,17 +11,17 @@ import {
   hostedStoreOrUnavailable,
   type UserIdResolver,
 } from "@luke/service/http/http-effect";
+import { ModelCatalog, offeredToAccount } from "@luke/service/providers/model-catalog";
 import { ANY_METHOD, type WebRoutes } from "@luke/service/route";
 import { Effect, Layer, Option } from "effect";
 import { HttpRouter, HttpServerRequest, type HttpServerResponse } from "effect/http";
 import { anthropicFastAccess } from "./hosted/coder-host/account-keys.js";
-import { ModelCatalog, offeredToAccount } from "./hosted/model-catalog.js";
 
 /**
  * models-app.ts -- the models a coding agent may run on, as the Start menu and Settings offer them.
  *
  * `GET /api/models` answers the instance's cached read of AI Gateway's
- * public catalog, filtered to what Luke offers (`hosted/model-catalog.ts`):
+ * public catalog, filtered to what Luke offers (`packages/service/src/providers/model-catalog.ts`):
  * each model's id, name, provider, the efforts it lists, and its two
  * context windows where it offers a choice of them. The catalog is
  * public and the same for every account, but what an account is offered

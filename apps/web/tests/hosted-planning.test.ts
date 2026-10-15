@@ -16,6 +16,7 @@ import {
 } from "@luke/service/agents/brain-host/bounds";
 import { readRecentMessages } from "@luke/service/agents/brain-host/context";
 import type { GitHubApp } from "@luke/service/github/github-app";
+import { modelCatalogOf } from "@luke/service/providers/model-catalog";
 import {
   connectWorkspaceGitHub,
   GITHUB_FIXTURE_INSTALLATION_TOKEN,
@@ -49,7 +50,6 @@ import { type BrainHost, brainHost } from "../server/hosted/brain-host/host";
 import type { BrainHostSeams } from "../server/hosted/brain-host/production";
 import { memoryRelayState, type RelayStateStore } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
-import { modelCatalogOf } from "../server/hosted/model-catalog";
 import type { RepositorySandboxDoor } from "../server/hosted/repository-shell";
 import { stampedEveEvent } from "./support/eve-events";
 import { sandboxDouble } from "./support/repository-sandbox";

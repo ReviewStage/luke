@@ -42,13 +42,13 @@ import { causeKind } from "@luke/runtime/effect";
 import { CONNECTION_POLICY, type ConnectionPolicy } from "@luke/service/agents/agent-runtime/role";
 import type { ConversationAdmission } from "@luke/service/agents/brain-host/conversation";
 import type { GitHubApp } from "@luke/service/github/github-app";
+import { githubOffered } from "@luke/service/integrations/github-integration";
 import {
   accountIntegrationConnect,
   type IntegrationConnect,
 } from "@luke/service/integrations/integration-connect";
 import { Effect, Option, Result, type Schema } from "effect";
 import type { SessionAuth } from "eve/context";
-import { githubOffered } from "../github-integration.js";
 
 /** Which servers a turn is handed, under the account they are credentialed for, or none. */
 export type ServerStanding =

@@ -94,7 +94,7 @@ is confirmed as this App's own or answered as none, and what every
 installation token is minted under (`POST
 /app/installations/{id}/access_tokens`). `userToken(userId)` is the signed-in
 user's token off the row, unsealed, read for one caller alone, GitHub's MCP
-server (`apps/web/server/hosted/github-integration.ts`); a token within a minute of its expiry
+server (`src/integrations/github-integration.ts`); a token within a minute of its expiry
 is refreshed first at GitHub's token endpoint on the App's client, and the
 fresh pair is re-sealed in place, inside one transaction under `FOR UPDATE`
 on the row, because GitHub retires a refresh token the moment it is used.
@@ -277,3 +277,150 @@ own wildcards escaped.
 Every admin answer is viewer-gated account data, refusals included, so each
 one carries `no-store`, the five refusals the group answers itself included,
 in the bytes the promise-shaped vocabulary in `src/admin/http.ts` gives.
+
+## The bearer's resolution
+
+`src/auth/bearer.ts` answers effects. `hostedUserId(request, userInfo)`
+and `userIdForAuthorization(authorization, userInfo)` each answer
+`Effect<string | undefined>`, and a `UserInfoEndpoint` answers
+`Effect<OAuthUserInfo | undefined, UnknownException>`: the auth service's own
+`oauth2UserInfo` is a promise of Better Auth's, so it is wrapped with
+`Effect.tryPromise` once where an endpoint is constructed —
+`hostedUserInfo` in `src/auth/bearer.ts` itself, the brain host's seam,
+and the events group's inline one — and nowhere else. What that
+call throws is still one indistinguishable nothing: the resolution recovers
+it, so a missing header, an expired token, and a refusing auth service are
+the same 401 they always were, and no route repeats the recovery.
+
+Every caller yields it. `resolveHostedUserId`, which the account and plans
+groups are handed as their `resolveUserId`, and the voice function's own
+resolver are Effect-shaped, so each reads the bearer on its own fiber instead
+of wrapping a promise in `Effect.promise`. One caller is a
+promise of somebody else's: eve's `AuthFn`, which
+`apps/web/eve/channels/eve.ts` satisfies by running the resolution once at
+that authored file — eve's own edge — rather than keeping a promise-shaped
+door beside the effect in `src/auth/`. `lukeAccount` takes the
+resolved account as a `BearerAccount` promise and reaches no userinfo
+endpoint of its own.
+
+## The dictation group
+
+`src/dictation/dictation-app.ts` answers `POST /api/dictation`: one clip the
+developer dictated into a message box, `{ audio, durationMs, keywords }`
+(`@luke/features/dictation-wire`), answered `{ text }`. The clip is WebM
+with Opus in base64, held to two minutes and a megabyte and refused past
+either as `request_too_large` before anything goes upstream; `keywords` are
+up to fifty words the desktop expects to hear (the repository, the plan's
+title, the paths it names), each on one line. `src/dictation/transcription.ts`
+sends the clip and the words to OpenAI's `gpt-transcribe` on Luke's key as one
+multipart `POST /v1/audio/transcriptions`, the words as its `keywords[]`
+([OpenAI's speech-to-text guide](https://developers.openai.com/api/docs/guides/speech-to-text)).
+Nothing of the clip or the text is stored, logged, traced, or counted as an
+event; a failure logs OpenAI's status alone and answers `unavailable`, as a
+deployment without `OPENAI_API_KEY` does. The day is metered one call and the
+seconds OpenAI billed, or the clip's own length where the answer reports none,
+and a meter the database refused is logged while the text is still answered.
+There is no path on an account's own key. `src/dictation/dictation-app.test.ts`
+answers the route over a scripted OpenAI at its HTTP door.
+
+## The models group
+
+`apps/web/server/models-app.ts` answers `GET /api/models`: the models a coding agent
+may run on, as `{ models: [{ id, name, provider, efforts, contextWindows? }] }`. The list is
+`src/providers/model-catalog.ts`'s read of AI Gateway's public catalog
+(`https://ai-gateway.vercel.sh/v1/models`, no key), Schema-decoded at the
+boundary and kept to the Anthropic and OpenAI models whose tags carry both
+`tool-use` and `reasoning`; each model's efforts are the `values` of the
+`effort` entry among its `reasoning_options`, and a model listing none is
+left out, since no Start could name an effort for it. A model offers two
+context windows, `contextWindows: { standardTokens, longTokens,
+longInputPriceFactor?, longOutputPriceFactor? }`, where its `pricing` tiers
+its input past a boundary inside its `context_window` — OpenAI's 272K on the
+GPT-5.4 line and after, Anthropic's 100K on Claude Haiku 5.5 — and a model
+priced the same across its whole window has the one window; the boundary is
+the standard window, which a choice opts into, and the whole window is the
+long one, which every choice runs on unless it names the standard one, as
+every agent did before the choice existed; the factors are what the tier
+past the boundary costs beside the first. No offered model needs a request
+option for either window, so the choice is the window eve compacts against
+and the context ring reads, nothing more. The read is the
+`ModelCatalog` service `apps/web/server/runtime.ts` builds once per instance, cached
+for an hour on a success and for no time on a failure, so an outage at the
+gateway is retried on the next request rather than answered for the hour.
+The bearer is resolved before the read, as every hosted endpoint resolves
+it, though the catalog is public and the same for every account.
+
+The same module holds the functions the coding-agent routes and the coder
+host stand on: `acceptedModelChoice`, which reads the instance's catalog and,
+through `validateModelChoice`, accepts a `(model, effort)` only for an
+offered model at an effort it lists, keeping the standard window only for a
+model that offers two, and `providerModelOf`, which turns a
+catalog id into the id the provider's own API takes — model calls go to
+Anthropic and OpenAI directly on Luke's keys, never through the gateway — so
+`anthropic/claude-opus-5.5` is `claude-opus-5-5` and an OpenAI id is the
+catalog's after its prefix. `src/providers/model-catalog.test.ts` reads the catalog
+through a scripted gateway and the test clock; `apps/web/tests/models-app.test.ts`
+answers the route over a fixed catalog.
+
+## Accounts' own provider keys
+
+`src/accounts/provider-keys-app.ts` answers `/api/account/provider-keys`, the
+account's own Anthropic and OpenAI API keys, at most one per provider:
+`GET` answers what each is, `PUT` saves one, and `DELETE
+?provider=<provider>` removes one, each answered with the keys as they then
+stand (`@luke/features/provider-key-wire`). No answer carries a key: what
+the account is shown is the provider, a hint of the key's prefix and last
+four characters (`sk-ant-…abcd`), when it was added, and its status —
+`verified`, `invalid`, `quota_exceeded`, or `unreadable` where the ring
+below can no longer open it. A save asks the provider first, with one read
+of its model list, which bills nothing (`src/providers/provider-key-check.ts`):
+a 200 keeps the key as verified, a 401 or 403 keeps nothing and answers
+`rejected: invalid`, anything else keeps nothing and answers `unreachable`,
+and a key spelled as the other provider's is answered `wrong_provider`
+without being sent anywhere. Saves are braked at ten an hour per account
+on each instance, so the endpoint is no oracle for keys that are not the
+caller's. Neither the key nor what the provider said of it is logged.
+
+A key is kept in `account_provider_key` (migration 0080), sealed by
+`packages/database/src/models/provider-key-seal.ts`: AES-256-GCM under a data key drawn
+for that save, the data key wrapped under the deployment's key-encryption
+key, with the account and provider bound as additional data on both seals
+and the version on the wrap, so a sealed key copied onto another row does
+not open. The row holds the version, the wrapped data key, the sealed key,
+the hint, and the status; it is replaced whole by a save, deleted by a
+removal, and cascades with the account. `packages/database/src/models/provider-key-store.ts`
+reads and writes the rows and never sees a key in the clear.
+
+The key-encryption keys are `PROVIDER_KEY_ENCRYPTION_KEYS`, read through
+`HostedEnvironment`: comma-separated `<version>:<base64 of 32 random
+bytes>` entries, the version new saves wrap under first. Production and
+Preview each hold their own. A deployment without it, or with a value that
+is no list, answers every request on the path `unavailable` and logs which
+shape is wrong, never the value. To set one up:
+
+```
+openssl rand -base64 32          # one key; repeat for the other environment
+vercel env add PROVIDER_KEY_ENCRYPTION_KEYS production   # value: 1:<key>
+vercel env add PROVIDER_KEY_ENCRYPTION_KEYS preview      # value: 1:<another key>
+```
+
+A rotation is two steps. First put a new version at the head of the list,
+`2:<new key>,1:<old key>`, and redeploy: new saves wrap under version 2, and
+rows on version 1 still open. Then ask that deployment for the rewrap:
+
+```
+CRON_SECRET=<the deployment's own> scripts/rewrap-provider-keys.sh https://tryluke.dev
+```
+
+The script is a `POST /api/maintenance/provider-keys-rewrap` under the
+deployment's `CRON_SECRET`, compared in constant time as the sweep's is, so
+the rewrap (`src/accounts/provider-key-rewrap.ts`) runs on the deployment
+over the ring it holds and the key-encryption keys never leave Vercel. It
+unwraps each older row's data key and wraps it under the head version,
+leaving the sealed key itself untouched, and answers counts: the version,
+moved, already current, changed meanwhile, and unreadable. Run it again
+until nothing is changed meanwhile; once nothing names the old version,
+drop it from the list and redeploy. A row counted unreadable reads
+`unreadable` to its account, which is told to replace it. It is not a
+migration, since a migration holds no key and runs before the deployment
+whose ring it would need.

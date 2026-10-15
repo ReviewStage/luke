@@ -1,12 +1,12 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import { readAccountPerson } from "@luke/service/accounts/account-person";
+import { resolveHostedUserId } from "@luke/service/auth/bearer";
+import { HostedEnvironment } from "@luke/service/environment";
+import { type EventsOptions, handleEvents } from "@luke/service/events/events";
 import { effectPassthrough, hostedNotFoundRoute } from "@luke/service/http/http-effect";
 import { ANY_METHOD, type WebRoutes } from "@luke/service/route";
 import { Effect, Layer, Redacted } from "effect";
 import { HttpRouter } from "effect/http";
-import { resolveHostedUserId } from "./hosted/bearer.js";
-import { HostedEnvironment } from "./hosted/environment.js";
-import { type EventsOptions, handleEvents } from "./hosted/events.js";
 
 /**
  * The events group: the desktop's analytics ingest, carried to an `HttpApp`
@@ -18,10 +18,10 @@ const EVENTS_PATH = "/api/events";
 
 /**
  * Records what the signed-in desktop counted about its own use. The logic
- * lives in `server/hosted/events.ts`; this hands it the deployment's real
+ * lives in `packages/service/src/events/events.ts`; this hands it the deployment's real
  * seams — the project token the desktop never holds, and the same
  * in-process token resolution every other hosted endpoint trusts, whose
- * userinfo answer `hosted/bearer.ts` parses at the boundary.
+ * userinfo answer `packages/service/src/auth/bearer.ts` parses at the boundary.
  */
 const eventsEffect = /* @__PURE__ */ Effect.fn("web/eventsEffect")(function* (
   request: Request,

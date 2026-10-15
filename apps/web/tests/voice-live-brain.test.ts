@@ -19,6 +19,7 @@ import {
   BRAIN_HOST_TURN,
   RELAY_TURN,
 } from "@luke/service/agents/brain-host/bounds";
+import { askStanding } from "@luke/service/agents/brain-host/brain-ask";
 import { openChildConversation } from "@luke/service/agents/brain-host/conversation";
 import {
   EVE_CANCEL_OUTCOME,
@@ -42,7 +43,6 @@ import { Duration, Effect, Exit, Option, Redacted, Scope } from "effect";
 import { type AuthFn, ForbiddenError } from "eve/channels/auth";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll } from "vitest";
-import { askStanding } from "../server/hosted/brain-ask";
 import { DEPLOYMENT_TURNS } from "../server/hosted/brain-host/channel";
 import { ownedAuth } from "../server/hosted/brain-host/door";
 import { PLANNER_DELEGATE_TOOL } from "../server/hosted/brain-host/planning";

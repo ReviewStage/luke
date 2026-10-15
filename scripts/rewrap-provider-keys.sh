@@ -8,7 +8,7 @@ set -euo pipefail
 #
 # Run it once the new version heads the list on that deployment and the
 # deployment has been redeployed with it. The rewrap runs on the deployment
-# itself (`apps/web/server/hosted/provider-key-rewrap.ts`), over the ring the
+# itself (`packages/service/src/accounts/provider-key-rewrap.ts`), over the ring the
 # deployment holds, so the key-encryption keys never leave Vercel; this asks
 # for it under the deployment's CRON_SECRET and prints the counts it answers:
 # the version moved onto, rows moved, already current, changed meanwhile, and

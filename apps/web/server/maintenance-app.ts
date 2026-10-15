@@ -10,6 +10,7 @@ import {
   sessionSandboxesLayer,
   sweepSessionSandboxes,
 } from "@luke/service/agents/session-sandboxes";
+import { HostedEnvironment } from "@luke/service/environment";
 import type { GitHubApp } from "@luke/service/github/github-app";
 import {
   effectPassthrough,
@@ -18,15 +19,14 @@ import {
 } from "@luke/service/http/http-effect";
 import { MAINTENANCE_SWEEP_PATH } from "@luke/service/maintenance/maintenance-bounds";
 import { sweepTerminalLeases } from "@luke/service/maintenance/terminal-lease-sweep";
+import type { ModelCatalog } from "@luke/service/providers/model-catalog";
 import { ANY_METHOD, type WebRoutes } from "@luke/service/route";
 import { Effect, Layer, Redacted } from "effect";
 import { HttpClient, HttpRouter } from "effect/http";
 import type { EveForAccount } from "./hosted/automation-runs.js";
 import { sweepAutomations } from "./hosted/automation-sweep.js";
 import { HOSTED_TOOL_SET } from "./hosted/brain-tool-set.js";
-import { HostedEnvironment } from "./hosted/environment.js";
 import { handleMaintenanceSweep } from "./hosted/maintenance-sweep.js";
-import type { ModelCatalog } from "./hosted/model-catalog.js";
 import { createLiveUpstream } from "./voice/openai.js";
 import {
   NOTHING_ORPHANED,

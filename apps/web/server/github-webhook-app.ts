@@ -6,6 +6,7 @@ import {
 } from "@luke/database/github-installation-vocabulary";
 import { listCodingAgentsOnBranches } from "@luke/database/models/coding-agent-store";
 import { queueGithubRuns } from "@luke/service/automations/automation-github";
+import { HostedEnvironment } from "@luke/service/environment";
 import { clearRevokedAuthorization, type GitHubApp } from "@luke/service/github/github-app";
 import { setInstallationStatus } from "@luke/service/github/github-installations";
 import {
@@ -29,7 +30,6 @@ import {
   type HttpServerResponse,
 } from "effect/http";
 import { agentPublished } from "./hosted/coder-host/published.js";
-import { HostedEnvironment } from "./hosted/environment.js";
 
 /**
  * github-webhook-app.ts -- the Luke GitHub App's webhook: a delivery about a pull request or its checks reads what the agents on that branch published again, one about an installation marks its workspace active or not, and a revoked authorization clears that GitHub user's tokens.

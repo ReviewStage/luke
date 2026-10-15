@@ -13,14 +13,14 @@ import {
 } from "@luke/service/agents/brain-host/conversation";
 import { deploymentEveOrigin } from "@luke/service/agents/brain-host/eve-origin";
 import { auth } from "@luke/service/auth/auth";
+import { oauthUserInfoFromAuthAnswer, type UserInfoEndpoint } from "@luke/service/auth/bearer";
 import { unparsedWire, type WireBoundaryInput } from "@luke/service/core";
+import { HostedEnvironment } from "@luke/service/environment";
 import type { WebStoreRun } from "@luke/service/run";
 import type { LanguageModel } from "ai";
 import { Effect, type Redacted } from "effect";
-import { oauthUserInfoFromAuthAnswer, type UserInfoEndpoint } from "../bearer.js";
 import { HOSTED_TOOL_SET } from "../brain-tool-set.js";
 import { titleModel } from "../coder-host/model.js";
-import { HostedEnvironment } from "../environment.js";
 import type { SessionOwnership } from "./door.js";
 
 /**

@@ -17,7 +17,7 @@ export const accountPreference = pgTable("account_preference", {
   voice: text("voice"),
   /**
    * The model and effort a coding agent starts on when Start is clicked, as
-   * AI Gateway's catalog names them (`hosted/model-catalog.ts`); null on both
+   * AI Gateway's catalog names them (`packages/service/src/providers/model-catalog.ts`); null on both
    * means the account has never chosen and starts on the catalog's default.
    * The context window beside them is null for the model's whole window,
    * which is also what a choice written before the window could be chosen

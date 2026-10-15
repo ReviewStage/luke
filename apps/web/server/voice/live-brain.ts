@@ -9,6 +9,17 @@ import type { ConversationTarget, StoreWriter } from "@luke/database/models/writ
 import type { TurnRecord } from "@luke/features/coding-agent-wire";
 import { PLAN_ACTIVITY_ACTION_MAX_CHARS, type PlanWorkTurn } from "@luke/features/planning-view";
 import {
+  ASK_REFUSAL,
+  type AskInput,
+  type AskSeams,
+  type AskStandingReads,
+  acceptAsk,
+  askStanding,
+  STOP_REFUSAL,
+  type StopOutcome,
+  stopAsk,
+} from "@luke/service/agents/brain-host/brain-ask";
+import {
   ASK_ORIGIN,
   isSettledToolPartState,
   isStoredToolPart,
@@ -23,6 +34,7 @@ import {
   type TurnEventKind,
 } from "@luke/service/core";
 import { logStoreFailure } from "@luke/service/http/store-failure";
+import { QUEUE_QUESTION_TOOL, WITHDRAW_QUESTION_TOOL } from "@luke/service/plans/queue-question";
 import {
   LIVE_BRAIN_CANCEL,
   LIVE_BRAIN_RUN_END,
@@ -38,22 +50,10 @@ import {
 } from "@luke/voice/live-session";
 import { Cause, Clock, Duration, Effect, Result, Schedule, Schema, type Scope } from "effect";
 import { SqlClient } from "effect/sql";
-import {
-  ASK_REFUSAL,
-  type AskInput,
-  type AskSeams,
-  type AskStandingReads,
-  acceptAsk,
-  askStanding,
-  STOP_REFUSAL,
-  type StopOutcome,
-  stopAsk,
-} from "../hosted/brain-ask.js";
 import { PLANNER_DELEGATION_TOOLS, PLANNING_EXPLORE_ASK } from "../hosted/brain-host/planning.js";
 import { HOSTED_TOOL_SET } from "../hosted/brain-tool-set.js";
 import { subagentRecordsByCall } from "../hosted/child-models.js";
 import { plannerDelegationJournalsOf } from "../hosted/plan-work-store.js";
-import { QUEUE_QUESTION_TOOL, WITHDRAW_QUESTION_TOOL } from "../hosted/queue-question.js";
 import { RUN_IN_REPOSITORY_TOOL } from "../hosted/repository-shell.js";
 import { projectTurnEvents } from "../hosted/turn-events.js";
 import { VOICE_DETACH_GRACE_MS } from "./orphan-sweep.js";

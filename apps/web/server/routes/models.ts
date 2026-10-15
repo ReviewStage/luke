@@ -1,4 +1,4 @@
-import { resolveHostedUserId } from "../hosted/bearer.js";
+import { resolveHostedUserId } from "@luke/service/auth/bearer";
 import { modelsApp } from "../models-app.js";
 import { routeFromHttpRouter } from "../route-effect.js";
 

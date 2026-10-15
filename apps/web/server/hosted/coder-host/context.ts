@@ -4,7 +4,7 @@ import {
   type CodingAgentContext,
   type ContextWindow,
 } from "@luke/features/coding-agent-wire";
-import type { OfferedModel } from "../model-catalog.js";
+import type { OfferedModel } from "@luke/service/providers/model-catalog";
 import { CODER } from "./bounds.js";
 
 /**

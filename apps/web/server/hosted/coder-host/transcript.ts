@@ -47,9 +47,9 @@ import {
   storedToolName,
   TURN_STATUS,
 } from "@luke/service/core";
+import { ModelCatalog, type OfferedModel } from "@luke/service/providers/model-catalog";
 import type { ToolSet } from "ai";
 import { Clock, Duration, Effect, Option, Schedule, type Schema } from "effect";
-import { ModelCatalog, type OfferedModel } from "../model-catalog.js";
 import { CODER } from "./bounds.js";
 import { codingAgentContextOf, contextWindowOf } from "./context.js";
 import {

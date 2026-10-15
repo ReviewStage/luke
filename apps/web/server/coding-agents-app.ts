@@ -46,6 +46,7 @@ import {
 } from "@luke/features/inbox-wire";
 import { modelChoiceSchema } from "@luke/features/models-wire";
 import { isRecord, isWireString, type UnparsedWireValue, unparsedWire } from "@luke/service/core";
+import { HostedEnvironment } from "@luke/service/environment";
 import type { GitHubApp } from "@luke/service/github/github-app";
 import { githubReadOrRefusal } from "@luke/service/github/github-refusal";
 import { pullRequestFiles } from "@luke/service/github/pull-requests";
@@ -68,6 +69,7 @@ import {
   type StoredInboxItem,
   withdrawInboxAnswer,
 } from "@luke/service/inbox/inbox-store";
+import type { ModelCatalog, ModelChoiceRefused } from "@luke/service/providers/model-catalog";
 import { ANY_METHOD, type WebRoutes } from "@luke/service/route";
 import { readEither } from "@luke/wire/effect";
 import { Cache, Clock, Effect, Layer, Option, Result } from "effect";
@@ -102,8 +104,6 @@ import {
   titleMayLand,
   transcriptPast,
 } from "./hosted/coder-host/transcript.js";
-import { HostedEnvironment } from "./hosted/environment.js";
-import type { ModelCatalog, ModelChoiceRefused } from "./hosted/model-catalog.js";
 
 /**
  * coding-agents-app.ts -- a plan's coding agents: start one, list them, read one's transcript and its workers', message one, change one's model, and stop one.

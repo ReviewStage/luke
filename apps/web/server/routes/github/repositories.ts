@@ -1,5 +1,5 @@
+import { resolveHostedUserId } from "@luke/service/auth/bearer";
 import { githubRepositoriesApp } from "../../github-repositories-app.js";
-import { resolveHostedUserId } from "../../hosted/bearer.js";
 import { routeFromHttpRouter } from "../../route-effect.js";
 
 /**

@@ -70,6 +70,7 @@ import {
   userMessage,
   userMetadataOf,
 } from "@luke/service/core";
+import { HostedEnvironment, type HostedEnvironmentValues } from "@luke/service/environment";
 import {
   disconnectInstallation,
   LINK_OUTCOME,
@@ -77,6 +78,7 @@ import {
 } from "@luke/service/github/github-installations";
 import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import { answerInboxItem, type InboxImage, postInboxItem } from "@luke/service/inbox/inbox-store";
+import { modelCatalogOf, type OfferedModel } from "@luke/service/providers/model-catalog";
 import {
   connectWorkspaceGitHub,
   type FakeGitHub,
@@ -106,8 +108,6 @@ import { TestClock } from "effect/testing";
 import { codingAgentsApp } from "../server/coding-agents-app";
 import { CODER } from "../server/hosted/coder-host/bounds";
 import { CODER_TOOL_SET } from "../server/hosted/coder-host/tool-set";
-import { HostedEnvironment, type HostedEnvironmentValues } from "../server/hosted/environment";
-import { modelCatalogOf, type OfferedModel } from "../server/hosted/model-catalog";
 import { plansApp } from "../server/plans-app";
 
 /**

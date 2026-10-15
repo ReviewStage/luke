@@ -1,3 +1,4 @@
+import { resolveHostedUserId } from "@luke/service/auth/bearer";
 import {
   beginIntegrationSignIn,
   completeIntegrationSignIn,
@@ -8,7 +9,6 @@ import {
 } from "@luke/service/integrations/integration-store";
 import type { IntegrationsAppSeams } from "../integrations-app.js";
 import { mintIntegrationState } from "../integrations-app.js";
-import { resolveHostedUserId } from "./bearer.js";
 
 /**
  * integration-seams.ts -- the integrations group's seams over this deployment's real database and auth session.

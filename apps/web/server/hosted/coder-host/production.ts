@@ -9,13 +9,13 @@ import {
   runtimeSessionReachableBy,
 } from "@luke/service/agents/brain-host/conversation";
 import { auth } from "@luke/service/auth/auth";
+import { oauthUserInfoFromAuthAnswer, type UserInfoEndpoint } from "@luke/service/auth/bearer";
 import { unparsedWire, type WireBoundaryInput } from "@luke/service/core";
+import { HostedEnvironment } from "@luke/service/environment";
 import type { WebStoreRun } from "@luke/service/run";
 import type { LanguageModel } from "ai";
 import { Effect, type Redacted } from "effect";
-import { oauthUserInfoFromAuthAnswer, type UserInfoEndpoint } from "../bearer.js";
 import type { SessionOwnership } from "../brain-host/door.js";
-import { HostedEnvironment } from "../environment.js";
 import { MeterUnavailable, type ResearchAccess, researchOpenAiOf } from "../public-research.js";
 import { accountProviderKeys } from "./account-keys.js";
 import { CODER_ENVIRONMENT, CODER_MODEL_FIXTURE } from "./bounds.js";

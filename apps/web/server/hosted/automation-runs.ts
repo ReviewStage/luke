@@ -35,12 +35,12 @@ import { failureKind } from "@luke/runtime/effect";
 import type { EveSessions } from "@luke/service/agents/brain-host/eve-sessions";
 import { HOSTED_API_ERROR } from "@luke/service/http/http";
 import type { HostedRefusal } from "@luke/service/http/http-effect";
+import type { ModelChoiceRefused } from "@luke/service/providers/model-catalog";
 import { Clock, Duration, Effect, Option, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { CODER } from "./coder-host/bounds.js";
 import { type StartServices, startCodingAgent } from "./coder-host/start.js";
 import { codingAgentStatusOf } from "./coder-host/status.js";
-import type { ModelChoiceRefused } from "./model-catalog.js";
 
 /**
  * automation-runs.ts -- one queued automation run acted on: its guards read, its coding agent started as the deployment acting for the owner, and the run settled.

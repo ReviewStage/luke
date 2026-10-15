@@ -1,5 +1,5 @@
+import { resolveHostedUserId } from "@luke/service/auth/bearer";
 import { agentTerminalsApp } from "../../agent-terminals-app.js";
-import { resolveHostedUserId } from "../../hosted/bearer.js";
 import { agentSandboxLayer } from "../../hosted/terminal/agent-sandbox.js";
 import { routeFromHttpRouter } from "../../route-effect.js";
 

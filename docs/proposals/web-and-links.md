@@ -341,8 +341,8 @@ The work is not the screens. It is three things behind that interface:
    It is close to portable already: its only Node imports are `node:path`,
    `node:util`'s `isDeepStrictEqual`, a JSON state file, and the `ws` socket.
 2. **Auth for a browser.** 56 route files accept only an OAuth bearer
-   (`apps/web/server/hosted/bearer.ts`); 13 accept a Better Auth session
-   (`apps/web/server/hosted/browser-session.ts`).
+   (`packages/service/src/auth/bearer.ts`); 13 accept a Better Auth session
+   (`packages/service/src/auth/browser-session.ts`).
 3. **Voice admission.** The voice socket refuses any upgrade that carries an
    `Origin` header and wants an `Authorization` header
    (`apps/web/server/voice/service.ts:466-468`). A browser always sends one and

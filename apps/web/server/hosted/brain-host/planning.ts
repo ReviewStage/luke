@@ -13,19 +13,29 @@ import { PLAN_ACTOR, PLAN_FIELD } from "@luke/features/plan-wire";
 import { AGENT_ROLE } from "@luke/service/agents/agent-runtime/role";
 import { AGENT_TOOL, toolsOf } from "@luke/service/agents/agent-runtime/tools";
 import { COMMAND_DESCRIPTION_INSTRUCTION } from "@luke/service/agents/command-description";
+import { RUN_ON_MAC_TOOL, runOnMacTool } from "@luke/service/agents/mac-command";
 import { ACTION_RESULT_STATUS, wireValidatedTool } from "@luke/service/core";
 import type { GitHubApp } from "@luke/service/github/github-app";
 import { connectionToolEntries } from "@luke/service/integrations/connection-tools";
 import { INTEGRATION_NAMES_SAID } from "@luke/service/integrations/integrations";
+import { LOOK_AT_BOARD_TOOL, runLookAtBoard } from "@luke/service/plans/board-look";
 import { DRAW_ON_BOARD_TOOL, runDrawOnBoard } from "@luke/service/plans/board-tool";
+import { END_CALL_TOOL, runEndCall } from "@luke/service/plans/end-call";
+import { runShowPage, SHOW_PAGE_TOOL } from "@luke/service/plans/page-tool";
 import type { PlanDocumentBinding } from "@luke/service/plans/plan-notes";
+import {
+  QUEUE_QUESTION_TOOL,
+  runQueueQuestion,
+  runWithdrawQuestion,
+  WITHDRAW_QUESTION_TOOL,
+} from "@luke/service/plans/queue-question";
+import type { ModelCatalog } from "@luke/service/providers/model-catalog";
 import type { UnparsedWireValue, WireRecord } from "@luke/wire";
 import { emitJsonSchema } from "@luke/wire/effect";
 import type { ToolSet } from "ai";
 import { Effect, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { ToolDefinition } from "eve/tools";
-import { LOOK_AT_BOARD_TOOL, runLookAtBoard } from "../board-look.js";
 import {
   type CodingAgentCall,
   LIST_CODING_AGENTS_TOOL,
@@ -37,10 +47,6 @@ import {
   runStartCodingAgent,
   START_CODING_AGENT_TOOL,
 } from "../coding-agent-tools.js";
-import { END_CALL_TOOL, runEndCall } from "../end-call.js";
-import { RUN_ON_MAC_TOOL, runOnMacTool } from "../mac-command.js";
-import type { ModelCatalog } from "../model-catalog.js";
-import { runShowPage, SHOW_PAGE_TOOL } from "../page-tool.js";
 import {
   READ_WEB_PAGE_TOOL,
   type ResearchCall,
@@ -48,12 +54,6 @@ import {
   runSearchWeb,
   SEARCH_WEB_TOOL,
 } from "../public-research.js";
-import {
-  QUEUE_QUESTION_TOOL,
-  runQueueQuestion,
-  runWithdrawQuestion,
-  WITHDRAW_QUESTION_TOOL,
-} from "../queue-question.js";
 import {
   type RepositoryCall,
   RUN_IN_REPOSITORY_TOOL,

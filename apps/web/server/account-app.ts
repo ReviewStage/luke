@@ -20,6 +20,8 @@ import {
 import { planRevisionSeqSchema } from "@luke/features/plan-wire";
 import type { FastAccess } from "@luke/features/provider-key-wire";
 import { failureKind } from "@luke/runtime/effect";
+import { retireSessions } from "@luke/service/agents/retire-sessions";
+import { HostedEnvironment } from "@luke/service/environment";
 import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import {
   HOSTED_REFUSAL,
@@ -36,6 +38,7 @@ import {
   type IntegrationConnect,
   revokeIntegrationGrants,
 } from "@luke/service/integrations/integration-connect";
+import { acceptedModelChoice, type ModelCatalog } from "@luke/service/providers/model-catalog";
 import { forgetPosthogPersonEffect } from "@luke/service/providers/posthog";
 import { ANY_METHOD, type WebRoutes } from "@luke/service/route";
 import { accountPreferencesFromWire, experimentChoicesFrom, NO_EXPERIMENTS } from "@luke/settings";
@@ -49,9 +52,6 @@ import {
   type HttpServerResponse,
 } from "effect/http";
 import { type EveReach, eveFor } from "./hosted/coder-host/stop.js";
-import { HostedEnvironment } from "./hosted/environment.js";
-import { acceptedModelChoice, type ModelCatalog } from "./hosted/model-catalog.js";
-import { retireSessions } from "./hosted/retire-sessions.js";
 
 /**
  * The account group: the signed-in desktop's own delete, preferences, and
@@ -67,7 +67,7 @@ import { retireSessions } from "./hosted/retire-sessions.js";
  * window beside them, which Settings and the Start menu both write, and the
  * experiments the account turned on in Settings › Experimental. A write
  * carries any of them, a coding-agent choice is accepted only as the
- * catalog accepts it (`hosted/model-catalog.ts`), so what is stored is
+ * catalog accepts it (`packages/service/src/providers/model-catalog.ts`), so what is stored is
  * always a choice a Start could run, and the experiments are a patch read
  * as tolerantly as they are answered: a key this deployment does not list
  * is passed over rather than refused, because it is an older or newer
