@@ -588,8 +588,8 @@ function TodoItems({
  * One write of an agent's to-do list: a call's row saying how far the list
  * has got, which opens onto the list itself, set bare at the row's text
  * column as Claude Code and Codex hang theirs under the call, since it is
- * words rather than the code a call's card holds; a failure is said under
- * it as a subagent's is. Whether it starts open is the caller's, since only
+ * words rather than the code a call's card holds, and selectable as a
+ * call's body is; a failure is said under it as a subagent's is. Whether it starts open is the caller's, since only
  * the newest list is worth reading unasked. Its working mark holds still
  * (planning.css), since a row's list is a record of one write, and the
  * list the agent is at is docked above the composer while it works.
@@ -611,7 +611,7 @@ export function TranscriptTodos({
         subject={subject}
         subjectIsCode={words.code}
       />
-      <FoldBody className="mt-0.5 mb-1 ml-7">
+      <FoldBody className="mt-0.5 mb-1 ml-7 select-text">
         <TodoItems todos={todos} />
         {errorText === undefined ? null : (
           <p
