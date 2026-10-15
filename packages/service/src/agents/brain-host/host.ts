@@ -7,40 +7,12 @@ import { listMessagesPast, type MessageCursor } from "@luke/database/models/mess
 import { readPlanOfConversation } from "@luke/database/models/plan-store";
 import type { ConversationTarget } from "@luke/database/models/writer";
 import { EMPTY_BOARD } from "@luke/features/board-wire";
-import {
-  delegatedChildOf,
-  type HostAdmission,
-  hostAdmission,
-} from "@luke/service/agents/agent-runtime/host-core";
-import { type AgentSkill, repositorySkills } from "@luke/service/agents/agent-runtime/skills";
-import { turnKindOf } from "@luke/service/agents/brain-host/auth";
-import {
-  BRAIN_HOST,
-  BRAIN_HOST_MODEL_FIXTURE,
-  BRAIN_HOST_REFUSAL,
-  BRAIN_HOST_TURN_KIND,
-  type BrainHostTurn,
-  RELAY_TURN,
-} from "@luke/service/agents/brain-host/bounds";
-import { readRecentMessages } from "@luke/service/agents/brain-host/context";
-import {
-  type AdmittedConversation,
-  admitConversation,
-  openChildConversation,
-  SESSION_STANDING,
-} from "@luke/service/agents/brain-host/conversation";
-import { EVE_MOUNT, eveSessionsComposer } from "@luke/service/agents/brain-host/eve-sessions";
-import {
-  type RelayStanding,
-  type RelayStateStore,
-  StreamRelay,
-} from "@luke/service/agents/brain-host/relay";
-import { rotationSeedText } from "@luke/service/agents/brain-host/seed";
-import { carryStop } from "@luke/service/agents/brain-host/stop-carrier";
-import type { CoderModelSelection } from "@luke/service/agents/coder-host/model";
-import { titleSubagent } from "@luke/service/agents/coder-host/title";
-import { MeterUnavailable, ResearchBudget } from "@luke/service/agents/public-research";
-import type { RepositorySkill } from "@luke/service/agents/repository-skills";
+import { isTextUIPart } from "ai";
+import { Effect, Option, Result, type Schema } from "effect";
+import type * as HttpClient from "effect/http/HttpClient";
+import type { MessageStreamEvent } from "eve/client";
+import type { SessionAuth, SessionContext } from "eve/context";
+import type { ToolContext as EveToolContext } from "eve/tools";
 import {
   ACTION_RESULT_STATUS,
   type BrainTurnTrigger,
@@ -49,17 +21,34 @@ import {
   MESSAGE_ROLE,
   type UnparsedWireValue,
   type WireRecord,
-} from "@luke/service/core";
-import type { GitHubApp } from "@luke/service/github/github-app";
-import { planWorkspace } from "@luke/service/github/workspace-repository";
-import { type ModelCatalog, providerModelOf } from "@luke/service/providers/model-catalog";
-import { isTextUIPart } from "ai";
-import { Effect, Option, Result, type Schema } from "effect";
-import type * as HttpClient from "effect/http/HttpClient";
-import type { MessageStreamEvent } from "eve/client";
-import type { SessionAuth, SessionContext } from "eve/context";
-import type { ToolContext as EveToolContext } from "eve/tools";
-import { HOSTED_TOOL_SET } from "../brain-tool-set.js";
+} from "../../core.js";
+import type { GitHubApp } from "../../github/github-app.js";
+import { planWorkspace } from "../../github/workspace-repository.js";
+import { HOSTED_TOOL_SET } from "../../plans/brain-tool-set.js";
+import { type ModelCatalog, providerModelOf } from "../../providers/model-catalog.js";
+import { delegatedChildOf, type HostAdmission, hostAdmission } from "../agent-runtime/host-core.js";
+import { type AgentSkill, repositorySkills } from "../agent-runtime/skills.js";
+import type { CoderModelSelection } from "../coder-host/model.js";
+import { titleSubagent } from "../coder-host/title.js";
+import { MeterUnavailable, ResearchBudget } from "../public-research.js";
+import type { RepositorySkill } from "../repository-skills.js";
+import { turnKindOf } from "./auth.js";
+import {
+  BRAIN_HOST,
+  BRAIN_HOST_MODEL_FIXTURE,
+  BRAIN_HOST_REFUSAL,
+  BRAIN_HOST_TURN_KIND,
+  type BrainHostTurn,
+  RELAY_TURN,
+} from "./bounds.js";
+import { readRecentMessages } from "./context.js";
+import {
+  type AdmittedConversation,
+  admitConversation,
+  openChildConversation,
+  SESSION_STANDING,
+} from "./conversation.js";
+import { EVE_MOUNT, eveSessionsComposer } from "./eve-sessions.js";
 import { brainModelSelection } from "./model.js";
 import {
   EVE_DELEGATION_TOOL,
@@ -70,6 +59,9 @@ import {
   runPlanningTool,
 } from "./planning.js";
 import type { BrainHostSeams } from "./production.js";
+import { type RelayStanding, type RelayStateStore, StreamRelay } from "./relay.js";
+import { rotationSeedText } from "./seed.js";
+import { carryStop } from "./stop-carrier.js";
 
 /**
  * The hosted brain composed over eve and the store: what the eve project's

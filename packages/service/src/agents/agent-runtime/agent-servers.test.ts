@@ -12,24 +12,21 @@ import {
   INTEGRATION_PROVIDER_LIST,
   type IntegrationProvider,
 } from "@luke/features/integration-wire";
-import { CONNECTION_POLICY } from "@luke/service/agents/agent-runtime/role";
-import { type ServerStanding, turnServers } from "@luke/service/agents/agent-runtime/servers";
-import {
-  BRAIN_HOST_ATTRIBUTE,
-  BRAIN_HOST_PRINCIPAL_TYPE,
-} from "@luke/service/agents/brain-host/bounds";
-import { CODER_TOOL_SET } from "@luke/service/agents/coder-host/tool-set";
-import { GitHubApp } from "@luke/service/github/github-app";
-import { GITHUB_APP_SETTINGS, openGithubUser } from "@luke/service/testing/github-app-fake";
+import { Effect, Layer, Option, Result } from "effect";
+import type { SessionAuth } from "eve/context";
+import { GitHubApp } from "../../github/github-app.js";
+import { GITHUB_APP_SETTINGS, openGithubUser } from "../../testing/github-app-fake.js";
 import {
   CONNECTOR_ASKED_NOTHING,
   integrationConnectOf,
   integrationConnectOver,
-} from "@luke/service/testing/integration-connect";
-import { noNetwork } from "@luke/service/testing/no-network";
-import { Effect, Layer, Option, Result } from "effect";
-import type { SessionAuth } from "eve/context";
-import { type CoderHost, coderHost } from "../server/hosted/coder-host/host";
+} from "../../testing/integration-connect.js";
+import { noNetwork } from "../../testing/no-network.js";
+import { BRAIN_HOST_ATTRIBUTE, BRAIN_HOST_PRINCIPAL_TYPE } from "../brain-host/bounds.js";
+import { type CoderHost, coderHost } from "../coder-host/host.js";
+import { CODER_TOOL_SET } from "../coder-host/tool-set.js";
+import { CONNECTION_POLICY } from "./role.js";
+import { type ServerStanding, turnServers } from "./servers.js";
 
 /**
  * The MCP servers an agent's turn is handed, read as the turn starts under

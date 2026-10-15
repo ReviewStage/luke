@@ -13,7 +13,15 @@ import {
   type PlanWorkTurn,
   type PlanWorkWorker,
 } from "@luke/features/planning-view";
-import { turnRecordOf } from "@luke/service/agents/turn-record";
+import { isRecord, isWireString, type WireRecord, type WireValue } from "@luke/wire";
+import { Schema } from "effect";
+import {
+  EVE_DELEGATION_INPUT,
+  EVE_DELEGATION_TOOL,
+  PLANNER_DELEGATE_TOOL,
+  PLANNER_DELEGATION_TOOLS,
+} from "../agents/brain-host/planning.js";
+import { turnRecordOf } from "../agents/turn-record.js";
 import {
   isStoredToolPart,
   type StoredToolPart,
@@ -22,15 +30,7 @@ import {
   TOOL_PART_STATE,
   TURN_STATUS,
   UI_PART_TYPE,
-} from "@luke/service/core";
-import { isRecord, isWireString, type WireRecord, type WireValue } from "@luke/wire";
-import { Schema } from "effect";
-import {
-  EVE_DELEGATION_INPUT,
-  EVE_DELEGATION_TOOL,
-  PLANNER_DELEGATE_TOOL,
-  PLANNER_DELEGATION_TOOLS,
-} from "../hosted/brain-host/planning.js";
+} from "../core.js";
 
 /**
  * plan-work.ts -- one planning turn as the Work tab draws it, read from the turn's row and its journal.
@@ -378,7 +378,7 @@ function askedOf(asked: readonly SpokenAskRow[]): Pick<PlanWorkTurn, "asked" | "
  * when its newest task began and ended, its title where one landed on that
  * child (`titles`, by the call's id), and what its newest task ran on and
  * spent as its turn row recorded them (`records`, by the call's id,
- * `hosted/child-models.ts`). The turn carries what it ran on and spent too,
+ * `plans/child-models.ts`). The turn carries what it ran on and spent too,
  * as its own row recorded them, and the developer's spoken lines it took as
  * its ask (`asked`, by the ids the voice's ledger minted, and `askedAt`, by
  * where on its call each began), the newest the wire carries, where it took

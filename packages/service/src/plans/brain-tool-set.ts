@@ -1,5 +1,5 @@
 import type { ToolSet } from "ai";
-import { planningToolSet } from "./brain-host/planning.js";
+import { planningToolSet } from "../agents/brain-host/planning.js";
 
 /**
  * Every tool a hosted conversation's rows may name: the planning model's,

@@ -2,10 +2,10 @@ import { workspaceSeams } from "@luke/database/models/workspace-seams";
 import { deploymentEveOrigin } from "@luke/service/agents/brain-host/eve-origin";
 import { auth } from "@luke/service/auth/auth";
 import { resolveHostedUserId } from "@luke/service/auth/bearer";
-import { plansApp } from "../../plans-app.js";
+import { plansApp } from "@luke/service/plans/plans-app";
 import { routeFromHttpRouter } from "../../route-effect.js";
 
-/** One plan's planning conversation read as a coding agent's transcript is (GET), held open while a turn or a worker runs. The logic lives in `server/plans-app.ts`; this file only hands it the deployment's real seams. */
+/** One plan's planning conversation read as a coding agent's transcript is (GET), held open while a turn or a worker runs. The logic lives in `packages/service/src/plans/plans-app.ts`; this file only hands it the deployment's real seams. */
 export default routeFromHttpRouter(
   plansApp({
     resolveUserId: resolveHostedUserId,

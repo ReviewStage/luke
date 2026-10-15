@@ -7,13 +7,13 @@ import {
 } from "@luke/service/agents/agent-runtime/sandbox";
 import { pinnedState } from "@luke/service/agents/brain-host/pinned-state";
 import { EMPTY_RELAY_STATE, type RelayState } from "@luke/service/agents/brain-host/relay";
+import type { CheckoutFailure } from "@luke/service/agents/coder-host/host";
 import { opensSandbox } from "@luke/service/agents/coder-host/tool-set";
 import type { RepositorySandbox } from "@luke/service/agents/repository-shell";
 import { Effect, Redacted, Result } from "effect";
 import { defineState } from "eve/context";
 import { authenticateGitHub } from "eve/extensions/code/sandbox";
 import { defineHook, type HookContext } from "eve/hooks";
-import type { CheckoutFailure } from "../../server/hosted/coder-host/host.js";
 import { runWeb } from "../../server/runtime.js";
 import { host, seams } from "../host.js";
 import { environment } from "../sandbox.js";

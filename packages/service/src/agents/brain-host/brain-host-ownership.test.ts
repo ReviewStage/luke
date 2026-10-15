@@ -9,36 +9,29 @@ import {
   setConversationDeletedAt,
   startPlan,
 } from "@luke/database/testing";
-import { DEPLOYMENT_PRESENCE } from "@luke/service/agents/brain-host/auth";
-import {
-  BRAIN_HOST_ATTRIBUTE,
-  BRAIN_HOST_HEADER,
-  BRAIN_HOST_REFUSAL,
-  BRAIN_HOST_TURN,
-} from "@luke/service/agents/brain-host/bounds";
-import { brainHostChannelInput, DEPLOYMENT_TURNS } from "@luke/service/agents/brain-host/channel";
-import {
-  conversationReachableBy,
-  runtimeSessionReachableBy,
-} from "@luke/service/agents/brain-host/conversation";
-import type { SessionOwnership } from "@luke/service/agents/brain-host/door";
-import { ACTION_RESULT_STATUS, BRAIN_TURN_TRIGGER } from "@luke/service/core";
-import { QUEUE_QUESTION_TOOL } from "@luke/service/plans/queue-question";
-import { modelCatalogOf } from "@luke/service/providers/model-catalog";
-import { NO_GITHUB } from "@luke/service/testing/github-app-fake";
 import { generateText } from "ai";
 import { Effect, Layer, Option, Redacted, Result } from "effect";
 import { routeAuth } from "eve/channels/auth";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
 import type { ToolContext as EveToolContext } from "eve/tools";
 import { afterAll, test } from "vitest";
+import { ACTION_RESULT_STATUS, BRAIN_TURN_TRIGGER } from "../../core.js";
+import { HOSTED_TOOL_SET } from "../../plans/brain-tool-set.js";
+import { QUEUE_QUESTION_TOOL } from "../../plans/queue-question.js";
+import { modelCatalogOf } from "../../providers/model-catalog.js";
+import { NO_GITHUB } from "../../testing/github-app-fake.js";
+import { DEPLOYMENT_PRESENCE } from "./auth.js";
 import {
-  type BrainHost,
-  brainHost,
-  type HostedToolBinding,
-} from "../server/hosted/brain-host/host";
-import type { BrainHostSeams } from "../server/hosted/brain-host/production";
-import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
+  BRAIN_HOST_ATTRIBUTE,
+  BRAIN_HOST_HEADER,
+  BRAIN_HOST_REFUSAL,
+  BRAIN_HOST_TURN,
+} from "./bounds.js";
+import { brainHostChannelInput, DEPLOYMENT_TURNS } from "./channel.js";
+import { conversationReachableBy, runtimeSessionReachableBy } from "./conversation.js";
+import type { SessionOwnership } from "./door.js";
+import { type BrainHost, brainHost, type HostedToolBinding } from "./host.js";
+import type { BrainHostSeams } from "./production.js";
 
 /**
  * Session ownership is the host's alone: eve authenticates a request and

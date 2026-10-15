@@ -16,7 +16,7 @@ import {
  * An agent that meets something the plan does not settle, verifies a fact
  * the plan has wrong, or makes a decision the plan left open does not stop
  * and does not keep it to itself: it takes notes on the plan exactly as the
- * planning call's notetaker does (`voice/plan-scribe.ts`), under the same
+ * planning call's notetaker does (`plans/plan-scribe.ts`), under the same
  * schema and through the plan's one write (`plan-notes.ts`), which journals
  * the save under the agent's id, so the planning model and the developer
  * read them on the next call and see which agent wrote what. Note that the call answers at once, whatever was

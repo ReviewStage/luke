@@ -6,23 +6,20 @@ import assert from "node:assert/strict";
 import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { openHostedStoreTestDatabase, startPlan } from "@luke/database/testing";
-import { type EdgeKit, edgeKit } from "@luke/service/agents/agent-runtime/edge";
-import { AGENT_ROLE, type AgentRole } from "@luke/service/agents/agent-runtime/role";
-import {
-  BRAIN_HOST_ATTRIBUTE,
-  BRAIN_HOST_PRINCIPAL_TYPE,
-} from "@luke/service/agents/brain-host/bounds";
-import { CODER_TOOL_SET } from "@luke/service/agents/coder-host/tool-set";
-import type { WebAgentRun } from "@luke/service/run";
-import { NO_GITHUB, openGithubUser } from "@luke/service/testing/github-app-fake";
-import {
-  CONNECTOR_ASKED_NOTHING,
-  integrationConnectOf,
-} from "@luke/service/testing/integration-connect";
 import { Effect, Layer, Option, Result } from "effect";
 import type { SessionAuth, SessionContext } from "eve/context";
 import { afterAll, test } from "vitest";
-import { type CoderHost, coderHost } from "../server/hosted/coder-host/host";
+import type { WebAgentRun } from "../../run.js";
+import { NO_GITHUB, openGithubUser } from "../../testing/github-app-fake.js";
+import {
+  CONNECTOR_ASKED_NOTHING,
+  integrationConnectOf,
+} from "../../testing/integration-connect.js";
+import { BRAIN_HOST_ATTRIBUTE, BRAIN_HOST_PRINCIPAL_TYPE } from "../brain-host/bounds.js";
+import { type CoderHost, coderHost } from "../coder-host/host.js";
+import { CODER_TOOL_SET } from "../coder-host/tool-set.js";
+import { type EdgeKit, edgeKit } from "./edge.js";
+import { AGENT_ROLE, type AgentRole } from "./role.js";
 
 /**
  * A session over another account's conversation is handed nothing under

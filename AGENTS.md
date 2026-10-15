@@ -200,8 +200,8 @@ there), each an edge because eve drives them through promise-shaped hooks of
 its own, and `apps/web/coder/host.ts`, the one module those files share their
 host through, composed with `Effect.runSync` as it loads for the same reason
 `apps/web/eve/host.ts` is. Not
-every seam under `apps/web/server/hosted/` is an effect down to its floor:
-`hosted/brain-host/production.ts`'s `spend` is
+every seam in `packages/service/src/` is an effect down to its floor:
+`packages/service/src/agents/brain-host/production.ts`'s `spend` is
 the AI SDK's async middleware, and `packages/service/src/agents/brain-host/door.ts`'s
 `SessionOwnership` speaks eve's own `AuthFn<Request>` — two promise-shaped
 foreign boundaries the effects around them compose over rather than

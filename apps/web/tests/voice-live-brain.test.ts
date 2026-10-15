@@ -30,6 +30,7 @@ import {
   type EveSessions,
   eveSessions,
 } from "@luke/service/agents/brain-host/eve-sessions";
+import { PLANNER_DELEGATE_TOOL } from "@luke/service/agents/brain-host/planning";
 import {
   memoryRelayState,
   type RelayStanding,
@@ -41,7 +42,9 @@ import {
   SEARCH_WEB_TOOL,
 } from "@luke/service/agents/public-research";
 import { ASK_ORIGIN, TURN_SLOW_STEP } from "@luke/service/core";
+import { HOSTED_TOOL_SET } from "@luke/service/plans/brain-tool-set";
 import { stampedEveEvent } from "@luke/service/testing/eve-events";
+import { FIRST_EVE_TURN, spokenTurn } from "@luke/service/testing/eve-turns";
 import {
   LIVE_BRAIN_CANCEL,
   LIVE_BRAIN_RUN_END,
@@ -56,14 +59,11 @@ import { Duration, Effect, Exit, Option, Redacted, Scope } from "effect";
 import { type AuthFn, ForbiddenError } from "eve/channels/auth";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll } from "vitest";
-import { PLANNER_DELEGATE_TOOL } from "../server/hosted/brain-host/planning";
-import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import {
   type HostedLiveBrain,
   type HostedLiveBrainOptions,
   hostedLiveBrain,
 } from "../server/voice/live-brain";
-import { FIRST_EVE_TURN, spokenTurn } from "./support/eve-turns";
 
 /**
  * The hosted live brain over the real ask door and the real store on PGlite:

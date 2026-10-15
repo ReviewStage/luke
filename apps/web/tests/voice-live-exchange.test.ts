@@ -29,6 +29,7 @@ import {
   type EveMessage,
   type EveSessions,
 } from "@luke/service/agents/brain-host/eve-sessions";
+import { PLANNING_EXPLORE_ASK } from "@luke/service/agents/brain-host/planning";
 import {
   memoryRelayState,
   type RelayStanding,
@@ -36,20 +37,19 @@ import {
 } from "@luke/service/agents/brain-host/relay";
 import { MESSAGE_ROLE } from "@luke/service/core";
 import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
+import { HOSTED_TOOL_SET } from "@luke/service/plans/brain-tool-set";
+import type { PlanDraft } from "@luke/service/plans/plan-scribe";
+import { FIRST_EVE_TURN, spokenTurn } from "@luke/service/testing/eve-turns";
+import { delegated, heard, said, sessionStarted } from "@luke/service/testing/live-events";
 import { added } from "@luke/service/testing/plan-contents";
+import { scriptedScribeModel } from "@luke/service/testing/scribe-model";
 import { sidebandOverSocket } from "@luke/voice/live-session";
 import { FakeLiveSocket } from "@luke/voice/testing";
 import type { LanguageModel } from "ai";
 import { Deferred, Effect, Exit, Option, Schema, Scope } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll } from "vitest";
-import { PLANNING_EXPLORE_ASK } from "../server/hosted/brain-host/planning";
-import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { hostedLiveExchange } from "../server/voice/live-exchange";
-import type { PlanDraft } from "../server/voice/plan-scribe";
-import { FIRST_EVE_TURN, spokenTurn } from "./support/eve-turns";
-import { delegated, heard, said, sessionStarted } from "./support/live-events";
-import { scriptedScribeModel } from "./support/scribe-model";
 import { settled } from "./support/settle";
 
 /**

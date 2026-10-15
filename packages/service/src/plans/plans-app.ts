@@ -35,17 +35,25 @@ import {
   planRevisionSeqSchema,
   planTreeRequestSchema,
 } from "@luke/features/plan-wire";
-import { type EveReach, eveFor, stoppedForGood } from "@luke/service/agents/coder-host/stop";
-import { CODER_TOOL_SET } from "@luke/service/agents/coder-host/tool-set";
+import { readEither } from "@luke/wire/effect";
+import { Clock, Data, Effect, Layer, Option, Result } from "effect";
+import {
+  type HttpClient,
+  HttpRouter,
+  HttpServerRequest,
+  type HttpServerResponse,
+} from "effect/http";
+import { type EveReach, eveFor, stoppedForGood } from "../agents/coder-host/stop.js";
+import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import {
   CURSOR_START,
   cursorOfWire,
   cursorToWire,
   type TranscriptPage,
   transcriptPast,
-} from "@luke/service/agents/coder-host/transcript";
-import { withPlanAgents } from "@luke/service/agents/plan-agents";
-import { retireSessions } from "@luke/service/agents/retire-sessions";
+} from "../agents/coder-host/transcript.js";
+import { withPlanAgents } from "../agents/plan-agents.js";
+import { retireSessions } from "../agents/retire-sessions.js";
 import {
   PLAN_LIST_ARCHIVED,
   PLAN_LIST_QUERY,
@@ -53,10 +61,10 @@ import {
   planUpdateRequestSchema,
   unparsedWire,
   wireUuidSchema,
-} from "@luke/service/core";
-import type { GitHubApp } from "@luke/service/github/github-app";
-import { workspaceRepository } from "@luke/service/github/workspace-repository";
-import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
+} from "../core.js";
+import type { GitHubApp } from "../github/github-app.js";
+import { workspaceRepository } from "../github/workspace-repository.js";
+import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
   HOSTED_REFUSAL,
   type HostedRefusal,
@@ -67,28 +75,20 @@ import {
   hostedStoreOrUnavailable,
   readJsonBodyEffect,
   type UserIdResolver,
-} from "@luke/service/http/http-effect";
-import { readPlanFile } from "@luke/service/plans/plan-file";
+} from "../http/http-effect.js";
+import type { ModelCatalog } from "../providers/model-catalog.js";
+import { ANY_METHOD, type WebRoutes } from "../route.js";
+import { HOSTED_TOOL_SET } from "./brain-tool-set.js";
+import { readPlanFile } from "./plan-file.js";
 import {
   PLAN_SAVE_REFUSAL,
   PLAN_SAVE_STATUS,
   restoreRevision,
   saveDeveloperEdit,
-} from "@luke/service/plans/plan-notes";
-import { readPlanSkills } from "@luke/service/plans/plan-skills";
-import { readPlanTree } from "@luke/service/plans/plan-tree";
-import type { ModelCatalog } from "@luke/service/providers/model-catalog";
-import { ANY_METHOD, type WebRoutes } from "@luke/service/route";
-import { readEither } from "@luke/wire/effect";
-import { Clock, Data, Effect, Layer, Option, Result } from "effect";
-import {
-  type HttpClient,
-  HttpRouter,
-  HttpServerRequest,
-  type HttpServerResponse,
-} from "effect/http";
-import { HOSTED_TOOL_SET } from "./hosted/brain-tool-set.js";
-import { readPlanCode, readPlanWork } from "./hosted/plan-work-store.js";
+} from "./plan-notes.js";
+import { readPlanSkills } from "./plan-skills.js";
+import { readPlanTree } from "./plan-tree.js";
+import { readPlanCode, readPlanWork } from "./plan-work-store.js";
 import {
   PLANNER_POLL,
   type PlannerPage,
@@ -97,7 +97,7 @@ import {
   plannerTitleAwaited,
   plannerTurnsPage,
   plannerWorkerSession,
-} from "./hosted/planner-transcript.js";
+} from "./planner-transcript.js";
 
 /**
  * plans-app.ts -- the Mac Plans tab's named plans: list, start, open, change, and delete.
@@ -129,7 +129,7 @@ import {
  * (`@luke/database/models/transcript-store`). `/api/plans/{id}/work` is what Luke's
  * planning model wrote and ran on them, a page at a time, and every code he
  * showed, read back from the plan's conversation
- * (`hosted/plan-work-store.ts`). `/api/plans/{id}/file` is a window of one
+ * (`plans/plan-work-store.ts`). `/api/plans/{id}/file` is a window of one
  * file of the plan's repository for the File tab, read from GitHub as it
  * stands now, or at the commit an inbox item's code reference pins, through
  * the App, under the rule `show_code` is held to (`packages/service/src/plans/plan-file.ts`), and `/api/plans/{id}/tree` one folder of it for

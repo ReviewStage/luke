@@ -1261,8 +1261,8 @@ reading as unchanged, a file only moved carries an empty patch, and a
 list cut at the bound says so. An agent with no pull request yet answers
 a null one. The agent's sandbox is no source: nothing outside its session
 reaches it and its diff is not kept in the store.
-`apps/web/tests/coding-agents-app.test.ts` answers the routes over a fake eve, a
-scripted GitHub, a fixed catalog, and PGlite; `apps/web/tests/coder-host.test.ts`
+`src/agents/coding-agents-app.test.ts` answers the routes over a fake eve, a
+scripted GitHub, a fixed catalog, and PGlite; `src/agents/coder-host/coder-host.test.ts`
 drives the host, the shared relay, the branch recorded at a turn's end
 over the sandbox double, and the held read on the test clock;
 `src/agents/coder-host/checkout.test.ts` holds the checkout over the sandbox
@@ -1384,3 +1384,502 @@ as entities so it cannot close the fence, and reads the rest with `gh`. The App 
 request and check events it already reads, a setting of the App on GitHub
 rather than of this repository; until it does, those two triggers never
 fire.
+
+## The plans group
+
+`src/plans/plans-app.ts` is the Mac's Plans tab's route group over the account's
+named feature plans (`docs/PLANNING.md`): `GET /api/plans` lists them, newest
+started first and the archived ones left out unless `?archived=include` asks
+for them, so a build from before archiving never draws one, `POST /api/plans`
+starts one with its name, the untouched
+template as its document, and the repository it is about where one is
+chosen, in the workspace its `workspaceId` names, which the account must be
+a member of (`isWorkspaceMember`; one it is not in answers `not-found`), or
+in the account's first workspace, ensured first, where it names none,
+`GET /api/plans/{id}` opens one with its saved document,
+`PATCH /api/plans/{id}` changes its name, its repository, whether it is
+pinned, whether it is archived, the workspace it belongs to, or several at
+once, each pin and archive a stamp on the row (`pinned_at`, `archived_at`)
+answered as `pinnedAt` and `archivedAt` only where it stands; a move
+(`workspaceId`) is the plan's owner's alone (`not-permitted` for a
+teammate), into a workspace they are a member of (`not-found` otherwise)
+whose installation reaches the plan's repository, refused as a repository
+change would be otherwise, and its coding agents go with it, and
+`DELETE /api/plans/{id}` deletes it, its coding agents' rows going with it
+and their conversations stamped deleted beside the plan's own (`deletePlan`),
+the id moved into
+the query by the rewrite `apps/web/server/function-rewrites.ts` makes of every
+segment-captured id.
+Each row of the list carries `agents` where the plan has a coding agent
+(`src/agents/plan-agents.ts`): how many it has and how many are starting
+or running, the three it names (those at work first, then the newest), each
+with its title, model, effort, status, and since when, and the pull requests
+they opened, each number once and at most three, as GitHub last answered a
+read of them. Three statements answer the whole list: the agents of every
+plan listed with `coding_agent.published` (migration 0078), their newest
+turns, and the lines awaiting a turn; the list asks GitHub nothing.
+`packages/features/src/plan-wire.ts` declares every request and answer. Each
+endpoint resolves the bearer first, and every statement in
+`packages/database/src/models/plan-store.ts` names the account beside the plan and gates on
+its membership of the plan's workspace, so a teammate's plan reads and
+writes as the account's own, and a plan of a workspace the account is not in
+answers exactly as none does.
+
+`src/github/repository-pins-app.ts` answers `/api/repository-pins`, the
+repositories the account pinned in the sidebar, whose groups of plans stand
+above the rest: `GET` reads them newest pinned first, and `PUT` pins or
+unpins one and answers them all as they then stand. A pin is a row of
+`repository_pin` keyed by the account and the repository's full name
+(`packages/database/src/models/repository-pin-store.ts`), stamped the first time it is made,
+deleted when it is undone, bounded at fifty an account, and gone with the
+account. It names the repository and nothing of it, so it asks GitHub
+nothing. It is a path of its own rather than one under `/api/plans/`, whose
+rewrite reads the next segment as a plan's id.
+
+`src/accounts/workspaces-app.ts` answers the account's workspaces
+(`packages/features/src/workspace-wire.ts`). Membership has nothing to do with
+GitHub: a teammate joins a workspace by invitation, and a workspace's
+repositories come only from the one Luke GitHub App installation an owner or
+admin connects to it. Every request resolves the bearer first and ensures the
+account's first workspace.
+
+- `GET /api/workspaces` answers `{ workspaces }`, every workspace the account
+  is a member of, its first one first and the rest by name, each
+  `{ id, name, role, github: { login, active } | null }`. It asks
+  GitHub nothing.
+- `POST /api/workspaces { name }` creates a workspace through the plugin's
+  server-only `auth.api.createOrganization` (`body.userId`, no session
+  headers; [docs](https://www.better-auth.com/docs/plugins/organization#create-an-organization)),
+  so the caller is its owner, and answers `{ workspace }` (201). The slug is
+  spelled from the name and never takes the `personal-` prefix a first
+  workspace is made under; a slug the plugin
+  refuses as taken is never adopted (`createLinkedOrganization`), and the
+  workspace takes it with a random suffix.
+- `POST /api/workspaces/github/connect { workspaceId }`, for an owner or admin,
+  writes a `github_install_intent` row (the SHA-256 of a random state, the
+  account, the workspace, an hour's expiry) and answers `{ url }`: the App's
+  install address with that `state`. A member is `not-permitted` (403); a
+  workspace the account is not in is `not-found`.
+- `POST /api/workspaces/github/disconnect { workspaceId }`, for an owner or
+  admin, deletes the workspace's `github_installation` row and answers
+  `{ workspace }`.
+
+A `github_installation` row (`packages/database/src/schemas/github-installation.ts`)
+ties one workspace to one installation, keyed on GitHub's installation id and
+account id (both unique), with the account's login and kind and the
+installation's status, which the installation webhook keeps. The connect's
+callback links it (above, under the install group). `src/accounts/workspaces-app.test.ts` holds
+all of it over the plugin on PGlite and a scripted GitHub.
+
+`GET /api/plans/{id}/work` reads back what the planning model wrote and
+ran on the plan's calls (`src/plans/plan-work-store.ts`): the plan's
+conversation's turns, twenty a page newest first, each read from its
+row and journal by the same `src/plans/plan-work.ts` a live call tells them
+through, and `?before=<turn id>` for the page before that turn; the answer
+names the turn the next older page is read before while one stands. The
+newest page also carries every answered `show_code` call in the
+conversation, oldest first, picked by its parts in the statement and read
+through `shownCodeOf`, so what the call refused and a secret file are
+never read back. `packages/features/src/planning-view.ts` declares the
+answer (`planWorkAnswerSchema`).
+
+`GET /api/plans/{id}/file?path=&first=&last=` reads a window of one file of
+the plan's repository for the Mac's File tab (`src/plans/plan-file.ts`),
+at most 500 lines a window. No sandbox stands outside a planning turn, so it
+reads GitHub's contents API at the head of the default branch, not the
+session's checkout, or with `ref=` at that commit, a whole 40-character
+lowercase SHA and nothing a branch or a path could spell, as an inbox item's
+code block pins its lines, on a token `repositoryReadToken` mints for that one
+repository with contents read, after the same reach check the checkout
+makes. The token is used for the one read and enters no answer, log line,
+or trace. What is shown is decided by the rule `show_code` is held to
+(`src/plans/shown-file.ts`): a secret file is refused before GitHub is
+asked, and so is a path with an empty, `.`, or `..` segment; a link, a
+directory, a missing file, a file past a megabyte, or one with a NUL among
+its first bytes is refused by name, a path GitHub finds nothing at with the
+branch or the commit it was looked for at; and each line is cut to 400
+characters.
+`packages/features/src/plan-wire.ts` declares the request and the answer
+(`planFileRequestSchema`, `planFileAnswerSchema`). The file's `path` query
+reaches the route because the grouped function's dispatcher reads its own
+path override from `route-path` (`apps/web/server/function-dispatch.ts`): it once
+read `path`, and every File tab read was answered 404.
+
+`GET /api/plans/{id}/revisions` reads the plan's history for the Mac's
+version history (`packages/database/src/models/plan-revisions.ts`): fifty revisions a page,
+newest first, each its writer as the "Edited by" line names it, when it
+began and last moved, how many changes it made, and for a restore the
+revision it brought back; `?before=<seq>` reads the page before that
+revision, and the answer names the revision the next older page is read
+before while one stands. `GET /api/plans/{id}/revisions/{seq}` reads one
+revision's content and the content before it, null for the first, each
+formatted under the plan's name as it stands now, so a rename since is no
+difference between them. `POST /api/plans/{id}/revisions/{seq}/restore`
+puts that revision's text back through the plan's one
+locked save (`src/plans/plan-notes.ts`'s `restoreRevision`), kept as a
+revision of the developer's naming the one restored, and answers the plan.
+It takes no body and no base: what it replaced is the revision before it,
+so a restore over a save that landed meanwhile is undone by restoring that.
+Every member of the plan's workspace reads the history any of them wrote;
+a plan of a workspace the account is not in reads as an empty history and
+restores as `not-found`. `packages/features/src/plan-wire.ts` declares the answers
+(`planRevisionsAnswerSchema`, `planRevisionAnswerSchema`).
+
+A plan's repository is `plan.repository` (migration 0063), the full name
+`owner/name` as GitHub spells it, or null for a plan with none, which is
+where every plan from before repositories stands and is no error. It is
+kept only once `workspaceRepository` on the `GitHubApp` confirms the
+installation connected to the plan's workspace reaches it, read from GitHub
+before the row is written, so a plan never names a repository its workspace
+could not reach at the moment it was named; the stored spelling is GitHub's,
+whatever case the request used. A start or a change naming one outside that
+installation, or any in a workspace with nothing connected, is
+`repository-not-reachable` (403) with nothing written, the name beside it
+included; a GitHub that did not answer is `github-unanswered` (502), and an
+App or store the service could not read `unavailable`, the plan standing as
+it was. A change naming null clears it.
+
+A `repository-not-reachable` refusal says why in `unreached`
+(`@luke/features/repository-reach-wire`, read by `repositoryReach` on the
+`GitHubApp`), naming the repository: the workspace has nothing connected
+(`not-connected`); the installation GitHub no longer knows or its account
+suspended (`connection-lapsed`); the installation is on another account
+than the repository's owner (`other-owner`, naming that account); the
+installation on the owner was not given the repository (`not-selected`,
+with the installation's settings page on GitHub); or one given every
+repository of the owner still does not list it, which a rename, a
+transfer, or a delete leaves (`gone`). Where the plan's owner asks and the
+workspace has nothing connected or another account's installation, and the
+owner's installation stands for another workspace they are in, the reason
+is `other-workspace`, naming that workspace, since one installation stands
+for one workspace and moving the plan there is what reaches the repository:
+a plan a personal workspace held before #2524 is left that way.
+
+A plan's text has one write, `src/plans/plan-notes.ts`, and four
+writers. `POST /api/plans/{id}/edit` takes the developer's edit of the
+whole text against the base it was made on (`saveDeveloperEdit`), saved
+where the text still holds that base, laid over what Luke wrote meanwhile
+where it can be, and answered as a conflict with the text as it stands, with
+nothing saved, where it cannot (`packages/features/src/plan-edit.ts`); a
+restore above is the second. A planning call's notetaker
+(`src/plans/plan-scribe.ts`) and a coding agent's `edit_plan`
+(`src/agents/coder-host/plan-edit.ts`) answer with notes
+(`packages/features/src/plan-template.ts`): a point added under a heading, a
+phrase corrected, or a line struck. `saveNotes` takes them in order over the
+text as it stands, passing over a note that names a phrase the plan does not
+hold, and saves it under a binding of account and plan the service built
+rather than anything the model sends, answering the document as saved or
+why nothing was: a text past its bound,
+a plan deleted meanwhile, which a save never recreates because it is an
+`update` over the row that stands, and a store that could not be reached,
+each leaving the prior document in place.
+`readPlan` is the read the planning model starts and resumes from, with the
+conversation `attachPlanConversation` associated, and it moves nothing.
+`src/plans/plans.test.ts` and `apps/web/tests/plans-app.test.ts` hold both halves
+against a real dialect.
+
+The planning model is the hosted brain run over a `plan` conversation, which
+`openPlanConversation` opens once per plan and attaches; deleting the plan
+stamps it cleared, so the purge takes its words thirty days on. A plan's is
+the only conversation any code still opens, and the host runs every
+conversation it admits as one, which fixes three things
+(`src/agents/brain-host/planning.ts`): the prompt is the
+authored planning instructions, the standing context each turn opens with is
+the plan's name and saved document read again from the row,
+and the tools are the planning list alone: `run_in_repository` bound to the
+plan the conversation belongs to (`readPlanOfConversation`), the two public
+research reads beside it, `queue_question`
+(`src/plans/queue-question.ts`), which runs nothing: its journaled call is
+how a question reaches the voice while the turn still runs, and the four
+tools about the plan's coding agents (`src/agents/coding-agent-tools.ts`):
+a list with each agent's status and what it published, one agent's recent
+progress as a bounded tail, a message to one, which takes the message
+box's own steer path (`src/agents/coder-host/steer.ts`), and a start of
+a new one on the call's plan, which takes the Start button's own path
+(`src/agents/coder-host/start.ts`) under the tool call's id as its key;
+both reach eve as the deployment acting for the account, the two rows the
+coder channel's deployment table admits. A resumed session
+is seeded with the conversation so far. The writer holds rows to
+`HOSTED_TOOL_SET`, which is the planning tools and nothing else, so a turn's
+calls are written and read back under the same list it was offered.
+Question choice, agreement, assumption flags, and corrections are the
+instructions' alone: no code reads the document for meaning.
+
+**One tool registry** (`src/agents/agent-runtime/tools.ts`). Every tool
+Luke offers any of its four agents is named once there, with the roles it
+serves: the planner, the planning worker, the coding agent, and its worker.
+What each is offered is derived from it: the planning root's hosted resolver
+offers the planner's (`PLANNER_TOOL_NAMES`), the planning worker its own
+(`WORKER_TOOL_NAMES`), and the coding agent's files under `apps/web/coder/tools/` and
+its worker's are held to their roles by `coder-agent.test.ts`; each role's
+stored set names every tool the role is offered. A tool's
+module takes its name from the registry, so the registry imports none and
+every module may import it. eve's own injected tools (`task_wait`,
+`task_cancel`, `connection_search`, `connection_execute`) are eve's, not
+listed.
+
+The planning session is offered the skills the plan's repository keeps
+(`apps/web/eve/skills/repository.ts`, `src/agents/agent-runtime/skills.ts`), read
+from GitHub on a read token for that repository as the session starts, which
+is the call's warm-up ask, and loaded with eve's own `load_skill`; each body
+says where the skill stands in the repository, so its files are read with
+`run_in_repository`. A plan with no repository, one the App does not reach,
+or a read that fails offers none, and a coding agent's are read the same way
+from its own repository, led by where they stand in its checkout. A skill
+load reaches the Work tab as `other` named `load_skill`, a kind every desktop
+reads, with the skill as its subject.
+
+The research reads (`src/agents/public-research.ts`) are `search_web`,
+one query sent to OpenAI's Responses API with its own `web_search` tool on
+Luke's key and the brain's model at low reasoning effort and low search
+context, since the planning turn waits on it, asked to store nothing, and
+`read_web_page`, one public HTTPS page fetched and reduced to its text.
+Neither knows the account or the plan: what leaves is the query and fixed
+instructions, or a GET for one URL with no credential of the account's, and
+the result goes back only to the call that asked. A query is one line of at
+most 200 characters with nothing shaped like a credential; keeping private
+repository text out of it is the planning instructions' rule, since plain
+words cannot be told apart by code. A search is `found` only with a cited
+public URL, each with the answer's words that cited it; a finished uncited
+answer is `no-results` and its words go no further, one the token bound cut
+short before it cited anything is `not-searched`, and every failure is `not-searched`
+or `not-read` in words that say nothing was found. A page read refuses any
+host whose address, resolved before each request and again on every redirect
+hop it follows by hand, is private, loopback, link-local, CGNAT, unique-local,
+or reserved; the check is a lookup ahead of the request, so a DNS answer that
+changes between the two is the case it does not cover. A turn gets at most
+4 searches and 6 page reads, 5 sources a search, and 20,000 characters of a
+page from at most 1 MB read (`PUBLIC_RESEARCH_BOUNDS`). A search is a paid
+inference on Luke's key, so each one is counted as one of the calling account's
+hosted uses before it is sent; a count that cannot be written is logged and stops
+nothing.
+`src/agents/public-research.test.ts` holds both against scripted HTTP and DNS.
+`src/agents/brain-host/planning.test.ts` runs the scripted model through the host and
+the relay, and the `brain-host` eval runs a plan conversation through eve.
+
+The developer talks to the planning model through the ordinary voice
+session. Every call is a `/api/voice/sessions` session whose
+`session.create` names the plan (`planId`), which the service checks the
+account holds before anything is spent; a create naming none is refused. It is created under
+the planning call's instructions (`sessionInstructions()` in
+`@luke/live`), whose delegation policy hands the developer's planning words to the backend and says back the
+finding and its one next question. A call just created speaks first: on
+`session.started` the service sends `planningOpeningInstruction()` and, once
+it is acknowledged, a cue to begin (`greetingCue`), so Luke
+opens the conversation rather than waiting for the developer, and a
+re-attach opens nothing again. The plan seed's first line says whether the
+plan is new (the untouched template and no assumption) or under way, which
+is what the opening picks its first question from. The exchange lands every spoken ask and
+the session's record in the plan's conversation (`openPlanConversation`),
+so the delegation reaches the
+planning model with its document, its tools, and the conversation so far.
+The recent words ride the delegation as context, and whether an answer
+agrees to anything is the planning instructions' to judge. The binding is the session's for life. It is written on
+the `voice_sessions` row as a plain `plan_id`,
+and a re-attach reads it from there, so a later connection cannot move a
+session onto another plan, and one whose row names no plan is refused. The Mac holds one call at a time, which outlives
+the plan on screen and moves only when another plan's Talk press hangs it up
+and opens one about that plan, so only one plan is ever spoken. `apps/web/tests/voice-service-exchange.test.ts` drives both
+plans and the re-attach over the real store.
+
+The planning model reads source through one tool,
+`run_in_repository({ command })` (`src/agents/repository-shell.ts`), which
+runs the command in the planning session's own Vercel Sandbox, the one eve
+opens per session from `apps/web/eve/sandbox.ts` and hands a tool through
+`ctx.getSandbox()`, on a checkout of the plan's repository. The first call
+that finds no checkout of the plan's repository makes one, at the
+repository's current default branch and one commit deep, and later calls
+reuse it; a plan whose repository changed meanwhile is checked out again,
+and the worker subagent shares the session's sandbox
+(`apps/web/eve/subagents/worker/sandbox.ts`), so its reads see the same checkout. The
+checkout reads through the Luke GitHub App: `repositoryReadToken` confirms
+the installation of the plan's workspace still reaches the repository and
+mints a token for that one
+repository with contents read, which the shell sets as GitHub's `Basic`
+header at the sandbox's firewall, on `github.com` under the repository's own
+`.git/` endpoint alone, for the clone alone, and sets back to open internet
+as the clone ends, in a finalizer, so the token never enters the sandbox's
+filesystem or environment and no command or output can carry it. The
+command runs from the checkout root under a 60-second bound and a clean
+environment (`env -i` with a search path, a home, and git's fixed values,
+as the Mac runner once gave one), with its text handed to bash as an
+argument rather than spliced into shell text, and answers its exit code and
+up to 20,000 characters each of stdout and stderr. Every refusal is
+`not-run` with a reason the model can act on, and each is answered ahead of
+anything it would need: a plan with no repository yet opens no sandbox; a
+repository the workspace's installation no longer reaches, a GitHub that
+could not be read, a sandbox that could not
+be opened or carries no firewall, and a clone that failed, with git's words,
+each check nothing out. `src/agents/repository-shell.test.ts` holds it over a
+sandbox double at eve's boundary (`src/testing/repository-sandbox.ts`), a
+scripted GitHub, and PGlite, and `src/agents/brain-host/planning.test.ts` drives the
+scripted model's read through the host and the relay, reading the record
+back for the listing and never the token. The old `plan_command` table, the
+Mac's claim and settle routes, and the Mac's command runner are gone
+(migration 0064).
+
+## Hosted conversation store
+
+The `conversations`, `messages`, `turns`, and `asks` tables hold the hosted
+brain's conversations per account: a plan's conversation, its messages, the
+turns that ran over it, and the asks handed to it. Every row is keyed by
+`user_id` and cascades with the user row, so
+`apps/web/server/routes/account/delete.ts` erases them with the account.
+`packages/database/src/models/` is the store the brain host composes against; every
+module there is an `Effect<A, SqlError | Schema.SchemaError, SqlClient>`
+whose rows a `Schema` decodes and whose path rule is that schema too, which
+`HostedStore`, the store writer, the voice writer, and the ask record all
+answer as it came, and which a route handler composes into the one effect
+`runWeb` answers for the request.
+
+`20261013123642_dead_tables_drop` dropped the tables and columns nothing
+read or wrote any more — `events`, `provider_cursors`, `provider_key` (not
+the BYOK keys, which are `account_provider_key`), `roster_snapshot`,
+`transcript_mark`, `observation_pass`, `workspace_file`,
+`workspace_embedding`, `devices`, `account_workspace_preference`,
+`introduction_usage`, `account_preference.default_workspace_provider`, and
+the conversation row's observed-session, event-sequence, completion-sweep,
+and memory-flush columns. A child's `parent_conversation_id`, `label`,
+`title`, and `expects_completion` are live: a subagent's and a coding
+agent's worker's child conversation writes them.
+
+The conversation tables are the shape the LUKE-95 storage plan settled on,
+less the `prompts` table it drew and less the `tool_sets` table
+`0039_dead_tool_sets` dropped: a turn keeps the composed prompt's hash and the
+tool set's and nothing else of either, because nothing replays them, and the
+tool set is the build's own and read from the build that offered it. A
+conversation row names its kind (`plan`, which `packages/database/src/models/plan-store.ts`
+opens, and `coding_agent`, which `packages/database/src/models/coding-agent-store.ts` opens,
+are the two any code still opens), the
+runtime's own session id, its soft-delete instant, and the counter that
+numbers its messages. A message is one AI SDK `UIMessage`, its parts and
+metadata as plain `jsonb`, unique on `(conversation_id, client_id)` as its
+idempotency key; a turn is one run's origin, status, model, prompt and
+tool-set hashes, response ids, usage, timings, and failure, with why the
+runtime failed one in `failure_detail`: eve's failure code, the key names of
+its details, the error's class name, eve's catalog id, and status codes where
+eve's details carry them, and eve's message cut to 200 characters with every
+credential-shaped run replaced by `[redacted]`, no other value of the
+details, cut to 500 characters by the writer and read by nothing but a
+query. A prompt and a tool set are content-addressed, the hash of the text or
+the schemas as the key, and the turn row carries that hash and nothing else
+of either, naming no row and holding no foreign key. Nothing in these tables
+is sealed: the content is readable by an operator.
+
+The store writer, `packages/database/src/models/writer.ts`, is the one path by which a
+`messages` or `turns` row is written: the writer is the one server module
+with an insert, an update, or a delete over `messages` or `turns`, whether as a
+Drizzle table imported from the schema or in the text of a statement, and the
+modules that name one at all are the writer and the two readers. It
+consumes the brain's run event stream (`BrainRunEvent`, every kind of turn)
+for a conversation the caller names by its row id and account. A turn row
+goes from queued (written ahead of the stream by `enqueueTurn`, or at the
+turn's start where nothing queued it) through running to settled, cancelled,
+or failed, carrying the origin it was queued under, eve's own id for the turn
+where the relay queued it (the store's id is a digest of it that nothing
+reverses, and a Stop on the row is scoped to eve's turn by reading it back),
+its usage split four ways, its response ids where the runtime has them, and
+its failure word. Each user
+message the turn opened with lands as its own row by the message's id. The
+turn's answer is one assistant message keyed by the turn's id, and while the
+turn runs that row is its journal: a tool call is written in `input-available`
+before it executes and moved to `output-available` or `output-error` as its
+result lands, a reasoning summary is written as it completes, and the turn's
+completed message replaces the journal's parts whole and sets `finished_at`
+once, after which the row is immutable and a late event for it is refused. A
+turn that ends with a call still unanswered settles the call as an answer
+whose envelope says its effect is unknown, since the call was dispatched and
+nothing will answer it now, and closes the row; a writer that dies between
+the call and its result leaves the part in `input-available`, which is what
+a resume reads. Only a refusal — a call the tool or the host's admission
+refused — is an `output-error` part; an unknown outcome is an
+`output-available` part carrying its envelope, so the record can tell "Luke
+declined" from "Luke does not know", which are opposite claims. Because any
+call may answer with that envelope, a tool's declared output schema has to
+admit it, and the writer holds the catalog to that once, when it is
+composed, refusing to exist over a catalog that fails it rather than leaving
+a row nothing could read back. Every write is
+idempotent — a message by `(conversation_id, client_id)`, a turn by its id, a
+tool part by its call id, a reasoning part by its item's id — so an event
+delivered twice writes one row and a replayed stream changes nothing, and
+every message is held to the vocabulary before it lands, through the same
+`readStoredUIMessages` a read goes through, so no row can carry a tool the
+catalog does not register, an input its schema refuses, or metadata outside
+the set; a message the reader would refuse is refused whole and reported,
+never cut down to the parts that would pass. Every write runs under a lock on
+the conversation row, which no write reaches once it is stamped deleted; the
+sequence comes from the row's counter, each allocation landing on the first
+position no row holds, so the unique `(conversation_id, seq)` constraint is
+the backstop for a writer outside the lock and nothing the writer retries.
+
+Voice is stored beside them the way a call platform stores a call, in
+`voice_sessions` and `voice_transcript_segments`.
+A session row is one live session — the Live API's own session id, unique so
+a re-attach on a fresh function instance finds the row it had rather than
+forking it, and indexed with the user so an ownership check is one lookup —
+with its delegation mode, when it started and
+closed, the API's own close reason, and a `usage` payload of billed seconds
+with a flag saying whether the API confirmed them or a lost connection left
+them estimated. A segment is one span of what was actually said, by whom, in
+milliseconds on the session's clock. What is spoken becomes a message as each
+utterance settles: the developer's line and every utterance of Luke's are each
+cut from these segments into a finished row of the conversation, so the
+record keeps the words the developer actually heard. A delegated
+exchange's reply is also the assistant message the brain wrote, and Luke's
+reading of it stands beside that message as its own row, whose metadata names
+the voice session and span it was cut from, the delegation it followed, and,
+where the store could tell, `read_from`: the message the words were read
+aloud from — the delegation's turn's journal where that turn had settled
+within two minutes of the write, in which case the row joins the turn. No
+audio is ever stored.
+
+Two writers share those tables and never a column. The voice service's own
+`packages/database/src/models/voice-session-record.ts` owns the session row's whole life: it is
+inserted when the session is created, found again by `(user_id,
+live_session_id)` when a fresh function instance re-attaches to the same
+live session, overwritten with each unconfirmed usage snapshot while open,
+and closed once with the confirmed seconds, the instant, and the reason. The
+voice writer in `packages/database/src/models/voice-writer.ts` only reads that row
+for its id and hangs everything else off it: a segment per transcript delta
+at the next position of the session's own sequence, and the developer's spoken ask as a
+user message on the voice channel, cut from the stored user segments between
+the previous ask's end and the delegation's offset or the end of the
+utterance the service's ledger grouped the ask as, whichever is later, and
+named with the session, the delegation, and the span. A row whose `closed_at` is still
+null may keep gaining segments, because an instance that dies at its
+duration bound never sends `session.closed`, its relay detaches rather than
+closing, and the re-attach lands on the same row; the writer reads nothing from the row's state but its id
+and reads everything else back from the record, so a
+fresh instance continues a session where the last one stopped.
+
+The store tests run the generated migrations on PGlite in process, so
+`check.sh` needs no service; the `postgres` CI job runs the same migrations,
+then `test:store`, against a Postgres container. Every one of those is
+Postgres 18, the major production runs: Neon serves 18.x, PGlite 0.5.8
+embeds PostgreSQL 18.3, and the CI image is `postgres:18`, so a failure in
+any of them is about the database the service actually runs, and a local `check.sh` is a reproduction on 18 already. On either
+dialect an opening of the test database is a database of that opening's own:
+a fresh PGlite, or a clone of the database `LUKE_STORE_TEST_DATABASE_URL`
+names, made with `create database ... template ...` on the cluster's
+`postgres` maintenance database and dropped when the file closes it
+(`@luke/database/testing`). Nothing writes to the named
+database itself after `db:migrate`, so a statement a test forgets to scope by
+account or conversation reaches its own file's rows and no other file's.
+Which files `test:store` runs is read from the files, not kept
+in a list: `apps/web/scripts/store-tests.ts` selects every `apps/web/tests/**/*.test.ts` whose
+source imports the one door, `@luke/database/testing` (whose
+`openHostedStoreTestDatabase()` is the hosted store's and `getTestDB()` the
+bare one), because
+`LUKE_STORE_TEST_DATABASE_URL` is read there alone and a file that imports no
+door cannot meet a Postgres whatever it does. A new store test is therefore
+in the set the moment it imports its harness, and `package.json` is not
+edited. The runner then reads vitest's JSON report back and fails, naming
+each file, when the files vitest ran are not exactly the files selected. A reproduction against a real
+Postgres needs an 18 of your own whose role may `create database`, migrated
+by `db:migrate` alone, because that is the runner which records what it
+applied and the tests copy what it recorded, so run it first:
+
+```sh
+DATABASE_URL_UNPOOLED=postgresql://... pnpm --filter @luke/web db:migrate
+LUKE_STORE_TEST_DATABASE_URL=postgresql://... pnpm --filter @luke/web test:store
+```

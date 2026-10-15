@@ -49,48 +49,6 @@ import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
-import { BRAIN_HOST_TURN } from "@luke/service/agents/brain-host/bounds";
-import {
-  EVE_CANCEL_OUTCOME,
-  EVE_RESET_OUTCOME,
-  EVE_SEND_OUTCOME,
-  type EveMessage,
-  type EveSessions,
-  EveUnreachable,
-} from "@luke/service/agents/brain-host/eve-sessions";
-import { CODER } from "@luke/service/agents/coder-host/bounds";
-import { CODER_TOOL_SET } from "@luke/service/agents/coder-host/tool-set";
-import { codingAgentsApp } from "@luke/service/agents/coding-agents-app";
-import {
-  BRAIN_REQUEST_STATUS,
-  BRAIN_RUN_EVENT,
-  BRAIN_TURN_ORIGIN,
-  BRAIN_TURN_TRIGGER,
-  isRecord,
-  isWireString,
-  MESSAGE_ROLE,
-  sessionKey,
-  TURN_ORIGIN,
-  userMessage,
-  userMetadataOf,
-} from "@luke/service/core";
-import { HostedEnvironment, type HostedEnvironmentValues } from "@luke/service/environment";
-import {
-  disconnectInstallation,
-  LINK_OUTCOME,
-  linkInstallation,
-} from "@luke/service/github/github-installations";
-import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
-import { answerInboxItem, type InboxImage, postInboxItem } from "@luke/service/inbox/inbox-store";
-import { modelCatalogOf, type OfferedModel } from "@luke/service/providers/model-catalog";
-import {
-  connectWorkspaceGitHub,
-  type FakeGitHub,
-  githubReaching,
-  type InstallationFixture,
-  openGithubUser,
-  type RepositoryScript,
-} from "@luke/service/testing/github-app-fake";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { eq } from "drizzle-orm";
@@ -109,7 +67,49 @@ import {
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
-import { plansApp } from "../server/plans-app";
+import {
+  BRAIN_REQUEST_STATUS,
+  BRAIN_RUN_EVENT,
+  BRAIN_TURN_ORIGIN,
+  BRAIN_TURN_TRIGGER,
+  isRecord,
+  isWireString,
+  MESSAGE_ROLE,
+  sessionKey,
+  TURN_ORIGIN,
+  userMessage,
+  userMetadataOf,
+} from "../core.js";
+import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
+import {
+  disconnectInstallation,
+  LINK_OUTCOME,
+  linkInstallation,
+} from "../github/github-installations.js";
+import { HOSTED_HTTP_STATUS } from "../http/http.js";
+import { answerInboxItem, type InboxImage, postInboxItem } from "../inbox/inbox-store.js";
+import { plansApp } from "../plans/plans-app.js";
+import { modelCatalogOf, type OfferedModel } from "../providers/model-catalog.js";
+import {
+  connectWorkspaceGitHub,
+  type FakeGitHub,
+  githubReaching,
+  type InstallationFixture,
+  openGithubUser,
+  type RepositoryScript,
+} from "../testing/github-app-fake.js";
+import { BRAIN_HOST_TURN } from "./brain-host/bounds.js";
+import {
+  EVE_CANCEL_OUTCOME,
+  EVE_RESET_OUTCOME,
+  EVE_SEND_OUTCOME,
+  type EveMessage,
+  type EveSessions,
+  EveUnreachable,
+} from "./brain-host/eve-sessions.js";
+import { CODER } from "./coder-host/bounds.js";
+import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
+import { codingAgentsApp } from "./coding-agents-app.js";
 
 /**
  * The coding-agent routes, answered by the group the way a function answers

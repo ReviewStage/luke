@@ -4,6 +4,7 @@ import { edgeKit } from "@luke/service/agents/agent-runtime/edge";
 import { AGENT_ROLE } from "@luke/service/agents/agent-runtime/role";
 import type { AgentSkill } from "@luke/service/agents/agent-runtime/skills";
 import type { DelegationAsk } from "@luke/service/agents/coder-host/delegation";
+import { type CoderHost, coderHost, type InboxCall } from "@luke/service/agents/coder-host/host";
 import { type InboxToolResult, inboxRejected } from "@luke/service/agents/coder-host/inbox";
 import type { InboxSandboxDoor } from "@luke/service/agents/coder-host/inbox-image";
 import type { CoderModelSelection } from "@luke/service/agents/coder-host/model";
@@ -32,7 +33,6 @@ import { emitJsonSchema } from "@luke/wire/effect";
 import { Effect, Result, Schema } from "effect";
 import type { SessionAuth } from "eve/context";
 import { defineTool } from "eve/tools";
-import { type CoderHost, coderHost, type InboxCall } from "../server/hosted/coder-host/host.js";
 import { runWeb } from "../server/runtime.js";
 import { scriptedModel } from "./scripted-model.js";
 

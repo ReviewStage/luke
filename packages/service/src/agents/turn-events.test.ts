@@ -5,23 +5,16 @@ import { hostTurnId } from "@luke/database/models/ids";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
 import { insertConversation, openHostedStoreTestDatabase } from "@luke/database/testing";
 import { TURN_END, TURN_EVENT_KIND, TURN_SLOW_STEP, type TurnEvent } from "@luke/features";
-import { BRAIN_HOST_TURN } from "@luke/service/agents/brain-host/bounds";
-import {
-  memoryRelayState,
-  type RelayStanding,
-  StreamRelay,
-} from "@luke/service/agents/brain-host/relay";
-import {
-  REPOSITORY_SHELL_STATUS,
-  RUN_IN_REPOSITORY_TOOL,
-} from "@luke/service/agents/repository-shell";
-import { projectTurnEvents } from "@luke/service/agents/turn-events";
-import { BRAIN_RUN_EVENT, SLOW_STEP_KIND } from "@luke/service/core";
-import { stampedEveEvent } from "@luke/service/testing/eve-events";
 import { Effect } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll, test } from "vitest";
-import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
+import { BRAIN_RUN_EVENT, SLOW_STEP_KIND } from "../core.js";
+import { HOSTED_TOOL_SET } from "../plans/brain-tool-set.js";
+import { stampedEveEvent } from "../testing/eve-events.js";
+import { BRAIN_HOST_TURN } from "./brain-host/bounds.js";
+import { memoryRelayState, type RelayStanding, StreamRelay } from "./brain-host/relay.js";
+import { REPOSITORY_SHELL_STATUS, RUN_IN_REPOSITORY_TOOL } from "./repository-shell.js";
+import { projectTurnEvents } from "./turn-events.js";
 
 /**
  * A turn's events over the real migrations on PGlite, with the turn written

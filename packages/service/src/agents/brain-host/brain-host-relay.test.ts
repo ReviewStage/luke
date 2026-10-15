@@ -10,17 +10,10 @@ import {
   readMessagesByConversationTyped,
   readTurnsByConversation,
 } from "@luke/database/testing";
-import { BRAIN_HOST_TURN, type BrainHostTurn } from "@luke/service/agents/brain-host/bounds";
-import {
-  memoryRelayState,
-  type RelayStanding,
-  redactCredentials,
-  StreamRelay,
-} from "@luke/service/agents/brain-host/relay";
-import {
-  REPOSITORY_SHELL_STATUS,
-  RUN_IN_REPOSITORY_TOOL,
-} from "@luke/service/agents/repository-shell";
+import { isToolUIPart } from "ai";
+import { Effect, Result } from "effect";
+import type { MessageStreamEvent } from "eve/client";
+import { afterAll } from "vitest";
 import {
   ASK_ORIGIN,
   MESSAGE_AUTHOR,
@@ -30,14 +23,13 @@ import {
   TOOL_PART_STATE,
   TURN_ORIGIN,
   TURN_STATUS,
-} from "@luke/service/core";
-import { stampedEveEvent } from "@luke/service/testing/eve-events";
-import { isToolUIPart } from "ai";
-import { Effect, Result } from "effect";
-import type { MessageStreamEvent } from "eve/client";
-import { afterAll } from "vitest";
-import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
-import { spokenTurn } from "./support/eve-turns";
+} from "../../core.js";
+import { HOSTED_TOOL_SET } from "../../plans/brain-tool-set.js";
+import { stampedEveEvent } from "../../testing/eve-events.js";
+import { spokenTurn } from "../../testing/eve-turns.js";
+import { REPOSITORY_SHELL_STATUS, RUN_IN_REPOSITORY_TOOL } from "../repository-shell.js";
+import { BRAIN_HOST_TURN, type BrainHostTurn } from "./bounds.js";
+import { memoryRelayState, type RelayStanding, redactCredentials, StreamRelay } from "./relay.js";
 
 /**
  * The relay from eve's stream into the store writer, over the real

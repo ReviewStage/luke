@@ -19,6 +19,10 @@ import {
   type StopOutcome,
   stopAsk,
 } from "@luke/service/agents/brain-host/brain-ask";
+import {
+  PLANNER_DELEGATION_TOOLS,
+  PLANNING_EXPLORE_ASK,
+} from "@luke/service/agents/brain-host/planning";
 import { RUN_IN_REPOSITORY_TOOL } from "@luke/service/agents/repository-shell";
 import { projectTurnEvents } from "@luke/service/agents/turn-events";
 import {
@@ -36,6 +40,16 @@ import {
   type TurnEventKind,
 } from "@luke/service/core";
 import { logStoreFailure } from "@luke/service/http/store-failure";
+import { HOSTED_TOOL_SET } from "@luke/service/plans/brain-tool-set";
+import { subagentRecordsByCall } from "@luke/service/plans/child-models";
+import {
+  callsSendingToEarlierTasks,
+  planWorkOf,
+  SUBAGENT_JOURNALS,
+  type SubagentJournal,
+  workerSessionCallsOf,
+} from "@luke/service/plans/plan-work";
+import { plannerDelegationJournalsOf } from "@luke/service/plans/plan-work-store";
 import { QUEUE_QUESTION_TOOL, WITHDRAW_QUESTION_TOOL } from "@luke/service/plans/queue-question";
 import {
   LIVE_BRAIN_CANCEL,
@@ -52,18 +66,7 @@ import {
 } from "@luke/voice/live-session";
 import { Cause, Clock, Duration, Effect, Result, Schedule, Schema, type Scope } from "effect";
 import { SqlClient } from "effect/sql";
-import { PLANNER_DELEGATION_TOOLS, PLANNING_EXPLORE_ASK } from "../hosted/brain-host/planning.js";
-import { HOSTED_TOOL_SET } from "../hosted/brain-tool-set.js";
-import { subagentRecordsByCall } from "../hosted/child-models.js";
-import { plannerDelegationJournalsOf } from "../hosted/plan-work-store.js";
 import { VOICE_DETACH_GRACE_MS } from "./orphan-sweep.js";
-import {
-  callsSendingToEarlierTasks,
-  planWorkOf,
-  SUBAGENT_JOURNALS,
-  type SubagentJournal,
-  workerSessionCallsOf,
-} from "./plan-work.js";
 
 /**
  * The hosted implementation of the live brain: Luke's judgment reached in

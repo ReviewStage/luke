@@ -32,7 +32,7 @@ import { makeDelegation } from "../host.js";
  * beside its start. The answer names the pair the worker ran on and its
  * words; the child conversation the worker is recorded in is a function of
  * the starting call's id, so the transcript can be opened from the call
- * alone (`server/hosted/coder-host/host.ts`).
+ * alone (`packages/service/src/agents/coder-host/host.ts`).
  */
 
 /** The declared subagent the task goes to, by the name its directory gives it. */

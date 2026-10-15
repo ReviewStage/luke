@@ -76,7 +76,7 @@ follows PRs 2 and 3, assigned separately.
 
 There are two writers:
 
-- **The notetaker** (`apps/web/server/voice/plan-scribe.ts`). It runs
+- **The notetaker** (`packages/service/src/plans/plan-scribe.ts`). It runs
   `gpt-5.6-luna` after each ~1 s pause in speech, and its runs never overlap.
   It saves with **no author**, so nothing records that it wrote
   (`plan-notes.ts:20-23`, `plan-scribe.ts:254-257`).
