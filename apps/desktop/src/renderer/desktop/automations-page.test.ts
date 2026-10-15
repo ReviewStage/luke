@@ -29,6 +29,7 @@ import { installScrollIntoView } from "#testing/scroll-into-view";
 import { runAppCommand } from "../app-commands";
 import { AUTOMATIONS_PAGE, type AutomationsPlace } from "../planning/use-plans-tab";
 import { ToastHost } from "../toast";
+import { appStateNow } from "../use-app-state";
 import { AutomationsPage } from "./automations-page";
 
 /**
@@ -144,6 +145,10 @@ let changeRefusal:
   | (typeof AUTOMATION_CALL_FAILURE)[keyof typeof AUTOMATION_CALL_FAILURE]
   | undefined;
 
+/** The secrets a write answers once: a webhook made, and a new secret asked for. Synthetic. */
+const MADE_SECRET = "whsec-fixture-made-once";
+const ROTATED_SECRET = "whsec-fixture-rotated-once";
+
 /** The automations a fresh webhook secret was asked for. */
 let secretsAsked: string[] = [];
 /** What the window handed main's clipboard itself. */
@@ -206,6 +211,7 @@ beforeEach(() => {
         if (request.kind === ACT_KIND.AUTOMATIONS_CREATE) {
           creates.push(request.payload);
           const { workspaceId, name, trigger, action, scope, repositories } = request.payload;
+          const hooked = trigger.kind === AUTOMATION_TRIGGER.WEBHOOK;
           const made = automation(42, {
             workspaceId: workspaceId ?? WORKSPACE.id,
             name,
@@ -213,9 +219,14 @@ beforeEach(() => {
             action,
             scope: scope ?? AUTOMATION_SCOPE.PERSONAL,
             repositories: repositories ?? [],
+            ...(hooked ? { webhookUrl: "https://tryluke.dev/api/automations/made/webhook" } : {}),
           });
           standing = [made, ...standing];
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { automation: made } });
+          // A webhook's secret is answered once, by the write that minted it.
+          const value = hooked
+            ? { automation: made, webhookSecret: MADE_SECRET }
+            : { automation: made };
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
         }
         if (request.kind === ACT_KIND.CODING_AGENTS_MODELS) {
           catalogReads += 1;
@@ -257,13 +268,13 @@ beforeEach(() => {
           runs = [made, ...runs];
           return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { run: made } });
         }
-        if (request.kind === ACT_KIND.AUTOMATIONS_COPY_WEBHOOK_SECRET) {
+        if (request.kind === ACT_KIND.AUTOMATIONS_NEW_WEBHOOK_SECRET) {
           secretsAsked.push(request.payload.automationId);
           const automation = standing.find((each) => each.id === request.payload.automationId);
           const value =
             automation === undefined
               ? { failure: AUTOMATION_CALL_FAILURE.NOT_FOUND }
-              : { automation, secretCopied: true };
+              : { automation, webhookSecret: ROTATED_SECRET };
           return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
         }
         if (request.kind === ACT_KIND.WINDOW_COPY_TEXT) {
@@ -1122,7 +1133,33 @@ test("a new automation set to a GitHub event is created on it, the trigger said 
   );
 });
 
-test("a saved webhook shows its address to copy, and a new secret, asked for first, goes to the clipboard by the host, never into the window", async () => {
+test("a webhook made in the window shows its secret once, read-only with Copy, left out of the screen recording and the app state, and gone once Done is pressed", async () => {
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
+  await settle();
+
+  act(() => button("Webhook").click());
+  type(page.querySelector("input[aria-label='Automation name']"), "Fix Sentry alerts");
+  type(page.querySelector("textarea[aria-label='Task']"), "Fix the error the alert names.");
+  act(() => button("Create").click());
+  await settle();
+
+  const field = page.querySelector<HTMLInputElement>("input[aria-label='Secret']");
+  assert.equal(field?.value, MADE_SECRET);
+  assert.equal(field?.readOnly, true);
+  assert.ok(field?.closest(".ph-no-capture"), "the secret is left out of the screen recording");
+  assert.match(page.textContent ?? "", /You won't be able to see this again/u);
+  assert.ok(!JSON.stringify(appStateNow() ?? {}).includes(MADE_SECRET), "no app state holds it");
+  act(() => button("Copy secret").click());
+  await settle();
+  assert.deepEqual(copied, [MADE_SECRET]);
+
+  act(() => button("Done").click());
+  assert.equal(page.querySelector("input[aria-label='Secret']"), null);
+  assert.ok(!(page.ownerDocument.body.innerHTML ?? "").includes(MADE_SECRET), "it is gone");
+  assert.ok(button("New secret"), "a new secret is the only way to another");
+});
+
+test("a new secret, asked for first, is shown once on the page that asked, and is gone once the page is left", async () => {
   const hooked = automation(8, {
     name: "Fix Sentry alerts",
     trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK },
@@ -1136,21 +1173,42 @@ test("a saved webhook shows its address to copy, and a new secret, asked for fir
     page.querySelector<HTMLInputElement>("input[aria-label='Webhook address']")?.value,
     hooked.webhookUrl,
   );
+  assert.equal(
+    page.querySelector("input[aria-label='Secret']"),
+    null,
+    "no secret is shown unasked",
+  );
   act(() => button("Copy address").click());
-  act(() => button("Copy a new secret").click());
+  act(() => button("New secret").click());
   await settle();
   assert.deepEqual(secretsAsked, [], "nothing is replaced before the developer says so");
-  assert.match(
-    page.ownerDocument.body.textContent ?? "",
-    /stops working until you paste in the new one/u,
-  );
-  act(() => button("Copy new secret").click());
+  act(() => {
+    const confirm = [
+      ...document.querySelectorAll<HTMLButtonElement>(".confirm-dialog button"),
+    ].find((each) => each.textContent === "New secret");
+    assert.ok(confirm, "the dialog asks first");
+    confirm.click();
+  });
   await settle();
 
   assert.deepEqual(copied, [hooked.webhookUrl]);
   assert.deepEqual(secretsAsked, [hooked.id]);
-  assert.match(page.textContent ?? "", /A new secret is on your clipboard/u);
+  assert.equal(
+    page.querySelector<HTMLInputElement>("input[aria-label='Secret']")?.value,
+    ROTATED_SECRET,
+  );
   assert.match(page.textContent ?? "", /Don't send secrets in the body/u);
+
+  act(() => button("Automations").click());
+  await settle();
+  act(() =>
+    rowOf(page, "Fix Sentry alerts")
+      .querySelector<HTMLButtonElement>(".automation-row-open")
+      ?.click(),
+  );
+  await settle();
+  assert.equal(page.querySelector("input[aria-label='Secret']"), null, "never shown again");
+  assert.ok(!(page.ownerDocument.body.innerHTML ?? "").includes(ROTATED_SECRET));
 });
 
 test("a webhook not yet saved as one says it gets its address once it is saved", async () => {

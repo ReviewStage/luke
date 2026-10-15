@@ -4247,6 +4247,14 @@ body:has(.app-stage[data-capture="true"])
   gap: var(--space-6);
 }
 
+/* A webhook's secret, shown once: its field, its copy, and its Done, over a line saying so. */
+.automation-webhook-secret {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
 .automation-webhook-url {
   min-width: 0;
   flex: 1;

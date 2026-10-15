@@ -8,7 +8,6 @@ import type {
   AutomationRunParams,
   AutomationRunsView,
   AutomationRunView,
-  AutomationSecretCopiedView,
   AutomationView,
 } from "@luke/features/automation-view";
 import { ACT, ACT_KIND } from "@luke/host/acts";
@@ -31,9 +30,7 @@ export interface AutomationActsDependencies {
     automationDelete(params: AutomationIdParams): Effect.Effect<AutomationDeletedView>;
     automationRun(params: AutomationRunParams): Effect.Effect<AutomationRunView>;
     automationRuns(params: AutomationIdParams): Effect.Effect<AutomationRunsView>;
-    automationCopyWebhookSecret(
-      params: AutomationIdParams,
-    ): Effect.Effect<AutomationSecretCopiedView>;
+    automationNewWebhookSecret(params: AutomationIdParams): Effect.Effect<AutomationView>;
   };
 }
 
@@ -44,7 +41,7 @@ type AutomationActKind =
   | typeof ACT_KIND.AUTOMATIONS_DELETE
   | typeof ACT_KIND.AUTOMATIONS_RUN
   | typeof ACT_KIND.AUTOMATIONS_RUNS
-  | typeof ACT_KIND.AUTOMATIONS_COPY_WEBHOOK_SECRET;
+  | typeof ACT_KIND.AUTOMATIONS_NEW_WEBHOOK_SECRET;
 
 /** The refusal a window that draws no Automations page hears, in its kind's own words. */
 function refuseUnlessPanel(kind: AutomationActKind, sender: ActSender): void {
@@ -80,9 +77,9 @@ export function automationActRows(
       refuseUnlessPanel(ACT_KIND.AUTOMATIONS_RUNS, sender);
       return host.automationRuns(params);
     },
-    [ACT_KIND.AUTOMATIONS_COPY_WEBHOOK_SECRET]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.AUTOMATIONS_COPY_WEBHOOK_SECRET, sender);
-      return host.automationCopyWebhookSecret(params);
+    [ACT_KIND.AUTOMATIONS_NEW_WEBHOOK_SECRET]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.AUTOMATIONS_NEW_WEBHOOK_SECRET, sender);
+      return host.automationNewWebhookSecret(params);
     },
   };
 }

@@ -15,8 +15,6 @@ export const HOST_NATIVE_NODE_ID = "native";
 export const HOST_NODE_CAPABILITY = {
   /** Hands an address to the operating system, as a row press does: the pressing panel has stood itself down already. */
   OPEN_EXTERNAL: "os.openExternal",
-  /** Puts text on the system clipboard: a secret the host was answered, which crosses to no window. */
-  COPY_TEXT: "os.copyText",
 } as const;
 
 export type HostNodeCapability = (typeof HOST_NODE_CAPABILITY)[keyof typeof HOST_NODE_CAPABILITY];

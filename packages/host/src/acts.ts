@@ -5,7 +5,6 @@ import {
   type AutomationListView,
   type AutomationRunsView,
   type AutomationRunView,
-  type AutomationSecretCopiedView,
   type AutomationView,
   automationChangeParamsSchema,
   automationCreateParamsSchema,
@@ -16,7 +15,6 @@ import {
   automationRunParamsSchema,
   automationRunsViewSchema,
   automationRunViewSchema,
-  automationSecretCopiedViewSchema,
   automationViewSchema,
 } from "@luke/features/automation-view";
 import {
@@ -381,8 +379,8 @@ export const ACT_KIND = {
   AUTOMATIONS_DELETE: "automations.delete",
   AUTOMATIONS_RUN: "automations.run",
   AUTOMATIONS_RUNS: "automations.runs",
-  /** A webhook's secret minted again and put on the clipboard by the host; the window hears that it was copied. */
-  AUTOMATIONS_COPY_WEBHOOK_SECRET: "automations.copyWebhookSecret",
+  /** A webhook's secret minted again by the host and answered to this window alone, once, to show. */
+  AUTOMATIONS_NEW_WEBHOOK_SECRET: "automations.newWebhookSecret",
   /**
    * Settings › API keys: the account's own provider keys read as hints and
    * statuses, one saved, one removed. The save's payload is the one place a
@@ -1113,10 +1111,10 @@ export const ACT = {
     result: wireResult<AutomationRunsView>(isReadable(automationRunsViewSchema)),
     refusal: "Could not read the automation's runs on this system.",
   },
-  [ACT_KIND.AUTOMATIONS_COPY_WEBHOOK_SECRET]: {
+  [ACT_KIND.AUTOMATIONS_NEW_WEBHOOK_SECRET]: {
     payload: actSchema(automationIdParamsSchema),
-    result: wireResult<AutomationSecretCopiedView>(isReadable(automationSecretCopiedViewSchema)),
-    refusal: "Could not copy a new webhook secret on this system.",
+    result: wireResult<AutomationView>(isReadable(automationViewSchema)),
+    refusal: "Could not make a new webhook secret on this system.",
   },
   [ACT_KIND.PROVIDER_KEYS_READ]: {
     payload: noPayload,

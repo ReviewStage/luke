@@ -64,7 +64,7 @@ const MADE = {
 };
 
 it.effect(
-  "an automation is made on its workspace under the account's bearer, and a secret the service answered never reaches the window",
+  "an automation is made on its workspace under the account's bearer, and a webhook secret the service minted is answered once for the window to show",
   () =>
     Effect.gen(function* () {
       const api = fakeCloudApi({
@@ -75,8 +75,10 @@ it.effect(
 
       const made = yield* Effect.provide(client().create(MADE), api.layer);
 
-      assert.deepEqual(made, { automation: SUMMARY });
-      assert.equal(JSON.stringify(made).includes("a-secret-the-service-answered"), false);
+      assert.deepEqual(made, {
+        automation: SUMMARY,
+        webhookSecret: "a-secret-the-service-answered",
+      });
       assert.deepEqual(JSON.parse(api.requests()[0]?.body ?? "{}"), MADE);
       assert.deepEqual(api.credentials(), ["token-1"]);
     }),
@@ -162,7 +164,7 @@ it.effect(
 );
 
 it.effect(
-  "a webhook's secret is replaced by the hash the host sends, and a window's own write to a webhook drops the secret the service mints",
+  "a webhook's secret is replaced by the hash the host sends, and a window's own write to a webhook answers the secret the service minted",
   () =>
     Effect.gen(function* () {
       const api = fakeCloudApi({
@@ -193,7 +195,9 @@ it.effect(
       assert.deepEqual(JSON.parse(api.requests()[0]?.body ?? "{}"), {
         webhookSecretHash: "ab".repeat(32),
       });
-      assert.ok(!JSON.stringify([replaced, toWebhook]).includes("a-secret-the-service-minted"));
+      assert.ok(
+        !("failure" in toWebhook) && toWebhook.webhookSecret === "a-secret-the-service-minted",
+      );
     }),
 );
 

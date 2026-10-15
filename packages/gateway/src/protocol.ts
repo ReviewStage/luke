@@ -124,8 +124,8 @@ export const GATEWAY_METHOD = {
   AUTOMATIONS_DELETE: "automations.delete",
   AUTOMATIONS_RUN: "automations.run",
   AUTOMATIONS_RUNS: "automations.runs",
-  /** A webhook trigger's secret minted again and put on the system clipboard by the host; the answer says it was copied and never carries it. */
-  AUTOMATIONS_COPY_WEBHOOK_SECRET: "automations.copyWebhookSecret",
+  /** A webhook trigger's secret minted again by the host, its hash sent to the service, and the secret answered once to the window that asked (root AGENTS.md's carve-out). */
+  AUTOMATIONS_NEW_WEBHOOK_SECRET: "automations.newWebhookSecret",
   CODING_AGENTS_PULL_REQUEST: "codingAgents.pullRequest",
   /** One agent's changes: the files of its pull request as GitHub holds them now, each with its patch. */
   CODING_AGENTS_CHANGES: "codingAgents.changes",

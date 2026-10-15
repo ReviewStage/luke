@@ -16,11 +16,11 @@ import { wireUuidSchema } from "./service-wire.js";
  * The host asks the service on the window's behalf and answers the window
  * one of the shapes here. A repository the automation's workspace does not
  * reach is refused with why, as a Start is, so the window can say which
- * press mends it. The window writes any trigger, but no answer here carries
- * a webhook's secret, since a secret never enters a Gateway answer: the
- * secret a write mints is dropped, and one the developer asks for is minted
- * again and put on the system clipboard by the host, the window hearing only
- * that it was copied.
+ * press mends it. The window writes any trigger. A webhook's secret is the
+ * one secret an answer here carries, by root `AGENTS.md`'s carve-out: the
+ * write that mints it, a webhook made or a new secret asked for, answers it
+ * to the window that asked, once, for that window to show and forget; no
+ * other answer, event, or window ever holds it.
  */
 
 /** Why an automation call answered nothing a window can draw. */
@@ -87,24 +87,16 @@ export const automationListViewSchema = EffectSchema.Union([automationListAnswer
 
 export type AutomationListView = typeof automationListViewSchema.Type;
 
-/** One automation as a write answers it to the window. */
+/** One automation as a write answers it to the window, with the webhook secret it minted where it minted one. */
 export const automationViewSchema = EffectSchema.Union([
-  EffectSchema.Struct({ automation: automationSummarySchema }),
-  failed,
-]);
-
-export type AutomationView = typeof automationViewSchema.Type;
-
-/** A webhook's fresh secret put on the clipboard, as the window hears it: the automation, and that it was copied, never the secret. */
-export const automationSecretCopiedViewSchema = EffectSchema.Union([
   EffectSchema.Struct({
     automation: automationSummarySchema,
-    secretCopied: EffectSchema.Literal(true),
+    webhookSecret: EffectSchema.optionalKey(EffectSchema.String),
   }),
   failed,
 ]);
 
-export type AutomationSecretCopiedView = typeof automationSecretCopiedViewSchema.Type;
+export type AutomationView = typeof automationViewSchema.Type;
 
 /** A deletion as the window hears it. */
 export const automationDeletedViewSchema = EffectSchema.Union([

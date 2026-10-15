@@ -130,12 +130,16 @@ function readAnswer<Answer, Encoded>(
   });
 }
 
-/** A write's answer as the window hears it: the summary alone. */
+/** A write's answer as the window hears it: the summary, and a webhook secret the write minted, the window's to show once by root AGENTS.md's carve-out. */
 function summaryOnly(
   serviceBaseUrl: string,
   read: typeof automationAnswerSchema.Type | Failed,
 ): AutomationView {
-  return "failure" in read ? read : { automation: withWebhookUrl(serviceBaseUrl, read.automation) };
+  if ("failure" in read) return read;
+  const automation = withWebhookUrl(serviceBaseUrl, read.automation);
+  return read.webhookSecret === undefined
+    ? { automation }
+    : { automation, webhookSecret: read.webhookSecret };
 }
 
 /** A webhook automation with the address its caller posts to, on the service this client reaches; any other as it came. */
