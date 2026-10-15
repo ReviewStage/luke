@@ -461,6 +461,40 @@ test("Luke starts an agent on the call's plan as the deployment acting for the a
   assert.equal(eve.sent.length, 3);
 });
 
+test("Luke's one start carries what the developer said beyond the plan: the note rides after the plan, or after a prompt, in the agent's one opening message, and the agent is still handed the plan", async () => {
+  const userId = await database.createUser();
+  const plan = await planConversation(userId, RELAY_FULL_NAME);
+  const eve = await fakeCoderEve(plan.workspaceId);
+  const acting = brainHost({
+    ...seams,
+    deploymentSecret: () => Redacted.make(CRON_SECRET),
+    eveOrigin: () => EVE_ORIGIN,
+  });
+  const call = await callerOn(acting, plan, eve.services, CATALOG);
+
+  const started = await call(START_CODING_AGENT_TOOL.name, { note: INSTRUCTION });
+  assert.equal(started.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(started));
+  const agent = startedAgentOf(started);
+  const stored = Option.getOrThrow(await database.run(readCodingAgent(userId, agent.id)));
+  assert.equal(stored.prompt, null);
+  assert.equal(eve.sent.length, 1);
+  const opening: string = JSON.parse(eve.sent[0]?.body ?? "").message;
+  assert.match(opening, /^# Teammate invitations/u);
+  assert.ok(opening.endsWith(`\n\n## Note from the developer\n\n${INSTRUCTION}`), opening);
+
+  const tasked = await call(
+    START_CODING_AGENT_TOOL.name,
+    { prompt: TASK, note: INSTRUCTION },
+    "call-2",
+  );
+  assert.equal(tasked.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(tasked));
+  assert.equal(eve.sent.length, 2);
+  assert.equal(
+    JSON.parse(eve.sent[1]?.body ?? "").message,
+    `${TASK}\n\n## Note from the developer\n\n${INSTRUCTION}`,
+  );
+});
+
 test("end_call is the one planning tool eve is told ends its turn, so the model is asked for no step after the goodbye it was told to add nothing to", () => {
   const endings = planningToolDeclarations()
     .filter((tool) => tool.endsTurn === true)
