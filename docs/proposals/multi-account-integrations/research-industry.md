@@ -90,6 +90,98 @@ connector or integration.
   documented confirms one OAuth session per entry.
   [OAuth API](https://developers.raycast.com/api-reference/oauth).
 
+## Instinct (instinct.com)
+
+Instinct is the invite-only personal agent from Spear Street Technology
+(Noah Shinn). You text or call it. It has a web workspace at
+`app.instinct.com` and a Mac app that pairs for iMessage and a local browser.
+
+**What is documented: nothing about multiple accounts.**
+- The [privacy policy](https://www.instinct.com/privacy-policy) names only
+  Google ("Google Calendar, Gmail, Google Drive, Google Docs, Google Sheets,
+  Google Slides and Google Tasks").
+- It commits to Google's User Data Policy "including the Limited Use
+  requirements".
+- It says access is revoked by "disconnecting via your settings within
+  Instinct's Workspace", and that disconnecting "does not automatically
+  delete data collected from that integration".
+- The [terms](https://www.instinct.com/terms) define "Connected Services" in
+  general.
+
+**What third parties report.** None of them mentions multiple accounts.
+- [TechCrunch, 2026-08-24](https://techcrunch.com/2026/08/24/instincts-powerful-ai-assistant-is-raising-privacy-and-security-concerns/)
+  covers testers' Gmail retention after disconnect.
+- [usecarly review](https://www.usecarly.com/blog/instinct-review/): "Gmail,
+  Calendar and Drive are offered as full-access links with no read-only
+  option".
+- [eesel setup guide](https://www.eesel.ai/blog/instinct-ai-for-email-management):
+  "connect a personal Gmail only".
+- [rywalker.com](https://rywalker.com/research/instinct): the legal pages
+  define "Mac OS and mobile apps".
+- [explainx on the 1Password partnership](https://explainx.ai/blog/instinct-1password-ai-agent-account-vaults-2026)
+  covers Shinn's
+  [2026-09-04 post](https://x.com/noahrshinn/status/2095911123291881608),
+  which says 32% of users share credentials through Instinct's Vault.
+- I found no App Store listing, help center, or changelog. X refused the
+  fetch of the founder's posts.
+
+**What the client code shows.** This is the Workspace page bundle that
+`app.instinct.com/assets/WorkspacePage-*.js` serves without signing in, read
+on 2026-10-15. It is undocumented and may change.
+
+- **The GraphQL connection types are plural for four providers:**
+  - `googleWorkspaceConnections` (fields: `id`, `email`, `isDefault`,
+    `isRevoked`, and `services[]` with `serviceId`, `label`, `connected`);
+  - `outlookConnections` (`id`, `email`, `displayName`, `isDefault`,
+    `isRevoked`);
+  - `linearConnections` (`id`, `organizationName`, `displayName`, `email`,
+    `isDefault`, `isRevoked`);
+  - `notionConnections` (`id`, `workspaceName`, `isDefault`, `isRevoked`).
+
+  Each has `…SelectConnection` and `…DisconnectConnection(connectionId)`
+  mutations.
+- **Singular types:**
+  - `githubConnection` (`username`);
+  - `granolaConnection`;
+  - `slackCanvasConnection` (`teamName`, `teamId`);
+  - `spotifyConnection`, `whoopConnection`, `shopWalletConnection`,
+    `stripeLinkConnection`;
+  - `imessageLocalConnection`.
+- **The UI strings:**
+  - "Add account" (the button once a provider is connected), "Connect",
+    "Connecting...", "At capacity";
+  - "Primary", "Make primary" (offered only when there is more than one
+    account), "Remove";
+  - "Failed to change primary Notion workspace", "Failed to change primary
+    Linear account", "Failed to change primary Google Workspace account",
+    "Failed to change primary Outlook account";
+  - "Instinct will no longer have access to this Google Workspace account.";
+  - Notion's line, "Search, read, and manage Notion pages and databases";
+  - Outlook's line, "Read, search, draft, send, and organize Outlook mail
+    through Microsoft Graph".
+- **Connecting** calls `startWebConnect(integrationId, scopeProfile)`, e.g.
+  `integrationId: "google-workspace"` with `scopeProfile: "ONBOARDING"`. It
+  answers a URL the browser follows.
+- **No integration platform is named** anywhere in the bundles: no Composio,
+  Pipedream, Nango, Merge, Paragon, or Arcade.
+- **Inference:**
+  - Instinct runs its own OAuth clients. The Limited Use commitment is what
+    Google requires of an app requesting restricted Gmail scopes under its
+    own verified client, with an annual CASA assessment
+    ([restricted-scope verification](https://developers.google.com/identity/protocols/oauth2/production-readiness/restricted-scope-verification)).
+  - Its per-provider label fields (`workspaceName`, `organizationName`,
+    `teamName`) are what each provider's own token response or identity call
+    answers.
+
+**Google, in general.**
+- Every Google account a user authorizes is a separate grant to the same
+  client.
+- The only limit is "100 refresh tokens per Google Account per OAuth 2.0
+  client ID", beyond which the oldest is invalidated.
+- `prompt=select_account` and `login_hint` choose the account
+  ([OAuth 2.0](https://developers.google.com/identity/protocols/oauth2),
+  [web server flow](https://developers.google.com/identity/protocols/oauth2/web-server)).
+
 ## Auth platforms for agents
 
 - **Composio has the most complete model.** It is opt-in (`allowMultiple`).
