@@ -1014,7 +1014,7 @@ test("a switch toast's Back does nothing once the window has moved on from the s
   const back = newestToastAction() ?? assert.fail("the toast offers a way back");
   act(() => tab.control().onChooseWorkspace(PLATFORM.id));
   await settle();
-  tab.stand({ planning: { ...TWO_WORKSPACES, workspaces: three, activePlanId: undefined } });
+  tab.stand({ planning: { ...TWO_WORKSPACES, workspaces: three } });
 
   act(() => back.click());
   await settle();
