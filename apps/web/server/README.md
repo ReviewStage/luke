@@ -131,7 +131,8 @@ too, so a renamed account renames it and the name it was made under, the
 account's or, for one made on 2026-10-15, "Personal", stands only once the
 account is gone. `tests/workspace-store.test.ts` holds the three. Beyond its name, that row is only how a
 plan start or a repository listing that names no workspace finds the
-account's default; the workspace is otherwise one like any other: it takes
+account's default; the workspace is otherwise one like any other, but that
+it is never renamed: it takes
 invitations, its members are read, removed, and left, and it connects GitHub,
 on the same rules as every workspace. The user row's cascade takes the
 `personal_workspace` row and the account's `member` rows and leaves the
@@ -189,7 +190,9 @@ where it is Google's or GitHub's (`@luke/features/account-picture`).
 member who is not an owner, `POST /api/workspaces/leave` lets anyone but
 an owner leave, and `POST /api/workspaces/rename { workspaceId, name }` lets
 an owner or an admin rename a workspace, answering `{ workspace }` under its
-new name and the slug it already had, and
+new name and the slug it already had, but for an account's first workspace,
+which the list marks `personal` to every member of it and whose rename is
+refused as `not-permitted`, because it is named by its owner's account name, and
 `POST /api/workspaces/photo/set { workspaceId, photo }` lets an owner or an
 admin set its photo, a `data:` URL of a PNG, JPEG, or WebP of at most
 `WORKSPACE_PHOTO_BOUNDS.MAX_BYTES` decoded, or remove it with `null`,

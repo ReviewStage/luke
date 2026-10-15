@@ -287,7 +287,7 @@ it.effect("a request without a bearer is refused and makes no workspace", () =>
 );
 
 it.effect(
-  "the first read makes the account's first workspace, owned and with no GitHub account",
+  "the first read makes the account's first workspace, owned, personal, and with no GitHub account",
   () =>
     Effect.gen(function* () {
       const { seams, database } = yield* openWorkspacePlugin;
@@ -306,6 +306,7 @@ it.effect(
             role: WORKSPACE_ROLE.OWNER,
             github: null,
             memberCount: 1,
+            personal: true,
           },
         ]);
         assert.deepEqual(second, first);
@@ -1017,6 +1018,49 @@ it.effect(
           refusedAs(HOSTED_HTTP_STATUS.FORBIDDEN, HOSTED_API_ERROR.NOT_PERMITTED),
         );
         assert.deepEqual(yield* organizationOf(acme), { name: "Acme Research", slug });
+      }).pipe(Effect.provide(plugin.database));
+    }),
+);
+
+it.effect(
+  "an account's first workspace is listed as personal and its rename refused to its owner and an admin of it alike, while a team's is neither",
+  () =>
+    Effect.gen(function* () {
+      const plugin = yield* openWorkspacePlugin;
+      yield* Effect.gen(function* () {
+        const ada = yield* openGithubAccount("Ada Lovelace");
+        const grace = yield* openGithubAccount("Grace Hopper");
+        const personal = yield* ensurePersonalWorkspace(ada, plugin.seams);
+        assert.ok(Option.isSome(personal));
+        yield* Effect.promise(() =>
+          plugin.api.addMember({
+            body: { userId: grace, organizationId: personal.value, role: "admin" },
+          }),
+        );
+        yield* openTeam(plugin.api, ada, []);
+
+        const listedOf = (userId: string) =>
+          Effect.map(workspacesOf(plugin.seams, githubReaching([]), userId), (listed) =>
+            listed.map(({ name, personal }) => ({ name, personal })),
+          );
+        const byOwner = yield* renaming(plugin, ada, personal.value, "Ada's");
+        const byAdmin = yield* renaming(plugin, grace, personal.value, "Grace's");
+
+        assert.deepEqual(yield* listedOf(ada), [
+          { name: "Ada Lovelace", personal: true },
+          { name: "Acme", personal: undefined },
+        ]);
+        assert.deepEqual(yield* listedOf(grace), [
+          { name: "Grace Hopper", personal: true },
+          { name: "Ada Lovelace", personal: true },
+        ]);
+        const refused = refusedAs(HOSTED_HTTP_STATUS.FORBIDDEN, HOSTED_API_ERROR.NOT_PERMITTED);
+        assert.deepEqual(byOwner, refused);
+        assert.deepEqual(byAdmin, refused);
+        assert.deepEqual(yield* organizationOf(personal.value), {
+          name: "Ada Lovelace",
+          slug: `personal-${ada}`,
+        });
       }).pipe(Effect.provide(plugin.database));
     }),
 );

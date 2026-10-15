@@ -209,6 +209,7 @@ it.layer(getTestDB())("an account's workspaces over effect/unstable/sql", (it) =
           role: WORKSPACE_ROLE.OWNER,
           github: null,
           memberCount: 1,
+          personal: true,
         },
       ]);
     }),
@@ -309,6 +310,7 @@ it.layer(getTestDB())("an account's workspaces over effect/unstable/sql", (it) =
           role: WORKSPACE_ROLE.OWNER,
           github: null,
           memberCount: 1,
+          personal: true,
         },
       ]);
     }),
@@ -342,6 +344,7 @@ it.layer(getTestDB())("an account's workspaces over effect/unstable/sql", (it) =
             role: WORKSPACE_ROLE.OWNER,
             github: null,
             memberCount: 1,
+            personal: true,
           },
         ]);
       }),
@@ -375,6 +378,7 @@ it.layer(getTestDB())("an account's workspaces over effect/unstable/sql", (it) =
             role: WORKSPACE_ROLE.OWNER,
             github: null,
             memberCount: 1,
+            personal: true,
           },
         ]);
       }),
@@ -401,6 +405,7 @@ it.layer(getTestDB())("an account's workspaces over effect/unstable/sql", (it) =
             role: WORKSPACE_ROLE.OWNER,
             github: null,
             memberCount: 1,
+            personal: true,
           },
           { ...acme, name: "Acme", role: WORKSPACE_ROLE.MEMBER, github: null, memberCount: 2 },
           { ...zeta, name: "Zeta", role: WORKSPACE_ROLE.OWNER, github: null, memberCount: 2 },
@@ -413,6 +418,7 @@ it.layer(getTestDB())("an account's workspaces over effect/unstable/sql", (it) =
             role: WORKSPACE_ROLE.OWNER,
             github: null,
             memberCount: 1,
+            personal: true,
           },
           { ...acme, name: "Acme", role: WORKSPACE_ROLE.OWNER, github: null, memberCount: 2 },
           { ...zeta, name: "Zeta", role: WORKSPACE_ROLE.MEMBER, github: null, memberCount: 2 },
@@ -484,6 +490,7 @@ it.effect(
             role: WORKSPACE_ROLE.OWNER,
             github: null,
             memberCount: 1,
+            personal: true,
           },
         ]);
       }).pipe(Effect.provide(database));

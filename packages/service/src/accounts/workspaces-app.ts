@@ -82,7 +82,8 @@ import { listMembers, memberIdOf } from "./workspace-members.js";
  * owner or admin remove a member who is not an owner, and
  * `POST /api/workspaces/leave` lets anyone but an owner leave.
  * `POST /api/workspaces/rename` lets an owner or admin rename a workspace,
- * answering it under its new name and its old slug.
+ * answering it under its new name and its old slug; an account's first
+ * workspace is refused, since it is named by its owner's account name.
  * `GET /api/workspaces/<id>/photo` serves a workspace's photo as its bytes
  * to a member of it; the list names only which version of it stands.
  * `POST /api/workspaces/photo/set` lets an owner or admin set the photo, as
@@ -491,8 +492,10 @@ const managedWorkspace = Effect.fn("web/managedWorkspace")(function* (
 
 /**
  * POST: an owner or admin renames a workspace, answered with it as it then
- * stands. Note that the plugin is handed the name alone, because a slug it
- * was handed would move every link's first step with it.
+ * stands; an account's first workspace is refused, because every read names
+ * it by its owner's account name and a name of its own would never show.
+ * Note that the plugin is handed the name alone, because a slug it was
+ * handed would move every link's first step with it.
  */
 const renameEndpoint = Effect.fn("web/workspaceRenameEndpoint")(function* (
   seams: WorkspacesAppSeams,
@@ -507,6 +510,7 @@ const renameEndpoint = Effect.fn("web/workspaceRenameEndpoint")(function* (
   if (Result.isFailure(asked)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   const { workspaceId, name } = asked.success;
   const workspace = yield* managedWorkspace(userId, workspaceId);
+  if (workspace.personal === true) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
   yield* pluginCallOrRefused(
     seams.members.updateOrganization({ headers, organizationId: workspace.id, data: { name } }),
   );
