@@ -18,8 +18,16 @@ import { SETTINGS_SECTION } from "@luke/settings/settings-views";
 import { ProviderMark, TrashIcon } from "@luke/ui";
 import { ACTOR_KIND, memberActor, ROLE_WORDS, SOMEONE_REASON } from "@luke/ui/actor-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
-import { ExternalLinkIcon, ImageUpIcon, UserMinusIcon, XIcon } from "lucide-react";
-import { Fragment, useEffect, useRef, useState } from "react";
+import {
+  CrownIcon,
+  ExternalLinkIcon,
+  ImageUpIcon,
+  ShieldIcon,
+  UserIcon,
+  UserMinusIcon,
+  XIcon,
+} from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { useAct } from "../act";
 import { ACTOR_SIZE, ActorMark, YouBadge } from "../actor-ref";
 import { CHIP_LOOK, Chip } from "../chip";
@@ -47,16 +55,18 @@ import { ReadFailed, SettingsGroup } from "./settings-group";
  * shares it and the reader's role, and for an owner or an admin Rename and
  * the photo's acts; an account's first workspace is named by its owner's
  * account name, so it offers no Rename. The members follow as the service
- * holds them now, each with their email and their role in one column; an
- * owner or an admin removes a member who is not an owner and not
- * themselves. An owner or an admin then invites people by address and role,
+ * holds them now, each with their email and their role in one column; the
+ * owner makes a member an admin, an admin a member or the owner, and
+ * removes anyone else, and an admin removes members. An owner or an admin
+ * then invites people by address and role, an admin as a member alone,
  * sees the invitations still pending with each one's accept link to copy and
  * send, and cancels one. GitHub, the one place a workspace's repositories
  * are set, is drawn as Settings › Integrations draws its rows: an owner or an
  * admin connects one GitHub account's installation of the Luke GitHub App,
  * or manages it from Manage, whose menu holds Choose repositories on GitHub,
  * the App's page there, and Disconnect; a member sees whether GitHub is
- * connected, or is told to ask. Last, anyone but an owner leaves.
+ * connected, or is told to ask. Last, anyone but the owner leaves, and the
+ * owner hands the workspace to an admin first.
  *
  * Its rows are the Settings kit's: a row's one constructive act stands at
  * its end, and the rest are its ⋯'s (`menu-row.tsx`), each act that cannot
@@ -130,11 +140,34 @@ const LEAVE_WORDS = {
   AGENTS:
     "Agents you started stay in its history, named as a former member, and any still working stop.",
   AUTOMATIONS: "Automations you created stop running.",
+  AUTOMATIONS_NAMED: (names: readonly string[]) =>
+    names.length === 1
+      ? `An automation you created stops running: ${names[0]}.`
+      : `${names.length} automations you created stop running: ${names.join(", ")}.`,
+  OWNER: "You're its owner. Make an admin the owner first, then you can leave.",
+  OWNER_NO_ADMIN:
+    "You're its owner. Make a member an admin, then make them the owner, and you can leave.",
   OWN: (name: string | undefined) =>
     name === undefined
       ? "Your own workspace isn't affected."
       : `Your own workspace, ${name}, isn't affected.`,
   LEFT: (name: string) => `You left ${name}.`,
+} as const;
+
+/** The role changes in a member's ⋯, the owner's alone. */
+const ROLE_ACT = {
+  MAKE_ADMIN: "Make admin",
+  MAKE_MEMBER: "Make member",
+  MAKE_OWNER: "Make owner",
+} as const;
+
+/** What the handover says: its press, its dialogs' bodies, and its running verb. The old owner becomes an admin, one way. */
+const TRANSFER_WORDS = {
+  VERB: "Transfer ownership",
+  RUNNING: "Transferring",
+  BODY: "The admin you choose becomes its owner, and you become an admin. You can leave once it's done.",
+  ONE_BODY: (name: string) =>
+    `You become an admin. ${name} can then change anyone's role and remove anyone, you included.`,
 } as const;
 
 /** The outline face an invited address wears until it is a member, so its words stand in the members' column. */
@@ -184,40 +217,144 @@ function RowCopy({ name, line }: { name: string; line?: React.ReactNode }): Reac
 }
 
 /**
+ * What the reader may do to another member, by both their roles, as the
+ * service holds it: the owner makes a member an admin, an admin a member or
+ * the owner, though never in the account's own first workspace, which is
+ * named for its creator, and removes anyone but itself; an admin removes
+ * members alone. Nobody acts on themselves, whose way out is Leave.
+ */
+function memberActs(workspace: Workspace, member: WorkspaceMember, self: boolean) {
+  const owner = workspace.role === WORKSPACE_ROLE.OWNER && !self;
+  const admin = member.role === WORKSPACE_ROLE.ADMIN;
+  return {
+    promote: owner && member.role === WORKSPACE_ROLE.MEMBER,
+    demote: owner && admin,
+    transfer: owner && admin && workspace.personal !== true,
+    remove: !self && removes(workspace.role, member.role),
+  };
+}
+
+/**
+ * Whether the reader's role removes a member of `role`: the owner an admin
+ * or a member, and an admin a member alone, as the service holds it.
+ */
+function removes(reader: Workspace["role"], role: WorkspaceMember["role"]): boolean {
+  if (reader === WORKSPACE_ROLE.OWNER) return role !== WORKSPACE_ROLE.OWNER;
+  return reader === WORKSPACE_ROLE.ADMIN && role === WORKSPACE_ROLE.MEMBER;
+}
+
+/**
+ * The workspace's members, read afresh whenever the workspace changes or
+ * the window's list says it holds another count of them, as someone
+ * joining or leaving elsewhere makes it; a write's answer stands in once it
+ * lands. Retry reads again from nothing; a refresh reads again keeping the
+ * list it has on screen until the new one lands, and a refresh that fails
+ * keeps it. Note that only the newest thing asked is shown, a read or a
+ * write's answer, because a read sent before a write can land after it and
+ * would put back what the write changed.
+ */
+function useMembersRead(workspaceId: string, memberCount: number | undefined) {
+  const { act } = useAct();
+  const [read, setRead] = useState<ListRead<WorkspaceMember>>(undefined);
+  const [attempt, setAttempt] = useState({ count: 0, keep: false });
+  const latest = useRef(0);
+  useEffect(() => {
+    const asked = ++latest.current;
+    if (!attempt.keep) setRead(undefined);
+    act(ACT_KIND.WORKSPACE_MEMBERS_READ, { workspaceId }).then(
+      (items) => {
+        if (asked === latest.current) setRead({ items });
+      },
+      () => {
+        if (asked === latest.current && !attempt.keep) setRead({ failed: READ_FAILED.MEMBERS });
+      },
+    );
+    return () => {
+      // A read the workspace or a newer ask replaced is passed over when it lands.
+      if (asked === latest.current) latest.current += 1;
+    };
+  }, [act, workspaceId, memberCount, attempt]);
+  return {
+    read,
+    retry: () => setAttempt((was) => ({ count: was.count + 1, keep: false })),
+    refresh: () => setAttempt((was) => ({ count: was.count + 1, keep: true })),
+    changed: (items: readonly WorkspaceMember[]) => {
+      latest.current += 1;
+      setRead({ items });
+    },
+  };
+}
+
+/**
  * One member's row: their face, their name with You on the reader's own,
- * their email under it, and their role as the row's value in one column;
- * for an owner or admin, Remove in its ⋯ on anyone's but an owner's and
- * their own, which asks first. A row with no ⋯ in a list where others have
- * one keeps the ⋯'s room, so every role ends in the same place.
+ * their email under it, and their role as the row's value in one column,
+ * then in its ⋯ what the reader may do to them (`memberActs`). Make admin
+ * and Make member take hold at once, since either is undone by the other;
+ * Make owner and Remove from workspace ask first. A role change refused is
+ * said under the row. A row with no ⋯ in a list where others have one
+ * keeps the ⋯'s room, so every role ends in the same place.
  */
 function MemberRow({
-  workspaceId,
+  workspace,
   member,
   readerId,
-  removable,
   slotted,
-  onRemoved,
+  onChanged,
 }: {
-  workspaceId: string;
+  workspace: Workspace;
   member: WorkspaceMember;
   /** The reader's account id, whose own row wears You. */
   readerId: string | undefined;
-  removable: boolean;
   /** Whether the list's rows may carry a ⋯, so one without keeps its room. */
   slotted: boolean;
-  onRemoved: (members: readonly WorkspaceMember[]) => void;
+  onChanged: (members: readonly WorkspaceMember[]) => void;
 }): React.JSX.Element {
   const { act } = useAct();
-  const remove = useConfirmDialog({ subject: removable, surfaceOpen: true }, () =>
-    act(ACT_KIND.WORKSPACE_MEMBER_REMOVE, { workspaceId, userId: member.userId }).then(
-      (members) => {
-        onRemoved(members);
-        return ACCEPTED;
-      },
-      refusedWith,
-    ),
+  const workspaceId = workspace.id;
+  const { userId } = member;
+  const may = memberActs(workspace, member, userId === readerId);
+  const [refusal, setRefusal] = useState<string>();
+  const answered = (members: readonly WorkspaceMember[]) => {
+    onChanged(members);
+    return ACCEPTED;
+  };
+  const remove = useConfirmDialog({ subject: may.remove, surfaceOpen: true }, () =>
+    act(ACT_KIND.WORKSPACE_MEMBER_REMOVE, { workspaceId, userId }).then(answered, refusedWith),
   );
-  const actions = removable
+  const makeOwner = useConfirmDialog({ subject: may.transfer, surfaceOpen: true }, () =>
+    act(ACT_KIND.WORKSPACE_TRANSFER, { workspaceId, userId }).then(answered, refusedWith),
+  );
+  const giveRole = (role: WorkspaceInvitation["role"]) => {
+    setRefusal(undefined);
+    act(ACT_KIND.WORKSPACE_MEMBER_ROLE, { workspaceId, userId, role }).then(
+      onChanged,
+      (refused: Error) => setRefusal(refused.message),
+    );
+  };
+  const roleActs = [
+    ...(may.promote
+      ? [
+          {
+            label: ROLE_ACT.MAKE_ADMIN,
+            icon: <ShieldIcon />,
+            onSelect: () => giveRole(INVITATION_ROLE.ADMIN),
+          },
+        ]
+      : []),
+    ...(may.demote
+      ? [
+          {
+            label: ROLE_ACT.MAKE_MEMBER,
+            icon: <UserIcon />,
+            onSelect: () => giveRole(INVITATION_ROLE.MEMBER),
+          },
+        ]
+      : []),
+    ...(may.transfer
+      ? [{ label: ROLE_ACT.MAKE_OWNER, icon: <CrownIcon />, onSelect: makeOwner.ask }]
+      : []),
+  ];
+  const removeActs = may.remove
     ? [
         {
           label: "Remove from workspace",
@@ -227,21 +364,27 @@ function MemberRow({
         },
       ]
     : [];
+  const acting = roleActs.length + removeActs.length > 0;
   return (
     <>
-      <MenuRow label={`${member.name} actions`} actions={actions}>
+      <MenuRow label={`${member.name} actions`} actions={[roleActs, removeActs]}>
         <ActorMark actor={memberActor(member, readerId)} size={ACTOR_SIZE.CARD} />
         <span className="settings-copy">
           {/* The person card's own wrapper, so You stands off the name as it does on the card. */}
           <strong className="actor-card-name">
             {member.name}
-            {member.userId === readerId ? <YouBadge /> : null}
+            {userId === readerId ? <YouBadge /> : null}
           </strong>
           <small>{member.email}</small>
         </span>
         <span className="settings-row-value">{ROLE_WORDS[member.role]}</span>
-        {slotted && !removable ? <span className="settings-act-slot" aria-hidden="true" /> : null}
+        {slotted && !acting ? <span className="settings-act-slot" aria-hidden="true" /> : null}
       </MenuRow>
+      {refusal === undefined ? null : (
+        <p className="error-message" role="alert">
+          {refusal}
+        </p>
+      )}
       <ConfirmDialog
         confirm={remove}
         question={{
@@ -251,31 +394,68 @@ function MemberRow({
           running: "Removing",
         }}
       />
+      <ConfirmDialog
+        confirm={makeOwner}
+        question={{
+          title: `Make ${member.name} the owner of ${workspace.name}?`,
+          body: TRANSFER_WORDS.ONE_BODY(member.name),
+          verb: ROLE_ACT.MAKE_OWNER,
+          running: TRANSFER_WORDS.RUNNING,
+        }}
+      />
     </>
   );
 }
 
 /**
- * The leave, for anyone but an owner, the page's last group: drawn as
- * Profile's Delete account is, its name, a line saying what goes, and the
- * red button, which asks first, naming what stays and what stops. A leave
- * the service carried says so in the window's toast as the window turns to
- * the personal workspace's Home; a refusal, offline among them, is said in
- * the dialog, which stays open to try again.
+ * The automations the reader made in the workspace, by name, which a leave
+ * stops, read afresh each time the leave is asked, since one made in
+ * another window meanwhile stops too; undefined until that read lands, and
+ * where the service does not say whose they are, which the dialog says
+ * without names.
  */
-function LeaveGroup({
+function useOwnAutomations(workspaceId: string) {
+  const { act } = useAct();
+  const [names, setNames] = useState<readonly string[] | undefined>(undefined);
+  // Note that only the read asked last is shown, because two leaves asked in turn can answer out of order.
+  const latest = useRef(0);
+  const read = () => {
+    const asked = ++latest.current;
+    setNames(undefined);
+    act(ACT_KIND.AUTOMATIONS_LIST, { workspaceId }).then(
+      (view) => {
+        if (asked !== latest.current || "failure" in view) return;
+        if (view.automations.some((each) => each.mine === undefined)) return;
+        setNames(view.automations.filter((each) => each.mine === true).map((each) => each.name));
+      },
+      () => undefined,
+    );
+  };
+  return { names, read };
+}
+
+/**
+ * The leave for a member or an admin: drawn as Profile's Delete account is,
+ * its name, a line saying what goes, and the red button, which asks first,
+ * naming what stays and what stops, the automations the reader made among
+ * them by name where the service says whose they are. A leave the service
+ * carried says so in the window's toast as the window turns to the personal
+ * workspace's Home; a refusal, offline among them, is said in the dialog,
+ * which stays open to try again.
+ */
+function MemberLeave({
   workspace,
   ownName,
   onLeft,
 }: {
   workspace: Workspace;
-  /** The name of the account's own workspace, which a leave leaves alone; absent from a service that names none. */
   ownName: string | undefined;
   onLeft: () => void;
 }): React.JSX.Element {
   const { act } = useAct();
   const show = useToast();
   const workspaceId = workspace.id;
+  const automations = useOwnAutomations(workspaceId);
   const leave = useConfirmDialog({ subject: true, surfaceOpen: true }, () =>
     act(ACT_KIND.WORKSPACE_LEAVE, { workspaceId }).then(() => {
       show({
@@ -287,8 +467,14 @@ function LeaveGroup({
       return ACCEPTED;
     }, refusedWith),
   );
+  const automationsLine =
+    automations.names === undefined
+      ? LEAVE_WORDS.AUTOMATIONS
+      : automations.names.length === 0
+        ? undefined
+        : LEAVE_WORDS.AUTOMATIONS_NAMED(automations.names);
   return (
-    <SettingsGroup anchor={SETTINGS_SECTION.LEAVE}>
+    <>
       <div className="settings-row">
         <RowCopy name={`Leave ${workspace.name}`} line={LEAVE_WORDS.LINE} />
         <button
@@ -296,7 +482,10 @@ function LeaveGroup({
           className="toolbar-button bordered-button"
           data-danger="true"
           disabled={leave.busy}
-          onClick={leave.ask}
+          onClick={() => {
+            automations.read();
+            leave.ask();
+          }}
         >
           Leave
         </button>
@@ -313,76 +502,213 @@ function LeaveGroup({
         <ul className="leave-consequences">
           <li>{LEAVE_WORDS.PLANS(workspace.name)}</li>
           <li>{LEAVE_WORDS.AGENTS}</li>
-          <li>{LEAVE_WORDS.AUTOMATIONS}</li>
+          {automationsLine === undefined ? null : <li>{automationsLine}</li>}
           <li>{LEAVE_WORDS.OWN(ownName)}</li>
         </ul>
       </ConfirmDialog>
-    </SettingsGroup>
+    </>
   );
 }
 
-/** The chosen workspace's members, read afresh whenever the workspace changes. */
-function TeamMembers({
-  workspace,
-  readerId,
+/**
+ * The admins the owner may hand the workspace to, as the transfer dialog's
+ * field chip, each in the shared menu by face, name, and email.
+ */
+function HeirChip({
+  admins,
+  chosen,
+  onChoose,
 }: {
-  workspace: Workspace;
-  readerId: string | undefined;
+  admins: readonly WorkspaceMember[];
+  chosen: WorkspaceMember;
+  onChoose: (heir: WorkspaceMember) => void;
 }): React.JSX.Element {
-  const { act } = useAct();
-  const [read, setRead] = useState<ListRead<WorkspaceMember>>(undefined);
-  const [attempt, setAttempt] = useState(0);
-  const workspaceId = workspace.id;
-
-  // A Retry reads again by bumping the attempt.
-  useEffect(() => {
-    let live = true;
-    setRead(undefined);
-    act(ACT_KIND.WORKSPACE_MEMBERS_READ, { workspaceId }).then(
-      (items) => {
-        if (live) setRead({ items });
-      },
-      () => {
-        if (live) setRead({ failed: READ_FAILED.MEMBERS });
-      },
-    );
-    return () => {
-      live = false;
-    };
-  }, [act, workspaceId, attempt]);
-
-  const manages = managesWorkspace(workspace);
+  const menu = useActionMenu(true);
+  const door = useRef<HTMLButtonElement | null>(null);
   return (
     <>
-      {read === undefined ? (
-        <Reading label="Loading the members" />
-      ) : "failed" in read ? (
-        <ReadFailed line={read.failed} onRetry={() => setAttempt((count) => count + 1)} />
-      ) : (
-        read.items.map((member) => (
-          <MemberRow
-            key={member.userId}
-            workspaceId={workspaceId}
-            member={member}
-            readerId={readerId}
-            // Note that the reader's own row offers no Remove, because the way out of a workspace is Leave.
-            removable={member.userId !== readerId && removes(workspace.role, member.role)}
-            slotted={manages}
-            onRemoved={(items) => setRead({ items })}
-          />
-        ))
+      <Chip
+        look={CHIP_LOOK.FIELD}
+        chevron
+        ref={door}
+        className="workspace-heir"
+        aria-label={`New owner: ${chosen.name}`}
+        {...menu.trigger()}
+      >
+        <ActorMark actor={memberActor(chosen, undefined)} size={ACTOR_SIZE.INLINE} />
+        <span className="chip-name">{chosen.name}</span>
+      </Chip>
+      {menu.drawn === undefined ? null : (
+        <ActionMenu
+          label="New owner"
+          menu={menu.drawn}
+          groups={[
+            admins.map((admin) => ({
+              label: admin.name,
+              detail: admin.email,
+              icon: <ActorMark actor={memberActor(admin, undefined)} size={ACTOR_SIZE.ROW} />,
+              checked: admin.userId === chosen.userId,
+              onSelect: () => onChoose(admin),
+            })),
+          ]}
+          onClose={menu.close}
+        />
       )}
     </>
   );
 }
 
 /**
- * Whether the reader's role removes a member of `role`: the owner an admin
- * or a member, and an admin a member alone, as the service holds it.
+ * The owner's leave, which waits on the workspace being handed over: the
+ * row says so, and with an admin to hand it to offers Transfer ownership,
+ * the confirm dialog with the admin to make the owner as its field, the
+ * first admin unless another is chosen; with none it says to make one
+ * first. The members the service answers after the handover stand in at
+ * once, and the reader's own new role arrives with the workspaces the host
+ * reads again after it, which turns this row into a member's leave.
  */
-function removes(reader: Workspace["role"], role: WorkspaceMember["role"]): boolean {
-  if (reader === WORKSPACE_ROLE.OWNER) return role !== WORKSPACE_ROLE.OWNER;
-  return reader === WORKSPACE_ROLE.ADMIN && role === WORKSPACE_ROLE.MEMBER;
+function OwnerLeave({
+  workspace,
+  members,
+  onChanged,
+  onRefresh,
+}: {
+  workspace: Workspace;
+  members: ListRead<WorkspaceMember>;
+  onChanged: (members: readonly WorkspaceMember[]) => void;
+  /** Reads the members again keeping the list on screen, so the admins offered are the workspace's now. */
+  onRefresh: () => void;
+}): React.JSX.Element {
+  const { act } = useAct();
+  const admins =
+    members !== undefined && "items" in members
+      ? members.items.filter((each) => each.role === WORKSPACE_ROLE.ADMIN)
+      : [];
+  const [chosenId, setChosenId] = useState<string>();
+  const heir = admins.find((each) => each.userId === chosenId) ?? admins[0];
+  const transfer = useConfirmDialog({ subject: heir !== undefined, surfaceOpen: true }, () =>
+    heir === undefined
+      ? Promise.resolve(ACCEPTED)
+      : act(ACT_KIND.WORKSPACE_TRANSFER, { workspaceId: workspace.id, userId: heir.userId }).then(
+          (items) => {
+            onChanged(items);
+            return ACCEPTED;
+          },
+          refusedWith,
+        ),
+  );
+  return (
+    <>
+      <div className="settings-row">
+        <RowCopy
+          name={`Leave ${workspace.name}`}
+          line={heir === undefined ? LEAVE_WORDS.OWNER_NO_ADMIN : LEAVE_WORDS.OWNER}
+        />
+        {heir === undefined ? null : (
+          <button
+            type="button"
+            className="toolbar-button bordered-button"
+            disabled={transfer.busy}
+            onClick={() => {
+              onRefresh();
+              transfer.ask();
+            }}
+          >
+            {TRANSFER_WORDS.VERB}
+          </button>
+        )}
+      </div>
+      {heir === undefined ? null : (
+        <ConfirmDialog
+          confirm={transfer}
+          question={{
+            title: `Transfer ownership of ${workspace.name}`,
+            body: TRANSFER_WORDS.BODY,
+            verb: TRANSFER_WORDS.VERB,
+            running: TRANSFER_WORDS.RUNNING,
+          }}
+        >
+          <div className="dialog-field">
+            <span className="dialog-field-label">New owner</span>
+            <HeirChip admins={admins} chosen={heir} onChoose={(each) => setChosenId(each.userId)} />
+          </div>
+        </ConfirmDialog>
+      )}
+    </>
+  );
+}
+
+/**
+ * The page's last group, the way out of the workspace: a member's or an
+ * admin's leave, or the owner's, which waits on a handover; none for the
+ * owner of the account's own first workspace, which cannot be left or
+ * handed over.
+ */
+function LeaveGroup({
+  workspace,
+  members,
+  ownName,
+  onLeft,
+  onChanged,
+  onRefresh,
+}: {
+  workspace: Workspace;
+  members: ListRead<WorkspaceMember>;
+  /** The name of the account's own workspace, which a leave leaves alone; absent from a service that names none. */
+  ownName: string | undefined;
+  onLeft: () => void;
+  onChanged: (members: readonly WorkspaceMember[]) => void;
+  onRefresh: () => void;
+}): React.JSX.Element | null {
+  const owner = workspace.role === WORKSPACE_ROLE.OWNER;
+  if (owner && workspace.personal === true) return null;
+  return (
+    <SettingsGroup anchor={SETTINGS_SECTION.LEAVE}>
+      {owner ? (
+        <OwnerLeave
+          workspace={workspace}
+          members={members}
+          onChanged={onChanged}
+          onRefresh={onRefresh}
+        />
+      ) : (
+        <MemberLeave workspace={workspace} ownName={ownName} onLeft={onLeft} />
+      )}
+    </SettingsGroup>
+  );
+}
+
+/** The chosen workspace's members, as `useMembersRead` holds them. */
+function TeamMembers({
+  workspace,
+  readerId,
+  members,
+  onRetry,
+  onChanged,
+}: {
+  workspace: Workspace;
+  readerId: string | undefined;
+  members: ListRead<WorkspaceMember>;
+  onRetry: () => void;
+  onChanged: (members: readonly WorkspaceMember[]) => void;
+}): React.JSX.Element {
+  const manages = managesWorkspace(workspace);
+  if (members === undefined) return <Reading label="Loading the members" />;
+  if ("failed" in members) return <ReadFailed line={members.failed} onRetry={onRetry} />;
+  return (
+    <>
+      {members.items.map((member) => (
+        <MemberRow
+          key={member.userId}
+          workspace={workspace}
+          member={member}
+          readerId={readerId}
+          slotted={manages}
+          onChanged={onChanged}
+        />
+      ))}
+    </>
+  );
 }
 
 /**
@@ -976,14 +1302,42 @@ export function WorkspacePage({
       </SettingsGroup>
     );
   }
+  // Keyed to the workspace, so another one listed reads its own members and asks nothing left over.
+  return (
+    <ShownWorkspace
+      key={workspace.id}
+      control={control}
+      workspace={workspace}
+      readerId={readerId}
+    />
+  );
+}
+
+/** The page over one workspace, its members read once for the groups that read them. */
+function ShownWorkspace({
+  control,
+  workspace,
+  readerId,
+}: {
+  control: WorkspaceSettingsControl;
+  workspace: Workspace;
+  readerId: string | undefined;
+}): React.JSX.Element {
+  const members = useMembersRead(workspace.id, workspace.memberCount);
   const ownName = control.workspaces.find((each) => each.personal === true)?.name;
   return (
-    <Fragment key={workspace.id}>
+    <>
       <SettingsGroup>
         <WorkspaceIdentity workspace={workspace} />
       </SettingsGroup>
       <SettingsGroup title="Members" anchor={SETTINGS_SECTION.MEMBERS}>
-        <TeamMembers workspace={workspace} readerId={readerId} />
+        <TeamMembers
+          workspace={workspace}
+          readerId={readerId}
+          members={members.read}
+          onRetry={members.retry}
+          onChanged={members.changed}
+        />
       </SettingsGroup>
       {managesWorkspace(workspace) ? (
         <SettingsGroup title="Invitations" anchor={SETTINGS_SECTION.INVITATIONS}>
@@ -997,13 +1351,14 @@ export function WorkspacePage({
       <SettingsGroup title="GitHub" anchor={SETTINGS_SECTION.GITHUB_REPOSITORIES}>
         <WorkspaceGitHub workspace={workspace} />
       </SettingsGroup>
-      {workspace.role === WORKSPACE_ROLE.OWNER ? null : (
-        <LeaveGroup
-          workspace={workspace}
-          ownName={ownName}
-          onLeft={() => control.onLeft(workspace.id)}
-        />
-      )}
-    </Fragment>
+      <LeaveGroup
+        workspace={workspace}
+        members={members.read}
+        ownName={ownName}
+        onLeft={() => control.onLeft(workspace.id)}
+        onChanged={members.changed}
+        onRefresh={members.refresh}
+      />
+    </>
   );
 }
