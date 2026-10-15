@@ -53,7 +53,7 @@ import { PlanNameField, usePlanRename } from "./plan-name-field";
  * be acted on without being opened first. The menu is the window's own (`action-menu.tsx`),
  * so both doors draw it the same way and Permanently delete can be drawn red.
  *
- * Copy link to plan copies the plan's address on tryluke.dev, as the ⋯
+ * Copy link copies the plan's address on tryluke.dev, as the ⋯
  * beside the plan's title does (`plan-menu-items.tsx`). Mark as unread
  * draws the task's row in the unread weight until it next opens, and turns
  * to Mark as read on a task already unread. Rename edits the
@@ -168,7 +168,7 @@ function SidebarPlanMarks({
 /**
  * One plan's actions in the groups a rule divides, offering only those that
  * apply to it now. Copy formats the document drawn, so only the open plan
- * offers it, ahead of Copy link to plan, Mark as unread or read, Rename,
+ * offers it, ahead of Copy link, Mark as unread or read, Rename,
  * and Version history; Pin and Archive follow; the repository is changed from any plan and opened on
  * GitHub where there is one, beside Move to workspace where the plan may be
  * moved; Permanently delete is last and alone. An archived plan takes

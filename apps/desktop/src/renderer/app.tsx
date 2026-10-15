@@ -52,6 +52,7 @@ import { FeedbackDialog } from "./feedback-dialog";
 import { GitHubConnectProvider } from "./github-connect";
 import { useKeyboardModality } from "./keyboard-modality";
 import { useLastSignIn } from "./last-sign-in";
+import { useCopyLink } from "./links-at-hand";
 import { prefetchMarkdownHtmlParser } from "./markdown-html-parser";
 import { useHistoryMouseButtons, useWindowHistory } from "./navigation-history";
 import { OpenFeedbackProvider } from "./open-feedback";
@@ -295,6 +296,17 @@ export function App(): React.JSX.Element {
     settingsShown: tab === PANEL_TAB.SETTINGS,
   });
   linkWorkspace.current = settingsWorkspace.link;
+  // The links the window can copy now: ⌥⌘C copies the first, and ⌘K offers each (`links-at-hand.ts`).
+  const copyLink = useCopyLink(
+    plans,
+    tab === PANEL_TAB.SETTINGS
+      ? {
+          view: settingsView,
+          workspace: plans.workspaces.find((each) => each.id === settingsWorkspace.shownId),
+        }
+      : undefined,
+    !accountGated,
+  );
   // A coding agent's notification clicked: the Plans tab, on that agent,
   // its plan's tab or its own page where it has no plan. Read through refs,
   // because the tab hands new closures each render and the subscription is
@@ -691,6 +703,7 @@ export function App(): React.JSX.Element {
                     tab={tab}
                     onTabChange={changeTab}
                     plans={plans}
+                    links={copyLink}
                     settings={{
                       rows: settingsRowsInput({
                         settings,

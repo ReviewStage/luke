@@ -322,6 +322,7 @@ function fullMenuTemplate(appName: string, update?: UpdateMenu): MenuItemConstru
         closeWindowItem(),
         SEPARATOR,
         commandItem(APP_COMMAND.COPY_PLAN),
+        commandItem(APP_COMMAND.COPY_LINK),
         SEPARATOR,
         commandItem(APP_COMMAND.ARCHIVE_PLAN),
         commandItem(APP_COMMAND.DELETE_PLAN),

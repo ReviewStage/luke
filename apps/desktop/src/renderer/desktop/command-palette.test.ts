@@ -17,7 +17,7 @@ import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
 import { settingsView } from "@luke/settings/testing";
-import { DOCUMENT_REGION } from "@luke/ui/planning-model";
+import { DOCUMENT_REGION, PLANS_PAGE } from "@luke/ui/planning-model";
 import { shownFiles } from "@luke/voice/code-pane-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
@@ -29,11 +29,14 @@ import { onRegistry } from "#testing/copy-feedback";
 import { DOCUMENT_PLAN } from "#testing/document-plan";
 import { codingAgentsControl, plansControl } from "#testing/plans-control";
 import { installScrollIntoView } from "#testing/scroll-into-view";
-import { runAppCommand, useAppCommand } from "../app-commands";
+import { newestToastSays } from "#testing/toast";
+import { appCommandOffered, runAppCommand, useAppCommand } from "../app-commands";
+import { useCopyLink } from "../links-at-hand";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { usePlanLooks } from "../planning/use-plan-looks";
-import type { PlansControl } from "../planning/use-plans-tab";
-import type { SidePanelControl } from "../planning/use-side-panel";
+import { AUTOMATIONS_PAGE, type PlansControl } from "../planning/use-plans-tab";
+import { SIDE_PANEL_TAB, type SidePanelControl } from "../planning/use-side-panel";
+import { ToastHost } from "../toast";
 import { CommandPalette } from "./command-palette";
 import { ListedAutomations } from "./listed-automations";
 import { panelEntries } from "./side-panel";
@@ -55,6 +58,14 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
+/** The palette as the window draws it, offering the links at hand through the window's own Copy link. */
+function WindowPalette(
+  props: Omit<Parameters<typeof CommandPalette>[0], "links">,
+): React.JSX.Element {
+  const links = useCopyLink(props.plans, undefined, true);
+  return createElement(CommandPalette, { ...props, links });
+}
+
 /** The palette over a window on its Plans tab, opened by ⌘K's command, every page it opens recorded. */
 function openPalette(
   plans: PlansControl = plansControl(),
@@ -68,7 +79,7 @@ function openPalette(
   roots.push(root);
   act(() =>
     root.render(
-      createElement(CommandPalette, {
+      createElement(WindowPalette, {
         available: true,
         tab: PANEL_TAB.PLANS,
         onTabChange: (tab) => sent.tabs.push(tab),
@@ -111,7 +122,7 @@ function paletteOverPlan(): (looked: typeof DOCUMENT_PLAN | undefined) => void {
             Fragment,
             null,
             createElement(Looker, { looked }),
-            createElement(CommandPalette, {
+            createElement(WindowPalette, {
               available: true,
               tab: PANEL_TAB.PLANS,
               onTabChange: () => undefined,
@@ -458,7 +469,7 @@ test("an agent's card in ⌘K names the automation that started it, the listed w
     const host = document.body.appendChild(document.createElement("div"));
     const root = createRoot(host);
     roots.push(root);
-    const palette = createElement(CommandPalette, {
+    const palette = createElement(WindowPalette, {
       available: true,
       tab: PANEL_TAB.PLANS,
       onTabChange: () => undefined,
@@ -808,4 +819,157 @@ test("a command ⌘K alone offers, the sidebar's Show my tasks, is listed by its
   assert.equal(row?.querySelector(".menu-item-hint"), null, "no chord is printed");
   press("Show my tasks");
   assert.deepEqual(ran, ["show my tasks"]);
+});
+
+/** Main's clipboard, keeping each copy the window asks of it. */
+function installClipboard(): string[] {
+  const copied: string[] = [];
+  Object.defineProperty(window, "luke", {
+    configurable: true,
+    value: {
+      act: (request: Act): Promise<ActOutcome> => {
+        if (request.kind === ACT_KIND.WINDOW_COPY_TEXT) copied.push(request.payload.words);
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
+      },
+      recordSurfaceEvent: () => undefined,
+    },
+  });
+  return copied;
+}
+
+/** The toasts the window raises, drawn as the window draws them. */
+function drawToasts(): void {
+  const host = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(host);
+  roots.push(root);
+  act(() => root.render(createElement(ToastHost)));
+}
+
+const LINKED_AGENT = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
+
+/** A task drawn in Acme, its agent's tab chosen in the work column and the agent named. */
+const ON_AGENT_TAB: PlansControl = plansControl({
+  page: PLANS_PAGE.DOCUMENT,
+  activePlanId: DOCUMENT_PLAN.id,
+  region: {
+    kind: DOCUMENT_REGION.READY,
+    plan: { ...DOCUMENT_PLAN, workspaceId: "workspace-acme" },
+  },
+  workspaces: [
+    { id: "workspace-acme", name: "Acme", slug: "acme", role: WORKSPACE_ROLE.MEMBER, github: null },
+  ],
+  mainTabs: { ...plansControl().mainTabs, tab: { agent: LINKED_AGENT } },
+  agents: codingAgentsControl({
+    agents: [
+      {
+        id: LINKED_AGENT,
+        planId: DOCUMENT_PLAN.id,
+        model: "anthropic/claude-opus-5.5",
+        effort: "high",
+        title: "Expire old invites",
+        createdAt: 3,
+        status: CODING_AGENT_STATUS.RUNNING,
+        turnId: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32",
+      },
+    ],
+  }),
+});
+
+test("on a task's agent's tab, ⌘K offers Copy link to the agent, wearing ⌥⌘C, then to the task, and choosing one copies its link and says Link copied", async () => {
+  const copied = installClipboard();
+  drawToasts();
+  openPalette(ON_AGENT_TAB);
+  type("copy link");
+  const listed = rows().filter((row) => row.startsWith("Copy link to "));
+  const chord = document.querySelector(".menu-item .menu-item-hint")?.textContent;
+
+  press("Copy link to agent · Expire old invites");
+  await act(async () => undefined);
+
+  assert.deepEqual(listed, [
+    "Copy link to agent · Expire old invites",
+    `Copy link to task · ${DOCUMENT_PLAN.name}`,
+  ]);
+  assert.equal(chord, "⌥⌘C");
+  assert.deepEqual(copied, [
+    `https://tryluke.dev/acme/plan/${DOCUMENT_PLAN.id}/agent/${LINKED_AGENT}`,
+  ]);
+  assert.equal(newestToastSays(), "Link copied");
+});
+
+test("⌥⌘C copies the link of what is open, the most specific first: the Inbox's item over the Inbox, an automation over the list, the task under its tabs", async () => {
+  const copied = installClipboard();
+  const automationId = "6e2f3a4b-5c6d-4e7f-8a91-92a3b4c5d6e7";
+  const itemId = "5d1e2f3a-4b5c-4d6e-8f70-819203a4b5c6";
+  const listed = { workspaces: ON_AGENT_TAB.workspaces, workspace: ON_AGENT_TAB.workspaces[0] };
+  for (const plans of [
+    ON_AGENT_TAB,
+    plansControl({
+      ...listed,
+      inboxView: {
+        ...plansControl().inboxView,
+        open: true,
+        chosen: { agentId: LINKED_AGENT, itemId },
+      },
+    }),
+    plansControl({
+      ...listed,
+      automationsView: {
+        ...plansControl().automationsView,
+        open: true,
+        place: { kind: AUTOMATIONS_PAGE.EDIT, automationId },
+      },
+    }),
+    plansControl({ ...listed, factoryView: { ...plansControl().factoryView, open: true } }),
+  ]) {
+    openPalette(plans);
+    act(() => {
+      runAppCommand(APP_COMMAND.COMMAND_PALETTE);
+      runAppCommand(APP_COMMAND.COPY_LINK);
+    });
+    await act(async () => undefined);
+    act(() => {
+      for (const root of roots.splice(0)) root.unmount();
+    });
+  }
+
+  assert.deepEqual(copied, [
+    `https://tryluke.dev/acme/plan/${DOCUMENT_PLAN.id}/agent/${LINKED_AGENT}`,
+    `https://tryluke.dev/acme/agent/${LINKED_AGENT}/inbox/${itemId}`,
+    `https://tryluke.dev/acme/automation/${automationId}`,
+    "https://tryluke.dev/acme/factory",
+  ]);
+});
+
+test("on the home page nothing has a link, so ⌥⌘C is not offered and ⌘K lists no Copy link", () => {
+  openPalette(plansControl());
+  type("copy link");
+
+  assert.deepEqual(
+    rows().filter((row) => row.startsWith("Copy link to ")),
+    [],
+  );
+  assert.equal(appCommandOffered(APP_COMMAND.COPY_LINK), false);
+});
+
+test("with the side panel filling the window over an agent's tab, ⌥⌘C copies the panel's tab, which is what shows", async () => {
+  const copied = installClipboard();
+  openPalette(
+    plansControl({
+      ...ON_AGENT_TAB,
+      sidePanel: {
+        ...ON_AGENT_TAB.sidePanel,
+        open: true,
+        fullScreen: true,
+        tab: SIDE_PANEL_TAB.CALL,
+      },
+    }),
+  );
+  act(() => {
+    runAppCommand(APP_COMMAND.COMMAND_PALETTE);
+    runAppCommand(APP_COMMAND.COPY_LINK);
+  });
+  await act(async () => undefined);
+
+  assert.deepEqual(copied, [`https://tryluke.dev/acme/plan/${DOCUMENT_PLAN.id}/call`]);
 });
