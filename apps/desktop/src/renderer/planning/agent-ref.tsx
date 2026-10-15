@@ -12,10 +12,11 @@ import {
   lastFinished,
 } from "./agent-tab-card";
 import {
+  agentActor,
   agentStateWords,
   agentStillWriting,
   agentTabLabel,
-  teammateStarter,
+  teammateRef,
 } from "./coding-agent-model";
 import { agentTranscript } from "./transcript-copy";
 import type { CodingAgentsControl } from "./use-coding-agents";
@@ -59,7 +60,9 @@ export interface AgentSubject {
  * What an agent's card says, read from what its tab last held as the card
  * is hung (`heldLatest`): where it stands and when it last moved, its pair,
  * and its latest step; an archived agent's says it was archived, and when.
- * Its tab's card and every other place naming it say it, `chosen` telling
+ * It wears the agent's tile, names a teammate who started it, as the
+ * reader `agents.me` tells them apart, and leads its corner with the pull
+ * request the plan holds for it. Its tab's card and every other place naming it say it, `chosen` telling
  * whether its tab is the one shown, whose transcript follows the run. Note
  * that an agent with no turn finished in what its tab holds last moved
  * when its newest run began, the latest moment its summary knows.
@@ -69,7 +72,7 @@ export function agentCardReading(
   label: string,
   held: HeldTranscripts,
   chosen: boolean,
-  readerId: string | undefined,
+  agents: Pick<CodingAgentsControl, "me" | "pullRequests">,
 ): () => CardReading {
   return () => {
     const { archivedAt } = agent;
@@ -86,18 +89,21 @@ export function agentCardReading(
       }),
       choice: { model: agent.model, effort: agent.effort },
       transcript: messages && agentTranscript({ title: label, messages, brief: agent.brief }),
-      startedBy: teammateStarter(agent.startedBy, readerId),
+      startedBy: teammateRef(agent.startedBy, agents.me),
+      tile: agentActor(agent, label),
+      pullRequest: agents.pullRequests.get(agent.id),
     };
   };
 }
 
-/** An agent as the sidebar's list names it: where it stands and since when, its pair, and the teammate who started it, as `readerId` reads it, with no step to preview. */
+/** An agent as the sidebar's list names it: its tile, where it stands and since when, its pair, and the teammate who started it, as `readerId` reads it, with no step or pull request to preview. */
 export function lineSubject(
   line: PlanAgentLine,
   models: readonly CatalogModel[] | undefined,
   readerId: string | undefined,
 ): AgentSubject {
   const writing = agentStillWriting(line.status);
+  const name = agentTabLabel(line, models);
   const reading: CardReading = {
     corner: cardCorner({
       writing,
@@ -107,9 +113,10 @@ export function lineSubject(
     }),
     choice: { model: line.model, effort: line.effort },
     transcript: undefined,
-    startedBy: teammateStarter(line.startedBy, readerId),
+    startedBy: teammateRef(line.startedBy, readerId),
+    tile: agentActor(line, name),
   };
-  return { name: agentTabLabel(line, models), read: () => reading };
+  return { name, read: () => reading };
 }
 
 /**
@@ -119,7 +126,7 @@ export function lineSubject(
  * once the list has been read, and nothing more before.
  */
 export function agentSubject(
-  agents: Pick<CodingAgentsControl, "agents" | "archived" | "models" | "me">,
+  agents: Pick<CodingAgentsControl, "agents" | "archived" | "models" | "me" | "pullRequests">,
   agentId: string,
   held: HeldTranscripts,
   chosen: boolean,
@@ -129,7 +136,7 @@ export function agentSubject(
     agents.archived?.find((each) => each.id === agentId);
   if (agent !== undefined) {
     const name = agentTabLabel(agent, agents.models);
-    return { name, agent, read: agentCardReading(agent, name, held, chosen, agents.me) };
+    return { name, agent, read: agentCardReading(agent, name, held, chosen, agents) };
   }
   const reading: CardReading = {
     corner: cardCorner({
@@ -144,15 +151,19 @@ export function agentSubject(
   return { name: TAB_WORDS.CODING_AGENT, read: () => reading };
 }
 
-/** The agent's tab's card, as a place naming the agent hangs it. */
+/** The agent's tab's card, as a place naming the agent hangs it, ending on the way to its tab where the place offers one. */
 export function AgentCard({
   subject,
   models,
+  onOpen,
 }: {
   subject: AgentSubject;
   models: readonly CatalogModel[] | undefined;
+  onOpen?: (() => void) | undefined;
 }): React.JSX.Element {
-  return <AgentTabCard name={subject.name} models={models ?? []} read={subject.read} />;
+  return (
+    <AgentTabCard name={subject.name} models={models ?? []} read={subject.read} onOpen={onOpen} />
+  );
 }
 
 /**
@@ -178,7 +189,10 @@ export function AgentRef({
 }): React.JSX.Element {
   const classes = className === undefined ? "agent-ref" : `agent-ref ${className}`;
   return (
-    <Tooltip label={subject.name} card={<AgentCard subject={subject} models={models} />}>
+    <Tooltip
+      label={subject.name}
+      card={<AgentCard subject={subject} models={models} onOpen={onOpen} />}
+    >
       {onOpen === undefined ? (
         <span className={classes} data-agent-ref="">
           {children}

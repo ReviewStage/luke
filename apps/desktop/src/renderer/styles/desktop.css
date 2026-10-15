@@ -1046,6 +1046,17 @@ body,
   gap: var(--space-6);
 }
 
+/* Words naming an actor, in one row centred on its disc; each word keeps
+   its own spaces, since a row drops a run of spaces standing alone. */
+.actor-line {
+  display: inline-flex;
+  max-width: 100%;
+  min-width: 0;
+  align-items: center;
+  vertical-align: middle;
+  white-space: pre;
+}
+
 .actor-you {
   padding: 0 5px; /* off-scale */
   border-radius: 4px;
@@ -5893,6 +5904,30 @@ button.automation-run:hover {
   margin: 0;
   border: 0;
   background: var(--hairline);
+}
+
+/* A card's way to the page of what it is about, under its rule, set as a
+   menu's row: its fill washes off the card's edge on hover. */
+.card-door {
+  display: flex;
+  width: calc(100% + 2 * var(--row-inset));
+  height: var(--menu-row-height);
+  align-items: center;
+  margin-inline: calc(-1 * var(--row-inset));
+  padding: 0 var(--row-inset);
+  border: 0;
+  border-radius: var(--menu-row-radius);
+  background: none;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  transition: background-color var(--duration-hover) ease;
+}
+
+.card-door:is(:hover, :focus-visible) {
+  outline: none; /* no ring: the row's fill marks it, as a menu row's does */
+  background: var(--raised-strong);
 }
 
 /* Renamed in place, the label gives way to a field in the same type,

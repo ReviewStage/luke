@@ -24,6 +24,7 @@ import { copiedLines, fileRefText } from "@luke/voice/code-pane-model";
 import { CheckIcon, ZapIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
+import { ActorLine, ActorRef } from "../actor-ref";
 import { Message, MessageContent } from "../ai-elements/message";
 import {
   PROMPT_INPUT_STATUS,
@@ -34,6 +35,7 @@ import {
   PromptInputTools,
 } from "../ai-elements/prompt-input";
 import { PlanRef } from "../desktop/plan-card";
+import { usePerson } from "../member-directory";
 import { ReadFailure } from "../read-failure";
 import { Segmented } from "../segmented";
 import { BusyLabel, SPINNER_SIZE, Spinner, SpinnerRegion } from "../spinner";
@@ -46,7 +48,6 @@ import { AttachmentViewer } from "./attachment-viewer";
 import { CodeCardHeader, CodeLines } from "./code-pane";
 import type { ReadFileWindow } from "./file-tab";
 import {
-  answererOf,
   CODE_READ,
   CODE_READ_FAILED,
   type CodeRead,
@@ -680,20 +681,13 @@ function Delivered({ item, by }: { item: InboxItem; by: ItemAgent }): React.JSX.
 
 /**
  * What a settled item offered, as the Inbox's own option rows: the
- * developer's pick in the look of a picked option, a check and "Your pick"
- * beside its label, and the rest stepped back to an outline, so what was
- * offered and what was chosen read together.
+ * developer's pick in the look of a picked option, a check and whose pick
+ * it was, "[disc] Your pick" or "[disc] Charles Pan’s pick", beside its
+ * label, and the rest stepped back to an outline, so what was offered and
+ * what was chosen read together.
  */
-function Proposal({
-  item,
-  readerId,
-}: {
-  item: InboxItem;
-  readerId: string | undefined;
-}): React.JSX.Element | null {
-  // Note that the reader is told apart by id, never by the name the answerer goes by.
-  const yours = readerId !== undefined && item.answeredBy?.userId === readerId;
-  const pick = yours ? "Your pick" : `${answererOf(item, readerId)}'s pick`;
+function Proposal({ item }: { item: InboxItem }): React.JSX.Element | null {
+  const answerer = usePerson(item.answeredBy);
   const options = proposedOptions(item);
   if (options.length === 0) return null;
   return (
@@ -708,7 +702,10 @@ function Proposal({
             {option.picked ? (
               <span className="inbox-picked">
                 <CheckIcon aria-hidden="true" />
-                {pick}
+                <ActorLine>
+                  <ActorRef actor={answerer} possessive />
+                  {" pick"}
+                </ActorLine>
               </span>
             ) : null}
           </span>
@@ -750,20 +747,18 @@ function Byline({
   );
 }
 
-/** What the developer has said, under their own bubble: what they did, when, and where the answer went. */
+/** What the developer has said, under their own bubble: who answered, by their disc and name, what they did, when, and where the answer went. */
 function Answered({
   item,
   by,
   now,
-  readerId,
 }: {
   item: InboxItem;
   by: ItemAgent;
   now: number;
-  /** The signed-in account's id, whose own answer reads as theirs. */
-  readerId: string | undefined;
 }): React.JSX.Element | null {
-  const settled = settlementOf(item, readerId);
+  const answerer = usePerson(item.answeredBy);
+  const settled = settlementOf(item);
   if (settled === undefined) return null;
   if (settled.by === SETTLED_BY.AGENT) return null;
   return (
@@ -774,7 +769,7 @@ function Answered({
         </MessageContent>
       )}
       <p className="m-0 text-[11.5px] text-muted-foreground">
-        {settled.lead} ·{" "}
+        <ActorRef actor={answerer} /> {settled.did} ·{" "}
         <RelativeTime className={THREAD_TIME_CLASS} at={item.updatedAt} now={now} /> ·{" "}
         <Delivered item={item} by={by} />
       </p>
@@ -787,15 +782,12 @@ function Withdrawn({
   item,
   by,
   now,
-  readerId,
 }: {
   item: InboxItem;
   by: ItemAgent;
   now: number;
-  /** The signed-in account's id, whose own answer reads as theirs. */
-  readerId: string | undefined;
 }): React.JSX.Element | null {
-  const settled = settlementOf(item, readerId);
+  const settled = settlementOf(item);
   if (settled?.by !== SETTLED_BY.AGENT) return null;
   return (
     <Message from="assistant" data-inbox-withdrawn="">
@@ -1042,12 +1034,12 @@ export function InboxPane({
                   onDraft={(next) => control.onDraft(item, next)}
                 />
               ) : (
-                <Proposal item={item} readerId={agents.me} />
+                <Proposal item={item} />
               )}
             </MessageContent>
           </Message>
-          <Answered item={item} by={by} now={now} readerId={agents.me} />
-          <Withdrawn item={item} by={by} now={now} readerId={agents.me} />
+          <Answered item={item} by={by} now={now} />
+          <Withdrawn item={item} by={by} now={now} />
           {control.failed ? (
             <ReadFailure line={INBOX_FAILED_LINE} onRetry={control.onRetry} />
           ) : null}

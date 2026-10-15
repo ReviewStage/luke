@@ -13,6 +13,7 @@ import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "../act";
 import { useAppCommand } from "../app-commands";
 import { EmptyState } from "../empty-state";
+import { MemberDirectory } from "../member-directory";
 import { INBOX_COLUMNS, useInboxColumns } from "../planning/inbox-columns";
 import { InboxList } from "../planning/inbox-list";
 import {
@@ -65,7 +66,9 @@ import { planCardOf } from "./plan-card";
  * and so does any row of the sidebar. Too narrow for the list and the item
  * side by side, it shows one at a time (`inbox-columns.ts`): the list, and
  * the item a press opens, whose way back, Back's chord, or Escape gives the
- * list back before Escape leaves the Inbox.
+ * list back before Escape leaves the Inbox. Everything in it that names a
+ * person, an answer and an agent's starter, reads them against the listed
+ * workspace's members (`member-directory.tsx`).
  */
 
 /** What the list says where a plan's read did not answer. */
@@ -233,48 +236,50 @@ export function DesktopInbox({ plans }: { plans: PlansControl }): React.JSX.Elem
     planless.onRetry();
   };
   return (
-    <div className="inbox-view" ref={columns.ref} data-columns={columns.shown}>
-      <InboxList
-        view={list}
-        chosen={chosen?.item.id}
-        columns={columns.shown}
-        head={{ shown: plans.shown, choices, folds, waiting: anyNeedsYou(entries) }}
-        models={named.models}
-        readerId={plans.me}
-        note={
-          <ListNote
-            failed={read.failed || planless.failed}
-            reading={reading}
-            empty={listedItems(list).length === 0}
-            onRetry={onRetry}
-          />
-        }
-        onChoose={(listed) => {
-          choose(listed);
-          columns.onOpen(listed.item.id);
-        }}
-      />
-      {chosen === undefined ? (
-        <section
-          className="inbox-view-items"
-          aria-label="Inbox"
-          hidden={columns.shown !== INBOX_COLUMNS.BOTH}
-        >
-          <header className="desktop-toolbar" />
-          {reading ? null : <EmptyState icon={<InboxIcon />}>{NEEDS_YOU.NONE}</EmptyState>}
-        </section>
-      ) : (
-        <InboxPane
-          holder={chosen.holder}
-          item={chosen.item}
-          control={live}
-          agents={named}
-          hidden={columns.shown === INBOX_COLUMNS.LIST}
-          onBack={columns.onBack}
-          doors={paneDoors(plans, chosen.holder, { act, openLink, now, automationsOn })}
+    <MemberDirectory workspace={plans.workspace} readerId={plans.me}>
+      <div className="inbox-view" ref={columns.ref} data-columns={columns.shown}>
+        <InboxList
+          view={list}
+          chosen={chosen?.item.id}
+          columns={columns.shown}
+          head={{ shown: plans.shown, choices, folds, waiting: anyNeedsYou(entries) }}
+          models={named.models}
+          readerId={plans.me}
+          note={
+            <ListNote
+              failed={read.failed || planless.failed}
+              reading={reading}
+              empty={listedItems(list).length === 0}
+              onRetry={onRetry}
+            />
+          }
+          onChoose={(listed) => {
+            choose(listed);
+            columns.onOpen(listed.item.id);
+          }}
         />
-      )}
-    </div>
+        {chosen === undefined ? (
+          <section
+            className="inbox-view-items"
+            aria-label="Inbox"
+            hidden={columns.shown !== INBOX_COLUMNS.BOTH}
+          >
+            <header className="desktop-toolbar" />
+            {reading ? null : <EmptyState icon={<InboxIcon />}>{NEEDS_YOU.NONE}</EmptyState>}
+          </section>
+        ) : (
+          <InboxPane
+            holder={chosen.holder}
+            item={chosen.item}
+            control={live}
+            agents={named}
+            hidden={columns.shown === INBOX_COLUMNS.LIST}
+            onBack={columns.onBack}
+            doors={paneDoors(plans, chosen.holder, { act, openLink, now, automationsOn })}
+          />
+        )}
+      </div>
+    </MemberDirectory>
   );
 }
 

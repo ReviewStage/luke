@@ -16,6 +16,7 @@ import {
   type TurnRow,
 } from "@luke/features/turn-rows";
 import { cn } from "@luke/ui";
+import type { Actor } from "@luke/ui/actor-model";
 import {
   AppWindowIcon,
   BookOpenIcon,
@@ -48,6 +49,7 @@ import {
 } from "lucide-react";
 import { type ComponentProps, createContext, Fragment, type ReactNode, useContext } from "react";
 import { type Components, defaultRemarkPlugins, type ExtraProps } from "streamdown";
+import { ActorLine, ActorRef } from "../actor-ref";
 import { Fold, FoldBody, FoldChevron, FoldSummary } from "../ai-elements/fold";
 import { MessageResponse, PANEL_MARKDOWN_COMPONENTS } from "../ai-elements/message";
 import { Reasoning, ReasoningContent, ReasoningTrigger } from "../ai-elements/reasoning";
@@ -378,8 +380,8 @@ const CALL_ICON = {
   [CALL_KIND.OTHER]: WrenchIcon,
 } as const satisfies Record<CallKind, LucideIcon>;
 
-/** The teammate whose Mac a transcript's Mac commands ran on, its agent's starter; none for the reader's own, whose ran on their own. */
-const MacOwnerContext = createContext<string | undefined>(undefined);
+/** Whose Mac a transcript's Mac commands ran on, its agent's starter, the reader's own among them (`macOwnerOf`); none where the window cannot tell, whose ran on the reader's own as far as it knows. */
+const MacOwnerContext = createContext<Actor | undefined>(undefined);
 
 /** Names whose Mac the transcript under it ran its Mac commands on. */
 export const MacOwnerProvider = MacOwnerContext.Provider;
@@ -425,7 +427,17 @@ export function TranscriptTool({
         subject={line.subject}
         subjectIsCode={line.code}
         subjectInBody={command && input.kind === TOOL_BLOCK.COMMAND}
-        place={callPlace(kind, macOwner)}
+        place={
+          kind === CALL_KIND.MAC_COMMAND && macOwner !== undefined ? (
+            <ActorLine>
+              {"On "}
+              <ActorRef actor={macOwner} sentence possessive />
+              {" Mac"}
+            </ActorLine>
+          ) : (
+            callPlace(kind)
+          )
+        }
       />
       <ToolContent>
         <ToolInput block={input} />

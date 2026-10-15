@@ -340,7 +340,7 @@ function withCards(
     if (agent !== undefined) {
       const label = agentTabLabel(agent, agents.models);
       const chosen = sameTab({ agent: agent.id }, mainTabs.tab);
-      const read = agentCardReading(agent, label, held, chosen, agents.me);
+      const read = agentCardReading(agent, label, held, chosen, agents);
       return { ...entry, card: <AgentTabCard name={label} models={models} read={read} /> };
     }
     if (row.id === INBOX_ROW) return { ...entry, card: <InboxCard inbox={inbox} /> };
