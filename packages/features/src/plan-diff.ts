@@ -29,10 +29,13 @@ const MAX_READ_TOKENS = 4_000;
  * and that a picture, `![alt](address "title")` with an address holding a
  * pair of parentheses as CommonMark allows, is one unit, so a picture
  * replaced is one struck and one written in rather than the letters of two
- * addresses run together.
+ * addresses run together. Its alt text and its address are bounded, because
+ * static analysis reads an unbounded run after `![` as rescanned from every
+ * `![` of a line that never closes one; a longer picture is read as its
+ * words and marks, as every picture was before.
  */
 const TOKEN =
-  /!\[(?:\\.|[^\]\\\n])*\]\((?:\\.|\([^()\s]*\)|[^()\\\n])*\)|\n|[^\S\n]|[\p{L}\p{N}_]+|[^\s\p{L}\p{N}_]/gu;
+  /!\[(?:\\.|[^\]\\\n]){0,1000}\]\((?:\\.|\([^()\s]{0,2000}\)|[^()\\\n]){0,2000}\)|\n|[^\S\n]|[\p{L}\p{N}_]+|[^\s\p{L}\p{N}_]/gu;
 
 /** One change to the old words: the span from `from` to `to` replaced by `insert`, offsets in the old words. */
 export interface Hunk {
