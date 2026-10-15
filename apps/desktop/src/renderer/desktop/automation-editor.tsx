@@ -29,6 +29,7 @@ import {
   type AutomationSummary,
   type AutomationTargetKind,
 } from "@luke/features/automation-wire";
+import { CODING_AGENT_DEFAULT_CHOICE } from "@luke/features/models-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import {
@@ -79,6 +80,8 @@ export interface AutomationWrites {
   change(params: AutomationChangeParams): Promise<AutomationView>;
   toggle(automationId: string, enabled: boolean): Promise<AutomationView>;
   remove(automationId: string): Promise<AutomationDeletedView>;
+  /** Reads the list again, as a Run now settling moves an automation's newest run. */
+  reload(): void;
 }
 
 /** The kinds of schedule as the picker offers them, in its order. */
@@ -436,7 +439,12 @@ function ModelControl({
   choices: RunChoices;
   onDraft: (patch: Partial<AutomationDraft>) => void;
 }): React.JSX.Element {
-  const shown = draft.choice ?? choices.defaultChoice;
+  // Note that a default that could not be read still lets a model be chosen once the catalog is
+  // read, drawing the service's own default in its place, so the picker is never out of reach.
+  const shown =
+    draft.choice ??
+    choices.defaultChoice ??
+    (choices.models === undefined ? undefined : CODING_AGENT_DEFAULT_CHOICE);
   if (shown === undefined) return <p className="automation-form-note">Your default model.</p>;
   return (
     <div className="automation-model">
@@ -446,9 +454,13 @@ function ModelControl({
         readModels={choices.readModels}
         usage={undefined}
       />
-      {draft.choice === null ? (
-        <span className="automation-form-note">Your default, until you choose one.</span>
-      ) : null}
+      {draft.choice !== null ? null : (
+        <span className="automation-form-note">
+          {choices.defaultChoice === undefined
+            ? "It runs on your default model until you choose one."
+            : "Your default, until you choose one."}
+        </span>
+      )}
     </div>
   );
 }
@@ -735,8 +747,24 @@ export function AutomationEditor({
     setRefusal(undefined);
     runs.runNow().then((answer) => {
       setRunning(false);
+      // The automation's newest run moved, so the list it stands in is read again too.
+      writes.reload();
       if ("failure" in answer) setRefusal(RUN_REFUSAL_WORDS[answer.failure]);
     });
+  };
+  // Note that opening a run's agent leaves the page and its draft with it, so unsaved changes ask first.
+  const [leavingFor, setLeavingFor] = useState<string | undefined>(undefined);
+  const leaving = useConfirmDialog({ subject: leavingFor !== undefined, surfaceOpen: true }, () => {
+    if (leavingFor !== undefined) onOpenAgent(leavingFor);
+    return Promise.resolve(ACCEPTED);
+  });
+  const openRun = (agentId: string) => {
+    if (!dirty) {
+      onOpenAgent(agentId);
+      return;
+    }
+    setLeavingFor(agentId);
+    leaving.ask();
   };
   const toggle = (enabled: boolean) => {
     if (automation === undefined) return;
@@ -815,9 +843,18 @@ export function AutomationEditor({
           created={automation !== undefined}
           runs={runs.read}
           onRetry={runs.reload}
-          onOpenAgent={onOpenAgent}
+          onOpenAgent={openRun}
         />
       </div>
+      <ConfirmDialog
+        confirm={leaving}
+        question={{
+          title: "Leave with unsaved changes?",
+          body: "Opening the run's agent leaves this page, and what you changed here is lost.",
+          verb: "Leave",
+          running: "Leaving",
+        }}
+      />
       <ConfirmDialog
         confirm={deletion}
         question={{

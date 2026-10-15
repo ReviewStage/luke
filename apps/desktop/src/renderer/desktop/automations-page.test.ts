@@ -125,6 +125,8 @@ let runsAsked: string[] = [];
 let runRefusal: (typeof AUTOMATION_CALL_FAILURE)[keyof typeof AUTOMATION_CALL_FAILURE] | undefined;
 /** Every agent whose page a run opened. */
 let agentsOpened: string[] = [];
+/** Whether the account's default model reads, or answers that it could not. */
+let defaultRefused = false;
 /** What a change answers: the automation as changed, or why not. */
 let changeRefusal:
   | (typeof AUTOMATION_CALL_FAILURE)[keyof typeof AUTOMATION_CALL_FAILURE]
@@ -145,6 +147,7 @@ beforeEach(() => {
   runsAsked = [];
   runRefusal = undefined;
   agentsOpened = [];
+  defaultRefused = false;
   changeRefusal = undefined;
   Object.defineProperty(window, "luke", {
     configurable: true,
@@ -198,10 +201,10 @@ beforeEach(() => {
           return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { models: [] } });
         }
         if (request.kind === ACT_KIND.CODING_AGENTS_DEFAULT_READ) {
-          return Promise.resolve({
-            status: ACT_OUTCOME_STATUS.DONE,
-            value: { choice: DEFAULT_CHOICE },
-          });
+          const value = defaultRefused
+            ? { failure: AUTOMATION_CALL_FAILURE.UNANSWERED }
+            : { choice: DEFAULT_CHOICE };
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
         }
         if (request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST) {
           agentsAsked.push(request.payload);
@@ -968,4 +971,50 @@ test("a Run now the service refuses says why under the name, and a new automatio
   await settle();
   assert.ok(![...fresh.querySelectorAll("button")].some((each) => each.textContent === "Run now"));
   assert.match(fresh.textContent ?? "", /Create it, then Run now to try it\./u);
+});
+
+/** A run of the sweep that started the CI digest agent, which a press on its row opens. */
+const SWEEP_RUN = {
+  id: "1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f",
+  firing: { kind: AUTOMATION_TRIGGER.SCHEDULE, dueAt: 3 },
+  status: AUTOMATION_RUN_STATUS.STARTED,
+  reason: null,
+  agent: { id: CI_DIGEST.id, title: "Fix the flaky test", status: "running" },
+  firedAt: 3,
+  settledAt: 3,
+} as const;
+
+test("opening a run's agent with unsaved changes asks first, and Leave opens it", async () => {
+  runs = [SWEEP_RUN];
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+  type(page.querySelector("input[aria-label='Automation name']"), "Sweep");
+
+  act(() => page.querySelector<HTMLButtonElement>("button.automation-run")?.click());
+  await settle();
+  assert.deepEqual(agentsOpened, []);
+  act(() => button("Leave").click());
+  await settle();
+
+  assert.deepEqual(agentsOpened, [CI_DIGEST.id]);
+});
+
+test("a Run now that settles reads the list again, so its newest run stands there too", async () => {
+  mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+  const before = listed.length;
+
+  act(() => button("Run now").click());
+  await settle();
+
+  assert.ok(listed.length > before);
+});
+
+test("a default model that could not be read still offers the model chip once the catalog is read", async () => {
+  defaultRefused = true;
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+
+  assert.ok(page.querySelector(".agent-model-chip"));
+  assert.match(page.textContent ?? "", /It runs on your default model until you choose one\./u);
 });
