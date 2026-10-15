@@ -379,6 +379,8 @@ export const automationSummarySchema = EffectSchema.Struct({
    * one origin that holds is the caller's.
    */
   webhookUrl: EffectSchema.optionalKey(EffectSchema.String),
+  /** Whether the account reading it created it, which a run starts as; absent from a service before it. */
+  mine: EffectSchema.optionalKey(EffectSchema.Boolean),
 });
 
 export type AutomationSummary = typeof automationSummarySchema.Type;

@@ -76,11 +76,13 @@ import {
   planningWorkspaceInviteParamsSchema,
   planningWorkspaceLeaveParamsSchema,
   planningWorkspaceMemberRemoveParamsSchema,
+  planningWorkspaceMemberRoleParamsSchema,
   planningWorkspaceMembersParamsSchema,
   planningWorkspaceParamsSchema,
   planningWorkspacePhotoParamsSchema,
   planningWorkspacePhotoSetParamsSchema,
   planningWorkspaceRenameParamsSchema,
+  planningWorkspaceTransferParamsSchema,
 } from "@luke/features/planning-view";
 import { EMPTY_TRANSCRIPT } from "@luke/features/transcript-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
@@ -161,8 +163,8 @@ import type { RunMode } from "./run-mode.js";
  * the first refresh after a launch or a sign-in, when the panel comes
  * forward, at most once a minute either way, and after a workspace call
  * moved them. A workspace made, renamed, or given a photo, a GitHub
- * organization connected or disconnected, a removal of a member, and a
- * leave are carried to the
+ * organization connected or disconnected, a removal of a member, a
+ * member's role changed, a handover, and a leave are carried to the
  * service on the developer's word, and a workspace's members and a
  * connection's install address are answered to the caller that asked and
  * held nowhere here.
@@ -300,6 +302,8 @@ export type PlanningClient = Pick<
     | "members"
     | "photo"
     | "removeMember"
+    | "changeRole"
+    | "transfer"
     | "leave"
     | "invite"
     | "invitations"
@@ -1648,6 +1652,42 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
         );
         return carried<PlanningWorkspaceMembersAnswer>(
           remaining.ok ? { members: remaining.answer } : { failure: remaining.failure },
+        );
+      }),
+    // A role changed moves no plan, so the workspaces alone are read again,
+    // as after a removal.
+    [GATEWAY_METHOD.WORKSPACES_MEMBER_ROLE]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(planningWorkspaceMemberRoleParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) {
+          return yield* invalid("changing a role names the workspace, the member, and the role");
+        }
+        if (!gate()) return carried<PlanningWorkspaceMembersAnswer>(WORKSPACE_UNANSWERED);
+        const { workspaceId, userId, role } = read.success;
+        const changed = yield* workspaceCall(
+          client.workspaces.changeRole(workspaceId, userId, role),
+          { plans: false },
+        );
+        return carried<PlanningWorkspaceMembersAnswer>(
+          changed.ok ? { members: changed.answer } : { failure: changed.failure },
+        );
+      }),
+    // Note that a handover changes the account's own role in the workspace,
+    // which the view's workspaces carry and every owner's and admin's act is
+    // drawn from, so the workspaces are read again; it moves no plan.
+    [GATEWAY_METHOD.WORKSPACES_TRANSFER]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(planningWorkspaceTransferParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) {
+          return yield* invalid("handing a workspace over names it and the admin");
+        }
+        if (!gate()) return carried<PlanningWorkspaceMembersAnswer>(WORKSPACE_UNANSWERED);
+        const { workspaceId, userId } = read.success;
+        const handedOver = yield* workspaceCall(client.workspaces.transfer(workspaceId, userId), {
+          plans: false,
+        });
+        return carried<PlanningWorkspaceMembersAnswer>(
+          handedOver.ok ? { members: handedOver.answer } : { failure: handedOver.failure },
         );
       }),
     // Note that a leave ends a call about any plan of the workspace left,

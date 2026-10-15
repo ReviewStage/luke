@@ -26,12 +26,15 @@ import {
   WORKSPACE_MEMBERS_QUERY,
   WORKSPACE_PHOTO_BOUNDS,
   WORKSPACE_ROLE,
+  type WorkspaceRole,
   workspaceCreateRequestSchema,
   workspaceGithubRequestSchema,
   workspaceLeaveRequestSchema,
   workspaceMemberRemovalSchema,
+  workspaceMemberRoleSchema,
   workspacePhotoSetRequestSchema,
   workspaceRenameRequestSchema,
+  workspaceTransferSchema,
 } from "@luke/features/workspace-wire";
 import { readEither } from "@luke/wire/effect";
 import { type Cause, Clock, Effect, Layer, Option, Result } from "effect";
@@ -61,7 +64,7 @@ import { ANY_METHOD, type WebRoutes } from "../route.js";
 import { listMembers, memberIdOf } from "./workspace-members.js";
 
 /**
- * workspaces-app.ts -- the account's workspaces as the Mac reads and asks for them: the list, a workspace created, renamed, or given a photo, a GitHub organization connected or disconnected, and its members read, removed, or left.
+ * workspaces-app.ts -- the account's workspaces as the Mac reads and asks for them: the list, a workspace created, renamed, given a photo, or handed over, a GitHub organization connected or disconnected, and its members read, removed, given a role, or left.
  *
  * `GET /api/workspaces` answers every workspace the bearer's account is a
  * member of, the one made for it first and the rest by name, each with the
@@ -78,8 +81,14 @@ import { listMembers, memberIdOf } from "./workspace-members.js";
  * workspace's repositories are its installation's alone, so one with nothing
  * connected has none.
  * `GET /api/workspaces/members` answers a workspace's
- * members to a member of it, `POST /api/workspaces/members/remove` lets an
- * owner or admin remove a member who is not an owner, and
+ * members to a member of it. `POST /api/workspaces/members/remove` lets the
+ * owner remove an admin or a member, and an admin a member alone;
+ * `POST /api/workspaces/members/role` lets the owner alone make a member an
+ * admin or an admin a member; `POST /api/workspaces/transfer` lets the owner
+ * alone hand the workspace to an admin, becoming an admin, though never the
+ * account's own first workspace, which is named for its creator; each
+ * answers the members as they then stand. Nobody removes or changes
+ * themselves, whose way out is leaving, or the owner.
  * `POST /api/workspaces/leave` lets anyone but an owner leave.
  * `POST /api/workspaces/rename` lets an owner or admin rename a workspace,
  * answering it under its new name and its old slug; an account's first
@@ -91,8 +100,9 @@ import { listMembers, memberIdOf } from "./workspace-members.js";
  * answering the workspace with its photo's new version or none.
  * The bearer is resolved before any row is touched.
  *
- * Removing, leaving, renaming, and setting the photo are Better Auth's own
- * `removeMember`, `leaveOrganization`, and `updateOrganization`
+ * Removing, changing a role, handing over, leaving, renaming, and setting
+ * the photo are Better Auth's own `removeMember`, `updateMemberRole`,
+ * `leaveOrganization`, and `updateOrganization`
  * (https://www.better-auth.com/docs/plugins/organization#remove-member),
  * so their bearer is the Mac's Better Auth session, signed, which the bearer
  * plugin reads as the session cookie those calls take; every other path
@@ -100,7 +110,7 @@ import { listMembers, memberIdOf } from "./workspace-members.js";
  * plugin's, which checks the caller's role and membership again itself.
  *
  * An owner or an admin of a workspace invites people from the Mac the
- * same way, under the session: `GET /api/workspaces/invitations` answers the
+ * same way, under the session, the owner alone as an admin: `GET /api/workspaces/invitations` answers the
  * pending invitations, each with its accept link, `POST` makes one through
  * the plugin's `createInvitation`
  * (https://www.better-auth.com/docs/plugins/organization#send-invitation),
@@ -113,6 +123,8 @@ const GITHUB_CONNECT_PATH = "/api/workspaces/github/connect";
 const GITHUB_DISCONNECT_PATH = "/api/workspaces/github/disconnect";
 const MEMBERS_PATH = "/api/workspaces/members";
 const MEMBERS_REMOVE_PATH = "/api/workspaces/members/remove";
+const MEMBERS_ROLE_PATH = "/api/workspaces/members/role";
+const TRANSFER_PATH = "/api/workspaces/transfer";
 const LEAVE_PATH = "/api/workspaces/leave";
 const RENAME_PATH = "/api/workspaces/rename";
 const INVITATIONS_PATH = "/api/workspaces/invitations";
@@ -162,8 +174,20 @@ const MAXIMUM_BODY_BYTES = 1_024;
  */
 const PHOTO_BODY_BYTES = Math.ceil(WORKSPACE_PHOTO_BOUNDS.MAX_BYTES / 3) * 4 + MAXIMUM_BODY_BYTES;
 
-/** The roles that remove a member, rename the workspace, or set its photo. */
+/** The roles that rename the workspace, set its photo, or invite people to it. */
 const MANAGING_ROLES: ReadonlySet<string> = new Set([WORKSPACE_ROLE.OWNER, WORKSPACE_ROLE.ADMIN]);
+
+/** The roles a workspace is handed to: an admin, or an owner a handover cut short already made one. */
+const HEIR_ROLES: ReadonlySet<WorkspaceRole> = new Set([
+  WORKSPACE_ROLE.ADMIN,
+  WORKSPACE_ROLE.OWNER,
+]);
+
+/** The roles each role removes: the owner an admin or a member, an admin a member alone. */
+const REMOVABLE_BY: ReadonlyMap<WorkspaceRole, ReadonlySet<WorkspaceRole>> = new Map([
+  [WORKSPACE_ROLE.OWNER, new Set([WORKSPACE_ROLE.ADMIN, WORKSPACE_ROLE.MEMBER])],
+  [WORKSPACE_ROLE.ADMIN, new Set([WORKSPACE_ROLE.MEMBER])],
+]);
 
 export interface WorkspacesAppSeams {
   resolveUserId: UserIdResolver;
@@ -427,7 +451,38 @@ const photoEndpoint = Effect.fn("web/workspacePhotoEndpoint")(function* (
   });
 });
 
-/** POST: an owner or admin removes a member who is not an owner, answered with those who remain. */
+/**
+ * Another member of the workspace, as the account would act on them: their
+ * role and the plugin's member id. One not in it is not found; the account
+ * itself is not permitted, since its own way out is leaving.
+ */
+const otherMemberOf = Effect.fn("web/workspaceOtherMember")(function* (
+  userId: string,
+  workspaceId: string,
+  otherId: string,
+) {
+  if (otherId === userId) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
+  const other = yield* hostedStoreOrUnavailable(workspaceOf(otherId, workspaceId));
+  const memberId = yield* hostedStoreOrUnavailable(memberIdOf(otherId, workspaceId));
+  if (Option.isNone(other) || Option.isNone(memberId)) {
+    return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  }
+  return { role: other.value.role, memberId: memberId.value };
+});
+
+/** A workspace the account owns; one it is not in is not found, and one it is in but does not own not permitted. */
+const ownedWorkspace = Effect.fn("web/ownedWorkspace")(function* (
+  userId: string,
+  workspaceId: string,
+) {
+  const workspace = yield* answeredWorkspace(userId, workspaceId);
+  if (workspace.role !== WORKSPACE_ROLE.OWNER) {
+    return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
+  }
+  return workspace;
+});
+
+/** POST: the owner removes an admin or a member, and an admin a member, answered with those who remain. */
 const removeEndpoint = Effect.fn("web/workspaceMemberRemoveEndpoint")(function* (
   seams: WorkspacesAppSeams,
 ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, Requirements> {
@@ -441,18 +496,81 @@ const removeEndpoint = Effect.fn("web/workspaceMemberRemoveEndpoint")(function* 
   if (Result.isFailure(asked)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   const { workspaceId, userId: removed } = asked.success;
   const workspace = yield* answeredWorkspace(userId, workspaceId);
-  if (!MANAGING_ROLES.has(workspace.role)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
-  const target = yield* hostedStoreOrUnavailable(workspaceOf(removed, workspaceId));
-  const memberId = yield* hostedStoreOrUnavailable(memberIdOf(removed, workspaceId));
-  if (Option.isNone(target) || Option.isNone(memberId)) {
-    return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  }
-  if (target.value.role === WORKSPACE_ROLE.OWNER) {
-    return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
-  }
+  const removable = REMOVABLE_BY.get(workspace.role);
+  if (removable === undefined) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
+  const { role, memberId } = yield* otherMemberOf(userId, workspaceId, removed);
+  if (!removable.has(role)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
   yield* pluginCallOrRefused(
-    seams.members.removeMember({ headers, organizationId: workspaceId, memberId: memberId.value }),
+    seams.members.removeMember({ headers, organizationId: workspaceId, memberId }),
   );
+  const members = yield* hostedStoreOrUnavailable(listMembers(workspaceId));
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { members });
+});
+
+/** POST: the owner makes another member an admin or an admin a member, answered with the members as they then stand. */
+const roleEndpoint = Effect.fn("web/workspaceMemberRoleEndpoint")(function* (
+  seams: WorkspacesAppSeams,
+): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, Requirements> {
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  if (incoming.method !== HTTP_METHOD.POST) {
+    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
+  }
+  const { userId, headers } = yield* sessionAccountOf(seams);
+  const body = yield* readJsonBodyEffect(MAXIMUM_BODY_BYTES);
+  const asked = readEither(workspaceMemberRoleSchema)(body);
+  if (Result.isFailure(asked)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  const { workspaceId, userId: changed, role } = asked.success;
+  yield* ownedWorkspace(userId, workspaceId);
+  const other = yield* otherMemberOf(userId, workspaceId, changed);
+  if (other.role === WORKSPACE_ROLE.OWNER) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
+  yield* pluginCallOrRefused(
+    seams.members.updateMemberRole({
+      headers,
+      organizationId: workspaceId,
+      memberId: other.memberId,
+      role,
+    }),
+  );
+  const members = yield* hostedStoreOrUnavailable(listMembers(workspaceId));
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { members });
+});
+
+/**
+ * POST: the owner hands the workspace to one of its admins and becomes an
+ * admin, answered with the members as they then stand. The account's first
+ * workspace is refused, because every read names it for its creator, whoever
+ * owns it, and nobody may rename it.
+ *
+ * Note that the admin is made the owner before the owner is made an admin,
+ * as two writes, because a failure between them then leaves the workspace
+ * two owners rather than none, which nobody could mend; the plugin refuses
+ * the sole owner's own step down besides. An heir who is already an owner
+ * is one such handover cut short, so the old owner trying again finishes it.
+ */
+const transferEndpoint = Effect.fn("web/workspaceTransferEndpoint")(function* (
+  seams: WorkspacesAppSeams,
+): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, Requirements> {
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  if (incoming.method !== HTTP_METHOD.POST) {
+    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
+  }
+  const { userId, headers } = yield* sessionAccountOf(seams);
+  const body = yield* readJsonBodyEffect(MAXIMUM_BODY_BYTES);
+  const asked = readEither(workspaceTransferSchema)(body);
+  if (Result.isFailure(asked)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  const { workspaceId, userId: heir } = asked.success;
+  const workspace = yield* ownedWorkspace(userId, workspaceId);
+  if (workspace.personal === true) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
+  const other = yield* otherMemberOf(userId, workspaceId, heir);
+  if (!HEIR_ROLES.has(other.role)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
+  const ownMemberId = yield* hostedStoreOrUnavailable(memberIdOf(userId, workspaceId));
+  if (Option.isNone(ownMemberId)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  const giveRole = (memberId: string, role: WorkspaceRole) =>
+    pluginCallOrRefused(
+      seams.members.updateMemberRole({ headers, organizationId: workspaceId, memberId, role }),
+    );
+  if (other.role !== WORKSPACE_ROLE.OWNER) yield* giveRole(other.memberId, WORKSPACE_ROLE.OWNER);
+  yield* giveRole(ownMemberId.value, WORKSPACE_ROLE.ADMIN);
   const members = yield* hostedStoreOrUnavailable(listMembers(workspaceId));
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { members });
 });
@@ -569,7 +687,7 @@ const pendingOf = Effect.fn("web/workspacePendingInvitations")(function* (
   return pendingInvitations(listed, yield* serviceOrigin, yield* Clock.currentTimeMillis);
 });
 
-/** POST: an invitation made by an owner or an admin, answered with it and its accept link. */
+/** POST: an invitation made by an owner or an admin, as an admin by the owner alone, answered with it and its accept link. */
 const inviteEndpoint = Effect.fn("web/workspaceInviteEndpoint")(function* (
   seams: WorkspacesAppSeams,
 ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, Requirements> {
@@ -579,6 +697,9 @@ const inviteEndpoint = Effect.fn("web/workspaceInviteEndpoint")(function* (
   if (Result.isFailure(asked)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   const { workspaceId, email, role } = asked.success;
   const workspace = yield* managedWorkspace(userId, workspaceId);
+  if (role === INVITATION_ROLE.ADMIN && workspace.role !== WORKSPACE_ROLE.OWNER) {
+    return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
+  }
   const made = yield* pluginCallOrRefused(
     seams.members.inviteMember({ headers, organizationId: workspace.id, email, role }),
   );
@@ -638,7 +759,7 @@ const cancelInvitationEndpoint = Effect.fn("web/workspaceInvitationCancelEndpoin
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { invitations });
 });
 
-/** The group: the workspaces path, the rename, the two GitHub paths, the three members paths, the photo's two paths, the two invitations paths, and the hosted vocabulary's own refusal for any other. */
+/** The group: the workspaces path, the rename, the two GitHub paths, the four members paths, the handover, the photo's two paths, the two invitations paths, and the hosted vocabulary's own refusal for any other. */
 export function workspacesApp(
   seams: WorkspacesAppSeams,
 ): WebRoutes<DatabaseServices | HttpClient.HttpClient | GitHubApp> {
@@ -648,6 +769,8 @@ export function workspacesApp(
     HttpRouter.add(ANY_METHOD, GITHUB_DISCONNECT_PATH, hostedRefusing(disconnectEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, MEMBERS_PATH, hostedRefusing(membersEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, MEMBERS_REMOVE_PATH, hostedRefusing(removeEndpoint(seams))),
+    HttpRouter.add(ANY_METHOD, MEMBERS_ROLE_PATH, hostedRefusing(roleEndpoint(seams))),
+    HttpRouter.add(ANY_METHOD, TRANSFER_PATH, hostedRefusing(transferEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, LEAVE_PATH, hostedRefusing(leaveEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, RENAME_PATH, hostedRefusing(renameEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, PHOTO_PATH, hostedRefusing(photoEndpoint(seams))),

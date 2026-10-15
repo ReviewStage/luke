@@ -405,6 +405,33 @@ function fakeService(plans: Plan[]): FakeService {
           service.members[workspaceId] = remaining;
           return { ok: true, answer: remaining } as const;
         }),
+      changeRole: (workspaceId, userId, role) =>
+        Effect.sync(() => {
+          service.reads.push(`role:${workspaceId}:${userId}:${role}`);
+          if (service.notPermitted) return NOT_PERMITTED_WORKSPACE;
+          const given =
+            role === WORKSPACE_ROLE.ADMIN ? WORKSPACE_ROLE.ADMIN : WORKSPACE_ROLE.MEMBER;
+          const changed = (service.members[workspaceId] ?? []).map((member) =>
+            member.userId === userId ? { ...member, role: given } : member,
+          );
+          service.members[workspaceId] = changed;
+          return { ok: true, answer: changed } as const;
+        }),
+      // A handover makes the heir the owner and the account, the owner until then, an admin.
+      transfer: (workspaceId, userId) =>
+        Effect.sync(() => {
+          service.reads.push(`transfer:${workspaceId}:${userId}`);
+          if (service.notPermitted) return NOT_PERMITTED_WORKSPACE;
+          const handedOver = (service.members[workspaceId] ?? []).map((member) => ({
+            ...member,
+            role: member.userId === userId ? WORKSPACE_ROLE.OWNER : member.role,
+          }));
+          service.members[workspaceId] = handedOver;
+          service.memberships = service.memberships.map((each) =>
+            each.id === workspaceId ? { ...each, role: WORKSPACE_ROLE.ADMIN } : each,
+          );
+          return { ok: true, answer: handedOver } as const;
+        }),
       invitations: (workspaceId) =>
         Effect.sync(() => {
           service.reads.push(`invitations:${workspaceId}`);
@@ -1435,6 +1462,55 @@ it.effect(
       assert.deepEqual(service.reads, [
         `members:${ACME.id}`,
         `remove:${ACME.id}:${GRACE.userId}`,
+        "workspaces",
+      ]);
+    }),
+);
+
+it.effect(
+  "a role changed and a handover each read the workspaces again and not the plans, so the account's own role after a handover arrives on the view",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      const owned = { ...ACME, role: WORKSPACE_ROLE.OWNER };
+      const owner = { ...ADA, role: WORKSPACE_ROLE.OWNER };
+      service.memberships = [PERSONAL, owned];
+      service.members[ACME.id] = [owner, GRACE];
+      const { call, last } = yield* subject(service);
+
+      const changed = yield* call(GATEWAY_METHOD.WORKSPACES_MEMBER_ROLE, {
+        workspaceId: ACME.id,
+        userId: GRACE.userId,
+        role: WORKSPACE_ROLE.ADMIN,
+      });
+      const roleAfterChange = last()?.workspaces.find((each) => each.id === ACME.id)?.role;
+      const handedOver = yield* call(GATEWAY_METHOD.WORKSPACES_TRANSFER, {
+        workspaceId: ACME.id,
+        userId: GRACE.userId,
+      });
+      const toOwner = yield* Effect.exit(
+        call(GATEWAY_METHOD.WORKSPACES_MEMBER_ROLE, {
+          workspaceId: ACME.id,
+          userId: GRACE.userId,
+          role: WORKSPACE_ROLE.OWNER,
+        }),
+      );
+
+      const admin = { ...GRACE, role: WORKSPACE_ROLE.ADMIN };
+      assert.deepEqual(changed, { members: [owner, admin] });
+      assert.equal(roleAfterChange, WORKSPACE_ROLE.OWNER);
+      assert.deepEqual(handedOver, {
+        members: [owner, { ...GRACE, role: WORKSPACE_ROLE.OWNER }],
+      });
+      assert.equal(
+        last()?.workspaces.find((each) => each.id === ACME.id)?.role,
+        WORKSPACE_ROLE.ADMIN,
+      );
+      assert.ok(Exit.isFailure(toOwner), "an owner's role is no role a change gives");
+      assert.deepEqual(service.reads, [
+        `role:${ACME.id}:${GRACE.userId}:${WORKSPACE_ROLE.ADMIN}`,
+        "workspaces",
+        `transfer:${ACME.id}:${GRACE.userId}`,
         "workspaces",
       ]);
     }),

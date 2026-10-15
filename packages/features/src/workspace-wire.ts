@@ -25,9 +25,12 @@ import { countedNumber } from "./service-wire.js";
  * `workspaceIdSchema`.
  *
  * A member of a workspace reads its members; an owner or an admin renames
- * it and removes a member who is not an owner, and anyone but an owner
- * leaves. A rename moves the name alone: the slug stays the one the
- * workspace was made under.
+ * it, and anyone but an owner leaves. A workspace has one owner, its
+ * creator, until the owner hands it to an admin and becomes an admin. The
+ * owner alone makes a member an admin or an admin a member, and removes an
+ * admin; an admin removes a member alone. Nobody changes or removes
+ * themselves, whose way out is leaving, or the owner. A rename moves the
+ * name alone: the slug stays the one the workspace was made under.
  *
  * A workspace's slug is the first step of a Luke link's path
  * (`https://tryluke.dev/<slug>/plan/<id>`, `mention-link.ts`), so no workspace
@@ -51,6 +54,16 @@ export const WORKSPACE_ROLE = {
 } as const;
 
 export type WorkspaceRole = (typeof WORKSPACE_ROLE)[keyof typeof WORKSPACE_ROLE];
+
+/**
+ * The roles a member is given, by an invitation or by the owner: a
+ * workspace has one owner, its creator, so nobody is made one but by the
+ * owner handing it over.
+ */
+export const ASSIGNABLE_ROLE = {
+  ADMIN: WORKSPACE_ROLE.ADMIN,
+  MEMBER: WORKSPACE_ROLE.MEMBER,
+} as const;
 
 /**
  * The first steps of tryluke.dev's paths that are Luke's own, now or likely
@@ -275,7 +288,7 @@ export const workspaceMemberSchema = EffectSchema.Struct({
 
 export type WorkspaceMember = typeof workspaceMemberSchema.Type;
 
-/** A workspace's members, owners first, then admins, then members, each by name (GET, and after a removal). */
+/** A workspace's members, owners first, then admins, then members, each by name (GET, and after a removal, a role changed, or a handover). */
 export const workspaceMembersAnswerSchema = EffectSchema.Struct({
   members: EffectSchema.Array(workspaceMemberSchema),
 });
@@ -287,6 +300,19 @@ export const WORKSPACE_MEMBERS_QUERY = { WORKSPACE_ID: "workspaceId" } as const;
 export const workspaceMemberRemovalSchema = EffectSchema.Struct({
   workspaceId: workspaceIdSchema,
   userId: EffectSchema.String.check(EffectSchema.isNonEmpty()),
+});
+
+/** The owner making another member an admin or an admin a member (POST), answered with the members as they then stand. */
+export const workspaceMemberRoleSchema = EffectSchema.Struct({
+  workspaceId: workspaceIdSchema,
+  userId: workspaceMemberRemovalSchema.fields.userId,
+  role: EffectSchema.Literals(Object.values(ASSIGNABLE_ROLE)),
+});
+
+/** The owner handing the workspace to one of its admins (POST), answered with the members as they then stand. */
+export const workspaceTransferSchema = EffectSchema.Struct({
+  workspaceId: workspaceIdSchema,
+  userId: workspaceMemberRemovalSchema.fields.userId,
 });
 
 /** Leaving a workspace (POST), answered with the workspace left. */

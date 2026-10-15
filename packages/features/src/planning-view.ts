@@ -49,11 +49,13 @@ import {
   workspaceGithubRequestSchema,
   workspaceLeaveRequestSchema,
   workspaceMemberRemovalSchema,
+  workspaceMemberRoleSchema,
   workspaceMemberSchema,
   workspacePhotoSetRequestSchema,
   workspacePhotoTypeSchema,
   workspaceRenameRequestSchema,
   workspaceSchema,
+  workspaceTransferSchema,
 } from "./workspace-wire.js";
 
 /**
@@ -798,7 +800,17 @@ export const planningWorkspaceMemberRemoveParamsSchema = workspaceMemberRemovalS
 export type PlanningWorkspaceMemberRemoveParams =
   typeof planningWorkspaceMemberRemoveParamsSchema.Type;
 
-/** A workspace's members, as the window hears them after a read or a removal: the members as they then stand, or why there are none. */
+/** Giving another member of a workspace a role, as the window asks it: the workspace, the member's account, and admin or member. */
+export const planningWorkspaceMemberRoleParamsSchema = workspaceMemberRoleSchema;
+
+export type PlanningWorkspaceMemberRoleParams = typeof planningWorkspaceMemberRoleParamsSchema.Type;
+
+/** Handing a workspace to one of its admins, as the window asks it: the workspace and the admin's account. */
+export const planningWorkspaceTransferParamsSchema = workspaceTransferSchema;
+
+export type PlanningWorkspaceTransferParams = typeof planningWorkspaceTransferParamsSchema.Type;
+
+/** A workspace's members, as the window hears them after a read, a removal, a role changed, or a handover: the members as they then stand, or why there are none. */
 export const planningWorkspaceMembersAnswerSchema = EffectSchema.Union([
   EffectSchema.Struct({ members: EffectSchema.Array(workspaceMemberSchema) }),
   workspaceCallFailureSchema,

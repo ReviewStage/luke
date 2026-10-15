@@ -51,19 +51,22 @@ import {
   workspaceLeaveAnswerSchema,
   workspaceLeaveRequestSchema,
   workspaceMemberRemovalSchema,
+  workspaceMemberRoleSchema,
   workspaceMembersAnswerSchema,
   workspacePhotoSetRequestSchema,
   workspacePhotoTypeSchema,
   workspaceRenameRequestSchema,
   workspacesAnswerSchema,
+  workspaceTransferSchema,
 } from "./workspace-wire.js";
 
 /**
- * workspace-client.ts -- the account's workspaces as the host asks the service for them: the list, a workspace created, renamed, or given a photo, a GitHub organization connected or disconnected, and its members read, removed, or left.
+ * workspace-client.ts -- the account's workspaces as the host asks the service for them: the list, a workspace created, renamed, given a photo, or handed over, a GitHub organization connected or disconnected, and its members read, removed, given a role, or left.
  *
  * Every call is the account call, so the bearer is read fresh per attempt
  * and a 401 is renewed and retried once. Renaming, setting the photo,
- * removing a member, and leaving write through Better Auth's own
+ * removing a member, changing a member's role, handing the workspace over,
+ * and leaving write through Better Auth's own
  * organization calls, so they carry the
  * Mac's Better Auth session rather than its OAuth token: with no session
  * yet, or one the service no longer takes, the call asks for one through
@@ -261,6 +264,49 @@ export class HostedWorkspaceClient {
       {
         method: HTTP_METHOD.POST,
         path: HOSTED_SERVICE_PATH.WORKSPACES_MEMBERS_REMOVE,
+        body: JSON.stringify(admitted),
+      },
+      workspaceMembersAnswerSchema,
+      (answer) => answer.members,
+      this.#inSession,
+    );
+  }
+
+  /** Another member made an admin or an admin a member by the owner, answering the members as they then stand; a role the service would refuse by shape never travels. */
+  changeRole(
+    workspaceId: string,
+    userId: string,
+    role: string,
+  ): Effect.Effect<WorkspaceCallResult<readonly WorkspaceMember[]>, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(
+      readEither(workspaceMemberRoleSchema)({ workspaceId, userId, role }),
+    );
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return this.#answered(
+      {
+        method: HTTP_METHOD.POST,
+        path: HOSTED_SERVICE_PATH.WORKSPACES_MEMBERS_ROLE,
+        body: JSON.stringify(admitted),
+      },
+      workspaceMembersAnswerSchema,
+      (answer) => answer.members,
+      this.#inSession,
+    );
+  }
+
+  /** The workspace handed by its owner to one of its admins, the owner becoming an admin, answering the members as they then stand. */
+  transfer(
+    workspaceId: string,
+    userId: string,
+  ): Effect.Effect<WorkspaceCallResult<readonly WorkspaceMember[]>, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(
+      readEither(workspaceTransferSchema)({ workspaceId, userId }),
+    );
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return this.#answered(
+      {
+        method: HTTP_METHOD.POST,
+        path: HOSTED_SERVICE_PATH.WORKSPACES_TRANSFER,
         body: JSON.stringify(admitted),
       },
       workspaceMembersAnswerSchema,

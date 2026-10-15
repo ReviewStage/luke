@@ -1,3 +1,4 @@
+import type { WorkspaceRole } from "@luke/features/workspace-wire";
 import { Cause, Data, Effect, Option, Schema } from "effect";
 
 /**
@@ -11,7 +12,8 @@ import { Cause, Data, Effect, Option, Schema } from "effect";
  * plugin's `removeMember` and `leaveOrganization`, called with the headers
  * of the request that asked, which carry the Mac's own Better Auth session
  * as a signed bearer token, so the plugin checks the caller's role and
- * membership itself. A rename, and a photo set or removed, is the plugin's
+ * membership itself. A member's new role, a handover's two among them, is
+ * the plugin's `updateMemberRole` under the same headers. A rename, and a photo set or removed, is the plugin's
  * `updateOrganization` under the same headers, given the name alone or the
  * logo alone, so the plugin checks that the caller may update the workspace
  * and leaves its slug as it was. An
@@ -59,6 +61,15 @@ interface MemberRemoval {
   readonly organizationId: string;
   /** The plugin's member id of the one removed. */
   readonly memberId: string;
+}
+
+/** One member given a role in a workspace under the session the headers carry. */
+interface MemberRoleUpdate {
+  readonly headers: Headers;
+  readonly organizationId: string;
+  /** The plugin's member id of the one given the role. */
+  readonly memberId: string;
+  readonly role: WorkspaceRole;
 }
 
 /** The session the headers carry leaving a workspace. */
@@ -114,6 +125,7 @@ export interface MemberSeams {
     readonly invitationId: string;
   }) => Effect.Effect<void, MemberFailure>;
   readonly removeMember: (removal: MemberRemoval) => Effect.Effect<void, MemberFailure>;
+  readonly updateMemberRole: (update: MemberRoleUpdate) => Effect.Effect<void, MemberFailure>;
   readonly leaveOrganization: (leaving: WorkspaceLeaving) => Effect.Effect<void, MemberFailure>;
   readonly updateOrganization: (update: WorkspaceUpdate) => Effect.Effect<void, MemberFailure>;
 }
@@ -142,6 +154,10 @@ export interface MemberAuthApi {
   readonly removeMember: (input: {
     headers: Headers;
     body: { memberIdOrEmail: string; organizationId: string };
+  }) => Promise<object | null>;
+  readonly updateMemberRole: (input: {
+    headers: Headers;
+    body: { memberId: string; role: WorkspaceRole; organizationId: string };
   }) => Promise<object | null>;
   readonly leaveOrganization: (input: {
     headers: Headers;
@@ -246,6 +262,19 @@ export function memberSeams(api: MemberAuthApi): MemberSeams {
           api.removeMember({
             headers: removal.headers,
             body: { memberIdOrEmail: removal.memberId, organizationId: removal.organizationId },
+          }),
+        ),
+      ),
+    updateMemberRole: (update) =>
+      Effect.asVoid(
+        pluginCall(() =>
+          api.updateMemberRole({
+            headers: update.headers,
+            body: {
+              memberId: update.memberId,
+              role: update.role,
+              organizationId: update.organizationId,
+            },
           }),
         ),
       ),

@@ -158,8 +158,12 @@ export const HOSTED_SERVICE_PATH = {
   WORKSPACES_PHOTO_SET: "/api/workspaces/photo/set",
   /** One workspace's members, to a member of it (GET), the workspace named in `workspace-wire.ts`'s `WORKSPACE_MEMBERS_QUERY`. */
   WORKSPACES_MEMBERS: "/api/workspaces/members",
-  /** An owner or an admin removes a member who is not an owner (POST), answered with those who remain. */
+  /** The owner removes an admin or a member, and an admin a member (POST), answered with those who remain. */
   WORKSPACES_MEMBERS_REMOVE: "/api/workspaces/members/remove",
+  /** The owner makes another member an admin or an admin a member (POST), answered with the members as they then stand. */
+  WORKSPACES_MEMBERS_ROLE: "/api/workspaces/members/role",
+  /** The owner hands the workspace to an admin, becoming an admin (POST), answered with the members as they then stand. */
+  WORKSPACES_TRANSFER: "/api/workspaces/transfer",
   /** The account leaves a workspace it does not own (POST). */
   WORKSPACES_LEAVE: "/api/workspaces/leave",
   /**

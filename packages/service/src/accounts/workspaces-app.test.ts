@@ -24,11 +24,12 @@ import {
   type WorkspacePhotoType,
   workspaceAnswerSchema,
   workspaceGithubConnectAnswerSchema,
+  workspaceMembersAnswerSchema,
   workspacesAnswerSchema,
 } from "@luke/features/workspace-wire";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { Cause, Clock, Effect, Layer, Option, Result, type Schema } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
@@ -90,6 +91,7 @@ const NO_SESSION: SessionSeams = {
     listInvitations: () => Effect.die("no member write without a session"),
     cancelInvitation: () => Effect.die("no member write without a session"),
     removeMember: () => Effect.die("no member write without a session"),
+    updateMemberRole: () => Effect.die("no member write without a session"),
     leaveOrganization: () => Effect.die("no member write without a session"),
     updateOrganization: () => Effect.die("no member write without a session"),
   },
@@ -1035,6 +1037,268 @@ it.effect("an owner cannot leave, and a member leaves", () =>
   }),
 );
 
+/** The account giving a teammate a role, under its session. */
+const changingRole = (
+  plugin: WorkspacePlugin,
+  userId: string,
+  workspaceId: string,
+  changed: string,
+  role: string,
+) =>
+  postedInSession(plugin, userId, HOSTED_SERVICE_PATH.WORKSPACES_MEMBERS_ROLE, {
+    workspaceId,
+    userId: changed,
+    role,
+  });
+
+/** The account handing the workspace to a teammate, under its session. */
+const transferring = (plugin: WorkspacePlugin, userId: string, workspaceId: string, heir: string) =>
+  postedInSession(plugin, userId, HOSTED_SERVICE_PATH.WORKSPACES_TRANSFER, {
+    workspaceId,
+    userId: heir,
+  });
+
+/** Each member's role in a workspace, by account, as the plugin's rows hold them. */
+const rolesIn = (organizationId: string) =>
+  Effect.map(membersOf(organizationId), (rows) =>
+    Object.fromEntries(rows.map((row) => [row.userId, row.role])),
+  );
+
+/** Each member's role, by account, as a members answer carries them, failing the test where it is not one. */
+const rolesAnswered = (answer: Pick<Answer, "status" | "body">) =>
+  Object.fromEntries(
+    readAs(answer, workspaceMembersAnswerSchema, HOSTED_HTTP_STATUS.OK).members.map((one) => [
+      one.userId,
+      one.role,
+    ]),
+  );
+
+/** A member's row made an owner's, as a handover cut short between its two writes leaves the heir. */
+const ownerByHand = (organizationId: string, userId: string) =>
+  Database.use((db) =>
+    db
+      .update(member)
+      .set({ role: WORKSPACE_ROLE.OWNER })
+      .where(and(eq(member.organizationId, organizationId), eq(member.userId, userId))),
+  );
+
+it.effect(
+  "the owner makes a member an admin and an admin a member, answered with the members, and an admin's or a member's change is refused",
+  () =>
+    Effect.gen(function* () {
+      const plugin = yield* openWorkspacePlugin;
+      yield* Effect.gen(function* () {
+        const ada = yield* openGithubAccount("Ada Lovelace");
+        const grace = yield* openGithubAccount("Grace Hopper");
+        const alan = yield* openGithubAccount("Alan Turing");
+        const acme = yield* openTeam(plugin.api, ada, [
+          { userId: grace, role: "admin" },
+          { userId: alan, role: "member" },
+        ]);
+
+        const byAdmin = yield* changingRole(plugin, grace, acme, alan, WORKSPACE_ROLE.ADMIN);
+        const byMember = yield* changingRole(plugin, alan, acme, grace, WORKSPACE_ROLE.MEMBER);
+        const unchanged = yield* rolesIn(acme);
+        const promoted = rolesAnswered(
+          yield* changingRole(plugin, ada, acme, alan, WORKSPACE_ROLE.ADMIN),
+        );
+        const demoted = rolesAnswered(
+          yield* changingRole(plugin, ada, acme, grace, WORKSPACE_ROLE.MEMBER),
+        );
+
+        const notPermitted = refusedAs(
+          HOSTED_HTTP_STATUS.FORBIDDEN,
+          HOSTED_API_ERROR.NOT_PERMITTED,
+        );
+        assert.deepEqual(byAdmin, notPermitted);
+        assert.deepEqual(byMember, notPermitted);
+        assert.deepEqual(unchanged, { [ada]: "owner", [grace]: "admin", [alan]: "member" });
+        assert.deepEqual(promoted, { [ada]: "owner", [grace]: "admin", [alan]: "admin" });
+        assert.deepEqual(demoted, { [ada]: "owner", [grace]: "member", [alan]: "admin" });
+        assert.deepEqual(yield* rolesIn(acme), demoted);
+      }).pipe(Effect.provide(plugin.database));
+    }),
+);
+
+it.effect(
+  "a role change of the owner, of oneself, or to owner is refused, and one in a workspace the account is not in, or of an account not in it, is not found",
+  () =>
+    Effect.gen(function* () {
+      const plugin = yield* openWorkspacePlugin;
+      yield* Effect.gen(function* () {
+        const ada = yield* openGithubAccount("Ada Lovelace");
+        const grace = yield* openGithubAccount("Grace Hopper");
+        const alan = yield* openGithubAccount("Alan Turing");
+        const mallory = yield* openGithubAccount("Mallory");
+        const acme = yield* openTeam(plugin.api, ada, [
+          { userId: grace, role: "admin" },
+          { userId: alan, role: "member" },
+        ]);
+        // A second owner, as a handover cut short leaves one, is still an owner nobody changes.
+        yield* ownerByHand(acme, grace);
+
+        const ofOwner = yield* changingRole(plugin, ada, acme, grace, WORKSPACE_ROLE.MEMBER);
+        const ofSelf = yield* changingRole(plugin, ada, acme, ada, WORKSPACE_ROLE.ADMIN);
+        const toOwner = yield* changingRole(plugin, ada, acme, alan, WORKSPACE_ROLE.OWNER);
+        const byOutsider = yield* changingRole(plugin, mallory, acme, alan, WORKSPACE_ROLE.ADMIN);
+        const ofOutsider = yield* changingRole(plugin, ada, acme, mallory, WORKSPACE_ROLE.ADMIN);
+
+        const notPermitted = refusedAs(
+          HOSTED_HTTP_STATUS.FORBIDDEN,
+          HOSTED_API_ERROR.NOT_PERMITTED,
+        );
+        const notFound = refusedAs(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
+        assert.deepEqual(ofOwner, notPermitted);
+        assert.deepEqual(ofSelf, notPermitted);
+        assert.deepEqual(
+          toOwner,
+          refusedAs(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+        assert.deepEqual(byOutsider, notFound);
+        assert.deepEqual(ofOutsider, notFound);
+        assert.deepEqual(yield* rolesIn(acme), {
+          [ada]: "owner",
+          [grace]: "owner",
+          [alan]: "member",
+        });
+      }).pipe(Effect.provide(plugin.database));
+    }),
+);
+
+it.effect(
+  "the owner hands the workspace to an admin, who owns it as the old owner becomes an admin, and each reads it so",
+  () =>
+    Effect.gen(function* () {
+      const plugin = yield* openWorkspacePlugin;
+      yield* Effect.gen(function* () {
+        const ada = yield* openGithubAccount("Ada Lovelace");
+        const grace = yield* openGithubAccount("Grace Hopper");
+        const alan = yield* openGithubAccount("Alan Turing");
+        const acme = yield* openTeam(plugin.api, ada, [
+          { userId: grace, role: "admin" },
+          { userId: alan, role: "member" },
+        ]);
+
+        const handedOver = rolesAnswered(yield* transferring(plugin, ada, acme, grace));
+        const roleOf = (userId: string) =>
+          Effect.map(
+            workspacesOf(plugin.seams, NO_GITHUB_TO_READ, userId),
+            (listed) => listed.find((each) => each.id === acme)?.role,
+          );
+
+        assert.deepEqual(handedOver, { [ada]: "admin", [grace]: "owner", [alan]: "member" });
+        assert.deepEqual(yield* rolesIn(acme), handedOver);
+        assert.equal(yield* roleOf(ada), WORKSPACE_ROLE.ADMIN);
+        assert.equal(yield* roleOf(grace), WORKSPACE_ROLE.OWNER);
+        // The old owner, an admin now, may leave, and the new owner may not.
+        assert.deepEqual(yield* leaving(plugin, grace, acme), {
+          status: HOSTED_HTTP_STATUS.FORBIDDEN,
+          body: { error: HOSTED_API_ERROR.NOT_PERMITTED },
+        });
+        assert.deepEqual(yield* leaving(plugin, ada, acme), {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: { workspaceId: acme },
+        });
+      }).pipe(Effect.provide(plugin.database));
+    }),
+);
+
+it.effect(
+  "a handover to a member, by an admin, of the account's first workspace, or of a workspace the account is not in is refused, and moves no role",
+  () =>
+    Effect.gen(function* () {
+      const plugin = yield* openWorkspacePlugin;
+      yield* Effect.gen(function* () {
+        const ada = yield* openGithubAccount("Ada Lovelace");
+        const grace = yield* openGithubAccount("Grace Hopper");
+        const alan = yield* openGithubAccount("Alan Turing");
+        const mallory = yield* openGithubAccount("Mallory");
+        const acme = yield* openTeam(plugin.api, ada, [
+          { userId: grace, role: "admin" },
+          { userId: alan, role: "member" },
+        ]);
+        const first = Option.getOrThrow(yield* ensurePersonalWorkspace(ada, plugin.seams));
+        yield* Effect.promise(() =>
+          plugin.api.addMember({ body: { userId: grace, organizationId: first, role: "admin" } }),
+        );
+
+        const toMember = yield* transferring(plugin, ada, acme, alan);
+        const byAdmin = yield* transferring(plugin, grace, acme, alan);
+        const ofFirst = yield* transferring(plugin, ada, first, grace);
+        const byOutsider = yield* transferring(plugin, mallory, acme, grace);
+
+        const notPermitted = refusedAs(
+          HOSTED_HTTP_STATUS.FORBIDDEN,
+          HOSTED_API_ERROR.NOT_PERMITTED,
+        );
+        assert.deepEqual(toMember, notPermitted);
+        assert.deepEqual(byAdmin, notPermitted);
+        assert.deepEqual(ofFirst, notPermitted);
+        assert.deepEqual(
+          byOutsider,
+          refusedAs(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+        assert.deepEqual(yield* rolesIn(acme), {
+          [ada]: "owner",
+          [grace]: "admin",
+          [alan]: "member",
+        });
+        assert.deepEqual(yield* rolesIn(first), { [ada]: "owner", [grace]: "admin" });
+      }).pipe(Effect.provide(plugin.database));
+    }),
+);
+
+it.effect(
+  "a handover cut short after its heir was made an owner is finished by the old owner trying again",
+  () =>
+    Effect.gen(function* () {
+      const plugin = yield* openWorkspacePlugin;
+      yield* Effect.gen(function* () {
+        const ada = yield* openGithubAccount("Ada Lovelace");
+        const grace = yield* openGithubAccount("Grace Hopper");
+        const acme = yield* openTeam(plugin.api, ada, [{ userId: grace, role: "admin" }]);
+        yield* ownerByHand(acme, grace);
+
+        const finished = rolesAnswered(yield* transferring(plugin, ada, acme, grace));
+
+        assert.deepEqual(finished, { [ada]: "admin", [grace]: "owner" });
+      }).pipe(Effect.provide(plugin.database));
+    }),
+);
+
+it.effect(
+  "the owner removes an admin, an admin cannot remove another admin, and nobody removes themselves",
+  () =>
+    Effect.gen(function* () {
+      const plugin = yield* openWorkspacePlugin;
+      yield* Effect.gen(function* () {
+        const ada = yield* openGithubAccount("Ada Lovelace");
+        const grace = yield* openGithubAccount("Grace Hopper");
+        const alan = yield* openGithubAccount("Alan Turing");
+        const linus = yield* openGithubAccount("Linus Torvalds");
+        const acme = yield* openTeam(plugin.api, ada, [
+          { userId: grace, role: "admin" },
+          { userId: alan, role: "admin" },
+          { userId: linus, role: "admin" },
+        ]);
+
+        const adminOfAdmin = yield* removing(plugin, grace, acme, alan);
+        const adminOfSelf = yield* removing(plugin, grace, acme, grace);
+        const ownerOfSelf = yield* removing(plugin, ada, acme, ada);
+        const ownerOfAdmin = rolesAnswered(yield* removing(plugin, ada, acme, linus));
+
+        const notPermitted = refusedAs(
+          HOSTED_HTTP_STATUS.FORBIDDEN,
+          HOSTED_API_ERROR.NOT_PERMITTED,
+        );
+        assert.deepEqual(adminOfAdmin, notPermitted);
+        assert.deepEqual(adminOfSelf, notPermitted);
+        assert.deepEqual(ownerOfSelf, notPermitted);
+        assert.deepEqual(ownerOfAdmin, { [ada]: "owner", [grace]: "admin", [alan]: "admin" });
+      }).pipe(Effect.provide(plugin.database));
+    }),
+);
+
 it.effect(
   "an owner and an admin rename the workspace, its ends trimmed and its slug left as it was, and a member is refused",
   () =>
@@ -1399,12 +1663,18 @@ const readInSession = (plugin: WorkspacePlugin, userId: string, path: string) =>
     return { status, body };
   });
 
-/** An invitation asked for by the account, under its session. */
-const inviting = (plugin: WorkspacePlugin, userId: string, workspaceId: string, email: string) =>
+/** An invitation asked for by the account, under its session, as a member unless told otherwise. */
+const inviting = (
+  plugin: WorkspacePlugin,
+  userId: string,
+  workspaceId: string,
+  email: string,
+  role = "member",
+) =>
   postedInSession(plugin, userId, HOSTED_SERVICE_PATH.WORKSPACES_INVITATIONS, {
     workspaceId,
     email,
-    role: "member",
+    role,
   });
 
 it.effect(
@@ -1443,6 +1713,36 @@ it.effect(
         assert.deepEqual(canceled, { status: HOSTED_HTTP_STATUS.OK, body: { invitations: [] } });
       }).pipe(Effect.provide(plugin.database));
     }),
+);
+
+it.effect("an admin's invitation as an admin is refused, and the owner invites as an admin", () =>
+  Effect.gen(function* () {
+    const plugin = yield* openWorkspacePlugin;
+    yield* Effect.gen(function* () {
+      const ada = yield* openGithubAccount("Ada Lovelace");
+      const grace = yield* openGithubAccount("Grace Hopper");
+      const acme = yield* openTeam(plugin.api, ada, [{ userId: grace, role: "admin" }]);
+
+      const byAdmin = yield* inviting(plugin, grace, acme, "alan@example.com", "admin");
+      const byOwner = readAs(
+        yield* inviting(plugin, ada, acme, "alan@example.com", "admin"),
+        workspaceInvitationAnswerSchema,
+        HOSTED_HTTP_STATUS.CREATED,
+      ).invitation;
+
+      assert.deepEqual(
+        byAdmin,
+        refusedAs(HOSTED_HTTP_STATUS.FORBIDDEN, HOSTED_API_ERROR.NOT_PERMITTED),
+      );
+      assert.deepEqual(
+        { email: byOwner.email, role: byOwner.role },
+        {
+          email: "alan@example.com",
+          role: "admin",
+        },
+      );
+    }).pipe(Effect.provide(plugin.database));
+  }),
 );
 
 it.effect(

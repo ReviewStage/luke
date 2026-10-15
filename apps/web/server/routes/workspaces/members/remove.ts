@@ -5,7 +5,7 @@ import { resolveHostedUserId } from "@luke/service/auth/bearer";
 import { resolveBrowserSessionUserId } from "@luke/service/auth/browser-session";
 import { routeFromHttpRouter } from "../../../route-effect.js";
 
-/** An owner or an admin removes a member who is not an owner (POST). */
+/** The owner removes an admin or a member, and an admin a member (POST). */
 export default routeFromHttpRouter(
   workspacesApp({
     resolveUserId: resolveHostedUserId,

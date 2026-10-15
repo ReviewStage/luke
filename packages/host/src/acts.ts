@@ -139,12 +139,14 @@ import {
   planningWorkspaceInviteParamsSchema,
   planningWorkspaceLeaveParamsSchema,
   planningWorkspaceMemberRemoveParamsSchema,
+  planningWorkspaceMemberRoleParamsSchema,
   planningWorkspaceMembersParamsSchema,
   planningWorkspaceParamsSchema,
   planningWorkspacePhotoAnswerSchema,
   planningWorkspacePhotoParamsSchema,
   planningWorkspacePhotoSetParamsSchema,
   planningWorkspaceRenameParamsSchema,
+  planningWorkspaceTransferParamsSchema,
 } from "@luke/features/planning-view";
 import {
   type TerminalCreatedActAnswer,
@@ -319,7 +321,9 @@ export const ACT_KIND = {
    * organization connected to one, the Luke GitHub App's install address the
    * service answers opened in the browser, or disconnected from it; one
    * workspace's members read; one member removed, answered with the members
-   * who remain; and one workspace left. Every write reads the workspaces
+   * who remain; another member given a role, or the workspace handed to one
+   * of its admins, by its owner, each answered with the members as they then
+   * stand; and one workspace left. Every write reads the workspaces
    * again, so they arrive on the document; a write the account's role does
    * not allow is refused in words that say so. A workspace's photo is read
    * apart, answered with its bytes in base64 under its media type or why
@@ -334,6 +338,8 @@ export const ACT_KIND = {
   WORKSPACE_GITHUB_DISCONNECT: "workspace.githubDisconnect",
   WORKSPACE_MEMBERS_READ: "workspace.membersRead",
   WORKSPACE_MEMBER_REMOVE: "workspace.memberRemove",
+  WORKSPACE_MEMBER_ROLE: "workspace.memberRole",
+  WORKSPACE_TRANSFER: "workspace.transfer",
   WORKSPACE_LEAVE: "workspace.leave",
   WORKSPACE_PHOTO_READ: "workspace.photoRead",
   WORKSPACE_PHOTO_SET: "workspace.photoSet",
@@ -883,6 +889,16 @@ export const ACT = {
     payload: actSchema(planningWorkspaceMemberRemoveParamsSchema),
     result: wireResult<readonly WorkspaceMember[]>(isReadable(workspaceMembersSchema)),
     refusal: "Could not remove that member on this system.",
+  },
+  [ACT_KIND.WORKSPACE_MEMBER_ROLE]: {
+    payload: actSchema(planningWorkspaceMemberRoleParamsSchema),
+    result: wireResult<readonly WorkspaceMember[]>(isReadable(workspaceMembersSchema)),
+    refusal: "Could not change that member's role on this system.",
+  },
+  [ACT_KIND.WORKSPACE_TRANSFER]: {
+    payload: actSchema(planningWorkspaceTransferParamsSchema),
+    result: wireResult<readonly WorkspaceMember[]>(isReadable(workspaceMembersSchema)),
+    refusal: "Could not transfer that workspace on this system.",
   },
   [ACT_KIND.WORKSPACE_LEAVE]: {
     payload: actSchema(planningWorkspaceLeaveParamsSchema),
