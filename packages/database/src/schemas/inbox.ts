@@ -34,6 +34,10 @@ import { plan } from "./plan.js";
  * the fixed kinds stood in, `kind`, `details`, `options`, and
  * `recommended`, are declared no longer and wait on their drop
  * (`tests/drizzle-schema.test.ts`'s `PENDING_DROP`).
+ *
+ * Nothing writes this table any longer: an inbox item is an ask in chat
+ * (`chat.ts`), and `20261015150750_inbox_into_chat` copied every row here
+ * into chat once. The table stands, unwritten, until it is dropped.
  */
 export const inboxItem = pgTable(
   "inbox_item",

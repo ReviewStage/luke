@@ -25,6 +25,9 @@ import { plan } from "./plan.js";
  * with any of the three, and a read names the account beside the item.
  * A row no block names any longer, once the agent posted its item again
  * without the picture, is deleted with that post (`inbox-store.ts`).
+ * Nothing writes this table any longer: a picture is a chat attachment
+ * (`chat.ts`), and every row here was copied there once with its item. The
+ * table stands, unwritten, until it is dropped.
  */
 const bytea = customType<{ data: Uint8Array; driverData: Uint8Array }>({
   dataType: () => "bytea",
