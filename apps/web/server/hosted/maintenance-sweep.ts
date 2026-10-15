@@ -1,5 +1,6 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import type { SessionSandboxSweepOutcome } from "@luke/service/agents/session-sandboxes";
+import type { AutomationSweepOutcome } from "@luke/service/automations/automation-sweep";
 import {
   bearerMatchesSecret,
   errorResponse,
@@ -10,7 +11,6 @@ import {
 import type { TerminalLeaseSweepOutcome } from "@luke/service/maintenance/terminal-lease-sweep";
 import { Clock, Effect, type Redacted } from "effect";
 import type { VoiceOrphanSweepOutcome } from "../voice/orphan-sweep.js";
-import type { AutomationSweepOutcome } from "./automation-sweep.js";
 
 /**
  * The scheduled sweep: once a minute, Vercel's cron ends what no request

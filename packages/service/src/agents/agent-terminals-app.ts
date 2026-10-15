@@ -6,23 +6,6 @@ import {
   terminalCreateRequestSchema,
   terminalRenameRequestSchema,
 } from "@luke/features/terminal-wire";
-import { type AccountResolving, reachedAgent, uuidOf } from "@luke/service/agents/agent-reach";
-import {
-  AgentSandbox,
-  SHELL_REFUSAL,
-  type ShellRefusal,
-} from "@luke/service/agents/terminal/agent-sandbox";
-import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
-import {
-  HOSTED_REFUSAL,
-  type HostedRefusal,
-  hostedJsonResponse,
-  hostedNotFoundRoute,
-  hostedRefusing,
-  hostedStoreOrUnavailable,
-  readJsonBodyEffect,
-} from "@luke/service/http/http-effect";
-import { ANY_METHOD, type WebRoutes } from "@luke/service/route";
 import { readEither } from "@luke/wire/effect";
 import { Effect, Layer, Result } from "effect";
 import {
@@ -31,6 +14,19 @@ import {
   HttpServerRequest,
   type HttpServerResponse,
 } from "effect/http";
+import { HOSTED_HTTP_STATUS } from "../http/http.js";
+import {
+  HOSTED_REFUSAL,
+  type HostedRefusal,
+  hostedJsonResponse,
+  hostedNotFoundRoute,
+  hostedRefusing,
+  hostedStoreOrUnavailable,
+  readJsonBodyEffect,
+} from "../http/http-effect.js";
+import { ANY_METHOD, type WebRoutes } from "../route.js";
+import { type AccountResolving, reachedAgent, uuidOf } from "./agent-reach.js";
+import { AgentSandbox, SHELL_REFUSAL, type ShellRefusal } from "./terminal/agent-sandbox.js";
 
 /**
  * The agent terminals group: a coding agent's shells as its Terminal tab

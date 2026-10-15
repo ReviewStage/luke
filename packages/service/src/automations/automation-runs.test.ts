@@ -28,26 +28,26 @@ import {
 } from "@luke/features/automation-wire";
 import { INBOX_RESPONSE } from "@luke/features/inbox-wire";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
+import { TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@luke/wire";
+import { eq } from "drizzle-orm";
+import { Clock, Effect, Layer, Option, Result } from "effect";
 import {
   EVE_CANCEL_OUTCOME,
   EVE_RESET_OUTCOME,
   EVE_SEND_OUTCOME,
   type EveMessage,
   type EveSessions,
-} from "@luke/service/agents/brain-host/eve-sessions";
-import { closeInboxItem, postInboxItem } from "@luke/service/inbox/inbox-store";
-import { modelCatalogOf, type OfferedModel } from "@luke/service/providers/model-catalog";
+} from "../agents/brain-host/eve-sessions.js";
+import { closeInboxItem, postInboxItem } from "../inbox/inbox-store.js";
+import { modelCatalogOf, type OfferedModel } from "../providers/model-catalog.js";
 import {
   connectWorkspaceGitHub,
   githubReaching,
   type InstallationFixture,
   openGithubUser,
-} from "@luke/service/testing/github-app-fake";
-import { TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@luke/wire";
-import { eq } from "drizzle-orm";
-import { Clock, Effect, Layer, Option, Result } from "effect";
-import { executeAutomationRun, recoverStrandedRun } from "../server/hosted/automation-runs";
-import { sweepAutomations } from "../server/hosted/automation-sweep";
+} from "../testing/github-app-fake.js";
+import { executeAutomationRun, recoverStrandedRun } from "./automation-runs.js";
+import { sweepAutomations } from "./automation-sweep.js";
 
 /**
  * An automation's runs acted on, over a real dialect: a due schedule starts

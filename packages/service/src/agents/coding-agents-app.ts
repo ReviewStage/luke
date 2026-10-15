@@ -45,46 +45,15 @@ import {
   inboxReplyRefusal,
 } from "@luke/features/inbox-wire";
 import { modelChoiceSchema } from "@luke/features/models-wire";
-import { reachedAgent, resolvedUserId, uuidOf } from "@luke/service/agents/agent-reach";
-import {
-  accountInboxPast,
-  agentInboxPast,
-  planInboxPast,
-} from "@luke/service/agents/coder-host/inbox-page";
-import {
-  agentPullRequestReach,
-  type PublishedCache,
-  PublishedKey,
-  withPublishedCache,
-} from "@luke/service/agents/coder-host/published";
-import { acceptedAgentChoice, startCodingAgent } from "@luke/service/agents/coder-host/start";
-import { codingAgentPage, codingAgentSummary } from "@luke/service/agents/coder-host/status";
-import { steerCodingAgent } from "@luke/service/agents/coder-host/steer";
-import {
-  type EveReach,
-  eveFor,
-  standingsOf,
-  stoppedForGood,
-  stoppedTurn,
-  summaryOf,
-} from "@luke/service/agents/coder-host/stop";
-import { CODER_TOOL_SET } from "@luke/service/agents/coder-host/tool-set";
-import {
-  cursorOfWire,
-  cursorToWire,
-  delegationPast,
-  NO_TITLE_AWAITED,
-  type TitleAwaited,
-  type TranscriptPage,
-  titleMayLand,
-  transcriptPast,
-} from "@luke/service/agents/coder-host/transcript";
-import { isRecord, isWireString, type UnparsedWireValue, unparsedWire } from "@luke/service/core";
-import { HostedEnvironment } from "@luke/service/environment";
-import type { GitHubApp } from "@luke/service/github/github-app";
-import { githubReadOrRefusal } from "@luke/service/github/github-refusal";
-import { pullRequestFiles } from "@luke/service/github/pull-requests";
-import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
+import { readEither } from "@luke/wire/effect";
+import { Cache, Clock, Effect, Layer, Option, Result } from "effect";
+import { type HttpClient, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
+import { isRecord, isWireString, type UnparsedWireValue, unparsedWire } from "../core.js";
+import { HostedEnvironment } from "../environment.js";
+import type { GitHubApp } from "../github/github-app.js";
+import { githubReadOrRefusal } from "../github/github-refusal.js";
+import { pullRequestFiles } from "../github/pull-requests.js";
+import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
   HOSTED_REFUSAL,
   type HostedRefusal,
@@ -94,20 +63,47 @@ import {
   hostedStoreOrUnavailable,
   readJsonBodyEffect,
   type UserIdResolver,
-} from "@luke/service/http/http-effect";
-import { logStoreFailure } from "@luke/service/http/store-failure";
+} from "../http/http-effect.js";
+import { logStoreFailure } from "../http/store-failure.js";
 import {
   answerInboxItem,
   readInboxAttachment,
   readInboxItem,
   type StoredInboxItem,
   withdrawInboxAnswer,
-} from "@luke/service/inbox/inbox-store";
-import type { ModelCatalog, ModelChoiceRefused } from "@luke/service/providers/model-catalog";
-import { ANY_METHOD, type WebRoutes } from "@luke/service/route";
-import { readEither } from "@luke/wire/effect";
-import { Cache, Clock, Effect, Layer, Option, Result } from "effect";
-import { type HttpClient, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
+} from "../inbox/inbox-store.js";
+import type { ModelCatalog, ModelChoiceRefused } from "../providers/model-catalog.js";
+import { ANY_METHOD, type WebRoutes } from "../route.js";
+import { reachedAgent, resolvedUserId, uuidOf } from "./agent-reach.js";
+import { accountInboxPast, agentInboxPast, planInboxPast } from "./coder-host/inbox-page.js";
+import {
+  agentPullRequestReach,
+  type PublishedCache,
+  PublishedKey,
+  withPublishedCache,
+} from "./coder-host/published.js";
+import { acceptedAgentChoice, startCodingAgent } from "./coder-host/start.js";
+import { codingAgentPage, codingAgentSummary } from "./coder-host/status.js";
+import { steerCodingAgent } from "./coder-host/steer.js";
+import {
+  type EveReach,
+  eveFor,
+  standingsOf,
+  stoppedForGood,
+  stoppedTurn,
+  summaryOf,
+} from "./coder-host/stop.js";
+import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
+import {
+  cursorOfWire,
+  cursorToWire,
+  delegationPast,
+  NO_TITLE_AWAITED,
+  type TitleAwaited,
+  type TranscriptPage,
+  titleMayLand,
+  transcriptPast,
+} from "./coder-host/transcript.js";
 
 /**
  * coding-agents-app.ts -- a plan's coding agents: start one, list them, read one's transcript and its workers', message one, change one's model, and stop one.

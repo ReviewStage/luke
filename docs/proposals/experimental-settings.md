@@ -214,7 +214,7 @@ Discord's Experiments tab is internal.
 - Exactly one setting travels with the account: the voice
   (`ACCOUNT_PREFERENCE_FIELDS`). It is stored in the `account_preference`
   row (`packages/database/src/schemas/preferences.ts`) and served by
-  `/api/account/preferences` (`apps/web/server/account-app.ts`).
+  `/api/account/preferences` (`packages/service/src/accounts/account-app.ts`).
 - It is reconciled when the account gate opens, that is, at launch and at
   sign-in (`packages/host/src/compose-host.ts:194-197`). It is pushed on
   every local change.

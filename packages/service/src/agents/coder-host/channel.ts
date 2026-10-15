@@ -30,7 +30,7 @@ import { messageAuth, ownedAuth, type SessionOwnership } from "../brain-host/doo
  * agent is started, messaged, and stopped by routes still holding the
  * developer's own bearer, which reach eve as that developer; what the
  * deployment does here is carry the two things the voice brain does for the
- * developer in a planning call (`hosted/coding-agent-tools.ts`), since the
+ * developer in a planning call (`agents/coding-agent-tools.ts`), since the
  * planning session holds no bearer of the account's: a message it sends an
  * agent, admitted only on a session the named account's agent recorded, and
  * the opening that starts an agent, admitted only on a conversation the

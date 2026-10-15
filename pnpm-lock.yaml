@@ -315,9 +315,6 @@ importers:
       '@luke/service':
         specifier: workspace:*
         version: link:../../packages/service
-      '@luke/settings':
-        specifier: workspace:*
-        version: link:../../packages/settings
       '@luke/ui':
         specifier: workspace:*
         version: link:../../packages/ui
@@ -839,6 +836,9 @@ importers:
       '@luke/runtime':
         specifier: workspace:*
         version: link:../runtime
+      '@luke/settings':
+        specifier: workspace:*
+        version: link:../settings
       '@luke/wire':
         specifier: workspace:*
         version: link:../wire

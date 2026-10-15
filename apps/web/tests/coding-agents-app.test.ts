@@ -60,6 +60,7 @@ import {
 } from "@luke/service/agents/brain-host/eve-sessions";
 import { CODER } from "@luke/service/agents/coder-host/bounds";
 import { CODER_TOOL_SET } from "@luke/service/agents/coder-host/tool-set";
+import { codingAgentsApp } from "@luke/service/agents/coding-agents-app";
 import {
   BRAIN_REQUEST_STATUS,
   BRAIN_RUN_EVENT,
@@ -108,7 +109,6 @@ import {
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
-import { codingAgentsApp } from "../server/coding-agents-app";
 import { plansApp } from "../server/plans-app";
 
 /**

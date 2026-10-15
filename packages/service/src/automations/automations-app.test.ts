@@ -39,27 +39,27 @@ import {
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
-import {
-  EVE_CANCEL_OUTCOME,
-  EVE_RESET_OUTCOME,
-  EVE_SEND_OUTCOME,
-  type EveSessions,
-} from "@luke/service/agents/brain-host/eve-sessions";
-import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
-import { modelCatalogOf, type OfferedModel } from "@luke/service/providers/model-catalog";
-import {
-  connectWorkspaceGitHub,
-  githubReaching,
-  type InstallationFixture,
-  openGithubUser,
-} from "@luke/service/testing/github-app-fake";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { eq } from "drizzle-orm";
 import { Clock, Effect, Layer, Option, Result, type Schema } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
-import { automationsApp } from "../server/automations-app";
+import {
+  EVE_CANCEL_OUTCOME,
+  EVE_RESET_OUTCOME,
+  EVE_SEND_OUTCOME,
+  type EveSessions,
+} from "../agents/brain-host/eve-sessions.js";
+import { HOSTED_HTTP_STATUS } from "../http/http.js";
+import { modelCatalogOf, type OfferedModel } from "../providers/model-catalog.js";
+import {
+  connectWorkspaceGitHub,
+  githubReaching,
+  type InstallationFixture,
+  openGithubUser,
+} from "../testing/github-app-fake.js";
+import { automationsApp } from "./automations-app.js";
 
 /**
  * The automation routes, answered by the group the way a function answers
