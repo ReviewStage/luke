@@ -12,7 +12,13 @@ import type { CatalogModel } from "@luke/features/models-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { CopyIcon, DownloadIcon } from "@luke/ui";
 import { fileName } from "@luke/voice/code-pane-model";
-import { ClipboardCopyIcon, FileDiffIcon, RotateCwIcon } from "lucide-react";
+import {
+  ClipboardCopyIcon,
+  Columns2Icon,
+  FileDiffIcon,
+  HighlighterIcon,
+  RotateCwIcon,
+} from "lucide-react";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act";
 import { useCopyToast } from "../copy-feedback";
@@ -28,12 +34,16 @@ import {
   changedFolders,
   changeMarks,
   DIFF_ROW,
+  type DiffHunk,
+  type DiffRow,
   fileNotice,
   filePatch,
   linesChanged,
+  markChangedWords,
   patchHunks,
   STATUS_LETTER,
   STATUS_WORDS,
+  splitRows,
 } from "./changes-model";
 import { BLANK_LINE_TEXT, CodeLineNumber } from "./code-pane";
 import { agentStillWriting, pullRequestNumberLabel } from "./coding-agent-model";
@@ -41,6 +51,7 @@ import { LinesMenu, useSaveText } from "./file-menu";
 import { useLinesLook } from "./file-tab";
 import { FileTreePane } from "./file-tree-pane";
 import { FileViewBar, usePaneRoom } from "./file-view";
+import { DIFF_LAYOUT, useFileViewSettings } from "./file-view-settings";
 import { PullRequestMark } from "./pull-request-mark";
 import { OpenedBy, PullRequestPeople, ReviewComments, ReviewersLine } from "./pull-request-people";
 import type { CodingAgentsControl, HeldPeople } from "./use-coding-agents";
@@ -67,7 +78,7 @@ import type { CodingAgentsControl, HeldPeople } from "./use-coding-agents";
  * files, with the letter of what became of it and the lines it adds and
  * removes quietly beside, then the pull request's files on GitHub, the ⋯
  * (the file's name or its patch copied, the patch saved, the changes read
- * again, and the File tabs' two settings), and the tree's toggle, which
+ * again, the File tabs' two settings, and the diff's own two), and the tree's toggle, which
  * shows and hides the tree for every File and Changes tab alike. The tree
  * is a File tab's own pane (`file-tree-pane.tsx`) narrowed to the changed
  * files, every folder open, each row lettered A, M, D, or R, searched in
@@ -78,6 +89,11 @@ import type { CodingAgentsControl, HeldPeople } from "./use-coding-agents";
  * and wrapped as the File tabs' settings say, left out of the find and of
  * a copy as a File tab's numbers are; what is a diff's alone is the tint of
  * a line added or removed, the hunk's header, and git's note on a line.
+ * Two settings are the diff's own, under the File tabs' two in the ⋯, as a
+ * review tool's diff settings are: Split view lays each hunk out side by
+ * side, the old lines on the left beside the new on the right, each side
+ * numbered on its own; and Highlight changed words marks, in a removed line
+ * and the added line beside it, the words only that side holds.
  * Every name and line here is the repository's, so the tab is left out of
  * the screen recording (`ph-no-capture`).
  */
@@ -144,7 +160,7 @@ function ChangeBeside({ file }: { file: CodingAgentChangedFile }): React.JSX.Ele
   );
 }
 
-/** The bar's ⋯ over a diff: the file's name or its patch copied, the patch saved, and the changes read again, over the File tabs' settings. */
+/** The bar's ⋯ over a diff: the file's name or its patch copied, the patch saved, and the changes read again, over the File tabs' settings and the diff's own. */
 function ChangesMenu({
   file,
   reading,
@@ -157,11 +173,27 @@ function ChangesMenu({
 }): React.JSX.Element {
   const copyWithToast = useCopyToast();
   const saveText = useSaveText();
+  const { settings, change } = useFileViewSettings();
   const name = fileName(file.path);
   const patch = filePatch(file);
+  const split = settings.diffLayout === DIFF_LAYOUT.SPLIT;
   return (
     <LinesMenu
       label="Changes actions"
+      looks={[
+        {
+          label: "Split view",
+          icon: <Columns2Icon aria-hidden="true" />,
+          checked: split,
+          onSelect: () => change({ diffLayout: split ? DIFF_LAYOUT.UNIFIED : DIFF_LAYOUT.SPLIT }),
+        },
+        {
+          label: "Highlight changed words",
+          icon: <HighlighterIcon aria-hidden="true" />,
+          checked: settings.changedWords,
+          onSelect: () => change({ changedWords: !settings.changedWords }),
+        },
+      ]}
       actions={[
         {
           label: "Copy file name",
@@ -195,6 +227,27 @@ function ChangesMenu({
   );
 }
 
+/** What the side of a split row with no line on it is, beside the kinds of row a side may hold. */
+const DIFF_EMPTY = "empty";
+
+/** A row's text as drawn: git's note trimmed, a blank line held open, and the words it changed marked where they were. */
+function RowText({ row }: { row: DiffRow }): React.ReactNode {
+  if (row.kind === DIFF_ROW.NOTE) return row.text.trim();
+  if (row.text === "") return BLANK_LINE_TEXT;
+  if (row.words === undefined) return row.text;
+  return row.words.map((span, at) =>
+    span.changed ? (
+      // oxlint-disable-next-line react/no-array-index-key -- a line's spans are drawn once per patch, in order.
+      <mark key={at} className="code-diff-word">
+        {span.text}
+      </mark>
+    ) : (
+      // oxlint-disable-next-line react/no-array-index-key -- a line's spans are drawn once per patch, in order.
+      <Fragment key={at}>{span.text}</Fragment>
+    ),
+  );
+}
+
 /** One row of the diff in a File tab's line: the old side's number, the new side's, and its text, tinted by what it is. */
 function DiffLine({
   kind,
@@ -216,15 +269,69 @@ function DiffLine({
   );
 }
 
-/** The chosen file: where it moved from, and its diff, or why there is none, in a File tab's place. */
+/** One side of a split row: the row's number on that side and its text, tinted by what it is, or an empty side where the other's line has no partner. */
+function DiffSide({
+  row,
+  line,
+}: {
+  row: DiffRow | undefined;
+  line: number | undefined;
+}): React.JSX.Element {
+  return (
+    <div className="code-line diff-split-side" data-diff={row?.kind ?? DIFF_EMPTY}>
+      <CodeLineNumber line={line} />
+      <code className="code-line-text">{row === undefined ? null : <RowText row={row} />}</code>
+    </div>
+  );
+}
+
+/** A hunk's rows in one column, each numbered on both sides in the same gutter. */
+function UnifiedRows({ rows }: { rows: readonly DiffRow[] }): React.JSX.Element {
+  return (
+    <>
+      {rows.map((row, at) => (
+        // oxlint-disable-next-line react/no-array-index-key -- a hunk's rows never move within it.
+        <DiffLine key={at} kind={row.kind} oldLine={row.oldLine} newLine={row.newLine}>
+          <RowText row={row} />
+        </DiffLine>
+      ))}
+    </>
+  );
+}
+
+/** A hunk's rows side by side, the old side's on the left and the new side's on the right. */
+function SplitRows({ rows }: { rows: readonly DiffRow[] }): React.JSX.Element {
+  return (
+    <>
+      {splitRows(rows).map((row, at) => (
+        // oxlint-disable-next-line react/no-array-index-key -- a hunk's rows never move within it.
+        <div key={at} className="diff-split-row">
+          <DiffSide row={row.old} line={row.old?.oldLine} />
+          <DiffSide row={row.new} line={row.new?.newLine} />
+        </div>
+      ))}
+    </>
+  );
+}
+
+/** A patch's hunks with their changed words marked, where the File tabs' settings ask for them. */
+function drawnHunks(hunks: readonly DiffHunk[], words: boolean): readonly DiffHunk[] {
+  if (!words) return hunks;
+  return hunks.map((hunk) => ({ ...hunk, rows: markChangedWords(hunk.rows) }));
+}
+
+/** The chosen file: where it moved from, and its diff, unified or split as the settings say, or why there is none, in a File tab's place. */
 function FileDiff({ file }: { file: CodingAgentChangedFile }): React.JSX.Element {
   const look = useLinesLook();
+  const { settings } = useFileViewSettings();
+  const split = settings.diffLayout === DIFF_LAYOUT.SPLIT;
   const notice = fileNotice(file);
   // A file with no notice has a patch with hunks, which may yet not read as a diff.
-  const hunks = useMemo(
-    () => (notice === undefined && file.patch !== null ? patchHunks(file.patch) : undefined),
-    [file.patch, notice],
-  );
+  const hunks = useMemo(() => {
+    const read = notice === undefined && file.patch !== null ? patchHunks(file.patch) : undefined;
+    return read === undefined ? undefined : drawnHunks(read, settings.changedWords);
+  }, [file.patch, notice, settings.changedWords]);
+  const Rows = split ? SplitRows : UnifiedRows;
   return (
     <section className="file-tab" aria-label={`Diff of ${file.path}`}>
       {file.previousPath === null ? null : (
@@ -237,23 +344,18 @@ function FileDiff({ file }: { file: CodingAgentChangedFile }): React.JSX.Element
       {hunks === undefined ? (
         <p className="side-panel-empty">{notice ?? CHANGES_WORDS.UNREADABLE}</p>
       ) : (
-        <div className="code-lines file-tab-lines scroll-fade-top" {...look}>
+        <div
+          className="code-lines file-tab-lines scroll-fade-top"
+          data-diff-layout={settings.diffLayout}
+          {...look}
+        >
           {hunks.map((hunk, index) => (
             // oxlint-disable-next-line react/no-array-index-key -- a file's hunks are drawn once per patch, in order.
             <Fragment key={index}>
               <DiffLine kind={DIFF_HUNK} oldLine={undefined} newLine={undefined}>
                 {hunk.header}
               </DiffLine>
-              {hunk.rows.map((row, at) => (
-                // oxlint-disable-next-line react/no-array-index-key -- a hunk's rows never move within it.
-                <DiffLine key={at} kind={row.kind} oldLine={row.oldLine} newLine={row.newLine}>
-                  {row.kind === DIFF_ROW.NOTE
-                    ? row.text.trim()
-                    : row.text === ""
-                      ? BLANK_LINE_TEXT
-                      : row.text}
-                </DiffLine>
-              ))}
+              <Rows rows={hunk.rows} />
             </Fragment>
           ))}
         </div>
