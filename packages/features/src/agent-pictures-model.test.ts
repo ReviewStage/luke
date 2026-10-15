@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { calledPicturesOf, shownPicturesOf } from "./agent-pictures-model.js";
+import {
+  calledPicturesOf,
+  planPictureLine,
+  shownPicturesOf,
+  withoutPictureLine,
+  withPictureLine,
+} from "./agent-pictures-model.js";
 import { PICTURE_OMISSION } from "./conversation-picture-wire.js";
 import { INBOX_IMAGE_TYPE } from "./inbox-wire.js";
 
@@ -80,5 +86,25 @@ test("a call whose answer is no list of blocks, or whose blocks carry no picture
     ]),
     [],
     "an image still carried as base64, as a transcript written before pictures were kept holds, is no picture to read",
+  );
+});
+
+test("a picture is added to a plan's text as its own last paragraph, escaped, and Undo takes that paragraph back out", () => {
+  const line = planPictureLine(
+    "Members [after]",
+    "https://tryluke.dev/acme/plan/5d8e/files/(3c9e)",
+  );
+  const plan = "# Teammate invitations\n\nInvite by email.\n";
+
+  assert.equal(line, "![Members \\[after\\]](https://tryluke.dev/acme/plan/5d8e/files/\\(3c9e\\))");
+  const added = withPictureLine(plan, line);
+  assert.equal(added, `# Teammate invitations\n\nInvite by email.\n\n${line}\n`);
+  assert.equal(withoutPictureLine(added, line), plan);
+  assert.equal(withPictureLine("", line), `${line}\n`);
+  assert.equal(withoutPictureLine(`${line}\n`, line), "");
+  assert.equal(
+    withoutPictureLine("# Moved\n\nThe line was edited away.\n", line),
+    undefined,
+    "a line no longer standing alone is left for the developer to take out",
   );
 });

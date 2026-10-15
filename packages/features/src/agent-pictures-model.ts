@@ -118,3 +118,31 @@ export function calledPicturesOf(
   }
   return found;
 }
+
+/** Escapes the characters that would end a picture's words or address early, as the plan editor writes a picture (`picture-node.ts`). */
+function escaped(words: string, ends: RegExp): string {
+  return words.replace(ends, "\\$&");
+}
+
+/** A picture's line in a plan's text: its words as its alt text, and the plan's own address for it. */
+export function planPictureLine(words: string, address: string): string {
+  return `![${escaped(words, /[\\[\]]/gu)}](${escaped(address, /[\\()]/gu)})`;
+}
+
+/** The plan's text with a picture's line at its end, a paragraph of its own. */
+export function withPictureLine(text: string, line: string): string {
+  const body = text.trimEnd();
+  return body === "" ? `${line}\n` : `${body}\n\n${line}\n`;
+}
+
+/**
+ * The plan's text with a picture's line taken out again, as Undo takes back
+ * Add to plan: its last paragraph of that line alone, and the blank line
+ * before it; nothing where the line no longer stands as its own paragraph.
+ */
+export function withoutPictureLine(text: string, line: string): string | undefined {
+  const paragraph = `\n\n${line}\n`;
+  const at = text.lastIndexOf(paragraph);
+  if (at >= 0) return `${text.slice(0, at)}\n${text.slice(at + paragraph.length)}`;
+  return text === `${line}\n` ? "" : undefined;
+}

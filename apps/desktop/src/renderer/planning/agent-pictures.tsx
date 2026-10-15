@@ -19,6 +19,7 @@ import { createContext, type ReactNode, useCallback, useContext, useMemo, useSta
 import { useAct } from "../act";
 import { PictureBlock } from "../picture-block";
 import { SPINNER_SIZE, Spinner } from "../spinner";
+import { useAddToPlan } from "./add-to-plan";
 import { AttachmentViewer } from "./attachment-viewer";
 
 /**
@@ -34,7 +35,8 @@ import { AttachmentViewer } from "./attachment-viewer";
  * thumbnails of one height that wrap, six of them, the sixth saying how many
  * more there are, the rest read all the same for the viewer. A call's pictures are the message box's chips under its
  * row, open or closed. A press on any opens the window's file viewer
- * walking the set, or the call's pictures, from it. Everything here is
+ * walking the set, or the call's pictures, from it, with Add to plan
+ * beside Download where the transcript is drawn on a plan's page. Everything here is
  * left out of the screen recording, as the tab around it is.
  */
 
@@ -114,6 +116,7 @@ interface PictureViewer {
 
 /** The viewer over the files held, from the one named, until it is closed. */
 function useViewer(): PictureViewer {
+  const addToPlan = useAddToPlan();
   const [viewing, setViewing] = useState<{ files: readonly FileChip[]; at: number } | undefined>();
   const open = useCallback((files: readonly HeldFile[], id: string) => {
     const at = files.findIndex((each) => each.id === id);
@@ -126,6 +129,7 @@ function useViewer(): PictureViewer {
         at={viewing.at}
         onAt={(at) => setViewing({ ...viewing, at })}
         onClose={() => setViewing(undefined)}
+        action={addToPlan}
       />
     );
   return { open, viewer };
