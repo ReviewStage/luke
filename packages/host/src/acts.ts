@@ -448,13 +448,16 @@ export const ACT_KIND = {
   /**
    * Running a pull request on this Mac (`@luke/features/pr-run-view`): the
    * account's run commands read and set in Settings; a run started from a
-   * pull request's tab, stopped, and closed with its tab; and its checkout
+   * pull request's tab, drawn again and set aside as the tab comes and goes
+   * from sight, stopped, and closed with its tab; and its checkout
    * shown in Finder or deleted. What a run prints travels on the port a
    * start posts to the asking panel, never on an act.
    */
   PR_RUN_COMMANDS: "prRun.commands",
   PR_RUN_SET_COMMAND: "prRun.setCommand",
   PR_RUN_START: "prRun.start",
+  PR_RUN_ATTACH: "prRun.attach",
+  PR_RUN_DETACH: "prRun.detach",
   PR_RUN_STOP: "prRun.stop",
   PR_RUN_CLOSE: "prRun.close",
   PR_RUN_SHOW_IN_FINDER: "prRun.showInFinder",
@@ -1276,6 +1279,16 @@ export const ACT = {
     payload: actSchema(prRunPullRequestSchema),
     result: answersNothing,
     refusal: "Could not run this pull request on this Mac.",
+  },
+  [ACT_KIND.PR_RUN_ATTACH]: {
+    payload: actSchema(prRunPullRequestSchema),
+    result: answersNothing,
+    refusal: "Could not show the run.",
+  },
+  [ACT_KIND.PR_RUN_DETACH]: {
+    payload: actSchema(prRunPullRequestSchema),
+    result: answersNothing,
+    refusal: "Could not set the run aside.",
   },
   [ACT_KIND.PR_RUN_STOP]: {
     payload: actSchema(prRunPullRequestSchema),

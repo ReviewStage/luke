@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platform-node";
 import { it } from "@effect/vitest";
@@ -423,4 +423,29 @@ it.effect("output past what the tab has drawn waits for its acks, and arrives wh
       assert.equal(emitted(), total);
     }),
   ).pipe(Effect.provide(machine)),
+);
+
+it.effect(
+  "a tab drawn again is told where the run stands and handed what it prints next; one set aside is handed nothing",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { setCommand, start, until, untilPrinted, printed, call, checkout } =
+          yield* subject();
+        yield* setCommand("echo before; while [ ! -f go ]; do sleep 0.05; done; echo after");
+
+        yield* start("conn-1");
+        yield* untilPrinted("before", "conn-1");
+        yield* call(GATEWAY_METHOD.PR_RUNS_DETACH, { connectionId: "conn-1" });
+        yield* call(GATEWAY_METHOD.PR_RUNS_ATTACH, { connectionId: "conn-2", ...PULL_REQUEST });
+        const told = yield* until([PR_RUN_PHASE.RUNNING], "conn-2");
+        writeFileSync(path.join(checkout, "go"), "");
+        const ended = yield* until([PR_RUN_PHASE.SUCCESS, PR_RUN_PHASE.FAILURE], "conn-2");
+
+        assert.equal(told.phase, PR_RUN_PHASE.RUNNING);
+        assert.equal(ended.phase, PR_RUN_PHASE.SUCCESS);
+        assert.match(printed("conn-2"), /after/u);
+        assert.doesNotMatch(printed("conn-1"), /after/u);
+      }),
+    ).pipe(Effect.provide(machine)),
 );

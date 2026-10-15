@@ -11,8 +11,10 @@
  * connection. Nothing a run prints is read here beyond its connection's id,
  * kept, logged, or written to app state. A panel that runs a pull request it
  * already draws has the older port closed first, its run left to the host to
- * stop or join; a closed tab lets its connection go, which stops its run;
- * and a panel whose page is gone has every connection it held let go. Only a
+ * stop or join; a tab drawn again attaches a fresh connection to the run
+ * standing without starting one, and a tab out of sight detaches, its run
+ * going on; a closed tab lets its connection go, which stops its run; and a
+ * panel whose page is gone has every connection it held let go. Only a
  * panel draws a run, so the run rows refuse the voice and call windows.
  */
 
@@ -35,6 +37,8 @@ type PrRunActKind =
   | typeof ACT_KIND.PR_RUN_COMMANDS
   | typeof ACT_KIND.PR_RUN_SET_COMMAND
   | typeof ACT_KIND.PR_RUN_START
+  | typeof ACT_KIND.PR_RUN_ATTACH
+  | typeof ACT_KIND.PR_RUN_DETACH
   | typeof ACT_KIND.PR_RUN_STOP
   | typeof ACT_KIND.PR_RUN_CLOSE
   | typeof ACT_KIND.PR_RUN_SHOW_IN_FINDER
@@ -62,6 +66,8 @@ export interface PrRunActsDependencies {
     | "prRunCommands"
     | "prRunSetCommand"
     | "prRunStart"
+    | "prRunAttach"
+    | "prRunDetach"
     | "prRunStop"
     | "prRunAck"
     | "prRunRelease"
@@ -159,6 +165,36 @@ export function prRunActRows(dependencies: PrRunActsDependencies): Pick<ActRows,
     return numbers;
   };
 
+  /** A fresh connection for the panel and the pull request, its port posted and its acks heard, in place of any it drew before. */
+  const opened = (sender: WebContents, pullRequest: PrRunPullRequest) => {
+    const numbers = drawnOf(sender, pullRequest);
+    const earlier = numbers.get(pullRequest.number);
+    if (earlier !== undefined) forget(earlier);
+    const connectionId = createId();
+    const port = ports.open(sender, pullRequest);
+    const drawn = { connectionId, port };
+    numbers.set(pullRequest.number, drawn);
+    byConnection.set(connectionId, port);
+    port.onMessage((message) => void run(heard(connectionId, message)));
+    /** The connection let go where a newer one has not taken its place. */
+    const dropped = Effect.suspend(() => {
+      if (numbers.get(pullRequest.number) === drawn) numbers.delete(pullRequest.number);
+      return release(drawn);
+    });
+    return { connectionId, dropped };
+  };
+
+  /** The panel's connection for the pull request, taken out of its map; none where it draws none. */
+  const takenDrawn = (sender: WebContents, pullRequest: PrRunPullRequest) => {
+    const numbers = panels
+      .get(sender)
+      ?.get(pullRequest.workspaceId)
+      ?.get(pullRequest.repository.toLowerCase());
+    const drawn = numbers?.get(pullRequest.number);
+    if (drawn !== undefined) numbers?.delete(pullRequest.number);
+    return drawn;
+  };
+
   /** An ack the panel sent on a run's port, handed to the host; anything else is dropped. */
   const heard = (connectionId: string, message: WireBoundaryInput): Effect.Effect<void> => {
     const read = readInbound(unparsedWire(message));
@@ -185,22 +221,24 @@ export function prRunActRows(dependencies: PrRunActsDependencies): Pick<ActRows,
     [ACT_KIND.PR_RUN_START]: (pullRequest, sender) => {
       refuseUnlessPanel(ACT_KIND.PR_RUN_START, sender);
       return Effect.gen(function* () {
-        const numbers = drawnOf(sender.sender, pullRequest);
-        const earlier = numbers.get(pullRequest.number);
-        if (earlier !== undefined) forget(earlier);
-        const connectionId = createId();
-        const port = ports.open(sender.sender, pullRequest);
-        const drawn = { connectionId, port };
-        numbers.set(pullRequest.number, drawn);
-        byConnection.set(connectionId, port);
-        port.onMessage((message) => void run(heard(connectionId, message)));
+        const { connectionId, dropped } = opened(sender.sender, pullRequest);
         const outcome = yield* host.prRunStart({ connectionId, ...pullRequest });
         if (outcome !== undefined && "done" in outcome) return undefined;
-        // Note that only this start's own entry goes, because a newer start of the pull request may have taken its place.
-        if (numbers.get(pullRequest.number) === drawn) numbers.delete(pullRequest.number);
-        yield* release(drawn);
+        yield* dropped;
         return yield* outcomeOf(ACT_KIND.PR_RUN_START, outcome);
       });
+    },
+    [ACT_KIND.PR_RUN_ATTACH]: (pullRequest, sender) => {
+      refuseUnlessPanel(ACT_KIND.PR_RUN_ATTACH, sender);
+      const { connectionId } = opened(sender.sender, pullRequest);
+      return host.prRunAttach({ connectionId, ...pullRequest });
+    },
+    [ACT_KIND.PR_RUN_DETACH]: (pullRequest, sender) => {
+      refuseUnlessPanel(ACT_KIND.PR_RUN_DETACH, sender);
+      const drawn = takenDrawn(sender.sender, pullRequest);
+      if (drawn === undefined) return Effect.void;
+      forget(drawn);
+      return host.prRunDetach({ connectionId: drawn.connectionId });
     },
     [ACT_KIND.PR_RUN_STOP]: (pullRequest, sender) => {
       refuseUnlessPanel(ACT_KIND.PR_RUN_STOP, sender);
@@ -208,14 +246,8 @@ export function prRunActRows(dependencies: PrRunActsDependencies): Pick<ActRows,
     },
     [ACT_KIND.PR_RUN_CLOSE]: (pullRequest, sender) => {
       refuseUnlessPanel(ACT_KIND.PR_RUN_CLOSE, sender);
-      const numbers = panels
-        .get(sender.sender)
-        ?.get(pullRequest.workspaceId)
-        ?.get(pullRequest.repository.toLowerCase());
-      const drawn = numbers?.get(pullRequest.number);
-      if (numbers === undefined || drawn === undefined) return Effect.void;
-      numbers.delete(pullRequest.number);
-      return release(drawn);
+      const drawn = takenDrawn(sender.sender, pullRequest);
+      return drawn === undefined ? Effect.void : release(drawn);
     },
     [ACT_KIND.PR_RUN_SHOW_IN_FINDER]: (pullRequest, sender) => {
       refuseUnlessPanel(ACT_KIND.PR_RUN_SHOW_IN_FINDER, sender);

@@ -191,8 +191,9 @@ export const GATEWAY_METHOD = {
   TERMINALS_WAKE: "terminals.wake",
   /**
    * Running a pull request on this Mac (`@luke/features/pr-run-view`): the
-   * account's run commands read and set; a run started for one panel under a
-   * connection id the desktop minted, stopped, acked, and let go; and a pull
+   * account's run commands read and set; a run started, or drawn again, for
+   * one panel under a connection id the desktop minted, stopped, acked,
+   * detached while its tab is out of sight, and let go; and a pull
    * request's checkout located and deleted. What a run prints is heard as
    * `PR_RUN_OUTPUT` events, never answered.
    */
@@ -201,6 +202,8 @@ export const GATEWAY_METHOD = {
   PR_RUNS_START: "prRuns.start",
   PR_RUNS_STOP: "prRuns.stop",
   PR_RUNS_ACK: "prRuns.ack",
+  PR_RUNS_ATTACH: "prRuns.attach",
+  PR_RUNS_DETACH: "prRuns.detach",
   PR_RUNS_RELEASE: "prRuns.release",
   PR_RUNS_LOCATE: "prRuns.locate",
   PR_RUNS_DELETE: "prRuns.delete",

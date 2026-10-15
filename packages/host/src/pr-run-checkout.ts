@@ -105,7 +105,9 @@ export const CHECKOUT_REFUSAL = {
 export type CheckoutStep<A> = { readonly ok: A } | { readonly refused: string };
 
 /** How a fetch into a repository folder came out: the commit fetched, or why there is none. */
-export type FetchInto = (repositoryFolder: string) => Effect.Effect<CheckoutStep<string>>;
+export type FetchInto = (
+  repositoryFolder: string,
+) => Effect.Effect<CheckoutStep<string>, never, ChildProcessSpawner.ChildProcessSpawner>;
 
 /** The flags every Git step is run with, which keep configuration from elsewhere on the Mac out of it. */
 const HARDENED_FLAGS = [

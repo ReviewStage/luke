@@ -561,6 +561,10 @@ export interface HostOperator {
   prRunStart(
     params: PrRunPullRequest & { connectionId: string },
   ): Effect.Effect<PrRunOutcome | undefined>;
+  /** A pull request's run drawn again by the connection given, without starting one. */
+  prRunAttach(params: PrRunPullRequest & { connectionId: string }): Effect.Effect<void>;
+  /** A connection's tab out of sight: its run goes on, its output let go. */
+  prRunDetach(params: { connectionId: string }): Effect.Effect<void>;
   /** A pull request's run stopped, its checkout kept. */
   prRunStop(params: PrRunPullRequest): Effect.Effect<void>;
   prRunAck(params: { connectionId: string; bytes: number }): Effect.Effect<void>;
@@ -1572,6 +1576,15 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         }),
         terminalAnswer(prRunOutcomeSchema),
       ),
+    prRunAttach: (params) =>
+      fire(
+        client.call(GATEWAY_METHOD.PR_RUNS_ATTACH, {
+          connectionId: params.connectionId,
+          ...pullRequestParams(params),
+        }),
+      ),
+    prRunDetach: (params) =>
+      fire(client.call(GATEWAY_METHOD.PR_RUNS_DETACH, { connectionId: params.connectionId })),
     prRunStop: (params) =>
       fire(client.call(GATEWAY_METHOD.PR_RUNS_STOP, pullRequestParams(params))),
     prRunAck: (params) =>

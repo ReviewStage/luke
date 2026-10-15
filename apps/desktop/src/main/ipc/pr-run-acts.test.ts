@@ -64,6 +64,8 @@ function fixture(options: { start?: PrRunOutcome; location?: string | null } = {
         asked.push(`start:${connectionId}:ports=${opened.length}`);
         return options.start ?? { done: true };
       }),
+    prRunAttach: ({ connectionId }) => Effect.sync(() => void asked.push(`attach:${connectionId}`)),
+    prRunDetach: ({ connectionId }) => Effect.sync(() => void asked.push(`detach:${connectionId}`)),
     prRunStop: () => Effect.sync(() => void asked.push("stop")),
     prRunAck: ({ connectionId, bytes }) =>
       Effect.sync(() => void asked.push(`ack:${connectionId}:${bytes}`)),
@@ -196,6 +198,29 @@ it.effect(
         status: ACT_OUTCOME_STATUS.REFUSED,
         reason: "Stop the run before deleting its local checkout.",
       });
+    }),
+);
+
+it.effect(
+  "a tab drawn again attaches without starting, and one out of sight detaches without stopping",
+  () =>
+    Effect.gen(function* () {
+      const { router, asked, opened } = fixture();
+      const panel = panelOf();
+
+      yield* router.performAct({ kind: ACT_KIND.PR_RUN_START, payload: PULL_REQUEST }, panel);
+      yield* router.performAct({ kind: ACT_KIND.PR_RUN_DETACH, payload: PULL_REQUEST }, panel);
+      yield* router.performAct({ kind: ACT_KIND.PR_RUN_ATTACH, payload: PULL_REQUEST }, panel);
+
+      assert.deepEqual(asked, [
+        "start:connection-1:ports=1",
+        "detach:connection-1",
+        "attach:connection-2",
+      ]);
+      assert.deepEqual(
+        opened.map((port) => port.closed),
+        [true, false],
+      );
     }),
 );
 

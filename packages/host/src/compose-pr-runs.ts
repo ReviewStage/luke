@@ -170,6 +170,8 @@ interface Slot {
   /** The run standing, by the key its fiber is held under; none before the first and after a stop. */
   runId: string | undefined;
   phase: PrRunState["phase"] | undefined;
+  /** Where the last run stood when it was last said, which a panel attaching again is told first. */
+  state: PrRunState | undefined;
   readonly lock: Semaphore.Semaphore;
 }
 
@@ -244,6 +246,7 @@ function composed(
       viewer: undefined,
       runId: undefined,
       phase: undefined,
+      state: undefined,
       lock: Semaphore.makeUnsafe(1),
     };
     numbers.set(pullRequest.number, fresh);
@@ -254,6 +257,7 @@ function composed(
   const tell = (slot: Slot, state: PrRunState) =>
     Effect.sync(() => {
       slot.phase = state.phase;
+      slot.state = state;
       const viewer = slot.viewer;
       if (viewer === undefined) return;
       kernel.emit(
@@ -533,6 +537,39 @@ function composed(
         if (viewer === undefined || viewer.connectionId !== connectionId) return {};
         viewer.unacked = Math.max(0, viewer.unacked - bytes);
         if (viewer.unacked < PR_RUN_FLOW.RESUME_BELOW_BYTES) yield* viewer.caughtUp.open;
+        return {};
+      }),
+    [GATEWAY_METHOD.PR_RUNS_ATTACH]: (params) =>
+      Effect.gen(function* () {
+        const { connectionId, ...pullRequest } = yield* read(
+          prRunStartParamsSchema,
+          params,
+          "attaching names its connection and its pull request",
+        );
+        const slot = slotOf(pullRequest);
+        // Note that a panel drawing the tab again is told where the run stands first; what it printed meanwhile was let go.
+        yield* slot.lock.withPermits(1)(
+          Effect.andThen(
+            view(slot, connectionId),
+            Effect.suspend(() => (slot.state === undefined ? Effect.void : tell(slot, slot.state))),
+          ),
+        );
+        return {};
+      }),
+    [GATEWAY_METHOD.PR_RUNS_DETACH]: (params) =>
+      Effect.gen(function* () {
+        const { connectionId } = yield* read(
+          prRunConnectionParamsSchema,
+          params,
+          "detaching names its connection",
+        );
+        const slot = byConnection.get(connectionId);
+        byConnection.delete(connectionId);
+        const viewer = slot?.viewer;
+        if (slot === undefined || viewer?.connectionId !== connectionId) return {};
+        // Note that a run nobody draws goes on, its output let go rather than held, so a server is never stalled by a tab out of sight.
+        slot.viewer = undefined;
+        yield* viewer.caughtUp.open;
         return {};
       }),
     [GATEWAY_METHOD.PR_RUNS_RELEASE]: (params) =>
