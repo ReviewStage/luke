@@ -216,7 +216,8 @@ export function transcriptRegion(input: {
     const behind =
       ahead !== undefined && (ahead.live || wordCount(messages) < wordCount(ahead.messages));
     if (ahead !== undefined && behind) {
-      return [{ ...ahead, startedAt, ...(ahead.live ? undefined : { record }) }];
+      // Note that the heard copy takes the record's caller, because a call heard here names nobody of its own.
+      return [{ ...ahead, startedAt, caller, ...(ahead.live ? undefined : { record }) }];
     }
     return messages.length === 0
       ? []

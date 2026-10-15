@@ -3,10 +3,17 @@
 import assert from "node:assert/strict";
 import {
   CODING_AGENT_CALL_FAILURE,
+  type CodingAgentMessagesAnswerView,
   type CodingAgentPageAnswerView,
 } from "@luke/features/coding-agent-view";
-import { CODING_AGENT_STATUS, type CodingAgentPage } from "@luke/features/coding-agent-wire";
+import {
+  CODING_AGENT_SENDER,
+  CODING_AGENT_STATUS,
+  type CodingAgentPage,
+} from "@luke/features/coding-agent-wire";
+import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import { MESSAGE_ROLE } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -14,6 +21,7 @@ import { afterEach, beforeEach, test } from "vitest";
 import { onRegistry } from "#testing/copy-feedback";
 import { plansControl } from "#testing/plans-control";
 import { archiveWords } from "../planning/coding-agent-model";
+import type { PlansControl } from "../planning/use-plans-tab";
 import { ToastHost } from "../toast";
 import { DesktopAgentPage } from "./desktop-agent-page";
 
@@ -48,12 +56,18 @@ let read: string[] = [];
 let archives: { agentId: string; archived: boolean }[] = [];
 /** Whether an archive or Unarchive is refused, as an unanswered service refuses it. */
 let archiveRefused = false;
+/** What the agent's workspace's members read answers; none refuses it. */
+let members: readonly WorkspaceMember[] | undefined;
+/** What the next read of the agent's transcript answers; none refuses it. */
+let transcript: CodingAgentMessagesAnswerView | undefined;
 
 beforeEach(() => {
   pages = [{ agent: PAGE }];
   read = [];
   archives = [];
   archiveRefused = false;
+  members = undefined;
+  transcript = undefined;
   Object.defineProperty(window, "luke", {
     configurable: true,
     value: {
@@ -65,6 +79,15 @@ beforeEach(() => {
           const value = archiveRefused
             ? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }
             : { agent: { ...PAGE, archivedAt: undefined } };
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+        }
+        if (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ && members !== undefined) {
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: members });
+        }
+        if (request.kind === ACT_KIND.CODING_AGENTS_MESSAGES && transcript !== undefined) {
+          // Note that only the first read answers, because a read past the cursor waits on the service, and one answered at once would be read again without end.
+          const value = transcript;
+          transcript = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
           return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
         }
         if (request.kind === ACT_KIND.CODING_AGENTS_PAGE) {
@@ -84,8 +107,8 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The page of the agent, standing in the plan's place. */
-function mount(): HTMLElement {
+/** The page of the agent, standing in the plan's place, as the window's plans control holds it. */
+function mount(plans: PlansControl = plansControl({})): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
@@ -96,7 +119,7 @@ function mount(): HTMLElement {
         createElement(
           Fragment,
           null,
-          createElement(DesktopAgentPage, { plans: plansControl({}), agentId: AGENT_ID }),
+          createElement(DesktopAgentPage, { plans, agentId: AGENT_ID }),
           createElement(ToastHost),
         ),
       ),
@@ -170,4 +193,52 @@ test("an Unarchive the service refuses says why, and the agent stays archived", 
     [...page.querySelectorAll("button")].some((each) => each.textContent === "Unarchive"),
     "the agent stays archived, Unarchive still offered",
   );
+});
+
+test("a teammate's message to an agent on its own page carries their sign-in picture, read from the agent's workspace's members", async () => {
+  const picture = "https://lh3.googleusercontent.com/a/charles=s96-c";
+  const charles = { userId: "user-charles", name: "Charles Pan" };
+  members = [
+    {
+      userId: "user-dean",
+      name: "Dean Stratakos",
+      email: "dean@example.com",
+      role: WORKSPACE_ROLE.OWNER,
+    },
+    { ...charles, email: "charles@example.com", role: WORKSPACE_ROLE.MEMBER, pictureUrl: picture },
+  ];
+  transcript = {
+    messages: [
+      // The first of the developer's messages is what the agent was handed, drawn as its card.
+      { id: "brief", role: MESSAGE_ROLE.USER, parts: [{ type: "text", text: "Sweep the tests." }] },
+      {
+        id: "line",
+        role: MESSAGE_ROLE.USER,
+        parts: [{ type: "text", text: "Skip the flaky retry." }],
+        sentBy: { ...charles, kind: CODING_AGENT_SENDER.MEMBER },
+      },
+    ],
+    cursor: "1:0",
+    status: CODING_AGENT_STATUS.COMPLETED,
+    title: null,
+  };
+  const page = mount(
+    plansControl({
+      me: "user-dean",
+      workspaces: [
+        {
+          id: PAGE.workspaceId,
+          name: "Acme",
+          role: WORKSPACE_ROLE.OWNER,
+          github: null,
+          memberCount: 2,
+        },
+      ],
+    }),
+  );
+  await settle();
+
+  const sender = page.querySelector(".message-sender .actor-ref");
+  assert.equal(sender?.querySelector(".actor-ref-name")?.textContent, "Charles Pan");
+  assert.equal(sender?.querySelector("img")?.getAttribute("src"), picture);
 });

@@ -2,6 +2,7 @@ import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "../act";
 import { useAppCommand } from "../app-commands";
+import { MemberDirectory } from "../member-directory";
 import { AgentTab } from "../planning/agent-tab";
 import { agentTabLabel } from "../planning/coding-agent-model";
 import { useCodingAgents } from "../planning/use-coding-agents";
@@ -21,7 +22,8 @@ import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
  * agents are driven by, here holding the one agent read by its id
  * (`use-coding-agents.ts`'s `agentId`). Its title names the agent as its tab
  * would. An archived agent takes no message, so its composer gives way to
- * its own Unarchive. Its workers open nowhere yet, since a worker opens in
+ * its own Unarchive. Whoever sent it a message is read against its
+ * workspace's members, as on a plan. Its workers open nowhere yet, since a worker opens in
  * the side panel a plan's column keeps. Escape leaves it for wherever it
  * was opened from, and so does any row of the sidebar.
  */
@@ -68,6 +70,12 @@ export function DesktopAgentPage({
       }
     }, nothing);
   };
+  // The agent's workspace as the account lists it, whose count reads its members again; by its id alone where the list does not hold it yet.
+  const { workspaceId } = agents;
+  const workspace =
+    workspaceId === undefined
+      ? undefined
+      : (plans.workspaces.find((each) => each.id === workspaceId) ?? { id: workspaceId });
   const control = {
     ...agents,
     models: agents.models ?? plans.agents.models,
@@ -83,7 +91,15 @@ export function DesktopAgentPage({
         </div>
       </header>
       {agent !== undefined ? (
-        <AgentTab agent={agent} control={control} shown onOpenSubagent={nothing} onHeld={nothing} />
+        <MemberDirectory workspace={workspace} readerId={plans.me}>
+          <AgentTab
+            agent={agent}
+            control={control}
+            shown
+            onOpenSubagent={nothing}
+            onHeld={nothing}
+          />
+        </MemberDirectory>
       ) : agents.listFailed ? (
         <div className="agent-page-note">
           <ReadFailure line={NOT_READ} onRetry={agents.onRetryList} />
