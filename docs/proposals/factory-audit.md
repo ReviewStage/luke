@@ -7,8 +7,9 @@ Dean asked for an audit: "The Factory tab is really hard to see and
 understand. Let's do a design audit and propose fixes on a Conductor show."
 He chose to keep the line: "I think we still want something like A. The
 shape of the 'factory' is what I'm trying to capture here. So let's go with A
-with fixes 1-9." Then he renamed the first station: "I think we need to
-rename to task." So the line reads Task → Build → Ship.
+with fixes 1-9." Then he named the stations: the first is Talk, so the
+line reads Talk → Build → Ship, and "Use the block icon for Build", so
+Build wears lucide's Blocks.
 
 The design show is `docs/proposals/factory-audit/index.html`. It is one
 self-contained file that fetches nothing. Every frame is drawn by the
@@ -111,7 +112,8 @@ Dean kept the line for the factory's shape, and A takes the rest.
 | 2 | A Build row | Each agent, its task as context |
 | 3 | Whose work | Everyone's, through Home's Inbox read, so the counts agree |
 | 4 | Ship | Merged in the last 24 hours, at the task's last activity |
-| 5 | The first station | Task, holding only the task on a call with Luke; drafts out (Dean). The show draws "Talk" as the alternative name |
+| 5 | The first station | Talk, holding only the task on a call with Luke; drafts out (Dean) |
+| 5b | Build's glyph | lucide's Blocks (Dean). The show draws the toy brick as the alternative |
 | 6 | Needs-you order | Build: questions, then failures. Ship: failing checks, then merges. Each newest first |
 | 7 | The chord | ⇧⌘F freed; Factory reached from ⌘K and the sidebar |
 | 8 | A count on the sidebar's Factory row | None |
@@ -125,19 +127,24 @@ Dean kept the line for the factory's shape, and A takes the rest.
 |---|---|---|
 | #2953 | Waits for the list, says when it could not be read, and is the empty state | 7 |
 | #2954 | Stations lead with what waits; failures among it; rows say what, which task, who, when; Build lists each agent | 1–4 |
-| #2955 | Task holds the call; Ship holds the last day's merges; `noteMerged` deleted | d4, d5 |
+| #2955 | Talk holds the call; Build wears the blocks; Ship holds the last day's merges; `noteMerged` deleted | d4, d5 |
 | #2956 | The app's cards, readable arrows, no cap, stacked when narrow | 5, 6, 8 |
 | #2957 | Every member's open items, through Home's read (`use-waiting-items.ts`) | d3 |
 | #2958 | ↑ / ↓ / Return, through Home's keys (`use-row-keys.ts`) | 9 |
 
 Fixes 1–4 land as one PR, because each rewrites the same station and row.
 
-Three things follow the stack:
+#2968 frees ⇧⌘F through #2905's ⌘K-only commands.
 
-- freeing ⇧⌘F, after #2905 adds ⌘K-only commands;
+Two things follow the stack:
+
 - listing one-off agents, after #2932;
 - reading 324's activity time, which comes through `taskTime` once #2935
   lands, with no change of Factory's own.
+
+Factory stays a thin layer in the renderer: it composes reads the app
+already has (the task list, Home's Inbox read, agents' status, `taskTime`),
+and nothing in the service, wire, database or host exists for it alone.
 
 The stack waits outside the merge queue until the LUKE-369 renames (#2855,
 #2857) land, then rebases onto their names.
