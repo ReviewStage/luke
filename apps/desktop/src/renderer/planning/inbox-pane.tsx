@@ -695,8 +695,9 @@ function Proposal({
   item: InboxItem;
   readerId: string | undefined;
 }): React.JSX.Element | null {
-  const answerer = answererOf(item, readerId);
-  const pick = answerer === "You" ? "Your pick" : `${answerer}'s pick`;
+  // Note that the reader is told apart by id, never by the name the answerer goes by.
+  const yours = readerId !== undefined && item.answeredBy?.userId === readerId;
+  const pick = yours ? "Your pick" : `${answererOf(item, readerId)}'s pick`;
   const options = proposedOptions(item);
   if (options.length === 0) return null;
   return (
