@@ -69,6 +69,7 @@ const EXACT_COLUMN_TYPES: ReadonlySet<string> = new Set([
   "text[]",
   "timestamp with time zone",
   "uuid",
+  "uuid[]",
 ]);
 
 /** `information_schema` reads an array column back under this one type, its element in `udt_name`. */

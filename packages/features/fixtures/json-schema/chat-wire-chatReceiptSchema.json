@@ -1,0 +1,36 @@
+{
+  "type": "object",
+  "properties": {
+    "told": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "held": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "left": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "unresolved": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "told",
+    "held",
+    "left",
+    "unresolved"
+  ],
+  "additionalProperties": false
+}

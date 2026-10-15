@@ -1,0 +1,13 @@
+{
+  "type": "object",
+  "properties": {
+    "readTo": {
+      "type": "number",
+      "minimum": 0
+    }
+  },
+  "required": [
+    "readTo"
+  ],
+  "additionalProperties": false
+}

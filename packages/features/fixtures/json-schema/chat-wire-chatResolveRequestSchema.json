@@ -1,0 +1,28 @@
+{
+  "type": "object",
+  "properties": {
+    "resolve": {
+      "type": "object",
+      "properties": {
+        "seq": {
+          "type": "number",
+          "minimum": 0
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 600
+        }
+      },
+      "required": [
+        "seq",
+        "reason"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "resolve"
+  ],
+  "additionalProperties": false
+}
