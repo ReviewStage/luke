@@ -1,8 +1,9 @@
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
+import { type InboxFormValue, inboxFormValueSchema } from "@luke/features/inbox-wire";
 import { Equal, Schema } from "effect";
 import { Atom } from "effect/reactivity";
-import { useLayoutEffect, useMemo } from "react";
+import { useLayoutEffect, useMemo, useRef } from "react";
 import { readKept, writeKept } from "./desktop/folded-groups";
 
 /**
@@ -10,8 +11,10 @@ import { readKept, writeKept } from "./desktop/folded-groups";
  *
  * Every chat keeps an unsent message per conversation, Slack's, Linear's,
  * Discord's, and GitHub's comments alike, and so does every box here that
- * sends somewhere: an agent's composer keeps its words per agent, and a
- * plan's draft agent its first message per plan. A draft is known by where
+ * sends somewhere: an agent's composer keeps its words per agent, a plan's
+ * draft agent its first message per plan, and an inbox card its answer per
+ * item, at the revision it was written against, the options picked and the
+ * fields filled beside its note. A draft is known by where
  * it goes, a place named by the ids of what it goes to, never one key built
  * of them. Sending a draft lets it go, and so does emptying its box, so a
  * place holds a draft only while its box holds something.
@@ -39,10 +42,11 @@ const STORAGE_KEY = "luke.composerDrafts";
 /** How many drafts are kept at most, the oldest written let go first. */
 const MAX_KEPT = 200;
 
-/** What a draft is written to: a started agent, or a plan's agent not yet started. */
+/** What a draft is written to: a started agent, a plan's agent not yet started, or an inbox item. */
 export const DRAFT_PLACE = {
   AGENT: "agent",
   NEW_AGENT: "newAgent",
+  INBOX: "inbox",
 } as const;
 
 const draftPlaceSchema = Schema.Union([
@@ -58,18 +62,28 @@ const draftPlaceSchema = Schema.Union([
     /** The key the draft agent starts under, which a relaunch keeps, so a Start asked again is the same one. */
     draftId: Schema.String,
   }),
+  Schema.Struct({
+    kind: Schema.Literal(DRAFT_PLACE.INBOX),
+    /** The item's plan, which the sidebar marks; null for an inbox of an agent with no plan. */
+    planId: Schema.NullOr(Schema.String),
+    itemId: Schema.String,
+    /** The item's revision the answer was written against; the agent changing the item starts its card afresh. */
+    revision: Schema.Number,
+  }),
 ]);
 
 /** Where one draft goes. */
 export type DraftPlace = typeof draftPlaceSchema.Type;
 
-/** The drafts as storage keeps them: each place's words and the account that wrote them, the latest written last. */
+/** The drafts as storage keeps them: each place's words, a card's picks where it holds some, and the account that wrote them, the latest written last. */
 const storedDrafts = Schema.fromJsonString(
   Schema.Array(
     Schema.Struct({
       accountId: Schema.NullOr(Schema.String),
       place: draftPlaceSchema,
       text: Schema.String,
+      choices: Schema.optionalKey(Schema.Array(Schema.String)),
+      values: Schema.optionalKey(Schema.Array(inboxFormValueSchema)),
     }),
   ),
 );
@@ -79,10 +93,12 @@ type StoredDraft = (typeof storedDrafts.Type)[number];
 /** The account a window's drafts are written by: the one signed in, none before its state is read, as in a test. */
 type Owner = string | null;
 
-/** What a box holds unsent: its words, and the files attached to them. */
+/** What a box holds unsent: its words, the files attached to them, and an inbox card's options picked and fields filled. */
 export interface Draft {
   readonly text: string;
   readonly attachments: readonly CodingAgentAttachment[];
+  readonly choices: readonly string[];
+  readonly values: readonly InboxFormValue[];
 }
 
 /** One place's draft. */
@@ -93,12 +109,20 @@ export interface KeptDraft<Place extends DraftPlace = DraftPlace> extends Draft 
 /** A plan's draft agent's place. */
 export type NewAgentPlace = Extract<DraftPlace, { kind: typeof DRAFT_PLACE.NEW_AGENT }>;
 
+/** An inbox card's place. */
+export type InboxPlace = Extract<DraftPlace, { kind: typeof DRAFT_PLACE.INBOX }>;
+
 /** A box holding nothing. */
-export const EMPTY_DRAFT: Draft = { text: "", attachments: [] };
+export const EMPTY_DRAFT: Draft = { text: "", attachments: [], choices: [], values: [] };
+
+/** Whether a draft holds anything storage keeps: everything but its files. */
+function stored(draft: Draft): boolean {
+  return draft.text !== "" || draft.choices.length > 0 || draft.values.length > 0;
+}
 
 /** Whether a draft holds anything to keep. */
 function holds(draft: Draft): boolean {
-  return draft.text !== "" || draft.attachments.length > 0;
+  return stored(draft) || draft.attachments.length > 0;
 }
 
 /** Every account's kept drafts, none where none were kept or they no longer read. */
@@ -109,14 +133,25 @@ function readStored(): readonly StoredDraft[] {
 /** The owner's kept drafts; storage keeps no files, and no draft of files alone. */
 function readDrafts(owner: Owner): readonly KeptDraft[] {
   return readStored()
-    .filter((kept) => kept.accountId === owner && kept.text !== "")
-    .map(({ place, text }) => ({ place, text, attachments: [] }));
+    .filter((kept) => kept.accountId === owner)
+    .map(({ place, text, choices = [], values = [] }) => ({
+      place,
+      text,
+      attachments: [],
+      choices,
+      values,
+    }))
+    .filter(stored);
 }
 
-/** Whether a kept draft is the one storage holds for an entry: the owner's, at its place, in its words. */
+/** Whether a kept draft is the one storage holds for an entry: the owner's, at its place, holding the same. */
 function storedAs(owner: Owner, kept: KeptDraft, entry: StoredDraft): boolean {
   return (
-    entry.accountId === owner && Equal.equals(entry.place, kept.place) && entry.text === kept.text
+    entry.accountId === owner &&
+    Equal.equals(entry.place, kept.place) &&
+    entry.text === kept.text &&
+    Equal.equals(entry.choices ?? [], kept.choices) &&
+    Equal.equals(entry.values ?? [], kept.values)
   );
 }
 
@@ -124,21 +159,28 @@ function storedAs(owner: Owner, kept: KeptDraft, entry: StoredDraft): boolean {
  * Keeps the owner's drafts beside every other account's, in the order they
  * were written: an entry unchanged stands where it stood and one written
  * moves last, so the oldest written of any account's is the one let go past
- * `MAX_KEPT`. Answers the owner's drafts as kept, a draft of files alone
- * among them, since storage holds none of those to let go.
+ * `MAX_KEPT`, a card's picks kept only where it holds some. Answers the
+ * owner's drafts as kept, a draft of files alone among them, since storage
+ * holds none of those to let go.
  */
 function writeDrafts(owner: Owner, drafts: readonly KeptDraft[]): readonly KeptDraft[] {
-  const worded = drafts.filter((kept) => kept.text !== "");
+  const kept = drafts.filter(stored);
   const standing = readStored().filter(
-    (entry) => entry.accountId !== owner || worded.some((kept) => storedAs(owner, kept, entry)),
+    (entry) => entry.accountId !== owner || kept.some((draft) => storedAs(owner, draft, entry)),
   );
-  const written = worded
-    .filter((kept) => !standing.some((entry) => storedAs(owner, kept, entry)))
-    .map(({ place, text }) => ({ accountId: owner, place, text }));
-  const kept = [...standing, ...written].slice(-MAX_KEPT);
-  writeKept(STORAGE_KEY, storedDrafts, kept);
+  const written = kept
+    .filter((draft) => !standing.some((entry) => storedAs(owner, draft, entry)))
+    .map(({ place, text, choices, values }) => ({
+      accountId: owner,
+      place,
+      text,
+      ...(choices.length === 0 ? undefined : { choices }),
+      ...(values.length === 0 ? undefined : { values }),
+    }));
+  const entries = [...standing, ...written].slice(-MAX_KEPT);
+  writeKept(STORAGE_KEY, storedDrafts, entries);
   return drafts.filter(
-    (draft) => draft.text === "" || kept.some((entry) => storedAs(owner, draft, entry)),
+    (draft) => !stored(draft) || entries.some((entry) => storedAs(owner, draft, entry)),
   );
 }
 
@@ -175,13 +217,12 @@ const draftsOf = Atom.family((owner: Owner) => {
         const read = readDrafts(owner).map((kept) => {
           const was = held.find((each) => Equal.equals(each.place, kept.place));
           if (was === undefined) return kept;
-          return was.text === kept.text ? was : { ...kept, attachments: was.attachments };
+          return Equal.equals({ ...was, attachments: [] }, kept)
+            ? was
+            : { ...kept, attachments: was.attachments };
         });
         const filesAlone = held.filter(
-          (kept) =>
-            kept.text === "" &&
-            kept.attachments.length > 0 &&
-            !read.some((each) => Equal.equals(each.place, kept.place)),
+          (kept) => !stored(kept) && !read.some((each) => Equal.equals(each.place, kept.place)),
         );
         const standing = [...filesAlone, ...read];
         const next =
@@ -307,6 +348,28 @@ export function useNewAgentDraft(
     return draftId === undefined
       ? plans.at(-1)
       : plans.find((kept) => kept.place.draftId === draftId);
+  });
+}
+
+/** Whether a draft is an inbox card's. */
+function isInbox(kept: KeptDraft): kept is KeptDraft<InboxPlace> {
+  return kept.place.kind === DRAFT_PLACE.INBOX;
+}
+
+/**
+ * The inbox cards' drafts of a plan, or of the agents with none where it is
+ * null. Note that the list answered is the very one it was until one of its
+ * drafts changes, so the inbox reading it draws again only then, never on a
+ * word typed in another box.
+ */
+export function useInboxDrafts(planId: string | null): readonly KeptDraft<InboxPlace>[] {
+  const last = useRef<readonly KeptDraft<InboxPlace>[]>([]);
+  return useAtomValue(draftsAtom, (drafts) => {
+    const found = drafts.filter(isInbox).filter((kept) => kept.place.planId === planId);
+    const same =
+      found.length === last.current.length && found.every((kept, at) => kept === last.current[at]);
+    if (!same) last.current = found;
+    return last.current;
   });
 }
 

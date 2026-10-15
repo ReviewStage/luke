@@ -186,7 +186,7 @@ export function useAgentComposer(input: {
             return;
           }
           // The words come back into the agent's draft where it holds nothing newer, and the line out of the transcript.
-          update((now) => (holdsNothing(now) ? { text, attachments } : now));
+          update((now) => (holdsNothing(now) ? { ...EMPTY_DRAFT, text, attachments } : now));
           setHeld((was) => ({
             ...was,
             sending: false,
