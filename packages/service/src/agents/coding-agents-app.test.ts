@@ -13,6 +13,7 @@ import { sentLineId } from "@luke/database/models/ids";
 import { sentLineStands } from "@luke/database/models/message-reads";
 import { openPlanConversation, savePlanText, updatePlan } from "@luke/database/models/plan-store";
 import { claimRuntimeSession } from "@luke/database/models/recorded-session";
+import { ensurePersonalWorkspace } from "@luke/database/models/workspace-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { user } from "@luke/database/schemas/auth";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
@@ -662,6 +663,48 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
           },
         });
         assert.deepEqual(eve.opened, []);
+      }),
+  );
+
+  it.effect(
+    "a Start that names the owner's own first workspace as where the plan can move names it by the owner's name as it stands now",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openGithubUser();
+        const plan = yield* startPlan(owner, {
+          name: "Teammate invitations",
+          repository: RELAY_FULL_NAME,
+        });
+        const personal = yield* ensurePersonalWorkspace(owner, yield* fakeWorkspaceSeams);
+        assert.ok(Option.isSome(personal));
+        const installation = freshInstallation();
+        assert.equal(
+          yield* connectWorkspaceGitHub(personal.value, installation),
+          LINK_OUTCOME.LINKED,
+        );
+        yield* Database.use((db) =>
+          db.update(user).set({ name: "Ada Lovelace" }).where(eq(user.id, owner)),
+        );
+        const { ask } = yield* standing(
+          new Map([[`Bearer ${owner}`, owner]]),
+          githubReaching([installation]),
+          fakeEve(),
+          false,
+        );
+
+        const started = yield* ask(startAs(owner, plan.id, { idempotencyKey: randomUUID() }));
+
+        assert.deepEqual(started, {
+          status: HOSTED_HTTP_STATUS.FORBIDDEN,
+          body: {
+            error: HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE,
+            unreached: {
+              reason: REPOSITORY_UNREACHED.OTHER_WORKSPACE,
+              repository: RELAY_FULL_NAME,
+              workspace: { id: personal.value, name: "Ada Lovelace" },
+            },
+          },
+        });
       }),
   );
 
