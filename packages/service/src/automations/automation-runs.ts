@@ -17,6 +17,7 @@ import {
 } from "@luke/database/models/automation-store";
 import {
   awaitingLinesOfReached,
+  codingAgentConversation,
   discardCodingAgent,
   latestTurnsOfReached,
   readCodingAgent,
@@ -522,7 +523,8 @@ export const recoverStrandedRun = /* @__PURE__ */ Effect.fn("web/recoverStranded
   // A run handed to the same agent made none: it is the start of the agent it was claimed for, where
   // that agent holds the line it sent under its key, and of no other agent whatever its lines hold.
   if (stranded.claimedAgentId !== null) {
-    const agent = yield* readCodingAgent(stranded.userId, stranded.claimedAgentId);
+    // Read past the creator's gate, since a creator who left after the line landed still sent it.
+    const agent = yield* codingAgentConversation(stranded.claimedAgentId);
     const sent =
       Option.isSome(agent) &&
       (yield* sentLineStands(

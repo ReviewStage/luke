@@ -311,7 +311,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
   );
 
   it.effect(
-    "a run handed to a teammate's agent stands as a line under the teammate, and left claimed it is settled with that agent still",
+    "a run handed to a teammate's agent stands as a line under the teammate, and left claimed it is settled with that agent still, even once its creator left",
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
@@ -347,6 +347,8 @@ it.layer(getTestDB())("an automation's runs", (it) => {
             .where(eq(automationRun.id, run.id)),
         );
 
+        // The creator left after the line landed: it was still sent, and the run is still that agent's.
+        yield* leaveWorkspace(workspaceId, owner);
         yield* recoverStrandedRun({
           id: run.id,
           automationId: automation.id,
@@ -354,8 +356,12 @@ it.layer(getTestDB())("an automation's runs", (it) => {
           claimedAgentId: theirs.id,
         });
 
-        const [settled] = (yield* listAutomationRuns(owner, automation.id)).filter(
-          (each) => each.id === run.id,
+        // Read as the store holds it, since the creator who left reads none of the automation's runs.
+        const [settled] = yield* Database.use((db) =>
+          db
+            .select({ status: automationRun.status, codingAgentId: automationRun.codingAgentId })
+            .from(automationRun)
+            .where(eq(automationRun.id, run.id)),
         );
         assert.deepEqual(
           [settled?.status, settled?.codingAgentId],
