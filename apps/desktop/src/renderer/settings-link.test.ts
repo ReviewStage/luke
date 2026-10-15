@@ -57,6 +57,7 @@ test("a link lists its workspace, turns to Settings and its page, and lands on i
   act(() =>
     root.render(
       createElement(WorkspacePage, {
+        readerId: undefined,
         control: {
           workspaces: [ACME],
           workspaceId: ACME.id,

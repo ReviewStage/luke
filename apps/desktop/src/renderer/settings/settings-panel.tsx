@@ -140,7 +140,7 @@ export function SettingsPanel({
       {view !== SETTINGS_VIEW.WORKSPACE ? null : !signedIn ? (
         <p className="settings-note">Sign in to see your workspaces.</p>
       ) : workspace ? (
-        <WorkspacePage control={workspace} />
+        <WorkspacePage control={workspace} readerId={account.id} />
       ) : null}
 
       {view === SETTINGS_VIEW.CODING_AGENTS ? <CodingAgentsPage signedIn={signedIn} /> : null}

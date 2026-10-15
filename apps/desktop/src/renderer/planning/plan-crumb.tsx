@@ -1,13 +1,13 @@
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { SETTINGS_SECTION, SETTINGS_VIEW } from "@luke/settings/settings-views";
+import { memberActor, ROLE_WORDS } from "@luke/ui/actor-model";
 import { ChevronRightIcon, LockIcon } from "lucide-react";
+import { ACTOR_SIZE, ActorMark, ActorStack, YouBadge } from "../actor-ref";
 import { TILE_SIZE, WorkspaceTile } from "../desktop/workspace-tile";
 import { CardHead, CardNote, CardRule, HoverCard } from "../hover-card";
+import { useMemberDirectory } from "../member-directory";
 import { useOpenSettings } from "../open-settings";
-import { PersonAvatar } from "../person-avatar";
-import { ROLE_WORDS } from "../settings/workspace-page";
 import { Tooltip } from "../tooltip";
-import { useWorkspaceMembers } from "./use-workspace-members";
 
 /**
  * plan-crumb.tsx -- the line over a plan's title that says where it lives and who can edit it: "Acme › relay", then "5 can edit".
@@ -21,11 +21,12 @@ import { useWorkspaceMembers } from "./use-workspace-members";
  * stands who can edit: the first few members' faces and "5 can edit", or a
  * lock and "Only you" for a workspace of one. Resting on it hangs a card
  * listing everyone by name and role, and pressing it opens the workspace's
- * members in Settings. Each face is the member's sign-in picture where the
- * members read lists one, and their letter otherwise. The members are read
- * once per workspace the crumb stands in (`use-workspace-members.ts`); until
- * they answer, or if they never do, the count stands alone, from the
- * workspace's own count.
+ * members in Settings. Each face is drawn as the window draws any person
+ * (`actor-ref.tsx`): the member's sign-in picture where the members read
+ * lists one, their letter on its hue otherwise, and the reader's own row
+ * wears You. The members are the plan's directory's (`member-directory.tsx`),
+ * read once for the plan; until they answer, or if they never do, the count
+ * stands alone, from the workspace's own count.
  */
 
 /** How many faces the crumb's end draws before the count says the rest. */
@@ -45,11 +46,14 @@ function PeopleCard({
   members,
   count,
   archived,
+  readerId,
 }: {
   workspace: Workspace;
   members: readonly WorkspaceMember[] | undefined;
   count: number;
   archived: boolean;
+  /** The reader's account id, whose own row wears You. */
+  readerId: string | undefined;
 }): React.JSX.Element {
   const only = count <= 1;
   const note = archived
@@ -71,8 +75,9 @@ function PeopleCard({
           <ul className="plan-crumb-people-list">
             {members.map((member) => (
               <li key={member.userId}>
-                <PersonAvatar name={member.name} pictureUrl={member.pictureUrl} />
+                <ActorMark actor={memberActor(member, readerId)} size={ACTOR_SIZE.ROW} />
                 <span className="plan-crumb-person">{member.name}</span>
+                {member.userId === readerId ? <YouBadge /> : null}
                 <span className="plan-crumb-role">{ROLE_WORDS[member.role]}</span>
               </li>
             ))}
@@ -89,12 +94,14 @@ function People({
   members,
   count,
   archived,
+  readerId,
   onOpen,
 }: {
   workspace: Workspace;
   members: readonly WorkspaceMember[] | undefined;
   count: number;
   archived: boolean;
+  readerId: string | undefined;
   onOpen: () => void;
 }): React.JSX.Element {
   const only = count <= 1;
@@ -102,7 +109,13 @@ function People({
     <Tooltip
       label={only ? "Only you" : `Everyone in ${workspace.name}`}
       card={
-        <PeopleCard workspace={workspace} members={members} count={count} archived={archived} />
+        <PeopleCard
+          workspace={workspace}
+          members={members}
+          count={count}
+          archived={archived}
+          readerId={readerId}
+        />
       }
     >
       <button type="button" className="plan-crumb-people" onClick={onOpen}>
@@ -114,15 +127,11 @@ function People({
         ) : (
           <>
             {members === undefined ? null : (
-              <span className="plan-crumb-faces" aria-hidden="true">
-                {members.slice(0, FACES_DRAWN).map((member) => (
-                  <PersonAvatar
-                    key={member.userId}
-                    name={member.name}
-                    pictureUrl={member.pictureUrl}
-                  />
-                ))}
-              </span>
+              <ActorStack
+                actors={members.map((member) => memberActor(member, readerId))}
+                drawn={FACES_DRAWN}
+                counted={false}
+              />
             )}
             {archived ? `${count} members` : `${count} can edit`}
           </>
@@ -149,7 +158,7 @@ export function PlanCrumb({
   archived: boolean;
 }): React.JSX.Element {
   const openSettings = useOpenSettings();
-  const members = useWorkspaceMembers(workspace);
+  const { members, readerId } = useMemberDirectory();
   const count = editorsOf(workspace, members);
   const page = { page: SETTINGS_VIEW.WORKSPACE, workspaceId: workspace.id };
   return (
@@ -170,6 +179,7 @@ export function PlanCrumb({
           members={members}
           count={count}
           archived={archived}
+          readerId={readerId}
           onOpen={() => openSettings({ ...page, section: SETTINGS_SECTION.MEMBERS })}
         />
       )}

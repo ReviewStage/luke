@@ -13,6 +13,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { onRegistry } from "#testing/copy-feedback";
+import { MemberDirectory } from "../member-directory";
 import { OpenSettingsProvider } from "../open-settings";
 import { PlanCrumb } from "./plan-crumb";
 
@@ -98,7 +99,11 @@ async function crumb(
           createElement(
             OpenSettingsProvider,
             { value: (link: SettingsLink) => links.push(link) },
-            createElement(PlanCrumb, { workspace: shown, repository, archived }),
+            createElement(MemberDirectory, {
+              workspace: shown,
+              readerId: "user-sam",
+              children: createElement(PlanCrumb, { workspace: shown, repository, archived }),
+            }),
           ),
         ),
       ),
@@ -124,7 +129,7 @@ test("the crumb names the plan's workspace and repository, and how many can edit
   const { nav } = await crumb(ACME, "acme-corp/relay", MEMBERS);
 
   assert.equal(nav.textContent, "AAcmerelayDSL3 can edit");
-  assert.equal(nav.querySelectorAll(".plan-crumb-faces .sidebar-avatar").length, 3);
+  assert.equal(nav.querySelectorAll(".actor-stack .actor-mark").length, 3);
 });
 
 test("a member's face is their sign-in picture where the members read lists one, and their letter where it lists none", async () => {
@@ -134,9 +139,9 @@ test("a member's face is their sign-in picture where the members read lists one,
   );
   const { nav } = await crumb(ACME, "acme-corp/relay", pictured);
 
-  const faces = [...nav.querySelectorAll(".plan-crumb-faces .sidebar-avatar")];
+  const faces = [...nav.querySelectorAll(".actor-stack .actor-mark")];
   assert.deepEqual(
-    faces.map((face) => (face instanceof HTMLImageElement ? face.src : face.textContent)),
+    faces.map((face) => face.querySelector("img")?.src ?? face.textContent),
     [picture, "S", "L"],
   );
 });
@@ -151,7 +156,7 @@ test("members that could not be read leave the workspace's own count standing, w
   const { nav } = await crumb(ACME, "acme-corp/relay", undefined);
 
   assert.match(nav.textContent ?? "", /3 can edit$/u);
-  assert.equal(nav.querySelector(".plan-crumb-faces"), null);
+  assert.equal(nav.querySelector(".actor-stack"), null);
 });
 
 test("the workspace opens its Settings page, and who can edit opens its members", async () => {
@@ -185,4 +190,14 @@ test("a member leaving, as the workspace's count says, reads the members again, 
   await page.redraw({ ...ACME, memberCount: 2 });
 
   assert.equal(page.current().textContent, "AAcmerelayDS2 can edit");
+});
+
+test("a member joining while the members read again fails leaves the new count standing alone, rather than the earlier faces as if nobody joined", async () => {
+  const page = await crumb(ACME, "acme-corp/relay", MEMBERS);
+
+  held = undefined;
+  await page.redraw({ ...ACME, memberCount: 4 });
+
+  assert.equal(page.current().textContent, "AAcmerelay4 can edit");
+  assert.equal(page.current().querySelector(".actor-stack"), null);
 });

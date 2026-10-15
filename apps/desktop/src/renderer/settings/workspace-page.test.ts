@@ -56,7 +56,11 @@ const MEMBER: WorkspaceMember = {
   name: "Sam",
   email: "sam@example.com",
   role: WORKSPACE_ROLE.MEMBER,
+  pictureUrl: "https://avatars.githubusercontent.com/u/7",
 };
+
+/** The account reading the page: Dana, the owner. */
+const READER_ID = OWNER.userId;
 
 const ACME: Workspace = {
   id: "workspace-acme",
@@ -264,7 +268,7 @@ async function mount(workspace: Workspace, others: readonly Workspace[] = []) {
         pressed.left += 1;
       },
     };
-    act(() => root.render(createElement(WorkspacePage, { control })));
+    act(() => root.render(createElement(WorkspacePage, { control, readerId: READER_ID })));
   };
   render(workspace.id);
   await settle();
@@ -285,10 +289,10 @@ const buttons = (within: Element, words: string) =>
 const button = (within: Element, words: string) =>
   buttons(within, words)[0] ?? assert.fail(`no ${words} button`);
 
-/** The page's row naming `name`. */
+/** The page's row naming `name`, the reader's own beside its You. */
 const rowNamed = (page: HTMLElement, name: string) =>
   [...page.querySelectorAll<HTMLElement>(".settings-row")].find(
-    (row) => row.querySelector("strong")?.textContent === name,
+    (row) => row.querySelector("strong")?.firstChild?.textContent === name,
   ) ?? assert.fail(`no ${name} row`);
 
 /** The rows of the invitations still pending, by the line each wears. */
@@ -564,6 +568,20 @@ test("the chosen team workspace's members are listed with their email and role, 
   assert.deepEqual(rowActions(rowNamed(page, "Sam")), []);
 });
 
+test("each member's row leads with their face, their picture where the read lists one and their letter where it lists none, and the reader's own wears You", async () => {
+  const { page } = await mount(ACME);
+
+  const dana = rowNamed(page, "Dana");
+  const sam = rowNamed(page, "Sam");
+  assert.equal(dana.querySelector(".actor-mark .actor-face")?.textContent, "D");
+  assert.equal(
+    sam.querySelector<HTMLImageElement>(".actor-mark img")?.src,
+    "https://avatars.githubusercontent.com/u/7",
+  );
+  assert.equal(dana.querySelector(".actor-you")?.textContent, "You");
+  assert.equal(sam.querySelector(".actor-you"), null);
+});
+
 test("while the members are being read the page holds itself back, and a read that failed says so with Retry", async () => {
   refuseMembersRead = true;
   const container = document.createElement("div");
@@ -577,7 +595,7 @@ test("while the members are being read the page holds itself back, and a read th
     listFailed: false,
     onRetryList: () => undefined,
   };
-  act(() => root.render(createElement(WorkspacePage, { control })));
+  act(() => root.render(createElement(WorkspacePage, { control, readerId: READER_ID })));
   const heldBack = container.querySelector(".settings-reading") !== null;
   await settle();
 
@@ -1128,7 +1146,7 @@ test("a workspaces read that failed says so with Retry, which asks for them agai
       retried += 1;
     },
   };
-  act(() => root.render(createElement(WorkspacePage, { control })));
+  act(() => root.render(createElement(WorkspacePage, { control, readerId: READER_ID })));
 
   assert.equal(
     container.querySelector('[role="alert"] .failure-note-words')?.textContent,

@@ -1,6 +1,7 @@
 import type { PlanningWorkspacePhotoAnswer } from "@luke/features/planning-view";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { identityHue, identityLetter } from "@luke/ui/actor-model";
 import { useEffect, useReducer, useState } from "react";
 import { useAct } from "../act";
 
@@ -25,12 +26,6 @@ import { useAct } from "../act";
  * from a screen reader, since the row beside it already says the name.
  */
 
-/** How many hues a tile is drawn in: `--workspace-hue-1` through `--workspace-hue-6`. */
-const WORKSPACE_HUES = 6;
-
-/** Splits a name into the characters a reader sees, an emoji's parts as one. */
-const CHARACTERS = new Intl.Segmenter(undefined, { granularity: "grapheme" });
-
 /** A photo read or being read: the read every tile asking for it shares, and its `data:` URL once it landed. */
 interface KeptPhoto {
   readonly read: Promise<string | undefined>;
@@ -45,12 +40,6 @@ interface KeptPhoto {
  */
 const keptPhotos = new Map<string, Map<string, KeptPhoto>>();
 
-/** The name's first character as a reader sees it, upper-cased; none for a blank name. */
-function letterOf(name: string): string {
-  const [first] = CHARACTERS.segment(name.trim());
-  return first === undefined ? "" : first.segment.toUpperCase();
-}
-
 /** The tile's sizes: a row's glyph, the sidebar's head, or the photo's row on Settings › Workspace. */
 export const TILE_SIZE = {
   ROW: "row",
@@ -59,13 +48,6 @@ export const TILE_SIZE = {
 } as const;
 
 type TileSize = (typeof TILE_SIZE)[keyof typeof TILE_SIZE];
-
-/** The hue a workspace is drawn in, from 1, read off its id alone. */
-function hueOf(id: string): number {
-  let hash = 0;
-  for (const character of id) hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
-  return (hash % WORKSPACE_HUES) + 1;
-}
 
 /** The workspace's photo at this version, read through `read` the first time any tile asks and shared after. */
 function keptPhoto(
@@ -136,10 +118,10 @@ export function WorkspaceTile({
     <span
       className="workspace-tile"
       data-size={size}
-      data-hue={shown ? undefined : hueOf(workspace.id)}
+      data-hue={shown ? undefined : identityHue(workspace.id)}
       aria-hidden="true"
     >
-      {shown ? null : letterOf(workspace.name)}
+      {shown ? null : identityLetter(workspace.name)}
       {drawn === undefined ? null : (
         <img
           className="workspace-tile-picture"

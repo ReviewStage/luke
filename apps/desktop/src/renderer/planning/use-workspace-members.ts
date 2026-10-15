@@ -10,7 +10,8 @@ import { useAct } from "../act";
  * whenever the workspace's own count changes, as a member joining or leaving
  * changes it. Until they answer, or if they never do, the place has none, and
  * draws what it can without them: a count alone, or a teammate's letter where
- * their picture would stand. Each place reads for itself; a version history
+ * their picture would stand. A read taken before the count last changed is
+ * no longer handed on, so nobody who joined since is taken for gone. Each place reads for itself; a version history
  * and the crumb never stand at once, since the history takes the window.
  */
 
@@ -21,6 +22,7 @@ export function useWorkspaceMembers(
   const { act } = useAct();
   const [read, setRead] = useState<{
     workspaceId: string;
+    memberCount: number | undefined;
     members: readonly WorkspaceMember[];
   }>();
   const workspaceId = workspace?.id;
@@ -31,7 +33,7 @@ export function useWorkspaceMembers(
     let live = true;
     act(ACT_KIND.WORKSPACE_MEMBERS_READ, { workspaceId }).then(
       (members) => {
-        if (live) setRead({ workspaceId, members });
+        if (live) setRead({ workspaceId, memberCount, members });
       },
       // Note that a refused read leaves the place as it stands, because it draws what it can without the members.
       () => undefined,
@@ -40,16 +42,8 @@ export function useWorkspaceMembers(
       live = false;
     };
   }, [act, workspaceId, memberCount]);
-  return read !== undefined && read.workspaceId === workspaceId ? read.members : undefined;
-}
-
-/** The members' sign-in pictures by account id, for those who have one the window may draw. */
-export function memberPictures(
-  members: readonly WorkspaceMember[] | undefined,
-): ReadonlyMap<string, string> {
-  return new Map(
-    (members ?? []).flatMap((member) =>
-      member.pictureUrl === undefined ? [] : [[member.userId, member.pictureUrl] as const],
-    ),
-  );
+  // Note that a read taken at another count is not handed on, because a member it misses would be drawn as having left while a newer read is out, or after one failed.
+  const current =
+    read !== undefined && read.workspaceId === workspaceId && read.memberCount === memberCount;
+  return current ? read.members : undefined;
 }
