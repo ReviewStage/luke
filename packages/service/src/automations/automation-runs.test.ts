@@ -42,7 +42,7 @@ import { INBOX_RESPONSE } from "@luke/features/inbox-wire";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@luke/wire";
 import { eq, inArray } from "drizzle-orm";
-import { Clock, Effect, Layer, Option, Result } from "effect";
+import { Clock, Effect, Layer, Option, Result, Stream } from "effect";
 import {
   EVE_CANCEL_OUTCOME,
   EVE_RESET_OUTCOME,
@@ -127,6 +127,7 @@ function fakeEve() {
       }),
     cancel: () => Effect.succeed({ outcome: EVE_CANCEL_OUTCOME.ACCEPTED }),
     reset: () => Effect.succeed({ outcome: EVE_RESET_OUTCOME.RESET }),
+    stream: () => Stream.empty,
   });
   return { opened, sent, eveFor: (account: string) => Effect.succeed(sessions(account)) };
 }

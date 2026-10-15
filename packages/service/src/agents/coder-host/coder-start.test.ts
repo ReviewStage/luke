@@ -4,7 +4,7 @@ import { it } from "@effect/vitest";
 import { readCodingAgent } from "@luke/database/models/coding-agent-store";
 import { getTestDB, joinWorkspace, openWorkspace } from "@luke/database/testing";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
-import { Effect, Layer, Option, Result } from "effect";
+import { Effect, Layer, Option, Result, Stream } from "effect";
 import { HOSTED_REFUSAL } from "../../http/http-effect.js";
 import { modelCatalogOf } from "../../providers/model-catalog.js";
 import {
@@ -60,6 +60,7 @@ function fakeEve() {
     send: () => Effect.succeed({ outcome: EVE_SEND_OUTCOME.FAILED, status: 500 }),
     cancel: () => Effect.succeed({ outcome: EVE_CANCEL_OUTCOME.ACCEPTED }),
     reset: () => Effect.succeed({ outcome: EVE_RESET_OUTCOME.RESET }),
+    stream: () => Stream.empty,
   };
   return { opened, eve: Effect.succeed(sessions) };
 }
