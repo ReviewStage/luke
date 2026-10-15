@@ -260,13 +260,6 @@ const automationTargetSchema = EffectSchema.Union([
 
 export type AutomationTarget = typeof automationTargetSchema.Type;
 
-export const AUTOMATION_PAUSE = {
-  /** Its last runs failed one after another, so the service stopped firing it. */
-  FAILURES: "failures",
-} as const;
-
-export type AutomationPause = (typeof AUTOMATION_PAUSE)[keyof typeof AUTOMATION_PAUSE];
-
 /** Where a run came from, beyond the automation's own trigger. */
 export const AUTOMATION_FIRING = {
   ...AUTOMATION_TRIGGER,
@@ -364,7 +357,6 @@ export const automationRunStatusSchema = EffectSchema.Literals(
 export const automationRunReasonSchema = EffectSchema.Literals(
   Object.values(AUTOMATION_RUN_REASON),
 );
-export const automationPauseSchema = EffectSchema.Literals(Object.values(AUTOMATION_PAUSE));
 
 /** The query an automation list may narrow by: one plan's automations alone. */
 export const AUTOMATION_LIST_QUERY = { PLAN_ID: "planId", WORKSPACE_ID: "workspaceId" } as const;
@@ -413,7 +405,12 @@ export const automationSummarySchema = EffectSchema.Struct({
   workspaceId: EffectSchema.optionalKey(EffectSchema.String),
   name: EffectSchema.String,
   enabled: EffectSchema.Boolean,
-  pausedReason: EffectSchema.NullOr(automationPauseSchema),
+  /**
+   * Always null: nothing pauses an automation for its failures. The service
+   * still sends it, because a desktop from before reads it as required, and
+   * a desktop reads past it.
+   */
+  pausedReason: EffectSchema.optionalKey(EffectSchema.Null),
   trigger: automationTriggerSchema,
   action: automationActionSchema,
   guards: automationGuardsSchema,

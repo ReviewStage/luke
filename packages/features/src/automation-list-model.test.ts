@@ -196,9 +196,6 @@ test("an automation turned off says so before any instant, and one with no insta
   assert.deepEqual(automationNext(automation("a", { enabled: false })), {
     kind: AUTOMATION_NEXT.OFF,
   });
-  assert.deepEqual(automationNext(automation("a", { pausedReason: "failures" })), {
-    kind: AUTOMATION_NEXT.PAUSED,
-  });
   assert.deepEqual(automationNext(automation("a", { nextRunAt: null })), {
     kind: AUTOMATION_NEXT.UNSCHEDULED,
   });
