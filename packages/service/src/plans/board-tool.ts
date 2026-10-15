@@ -45,7 +45,7 @@ const DRAW_ON_BOARD_REFUSAL = {
     "Not drawn: `elements` must be the whole diagram, each element in the tool's schema, every " +
     "id used once. The board is unchanged.",
   NO_END: "Not drawn: an arrow names an id the diagram does not hold. The board is unchanged.",
-  NO_PLAN: "Not drawn: this plan no longer exists.",
+  NO_PLAN: "Not drawn: this task no longer exists.",
   UNAVAILABLE:
     "Not drawn: the service could not reach its store. The board is unchanged; the call may be " +
     "made again.",
@@ -69,7 +69,7 @@ const readInput = readEither(DRAW_ON_BOARD_INPUT);
 export const DRAW_ON_BOARD_TOOL = {
   name: DRAW_ON_BOARD_TOOL_NAME,
   description:
-    "Draw a diagram on the plan's whiteboard, which the developer sees beside the plan and can " +
+    "Draw a diagram on the task's whiteboard, which the developer sees beside the plan and can " +
     "draw on too. Send the whole diagram every time: it replaces your previous drawing and " +
     "leaves what the developer drew. Boxes, ellipses, and diamonds take a label; a zone is a " +
     "dashed outline that groups shapes under a title; arrows join two ids. Coordinates are " +

@@ -102,7 +102,7 @@ export const CODER_REFUSAL = {
   ACCOUNT_KEY_NO_QUOTA:
     "Not run: the provider refused the work for your own API key's billing or quota.",
   NOT_REACHABLE:
-    "Not run: the agent's repository is not reachable through the GitHub installation connected to its plan's workspace.",
+    "Not run: the agent's repository is not reachable through the GitHub installation connected to its task's workspace.",
   GITHUB_UNAVAILABLE: "Not run: GitHub could not be asked for the repository's credential.",
   NO_DELEGATION: "Not run: this session is no worker of a coding agent's.",
   NO_DELEGATION_PINNED: "Not run: the worker's session was started by no call of a coding agent's.",

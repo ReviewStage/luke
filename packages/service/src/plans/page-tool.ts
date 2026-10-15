@@ -60,11 +60,11 @@ export const SHOW_PAGE_REFUSAL = {
   SECRET: "Not shown: that file holds secrets, such as a `.env`, and is never shown.",
   NO_FILE: "Not shown: no such file in your sandbox:",
   EMPTY: "Not shown: the page is empty.",
-  PLANLESS: "Not shown: you work on no plan, so there is no plan to show a page on.",
+  PLANLESS: "Not shown: you work on no task, so there is no task to show a page on.",
   TOO_LARGE: `Not shown: the page is larger than ${PAGE_BOUNDS.MAX_HTML_CHARS / 1024} KB. Inline less data, or load a library from cdnjs rather than inlining it.`,
   NO_PAGE:
-    "Not shown: this plan has no page with that id. Leave `page` out to make a new page, or name one you showed on this plan.",
-  NO_PLAN: "Not shown: this plan no longer exists.",
+    "Not shown: this task has no page with that id. Leave `page` out to make a new page, or name one you showed on this task.",
+  NO_PLAN: "Not shown: this task no longer exists.",
   UNAVAILABLE: "Not shown: the page could not be saved just now. The call may be made again.",
 } as const;
 
@@ -88,7 +88,7 @@ const SHOW_PAGE_INPUT = Schema.Struct({
   page: Schema.optionalKey(
     describeWire(
       wireUuidSchema,
-      "The id a page you showed on this plan answered with, to write its next version in its place. Leave it out to make a new page.",
+      "The id a page you showed on this task answered with, to write its next version in its place. Leave it out to make a new page.",
     ),
   ),
 });
@@ -99,7 +99,7 @@ const readInput = readEither(SHOW_PAGE_INPUT);
 export const SHOW_PAGE_TOOL = {
   name: AGENT_TOOL.SHOW_PAGE,
   description:
-    "Show the developer an interactive HTML page in the plan's side panel: a chart, a table to " +
+    "Show the developer an interactive HTML page in the task's side panel: a chart, a table to " +
     "sort, a mockup of a screen, or a comparison they can click through, when it says more than " +
     "a diagram or words would. The page is one self-contained HTML document: scripts and styles " +
     "inline, and libraries only from https://cdnjs.cloudflare.com. It runs sealed off: it cannot " +

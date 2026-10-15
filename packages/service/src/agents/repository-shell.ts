@@ -36,10 +36,10 @@ import { COMMAND_DESCRIPTION } from "./command-description.js";
  */
 export const REPOSITORY_REFUSAL = {
   NO_REPOSITORY:
-    "this plan has no repository yet; the developer picks one in the app. " +
+    "this task has no repository yet; the developer picks one in the app. " +
     "Nothing of the code has been read.",
   NOT_REACHABLE:
-    "the plan's repository is not reachable through the GitHub installation connected to the plan's workspace: " +
+    "the task's repository is not reachable through the GitHub installation connected to the task's workspace: " +
     "the App may have been removed from it, or the workspace's GitHub disconnected. " +
     "The developer picks a reachable repository in the app. Nothing of the code has been read.",
   GITHUB_UNAVAILABLE:
@@ -247,7 +247,7 @@ const readInput = readEither(RUN_IN_REPOSITORY_INPUT);
 export const RUN_IN_REPOSITORY_TOOL = {
   name: AGENT_TOOL.RUN_IN_REPOSITORY,
   description:
-    "Run one bash command in a checkout of the plan's GitHub repository, from the checkout root. " +
+    "Run one bash command in a checkout of the task's GitHub repository, from the checkout root. " +
     "Use it to read the code: ls, find, grep, cat, sed, git log. " +
     "The checkout is the repository's default branch, one commit deep, made on the first call " +
     "and kept for the conversation; it is meant for reading, and nothing written to it reaches " +

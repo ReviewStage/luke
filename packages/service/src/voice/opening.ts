@@ -133,7 +133,7 @@ function sessionsInput(frame: SessionCreateFrame): readonly InitialItem[] | unde
 }
 
 /** What the plan seed opens with, so the voice reads it as the service's note rather than the developer's words. */
-const PLAN_SEED_MARKER = "[plan]";
+const PLAN_SEED_MARKER = "[task]";
 
 /**
  * Whether a plan is still as it was started: nobody has written it. Note that
@@ -166,10 +166,10 @@ const PLAN_SEED_FLOOR_TOKENS = 5_000;
 function planSeedText(plan: Plan, talkedAbout: boolean): string {
   const assumptions = plan.document.assumptions.map((assumption) => `- ${assumption.text}`);
   const standing = talkedAbout
-    ? "This call continues the saved plan below and the conversation about it after it. It is not a new plan."
+    ? "This call continues the task below, its saved plan, and the conversation about it after them. It is not a new task."
     : planUntouched(plan)
-      ? "This call starts the new plan below. Nothing in it is answered yet."
-      : "This call continues the saved plan below. It is not a new plan.";
+      ? "This call starts the new task below. Nothing in its plan is answered yet."
+      : "This call continues the task below and its saved plan. It is not a new task.";
   return [
     `${PLAN_SEED_MARKER} ${standing}`,
     `Name: ${plan.name}`,
@@ -188,7 +188,7 @@ function planSeedText(plan: Plan, talkedAbout: boolean): string {
  * it behaves, said "See you around" and "Sure thing" to two requests to end
  * the call, and delegated neither.
  */
-const EARLIER_CALLS_NOTE = `${EARLIER_CALLS_MARKER} What was said on earlier calls about this plan, oldest first. This call picks up where the last one left off. Only the words are shown, not what was delegated to the backend, so delegate as your instructions say rather than as these lines look.`;
+const EARLIER_CALLS_NOTE = `${EARLIER_CALLS_MARKER} What was said on earlier calls about this task, oldest first. This call picks up where the last one left off. Only the words are shown, not what was delegated to the backend, so delegate as your instructions say rather than as these lines look.`;
 
 /** How the transcript names each speaker. */
 const EARLIER_SPEAKER = {

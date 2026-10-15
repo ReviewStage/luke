@@ -188,7 +188,7 @@ const readShownCode = Schema.decodeUnknownResult(SHOW_CODE_ANSWER);
 export const SHOW_CODE_TOOL = {
   name: AGENT_TOOL.SHOW_CODE,
   description:
-    "Put lines of a file in the plan's repository on the developer's screen, lit, as Luke starts " +
+    "Put lines of a file in the task's repository on the developer's screen, lit, as Luke starts " +
     "saying your next words. Call it just before the queue_question or the return that talks " +
     "about those lines, with the lines you found through run_in_repository. Point at the few " +
     "lines that matter, at most 200, and say in the note why you are showing them. Answers " +

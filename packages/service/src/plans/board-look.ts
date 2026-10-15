@@ -58,7 +58,7 @@ export type LookAtBoardResult =
 export const LOOK_AT_BOARD_TOOL = {
   name: LOOK_AT_BOARD_TOOL_NAME,
   description:
-    "See the plan's whiteboard as the developer sees it: an image of the whole board, your " +
+    "See the task's whiteboard as the developer sees it: an image of the whole board, your " +
     "latest drawing and what they drew. Call it after draw_on_board, and check that every " +
     "label is whole, nothing overlaps, and no arrow crosses a shape it does not join; then fix " +
     "what you see by drawing again. Answers the image, or `not-looked` and why.",
@@ -130,7 +130,7 @@ export function lookModelOutput(output: UnparsedWireValue): ToolModelOutput {
     value: [
       {
         type: "text",
-        text: "The plan's whiteboard, as the developer sees it:",
+        text: "The task's whiteboard, as the developer sees it:",
       },
       { type: "file", data: { type: "data", data: output.image }, mediaType: LOOK_MEDIA_TYPE },
     ],
