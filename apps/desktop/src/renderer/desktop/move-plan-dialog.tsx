@@ -1,7 +1,7 @@
 import type { PlanSummary } from "@luke/features/plan-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { CONFIRM_STAGE, confirmAsked } from "@luke/ui/confirm-state";
-import { workspaceReaches } from "@luke/ui/planning-model";
+import { strandedPlanHome, workspaceReaches } from "@luke/ui/planning-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useId, useRef, useState } from "react";
 import { ModalShell } from "../modal-shell";
@@ -49,7 +49,7 @@ function otherWorkspaces(plans: PlansControl, plan: PlanSummary): readonly Works
 }
 
 /** Whether the reader may be the one to move the plan: its owner, or nobody the window can tell is not. */
-function ownsPlan(plans: PlansControl, plan: PlanSummary): boolean {
+function ownsPlan(plans: Pick<PlansControl, "me">, plan: PlanSummary): boolean {
   return plan.ownerId === undefined || plans.me === undefined || plan.ownerId === plans.me;
 }
 
@@ -238,6 +238,21 @@ function MovePlanCard({
       </div>
     </ModalShell>
   );
+}
+
+/**
+ * The workspace a plan's repository belongs to, where the reader may move
+ * the plan there: a plan they own, not archived, its own workspace's GitHub
+ * not reaching its repository and another of the account's reaching it
+ * (`strandedPlanHome`). None for any other plan. The plan's banner
+ * (`stranded-plan-banner.tsx`), its sidebar row's mark, and its card read it.
+ */
+export function strandedHome(
+  plans: Pick<PlansControl, "me" | "workspaces">,
+  plan: PlanSummary,
+): Workspace | undefined {
+  if (plan.archivedAt !== undefined || !ownsPlan(plans, plan)) return undefined;
+  return strandedPlanHome(plan, plans.workspaces);
 }
 
 /** One plan's Move to workspace… as a door holds it. */

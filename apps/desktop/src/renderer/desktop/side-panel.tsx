@@ -1499,6 +1499,7 @@ export function SidePanel({
   focused,
   onOpenTarget,
   cards,
+  banner,
 }: SidePanelDrawing & {
   panel: SidePanelControl;
   /** The tabs holding something that arrived while another was shown, each in semibold until it is shown. */
@@ -1526,6 +1527,8 @@ export function SidePanel({
   onOpenTarget: (target: ToolTarget) => void;
   /** The cards the Call tab's rows that open a tab hang, as those tabs hang them. */
   cards: PlanCards;
+  /** The plan's banner, where one stands (`plan-banner.tsx`), drawn under the bar while the panel fills the window and covers the column that draws it otherwise. */
+  banner?: React.ReactNode;
 }): React.JSX.Element {
   const aside = useRef<HTMLElement>(null);
   const room = useRef<HTMLDivElement>(null);
@@ -1657,6 +1660,7 @@ export function SidePanel({
             onToggle={panel.onToggleFullScreen}
           />
         </div>
+        {panel.fullScreen ? banner : null}
         {/* A plan that has used no tab stands empty, the "+" above offering
             any; one whose tabs were closed offers them again in place. */}
         {tab === undefined ? (
