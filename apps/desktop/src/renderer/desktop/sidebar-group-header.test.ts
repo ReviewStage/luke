@@ -1,30 +1,25 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import type { PlanSummary } from "@luke/features/plan-wire";
 import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
-import { UPDATE_STATUS } from "@luke/settings/update";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { onRegistry } from "#testing/copy-feedback";
+import { sidebarProps } from "#testing/desktop-sidebar";
 import { codingAgentsControl, plansControl } from "#testing/plans-control";
-import { PANEL_TAB } from "../panel-tabs";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { ArchivedAgents } from "./agent-archive";
 import { DesktopSidebar } from "./desktop-sidebar";
-import { SIDEBAR_OVERLAY } from "./sidebar-collapse";
 
 /**
  * sidebar-group-header.test.ts -- every group that folds folds under one
  * header: the sidebar's repositories and Archived, and the summary's
  * archived agents, alike but for what each counts.
  */
-
-const ignore = () => undefined;
 
 const roots: Root[] = [];
 
@@ -71,45 +66,7 @@ function mount(element: ReactElement): HTMLElement {
 
 /** The sidebar on the Plans tab, open, listing what `plans` lists. */
 function mountSidebar(plans: PlansControl): HTMLElement {
-  return mount(
-    createElement(DesktopSidebar, {
-      sidebar: {
-        collapsed: false,
-        compact: false,
-        overlay: SIDEBAR_OVERLAY.CLOSED,
-        width: 264,
-        onToggle: ignore,
-        onOverlay: ignore,
-        onResize: ignore,
-        staged: false,
-      },
-      history: { canGoBack: false, canGoForward: false, onBack: ignore, onForward: ignore },
-      plans,
-      tab: PANEL_TAB.PLANS,
-      onTabChange: ignore,
-      onPressWithin: ignore,
-      account: {
-        status: ACCOUNT_STATUS.SIGNED_IN,
-        email: "dev@example.com",
-        name: "Dev",
-        provider: "github",
-      },
-      updates: {
-        update: {
-          status: UPDATE_STATUS.IDLE,
-          currentVersion: "1.0.0",
-          installSupported: true,
-          upToDate: true,
-        },
-        build: { packaged: false },
-        onCheck: () => Promise.resolve(),
-        onInstall: ignore,
-        onOpenLatest: ignore,
-      },
-      onSignOut: () => Promise.resolve(),
-      call: undefined,
-    }),
-  );
+  return mount(createElement(DesktopSidebar, sidebarProps(plans)));
 }
 
 /** The fold whose words start with `name`. */

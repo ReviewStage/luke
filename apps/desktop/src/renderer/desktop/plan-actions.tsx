@@ -399,7 +399,10 @@ export function PlanActions({
  * another workspace, an agent at work, or a pull request (`plan-card.tsx`),
  * the first named in the row's card, and before that, on a task someone else
  * created, its creator's face (`teammateCreator`), read against the members
- * of the directory around the list; the reader's own tasks wear none. Pin
+ * of the directory around the list; the reader's own tasks wear none. A row
+ * says what its group does not: its repository's name, muted, where its
+ * group is not its repository's, and no face where its group is its
+ * creator's. Its time is the one the list's order chooses. Pin
  * and Archive stand in place of all of it while the row is hovered or
  * reached from the keyboard.
  * A press opens it, and a right-click offers its actions where the pointer is. Renamed,
@@ -413,6 +416,9 @@ export function SidebarPlan({
   current,
   unread,
   now,
+  at = plan.updatedAt,
+  repository,
+  face = true,
   onOpen,
 }: {
   plans: PlansControl;
@@ -423,6 +429,12 @@ export function SidebarPlan({
   unread: boolean;
   /** The time the row's last update is counted back from. */
   now: number;
+  /** The time the row shows, which the list's order chooses: its last update unless said. */
+  at?: number;
+  /** The repository's name the row says, muted before its time, where its group does not say it. */
+  repository?: string | undefined;
+  /** Whether a teammate's task wears its creator's face, which a group by creator says instead. */
+  face?: boolean;
   onOpen: () => void;
 }): React.JSX.Element {
   const rename = usePlanRename(plan.id, plans.onRenamePlan);
@@ -430,7 +442,8 @@ export function SidebarPlan({
     rename: rename.begin,
     drawn: true,
   });
-  const creator = teammateCreator(plan, useMemberDirectory());
+  const teammate = teammateCreator(plan, useMemberDirectory());
+  const creator = face ? teammate : undefined;
   const row = useRef<HTMLButtonElement | null>(null);
   const item = useRef<HTMLLIElement | null>(null);
   const refocus = useRef(false);
@@ -479,11 +492,14 @@ export function SidebarPlan({
                 <span className="visually-hidden">{`(created by ${actorName(creator)})`}</span>
               )}
               <span className="sidebar-plan-time">
+                {repository === undefined ? null : (
+                  <span className="sidebar-plan-repository">{repository}</span>
+                )}
                 {creator === undefined ? null : (
                   <ActorMark actor={creator} size={ACTOR_SIZE.MARK} />
                 )}
                 <PlanStatusMark plan={plan} stranded={strandedHome(plans, plan)} />
-                <RelativeTime at={plan.updatedAt} now={now} hint={false} />
+                <RelativeTime at={at} now={now} hint={false} />
               </span>
             </span>
           </button>
