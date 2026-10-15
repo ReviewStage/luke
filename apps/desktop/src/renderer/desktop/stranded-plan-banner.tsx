@@ -15,7 +15,7 @@ import { WorkspaceCard, WorkspaceRef } from "./workspace-ref";
  * moving the plan there is what mends it, so the plan says so before
  * anything is refused, over every tab of it (`plan-banner.tsx`), naming
  * that workspace by its tile and name, with the press that opens Move to
- * workspace… (#2761) on it. The dialog is the move's confirmation and says
+ * workspace (#2761) on it. The dialog is the move's confirmation and says
  * who gains the plan, since a plan moved from a workspace of the reader's own
  * into a team's is read by that team. Note that the plan is never moved
  * without the press, for that same reason. The banner stands only where the

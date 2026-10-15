@@ -29,7 +29,7 @@ import {
 const SEPARATOR: MenuItemConstructorOptions = { type: "separator" };
 
 /** The update item's one act in each state, as the Updates row words it. */
-const UPDATE_MENU_ACT = {
+export const UPDATE_MENU_ACT = {
   /** Ask for the latest build, with Settings brought forward, where the answer is drawn. */
   CHECK: "check",
   /** Nothing to choose: a check is already out. */
@@ -44,13 +44,17 @@ const UPDATE_MENU_ACT = {
 
 export type UpdateMenuAct = (typeof UPDATE_MENU_ACT)[keyof typeof UPDATE_MENU_ACT];
 
-/** The item's name for each act, in the title case a Mac menu writes. */
+/**
+ * The item's name for each act, in the title case a Mac menu writes. Note
+ * that an act to choose carries no ellipsis, as no item in the bar does,
+ * while the two that stand disabled say the work under way as a status does.
+ */
 const UPDATE_MENU_LABELS = {
-  [UPDATE_MENU_ACT.CHECK]: "Check for Updates…",
+  [UPDATE_MENU_ACT.CHECK]: "Check for Updates",
   [UPDATE_MENU_ACT.CHECKING]: "Checking for Updates…",
   [UPDATE_MENU_ACT.DOWNLOADING]: "Downloading Update…",
   [UPDATE_MENU_ACT.RESTART]: "Restart to Update",
-  [UPDATE_MENU_ACT.GET]: "Download Latest Version…",
+  [UPDATE_MENU_ACT.GET]: "Download Latest Version",
 } as const satisfies Record<UpdateMenuAct, string>;
 
 /** What the app menu's update item does, and the presses it hands on. */
@@ -142,14 +146,9 @@ function roleItem(
   return { role, accelerator: shortcutAccelerator(APP_SHORTCUTS[command].chord) };
 }
 
-/** A command with no key that acts at once, named as the window names it. */
+/** A command with no key, named as the window names it. */
 function menuItem(command: MenuCommand): MenuItemConstructorOptions {
   return { label: menuTitle(MENU_COMMAND_LABELS[command]), click: sendCommand(command) };
-}
-
-/** A command with no key: named with an ellipsis, as an item that opens a dialog is. */
-function dialogItem(command: MenuCommand): MenuItemConstructorOptions {
-  return { label: `${menuTitle(MENU_COMMAND_LABELS[command])}…`, click: sendCommand(command) };
 }
 
 /**
@@ -300,9 +299,7 @@ function fullMenuTemplate(appName: string, update?: UpdateMenu): MenuItemConstru
         { role: "about" },
         ...(update ? [updateItem(update)] : []),
         SEPARATOR,
-        // A Mac app's own menu names Settings with an ellipsis, as a window
-        // it opens.
-        { ...commandItem(APP_COMMAND.SETTINGS), label: "Settings…" },
+        commandItem(APP_COMMAND.SETTINGS),
         SEPARATOR,
         { role: "services" },
         SEPARATOR,
@@ -346,8 +343,7 @@ function fullMenuTemplate(appName: string, update?: UpdateMenu): MenuItemConstru
         {
           label: "Find",
           submenu: [
-            // Find opens a bar, so it is named with an ellipsis, as a Mac app's Find… is.
-            { ...commandItem(APP_COMMAND.FIND), label: "Find…" },
+            commandItem(APP_COMMAND.FIND),
             commandItem(APP_COMMAND.FIND_NEXT),
             commandItem(APP_COMMAND.FIND_PREVIOUS),
           ],
@@ -417,8 +413,8 @@ function fullMenuTemplate(appName: string, update?: UpdateMenu): MenuItemConstru
       submenu: [
         commandItem(APP_COMMAND.KEYBOARD_SHORTCUTS),
         SEPARATOR,
-        dialogItem(APP_COMMAND.SEND_FEEDBACK),
-        dialogItem(APP_COMMAND.SUGGEST_FEATURE),
+        menuItem(APP_COMMAND.SEND_FEEDBACK),
+        menuItem(APP_COMMAND.SUGGEST_FEATURE),
       ],
     },
   ];
