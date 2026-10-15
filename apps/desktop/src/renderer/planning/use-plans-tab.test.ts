@@ -1004,10 +1004,12 @@ test("a remembered plan that moved to another workspace since, or would not open
 
 test("a workspace chosen is listed at once, and a reopen answered after another was chosen leaves the newer choice standing", async () => {
   const three = [PERSONAL, ACME, PLATFORM];
-  const held = Promise.withResolvers<boolean>();
+  // The first reopen waits on main until the test answers it.
+  const answers: ((opened: boolean) => void)[] = [];
+  const held = new Promise<boolean>((answer) => answers.push(answer));
   const tab = mount(
     { shown: true, planning: { ...TWO_WORKSPACES, workspaces: three, activePlanId: "alerts" } },
-    { ...OPENS, [ACT_KIND.PLANNING_SELECT]: () => held.promise },
+    { ...OPENS, [ACT_KIND.PLANNING_SELECT]: () => held },
   );
   tab.stand({ planning: { ...TWO_WORKSPACES, workspaces: three, activePlanId: "notes" } });
 
@@ -1016,7 +1018,7 @@ test("a workspace chosen is listed at once, and a reopen answered after another 
   act(() => tab.control().onChooseWorkspace(PLATFORM.id));
   await settle();
   const leaves = tab.told.filter((kind) => kind === ACT_KIND.PLANNING_CLOSE).length;
-  held.resolve(false);
+  for (const answer of answers) answer(false);
   await settle();
 
   assert.equal(listedAtOnce, ACME.id);
