@@ -264,7 +264,7 @@ const disconnectEndpoint = Effect.fn("web/workspaceLinearDisconnectEndpoint")(fu
   const userId = yield* accountOf(seams);
   const workspace = yield* administeredWorkspace(userId);
   yield* hostedStoreOrUnavailable(deleteWorkspaceIntegration(workspace.id, LINEAR));
-  yield* revokeIntegrationGrant(workspace.id, LINEAR);
+  yield* revokeIntegrationGrant({ provider: LINEAR, connectSubject: workspace.id });
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
     workspace: yield* memberWorkspace(userId, workspace.id),
   });

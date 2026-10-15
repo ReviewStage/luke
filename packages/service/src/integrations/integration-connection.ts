@@ -151,7 +151,7 @@ const connectedToken = /* @__PURE__ */ Effect.fnUntraced(function* (
   }
   // A provider not offered to the account answers it as one this deployment never set up.
   const connector = (yield* accountIntegrationConnect(userId))[provider];
-  const issued = yield* Effect.result(connector.token(userId, { fresh: false }));
+  const issued = yield* Effect.result(connector.token(row.connectSubject, { fresh: false }));
   if (Result.isFailure(issued)) {
     switch (issued.failure.reason) {
       case INTEGRATION_CONNECT_FAILURE.NOT_AUTHORIZED:

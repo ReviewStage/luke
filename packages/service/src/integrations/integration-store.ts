@@ -2,16 +2,20 @@
  * integration-store.ts -- the reads and writes of an account's integration rows.
  *
  * A row (`schemas/integration.ts`) is Luke's word on whether its agents may
- * use the account's grant at one provider: `connected` lets them, anything
- * else or no row does not. A sign-in begins by writing its one-time state
- * beside whatever the row already said, so an account signing in again keeps
- * working while it does, with the handle Connect answered it with, which
- * goes with the state; the sign-in completes by setting the row connected
- * and clearing the state, or ends without a grant by clearing the state alone
- * (a first sign-in's row with it); a Disconnect deletes the row. Every function here
+ * use the grant Connect holds for one account at one provider: `connected`
+ * lets them, anything else or no row does not. A Luke account may hold more
+ * than one account at a provider, each its own row under its own connection
+ * name, so every read and write here names the row by the Luke account and
+ * that name. A sign-in begins by writing its one-time state beside whatever
+ * the row already said, so an account signing in again keeps working while
+ * it does, with the handle Connect answered it with, which goes with the
+ * state; the sign-in completes by setting the row connected and clearing the
+ * state, or ends without a grant by clearing the state alone (a first
+ * sign-in's row with it); a Disconnect deletes the row. Every function here
  * is an effect over the ambient `SqlClient`.
  */
 
+import { randomUUID } from "node:crypto";
 import { Database, type DatabaseServices, type QueryError } from "@luke/database/core/query";
 import {
   INTEGRATION_ROW_STATUS,
@@ -37,8 +41,18 @@ export type IntegrationStoreEffect<A> = Effect.Effect<
 
 /** One account's row at one provider, as the group and the agents read it. */
 export interface IntegrationConnectionRow {
+  /** The row's own id. */
+  readonly id: string;
   readonly userId: string;
   readonly provider: IntegrationProvider;
+  /** The subject Connect holds this account's grant under; never answered to a window. */
+  readonly connectSubject: string;
+  /** The name the account goes by everywhere (`notion`, `notion-2`). */
+  readonly connectionName: string;
+  /** The account's name at the provider, or the developer's own for it; nothing until either is known. */
+  readonly label: string | undefined;
+  /** Whether the developer made this the provider's primary account. */
+  readonly primary: boolean;
   readonly status: IntegrationRowStatus;
   /** The sign-in under way's own state, which only it may complete under; nothing when none is. */
   readonly state: string | undefined;
@@ -50,9 +64,21 @@ export interface IntegrationConnectionRow {
   readonly connectedAt: Date | undefined;
 }
 
+/** The account a sign-in is begun for: which provider, the name it goes by, and the subject Connect holds its grant under. */
+export interface IntegrationAccountKey {
+  readonly provider: IntegrationProvider;
+  readonly connectionName: string;
+  readonly connectSubject: string;
+}
+
 const IntegrationRowSchema = Schema.Struct({
+  id: Schema.String,
   userId: Schema.String,
   provider: integrationProviderSchema,
+  connectSubject: Schema.String,
+  connectionName: Schema.String,
+  label: Schema.NullOr(Schema.String),
+  primary: Schema.Boolean,
   status: Schema.Literals(Object.values(INTEGRATION_ROW_STATUS)),
   state: Schema.NullOr(Schema.String),
   stateIssuedAt: Schema.NullOr(InstantColumnSchema),
@@ -61,8 +87,13 @@ const IntegrationRowSchema = Schema.Struct({
 });
 
 const ROW_COLUMNS = {
+  id: integrationConnection.id,
   userId: integrationConnection.userId,
   provider: integrationConnection.provider,
+  connectSubject: integrationConnection.connectSubject,
+  connectionName: integrationConnection.connectionName,
+  label: integrationConnection.label,
+  primary: integrationConnection.primary,
   status: integrationConnection.status,
   state: integrationConnection.state,
   stateIssuedAt: integrationConnection.stateIssuedAt,
@@ -72,8 +103,13 @@ const ROW_COLUMNS = {
 
 function rowOf(row: typeof IntegrationRowSchema.Type): IntegrationConnectionRow {
   return {
+    id: row.id,
     userId: row.userId,
     provider: row.provider,
+    connectSubject: row.connectSubject,
+    connectionName: row.connectionName,
+    label: row.label ?? undefined,
+    primary: row.primary,
     status: row.status,
     state: row.state ?? undefined,
     stateIssuedAt: row.stateIssuedAt ?? undefined,
@@ -82,13 +118,13 @@ function rowOf(row: typeof IntegrationRowSchema.Type): IntegrationConnectionRow 
   };
 }
 
-const AccountSchema = Schema.Struct({ userId: Schema.String, provider: integrationProviderSchema });
+const AccountSchema = Schema.Struct({ userId: Schema.String, connectionName: Schema.String });
 
-/** The row one account holds at one provider. */
-function ofAccount({ userId, provider }: typeof AccountSchema.Type) {
+/** The row one Luke account holds under one connection name. */
+function ofAccount({ userId, connectionName }: typeof AccountSchema.Type) {
   return and(
     eq(integrationConnection.userId, userId),
-    eq(integrationConnection.provider, provider),
+    eq(integrationConnection.connectionName, connectionName),
   );
 }
 
@@ -109,7 +145,8 @@ const findAllByUser = SqlSchema.findAll({
       db
         .select(ROW_COLUMNS)
         .from(integrationConnection)
-        .where(eq(integrationConnection.userId, userId)),
+        .where(eq(integrationConnection.userId, userId))
+        .orderBy(integrationConnection.provider, integrationConnection.connectionName),
     ),
 });
 
@@ -125,18 +162,18 @@ const findByState = SqlSchema.findOneOption({
     ),
 });
 
-/** The account's row at one provider, or nothing where it is not connected and is not signing in. */
+/** The account's row under one connection name, or nothing where it is not connected and is not signing in. */
 export function readIntegrationConnection(
   userId: string,
-  provider: IntegrationProvider,
+  connectionName: string,
 ): IntegrationStoreEffect<IntegrationConnectionRow | undefined> {
   return Effect.map(
-    findByAccount({ userId, provider }),
+    findByAccount({ userId, connectionName }),
     Option.match({ onNone: () => undefined, onSome: rowOf }),
   );
 }
 
-/** Every row the account holds, one per provider it connected or is signing in to. */
+/** Every row the account holds, one per account it connected or is signing in to, by provider and then by name. */
 export function readIntegrationConnections(
   userId: string,
 ): IntegrationStoreEffect<readonly IntegrationConnectionRow[]> {
@@ -151,8 +188,12 @@ export function readIntegrationSignIn(
 }
 
 const BeginSchema = Schema.Struct({
+  id: Schema.String,
   userId: Schema.String,
   provider: integrationProviderSchema,
+  connectionName: Schema.String,
+  connectSubject: Schema.String,
+  primary: Schema.Boolean,
   state: Schema.String,
   verifier: Schema.String,
   at: Schema.Date,
@@ -161,17 +202,32 @@ const BeginSchema = Schema.Struct({
 /**
  * Note that the conflicting update leaves the status alone, because an
  * account signing in again stays as connected, or as expired, as it was
- * until the new sign-in completes.
+ * until the new sign-in completes; it keeps its id, subject, label, and
+ * primary flag for the same reason.
  */
 const upsertSignIn = SqlSchema.void({
   Request: BeginSchema,
-  execute: ({ userId, provider, state, verifier, at }) =>
+  execute: ({
+    id,
+    userId,
+    provider,
+    connectionName,
+    connectSubject,
+    primary,
+    state,
+    verifier,
+    at,
+  }) =>
     Database.use((db) =>
       db
         .insert(integrationConnection)
         .values({
+          id,
           userId,
           provider,
+          connectSubject,
+          connectionName,
+          primary,
           status: INTEGRATION_ROW_STATUS.PENDING,
           state,
           stateIssuedAt: at,
@@ -179,37 +235,50 @@ const upsertSignIn = SqlSchema.void({
           updatedAt: at,
         })
         .onConflictDoUpdate({
-          target: [integrationConnection.userId, integrationConnection.provider],
+          target: [integrationConnection.userId, integrationConnection.connectionName],
           set: { state, stateIssuedAt: at, connectVerifier: verifier, updatedAt: at },
         }),
     ),
 });
 
 /**
- * Records a sign-in to one provider under way for the account, under the
+ * Records a sign-in under way for one account at a provider, under the
  * state only its callback carries back and the handle Connect answered it
- * with.
+ * with. A first row at the provider is its primary account.
  */
 export function beginIntegrationSignIn(
   userId: string,
-  provider: IntegrationProvider,
+  account: IntegrationAccountKey,
   state: string,
   verifier: Redacted.Redacted,
 ): IntegrationStoreEffect<void> {
-  return Effect.flatMap(DateTime.nowAsDate, (at) =>
-    upsertSignIn({ userId, provider, state, verifier: Redacted.value(verifier), at }),
-  );
+  return Effect.gen(function* () {
+    const at = yield* DateTime.nowAsDate;
+    const rows = yield* readIntegrationConnections(userId);
+    const primary = !rows.some(
+      (row) => row.provider === account.provider && row.connectionName !== account.connectionName,
+    );
+    yield* upsertSignIn({
+      id: randomUUID(),
+      userId,
+      ...account,
+      primary,
+      state,
+      verifier: Redacted.value(verifier),
+      at,
+    });
+  });
 }
 
 const StampedSchema = Schema.Struct({
   userId: Schema.String,
-  provider: integrationProviderSchema,
+  connectionName: Schema.String,
   at: Schema.Date,
 });
 
 const CompleteSchema = Schema.Struct({
   userId: Schema.String,
-  provider: integrationProviderSchema,
+  connectionName: Schema.String,
   state: Schema.String,
   at: Schema.Date,
 });
@@ -235,18 +304,18 @@ const updateConnected = SqlSchema.findAll({
 });
 
 /**
- * Sets the account connected to one provider and ends the sign-in begun
- * under `state`; answers whether that sign-in still stood to complete. A
- * Disconnect meanwhile removes it, and a sign-in begun again since replaces
- * its state, so a callback that answered late completes nothing but its own.
+ * Sets one account connected and ends the sign-in begun under `state`;
+ * answers whether that sign-in still stood to complete. A Disconnect
+ * meanwhile removes it, and a sign-in begun again since replaces its state,
+ * so a callback that answered late completes nothing but its own.
  */
 export function completeIntegrationSignIn(
   userId: string,
-  provider: IntegrationProvider,
+  connectionName: string,
   state: string,
 ): IntegrationStoreEffect<boolean> {
   return Effect.flatMap(DateTime.nowAsDate, (at) =>
-    Effect.map(updateConnected({ userId, provider, state, at }), (rows) => rows.length > 0),
+    Effect.map(updateConnected({ userId, connectionName, state, at }), (rows) => rows.length > 0),
   );
 }
 
@@ -266,12 +335,12 @@ const updateExpired = SqlSchema.void({
     ),
 });
 
-/** Marks a connected provider expired, once Connect answered it holds no grant it can use; any other row stands. */
+/** Marks a connected account expired, once Connect answered it holds no grant it can use; any other row stands. */
 export function expireIntegrationConnection(
   userId: string,
-  provider: IntegrationProvider,
+  connectionName: string,
 ): IntegrationStoreEffect<void> {
-  return Effect.flatMap(DateTime.nowAsDate, (at) => updateExpired({ userId, provider, at }));
+  return Effect.flatMap(DateTime.nowAsDate, (at) => updateExpired({ userId, connectionName, at }));
 }
 
 const deleteRow = SqlSchema.void({
@@ -280,12 +349,12 @@ const deleteRow = SqlSchema.void({
     Database.use((db) => db.delete(integrationConnection).where(ofAccount(account))),
 });
 
-/** Disconnects the account from one provider: its row is gone, so no agent reads a token from the next ask on. */
+/** Disconnects one account: its row is gone, so no agent reads a token from the next ask on. */
 export function deleteIntegrationConnection(
   userId: string,
-  provider: IntegrationProvider,
+  connectionName: string,
 ): IntegrationStoreEffect<void> {
-  return deleteRow({ userId, provider });
+  return deleteRow({ userId, connectionName });
 }
 
 const deleteUnfinished = SqlSchema.void({
@@ -317,20 +386,20 @@ const clearState = SqlSchema.void({
 
 /**
  * Ends the sign-in begun under `state` without a grant, as a browser that
- * came back without one ends it: a first sign-in's row goes, so the provider
+ * came back without one ends it: a first sign-in's row goes, so the account
  * stands disconnected, and a row that stood before it keeps its status and
  * loses only the state. A sign-in begun again since carries another state,
  * so it is left to run.
  */
 export function endIntegrationSignIn(
   userId: string,
-  provider: IntegrationProvider,
+  connectionName: string,
   state: string,
 ): IntegrationStoreEffect<void> {
   return Effect.flatMap(DateTime.nowAsDate, (at) =>
     Effect.andThen(
-      deleteUnfinished({ userId, provider, state, at }),
-      clearState({ userId, provider, state, at }),
+      deleteUnfinished({ userId, connectionName, state, at }),
+      clearState({ userId, connectionName, state, at }),
     ),
   );
 }

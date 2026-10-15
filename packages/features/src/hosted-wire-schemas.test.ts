@@ -179,6 +179,7 @@ const EFFECT_MODULE_SCHEMAS = {
   } satisfies RecordedEffectJsonSchemas<typeof integrationView>,
   "integration-wire": {
     integrationProviderSchema: integrationWire.integrationProviderSchema,
+    integrationConnectionNameSchema: integrationWire.integrationConnectionNameSchema,
     integrationSignInFailureSchema: integrationWire.integrationSignInFailureSchema,
     integrationStatusesAnswerSchema: integrationWire.integrationStatusesAnswerSchema,
     integrationStatusAnswerSchema: integrationWire.integrationStatusAnswerSchema,

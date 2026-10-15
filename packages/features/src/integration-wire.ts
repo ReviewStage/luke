@@ -186,6 +186,52 @@ export const integrationRemoteCallSchema = EffectSchema.Struct({
 
 export type IntegrationRemoteCall = typeof integrationRemoteCallSchema.Type;
 
+/**
+ * The name one account at a provider goes by everywhere: the eve connection
+ * an agent reaches it through, a coding agent's switch and mention, and the
+ * routes' `connection` query. The first account at a provider is named after
+ * the provider (`notion`), so every name stored before a second account was
+ * possible keeps naming it; another is the provider and its place, `notion-2`.
+ * eve allows a connection's name lowercase letters, digits, and dashes, from
+ * a letter, up to 64 characters, and qualifies a tool's name with two
+ * underscores, which this grammar never spells.
+ */
+const CONNECTION_NAME_PATTERN = new RegExp(
+  `^(${INTEGRATION_PROVIDER_LIST.join("|")})(?:-([2-9]|[1-9][0-9]{1,2}))?$`,
+  "u",
+);
+
+export const integrationConnectionNameSchema = EffectSchema.String.check(
+  EffectSchema.isPattern(CONNECTION_NAME_PATTERN),
+);
+
+/** The provider a connection name is an account at, and its place there (1 for the first); nothing for any other string. */
+export function integrationConnectionOf(
+  name: string,
+): { readonly provider: IntegrationProvider; readonly place: number } | undefined {
+  const match = CONNECTION_NAME_PATTERN.exec(name);
+  const provider = integrationProviderFromWire(match?.[1] ?? null);
+  if (match === null || provider === undefined) return undefined;
+  return { provider, place: match[2] === undefined ? 1 : Number(match[2]) };
+}
+
+/**
+ * The name a new account at the provider takes: the provider's own while no
+ * account holds it, else the lowest free place. Note that this is the one
+ * place a name is spelled from its parts, because eve takes a connection by
+ * one flat name; everywhere else reads it back from the row it was minted on.
+ */
+export function mintIntegrationConnectionName(
+  provider: IntegrationProvider,
+  taken: readonly string[],
+): string {
+  // Note that the grammar caps a place at three digits, far past any account count the routes allow.
+  if (!taken.includes(provider)) return provider;
+  let place = 2;
+  while (taken.includes(`${provider}-${place}`)) place += 1;
+  return `${provider}-${place}`;
+}
+
 /** Where an account's connection to one provider stands. */
 export const INTEGRATION_STATUS = {
   /** Luke's agents may use the account's grant. */

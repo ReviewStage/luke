@@ -24,7 +24,11 @@ import {
   openGithubUser,
   standingGithubRow,
 } from "../testing/github-app-fake.js";
-import { CONNECTOR_ASKED_NOTHING, integrationConnectOf } from "../testing/integration-connect.js";
+import {
+  CONNECTOR_ASKED_NOTHING,
+  firstIntegrationAccount,
+  integrationConnectOf,
+} from "../testing/integration-connect.js";
 import { noNetwork } from "../testing/no-network.js";
 import {
   type ConnectorService,
@@ -175,7 +179,7 @@ const connected = (userId: string) =>
   Effect.gen(function* () {
     yield* beginIntegrationSignIn(
       userId,
-      LINEAR,
+      firstIntegrationAccount(userId, LINEAR),
       `state-${userId}`,
       Redacted.make("connect-verifier"),
     );

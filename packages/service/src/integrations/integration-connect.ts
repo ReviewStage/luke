@@ -2,8 +2,10 @@
  * integration-connect.ts -- Vercel Connect, as Luke asks it about one account's grant at one provider.
  *
  * Vercel Connect holds every account's grant at every provider, encrypted,
- * and refreshes it; Luke names the account by its own user id as the
- * grant's subject and never stores a token. Four things are ever asked of
+ * and refreshes it; Luke names each account by the subject its row keeps
+ * (`integration-store.ts`): its own user id for the first account at a
+ * provider, a minted id for another, so two accounts at one provider are two
+ * grants. Luke never stores a token. Four things are ever asked of
  * a provider's connector: a browser sign-in for the account to begin, how
  * a sign-in it began stands, the account's token now, and the grant
  * revoked. Each answers either what was asked or one of three fixed words,
@@ -14,7 +16,7 @@
  * failed sign-in's own line, and only where it is shaped like no
  * credential, because it is what tells the developer why.
  *
- * Asking Connect for another user's token needs the deployment's own Vercel
+ * Asking Connect for any subject's token needs the deployment's own Vercel
  * OIDC token, which the SDK reads from the request or the environment
  * itself; what this deployment configures per provider is the connector's
  * UID and, where it names any, the accounts the provider is offered to,
@@ -127,22 +129,22 @@ export interface ConnectorService {
   readonly configured: boolean;
   /** The accounts the deployment offers this provider to; absent, it is offered to every account. */
   readonly allowedAccounts?: AllowedAccounts;
-  /** Begins a browser sign-in for the account, which Connect returns to `callbackUrl`; answers the address the browser opens and Connect's handle on it. */
+  /** Begins a browser sign-in for the account under `subject`, which Connect returns to `callbackUrl`; answers the address the browser opens and Connect's handle on it. */
   readonly authorize: (
-    userId: string,
+    subject: string,
     callbackUrl: string,
   ) => Effect.Effect<IntegrationAuthorization, IntegrationConnectFailure>;
   /** How the sign-in Connect answered this handle for stands now, which is all Luke hears of one that never came back. */
   readonly signInResult: (
     verifier: Redacted.Redacted,
   ) => Effect.Effect<ConnectSignInResult, IntegrationConnectFailure>;
-  /** The account's token now; `fresh` asks Connect itself rather than the SDK's in-process cache. */
+  /** The token of the account under `subject` now; `fresh` asks Connect itself rather than the SDK's in-process cache. */
   readonly token: (
-    userId: string,
+    subject: string,
     options: { readonly fresh: boolean },
   ) => Effect.Effect<IntegrationToken, IntegrationConnectFailure>;
-  /** Revokes the account's grant at Connect, which revokes it at the provider where the provider allows it. */
-  readonly revoke: (userId: string) => Effect.Effect<void, IntegrationConnectFailure>;
+  /** Revokes the grant of the account under `subject` at Connect, which revokes it at the provider where the provider allows it. */
+  readonly revoke: (subject: string) => Effect.Effect<void, IntegrationConnectFailure>;
 }
 
 /** Every provider's connector, configured or not. */
@@ -153,9 +155,9 @@ export class IntegrationConnect extends Context.Service<
   IntegrationConnectService
 >()("IntegrationConnect") {}
 
-/** The subject every ask names: Luke's own user id, so a grant is the account's whatever principal a session runs under. */
-function subjectOf(userId: string) {
-  return { subject: { type: "user", id: userId } } as const;
+/** The subject every ask names: the one the account's row keeps, so a grant is that account's whatever principal a session runs under. */
+function subjectOf(subject: string) {
+  return { subject: { type: "user", id: subject } } as const;
 }
 
 /** Connect's failure as the word it amounts to, keeping only its code and status. */
@@ -300,9 +302,9 @@ export function vercelConnector(
 ): ConnectorService {
   return {
     configured: true,
-    authorize: (userId, callbackUrl) =>
+    authorize: (subject, callbackUrl) =>
       Effect.tryPromise({
-        try: () => sdk.startAuthorization(connector, subjectOf(userId), { callbackUrl }),
+        try: () => sdk.startAuthorization(connector, subjectOf(subject), { callbackUrl }),
         catch: failureOf,
       }).pipe(
         Effect.flatMap(({ url, verifier }) =>
@@ -318,9 +320,9 @@ export function vercelConnector(
         try: () => sdk.readAuthorizationResult(Redacted.value(verifier)),
         catch: failureOf,
       }).pipe(Effect.flatMap(signInResultOf)),
-    token: (userId, { fresh }) =>
+    token: (subject, { fresh }) =>
       Effect.tryPromise({
-        try: () => sdk.getTokenResponse(connector, subjectOf(userId), { forceRefresh: fresh }),
+        try: () => sdk.getTokenResponse(connector, subjectOf(subject), { forceRefresh: fresh }),
         catch: failureOf,
       }).pipe(
         Effect.map((response) => ({
@@ -328,31 +330,37 @@ export function vercelConnector(
           expiresAt: response.expiresAt,
         })),
       ),
-    revoke: (userId) =>
+    revoke: (subject) =>
       Effect.tryPromise({
-        try: () => sdk.revokeToken(connector, subjectOf(userId)),
+        try: () => sdk.revokeToken(connector, subjectOf(subject)),
         catch: failureOf,
       }),
   };
 }
 
+/** One account's grant as a revoke names it: its provider and the subject Connect holds it under. */
+export interface IntegrationGrantKey {
+  readonly provider: IntegrationProvider;
+  readonly connectSubject: string;
+}
+
 /**
- * Asks Connect to revoke the account's grant at one provider, where the
- * deployment names its connector at all: a Disconnect asks it, and so does
+ * Asks Connect to revoke one account's grant, where the deployment names
+ * its provider's connector at all: a Disconnect asks it, and so does
  * deleting the account. A revoke that fails is logged by its word, code,
  * and status, never Connect's sentence, and answered as done, because
  * whoever asked has already deleted the account's row, so no agent reads a
  * token again whatever Connect answered.
  */
 export const revokeIntegrationGrant = /* @__PURE__ */ Effect.fn("web/revokeIntegrationGrant")(
-  function* (
-    userId: string,
-    provider: IntegrationProvider,
-  ): Effect.fn.Return<void, never, IntegrationConnect> {
+  function* ({
+    provider,
+    connectSubject,
+  }: IntegrationGrantKey): Effect.fn.Return<void, never, IntegrationConnect> {
     const connector = (yield* IntegrationConnect)[provider];
     if (!connector.configured) return;
     yield* connector
-      .revoke(userId)
+      .revoke(connectSubject)
       .pipe(
         Effect.catch((failure) =>
           Effect.logWarning(
@@ -365,18 +373,25 @@ export const revokeIntegrationGrant = /* @__PURE__ */ Effect.fn("web/revokeInteg
 );
 
 /**
- * Asks Connect to revoke the account's grant at every provider this
- * deployment names a connector for, which is what deleting the account
- * asks: each on the terms of `revokeIntegrationGrant`, so none can fail it.
+ * Asks Connect to revoke every grant the account may hold, which is what
+ * deleting the account asks once its rows are gone: the first account's at
+ * every provider this deployment names a connector for, under the
+ * account's own user id, whether or not a row still named it, because a
+ * sign-in cancelled after Connect took its grant, or a Disconnect whose
+ * revoke failed, leaves a grant no row names; and every other account's
+ * the rows named, under its own subject. Each is asked on the terms of
+ * `revokeIntegrationGrant`, so none can fail it.
  */
 export function revokeIntegrationGrants(
   userId: string,
+  grants: readonly IntegrationGrantKey[],
 ): Effect.Effect<void, never, IntegrationConnect> {
-  return Effect.forEach(
-    INTEGRATION_PROVIDER_LIST,
-    (provider) => revokeIntegrationGrant(userId, provider),
-    { discard: true },
-  );
+  const firsts = INTEGRATION_PROVIDER_LIST.map((provider) => ({
+    provider,
+    connectSubject: userId,
+  }));
+  const others = grants.filter((grant) => grant.connectSubject !== userId);
+  return Effect.forEach([...firsts, ...others], revokeIntegrationGrant, { discard: true });
 }
 
 /** An allowlist entry for every email at one domain: `@`, then a host name of at least two labels. */
