@@ -25,10 +25,12 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { APP_COMMAND } from "#shared/shortcuts";
 import { handState } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { plansControl, waitingOf } from "#testing/plans-control";
 import type { InboxChoice, PlansControl } from "../planning/use-plans-tab";
+import { commandKeyshortcuts } from "../tooltip";
 import { DesktopHome } from "./desktop-home";
 import { ListedAutomations } from "./listed-automations";
 
@@ -281,7 +283,16 @@ test("the home page greets the account, lists what needs it with each item's pla
     "Usage alerts · acme/relay",
     "Onboarding checklist · No repository",
   ]);
-  assert.ok(button(page, "Search all 8 tasks"));
+});
+
+test("Home offers no line to search every task, though Recent lists fewer than the workspace holds", async () => {
+  const { page } = mount();
+  await settle();
+
+  assert.equal(rows(page, "home-recent").length, 6);
+  assert.doesNotMatch(page.textContent ?? "", /Search all/u);
+  const palette = commandKeyshortcuts(APP_COMMAND.COMMAND_PALETTE);
+  assert.equal(page.querySelector(`[aria-keyshortcuts="${palette}"]`), null);
 });
 
 test("a waiting item's row opens the Inbox on its item, a recent plan opens the plan, and New plan asks for one", async () => {
@@ -330,7 +341,7 @@ test("an account with no plan yet is welcomed with New plan, and nothing the pag
   assert.doesNotMatch(page.textContent ?? "", /sidebar/iu);
 });
 
-test("↑ and ↓ move the focus through the rows from the window, Search all included, and leave a key pressed elsewhere alone", async () => {
+test("↑ and ↓ move the focus through the rows from the window, and leave a key pressed elsewhere alone", async () => {
   mount();
   await settle();
   const field = document.createElement("input");
@@ -357,7 +368,7 @@ test("↑ and ↓ move the focus through the rows from the window, Search all in
 
   field.blur();
   press("ArrowUp");
-  assert.match(focused(), /^Search all 8 tasks/u);
+  assert.match(focused(), /^Onboarding checklist/u);
 });
 
 test("a workspace with no plan of its own, in an account with plans elsewhere, welcomes the account back rather than as new, and lists none of the others' Inbox", async () => {
