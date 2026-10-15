@@ -49,6 +49,7 @@ import {
   codingAgentPageAnswerSchema,
 } from "@luke/features/coding-agent-wire";
 import {
+  INBOX_ANSWER_LEAD,
   INBOX_BLOCK,
   INBOX_CURSOR_START,
   INBOX_IMAGE_TYPE,
@@ -1655,6 +1656,46 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
           yield* ask(request(ACCOUNT_INBOX, undefined)),
           refusal(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN),
         );
+      }),
+  );
+
+  it.effect(
+    "an answer to an item that asks nothing back reaches the agent as the developer's message where it carries a typed note, and a bare press is kept for the agent to read",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { post, answer } = yield* openInbox(eve);
+        const todo = (key: string) =>
+          post({
+            key,
+            title: "Turn on the agent-mail flag in staging",
+            response: { type: INBOX_RESPONSE.TODO },
+            needsReply: false,
+          });
+        const noted = yield* todo("flag-noted");
+        const bare = yield* todo("flag-bare");
+        assert.ok(Result.isSuccess(noted) && Result.isSuccess(bare));
+        const before = eve.sent.length;
+
+        const pressed = yield* answer(bare.success.id, {
+          revision: bare.success.revision,
+          clientKey: randomUUID(),
+          reply: INBOX_REPLY.DONE,
+        });
+        assert.equal(pressed.status, HOSTED_HTTP_STATUS.OK);
+        assert.equal(eve.sent.length, before, "a bare Done messages nobody");
+
+        const written = yield* answer(noted.success.id, {
+          revision: noted.success.revision,
+          clientKey: randomUUID(),
+          reply: INBOX_REPLY.DONE,
+          note: "Done, and on preview too.",
+        });
+        assert.equal(written.status, HOSTED_HTTP_STATUS.OK);
+        assert.equal(eve.sent.length, before + 1, "a typed note reaches the agent");
+        const handed = JSON.stringify(eve.sent.at(-1)?.message.message);
+        assert.ok(handed.includes(INBOX_ANSWER_LEAD), "it reads as an Inbox answer");
+        assert.ok(handed.includes("Done, and on preview too."), "it carries the note");
       }),
   );
 

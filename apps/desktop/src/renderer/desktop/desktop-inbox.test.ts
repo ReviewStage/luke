@@ -1114,6 +1114,137 @@ test("a press on the row already chosen hands the keyboard nowhere, so a later n
   elsewhere.remove();
 });
 
+test("an item that needs no reply says a bare press won't message the agent, and that a note typed in its box will", async () => {
+  const todo: InboxItem = {
+    ...item("a1b2c3d4-0000-4000-8000-000000000009", "Turn on the flag", 6_000),
+    response: { type: INBOX_RESPONSE.TODO },
+    needsReply: false,
+  };
+  inboxes = new Map([
+    [BILLING.id, [todo]],
+    [INVITES.id, [EXPIRY]],
+  ]);
+  const { page } = mount();
+  await settle();
+  act(() => rowNamed(page, "Turn on the flag").click());
+  const quiet = () => page.querySelector(".inbox-view-items [data-inbox-quiet]")?.textContent;
+  assert.equal(quiet(), "Without a note, this won't message the agent.");
+
+  const box = page.querySelector<HTMLTextAreaElement>(".inbox-view-items textarea");
+  assert.ok(box, "the item takes a note in its box");
+  const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+  act(() => {
+    setValue?.call(box, "Done on preview too.");
+    box.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  assert.equal(quiet(), "Your note will be sent to the agent.");
+});
+
+test("an item that needs no reply, once settled, says a note was sent to the agent and a bare press kept for it to read", async () => {
+  const quietDone = (id: string, title: string, at: number, note?: string): InboxItem => ({
+    ...item(id, title, at),
+    response: { type: INBOX_RESPONSE.TODO },
+    needsReply: false,
+    status: INBOX_STATUS.ANSWERED,
+    answeredBy: READER,
+    answer: { reply: INBOX_REPLY.DONE, ...(note === undefined ? undefined : { note }) },
+  });
+  inboxes = new Map([
+    [
+      BILLING.id,
+      [
+        quietDone(
+          "a1b2c3d4-0000-4000-8000-000000000010",
+          "Turn on the flag",
+          6_000,
+          "On preview too.",
+        ),
+        quietDone("a1b2c3d4-0000-4000-8000-000000000011", "Add the secret", 5_500),
+      ],
+    ],
+    [INVITES.id, [EXPIRY]],
+  ]);
+  const { page } = mount();
+  await settle();
+  const where = (title: string) => {
+    act(() => rowNamed(page, title).click());
+    const lines = page.querySelectorAll(".inbox-view-items [data-inbox-answer] p");
+    return wordsOf(lines[lines.length - 1]);
+  };
+  assert.match(where("Turn on the flag") ?? "", /· Sent to /u);
+  assert.match(where("Add the secret") ?? "", /Saved for the agent to read$/u);
+});
+
+test("an answered item that asked to be heard back, carried without its answer, still says it was sent to the agent", async () => {
+  const { answer: _dropped, ...bare } = RETRY;
+  inboxes = new Map([
+    [BILLING.id, [THRESHOLD, bare]],
+    [INVITES.id, [EXPIRY]],
+  ]);
+  const { page } = mount();
+  await settle();
+  act(() => rowNamed(page, "How is a failed email retried?").click());
+  const lines = page.querySelectorAll(".inbox-view-items [data-inbox-answer] p");
+  assert.match(wordsOf(lines[lines.length - 1]) ?? "", /· Sent to /u);
+});
+
+test("a note answered on an item that needs no reply reaches the agent, so the window reads its agents again, as it does for no bare press", async () => {
+  const todo = (id: string, title: string): InboxItem => ({
+    ...item(id, title, 6_000),
+    response: { type: INBOX_RESPONSE.TODO },
+    needsReply: false,
+  });
+  const noted = todo("a1b2c3d4-0000-4000-8000-000000000012", "Turn on the flag");
+  const bare = todo("a1b2c3d4-0000-4000-8000-000000000013", "Add the secret");
+  inboxes = new Map([
+    [BILLING.id, [noted, bare]],
+    [INVITES.id, [EXPIRY]],
+  ]);
+  const { page } = mount();
+  await settle();
+  const listReads: Act[] = [];
+  const bridge = window.luke;
+  Object.defineProperty(window, "luke", {
+    configurable: true,
+    value: {
+      ...bridge,
+      act: (request: Act) => {
+        if (request.kind === ACT_KIND.CODING_AGENTS_LIST) listReads.push(request);
+        if (request.kind === ACT_KIND.CODING_AGENTS_INBOX_ANSWER) {
+          const asked = request.payload.itemId === noted.id ? noted : bare;
+          const answered = { ...asked, status: INBOX_STATUS.ANSWERED, answeredBy: READER };
+          return Promise.resolve({
+            status: ACT_OUTCOME_STATUS.DONE,
+            value: { item: answered, taken: true },
+          });
+        }
+        return bridge.act(request);
+      },
+    },
+  });
+  const press = (name: string) =>
+    [...page.querySelectorAll<HTMLButtonElement>(".inbox-view-items button")].find(
+      (button) => button.textContent === name,
+    );
+
+  act(() => rowNamed(page, "Add the secret").click());
+  await act(async () => press("Done")?.click());
+  await settle();
+  assert.equal(listReads.length, 0, "a bare Done reaches no one, so nothing about the agent moved");
+
+  act(() => rowNamed(page, "Turn on the flag").click());
+  const box = page.querySelector<HTMLTextAreaElement>(".inbox-view-items textarea");
+  assert.ok(box);
+  const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+  act(() => {
+    setValue?.call(box, "On preview too.");
+    box.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await act(async () => press("Done")?.click());
+  await settle();
+  assert.ok(listReads.length > 0, "the agent heard the note, so its list is read again");
+});
+
 /** An answer the act gives the renderer, the view it carries settled now. */
 function answered(value: CodingAgentInboxAnswerView): Promise<ReadOutcome> {
   return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });

@@ -43,6 +43,7 @@ import {
   INBOX_STATUS,
   type InboxItem,
   type InboxReply,
+  inboxAnswerHeard,
   inboxAnswerMessage,
   inboxAnswerRequestSchema,
   inboxCursorSchema,
@@ -905,7 +906,8 @@ function retiredRefusal(refusal: HostedRefusal): boolean {
  * revision the agent has since moved on from, or an item no longer open,
  * is answered with the item as it stands and not taken. Otherwise the
  * answer is taken first, at the revision it names, and only then, where
- * the item asks to be heard back, handed to the agent as one of the
+ * the item asks to be heard back or the developer typed a note, handed to
+ * the agent as one of the
  * developer's messages under the answer's own key through the one steer
  * path (`coder-host/steer.ts`), so an answer the item no longer takes
  * never reaches the agent. A hand-off that fails, is interrupted, or dies
@@ -941,7 +943,9 @@ const inboxAnswerEndpoint = /* @__PURE__ */ Effect.fn("web/inboxAnswerEndpoint")
     if (Option.isNone(now)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
     return inboxAnswered(now.value.item, now.value.answerKey === clientKey);
   }
-  if (!taken.needsReply || taken.answer === undefined) return inboxAnswered(taken, true);
+  if (taken.answer === undefined || !inboxAnswerHeard(taken, taken.answer)) {
+    return inboxAnswered(taken, true);
+  }
   const answer = taken.answer;
   const handedOver = Effect.gen(function* () {
     const agent = yield* hostedStoreOrUnavailable(readCodingAgent(userId, taken.agentId));

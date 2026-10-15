@@ -585,6 +585,18 @@ function replyWords(reply: InboxReply): string {
 }
 
 /**
+ * Whether an answer reaches the agent as one of the developer's messages:
+ * every answer to an item that asks to be heard back, and any other carrying
+ * words the developer typed, since words are written to be read; a bare
+ * press on an item that asks nothing back, Done or Got it, is kept for the
+ * agent to read in its own time. The service hands an answer off by it, and
+ * the window says where an answer went and reads the agent again by it.
+ */
+export function inboxAnswerHeard(item: Pick<InboxItem, "needsReply">, reply: InboxReply): boolean {
+  return item.needsReply || (reply.note ?? "").trim() !== "";
+}
+
+/**
  * The message an answer reaches the agent as: a first line naming the item
  * by its key and title with what the developer did, then a form's values
  * one per line, then their note. Note that the title is put on one line,
