@@ -43,7 +43,7 @@ import { FileTreePane } from "./file-tree-pane";
 import { FileViewBar, useTreeSlide } from "./file-view";
 import { PullRequestMark } from "./pull-request-mark";
 import { OpenedBy, PullRequestPeople, ReviewComments, ReviewersLine } from "./pull-request-people";
-import type { CodingAgentsControl } from "./use-coding-agents";
+import type { CodingAgentsControl, HeldPeople } from "./use-coding-agents";
 
 /**
  * agent-changes-tab.tsx -- one agent's Changes tab in the side panel: its pull request's files drawn as a File tab draws a file, the chosen file's unified diff under the same bar and beside the same tree.
@@ -262,6 +262,14 @@ function FileDiff({ file }: { file: CodingAgentChangedFile }): React.JSX.Element
   );
 }
 
+/** Who a pull request names, as its tab last read them for that very pull request; none where the tab read them for another, or has not yet. */
+export function peopleOf(
+  held: HeldPeople | undefined,
+  pullRequest: Pick<CodingAgentPullRequest, "url">,
+): CodingAgentChangesPeople | undefined {
+  return held?.url === pullRequest.url ? held.people : undefined;
+}
+
 /**
  * The card a Changes tab hangs, and its row in the plan's summary, in a tab
  * card's look: the pull request's title with its mark and number at the
@@ -371,11 +379,17 @@ export function AgentChangesTab({
       </div>
     );
   }
-  if (pullRequest === null || shownFile === undefined) {
+  if (pullRequest === null) {
+    return <EmptyState icon={<FileDiffIcon />}>{CHANGES_WORDS.NO_PULL_REQUEST}</EmptyState>;
+  }
+  // A pull request that changes no file still names its people, over the line saying so.
+  if (shownFile === undefined) {
     return (
-      <EmptyState icon={<FileDiffIcon />}>
-        {pullRequest === null ? CHANGES_WORDS.NO_PULL_REQUEST : CHANGES_WORDS.EMPTY}
-      </EmptyState>
+      <div className="file-view ph-no-capture">
+        <PullRequestPeople people={pullRequest} agent={named} />
+        <ReviewComments comments={pullRequest.comments} agent={named} />
+        <EmptyState icon={<FileDiffIcon />}>{CHANGES_WORDS.EMPTY}</EmptyState>
+      </div>
     );
   }
   const count = pullRequest.files.length;

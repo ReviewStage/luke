@@ -19,7 +19,7 @@ import { afterEach, beforeEach, test } from "vitest";
 import { onRegistry } from "#testing/copy-feedback";
 import { codingAgentsControl } from "#testing/plans-control";
 import { MemberDirectory } from "../member-directory";
-import { AgentChangesTab, ChangesCard } from "./agent-changes-tab";
+import { AgentChangesTab, ChangesCard, peopleOf } from "./agent-changes-tab";
 import { agentSubject, NOTHING_HELD } from "./agent-ref";
 
 /**
@@ -260,4 +260,32 @@ test("a Changes card says who opened the pull request and its reviewers once its
   const read = await card(PEOPLE);
   assert.match(read.textContent ?? "", /Opened by.*Expiry job/u);
   assert.equal(read.querySelectorAll('[aria-label="Reviewers"] .actor-stack-face').length, 3);
+});
+
+test("a pull request that changes no file still says who it names and its review comments, over the line saying it changes nothing", async () => {
+  const tab = await draw(
+    createElement(AgentChangesTab, {
+      agentId: AGENT.id,
+      control: {
+        ...control,
+        readChanges: () =>
+          Promise.resolve({
+            pullRequest: { url: PULL_REQUEST.url, truncated: false, files: [], ...PEOPLE },
+          }),
+      },
+      shown: true,
+      repository: "acme/relay",
+      tree: { open: false, onToggle: () => undefined },
+    }),
+  );
+  assert.ok(tab.querySelector(".changes-people"), "the people stand");
+  assert.ok(tab.querySelector("details.changes-comments"), "the comments stand");
+  assert.match(tab.textContent ?? "", /This pull request changes no files\./u);
+});
+
+test("a card says the people its tab read only for the pull request they were read for", () => {
+  const held = { url: PULL_REQUEST.url, people: PEOPLE };
+  assert.equal(peopleOf(held, PULL_REQUEST), PEOPLE);
+  assert.equal(peopleOf(held, { url: "https://github.com/acme/relay/pull/43" }), undefined);
+  assert.equal(peopleOf(undefined, PULL_REQUEST), undefined);
 });
