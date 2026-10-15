@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { type AppLinkPlace, appLinkInArguments, appLinkInbox, placeOfAppLink } from "./app-links";
+import {
+  type AppLinkPlace,
+  appLinkInArguments,
+  appLinkInbox,
+  placeOfAppLink,
+} from "./app-links.js";
 
 /**
  * A Luke link the system hands the app: read only as a plan or a section

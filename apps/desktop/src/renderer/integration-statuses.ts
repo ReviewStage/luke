@@ -16,10 +16,10 @@ import {
   type IntegrationSignInFailure,
   type IntegrationStatus,
 } from "@luke/features/integration-wire";
+import { ACT_KIND } from "@luke/host/acts";
 import { Clock, Context, Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "./act";
 import { rendererRuntime } from "./renderer-runtime";
 

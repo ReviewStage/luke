@@ -49,7 +49,6 @@
     "@luke/gateway": "workspace:*",
     "@luke/host": "workspace:*",
     "@luke/live": "workspace:*",
-    "@luke/runtime": "workspace:*",
     "@luke/settings": "workspace:*",
     "@luke/ui": "workspace:*",
     "@luke/brand": "workspace:*",

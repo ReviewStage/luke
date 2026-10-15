@@ -11,11 +11,11 @@ import {
   terminalPortOutboundSchema,
 } from "@luke/features/terminal-acts";
 import { SANDBOX_STATE, type TerminalsAnswer } from "@luke/features/terminal-wire";
+import { ACT_KIND } from "@luke/host/acts";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { Duration, Effect, Option, Schema } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";
 import { rendererRuntime } from "../renderer-runtime";
 import type { TerminalFind, TerminalHandle } from "../terminal/contract";

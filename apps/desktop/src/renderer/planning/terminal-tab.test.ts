@@ -10,12 +10,6 @@ import {
   type TerminalRefusal,
 } from "@luke/features/terminal-acts";
 import { SANDBOX_STATE, type TerminalsAnswer } from "@luke/features/terminal-wire";
-import type { UnparsedWireValue } from "@luke/wire";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement } from "react";
-import { createRoot, type Root } from "react-dom/client";
-import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, beforeEach, test, vi } from "vitest";
 import {
   ACT_KIND,
   ACT_OUTCOME_STATUS,
@@ -23,7 +17,13 @@ import {
   type ActKind,
   type ActOutcome,
   type ActResultFor,
-} from "#shared/messages/acts";
+} from "@luke/host/acts";
+import type { UnparsedWireValue } from "@luke/wire";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
+import { act, createElement } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { renderToStaticMarkup } from "react-dom/server";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import { onRegistry } from "#testing/copy-feedback";
 import { codingAgentsControl } from "#testing/plans-control";
 import "../terminal/index";

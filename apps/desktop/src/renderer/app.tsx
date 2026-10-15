@@ -3,6 +3,13 @@ import { PRODUCT_SURFACE_EVENT } from "@luke/features/analytics";
 import { FEEDBACK_KIND, type FeedbackKind } from "@luke/features/feedback";
 import { MENTION_KIND, type PlanMention } from "@luke/features/mention-link";
 import { IDLE_PLANNING_VIEW } from "@luke/features/planning-view";
+import { ACT_KIND } from "@luke/host/acts";
+import {
+  type AppInboxPlan,
+  type AppInboxPlanHolding,
+  RUN_PROFILE,
+  sessionReplayBootstrap,
+} from "@luke/host/app-state";
 import { APP_SETTING_SCHEMA, type Experiment, VOICE_HOTKEY_NONE } from "@luke/settings";
 import { SETTINGS_VIEW, type SettingsLink, type SettingsView } from "@luke/settings/settings-views";
 import { fixtureUpdate } from "@luke/settings/update-row";
@@ -23,13 +30,6 @@ import {
 } from "@luke/voice/volume-hint";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ACT_KIND } from "#shared/messages/acts";
-import {
-  type AppInboxPlan,
-  type AppInboxPlanHolding,
-  RUN_PROFILE,
-  sessionReplayBootstrap,
-} from "#shared/messages/app-state";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "./act";
 import { runAppCommand, useAppCommand, useAppKeymap, useMenuCommands } from "./app-commands";

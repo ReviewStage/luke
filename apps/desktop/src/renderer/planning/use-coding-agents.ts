@@ -15,9 +15,9 @@ import {
 import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
 import type { IntegrationProvider } from "@luke/features/integration-wire";
 import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
+import { ACT_KIND, type ActPayload } from "@luke/host/acts";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ACT_KIND, type ActPayload } from "#shared/messages/acts";
 import type { ActHandle } from "../act";
 import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast";
 import {

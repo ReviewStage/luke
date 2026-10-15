@@ -8,11 +8,6 @@ import {
 } from "@luke/features/coding-agent-view";
 import { INBOX_CURSOR_START } from "@luke/features/inbox-wire";
 import type { PlanSummary } from "@luke/features/plan-wire";
-import { UPDATE_STATUS } from "@luke/settings/update";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement } from "react";
-import { createRoot } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
 import {
   ACT_KIND,
   ACT_OUTCOME_STATUS,
@@ -20,7 +15,12 @@ import {
   type ActKind,
   type ActOutcome,
   type ActResultFor,
-} from "#shared/messages/acts";
+} from "@luke/host/acts";
+import { UPDATE_STATUS } from "@luke/settings/update";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
+import { act, createElement } from "react";
+import { createRoot } from "react-dom/client";
+import { afterEach, beforeEach, test } from "vitest";
 import { onRegistry } from "#testing/copy-feedback";
 import { codingAgentsControl, plansControl } from "#testing/plans-control";
 import { DesktopInbox } from "./desktop/desktop-inbox";

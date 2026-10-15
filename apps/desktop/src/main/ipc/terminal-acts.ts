@@ -24,12 +24,12 @@ import {
   type TerminalsActAnswer,
   terminalPortInboundSchema,
 } from "@luke/features/terminal-acts";
+import { ACT, ACT_KIND } from "@luke/host/acts";
 import type { HostOperator } from "@luke/host/host-operator";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Effect, Result } from "effect";
 import type { WebContents } from "electron";
-import { ACT, ACT_KIND } from "#shared/messages/acts";
 import { ActRefused, type ActRows, type ActSender } from "../act-router";
 
 type TerminalActKind =

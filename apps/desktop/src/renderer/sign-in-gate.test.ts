@@ -7,10 +7,10 @@ import {
   type AccountProvider,
   type AccountSnapshot,
 } from "@luke/credentials/snapshot";
+import type { Act, ActOutcome } from "@luke/host/acts";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import type { Act, ActOutcome } from "#shared/messages/acts";
 import { SignInGate } from "./sign-in-gate";
 
 const ignore = () => undefined;

@@ -1,3 +1,4 @@
+import { ACT_KIND } from "@luke/host/acts";
 import type {
   AppSettingField,
   AppSettingValue,
@@ -6,7 +7,6 @@ import type {
 } from "@luke/settings/wire";
 import type { ActionResult } from "@luke/wire";
 import { useMemo } from "react";
-import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";
 
 export interface SettingsWrites {

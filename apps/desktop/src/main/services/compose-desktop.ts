@@ -1,5 +1,11 @@
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
 import {
+  AgentNoticeDoors,
+  type AgentNotices,
+  createAgentNotices,
+  noticePlanTitle,
+} from "@luke/host/agent-notices";
+import {
   type DuplicateGatewayMethod,
   HostAssemblyTag,
   type HostTag,
@@ -11,12 +17,6 @@ import { effectServiceLayer, serviceLayer } from "@luke/host/service-layer";
 import { APP_SETTING_SCHEMA, NO_EXPERIMENTS } from "@luke/settings";
 import { callInProgress } from "@luke/voice/voice-view";
 import { Context, Effect, Layer, Stream } from "effect";
-import {
-  AgentNoticeDoors,
-  type AgentNotices,
-  createAgentNotices,
-  noticePlanTitle,
-} from "../agent-notices";
 import { AppStateStore, initialAppState } from "../app-state";
 import { registerDesktopIpc } from "../ipc/register-desktop-ipc";
 import { createElectronUpdaterEngine } from "../update-installer";

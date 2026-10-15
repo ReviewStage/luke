@@ -1,5 +1,6 @@
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import { ACT_KIND } from "@luke/host/acts";
 import { UPDATE_STATUS } from "@luke/settings/update";
 import { updateInSidebar } from "@luke/settings/update-row";
 import { ExternalIcon, GearIcon, KeyboardIcon, ProviderMark, UpdateIcon, UserIcon } from "@luke/ui";
@@ -13,7 +14,6 @@ import {
   MessageSquareIcon,
   NewspaperIcon,
 } from "lucide-react";
-import { ACT_KIND } from "#shared/messages/acts";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "../act";
 import { runAppCommand } from "../app-commands";

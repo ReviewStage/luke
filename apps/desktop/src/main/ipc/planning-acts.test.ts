@@ -13,8 +13,6 @@ import {
 } from "@luke/features/planning-view";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { highlightSnippet } from "@luke/host";
-import { Effect } from "effect";
-import type { WebContents } from "electron";
 import {
   ACT,
   ACT_KIND,
@@ -22,7 +20,9 @@ import {
   ALREADY_INVITED_REFUSAL,
   GITHUB_LAST_SIGN_IN_REFUSAL,
   WORKSPACE_NOT_PERMITTED_REFUSAL,
-} from "#shared/messages/acts";
+} from "@luke/host/acts";
+import { Effect } from "effect";
+import type { WebContents } from "electron";
 import { type ActRows, type ActSender, createActRouter } from "../act-router";
 import { planningActRows } from "./planning-acts";
 

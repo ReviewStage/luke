@@ -1,6 +1,6 @@
 import { decodeMention, MENTION_KIND, type PlanMention } from "@luke/features/mention-link";
+import { ACT_KIND, isGitHubAddress, isWebAddress } from "@luke/host/acts";
 import { createContext, useCallback, useContext } from "react";
-import { ACT_KIND, isGitHubAddress, isWebAddress } from "#shared/messages/acts";
 import { useAct } from "../act";
 
 /**

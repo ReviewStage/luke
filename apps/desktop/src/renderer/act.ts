@@ -1,6 +1,3 @@
-import type { AppSettingField, AppSettingValue } from "@luke/settings";
-import type { SettingsUpdateResult } from "@luke/settings/wire";
-import { useMemo } from "react";
 import {
   ACT,
   ACT_KIND,
@@ -11,7 +8,10 @@ import {
   type ActPayload,
   type ActResultFor,
   type SettingUpdatePayload,
-} from "#shared/messages/acts";
+} from "@luke/host/acts";
+import type { AppSettingField, AppSettingValue } from "@luke/settings";
+import type { SettingsUpdateResult } from "@luke/settings/wire";
+import { useMemo } from "react";
 
 /** A kind that carries nothing is called with nothing; every other kind carries its own payload. */
 type ActArguments<Kind extends ActKind> =

@@ -16,7 +16,7 @@ import {
   type PlanningRevisionAnswer,
   type PlanningRevisionsAnswer,
 } from "@luke/features/planning-view";
-import { ACT_KIND } from "#shared/messages/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import { FIXTURE_CLOSED_PANEL } from "../planning/planning-fixture";
 import { ago, daysAgo, hoursAgo } from "./clock";
 import { codingAgentAnswers } from "./coding-agent";

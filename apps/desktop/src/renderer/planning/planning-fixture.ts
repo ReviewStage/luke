@@ -18,10 +18,10 @@ import {
   type TranscriptMessage,
 } from "@luke/features/transcript-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
+import { RUN_PROFILE } from "@luke/host/app-state";
 import { LIVE_STATUS, TRANSCRIPT_SPEAKER } from "@luke/live";
 import type { VoiceView } from "@luke/voice/voice-view";
 import type { WireRecord, WireValue } from "@luke/wire";
-import { RUN_PROFILE } from "#shared/messages/app-state";
 import { TOOL_STATE } from "../ai-elements/tool";
 import {
   SIDE_PANEL_TAB,

@@ -39,10 +39,10 @@ import {
   type ProviderKeysAnswerView,
 } from "@luke/features/coding-agent-view";
 import type { ModelChoice } from "@luke/features/models-wire";
+import { ACT, ACT_KIND } from "@luke/host/acts";
+import type { AgentNotices } from "@luke/host/agent-notices";
 import { Effect } from "effect";
-import { ACT, ACT_KIND } from "#shared/messages/acts";
 import { ActRefused, type ActRows, type ActSender } from "../act-router";
-import type { AgentNotices } from "../agent-notices";
 
 /**
  * coding-agent-acts.ts -- the Plans tab's coding-agent acts: the panel's asks of the host about a plan's agents.
@@ -51,7 +51,7 @@ import type { AgentNotices } from "../agent-notices";
  * only a panel draws a plan's agents, so every row refuses the takeover and
  * the hidden voice window. What the service answers comes back as the
  * panel's own answer; on its way it is noted by the notices
- * (`main/agent-notices.ts`), which hold where each agent stands so an end
+ * (`@luke/host/agent-notices`), which hold where each agent stands so an end
  * the panel is not looking at is still announced, and which plan's Inbox
  * the panel shows, so an item it is looking at is not. The plan's inbox is
  * answered to the panel alone: the notices watch what waits across the

@@ -6,12 +6,12 @@ import {
 import { PLAN_EDIT_REFUSAL } from "@luke/features/plan-edit";
 import { PLAN_ACTOR, type Plan, type PlanLastEdit } from "@luke/features/plan-wire";
 import { PLAN_CALL_FAILURE, type PlanningEditAnswer } from "@luke/features/planning-view";
+import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
 import { ResetIcon } from "@luke/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { HistoryIcon, InfoIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ACT_KIND } from "#shared/messages/acts";
 import { type ActHandle, useAct } from "../act";
 import { type EditReader, PlanBody } from "../planning/plan-body";
 import type { PlanEditDoor } from "../planning/use-plan-editing";

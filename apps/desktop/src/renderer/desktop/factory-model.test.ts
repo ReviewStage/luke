@@ -10,8 +10,8 @@ import type {
   PlanPullRequestLine,
   PlanSummary,
 } from "@luke/features/plan-wire";
+import type { AppInboxPlan } from "@luke/host/app-state";
 import { test } from "vitest";
-import type { AppInboxPlan } from "#shared/messages/app-state";
 import {
   EMPTY_MERGED,
   FACTORY_STEP,

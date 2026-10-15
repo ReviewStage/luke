@@ -141,9 +141,6 @@ importers:
       '@luke/live':
         specifier: workspace:*
         version: link:../../packages/live
-      '@luke/runtime':
-        specifier: workspace:*
-        version: link:../../packages/runtime
       '@luke/settings':
         specifier: workspace:*
         version: link:../../packages/settings

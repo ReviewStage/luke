@@ -8,6 +8,8 @@ import {
 } from "@luke/features/analytics";
 import { type VoiceLiveSessionChanged, voiceLiveSessionChangedSchema } from "@luke/gateway";
 import { type AgentWireTrace, isAgentWireTrace } from "@luke/gateway/devtrace";
+import { type Act, type ActOutcome, isActOutcome, parsedAct } from "@luke/host/acts";
+import { type AppStateSnapshot, isAppStateSnapshot } from "@luke/host/app-state";
 import { liveExchangeActive } from "@luke/live";
 import {
   isVoiceCommand,
@@ -25,8 +27,6 @@ import {
 import { readEither } from "@luke/wire/effect";
 import { wireResult as result, type WireGuard } from "@luke/wire/wire-guard";
 import { Result } from "effect";
-import { type Act, type ActOutcome, isActOutcome, parsedAct } from "./messages/acts";
-import { type AppStateSnapshot, isAppStateSnapshot } from "./messages/app-state";
 import { type AppCommand, isAppCommand } from "./shortcuts";
 
 type BridgeArguments = readonly unknown[];

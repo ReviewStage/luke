@@ -50,7 +50,7 @@ repeat) before staging; it is cheap to change now and expensive later.
 
 Fixture mode (`--fixture smoke`) signs in to nothing, answers every service
 read "unanswered", and stages only a few `--profile`s (`RUN_PROFILE` in
-`apps/desktop/src/shared/messages/app-state.ts`). Everything a picture needs
+`packages/host/src/app-state.ts`). Everything a picture needs
 beyond that is a throwaway patch, never committed, applied on the Mac to the
 release commit. Start from 0.12.0's, beside this file:
 

@@ -1,9 +1,9 @@
 import type { CodingAgentInboxParams } from "@luke/features/coding-agent-view";
 import type { PlanSummary } from "@luke/features/plan-wire";
+import { ACT_KIND } from "@luke/host/acts";
 import { FolderIcon, SearchIcon, WingFace } from "@luke/ui";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ACT_KIND } from "#shared/messages/acts";
 import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
 import { useAct } from "../act";
 import { runAppCommand } from "../app-commands";

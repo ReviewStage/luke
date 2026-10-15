@@ -1,11 +1,11 @@
 import { useAtomValue } from "@effect/atom-react/Hooks";
+import type { AppStateSnapshot } from "@luke/host/app-state";
 import { type Experiment, experimentOn, NO_EXPERIMENTS } from "@luke/settings";
 import { type AppSettingsView, appSettingsView } from "@luke/settings/wire";
 import { type Cause, Data, Effect, Option, Queue, Stream } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import type { AppStateSnapshot } from "#shared/messages/app-state";
 import { rendererRegistry, rendererRuntime } from "./renderer-runtime";
 
 /** The two bridge calls a window reads its state through, and nothing else. */

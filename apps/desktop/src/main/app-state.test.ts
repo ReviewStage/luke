@@ -3,12 +3,12 @@ import { it } from "@effect/vitest";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import { PLAN_WORK_STATE } from "@luke/features/planning-view";
 import { runModeFor } from "@luke/host";
+import { type AppState, sessionReplayBootstrap } from "@luke/host/app-state";
 import type { HostBootstrap } from "@luke/host/host-operator";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { IDLE_VOICE_VIEW } from "@luke/voice/voice-view";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { Context, Effect, Fiber, Stream } from "effect";
-import { type AppState, sessionReplayBootstrap } from "#shared/messages/app-state";
 import {
   AppStateStore,
   bootstrapPatch,

@@ -13,7 +13,7 @@
  */
 
 import type { CodingAgentChangesAnswerView } from "@luke/features/coding-agent-view";
-import { ACT_KIND } from "#shared/messages/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import { FIXTURE_CLOSED_PANEL } from "../planning/planning-fixture";
 import { pullRequestFiles } from "./changes-files";
 import { codingAgentAnswers } from "./coding-agent";

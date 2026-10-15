@@ -48,7 +48,6 @@ import type {
   PlanningWorkspaceParams,
 } from "@luke/features/planning-view";
 import { GITHUB_DISCONNECT_FAILURE } from "@luke/features/planning-view";
-import { Effect } from "effect";
 import {
   ACT,
   ACT_KIND,
@@ -56,7 +55,8 @@ import {
   GITHUB_LAST_SIGN_IN_REFUSAL,
   isGitHubAddress,
   WORKSPACE_NOT_PERMITTED_REFUSAL,
-} from "#shared/messages/acts";
+} from "@luke/host/acts";
+import { Effect } from "effect";
 import { ActRefused, type ActRows, type ActSender } from "../act-router";
 
 /**

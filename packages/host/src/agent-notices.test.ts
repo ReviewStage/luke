@@ -15,7 +15,6 @@ import {
 import { INBOX_CURSOR_START } from "@luke/features/inbox-wire";
 import { Duration, Effect, Layer, Queue, Stream } from "effect";
 import { TestClock } from "effect/testing";
-import type { AppInboxPlan, AppInboxPlanHolding } from "#shared/messages/app-state";
 import {
   type AgentEndToast,
   type AgentNotice,
@@ -23,7 +22,8 @@ import {
   type AgentPlace,
   createAgentNotices,
   type InboxItemToast,
-} from "./agent-notices";
+} from "./agent-notices.js";
+import type { AppInboxPlan, AppInboxPlanHolding } from "./app-state.js";
 
 const PLAN_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";

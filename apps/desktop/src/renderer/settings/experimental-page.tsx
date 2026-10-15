@@ -1,7 +1,7 @@
+import { ACT_KIND } from "@luke/host/acts";
 import { type ExperimentChoices, type ExperimentEntry, experimentOn } from "@luke/settings";
 import { EXPERIMENT_ANCHOR } from "@luke/settings/settings-anchors";
 import { FlaskConicalIcon } from "lucide-react";
-import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";
 import { EmptyState } from "../empty-state";
 import { useOpenFeedback } from "../open-feedback";

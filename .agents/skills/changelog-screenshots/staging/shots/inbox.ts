@@ -24,7 +24,7 @@ import {
   type InboxAnswer,
   type InboxItem,
 } from "@luke/features/inbox-wire";
-import { ACT_KIND } from "#shared/messages/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import { FIXTURE_CLOSED_PANEL } from "../planning/planning-fixture";
 import { MAIN_TAB } from "../planning/use-main-tabs";
 import { ago } from "./clock";

@@ -271,7 +271,7 @@ PR that finishes the callers it was for, not left as a name on an allowlist.
 `SchemaRead` (`@luke/wire`) is the boundary result vocabulary a Schema
 decode answers when the result crosses IPC or the wire — a `Result` inside a
 process, a `SchemaRead` where a caller on the other side of a process boundary
-reads it: `apps/desktop/src/shared/messages/acts.ts`,
+reads it: `packages/host/src/acts.ts`,
 `packages/wire/src/effect/json-schema.ts`, and
 `packages/database/src/models/message-reads.ts` all produce or read it.
 

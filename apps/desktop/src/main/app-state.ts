@@ -1,11 +1,11 @@
 import { isDeepStrictEqual } from "node:util";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { IDLE_PLANNING_VIEW } from "@luke/features/planning-view";
+import type { AppState } from "@luke/host/app-state";
 import type { HostBootstrap } from "@luke/host/host-operator";
 import { idleUpdateSnapshot } from "@luke/host/update-service";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { type Context, Effect, type Stream, SubscriptionRef } from "effect";
-import type { AppState } from "#shared/messages/app-state";
 import type { DesktopConfig } from "./services/desktop-config";
 
 type AppStateSlice = Exclude<keyof AppState, "version">;

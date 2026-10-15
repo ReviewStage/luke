@@ -142,7 +142,7 @@ export interface AppInboxPlanHolding {
 
 /**
  * What waits on the developer across the account's plans, as main's own
- * read of it last answered (`main/agent-notices.ts`): each plan with an
+ * read of it last answered (`@luke/host/agent-notices`): each plan with an
  * open inbox item, the plan whose item changed latest first. What the
  * sidebar's Inbox counts, and what an item's toast is withdrawn by once it
  * no longer waits. Main's, because main holds that read whichever plan is

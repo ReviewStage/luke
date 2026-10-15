@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import path from "node:path";
+import { appLinkInbox } from "@luke/features/app-links";
 import { test } from "vitest";
 import { type BootstrapApp, bootstrapDesktop } from "./bootstrap";
-import { appLinkInbox } from "./window/app-links";
 
 /** Every call the bootstrap makes of Electron's app, in the order it made them. */
 const recordingApp = (

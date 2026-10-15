@@ -9,13 +9,13 @@ import {
 } from "@luke/features/mention-link";
 import { planSections } from "@luke/features/plan-document";
 import { PLAN_TREE_ENTRY } from "@luke/features/plan-wire";
+import { ACT_KIND } from "@luke/host/acts";
 import { DocumentIcon, ProviderMark } from "@luke/ui";
 import type { SkillOption } from "@luke/ui/skill-mention";
 import { fileFolder, fileName } from "@luke/voice/code-pane-model";
 import { defaultFilter } from "cmdk";
 import { BookOpenIcon, FolderIcon, HashIcon } from "lucide-react";
 import { type RefObject, useEffect, useId, useState } from "react";
-import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";
 import { type IntegrationToolsReads, useIntegrationTools } from "../integration-tools";
 import type { ComposerTrigger, MentionNode } from "../plan-editor/contract";

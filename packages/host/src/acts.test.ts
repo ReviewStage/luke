@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { ACT_KIND, parsedAct } from "./acts";
+import { ACT_KIND, parsedAct } from "./acts.js";
 
 test("an envelope that is not one act of a named kind is refused whole", () => {
   assert.equal(parsedAct(undefined), undefined);
