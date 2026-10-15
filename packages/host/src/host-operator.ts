@@ -43,6 +43,7 @@ import {
   type CodingAgentModelsAnswer,
   type CodingAgentPageAnswerView,
   type CodingAgentPageParams,
+  type CodingAgentPictureParams,
   type CodingAgentPullRequestAnswerView,
   type CodingAgentPullRequestParams,
   type CodingAgentRenameParams,
@@ -526,6 +527,10 @@ export interface HostOperator {
   /** One image of an inbox item, fetched under the account; its bytes in base64 under its media type, or why there is none. */
   codingAgentInboxAttachment(
     params: CodingAgentInboxAttachmentParams,
+  ): Effect.Effect<CodingAgentInboxAttachmentView>;
+  /** One picture a tool answered an agent or one of its workers, read under the account: its bytes in base64 under its type, or why there is none. */
+  codingAgentPicture(
+    params: CodingAgentPictureParams,
   ): Effect.Effect<CodingAgentInboxAttachmentView>;
   onSettingsChanged(listener: (change: HostSettingsChange) => void): () => void;
   onAccountChanged(listener: (account: AccountSnapshot) => void): () => void;
@@ -1471,6 +1476,11 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           itemId: params.itemId,
           attachmentId: params.attachmentId,
         }),
+        codingAgentAnswer(codingAgentInboxAttachmentViewSchema),
+      ),
+    codingAgentPicture: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_PICTURE, params),
         codingAgentAnswer(codingAgentInboxAttachmentViewSchema),
       ),
     onSettingsChanged: (listener) =>

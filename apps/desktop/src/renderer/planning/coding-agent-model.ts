@@ -49,7 +49,14 @@ import {
   personActor,
   SOMEONE_REASON,
 } from "@luke/ui/actor-model";
-import { isRecord, isWireString, MESSAGE_ROLE, type WireValue } from "@luke/wire";
+import {
+  ACTION_RESULT_STATUS,
+  isRecord,
+  isWireString,
+  MESSAGE_ROLE,
+  type UnparsedWireValue,
+  type WireValue,
+} from "@luke/wire";
 import { TOOL_STATE, type ToolState } from "../ai-elements/tool";
 import { GLYPH_STATE, type GlyphState, glyphStateWords } from "../state-glyph";
 import { remoteCallOf, TOOL_TARGET, todosView, toolTarget } from "./tool-call-model";
@@ -1118,28 +1125,69 @@ function runConnectionCalls(parts: readonly AgentPart[]): ReadonlySet<string> {
   );
 }
 
+type ToolPart = Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }>;
+
+/** Whether a part is a `show_image` call that showed its pictures, which a reader reads as their own and never folds away. */
+function isShownSet(part: AgentPart): part is ToolPart {
+  return (
+    part.kind === AGENT_PART.TOOL &&
+    part.tool === AGENT_TOOL.SHOW_IMAGE &&
+    part.state === TOOL_STATE.OUTPUT_AVAILABLE &&
+    isRecord(part.output) &&
+    part.output.status === ACTION_RESULT_STATUS.ACCEPTED
+  );
+}
+
+function listOf(value: UnparsedWireValue, key: string): readonly WireValue[] {
+  if (!isRecord(value)) return [];
+  const list = value[key];
+  return Array.isArray(list) ? list : [];
+}
+
+/** Two shown sets as one: the first's call, both sets' pictures in order. */
+function joinedSets(first: ToolPart, second: ToolPart): ToolPart {
+  return {
+    ...first,
+    input: { images: [...listOf(first.input, "images"), ...listOf(second.input, "images")] },
+    output: {
+      status: ACTION_RESULT_STATUS.ACCEPTED,
+      pictures: [...listOf(first.output, "pictures"), ...listOf(second.output, "pictures")],
+    },
+  };
+}
+
 /**
  * The parts of a message a row is drawn from: every part but a step
  * boundary, a kind this build does not draw, and a `connection_execute`
- * whose integration's own call stands in the message. Note that such a
- * wrapper is left out, because the call it ran is the same call told
- * twice, and that one with no such call, or one that failed, keeps its
- * row, because its row is where it, or its error, is read.
+ * whose integration's own call stands in the message; and every run of
+ * shown sets, one straight after another, joined into one set, as the
+ * parallel calls of one step are meant to be. Note that such a wrapper is
+ * left out, because the call it ran is the same call told twice, and that
+ * one with no such call, or one that failed, keeps its row, because its row
+ * is where it, or its error, is read.
  */
 function drawnParts(message: CodingAgentMessage): readonly AgentPart[] {
   const parts = agentParts(message);
   const ran = runConnectionCalls(parts);
-  return parts.filter(
-    (part) =>
-      part.kind !== AGENT_PART.STEP_START &&
-      part.kind !== AGENT_PART.OTHER &&
-      !(
-        part.kind === AGENT_PART.TOOL &&
-        part.tool === CONNECTION_TOOL.EXECUTE &&
-        part.state !== TOOL_STATE.OUTPUT_ERROR &&
-        ran.has(part.callId)
-      ),
-  );
+  const drawn: AgentPart[] = [];
+  for (const part of parts) {
+    if (part.kind === AGENT_PART.STEP_START || part.kind === AGENT_PART.OTHER) continue;
+    if (
+      part.kind === AGENT_PART.TOOL &&
+      part.tool === CONNECTION_TOOL.EXECUTE &&
+      part.state !== TOOL_STATE.OUTPUT_ERROR &&
+      ran.has(part.callId)
+    ) {
+      continue;
+    }
+    const last = drawn.at(-1);
+    if (last !== undefined && isShownSet(last) && isShownSet(part)) {
+      drawn[drawn.length - 1] = joinedSets(last, part);
+    } else {
+      drawn.push(part);
+    }
+  }
+  return drawn;
 }
 
 /**
@@ -1151,7 +1199,8 @@ function drawnParts(message: CodingAgentMessage): readonly AgentPart[] {
  * its agent's does, since a run of calls reads the same whoever made it.
  * The agent's newest to-do list, named by the call that wrote it
  * (`newestTodos`), stays out of a finished turn's fold, so the list
- * standing is never folded away.
+ * standing is never folded away, and so does every set of pictures the
+ * agent showed, which is its answer as much as its words are.
  */
 export function agentRows(
   message: CodingAgentMessage,
@@ -1167,7 +1216,8 @@ export function agentRows(
     failed: (part) =>
       part.kind === AGENT_PART.TOOL &&
       (workers.get(part.callId) ?? part.state) === TOOL_STATE.OUTPUT_ERROR,
-    kept: (part) => part.kind === AGENT_PART.TOOL && part.callId === newestTodos,
+    kept: (part) =>
+      (part.kind === AGENT_PART.TOOL && part.callId === newestTodos) || isShownSet(part),
   };
   return turnRows(parts, reading, {
     key: message.id,

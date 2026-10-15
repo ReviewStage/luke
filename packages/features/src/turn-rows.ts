@@ -58,6 +58,8 @@ export const CALL_KIND = {
   START_AGENT: "start-agent",
   END_CALL: "end-call",
   SHOW_PAGE: "show-page",
+  /** Pictures a coding agent showed from its sandbox (`show_image`), drawn as a row only where the call was refused; a shown set draws as its pictures. */
+  SHOW_IMAGE: "show-image",
   OTHER: "other",
 } as const;
 
@@ -94,6 +96,7 @@ export const CALL_WORDS = {
   [CALL_KIND.START_AGENT]: { verb: "Started a coding agent", code: false },
   [CALL_KIND.END_CALL]: { verb: "Ended the call", code: false },
   [CALL_KIND.SHOW_PAGE]: { verb: "Showed a page:", code: false },
+  [CALL_KIND.SHOW_IMAGE]: { verb: "Showed", code: true },
   [CALL_KIND.OTHER]: { verb: "Used", code: true },
 } as const satisfies Record<CallKind, { verb: string; code: boolean }>;
 

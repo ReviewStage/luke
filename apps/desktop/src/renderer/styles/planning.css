@@ -3522,6 +3522,113 @@ button.picture-frame {
   margin-right: var(--space-4);
 }
 
+/* Several pictures an agent showed at once (`agent-pictures.tsx`): one
+   justified row of two or three, each at its own shape and captioned under
+   it, the row stretched to the column so they share a height; more stand as
+   thumbnails of one height that wrap, the last drawn saying how many more. */
+.picture-set {
+  max-width: 100%;
+  margin: var(--space-12) 0;
+}
+
+.picture-set-tiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.picture-set-tile {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  max-width: 100%;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  cursor: zoom-in;
+  font: inherit;
+  text-align: left;
+}
+
+.picture-set-tile:focus-visible .picture-set-frame {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.picture-set-frame {
+  position: relative;
+  display: grid;
+  width: 100%;
+  place-items: center;
+  border: 1px solid var(--hairline);
+  border-radius: var(--control-radius);
+  background: var(--section-fill);
+  color: var(--text-secondary);
+  overflow: clip;
+}
+
+.picture-set-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.picture-set-frame > svg {
+  width: 16px;
+  height: 16px;
+}
+
+.picture-set-caption {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 0.9em;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.picture-set-more {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, #000 52%, transparent);
+  color: #fff;
+  font-size: 17px;
+  font-weight: 600;
+}
+
+/* The pictures an integration's call answered: the message box's chips,
+   set in under the row's words, a picture not kept saying so. */
+.call-pictures {
+  margin: 2px 0 6px 28px;
+}
+
+.call-picture[data-state] .attached-file-face {
+  display: grid;
+  width: 64px;
+  height: 48px;
+  place-items: center;
+  color: var(--text-secondary);
+}
+
+.call-picture[data-state="too-large"] .attached-file-face,
+.call-picture[data-state="limit"] .attached-file-face,
+.call-picture[data-state="unsupported"] .attached-file-face {
+  display: flex;
+  width: auto;
+  gap: var(--space-4);
+  padding: 0 var(--space-8);
+}
+
+.call-picture svg {
+  width: 14px;
+  height: 14px;
+}
+
 /* A version's change to a picture: written in on the green edge, struck out
    dimmed behind the red, as its words would be (`markdown-message.tsx`'s
    change marks); the mark lends it no wash of its own. */

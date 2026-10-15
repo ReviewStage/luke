@@ -145,8 +145,18 @@ const MENTION_ELEMENT = {
   TARGET: "to",
 } as const;
 
-/** The mention's element, let through the drawing's sanitizer with its target. */
-const MENTION_TAGS = { [MENTION_ELEMENT.TAG]: [MENTION_ELEMENT.TARGET] };
+/** The element a picture's Markdown is drawn as, and the attributes that carry its address and its words. */
+const PICTURE_ELEMENT = {
+  TAG: "luke-picture",
+  ADDRESS: "to",
+  WORDS: "words",
+} as const;
+
+/** The mention's element and the picture's, let through the drawing's sanitizer with what each carries. */
+const MENTION_TAGS = {
+  [MENTION_ELEMENT.TAG]: [MENTION_ELEMENT.TARGET],
+  [PICTURE_ELEMENT.TAG]: [PICTURE_ELEMENT.ADDRESS, PICTURE_ELEMENT.WORDS],
+};
 
 /** A node of the words, as markdown reads them or as they are drawn, as much of one as its words are told by. */
 interface WordsNode {
@@ -158,6 +168,7 @@ interface WordsNode {
 /** A node of the words as markdown reads them, which a mention's link is marked on: a link's target, or the label a reference link and its definition share. */
 interface MarkdownNode extends WordsNode {
   readonly url?: string;
+  readonly alt?: string | null;
   readonly identifier?: string;
   readonly children?: readonly MarkdownNode[];
   data?: { hName?: string; hProperties?: Record<string, string> };
@@ -210,9 +221,57 @@ function definitionsIn(
   return found;
 }
 
-/** The step that marks a transcript's links, a reference link's read through its definition. */
+/**
+ * Marks every picture in the words to be drawn as its own element, which
+ * names it as a link to where it points and never draws it, because a
+ * picture an agent writes is a request to wherever its address points the
+ * moment the tab opens, and a model's words must make none; the pictures an
+ * agent shows are its `show_image` calls'. Note that the mark is made on
+ * the markdown, before the drawing's hardening reads a picture at all,
+ * which draws a relative one as a placeholder of its own and an absolute
+ * one as nothing.
+ */
+function markPictures(node: MarkdownNode, definitions: ReadonlyMap<string, string>): void {
+  const address =
+    node.type === "image"
+      ? node.url
+      : node.type === "imageReference" && node.identifier !== undefined
+        ? definitions.get(node.identifier)
+        : undefined;
+  if (node.type === "image" || node.type === "imageReference") {
+    node.data = {
+      hName: PICTURE_ELEMENT.TAG,
+      hProperties: {
+        [PICTURE_ELEMENT.ADDRESS]: address ?? "",
+        [PICTURE_ELEMENT.WORDS]: node.alt ?? "",
+      },
+    };
+    return;
+  }
+  for (const child of node.children ?? []) markPictures(child, definitions);
+}
+
+/** The step that marks a transcript's links and its pictures, a reference's read through its definition. */
 function markLinks(tree: MarkdownNode): void {
-  markMentions(tree, definitionsIn(tree));
+  const definitions = definitionsIn(tree);
+  markMentions(tree, definitions);
+  markPictures(tree, definitions);
+}
+
+/** What a picture with no words of its own is called where it is named. */
+const UNNAMED_PICTURE = "Picture";
+
+/** A picture in a transcript's words: a link to where it points, with the picture's glyph, never drawn. */
+function PictureElement({ node }: ExtraProps): ReactNode {
+  const address = String(node?.properties[PICTURE_ELEMENT.ADDRESS] ?? "");
+  const said = String(node?.properties[PICTURE_ELEMENT.WORDS] ?? "");
+  const words = said === "" ? UNNAMED_PICTURE : said;
+  return (
+    <TranscriptLink href={address === "" ? undefined : address} words={words}>
+      <ImageIcon className="picture-outside-glyph" aria-hidden="true" />
+      {words}
+    </TranscriptLink>
+  );
 }
 
 /** The markdown steps a transcript is read with: the library's own, then the mark on its links. */
@@ -242,7 +301,8 @@ function MentionElement({ node, children }: ExtraProps & { children?: ReactNode 
 /**
  * How a transcript's markdown is drawn: at the panel's scale, its code and
  * tables as `transcript-markdown.tsx` draws them, its links as
- * {@link TranscriptLink}, but never as an image, because an image is a
+ * {@link TranscriptLink}, and its pictures as links to where they point
+ * ({@link PictureElement}), never as an image, because an image is a
  * request to wherever its address points the moment the tab opens, and
  * nothing said on a call or written by a model should make one.
  */
@@ -255,6 +315,7 @@ const TRANSCRIPT_COMPONENTS: Components = {
     </TranscriptLink>
   ),
   [MENTION_ELEMENT.TAG]: MentionElement,
+  [PICTURE_ELEMENT.TAG]: PictureElement,
   img: () => null,
 };
 
@@ -380,6 +441,7 @@ const CALL_ICON = {
   [CALL_KIND.START_AGENT]: PlayIcon,
   [CALL_KIND.END_CALL]: PhoneOffIcon,
   [CALL_KIND.SHOW_PAGE]: AppWindowIcon,
+  [CALL_KIND.SHOW_IMAGE]: ImageIcon,
   [CALL_KIND.OTHER]: WrenchIcon,
 } as const satisfies Record<CallKind, LucideIcon>;
 

@@ -125,6 +125,7 @@ const KEPT: ProviderKeySummary = {
 };
 
 const ATTACHMENT_ID = "9b8a7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d";
+const PICTURE_ID = "4fb17055-c16e-4293-bea5-7a8b9cadbec5";
 
 const ITEM: InboxItem = {
   id: "5e2d7c3a-1b4f-4e6a-8c9d-0f1e2d3c4b5a",
@@ -320,6 +321,11 @@ function fakeService() {
         asked.push(`attachment:${itemId}:${attachmentId}`);
         return { contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw0KGgo=" };
       }),
+    agentPicture: (agentId, pictureId, callId) =>
+      Effect.sync(() => {
+        asked.push(`picture:${agentId}:${pictureId}:${callId ?? ""}`);
+        return { contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw0KGgo=" };
+      }),
     answerInbox: (itemId, request) =>
       Effect.sync(() => {
         asked.push(
@@ -492,6 +498,14 @@ it.effect("each method asks the service once and answers what it said, whole", (
       { contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw0KGgo=" },
     );
     assert.deepEqual(
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_PICTURE, {
+        agentId: AGENT_ID,
+        pictureId: PICTURE_ID,
+        callId: "call-worker",
+      }),
+      { contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw0KGgo=" },
+    );
+    assert.deepEqual(
       yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_ANSWER, {
         itemId: ITEM.id,
         revision: 2,
@@ -537,6 +551,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `changes:${AGENT_ID}`,
       `inbox:${PLAN_ID}:${INBOX_CURSOR_START}`,
       `attachment:${ITEM.id}:${ATTACHMENT_ID}`,
+      `picture:${AGENT_ID}:${PICTURE_ID}:call-worker`,
       `answer:${ITEM.id}:2:${INBOX_REPLY.DECLINED}:Not before the freeze lifts.:answer-1`,
       `account-inbox:${INBOX_CURSOR_START}`,
     ]);

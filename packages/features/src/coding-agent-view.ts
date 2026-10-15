@@ -386,6 +386,15 @@ export const codingAgentInboxAttachmentParamsSchema = EffectSchema.Struct({
 
 export type CodingAgentInboxAttachmentParams = typeof codingAgentInboxAttachmentParamsSchema.Type;
 
+/** One picture a tool answered an agent, or one of its workers where `callId` names the delegation call that started it. */
+export const codingAgentPictureParamsSchema = EffectSchema.Struct({
+  agentId: EffectSchema.NonEmptyString,
+  pictureId: EffectSchema.NonEmptyString,
+  callId: EffectSchema.optionalKey(EffectSchema.NonEmptyString),
+});
+
+export type CodingAgentPictureParams = typeof codingAgentPictureParamsSchema.Type;
+
 /**
  * The image, as the window hears it: its bytes in base64 under the media
  * type the service sniffed and kept, which the window draws from a `data:`
