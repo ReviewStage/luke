@@ -214,7 +214,8 @@ press opens Luke and which says what to check when nothing opens.
 
 Settings › Experimental turns on features before they are finished. Automations
 start a coding agent on a schedule, on a GitHub event in the workspace's
-repositories, or from a webhook, for you or the whole workspace, and its page
+repositories (choosing whose events, at which moments, and whether drafts and
+forks count), or from a webhook, for you or the whole workspace, and its page
 lists its runs, each opening the agent it started. An agent an automation
 started belongs to no task: it has a page of its own, its questions wait in
 the Inbox under its automation, and it says what started it. The Factory is a
@@ -231,6 +232,7 @@ read-only board of every task, from Plan to Build to Ship, beside the Inbox.
 [#2768](https://github.com/ReviewStage/luke/pull/2768),
 [#2770](https://github.com/ReviewStage/luke/pull/2770),
 [#2805](https://github.com/ReviewStage/luke/pull/2805),
+[#2780](https://github.com/ReviewStage/luke/pull/2780),
 [#2799](https://github.com/ReviewStage/luke/pull/2799),
 [#2674](https://github.com/ReviewStage/luke/pull/2674),
 [#2720](https://github.com/ReviewStage/luke/pull/2720),
@@ -261,6 +263,11 @@ read-only board of every task, from Plan to Build to Ship, beside the Inbox.
   Workspace and managed on GitHub
   ([#2642](https://github.com/ReviewStage/luke/pull/2642),
   [#2644](https://github.com/ReviewStage/luke/pull/2644))
+- Start a task without a name: it stands as Untitled until you name it
+  ([#2888](https://github.com/ReviewStage/luke/pull/2888))
+- An Inbox item standing alone says where it stands, 2 of 8, and steps through
+  the list by its arrows, J, and K
+  ([#2882](https://github.com/ReviewStage/luke/pull/2882))
 - A task counts as read the moment it opens, on whichever of its tabs
   ([#2900](https://github.com/ReviewStage/luke/pull/2900))
 - A pinned task is pinned for you alone, not for the whole workspace
@@ -344,6 +351,8 @@ read-only board of every task, from Plan to Build to Ship, beside the Inbox.
   ([#2769](https://github.com/ReviewStage/luke/pull/2769))
 - Fixed a picture on its own line opening in the plan editor as something you
   could not edit ([#2886](https://github.com/ReviewStage/luke/pull/2886))
+- Fixed a menu's second submenu item not opening its submenu on hover
+  ([#2917](https://github.com/ReviewStage/luke/pull/2917))
 - Fixed Luke's face moving on the sign-in screen
   ([#2891](https://github.com/ReviewStage/luke/pull/2891))
 - Fixed an agent's to-do list sitting off its rows' text, its item in progress
