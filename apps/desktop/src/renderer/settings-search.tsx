@@ -4,11 +4,13 @@ import type { Workspace } from "@luke/features/workspace-wire";
 import {
   APP_SETTING_SCHEMA,
   describedSettings,
+  EXPERIMENTS,
   type SettingsRowsInput,
   settingFieldForId,
   settingIdVisible,
 } from "@luke/settings";
 import {
+  EXPERIMENT_ANCHOR,
   SETTINGS_SEARCH_ANCHOR_ATTRIBUTE,
   SETTINGS_SEARCH_ROW,
 } from "@luke/settings/settings-anchors";
@@ -101,6 +103,9 @@ const SHORTCUT_WORDS = "keyboard shortcut hotkey key chord record remove delete 
 /** The words every integration's row can be found by, beside its own name. */
 const INTEGRATION_WORDS = "connect disconnect integration mcp";
 
+/** The words every experiment's row answers to beside its own name, the ones other apps call the same page by. */
+const EXPERIMENT_WORDS = "experiment preview beta labs early try";
+
 /** The words every window shortcut answers to, which change nothing and so offer no removal. */
 const WINDOW_SHORTCUT_WORDS = "keyboard shortcut key chord";
 
@@ -131,6 +136,17 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           haystack: ["Sign out", "account sign out log out"],
         }
       : undefined,
+    // Each experiment's row on Experimental, drawn once an account is signed in: found by its name and what it brings.
+    ...EXPERIMENTS.map((entry) =>
+      input.accountDrawn
+        ? {
+            id: EXPERIMENT_ANCHOR[entry.key],
+            label: entry.name,
+            page: SETTINGS_VIEW.EXPERIMENTAL,
+            haystack: [entry.name, entry.detail, EXPERIMENT_WORDS],
+          }
+        : undefined,
+    ),
     // Each integration's row on its page, drawn once an account is signed in and anchored by its provider.
     ...INTEGRATION_PROVIDER_LIST.map((provider) =>
       input.accountDrawn

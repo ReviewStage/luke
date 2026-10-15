@@ -1,6 +1,6 @@
 import type { AccountSnapshot } from "@luke/credentials/snapshot";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
-import { NO_EXPERIMENTS } from "@luke/settings";
+import { EXPERIMENTS, NO_EXPERIMENTS } from "@luke/settings";
 import { SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
 import type { AppSettingsView } from "@luke/settings/wire";
 import { microphoneAccessRow, voiceAttentionNote } from "@luke/voice/microphone-access";
@@ -15,6 +15,7 @@ import type { SettingsSearchInput } from "../settings-search";
 import { AccountSection } from "./account-section";
 import { AppearanceSection } from "./appearance-page";
 import { CodingAgentsPage } from "./coding-agents-page";
+import { ExperimentalPage } from "./experimental-page";
 import { type IntegrationsFilter, IntegrationsSection } from "./integrations-page";
 import { MacCommandsSection } from "./mac-commands-section";
 import { NotificationsSection } from "./notifications-section";
@@ -171,6 +172,14 @@ export function SettingsPanel({
 
       {view === SETTINGS_VIEW.THIS_MAC && panelView ? (
         <MacCommandsSection view={panelView} writes={writes} />
+      ) : null}
+
+      {view === SETTINGS_VIEW.EXPERIMENTAL ? (
+        <ExperimentalPage
+          entries={EXPERIMENTS}
+          experiments={settings?.experiments ?? NO_EXPERIMENTS}
+          signedIn={signedIn}
+        />
       ) : null}
 
       {view === SETTINGS_VIEW.ABOUT ? <UpdatesSection control={updates} /> : null}

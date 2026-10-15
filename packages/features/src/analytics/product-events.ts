@@ -228,6 +228,7 @@ export const PRODUCT_SETTINGS_VIEW = {
   ACCOUNT: "account",
   NOTIFICATIONS: "notifications",
   THIS_MAC: "this_mac",
+  EXPERIMENTAL: "experimental",
   ABOUT: "about",
 } as const;
 

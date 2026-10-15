@@ -41,7 +41,8 @@
         "src/entry-server.tsx",
         "server/db/migrate.ts",
         "scripts/*.ts",
-        "server/feedback.mjs"
+        "server/feedback.mjs",
+        "server/feedback.d.mts"
       ],
       "project": ["src/**", "server/**", "scripts/**", "tests/**"]
     },

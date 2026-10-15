@@ -26,6 +26,8 @@ export const SETTINGS_PAGE = {
   NOTIFICATIONS: "notifications",
   /** What this Mac lets agents do on it: the stored switch for running commands here. */
   THIS_MAC: "this-mac",
+  /** The features the account can turn on before they are finished, each the account's on the service rather than a stored setting. */
+  EXPERIMENTAL: "experimental",
   /** The running version, its updates, and the changelog. */
   ABOUT: "about",
 } as const;

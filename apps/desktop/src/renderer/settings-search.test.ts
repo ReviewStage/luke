@@ -110,3 +110,36 @@ test("searching GitHub while signed in finds Integrations' GitHub row and nothin
     false,
   );
 });
+
+/** Where `query` leads on the Experimental page, signed in or not. */
+function experimentalFound(query: string, accountDrawn: boolean): readonly string[] {
+  const input: SettingsSearchInput = {
+    settings: settingsView(),
+    voiceControlsDrawn: false,
+    accountDrawn,
+  };
+  const found = searchSettings(settingsSearchEntries(input), query);
+  return (found?.groups ?? [])
+    .filter((group) => group.page === SETTINGS_VIEW.EXPERIMENTAL)
+    .flatMap((group) => group.items.map((entry) => entry.label));
+}
+
+test("an experiment is found by its name, what it brings, and what other apps call the page, while signed in", () => {
+  for (const query of ["Factory", "Plan to Build to Ship", "Experimental", "beta", "labs"]) {
+    assert.deepEqual(experimentalFound(query, true), ["Factory"], query);
+  }
+  assert.deepEqual(experimentalFound("Factory", false), []);
+});
+
+test("no two rows the search can land on wear the same id", () => {
+  const ids = settingsSearchEntries({
+    settings: settingsView(),
+    voiceControlsDrawn: true,
+    accountDrawn: true,
+    workspace: TEAM,
+  }).map((entry) => entry.id);
+  assert.deepEqual(
+    ids.filter((id, at) => ids.indexOf(id) !== at),
+    [],
+  );
+});

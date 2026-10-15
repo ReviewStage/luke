@@ -1,3 +1,5 @@
+import { EXPERIMENT, type Experiment } from "./experiments.js";
+
 /**
  * How a row says a pressed search result may land on it, and the ids the rows
  * that are not settings wear.
@@ -35,3 +37,14 @@ export const SETTINGS_SEARCH_ROW = {
   API_KEY_ANTHROPIC: "api-key-anthropic",
   API_KEY_OPENAI: "api-key-openai",
 } as const;
+
+/**
+ * The id each experiment's row in Settings › Experimental wears, spelled out
+ * rather than its bare key, since a gated feature's own command is likely to
+ * share that key and its row on the Keyboard shortcuts page anchors by the
+ * command. Total over the registry, so a new experiment does not build
+ * without one.
+ */
+export const EXPERIMENT_ANCHOR = {
+  [EXPERIMENT.FACTORY]: "experiment-factory",
+} as const satisfies Record<Experiment, string>;

@@ -128,6 +128,7 @@ const SETTINGS_PAGES = [
   "Appearance",
   "Notifications",
   "This Mac",
+  "Experimental",
   "About",
   "Keyboard shortcuts",
 ];

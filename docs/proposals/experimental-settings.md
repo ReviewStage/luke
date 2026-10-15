@@ -7,6 +7,29 @@ no intro text, and the empty Inbox's empty state with a title in place of a
 one-line note. It is being built as the stack §4 describes. Where what
 shipped differs from this text, the text says what shipped.
 
+## As built
+
+These are the places where the stack differs from the text below:
+
+- **Factory's entry landed with the registry** (PR 1, `EXPERIMENT.FACTORY`),
+  so Factory's view (#2608) could gate on it from the start. Its `since` is
+  the day it was added rather than a release.
+- **`experiment:toggle` is counted by the host's write** (PR 2), beside the
+  write itself, rather than by the page.
+- **The hook lives in `renderer/use-app-state.ts`**: `useExperiment` and
+  `experimentOnNow`, beside `appSettingsView`.
+- **The experiments ride the settings snapshot** (`AppSettings.experiments`)
+  rather than a slice of their own.
+- **No "+" entry tag was built.** No experiment has a "+" entry yet; the
+  first one to need it adds the tag, as the shortcut table's was added.
+- **Feedback names the experiment by its key's shape.** The feedback contract
+  sits below the settings vocabulary, so the submission carries the key as a
+  fixed-shape slug, checked by both readers. The mail's subject reads "Luke
+  feedback on the factory experiment".
+- **The empty state reads "No experiments right now"** over "New features show
+  up here to try before they ship.", on the window's own `EmptyState`, which
+  gained a `title`. A signed-out page says "Sign in to try experiments."
+
 Dean's ask: "I want to build the thin version of Factory. HOWEVER, I want to
 add an Experimental settings tab that gates features. Can we plan this out
 first?"
