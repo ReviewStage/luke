@@ -160,7 +160,7 @@ test("a teammate's agent's card says it was started by them, their disc and name
   assert.equal(teammateStarter(AGENT.startedBy, undefined), undefined);
 
   const { card } = await agentNamed(DEAN.userId);
-  const line = card.querySelector(".actor-line") ?? assert.fail("the card names its starter");
+  const line = card.querySelector(".actor-words") ?? assert.fail("the card names its starter");
   const starter = line.querySelector<HTMLElement>(".actor-ref") ?? assert.fail("as an actor");
   assert.equal(line.firstChild?.textContent, "Started by ");
   assert.equal(starter.dataset.kind, "person");
@@ -180,7 +180,7 @@ test("a teammate's agent's card says it was started by them, their disc and name
 
 test("the starter's name on an agent's card hangs their own card over it, read only, and the agent's card stays standing beneath", async () => {
   const { card } = await agentNamed(DEAN.userId);
-  const starter = card.querySelector(".actor-line .actor-ref") ?? assert.fail("the starter");
+  const starter = card.querySelector(".actor-words .actor-ref") ?? assert.fail("the starter");
   assert.equal(starter.tagName, "SPAN", "a person has no page to press through to");
 
   hover(starter);
@@ -263,8 +263,8 @@ async function macPlace(
 test("a command an agent ran on a Mac says whose, by their disc and name: a teammate's, the reader's own, or the reader's where the window cannot tell", async () => {
   const theirs = await macPlace(CHARLES, DEAN.userId);
   assert.equal(theirs.querySelector(".actor-ref .actor-ref-name")?.textContent, "Charles Pan’s");
-  assert.equal(theirs.querySelector(".actor-line")?.lastChild?.textContent, " Mac");
-  assert.equal(theirs.querySelector(".actor-line")?.firstChild?.textContent, "On ");
+  assert.equal(theirs.querySelector(".actor-words")?.lastChild?.textContent, " Mac");
+  assert.equal(theirs.querySelector(".actor-words")?.firstChild?.textContent, "On ");
   act(() => root?.unmount());
 
   const yours = await macPlace(CHARLES, CHARLES.userId);

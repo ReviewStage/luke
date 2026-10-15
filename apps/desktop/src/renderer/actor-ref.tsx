@@ -328,7 +328,7 @@ export function CardDoor({
  * row drops a run of spaces standing alone.
  */
 export function ActorLine({ children }: { children: ReactNode }): React.JSX.Element {
-  return <span className="actor-line">{children}</span>;
+  return <span className="actor-words">{children}</span>;
 }
 
 /**

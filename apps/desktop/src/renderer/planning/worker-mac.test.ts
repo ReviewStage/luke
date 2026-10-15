@@ -99,7 +99,7 @@ async function workerTabFor(reader: string): Promise<string> {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
   // The place's words, the owner's disc left out of them.
-  const place = container.querySelector(".actor-line") ?? assert.fail("the row says whose Mac");
+  const place = container.querySelector(".actor-words") ?? assert.fail("the row says whose Mac");
   const disc = place.querySelector(".actor-mark") ?? assert.fail("by the owner's disc");
   return (place.textContent ?? "").replace(disc.textContent ?? "", "");
 }
