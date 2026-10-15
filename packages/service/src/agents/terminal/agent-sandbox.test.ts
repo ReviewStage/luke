@@ -4,6 +4,7 @@ import { SANDBOX_STATE } from "@luke/features/terminal-wire";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
 import { Effect, Layer, Redacted, Result } from "effect";
 import { afterEach, vi } from "vitest";
+import { sandboxListRefusal } from "../../testing/vercel-sandbox-fake.js";
 import { SandboxUnavailable } from "../vercel-sandbox-api.js";
 import { AgentSandbox, agentSandboxLayer, SHELL_REFUSAL } from "./agent-sandbox.js";
 import { TMUX_EXIT } from "./tmux.js";
@@ -98,12 +99,15 @@ function vercel(
           session: { id: "sbs_resumed", status: "running" },
         });
       }
-      return Response.json({
-        sandboxes:
-          status === undefined
-            ? []
-            : [{ name: SANDBOX, status, currentSessionId: RUNNING_SESSION }],
-      });
+      return (
+        sandboxListRefusal(parsed) ??
+        Response.json({
+          sandboxes:
+            status === undefined
+              ? []
+              : [{ name: SANDBOX, status, currentSessionId: RUNNING_SESSION }],
+        })
+      );
     }),
   );
   return { layer, asked, policies };

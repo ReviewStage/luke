@@ -3,6 +3,7 @@ import { it } from "@effect/vitest";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
 import { Effect, Layer } from "effect";
 import { afterEach, vi } from "vitest";
+import { sandboxListRefusal } from "../testing/vercel-sandbox-fake.js";
 import { SessionSandboxes, sessionSandboxesLayer } from "./session-sandboxes.js";
 import { SandboxUnavailable } from "./vercel-sandbox-api.js";
 
@@ -44,7 +45,7 @@ function vercel(sandboxes: readonly object[], stopStatus = 200) {
       asked.push({ method: init.method ?? "GET", url: parsed });
       return parsed.pathname.endsWith("/stop")
         ? new Response("{}", { status: stopStatus })
-        : Response.json({ sandboxes });
+        : (sandboxListRefusal(parsed) ?? Response.json({ sandboxes }));
     }),
   );
   return { layer, asked };
