@@ -19,7 +19,10 @@ import { useAct } from "./act";
  * opener, a person opens nothing either.
  */
 
-const OpenPersonContext = createContext<((userId: string) => void) | undefined>(undefined);
+/** Opens a person's page by their account id, with the name the place knows them by. */
+type OpenPerson = (userId: string, name?: string) => void;
+
+const OpenPersonContext = createContext<OpenPerson | undefined>(undefined);
 
 /** Hands the window's opener for a person's page to everything under it. */
 export const OpenPersonProvider = OpenPersonContext.Provider;
@@ -48,9 +51,10 @@ export function useActorDoor(actor: Actor): (() => void) | undefined {
       return () => openPerson(userId);
     }
     case ACTOR_KIND.SOMEONE: {
-      const { userId } = actor;
+      // Note that someone who left is opened with the name the place knows them by, because their page may find them nowhere else.
+      const { userId, name } = actor;
       if (actor.reason !== SOMEONE_REASON.FORMER || userId === undefined) return undefined;
-      return () => openPerson(userId);
+      return () => openPerson(userId, name);
     }
     case ACTOR_KIND.GITHUB: {
       const url = githubPageOf(actor.login, actor.bot);

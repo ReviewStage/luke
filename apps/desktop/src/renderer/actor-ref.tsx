@@ -263,12 +263,16 @@ const OPEN_ON_GITHUB = "Open on GitHub";
 export function PersonCard({
   actor,
   latest,
+  onOpen,
 }: {
   actor: PersonActor;
   /** Their latest activity in this plan, in a line: "Edited Rollout · 2h ago". */
   latest?: ReactNode;
+  /** Where the place naming them sends a press instead of their page, which the card's door goes to as well. */
+  onOpen?: (() => void) | undefined;
 }): React.JSX.Element {
-  const door = useActorDoor(actor);
+  const ownDoor = useActorDoor(actor);
+  const door = onOpen ?? ownDoor;
   return (
     <HoverCard data-actor-card={actor.kind}>
       <ActorHead
@@ -325,11 +329,14 @@ const SOMEONE_NOTES = {
 /** Someone's card: the name the service still holds for a member who left, and why the window says no more. */
 function SomeoneCard({
   actor,
+  onOpen,
 }: {
   actor: Extract<Actor, { kind: typeof ACTOR_KIND.SOMEONE }>;
+  onOpen?: (() => void) | undefined;
 }): React.JSX.Element {
   const former = actor.reason === SOMEONE_REASON.FORMER;
-  const door = useActorDoor(actor);
+  const ownDoor = useActorDoor(actor);
+  const door = onOpen ?? ownDoor;
   return (
     <HoverCard data-actor-card={actor.kind}>
       <ActorHead
@@ -355,8 +362,15 @@ const GITHUB_WORDS = {
 } as const;
 
 /** Someone on GitHub's card: their face, their login, whether they are a person or an App's bot, that a person is no member here, and the way to their page on GitHub. */
-function GitHubCard({ actor }: { actor: GitHubActor }): React.JSX.Element {
-  const door = useActorDoor(actor);
+function GitHubCard({
+  actor,
+  onOpen,
+}: {
+  actor: GitHubActor;
+  onOpen?: (() => void) | undefined;
+}): React.JSX.Element {
+  const ownDoor = useActorDoor(actor);
+  const door = onOpen ?? ownDoor;
   return (
     <HoverCard data-actor-card={actor.kind}>
       <div className="actor-card-head">
@@ -435,15 +449,15 @@ export function AutomationCard({
   );
 }
 
-/** The card an actor hangs where the place naming it adds nothing: a person's, someone's, or a GitHub account's; none for the rest, whose name stands as a pill. */
-function actorCard(actor: Actor): ReactNode {
+/** The card an actor hangs where the place naming it adds nothing: a person's, someone's, or a GitHub account's, its door the place's own where it hands one; none for the rest, whose name stands as a pill. */
+function actorCard(actor: Actor, onOpen?: () => void): ReactNode {
   switch (actor.kind) {
     case ACTOR_KIND.PERSON:
-      return <PersonCard actor={actor} />;
+      return <PersonCard actor={actor} onOpen={onOpen} />;
     case ACTOR_KIND.SOMEONE:
-      return <SomeoneCard actor={actor} />;
+      return <SomeoneCard actor={actor} onOpen={onOpen} />;
     case ACTOR_KIND.GITHUB:
-      return <GitHubCard actor={actor} />;
+      return <GitHubCard actor={actor} onOpen={onOpen} />;
     default:
       return undefined;
   }
@@ -482,7 +496,7 @@ export function ActorRef({
     </>
   );
   return (
-    <Tooltip label={actorName(actor)} card={card ?? actorCard(actor)}>
+    <Tooltip label={actorName(actor)} card={card ?? actorCard(actor, onOpen)}>
       {open === undefined ? (
         <span className="actor-ref" data-kind={actor.kind}>
           {inner}
