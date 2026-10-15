@@ -13,7 +13,7 @@ import { sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
 import { CODING_AGENT_BRIEF, CONTEXT_WINDOW } from "@luke/features/coding-agent-wire";
 import { INBOX_TOOL } from "@luke/features/inbox-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
-import { Effect, Option, Result, type Schema } from "effect";
+import { Effect, Option, type Redacted, Result, type Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionContext } from "eve/context";
@@ -45,7 +45,6 @@ import {
 } from "../brain-host/conversation.js";
 import type { SessionPromptRecord } from "../brain-host/host.js";
 import { type RelayStanding, type RelayStateStore, StreamRelay } from "../brain-host/relay.js";
-import { setGitHubCredentials } from "../github-credentials.js";
 import {
   type ReadWebPageResult,
   ResearchBudget,
@@ -59,7 +58,7 @@ import { CODER, CODER_MODEL_FIXTURE, CODER_REFUSAL, type CoderRefusal } from "./
 import {
   agentCiReadable,
   agentCoAuthor,
-  agentGitHubCredentials,
+  agentRepositoryToken,
   CheckoutRefused,
   type CheckoutServices,
   checkOutAgentRepository,
@@ -86,6 +85,12 @@ import {
   recordPlanEdit,
 } from "./plan-edit.js";
 import type { CoderHostSeams } from "./production.js";
+import {
+  openPullRequest,
+  PULL_REQUEST_UNAVAILABLE,
+  type PullRequestToolResult,
+  pullRequestRejected,
+} from "./pull-request.js";
 import { runShowImage, SHOW_IMAGE_REFUSAL, showImageRejected } from "./show-image.js";
 import { agentSkills } from "./skills.js";
 import { titleCodingAgent, titleSubagent } from "./title.js";
@@ -206,16 +211,15 @@ export interface CoderHost extends HostAdmission {
     admitted: AdmittedConversation,
     agent: CodingAgent,
   ): Effect.Effect<readonly AgentSkill[], never, CheckoutServices>;
-  /** The agent's repository checked out into the sandbox, with its GitHub credentials set at the sandbox's firewall. */
+  /** The agent's repository checked out into the sandbox; answers the write token for the caller to set at the firewall. */
   checkOut(
     admitted: AdmittedConversation,
     sandbox: RepositorySandbox,
-  ): Effect.Effect<void, CheckoutFailure, CheckoutServices>;
-  /** The agent's GitHub credentials minted afresh and set at the sandbox's firewall, in place of the standing ones once they are old. */
-  renewCredentials(
+  ): Effect.Effect<Redacted.Redacted, CheckoutFailure, CheckoutServices>;
+  /** A fresh write token for the agent's repository, for the firewall once the standing one is old. */
+  repositoryToken(
     admitted: AdmittedConversation,
-    sandbox: RepositorySandbox,
-  ): Effect.Effect<void, CheckoutFailure, CheckoutServices>;
+  ): Effect.Effect<Redacted.Redacted, CheckoutFailure, CheckoutServices>;
   /**
    * The branch checked out in the sandbox as the turn ended, written on the
    * agent's row for its pull request to be read from; null where the
@@ -255,6 +259,11 @@ export interface CoderHost extends HostAdmission {
     input: UnparsedWireValue,
     takenInTurn: number,
   ): Effect.Effect<PlanEditResult, never, DatabaseServices>;
+  /** Opens the agent's pull request (`pull-request.ts`): as its developer where it writes as them, as the App otherwise. */
+  openPullRequest(
+    admitted: AdmittedConversation,
+    input: UnparsedWireValue,
+  ): Effect.Effect<PullRequestToolResult, never, CheckoutServices>;
   /** Runs one of the agent's inbox tools (`inbox.ts`): a post, a close, or a read of its own items. */
   inbox(
     admitted: AdmittedConversation,
@@ -532,14 +541,10 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         checkOutAgentRepository(admitted.target, agent, sandbox),
       ),
 
-    renewCredentials: (admitted, sandbox) =>
-      Effect.gen(function* () {
-        const agent = yield* agentOrRefused(admitted);
-        const credentials = yield* agentGitHubCredentials(admitted.target, agent);
-        yield* setGitHubCredentials(sandbox, credentials).pipe(
-          Effect.mapError((refused) => new CheckoutRefused({ reason: refused.reason })),
-        );
-      }),
+    repositoryToken: (admitted) =>
+      Effect.flatMap(agentOrRefused(admitted), (agent) =>
+        Effect.map(agentRepositoryToken(admitted.target, agent), (minted) => minted.token),
+      ),
 
     recordBranch: (admitted, sandbox) =>
       Effect.gen(function* () {
@@ -633,6 +638,16 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
       }).pipe(
         Effect.tapError(logStoreFailure),
         Effect.catch(() => Effect.succeed(pictureNotLooked(PICTURE_LOOK_REFUSAL.UNAVAILABLE))),
+      ),
+
+    openPullRequest: (admitted, input) =>
+      Effect.gen(function* () {
+        const found = yield* agentOf(admitted);
+        if (Result.isFailure(found)) return pullRequestRejected(found.failure);
+        return yield* openPullRequest(admitted.target, found.success, input);
+      }).pipe(
+        Effect.tapError(logStoreFailure),
+        Effect.catch(() => Effect.succeed(pullRequestRejected(PULL_REQUEST_UNAVAILABLE))),
       ),
 
     showPage: (admitted, input, sandbox) =>

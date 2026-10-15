@@ -50,6 +50,7 @@ export const AGENT_TOOL = {
   POST_TO_INBOX: INBOX_TOOL.POST,
   CLOSE_INBOX_ITEM: INBOX_TOOL.CLOSE,
   READ_INBOX: INBOX_TOOL.READ,
+  OPEN_PULL_REQUEST: "open_pull_request",
   // eve's own, which loads one of the skills a session is offered.
   LOAD_SKILL: "load_skill",
   // An interactive page shown in the plan's side panel.

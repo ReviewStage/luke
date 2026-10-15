@@ -428,8 +428,8 @@ own retention policy.
 address, the address of your profile picture, and which of the two you used.
 An account made with Google can also link a GitHub account to itself, even
 one under a different email address, in Settings › Integrations, which lets
-agents use GitHub tools as you, and lets a coding agent you start open its
-pull request as you; signing in with GitHub, or linking it,
+agents use GitHub tools as you, and lets our service open the pull request
+of a coding agent you start as you; signing in with GitHub, or linking it,
 authorizes the Luke GitHub App: its token reaches only
 repositories where you installed the App and can already see, with the App's
 permissions (reading a repository's details; reading and writing its contents,
@@ -873,7 +873,7 @@ only when you press Send.
   minutes after you last typed, unless a turn is running, and a stopped
   sandbox comes back only when you resume it. While a terminal is connected,
   the agent's GitHub access at the sandbox's firewall is kept fresh, so what
-  you run there reaches GitHub as the agent does, never holding a token
+  you run there reaches GitHub as the agent does, never holding the token
   itself.
 - Anthropic, for titles. As a coding agent's turn completes, until it has a
   title and for its first three turns at most, our service asks a small Claude
@@ -889,15 +889,19 @@ only when you press Send.
   the App mints for that one repository, set at the sandbox's network
   boundary and never inside it. Where you started the agent, in the app or
   by asking Luke, you signed in with GitHub (or linked it), and your GitHub
-  account may push to the repository, the agent writes as you: its commits name your GitHub account
-  at the private noreply address GitHub gives it, each with Luke's App as
-  co-author, and its pull request, and anything else it asks of GitHub's
-  API, goes out on your own GitHub App token, set at the same boundary and
-  never inside it, so GitHub shows them as yours with the App's badge.
-  Otherwise, and always for an agent an automation started, its commits and
-  pull request are the App's own, under its bot, and name no one's GitHub
-  account, and the agent opens its pull request with the App's token. Which
-  of the two an agent writes as is kept with it. Where the installation has
+  account may push to the repository, the agent writes as you: its commits
+  name your GitHub account at the private noreply address GitHub gives it,
+  each with Luke's App as co-author, and our service opens its pull request
+  as you, with your own GitHub App token, in one request to GitHub for that
+  one repository. Your token is used on our service alone and never reaches
+  the agent's sandbox, so neither the agent nor anyone with a terminal in it
+  holds it; everything else the agent asks of GitHub, such as a comment or
+  marking a draft ready, goes out as the App. Where GitHub refuses your
+  token, the App opens the pull request in your place and the agent keeps
+  why. Otherwise, and always for an agent an automation started, its commits
+  and pull request are the App's own, under its bot, and name no one's
+  GitHub account. Which of the two an agent writes as is kept with it.
+  Where the installation has
   accepted it, the agent also reads its pull request's checks and the logs of
   failed runs with that token, which land in its transcript like any other
   command's output. GitHub also tells our service, signed with a secret it
@@ -908,9 +912,10 @@ only when you press Send.
   the App mints on the workspace's installation the pull request's number,
   title, link, state, checks,
   and size of change, and the branch's latest commit, and keeps them with the
-  agent until the task is deleted. Our service also reads from GitHub, through the workspace's installation and
-  storing none of it, a file or folder you open, a pull request's
-  changed files for the Changes tab, and a repository's skills.
+  agent until the task is deleted. Our service also reads from GitHub, through
+  the workspace's installation and storing none of it, a file or folder you
+  open, a pull request's changed files for the Changes tab, and a repository's
+  skills.
 - Vercel Connect and Linear, if you connect Linear: Vercel Connect keeps
   Linear's token, and our service sends each Linear call, with its input, to
   Linear's MCP server, which keeps it under Linear's own policy.

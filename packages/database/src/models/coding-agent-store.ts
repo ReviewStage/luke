@@ -113,7 +113,8 @@ import type { ConversationTarget } from "./writer.js";
  * agent by its id still finds it, so its transcript and pull request stand.
  * Who the agent writes as on GitHub is settled once, by its first session,
  * and a later session's word is answered with the one standing rather than
- * written over it.
+ * written over it; it is written over only where the developer's token was
+ * refused as the service opened the agent's pull request, with why.
  * Every function is an effect over the ambient `SqlClient` and names no
  * database of its own.
  */
@@ -627,6 +628,18 @@ const settleAgentAuthor = SqlSchema.findOneOption({
         .set({ author: sql`coalesce(${codingAgent.author}, ${author})` })
         .where(reachableAgent(userId, agentId))
         .returning({ author: codingAgent.author }),
+    ),
+});
+
+const updateAgentAuthor = SqlSchema.void({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    agentId: Schema.String,
+    author: AuthorColumnSchema,
+  }),
+  execute: ({ userId, agentId, author }) =>
+    Database.use((db) =>
+      db.update(codingAgent).set({ author }).where(reachableAgent(userId, agentId)),
     ),
 });
 
@@ -1205,6 +1218,20 @@ export function settleCodingAgentAuthor(
   return Effect.map(settleAgentAuthor({ userId, agentId, author }), (row) =>
     Option.map(row, (settled) => settled.author),
   );
+}
+
+/**
+ * The agent's author recorded over whatever stood, which is how an agent
+ * that wrote as its developer records why the App opened its pull request
+ * once their token was refused; nothing for an agent of a workspace the
+ * account is not in.
+ */
+export function recordCodingAgentAuthor(
+  userId: string,
+  agentId: string,
+  author: CodingAgentAuthor,
+): CodingAgentStoreEffect<void> {
+  return updateAgentAuthor({ userId, agentId, author });
 }
 
 /** The agent whose conversation this is, which is what an eve session admitted for the conversation runs; nothing for an agent of a workspace the account is not in, or no agent's. */

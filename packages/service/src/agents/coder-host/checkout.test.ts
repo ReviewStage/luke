@@ -16,7 +16,7 @@ import {
   AUTOMATION_TRIGGER,
 } from "@luke/features/automation-wire";
 import { CODING_AGENT_AUTHOR, type CodingAgentAuthor } from "@luke/features/coding-agent-wire";
-import { Effect, Option } from "effect";
+import { Effect, Option, Redacted } from "effect";
 import { LINK_OUTCOME } from "../../github/github-installations.js";
 import {
   connectWorkspaceGitHub,
@@ -34,9 +34,8 @@ import { agentCoAuthor, checkOutAgentRepository } from "./checkout.js";
 /**
  * A coding agent's checkout: the repository cloned whole into its sandbox
  * through the firewall on a write token minted for that one repository,
- * which the sandbox's commands and output never carry; and the firewall
- * then set for the session's own `git` and `gh`, the App's token for `git`
- * and, for GitHub's API, the developer's own where the agent writes as them.
+ * which the sandbox's commands and output never carry, and handed back for
+ * the session's own `gh` and `git`; no developer's own token ever is.
  * Who the agent writes as: the developer who started it, on their GitHub
  * account with the App's bot as co-author, where their sign-in may push to
  * the repository; the App's bot otherwise, and always for an agent an
@@ -75,17 +74,6 @@ function carriesToken(text: string): boolean {
   return [GITHUB_FIXTURE_INSTALLATION_TOKEN, TOKEN_HEADER, DEVELOPER_TOKEN].some((token) =>
     text.includes(token),
   );
-}
-
-/** The firewall as the session's commands find it: the App's token for `git`, and the API's bearer given. */
-function sessionPolicy(apiToken: string) {
-  return {
-    allow: {
-      "*": [],
-      "github.com": [{ transform: [{ headers: { authorization: TOKEN_HEADER } }] }],
-      "api.github.com": [{ transform: [{ headers: { authorization: `Bearer ${apiToken}` } }] }],
-    },
-  };
 }
 
 /** GitHub as the developer's token reads it: their account, and the repository with whether they may push to it. */
@@ -173,7 +161,7 @@ const authorOf = (userId: string, agent: CodingAgent) =>
 
 it.layer(getTestDB())("a coding agent's checkout", (it) => {
   it.effect(
-    "the repository is cloned whole at its default branch with a write token at the firewall for the clone alone, no token reaches a command or its output, and a developer whose GitHub may not push leaves the commits and the API the App's",
+    "the repository is cloned whole at its default branch with a write token at the firewall for the clone alone, no token reaches a command or its output, and a developer whose GitHub may not push leaves the commits the App's",
     () =>
       Effect.gen(function* () {
         const installation = installationOf(7);
@@ -181,8 +169,11 @@ it.layer(getTestDB())("a coding agent's checkout", (it) => {
         const github = githubReaching([installation], undefined, {}, developerReach(false));
         const sandbox = sandboxDouble(() => undefined);
 
-        yield* checkOutAgentRepository(target, agent, sandbox).pipe(Effect.provide(github.layer));
+        const token = yield* checkOutAgentRepository(target, agent, sandbox).pipe(
+          Effect.provide(github.layer),
+        );
 
+        assert.equal(Redacted.value(token), GITHUB_FIXTURE_INSTALLATION_TOKEN);
         assert.deepEqual(sandbox.clones, [
           {
             repository: RELAY_FULL_NAME,
@@ -210,11 +201,7 @@ it.layer(getTestDB())("a coding agent's checkout", (it) => {
             },
           },
         ]);
-        // The clone's own rule is withdrawn as it ends, and the session's set after it.
-        assert.deepEqual(sandbox.policies.slice(-2), [
-          "allow-all",
-          sessionPolicy(GITHUB_FIXTURE_INSTALLATION_TOKEN),
-        ]);
+        assert.equal(sandbox.policies.at(-1), "allow-all");
         for (const run of sandbox.runs) {
           assert.equal(carriesToken(JSON.stringify(run)), false);
         }
@@ -242,7 +229,7 @@ it.layer(getTestDB())("a coding agent's checkout", (it) => {
   );
 
   it.effect(
-    "a developer whose GitHub may push authors the commits with the App's bot as co-author, and the API speaks as them while git still pushes as the App",
+    "a developer whose GitHub may push authors the commits with the App's bot as co-author, and the sandbox is still handed the App's token alone",
     () =>
       Effect.gen(function* () {
         const installation = installationOf(9);
@@ -250,16 +237,21 @@ it.layer(getTestDB())("a coding agent's checkout", (it) => {
         const github = githubReaching([installation], undefined, {}, developerReach(true));
         const sandbox = sandboxDouble(() => undefined);
 
-        yield* checkOutAgentRepository(target, agent, sandbox).pipe(Effect.provide(github.layer));
+        const token = yield* checkOutAgentRepository(target, agent, sandbox).pipe(
+          Effect.provide(github.layer),
+        );
         const coAuthor = yield* agentCoAuthor(target, agent).pipe(Effect.provide(github.layer));
 
+        assert.equal(Redacted.value(token), GITHUB_FIXTURE_INSTALLATION_TOKEN);
         assert.deepEqual(sandbox.identities, [
           {
             name: DEVELOPER.name,
             email: `${DEVELOPER.id}+${DEVELOPER.login}@users.noreply.github.com`,
           },
         ]);
-        assert.deepEqual(sandbox.policies.at(-1), sessionPolicy(DEVELOPER_TOKEN));
+        for (const policy of sandbox.policies) {
+          assert.equal(JSON.stringify(policy).includes(DEVELOPER_TOKEN), false);
+        }
         for (const run of sandbox.runs) {
           assert.equal(carriesToken(JSON.stringify(run)), false);
         }
@@ -288,10 +280,6 @@ it.layer(getTestDB())("a coding agent's checkout", (it) => {
           yield* checkOutAgentRepository(target, agent, sandbox).pipe(Effect.provide(github.layer));
           const coAuthor = yield* agentCoAuthor(target, agent).pipe(Effect.provide(github.layer));
           assert.deepEqual(sandbox.identities, [BOT_IDENTITY]);
-          assert.deepEqual(
-            sandbox.policies.at(-1),
-            sessionPolicy(GITHUB_FIXTURE_INSTALLATION_TOKEN),
-          );
           assert.equal(coAuthor, undefined);
         }
 

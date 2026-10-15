@@ -312,30 +312,20 @@ it.effect("a tmux that could not be asked is an outage the tab may retry, never 
 );
 
 it.effect(
-  "the GitHub credentials are set at the firewall on GitHub's two hosts alone, the App's for git and the developer's for the API, every other host left open",
+  "a GitHub token is set at the firewall on GitHub's two hosts alone, every other host left open",
   () =>
     Effect.gen(function* () {
       vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
       const api = vercel("running");
 
       yield* Effect.flatMap(AgentSandbox, (sandbox) =>
-        sandbox.setGitHubCredentials(RUNNING_SESSION, {
-          git: Redacted.make("ghs_fixture"),
-          api: Redacted.make("ghu_fixture"),
-        }),
+        sandbox.setGitHubToken(RUNNING_SESSION, Redacted.make("ghs_fixture")),
       ).pipe(Effect.provide(api.layer));
 
-      const basic = `Basic ${Buffer.from("x-access-token:ghs_fixture").toString("base64")}`;
+      const authorization = `Basic ${Buffer.from("x-access-token:ghs_fixture").toString("base64")}`;
+      const injected = [{ transform: [{ headers: { authorization } }] }];
       assert.deepEqual(api.policies, [
-        {
-          allow: {
-            "*": [],
-            "github.com": [{ transform: [{ headers: { authorization: basic } }] }],
-            "api.github.com": [
-              { transform: [{ headers: { authorization: "Bearer ghu_fixture" } }] },
-            ],
-          },
-        },
+        { allow: { "*": [], "github.com": injected, "api.github.com": injected } },
       ]);
     }),
 );

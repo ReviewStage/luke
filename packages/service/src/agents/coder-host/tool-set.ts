@@ -18,7 +18,8 @@ import { AGENT_TOOL, toolsOf } from "../agent-runtime/tools.js";
  * too (`../public-research.ts`), the delegation of a slice of its
  * work to a worker (`apps/dev/tools/delegate.ts`), the notes it takes on
  * its plan (`plan-edit.ts`), its to-do list (`todos.ts`), and the
- * developer's inbox it posts to (`inbox.ts`), the load of one of its
+ * developer's inbox it posts to (`inbox.ts`), the pull request the service
+ * opens for it (`pull-request.ts`), the load of one of its
  * repository's skills (`skills.ts`), and the pages it shows the developer
  * (`../page-tool.ts`). The worker's own rows name
  * the read-only few of the same tools (`WORKER_TOOL_NAMES`), so one writer
@@ -51,6 +52,7 @@ export const CODER_TOOL = {
   POST_TO_INBOX: AGENT_TOOL.POST_TO_INBOX,
   CLOSE_INBOX_ITEM: AGENT_TOOL.CLOSE_INBOX_ITEM,
   READ_INBOX: AGENT_TOOL.READ_INBOX,
+  OPEN_PULL_REQUEST: AGENT_TOOL.OPEN_PULL_REQUEST,
   LOAD_SKILL: AGENT_TOOL.LOAD_SKILL,
   SHOW_PAGE: AGENT_TOOL.SHOW_PAGE,
   RUN_ON_MAC: AGENT_TOOL.RUN_ON_MAC,

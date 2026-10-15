@@ -23,6 +23,7 @@ import {
   lineSendersOf,
   listWorkspaceCodingAgents,
   readCodingAgent,
+  recordCodingAgentAuthor,
   recordTurnFastRefused,
   settleCodingAgentAuthor,
   turnUsagesOf,
@@ -405,7 +406,7 @@ it.layer(getTestDB())("the coding-agent store's agents of a workspace", (it) => 
 
 it.layer(getTestDB())("the coding-agent store's author of an agent", (it) => {
   it.effect(
-    "the first author settled is the agent's for good, a later one is answered with it, and an account outside the workspace settles nothing",
+    "the first author settled stands against a later settle, a recorded one replaces it, and an account outside the workspace writes nothing",
     () =>
       Effect.gen(function* () {
         const starter = yield* openAccount;
@@ -440,6 +441,14 @@ it.layer(getTestDB())("the coding-agent store's author of an agent", (it) => {
         assert.equal(
           Option.getOrThrow(yield* readCodingAgent(starter, agentId)).author,
           CODING_AGENT_AUTHOR.DEVELOPER,
+        );
+
+        // Recorded over, as an opening the App made in the developer's place records why; never by an outsider.
+        yield* recordCodingAgentAuthor(outsider, agentId, CODING_AGENT_AUTHOR.APP_NO_PUSH);
+        yield* recordCodingAgentAuthor(starter, agentId, CODING_AGENT_AUTHOR.APP_UNLINKED);
+        assert.equal(
+          Option.getOrThrow(yield* readCodingAgent(starter, agentId)).author,
+          CODING_AGENT_AUTHOR.APP_UNLINKED,
         );
       }),
   );

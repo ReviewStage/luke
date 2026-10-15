@@ -14,9 +14,6 @@ import { CODER_TOOL } from "./tool-set.js";
 
 const CODING_AGENT_EDIT_PLAN_TOOL = EDIT_PLAN_TOOL.name;
 
-/** The line every pull request the agent opens ends its description with. */
-const PULL_REQUEST_FOOTER = "Made with [Luke](https://tryluke.dev)";
-
 /**
  * instructions.ts -- what a coding agent's session runs under.
  *
@@ -36,8 +33,10 @@ const PULL_REQUEST_FOOTER = "Made with [Luke](https://tryluke.dev)";
  * account where the agent writes as them, with the trailer that names the
  * Luke GitHub App's bot as co-author handed here to end every commit with,
  * the way Claude Code names itself on a commit it made beside its user; or
- * the App's bot alone, which adds no trailer. Every pull request ends on one
- * line saying Luke made it, since its author may now be a person.
+ * the App's bot alone, which adds no trailer. The agent opens its pull
+ * request through the service (`pull-request.ts`) rather than `gh`, so the
+ * developer's token never reaches the sandbox, and is told to say so where
+ * the service opened it as the App in the developer's place.
  * The worker's instructions stand beside the agent's: it owns one slice,
  * grounds what it says in paths, lines, and command output, and returns a
  * result the agent reads whole, in the spirit of the planning worker's
@@ -121,7 +120,7 @@ When a result reads better as something to look at or click through than as word
 function authorshipRule(coAuthor: string | undefined): string {
   return coAuthor === undefined
     ? "Your commits are the Luke GitHub App's: the checkout's git identity is already set to its bot, so never change `user.name` or `user.email`, pass `--author`, add a `Co-authored-by` trailer, or rewrite who a commit is by."
-    : `Your commits are the developer's, with Luke as co-author: the checkout's git identity is already set to the developer's own GitHub account, so never change \`user.name\` or \`user.email\`, pass \`--author\`, or rewrite who a commit is by, and end every commit message with a blank line and then this trailer, exactly as written: \`${coAuthor}\`. The pull request you open is opened as the developer too.`;
+    : `Your commits are the developer's, with Luke as co-author: the checkout's git identity is already set to the developer's own GitHub account, so never change \`user.name\` or \`user.email\`, pass \`--author\`, or rewrite who a commit is by, and end every commit message with a blank line and then this trailer, exactly as written: \`${coAuthor}\`. The service opens your pull request as the developer too.`;
 }
 
 /**
@@ -153,7 +152,7 @@ The repository is checked out at \`${CODER.CHECKOUT_PATH}\`, at its current defa
 4. ${authorshipRule(coAuthor)}
 5. Make the smallest coherent change that ${words.whole}. Follow the repository's own conventions over any habit of yours.
 6. Run the repository's checks as its own files describe them, and fix what they find before you consider publishing.
-7. Decide whether to open a pull request, and whether as a draft: open one when the work is complete and the checks pass; open a draft when the work is worth a reviewer's eyes but something is unresolved, and say what; open none when ${words.none}, and say why. Push the branch before you open a pull request, and ${words.describe}; end the description with the line \`${PULL_REQUEST_FOOTER}\`.
+7. Decide whether to open a pull request, and whether as a draft: open one when the work is complete and the checks pass; open a draft when the work is worth a reviewer's eyes but something is unresolved, and say what; open none when ${words.none}, and say why. Push the branch, then open the pull request with \`${CODER_TOOL.OPEN_PULL_REQUEST}\`, never \`gh pr create\`, and ${words.describe}; the service opens it as whoever your commits name and ends its description with Luke's own line. Where it answers that it opened the pull request as Luke's GitHub App because the developer's own GitHub access was refused, say so in your final message. Use \`gh\` for everything after the opening: marking a draft ready, a comment, an edit.
 8. ${ciReadable ? CHECKS_WORDS.readable : CHECKS_WORDS.unreadable}
 
 For work of more than a couple of steps, keep your to-dos with \`${TODOS_TOOL.name}\`, which the developer watches: write the list before you start, keep exactly one item in progress, and write it again as each item finishes.

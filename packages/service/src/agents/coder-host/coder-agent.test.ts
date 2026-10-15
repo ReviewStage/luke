@@ -167,7 +167,7 @@ test("the session and the post tool are told never to ask for a credential or a 
   );
 });
 
-test("an agent writing as its developer is told to end every commit on the trailer naming Luke as co-author, one writing as the App is told never to add one, and both end a pull request on Luke's line", () => {
+test("an agent writing as its developer is told to end every commit on the trailer naming Luke as co-author, one writing as the App is told never to add one, and both open a pull request through the service, never gh", () => {
   const TRAILER = "Co-authored-by: luke[bot] <90001+luke[bot]@users.noreply.github.com>";
   for (const brief of Object.values(CODING_AGENT_BRIEF)) {
     const developer = coderInstructions("Acme/Relay", brief, true, true, TRAILER);
@@ -177,7 +177,12 @@ test("an agent writing as its developer is told to end every commit on the trail
     assert.ok(app.includes("add a `Co-authored-by` trailer"), brief);
     assert.ok(!app.includes(TRAILER), brief);
     for (const instructions of [developer, app]) {
-      assert.ok(instructions.includes("`Made with [Luke](https://tryluke.dev)`"), brief);
+      assert.ok(
+        instructions.includes(
+          `open the pull request with \`${CODER_TOOL.OPEN_PULL_REQUEST}\`, never \`gh pr create\``,
+        ),
+        brief,
+      );
     }
   }
 });

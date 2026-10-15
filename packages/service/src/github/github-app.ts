@@ -813,6 +813,19 @@ export function githubRead(
   );
 }
 
+/** One write of the API under the bearer given, its JSON body as given, the path rooted at the API's origin. */
+export function githubPost<Body extends object>(
+  path: string,
+  bearer: Redacted.Redacted,
+  body: Body,
+): HttpClientRequest.HttpClientRequest {
+  return HttpClientRequest.post(`${GITHUB_API}${path}`).pipe(
+    HttpClientRequest.bearerToken(bearer),
+    HttpClientRequest.setHeaders(GITHUB_HEADERS),
+    HttpClientRequest.bodyJsonUnsafe(body),
+  );
+}
+
 /** The one write the App makes as itself: a token mint, its JSON body under the App's own JWT. */
 function githubMintAsApp(
   path: string,

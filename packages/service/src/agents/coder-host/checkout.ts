@@ -15,7 +15,6 @@ import {
 } from "../../github/github-app.js";
 import { agentWorkspace as workspaceOfAgent } from "../../github/workspace-repository.js";
 import type { StoreFailure } from "../../http/store-failure.js";
-import { type AgentGitHubCredentials, setGitHubCredentials } from "../github-credentials.js";
 import {
   type CheckoutIdentity,
   cloneRepository,
@@ -27,7 +26,7 @@ import {
 import { CODER, CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
 
 /**
- * checkout.ts -- a coding agent's checkout of its repository, whose its commits and pull request are, and the credentials its sandbox reaches GitHub through.
+ * checkout.ts -- a coding agent's checkout of its repository, whose its commits are, and the credential its sandbox pushes through.
  *
  * The agent's repository is checked out once, as its sandbox opens, on the
  * same terms as the planning checkout (`repository-shell.ts`): the
@@ -37,14 +36,14 @@ import { CODER, CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
  * differs is the token and the depth: the token carries contents and pull
  * requests write, since the agent pushes a branch and opens a pull request
  * from it, and the clone is the whole history, since a branch and a pull
- * request are cut from it. The clone done, the firewall is set for the
- * session's own commands with two credentials (`github-credentials.ts`):
- * that token for `git`, so every push is the App's, and for GitHub's API,
- * where `gh` opens the pull request, the developer's own token where the
- * agent writes as them and the same App token otherwise. Neither enters the
- * sandbox's filesystem or environment. An App token is good for an hour and
- * a developer's for eight, so the host sets both afresh on the same terms
- * when the session's step hook finds the standing ones old.
+ * request are cut from it. The token is then handed back for the authored
+ * sandbox file to set at the firewall for the session's own commands,
+ * through eve's `authenticateGitHub`, which is where `gh` and `git push`
+ * reach GitHub as the App; it never enters the sandbox's filesystem or
+ * environment. A token is good for an hour, so the host mints another on
+ * the same terms when the session's step hook finds the one standing old.
+ * No developer's own token ever stands at the firewall: the sandbox is the
+ * workspace's, and any member may open a terminal in it.
  *
  * Who the agent writes as is settled once, as its first session starts, and
  * kept on its row (`CODING_AGENT_AUTHOR`), so the instructions that session
@@ -53,12 +52,13 @@ import { CODER, CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
  * they signed in with GitHub and their own account may push to the
  * repository: its commits are authored as their GitHub account, at the
  * noreply address GitHub links to it, each ending on a trailer that names
- * the App's bot as co-author, and its pull request is opened on their token,
- * which is how Claude Code names itself beside the person it worked for. An
- * agent an automation started writes as the App's bot, since no developer's
- * hand started it, and so does one whose developer has no GitHub sign-in or
- * may not push, the row saying why. The identity is set here, as the
- * checkout opens, and never by the model, whose instructions say so.
+ * the App's bot as co-author, which is how Claude Code names itself beside
+ * the person it worked for, and its pull request is opened as them by the
+ * service (`pull-request.ts`). An agent an automation started writes as the
+ * App's bot, since no developer's hand started it, and so does one whose
+ * developer has no GitHub sign-in or may not push, the row saying why. The
+ * identity is set here, as the checkout opens, and never by the model,
+ * whose instructions say so.
  *
  * The agent publishes through `git` and `gh` of its own, so what it
  * published is read off the checkout rather than guessed: the branch
@@ -202,70 +202,29 @@ export const agentCiReadable = /* @__PURE__ */ Effect.fn("web/agentCiReadable")(
  * installation of its plan's workspace still reaches the repository, with
  * the repository as GitHub spells it.
  */
-const agentRepositoryToken = /* @__PURE__ */ Effect.fn("web/agentRepositoryToken")(function* (
-  target: ConversationTarget,
-  agent: CodingAgent,
-): Effect.fn.Return<
-  {
-    readonly token: Redacted.Redacted;
-    readonly defaultBranch: string;
-    readonly fullName: string;
-  },
-  CheckoutRefused,
-  CheckoutServices
-> {
-  const app = yield* GitHubApp;
-  const reached = yield* Effect.gen(function* () {
-    const workspace = yield* agentWorkspace(target, agent);
-    if (Option.isNone(workspace)) return Option.none();
-    return yield* app.repositoryWriteToken(workspace.value, agent.repository);
-  }).pipe(Effect.mapError(refusedBy));
-  if (Option.isNone(reached))
-    return yield* new CheckoutRefused({ reason: CODER_REFUSAL.NOT_REACHABLE });
-  const { repository, token } = reached.value;
-  return { token, defaultBranch: repository.defaultBranch, fullName: repository.fullName };
-});
-
-/**
- * The developer's own token for GitHub's API, where the agent writes as
- * them; the App's token given otherwise, and where their token could not be
- * had, which is said in the log, so a sign-in that lapsed mid-session leaves
- * the agent publishing as the App rather than not at all.
- */
-const apiToken = /* @__PURE__ */ Effect.fn("web/agentApiToken")(function* (
-  target: ConversationTarget,
-  author: CodingAgentAuthor,
-  appToken: Redacted.Redacted,
-): Effect.fn.Return<Redacted.Redacted, never, CheckoutServices> {
-  if (author !== CODING_AGENT_AUTHOR.DEVELOPER) return appToken;
-  const app = yield* GitHubApp;
-  return yield* app
-    .userToken(target.userId)
-    .pipe(
-      Effect.catch((failure) =>
-        Effect.as(
-          Effect.logWarning(
-            `The developer's GitHub token for conversation ${target.conversationId} was not read: ${failure._tag}`,
-          ),
-          appToken,
-        ),
-      ),
-    );
-});
-
-/**
- * The agent's two GitHub credentials, minted afresh: the App's write token
- * for its repository, and the token its API calls go out on, the
- * developer's where the agent writes as them.
- */
-export const agentGitHubCredentials = /* @__PURE__ */ Effect.fn("web/agentGitHubCredentials")(
+export const agentRepositoryToken = /* @__PURE__ */ Effect.fn("web/agentRepositoryToken")(
   function* (
     target: ConversationTarget,
     agent: CodingAgent,
-  ): Effect.fn.Return<AgentGitHubCredentials, CheckoutRefused | StoreFailure, CheckoutServices> {
-    const minted = yield* agentRepositoryToken(target, agent);
-    const author = yield* agentAuthor(target, agent);
-    return { git: minted.token, api: yield* apiToken(target, author, minted.token) };
+  ): Effect.fn.Return<
+    {
+      readonly token: Redacted.Redacted;
+      readonly defaultBranch: string;
+      readonly fullName: string;
+    },
+    CheckoutRefused,
+    CheckoutServices
+  > {
+    const app = yield* GitHubApp;
+    const reached = yield* Effect.gen(function* () {
+      const workspace = yield* agentWorkspace(target, agent);
+      if (Option.isNone(workspace)) return Option.none();
+      return yield* app.repositoryWriteToken(workspace.value, agent.repository);
+    }).pipe(Effect.mapError(refusedBy));
+    if (Option.isNone(reached))
+      return yield* new CheckoutRefused({ reason: CODER_REFUSAL.NOT_REACHABLE });
+    const { repository, token } = reached.value;
+    return { token, defaultBranch: repository.defaultBranch, fullName: repository.fullName };
   },
 );
 
@@ -297,17 +256,18 @@ const commitIdentity = /* @__PURE__ */ Effect.fn("web/agentCommitIdentity")(func
 
 /**
  * The agent's repository checked out whole, at its current default branch,
- * into the sandbox, with its commit identity set in it and its two
- * credentials at the firewall for the commands that follow. The checkout is
- * recorded under the name the agent's row holds. Note that the identity is
- * read ahead of the clone, so a bot GitHub cannot name costs no clone.
+ * into the sandbox, with its commit identity set in it; answers the token
+ * minted for it, for the caller to set at the firewall for the commands
+ * that follow. The checkout is recorded under the name the agent's row
+ * holds. Note that the identity is read ahead of the clone, so a bot GitHub
+ * cannot name costs no clone.
  */
 export const checkOutAgentRepository = /* @__PURE__ */ Effect.fn("web/checkOutAgentRepository")(
   function* (
     target: ConversationTarget,
     agent: CodingAgent,
     sandbox: RepositorySandbox,
-  ): Effect.fn.Return<void, CheckoutRefused | StoreFailure, CheckoutServices> {
+  ): Effect.fn.Return<Redacted.Redacted, CheckoutRefused | StoreFailure, CheckoutServices> {
     const minted = yield* agentRepositoryToken(target, agent);
     const author = yield* agentAuthor(target, agent);
     const identity = yield* commitIdentity(target, agent, author, minted.token);
@@ -323,8 +283,7 @@ export const checkOutAgentRepository = /* @__PURE__ */ Effect.fn("web/checkOutAg
       minted.token,
     ).pipe(Effect.mapError(refused));
     yield* setCheckoutIdentity(sandbox, identity).pipe(Effect.mapError(refused));
-    const credentials = { git: minted.token, api: yield* apiToken(target, author, minted.token) };
-    yield* setGitHubCredentials(sandbox, credentials).pipe(Effect.mapError(refused));
+    return minted.token;
   },
 );
 
