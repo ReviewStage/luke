@@ -1,3 +1,4 @@
+import { AGENT_EXTERNAL_DEPENDENCIES } from "@luke/service/agents/agent-runtime/build";
 import { BRAIN_HOST, BRAIN_HOST_REFUSAL } from "@luke/service/agents/brain-host/bounds";
 import { Result } from "effect";
 import { defineAgent, defineDynamic } from "eve";
@@ -55,6 +56,7 @@ export function brainModel(admit: Admission) {
 
 export default defineAgent({
   defaultTools: false,
+  build: { externalDependencies: [...AGENT_EXTERNAL_DEPENDENCIES] },
   limits: { maxInputTokensPerSession: false, sessionTimeoutMs: false },
   compaction: { thresholdPercent: BRAIN_HOST.COMPACTION_THRESHOLD },
   model: brainModel(host.admit),

@@ -5,7 +5,7 @@
       "root": ".",
       "framework": "vite",
       "installCommand": "pnpm install --frozen-lockfile --filter @luke/web...",
-      "buildCommand": "pnpm db:migrate && pnpm auth:seed && pnpm build",
+      "buildCommand": "(pnpm db:migrate && pnpm auth:seed) & db=$!; pnpm build && wait $db",
       "ignoreCommand": "git diff --quiet HEAD^ HEAD -- :/apps/web :/packages :/pnpm-lock.yaml :/pnpm-workspace.yaml :/package.json :/CHANGELOG.md :/PRIVACY.md",
       "routes": [
         {

@@ -22,6 +22,7 @@
     "./admin/http": "./src/admin/http.js",
     "./admin/http-effect": "./src/admin/http-effect.js",
     "./admin/seam": "./src/admin/seam.js",
+    "./agents/agent-runtime/build": "./src/agents/agent-runtime/build.js",
     "./agents/agent-runtime/connections": "./src/agents/agent-runtime/connections.js",
     "./agents/agent-runtime/edge": "./src/agents/agent-runtime/edge.js",
     "./agents/agent-runtime/host-core": "./src/agents/agent-runtime/host-core.js",

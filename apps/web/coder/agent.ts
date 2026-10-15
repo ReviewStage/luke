@@ -1,3 +1,4 @@
+import { AGENT_EXTERNAL_DEPENDENCIES } from "@luke/service/agents/agent-runtime/build";
 import { CODER } from "@luke/service/agents/coder-host/bounds";
 import { Effect, Result } from "effect";
 import { defineAgent, defineDynamic } from "eve";
@@ -20,6 +21,7 @@ import { scriptedModel } from "./scripted-model.js";
  */
 export default defineAgent({
   defaultTools: false,
+  build: { externalDependencies: [...AGENT_EXTERNAL_DEPENDENCIES] },
   compaction: { thresholdPercent: CODER.COMPACTION_THRESHOLD_SHARE },
   limits: { maxInputTokensPerSession: false, sessionTimeoutMs: false },
   // Note that a finished run's history is deleted at once rather than kept under Vercel's
