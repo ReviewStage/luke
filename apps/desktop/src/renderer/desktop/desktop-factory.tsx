@@ -12,7 +12,7 @@ import {
   GitMergeIcon,
   MessageCircleQuestionIcon,
 } from "lucide-react";
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { ACTOR_SIZE, ActorMark, CreatorHeard } from "../actor-ref";
 import { useAppCommand } from "../app-commands";
@@ -49,6 +49,7 @@ import {
 } from "./factory-model";
 import { paneTiming } from "./pane-motion";
 import { planCardOf } from "./plan-card";
+import { useRowKeys } from "./use-row-keys";
 
 /**
  * desktop-factory.tsx -- the window's Factory: the workspace's tasks being talked through, built, and shipped, as three stations on one line, each leading with what waits on the developer there.
@@ -71,11 +72,13 @@ import { planCardOf } from "./plan-card";
  * anything else its task, whose card hangs on the row's hover. A row that
  * moves from one station to another slides there once, and one that arrives
  * fades in; nothing else moves, and the times count on with the window's
- * minute. Escape leaves it for the task it stood over, and so does any row
- * of the sidebar. Until the plan list is read nothing stands, a list that
- * could not be read says so with Retry, above the line
- * where an earlier read still stands, and with nothing on a call, built,
- * or shipped the page is the app's empty state. It is an experiment
+ * minute. ↑ and ↓ move through the rows from the window itself, as on Home,
+ * and Return opens the one reached. Escape leaves it for the task it stood
+ * over, and so does any row of the sidebar. Until the plan list is read
+ * nothing stands, a list that could not be read says so with Retry, above the line
+ * where an earlier read still stands, and
+ * with nothing on a call, built, or shipped the page is the app's empty
+ * state. It is an experiment
  * (`EXPERIMENT.FACTORY`): every door to it is gated on the account's switch,
  * and its toolbar says so with the Experimental tag and Send feedback.
  */
@@ -169,6 +172,35 @@ function useRowSlide(root: HTMLElement | null, board: FactoryBoard): void {
       }
     }
     last.current = next;
+  }, [root, board]);
+}
+
+/**
+ * A row that moves from one station's list to another keeps the keyboard:
+ * React draws it anew in its new list and drops the one that held focus, so
+ * where the row that held it is gone and focus with it, the row of the same
+ * name takes it back. A row left for elsewhere keeps nothing.
+ */
+function useFocusFollows(root: HTMLElement | null, board: FactoryBoard): void {
+  const held = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    if (root === null) return;
+    const note = (event: FocusEvent) => {
+      held.current = event.target instanceof HTMLElement ? event.target : null;
+    };
+    root.addEventListener("focusin", note);
+    return () => root.removeEventListener("focusin", note);
+  }, [root]);
+  useLayoutEffect(() => {
+    const was = held.current;
+    if (root === null || was === null || was.isConnected) return;
+    const lost = document.activeElement === null || document.activeElement === document.body;
+    const key = was.closest<HTMLElement>("[data-factory-row]")?.dataset.factoryRow;
+    if (!lost || key === undefined) return;
+    const row = [...root.querySelectorAll<HTMLElement>("[data-factory-row]")].find(
+      (each) => each.dataset.factoryRow === key,
+    );
+    row?.querySelector<HTMLElement>(".sidebar-plan")?.focus();
   }, [root, board]);
 }
 
@@ -484,6 +516,8 @@ export function DesktopFactory({ plans }: { plans: PlansControl }): React.JSX.El
   const { board, questions } = useFactoryBoard(plans, now);
   const [root, setRoot] = useState<HTMLElement | null>(null);
   useRowSlide(root, board);
+  useRowKeys(root, plans.shown);
+  useFocusFollows(root, board);
   const empty =
     board.talking.length +
       board.stopped.length +

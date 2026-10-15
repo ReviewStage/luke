@@ -164,7 +164,10 @@ function mount(listed: readonly PlanSummary[], overrides: Partial<PlansControl> 
   draw(plans);
   /** The same page drawn again with some of its control changed, as a newer read hands it. */
   const redraw = (patch: Partial<PlansControl>) => draw({ ...plans, ...patch });
-  return { page: container, opened, redraw };
+  /** The same page drawn again over another read of the plan list. */
+  const rerender = (next: readonly PlanSummary[]) =>
+    draw({ ...plans, plans: next, listed: { ...plans.listed, plans: next } });
+  return { page: container, opened, redraw, rerender };
 }
 
 /** A station's rows as a reader scans them: each row's words and task, and whether it waits on the developer. */
@@ -656,4 +659,48 @@ test("a question main counts after a plan's last read stands while that plan's r
   redraw({ listed: listed(NOW), inbox: [asked] });
   await settle();
   assert.equal(rows(page, "build")[0], `${QUESTION} · Mercury payouts (waits)`);
+});
+
+test("↓ from the window reaches the first row and moves on through the stations, and ↑ from the window the last", () => {
+  const { page } = mount([DRAFT, SEARCH, INVITES], { callPlanId: DRAFT.id });
+  const press = (key: string) =>
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+    });
+  const focused = () =>
+    document.activeElement?.querySelector(".sidebar-plan-name")?.textContent ?? null;
+  press("ArrowDown");
+  assert.equal(focused(), "Usage alerts");
+  press("ArrowDown");
+  assert.equal(focused(), "Plan index");
+  press("ArrowDown");
+  assert.equal(focused(), "#2505 ready to merge");
+  const reached = document.activeElement;
+  assert.ok(reached instanceof HTMLElement);
+  act(() => reached.blur());
+  press("ArrowUp");
+  assert.equal(focused(), "#2505 ready to merge");
+  assert.ok(page.contains(document.activeElement));
+});
+
+test("an agent that fails while its row holds the keyboard keeps it, its row now leading Build", () => {
+  const { page, rerender } = mount([SEARCH]);
+  act(() => {
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+  });
+  const name = () => document.activeElement?.querySelector(".sidebar-plan-name")?.textContent;
+  assert.equal(name(), "Plan index");
+  const working = SEARCH.agents;
+  assert.ok(working);
+  const failed: PlanSummary = {
+    ...SEARCH,
+    agents: {
+      ...working,
+      working: 0,
+      agents: working.agents.map((each) => ({ ...each, status: CODING_AGENT_STATUS.FAILED })),
+    },
+  };
+  rerender([failed]);
+  assert.equal(name(), "Plan index failed");
+  assert.ok(page.contains(document.activeElement));
 });
