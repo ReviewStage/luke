@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
-import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
+import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
 import { settingsView } from "@luke/settings/testing";
 import { UPDATE_STATUS } from "@luke/settings/update";
@@ -15,7 +15,9 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { onRegistry } from "#testing/copy-feedback";
+import { useAct } from "../act";
 import { runAppCommand } from "../app-commands";
+import { type CallCardInput, callControls } from "../call/call-card";
 import type { SettingsPanelProps } from "../settings/settings-panel";
 import type { WorkspaceSettingsControl } from "../settings/workspace-page";
 import { DesktopSettings } from "./desktop-settings";
@@ -142,10 +144,14 @@ function settingsProps(view: SettingsView, onViewChange: (view: SettingsView) =>
 /** Settings holding its own page, as the app holds it, opened on Profile, over the workspaces the plans' sidebar lists where it is handed them. */
 function SettingsHarness({
   workspace,
+  opensOn = SETTINGS_VIEW.ACCOUNT,
+  call,
 }: {
   workspace?: WorkspaceSettingsControl;
+  opensOn?: SettingsView;
+  call?: CallCardInput;
 }): React.JSX.Element {
-  const [view, setView] = useState<SettingsView>(SETTINGS_VIEW.ACCOUNT);
+  const [view, setView] = useState<SettingsView>(opensOn);
   return createElement(DesktopSettings, {
     sidebar: {
       collapsed: false,
@@ -164,7 +170,7 @@ function SettingsHarness({
       onForward: ignore,
     },
     settings: { ...settingsProps(view, setView), ...(workspace ? { workspace } : undefined) },
-    call: undefined,
+    call,
     onExit: ignore,
   });
 }
@@ -384,4 +390,58 @@ test("the Integrations page's search is cleared when another page is turned to",
   openPage(page, "Integrations");
 
   assert.equal(fieldNamed(page, PAGE_SEARCH)?.value, "");
+});
+
+test("the plan template's version history keeps a call's card at the foot of its versions, as Settings' page list held it, and its way back asks for the call's plan", async () => {
+  const sent: string[] = [];
+  Object.defineProperty(window, "luke", {
+    configurable: true,
+    value: {
+      ...window.luke,
+      act: (request: { kind: string }) => {
+        sent.push(request.kind);
+        return Promise.resolve(
+          request.kind === ACT_KIND.PLAN_TEMPLATE_READ
+            ? { status: ACT_OUTCOME_STATUS.DONE, value: { template: "# Context\n", custom: false } }
+            : { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." },
+        );
+      },
+    },
+  });
+  // The card's presses sent as `App` sends them, over the bridge.
+  function CallSettings(): React.JSX.Element {
+    const { tell } = useAct();
+    const call: CallCardInput = {
+      card: { planName: "Checkout redesign", status: undefined, microphoneMuted: false },
+      speakerMuted: false,
+      controls: callControls(tell, false),
+    };
+    return createElement(SettingsHarness, { opensOn: SETTINGS_VIEW.PLAN_TEMPLATE, call });
+  }
+  const page = mount(createElement(CallSettings));
+  await act(async () => {
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
+  const history = page.querySelector<HTMLButtonElement>('button[aria-label="Version history"]');
+  assert.ok(history, "the template page offers its version history");
+  act(() => history.click());
+
+  const versions = page.querySelector('nav[aria-label="Versions"]');
+  assert.ok(versions, "the template's versions stand where the page list was");
+  const cards = page.querySelectorAll<HTMLElement>('section.call-card[aria-label="Call"]');
+  assert.equal(cards.length, 1);
+  const [card] = cards;
+  assert.ok(card);
+  assert.deepEqual(
+    {
+      surface: card.dataset.surface,
+      docked: card.closest(".sidebar-foot")?.parentElement === versions,
+    },
+    { surface: "sidebar", docked: true },
+  );
+  sent.length = 0;
+  const back = card.querySelector<HTMLButtonElement>('button[aria-label="Open Checkout redesign"]');
+  assert.ok(back);
+  act(() => back.click());
+  assert.deepEqual(sent, [ACT_KIND.CALL_SHOW_PLAN]);
 });

@@ -16,7 +16,7 @@ import { integrationNamed } from "@luke/ui/integration-search";
 import { useEffect, useRef, useState } from "react";
 import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
-import { CALL_CARD_SURFACE, CallCardDock, type CallCardInput } from "../call/call-card";
+import { type CallCardInput, ColumnFoot } from "../call/call-card";
 import type { NavigationHistory } from "../navigation-history";
 import { AttentionMark } from "../settings/marks";
 import { settingsGroupHeadingOf, settingsPageOf } from "../settings/pages";
@@ -180,19 +180,17 @@ export function DesktopSettings({
     settings.view === SETTINGS_VIEW.INTEGRATIONS &&
     settings.account.status === ACCOUNT_STATUS.SIGNED_IN;
 
-  // The template's version history takes the whole window as a plan's does, and leaves for the template.
-  // Note that the call card floats while it does, as over a plan's history, since the page list it rides is gone.
+  // The template's version history takes the whole window as a plan's does, and leaves for the template,
+  // the call card at the foot of its versions as it was at the page list's.
   if (templateHistory) {
     return (
-      <>
-        <TemplateVersionHistory
-          sidebar={sidebar}
-          history={history}
-          account={settings.account}
-          onExit={() => setTemplateHistory(false)}
-        />
-        <CallCardDock call={call} surface={CALL_CARD_SURFACE.FLOATING} />
-      </>
+      <TemplateVersionHistory
+        sidebar={sidebar}
+        history={history}
+        account={settings.account}
+        call={call}
+        onExit={() => setTemplateHistory(false)}
+      />
     );
   }
   return (
@@ -254,9 +252,7 @@ export function DesktopSettings({
             ))
           )}
         </div>
-        <div className="sidebar-foot">
-          <CallCardDock call={call} surface={CALL_CARD_SURFACE.SIDEBAR} />
-        </div>
+        <ColumnFoot call={call} />
         {/* Last, so the drag strip above the way back does not take the edge's top from it. */}
         <SidebarResizeEdge edge={edge} />
       </nav>

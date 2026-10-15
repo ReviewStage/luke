@@ -28,7 +28,7 @@ import { FactoryIcon, HouseIcon, InboxIcon, ZapIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
 import { runAppCommand, useAppCommand } from "../app-commands";
-import { CALL_CARD_SURFACE, CallCardDock, type CallCardInput } from "../call/call-card";
+import { type CallCardInput, ColumnFoot } from "../call/call-card";
 import type { NavigationHistory } from "../navigation-history";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { NEEDS_YOU } from "../planning/inbox-model";
@@ -1011,8 +1011,7 @@ export function DesktopSidebar({
         </nav>
       </div>
 
-      <div className="sidebar-foot">
-        <CallCardDock call={call} surface={CALL_CARD_SURFACE.SIDEBAR} />
+      <ColumnFoot call={call}>
         <SidebarFoot
           account={account}
           updates={updates}
@@ -1021,7 +1020,7 @@ export function DesktopSidebar({
           onSettings={chosen(() => onTabChange(PANEL_TAB.SETTINGS))}
           onSignOut={onSignOut}
         />
-      </div>
+      </ColumnFoot>
       {/* Last, so the drag strip above Luke does not take the edge's top from it. */}
       {sidebar.collapsed ? null : <SidebarResizeEdge edge={edge} />}
     </aside>

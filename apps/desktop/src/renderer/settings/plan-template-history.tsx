@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "../act";
 import { useAppCommand } from "../app-commands";
+import type { CallCardInput } from "../call/call-card";
 import { DesktopVersionHistory, type VersionSubject } from "../desktop/desktop-version-history";
 import type { SidebarCollapse } from "../desktop/sidebar-collapse";
 import { MOUSE_BUTTON, type NavigationHistory } from "../navigation-history";
@@ -87,12 +88,15 @@ export function TemplateVersionHistory({
   sidebar,
   history,
   account,
+  call,
   onExit,
 }: {
   sidebar: SidebarCollapse;
   history: NavigationHistory;
   /** Who is reading, whose revisions are drawn as theirs. */
   account: AccountSnapshot;
+  /** The call card, at the foot of the versions. */
+  call: CallCardInput | undefined;
   onExit: () => void;
 }): React.JSX.Element {
   const { act } = useAct();
@@ -142,6 +146,7 @@ export function TemplateVersionHistory({
       history={steps}
       subject={subject}
       account={account}
+      call={call}
       onExit={onExit}
       onRestored={onExit}
     />

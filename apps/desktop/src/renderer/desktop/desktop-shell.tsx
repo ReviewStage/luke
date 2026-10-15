@@ -409,10 +409,10 @@ export function DesktopShell({
           history={history}
           subject={planVersionSubject(plans)}
           account={account}
+          call={call}
           onExit={history.canGoBack ? history.onBack : plans.history.onClose}
           onRestored={history.onLeaveVersionHistory}
         />
-        <CallCardDock call={call} surface={CALL_CARD_SURFACE.FLOATING} />
         <CaptionStrip {...captions} />
         {newPlanDialog}
       </div>
