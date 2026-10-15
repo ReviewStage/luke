@@ -621,7 +621,8 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
      */
     function observeWaiting(answer: AccountInboxAnswer): void {
       const was = waiting;
-      if (was?.answer.cursor === answer.cursor) {
+      // Note that an answer at the same cursor holding fewer of the account's own items is news, because the account's id, which picks them, may have arrived since.
+      if (was?.answer.cursor === answer.cursor && was.answer.items.length === answer.items.length) {
         // Note that the plans and automations holding items, and what an item with no plan is named
         // by, may move with nothing waiting moving, an archive, a rename, or a hold let go, so they are written alone.
         if (
