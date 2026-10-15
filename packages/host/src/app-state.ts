@@ -147,7 +147,7 @@ export interface AppInboxPlanHolding {
  * automation, and its name, null where the reader may not read it or none
  * stands.
  */
-interface AppInboxPlanlessItem extends AppInboxWaitingItem {
+export interface AppInboxPlanlessItem extends AppInboxWaitingItem {
   agentTitle: string | null;
   agentModel: string;
   automationId: string | null;

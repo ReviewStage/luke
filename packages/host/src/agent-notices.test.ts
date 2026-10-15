@@ -23,7 +23,7 @@ import {
   createAgentNotices,
   type InboxItemToast,
 } from "./agent-notices.js";
-import type { AppInboxPlan, AppInboxPlanHolding } from "./app-state.js";
+import type { AppInboxPlan, AppInboxPlanHolding, AppInboxSlice } from "./app-state.js";
 
 const PLAN_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
@@ -85,6 +85,7 @@ function fixture() {
   const inboxReads: string[] = [];
   const waiting: (readonly AppInboxPlan[])[] = [];
   const holding: (readonly AppInboxPlanHolding[])[] = [];
+  const planless: AppInboxSlice["planless"][] = [];
   const openedInboxes: string[] = [];
   let inboxAnswers: Queue.Queue<CodingAgentAccountInboxAnswerView> | undefined;
   let accounts: Queue.Queue<string | undefined> | undefined;
@@ -143,6 +144,7 @@ function fixture() {
       onInboxChanged: (next) => {
         waiting.push(next.waiting);
         holding.push(next.plans);
+        planless.push(next.planless);
       },
       openInbox: (planId) => openedInboxes.push(planId),
       watchInterval: WATCH,
@@ -182,6 +184,7 @@ function fixture() {
     inboxReads,
     waiting,
     holding,
+    planless,
     badges,
     inboxToasted,
     openedInboxes,
@@ -405,5 +408,30 @@ it.effect(
       ]);
       f.posted.at(-1)?.onClick();
       assert.deepEqual(f.opened, [{ planId: null, agentId: AGENT_ID }]);
+    }),
+);
+it.effect(
+  "an automation renamed with nothing waiting moving is written as the item's new name, its cursor the same",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      yield* f.notices;
+      const answer = (automationName: string) => ({
+        items: [],
+        planless: [planlessItem(ITEM_A, { automationName })],
+        automations: [],
+        cursor: "4",
+        readAt: READ_AT,
+      });
+      f.answerInbox(answer("Nightly flake sweep"));
+      yield* settled;
+
+      f.answerInbox(answer("Flake sweep, nightly"));
+      yield* settled;
+
+      assert.deepEqual(
+        f.planless.at(-1)?.map((item) => item.automationName),
+        ["Flake sweep, nightly"],
+      );
     }),
 );

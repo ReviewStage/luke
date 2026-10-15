@@ -380,6 +380,27 @@ function planlessNoticeText(
 /** What an answer of the inbox read carries that the window and the Dock are told of. */
 type InboxAnswered = Pick<AccountInboxAnswer, "items" | "plans" | "planless" | "automations">;
 
+/** Whether two answers say alike everything the window draws of each item of an agent with no plan: its agent's title and the automation and repository standing in a plan's place, which change without the item's stamp moving. */
+function samePlanless(
+  one: readonly AccountPlanlessEntry[],
+  other: readonly AccountPlanlessEntry[],
+): boolean {
+  return (
+    one.length === other.length &&
+    one.every((item, at) => {
+      const was = other[at];
+      return (
+        was !== undefined &&
+        was.id === item.id &&
+        was.agentTitle === item.agentTitle &&
+        was.automationId === item.automationId &&
+        was.automationName === item.automationName &&
+        was.repository === item.repository
+      );
+    })
+  );
+}
+
 /** Whether two answers list the same automations holding items, alike in order, count, and instant. */
 function sameAutomations(
   one: readonly AccountInboxAutomation[],
@@ -580,14 +601,21 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     function observeWaiting(answer: AccountInboxAnswer): void {
       const was = waiting;
       if (was?.answer.cursor === answer.cursor) {
-        // Note that the plans and automations holding items may move with nothing waiting moving, an archive or a hold let go, so they are written alone.
+        // Note that the plans and automations holding items, and what an item with no plan is named
+        // by, may move with nothing waiting moving, an archive, a rename, or a hold let go, so they are written alone.
         if (
           samePlans(was.answer.plans, answer.plans) &&
-          sameAutomations(was.answer.automations ?? [], answer.automations ?? [])
+          sameAutomations(was.answer.automations ?? [], answer.automations ?? []) &&
+          samePlanless(was.answer.planless ?? [], answer.planless ?? [])
         ) {
           return;
         }
-        const moved = { ...was.answer, plans: answer.plans, automations: answer.automations ?? [] };
+        const moved = {
+          ...was.answer,
+          plans: answer.plans,
+          automations: answer.automations ?? [],
+          planless: answer.planless ?? [],
+        };
         waiting = { ...was, answer: moved };
         dependencies.onInboxChanged(sliceOf(moved));
         return;
