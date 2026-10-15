@@ -52,9 +52,9 @@ export const automation = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    organizationId: text("organization_id").references(() => organization.id, {
-      onDelete: "cascade",
-    }),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
     scope: text("scope").$type<AutomationScope>().notNull().default(AUTOMATION_SCOPE.PERSONAL),
     planId: uuid("plan_id").references(() => plan.id, { onDelete: "cascade" }),
     name: text("name").notNull(),

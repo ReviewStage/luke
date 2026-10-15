@@ -39,10 +39,10 @@ export const inboxAttachment = pgTable(
       .references(() => user.id, { onDelete: "cascade" }),
     /** The item's plan; null for an item of an agent with no plan. */
     planId: uuid("plan_id").references(() => plan.id, { onDelete: "cascade" }),
-    /** The item's workspace; null only on rows the backfill has not reached. */
-    organizationId: text("organization_id").references(() => organization.id, {
-      onDelete: "cascade",
-    }),
+    /** The item's workspace. */
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
     itemId: uuid("item_id")
       .notNull()
       .references(() => inboxItem.id, { onDelete: "cascade" }),
