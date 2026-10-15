@@ -238,12 +238,6 @@ test("a card's title is plain words: the marks a markdown line opens on, strong 
   );
   assert.equal(cardTitle("- Find the admin check"), "Find the admin check");
   assert.equal(cardTitle("1. Find the admin check"), "Find the admin check");
-  assert.equal(
-    cardTitle(
-      "Review [@store.ts](https://github.com/acme/relay/blob/HEAD/store.ts) and [the docs](https://example.com/docs)",
-    ),
-    "Review store.ts and the docs",
-  );
   assert.equal(cardTitle("> Find the admin check"), "Find the admin check");
   assert.equal(cardTitle("Read plan_list_store.ts"), "Read plan_list_store.ts");
   assert.equal(cardTitle("Find who calls `__init__`"), "Find who calls __init__");

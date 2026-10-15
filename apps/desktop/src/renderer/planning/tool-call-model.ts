@@ -12,7 +12,6 @@ import {
   type InboxPostBlock,
   inboxPostInputSchema,
 } from "@luke/features/inbox-wire";
-import { linkLabels } from "@luke/features/mention-link";
 import type { ModelChoice } from "@luke/features/models-wire";
 import type { PlanNote } from "@luke/features/plan-template";
 import type { CodeRef } from "@luke/features/plan-wire";
@@ -770,6 +769,9 @@ const LINE_MARKS = /^(?:#{1,6}|>|[-*+]|\d+[.)])\s+/u;
  */
 const INLINE_MARKS = /\*\*|`/gu;
 
+/** A markdown link, whose words a title keeps and whose destination it leaves out. */
+const LINK = /\[([^\]]*)\]\([^)]*\)/gu;
+
 /** A markdown fence's opening or closing line, which plain words leave out. */
 const FENCE_LINE = /^\s*(?:```|~~~)/u;
 
@@ -785,8 +787,7 @@ export function cardTitle(text: string): string {
 }
 
 function plainLine(line: string): string {
-  // A link is said by its name, as its chip would name it, never its destination.
-  return linkLabels(line.trim().replace(LINE_MARKS, "")).replace(INLINE_MARKS, "").trim();
+  return line.trim().replace(LINE_MARKS, "").replace(LINK, "$1").replace(INLINE_MARKS, "").trim();
 }
 
 /**
