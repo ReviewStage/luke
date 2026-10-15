@@ -1,5 +1,6 @@
 import type { FaceMotion } from "@luke/brand";
 import { ACCOUNT_STATUS, type AccountProvider } from "@luke/credentials/snapshot";
+import type { Plan } from "@luke/features/plan-wire";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { ComposeIcon, SidebarIcon } from "@luke/ui";
 import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
@@ -28,6 +29,7 @@ import { PaneGlide } from "./pane-motion";
 import { useSummaryPin } from "./plan-summary";
 import { SidePanelToggle } from "./side-panel";
 import { SIDEBAR_OVERLAY, type SidebarCollapse } from "./sidebar-collapse";
+import { useWindowTitle } from "./window-title";
 
 /** What stands between the developer and the window's own content: the account sign-in. */
 export interface DesktopGates {
@@ -199,6 +201,26 @@ function transcriptStreaming(plans: PlansControl): boolean {
 }
 
 /**
+ * What the window's title names: Settings alone, whose pages are not one
+ * workspace's; the Inbox in the listed workspace, whatever plan its item is
+ * from; the plan on screen in its own workspace, or alone while that is not
+ * read; else the listed workspace.
+ */
+function titleSubject(
+  tab: PanelTab,
+  plans: PlansControl,
+  shownPlan: Plan | undefined,
+): Parameters<typeof useWindowTitle>[0] {
+  const { signedIn } = plans;
+  if (tab === PANEL_TAB.SETTINGS) return { signedIn, subject: "Settings", workspace: undefined };
+  if (plans.inboxView.open) return { signedIn, subject: "Inbox", workspace: plans.workspace };
+  if (shownPlan === undefined) return { signedIn, subject: undefined, workspace: plans.workspace };
+  // Note that a plan whose workspace is not read yet is named alone, because the listed one may not be its.
+  const workspace = plans.workspaces.find((each) => each.id === shownPlan.workspaceId);
+  return { signedIn, subject: shownPlan.name, workspace };
+}
+
+/**
  * Luke's window: the sidebar on the left and the chosen work on the right,
  * or the sign-in over the whole window while no account stands. Every
  * press is the control's it came from; this only lays them out. Settings
@@ -261,13 +283,14 @@ export function DesktopShell({
     plans.sidePanel.fullScreen,
     `${tab}:${plans.page}:${plans.history.open}:${plans.inboxView.open}:${sidebar.collapsed}`,
   );
-  // The plan is looked at only while it is on screen, which the Inbox standing in its place is not.
-  const looks = usePlanLooks(
+  // The window's title names what stands in it, the plan only while it is on screen, and its workspace.
+  const shownPlan =
     tab === PANEL_TAB.PLANS && !plans.inboxView.open && region.kind === DOCUMENT_REGION.READY
       ? region.plan
-      : undefined,
-    plans.me,
-  );
+      : undefined;
+  useWindowTitle(titleSubject(tab, plans, shownPlan));
+  // The plan is looked at only while it is on screen, which the Inbox standing in its place is not.
+  const looks = usePlanLooks(shownPlan, plans.me);
   if (gated) {
     return (
       <div className="desktop-onboarding">
