@@ -3,7 +3,8 @@ import { SETTINGS_SECTION, SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { memberActor, ROLE_WORDS } from "@luke/ui/actor-model";
 import { ChevronRightIcon, LockIcon } from "lucide-react";
 import { ACTOR_SIZE, ActorMark, ActorStack, YouBadge } from "../actor-ref";
-import { TILE_SIZE, WorkspaceTile } from "../desktop/workspace-tile";
+import { WORKSPACE_REF_SIZE, WorkspaceRef } from "../desktop/workspace-ref";
+import { WorkspaceTile } from "../desktop/workspace-tile";
 import { CardHead, CardNote, CardRule, HoverCard } from "../hover-card";
 import { useMemberDirectory } from "../member-directory";
 import { useOpenSettings } from "../open-settings";
@@ -164,8 +165,7 @@ export function PlanCrumb({
   return (
     <nav className="plan-crumb" aria-label="Where this plan is">
       <button type="button" className="plan-crumb-item" onClick={() => openSettings(page)}>
-        <WorkspaceTile workspace={workspace} size={TILE_SIZE.ROW} />
-        {workspace.name}
+        <WorkspaceRef workspace={workspace} size={WORKSPACE_REF_SIZE.ROW} />
       </button>
       {repository === null ? null : (
         <>

@@ -4,7 +4,8 @@ import { UsersIcon } from "lucide-react";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { ActionMenu, dropBelowStart, type MenuAction, useActionMenu } from "./action-menu";
 import { useNewWorkspaceDialog } from "./new-workspace-dialog";
-import { TILE_SIZE, WorkspaceTile } from "./workspace-tile";
+import { sharedWords, WORKSPACE_REF_SIZE, WorkspaceRef } from "./workspace-ref";
+import { WorkspaceTile } from "./workspace-tile";
 
 /**
  * workspace-switcher.tsx -- the sidebar's head: the workspace listed, by its tile and name and who shares it, and the menu that lists another.
@@ -53,28 +54,10 @@ function workspaceMenuGroups(
   ];
 }
 
-/**
- * Who shares a workspace in words: "Personal workspace" for the account's
- * own first workspace while no one else is in it, its members counted
- * otherwise, a team made a moment ago and joined by no one yet included;
- * nothing from a service that does not count them.
- */
-export function sharedWords(count: number | undefined, personal: boolean): string | undefined {
-  if (count === undefined) return undefined;
-  if (count <= 1) return personal ? "Personal workspace" : "1 member";
-  return `${count} members`;
-}
-
-/** The head's line saying who shares the workspace, a people glyph before a team's members counted. */
-function SharedLine({
-  count,
-  personal,
-}: {
-  count: number | undefined;
-  personal: boolean;
-}): React.JSX.Element | null {
+/** The head's line saying who shares the workspace, a people glyph before a team's members counted; none where the service does not count them. */
+function sharedLine(count: number | undefined, personal: boolean): React.JSX.Element | undefined {
   const words = sharedWords(count, personal);
-  if (count === undefined || words === undefined) return null;
+  if (count === undefined || words === undefined) return undefined;
   return (
     <span className="sidebar-workspace-shared">
       {personal && count <= 1 ? null : <UsersIcon aria-hidden="true" />}
@@ -111,11 +94,11 @@ export function WorkspaceSwitcher({
           .join(", ")}
         {...menu.trigger(dropBelowStart)}
       >
-        <WorkspaceTile workspace={listed} size={TILE_SIZE.HEAD} />
-        <span className="sidebar-workspace-copy">
-          <span className="sidebar-workspace-name">{listed.name}</span>
-          <SharedLine count={listed.memberCount} personal={personal} />
-        </span>
+        <WorkspaceRef
+          workspace={listed}
+          size={WORKSPACE_REF_SIZE.HEAD}
+          line={sharedLine(listed.memberCount, personal)}
+        />
         <ChevronDownIcon />
       </button>
       {menu.drawn === undefined ? null : (

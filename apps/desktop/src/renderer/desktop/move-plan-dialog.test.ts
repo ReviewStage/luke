@@ -219,7 +219,7 @@ test("a row calls the account's own first workspace personal while no one else i
   const fresh: Workspace = { ...NORTHWIND, id: "ws-fresh", name: "Platform", memberCount: 1 };
   openMenu(openTab({ ...PLAN, repository: null }, [personal, STUDIO, fresh]));
 
-  const rows = [...chooseMove().querySelectorAll('[role="radio"] .move-row-line')].map(
+  const rows = [...chooseMove().querySelectorAll('[role="radio"] .workspace-ref-line')].map(
     (line) => line.textContent,
   );
 

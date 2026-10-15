@@ -5,6 +5,7 @@ import { useId, useRef, useState } from "react";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutAria } from "#shared/shortcuts";
 import { CHIP_LOOK, Chip } from "../chip";
 import { ActionMenu, dropBelowStart, type MenuAction, useActionMenu } from "../desktop/action-menu";
+import { WORKSPACE_REF_SIZE, WorkspaceRef } from "../desktop/workspace-ref";
 import { WorkspaceTile } from "../desktop/workspace-tile";
 import { ModalShell } from "../modal-shell";
 import { Shortcut } from "../shortcut";
@@ -75,8 +76,7 @@ function WorkspaceChip({
         chevron
         {...menu.trigger(dropBelowStart)}
       >
-        <WorkspaceTile workspace={workspace} />
-        <span className="chip-name">{workspace.name}</span>
+        <WorkspaceRef workspace={workspace} size={WORKSPACE_REF_SIZE.ROW} />
       </Chip>
       {menu.drawn === undefined ? null : (
         <ActionMenu label="Workspace" menu={menu.drawn} groups={[choices]} onClose={menu.close} />
