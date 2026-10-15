@@ -279,3 +279,19 @@ test("a plain link to an address the window refuses to open is drawn going nowhe
   assert.equal(link.tagName, "SPAN");
   assert.deepEqual(sent, []);
 });
+
+test("a plain link hangs its whole address in the window's hint, an address past the hint's bound cut short", () => {
+  const long = `https://example.com/${"a".repeat(2_100)}`;
+  const container = drawn(
+    createElement(MarkdownMessage, { words: `See ${BARE} and [the long page](${long}).` }),
+  );
+  const [bare, longLink] = [...container.querySelectorAll<HTMLElement>(".text-link")];
+  assert.ok(bare !== undefined && longLink !== undefined);
+  const hint = (link: HTMLElement): string | null | undefined => {
+    act(() => link.dispatchEvent(new MouseEvent("pointerover", { bubbles: true })));
+    return document.querySelector('[role="tooltip"]')?.textContent;
+  };
+
+  assert.equal(hint(bare), BARE);
+  assert.equal(hint(longLink), `${long.slice(0, 499)}…`);
+});

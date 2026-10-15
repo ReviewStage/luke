@@ -26,6 +26,18 @@ import { Tooltip } from "./tooltip";
  * its caret and its marks stay where they stand.
  */
 
+/**
+ * The most characters of an address the hint says. Note that an address
+ * past it, thousands of characters long, is cut, because a hint taller than
+ * the window would stand mostly off it and scrolls nowhere.
+ */
+const HINT_MAX_CHARS = 500;
+
+/** The address as the hint says it: whole, or cut at the bound and marked. */
+function hintOf(href: string): string {
+  return href.length <= HINT_MAX_CHARS ? href : `${href.slice(0, HINT_MAX_CHARS - 1)}…`;
+}
+
 /** A plain link to `href`: its label as `children`, and its label's words, which say whether it is its own address; no words for a label that is more than words. */
 export function TextLink({
   href,
@@ -50,7 +62,7 @@ export function TextLink({
       children
     );
   return (
-    <Tooltip label={href}>
+    <Tooltip label={hintOf(href)}>
       {onOpen === undefined || !opensAsLink(href) ? (
         <span className={TEXT_LINK_CLASS}>{said}</span>
       ) : (
