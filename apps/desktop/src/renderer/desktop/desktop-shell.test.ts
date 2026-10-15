@@ -117,6 +117,7 @@ function mount(
   tab: PanelTab = PANEL_TAB.PLANS,
   onTabChange: (tab: PanelTab) => void = ignore,
   sidebarPatch: Partial<SidebarCollapse> = {},
+  registry = AtomRegistry.make(),
 ): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
@@ -173,7 +174,7 @@ function mount(
       settings: SETTINGS,
     });
   }
-  act(() => root?.render(onRegistry(AtomRegistry.make(), createElement(Shell))));
+  act(() => root?.render(onRegistry(registry, createElement(Shell))));
   return container;
 }
 
@@ -399,6 +400,49 @@ test("the Automations page's sidebar row and its command stand only while the ac
   await settle();
   assert.ok(on.querySelector(".sidebar-automations"));
   assert.equal(runAppCommand(APP_COMMAND.AUTOMATIONS), true);
+});
+
+test("Escape pressed while the Automations pages are still loading closes Automations, as the list does once it stands", async () => {
+  const closed: string[] = [];
+  const automationsView = {
+    open: false,
+    place: { kind: AUTOMATIONS_PAGE.LIST } as const,
+    onOpen: ignore,
+    onClose: () => closed.push("closed"),
+  };
+  const registry = AtomRegistry.make();
+  handState(experimentsOn(EXPERIMENT.AUTOMATIONS));
+  mount(
+    false,
+    false,
+    { workspaces: [ACME], workspace: ACME, automationsView },
+    PANEL_TAB.PLANS,
+    ignore,
+    {},
+    registry,
+  );
+  await settle();
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  // Note that the window's state has landed in the registry, so Automations opens within one render, before their chunk can.
+  const page = mount(
+    false,
+    false,
+    { workspaces: [ACME], workspace: ACME, automationsView: { ...automationsView, open: true } },
+    PANEL_TAB.PLANS,
+    ignore,
+    {},
+    registry,
+  );
+  const loading = page.querySelector("section[aria-label=Automations]");
+  assert.ok(loading, "the pages' frame stands");
+  assert.equal(loading.childElementCount, 0, "their chunk has not loaded yet");
+  act(() => {
+    assert.ok(runAppCommand(APP_COMMAND.EXIT_AUTOMATIONS), "Automations' way out is offered");
+  });
+
+  assert.deepEqual(closed, ["closed"]);
 });
 
 test("the Automations page stands in the plan's place, titled for the listed workspace, and gives it back once its experiment is off", async () => {

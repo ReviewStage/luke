@@ -57,6 +57,16 @@ const AutomationsPage = lazy(() =>
 );
 
 /**
+ * What stands while the Automations pages' chunk loads: their empty frame,
+ * and their own way out, so Escape pressed in that frame closes Automations
+ * as the list would rather than falling through to the plan behind it.
+ */
+function AutomationsLoading({ onExit }: { onExit: () => void }): React.JSX.Element {
+  useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, onExit);
+  return <section className="automations-view" aria-label="Automations" />;
+}
+
+/**
  * What stands while Settings' chunk loads: nothing drawn, but Settings' own
  * way out, so Escape pressed in that frame leaves Settings as it would once
  * drawn, rather than falling through to the plan behind it. It is gone as
@@ -472,7 +482,7 @@ export function DesktopShell({
         ) : factoryOpen ? (
           <DesktopFactory plans={plans} />
         ) : automationsOpen ? (
-          <Suspense fallback={<section className="automations-view" aria-label="Automations" />}>
+          <Suspense fallback={<AutomationsLoading onExit={plans.automationsView.onClose} />}>
             <AutomationsPage plans={plans} />
           </Suspense>
         ) : (
