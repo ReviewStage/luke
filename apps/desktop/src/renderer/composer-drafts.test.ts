@@ -536,3 +536,32 @@ test("an agent with no plan lets go of its own outdated answers as its inbox is 
   const kept = await planlessInbox(BILLING.agent.id, [theirs]);
   assert.equal(kept.draftOf(theirs).note, "Weekly");
 });
+
+test("words another panel's window writes for a box reach this window's box as they are written", async () => {
+  const app = windowOn(AtomRegistry.make());
+  await app.show(INVITES, { account: DEAN });
+  typeInComposer(app.container, "Fix login");
+  await settle();
+
+  // The other window's write, as storage hands it to this one.
+  window.localStorage.setItem(
+    "luke.composerDrafts",
+    JSON.stringify([keptEntry(DEAN.id, INVITES.plan.id, INVITES.agent.id, "Fix logout")]),
+  );
+  act(() => {
+    window.dispatchEvent(new StorageEvent("storage", { key: "luke.composerDrafts" }));
+  });
+  await settle();
+  assert.equal(app.box(), "Fix logout");
+});
+
+test("an account's drafts moved from its address reach a window that read its id's before", async () => {
+  const app = windowOn(AtomRegistry.make());
+  await app.show(INVITES, { account: DEAN });
+  await app.show(INVITES, { account: { email: DEAN.email } });
+  typeInComposer(app.container, "Check the export");
+  await settle();
+
+  await app.show(INVITES, { account: DEAN });
+  assert.equal(app.box(), "Check the export");
+});

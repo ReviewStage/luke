@@ -3,7 +3,7 @@ import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import { type InboxFormValue, inboxFormValueSchema } from "@luke/features/inbox-wire";
 import { Equal, Schema } from "effect";
 import { Atom } from "effect/reactivity";
-import { useLayoutEffect, useMemo, useRef } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { readKept, writeKept } from "./desktop/folded-groups";
 
 /**
@@ -26,7 +26,8 @@ import { readKept, writeKept } from "./desktop/folded-groups";
  * without an id, and a window reads only the drafts of the account
  * signed in to it (`useDraftsOwner`), so a teammate signing in on the same
  * Mac meets nothing of another's unsent words, which wait for their writer
- * to sign in again. A mention or a skill is part of the words, written
+ * to sign in again. A window reads what another panel's window wrote as it
+ * is written, so two boxes for one place show the words written last. A mention or a skill is part of the words, written
  * as its link or its `/name`, so it comes back as the chip it was. The files
  * attached are kept in this window alone, for as long as it stands, because
  * a message's files may run to megabytes and storage holds a few: a relaunch
@@ -199,7 +200,8 @@ function withDraft(
 /** A change to the drafts: one place's draft moved on from what it holds, or the drafts a predicate names let go. */
 type DraftChange =
   | { readonly place: DraftPlace; readonly next: (was: Draft) => Draft }
-  | { readonly drop: (place: DraftPlace) => boolean };
+  | { readonly drop: (place: DraftPlace) => boolean }
+  | { readonly reread: true };
 
 /**
  * Every draft one account holds, in an atom of its own. Note that a write
@@ -227,6 +229,11 @@ const draftsOf = Atom.family((owner: Owner) => {
           (kept) => !stored(kept) && !read.some((each) => Equal.equals(each.place, kept.place)),
         );
         const standing = [...filesAlone, ...read];
+        // A read again takes what another window or a move wrote, and writes nothing of its own.
+        if ("reread" in change) {
+          ctx.setSelf(standing);
+          return;
+        }
         const next =
           "drop" in change
             ? standing.filter((kept) => !change.drop(kept.place))
@@ -287,12 +294,24 @@ export function useDraftsOwner(
   account: { readonly id?: string | undefined; readonly email: string } | undefined,
 ): void {
   const own = useAtomSet(ownerAtom);
+  const change = useAtomSet(draftsAtom);
   const id = account?.id;
   const email = account?.email;
   useLayoutEffect(() => {
     if (id !== undefined && email !== undefined) adoptDrafts(email, id);
     own(id ?? email ?? null);
-  }, [own, id, email]);
+    // Note that the account's drafts are read again, because a window that held them before may
+    // hold them as they stood then, before a move from its address added to them.
+    change({ reread: true });
+  }, [own, change, id, email]);
+  // Another panel's window writing the drafts is read at once, so a box never types over its words.
+  useEffect(() => {
+    const heard = (event: StorageEvent) => {
+      if (event.key === STORAGE_KEY) change({ reread: true });
+    };
+    window.addEventListener("storage", heard);
+    return () => window.removeEventListener("storage", heard);
+  }, [change]);
 }
 
 /**
