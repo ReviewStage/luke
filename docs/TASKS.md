@@ -176,9 +176,10 @@ new-task page, which leaves the task, and the new-task page closes the panel. Es
 - An archived task leaves the list for **Archived (n)**, a quiet row at the
   list's foot that unfolds the archived tasks, newest archived first.
   Archiving the open task leaves it for the new-task page, as deleting it
-  does, and back and forward pass archived tasks over. Pins and archives are
-  the account's (`PATCH /api/plans/{id}`), so they follow it to every Mac,
-  and a Pin, an Archive, or the way back from either is drawn at once and
+  does, and back and forward pass archived tasks over. A pin is the account's
+  own and an archive the workspace's (`PATCH /api/plans/{id}`), so a task of
+  a shared workspace one member pinned stands under Pinned for them alone,
+  both follow the account to every Mac, and a Pin, an Archive, or the way back from either is drawn at once and
   put back, with a quiet note under the task's row, when the service refuses.
 - There is no search in this journey.
 
