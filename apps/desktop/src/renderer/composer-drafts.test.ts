@@ -91,11 +91,20 @@ async function settle(): Promise<void> {
   });
 }
 
+/** A signed-in identity: its id, where it was stored with one, and its address. */
+interface Identity {
+  readonly id?: string;
+  readonly email: string;
+}
+
 /** The account signed in to the window, as the panel's root hands it the drafts. */
-function SignedIn({ accountId }: { accountId: string | undefined }): null {
-  useDraftsOwner(accountId);
+function SignedIn({ account }: { account: Identity | undefined }): null {
+  useDraftsOwner(account);
   return null;
 }
+
+const DEAN = { id: "user-dean", email: "dean@example.com" } as const;
+const SAM = { id: "user-sam", email: "sam@example.com" } as const;
 
 /** Sends nothing anywhere: every message stays out, unanswered. */
 const NEVER_ANSWERED: MessageSender = () => new Promise(() => undefined);
@@ -116,7 +125,7 @@ function windowOn(registry: AtomRegistry.AtomRegistry) {
       onPlan = false,
       send = NEVER_ANSWERED,
       account,
-    }: { onPlan?: boolean; send?: MessageSender; account?: string } = {},
+    }: { onPlan?: boolean; send?: MessageSender; account?: Identity } = {},
   ) => {
     const agentTab = { agent: open.agent.id };
     const plans = plansControl({
@@ -155,7 +164,7 @@ function windowOn(registry: AtomRegistry.AtomRegistry) {
           createElement(
             Fragment,
             null,
-            createElement(SignedIn, { accountId: account }),
+            createElement(SignedIn, { account }),
             createElement("ul", null, rows),
             createElement(DesktopPlans, {
               summary: UNPINNED_SUMMARY,
@@ -267,19 +276,32 @@ test("a box emptied by hand lets its draft go, and its mark with it", async () =
 
 test("a draft is its account's: another signing in on the same Mac meets none of it, and its writer finds it again", async () => {
   const app = windowOn(AtomRegistry.make());
-  await app.show(INVITES, { account: "user-dean" });
+  await app.show(INVITES, { account: DEAN });
   typeInComposer(app.container, "Expire invites after a week");
   await settle();
 
-  await app.show(INVITES, { account: "user-sam" });
+  await app.show(INVITES, { account: SAM });
   assert.equal(app.box(), "");
   assert.equal(app.rowDrafted(INVITES.plan.name), false);
   for (const root of roots.splice(0)) act(() => root.unmount());
 
   const relaunched = windowOn(AtomRegistry.make());
-  await relaunched.show(INVITES, { account: "user-sam" });
+  await relaunched.show(INVITES, { account: SAM });
   assert.equal(relaunched.box(), "", "nor after a relaunch");
-  await relaunched.show(INVITES, { account: "user-dean" });
+  await relaunched.show(INVITES, { account: DEAN });
   assert.equal(relaunched.box(), "Expire invites after a week");
   assert.equal(relaunched.rowDrafted(INVITES.plan.name), true);
+});
+
+test("accounts whose identity holds no id are told apart by their address, so neither reads the other's draft", async () => {
+  const app = windowOn(AtomRegistry.make());
+  await app.show(INVITES, { account: { email: DEAN.email } });
+  typeInComposer(app.container, "Expire invites after a week");
+  await settle();
+
+  await app.show(INVITES, { account: { email: SAM.email } });
+  assert.equal(app.box(), "");
+  assert.equal(app.rowDrafted(INVITES.plan.name), false);
+  await app.show(INVITES, { account: { email: DEAN.email } });
+  assert.equal(app.box(), "Expire invites after a week");
 });

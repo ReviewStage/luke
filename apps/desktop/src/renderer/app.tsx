@@ -98,7 +98,7 @@ export function App(): React.JSX.Element {
     forgetPictures();
   }, [accountKey]);
   // A draft is its account's: the window reads the unsent words of the one signed in alone.
-  useDraftsOwner(account?.status === ACCOUNT_STATUS.SIGNED_IN ? account.id : undefined);
+  useDraftsOwner(account?.status === ACCOUNT_STATUS.SIGNED_IN ? account : undefined);
   const outputAudio = state?.audio.outputAudio;
   const [tab, setTab] = useStateWithRef<PanelTab>(PANEL_TAB.PLANS);
   const [settingsView, setSettingsView] = useStateWithRef<SettingsView>(SETTINGS_VIEW.ACCOUNT);

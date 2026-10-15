@@ -19,7 +19,8 @@ import { readKept, writeKept } from "./desktop/folded-groups";
  * The words are kept in the renderer's own storage, as the sidebar's folds
  * and the plans' looks are, so they outlast a reload and a relaunch on this
  * Mac and reach no other. They are the account's that wrote them, each kept
- * with its account's id, and a window reads only the drafts of the account
+ * with its account's id, or its address where its identity was stored
+ * without an id, and a window reads only the drafts of the account
  * signed in to it (`useDraftsOwner`), so a teammate signing in on the same
  * Mac meets nothing of another's unsent words, which wait for their writer
  * to sign in again. A mention or a skill is part of the words, written
@@ -185,11 +186,16 @@ const draftsAtom = Atom.keepAlive(
 /**
  * Hands this window's drafts to the account signed in to it, before the
  * window is painted, so a box opening as the account changes never shows
- * another's words; nothing while none is signed in.
+ * another's words; nothing while none is signed in. An account is known by
+ * its id, or by its address where its identity was stored without one, so
+ * two such accounts never share their drafts either.
  */
-export function useDraftsOwner(accountId: string | undefined): void {
+export function useDraftsOwner(
+  account: { readonly id?: string | undefined; readonly email: string } | undefined,
+): void {
   const own = useAtomSet(ownerAtom);
-  useLayoutEffect(() => own(accountId ?? null), [own, accountId]);
+  const owner = account === undefined ? null : (account.id ?? account.email);
+  useLayoutEffect(() => own(owner), [own, owner]);
 }
 
 /**
