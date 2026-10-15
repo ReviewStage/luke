@@ -12,11 +12,11 @@ import { TranscriptWords } from "./transcript-blocks";
 import { OpenPlanProvider } from "./use-open-link";
 
 /**
- * A link pressed in written words: a Luke link opens its plan in the
- * window, at its section, and never the browser, while a GitHub page and
- * any other web page open in the browser over their acts; off the window,
- * where no opener for a plan is handed down, a Luke link opens in the
- * browser too. Synthetic plan.
+ * A link pressed in written words: a Luke link, drawn as its chip, opens
+ * its plan in the window, at its section, and never the browser, while a
+ * GitHub page, drawn as GitHub's chip, and any other web page open in the
+ * browser over their acts; off the window, where no opener for a plan is
+ * handed down, a Luke link's chip opens nothing. Synthetic plan.
  */
 
 const PLAN_ID = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
@@ -65,7 +65,9 @@ function pressedEach(openPlan: ((mention: PlanMention) => void) | undefined): vo
       openPlan === undefined ? words : createElement(OpenPlanProvider, { value: openPlan }, words),
     ),
   );
-  for (const link of container.querySelectorAll<HTMLElement>("a, .agent-link-inert")) {
+  for (const link of container.querySelectorAll<HTMLElement>(
+    "a, .agent-link-inert, button.mention-chip",
+  )) {
     act(() => link.click());
   }
 }
@@ -85,11 +87,11 @@ test("a Luke link opens its plan in the window, at its section, and other pages 
   );
 });
 
-test("off the window, where no opener for a plan is handed down, a Luke link opens in the browser", () => {
+test("off the window, where no opener for a plan is handed down, a Luke link opens nothing, and other pages still open in the browser", () => {
   pressedEach(undefined);
 
   assert.deepEqual(
     sent.map((request) => request.kind),
-    [ACT_KIND.WEB_OPEN, ACT_KIND.WEB_OPEN, ACT_KIND.GITHUB_OPEN, ACT_KIND.WEB_OPEN],
+    [ACT_KIND.GITHUB_OPEN, ACT_KIND.WEB_OPEN],
   );
 });

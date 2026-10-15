@@ -24,10 +24,10 @@ import { useOpenLink } from "./use-open-link";
 /**
  * mention-chip.tsx -- a mention drawn in words as its chip: its kind's glyph and its name, a button that opens what it names, hanging a card that says what that is, struck through where what it names is gone.
  *
- * A mention is written into markdown as a link whose label starts with `@`
- * (`@luke/features/mention-link`), and wherever the words are drawn by a
- * place that can open what a mention names, the link is drawn as this
- * chip: a pill on the words' line, the kind's glyph and the name the
+ * A mention is written into markdown as a link whose target names it
+ * (`@luke/features/mention-link`'s `linkMention`), a developer's with a
+ * label starting with `@`, and wherever words are drawn, the link is drawn
+ * as this chip: a pill on the words' line, the kind's glyph and the name the
  * mention was written with, cut to the chip's width. A press opens it: a
  * section of a plan, that plan scrolled to the section; a plan, the plan
  * at its top; a file, its tab, through the side panel's one door for a file

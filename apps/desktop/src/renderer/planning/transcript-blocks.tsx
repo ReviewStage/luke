@@ -3,7 +3,7 @@ import {
   type CodingAgentTodoStatus,
   type CodingAgentTodos,
 } from "@luke/features/coding-agent-wire";
-import { decodeMention, isMentionLabel, mentionName } from "@luke/features/mention-link";
+import { linkMention, mayNameMention } from "@luke/features/mention-link";
 import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
 import {
   CALL_KIND,
@@ -73,7 +73,7 @@ import { Tooltip } from "../tooltip";
 import { useClipped } from "../use-clipped";
 import { MentionChip } from "./mention-chip";
 import { ModelLabel } from "./model-label";
-import { usePlanMentions } from "./plan-mentions";
+import { useMentionDoors } from "./plan-mentions";
 import { SubagentMark } from "./tab-look";
 import { cardTitle } from "./tool-call-model";
 import {
@@ -156,9 +156,10 @@ interface WordsNode {
   readonly children?: readonly WordsNode[];
 }
 
-/** A node of the words as markdown reads them, which a mention's link is marked on. */
+/** A node of the words as markdown reads them, which a mention's link is marked on: a link's target, or the label a reference link and its definition share. */
 interface MarkdownNode extends WordsNode {
   readonly url?: string;
+  readonly identifier?: string;
   readonly children?: readonly MarkdownNode[];
   data?: { hName?: string; hProperties?: Record<string, string> };
 }
@@ -170,40 +171,67 @@ function wordsOf(node: WordsNode): string {
 }
 
 /**
- * Marks every link in the words whose label starts with `@`, which may be a
- * mention, to be drawn as its own element, which reads what it names
- * against the plan its page is of. Note that the mark is made on the
- * markdown, before it is drawn, because the drawing's sanitizer keeps no
- * address on a link but the web's, so a mention's target would never reach
- * a link of ours.
+ * Marks every link in the words whose target may name a mention to be
+ * drawn as its own element, which reads what it names against the plan
+ * its page is of (`linkMention`): the same rule for a developer's `@`
+ * mention, an agent's link, a reference link, and a bare address. A target
+ * is read here before the page's repository is known (`mayNameMention`),
+ * so every page of GitHub's is marked, and every other link is drawn as
+ * the library draws it. Note that the mark is made on the markdown, before
+ * it is drawn, because the drawing's sanitizer keeps no address on a link
+ * but the web's, so a mention's target would never reach a link of ours.
+ * Code holds no link, so a mention in code stays code.
  */
-function markMentions(node: MarkdownNode): void {
-  if (node.type === "link" && node.url !== undefined && isMentionLabel(wordsOf(node))) {
+function markMentions(node: MarkdownNode, definitions: ReadonlyMap<string, string>): void {
+  const target =
+    node.type === "link"
+      ? node.url
+      : node.type === "linkReference" && node.identifier !== undefined
+        ? definitions.get(node.identifier)
+        : undefined;
+  if (target !== undefined && mayNameMention(target)) {
     node.data = {
       hName: MENTION_ELEMENT.TAG,
-      hProperties: { [MENTION_ELEMENT.TARGET]: node.url },
+      hProperties: { [MENTION_ELEMENT.TARGET]: target },
     };
     return;
   }
-  for (const child of node.children ?? []) markMentions(child);
+  for (const child of node.children ?? []) markMentions(child, definitions);
 }
 
-/** The markdown steps a transcript is read with: the library's own, then the mark on its mentions. */
-const TRANSCRIPT_REMARK_PLUGINS = [...Object.values(defaultRemarkPlugins), () => markMentions];
+/** Each link definition in the words, by the label a reference link names it with, the first standing where one is defined twice, as markdown reads them. */
+function definitionsIn(
+  node: MarkdownNode,
+  found: Map<string, string> = new Map(),
+): Map<string, string> {
+  if (node.type === "definition" && node.identifier !== undefined && node.url !== undefined) {
+    if (!found.has(node.identifier)) found.set(node.identifier, node.url);
+  }
+  for (const child of node.children ?? []) definitionsIn(child, found);
+  return found;
+}
+
+/** The step that marks a transcript's links, a reference link's read through its definition. */
+function markLinks(tree: MarkdownNode): void {
+  markMentions(tree, definitionsIn(tree));
+}
+
+/** The markdown steps a transcript is read with: the library's own, then the mark on its links. */
+const TRANSCRIPT_REMARK_PLUGINS = [...Object.values(defaultRemarkPlugins), () => markLinks];
 
 /**
- * A mention in a transcript's words: on a plan's page, the chip that opens
- * what it names (`mention-chip.tsx`); off one, a link as any other is.
+ * A link in a transcript's words: the chip that opens what it names
+ * (`mention-chip.tsx`) where its target names a mention, read against the
+ * plan's page it is drawn on, or the window's doors off one; a link as any
+ * other is where it names none.
  */
 function MentionElement({ node, children }: ExtraProps & { children?: ReactNode }): ReactNode {
-  const mentions = usePlanMentions();
+  const doors = useMentionDoors();
   const target = String(node?.properties[MENTION_ELEMENT.TARGET] ?? "");
-  const mention =
-    mentions === undefined ? undefined : decodeMention(target, mentions.doors.place.repository);
-  if (node === undefined || mention === undefined || mentions === undefined) {
-    return <TranscriptLink href={target}>{children}</TranscriptLink>;
-  }
-  return <MentionChip mention={mention} name={mentionName(wordsOf(node))} doors={mentions.doors} />;
+  const found =
+    node === undefined ? undefined : linkMention(wordsOf(node), target, doors.place.repository);
+  if (found === undefined) return <TranscriptLink href={target}>{children}</TranscriptLink>;
+  return <MentionChip mention={found.mention} name={found.name} doors={doors} />;
 }
 
 /**

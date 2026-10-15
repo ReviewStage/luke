@@ -1,5 +1,9 @@
 import { Schema as EffectSchema, Option } from "effect";
-import { integrationOfHost, integrationProviderSchema } from "./integration-wire.js";
+import {
+  INTEGRATION_NAME,
+  integrationOfHost,
+  integrationProviderSchema,
+} from "./integration-wire.js";
 import { PLAN_SECTION_BOUNDS } from "./plan-wire.js";
 
 /**
@@ -13,6 +17,13 @@ import { PLAN_SECTION_BOUNDS } from "./plan-wire.js";
  * caller holds a `Mention`, which names its subject and nothing of the
  * form, and goes through `encodeMention` and `decodeMention` to write and
  * read one.
+ *
+ * Drawn, the `@` is not asked for: wherever Luke draws words a person,
+ * Luke, or an agent wrote, any link whose target names a mention is drawn
+ * as its chip (`linkMention`), a bare address among them, so an agent that
+ * writes a file's GitHub page or a Linear issue's address is drawn as a
+ * developer's mention of it is. The `@` still says which links a developer
+ * placed, which a writer must keep and an agent is handed (`mentionsIn`).
  *
  * The target is the address the thing has on the web, so a mention copied
  * out of Luke, into Slack, a pull request or a mail, still leads somewhere
@@ -731,6 +742,80 @@ export function isMentionLabel(label: string): boolean {
 /** A mention's label without its `@`, as its chip says it. */
 export function mentionName(label: string): string {
   return isMentionLabel(label) ? label.slice(MENTION_SIGIL.length) : label;
+}
+
+/** What a bare link's chip names a plan by, since its address holds no name of the plan's. */
+const BARE_PLAN_NAME = "Plan";
+
+/** A file's lines as a chip names them, `app.ts:12–20`, as a mention of them picked from a File tab is named. */
+function linesName(path: string, lines: MentionLines | undefined): string {
+  const name = path.split("/").at(-1) ?? path;
+  if (lines === undefined) return name;
+  const span =
+    lines.startLine === lines.endLine
+      ? String(lines.startLine)
+      : `${lines.startLine}–${lines.endLine}`;
+  return `${name}:${span}`;
+}
+
+/** What a mention written as its bare address is named: what the address itself says of the thing. */
+function bareName(mention: Mention): string {
+  switch (mention.kind) {
+    case MENTION_KIND.PLAN:
+      return BARE_PLAN_NAME;
+    case MENTION_KIND.SECTION:
+      return mention.anchor;
+    case MENTION_KIND.FILE:
+      return linesName(mention.path, mention.lines);
+    case MENTION_KIND.FOLDER:
+      return mention.path.split("/").at(-1) ?? mention.path;
+    case MENTION_KIND.SERVER:
+      return INTEGRATION_NAME[mention.provider];
+    case MENTION_KIND.TOOL:
+      return mention.tool;
+    case MENTION_KIND.LINK:
+      return readableLink(mention.url);
+  }
+}
+
+/** Whether a link's label is its target spelled out, as a bare address's is: the same address, however its characters are encoded. */
+function isBareLabel(label: string, target: string): boolean {
+  if (label === "" || label === target) return true;
+  const spelled = parsedUrl(label);
+  return spelled !== undefined && spelled.href === parsedUrl(target)?.href;
+}
+
+/**
+ * Whether a link's target may name a mention for some plan, so a reader
+ * who does not yet know the plan's repository knows to read it again when
+ * it does: one that names a mention with no repository, or any page of
+ * GitHub's, which may be a file or a folder of the plan's.
+ */
+export function mayNameMention(target: string): boolean {
+  if (decodeMention(target, null) !== undefined) return true;
+  return parsedUrl(target)?.origin === GITHUB.ORIGIN;
+}
+
+/**
+ * A link in written words as the mention its chip draws, whoever wrote it:
+ * any link whose target names a mention, a GitHub page as a file or a
+ * folder only of `repository`, the plan's, is one, whatever its label says,
+ * so an agent's `[the store](<GitHub page>)` reads as the developer's
+ * `[@store.ts](<GitHub page>)` does. Its name is its label, without its `@`;
+ * a bare address, its label the address spelled out, is named by what the
+ * address says of the thing. Nothing for a link whose target names none,
+ * which stays a link.
+ */
+export function linkMention(
+  label: string,
+  target: string,
+  repository: string | null,
+): { readonly mention: Mention; readonly name: string } | undefined {
+  const mention = decodeMention(target, repository);
+  if (mention === undefined) return undefined;
+  const words = label.trim();
+  if (isBareLabel(words, target)) return { mention, name: bareName(mention) };
+  return { mention, name: mentionName(words) };
 }
 
 /** The mention written into markdown as a link: `[@label](target)`, its label's brackets and backslashes escaped. */

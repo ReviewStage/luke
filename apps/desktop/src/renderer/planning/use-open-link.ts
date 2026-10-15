@@ -28,6 +28,11 @@ const OpenPlanContext = createContext<((mention: PlanMention) => void) | undefin
 /** Hands the window's opener for a plan, or one of its sections, to everything under it. */
 export const OpenPlanProvider = OpenPlanContext.Provider;
 
+/** The window's opener for a plan, or one of its sections; nothing outside the window. */
+export function useOpenPlan(): ((mention: PlanMention) => void) | undefined {
+  return useContext(OpenPlanContext);
+}
+
 /**
  * Whether a link is one the window opens. Note that it asks the two acts'
  * own schemas, because an address both refuse would be drawn as a press
@@ -49,7 +54,7 @@ function lukeLinkOf(href: string): PlanMention | undefined {
 /** Opens a link {@link opensAsLink} admits: a Luke link in the window where it can be, anything else in the browser, over the act it belongs to. */
 export function useOpenLink(): (href: string) => void {
   const { tell } = useAct();
-  const openPlan = useContext(OpenPlanContext);
+  const openPlan = useOpenPlan();
   return useCallback(
     (href: string) => {
       const plan = openPlan === undefined ? undefined : lukeLinkOf(href);
