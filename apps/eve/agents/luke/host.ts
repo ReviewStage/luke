@@ -9,7 +9,7 @@ import {
 import { hostedEnvironment } from "@luke/service/environment";
 import { Effect } from "effect";
 import type { SessionAuth } from "eve/context";
-import { runAgent } from "./runtime.js";
+import { runAgent } from "../../runtime.js";
 
 /**
  * The one host every authored file of this eve project shares, over the

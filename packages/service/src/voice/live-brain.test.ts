@@ -35,6 +35,7 @@ import { openChildConversation } from "../agents/brain-host/conversation.js";
 import { ownedAuth } from "../agents/brain-host/door.js";
 import {
   EVE_CANCEL_OUTCOME,
+  EVE_MOUNT,
   EVE_SEND_OUTCOME,
   type EveMessage,
   type EveSessions,
@@ -472,7 +473,9 @@ interface DoorSeen {
 
 /**
  * eve as the deployment reaches it, with the real door in front: the host's
- * own client over an `HttpClient` whose every request walks `ownedAuth` with
+ * own client over an `HttpClient` whose every request enters Luke's service by
+ * its public mount, has that mount turned back into eve's own `/eve/v1/*` as
+ * the deployment's route does, and walks `ownedAuth` with
  * the deployment actor the production channel composes, over an ownership
  * that attributes the one session and the one conversation to the account
  * the brain stands for. Note that the ownership is answered from the ids
@@ -498,9 +501,12 @@ async function eveBehindDoor(target: ConversationTarget, sessionId: string) {
     },
   );
   const door = fakeHttpClientLayer(async (url, init) => {
-    const request = new Request(url, init);
+    // The deployment's route into Luke's service turns the public mount back into eve's own path, as the door reads it.
+    const routed = new URL(url);
+    routed.pathname = routed.pathname.replace(`${EVE_MOUNT.PLANNING}/v1/`, "/eve/v1/");
+    const request = new Request(routed, init);
     seen.push({
-      pathname: new URL(url).pathname,
+      pathname: routed.pathname,
       authorization: request.headers.get("authorization"),
       account: request.headers.get(BRAIN_HOST_HEADER.ACCOUNT),
       body: JSON.parse(await request.text()),

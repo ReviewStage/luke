@@ -71,7 +71,7 @@
       "entry": ["instructions/*.ts", "evals/evals.config.ts", "evals/*.eval.ts"],
       "project": ["**/*.ts"]
     },
-    "apps/web/eve": {
+    "apps/eve": {
       "ignoreDependencies": [
         "@ai-sdk/anthropic",
         "@ai-sdk/openai",
@@ -84,7 +84,15 @@
         "diff",
         "ws"
       ],
-      "entry": ["instructions/*.ts", "evals/evals.config.ts", "evals/*.eval.ts"],
+      "entry": [
+        "agents/*/{,subagents/*/}agent.ts",
+        "agents/*/{,subagents/*/}sandbox.ts",
+        "agents/*/{,subagents/*/}instructions.ts",
+        "agents/*/{,subagents/*/}instructions/*.ts",
+        "agents/*/{,subagents/*/}{channels,connections,hooks,skills,tools}/**/*.ts",
+        "agents/*/evals/evals.config.ts",
+        "agents/*/evals/*.eval.ts"
+      ],
       "project": ["**/*.ts"]
     },
     "tools/anti-slop": {

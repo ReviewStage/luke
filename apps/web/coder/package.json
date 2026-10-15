@@ -28,7 +28,7 @@
     "diff": "9.0.0",
     "drizzle-orm": "catalog:",
     "effect": "catalog:",
-    "eve": "0.74.0",
+    "eve": "catalog:",
     "pg": "8.23.0",
     "ws": "catalog:"
   }

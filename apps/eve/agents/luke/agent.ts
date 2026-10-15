@@ -4,8 +4,8 @@ import { scriptedModel } from "@luke/service/testing/eve-scripted-model";
 import { Result } from "effect";
 import { defineAgent, defineDynamic } from "eve";
 import type { SessionAuth } from "eve/context";
+import { runAgent } from "../../runtime.js";
 import { host, seams } from "./host.js";
-import { runAgent } from "./runtime.js";
 
 /**
  * Luke's judgment on the hosted tier, as an eve agent. eve ships a default

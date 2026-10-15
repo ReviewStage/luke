@@ -13,7 +13,7 @@ import { checkApiCallers, PROBE_SEGMENT, RESOLUTION } from "./api-callers.js";
  * nothing in CI could see what Vercel had built: the Framework Preset and
  * the configuration's `services` key must agree, and only a deployment shows
  * whether they did. A deployment distinguishes the states — a services build
- * serves eve at `/eve/v1/health` and every `/api/` function; the single-app
+ * serves each agent's eve health and every `/api/` function; the single-app
  * build answers `NOT_FOUND` for eve; a preset without the key fails to build
  * at all — so this sends one the requests a hand probe would make: every
  * `/api/` path a client in the repository spells (`api-callers.ts` derives the
@@ -65,11 +65,14 @@ const METHOD_BY_DOOR = {
 
 const SITE_ROOT_PATH = "/";
 /**
- * eve's own `EVE_HEALTH_ROUTE_PATH`, which the package keeps off its public
- * exports; the root `vercel.ts`'s `/eve/v1/(.*)` rewrite is what lands it on the
- * eve service, so its answer is the eve service being served.
+ * eve's own `EVE_HEALTH_ROUTE_PATH` (`/eve/v1/health`, which the package keeps
+ * off its public exports) under each public mount of an agent: Luke's at the
+ * workspace member's `/eve/luke`, which `withEve` routes to its service, and
+ * Luke's mount from before the workspace, which the root `vercel.ts` still
+ * routes there for the sessions already running. An answer is that agent's
+ * service being served.
  */
-const EVE_HEALTH_PATH = "/eve/v1/health";
+const EVE_HEALTH_PATHS = ["/eve/luke/v1/health", "/eve/v1/health"] as const;
 
 const PROBE_STATUS = {
   OK: 200,
@@ -98,7 +101,7 @@ const EXPECTED_STATUS = {
     ["/api/voice/sessions", PROBE_STATUS.UPGRADE_REQUIRED],
     ["/api/terminal/sessions", PROBE_STATUS.UPGRADE_REQUIRED],
     ["/api/feedback", PROBE_STATUS.METHOD_NOT_ALLOWED],
-    [EVE_HEALTH_PATH, PROBE_STATUS.OK],
+    ...EVE_HEALTH_PATHS.map((path) => [path, PROBE_STATUS.OK] as const),
   ]),
   [PROBE_DOOR.OPTIONS_ALLOWLIST]: new Map([
     ["/api/plans", PROBE_STATUS.METHOD_NOT_ALLOWED],
@@ -134,7 +137,7 @@ export function planProbes(door: ProbeDoor, paths: ProbePaths): readonly Planned
   const method = METHOD_BY_DOOR[door];
   const expected = EXPECTED_STATUS[door];
   const page = door === PROBE_DOOR.BYPASS_SECRET ? [SITE_ROOT_PATH] : [];
-  const unique = new Set([...page, ...paths.callers, ...paths.crons, EVE_HEALTH_PATH]);
+  const unique = new Set([...page, ...paths.callers, ...paths.crons, ...EVE_HEALTH_PATHS]);
   return [...unique].sort().map((path) => ({ method, path, expected: expected.get(path) }));
 }
 

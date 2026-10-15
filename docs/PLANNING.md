@@ -935,7 +935,7 @@ The planning model reads the plan's repository, not a folder on the Mac,
 and so does the code it puts on the developer's screen. What only the Mac
 has, it reaches with `run_on_mac` (below).
 `run_in_repository` runs one bash command in a Vercel Sandbox the planning
-conversation's eve session owns (`apps/web/eve/sandbox.ts`), on a checkout of
+conversation's eve session owns (`apps/eve/agents/luke/sandbox.ts`), on a checkout of
 the plan's GitHub repository (`packages/service/src/agents/repository-shell.ts`).
 The first call that finds no checkout of the plan's repository makes one, at
 the repository's current default branch and one commit deep, and later calls

@@ -1,17 +1,58 @@
 import assert from "node:assert/strict";
-import { readdirSync } from "node:fs";
+import { readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { RESERVED_WORKSPACE_SLUGS } from "@luke/features/workspace-wire";
+import { Schema } from "effect";
 import { test } from "vitest";
-import { config, SERVICE } from "../../../vercel";
+import { config, EVE_WORKSPACE, SERVICE } from "../../../vercel";
 import { webFunctions } from "../server/function-layout";
 import { apiRewrites, rewritesDrifted } from "../server/function-rewrites";
 
 const WEB = fileURLToPath(new URL("..", import.meta.url));
+const REPOSITORY = join(WEB, "..", "..");
 
-const webRoutes = (config.services[SERVICE.WEB].routes ?? []).flatMap((route) =>
+/** A route that lands a path on a page or a function of the service it runs in. */
+const PathRoute = Schema.Struct({ src: Schema.String, dest: Schema.String });
+/** A route that rewrites the path a request entered its service with. */
+const TransformRoute = Schema.Struct({
+  src: Schema.String,
+  transforms: Schema.Array(Schema.Unknown),
+});
+
+/**
+ * The configuration Vercel is handed, read as the deployment's shape: what
+ * `vercel.ts` exports is `withEve`'s plain object, typed loosely by eve, so
+ * the test reads it through a Schema rather than trusting its type.
+ */
+const DeployedConfig = Schema.Struct({
+  services: Schema.Record(
+    Schema.String,
+    Schema.Struct({
+      root: Schema.String,
+      buildCommand: Schema.String,
+      routes: Schema.optional(Schema.Array(Schema.Union([PathRoute, TransformRoute]))),
+    }),
+  ),
+  routes: Schema.Array(
+    Schema.Struct({ src: Schema.String, destination: Schema.Struct({ service: Schema.String }) }),
+  ),
+});
+
+const deployed = Schema.decodeUnknownSync(DeployedConfig)(config);
+
+const webRoutes = (deployed.services[SERVICE.WEB]?.routes ?? []).flatMap((route) =>
   "dest" in route ? [route] : [],
 );
+
+/** The service a public path enters, by the first top-level route that matches it whole, as Vercel picks one. */
+function serviceFor(path: string): string | undefined {
+  return deployed.routes.find((route) => new RegExp(route.src, "u").test(path))?.destination
+    .service;
+}
+
+/** The directory a service's build command enters first, from the service's root. */
+const ENTERED = /^cd '([^']+)'/u;
 
 test("the /api/ rewrites are generated into the web service's routes, ahead of its other routes, and the committed table carries exactly that generation", async () => {
   const generated = apiRewrites(await webFunctions(WEB));
@@ -21,8 +62,29 @@ test("the /api/ rewrites are generated into the web service's routes, ahead of i
     [],
   );
   assert.equal(await rewritesDrifted(WEB), false);
-  // Vercel ignores a top-level `routes` key in services mode, so a route left there would 404 in production.
-  assert.equal("routes" in config, false);
+});
+
+test("a public path enters its service: Luke at the workspace member's mount and at its mount from before the workspace, the coding agent at its own, and everything else the website", () => {
+  assert.equal(serviceFor("/eve/luke/v1/session"), SERVICE.LUKE);
+  assert.equal(serviceFor("/eve/luke/v1/health"), SERVICE.LUKE);
+  assert.equal(serviceFor("/eve/v1/session/s_1/stream"), SERVICE.LUKE);
+  assert.equal(serviceFor("/eve/coder/v1/session"), SERVICE.CODER);
+  assert.equal(serviceFor("/api/plans"), SERVICE.WEB);
+  assert.equal(serviceFor("/acme/plan/p_1"), SERVICE.WEB);
+});
+
+test("every service is rooted at a directory from the repository root, and each agent's build enters its own member of the eve workspace", () => {
+  for (const [name, service] of Object.entries(deployed.services)) {
+    assert.ok(statSync(join(REPOSITORY, service.root)).isDirectory(), `${name}: ${service.root}`);
+  }
+  const luke = deployed.services[SERVICE.LUKE];
+  assert.ok(luke);
+  const entered = ENTERED.exec(luke.buildCommand)?.[1];
+  assert.ok(entered, luke.buildCommand);
+  assert.equal(
+    join(REPOSITORY, luke.root, entered),
+    join(REPOSITORY, EVE_WORKSPACE, "agents", "luke"),
+  );
 });
 
 /** The first step of a path, where it is spelled as itself rather than matched. */
@@ -31,7 +93,7 @@ const FIRST_STEP = /^\^?\/([a-z0-9-]+)(?:\/|$)/u;
 test("no workspace's slug can be the first step of a page the web app serves under its own name", () => {
   const routed = [
     ...webRoutes.map((route) => route.src),
-    ...config.rewrites.map((rewrite) => rewrite.source),
+    ...deployed.routes.map((route) => route.src),
   ];
   const pages = readdirSync(WEB)
     .filter((name) => name.endsWith(".html"))

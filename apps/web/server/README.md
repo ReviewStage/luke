@@ -351,35 +351,28 @@ at the `VOICE_SERVICE_PATH` path and the desktop posts feedback to
 commit with no migration and no dashboard state, and the deploy shape returns
 to Vercel's own pass.
 
-The Vercel project is three services in one deployment, declared under `services`
+The Vercel project is several services in one deployment, declared under `services`
 in the root `vercel.ts`, which Vercel reads at the project's Root Directory
 (the repository root, so each service's `root` is relative to it) and only
 while the project's Framework Preset is Services. `@vercel/config`'s
 `VercelConfig` type has no `services` key yet, so `vercel.ts` states the
-service and service-rewrite shapes beside it. `web` is this app, rooted at
+service and public-route shapes beside it. `web` is this app, rooted at
 `apps/web`, and carries the migrate-and-seed build, the install filter, the
 ignore rule, and the `routes` above unchanged.
-`eve` is the hosted brain: its root is `apps/web/eve/`, the flat eve app root described
-below, whose own `package.json` declares `eve`, so the service's install pulls
-`@luke/eve` beside this app and its build is a plain `pnpm exec eve build` run
-in that root. eve resolves that directory as its app root and writes its Build
-Output there, which is where static-build reads a service's output, so nothing
-relocates it and no variable of eve's own is set by hand. The block is one
-isolated declaration with no shared keys, so replacing it with a generated
-service later is removing a block rather than untangling one (LUKE-183).
-`coder` is the coding-agent service, a second eve app root at `apps/web/coder/` built
-and deployed on the same terms ("The coding-agent service" below).
-Public routing is the top-level `rewrites`:
-`/eve/coder/v1/*` enters the coder service, `/eve/v1/*` the eve service, and
-everything else the web service, and a
-service's own routes run only once a request has entered it. That is why the
-generated `/api/` rewrites live under the web service's `routes`, and
-`tests/vercel-services.test.ts` refuses a `routes` key at the top level beside
-`services`: Vercel ignores one there rather than erroring, so a route left
-there would pass every check and 404 in production. The project's
-environment variables reach all three services alike, and each service's own
+`eve-luke` is the hosted brain, the service `withEve` generates for the
+`luke` member of the agents' eve workspace (`apps/eve/README.md`).
+`coder` is the coding-agent service, an eve app root of its own at
+`apps/web/coder/` (`packages/service/README.md`'s "The coding-agent service").
+Public routing is the top-level `routes`, each naming the service a request
+enters: `withEve`'s own put `/eve/luke/v1/*` into `eve-luke`, ahead of the
+authored ones, which put `/eve/coder/v1/*` into the coder service, Luke's
+mount from before the workspace, `/eve/v1/*`, into `eve-luke`, and everything
+else into the web service. A service's own routes run only once a request has
+entered it, which is why the generated `/api/` rewrites live under the web
+service's `routes` rather than among the top-level ones. The project's
+environment variables reach every service alike, and each service's own
 `ignoreCommand` is what skips its build, so a commit that changes nothing under
-`apps/web`, `packages`, the workspace manifests, `vercel.ts`, or
+`apps/web`, `apps/eve`, `packages`, the workspace manifests, `vercel.ts`, or
 `api-rewrites.json` deploys none of them.
 
 ## The data layer
@@ -693,43 +686,7 @@ origin is the deployment's own unless `LUKE_EVE_ORIGIN` names another. No
 separate service is deployed. Tests run against a fake OpenAI on loopback and an in-memory account side
 (`packages/service/src/voice/service.test.ts`, `packages/service/src/testing/voice-fakes.ts`).
 
-## The eve app root
+## The agents
 
-The hosted brain's eve agent lives in `eve/`, beside `server/`, as a flat eve
-app root with its own `package.json` (`@luke/eve`, a workspace member whose one
-dependency is `eve`) and its evals under `eve/evals/`. The layout is
-load-bearing for the deployment: eve resolves the directory that holds
-`agent.ts` and declares `eve` as its app root, and writes its build output
-there (`.vercel/output` under Vercel, `.output` locally), so the eve service's
-root is `eve` and its build command is a plain `pnpm exec eve build`, run by
-static-build in that root and read back from it. A directory named `agent`
-under `apps/web` would resolve as eve's nested layout instead, with the app
-root at `apps/web` and the output one level above where the service reads it,
-which an earlier shape of this block relocated by hand through eve's internal
-environment variables. The
-agent still reaches `server/` by relative import and nothing else: neither
-package depends on the other, so `pnpm install --filter @luke/web...` pulls
-nothing of eve's and the web build never traces into `eve/` (the function
-bundle guard refuses it).
-
-`eve/sandbox.ts` is the session's sandbox, a `VercelSandbox.environment`
-whose `prepare` holds the one thing the checkout needs of eve's base image,
-git; `eve build` prewarms its snapshot on Vercel, so the eve service's build
-needs Vercel Sandbox credentials (the build's own `VERCEL_OIDC_TOKEN`, or
-`VERCEL_TOKEN` with `VERCEL_TEAM_ID` and `VERCEL_PROJECT_ID`) and a prewarm
-that fails stops the deployment. The running
-service needs the GitHub App's five variables and `BETTER_AUTH_SECRET` as the
-web functions do: `run_in_repository`'s checkout confirms the plan's
-repository is reachable and mints its token through `GitHubApp`, which the
-shared layer builds from them (`@luke/service/runtime`,
-`githubAppFromEnvironment`), the session secret being what the account's
-user token is sealed under.
-
-`eve/evals/brain-host.eval.ts` is the planning brain's end-to-end eval, and nothing local
-runs it. `./scripts/check.sh` runs vitest over the workspaces
-`vitest.config.ts` lists, and `@luke/eve` is not one of them; the eval is
-`pnpm --filter @luke/web test:agent`, which writes through the real store
-writer against the database `DATABASE_URL` names. CI does not run it either, so
-run it by hand before a change to the brain host, the writer, or a schema
-module it reads back through.
-
+Luke's planning brain is a member of the agents' eve workspace, `apps/eve`;
+its layout, deployment, and evals are in `apps/eve/README.md`.

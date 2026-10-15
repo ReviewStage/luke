@@ -109,7 +109,7 @@ it.effect(
       assert.equal(seen.length, 1);
       const [request] = seen;
       assert.ok(request);
-      assert.equal(request.url, `${ORIGIN}/eve/v1/session`);
+      assert.equal(request.url, `${ORIGIN}/eve/luke/v1/session`);
       assert.equal(request.method, "POST");
       assert.equal(request.headers.get("authorization"), `Bearer ${CRON_SECRET}`);
       assert.equal(request.headers.get("content-type"), "application/json");

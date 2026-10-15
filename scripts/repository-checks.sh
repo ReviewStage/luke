@@ -127,9 +127,9 @@ fi
 # without declaring resolves in a developer's hoisted tree, typechecks, and
 # fails the deploy's bundle step, or, for the Vite client, ships a bundle that
 # happened to resolve through another package's link. Declare what is named.
-# The two eve services under apps/web are workspaces of their own, each a
-# Vercel service root installed from its own manifest, so each is held to what
-# it declares on the same terms.
+# The agents' eve workspace (apps/eve) and the coding agent's eve service
+# under apps/web are workspaces of their own, each installed from its own
+# manifest, so each is held to what it declares on the same terms.
 undeclared_packages() {
     local manifest=$1
     shift
@@ -149,11 +149,11 @@ undeclared_packages() {
 }
 undeclared_web_packages=$(undeclared_packages "$LUKE_REPO_ROOT/apps/web/package.json" \
     "$LUKE_REPO_ROOT/apps/web/server" "$LUKE_REPO_ROOT/apps/web/src" "$LUKE_REPO_ROOT/apps/web/scripts")
-for service in eve coder; do
-    undeclared_service_packages=$(undeclared_packages "$LUKE_REPO_ROOT/apps/web/$service/package.json" \
-        "$LUKE_REPO_ROOT/apps/web/$service")
+for service in apps/eve apps/web/coder; do
+    undeclared_service_packages=$(undeclared_packages "$LUKE_REPO_ROOT/$service/package.json" \
+        "$LUKE_REPO_ROOT/$service")
     if [[ -n "$undeclared_service_packages" ]]; then
-        undeclared_web_packages+="apps/web/$service: $undeclared_service_packages"
+        undeclared_web_packages+="$service: $undeclared_service_packages"
     fi
 done
 if [[ -n "$undeclared_web_packages" ]]; then

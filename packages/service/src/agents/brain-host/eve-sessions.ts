@@ -71,13 +71,14 @@ import { BRAIN_HOST_HEADER, type BrainHostTurn } from "./bounds.js";
 
 /**
  * Where an eve service's routes stand under its origin: the planning brain's
- * at eve's own `/eve`, and the coding-agent service's at the named mount
- * `/eve/coder`, which the deployment's rewrite carries into that service and
- * whose own route transform turns back into `/eve/v1/*` before the door
- * reads it (`door.ts` spells the paths the door sees).
+ * at `/eve/luke`, the mount of the agents' eve workspace's `luke` member, and
+ * the coding-agent service's at the named mount `/eve/coder`. The deployment
+ * carries each into its service, whose own route transform turns it back into
+ * `/eve/v1/*` before the door reads it (`door.ts` spells the paths the door
+ * sees).
  */
 export const EVE_MOUNT = {
-  PLANNING: "/eve",
+  PLANNING: "/eve/luke",
   CODER: "/eve/coder",
 } as const;
 

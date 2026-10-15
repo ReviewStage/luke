@@ -31,6 +31,9 @@
   "lint-staged": {
     "*.{js,jsx,mjs,ts,tsx,json,md,css}": "biome check --write --no-errors-on-unmatched"
   },
+  "dependencies": {
+    "eve": "catalog:"
+  },
   "devDependencies": {
     "@biomejs/biome": "2.5.8",
     "@vercel/config": "0.12.0",

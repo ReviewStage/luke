@@ -3,8 +3,8 @@ import { EMPTY_RELAY_STATE, type RelayState } from "@luke/service/agents/brain-h
 import { Effect, Result } from "effect";
 import { defineState } from "eve/context";
 import { defineHook } from "eve/hooks";
+import { runAgent } from "../../../runtime.js";
 import { host } from "../host.js";
-import { runAgent } from "../runtime.js";
 import { sessionPrompt } from "../session-prompt.js";
 
 /**

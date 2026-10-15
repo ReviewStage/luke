@@ -49,8 +49,8 @@ SSO_HOST=vercel.com
 SSO_PATH=/sso-api
 # The deployed tree is whatever the web service's ignoreCommand diffs, read
 # from the command itself so the two cannot drift apart. The configuration is
-# the root vercel.ts, which Node evaluates as it stands (its imports are a
-# type and a JSON table).
+# the root vercel.ts, which Node evaluates as it stands, from the repository
+# root its eve composition looks for.
 VERCEL_CONFIG="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/../vercel.ts"
 
 # Twenty minutes by default, on the probe's own observation that a record
@@ -186,7 +186,7 @@ read_preview() {
     exit "$EXIT_NOT_READY"
 }
 
-if ! ignore_command=$(node --input-type=module --eval 'const { config } = await import(process.argv[1]); console.log(config.services.web.ignoreCommand);' "$VERCEL_CONFIG"); then
+if ! ignore_command=$(cd -- "$(dirname -- "$VERCEL_CONFIG")" && node --input-type=module --eval 'const { config } = await import(process.argv[1]); console.log(config.services.web.ignoreCommand);' "$VERCEL_CONFIG"); then
     printf 'UNREADABLE: could not read the ignoreCommand in %s\n' "$VERCEL_CONFIG" >&2
     exit "$EXIT_UNREADABLE"
 fi

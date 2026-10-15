@@ -15,7 +15,7 @@ import { COMMAND_DESCRIPTION } from "./command-description.js";
  * repository-shell.ts -- the planning model's one source read: a shell command run in the planning session's sandbox, on a checkout of the plan's GitHub repository.
  *
  * The planning model runs here and so does the sandbox: eve opens one Vercel
- * Sandbox per planning session (`apps/web/eve/sandbox.ts`) and hands a tool
+ * Sandbox per planning session (`apps/eve/agents/luke/sandbox.ts`) and hands a tool
  * its door. The first call that finds no checkout of the plan's repository
  * makes one, at the repository's current default branch and one commit
  * deep, and later calls reuse it; a plan whose repository changed meanwhile

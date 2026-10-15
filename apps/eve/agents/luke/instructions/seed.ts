@@ -1,7 +1,7 @@
 import { Effect, Result } from "effect";
 import { defineDynamic, defineInstructions } from "eve/instructions";
+import { runAgent } from "../../../runtime.js";
 import { host } from "../host.js";
-import { runAgent } from "../runtime.js";
 
 /**
  * The conversation so far, for a session opened over a conversation that

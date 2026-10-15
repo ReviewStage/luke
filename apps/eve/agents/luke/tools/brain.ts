@@ -5,8 +5,8 @@ import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { Effect, Result } from "effect";
 import type { SessionAuth } from "eve/context";
 import { defineDynamic, defineTool } from "eve/tools";
+import { runAgent } from "../../../runtime.js";
 import { host } from "../host.js";
-import { runAgent } from "../runtime.js";
 
 /**
  * The brain's tools, resolved at every turn's start for the conversation the
