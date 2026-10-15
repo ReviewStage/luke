@@ -1,3 +1,4 @@
+import { TEXT_LINK_CLASS } from "@luke/ui/link-face";
 import { type AnyExtension, Editor, Extension } from "@tiptap/core";
 import Heading from "@tiptap/extension-heading";
 import Image from "@tiptap/extension-image";
@@ -60,25 +61,32 @@ const DocumentHeading = Heading.extend({
 const MENTION_LINK_CLASS = "plan-mention-link";
 
 /**
- * A link whose target names a mention, which the read view draws as its
- * chip, wears a chip's light look in the editor, so opening a section to
- * edit it does not turn its chips into underlined words. Note that only a
- * class is added, never the target in an attribute of its own, and that
- * the attribute is drawn alone and never read or written as markdown.
+ * How a link looks in the editor: a link whose target names a mention,
+ * which the read view draws as its chip, wears a chip's light look, so
+ * opening a section to edit it does not turn its chips into underlined
+ * words; any other is the plain link every place draws (`TEXT_LINK_CLASS`).
+ * Note that one attribute decides between the two, so a mention's link
+ * never wears the plain link's class beside its own, that only a class is
+ * added, never the target in an attribute of its own, and that the
+ * attribute is drawn alone and never read or written as markdown.
  */
-function mentionLinkLook(namesMention: (target: string) => boolean) {
+function linkLook(namesMention: ((target: string) => boolean) | undefined) {
   return Extension.create({
-    name: "mentionLinkLook",
+    name: "linkLook",
     addGlobalAttributes() {
       return [
         {
           types: ["link"],
           attributes: {
-            mentionLook: {
+            look: {
               default: null,
               parseHTML: () => null,
-              renderHTML: (attributes) =>
-                namesMention(String(attributes.href ?? "")) ? { class: MENTION_LINK_CLASS } : {},
+              renderHTML: (attributes) => ({
+                class:
+                  namesMention?.(String(attributes.href ?? "")) === true
+                    ? MENTION_LINK_CLASS
+                    : TEXT_LINK_CLASS,
+              }),
             },
           },
         },
@@ -90,7 +98,8 @@ function mentionLinkLook(namesMention: (target: string) => boolean) {
 /**
  * What the text may hold, read and written as the editor reads and writes
  * it: the mention among the rest, drawn by the panel where it can draw one,
- * and a link naming one in a chip's light look where the panel says which.
+ * a link naming one in a chip's light look where the panel says which, and
+ * every other link a plain one.
  */
 export function markdownExtensions(
   drawMention?: ((element: HTMLElement, mention: MentionNode) => () => void) | undefined,
@@ -112,7 +121,7 @@ export function markdownExtensions(
     Image.configure({ inline: true }),
     RawBlock,
     mentionNode(drawMention),
-    ...(namesMention === undefined ? [] : [mentionLinkLook(namesMention)]),
+    linkLook(namesMention),
   ];
 }
 

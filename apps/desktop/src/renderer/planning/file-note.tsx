@@ -6,6 +6,7 @@ import type { FileNote } from "./file-tab-model";
 import { useMentionLink } from "./plan-mentions";
 import { useMinute } from "./plan-time";
 import { RelativeTime } from "./relative-time";
+import { useOpenLink } from "./use-open-link";
 
 /**
  * file-note.tsx -- Luke's note on lines of a File tab's file: a card standing over the lines he showed, saying why he showed them, as a review comment stands over the lines it is on.
@@ -54,6 +55,7 @@ function FileNoteCard({
   // Note that the age moves on with the minute, because a tab left open draws nothing else anew.
   const now = useMinute();
   const link = useMentionLink();
+  const openLink = useOpenLink();
   return (
     <aside
       className="file-note"
@@ -84,7 +86,12 @@ function FileNoteCard({
         </button>
       </header>
       {folded ? null : (
-        <MarkdownMessage words={note.note} className="file-note-words" link={link} />
+        <MarkdownMessage
+          words={note.note}
+          className="file-note-words"
+          link={link}
+          openLink={openLink}
+        />
       )}
     </aside>
   );

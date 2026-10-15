@@ -22,6 +22,7 @@
     "./integration-search": "./src/integration-search.js",
     "./agent-servers-model": "./src/agent-servers-model.js",
     "./held-link": "./src/held-link.js",
+    "./link-face": "./src/link-face.js",
     "./confirm-state": "./src/confirm-state.js",
     "./use-setting-write": "./src/use-setting-write.js",
     "./use-state-with-ref": "./src/use-state-with-ref.js",

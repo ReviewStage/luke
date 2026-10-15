@@ -38,6 +38,7 @@ import { ReadFailure } from "../read-failure";
 import { Segmented } from "../segmented";
 import { BusyLabel, SPINNER_SIZE, Spinner, SpinnerRegion } from "../spinner";
 import { Switch } from "../switch";
+import { TextLink } from "../text-link";
 import { Tooltip } from "../tooltip";
 import { useClipped } from "../use-clipped";
 import { AgentCard, AgentRef, type AgentSubject, agentSubject, NOTHING_HELD } from "./agent-ref";
@@ -150,7 +151,7 @@ const SEND = "Send to agent";
 /** What the way back from an item standing alone to the list says it does. */
 const BACK_TO_INBOX = "Back to inbox";
 
-/** A link block: a press where it is a web page, as a transcript's links are, else its label with the address beside it to copy. */
+/** A link block: a plain link where it is a web page, as a transcript's links are, else its label with the address beside it to copy. */
 function LinkBlock({
   url,
   label,
@@ -162,21 +163,14 @@ function LinkBlock({
 }): React.JSX.Element {
   if (opensAsLink(url)) {
     return (
-      <a
-        href={url}
-        className="agent-link"
-        onClick={(event) => {
-          event.preventDefault();
-          openLink(url);
-        }}
-      >
+      <TextLink href={url} words={label} onOpen={openLink}>
         {label}
-      </a>
+      </TextLink>
     );
   }
   return (
     <Tooltip label={url}>
-      <span className="agent-link-inert">
+      <span className="text-link-inert">
         {label} <span className="select-text text-muted-foreground">{url}</span>
       </span>
     </Tooltip>

@@ -43,6 +43,7 @@ import {
 } from "./plan-reveal";
 import { agoText, useMinute } from "./plan-time";
 import { PlanTitle } from "./plan-title";
+import { useOpenLink } from "./use-open-link";
 import { EDITOR_PLACE, type PlanEditDoor, usePlanEditing } from "./use-plan-editing";
 import { NO_LOOKS, type PlanLooks } from "./use-plan-looks";
 
@@ -544,12 +545,14 @@ function DocumentUnit({
   entry: boolean;
 }): React.JSX.Element {
   const changed = marks.changed.has(view.heading);
+  const openLink = useOpenLink();
   const drawn = (
     <MarkdownMessage
       words={view.words}
       className={unitClass(view, changed)}
       edit={view.edit}
       link={link}
+      openLink={openLink}
     />
   );
   const menu =

@@ -66,7 +66,7 @@ function pressedEach(openPlan: ((mention: PlanMention) => void) | undefined): vo
     ),
   );
   for (const link of container.querySelectorAll<HTMLElement>(
-    "a, .agent-link-inert, button.mention-chip",
+    "a, .text-link-inert, button.mention-chip",
   )) {
     act(() => link.click());
   }
