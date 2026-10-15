@@ -30,8 +30,9 @@ import type { StoreFailure } from "../http/store-failure.js";
  * and it is spent once GitHub returns the browser from a one-time
  * authorization of the App, where the installation is linked only after the
  * user who authorized shows they can see it (`github-install-app.ts`). The installation webhook keeps each row's
- * status, and a disconnect deletes the row, which is Luke's own, and the
- * workspace's outstanding intents with it.
+ * status, and any read of the installation from GitHub mends a status the
+ * webhook missed (`github-app.ts`); a disconnect deletes the row, which is
+ * Luke's own, and the workspace's outstanding intents with it.
  */
 
 /** The roles that connect and disconnect a workspace's GitHub organization: an owner or an admin. */
@@ -219,11 +220,19 @@ const findMemberWorkspaceOnOwner = SqlSchema.findOneOption({
 
 const findInstallationOfWorkspace = SqlSchema.findOneOption({
   Request: Schema.String,
-  Result: Schema.Struct({ installationId: Schema.Number }),
+  Result: Schema.Struct({
+    installationId: Schema.Number,
+    status: Schema.Literals(Object.values(GITHUB_INSTALLATION_STATUS)),
+    updatedAt: Schema.Date,
+  }),
   execute: (organizationId) =>
     Database.use((db) =>
       db
-        .select({ installationId: githubInstallation.installationId })
+        .select({
+          installationId: githubInstallation.installationId,
+          status: githubInstallation.status,
+          updatedAt: githubInstallation.updatedAt,
+        })
         .from(githubInstallation)
         .where(eq(githubInstallation.organizationId, organizationId)),
     ),
@@ -241,6 +250,27 @@ const updateInstallationStatus = SqlSchema.void({
         .update(githubInstallation)
         .set({ status: row.status, updatedAt: row.now })
         .where(eq(githubInstallation.installationId, row.installationId)),
+    ),
+});
+
+const mendStatus = SqlSchema.void({
+  Request: Schema.Struct({
+    installationId: Schema.Number,
+    status: Schema.Literals(Object.values(GITHUB_INSTALLATION_STATUS)),
+    readAt: Schema.Date,
+    now: Schema.Date,
+  }),
+  execute: (row) =>
+    Database.use((db) =>
+      db
+        .update(githubInstallation)
+        .set({ status: row.status, updatedAt: row.now })
+        .where(
+          and(
+            eq(githubInstallation.installationId, row.installationId),
+            eq(githubInstallation.updatedAt, row.readAt),
+          ),
+        ),
     ),
 });
 
@@ -335,6 +365,21 @@ export function setInstallationStatus(
 }
 
 /**
+ * Where the installation stands as a read from GitHub found it, written
+ * only where its row has not moved since it was read: a webhook or a connect
+ * that landed while GitHub was being asked is newer than the read, so the
+ * read leaves it be.
+ */
+export function mendInstallationStatus(
+  read: WorkspaceInstallation,
+  status: GitHubInstallationStatus,
+): Effect.Effect<void, StoreFailure, DatabaseServices> {
+  return Effect.flatMap(DateTime.nowAsDate, (now) =>
+    mendStatus({ installationId: read.installationId, status, readAt: read.updatedAt, now }),
+  );
+}
+
+/**
  * The workspace's installation disconnected, and every connect intent still
  * outstanding for it spent with it, so a return through the Setup URL begun
  * before the disconnect cannot link it again; a workspace with none
@@ -346,14 +391,18 @@ export function disconnectInstallation(
   return Effect.andThen(deleteWorkspaceIntents(organizationId), deleteInstallation(organizationId));
 }
 
-/** GitHub's id for the installation connected to the workspace, whatever its status; none for a workspace with none connected. */
+/** The installation connected to the workspace as Luke last stored it, and when the row last moved. */
+export interface WorkspaceInstallation {
+  readonly installationId: number;
+  readonly status: GitHubInstallationStatus;
+  readonly updatedAt: Date;
+}
+
+/** GitHub's id for the installation connected to the workspace, and its stored status, whatever it is; none for a workspace with none connected. */
 export function installationOfWorkspace(
   organizationId: string,
-): Effect.Effect<Option.Option<number>, StoreFailure, DatabaseServices> {
-  return Effect.map(
-    findInstallationOfWorkspace(organizationId),
-    Option.map((row) => row.installationId),
-  );
+): Effect.Effect<Option.Option<WorkspaceInstallation>, StoreFailure, DatabaseServices> {
+  return findInstallationOfWorkspace(organizationId);
 }
 
 /**

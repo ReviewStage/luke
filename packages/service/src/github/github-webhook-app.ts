@@ -55,7 +55,9 @@ import { setInstallationStatus } from "./github-installations.js";
  * its subscribing, move the status of the workspace that stands for it
  * (`@luke/service/github/github-installations`): removed or suspended marks it
  * inactive, and unsuspended active again. Nothing is deleted, so an installation
- * suspended and brought back keeps its members and its plans. Its
+ * suspended and brought back keeps its members and its plans. GitHub never
+ * redelivers a failed delivery on its own, so a status one missed is mended
+ * by the next read of the installation from GitHub (`github-app.ts`). Its
  * `installation_repositories` deliveries, a repository given or taken, are
  * answered and ignored, because no repository of an installation is held:
  * the chip lists them from GitHub each time it opens, and every start checks

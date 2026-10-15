@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { verify } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
-import { GITHUB_ACCOUNT_TYPE } from "@luke/database/github-installation-vocabulary";
+import {
+  GITHUB_ACCOUNT_TYPE,
+  GITHUB_INSTALLATION_STATUS,
+} from "@luke/database/github-installation-vocabulary";
+import { listWorkspaces } from "@luke/database/models/workspace-store";
 import { account } from "@luke/database/schemas/auth";
 import { getTestDB, openWorkspace } from "@luke/database/testing";
 import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
@@ -27,6 +31,11 @@ import {
   standingGithubRow,
 } from "../testing/github-app-fake.js";
 import { GITHUB_REPOSITORY_SELECTION, GitHubApp } from "./github-app.js";
+import {
+  installationOfWorkspace,
+  mendInstallationStatus,
+  setInstallationStatus,
+} from "./github-installations.js";
 
 /**
  * The Luke GitHub App's server client with GitHub a fake behind the
@@ -305,6 +314,61 @@ it.layer(getTestDB())("a workspace's repositories through its installation", (it
           ),
         );
       }).pipe(Effect.provide(GitHubApp.layer(GITHUB_APP_SETTINGS))),
+  );
+
+  it.effect(
+    "a read that finds the installation suspended or gone leaves its workspace's GitHub inactive, and one that finds it running again active, so a delivery GitHub never made is mended",
+    () =>
+      Effect.gen(function* () {
+        const running = relayInstallation(40);
+        const suspended = { ...running, suspendedAt: "2026-10-10T00:00:00Z" };
+        const owner = yield* openGithubUser();
+        const workspace = yield* openWorkspace(owner);
+        yield* connectWorkspaceGitHub(workspace, running);
+        const app = yield* GitHubApp;
+        const active = () =>
+          Effect.map(listWorkspaces(owner), (workspaces) =>
+            workspaces.filter((each) => each.id === workspace).map((each) => each.github?.active),
+          );
+
+        yield* app
+          .workspaceRepositories(workspace)
+          .pipe(Effect.provide(githubReaching([suspended]).layer));
+        const afterSuspension = yield* active();
+        yield* app
+          .repositoryReach(workspace, "octo-org/relay")
+          .pipe(Effect.provide(githubReaching([running]).layer));
+        const afterReturn = yield* active();
+        yield* app.workspaceRepositories(workspace).pipe(Effect.provide(githubReaching([]).layer));
+        const afterRemoval = yield* active();
+
+        assert.deepEqual([afterSuspension, afterReturn, afterRemoval], [[false], [true], [false]]);
+      }).pipe(Effect.provide(GitHubApp.layer(GITHUB_APP_SETTINGS))),
+  );
+
+  it.effect(
+    "a read's mend leaves a status a webhook moved while GitHub was being asked as the webhook left it",
+    () =>
+      Effect.gen(function* () {
+        const running = relayInstallation(42);
+        const owner = yield* openGithubUser();
+        const workspace = yield* openWorkspace(owner);
+        yield* connectWorkspaceGitHub(workspace, running);
+        const read = yield* installationOfWorkspace(workspace);
+        assert.ok(Option.isSome(read));
+
+        yield* TestClock.adjust("1 second");
+        yield* setInstallationStatus(running.id, GITHUB_INSTALLATION_STATUS.SUSPENDED);
+        yield* mendInstallationStatus(read.value, GITHUB_INSTALLATION_STATUS.DELETED);
+        const listed = yield* listWorkspaces(owner);
+
+        assert.deepEqual(
+          listed.filter((each) => each.id === workspace).map((each) => each.github?.active),
+          [false],
+        );
+        const after = yield* installationOfWorkspace(workspace);
+        assert.equal(Option.getOrUndefined(after)?.status, GITHUB_INSTALLATION_STATUS.SUSPENDED);
+      }),
   );
 
   it.effect(
