@@ -1,6 +1,10 @@
 # Proposal: the Inbox when it is one column wide
 
-Status: **proposed, waiting on Dean's pick.** Nothing is built yet.
+Status: **decided by Dean on 2026-10-15**, being built in the PR order in
+§5. Dean: "Let's go with (a), but also make the inbox sidebar the same color
+as the inbox main content, so that it doesn't look as weird when we are just
+looking at the inbox list." D1–D7 went as recommended (§6), and D8 records
+the colour.
 
 The design show is `docs/proposals/inbox-narrow-v2/index.html`. It is one
 self-contained file that fetches nothing. Every frame is the desktop
@@ -98,7 +102,8 @@ one item it stays closest to today's problem.
 All in `apps/desktop/src/renderer`, with no wire, host or service change.
 
 1. `feat(desktop): an Inbox one column wide opens on its item, the list a press of ‹ Inbox away`
-   (S: about 60 lines plus 150 of tests).
+   (S: about 60 lines plus 150 of tests). It also carries D8: the list
+   column takes the item's ground.
    - `inbox-columns.ts` shows the item whenever one is chosen, unless the
      list was asked for.
    - A window narrowed with an item open keeps it.
@@ -119,7 +124,7 @@ All in `apps/desktop/src/renderer`, with no wire, host or service change.
 
 ## 6. Decisions
 
-| # | Question | Recommended |
+| # | Question | Decided |
 |---|---|---|
 | D1 | When one column wide, open on the item rather than the list? | Yes. The item is the first that needs you, else the newest, as today. |
 | D2 | On a plan's Inbox holding one item, drop `‹ Inbox` and the pager? | Yes. The window's Inbox always keeps `‹ Inbox`, because its list holds Needs you and the grouping. |
@@ -128,6 +133,7 @@ All in `apps/desktop/src/renderer`, with no wire, host or service change.
 | D5 | What do the arrows step through? | The list's own order, settled items included, so "2 of 8" matches the list. Next skips to what needs you. |
 | D6 | Keep an open item when the window narrows? | Yes (Material's rule). This reverses #2680. |
 | D7 | Up and down arrows, or left and right? | Up and down, as in Mail's message toolbar. Left is already `‹ Inbox`. |
+| D8 | (Dean's addition.) Should the list column keep the sidebar's ground? | No. It takes the Inbox's main ground, both in the split and as the one-column page, so the list doesn't read as a different surface. The split keeps its hairline between list and item, as the app's other panes do. |
 
 These stay as they are: the list's grouping, the ActorRef tiles and their
 hover cards (#2853), the bold title and blue dot for what needs you, `⌘[`
