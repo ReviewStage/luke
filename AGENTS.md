@@ -361,7 +361,8 @@ Conventional Branch 1.1.0 (https://conventionalbranch.org/), both exactly.
 
 ## Merging
 
-To merge a PR, run `gh pr merge --auto` right away; the merge queue waits on
+To merge a PR, run `gh pr merge --auto` right away, once any manual pre-merge
+step (`docs/WORKFLOW.md` step 3's preview run) is done; the merge queue waits on
 CI, so do not, and do not rebase onto `main` unless it conflicts. In a stack,
 arm a PR only once it targets `main`.
 
