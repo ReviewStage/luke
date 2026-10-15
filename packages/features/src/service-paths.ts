@@ -174,6 +174,7 @@ export const HOSTED_SERVICE_PATH = {
   WORKSPACES_INVITATIONS: "/api/workspaces/invitations",
   /** A pending invitation canceled by an owner or an admin (POST), answered with those still pending. */
   WORKSPACES_INVITATIONS_CANCEL: "/api/workspaces/invitations/cancel",
+  WORKSPACES_INVITATION_OFFER: "/api/workspaces/invitations/offer",
 } as const;
 
 /**

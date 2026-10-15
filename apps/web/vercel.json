@@ -321,6 +321,10 @@
           "dest": "/api/default.js?route=workspaces/invitations/cancel"
         },
         {
+          "src": "/api/workspaces/invitations/offer",
+          "dest": "/api/default.js?route=workspaces/invitations/offer"
+        },
+        {
           "src": "/api/workspaces/leave",
           "dest": "/api/default.js?route=workspaces/leave"
         },
