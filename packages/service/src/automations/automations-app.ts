@@ -480,7 +480,9 @@ const changesOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (asked.webhookSecretHash !== undefined && trigger.kind !== AUTOMATION_TRIGGER.WEBHOOK) {
     return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   }
-  const webhook = becameWebhook ? mintWebhookSecret() : undefined;
+  // A secret the caller minted stands in place of one minted here, so no secret is answered that would not hold.
+  const webhook =
+    becameWebhook && asked.webhookSecretHash === undefined ? mintWebhookSecret() : undefined;
   const secretHash = asked.webhookSecretHash ?? webhook?.hash;
   const scope =
     asked.scope === undefined

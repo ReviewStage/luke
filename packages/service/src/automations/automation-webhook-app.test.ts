@@ -249,6 +249,36 @@ it.layer(getTestDB())("an automation's webhook", (it) => {
   );
 
   it.effect(
+    "a change to a webhook with a secret its caller minted answers no secret of its own, and the caller's admits calls",
+    () =>
+      Effect.gen(function* () {
+        const { owner, automation } = yield* openWebhook;
+        const { ask } = yield* standing;
+        yield* updateAutomation(owner, automation.id, {
+          trigger: { kind: AUTOMATION_TRIGGER.SCHEDULE, cron: "0 9 * * *", timezone: "UTC" },
+          webhookSecretHash: null,
+        });
+        const mine = randomBytes(32).toString("base64url");
+
+        const changed = yield* ask(automationPath(automation.id), {
+          method: "PATCH",
+          headers: { authorization: `Bearer ${owner}`, "content-type": "application/json" },
+          body: JSON.stringify({
+            trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK },
+            webhookSecretHash: createHash("sha256").update(mine).digest("hex"),
+          }),
+        });
+        const read = readEither(automationAnswerSchema)(unparsedWire(changed.body));
+
+        assert.ok(Result.isSuccess(read) && read.success.webhookSecret === undefined);
+        assert.deepEqual(yield* ask(automationWebhookPath(automation.id), call(mine)), {
+          status: HOSTED_HTTP_STATUS.ACCEPTED,
+          body: { queued: 1 },
+        });
+      }),
+  );
+
+  it.effect(
     "a retry key of any length names one run, and a short key that spells a long key's digest is a call of its own",
     () =>
       Effect.gen(function* () {
