@@ -1,8 +1,8 @@
 {
+  "id": "af00f4fd-ba5e-4f34-a585-9da06078f82e",
+  "prevIds": ["66889d46-8605-4d35-a474-28e15b675838"],
   "version": "8",
   "dialect": "postgres",
-  "id": "70c3642d-104a-42eb-ac82-e928e4c740c9",
-  "prevIds": ["4a492703-41a0-464c-80a4-63a88d3353a6"],
   "ddl": [
     {
       "isRlsEnabled": false,
@@ -2952,6 +2952,19 @@
       "table": "automation_run"
     },
     {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "archive_settled_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "automation_run"
+    },
+    {
       "type": "uuid",
       "typeSchema": null,
       "notNull": true,
@@ -4988,6 +5001,19 @@
       "generated": null,
       "identity": null,
       "name": "credential_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "sandbox_terminal_lease"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "credential_session",
       "entityType": "columns",
       "schema": "public",
       "table": "sandbox_terminal_lease"
