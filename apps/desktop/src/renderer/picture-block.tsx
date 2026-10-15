@@ -36,14 +36,32 @@ export function PictureBlock({
   alt: string;
   /** The words drawn under it, as its Markdown's title gives them; none where it gives none. */
   caption: string | undefined;
-  /** Opens the picture over the window; without one, a press does nothing. */
+  /** Opens the picture over the window; without one, the picture is drawn with no press to it. */
   onOpen?: (() => void) | undefined;
 }): React.JSX.Element {
   const said =
     caption === undefined || caption === "" ? null : (
       <span className="picture-caption">{caption}</span>
     );
+  // A picture with nothing to open on a press is drawn as itself, no button.
+  if (state.kind === PICTURE_STATE.READY && onOpen === undefined) {
+    return (
+      <span className="picture-block ph-no-capture" data-state={state.kind}>
+        <span className="picture-frame">
+          <img
+            className="picture-image"
+            src={state.url}
+            alt={alt}
+            decoding="async"
+            draggable={false}
+          />
+        </span>
+        {said}
+      </span>
+    );
+  }
   if (state.kind === PICTURE_STATE.READY) {
+    const open = onOpen;
     return (
       <span className="picture-block ph-no-capture" data-state={state.kind}>
         <button
@@ -53,7 +71,7 @@ export function PictureBlock({
           onClick={(event) => {
             // Note that the press stops here, because a click into a section opens its editor.
             event.stopPropagation();
-            onOpen?.();
+            open?.();
           }}
         >
           <img

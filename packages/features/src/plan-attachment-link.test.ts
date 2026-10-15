@@ -45,7 +45,7 @@ test("the pictures a text names are its plan's own, each once, in the order firs
   const text = [
     `![The mock](https://tryluke.dev/acme/plan/${PLAN_ID}/files/${SECOND} "Mock")`,
     `![Another plan's](https://tryluke.dev/acme/plan/${OTHER_PLAN_ID}/files/${PICTURE})`,
-    `![The flow](https://tryluke.dev/acme/plan/${PLAN_ID}/files/${PICTURE})`,
+    `![The flow](tryluke://tryluke.dev/acme/plan/${PLAN_ID}/files/${PICTURE})`,
     `![The mock again](https://tryluke.dev/acme/plan/${PLAN_ID}/files/${SECOND})`,
     `![Broken](https://tryluke.dev/acme/plan/${PLAN_ID}/files/${PICTURE.replace("a01", "a99")}-wrong)`,
   ].join("\n\n");

@@ -3336,8 +3336,11 @@ button.inbox-option:hover:not(:disabled) {
   border: 1px solid var(--hairline);
   border-radius: var(--control-radius);
   background: var(--section-fill);
-  cursor: zoom-in;
   overflow: clip;
+}
+
+button.picture-frame {
+  cursor: zoom-in;
 }
 
 .picture-image {

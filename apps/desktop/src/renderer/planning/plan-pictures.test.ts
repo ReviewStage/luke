@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { planAttachmentAddress } from "@luke/features/plan-attachment-link";
 import { PLAN_ACTOR, type Plan } from "@luke/features/plan-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { forgetPictures } from "@luke/ui/picture-cache";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
@@ -47,8 +48,12 @@ async function settle(): Promise<void> {
   });
 }
 
-/** The host as the window reaches it: the pictures it holds by id, and every other read refused. */
-function standHost(pictures: ReadonlySet<string>, asked: string[]): void {
+/** The host as the window reaches it: the pictures it holds by id, those it cannot answer for now, and every other read refused. */
+function standHost(
+  pictures: ReadonlySet<string>,
+  asked: string[],
+  unanswered: ReadonlySet<string> = new Set(),
+): void {
   Object.defineProperty(window, "luke", {
     configurable: true,
     value: {
@@ -62,7 +67,9 @@ function standHost(pictures: ReadonlySet<string>, asked: string[]): void {
           status: ACT_OUTCOME_STATUS.DONE,
           value: pictures.has(request.payload.attachmentId)
             ? { contentType: "image/png", base64: PNG_BASE64 }
-            : { failure: "not-found" },
+            : {
+                failure: unanswered.has(request.payload.attachmentId) ? "unanswered" : "not-found",
+              },
         });
       },
     },
@@ -190,4 +197,61 @@ test("a version draws the picture it struck and the one it wrote in, each in its
     view.querySelector("ins.markdown-inserted .picture-block img")?.getAttribute("alt"),
     "Second mock",
   );
+});
+
+test("another plan's picture is drawn as itself, with no press that would open nothing", async () => {
+  const planId = "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d";
+  const otherPlanId = "6f5e4d3c-2b1a-4c9d-8e7f-a0b1c2d3e4f5";
+  standHost(new Set([MOCK]), []);
+  const body = `## Approach\n\n![Copied mock](${picture(otherPlanId, MOCK)})`;
+
+  const view = await drawn(createElement(PlanBody, { plan: planOf(planId, body), live: false }));
+
+  assert.ok(view.querySelector(".picture-block img"));
+  assert.equal(view.querySelector(".picture-block button"), null);
+});
+
+test("once the window lets go of its pictures, as an account change asks, each is read again as the account now signed in", async () => {
+  const planId = "2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e";
+  standHost(new Set([MOCK]), []);
+  const body = `## Approach\n\n![Invite email](${picture(planId, MOCK)})`;
+  const view = await drawn(createElement(PlanBody, { plan: planOf(planId, body), live: false }));
+  assert.ok(view.querySelector(".picture-block img"));
+
+  standHost(new Set(), []);
+  act(() => forgetPictures());
+  await settle();
+
+  assert.equal(view.querySelector(".picture-block img"), null);
+  assert.equal(view.querySelector(".picture-block")?.textContent, "Invite email · not available");
+});
+
+test("a picture whose read went unanswered says so alone, and the picture drawn in its place next is read", async () => {
+  const planId = "3c4d5e6f-7a8b-4c9d-0e1f-2a3b4c5d6e7f";
+  standHost(new Set([SECOND]), [], new Set([MOCK]));
+  const first = `## Approach\n\n![First mock](${picture(planId, MOCK)})`;
+  const view = await drawn(createElement(PlanBody, { plan: planOf(planId, first), live: false }));
+  assert.equal(view.querySelector(".picture-block")?.textContent, "First mock · not available");
+
+  // A plan drawn again asks the window whether motion is reduced, which a page with no layout cannot say.
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    value: () => ({
+      matches: true,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    }),
+  });
+  const next = `## Approach\n\n![Second mock](${picture(planId, SECOND)})`;
+  act(() =>
+    root?.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(PlanBody, { plan: planOf(planId, next), live: false }),
+      ),
+    ),
+  );
+  await settle();
+
+  assert.equal(view.querySelector(".picture-block img")?.getAttribute("alt"), "Second mock");
 });

@@ -1,4 +1,4 @@
-import { useEffect, useReducer } from "react";
+import { useEffect, useReducer, useState, useSyncExternalStore } from "react";
 
 /**
  * picture-cache.ts -- the pictures this window read, each read once through the host and shared by every place that draws it, for the window's life.
@@ -81,10 +81,21 @@ export function pictureNow(owner: string, id: string): PictureState {
   return keptPictures.get(owner)?.get(id)?.state ?? READING;
 }
 
+/** How many times the window let go of every picture, which every place drawing one reads again on. */
+let forgotten = 0;
+const forgetting = new Set<() => void>();
+
+function heedForgetting(listener: () => void): () => void {
+  forgetting.add(listener);
+  return () => forgetting.delete(listener);
+}
+
 /**
  * The picture as the place drawing it sees it: reading until its read
  * lands, then its `data:` URL, or missing. A read that did not land draws
- * as missing here and is read again by the next place to mount.
+ * as missing here, for this picture alone, and is read again by the next
+ * place to mount; once the window lets go of every picture, it is read
+ * again here.
  */
 export function usePicture(
   owner: string,
@@ -92,20 +103,38 @@ export function usePicture(
   read: (owner: string, id: string) => Promise<PictureAnswer>,
 ): PictureState {
   const [, redraw] = useReducer((count: number) => count + 1, 0);
-  const [failed, fail] = useReducer(() => true, false);
+  const generation = useSyncExternalStore(heedForgetting, () => forgotten);
+  // Note that a failure is this picture's own, so another drawn in its place still reads.
+  const [failed, setFailed] = useState<{ owner: string; id: string; generation: number }>();
   useEffect(() => {
     let standing = true;
     keptPicture(owner, id, () => read(owner, id)).read.then((state) => {
       if (!standing) return;
       if (state.kind === PICTURE_STATE.MISSING && keptPictures.get(owner)?.get(id) === undefined) {
-        fail();
+        setFailed({ owner, id, generation });
       }
       redraw();
     });
     return () => {
       standing = false;
     };
-  }, [owner, id, read]);
+  }, [owner, id, read, generation]);
   const state = pictureNow(owner, id);
-  return failed && state.kind === PICTURE_STATE.READING ? MISSING : state;
+  const mine =
+    failed !== undefined &&
+    failed.owner === owner &&
+    failed.id === id &&
+    failed.generation === generation;
+  return mine && state.kind === PICTURE_STATE.READING ? MISSING : state;
+}
+
+/**
+ * Lets go of every picture this window read, as it must once the account
+ * signed in changes, since a picture is read as the account and another
+ * may not reach it; every place drawing one reads it again.
+ */
+export function forgetPictures(): void {
+  keptPictures.clear();
+  forgotten += 1;
+  for (const listener of forgetting) listener();
 }
