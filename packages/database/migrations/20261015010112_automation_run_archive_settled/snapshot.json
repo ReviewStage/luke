@@ -1,8 +1,8 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "400f5e4b-4b62-4664-ad8f-18c2a2ceb27b",
-  "prevIds": ["4a492703-41a0-464c-80a4-63a88d3353a6"],
+  "id": "b82fd145-e223-4655-b338-03c36a0b39dc",
+  "prevIds": ["a5735f80-1dfa-4d51-8425-861e572ff5ed"],
   "ddl": [
     {
       "isRlsEnabled": false,
@@ -4988,6 +4988,19 @@
       "generated": null,
       "identity": null,
       "name": "credential_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "sandbox_terminal_lease"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "credential_session",
       "entityType": "columns",
       "schema": "public",
       "table": "sandbox_terminal_lease"
