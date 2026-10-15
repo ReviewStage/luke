@@ -248,6 +248,7 @@ test("Settings says a page's failed read alike in its card's place, the keys and
   let retried = 0;
   const workspaces = await mount(
     createElement(WorkspacePage, {
+      readerId: undefined,
       control: {
         workspaces: [],
         workspaceId: undefined,

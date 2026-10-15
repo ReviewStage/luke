@@ -102,7 +102,6 @@
   --tooltip-edge: rgba(255, 255, 255, 0.1);
   --tooltip-text: rgba(255, 255, 255, 0.95);
   --tooltip-chord: rgba(255, 255, 255, 0.5);
-  --avatar-fill: linear-gradient(135deg, #3a3f55, #262833);
   /* The code on screen, in the ground and inks of the theme the host colours
      it with (`plan-code.ts`), and its lines pointed at in that theme's blue. */
   --code-ground: #0d1117;
@@ -238,7 +237,6 @@
     --shadow: rgba(0, 0, 0, 0.12);
     --shadow-deep: rgba(0, 0, 0, 0.2);
     --surface-caption: #fff;
-    --avatar-fill: linear-gradient(135deg, #e3e5ee, #cdd1dc);
     --code-ground: #fff;
     --code-text: #1f2328;
     --code-line-number: rgba(31, 35, 40, 0.5);

@@ -16,10 +16,12 @@ import {
 import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SECTION } from "@luke/settings/settings-views";
 import { ProviderMark, TrashIcon } from "@luke/ui";
+import { memberActor, ROLE_WORDS } from "@luke/ui/actor-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { ExternalLinkIcon, UserMinusIcon, XIcon } from "lucide-react";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { useAct } from "../act";
+import { ACTOR_SIZE, ActorMark, YouBadge } from "../actor-ref";
 import { useCopyToast } from "../copy-feedback";
 import { type NameEdit, PlanNameField } from "../desktop/plan-name-field";
 import { TILE_SIZE, WorkspaceTile } from "../desktop/workspace-tile";
@@ -75,13 +77,6 @@ const PHOTO_REFUSAL = {
   TOO_LARGE: (name: string) => `${name} is too large for a workspace photo.`,
 } as const;
 
-/** What each role reads as on a member's row. */
-export const ROLE_WORDS = {
-  [WORKSPACE_ROLE.OWNER]: "Owner",
-  [WORKSPACE_ROLE.ADMIN]: "Admin",
-  [WORKSPACE_ROLE.MEMBER]: "Member",
-} as const;
-
 const ACCEPTED: ActionResult = { status: ACTION_RESULT_STATUS.ACCEPTED };
 
 /** The roles an invitation offers, in the order the form's segments draw them, the default first. */
@@ -130,15 +125,18 @@ function RowCopy({ name, line }: { name: string; line?: React.ReactNode }): Reac
   );
 }
 
-/** One member's row: its email and role, and for an owner or admin, Remove in its ⋯, which asks first. */
+/** One member's row: their face, name, email and role, You on the reader's own, and for an owner or admin, Remove in its ⋯, which asks first. */
 function MemberRow({
   workspaceId,
   member,
+  readerId,
   removable,
   onRemoved,
 }: {
   workspaceId: string;
   member: WorkspaceMember;
+  /** The reader's account id, whose own row wears You. */
+  readerId: string | undefined;
   removable: boolean;
   onRemoved: (members: readonly WorkspaceMember[]) => void;
 }): React.JSX.Element {
@@ -165,7 +163,14 @@ function MemberRow({
   return (
     <>
       <MenuRow label={`${member.name} actions`} actions={actions}>
-        <RowCopy name={member.name} line={`${member.email} · ${ROLE_WORDS[member.role]}`} />
+        <ActorMark actor={memberActor(member, readerId)} size={ACTOR_SIZE.CARD} />
+        <span className="settings-copy">
+          <strong className="member-name">
+            {member.name}
+            {member.userId === readerId ? <YouBadge /> : null}
+          </strong>
+          <small>{`${member.email} · ${ROLE_WORDS[member.role]}`}</small>
+        </span>
       </MenuRow>
       <ConfirmDialog
         confirm={remove}
@@ -220,9 +225,11 @@ function LeaveRow({ workspace, onLeft }: { workspace: Workspace; onLeft: () => v
 /** The chosen workspace's members and the leave, read afresh whenever the workspace changes. */
 function TeamMembers({
   workspace,
+  readerId,
   onLeft,
 }: {
   workspace: Workspace;
+  readerId: string | undefined;
   onLeft: () => void;
 }): React.JSX.Element {
   const { act } = useAct();
@@ -260,6 +267,7 @@ function TeamMembers({
             key={member.userId}
             workspaceId={workspaceId}
             member={member}
+            readerId={readerId}
             removable={manages && member.role !== WORKSPACE_ROLE.OWNER}
             onRemoved={(items) => setRead({ items })}
           />
@@ -789,8 +797,11 @@ function WorkspaceHead({ workspace }: { workspace: Workspace }): React.JSX.Eleme
  */
 export function WorkspacePage({
   control,
+  readerId,
 }: {
   control: WorkspaceSettingsControl;
+  /** The signed-in account's id, whose own member row wears You. */
+  readerId: string | undefined;
 }): React.JSX.Element {
   const workspace = shownWorkspace(control);
   if (workspace === undefined) {
@@ -810,7 +821,11 @@ export function WorkspacePage({
       <SettingsGroup title="Members" anchor={SETTINGS_SECTION.MEMBERS}>
         <Fragment key={workspace.id}>
           {managesWorkspace(workspace) ? <Invitations workspaceId={workspace.id} /> : null}
-          <TeamMembers workspace={workspace} onLeft={() => control.onLeft(workspace.id)} />
+          <TeamMembers
+            workspace={workspace}
+            readerId={readerId}
+            onLeft={() => control.onLeft(workspace.id)}
+          />
         </Fragment>
       </SettingsGroup>
       <SettingsGroup title="GitHub" anchor={SETTINGS_SECTION.GITHUB_REPOSITORIES}>

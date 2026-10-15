@@ -3,7 +3,8 @@ import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { UPDATE_STATUS } from "@luke/settings/update";
 import { updateInSidebar } from "@luke/settings/update-row";
-import { ExternalIcon, GearIcon, KeyboardIcon, ProviderMark, UpdateIcon, UserIcon } from "@luke/ui";
+import { ExternalIcon, GearIcon, KeyboardIcon, ProviderMark, UpdateIcon } from "@luke/ui";
+import { ACTOR_KIND, type Actor, type PersonActor, SOMEONE_REASON } from "@luke/ui/actor-model";
 import type { UpdateControl } from "@luke/voice/settings-controls";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import {
@@ -16,8 +17,8 @@ import {
 } from "lucide-react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "../act";
+import { ACTOR_SIZE, ActorMark } from "../actor-ref";
 import { runAppCommand } from "../app-commands";
-import { PersonAvatar } from "../person-avatar";
 import { ConfirmDialog, DIALOG_TONE, useConfirmDialog } from "../settings/confirm-dialog";
 import { Tooltip } from "../tooltip";
 import { ActionMenu, type MenuEntry, riseAbove, useActionMenu } from "./action-menu";
@@ -38,16 +39,28 @@ import { ActionMenu, type MenuEntry, riseAbove, useActionMenu } from "./action-m
 /** Where Contact us > GitHub leads: Luke's own issues, where CONTRIBUTING.md sends bugs and feature requests. */
 const ISSUES_URL = "https://github.com/ReviewStage/luke/issues";
 
-/** The account's face: the signed-in person's (`person-avatar.tsx`), or a person glyph while no one is signed in. */
+/** The account's place while no one is signed in: someone's outline. */
+const NOBODY_SIGNED_IN: Actor = { kind: ACTOR_KIND.SOMEONE, reason: SOMEONE_REASON.UNNAMED };
+
+/** The account's face: the signed-in person's (`actor-ref.tsx`), or someone's outline while no one is signed in. */
 function AccountAvatar({ account }: { account: AccountSnapshot }): React.JSX.Element {
   if (account.status !== ACCOUNT_STATUS.SIGNED_IN) {
-    return (
-      <span className="sidebar-avatar sidebar-avatar-neutral" aria-hidden="true">
-        <UserIcon />
-      </span>
-    );
+    return <ActorMark actor={NOBODY_SIGNED_IN} size={ACTOR_SIZE.ACCOUNT} />;
   }
-  return <PersonAvatar name={account.name ?? account.email} pictureUrl={account.pictureUrl} />;
+  // Note that an account stored without an id is hued by its address, which names it as surely.
+  const person: PersonActor = {
+    kind: ACTOR_KIND.PERSON,
+    userId: account.id ?? account.email,
+    name: account.name ?? account.email,
+    you: true,
+  };
+  const { pictureUrl } = account;
+  return (
+    <ActorMark
+      actor={pictureUrl === undefined ? person : { ...person, pictureUrl }}
+      size={ACTOR_SIZE.ACCOUNT}
+    />
+  );
 }
 
 /**

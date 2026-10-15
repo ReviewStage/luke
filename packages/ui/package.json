@@ -7,6 +7,7 @@
   "exports": {
     ".": "./src/index.js",
     "./account-initials": "./src/account-initials.js",
+    "./actor-model": "./src/actor-model.js",
     "./accounts-sort": "./src/accounts-sort.js",
     "./activity-calendar": "./src/activity-calendar.js",
     "./admin-animations": "./src/admin-animations.js",

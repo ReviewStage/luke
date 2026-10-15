@@ -596,6 +596,7 @@ function PlanDocument({
                         workspace={home}
                         repository={plan.repository}
                         archived={archived}
+                        readerId={plans.me}
                       />
                     )
                   }

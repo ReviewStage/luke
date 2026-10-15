@@ -98,7 +98,12 @@ async function crumb(
           createElement(
             OpenSettingsProvider,
             { value: (link: SettingsLink) => links.push(link) },
-            createElement(PlanCrumb, { workspace: shown, repository, archived }),
+            createElement(PlanCrumb, {
+              workspace: shown,
+              repository,
+              archived,
+              readerId: "user-sam",
+            }),
           ),
         ),
       ),
@@ -124,7 +129,7 @@ test("the crumb names the plan's workspace and repository, and how many can edit
   const { nav } = await crumb(ACME, "acme-corp/relay", MEMBERS);
 
   assert.equal(nav.textContent, "AAcmerelayDSL3 can edit");
-  assert.equal(nav.querySelectorAll(".plan-crumb-faces .sidebar-avatar").length, 3);
+  assert.equal(nav.querySelectorAll(".actor-stack .actor-mark").length, 3);
 });
 
 test("a member's face is their sign-in picture where the members read lists one, and their letter where it lists none", async () => {
@@ -134,9 +139,9 @@ test("a member's face is their sign-in picture where the members read lists one,
   );
   const { nav } = await crumb(ACME, "acme-corp/relay", pictured);
 
-  const faces = [...nav.querySelectorAll(".plan-crumb-faces .sidebar-avatar")];
+  const faces = [...nav.querySelectorAll(".actor-stack .actor-mark")];
   assert.deepEqual(
-    faces.map((face) => (face instanceof HTMLImageElement ? face.src : face.textContent)),
+    faces.map((face) => face.querySelector("img")?.src ?? face.textContent),
     [picture, "S", "L"],
   );
 });
@@ -151,7 +156,7 @@ test("members that could not be read leave the workspace's own count standing, w
   const { nav } = await crumb(ACME, "acme-corp/relay", undefined);
 
   assert.match(nav.textContent ?? "", /3 can edit$/u);
-  assert.equal(nav.querySelector(".plan-crumb-faces"), null);
+  assert.equal(nav.querySelector(".actor-stack"), null);
 });
 
 test("the workspace opens its Settings page, and who can edit opens its members", async () => {

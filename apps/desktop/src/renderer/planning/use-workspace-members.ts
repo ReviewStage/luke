@@ -42,14 +42,3 @@ export function useWorkspaceMembers(
   }, [act, workspaceId, memberCount]);
   return read !== undefined && read.workspaceId === workspaceId ? read.members : undefined;
 }
-
-/** The members' sign-in pictures by account id, for those who have one the window may draw. */
-export function memberPictures(
-  members: readonly WorkspaceMember[] | undefined,
-): ReadonlyMap<string, string> {
-  return new Map(
-    (members ?? []).flatMap((member) =>
-      member.pictureUrl === undefined ? [] : [[member.userId, member.pictureUrl] as const],
-    ),
-  );
-}
