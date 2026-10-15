@@ -21,7 +21,8 @@ test("a reply is drawn only once the parser has landed, its HTML parsed", async 
   document.body.append(container);
   const root = createRoot(container);
   const words = createElement(TranscriptWords, { text: "Press <kbd>K</kbd> to search." });
-  await act(async () =>
+  // Note that the render is synchronous, so nothing the parser's import resolves has run yet.
+  act(() =>
     root.render(createElement(RegistryContext.Provider, { value: rendererRegistry }, words)),
   );
   assert.equal(container.textContent, "");
