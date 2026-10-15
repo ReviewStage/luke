@@ -47,6 +47,7 @@ test("the pictures a text names are its plan's own, each once, in the order firs
     `![Another plan's](https://tryluke.dev/acme/plan/${OTHER_PLAN_ID}/files/${PICTURE})`,
     `![The flow](https://tryluke.dev/acme/plan/${PLAN_ID}/files/${PICTURE})`,
     `![The mock again](https://tryluke.dev/acme/plan/${PLAN_ID}/files/${SECOND})`,
+    `![Broken](https://tryluke.dev/acme/plan/${PLAN_ID}/files/${PICTURE.replace("a01", "a99")}-wrong)`,
   ].join("\n\n");
 
   assert.deepEqual(planAttachmentIdsIn(text, PLAN_ID), [SECOND, PICTURE]);

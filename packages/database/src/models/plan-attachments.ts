@@ -4,7 +4,7 @@ import { PLAN_ATTACHMENT_BOUNDS } from "@luke/features/plan-attachment-wire";
 import { and, asc, eq, inArray, isNull, lt, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
-import { Database, queryBuilder } from "../core/query.js";
+import { Database } from "../core/query.js";
 import { plan } from "../schemas/plan.js";
 import { planAttachment } from "../schemas/plan-attachment.js";
 import type { PlanStoreEffect } from "./plan-store.js";
@@ -121,23 +121,32 @@ const stampSaved = SqlSchema.void({
     ),
 });
 
-const deleteUnsaved = SqlSchema.findAll({
+/**
+ * The oldest unsaved pictures uploaded before the cutoff, a sweep's worth,
+ * their plans locked until the transaction ends. Note that a plan a save
+ * holds locked is skipped, because the save may be stamping one of them
+ * this moment; the next sweep reads it again.
+ */
+const lockUnsaved = SqlSchema.findAll({
   Request: Schema.Struct({ before: Schema.Date }),
   Result: Schema.Struct({ id: Schema.String }),
-  execute: ({ before }) => {
-    const oldest = queryBuilder
-      .select({ id: planAttachment.id })
-      .from(planAttachment)
-      .where(and(isNull(planAttachment.savedAt), lt(planAttachment.createdAt, before)))
-      .orderBy(asc(planAttachment.createdAt))
-      .limit(PURGE_BATCH);
-    return Database.use((db) =>
+  execute: ({ before }) =>
+    Database.use((db) =>
       db
-        .delete(planAttachment)
-        .where(inArray(planAttachment.id, oldest))
-        .returning({ id: planAttachment.id }),
-    );
-  },
+        .select({ id: planAttachment.id })
+        .from(planAttachment)
+        .innerJoin(plan, eq(plan.id, planAttachment.planId))
+        .where(and(isNull(planAttachment.savedAt), lt(planAttachment.createdAt, before)))
+        .orderBy(asc(planAttachment.createdAt))
+        .limit(PURGE_BATCH)
+        .for("update", { of: plan, skipLocked: true }),
+    ),
+});
+
+const deletePictures = SqlSchema.void({
+  Request: Schema.Struct({ ids: Schema.Array(Schema.String) }),
+  execute: ({ ids }) =>
+    Database.use((db) => db.delete(planAttachment).where(inArray(planAttachment.id, [...ids]))),
 });
 
 /**
@@ -196,7 +205,19 @@ export function stampSavedAttachments(
   return Effect.flatMap(DateTime.nowAsDate, (now) => stampSaved({ planId, ids, now }));
 }
 
-/** The scheduled sweep's delete of the pictures no save named, uploaded before `before`, a sweep's worth; how many went. */
+/**
+ * The scheduled sweep's delete of the pictures no save named, uploaded
+ * before `before`, a sweep's worth, under their plans' locks, so a save
+ * stamping one cannot cross it; how many went.
+ */
 export function purgeUnsavedAttachments(before: Date): PlanStoreEffect<number> {
-  return Effect.map(deleteUnsaved({ before }), (rows) => rows.length);
+  return Effect.flatMap(SqlClient.SqlClient, (client) =>
+    client.withTransaction(
+      Effect.gen(function* () {
+        const ids = (yield* lockUnsaved({ before })).map((row) => row.id);
+        if (ids.length > 0) yield* deletePictures({ ids });
+        return ids.length;
+      }),
+    ),
+  );
 }

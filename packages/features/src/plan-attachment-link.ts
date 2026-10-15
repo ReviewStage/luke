@@ -27,10 +27,11 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 /**
  * Every picture address in a text, its plan's id and its own; a workspace
  * step is any run that holds no slash, space, or parenthesis, bounded, so
- * the scan stays linear over any text.
+ * the scan stays linear over any text, and the picture's id ends the
+ * address, so a broken one that only begins with an id names nothing.
  */
 const ADDRESS_IN_TEXT =
-  /https:\/\/tryluke\.dev\/[^\s/()]{1,200}\/plan\/([0-9a-f-]{36})\/files\/([0-9a-f-]{36})/gu;
+  /https:\/\/tryluke\.dev\/[^\s/()]{1,200}\/plan\/([0-9a-f-]{36})\/files\/([0-9a-f-]{36})(?![\w-])/gu;
 
 /** The most characters an address is read from; past this no picture's address is that long. */
 const MAX_ADDRESS_CHARS = 512;
