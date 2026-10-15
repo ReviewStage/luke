@@ -4248,10 +4248,9 @@ body:has(.app-stage[data-capture="true"])
 /* Factory -------------------------------------------------------------------- */
 
 /* Factory stands in the plan's place as the Inbox does: the toolbar, the
-   summary line, then the line of steps, each a card on the sidebar's ground
-   holding sidebar rows. The steps share one grid row each for their work and
-   their wait, so what waits on the developer lines up as one band across the
-   line, under the step it holds up. */
+   summary line, then the line of stations, each a card on the sidebar's
+   ground holding Home's rows, what waits on the developer first and set off
+   from the rest by a hairline. */
 .factory-view {
   display: flex;
   min-width: 0;
@@ -4277,21 +4276,13 @@ body:has(.app-stage[data-capture="true"])
   font-size: 13px;
 }
 
+/* What waits on the developer leads the line in full ink, its dot before it. */
 .factory-needs {
   display: inline-flex;
   align-items: center;
   gap: var(--space-6);
-  margin: calc(-1 * var(--space-2)) calc(-1 * var(--space-6));
-  padding: var(--space-2) var(--space-6);
-  border-radius: var(--menu-row-radius);
-  background: none;
   color: var(--text-primary);
   font-weight: 600;
-  transition: background-color var(--duration-hover) ease;
-}
-
-.factory-needs:hover {
-  background: var(--raised);
 }
 
 .factory-sep {
@@ -4301,36 +4292,19 @@ body:has(.app-stage[data-capture="true"])
 .factory-line-up {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr);
-  grid-template-rows: auto auto;
   align-items: start;
   column-gap: var(--space-8);
   max-width: 1080px; /* off-scale */
 }
 
 .factory-step {
-  display: grid;
-  grid-row: span 2;
-  grid-template-rows: subgrid;
+  display: flex;
   min-width: 0;
+  flex-direction: column;
   padding: var(--space-8) var(--space-4) var(--space-4);
   border: 1px solid var(--hairline);
   border-radius: var(--menu-radius);
   background: var(--desktop-sidebar);
-}
-
-.factory-work,
-.factory-wait {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-}
-
-.factory-wait {
-  margin: var(--space-12) calc(-1 * var(--space-4)) calc(-1 * var(--space-4));
-  padding: var(--space-8) var(--space-4) var(--space-4);
-  border-top: 1px solid var(--hairline);
-  border-radius: 0 0 var(--menu-radius) var(--menu-radius);
-  background: var(--desktop-ground);
 }
 
 .factory-arrow {
@@ -4386,49 +4360,40 @@ body:has(.app-stage[data-capture="true"])
   transform: none;
 }
 
-.factory-over {
-  margin: 0 0 var(--space-4);
-  padding: 0 var(--row-inset);
-  color: var(--text-secondary);
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.factory-line {
+/* A station with nothing in it says so in one muted line. */
+.factory-idle {
   margin: 0;
   padding: var(--space-2) var(--row-inset) var(--space-6);
   color: var(--text-secondary);
   font-size: 12px;
 }
 
-/* A step's rows read whole on two lines, and a question on up to five,
-   rather than cut short; the time and the dot stand at the first line. */
 .factory-rows {
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.factory-row .sidebar-plan-line {
-  align-items: flex-start;
+/* What waits on the developer stands apart from the work after it. */
+.factory-rows[data-needs] + .factory-rows {
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--hairline);
 }
 
-.factory-row .sidebar-plan-name {
-  display: -webkit-box;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-height: 1.35;
-  white-space: normal;
+/* A row offers no Pin or Archive to give way to, so its time stays put
+   while the row is hovered or holds the keyboard, as Home's does. */
+.factory-row:hover .sidebar-plan-time,
+.factory-row:has(:focus-visible) .sidebar-plan-time {
+  visibility: visible;
 }
 
-.factory-rows[data-wait] .sidebar-plan-name {
-  -webkit-line-clamp: 5;
-}
-
-/* The dot stands centred on the first line, beside the time. */
-.factory-row .inbox-row-dot {
-  top: 0.675em; /* off-scale: half the line's height */
+/* A row that opens GitHub says so with a plain link's ↗ after its words. */
+.factory-external {
+  display: inline-flex;
+  flex: none;
+  margin-left: calc(-1 * var(--space-6));
+  color: var(--text-tertiary);
 }
 
 .factory-more {
@@ -4437,18 +4402,9 @@ body:has(.app-stage[data-capture="true"])
   font-size: 12px;
 }
 
-/* An agent stopped on a question wears the question, in full ink, not the
-   working mark; what just shipped wears the finished mark, its name muted. */
-.factory-asking {
-  color: var(--text-primary);
-}
-
+/* What just shipped wears the finished mark. */
 .factory-shipped {
   color: var(--state-complete);
-}
-
-.factory-row:has(.factory-shipped) .sidebar-plan-name {
-  color: var(--text-secondary);
 }
 
 /* Automations ---------------------------------------------------------------- */

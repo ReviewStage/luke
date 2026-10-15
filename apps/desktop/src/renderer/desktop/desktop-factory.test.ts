@@ -112,17 +112,19 @@ interface Opened {
   readonly plans: string[];
   readonly inbox: (InboxChoice | "inbox")[];
   readonly github: string[];
+  readonly agents: string[];
   readonly feedback: Experiment[];
 }
 
 /** Factory over `listed`, what waits, and the call, every door it opens recorded. */
 function mount(listed: readonly PlanSummary[], overrides: Partial<PlansControl> = {}) {
-  const opened: Opened = { plans: [], inbox: [], github: [], feedback: [] };
+  const opened: Opened = { plans: [], inbox: [], github: [], agents: [], feedback: [] };
   const base = plansControl();
   const plans = plansControl({
     plans: listed,
     listed: { plans: listed, archived: [], inbox: [], inboxPlans: [] },
     onSelect: (planId) => opened.plans.push(planId),
+    onShowAgent: (_planId, agentId) => opened.agents.push(agentId),
     repositories: { ...base.repositories, openGitHub: (url) => opened.github.push(url) },
     inboxView: {
       open: false,
@@ -162,14 +164,16 @@ function mount(listed: readonly PlanSummary[], overrides: Partial<PlansControl> 
   return { page: container, opened, rerender };
 }
 
-/** A step's rows as a reader scans them: each row's words, and whether it waits on the developer. */
+/** A station's rows as a reader scans them: each row's words and task, and whether it waits on the developer. */
 function rows(page: HTMLElement, step: string): string[] {
   const region = page.querySelector(`section[data-step="${step}"]`);
   assert.ok(region, `${step} stands`);
-  return [...region.querySelectorAll(".sidebar-plan")].map(
-    (row) =>
-      `${row.querySelector(".sidebar-plan-name")?.textContent}${row.getAttribute("data-unread") === "true" ? " (waits)" : ""}`,
-  );
+  return [...region.querySelectorAll(".sidebar-plan")].map((row) => {
+    const words = row.querySelector(".sidebar-plan-name")?.textContent;
+    const context = row.querySelector(".home-row-context")?.textContent;
+    const waits = row.getAttribute("data-unread") === "true" ? " (waits)" : "";
+    return `${words}${context === undefined ? "" : ` · ${context}`}${waits}`;
+  });
 }
 
 function row(page: HTMLElement, words: string): HTMLButtonElement {
@@ -180,7 +184,7 @@ function row(page: HTMLElement, words: string): HTMLButtonElement {
   return found;
 }
 
-test("each plan stands in its step, and what waits on the developer stands at the foot of the step it holds up, the question first and in full", () => {
+test("each plan stands in its station, and what waits on the developer leads the station it holds up, each row naming its task", () => {
   const { page } = mount([DRAFT, SEARCH, BILLING, INVITES], {
     inbox: [
       {
@@ -196,25 +200,26 @@ test("each plan stands in its step, and what waits on the developer stands at th
       },
     ],
   });
-  assert.equal(
-    page.querySelector(".factory-summary")?.textContent,
-    "1 question and 1 merge need you·1 agent working on 1 task",
-  );
+  assert.equal(page.querySelector(".factory-summary")?.textContent, "2 need you·1 agent working");
   assert.deepEqual(rows(page, "plan"), ["Usage alerts"]);
-  assert.deepEqual(rows(page, "build"), ["Search across plans", `${QUESTION} (waits)`]);
-  assert.deepEqual(rows(page, "ship"), ["Workspace invites (waits)"]);
-  const overs = [...page.querySelectorAll(".factory-over")].map((each) => each.textContent);
-  assert.deepEqual(overs, ["Waiting for you · start here", "Waiting for you · then"]);
-  // The stalled agent's row wears the question, where the working agent's wears the working mark.
+  assert.deepEqual(rows(page, "build"), [
+    `${QUESTION} · Mercury payouts (waits)`,
+    "Plan index · Search across plans",
+  ]);
+  assert.deepEqual(rows(page, "ship"), ["#2505 ready to merge · Workspace invites (waits)"]);
+  // What waits stands in a list of its own, ahead of the work.
+  const build = page.querySelector('section[data-step="build"]');
+  assert.equal(build?.querySelector("[data-needs] .sidebar-plan-name")?.textContent, QUESTION);
+  // The working agent wears the working mark; the stalled one its own mark at rest.
   const working = '.state-glyph[data-state="working"]';
-  assert.ok(row(page, "Search across plans").querySelector(working));
-  const asking = row(page, QUESTION);
-  assert.ok(asking.querySelector(".factory-asking"));
-  assert.equal(asking.querySelector(working), null);
+  assert.ok(row(page, "Plan index").querySelector(working));
+  assert.equal(row(page, QUESTION).querySelector(working), null);
+  // A row that opens GitHub says so after its words.
+  assert.match(row(page, "#2505 ready to merge").textContent ?? "", /\(opens on GitHub\)/u);
 });
 
-test("a question opens the Inbox on its item, a pull request ready to merge opens on GitHub, a plan opens itself, and Send feedback is about Factory", () => {
-  const { page, opened } = mount([DRAFT, BILLING, INVITES], {
+test("a question opens the Inbox on its item, an agent its page, a pull request ready to merge opens on GitHub, a plan opens itself, and Send feedback is about Factory", () => {
+  const { page, opened } = mount([DRAFT, SEARCH, BILLING, INVITES], {
     inbox: [
       {
         planId: BILLING.id,
@@ -223,8 +228,9 @@ test("a question opens the Inbox on its item, a pull request ready to merge open
     ],
   });
   act(() => row(page, QUESTION).click());
-  act(() => row(page, "Workspace invites").click());
+  act(() => row(page, "#2505 ready to merge").click());
   act(() => row(page, "Usage alerts").click());
+  act(() => row(page, "Plan index").click());
   const feedback = [...page.querySelectorAll("button")].find(
     (each) => each.textContent === "Send feedback",
   );
@@ -234,12 +240,13 @@ test("a question opens the Inbox on its item, a pull request ready to merge open
   assert.deepEqual(opened.inbox, ["inbox", { planId: BILLING.id, itemId: "i1" }]);
   assert.deepEqual(opened.github, ["https://github.com/acme/relay/pull/2505"]);
   assert.deepEqual(opened.plans, [DRAFT.id]);
+  assert.deepEqual(opened.agents, [AGENT_ID]);
 });
 
 test("the plan on the call stands in Plan however old, and with nothing standing anywhere the page is the empty state, offering nothing to press", () => {
   const old = plan(5, "Factory tab", 10 * 24 * HOUR);
   const call = mount([old], { callPlanId: old.id });
-  assert.deepEqual(rows(call.page, "plan"), ["Factory tab"]);
+  assert.deepEqual(rows(call.page, "plan"), ["Factory tab · On a call with Luke"]);
   act(() => root?.unmount());
 
   const { page } = mount([old]);
@@ -273,24 +280,52 @@ test("a plan list that could not be read says so, and Retry reads it again", () 
   assert.equal(retries, 1);
 });
 
-test("with only merges waiting, the summary opens the first one on GitHub; with a question waiting, it opens the Inbox", () => {
-  const merges = mount([INVITES]);
-  act(() => merges.page.querySelector<HTMLButtonElement>(".factory-needs")?.click());
-  assert.deepEqual(merges.opened.github, ["https://github.com/acme/relay/pull/2505"]);
-  assert.deepEqual(merges.opened.inbox, []);
-  act(() => root?.unmount());
-
-  const asked = mount([BILLING, INVITES], {
-    inbox: [
-      {
-        planId: BILLING.id,
-        items: [{ id: "i1", agentId: AGENT_ID, title: QUESTION, postedAt: NOW - HOUR }],
-      },
-    ],
+test("an agent whose turn failed waits first in Build wearing the failed mark and opens its page, and failing checks wait first in Ship and open on GitHub", () => {
+  const failedAgent = "a0000000-0000-4000-8000-000000000009";
+  const pooling = plan(6, "Connection pooling", HOUR, {
+    agents: {
+      total: 1,
+      working: 0,
+      agents: [
+        {
+          id: failedAgent,
+          title: "PgBouncer pool",
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          status: CODING_AGENT_STATUS.FAILED,
+          at: NOW - HOUR,
+        },
+      ],
+      pullRequestTotal: 1,
+      pullRequests: [
+        {
+          number: 2507,
+          title: "Retry deliveries",
+          state: PULL_REQUEST_STATE.OPEN,
+          checks: CHECK_SUMMARY.FAILING,
+          additions: 10,
+          deletions: 2,
+          url: "https://github.com/acme/relay/pull/2507",
+        },
+      ],
+    },
   });
-  act(() => asked.page.querySelector<HTMLButtonElement>(".factory-needs")?.click());
-  assert.deepEqual(asked.opened.inbox, ["inbox"]);
-  assert.deepEqual(asked.opened.github, []);
+  const { page, opened } = mount([SEARCH, pooling, INVITES]);
+  assert.deepEqual(rows(page, "build"), [
+    "PgBouncer pool failed · Connection pooling (waits)",
+    "Plan index · Search across plans",
+  ]);
+  assert.deepEqual(rows(page, "ship"), [
+    "#2507 checks failing · Connection pooling (waits)",
+    "#2505 ready to merge · Workspace invites (waits)",
+  ]);
+  assert.ok(row(page, "PgBouncer pool failed").querySelector(".failed-mark"));
+  assert.ok(row(page, "#2507 checks failing").querySelector(".failed-mark"));
+  assert.equal(page.querySelector(".factory-summary")?.textContent, "3 need you·1 agent working");
+  act(() => row(page, "PgBouncer pool failed").click());
+  act(() => row(page, "#2507 checks failing").click());
+  assert.deepEqual(opened.agents, [failedAgent]);
+  assert.deepEqual(opened.github, ["https://github.com/acme/relay/pull/2507"]);
 });
 
 test("more pull requests shipping at once than Ship lists are counted after its rows", () => {
@@ -325,13 +360,34 @@ test("more pull requests shipping at once than Ship lists are counted after its 
   );
 });
 
-test("a task a teammate created wears their face before its time, wherever it stands, and the reader's own wears none", () => {
+test("a row wears a teammate's face before its time, whoever started its agent, else whoever created its task, and the reader's own wears none", () => {
   const charles = { userId: "user-charles", name: "Charles Pan" };
   const dean = { userId: "user-dean", name: "Dean Stratakos" };
+  const started = SEARCH.agents?.agents[0];
+  assert.ok(started);
   const { page } = mount(
     [
       { ...DRAFT, ownerId: charles.userId, createdBy: charles },
-      { ...SEARCH, ownerId: dean.userId, createdBy: dean },
+      {
+        ...SEARCH,
+        ownerId: dean.userId,
+        createdBy: dean,
+        agents: {
+          total: 2,
+          working: 2,
+          agents: [
+            { ...started, startedBy: dean },
+            {
+              ...started,
+              id: "a0000000-0000-4000-8000-000000000003",
+              title: "Plan UI",
+              startedBy: charles,
+            },
+          ],
+          pullRequestTotal: 0,
+          pullRequests: [],
+        },
+      },
     ],
     { me: dean.userId },
   );
@@ -339,7 +395,8 @@ test("a task a teammate created wears their face before its time, wherever it st
   const face = (words: string) =>
     row(page, words).querySelector(".sidebar-plan-time .actor-mark")?.textContent ?? null;
   assert.equal(face(DRAFT.name), "C");
-  assert.equal(face(SEARCH.name), null);
+  assert.equal(face("Plan index"), null);
+  assert.equal(face("Plan UI"), "C");
   assert.match(row(page, DRAFT.name).textContent ?? "", /\(created by Charles Pan\)/u);
 });
 
@@ -361,4 +418,19 @@ test("a refresh that fails over a list read before keeps the line standing, and 
   assert.ok(retry);
   act(() => retry.click());
   assert.equal(retries, 1);
+});
+
+test("a question's hover says it whole, which its one line cuts short", () => {
+  const { page } = mount([BILLING], {
+    inbox: [
+      {
+        planId: BILLING.id,
+        items: [{ id: "i1", agentId: AGENT_ID, title: QUESTION, postedAt: NOW - HOUR }],
+      },
+    ],
+  });
+  act(() => {
+    row(page, QUESTION).dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+  });
+  assert.equal(document.querySelector('[role="tooltip"]')?.textContent, QUESTION);
 });

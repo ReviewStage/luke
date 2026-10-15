@@ -14,8 +14,13 @@ import type { AppInboxPlan } from "@luke/host/app-state";
 import { test } from "vitest";
 import {
   EMPTY_MERGED,
-  FACTORY_STEP,
+  FACTORY_BLOCK,
+  FACTORY_STOP,
+  FACTORY_WORK,
+  FAILED_WINDOW_MS,
   type FactoryInput,
+  type FactoryStop,
+  type FactoryWork,
   factoryBoard,
   noteMerged,
   PLANNING_WINDOW_MS,
@@ -90,8 +95,21 @@ function board(patch: Partial<FactoryInput>) {
 
 const names = (rows: readonly { plan: PlanSummary }[]) => rows.map((row) => row.plan.name);
 
-test("a plan stands in the step its own state puts it in: drafted lately in Plan, worked on in Build, and an old draft or an archived plan nowhere", () => {
-  const working = agent(1, CODING_AGENT_STATUS.RUNNING);
+/** Build's work as a reader scans it: an agent by its title, a pull request by its number, each with its plan. */
+const work = (rows: readonly FactoryWork[]) =>
+  rows.map((row) =>
+    row.kind === FACTORY_WORK.AGENT
+      ? `${row.agent.title} (${row.plan.name})`
+      : `#${row.pullRequest.number} (${row.plan.name})`,
+  );
+
+/** What stops an agent as a reader scans it: a question by its words, a failure by its agent. */
+const stops = (rows: readonly FactoryStop[]) =>
+  rows.map((row) =>
+    row.kind === FACTORY_STOP.QUESTION ? row.item.title : `${row.agent.title} failed`,
+  );
+
+test("a plan stands in the station its own state puts it in: drafted lately in Plan, its agents at work in Build each on a row of its own, and an old draft, an archived plan, or a finished one nowhere", () => {
   const drawn = board({
     plans: [
       plan(1, "Usage alerts", 2 * HOUR),
@@ -99,19 +117,25 @@ test("a plan stands in the step its own state puts it in: drafted lately in Plan
         2,
         "Search across plans",
         5 * HOUR,
-        agents([agent(2, CODING_AGENT_STATUS.COMPLETED), working]),
+        agents([
+          agent(2, CODING_AGENT_STATUS.COMPLETED),
+          agent(1, CODING_AGENT_STATUS.RUNNING, NOW - 2 * MINUTE),
+          agent(3, CODING_AGENT_STATUS.STARTING, NOW - MINUTE),
+        ]),
       ),
       plan(3, "Old dashboard", PLANNING_WINDOW_MS + MINUTE),
       { ...plan(4, "Shelved", MINUTE), archivedAt: NOW - MINUTE },
-      plan(5, "Finished research", HOUR, agents([agent(3, CODING_AGENT_STATUS.COMPLETED)])),
+      plan(5, "Finished research", HOUR, agents([agent(4, CODING_AGENT_STATUS.COMPLETED)])),
     ],
   });
   assert.deepEqual(names(drawn.planning), ["Usage alerts"]);
-  assert.deepEqual(names(drawn.building), ["Search across plans"]);
-  assert.equal(drawn.building[0]?.agent, working);
-  assert.equal(drawn.agentsWorking, 1);
-  assert.equal(drawn.plansWorking, 1);
-  assert.equal(drawn.first, undefined);
+  assert.deepEqual(work(drawn.working), [
+    "Agent 3 (Search across plans)",
+    "Agent 1 (Search across plans)",
+  ]);
+  assert.equal(drawn.agentsWorking, 2);
+  assert.deepEqual(drawn.stopped, []);
+  assert.deepEqual(drawn.blocked, []);
 });
 
 test("the plan on the call is being planned however long ago it was saved, and stands first", () => {
@@ -126,22 +150,29 @@ test("the plan on the call is being planned however long ago it was saved, and s
   );
 });
 
-test("each open Inbox item waits under Build with its plan, the longest waiting first, and is the wait to take first", () => {
+test("what stops an agent leads Build: each open Inbox item with its plan, the latest first, then each agent whose turn failed in the last day, the latest first", () => {
   const stalled = agent(1, CODING_AGENT_STATUS.COMPLETED);
   const billing = plan(1, "Mercury payouts", 2 * HOUR, agents([stalled]));
   const invites = plan(2, "Invitations", HOUR, agents([agent(2, CODING_AGENT_STATUS.RUNNING)]));
+  const pooling = plan(
+    3,
+    "Connection pooling",
+    HOUR,
+    agents([agent(5, CODING_AGENT_STATUS.FAILED, NOW - HOUR)]),
+  );
+  const push = plan(
+    4,
+    "Mobile push",
+    3 * HOUR,
+    agents([agent(6, CODING_AGENT_STATUS.FAILED, NOW - 3 * HOUR)]),
+  );
+  const stale = plan(
+    5,
+    "Old retry",
+    2 * FAILED_WINDOW_MS,
+    agents([agent(7, CODING_AGENT_STATUS.FAILED, NOW - FAILED_WINDOW_MS - MINUTE)]),
+  );
   const waiting: AppInboxPlan[] = [
-    {
-      planId: invites.id,
-      items: [
-        {
-          id: "i1",
-          agentId: "unlisted",
-          title: "Expire invites after a week?",
-          postedAt: NOW - 6 * MINUTE,
-        },
-      ],
-    },
     {
       planId: billing.id,
       items: [
@@ -153,88 +184,82 @@ test("each open Inbox item waits under Build with its plan, the longest waiting 
         },
       ],
     },
+    {
+      planId: invites.id,
+      items: [
+        {
+          id: "i1",
+          agentId: "unlisted",
+          title: "Expire invites after a week?",
+          postedAt: NOW - 6 * MINUTE,
+        },
+      ],
+    },
   ];
-  const drawn = board({ plans: [billing, invites], waiting });
-  assert.deepEqual(
-    drawn.questions.map((question) => [question.item.title, question.plan.name]),
-    [
-      ["Which account pays out?", "Mercury payouts"],
-      ["Expire invites after a week?", "Invitations"],
-    ],
-  );
-  // A plan whose only agent is stalled stands in the wait alone, not among the plans being built.
-  assert.deepEqual(names(drawn.building), ["Invitations"]);
-  assert.equal(drawn.first, FACTORY_STEP.BUILD);
+  const drawn = board({ plans: [billing, invites, push, pooling, stale], waiting });
+  assert.deepEqual(stops(drawn.stopped), [
+    "Expire invites after a week?",
+    "Which account pays out?",
+    "Agent 5 failed",
+    "Agent 6 failed",
+  ]);
+  assert.deepEqual(names(drawn.stopped), [
+    "Invitations",
+    "Mercury payouts",
+    "Connection pooling",
+    "Mobile push",
+  ]);
+  // A plan whose only agent is stalled stands in the wait alone, not among the work.
+  assert.deepEqual(work(drawn.working), ["Agent 2 (Invitations)"]);
 });
 
-test("an open pull request with its checks passed, or none to run, waits to be merged; one in checks, failing, or a draft is still being built; a closed one stands nowhere", () => {
+test("what stops a merge leads Ship: failing checks, then pull requests ready to merge (passing, or no checks to run); one in checks or a draft is still built, and a closed one stands nowhere", () => {
+  const withPullRequest = (n: number, name: string, line: PlanPullRequestLine) =>
+    plan(
+      n,
+      name,
+      HOUR,
+      agents([agent(n, CODING_AGENT_STATUS.COMPLETED, NOW - n * MINUTE)], [line]),
+    );
   const drawn = board({
     plans: [
-      plan(
+      withPullRequest(
         1,
         "Invitations",
-        HOUR,
-        agents(
-          [agent(1, CODING_AGENT_STATUS.COMPLETED)],
-          [pullRequest(2505, PULL_REQUEST_STATE.OPEN, CHECK_SUMMARY.PASSING)],
-        ),
+        pullRequest(2505, PULL_REQUEST_STATE.OPEN, CHECK_SUMMARY.PASSING),
       ),
-      plan(
-        2,
-        "Docs",
-        HOUR,
-        agents(
-          [agent(2, CODING_AGENT_STATUS.COMPLETED)],
-          [pullRequest(2506, PULL_REQUEST_STATE.OPEN, CHECK_SUMMARY.NONE)],
-        ),
-      ),
-      plan(
+      withPullRequest(2, "Docs", pullRequest(2506, PULL_REQUEST_STATE.OPEN, CHECK_SUMMARY.NONE)),
+      withPullRequest(
         3,
         "Board export",
-        HOUR,
-        agents(
-          [agent(3, CODING_AGENT_STATUS.COMPLETED)],
-          [pullRequest(2516, PULL_REQUEST_STATE.OPEN, CHECK_SUMMARY.PENDING)],
-        ),
+        pullRequest(2516, PULL_REQUEST_STATE.OPEN, CHECK_SUMMARY.PENDING),
       ),
-      plan(
+      withPullRequest(
         4,
         "Neon branches",
-        HOUR,
-        agents(
-          [agent(4, CODING_AGENT_STATUS.COMPLETED)],
-          [pullRequest(2509, PULL_REQUEST_STATE.OPEN, CHECK_SUMMARY.FAILING)],
-        ),
+        pullRequest(2509, PULL_REQUEST_STATE.OPEN, CHECK_SUMMARY.FAILING),
       ),
-      plan(
+      withPullRequest(
         5,
         "Draft",
-        HOUR,
-        agents(
-          [agent(5, CODING_AGENT_STATUS.COMPLETED)],
-          [pullRequest(2511, PULL_REQUEST_STATE.DRAFT, CHECK_SUMMARY.PASSING)],
-        ),
+        pullRequest(2511, PULL_REQUEST_STATE.DRAFT, CHECK_SUMMARY.PASSING),
       ),
-      plan(
+      withPullRequest(
         6,
         "Abandoned",
-        HOUR,
-        agents(
-          [agent(6, CODING_AGENT_STATUS.COMPLETED)],
-          [pullRequest(2490, PULL_REQUEST_STATE.CLOSED, CHECK_SUMMARY.PASSING)],
-        ),
+        pullRequest(2490, PULL_REQUEST_STATE.CLOSED, CHECK_SUMMARY.PASSING),
       ),
     ],
   });
   assert.deepEqual(
-    drawn.merges.map((merge) => merge.pullRequest.number),
-    [2505, 2506],
+    drawn.blocked.map((row) => [row.kind, row.pullRequest.number]),
+    [
+      [FACTORY_BLOCK.CHECKS, 2509],
+      [FACTORY_BLOCK.MERGE, 2505],
+      [FACTORY_BLOCK.MERGE, 2506],
+    ],
   );
-  assert.deepEqual(
-    drawn.building.map((row) => row.pullRequest?.number),
-    [2516, 2509, 2511],
-  );
-  assert.equal(drawn.first, FACTORY_STEP.SHIP);
+  assert.deepEqual(work(drawn.working), ["#2516 (Board export)", "#2511 (Draft)"]);
 });
 
 test("a pull request seen turning merged stands in Ship for a minute, then leaves; one already merged when first read never stands", () => {
@@ -273,7 +298,7 @@ test("a pull request seen turning merged stands in Ship for a minute, then leave
     now.shipped.map((row) => [row.pullRequest.number, row.at]),
     [[2505, NOW]],
   );
-  assert.deepEqual(now.merges, []);
+  assert.deepEqual(now.blocked, []);
 
   const later = NOW + SHIPPED_LINGER_MS;
   const kept = noteMerged(seen, [merged, long], [merged, long], later);
@@ -309,16 +334,48 @@ test("two repositories' pull requests sharing a number are told apart by their p
   );
 });
 
-test("with nothing standing anywhere, the board is empty and no wait comes first", () => {
+test("with nothing standing anywhere, the board is empty", () => {
   const drawn = board({ plans: [plan(1, "Old dashboard", 10 * PLANNING_WINDOW_MS)] });
   assert.deepEqual(drawn, {
     planning: [],
-    building: [],
-    questions: [],
-    merges: [],
+    stopped: [],
+    working: [],
+    blocked: [],
     shipped: [],
     agentsWorking: 0,
-    plansWorking: 0,
-    first: undefined,
   });
+});
+
+test("an agent that failed before its first turn waits in Build as recent as its task's last activity, however old the task's last save", () => {
+  const turnless: PlanAgentLine = {
+    id: "a0000000-0000-4000-8000-000000000001",
+    title: "Agent 1",
+    model: "anthropic/claude-opus-5.5",
+    effort: "high",
+    status: CODING_AGENT_STATUS.FAILED,
+  };
+  const old = plan(1, "Old billing", 3 * FAILED_WINDOW_MS, agents([turnless]));
+  const started = plan(1, "Old billing", 3 * FAILED_WINDOW_MS, {
+    ...agents([turnless]),
+    activityAt: NOW - 5 * MINUTE,
+  });
+  assert.deepEqual(stops(board({ plans: [started] }).stopped), ["Agent 1 failed"]);
+  // With no activity of its own since, the old task's failure has aged out.
+  assert.deepEqual(board({ plans: [old] }).stopped, []);
+});
+
+test("a draft's failing checks are its own work still, standing in Build; only an open pull request's wait in Ship", () => {
+  const withPullRequest = (n: number, name: string, line: PlanPullRequestLine) =>
+    plan(n, name, HOUR, agents([agent(n, CODING_AGENT_STATUS.COMPLETED)], [line]));
+  const drawn = board({
+    plans: [
+      withPullRequest(1, "Draft", pullRequest(42, PULL_REQUEST_STATE.DRAFT, CHECK_SUMMARY.FAILING)),
+      withPullRequest(2, "Open", pullRequest(43, PULL_REQUEST_STATE.OPEN, CHECK_SUMMARY.FAILING)),
+    ],
+  });
+  assert.deepEqual(
+    drawn.blocked.map((row) => row.pullRequest.number),
+    [43],
+  );
+  assert.deepEqual(work(drawn.working), ["#42 (Draft)"]);
 });
