@@ -1,14 +1,13 @@
 import type { CodingAgentInboxParams } from "@luke/features/coding-agent-view";
 import type { PlanSummary } from "@luke/features/plan-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { FolderIcon, SearchIcon, WingFace } from "@luke/ui";
+import { FolderIcon, WingFace } from "@luke/ui";
 import { teammateCreator } from "@luke/ui/actor-model";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
 import { useAct } from "../act";
 import { ACTOR_SIZE, ActorMark, CreatorHeard } from "../actor-ref";
-import { runAppCommand } from "../app-commands";
 import { MemberDirectory, useMemberDirectory } from "../member-directory";
 import { InboxItemRow } from "../planning/inbox-list";
 import {
@@ -43,8 +42,7 @@ import { PlanStatusMark } from "./plan-card";
  * plan it is about after its title, a press opening the Inbox on it; then
  * Recent, the plans of the workspace listed saved latest, each as the
  * sidebar draws a plan, with its repository after its name, a press opening
- * it, and Search all of them, the command palette, where there are more.
- * Nothing waiting says so in the Inbox's own words. An account with no plan
+ * it. Nothing waiting says so in the Inbox's own words. An account with no plan
  * yet in any workspace is welcomed instead: Luke's face, one line of what he does, and New
  * plan. Nothing here names the sidebar, which may be folded away.
  *
@@ -58,8 +56,8 @@ import { PlanStatusMark } from "./plan-card";
 /** How many plans Recent lists. */
 const RECENT_COUNT = 6;
 
-/** The rows the arrow keys move through: every plan's and item's, and Search all. */
-const HOME_ROWS = ".sidebar-plan, .home-more";
+/** The rows the arrow keys move through: every plan's and item's. */
+const HOME_ROWS = ".sidebar-plan";
 
 /** The greeting: the account's first name where it has one. */
 function greeting(name: string | undefined): string {
@@ -316,18 +314,6 @@ export function DesktopHome({
                   />
                 ))}
               </ul>
-              {listed.plans.length > RECENT_COUNT ? (
-                <button
-                  type="button"
-                  className="home-more"
-                  aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.COMMAND_PALETTE)}
-                  onClick={() => runAppCommand(APP_COMMAND.COMMAND_PALETTE)}
-                >
-                  <SearchIcon />
-                  Search all {listed.plans.length} tasks
-                  <Shortcut chord={APP_SHORTCUTS[APP_COMMAND.COMMAND_PALETTE].chord} />
-                </button>
-              ) : null}
             </section>
           )}
         </div>

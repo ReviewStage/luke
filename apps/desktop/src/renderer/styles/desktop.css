@@ -6775,30 +6775,6 @@ button.automation-run:hover {
   border-radius: 4px;
 }
 
-.home-more {
-  display: inline-flex;
-  align-self: flex-start;
-  align-items: center;
-  gap: var(--space-8);
-  margin-top: var(--space-2);
-  padding: var(--space-6) var(--row-inset);
-  border-radius: 9px;
-  background: none;
-  color: var(--text-secondary);
-  font-size: 12.5px;
-  transition: background-color var(--duration-hover) ease;
-}
-
-.home-more svg {
-  width: 14px;
-  height: 14px;
-}
-
-.home-more:hover {
-  background: var(--raised);
-  color: var(--text-primary);
-}
-
 /* A new account's welcome: Luke's face on a tile, a title, a line, and New plan, centred. */
 .home-welcome {
   display: flex;
