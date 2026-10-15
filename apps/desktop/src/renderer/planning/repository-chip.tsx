@@ -63,8 +63,6 @@ export interface RepositoryChooser {
    * has heard yet.
    */
   connected?: boolean | undefined;
-  /** Where the repositories come from, as the list's heading says it: "acme-corp on GitHub · Acme"; none where no GitHub is connected. */
-  source?: string | undefined;
 }
 
 /** Where the chip stands, which is how it is sized. */
@@ -238,10 +236,7 @@ export function RepositoryChip(props: {
   // The toolbar's chip is drawn only while the plan has no repository; the sidebar names one it has.
   const triggerDrawn = props.place !== CHIP_PLACE.TOOLBAR || props.value === null;
 
-  // Every row stands under where the repositories come from, which the heading says.
-  const rows = repositoryRows(chooser.recent, listed?.repositories, chooser.pictures).map((row) =>
-    chooser.source === undefined ? row : { ...row, section: chooser.source },
-  );
+  const rows = repositoryRows(chooser.recent, listed?.repositories, chooser.pictures);
   const label =
     props.value ?? (rows.length === 0 && listed !== undefined ? NONE_LABEL : CHOOSE_LABEL);
   const note =
