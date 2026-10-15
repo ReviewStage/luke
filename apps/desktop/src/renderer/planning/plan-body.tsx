@@ -1,11 +1,8 @@
 import {
-  decodeMention,
-  isMentionLabel,
   MENTION_KIND,
   type MentionLines,
   type MentionPlace,
   mentionMarkdown,
-  mentionName,
   type PlanMention,
   sectionAnchors,
 } from "@luke/features/mention-link";
@@ -18,7 +15,7 @@ import { ActionMenu, useActionMenu } from "../desktop/action-menu";
 import { type LinkDrawer, MarkdownMessage } from "../markdown-message";
 import { Tooltip } from "../tooltip";
 import { prefersReducedMotion } from "../use-reduced-motion";
-import { MentionChip, type MentionDoors } from "./mention-chip";
+import { type MentionDoors, mentionLinkDrawer } from "./mention-chip";
 import {
   DOCUMENT_BLOCK_CLASS,
   DocumentBlock,
@@ -371,11 +368,11 @@ function unitClass(view: UnitView, changed: boolean): string {
 
 /**
  * What draws the plan's mentions as chips, on a plan's own page: a link
- * whose label starts with `@` and whose destination names a mention, drawn
- * against the anchors of the plan's headings as they stand; nothing off a
- * plan's page, where mentions stay words. Note that it is made again only
- * when a heading changes, since every unit's words are drawn again when it
- * is, and that what opening one does is read as it is pressed.
+ * whose destination names a mention, whoever wrote it (`linkMention`),
+ * drawn against the anchors of the plan's headings as they stand; nothing
+ * off a plan's page, where mentions stay words. Note that it is made again
+ * only when a heading changes, since every unit's words are drawn again
+ * when it is, and that what opening one does is read as it is pressed.
  */
 function useMentionChips(
   linked: LinkedPlan | undefined,
@@ -400,13 +397,7 @@ function useMentionChips(
         ? (path, lines) => latest.current?.onOpenFile?.(path, lines)
         : undefined,
     };
-    const link = (href: string, label: string) => {
-      if (!isMentionLabel(label)) return undefined;
-      const mention = decodeMention(href, repository);
-      if (mention === undefined) return undefined;
-      return <MentionChip mention={mention} name={mentionName(label)} doors={doors} />;
-    };
-    return { link, doors };
+    return { link: mentionLinkDrawer(doors), doors };
   }, [opensFiles, planId, workspace, repository, anchorKey]);
 }
 

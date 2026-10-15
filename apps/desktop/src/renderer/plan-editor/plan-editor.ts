@@ -1,4 +1,4 @@
-import { type AnyExtension, Editor } from "@tiptap/core";
+import { type AnyExtension, Editor, Extension } from "@tiptap/core";
 import Heading from "@tiptap/extension-heading";
 import Image from "@tiptap/extension-image";
 import { TaskItem, TaskList } from "@tiptap/extension-list";
@@ -56,12 +56,45 @@ const DocumentHeading = Heading.extend({
   },
 });
 
+/** The class a link whose target names a mention wears in the editor, which `planning.css` draws in a chip's light look. */
+const MENTION_LINK_CLASS = "plan-mention-link";
+
+/**
+ * A link whose target names a mention, which the read view draws as its
+ * chip, wears a chip's light look in the editor, so opening a section to
+ * edit it does not turn its chips into underlined words. Note that only a
+ * class is added, never the target in an attribute of its own, and that
+ * the attribute is drawn alone and never read or written as markdown.
+ */
+function mentionLinkLook(namesMention: (target: string) => boolean) {
+  return Extension.create({
+    name: "mentionLinkLook",
+    addGlobalAttributes() {
+      return [
+        {
+          types: ["link"],
+          attributes: {
+            mentionLook: {
+              default: null,
+              parseHTML: () => null,
+              renderHTML: (attributes) =>
+                namesMention(String(attributes.href ?? "")) ? { class: MENTION_LINK_CLASS } : {},
+            },
+          },
+        },
+      ];
+    },
+  });
+}
+
 /**
  * What the text may hold, read and written as the editor reads and writes
- * it: the mention among the rest, drawn by the panel where it can draw one.
+ * it: the mention among the rest, drawn by the panel where it can draw one,
+ * and a link naming one in a chip's light look where the panel says which.
  */
 export function markdownExtensions(
   drawMention?: ((element: HTMLElement, mention: MentionNode) => () => void) | undefined,
+  namesMention?: ((target: string) => boolean) | undefined,
 ): AnyExtension[] {
   const kit = StarterKit.configure({
     heading: false,
@@ -79,6 +112,7 @@ export function markdownExtensions(
     Image.configure({ inline: true }),
     RawBlock,
     mentionNode(drawMention),
+    ...(namesMention === undefined ? [] : [mentionLinkLook(namesMention)]),
   ];
 }
 
@@ -129,7 +163,7 @@ function placed(editor: Editor, placement: PlanEditorPlacement | undefined): Sel
 export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): PlanEditorHandle {
   const { markdown, placement, focus, label, className, onDraft, onFinish, onLeaveUp, mentions } =
     props;
-  const extensions = markdownExtensions(mentions?.drawMention);
+  const extensions = markdownExtensions(mentions?.drawMention, mentions?.namesMention);
   const manager = documentManager(extensions);
   // Filled once the editor is built, since a block's source is known by the node it opened as.
   let held: HeldSources = { sources: new Map(), lead: "", ending: "" };

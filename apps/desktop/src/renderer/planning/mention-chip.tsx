@@ -2,6 +2,7 @@ import { INTEGRATION_NAME } from "@luke/features/integration-wire";
 import {
   decodeMention,
   encodeMention,
+  linkMention,
   MENTION_KIND,
   type Mention,
   type MentionLines,
@@ -14,6 +15,7 @@ import { DocumentIcon, ProviderMark } from "@luke/ui";
 import { fileName } from "@luke/voice/code-pane-model";
 import { FolderIcon, HashIcon } from "lucide-react";
 import { CardHead, CardNote, HoverCard } from "../hover-card";
+import type { LinkDrawer } from "../markdown-message";
 import type { HeadingsChange, MentionNode } from "../plan-editor/contract";
 import { Tooltip } from "../tooltip";
 import { FileCard } from "./file-ref";
@@ -245,6 +247,15 @@ export function MentionChip({
       )}
     </Tooltip>
   );
+}
+
+/** What draws a link in Markdown as its mention's chip through the doors given, where its target names a mention (`linkMention`); a link where it names none. */
+export function mentionLinkDrawer(doors: MentionDoors): LinkDrawer {
+  return (href, label) => {
+    const found = linkMention(label, href, doors.place.repository);
+    if (found === undefined) return undefined;
+    return <MentionChip mention={found.mention} name={found.name} doors={doors} />;
+  };
 }
 
 /** The mention node words pasted whole stand for: a page of an integration's, named by its address's readable form; nothing for any other words, a file of the plan's repository among them. */

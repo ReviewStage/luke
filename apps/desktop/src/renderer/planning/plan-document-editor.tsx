@@ -1,4 +1,5 @@
 import { useAtom, useAtomValue } from "@effect/atom-react";
+import { decodeMention } from "@luke/features/mention-link";
 import {
   CONFLICT_NOTE,
   DOCUMENT_EDITOR_STATE,
@@ -445,6 +446,7 @@ function MountedPlanEditor({
                 latest.current.mentions?.drawMention(element, mention) ?? (() => undefined),
               retarget: (target, renamed) => latest.current.mentions?.retarget(target, renamed),
               pasted: (words) => latest.current.mentions?.pasted(words),
+              namesMention: (target) => latest.current.mentions?.namesMention(target) ?? false,
             },
     });
     handle.current = mounted;
@@ -595,6 +597,8 @@ export function PlanDocumentEditor({
             retarget: (target, change) =>
               retargetedMention(plan.id, mentions.place, target, change),
             pasted: (words) => pastedMentionNode(words, mentions.place),
+            namesMention: (target) =>
+              decodeMention(target, mentions.place.repository) !== undefined,
           },
   };
   return (

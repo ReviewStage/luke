@@ -83,6 +83,7 @@ function mounted(markdown: string) {
         return () => undefined;
       },
       retarget: (target, change) => retargetedMention(PLAN_ID, PLACE, target, change),
+      namesMention: () => false,
       // The panel reads the one page of an integration's this plan is pasted.
       pasted: (words) => (words.trim() === ISSUE_URL ? ISSUE : undefined),
     },
