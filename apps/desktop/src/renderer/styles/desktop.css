@@ -5312,8 +5312,10 @@ button.automation-run:hover {
 }
 
 /* Hidden, not removed, while the panel fills the window: it keeps its layout
-   beneath the panel, and is hidden only once the panel has grown over it. */
-.desktop-plan-main[hidden] {
+   beneath the panel, and is hidden only once the panel has grown over it. An
+   agent's page beside its panel is hidden alike. */
+.desktop-plan-main[hidden],
+.desktop-plan > .agent-page[hidden] {
   visibility: hidden;
   transition: visibility 0s linear var(--duration-pane);
 }
