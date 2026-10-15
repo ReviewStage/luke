@@ -203,6 +203,8 @@ export interface AgentNoticesDependencies {
   onInboxChanged: (inbox: AppInboxSlice) => void;
   /** Brings Luke forward on the plan with its Inbox tab open: an inbox notification's click. */
   openInbox: (planId: string) => void;
+  /** Brings Luke forward on the window's Inbox with an item of an agent with no plan chosen: that item's notification's click. */
+  openPlanlessItem: (item: { readonly agentId: string; readonly itemId: string }) => void;
   watchInterval?: Duration.Duration;
   report: (line: string) => void;
 }
@@ -588,12 +590,15 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       doors.badge(answer.items.length + (answer.planless?.length ?? 0));
     }
 
-    /** An item of an agent with no plan opened: told nowhere in front, since the window's toast opens a plan and the window's Inbox lists it, and as a notification behind, which opens the agent's page. */
+    /** An item of an agent with no plan opened: told nowhere in front, since the window's toast opens a plan and the window's Inbox lists it, and as a notification behind, which opens the window's Inbox on the item, where it is answered. */
     function announcePlanless(item: AccountPlanlessEntry): void {
       if (focused) return;
       if (dependencies.notifying()) {
         const text = planlessNoticeText(item, models);
-        doors.post({ ...text, onClick: () => open({ planId: null, agentId: item.agentId }) });
+        doors.post({
+          ...text,
+          onClick: () => dependencies.openPlanlessItem({ agentId: item.agentId, itemId: item.id }),
+        });
       }
     }
 

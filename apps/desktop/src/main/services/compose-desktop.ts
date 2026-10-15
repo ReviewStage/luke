@@ -254,6 +254,10 @@ export function composeDesktop(
           windows.panels.focusExpanded();
           windows.showInbox(planId);
         },
+        openPlanlessItem: (item) => {
+          windows.panels.focusExpanded();
+          windows.showInboxItem(item);
+        },
         report: config.report,
       }).pipe(
         Effect.provideService(

@@ -90,6 +90,7 @@ function fixture() {
   let inboxAnswers: Queue.Queue<CodingAgentAccountInboxAnswerView> | undefined;
   let accounts: Queue.Queue<string | undefined> | undefined;
   const opened: AgentPlace[] = [];
+  const openedPlanless: { readonly agentId: string; readonly itemId: string }[] = [];
   const unseen: (readonly string[])[] = [];
   const answers = new Map<string, CodingAgentListAnswer[]>();
   let focus: ((focused: boolean) => void) | undefined;
@@ -149,6 +150,7 @@ function fixture() {
         planless.push(next.planless);
       },
       openInbox: (planId) => openedInboxes.push(planId),
+      openPlanlessItem: (item) => openedPlanless.push(item),
       watchInterval: WATCH,
       report: () => undefined,
     });
@@ -163,6 +165,7 @@ function fixture() {
     publish: (agentId: string, answer: CodingAgentPullRequestAnswerView) =>
       published.set(agentId, answer),
     opened,
+    openedPlanless,
     unseen,
     /** The list answers a plan's reads hear, in order; the last stands for every read after it. */
     answer: (planId: string, ...queue: CodingAgentListAnswer[]) => answers.set(planId, queue),
@@ -383,7 +386,7 @@ function planlessItem(id: string, patch: Partial<AccountPlanlessEntry> = {}): Ac
   };
 }
 it.effect(
-  "an item of an agent with no plan waits beside the plans' with its workspace and counts on the badge, and one opened since is announced by its automation, its click opening the agent's own page",
+  "an item of an agent with no plan waits beside the plans' with its workspace and counts on the badge, and one opened since is announced by its automation, its click opening the item in the window's Inbox",
   () =>
     Effect.gen(function* () {
       const f = fixture();
@@ -416,7 +419,12 @@ it.effect(
         { title: "Nightly flake sweep", body: "Sweep the flaky tests: Quarantine the flaky test?" },
       ]);
       f.posted.at(-1)?.onClick();
-      assert.deepEqual(f.opened, [{ planId: null, agentId: AGENT_ID }]);
+      assert.deepEqual(f.openedPlanless, [{ agentId: AGENT_ID, itemId: ITEM_B }]);
+      assert.deepEqual(
+        f.opened,
+        [],
+        "it opens the item in the window's Inbox, not the agent's page",
+      );
       assert.deepEqual(
         f.planless.at(-1)?.map((item) => item.workspaceId),
         ["workspace-acme"],

@@ -93,6 +93,8 @@ export interface WindowService extends DesktopService {
   toastAgentEnd: (end: AgentEndToast) => void;
   /** Asks the panels to open a plan on its Inbox tab: an inbox notification's click. */
   showInbox: (planId: string) => void;
+  /** Asks the panels to open the window's Inbox on an item of an agent with no plan. */
+  showInboxItem: (item: { readonly agentId: string; readonly itemId: string }) => void;
   /** Asks the panels to open Settings: the menu bar's Check for Updates, whose answer is drawn there. */
   showSettings: () => void;
   /** Asks the panels to say an inbox item opened in their toast: one that opened while the window is focused. */
@@ -266,6 +268,10 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     panels.broadcast(channels.onShowInbox, { planId });
   }
 
+  function showInboxItem(item: { readonly agentId: string; readonly itemId: string }): void {
+    panels.broadcast(channels.onShowInboxItem, { agentId: item.agentId, itemId: item.itemId });
+  }
+
   function showSettings(): void {
     panels.broadcast(channels.onMenuCommand, APP_COMMAND.SETTINGS);
   }
@@ -414,6 +420,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     showAgent,
     panelReady: () => config.appLinks.ready(openAppLink),
     showInbox,
+    showInboxItem,
     showSettings,
     toastInboxItem,
     toastAgentEnd,
