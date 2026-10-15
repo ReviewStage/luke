@@ -10,11 +10,16 @@ import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 import { CALL_CARD_SURFACE, CallCardDock, type CallCardInput } from "../call/call-card";
 import { CaptionStrip, type CaptionStripProps } from "../caption-strip";
+import { FIND_PAGE, PageFind } from "../find-in-tab";
 import type { NavigationHistory, WindowHistory } from "../navigation-history";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { NewPlanDialog } from "../planning/new-plan-dialog";
 import { usePlanLooks } from "../planning/use-plan-looks";
-import type { PlansControl } from "../planning/use-plans-tab";
+import {
+  AUTOMATIONS_PAGE,
+  type AutomationsPlace,
+  type PlansControl,
+} from "../planning/use-plans-tab";
 import { SIDE_PANEL_TAB } from "../planning/use-side-panel";
 import type { SettingsPanelProps } from "../settings/settings-panel";
 import { SignInGate } from "../sign-in-gate";
@@ -292,6 +297,11 @@ function titleSubject(
   return { signedIn, subject: shownPlan.name, workspace };
 }
 
+/** Where on the Automations page a find stands: its list, a new automation, or one automation's editor, each a place of its own. */
+function automationsPlaceKey(place: AutomationsPlace): string {
+  return place.kind === AUTOMATIONS_PAGE.EDIT ? place.automationId : place.kind;
+}
+
 /**
  * Luke's window: the sidebar on the left and the chosen work on the right,
  * or the sign-in over the whole window while no account stands. Every
@@ -473,16 +483,26 @@ export function DesktopShell({
       />
       <main className="desktop-main">
         {inboxOpen ? (
-          <DesktopInbox plans={plans} />
+          <PageFind page={FIND_PAGE.INBOX} active={plans.shown}>
+            <DesktopInbox plans={plans} />
+          </PageFind>
         ) : pageAgent !== undefined ? (
           // Keyed by the agent, so another agent's page is a page of its own, holding nothing of the last.
           <DesktopAgentPage key={pageAgent} plans={plans} agentId={pageAgent} />
         ) : factoryOpen ? (
-          <DesktopFactory plans={plans} />
+          <PageFind page={FIND_PAGE.FACTORY} active={plans.shown}>
+            <DesktopFactory plans={plans} />
+          </PageFind>
         ) : automationsOpen ? (
-          <Suspense fallback={<AutomationsLoading onExit={plans.automationsView.onClose} />}>
-            <AutomationsPage plans={plans} />
-          </Suspense>
+          <PageFind
+            page={FIND_PAGE.AUTOMATIONS}
+            at={automationsPlaceKey(plans.automationsView.place)}
+            active={plans.shown}
+          >
+            <Suspense fallback={<AutomationsLoading onExit={plans.automationsView.onClose} />}>
+              <AutomationsPage plans={plans} />
+            </Suspense>
+          </PageFind>
         ) : (
           <DesktopPlans
             plans={plans}

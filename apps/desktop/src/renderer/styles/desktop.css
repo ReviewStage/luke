@@ -4073,6 +4073,7 @@ body:has(.app-stage[data-capture="true"])
    bar, led by the way back, leaves the title bar's buttons their room. */
 .desktop-shell[data-sidebar-collapsed="true"]
   .desktop-main
+  > .page-find
   > .inbox-view[data-columns="item"]
   .inbox-view-items
   .desktop-toolbar {
@@ -4771,6 +4772,21 @@ button.automation-run:hover {
    shows, as a browser's find bar stands over the page. */
 .find-scope {
   position: relative;
+}
+
+/* A page standing in the plan's place finds as one scope (`PageFind`): it
+   fills the place as the page did, and its bar stands under the page's
+   toolbar, clear of the toolbar's own buttons. */
+.page-find {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.page-find > .find-bar {
+  top: calc(var(--desktop-bar-height) + var(--space-8));
 }
 
 /* The bar floats as a menu does, on the menu's ground, edge, and entrance,

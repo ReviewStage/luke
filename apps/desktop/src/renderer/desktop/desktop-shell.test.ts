@@ -759,6 +759,41 @@ test("the side panel's toggle stands on a plan and on an agent's page, which kee
   });
 });
 
+test("⌘F opens a find over every page that stands in the window, and Settings keeps it for its own search", async () => {
+  await handBridge();
+  const found: Partial<Record<Place, boolean>> = {};
+  for (const place of PLACES) {
+    const container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+    act(() =>
+      root?.render(
+        onRegistry(AtomRegistry.make(), createElement(CallShell, { place, folded: false })),
+      ),
+    );
+    await settle();
+    act(() => {
+      runAppCommand(APP_COMMAND.FIND);
+    });
+    found[place] = container.querySelector("search[aria-label='Find']") !== null;
+    act(() => root?.unmount());
+    container.remove();
+  }
+  assert.deepEqual(found, {
+    [PLACE.HOME]: true,
+    [PLACE.OTHER_PLAN]: true,
+    [PLACE.INBOX]: true,
+    // Note that this agent is never read here, and an agent's page finds once its agent is drawn (`desktop-agent-page.test.ts`).
+    [PLACE.AGENT_PAGE]: false,
+    [PLACE.FACTORY]: true,
+    [PLACE.AUTOMATIONS]: true,
+    // Note that the panel filling the window holds the keys, on its Board, whose canvas no find reads.
+    [PLACE.SIDE_PANEL_FULL_SCREEN]: false,
+    [PLACE.SETTINGS]: false,
+    [PLACE.VERSION_HISTORY]: true,
+  });
+});
+
 test("walking every place in the window during a call about another plan, the card stays at the foot of the column at the window's left, and its way back asks for the call's plan from each", async () => {
   await handBridge();
   const container = document.createElement("div");
