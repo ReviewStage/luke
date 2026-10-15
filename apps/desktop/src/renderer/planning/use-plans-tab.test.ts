@@ -46,7 +46,7 @@ import { newestToastAction, newestToastSays } from "#testing/toast";
 import { ToastHost } from "../toast";
 import { CHIP_PLACE, RepositoryChip } from "./repository-chip";
 import { MAIN_TAB } from "./use-main-tabs";
-import { type PlansControl, usePlansTab } from "./use-plans-tab";
+import { type LeaveAsk, type PlansControl, useLeaveGuard, usePlansTab } from "./use-plans-tab";
 import { SIDE_PANEL_TAB } from "./use-side-panel";
 
 const PLAN: Plan = {
@@ -176,6 +176,7 @@ function mount(
       onOpenIntegrations: () => undefined,
       onOpenApiKeys: () => undefined,
       onOpenSettings: (link) => links.push(link),
+      leaveGuard: useLeaveGuard(),
     });
     return null;
   }
@@ -1598,6 +1599,31 @@ test("another account signing in after a sign-out keeps its own plan, and has it
   tab.stand({ signedIn: true, account: "other@example.com", planning: LAUNCHING });
   tab.stand({ planning: listRead([listed()]) });
   assert.deepEqual(selected(tab), [PLAN.id]);
+});
+
+test("while a page stands its ask, a way out asks instead of going, Leave goes where was asked, and once the ask is down the doors go at once", () => {
+  const tab = mount({ shown: true, planning: listRead([listed()]) });
+  act(() => tab.control().inboxView.onOpen());
+  const asked: (() => void)[] = [];
+  const ask: LeaveAsk = (leave) => asked.push(leave);
+  let down: () => void = () => undefined;
+  act(() => {
+    down = tab.control().leaveGuard.stand(ask);
+  });
+
+  act(() => tab.control().factoryView.onOpen());
+  act(() => tab.control().onGoHome());
+  act(() => tab.control().onChooseWorkspace("workspace-other"));
+  assert.equal(tab.control().inboxView.open, true, "the page stands while it is asked about");
+  assert.equal(asked.length, 3, "the workspace switcher asks as the other doors do");
+
+  act(() => asked[0]?.());
+  assert.equal(tab.control().factoryView.open, true, "Leave goes where the first way out went");
+
+  act(() => down());
+  act(() => tab.control().inboxView.onOpen());
+  assert.equal(tab.control().inboxView.open, true);
+  assert.equal(asked.length, 3, "nothing is asked once the ask is down");
 });
 
 test("Factory and the Inbox stand in the plan's place in turn: opening one puts the other away, and Home or a plan's press puts Factory away", () => {
