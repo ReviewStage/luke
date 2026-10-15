@@ -587,9 +587,12 @@ function useFloatingSidebar(sidebar: SidebarCollapse): FloatingSidebar {
   }, [overlay]);
   useEffect(() => () => onOverlay(SIDEBAR_OVERLAY.CLOSED), [onOverlay]);
   // Note that a peek leaves the keyboard in the work under it, so Escape
-  // there is heard at the window, before the work's own layers hear it.
+  // there is heard at the window, before the work's own layers hear it. An
+  // open sidebar holds the keyboard and hears its own Escape after any menu
+  // or dialog it raised, since a press in a peek opens it first.
+  const peeking = overlay === SIDEBAR_OVERLAY.PEEK;
   useEffect(() => {
-    if (!floating) return;
+    if (!peeking) return;
     const putAway = (event: KeyboardEvent) => {
       const held = ref.current;
       if (event.key !== "Escape" || event.defaultPrevented) return;
@@ -599,7 +602,7 @@ function useFloatingSidebar(sidebar: SidebarCollapse): FloatingSidebar {
     };
     window.addEventListener("keydown", putAway, true);
     return () => window.removeEventListener("keydown", putAway, true);
-  }, [floating, onOverlay]);
+  }, [peeking, onOverlay]);
   return {
     ref,
     inSight: !sidebar.collapsed || floating,

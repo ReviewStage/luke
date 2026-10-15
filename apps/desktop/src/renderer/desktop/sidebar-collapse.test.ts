@@ -319,3 +319,16 @@ test("Escape puts a peek away while the keyboard stays in the work under it, and
   });
   assert.deepEqual([standing(page), press.defaultPrevented], ["away", true]);
 });
+
+test("a dialog raised from the open sidebar takes Escape first, leaving the sidebar open behind it", () => {
+  const page = mount(1000);
+  act(() => toggle(page).click());
+  const dialog = document.body.appendChild(document.createElement("div"));
+  const field = dialog.appendChild(document.createElement("button"));
+  field.focus();
+  const press = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+  act(() => {
+    field.dispatchEvent(press);
+  });
+  assert.deepEqual([standing(page), press.defaultPrevented], ["floating", false]);
+});
