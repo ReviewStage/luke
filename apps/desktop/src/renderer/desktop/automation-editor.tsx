@@ -45,6 +45,7 @@ import {
 import type { ModelChoice } from "@luke/features/models-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { EXPERIMENT } from "@luke/settings";
+import { SidePanelIcon } from "@luke/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { ChevronRightIcon, PlayIcon, Trash2Icon, ZapIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
@@ -66,9 +67,11 @@ import { SettingsGroup } from "../settings/settings-group";
 import { SwitchRow } from "../settings/switch-row";
 import { BusyLabel, Spinner } from "../spinner";
 import { Switch } from "../switch";
+import { Tooltip } from "../tooltip";
 import { useDisclosure } from "../use-disclosure";
 import { OWNER_MARK_SIZE, OwnerMark } from "./automation-owner";
 import { AutomationRunsPanel } from "./automation-runs-panel";
+import { type RunsPanel, useRunsPanel } from "./folded-groups";
 import { useAutomationRuns } from "./use-automation-runs";
 import { type AgentsRead, type RunChoices, useRunChoices } from "./use-run-choices";
 
@@ -420,6 +423,7 @@ function EditorToolbar({
   onDelete,
   running,
   onRunNow,
+  runsPanel,
 }: {
   automation: AutomationSummary | undefined;
   dirty: boolean;
@@ -431,7 +435,9 @@ function EditorToolbar({
   /** Whether a Run now is out. */
   running: boolean;
   onRunNow: () => void;
+  runsPanel: RunsPanel;
 }): React.JSX.Element {
+  const runsLabel = runsPanel.open ? "Hide runs" : "Show runs";
   const status =
     automation === undefined
       ? "Not created yet"
@@ -502,6 +508,19 @@ function EditorToolbar({
             </button>
           </>
         )}
+        {/* The Runs panel's toggle, the side panel's own button and chord at the window's top right. */}
+        <Tooltip label={runsLabel} command={APP_COMMAND.TOGGLE_SIDE_PANEL}>
+          <button
+            type="button"
+            className="icon-button side-panel-toggle"
+            aria-label={runsLabel}
+            aria-expanded={runsPanel.open}
+            data-open={String(runsPanel.open)}
+            onClick={runsPanel.onToggle}
+          >
+            <SidePanelIcon />
+          </button>
+        </Tooltip>
       </div>
     </header>
   );
@@ -1232,6 +1251,9 @@ export function AutomationEditor({
   const written = automation === undefined ? !sameDraft(draft, start) : dirty;
   // Escape goes back to the list, asking first, as every way out does, where something written would be lost.
   useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, onBack);
+  const runsPanel = useRunsPanel();
+  // ⌥⌘B shows and hides the Runs panel, as it does a plan's side panel.
+  useAppCommand(APP_COMMAND.TOGGLE_SIDE_PANEL, runsPanel.onToggle);
   const problems = draftProblems(draft, planBacked, new Date());
   const editDraft = (patch: Partial<AutomationDraft>) => {
     setDraft((was) => ({ ...was, ...patch }));
@@ -1325,6 +1347,7 @@ export function AutomationEditor({
         onDelete={deletion.ask}
         running={running}
         onRunNow={runNow}
+        runsPanel={runsPanel}
       />
       <div className="automation-editor-layout">
         <div className="automations-scroll">
@@ -1364,6 +1387,7 @@ export function AutomationEditor({
           </div>
         </div>
         <AutomationRunsPanel
+          panel={runsPanel}
           created={automation !== undefined}
           runs={runs.read}
           onRetry={runs.reload}

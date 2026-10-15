@@ -4655,10 +4655,22 @@ body:has(.app-stage[data-capture="true"])
   min-width: 0;
 }
 
+/* The Runs panel's pane, its width the developer's (`useRunsPanel`), its left
+   edge the side panel's own resize edge. Note that a window narrower than the
+   kept width leaves the form its reserve, as the side panel leaves the
+   document its own, and the kept width comes back as the window grows. */
+.automation-runs-pane {
+  position: relative;
+  display: flex;
+  min-height: 0;
+  max-width: max(280px, calc(100% - 480px)); /* off-scale: the form's reserve, FORM_RESERVE */
+  flex: none;
+}
+
 .automation-runs {
   display: flex;
-  width: 340px; /* off-scale */
-  flex: none;
+  min-width: 0;
+  flex: 1;
   flex-direction: column;
   gap: var(--space-8);
   overflow-y: auto;
