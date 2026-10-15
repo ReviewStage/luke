@@ -32,6 +32,10 @@ import {
   readJsonBodyEffect,
   type UserIdResolver,
 } from "@luke/service/http/http-effect";
+import {
+  type IntegrationConnect,
+  revokeIntegrationGrants,
+} from "@luke/service/integrations/integration-connect";
 import { forgetPosthogPersonEffect } from "@luke/service/providers/posthog";
 import { ANY_METHOD, type WebRoutes } from "@luke/service/route";
 import { accountPreferencesFromWire, experimentChoicesFrom, NO_EXPERIMENTS } from "@luke/settings";
@@ -46,7 +50,6 @@ import {
 } from "effect/http";
 import { type EveReach, eveFor } from "./hosted/coder-host/stop.js";
 import { HostedEnvironment } from "./hosted/environment.js";
-import { type IntegrationConnect, revokeIntegrationGrants } from "./hosted/integration-connect.js";
 import { acceptedModelChoice, type ModelCatalog } from "./hosted/model-catalog.js";
 import { retireSessions } from "./hosted/retire-sessions.js";
 

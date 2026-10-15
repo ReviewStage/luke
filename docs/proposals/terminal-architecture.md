@@ -34,7 +34,7 @@ proposal's questions (`docs/proposals/terminal-tab.md`). No code yet.
 | 4 | **Host terminal client** | `packages/host/src/terminal/` (new), run by desktop main | See below |
 | 5 | **Terminal relay** | `apps/web/server/terminal/function.ts` (new Vercel Function, WebSocket) | See below |
 | 6 | **Terminal routes** | `apps/web/server/routes/agents/terminals.ts`, `…/sandbox.ts` | Short JSON routes that list (`tmux ls -F`), create, rename (`@luke_title`), kill (`kill-session`) and resume (`Sandbox.get({ resume: true })`). |
-| 7 | **Sandbox resolver** | `apps/web/server/hosted/session-sandboxes.ts` (grown) | Goes from conversation to `runtime_session_id` to the sandbox tagged `sessionId:<id>`, under the function's OIDC token. This is the REST lookup the sweep already makes. |
+| 7 | **Sandbox resolver** | `packages/service/src/agents/session-sandboxes.ts` (grown) | Goes from conversation to `runtime_session_id` to the sandbox tagged `sessionId:<id>`, under the function's OIDC token. This is the REST lookup the sweep already makes. |
 | 8 | **Vercel sandbox shell API** | `@vercel/sandbox`, pinned exactly | Session-level `openInteractive()` mints `{url, token}` for the controller's PTY WebSocket and does **not** resume. Behind one `InteractiveShell` `Context.Tag`; the fallback layer is `runCommand({ stdin: true, detached: true })` plus `writeStdin` plus `logs()` under `script -qfc`. |
 | 9 | **tmux in the image** | `PREPARE_SCRIPT` in `agent-runtime/sandbox.ts` | One tmux session per terminal, which outlives any socket. |
 | 10 | **Lease** | `packages/database/src/schemas/` + `models/sandbox-terminal-lease.ts` (new) | A row per agent conversation: `held_until`, `credential_at`. Written by the relay; read by the store hook and the sweep. |

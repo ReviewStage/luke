@@ -9,6 +9,7 @@ import {
   GITHUB_CONNECT_PAGE,
   githubConnectClaimRequestSchema,
 } from "@luke/features/github-connection-wire";
+import type { GitHubUnlink } from "@luke/service/github/github-unlink";
 import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import {
   HOSTED_REFUSAL,
@@ -27,7 +28,6 @@ import { HTTP_METHOD } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Effect, Layer, Option, Result } from "effect";
 import { HttpRouter, HttpServerRequest, type HttpServerResponse } from "effect/http";
-import type { GitHubUnlink } from "./hosted/github-unlink.js";
 
 /**
  * github-connection-app.ts -- connecting the account's GitHub: the Mac's connect intent, the page's claim of it, and whether GitHub is connected.
@@ -43,7 +43,7 @@ import type { GitHubUnlink } from "./hosted/github-unlink.js";
  * account row with a usable token, and never a token.
  *
  * `POST /api/github/disconnect` removes the account's GitHub link through
- * Better Auth's own `unlinkAccount` (`hosted/github-unlink.ts`), under the
+ * Better Auth's own `unlinkAccount` (`packages/service/src/github/github-unlink.ts`), under the
  * Mac's Better Auth session, which the bearer plugin reads off the
  * `Authorization` header: an OAuth token alone is no session, so it is
  * refused as unauthenticated, and only the session's own link can go,

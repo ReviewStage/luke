@@ -16,6 +16,15 @@ import {
   type UnparsedWireValue,
   type WireRecord,
 } from "@luke/service/core";
+import {
+  isSecretFile,
+  SHOWN_FILE_BOUNDS,
+  SHOWN_FILE_REFUSAL,
+  type ShownFileFacts,
+  type ShownFileRefusal,
+  shownFileRefusal,
+  shownLines,
+} from "@luke/service/plans/shown-file";
 import { describeWire } from "@luke/wire/effect";
 import { Data, Effect, Result, Schema } from "effect";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
@@ -28,15 +37,6 @@ import {
   type RepositoryShellServices,
   runInSandbox,
 } from "./repository-shell.js";
-import {
-  isSecretFile,
-  SHOWN_FILE_BOUNDS,
-  SHOWN_FILE_REFUSAL,
-  type ShownFileFacts,
-  type ShownFileRefusal,
-  shownFileRefusal,
-  shownLines,
-} from "./shown-file.js";
 
 /**
  * show-code.ts -- the planning model's `show_code` tool: code of the plan's repository put on the developer's screen as Luke talks about it.

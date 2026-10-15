@@ -23,9 +23,6 @@ import {
   INBOX_STATUS,
   type InboxPost,
 } from "@luke/features/inbox-wire";
-import { eq } from "drizzle-orm";
-import { Effect, Option, Result } from "effect";
-import { accountInboxPast } from "../server/hosted/coder-host/inbox-page";
 import {
   accountInboxPlans,
   accountWaitingItems,
@@ -36,7 +33,10 @@ import {
   postInboxItem,
   readInboxItem,
   withdrawInboxAnswer,
-} from "../server/hosted/inbox-store";
+} from "@luke/service/inbox/inbox-store";
+import { eq } from "drizzle-orm";
+import { Effect, Option, Result } from "effect";
+import { accountInboxPast } from "../server/hosted/coder-host/inbox-page";
 
 /**
  * The developer's inbox as the store keeps it, through its public functions

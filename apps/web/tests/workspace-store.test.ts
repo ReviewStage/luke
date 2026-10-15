@@ -16,9 +16,9 @@ import {
   joinWorkspace,
   WORKSPACE_ROLE,
 } from "@luke/database/testing";
+import { openWorkspacePlugin } from "@luke/service/testing/workspace-plugin";
 import { eq } from "drizzle-orm";
 import { Cause, DateTime, Effect, Option } from "effect";
-import { openWorkspacePlugin } from "./support/workspace-plugin";
 
 /**
  * An account's workspaces over a real dialect: its first one is made the

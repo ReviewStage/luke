@@ -24,7 +24,7 @@ import {
   releaseLapsedLease,
 } from "@luke/database/models/sandbox-terminal-lease";
 import { Duration, Effect, Result, type Schema } from "effect";
-import { SessionSandboxes } from "./session-sandboxes.js";
+import { SessionSandboxes } from "../agents/session-sandboxes.js";
 
 export const TERMINAL_LEASE_SWEEP = {
   /** How long past its lapse a lease stands before the sweep stops its sandbox: a terminal reconnecting takes it up again well inside it. */

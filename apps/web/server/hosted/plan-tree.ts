@@ -11,10 +11,10 @@ import {
 import type { GitHubApp } from "@luke/service/github/github-app";
 import { logGitHubReadFailure } from "@luke/service/github/github-refusal";
 import { GIT_ENTRY, readRepositoryFolder } from "@luke/service/github/repository-folder";
+import { isSecretFile } from "@luke/service/plans/shown-file";
 import { Effect, Option } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { reachPlanRepository, refused } from "./plan-file.js";
-import { isSecretFile } from "./shown-file.js";
 
 /**
  * plan-tree.ts -- one folder of a plan's repository for the File tab's tree, listed from GitHub as it stands now.

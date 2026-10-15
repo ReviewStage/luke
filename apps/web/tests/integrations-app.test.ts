@@ -15,19 +15,9 @@ import {
 import { GitHubApp } from "@luke/service/github/github-app";
 import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import {
-  GITHUB_APP_SETTINGS,
-  openGithubUser,
-  standingGithubRow,
-} from "@luke/service/testing/github-app-fake";
-import type { WireBoundaryInput } from "@luke/wire";
-import { fakeHttpClientLayer } from "@luke/wire/testing";
-import { Clock, Effect, Layer, Option, Redacted } from "effect";
-import { type HttpClient, HttpRouter } from "effect/http";
-import { SqlClient } from "effect/sql";
-import {
   CONNECT_SIGN_IN_RESULT,
   type ConnectSignInResult,
-} from "../server/hosted/integration-connect";
+} from "@luke/service/integrations/integration-connect";
 import {
   beginIntegrationSignIn,
   completeIntegrationSignIn,
@@ -36,7 +26,18 @@ import {
   expireIntegrationConnection,
   readIntegrationConnections,
   readIntegrationSignIn,
-} from "../server/hosted/integration-store";
+} from "@luke/service/integrations/integration-store";
+import {
+  GITHUB_APP_SETTINGS,
+  openGithubUser,
+  standingGithubRow,
+} from "@luke/service/testing/github-app-fake";
+import { noNetwork } from "@luke/service/testing/no-network";
+import type { WireBoundaryInput } from "@luke/wire";
+import { fakeHttpClientLayer } from "@luke/wire/testing";
+import { Clock, Effect, Layer, Option, Redacted } from "effect";
+import { type HttpClient, HttpRouter } from "effect/http";
+import { SqlClient } from "effect/sql";
 import {
   type IntegrationsAppSeams,
   integrationsApp,
@@ -47,7 +48,6 @@ import {
   GRANTING_SIGN_IN_VERIFIER,
   integrationConnectOver,
 } from "./support/integration-connect";
-import { noNetwork } from "./support/no-network";
 
 /**
  * The integrations an account is offered, as the integrations group answers

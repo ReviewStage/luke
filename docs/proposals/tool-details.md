@@ -32,7 +32,7 @@ use?"
 3. **The title is the display name**, in the spec's order: the tool's own
    `title`, then `annotations.title`, then its name.
 4. **Parameters come from the input schema's top level**, read by the
-   service into a bounded list (`apps/web/server/hosted/mcp-tool-parameters.ts`);
+   service into a bounded list (`packages/service/src/integrations/mcp-tool-parameters.ts`);
    nothing nested is expanded. A description is kept up to 8,000 characters.
 5. **Icons are deferred.** A tool's `icons` (spec 2025-11-25) would need the
    service to fetch each and hand it on as `data:`, because the panel's CSP

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { SANDBOX_STATE } from "@luke/features/terminal-wire";
+import { SandboxUnavailable } from "@luke/service/agents/vercel-sandbox-api";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
 import { Effect, Layer, Redacted, Result } from "effect";
 import { afterEach, vi } from "vitest";
@@ -10,7 +11,6 @@ import {
   SHELL_REFUSAL,
 } from "../server/hosted/terminal/agent-sandbox";
 import { TMUX_EXIT } from "../server/hosted/terminal/tmux";
-import { SandboxUnavailable } from "../server/hosted/vercel-sandbox-api";
 
 /**
  * A coding agent's sandbox as its Terminal tab reaches it, over Vercel

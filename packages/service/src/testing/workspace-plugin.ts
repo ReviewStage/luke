@@ -1,16 +1,12 @@
 import { memberSeams, workspaceSeams } from "@luke/database/models/workspace-seams";
 import { openMigratedPglite, sqlClientOverPglite } from "@luke/database/testing";
-import { authDatabaseAdapter } from "@luke/service/auth/auth-database";
-import {
-  DISABLED_AUTH_PATHS,
-  ORGANIZATION_OPTIONS,
-  SESSION_BEARER,
-} from "@luke/service/auth/auth-policy";
 import { betterAuth } from "better-auth";
 import { makeSignature } from "better-auth/crypto";
 import { bearer, organization as organizationPlugin } from "better-auth/plugins";
 import { drizzle } from "drizzle-orm/pglite";
 import { Effect, Option } from "effect";
+import { authDatabaseAdapter } from "../auth/auth-database.js";
+import { DISABLED_AUTH_PATHS, ORGANIZATION_OPTIONS, SESSION_BEARER } from "../auth/auth-policy.js";
 
 /**
  * workspace-plugin.ts -- Better Auth with the organization and bearer plugins over a migrated PGlite of its own.

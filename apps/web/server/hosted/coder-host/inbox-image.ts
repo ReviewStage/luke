@@ -1,8 +1,8 @@
 import { posix } from "node:path";
 import { INBOX_BOUNDS, INBOX_IMAGE_TYPE, type InboxImageType } from "@luke/features/inbox-wire";
+import type { InboxImage } from "@luke/service/inbox/inbox-store";
 import { Effect, Result } from "effect";
 import type { SandboxSession } from "eve/sandbox";
-import type { InboxImage } from "../inbox-store.js";
 
 /**
  * inbox-image.ts -- an image block's picture read from the agent's sandbox: the file at the path the agent posted, bounded, and sniffed for what it is.

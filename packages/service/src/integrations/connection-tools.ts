@@ -22,11 +22,11 @@ import {
   INTEGRATION_PROVIDER_LIST,
   type IntegrationProvider,
 } from "@luke/features/integration-wire";
-import { type UnparsedWireValue, wireValidatedTool } from "@luke/service/core";
 import { WireValueSchema } from "@luke/wire";
 import { verbatimJsonSchema } from "@luke/wire/effect";
 import type { Tool } from "ai";
 import { Schema } from "effect";
+import { type UnparsedWireValue, wireValidatedTool } from "../core.js";
 import { INTEGRATION } from "./integrations.js";
 
 /** eve's own two calls a connection's use leaves in a transcript, beside each integration's nested ones. */

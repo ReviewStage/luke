@@ -31,7 +31,6 @@ import {
   INTEGRATION_PROVIDER_LIST,
   type IntegrationProvider,
 } from "@luke/features/integration-wire";
-import { text } from "@luke/service/core";
 import {
   ConnectError,
   ConnectorInstallationRequiredError,
@@ -43,7 +42,8 @@ import {
 } from "@vercel/connect";
 import { getVercelOidcToken } from "@vercel/oidc";
 import { Config, Context, Data, Effect, Layer, Option, Redacted, Schema } from "effect";
-import { readAccountPerson } from "./account-person.js";
+import { readAccountPerson } from "../accounts/account-person.js";
+import { text } from "../core.js";
 import { INTEGRATION, type IntegrationDefinition } from "./integrations.js";
 import { credentialFreeLine } from "./mcp-tools.js";
 

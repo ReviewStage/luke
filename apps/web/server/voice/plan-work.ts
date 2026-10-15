@@ -13,6 +13,7 @@ import {
   type PlanWorkTurn,
   type PlanWorkWorker,
 } from "@luke/features/planning-view";
+import { turnRecordOf } from "@luke/service/agents/turn-record";
 import {
   isStoredToolPart,
   type StoredToolPart,
@@ -30,7 +31,6 @@ import {
   PLANNER_DELEGATE_TOOL,
   PLANNER_DELEGATION_TOOLS,
 } from "../hosted/brain-host/planning.js";
-import { turnRecordOf } from "../hosted/turn-record.js";
 
 /**
  * plan-work.ts -- one planning turn as the Work tab draws it, read from the turn's row and its journal.

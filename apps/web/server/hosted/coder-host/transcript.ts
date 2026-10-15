@@ -38,6 +38,7 @@ import {
   type CodingAgentUsage,
   type TurnRecord,
 } from "@luke/features/coding-agent-wire";
+import { turnRecordOf } from "@luke/service/agents/turn-record";
 import {
   isSettledToolPartState,
   isStoredToolPart,
@@ -49,7 +50,6 @@ import {
 import type { ToolSet } from "ai";
 import { Clock, Duration, Effect, Option, Schedule, type Schema } from "effect";
 import { ModelCatalog, type OfferedModel } from "../model-catalog.js";
-import { turnRecordOf } from "../turn-record.js";
 import { CODER } from "./bounds.js";
 import { codingAgentContextOf, contextWindowOf } from "./context.js";
 import {

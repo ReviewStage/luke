@@ -7,6 +7,7 @@ import {
   receivedMessageId,
 } from "@luke/database/models/ids";
 import type { ConversationTarget, StoreWriter } from "@luke/database/models/writer";
+import { type ReceivedMessage, receivedMessage } from "@luke/service/agents/attached-files";
 import {
   ACTION_RESULT_STATUS,
   AssistantMessageBuilder,
@@ -35,11 +36,14 @@ import {
   userMessage,
   userMetadataOf,
 } from "@luke/service/core";
+import {
+  CONNECTION_TOOL,
+  isRemoteToolName,
+  storedRemoteCall,
+} from "@luke/service/integrations/connection-tools";
 import { Effect, Option, Result, Schema } from "effect";
 import type { MessageStreamEvent } from "eve/client";
-import { type ReceivedMessage, receivedMessage } from "../attached-files.js";
 import { LOOK_AT_BOARD_TOOL, storedLookOutput } from "../board-look.js";
-import { CONNECTION_TOOL, isRemoteToolName, storedRemoteCall } from "../connection-tools.js";
 import {
   BRAIN_HOST_TURN,
   BRAIN_HOST_TURN_KIND,

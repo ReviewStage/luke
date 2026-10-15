@@ -34,7 +34,7 @@
  *   minutes per account and provider so a popover opened again asks the
  *   server nothing; GitHub's, whose grant has no instant a new one is told
  *   by, are read every time. A server that listed none answers why, with its own one-line message where it sent one that
- *   carries no credential (`hosted/mcp-tools.ts`), and is never held, so a
+ *   carries no credential (`packages/service/src/integrations/mcp-tools.ts`), and is never held, so a
  *   connection mended at the provider reads as mended at once. A provider
  *   the account has not connected is refused before any token is read.
  * - `GET /api/account/integrations/connected` is where Connect returns the
@@ -87,6 +87,27 @@ import {
   hostedStoreOrUnavailable,
   type UserIdResolver,
 } from "@luke/service/http/http-effect";
+import {
+  accountIntegrationConnect,
+  CONNECT_SIGN_IN_RESULT,
+  type ConnectorService,
+  INTEGRATION_CONNECT_FAILURE,
+  type IntegrationConnect,
+  revokeIntegrationGrant,
+} from "@luke/service/integrations/integration-connect";
+import {
+  INTEGRATION_ROW_STATUS,
+  type IntegrationConnectionRow,
+  type IntegrationStoreEffect,
+} from "@luke/service/integrations/integration-store";
+import { INTEGRATION, type IntegrationDefinition } from "@luke/service/integrations/integrations";
+import {
+  listMcpTools,
+  MCP_TOOLS_FAILURE,
+  type McpTool,
+  type McpToolsFailure,
+  type McpToolsFailureReason,
+} from "@luke/service/integrations/mcp-tools";
 import { ANY_METHOD, type WebRoutes } from "@luke/service/route";
 import { Effect, Layer, Option, Redacted, Result } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
@@ -97,27 +118,6 @@ import {
   githubOffered,
   githubSignInGrant,
 } from "./hosted/github-integration.js";
-import {
-  accountIntegrationConnect,
-  CONNECT_SIGN_IN_RESULT,
-  type ConnectorService,
-  INTEGRATION_CONNECT_FAILURE,
-  type IntegrationConnect,
-  revokeIntegrationGrant,
-} from "./hosted/integration-connect.js";
-import {
-  INTEGRATION_ROW_STATUS,
-  type IntegrationConnectionRow,
-  type IntegrationStoreEffect,
-} from "./hosted/integration-store.js";
-import { INTEGRATION, type IntegrationDefinition } from "./hosted/integrations.js";
-import {
-  listMcpTools,
-  MCP_TOOLS_FAILURE,
-  type McpTool,
-  type McpToolsFailure,
-  type McpToolsFailureReason,
-} from "./hosted/mcp-tools.js";
 
 /** How long a sign-in may stay under way before its state no longer settles it: Connect's own requests last about as long. */
 const INTEGRATION_SIGN_IN_WINDOW_MS = 15 * 60 * 1000;

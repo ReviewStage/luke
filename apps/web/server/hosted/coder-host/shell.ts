@@ -1,8 +1,8 @@
+import { COMMAND_DESCRIPTION } from "@luke/service/agents/command-description";
 import { describeWire, emitJsonSchema } from "@luke/wire/effect";
 import { Schema } from "effect";
 import { defineTool } from "eve/tools";
 import { bash } from "eve/tools/bash";
-import { COMMAND_DESCRIPTION } from "../command-description.js";
 
 /**
  * shell.ts -- the coding agent's shell: eve's own `bash`, with every command started in the checkout.

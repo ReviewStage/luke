@@ -21,7 +21,7 @@ import { Schema as EffectSchema, Option } from "effect";
  * are none, and every file after it as the SDK's file part over a `data:`
  * URL, a text file under `text/plain`, so the transcript draws a thumbnail
  * or a name for each from the row alone. eve is handed each text file
- * inlined under a heading and a fence (`apps/web/server/hosted/attached-files.ts`),
+ * inlined under a heading and a fence (`packages/service/src/agents/attached-files.ts`),
  * and its receipt lists a line's parts the way it was handed them, so a
  * line is matched by its words, each text file inlined, and each image and
  * PDF by its mark.
@@ -29,7 +29,7 @@ import { Schema as EffectSchema, Option } from "effect";
  * A line that mentions what eve cannot read for itself, a section of the
  * plan, carries one more text part after its words: what it named, as it
  * stood when the line was sent, under a heading of its own
- * (`apps/web/server/hosted/mentioned-context.ts`). The journal keeps it as
+ * (`packages/service/src/agents/mentioned-context.ts`). The journal keeps it as
  * a data part after the words, so the transcript draws only the words, and
  * a receipt is matched by it in the place eve was handed it.
  */

@@ -5,6 +5,7 @@ import {
   type GitHubInstallationStatus,
 } from "@luke/database/github-installation-vocabulary";
 import { listCodingAgentsOnBranches } from "@luke/database/models/coding-agent-store";
+import { queueGithubRuns } from "@luke/service/automations/automation-github";
 import { clearRevokedAuthorization, type GitHubApp } from "@luke/service/github/github-app";
 import { setInstallationStatus } from "@luke/service/github/github-installations";
 import {
@@ -27,7 +28,6 @@ import {
   HttpServerRequest,
   type HttpServerResponse,
 } from "effect/http";
-import { queueGithubRuns } from "./hosted/automation-github.js";
 import { agentPublished } from "./hosted/coder-host/published.js";
 import { HostedEnvironment } from "./hosted/environment.js";
 
@@ -63,7 +63,7 @@ import { HostedEnvironment } from "./hosted/environment.js";
  * longer answers it.
  *
  * Every delivery is also read as an automation's trigger
- * (`hosted/automation-github.ts`): a pull request or issue opened or
+ * (`packages/service/src/automations/automation-github.ts`): a pull request or issue opened or
  * labelled, a check suite that failed, or a push queues a run, under the
  * delivery's own id, for each automation on a plan of the repository that
  * listens for it, and the minute sweep starts each one's agent.

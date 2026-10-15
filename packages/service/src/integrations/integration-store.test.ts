@@ -2,8 +2,9 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { getTestDB } from "@luke/database/testing";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import { openGithubUser } from "@luke/service/testing/github-app-fake";
 import { Effect, Layer, Redacted } from "effect";
+import { openGithubUser } from "../testing/github-app-fake.js";
+import { noNetwork } from "../testing/no-network.js";
 import {
   beginIntegrationSignIn,
   completeIntegrationSignIn,
@@ -12,8 +13,7 @@ import {
   INTEGRATION_ROW_STATUS,
   readIntegrationConnection,
   readIntegrationConnections,
-} from "../server/hosted/integration-store";
-import { noNetwork } from "./support/no-network";
+} from "./integration-store.js";
 
 /**
  * An account's integration rows over the real migration on PGlite: a

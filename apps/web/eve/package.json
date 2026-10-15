@@ -13,6 +13,7 @@
   "dependencies": {
     "@luke/database": "workspace:*",
     "@luke/features": "workspace:*",
+    "@luke/service": "workspace:*",
     "@luke/wire": "workspace:*",
     "ai": "catalog:",
     "drizzle-orm": "catalog:",

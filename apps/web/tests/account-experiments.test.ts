@@ -17,6 +17,7 @@ import {
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB } from "@luke/database/testing";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "@luke/service/http/http";
+import { noNetwork } from "@luke/service/testing/no-network";
 import { EXPERIMENT } from "@luke/settings";
 import {
   HTTP_METHOD,
@@ -33,7 +34,6 @@ import { anthropicFastAccess } from "../server/hosted/coder-host/account-keys";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../server/hosted/environment";
 import { modelCatalogOf } from "../server/hosted/model-catalog";
 import { CONNECTOR_ASKED_NOTHING, integrationConnectOf } from "./support/integration-connect";
-import { noNetwork } from "./support/no-network";
 
 /**
  * The experiments part of the account's preferences snapshot, answered by

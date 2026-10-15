@@ -18,9 +18,9 @@ import {
   type GitHubUserReadFailure,
   USER_TOKEN_REFRESH_MARGIN_MS,
 } from "@luke/service/github/github-app";
+import type { IntegrationToken } from "@luke/service/integrations/integration-connect";
 import { Clock, Effect, Result } from "effect";
 import type { HttpClient } from "effect/http";
-import type { IntegrationToken } from "./integration-connect.js";
 
 /** Why the account's GitHub sign-in grants nothing just now. */
 export const GITHUB_GRANT_REFUSAL = {

@@ -20,8 +20,8 @@ import {
   type TurnTokens,
 } from "@luke/features/coding-agent-wire";
 import { catalogIdOf } from "@luke/features/model-label";
-import { BRAIN_REQUEST_FAILURE, TURN_STATUS } from "@luke/service/core";
 import { Option, Schema } from "effect";
+import { BRAIN_REQUEST_FAILURE, TURN_STATUS } from "../core.js";
 
 /** The row's fields a record is read from. */
 export type RecordedTurn = Pick<

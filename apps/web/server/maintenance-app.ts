@@ -4,12 +4,18 @@ import { hostedStore } from "@luke/database/models/hosted-store";
 import { recordVoiceSeconds } from "@luke/database/models/quota";
 import { voiceSessionRecord } from "@luke/database/models/voice-session-record";
 import { storeWriter } from "@luke/database/models/writer";
+import {
+  sessionSandboxesLayer,
+  sweepSessionSandboxes,
+} from "@luke/service/agents/session-sandboxes";
 import type { GitHubApp } from "@luke/service/github/github-app";
 import {
   effectPassthrough,
   HOSTED_REFUSAL,
   hostedNotFoundRoute,
 } from "@luke/service/http/http-effect";
+import { MAINTENANCE_SWEEP_PATH } from "@luke/service/maintenance/maintenance-bounds";
+import { sweepTerminalLeases } from "@luke/service/maintenance/terminal-lease-sweep";
 import { ANY_METHOD, type WebRoutes } from "@luke/service/route";
 import { Effect, Layer, Redacted } from "effect";
 import { HttpClient, HttpRouter } from "effect/http";
@@ -19,11 +25,8 @@ import { deploymentEveOrigin } from "./hosted/brain-host/eve-origin.js";
 import { EVE_MOUNT, eveSessions } from "./hosted/brain-host/eve-sessions.js";
 import { HOSTED_TOOL_SET } from "./hosted/brain-tool-set.js";
 import { HostedEnvironment } from "./hosted/environment.js";
-import { MAINTENANCE_SWEEP_PATH } from "./hosted/maintenance-bounds.js";
 import { handleMaintenanceSweep } from "./hosted/maintenance-sweep.js";
 import type { ModelCatalog } from "./hosted/model-catalog.js";
-import { sessionSandboxesLayer, sweepSessionSandboxes } from "./hosted/session-sandboxes.js";
-import { sweepTerminalLeases } from "./hosted/terminal-lease-sweep.js";
 import { createLiveUpstream } from "./voice/openai.js";
 import {
   NOTHING_ORPHANED,

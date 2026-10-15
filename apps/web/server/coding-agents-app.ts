@@ -61,6 +61,13 @@ import {
   type UserIdResolver,
 } from "@luke/service/http/http-effect";
 import { logStoreFailure } from "@luke/service/http/store-failure";
+import {
+  answerInboxItem,
+  readInboxAttachment,
+  readInboxItem,
+  type StoredInboxItem,
+  withdrawInboxAnswer,
+} from "@luke/service/inbox/inbox-store";
 import { ANY_METHOD, type WebRoutes } from "@luke/service/route";
 import { readEither } from "@luke/wire/effect";
 import { Cache, Clock, Effect, Layer, Option, Result } from "effect";
@@ -96,13 +103,6 @@ import {
   transcriptPast,
 } from "./hosted/coder-host/transcript.js";
 import { HostedEnvironment } from "./hosted/environment.js";
-import {
-  answerInboxItem,
-  readInboxAttachment,
-  readInboxItem,
-  type StoredInboxItem,
-  withdrawInboxAnswer,
-} from "./hosted/inbox-store.js";
 import type { ModelCatalog, ModelChoiceRefused } from "./hosted/model-catalog.js";
 
 /**
