@@ -95,7 +95,7 @@ function ownerName(owner: AutomationScope, workspaceName: string | undefined): s
   return owner === AUTOMATION_SCOPE.WORKSPACE ? (workspaceName ?? "Workspace") : "Personal";
 }
 
-/** Who owns an automation, as its row's column says it: a building and the workspace, or a lock and Personal. */
+/** Who owns an automation, as its row's column says it: a building and the workspace, or a lock and Personal, its name whole on hover where the column cuts it short. */
 function OwnerCell({
   owner,
   workspaceName,
@@ -104,13 +104,13 @@ function OwnerCell({
   workspaceName: string | undefined;
 }): React.JSX.Element {
   return (
-    <span className="automation-owner" data-owner={owner}>
+    <span className="automation-owner" data-owner={owner} title={ownerName(owner, workspaceName)}>
       {owner === AUTOMATION_SCOPE.WORKSPACE ? (
         <BuildingIcon aria-hidden="true" />
       ) : (
         <LockIcon aria-hidden="true" />
       )}
-      {ownerName(owner, workspaceName)}
+      <span className="automation-owner-name">{ownerName(owner, workspaceName)}</span>
     </span>
   );
 }

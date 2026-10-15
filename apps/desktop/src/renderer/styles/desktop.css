@@ -3514,6 +3514,12 @@ body:has(.app-stage[data-capture="true"])
   flex: none;
 }
 
+.automation-owner-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .automation-owner[data-owner="workspace"] {
   color: var(--text-primary);
 }

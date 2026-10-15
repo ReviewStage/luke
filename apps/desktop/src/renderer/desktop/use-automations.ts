@@ -15,7 +15,9 @@ import { useMinute } from "../planning/plan-time";
  * Nothing is held past the page. The list is read again each minute it
  * stands, so a schedule's next run and a run's agent move on without a
  * press. A switch's write answers the automation as the service then holds
- * it, which takes its place in the list at once. A failure is kept to be
+ * it, which takes its place in the list at once where it is the newest
+ * write of that automation, and the list is read again once it settles, so
+ * what changed elsewhere while it was out is not lost to it. A failure is kept to be
  * said rather than thrown, since every caller does the same with one: says
  * it, and offers to try again.
  */
@@ -51,6 +53,10 @@ export function useAutomations(workspaceId: string | undefined) {
   // the newest read is taken: one asked before a switch, or for another
   // workspace, answers nothing over what came after it.
   const generation = useRef(0);
+  // Note that each automation's newest write is counted, so an answer to an
+  // older write that lands after a newer one's draws nothing over it.
+  const writes = useRef(0);
+  const newestWrite = useRef(new Map<string, number>()).current;
   const reload = useCallback(() => {
     generation.current += 1;
     if (workspaceId === undefined) return;
@@ -69,18 +75,23 @@ export function useAutomations(workspaceId: string | undefined) {
   const toggle = useCallback(
     (automationId: string, enabled: boolean): Promise<AutomationView> => {
       generation.current += 1;
+      writes.current += 1;
+      const written = writes.current;
+      newestWrite.set(automationId, written);
+      const settled = (answer: AutomationView): AutomationView => {
+        if ("automation" in answer && newestWrite.get(automationId) === written) {
+          const { automation } = answer;
+          setHeld((was) => was && { ...was, read: replaced(was.read, automation) });
+        }
+        reload();
+        return answer;
+      };
       return act(ACT_KIND.AUTOMATIONS_CHANGE, { automationId, change: { enabled } }).then(
-        (answer) => {
-          if ("automation" in answer) {
-            const { automation } = answer;
-            setHeld((was) => was && { ...was, read: replaced(was.read, automation) });
-          }
-          return answer;
-        },
-        (): AutomationView => UNANSWERED,
+        settled,
+        () => settled(UNANSWERED),
       );
     },
-    [act],
+    [act, newestWrite, reload],
   );
   const read = held?.workspaceId === workspaceId ? held?.read : undefined;
   return { read, reload, toggle };

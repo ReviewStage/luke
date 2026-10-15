@@ -73,8 +73,14 @@ const FAILING = automation(3, {
 });
 
 let root: Root | undefined;
-/** How the next reads of the list answer, in order; the last stands for every read after it. */
+/** The service's automations, as a read of the list answers them and a change changes them. */
+let standing: AutomationSummary[] = [];
+/** How the next reads of the list answer before the service's own, in order. */
 let lists: AutomationListView[] = [];
+/** Whether a read of the list is held unanswered, so only the writes' answers draw. */
+let listHeld = false;
+/** The changes held unanswered, each answered by its resolver, where changes are held at all. */
+let heldChanges: (() => void)[] | undefined;
 /** Every workspace whose list was read, in order. */
 let listed: (string | undefined)[] = [];
 /** Every change asked, as the act carried it. */
@@ -85,7 +91,10 @@ let changeRefusal:
   | undefined;
 
 beforeEach(() => {
-  lists = [{ automations: [DIGEST, SWEEP, FAILING] }];
+  standing = [DIGEST, SWEEP, FAILING];
+  lists = [];
+  listHeld = false;
+  heldChanges = undefined;
   listed = [];
   changes = [];
   changeRefusal = undefined;
@@ -97,18 +106,28 @@ beforeEach(() => {
       act: (request: Act) => {
         if (request.kind === ACT_KIND.AUTOMATIONS_LIST) {
           listed.push(request.payload.workspaceId);
-          const value = lists.length > 1 ? lists.shift() : lists[0];
+          if (listHeld) return new Promise(() => undefined);
+          const value = lists.shift() ?? { automations: standing };
           return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
         }
         if (request.kind === ACT_KIND.AUTOMATIONS_CHANGE) {
           changes.push(request.payload);
           const { automationId, change } = request.payload;
-          const was = [DIGEST, SWEEP, FAILING].find((each) => each.id === automationId);
-          const value =
-            changeRefusal !== undefined || was === undefined
-              ? { failure: changeRefusal ?? AUTOMATION_CALL_FAILURE.NOT_FOUND }
-              : { automation: { ...was, ...change } };
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+          const was = standing.find((each) => each.id === automationId);
+          if (changeRefusal !== undefined || was === undefined) {
+            const failure = changeRefusal ?? AUTOMATION_CALL_FAILURE.NOT_FOUND;
+            return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { failure } });
+          }
+          const automation = { ...was, ...change };
+          standing = standing.map((each) => (each.id === automationId ? automation : each));
+          if (heldChanges === undefined) {
+            return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { automation } });
+          }
+          // A held write answers in words of its own, so which answer drew is told by the row's name.
+          const held = heldChanges;
+          const told = { ...automation, name: `${was.name}, write ${held.length + 1}` };
+          const done = { status: ACT_OUTCOME_STATUS.DONE, value: { automation: told } };
+          return new Promise((resolve) => held.push(() => resolve(done)));
         }
         return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
       },
@@ -184,7 +203,7 @@ test("the listed workspace's automations stand before the personal ones, under a
 });
 
 test("one owner's automations alone stand under no heading, still naming their owner", async () => {
-  lists = [{ automations: [DIGEST] }];
+  standing = [DIGEST];
   const page = mount();
   await settle();
 
@@ -193,7 +212,7 @@ test("one owner's automations alone stand under no heading, still naming their o
 });
 
 test("an automation turned off reads Off where its next run would, and a failed newest run is marked at its row's end", async () => {
-  lists = [{ automations: [{ ...SWEEP, enabled: false }, FAILING] }];
+  standing = [{ ...SWEEP, enabled: false }, FAILING];
   const page = mount();
   await settle();
 
@@ -219,6 +238,56 @@ test("a switch turns its automation off, and the row takes the service's answer 
   assert.equal(row.querySelector("[role=switch]")?.getAttribute("aria-checked"), "false");
 });
 
+test("an older switch's answer landing after a newer one's draws nothing over it", async () => {
+  heldChanges = [];
+  const page = mount();
+  await settle();
+  listHeld = true;
+  const press = () =>
+    act(() =>
+      page
+        .querySelector(".automation-row")
+        ?.querySelector<HTMLButtonElement>("[role=switch]")
+        ?.click(),
+    );
+
+  press();
+  press();
+  await settle();
+  const [older, newer] = heldChanges;
+  newer?.();
+  await settle();
+  older?.();
+  await settle();
+
+  assert.equal(changes.length, 2);
+  assert.equal(
+    page.querySelector(".automation-row-name")?.textContent,
+    "Nightly flaky-test sweep, write 2",
+  );
+});
+
+test("once a switch settles the list is read again, so what changed elsewhere meanwhile is drawn", async () => {
+  const page = mount();
+  await settle();
+  standing = standing.map((each) =>
+    each.id === FAILING.id ? { ...each, name: "Dependency bumps, weekly" } : each,
+  );
+
+  act(() =>
+    rowOf(page, "Nightly flaky-test sweep")
+      .querySelector<HTMLButtonElement>("[role=switch]")
+      ?.click(),
+  );
+  await settle();
+
+  assert.deepEqual(rows(page), [
+    ["Nightly flaky-test sweep", "Acme"],
+    ["Dependency bumps, weekly", "Acme"],
+    ["Morning digest", "Personal"],
+  ]);
+});
+
 test("a switch the service refuses stays where it was and says who may move it", async () => {
   changeRefusal = AUTOMATION_CALL_FAILURE.NOT_PERMITTED;
   const page = mount();
@@ -240,7 +309,8 @@ test("a switch the service refuses stays where it was and says who may move it",
 });
 
 test("a list that could not be read says so, and Retry reads it again", async () => {
-  lists = [{ failure: AUTOMATION_CALL_FAILURE.UNANSWERED }, { automations: [DIGEST] }];
+  standing = [DIGEST];
+  lists = [{ failure: AUTOMATION_CALL_FAILURE.UNANSWERED }];
   const page = mount();
   await settle();
 
@@ -256,7 +326,7 @@ test("a list that could not be read says so, and Retry reads it again", async ()
 });
 
 test("with no automations the page says what one is, and with no workspace listed it asks for none", async () => {
-  lists = [{ automations: [] }];
+  standing = [];
   const page = mount();
   await settle();
 
