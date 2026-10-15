@@ -405,28 +405,6 @@
   gap: 7px;
 }
 
-/* The signed-in identity's picture, leading its row as a provider's mark
-   leads one, or our own glyph where no picture travelled. */
-.account-avatar {
-  width: 30px;
-  height: 30px;
-  flex: 0 0 auto;
-  border-radius: 50%;
-  object-fit: cover;
-}
-
-.account-avatar-fallback {
-  display: grid;
-  background: var(--raised);
-  color: var(--text-secondary);
-  place-items: center;
-}
-
-.account-avatar-fallback .settings-icon {
-  width: 14px;
-  height: 14px;
-}
-
 /* The provider the account signed in with, its mark beside its name as the
    sign-in button drew them, at the size of the line's own words. */
 .account-provider {

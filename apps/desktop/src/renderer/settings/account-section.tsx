@@ -1,8 +1,10 @@
 import type { AccountSnapshot } from "@luke/credentials/snapshot";
 import { ACCOUNT_PROVIDER, type ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
-import { ProviderMark, UserIcon } from "@luke/ui";
+import { ProviderMark } from "@luke/ui";
+import { accountActor } from "@luke/ui/actor-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
+import { ACTOR_SIZE, ActorMark } from "../actor-ref";
 import { ConfirmDialog, DIALOG_TONE, useConfirmDialog } from "./confirm-dialog";
 import { SettingsGroup } from "./settings-group";
 
@@ -37,22 +39,8 @@ export function AccountSection({
   return (
     <SettingsGroup title="Account">
       <div className="settings-row" {...searchAnchorProps(SETTINGS_SEARCH_ROW.SIGN_OUT)}>
-        {/* The provider's own picture of the person, when their identity
-            carried one from a host this build pins — otherwise a glyph, so
-            the line never shows a broken image. */}
-        {account.pictureUrl ? (
-          <img
-            className="account-avatar"
-            src={account.pictureUrl}
-            alt=""
-            referrerPolicy="no-referrer"
-            draggable={false}
-          />
-        ) : (
-          <span className="account-avatar account-avatar-fallback" aria-hidden="true">
-            <UserIcon />
-          </span>
-        )}
+        {/* The account's face as the sidebar's foot and every list draw it: its picture, else its letter on its hue. */}
+        <ActorMark actor={accountActor(account)} size={ACTOR_SIZE.CARD} />
         <span className="settings-copy">
           <strong>{account.email}</strong>
           <small className="account-provider">
