@@ -1,6 +1,7 @@
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAgentAnswer,
+  type CodingAgentAgentInboxParams,
   type CodingAgentArchiveParams,
   type CodingAgentChangesAnswerView,
   type CodingAgentChooseParams,
@@ -103,6 +104,9 @@ export interface CodingAgentActsDependencies {
       params: DictationTranscribeParams,
     ): Effect.Effect<DictationTranscribeAnswerView>;
     codingAgentInbox(params: CodingAgentInboxParams): Effect.Effect<CodingAgentInboxAnswerView>;
+    codingAgentAgentInbox(
+      params: CodingAgentAgentInboxParams,
+    ): Effect.Effect<CodingAgentInboxAnswerView>;
     codingAgentInboxAnswer(
       params: CodingAgentInboxAnswerParams,
     ): Effect.Effect<CodingAgentInboxAnsweredView>;
@@ -152,6 +156,7 @@ type CodingAgentActKind =
   | typeof ACT_KIND.PLAN_TEMPLATE_RESTORE
   | typeof ACT_KIND.DICTATION_TRANSCRIBE
   | typeof ACT_KIND.CODING_AGENTS_INBOX
+  | typeof ACT_KIND.CODING_AGENTS_AGENT_INBOX
   | typeof ACT_KIND.CODING_AGENTS_INBOX_ANSWER
   | typeof ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT;
 
@@ -299,6 +304,10 @@ export function codingAgentActRows(
     [ACT_KIND.CODING_AGENTS_INBOX]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.CODING_AGENTS_INBOX, sender);
       return host.codingAgentInbox(params);
+    },
+    [ACT_KIND.CODING_AGENTS_AGENT_INBOX]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.CODING_AGENTS_AGENT_INBOX, sender);
+      return host.codingAgentAgentInbox(params);
     },
     [ACT_KIND.CODING_AGENTS_INBOX_ANSWER]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.CODING_AGENTS_INBOX_ANSWER, sender);

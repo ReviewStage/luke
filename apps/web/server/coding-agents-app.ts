@@ -76,7 +76,7 @@ import { readEither } from "@luke/wire/effect";
 import { Cache, Clock, Effect, Layer, Option, Result } from "effect";
 import { type HttpClient, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { reachedAgent, resolvedUserId, uuidOf } from "./hosted/agent-reach.js";
-import { accountInboxPast, planInboxPast } from "./hosted/coder-host/inbox-page.js";
+import { accountInboxPast, agentInboxPast, planInboxPast } from "./hosted/coder-host/inbox-page.js";
 import {
   agentPullRequestReach,
   type PublishedCache,
@@ -194,6 +194,8 @@ const AGENTS_PATH = {
   SUBAGENT_MESSAGES: "/api/agents/subagent-messages",
   /** GET reads the plan's inbox past `after`; the rewrite moves the path's plan id into the `id` query. */
   INBOX_OF_PLAN: "/api/plans/inbox",
+  /** GET reads one agent's inbox past `after`, an agent with no plan as much as one on a plan; the rewrite moves the path's agent id into the `id` query. */
+  INBOX_OF_AGENT: "/api/agents/inbox",
   /** POST answers one inbox item; the rewrite moves the path's item id into the `id` query. */
   INBOX_ITEM: "/api/inbox/item",
   /** GET reads what waits on the developer across the account's plans past `after`. */
@@ -727,6 +729,21 @@ const planInboxEndpoint = /* @__PURE__ */ Effect.fn("web/planInboxEndpoint")(fun
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, page);
 });
 
+/** GET reads one agent's inbox past the cursor: every item it posted, held open while nothing changed, for any member of its workspace. */
+const agentInboxEndpoint = /* @__PURE__ */ Effect.fn("web/agentInboxEndpoint")(function* (
+  seams: CodingAgentsAppSeams,
+): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  if (incoming.method !== HTTP_METHOD.GET) {
+    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
+  }
+  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  const after = yield* inboxCursorOf(request);
+  const { userId, agent } = yield* reachedAgent(seams, request);
+  const page = yield* hostedStoreOrUnavailable(agentInboxPast(userId, agent.id, after));
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, page);
+});
+
 /** GET reads what waits on the developer across the account's plans past the cursor: every open item, held open while nothing changed. */
 const accountInboxEndpoint = /* @__PURE__ */ Effect.fn("web/accountInboxEndpoint")(function* (
   seams: CodingAgentsAppSeams,
@@ -899,6 +916,11 @@ export function codingAgentsApp(seams: CodingAgentsAppSeams): WebRoutes<CodingAg
           ANY_METHOD,
           AGENTS_PATH.INBOX_OF_PLAN,
           hostedRefusing(planInboxEndpoint(seams)),
+        ),
+        HttpRouter.add(
+          ANY_METHOD,
+          AGENTS_PATH.INBOX_OF_AGENT,
+          hostedRefusing(agentInboxEndpoint(seams)),
         ),
         HttpRouter.add(
           ANY_METHOD,

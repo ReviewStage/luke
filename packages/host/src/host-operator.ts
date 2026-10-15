@@ -6,6 +6,7 @@ import {
   type CodingAgentAccountInboxAnswerView,
   type CodingAgentAccountInboxParams,
   type CodingAgentAgentAnswer,
+  type CodingAgentAgentInboxParams,
   type CodingAgentArchiveParams,
   type CodingAgentChangesAnswerView,
   type CodingAgentChooseParams,
@@ -422,6 +423,10 @@ export interface HostOperator {
   ): Effect.Effect<DictationTranscribeAnswerView>;
   /** One plan's inbox past a cursor, held by the service while nothing changed; or why there is none. */
   codingAgentInbox(params: CodingAgentInboxParams): Effect.Effect<CodingAgentInboxAnswerView>;
+  /** One agent's inbox past a cursor, an agent with no plan as much as one on a plan, held as a plan's is; or why there is none. */
+  codingAgentAgentInbox(
+    params: CodingAgentAgentInboxParams,
+  ): Effect.Effect<CodingAgentInboxAnswerView>;
   /** One item of a plan's inbox answered; the item as it then stands and whether the answer was taken, or why there is no answer. */
   codingAgentInboxAnswer(
     params: CodingAgentInboxAnswerParams,
@@ -1187,6 +1192,14 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_INBOX, {
           planId: params.planId,
+          after: params.after,
+        }),
+        codingAgentAnswer(codingAgentInboxAnswerViewSchema),
+      ),
+    codingAgentAgentInbox: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_AGENT_INBOX, {
+          agentId: params.agentId,
           after: params.after,
         }),
         codingAgentAnswer(codingAgentInboxAnswerViewSchema),

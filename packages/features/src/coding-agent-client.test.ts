@@ -197,3 +197,19 @@ it.effect(
       assert.deepEqual(refused, { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND });
     }),
 );
+
+it.effect(
+  "reads one agent's inbox past a cursor at the agent's own path, held as a plan's is",
+  () =>
+    Effect.gen(function* () {
+      const api = fakeCloudApi({
+        [`GET /api/agents/${AGENT_ID}/inbox`]: {
+          answer: () => ({ items: [], cursor: "3" }),
+        },
+      });
+
+      const read = yield* Effect.provide(client().agentInbox(AGENT_ID, "0"), api.layer);
+
+      assert.deepEqual(read, { items: [], cursor: "3" });
+    }),
+);

@@ -361,6 +361,12 @@ export function planInboxPath(planId: string, after?: string): string {
   return `${path}?${query}`;
 }
 
+/** One agent's inbox past a cursor (GET), held open while nothing changed as a plan's is, an agent with no plan as much as one on a plan; the same answer as `planInboxPath`'s read. */
+export function agentInboxPath(agentId: string, after: string): string {
+  const query = new URLSearchParams({ after });
+  return `/api/agents/${encodeURIComponent(agentId)}/inbox?${query}`;
+}
+
 /** One item of a plan's inbox, answered by the developer (POST) against the revision they saw; `inbox-wire.ts` declares the request and the answer. */
 export function inboxItemPath(itemId: string): string {
   return `/api/inbox/${encodeURIComponent(itemId)}`;
