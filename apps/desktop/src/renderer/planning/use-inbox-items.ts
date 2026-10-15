@@ -98,5 +98,6 @@ export function useInboxItems(input: {
     () => new Map([...reads].map(([planId, read]) => [planId, read.items])),
     [reads],
   );
-  return { items, failed: failed.size > 0, onRetry };
+  // Note that only a plan still listed fails the list, because one another workspace listed is not drawn.
+  return { items, failed: holdings.some((holding) => failed.has(holding.planId)), onRetry };
 }

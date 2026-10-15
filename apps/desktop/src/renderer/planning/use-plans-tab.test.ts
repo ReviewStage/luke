@@ -878,6 +878,19 @@ test("the Inbox lists the chosen workspace's share of what waits, and every work
   );
 });
 
+test("an Inbox item chosen in one workspace gives way as another is listed, so main is not told its plan's Inbox still shows", () => {
+  const tab = mount({ shown: true, planning: TWO_WORKSPACES });
+
+  act(() => tab.control().inboxView.onOpen());
+  act(() => tab.control().inboxView.onChoose({ planId: "notes", itemId: "notes-item-0" }));
+  const chosen = tab.control().inboxView.chosen?.planId;
+  act(() => tab.control().onChooseWorkspace(ACME.id));
+
+  assert.equal(chosen, "notes");
+  assert.equal(tab.control().inboxView.chosen, undefined);
+  assert.equal(tab.shownInboxes.at(-1), null);
+});
+
 test("the new-plan page's recent repositories are the chosen workspace's own, and the chip names its workspace", () => {
   const tab = mount({
     shown: true,

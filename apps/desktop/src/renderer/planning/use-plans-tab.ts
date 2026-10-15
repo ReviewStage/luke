@@ -834,9 +834,15 @@ export function usePlansTab(input: {
       : columnShown && isAgentTab(mainTabs.tab)
         ? mainTabs.tab.agent
         : null;
+  // The Inbox lists the listed workspace's items alone, so a choice another workspace's list made gives way with it.
+  const inboxChosen =
+    inboxView?.chosen !== undefined &&
+    inWorkspace([inboxView.chosen], planning.plans, listedWorkspaceId).length > 0
+      ? inboxView.chosen
+      : undefined;
   const shownInbox =
     shown && fixture === undefined && inboxView !== undefined
-      ? (inboxView.chosen?.planId ?? null)
+      ? (inboxChosen?.planId ?? null)
       : columnShown && mainTabs.tab === MAIN_TAB.INBOX
         ? (viewed.activePlanId ?? null)
         : null;
@@ -1646,7 +1652,7 @@ export function usePlansTab(input: {
     // The window's Inbox stands over the plan's place, so a version history there gives way.
     inboxView: {
       open: inboxView !== undefined,
-      chosen: inboxView?.chosen,
+      chosen: inboxChosen,
       onOpen: () => {
         setHistoryFor(undefined);
         setStandIn((held) =>
