@@ -357,23 +357,47 @@ function steppedFilter(filter: PaletteFilter, step: number): PaletteFilter {
   return PALETTE_FILTERS[(at + step + count) % count] ?? PALETTE_FILTER.ALL;
 }
 
-/** A plan's muted words: its repository, and whether it is archived. */
-function planDetail(plan: PlanSummary, archived: boolean): string | undefined {
-  const words = [plan.repository, archived ? "Archived" : null].filter((word) => word !== null);
+/** A plan's muted words: the workspace it is in where that is not the one listed, its repository, and whether it is archived. */
+function planDetail(
+  plan: PlanSummary,
+  archived: boolean,
+  elsewhere: string | undefined,
+): string | undefined {
+  const words = [elsewhere ?? null, plan.repository, archived ? "Archived" : null].filter(
+    (word) => word !== null,
+  );
   return words.length === 0 ? undefined : words.join(" · ");
 }
 
-/** Every plan, the sidebar's first in its order, then the archived ones, each in its tab's look, an archived one saying so in its detail. */
+/**
+ * Every plan, the sidebar's first in its order, then the archived ones, each
+ * in its tab's look, an archived one saying so in its detail. Within each,
+ * the listed workspace's plans come first and every other workspace's after
+ * them, naming its workspace and found by its name, since opening one
+ * switches the window to it.
+ */
 function planRows(plans: PlansControl, open: (planId: string) => void): readonly PaletteRow[] {
-  const row = (plan: PlanSummary, archived: boolean): PaletteRow => ({
-    ...tabLook({ kind: TAB_KIND.PLAN, name: plan.name }),
-    detail: planDetail(plan, archived),
-    terms: plan.repository === null ? [plan.name] : [plan.name, plan.repository],
-    onChoose: () => open(plan.id),
-  });
+  const listedId = plans.workspace?.id;
+  const elsewhereOf = (plan: PlanSummary): string | undefined =>
+    listedId === undefined || plan.workspaceId === listedId
+      ? undefined
+      : plans.workspaces.find((each) => each.id === plan.workspaceId)?.name;
+  const row = (plan: PlanSummary, archived: boolean): PaletteRow => {
+    const elsewhere = elsewhereOf(plan);
+    return {
+      ...tabLook({ kind: TAB_KIND.PLAN, name: plan.name }),
+      detail: planDetail(plan, archived, elsewhere),
+      terms: [plan.name, plan.repository, elsewhere ?? null].filter((term) => term !== null),
+      onChoose: () => open(plan.id),
+    };
+  };
+  const listedFirst = (list: readonly PlanSummary[]) => [
+    ...list.filter((plan) => listedId === undefined || plan.workspaceId === listedId),
+    ...list.filter((plan) => listedId !== undefined && plan.workspaceId !== listedId),
+  ];
   return [
-    ...plans.plans.map((plan) => row(plan, false)),
-    ...plans.archived.map((plan) => row(plan, true)),
+    ...listedFirst(plans.plans).map((plan) => row(plan, false)),
+    ...listedFirst(plans.archived).map((plan) => row(plan, true)),
   ];
 }
 

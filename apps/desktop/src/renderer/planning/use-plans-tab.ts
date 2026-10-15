@@ -508,6 +508,16 @@ const PLAN_DELETED_NOTE = "Plan deleted";
 /** What the toast says when the service did not move a plan, which stays where it was. */
 const MOVE_REFUSED_NOTE = "The plan could not be moved. Try again.";
 
+/** What the toast says when opening a plan listed the workspace it is in. */
+function switchedNote(workspace: string): string {
+  return `Switched to ${workspace}`;
+}
+
+/** The switch toast's action, which lists the workspace left again. */
+function backNote(workspace: string): string {
+  return `Back to ${workspace}`;
+}
+
 /** Why a delete the service did not carry was refused. */
 const DELETE_REFUSED_NOTE = "The plan could not be deleted. Try again.";
 
@@ -926,33 +936,39 @@ export function usePlansTab(input: {
   }
   // An answer clears the ask it answers, never one made since.
   const revealed = () => setReveal((held) => (held === reveal ? undefined : held));
-  // A plan opened from another workspace, from the palette, the inbox, or
-  // the history, lists its workspace, so the sidebar holds the plan open.
-  const chooseWorkspace = chooseListed;
   const listedId = listedWorkspace?.id;
   const plansNow = planning.plans;
   const workspacesNow = viewed.workspaces;
+  // The plan last open in each workspace, which a switch to it opens again.
+  const lastOpenIn = useRef(new Map<string, string>());
+  const openWorkspaceId = plansNow.find((plan) => plan.id === openPlanId)?.workspaceId;
+  useEffect(() => {
+    if (openPlanId !== undefined && openWorkspaceId !== undefined) {
+      lastOpenIn.current.set(openWorkspaceId, openPlanId);
+    }
+  }, [openPlanId, openWorkspaceId]);
   // Opening a plan, or leaving one, is leaving the window's Inbox for it.
-  const select = useCallback(
-    (planId: string) => {
+  // Note that `onOpened` runs only once the plan opened, because a plan that
+  // would not open must not leave the sidebar on another workspace, this
+  // launch or the next.
+  const openPlan = useCallback(
+    (planId: string, onOpened: () => void, onRefused: () => void = () => undefined) => {
       setStandIn(undefined);
-      const planWorkspace = plansNow.find((plan) => plan.id === planId)?.workspaceId;
-      const target = workspacesNow.find((each) => each.id === planWorkspace);
       const ask = { planId, over: openPlanId };
-      const withdraw = () => setAsked((held) => (held === ask ? undefined : held));
+      const withdraw = () => {
+        setAsked((held) => (held === ask ? undefined : held));
+        onRefused();
+      };
       if (fixture === undefined) setAsked(ask);
-      // Note that the workspace moves only once the plan opened, because a
-      // plan that would not open must not leave the sidebar on another
-      // workspace, this launch or the next.
       act(ACT_KIND.PLANNING_SELECT, { planId }).then((opened) => {
         if (!opened) {
           withdraw();
           return;
         }
-        if (target !== undefined && target.id !== listedId) chooseWorkspace(target.id);
+        onOpened();
       }, withdraw);
     },
-    [act, fixture, openPlanId, plansNow, listedId, workspacesNow, chooseWorkspace],
+    [act, fixture, openPlanId],
   );
   // A leave is asked rather than told, so a refused one takes its ask back too.
   const leavePlan = useCallback(() => {
@@ -962,6 +978,89 @@ export function usePlansTab(input: {
     setAsked(ask);
     act(ACT_KIND.PLANNING_CLOSE).catch(() => setAsked((held) => (held === ask ? undefined : held)));
   }, [act, fixture, openPlanId]);
+  // Every navigation a press asked for, counted, so an answer that lands
+  // after a newer one was asked for changes nothing the newer one decided.
+  const navigations = useRef(0);
+  // A workspace chosen on purpose, from the switcher, a workspace made, or
+  // one left, is listed at once, and the plan on screen follows: the plan
+  // last open there opens again, where it is still that workspace's and not
+  // archived, or else the home page, so the plan on screen is the listed
+  // workspace's. A remembered plan that would not open gives way to the home
+  // page, unless the developer went somewhere else meanwhile.
+  const switchWorkspace = useCallback(
+    (workspaceId: string) => {
+      navigations.current += 1;
+      const mine = navigations.current;
+      chooseListed(workspaceId);
+      if (openWorkspaceId === undefined || openWorkspaceId === workspaceId) return;
+      const last = lastOpenIn.current.get(workspaceId);
+      const reopens = plansNow.some(
+        (plan) =>
+          plan.id === last && plan.workspaceId === workspaceId && plan.archivedAt === undefined,
+      );
+      if (last === undefined || !reopens) {
+        leavePlan();
+        return;
+      }
+      openPlan(
+        last,
+        () => undefined,
+        () => {
+          if (navigations.current === mine) leavePlan();
+        },
+      );
+    },
+    [chooseListed, openWorkspaceId, plansNow, openPlan, leavePlan],
+  );
+  // What the window lists and shows now, which a switch toast's Back reads
+  // as it is pressed rather than as the toast was raised.
+  const standingNow = useRef({ listed: listedId, open: openPlanId });
+  standingNow.current = { listed: listedId, open: openPlanId };
+  // A plan opened from another workspace, from the palette, the Inbox, a
+  // notice, or the history, lists its workspace once it opened, so the
+  // sidebar holds the plan open, and says so in a toast whose Back lists the
+  // workspace left and returns to what stood open there. An open answered
+  // after the developer went somewhere else lists nothing, and Back does
+  // nothing once the window has moved on from the switch it reports.
+  const select = useCallback(
+    (planId: string) => {
+      navigations.current += 1;
+      const mine = navigations.current;
+      const planWorkspace = plansNow.find((plan) => plan.id === planId)?.workspaceId;
+      const target = workspacesNow.find((each) => each.id === planWorkspace);
+      const from = workspacesNow.find((each) => each.id === listedId);
+      const over = openPlanId;
+      openPlan(planId, () => {
+        if (navigations.current !== mine) return;
+        if (target === undefined || target.id === listedId) return;
+        chooseListed(target.id);
+        if (from === undefined) return;
+        const back = () => {
+          const now = standingNow.current;
+          if (now.listed !== target.id || now.open !== planId) return;
+          navigations.current += 1;
+          const backed = navigations.current;
+          chooseListed(from.id);
+          if (over === undefined) leavePlan();
+          else {
+            openPlan(
+              over,
+              () => undefined,
+              () => {
+                if (navigations.current === backed) leavePlan();
+              },
+            );
+          }
+        };
+        toast({
+          words: switchedNote(target.name),
+          tone: TOAST_TONE.DONE,
+          action: { label: backNote(from.name), onPress: back },
+        });
+      });
+    },
+    [plansNow, workspacesNow, listedId, openPlanId, openPlan, chooseListed, toast, leavePlan],
+  );
 
   // A fixture's plans are deleted nowhere, as they are read from nowhere. A
   // delete that landed says so in a toast, since its dialog has closed; a
@@ -1289,7 +1388,7 @@ export function usePlansTab(input: {
     if (fixture !== undefined) return Promise.resolve(undefined);
     return act(ACT_KIND.WORKSPACE_CREATE, { name }).then(
       (created) => {
-        chooseListed(created.id);
+        switchWorkspace(created.id);
         return undefined;
       },
       (refused: Error) => refused.message,
@@ -1595,7 +1694,7 @@ export function usePlansTab(input: {
     waitingIn: listedInbox.waitingIn,
     workspaces: viewed.workspaces,
     workspace: listedWorkspace,
-    onChooseWorkspace: chooseListed,
+    onChooseWorkspace: switchWorkspace,
     onCreateWorkspace: createWorkspace,
     onOpenWorkspaceSettings: () =>
       input.onOpenSettings({
@@ -1604,7 +1703,7 @@ export function usePlansTab(input: {
       }),
     onLeftWorkspace: (workspaceId) => {
       const next = viewed.workspaces.find((each) => each.id !== workspaceId);
-      if (next !== undefined && listedWorkspace?.id === workspaceId) chooseListed(next.id);
+      if (next !== undefined && listedWorkspace?.id === workspaceId) switchWorkspace(next.id);
     },
     github: viewed.github,
     onConnectAccountGitHub: () => accountGitHub(ACT_KIND.GITHUB_CONNECT),
@@ -1807,7 +1906,7 @@ export function usePlansTab(input: {
       start: startPlan,
       onClose: () => setNewPlanAsk(undefined),
     },
-    onLeavePlan: leavePlan,
+    onLeavePlan: () => leavePlan(),
     // Home is the page with no plan open, so where none is, only the Inbox, an
     // agent's page, or Factory standing over it is put away, and the host is asked nothing.
     onGoHome: () => (boundFor === undefined ? setStandIn(undefined) : leavePlan()),
