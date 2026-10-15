@@ -3867,6 +3867,33 @@ body:has(.app-stage[data-capture="true"])
   padding-left: var(--sidebar-toggle-clearance);
 }
 
+/* Experiments ---------------------------------------------------------------- */
+
+/* An experiment's toolbar (`experiment-marks.tsx`): the tag after its
+   title, on the title's baseline, as a devtool's Beta label sits; Send
+   feedback is a toolbar button like any other. The tag is a hairlined
+   capsule in the muted voice, unfilled, so it names the page's state
+   without asking for a look. Note that the heading aligns on the last
+   baseline, because an automation's title is the last of its crumbs, and
+   the crumbs' first baseline is the smaller words of the way back. */
+.desktop-toolbar-heading:has(.experiment-tag) {
+  display: flex;
+  align-items: last baseline;
+  gap: var(--space-8);
+}
+
+.experiment-tag {
+  flex: none;
+  padding: 0 var(--space-6);
+  border: 1px solid var(--hairline-strong);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  font-size: 10.5px;
+  font-weight: 500;
+  line-height: 16px;
+  letter-spacing: 0.01em;
+}
+
 /* Factory -------------------------------------------------------------------- */
 
 /* Factory stands in the plan's place as the Inbox does: the toolbar, the
@@ -3874,29 +3901,6 @@ body:has(.app-stage[data-capture="true"])
    holding sidebar rows. The steps share one grid row each for their work and
    their wait, so what waits on the developer lines up as one band across the
    line, under the step it holds up. */
-/* An experiment's toolbar: a quiet badge after its title, as a tool's
-   annotation is drawn, and Send feedback as a quiet text button. */
-.desktop-toolbar-heading:has(.experiment-badge) {
-  display: flex;
-  align-items: center;
-  gap: var(--space-8);
-}
-
-.experiment-feedback {
-  padding: var(--space-2) var(--space-6);
-  border-radius: var(--menu-row-radius);
-  background: none;
-  color: var(--text-secondary);
-  font-size: 12px;
-  transition: background-color var(--duration-hover) ease;
-  -webkit-app-region: no-drag;
-}
-
-.experiment-feedback:hover {
-  background: var(--raised);
-  color: var(--text-primary);
-}
-
 .factory-view {
   display: flex;
   min-width: 0;
