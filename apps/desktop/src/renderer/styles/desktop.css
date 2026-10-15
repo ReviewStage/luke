@@ -3730,6 +3730,13 @@ body:has(.app-stage[data-capture="true"])
   gap: var(--space-8);
 }
 
+/* Choose a model hangs its menu from itself, as the agent box's model chip does. */
+.automation-model-picker {
+  position: relative;
+  display: flex;
+  min-width: 0;
+}
+
 .automation-agent {
   max-width: 420px; /* off-scale */
 }
