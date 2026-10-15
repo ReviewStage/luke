@@ -5124,13 +5124,15 @@ button.automation-run:hover {
 }
 
 .tab {
-  /* The pill's insets about its glyph and label, and the ×'s box with its
-     inset from the pill's end. */
+  /* The pill's insets about its glyph and label, the ×'s box with its
+     inset from the pill's end, and where the ⋯, in a box the ×'s size,
+     stands from that end: the ×'s place on a tab with no ×. */
   --tab-start: var(--row-inset);
   --tab-end: var(--space-12);
   --tab-gap: var(--glyph-gap);
   --tab-close: 20px;
   --tab-close-inset: var(--space-4);
+  --tab-more-at: var(--tab-close-inset);
   position: relative;
   display: flex;
   max-width: 200px;
@@ -5196,6 +5198,16 @@ button.automation-run:hover {
   --tab-end: calc(var(--tab-close) + 2 * var(--tab-close-inset));
 }
 
+/* A tab with a ⋯ wears it just before its ×, and the chosen one keeps room
+   for both; on another, the ⋯ comes over its label's end with the ×. */
+.tab[data-closable="true"] {
+  --tab-more-at: calc(var(--tab-close-inset) + var(--tab-close));
+}
+
+.tab[data-more="true"][data-selected="true"] {
+  --tab-end: calc(var(--tab-more-at) + var(--tab-close) + var(--tab-close-inset));
+}
+
 .tab-button {
   position: relative;
   display: flex;
@@ -5215,6 +5227,20 @@ button.automation-run:hover {
     to left,
     transparent calc(var(--tab-close) + var(--tab-close-inset)),
     #000 calc(var(--tab-close) + var(--tab-close-inset) + 10px)
+  );
+}
+
+/* Note that the label fades beneath a ⋯ standing on a tab not chosen while
+   its menu is open or the keyboard is on it, too, because the ⋯ stands then
+   with the pointer gone. */
+.tab[data-more="true"][data-selected="false"]:is(
+  :hover,
+  :has(.tab-more[aria-expanded="true"], .tab-more:focus-visible)
+) .tab-button {
+  mask-image: linear-gradient(
+    to left,
+    transparent calc(var(--tab-more-at) + var(--tab-close)),
+    #000 calc(var(--tab-more-at) + var(--tab-close) + 10px)
   );
 }
 
@@ -5423,9 +5449,11 @@ button.automation-run:hover {
   outline: none; /* no ring: its tab rings */
 }
 
-/* The × keeps none of a button's own padding, which would leave its glyph
-   8px of the box's 20 and squeeze it narrower than every glyph beside it. */
-.tab-close {
+/* The × and the ⋯ keep none of a button's own padding, which would leave
+   a glyph 8px of the box's 20 and squeeze it narrower than every glyph
+   beside it. */
+.tab-close,
+.tab-more {
   position: absolute;
   top: 50%;
   right: var(--tab-close-inset);
@@ -5445,8 +5473,16 @@ button.automation-run:hover {
     color var(--duration-hover) ease;
 }
 
+.tab-more {
+  right: var(--tab-more-at);
+}
+
 .tab:hover .tab-close,
-.tab[data-selected="true"] .tab-close {
+.tab[data-selected="true"] .tab-close,
+.tab:hover .tab-more,
+.tab[data-selected="true"] .tab-more,
+.tab-more[aria-expanded="true"],
+.tab-more:focus-visible {
   opacity: 1;
 }
 
@@ -5478,13 +5514,17 @@ button.automation-run:hover {
   opacity: 0;
 }
 
-/* Note that the × draws no ground under the pointer, because it is a glyph
-   on a pill that is already raised: only the glyph itself brightens. */
-.tab-close:hover {
+/* Note that the × and the ⋯ draw no ground under the pointer, because each
+   is a glyph on a pill that is already raised: only the glyph itself
+   brightens, and the ⋯ stays bright while its menu is open. */
+.tab-close:hover,
+.tab-more:hover,
+.tab-more[aria-expanded="true"] {
   color: var(--text-primary);
 }
 
-.tab-close svg {
+.tab-close svg,
+.tab-more svg {
   width: var(--control-glyph);
   height: var(--control-glyph);
   flex: 0 0 auto;

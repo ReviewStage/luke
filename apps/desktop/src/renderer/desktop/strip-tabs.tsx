@@ -24,7 +24,9 @@ import { MenuTab } from "./tab-strip";
  * Both strips are the one `TabStrip` (tab-strip.tsx), each of its tabs a
  * `MenuTab` whose right-click offers the actions `tabActionGroups` lists:
  * Close and Close others; Pin tab or Unpin tab, and an agent's Rename,
- * beside it; a transcript's two copies; and an agent's Archive. Each strip ends in a "+" that
+ * beside it; a transcript's two copies; and an agent's Archive. A tab whose
+ * menu acts on what it shows, an agent's or a subagent's, also drops it from
+ * a ⋯ (`offersMore`). Each strip ends in a "+" that
  * drops the shared searchable menu over what the strip may open. The
  * columns' own modules say which tabs and rows those are
  * (`main-tabs.tsx`, `side-panel.tsx`).
@@ -138,6 +140,19 @@ function tabActionGroups(doors: TabDoors): MenuAction[][] {
   ];
 }
 
+/**
+ * Whether a tab's menu holds more than the tab's own keeping, and so wears a
+ * ⋯ as well as answering a right-click: a transcript's copies or an agent's
+ * Archive, which act on what the tab shows. Close is the ×, and Close others
+ * and Pin tab are what every editor's and browser's tab offers on a
+ * right-click alone, so a tab offering only those wears no ⋯. Note that a
+ * Rename alone does not count either, because the one tab offering it alone
+ * is the plan's, whose ⋯ already stands in the toolbar beside it.
+ */
+function offersMore(doors: TabDoors): boolean {
+  return doors.onCopy !== undefined || doors.archive !== undefined;
+}
+
 /** What a tab of either strip draws, beyond its menu. */
 export interface TabLook {
   icon: React.JSX.Element;
@@ -158,7 +173,7 @@ export interface TabLook {
   onSelect: () => void;
 }
 
-/** One tab of either strip, whatever its kind, with its menu (`tabActionGroups`). */
+/** One tab of either strip, whatever its kind, with its menu (`tabActionGroups`) and, where it holds more than the tab's keeping, its ⋯. */
 export function DoorsTab({
   look,
   doors,
@@ -177,6 +192,7 @@ export function DoorsTab({
       tabRef={tabRef}
       onClose={doors.onClose}
       groups={tabActionGroups(doors)}
+      more={offersMore(doors)}
     />
   );
 }
