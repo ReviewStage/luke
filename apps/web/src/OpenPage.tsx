@@ -67,8 +67,11 @@ export function OpenPage(): React.JSX.Element {
             {WORDS.GET}
           </a>
         </p>
-        {/* Note that the line's room stands from the first paint, because a card growing under a press would move the button from under the pointer. */}
-        <p className="mt-3 mb-0 min-h-5 text-muted-foreground text-sm" role="status">
+        {/* Note that the line's room stands from the first paint, two lines where the card is narrow enough to wrap it, because a card growing under a press would move the button from under the pointer. */}
+        <p
+          className="mt-3 mb-0 min-h-10 text-muted-foreground text-sm min-[480px]:min-h-5"
+          role="status"
+        >
           {pressed ? (
             <span className="animate-arrive-late">
               {WORDS.DID_NOT_OPEN}{" "}

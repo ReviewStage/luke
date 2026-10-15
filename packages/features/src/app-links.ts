@@ -67,12 +67,14 @@ export type AppLinkClaim = [executable: string, args: string[]];
 /**
  * Whether this launch asks macOS to send it the app's own scheme, and on
  * what. A packaged build claims it as itself, its bundle declaring the
- * scheme. A live development run claims it too, on the Electron binary it
- * runs and the app it was started on, so a link reaches the build
- * `./scripts/run.sh` launched rather than an older Luke installed beside it,
- * and the last Luke launched is the one a link opens. A fixture or capture
- * run claims nothing, so a deterministic run never takes the developer's
- * links.
+ * scheme. A live development run asks too, on the Electron binary it runs
+ * and the app it was started on, so a link may reach the build
+ * `./scripts/run.sh` launched rather than an older Luke installed beside it.
+ * Note that the stock Electron bundle a development run is declares no
+ * scheme, so whether macOS honours that claim is LaunchServices' to decide;
+ * `pnpm package:dir`'s Luke.app declares it, and is the local build a link
+ * surely reaches. A fixture or capture run claims nothing, so a
+ * deterministic run never takes the developer's links.
  */
 export function appLinkClaim(launch: {
   readonly packaged: boolean;
