@@ -52,6 +52,7 @@ import { usePlanRename } from "./plan-name-field";
 import { PlanSummary, SummaryButton, type SummaryPin, useSummaryLayout } from "./plan-summary";
 import { changesTabOf, planCards, SidePanel, useSidePanelDrawing } from "./side-panel";
 import { StartAgentButton } from "./start-agent-button";
+import { StrandedPlanBanner } from "./stranded-plan-banner";
 import { useTabViews } from "./strip-tabs";
 
 /**
@@ -553,7 +554,11 @@ function PlanDocument({
               active={plans.shown && !sideFocused}
               subject={{ plan: plan.id, tab }}
             >
-              {archived ? <ArchivedBanner onUnarchive={unarchive} /> : null}
+              {archived ? (
+                <ArchivedBanner onUnarchive={unarchive} />
+              ) : (
+                <StrandedPlanBanner plans={plans} plan={listed} />
+              )}
               <section
                 className="desktop-document"
                 role="tabpanel"

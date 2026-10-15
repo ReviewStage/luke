@@ -1,5 +1,6 @@
 import { PLAN_BOUNDS } from "@luke/features/plan-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
+import { workspaceReaches } from "@luke/ui/planning-model";
 import { useId, useRef, useState } from "react";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutAria } from "#shared/shortcuts";
 import { CHIP_LOOK, Chip } from "../chip";
@@ -26,10 +27,12 @@ import type { PlansControl } from "./use-plans-tab";
  * modifier held; Escape, Cancel, and a press on the dimmed window put the
  * card away with nothing started, its words with it. Nothing typed here
  * reaches the model as conversation. The repository starts on the one the
- * press chose (a repository group's +), else the one the newest plan was
- * about; the chip offers the other recent ones, a search over every
- * repository Luke reaches, and the page where the developer chooses which
- * ones Luke can see. A plan can start with none and be given one later. A
+ * press chose (a repository group's +), else the one the newest plan in the
+ * workspace was about, either only where the workspace's GitHub reaches it;
+ * the chip offers the other recent ones, a search over every repository the
+ * workspace's GitHub reaches, and the page where the developer chooses which
+ * ones Luke can see. A workspace with no GitHub connected offers none, and
+ * the plan starts with none, to be given one later. A
  * refusal keeps the card with the reason under the field, and Create plan
  * can be pressed again; a plan started closes the card and opens as the
  * host's open plan, its call with it.
@@ -85,15 +88,18 @@ function WorkspaceChip({
 /**
  * The card with its own state, mounted afresh on each opening so a
  * cancelled name is never offered again: the name, the repository chosen
- * over the press's or the last one used, and the start under way.
+ * over the press's or the last one used, and the start under way. The
+ * chosen repository is null where it was let go, and undefined while the
+ * workspace's last one used stands.
  */
 function NewPlanCard({ newPlan }: { newPlan: PlansControl["newPlan"] }): React.JSX.Element {
   const [name, setName] = useState("");
-  const [chosen, setChosen] = useState(newPlan.preset?.repository);
+  const [chosen, setChosen] = useState<string | null | undefined>(newPlan.preset?.repository);
   // The workspace the plan starts in: the one listed, until the title's chip chooses another.
   const [workspaceId, setWorkspaceId] = useState(newPlan.workspaceId);
   const startsIn = workspaceId ?? newPlan.workspaceId;
   const repositories = newPlan.repositoriesIn(startsIn);
+  const workspace = newPlan.workspaces.find((each) => each.id === startsIn);
   // A repository picked in one workspace is none of another's, so a switch
   // lets the pick go, in the render that brings it; the scope first
   // resolving keeps a pick made before the workspaces were read.
@@ -106,7 +112,13 @@ function NewPlanCard({ newPlan }: { newPlan: PlansControl["newPlan"] }): React.J
   const [note, setNote] = useState<string | undefined>(undefined);
   const field = useRef<HTMLInputElement>(null);
   const titleId = useId();
-  const repository = chosen ?? repositories.recent[0] ?? null;
+  // Note that a press's repository the workspace's GitHub does not reach is
+  // not started on, because the service would refuse it.
+  const pick =
+    chosen != null && workspace !== undefined && !workspaceReaches(workspace, chosen)
+      ? null
+      : chosen;
+  const repository = pick === undefined ? (repositories.recent[0] ?? null) : pick;
   const canStart = name.trim().length > 0 && !starting;
 
   const start = () => {
@@ -175,6 +187,7 @@ function NewPlanCard({ newPlan }: { newPlan: PlansControl["newPlan"] }): React.J
           value={repository}
           chooser={repositories}
           onChoose={setChosen}
+          onUnreached={() => setChosen(null)}
         />
         <button type="button" className="toolbar-button" disabled={starting} onClick={close}>
           Cancel

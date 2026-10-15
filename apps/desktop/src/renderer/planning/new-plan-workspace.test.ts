@@ -55,12 +55,27 @@ async function settle(): Promise<void> {
   });
 }
 
-/** The chooser each workspace's repository chip is handed, Acme's reaching its installation's repositories. */
+/** The chooser each workspace's repository chip is handed, Acme's reaching its installation's repositories and Personal's none. */
 function chooserFor(workspaceId: string | undefined): RepositoryChooser {
   const base = plansControl().repositories;
-  if (workspaceId !== ACME.id) return { ...base, scope: workspaceId, workspaceName: PERSONAL.name };
+  if (workspaceId !== ACME.id) {
+    return {
+      ...base,
+      scope: workspaceId,
+      workspaceName: PERSONAL.name,
+      read: () =>
+        Promise.resolve({
+          repositories: {
+            installed: false,
+            repositories: [],
+            installationUrl: "https://github.com/apps/luke/installations/new",
+          },
+        }),
+    };
+  }
   return {
     ...base,
+    recent: ["acme-corp/relay"],
     scope: ACME.id,
     workspaceName: ACME.name,
     source: "acme-corp on GitHub · Acme",
@@ -149,4 +164,83 @@ test("New plan says the workspace it starts in, and the workspace chosen there l
   act(() => create?.click());
   await settle();
   assert.deepEqual(starts, [ACME.id], "the plan starts in the workspace chosen");
+});
+
+/** New plan open over the two workspaces, starting in `workspaceId`, each start's repository and workspace written down. */
+async function openNewPlan(workspaceId: string, preset?: string) {
+  const starts: [string | null, string | undefined][] = [];
+  const control = plansControl();
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(root);
+  act(() =>
+    root.render(
+      createElement(NewPlanDialog, {
+        newPlan: {
+          ...control.newPlan,
+          open: true,
+          preset: preset === undefined ? undefined : { repository: preset },
+          workspaces: [PERSONAL, ACME],
+          workspaceId,
+          repositoriesIn: chooserFor,
+          start: (_name, repository, startsIn) => {
+            starts.push([repository, startsIn]);
+            return Promise.resolve(undefined);
+          },
+        },
+      }),
+    ),
+  );
+  await settle();
+  const repositoryChip = () =>
+    document.querySelector<HTMLButtonElement>(".repository-chip .chip") ??
+    assert.fail("the repository chip stands");
+  const create = async (words: string) => {
+    const name = document.querySelector<HTMLInputElement>('input[aria-label="Plan name"]');
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(name, words);
+      name?.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    const button = [...document.querySelectorAll<HTMLButtonElement>("button")].find((each) =>
+      each.textContent?.startsWith("Create plan"),
+    );
+    act(() => button?.click());
+    await settle();
+  };
+  return { starts, repositoryChip, create };
+}
+
+test("a repository group's + whose repository the workspace's GitHub does not reach opens New plan on none", async () => {
+  const dialog = await openNewPlan(PERSONAL.id, "ReviewStage/luke");
+
+  const label = dialog.repositoryChip().textContent;
+  await dialog.create("Tmp");
+
+  assert.equal(label, "No repository");
+  assert.deepEqual(dialog.starts, [[null, PERSONAL.id]]);
+});
+
+test("switching New plan to a workspace with no GitHub connected lets the other workspace's repository go and offers none of its own", async () => {
+  const dialog = await openNewPlan(ACME.id);
+  const before = dialog.repositoryChip().textContent;
+
+  const workspaceChip =
+    document.querySelector<HTMLButtonElement>('[aria-label="Workspace: Acme"]') ??
+    assert.fail("the title's workspace is a chip");
+  act(() => workspaceChip.click());
+  const personal = [
+    ...document.querySelectorAll<HTMLButtonElement>('[role="menuitemcheckbox"]'),
+  ].find((item) => item.textContent?.endsWith("Personal"));
+  act(() => personal?.click());
+  await settle();
+  act(() => dialog.repositoryChip().click());
+  await settle();
+  const offered = [...document.querySelectorAll("button")].map((button) => button.textContent);
+  const note = document.querySelector(".plan-compose-menu-note")?.textContent;
+  const after = dialog.repositoryChip().textContent;
+  await dialog.create("Tmp");
+
+  assert.deepEqual([before, after], ["acme-corp/relay", "No repository"]);
+  assert.equal(offered.includes("acme-corp/relay"), false);
+  assert.equal(note, "Personal has no GitHub connected yet.");
+  assert.deepEqual(dialog.starts, [[null, PERSONAL.id]]);
 });

@@ -231,3 +231,70 @@ test("a refused move keeps the dialog up, saying so under the list", async () =>
     "The plan could not be moved. Try again.",
   );
 });
+
+/** Mounts the open plan's page, its menu left closed. */
+function openPlan(plans: PlansControl): HTMLElement {
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  act(() =>
+    root.render(createElement(DesktopPlans, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, plans })),
+  );
+  return container;
+}
+
+/** The banner over a stranded plan's document, where one stands. */
+function strandedBanner(within: HTMLElement): HTMLElement | null {
+  return within.querySelector<HTMLElement>(".stranded-plan-banner");
+}
+
+test("a plan whose repository its workspace cannot reach and another of the account's can says which, and its press moves it there through the move's dialog", async () => {
+  const moves: [string, string][] = [];
+  const page = openPlan(
+    openTab(PLAN, [STUDIO, NORTHWIND, ACME], (planId, workspaceId) => {
+      moves.push([planId, workspaceId]);
+      return Promise.resolve(true);
+    }),
+  );
+  const banner = strandedBanner(page) ?? assert.fail("the stranded plan says so");
+  const title = document.getElementById(banner.getAttribute("aria-labelledby") ?? "");
+  assert.equal(title?.textContent, "This plan's repository belongs to Acme");
+  assert.equal(
+    banner.querySelector(".document-banner-detail")?.textContent,
+    "Studio can't reach acme-corp/relay, so agents can't start on it here.",
+  );
+  for (const element of [banner, ...banner.querySelectorAll("*")]) {
+    for (const attribute of element.attributes) {
+      assert.doesNotMatch(attribute.value, /Acme|Studio|acme-corp/u, attribute.name);
+    }
+  }
+
+  act(() => button(banner, "Move to Acme…").click());
+  const moving = dialog() ?? assert.fail("the press opens Move to workspace…");
+  assert.equal(
+    moving.querySelector('[aria-checked="true"]')?.textContent?.includes("Acme"),
+    true,
+    "the dialog opens on the workspace that reaches the repository",
+  );
+  act(() => button(moving, "Move to Acme").click());
+  await settle();
+
+  assert.deepEqual(moves, [[PLAN.id, ACME.id]]);
+});
+
+test("no banner stands over a plan its own workspace reaches, one no other workspace reaches, one with no repository, or a teammate's", () => {
+  const cases: [Plan, readonly Workspace[]][] = [
+    [{ ...PLAN, workspaceId: ACME.id }, [STUDIO, ACME]],
+    [PLAN, [STUDIO, NORTHWIND, OCTO]],
+    [{ ...PLAN, repository: null }, [STUDIO, ACME]],
+    [{ ...PLAN, ownerId: SAM }, [STUDIO, ACME]],
+  ];
+  const banners = cases.map(([plan, workspaces]) => {
+    const page = openPlan(openTab(plan, workspaces));
+    const found = strandedBanner(page) !== null;
+    unmountAll();
+    return found;
+  });
+
+  assert.deepEqual(banners, [false, false, false, false]);
+});

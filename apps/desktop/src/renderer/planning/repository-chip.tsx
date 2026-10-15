@@ -25,7 +25,11 @@ import { useDisclosure } from "../use-disclosure";
  * hung from the toolbar. Its menu is the shared searchable one: a search over every
  * repository the GitHub connected to the workspace reaches, the
  * repositories the account's plans were about lately first and the rest as
- * GitHub last saw them change, each under its owner's picture. With no
+ * GitHub last saw them change, each under its owner's picture. Nothing the
+ * workspace's GitHub does not reach is offered, so a plan never starts on
+ * a repository its workspace cannot work in; a pick the read finds out of
+ * reach is handed back, and with nothing to offer the chip reads No
+ * repository, which a plan can start with. With no
  * GitHub connected to the workspace, the menu says so in the list's place:
  * an owner or an admin is offered Open Settings at the workspace's GitHub
  * repositories, the one place they are set, and a member is told to ask
@@ -73,6 +77,9 @@ const PLACE_LOOK = {
 /** The chip's words while it waits on a pick. */
 const CHOOSE_LABEL = "Choose repository";
 
+/** The chip's words where the workspace's GitHub reaches nothing to pick. */
+const NONE_LABEL = "No repository";
+
 /** What the menu says in the list's place. */
 const MENU_NOTE = {
   NONE_REACHED: "Luke can't see any repository yet.",
@@ -84,19 +91,26 @@ const MENU_NOTE = {
   NO_MATCH: "No repositories match",
 } as const;
 
+/** Whether the read's repositories hold one, as GitHub spells it or not. */
+function listedIn(reached: readonly GitHubRepository[], repository: string): boolean {
+  const wanted = repository.toLowerCase();
+  return reached.some((each) => each.fullName.toLowerCase() === wanted);
+}
+
 /**
  * The menu's rows: the recent repositories first, then every other the App
  * reaches as the service ordered them, most recently updated first, each
- * once, every one under its owner's picture whether private or not. A recent
- * repository the App no longer reaches is still offered, since the plan it
- * came from still names it.
+ * once, every one under its owner's picture whether private or not. Once
+ * the read has answered, a recent repository it does not list is left out,
+ * because a plan started on it would be refused.
  */
 function repositoryRows(
   recent: readonly string[],
   reached: readonly GitHubRepository[] | undefined,
   pictures: boolean,
 ): MenuRow[] {
-  const names = [...recent];
+  const names =
+    reached === undefined ? [...recent] : recent.filter((each) => listedIn(reached, each));
   for (const each of reached ?? []) {
     if (!names.includes(each.fullName)) names.push(each.fullName);
   }
@@ -118,11 +132,13 @@ export function RepositoryChip(props: {
   value: string | null;
   chooser: RepositoryChooser;
   onChoose: (repository: string) => void;
+  /** Lets go of a pick the read finds the workspace's GitHub does not reach, where the pick is the chip's own to drop. */
+  onUnreached?: (() => void) | undefined;
   /** Counts the asks from elsewhere to open the menu, each opening it. */
   openRequest?: number | undefined;
   place: ChipPlace;
 }): React.JSX.Element {
-  const { chooser, openRequest } = props;
+  const { chooser, openRequest, onUnreached, value } = props;
   const openSettings = useOpenSettings();
   const [open, setOpen] = useState(false);
   const drawn = useDisclosure(open);
@@ -173,13 +189,17 @@ export function RepositoryChip(props: {
 
   const listed = list !== undefined && "repositories" in list ? list.repositories : undefined;
   const failure = list !== undefined && "failure" in list ? list.failure : undefined;
+  // A pick the read does not list is handed back, so nothing out of reach stands chosen.
+  const unreached = value !== null && listed !== undefined && !listedIn(listed.repositories, value);
+  useEffect(() => {
+    if (unreached) onUnreached?.();
+  }, [unreached, onUnreached]);
   // No GitHub connected is mended at the workspace's Integrations.
   const workspaceGitHub: SettingsLink = {
     page: SETTINGS_VIEW.WORKSPACE,
     section: SETTINGS_SECTION.GITHUB_REPOSITORIES,
     ...(chooser.scope === undefined ? undefined : { workspaceId: chooser.scope }),
   };
-  const label = props.value ?? CHOOSE_LABEL;
   const press = () => {
     opener.current = trigger.current;
     setOpen(!open);
@@ -191,6 +211,8 @@ export function RepositoryChip(props: {
   const rows = repositoryRows(chooser.recent, listed?.repositories, chooser.pictures).map((row) =>
     chooser.source === undefined ? row : { ...row, section: chooser.source },
   );
+  const label =
+    props.value ?? (rows.length === 0 && listed !== undefined ? NONE_LABEL : CHOOSE_LABEL);
   const note =
     failure !== undefined ? (
       <>

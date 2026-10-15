@@ -50,6 +50,7 @@ import {
   unsettledMarks,
   unsettledRenames,
   unsettledRepositoryPins,
+  workspaceReaches,
 } from "@luke/ui/planning-model";
 import {
   isAgentTab,
@@ -1376,23 +1377,29 @@ export function usePlansTab(input: {
   const openGitHub = (url: string) => tell(ACT_KIND.GITHUB_OPEN, { url });
   /**
    * The repository chip's list for one workspace: the repositories its plans
-   * were about lately, newest first, so a plan never starts on another
-   * workspace's; a read of every repository its GitHub reaches; where they
+   * were about lately that its GitHub reaches, newest first, so a plan never
+   * starts on another workspace's nor on one a plan stranded there by #2524
+   * still names; a read of every repository its GitHub reaches; where they
    * come from, which the list's heading says; and whether the account
    * manages it, so can connect its GitHub. A workspace not yet read is taken
-   * as managed, so the chip still points somewhere.
+   * as managed, so the chip still points somewhere, and its recent
+   * repositories are left to the service's read to judge.
    */
   const repositoriesIn = (workspaceId: string | undefined): RepositoryChooser => {
     const workspace = viewed.workspaces.find((each) => each.id === workspaceId);
+    const recent = recentRepositories(
+      workspaceId === undefined
+        ? planning.plans
+        : planning.plans.filter((plan) => plan.workspaceId === workspaceId),
+    );
     return {
-      recent: recentRepositories(
-        workspaceId === undefined
-          ? planning.plans
-          : planning.plans.filter((plan) => plan.workspaceId === workspaceId),
-      ),
+      recent:
+        workspace === undefined
+          ? recent
+          : recent.filter((repository) => workspaceReaches(workspace, repository)),
       read: () =>
         fixture !== undefined
-          ? Promise.resolve(fixtureRepositories())
+          ? Promise.resolve(fixtureRepositories(workspaceId))
           : act(
               ACT_KIND.PLANNING_REPOSITORIES,
               workspaceId === undefined ? {} : { workspaceId },
