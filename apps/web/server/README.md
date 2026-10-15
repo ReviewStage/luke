@@ -473,6 +473,10 @@ the document), so a rewrite reaches only the reads of what it rewrote.
 
 `server/runtime.ts` holds the one `ManagedRuntime` this app has, memoized at
 module scope, and `runWeb(effect)` is the only place `apps/web` runs an effect.
+The layer it builds, `webServices`, is `@luke/service/runtime`'s, which runs
+nothing; each eve root builds its own runtime over the same layer in its own
+`runtime.ts` and runs through its `runAgent`, so no agent file reaches into
+`server/`.
 Vercel keeps a warm instance's module registry between invocations, so the
 first invocation of a cold start builds the layer and every later one on that
 instance reuses the services it built; a runtime built where the work lives
@@ -485,8 +489,7 @@ The layer carries what a Vercel function's own platform already offers: an
 the database `DATABASE_URL` names. `@effect/platform-node` is not on it, and
 `repository-checks.sh` refuses that specifier and `effect/sql` in the
 renderer, where there is no Node; a function inlines its whole graph and the
-isolation guard proves it loads. The layer itself is behind
-`server/`, which is what the builder traces. A function is handed no shutdown
+isolation guard proves it loads. A function is handed no shutdown
 hook — an instance is frozen between invocations and discarded without notice —
 so nothing in production disposes the runtime; `disposeWebRuntime()` exists so a
 test can end the one it started.
@@ -714,7 +717,7 @@ that fails stops the deployment. The running
 service needs the GitHub App's five variables and `BETTER_AUTH_SECRET` as the
 web functions do: `run_in_repository`'s checkout confirms the plan's
 repository is reachable and mints its token through `GitHubApp`, which the
-shared runtime builds from them (`server/runtime.ts`,
+shared layer builds from them (`@luke/service/runtime`,
 `githubAppFromEnvironment`), the session secret being what the account's
 user token is sealed under.
 

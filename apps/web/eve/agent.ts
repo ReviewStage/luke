@@ -4,8 +4,8 @@ import { scriptedModel } from "@luke/service/testing/eve-scripted-model";
 import { Result } from "effect";
 import { defineAgent, defineDynamic } from "eve";
 import type { SessionAuth } from "eve/context";
-import { runWeb } from "../server/runtime.js";
 import { host, seams } from "./host.js";
+import { runAgent } from "./runtime.js";
 
 /**
  * Luke's judgment on the hosted tier, as an eve agent. eve ships a default
@@ -41,7 +41,7 @@ export function brainModel(admit: Admission) {
             modelContextWindowTokens: BRAIN_HOST.MODEL_CONTEXT_WINDOW_TOKENS,
           };
         }
-        const admitted = await runWeb(admit(ctx.session.auth, ctx.session.id));
+        const admitted = await runAgent(admit(ctx.session.auth, ctx.session.id));
         if (Result.isFailure(admitted)) throw new Error(admitted.failure);
         if (host.turnKindOf(ctx.session.auth) === undefined) {
           throw new Error(BRAIN_HOST_REFUSAL.NO_TURN_KIND);

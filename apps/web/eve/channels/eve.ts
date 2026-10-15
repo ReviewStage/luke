@@ -3,8 +3,8 @@ import { brainHostChannelInput, DEPLOYMENT_TURNS } from "@luke/service/agents/br
 import { hostedUserId } from "@luke/service/auth/bearer";
 import { Effect, Option } from "effect";
 import { eveChannel } from "eve/channels/eve";
-import { runWeb } from "../../server/runtime.js";
 import { seams } from "../host.js";
+import { runAgent } from "../runtime.js";
 
 /**
  * The bearer's account, resolved as an effect and run once here: eve's door
@@ -13,7 +13,7 @@ import { seams } from "../host.js";
  * the resolution for eve's sake.
  */
 const resolveUserId = (request: Request): Promise<string | undefined> =>
-  runWeb(Effect.map(hostedUserId(request, seams.userInfo), Option.getOrUndefined));
+  runAgent(Effect.map(hostedUserId(request, seams.userInfo), Option.getOrUndefined));
 
 /** The one door into the hosted brain: eve's own HTTP API under the host's auth and queue policy. */
 export default eveChannel(

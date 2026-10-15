@@ -14,8 +14,8 @@ import { Effect, Redacted, Result } from "effect";
 import { defineState } from "eve/context";
 import { authenticateGitHub } from "eve/extensions/code/sandbox";
 import { defineHook, type HookContext } from "eve/hooks";
-import { runWeb } from "../../server/runtime.js";
 import { host, seams } from "../host.js";
+import { runAgent } from "../runtime.js";
 import { environment } from "../sandbox.js";
 import { sandboxRecord, sessionPrompt } from "../session-prompt.js";
 
@@ -56,7 +56,7 @@ function describeRefusal(failure: CheckoutFailure): string {
 
 /** The branch checked out as the turn ends, written on the agent's row; an admission that fails is logged, and the host logs its own failures, so the stop that follows is never skipped. */
 async function recordBranch(ctx: HookContext, sandbox: RepositorySandbox): Promise<void> {
-  await runWeb(
+  await runAgent(
     Effect.gen(function* () {
       const admitted = yield* host.admit(ctx.session.auth, ctx.session.id);
       if (Result.isFailure(admitted)) return;
@@ -73,7 +73,7 @@ async function recordBranch(ctx: HookContext, sandbox: RepositorySandbox): Promi
 
 /** Whether a developer's terminal holds the sandbox as the turn ends; a session the host does not admit, and a read that fails, hold nothing. */
 async function terminalHolds(ctx: HookContext): Promise<boolean> {
-  return runWeb(
+  return runAgent(
     Effect.gen(function* () {
       const admitted = yield* host.admit(ctx.session.auth, ctx.session.id);
       if (Result.isFailure(admitted)) return false;
@@ -97,7 +97,7 @@ async function renewCredential(
   record: ReturnType<typeof pinnedState<SandboxRecord>>,
   now: number,
 ): Promise<void> {
-  const minted = await runWeb(
+  const minted = await runAgent(
     Effect.gen(function* () {
       const admitted = yield* host.admit(ctx.session.auth, ctx.session.id);
       if (Result.isFailure(admitted)) return undefined;
@@ -139,7 +139,7 @@ export default defineHook({
           ? await ctx.getSandbox()
           : undefined;
       if (ending !== undefined) await recordBranch(ctx, ending);
-      await runWeb(
+      await runAgent(
         Effect.gen(function* () {
           if (event.type === "session.started") {
             const starting = yield* host.admitStarting(ctx.session.auth, ctx.session.id);

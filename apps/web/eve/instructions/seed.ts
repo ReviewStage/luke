@@ -1,7 +1,7 @@
 import { Effect, Result } from "effect";
 import { defineDynamic, defineInstructions } from "eve/instructions";
-import { runWeb } from "../../server/runtime.js";
 import { host } from "../host.js";
+import { runAgent } from "../runtime.js";
 
 /**
  * The conversation so far, for a session opened over a conversation that
@@ -12,7 +12,7 @@ import { host } from "../host.js";
 export default defineDynamic({
   events: {
     "session.started": (_event, ctx) =>
-      runWeb(
+      runAgent(
         Effect.gen(function* () {
           const admitted = yield* host.admitStarting(ctx.session.auth, ctx.session.id);
           if (Result.isFailure(admitted)) return null;

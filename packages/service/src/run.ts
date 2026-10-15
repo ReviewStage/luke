@@ -1,8 +1,8 @@
 /**
  * run.ts -- the runners a service module is handed by the deployment's edge.
  *
- * The edge itself, `apps/web/server/runtime.ts`, builds the runtime and holds
- * `runWeb`; a module here names only the shape of what it is handed, so it
+ * The edge itself, `apps/web/server/runtime.ts` (or an eve root's own
+ * `runtime.ts`), builds the runtime and holds `runWeb` (or `runAgent`); a module here names only the shape of what it is handed, so it
  * never imports the edge and the database driver the edge's layer carries.
  */
 
@@ -31,7 +31,7 @@ export type WebAgentServices =
 
 /**
  * The edge's own runner as an eve root's doors are handed one, on the same
- * terms as `WebStoreRun`: the root's `host.ts` hands it `runWeb`, and a test
+ * terms as `WebStoreRun`: the root's `host.ts` hands it `runAgent`, and a test
  * the runner over its own test database and fakes of the rest.
  */
 export type WebAgentRun = <A, E>(effect: Effect.Effect<A, E, WebAgentServices>) => Promise<A>;

@@ -178,6 +178,7 @@
     "./providers/provider-key-check": "./src/providers/provider-key-check.js",
     "./route": "./src/route.js",
     "./run": "./src/run.js",
+    "./runtime": "./src/runtime.js",
     "./terminal/production": "./src/terminal/production.js",
     "./terminal/relay": "./src/terminal/relay.js",
     "./terminal/service": "./src/terminal/service.js",

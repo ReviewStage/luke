@@ -1,8 +1,8 @@
 import { pinnedState } from "@luke/service/agents/brain-host/pinned-state";
 import { Effect, Result } from "effect";
 import { defineDynamic, defineInstructions } from "eve/instructions";
-import { runWeb } from "../../server/runtime.js";
 import { host } from "../host.js";
+import { runAgent } from "../runtime.js";
 import { sessionPrompt } from "../session-prompt.js";
 
 /**
@@ -24,7 +24,7 @@ export default defineDynamic({
       // admission is read, and a statement can hand the fiber back in another
       // session's context (`packages/service/src/agents/brain-host/pinned-state.ts`).
       const prompt = pinnedState(sessionPrompt);
-      return runWeb(
+      return runAgent(
         Effect.gen(function* () {
           const admitted = yield* host.admitStarting(ctx.session.auth, ctx.session.id);
           if (Result.isFailure(admitted)) return null;
@@ -37,7 +37,7 @@ export default defineDynamic({
       );
     },
     "turn.started": (_event, ctx) =>
-      runWeb(
+      runAgent(
         Effect.gen(function* () {
           const admitted = yield* host.admit(ctx.session.auth, ctx.session.id);
           if (Result.isFailure(admitted)) return null;
