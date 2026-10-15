@@ -1,4 +1,4 @@
-import { resolveHostedUserId } from "@luke/service/auth/bearer";
+import { resolveHostedUserId } from "../auth/bearer.js";
 import {
   beginIntegrationSignIn,
   completeIntegrationSignIn,
@@ -6,14 +6,14 @@ import {
   endIntegrationSignIn,
   readIntegrationConnections,
   readIntegrationSignIn,
-} from "@luke/service/integrations/integration-store";
-import type { IntegrationsAppSeams } from "../integrations-app.js";
-import { mintIntegrationState } from "../integrations-app.js";
+} from "./integration-store.js";
+import type { IntegrationsAppSeams } from "./integrations-app.js";
+import { mintIntegrationState } from "./integrations-app.js";
 
 /**
  * integration-seams.ts -- the integrations group's seams over this deployment's real database and auth session.
  *
- * `server/integrations-app.ts` describes the endpoints; this is the one
+ * `integrations/integrations-app.ts` describes the endpoints; this is the one
  * place that hands them the real connection rows and the real bearer
  * resolver, so every `routes/account/integrations*` function builds the
  * group from the same wiring. Vercel Connect itself is `IntegrationConnect`,

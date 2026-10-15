@@ -1,11 +1,11 @@
 import type { StoredAgentStep } from "@luke/database/schemas/coding-agent";
 import { RUN_ON_MAC_TOOL } from "@luke/service/agents/mac-command";
+import { READ_WEB_PAGE_TOOL, SEARCH_WEB_TOOL } from "@luke/service/agents/public-research";
 import { SHOW_PAGE_TOOL } from "@luke/service/plans/page-tool";
 import { emitJsonSchema } from "@luke/wire/effect";
 import type { MessageStreamEvent } from "eve/client";
 import { serializeModelInputSchema, type ToolDefinition } from "eve/tools";
 import loadSkill from "eve/tools/load_skill";
-import { READ_WEB_PAGE_TOOL, SEARCH_WEB_TOOL } from "../public-research.js";
 import { CODER } from "./bounds.js";
 import { DELEGATE_TOOL } from "./delegation.js";
 import { applyPatchIn, globIn, grepIn, readFileIn, writeFileIn } from "./files.js";

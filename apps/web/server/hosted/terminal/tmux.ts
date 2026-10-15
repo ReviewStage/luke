@@ -21,11 +21,11 @@
  */
 
 import type { TerminalSummary } from "@luke/features/terminal-wire";
+import { REPOSITORY_SANDBOX_CONTRACT } from "@luke/service/agents/repository-shell";
 import type { CommandAsk, CommandRun } from "@luke/service/agents/vercel-sandbox-api";
 import { unparsedWire, wireUuidSchema } from "@luke/service/core";
 import { readEither } from "@luke/wire/effect";
 import { Result } from "effect";
-import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-shell.js";
 
 export const TMUX = {
   /** What a Terminal tab's session names start with; the rest is the shell's id. */

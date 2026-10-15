@@ -1,5 +1,6 @@
 import { AGENT_ROLE } from "@luke/service/agents/agent-runtime/role";
 import { pinnedState } from "@luke/service/agents/brain-host/pinned-state";
+import type { RepositorySandbox } from "@luke/service/agents/repository-shell";
 import { Effect, Redacted, Result } from "effect";
 import { defineState } from "eve/context";
 import { authenticateGitHub } from "eve/extensions/code/sandbox";
@@ -13,7 +14,6 @@ import {
 import { EMPTY_RELAY_STATE, type RelayState } from "../../server/hosted/brain-host/relay.js";
 import type { CheckoutFailure } from "../../server/hosted/coder-host/host.js";
 import { opensSandbox } from "../../server/hosted/coder-host/tool-set.js";
-import type { RepositorySandbox } from "../../server/hosted/repository-shell.js";
 import { runWeb } from "../../server/runtime.js";
 import { host, seams } from "../host.js";
 import { environment } from "../sandbox.js";

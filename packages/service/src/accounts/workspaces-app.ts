@@ -29,16 +29,23 @@ import {
   workspaceLeaveRequestSchema,
   workspaceMemberRemovalSchema,
 } from "@luke/features/workspace-wire";
-import { listMembers, memberIdOf } from "@luke/service/accounts/workspace-members";
-import { unparsedWire } from "@luke/service/core";
-import { GitHubApp } from "@luke/service/github/github-app";
+import { readEither } from "@luke/wire/effect";
+import { type Cause, Clock, Effect, Layer, Option, Result } from "effect";
+import {
+  type HttpClient,
+  HttpRouter,
+  HttpServerRequest,
+  type HttpServerResponse,
+} from "effect/http";
+import { unparsedWire } from "../core.js";
+import { GitHubApp } from "../github/github-app.js";
 import {
   createConnectIntent,
   disconnectInstallation,
   GITHUB_CONNECT_ROLES,
-} from "@luke/service/github/github-installations";
-import { logGitHubReadFailure } from "@luke/service/github/github-refusal";
-import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
+} from "../github/github-installations.js";
+import { logGitHubReadFailure } from "../github/github-refusal.js";
+import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
   HOSTED_REFUSAL,
   type HostedRefusal,
@@ -49,17 +56,10 @@ import {
   readJsonBodyEffect,
   type SessionUserIdResolver,
   type UserIdResolver,
-} from "@luke/service/http/http-effect";
-import type { StoreFailure } from "@luke/service/http/store-failure";
-import { ANY_METHOD, type WebRoutes } from "@luke/service/route";
-import { readEither } from "@luke/wire/effect";
-import { type Cause, Clock, Effect, Layer, Option, Result } from "effect";
-import {
-  type HttpClient,
-  HttpRouter,
-  HttpServerRequest,
-  type HttpServerResponse,
-} from "effect/http";
+} from "../http/http-effect.js";
+import type { StoreFailure } from "../http/store-failure.js";
+import { ANY_METHOD, type WebRoutes } from "../route.js";
+import { listMembers, memberIdOf } from "./workspace-members.js";
 
 /**
  * workspaces-app.ts -- the account's workspaces as the Mac reads and asks for them: the list, a workspace created, a GitHub organization connected or disconnected, and its members read, removed, or left.

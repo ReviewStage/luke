@@ -6,13 +6,15 @@ import {
   type PlanFileRefusal,
   type PlanFileRequest,
 } from "@luke/features/plan-wire";
+import { Effect, Option } from "effect";
+import type * as HttpClient from "effect/http/HttpClient";
 import {
   GitHubApp,
   type GitHubRepositoryToken,
   type GitHubWorkspaceReadFailure,
-} from "@luke/service/github/github-app";
-import { logGitHubReadFailure, logWorkspaceReadFailure } from "@luke/service/github/github-refusal";
-import { readBranchHead, readRepositoryFile } from "@luke/service/github/repository-file";
+} from "../github/github-app.js";
+import { logGitHubReadFailure, logWorkspaceReadFailure } from "../github/github-refusal.js";
+import { readBranchHead, readRepositoryFile } from "../github/repository-file.js";
 import {
   fileLines,
   holdsNul,
@@ -21,9 +23,7 @@ import {
   type ShownFileRefusal,
   shownFileRefusal,
   shownLine,
-} from "@luke/service/plans/shown-file";
-import { Effect, Option } from "effect";
-import type * as HttpClient from "effect/http/HttpClient";
+} from "./shown-file.js";
 
 /**
  * plan-file.ts -- a whole file of a plan's repository for the Mac's File tab, read a window at a time from GitHub as it stands now or at a commit.

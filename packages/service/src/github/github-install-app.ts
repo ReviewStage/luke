@@ -46,12 +46,17 @@ import {
   githubInstallLandingPath,
   HOSTED_SERVICE_PATH,
 } from "@luke/features";
+import { generateRandomString } from "better-auth/crypto";
+import { Effect, Layer, Option } from "effect";
+import { type HttpClient, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
+import { hostedNotFoundRoute } from "../http/http-effect.js";
+import { ANY_METHOD, type WebRoutes } from "../route.js";
 import {
   GitHubApp,
   type GitHubAuthorizeReturn,
   type GitHubReadFailure,
   type GitHubWorkspaceReadFailure,
-} from "@luke/service/github/github-app";
+} from "./github-app.js";
 import {
   type ConnectedInstallation,
   GITHUB_CONNECT_ROLES,
@@ -59,13 +64,8 @@ import {
   linkInstallation,
   recordConnectAuthorization,
   spendConnectIntent,
-} from "@luke/service/github/github-installations";
-import { logGitHubReadFailure, logWorkspaceReadFailure } from "@luke/service/github/github-refusal";
-import { hostedNotFoundRoute } from "@luke/service/http/http-effect";
-import { ANY_METHOD, type WebRoutes } from "@luke/service/route";
-import { generateRandomString } from "better-auth/crypto";
-import { Effect, Layer, Option } from "effect";
-import { type HttpClient, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
+} from "./github-installations.js";
+import { logGitHubReadFailure, logWorkspaceReadFailure } from "./github-refusal.js";
 
 /** The query GitHub puts on the Setup URL. */
 const SETUP_QUERY = {

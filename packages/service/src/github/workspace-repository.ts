@@ -21,18 +21,18 @@ import type { CodingAgent } from "@luke/database/models/coding-agent-store";
 import { readPlan } from "@luke/database/models/plan-store";
 import { isWorkspaceMember } from "@luke/database/models/workspace-store";
 import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
-import type { GitHubRepository } from "@luke/service/core";
-import { GitHubApp } from "@luke/service/github/github-app";
-import { memberWorkspaceOnOwner } from "@luke/service/github/github-installations";
-import { githubReachOrRefusal, logWorkspaceReadFailure } from "@luke/service/github/github-refusal";
+import { Effect, Option, Result } from "effect";
+import type * as HttpClient from "effect/http/HttpClient";
+import type { GitHubRepository } from "../core.js";
 import {
   type HostedRefusal,
   hostedStoreOrUnavailable,
   repositoryNotReachable,
-} from "@luke/service/http/http-effect";
-import type { StoreFailure } from "@luke/service/http/store-failure";
-import { Effect, Option, Result } from "effect";
-import type * as HttpClient from "effect/http/HttpClient";
+} from "../http/http-effect.js";
+import type { StoreFailure } from "../http/store-failure.js";
+import { GitHubApp } from "./github-app.js";
+import { memberWorkspaceOnOwner } from "./github-installations.js";
+import { githubReachOrRefusal, logWorkspaceReadFailure } from "./github-refusal.js";
 
 /**
  * The workspace of a plan the account reaches, whose installation every

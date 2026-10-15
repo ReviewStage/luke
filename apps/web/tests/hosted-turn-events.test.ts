@@ -6,6 +6,10 @@ import { type ConversationTarget, storeWriter } from "@luke/database/models/writ
 import { insertConversation, openHostedStoreTestDatabase } from "@luke/database/testing";
 import { TURN_END, TURN_EVENT_KIND, TURN_SLOW_STEP, type TurnEvent } from "@luke/features";
 import { BRAIN_HOST_TURN } from "@luke/service/agents/brain-host/bounds";
+import {
+  REPOSITORY_SHELL_STATUS,
+  RUN_IN_REPOSITORY_TOOL,
+} from "@luke/service/agents/repository-shell";
 import { BRAIN_RUN_EVENT, SLOW_STEP_KIND } from "@luke/service/core";
 import { Effect } from "effect";
 import type { MessageStreamEvent } from "eve/client";
@@ -16,7 +20,6 @@ import {
   StreamRelay,
 } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
-import { REPOSITORY_SHELL_STATUS, RUN_IN_REPOSITORY_TOOL } from "../server/hosted/repository-shell";
 import { projectTurnEvents } from "../server/hosted/turn-events";
 import { stampedEveEvent } from "./support/eve-events";
 

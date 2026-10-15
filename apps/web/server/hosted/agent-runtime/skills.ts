@@ -17,12 +17,12 @@
 
 import type { DatabaseServices } from "@luke/database/core/query";
 import type { ConversationTarget } from "@luke/database/models/writer";
+import { type RepositorySkill, readRepositorySkills } from "@luke/service/agents/repository-skills";
 import { GitHubApp } from "@luke/service/github/github-app";
 import type { StoreFailure } from "@luke/service/http/store-failure";
 import { Effect, Option } from "effect";
 import type { HttpClient } from "effect/http";
 import { defineSkill } from "eve/skills";
-import { type RepositorySkill, readRepositorySkills } from "../repository-skills.js";
 
 /** One skill as eve is handed it: its name, the description it routes on, and the body `load_skill` answers. */
 export interface AgentSkill {

@@ -15,11 +15,14 @@
 
 import type { IntegrationProvider } from "@luke/features/integration-wire";
 import {
+  type IntegrationTokenRead,
+  integrationConnection,
+} from "@luke/service/integrations/integration-connection";
+import {
   defineDynamic,
   defineMcpClientConnection,
   type McpClientConnectionDefinition,
 } from "eve/connections";
-import { type IntegrationTokenRead, integrationConnection } from "../integration-connection.js";
 import type { ServerStandingRead } from "./servers.js";
 
 /** How one agent's edge reads what a turn is handed and each provider's token, under that agent's own admission. */

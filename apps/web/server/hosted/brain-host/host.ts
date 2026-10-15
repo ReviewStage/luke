@@ -25,6 +25,8 @@ import {
 } from "@luke/service/agents/brain-host/conversation";
 import { EVE_MOUNT, eveSessionsComposer } from "@luke/service/agents/brain-host/eve-sessions";
 import { rotationSeedText } from "@luke/service/agents/brain-host/seed";
+import { MeterUnavailable, ResearchBudget } from "@luke/service/agents/public-research";
+import type { RepositorySkill } from "@luke/service/agents/repository-skills";
 import {
   ACTION_RESULT_STATUS,
   type BrainTurnTrigger,
@@ -35,6 +37,7 @@ import {
   type WireRecord,
 } from "@luke/service/core";
 import type { GitHubApp } from "@luke/service/github/github-app";
+import { planWorkspace } from "@luke/service/github/workspace-repository";
 import { type ModelCatalog, providerModelOf } from "@luke/service/providers/model-catalog";
 import { isTextUIPart } from "ai";
 import { Effect, Option, Result, type Schema } from "effect";
@@ -47,9 +50,6 @@ import { type AgentSkill, repositorySkills } from "../agent-runtime/skills.js";
 import { HOSTED_TOOL_SET } from "../brain-tool-set.js";
 import type { CoderModelSelection } from "../coder-host/model.js";
 import { titleSubagent } from "../coder-host/title.js";
-import { MeterUnavailable, ResearchBudget } from "../public-research.js";
-import type { RepositorySkill } from "../repository-skills.js";
-import { planWorkspace } from "../workspace-repository.js";
 import { brainModelSelection } from "./model.js";
 import {
   EVE_DELEGATION_TOOL,

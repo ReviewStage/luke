@@ -37,27 +37,24 @@ import {
   type IntegrationProvider,
 } from "@luke/features/integration-wire";
 import { causeKind } from "@luke/runtime/effect";
-import type { ConversationAdmission } from "@luke/service/agents/brain-host/conversation";
-import type { GitHubApp } from "@luke/service/github/github-app";
-import {
-  GITHUB_GRANT_REFUSAL,
-  githubSignInGrant,
-} from "@luke/service/integrations/github-integration";
-import {
-  accountIntegrationConnect,
-  INTEGRATION_CONNECT_FAILURE,
-  type IntegrationConnect,
-} from "@luke/service/integrations/integration-connect";
-import {
-  expireIntegrationConnection,
-  INTEGRATION_ROW_STATUS,
-  readIntegrationConnection,
-} from "@luke/service/integrations/integration-store";
-import { INTEGRATION, type IntegrationDefinition } from "@luke/service/integrations/integrations";
 import { Effect, Redacted, Result, type Schema } from "effect";
 import type { HttpClient } from "effect/http";
 import { defineMcpClientConnection, type McpClientConnectionDefinition } from "eve/connections";
 import type { SessionAuth } from "eve/context";
+import type { ConversationAdmission } from "../agents/brain-host/conversation.js";
+import type { GitHubApp } from "../github/github-app.js";
+import { GITHUB_GRANT_REFUSAL, githubSignInGrant } from "./github-integration.js";
+import {
+  accountIntegrationConnect,
+  INTEGRATION_CONNECT_FAILURE,
+  type IntegrationConnect,
+} from "./integration-connect.js";
+import {
+  expireIntegrationConnection,
+  INTEGRATION_ROW_STATUS,
+  readIntegrationConnection,
+} from "./integration-store.js";
+import { INTEGRATION, type IntegrationDefinition } from "./integrations.js";
 
 /** Why a provider's call ran nothing, in words the model can act on and say. */
 interface UnavailableSentences {

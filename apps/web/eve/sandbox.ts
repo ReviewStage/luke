@@ -7,7 +7,7 @@ import { environment, openSandbox } from "../server/hosted/agent-runtime/sandbox
  *
  * The planning model is offered none of eve's own sandbox tools
  * (`defaultTools: false` in `agent.ts`); the sandbox is reached through the
- * one hosted tool that reads code (`server/hosted/repository-shell.ts`),
+ * one hosted tool that reads code (`packages/service/src/agents/repository-shell.ts`),
  * which eve hands the session's sandbox as the tool runs. The sandbox is
  * opened on the first call that needs it and kept for the session across
  * turns, so the checkout the first call makes is what later calls read; a

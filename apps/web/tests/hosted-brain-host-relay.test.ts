@@ -12,6 +12,10 @@ import {
 } from "@luke/database/testing";
 import { BRAIN_HOST_TURN, type BrainHostTurn } from "@luke/service/agents/brain-host/bounds";
 import {
+  REPOSITORY_SHELL_STATUS,
+  RUN_IN_REPOSITORY_TOOL,
+} from "@luke/service/agents/repository-shell";
+import {
   ASK_ORIGIN,
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
@@ -32,7 +36,6 @@ import {
   StreamRelay,
 } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
-import { REPOSITORY_SHELL_STATUS, RUN_IN_REPOSITORY_TOOL } from "../server/hosted/repository-shell";
 import { stampedEveEvent } from "./support/eve-events";
 import { spokenTurn } from "./support/eve-turns";
 

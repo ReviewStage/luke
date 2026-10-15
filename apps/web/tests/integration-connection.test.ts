@@ -19,6 +19,12 @@ import {
   vercelConnector,
 } from "@luke/service/integrations/integration-connect";
 import {
+  type IntegrationAdmission,
+  integrationAccessToken,
+  integrationConnection,
+  integrationUnavailable,
+} from "@luke/service/integrations/integration-connection";
+import {
   beginIntegrationSignIn,
   completeIntegrationSignIn,
 } from "@luke/service/integrations/integration-store";
@@ -27,6 +33,10 @@ import {
   openGithubUser,
   standingGithubRow,
 } from "@luke/service/testing/github-app-fake";
+import {
+  CONNECTOR_ASKED_NOTHING,
+  integrationConnectOf,
+} from "@luke/service/testing/integration-connect";
 import { noNetwork } from "@luke/service/testing/no-network";
 import { ConnectError } from "@vercel/connect";
 import { eq } from "drizzle-orm";
@@ -35,13 +45,6 @@ import type { SessionAuth, SessionAuthContext } from "eve/context";
 import { test } from "vitest";
 import { type BrainHost, brainHost } from "../server/hosted/brain-host/host";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
-import {
-  type IntegrationAdmission,
-  integrationAccessToken,
-  integrationConnection,
-  integrationUnavailable,
-} from "../server/hosted/integration-connection";
-import { CONNECTOR_ASKED_NOTHING, integrationConnectOf } from "./support/integration-connect";
 
 /**
  * The one connection per integration all four agents register, through the

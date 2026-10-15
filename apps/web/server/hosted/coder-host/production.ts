@@ -8,6 +8,11 @@ import {
   conversationReachableBy,
   runtimeSessionReachableBy,
 } from "@luke/service/agents/brain-host/conversation";
+import {
+  MeterUnavailable,
+  type ResearchAccess,
+  researchOpenAiOf,
+} from "@luke/service/agents/public-research";
 import { auth } from "@luke/service/auth/auth";
 import { oauthUserInfoFromAuthAnswer, type UserInfoEndpoint } from "@luke/service/auth/bearer";
 import { unparsedWire, type WireBoundaryInput } from "@luke/service/core";
@@ -16,7 +21,6 @@ import type { WebStoreRun } from "@luke/service/run";
 import type { LanguageModel } from "ai";
 import { Effect, type Redacted } from "effect";
 import type { SessionOwnership } from "../brain-host/door.js";
-import { MeterUnavailable, type ResearchAccess, researchOpenAiOf } from "../public-research.js";
 import { accountProviderKeys } from "./account-keys.js";
 import { CODER_ENVIRONMENT, CODER_MODEL_FIXTURE } from "./bounds.js";
 import { type LukeKeys, type ProviderKeys, titleModel } from "./model.js";

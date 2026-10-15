@@ -27,6 +27,7 @@ import {
 } from "@luke/service/agents/brain-host/eve-sessions";
 import { mentionedContext, mentionedServers } from "@luke/service/agents/mentioned-context";
 import type { GitHubApp } from "@luke/service/github/github-app";
+import { workspaceRepository } from "@luke/service/github/workspace-repository";
 import {
   HOSTED_REFUSAL,
   type HostedRefusal,
@@ -40,7 +41,6 @@ import {
 } from "@luke/service/providers/model-catalog";
 import { Effect, Option } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
-import { workspaceRepository } from "../workspace-repository.js";
 import { anthropicFastAccess } from "./account-keys.js";
 
 /**
@@ -54,7 +54,7 @@ import { anthropicFastAccess } from "./account-keys.js";
  * the voice tool can say which choices there are. The plan must name a
  * repository the account still reaches through the Luke GitHub App, and
  * through its workspace's installation where it has one, read now rather
- * than when the plan named it (`hosted/workspace-repository.ts`). The
+ * than when the plan named it (`packages/service/src/github/workspace-repository.ts`). The
  * agent and its conversation are made under the ask's key, and a retry
  * carrying the same key is the same agent and opens nothing again; a new
  * agent's eve session opens with the plan's document as the Markdown Copy

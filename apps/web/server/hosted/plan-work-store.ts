@@ -17,6 +17,7 @@ import {
   type PlanWorkAnswer,
 } from "@luke/features/planning-view";
 import { isStoredToolPart, storedToolName } from "@luke/service/core";
+import { SHOW_CODE_TOOL, shownCodeOf } from "@luke/service/plans/show-code";
 import { Effect, Option } from "effect";
 import {
   callsSendingToEarlierTasks,
@@ -28,7 +29,6 @@ import {
 import { PLANNER_DELEGATION_TOOLS } from "./brain-host/planning.js";
 import { HOSTED_TOOL_SET } from "./brain-tool-set.js";
 import { subagentRecordsByCall } from "./child-models.js";
-import { SHOW_CODE_TOOL, shownCodeOf } from "./show-code.js";
 
 /**
  * plan-work-store.ts -- a plan's Work tab read back from the record, a page of turns at a time, and every code Luke showed on it.

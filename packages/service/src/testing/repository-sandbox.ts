@@ -16,7 +16,7 @@ import {
   REPOSITORY_SANDBOX_CONTRACT,
   type RepositorySandbox,
   type RepositorySandboxDoor,
-} from "../../server/hosted/repository-shell";
+} from "../agents/repository-shell.js";
 
 /** One run as the sandbox saw it. */
 interface SandboxRun {

@@ -12,12 +12,25 @@ import {
   INTEGRATION_STATUS,
   integrationLandingPath,
 } from "@luke/features/integration-wire";
-import { GitHubApp } from "@luke/service/github/github-app";
-import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
+import type { WireBoundaryInput } from "@luke/wire";
+import { fakeHttpClientLayer } from "@luke/wire/testing";
+import { Clock, Effect, Layer, Option, Redacted } from "effect";
+import { type HttpClient, HttpRouter } from "effect/http";
+import { SqlClient } from "effect/sql";
+import { GitHubApp } from "../github/github-app.js";
+import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
-  CONNECT_SIGN_IN_RESULT,
-  type ConnectSignInResult,
-} from "@luke/service/integrations/integration-connect";
+  GITHUB_APP_SETTINGS,
+  openGithubUser,
+  standingGithubRow,
+} from "../testing/github-app-fake.js";
+import {
+  GRANTING_SIGN_IN_URL,
+  GRANTING_SIGN_IN_VERIFIER,
+  integrationConnectOver,
+} from "../testing/integration-connect.js";
+import { noNetwork } from "../testing/no-network.js";
+import { CONNECT_SIGN_IN_RESULT, type ConnectSignInResult } from "./integration-connect.js";
 import {
   beginIntegrationSignIn,
   completeIntegrationSignIn,
@@ -26,28 +39,12 @@ import {
   expireIntegrationConnection,
   readIntegrationConnections,
   readIntegrationSignIn,
-} from "@luke/service/integrations/integration-store";
-import {
-  GITHUB_APP_SETTINGS,
-  openGithubUser,
-  standingGithubRow,
-} from "@luke/service/testing/github-app-fake";
-import { noNetwork } from "@luke/service/testing/no-network";
-import type { WireBoundaryInput } from "@luke/wire";
-import { fakeHttpClientLayer } from "@luke/wire/testing";
-import { Clock, Effect, Layer, Option, Redacted } from "effect";
-import { type HttpClient, HttpRouter } from "effect/http";
-import { SqlClient } from "effect/sql";
+} from "./integration-store.js";
 import {
   type IntegrationsAppSeams,
   integrationsApp,
   mintIntegrationState,
-} from "../server/integrations-app";
-import {
-  GRANTING_SIGN_IN_URL,
-  GRANTING_SIGN_IN_VERIFIER,
-  integrationConnectOver,
-} from "./support/integration-connect";
+} from "./integrations-app.js";
 
 /**
  * The integrations an account is offered, as the integrations group answers
