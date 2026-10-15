@@ -2,12 +2,13 @@
  * call-card.tsx -- the standing call as a small card: its plan and status, Luke's mark, and its controls.
  *
  * One card, drawn in whichever one place the call is not otherwise on
- * screen: at the foot of a Luke window's sidebar while that window shows
- * anything but the call's plan, floating in the window's bottom-left corner
- * while the sidebar is folded, and alone in the floating window while no
- * Luke window has the keyboard. It carries no words of the conversation, and
- * every press is an act main validates and hands to the voice window, which
- * holds the call.
+ * screen: at the foot of the column standing at a Luke window's left while
+ * that window shows anything but the call's plan, the plans' sidebar,
+ * Settings' page list, and a version history's versions alike, floating in
+ * the window's bottom-left corner while the plans' sidebar is folded, and
+ * alone in the floating window while no Luke window has the keyboard. It
+ * carries no words of the conversation, and every press is an act main
+ * validates and hands to the voice window, which holds the call.
  */
 
 import { IDLE_PLANNING_VIEW } from "@luke/features/planning-view";
@@ -15,7 +16,7 @@ import { ACT_KIND } from "@luke/host/acts";
 import { ReturnIcon } from "@luke/ui";
 import { type CallCardModel, callCard } from "@luke/ui/call-card-model";
 import { VOICE_COMMAND, type VoiceCommand } from "@luke/voice/voice-view";
-import { type AnimationEvent, type MouseEvent, useRef, useState } from "react";
+import { type AnimationEvent, type MouseEvent, type ReactNode, useRef, useState } from "react";
 import { type ActHandle, useAct } from "../act";
 import { useKeyboardModality } from "../keyboard-modality";
 import { CALL_CONTROL_LABEL, CallBar } from "../planning/planning-parts";
@@ -32,9 +33,9 @@ function returnLabel(planName: string): string {
 
 /** Where a card is drawn, which decides how its title answers and how its controls are hinted. */
 export const CALL_CARD_SURFACE = {
-  /** At the foot of a Luke window's sidebar, above the account row. */
+  /** At the foot of the column at a Luke window's left, above the plans' sidebar's account row (`ColumnFoot`). */
   SIDEBAR: "sidebar",
-  /** In a Luke window's bottom-left corner, while its sidebar is folded. */
+  /** In a Luke window's bottom-left corner, while the plans' sidebar is folded. */
   FLOATING: "floating",
   /** Alone in the floating window, over whatever app is in front. */
   WINDOW: "window",
@@ -185,6 +186,30 @@ export function CallCardDock({
       leaving={call === undefined}
       onLeft={() => setGone(true)}
     />
+  );
+}
+
+/**
+ * The foot of the column standing at a Luke window's left, wherever the
+ * window stands: the plans' sidebar, Settings' page list, or a version
+ * history's versions, a plan's or the plan template's. Every one of them
+ * docks the card here, above whatever the column keeps at its foot, so the
+ * card is in the same place on every page and never stands over the
+ * column's own rows. Only the plans' sidebar folds, so only it hands the
+ * card to the window's corner (`desktop-shell.tsx`).
+ */
+export function ColumnFoot({
+  call,
+  children,
+}: {
+  call: CallCardInput | undefined;
+  children?: ReactNode;
+}): React.JSX.Element {
+  return (
+    <div className="sidebar-foot">
+      <CallCardDock call={call} surface={CALL_CARD_SURFACE.SIDEBAR} />
+      {children}
+    </div>
   );
 }
 

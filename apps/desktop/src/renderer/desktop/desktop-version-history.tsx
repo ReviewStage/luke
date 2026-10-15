@@ -12,6 +12,7 @@ import { useEffect, useRef, useState } from "react";
 import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
 import { useAppCommand } from "../app-commands";
+import { type CallCardInput, ColumnFoot } from "../call/call-card";
 import type { NavigationHistory } from "../navigation-history";
 import { centreWithin } from "../planning/code-pane";
 import {
@@ -591,15 +592,17 @@ export function planVersionSubject(plans: PlansControl): VersionSubject {
 
 /**
  * A version history over the whole window: the versions where the sidebar
- * stands, with the way back at their head, and the version chosen beside
- * them. `onExit` leaves for wherever it was opened from, and `onRestored`
- * for what a restore landed on.
+ * stands, with the way back at their head and the call card at their foot,
+ * as the sidebar holds them, and the version chosen beside them. `onExit`
+ * leaves for wherever it was opened from, and `onRestored` for what a
+ * restore landed on.
  */
 export function DesktopVersionHistory({
   sidebar,
   history,
   subject,
   account,
+  call,
   onExit,
   onRestored,
 }: {
@@ -608,6 +611,8 @@ export function DesktopVersionHistory({
   subject: VersionSubject;
   /** Who is reading, whose revisions are drawn as theirs. */
   account: AccountSnapshot;
+  /** The call card, while the window is to draw one. */
+  call: CallCardInput | undefined;
   onExit: () => void;
   onRestored: () => void;
 }): React.JSX.Element {
@@ -766,6 +771,7 @@ export function DesktopVersionHistory({
             )}
           </section>
         </div>
+        <ColumnFoot call={call} />
         {/* Last, so the drag strip above the way back does not take the edge's top from it. */}
         <SidebarResizeEdge edge={edge} />
       </nav>

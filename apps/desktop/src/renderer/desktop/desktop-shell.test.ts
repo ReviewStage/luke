@@ -5,7 +5,7 @@ import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { IDLE_PLANNING_VIEW } from "@luke/features/planning-view";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { WINDOW_ROLE } from "@luke/gateway/window-session";
-import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
+import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import type { AppStateSnapshot } from "@luke/host/app-state";
 import { EXPERIMENT, type ExperimentChoices } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
@@ -22,7 +22,9 @@ import { APP_COMMAND } from "#shared/shortcuts";
 import { onRegistry } from "#testing/copy-feedback";
 import { DOCUMENT_NAME, DOCUMENT_PLAN } from "#testing/document-plan";
 import { plansControl } from "#testing/plans-control";
+import { useAct } from "../act";
 import { runAppCommand } from "../app-commands";
+import { callControls } from "../call/call-card";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { AUTOMATIONS_PAGE, type PlansControl } from "../planning/use-plans-tab";
 import type { SettingsPanelProps } from "../settings/settings-panel";
@@ -428,4 +430,211 @@ test("the Automations page stands in the plan's place, titled for the listed wor
   await settle();
   assert.equal(off.querySelector("section[aria-label=Automations]"), null);
   assert.deepEqual(closed, ["closed"]);
+});
+
+/** The plan the call in progress is about, which none of the places below shows with its call bar. */
+const CALL_PLAN_NAME = "Checkout redesign";
+
+/** Every place in the window the developer can stand while a call goes on about another plan, as the shell is handed it. */
+const PLACE = {
+  HOME: "home",
+  OTHER_PLAN: "another plan",
+  INBOX: "the Inbox",
+  AGENT_PAGE: "an agent's page",
+  FACTORY: "Factory",
+  AUTOMATIONS: "the Automations page",
+  SIDE_PANEL_FULL_SCREEN: "a side panel filling the window",
+  SETTINGS: "Settings",
+  VERSION_HISTORY: "a plan's version history",
+} as const;
+
+type Place = (typeof PLACE)[keyof typeof PLACE];
+
+/** The column at the window's left in each place: the plans' sidebar, which folds, or a column of the place's own, which does not. */
+const LEFT_COLUMN = {
+  [PLACE.HOME]: { selector: "aside.desktop-sidebar", folds: true },
+  [PLACE.OTHER_PLAN]: { selector: "aside.desktop-sidebar", folds: true },
+  [PLACE.INBOX]: { selector: "aside.desktop-sidebar", folds: true },
+  [PLACE.AGENT_PAGE]: { selector: "aside.desktop-sidebar", folds: true },
+  [PLACE.FACTORY]: { selector: "aside.desktop-sidebar", folds: true },
+  [PLACE.AUTOMATIONS]: { selector: "aside.desktop-sidebar", folds: true },
+  [PLACE.SIDE_PANEL_FULL_SCREEN]: { selector: "aside.desktop-sidebar", folds: true },
+  [PLACE.SETTINGS]: { selector: 'nav[aria-label="Settings pages"]', folds: false },
+  [PLACE.VERSION_HISTORY]: { selector: 'nav[aria-label="Versions"]', folds: false },
+} as const satisfies Record<Place, { selector: string; folds: boolean }>;
+
+/** The tab and the plans' state that stand the window in a place. */
+function placed(place: Place) {
+  const control = plansControl();
+  const onPlan = {
+    page: PLANS_PAGE.DOCUMENT,
+    region: { kind: DOCUMENT_REGION.READY, plan: DOCUMENT_PLAN },
+  } as const;
+  const plans = {
+    [PLACE.HOME]: { page: PLANS_PAGE.HOME },
+    [PLACE.OTHER_PLAN]: onPlan,
+    [PLACE.INBOX]: { inboxView: { ...control.inboxView, open: true } },
+    [PLACE.AGENT_PAGE]: { agentView: { ...control.agentView, agentId: "agent-page-1" } },
+    [PLACE.FACTORY]: { factoryView: { ...control.factoryView, open: true } },
+    [PLACE.AUTOMATIONS]: { automationsView: { ...control.automationsView, open: true } },
+    [PLACE.SIDE_PANEL_FULL_SCREEN]: {
+      ...onPlan,
+      sidePanel: { ...control.sidePanel, open: true, fullScreen: true },
+    },
+    [PLACE.SETTINGS]: { page: PLANS_PAGE.HOME },
+    [PLACE.VERSION_HISTORY]: { ...onPlan, history: { ...control.history, open: true } },
+  } satisfies Record<Place, Partial<PlansControl>>;
+  return {
+    tab: place === PLACE.SETTINGS ? PANEL_TAB.SETTINGS : PANEL_TAB.PLANS,
+    plans: plans[place],
+  };
+}
+
+/** The shell standing in a place with a call in progress about another plan, its card's presses sent as `App` sends them. */
+function CallShell({ place, folded }: { place: Place; folded: boolean }): React.JSX.Element {
+  const { tell } = useAct();
+  const { tab, plans } = placed(place);
+  return createElement(DesktopShell, {
+    gates: {
+      accountRequired: false,
+      onBeginSignIn: ignore,
+      onCancelSignIn: ignore,
+      signInFace: { play: 0 },
+    },
+    tab,
+    onTabChange: ignore,
+    plans: plansControl(plans),
+    history: {
+      canGoBack: false,
+      canGoForward: false,
+      onBack: ignore,
+      onForward: ignore,
+      onLeaveVersionHistory: ignore,
+    },
+    sidebar: {
+      collapsed: folded,
+      compact: false,
+      overlay: SIDEBAR_OVERLAY.CLOSED,
+      width: 264,
+      onToggle: ignore,
+      onOverlay: ignore,
+      onResize: ignore,
+      staged: false,
+    },
+    call: {
+      card: { planName: CALL_PLAN_NAME, status: undefined, microphoneMuted: false },
+      speakerMuted: false,
+      controls: callControls(tell, false),
+    },
+    captions: {
+      caption: { content: undefined, shown: false },
+      volumeHint: { wanted: false, text: "", onDismiss: ignore },
+    },
+    settings: SETTINGS,
+  });
+}
+
+/** Every act the window sent over the bridge, by kind, in order. */
+let sentActs: string[] = [];
+
+/**
+ * The bridge as the window meets it, every act written down, with Factory
+ * and the Automations page on, and Settings' chunk already loaded, as it is
+ * once Settings has opened once, so it stands within a settle.
+ */
+async function handBridge(): Promise<void> {
+  await import("./desktop-settings");
+  handState(experimentsOn(EXPERIMENT.FACTORY, EXPERIMENT.AUTOMATIONS));
+  sentActs = [];
+  const bridge = window.luke;
+  Object.defineProperty(window, "luke", {
+    configurable: true,
+    value: {
+      ...bridge,
+      act: (request: { kind: string }) => {
+        sentActs.push(request.kind);
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
+      },
+    },
+  });
+}
+
+/** Where the window draws the call card: on which surface, and whether at the foot of the column at the window's left. */
+function cardStanding(page: HTMLElement, place: Place) {
+  const cards = page.querySelectorAll<HTMLElement>('section.call-card[aria-label="Call"]');
+  assert.equal(cards.length, 1, `one call card stands over ${place}`);
+  const [card] = cards;
+  assert.ok(card);
+  const foot = card.closest(".sidebar-foot");
+  return {
+    surface: card.dataset.surface ?? "",
+    docked: foot !== null && foot.parentElement === page.querySelector(LEFT_COLUMN[place].selector),
+  };
+}
+
+/** Presses the card's way back to the call's plan. */
+function pressReturn(page: HTMLElement): void {
+  const button = page.querySelector<HTMLButtonElement>(
+    `section.call-card button[aria-label="Open ${CALL_PLAN_NAME}"]`,
+  );
+  assert.ok(button, "the card offers the way back to the call's plan");
+  act(() => button.click());
+}
+
+const PLACES = Object.values(PLACE);
+
+test("walking every place in the window during a call about another plan, the card stays at the foot of the column at the window's left, and its way back asks for the call's plan from each", async () => {
+  await handBridge();
+  const container = document.createElement("div");
+  document.body.append(container);
+  root = createRoot(container);
+  const registry = AtomRegistry.make();
+  const standing: Record<string, ReturnType<typeof cardStanding>> = {};
+  for (const place of PLACES) {
+    act(() =>
+      root?.render(onRegistry(registry, createElement(CallShell, { place, folded: false }))),
+    );
+    await settle();
+    standing[place] = cardStanding(container, place);
+    sentActs = [];
+    pressReturn(container);
+    assert.deepEqual(sentActs, [ACT_KIND.CALL_SHOW_PLAN], `the way back from ${place}`);
+  }
+  assert.deepEqual(
+    standing,
+    Object.fromEntries(PLACES.map((place) => [place, { surface: "sidebar", docked: true }])),
+  );
+});
+
+test("with the plans' sidebar folded, the card floats in the window's corner wherever the sidebar would have held it, and stays at the foot of Settings' and a version history's own columns, which do not fold", async () => {
+  await handBridge();
+  const standing: Record<string, ReturnType<typeof cardStanding>> = {};
+  for (const place of PLACES) {
+    const container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+    act(() =>
+      root?.render(
+        onRegistry(AtomRegistry.make(), createElement(CallShell, { place, folded: true })),
+      ),
+    );
+    await settle();
+    standing[place] = cardStanding(container, place);
+    sentActs = [];
+    pressReturn(container);
+    assert.deepEqual(sentActs, [ACT_KIND.CALL_SHOW_PLAN], `the way back from ${place}`);
+    act(() => root?.unmount());
+    container.remove();
+  }
+  assert.deepEqual(
+    standing,
+    Object.fromEntries(
+      PLACES.map((place) => [
+        place,
+        LEFT_COLUMN[place].folds
+          ? { surface: "floating", docked: false }
+          : { surface: "sidebar", docked: true },
+      ]),
+    ),
+  );
 });
