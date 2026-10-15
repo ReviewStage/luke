@@ -8,8 +8,8 @@
  * closes that scope and with it the session: there is no other way a session
  * ends from this side. The feed is mapped exactly as Keyframe's own bridge
  * maps it, and the panel reports the avatar to main with the act only it
- * may send: `STARTING` once a grant stands, `LIVE` on the first frame of
- * video, and `ENDED` with the reason the session closed for.
+ * may send: `STARTING` once a grant stands, `LIVE` once the first frame of
+ * video has drawn and the voice has arrived, and `ENDED` with the reason the session closed for.
  *
  * The grant's token reaches the panel and the session it opens, and is
  * never reported, logged, or held anywhere but the scope it opened.
@@ -128,7 +128,7 @@ const firstFrame = (track: MediaStreamTrack): Effect.Effect<void> =>
 /**
  * One grant's avatar, for the life of the scope it runs in: reported as
  * starting, opened, fed, its tracks published as each arrives, reported live
- * on the video's first frame, and reported ended once the session closes,
+ * once the video's first frame and the voice have both arrived, and reported ended once the session closes,
  * for the reason it closed. A session that cannot be opened ends as an
  * error, and a scope closed under it ends it as the developer's own close,
  * which `callAvatar` lets through only while the grant still stands: the
@@ -143,16 +143,20 @@ const runAvatar = Effect.fnUntraced(
     yield* doors.report({ status: AVATAR_STATUS.STARTING });
     const session = yield* openAvatarSession(grant, yield* doors.module);
     yield* Effect.forkScoped(Stream.runForEach(doors.feeds, (feed) => fed(session, feed)));
-    yield* Effect.forkScoped(
-      Effect.ignore(Effect.flatMap(session.audio, (audio) => publish({ audio }))),
-    );
+    // Note that live waits on the voice as well as the first frame, because the
+    // voice window mutes Luke the moment it reads live.
     const live = yield* Effect.forkScoped(
       Effect.ignore(
-        session.video.pipe(
-          Effect.tap((video) => publish({ video })),
-          Effect.flatMap(firstFrame),
-          Effect.andThen(doors.report({ status: AVATAR_STATUS.LIVE })),
-        ),
+        Effect.all(
+          [
+            Effect.flatMap(session.audio, (audio) => publish({ audio })),
+            session.video.pipe(
+              Effect.tap((video) => publish({ video })),
+              Effect.flatMap(firstFrame),
+            ),
+          ],
+          { concurrency: "unbounded" },
+        ).pipe(Effect.andThen(doors.report({ status: AVATAR_STATUS.LIVE }))),
       ),
     );
     const reason = yield* session.closed;
