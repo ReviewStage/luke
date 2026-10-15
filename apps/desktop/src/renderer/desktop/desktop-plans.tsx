@@ -27,6 +27,7 @@ import {
   NEEDS_YOU,
   planHolder,
 } from "../planning/inbox-model";
+import { useInboxPager } from "../planning/inbox-pager";
 import { type InboxCodeDoors, InboxPane } from "../planning/inbox-pane";
 import { PlanBody, type SectionLinks } from "../planning/plan-body";
 import { PlanCrumb } from "../planning/plan-crumb";
@@ -161,7 +162,8 @@ function NewTabChord({ onNewTab }: { onNewTab: () => void }): null {
  * the agent's. Too narrow for both, it shows the chosen item, and the list
  * once its way back is taken, as the window's Inbox does
  * (`inbox-columns.ts`); holding one item, it is that item, with no list to
- * go back to.
+ * go back to. K and J, and the pager where the item stands alone, step
+ * through the list (`inbox-pager.tsx`).
  */
 function PlanInboxTab({
   plans,
@@ -190,6 +192,7 @@ function PlanInboxTab({
   });
   const chosen = listedItems(list).find(({ item }) => item.id === asked) ?? firstChoice(list);
   const columns = useInboxColumns(chosen?.item.id, listedItems(list).length > 1);
+  const pager = useInboxPager(list, chosen?.item.id, ({ item }) => setAsked(item.id));
   return (
     <section
       ref={columns.ref}
@@ -240,6 +243,7 @@ function PlanInboxTab({
           agents={plans.agents}
           hidden={columns.shown === INBOX_COLUMNS.LIST}
           onBack={columns.onBack}
+          pager={columns.shown === INBOX_COLUMNS.ITEM ? pager : undefined}
           doors={{
             onOpenHolder: onOpenPlan,
             planCard: planCardOf(plans, plan, now),

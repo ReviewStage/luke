@@ -30,6 +30,7 @@ import {
   planHolder,
   planlessGroups,
 } from "../planning/inbox-model";
+import { useInboxPager } from "../planning/inbox-pager";
 import { InboxPane, type InboxPaneDoors } from "../planning/inbox-pane";
 import { useMinute } from "../planning/plan-time";
 import { useCodingAgents } from "../planning/use-coding-agents";
@@ -67,7 +68,8 @@ import { planCardOf } from "./plan-card";
  * and so does any row of the sidebar. Too narrow for the list and the item
  * side by side, it shows one at a time (`inbox-columns.ts`): the chosen
  * item, whose way back, Back's chord, or Escape gives the list, and a press
- * on a row there the item again, before Escape leaves the Inbox. Everything in it that names a
+ * on a row there the item again, before Escape leaves the Inbox. K and J, and the pager where the
+ * item stands alone, step through the list (`inbox-pager.tsx`). Everything in it that names a
  * person, an answer and an agent's starter, reads them against the listed
  * workspace's members (`member-directory.tsx`).
  */
@@ -233,6 +235,7 @@ export function DesktopInbox({ plans }: { plans: PlansControl }): React.JSX.Elem
     holdings.some((holding) => !read.items.has(holding.planId)) ||
     plans.inboxPlanless.some((each) => !planless.items.has(each.agentId));
   const columns = useInboxColumns(chosen?.item.id, true);
+  const pager = useInboxPager(list, chosen?.item.id, choose);
   // A choice that asks for its item opens it once, the one column the Inbox shows being the
   // item's; Back from it then stands on the list, the choice taken already.
   const opensItem = asked?.opened === true && chosen?.item.id === asked.itemId;
@@ -294,6 +297,7 @@ export function DesktopInbox({ plans }: { plans: PlansControl }): React.JSX.Elem
               agents={named}
               hidden={columns.shown === INBOX_COLUMNS.LIST}
               onBack={columns.onBack}
+              pager={columns.shown === INBOX_COLUMNS.ITEM ? pager : undefined}
               doors={paneDoors(plans, chosen.holder, { act, openLink, now, automationsOn })}
             />
           )}

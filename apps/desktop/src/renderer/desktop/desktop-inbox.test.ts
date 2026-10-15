@@ -41,7 +41,7 @@ import { onRegistry } from "#testing/copy-feedback";
 import { plansControl, waitingOf } from "#testing/plans-control";
 import { relayout } from "#testing/resize-observer";
 import { readSegmented, segment, segmentedGroup } from "#testing/segmented";
-import { runAppCommand } from "../app-commands";
+import { runAppCommand, useAppKeymap } from "../app-commands";
 import type { InboxChoice } from "../planning/use-plans-tab";
 import { DesktopInbox } from "./desktop-inbox";
 
@@ -947,6 +947,89 @@ test("the Inbox joins only once narrowed past the band, keeping the item it show
   assert.equal(page.querySelector(".inbox-view-items button.inbox-back"), null);
   layOut(page, 800);
   assert.deepEqual(columnsShown(page), ["item"]);
+});
+
+/** The window's keymap, standing beside the Inbox as the shell stands it; the root it is drawn in, to unmount. */
+function standKeymap(): Root {
+  function Keymap() {
+    useAppKeymap(true);
+    return null;
+  }
+  const keys = createRoot(document.body.appendChild(document.createElement("div")));
+  act(() => keys.render(createElement(Keymap)));
+  return keys;
+}
+
+/** A key pressed alone where the keyboard stands, or into the target given. */
+function pressKey(key: string, target: EventTarget = document.body): void {
+  act(() => {
+    target.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+  });
+}
+
+/** The pager at the end of the item's bar, as it reads: "2 of 3", or none where it is not drawn. */
+function pagerOf(page: HTMLElement): string | null {
+  return (
+    page.querySelector(".inbox-view-items:not([hidden]) .inbox-pager-count")?.textContent ?? null
+  );
+}
+
+/** One of the pager's arrows, by its name. */
+function arrowNamed(page: HTMLElement, name: string): HTMLButtonElement {
+  const arrow = page.querySelector<HTMLButtonElement>(`.inbox-pager button[aria-label="${name}"]`);
+  assert.ok(arrow, `the pager offers ${name}`);
+  return arrow;
+}
+
+/** The title of the item the pane reads. */
+function readTitle(page: HTMLElement): string | null | undefined {
+  return page.querySelector(".inbox-view-items:not([hidden]) [data-inbox-title]")?.textContent;
+}
+
+test("one column wide, the item's bar says where it stands in the list, and its arrows, K, and J step up and down the list in its order, a settled item among them, stopping at its ends", async () => {
+  const { page } = mount();
+  await settle();
+  const keys = standKeymap();
+  layOut(page, 800);
+  assert.deepEqual([readTitle(page), pagerOf(page)], ["Alert at 80%?", "2 of 3"]);
+
+  act(() => arrowNamed(page, "Previous item").click());
+  assert.deepEqual([readTitle(page), pagerOf(page)], ["How is a failed email retried?", "1 of 3"]);
+  assert.equal(arrowNamed(page, "Previous item").disabled, true, "nothing above the first");
+  pressKey("k");
+  assert.equal(readTitle(page), "How is a failed email retried?");
+
+  pressKey("j");
+  assert.deepEqual([readTitle(page), pagerOf(page)], ["Alert at 80%?", "2 of 3"]);
+  act(() => arrowNamed(page, "Next item").click());
+  assert.deepEqual([readTitle(page), pagerOf(page)], ["Expire after 7 days?", "3 of 3"]);
+  assert.equal(arrowNamed(page, "Next item").disabled, true, "nothing below the last");
+  pressKey("j");
+  assert.equal(readTitle(page), "Expire after 7 days?");
+  act(() => keys.unmount());
+});
+
+test("split, K and J move the chosen row and the item beside it, which draws no pager, and a J typed into the item's box is the box's", async () => {
+  const { page } = mount();
+  await settle();
+  const keys = standKeymap();
+  assert.equal(pagerOf(page), null, "the list beside the item says where it stands");
+
+  pressKey("j");
+  assert.deepEqual(
+    listed(page).filter((row) => row.startsWith("▸")),
+    ["▸ *Expire after 7 days?"],
+  );
+  assert.equal(readTitle(page), "Expire after 7 days?");
+  pressKey("k");
+  assert.equal(readTitle(page), "Alert at 80%?");
+
+  const box = page.querySelector<HTMLTextAreaElement>(".inbox-view-items textarea");
+  assert.ok(box, "the item waits on an answer in its box");
+  box.focus();
+  pressKey("j", box);
+  assert.equal(readTitle(page), "Alert at 80%?", "the letter is the box's");
+  act(() => keys.unmount());
 });
 
 /** An answer the act gives the renderer, the view it carries settled now. */
