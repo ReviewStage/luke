@@ -10,7 +10,6 @@ import { Schema } from "effect";
 export const APP_SETTING_ID = {
   VOICE: "voice",
   VOICE_CAPTIONS: "voice_captions",
-  VOICE_VIDEO: "voice_video",
   DUCK_OTHER_MEDIA: "duck_other_media",
   PREFER_BUILT_IN_MICROPHONE: "prefer_built_in_microphone",
   QUIET_DURING_MEETINGS: "quiet_during_meetings",

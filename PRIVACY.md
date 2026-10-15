@@ -752,9 +752,11 @@ only when you press Send.
   stores and logs neither the recording nor the text, and counts only the clip
   and its length in your daily usage; OpenAI keeps the request and its reply
   under its own retention policy.
-- Keyframe Labs, for video calls, only while Video calls is on in Settings ›
-  Voice, which it is not until you turn it on. Each call that shows Luke on
-  video opens one avatar session at Keyframe: our service asks Keyframe for it
+- Keyframe Labs, for video calls, only while the Video calls experiment is on
+  in Settings › Experimental, which it is not until you turn it on. The
+  choice is your account's, so it follows you to every Mac you sign in on.
+  Each call that shows Luke on video opens one avatar session at Keyframe: our
+  service asks Keyframe for it
   on our key, naming the stock persona Luke appears as and nothing about you,
   and hands the session's one-time pass to your Mac, where only Luke's main
   window holds it. That window then sends Keyframe Luke's synthesized voice as

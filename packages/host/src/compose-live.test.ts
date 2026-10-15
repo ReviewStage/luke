@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { it } from "@effect/vitest";
+import { ACCOUNT_PROVIDER } from "@luke/credentials/snapshot";
 import {
   AVATAR_STOP_REASON,
   AVATAR_UNAVAILABLE_REASON,
@@ -15,7 +16,7 @@ import {
   type GatewayMethod,
 } from "@luke/gateway";
 import { temporaryDirectoryScoped } from "@luke/runtime/testing";
-import { APP_SETTING_SCHEMA } from "@luke/settings";
+import { EXPERIMENT } from "@luke/settings";
 import { HostedLiveSessionSource } from "@luke/voice";
 import {
   AVATAR_START_BOUND,
@@ -62,29 +63,44 @@ function settle() {
   });
 }
 
-/** A settings store of this test's own, in a directory it made, holding nothing until a test writes it. */
+/** The account the settings store holds signed in, whose experiments a call reads. */
+const DEVELOPER = {
+  accessToken: "access-token",
+  refreshToken: "refresh-token",
+  email: "developer@example.com",
+  provider: ACCOUNT_PROVIDER.GITHUB,
+} as const;
+
+/** A settings store of this test's own, in a directory it made, with the developer signed in and no experiment on until a test turns one on. */
 function settingsStore() {
   return Effect.gen(function* () {
     const directory = yield* temporaryDirectoryScoped("luke-live-settings-");
-    return new SettingsStore({
+    const store = new SettingsStore({
       directory: () => directory,
       cipher: {
-        isAvailable: () => false,
-        encrypt: () => Buffer.alloc(0),
-        decrypt: () => "",
+        isAvailable: () => true,
+        encrypt: (text) => Buffer.from(text),
+        decrypt: (bytes) => bytes.toString(),
       },
       overrides: { voice: undefined },
       fileSystem: yield* FileSystem.FileSystem,
       path: yield* Path.Path,
     });
+    yield* Effect.orDie(store.setAccount(DEVELOPER));
+    return store;
   }).pipe(Effect.provide([NodeFileSystem.layer, NodePath.layer]));
+}
+
+/** The developer's Video calls experiment turned on, as the service answers a switch pressed on any of their Macs. */
+function videoCallsOn(store: SettingsStore) {
+  return Effect.orDie(store.cacheExperiments(DEVELOPER.email, { [EXPERIMENT.VIDEO_CALLS]: true }));
 }
 
 function subject(options: { videoOnCall?: boolean } = {}) {
   return Effect.gen(function* () {
     const store = yield* settingsStore();
     if (options.videoOnCall) {
-      yield* Effect.orDie(store.set(APP_SETTING_SCHEMA.voiceVideo.field, true));
+      yield* videoCallsOn(store);
     }
     const answerCreate = (socket: FakeLiveSocket) => {
       socket.onSent((data) => {
@@ -507,7 +523,7 @@ it.effect("a call opens with the avatar asked for where video is on for calls", 
   }),
 );
 
-it.effect("a call opens with no avatar while the video setting stands at its default", () =>
+it.effect("a call opens with no avatar while the Video calls experiment is off", () =>
   Effect.gen(function* () {
     const f = yield* subject();
     const socket = yield* f.openCall;
@@ -517,20 +533,22 @@ it.effect("a call opens with no avatar while the video setting stands at its def
   }),
 );
 
-it.effect("the video setting turned on during a call opens the next call with the avatar", () =>
-  Effect.gen(function* () {
-    const f = yield* subject();
-    const first = yield* f.openCall;
-    yield* Effect.orDie(f.store.set(APP_SETTING_SCHEMA.voiceVideo.field, true));
-    first.closeFromServer({ code: 1000 });
-    yield* settle();
+it.effect(
+  "the Video calls experiment turned on during a call opens the next call with the avatar",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* subject();
+      const first = yield* f.openCall;
+      yield* videoCallsOn(f.store);
+      first.closeFromServer({ code: 1000 });
+      yield* settle();
 
-    const second = yield* f.openCall;
+      const second = yield* f.openCall;
 
-    // The call already standing is not changed: the setting is read as a call comes to stand.
-    assert.deepEqual(avatarSends(first), []);
-    assert.deepEqual(avatarSends(second), [start("request-1")]);
-  }),
+      // The call already standing is not changed: the experiment is read as a call comes to stand.
+      assert.deepEqual(avatarSends(first), []);
+      assert.deepEqual(avatarSends(second), [start("request-1")]);
+    }),
 );
 
 it.effect(

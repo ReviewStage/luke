@@ -20,7 +20,7 @@ import {
   voiceSetVideoParamsSchema,
 } from "@luke/gateway";
 import { isAgentWireTrace } from "@luke/gateway/devtrace";
-import { APP_SETTING_SCHEMA } from "@luke/settings";
+import { EXPERIMENT, experimentOn } from "@luke/settings";
 import { unavailableLiveDiagnostics } from "@luke/voice";
 import { LiveSessionHolder } from "@luke/voice/live-session";
 import { readEither } from "@luke/wire/effect";
@@ -37,8 +37,8 @@ export interface LiveComposer extends Composer {
 
 export interface LiveDependencies {
   settings: Pick<SettingsComposer, "recordProductEvent"> & {
-    /** Where the `voiceVideo` setting is read, as each call comes to stand. */
-    readonly store: Pick<SettingsStore, "get">;
+    /** Where the account's Video calls experiment is read, as each call comes to stand. */
+    readonly store: Pick<SettingsStore, "snapshot">;
   };
   account: Pick<AccountComposer, "agentTrace"> & {
     readonly voiceCapabilities: Pick<AccountComposer["voiceCapabilities"], "liveSessions">;
@@ -87,9 +87,10 @@ export const composeLive = /* @__PURE__ */ Effect.fn("host/composeLive")(functio
     createId: kernel.createId,
     // Note that a settings file that cannot be read opens the call without
     // video, because each avatar is a Keyframe session the plan pays for.
-    videoOnCall: settings.store
-      .get(APP_SETTING_SCHEMA.voiceVideo.field)
-      .pipe(Effect.orElseSucceed(() => APP_SETTING_SCHEMA.voiceVideo.default)),
+    videoOnCall: settings.store.snapshot().pipe(
+      Effect.map(({ experiments }) => experimentOn(experiments, EXPERIMENT.VIDEO_CALLS)),
+      Effect.orElseSucceed(() => false),
+    ),
     emit: (change) => kernel.emit(GATEWAY_EVENT.VOICE_LIVE_SESSION_CHANGED, carried(change)),
     onSessionCreated: () => {
       settings.recordProductEvent(PRODUCT_EVENT.VOICE_CALL_START, {
