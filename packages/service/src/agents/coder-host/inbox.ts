@@ -17,10 +17,10 @@ import {
   inboxPostInputSchema,
   inboxReadInputSchema,
 } from "@luke/features/inbox-wire";
-import { CODER } from "@luke/service/agents/coder-host/bounds";
-import { type InboxSandboxDoor, readInboxImage } from "@luke/service/agents/coder-host/inbox-image";
-import { ACTION_RESULT_STATUS, EXCESS_KEYS, type UnparsedWireValue } from "@luke/service/core";
-import { logStoreFailure } from "@luke/service/http/store-failure";
+import { readEither } from "@luke/wire/effect";
+import { Effect, Option, Result } from "effect";
+import { ACTION_RESULT_STATUS, EXCESS_KEYS, type UnparsedWireValue } from "../../core.js";
+import { logStoreFailure } from "../../http/store-failure.js";
 import {
   agentInboxItems,
   closeInboxItem,
@@ -29,9 +29,9 @@ import {
   type InboxImage,
   type InboxPostRefusal,
   postInboxItem,
-} from "@luke/service/inbox/inbox-store";
-import { readEither } from "@luke/wire/effect";
-import { Effect, Option, Result } from "effect";
+} from "../../inbox/inbox-store.js";
+import { CODER } from "./bounds.js";
+import { type InboxSandboxDoor, readInboxImage } from "./inbox-image.js";
 
 /**
  * inbox.ts -- the coding agent's three inbox tools: post an item for the developer, close one, and read them all.

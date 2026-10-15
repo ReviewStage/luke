@@ -1,5 +1,6 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import { failureKind } from "@luke/runtime/effect";
+import { anthropicFastAccess } from "@luke/service/agents/coder-host/account-keys";
 import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import {
   HOSTED_REFUSAL,
@@ -15,7 +16,6 @@ import { ModelCatalog, offeredToAccount } from "@luke/service/providers/model-ca
 import { ANY_METHOD, type WebRoutes } from "@luke/service/route";
 import { Effect, Layer, Option } from "effect";
 import { HttpRouter, HttpServerRequest, type HttpServerResponse } from "effect/http";
-import { anthropicFastAccess } from "./hosted/coder-host/account-keys.js";
 
 /**
  * models-app.ts -- the models a coding agent may run on, as the Start menu and Settings offer them.

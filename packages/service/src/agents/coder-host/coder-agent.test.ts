@@ -1,22 +1,22 @@
 import assert from "node:assert/strict";
 import { CODING_AGENT_BRIEF } from "@luke/features/coding-agent-wire";
-import { DEPLOYMENT_PRESENCE, lukeAccount } from "@luke/service/agents/brain-host/auth";
+import { Redacted } from "effect";
+import { routeAuth } from "eve/channels/auth";
+import type { SessionAuthContext } from "eve/context";
+import { test } from "vitest";
+import { DEPLOYMENT_PRESENCE, lukeAccount } from "../brain-host/auth.js";
 import {
   BRAIN_HOST_ATTRIBUTE,
   BRAIN_HOST_DEPLOYMENT_PRINCIPAL,
   BRAIN_HOST_HEADER,
   BRAIN_HOST_REFUSAL,
   BRAIN_HOST_TURN,
-} from "@luke/service/agents/brain-host/bounds";
-import { BRAIN_HOST_TURN_POLICY } from "@luke/service/agents/brain-host/channel";
-import { CODER_TOOL } from "@luke/service/agents/coder-host/tool-set";
-import { Redacted } from "effect";
-import { routeAuth } from "eve/channels/auth";
-import type { SessionAuthContext } from "eve/context";
-import { test } from "vitest";
-import { CODER_DEPLOYMENT_TURNS, coderChannelInput } from "../server/hosted/coder-host/channel";
-import { INBOX_TOOLS } from "../server/hosted/coder-host/inbox";
-import { coderInstructions } from "../server/hosted/coder-host/instructions";
+} from "../brain-host/bounds.js";
+import { BRAIN_HOST_TURN_POLICY } from "../brain-host/channel.js";
+import { CODER_DEPLOYMENT_TURNS, coderChannelInput } from "./channel.js";
+import { INBOX_TOOLS } from "./inbox.js";
+import { coderInstructions } from "./instructions.js";
+import { CODER_TOOL } from "./tool-set.js";
 
 const SECRET = "cron-secret-1";
 const ACCOUNT = "user-a";

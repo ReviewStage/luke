@@ -3,28 +3,21 @@ import type { PlanStoreEffect } from "@luke/database/models/plan-store";
 import { spendHostedMeter } from "@luke/database/models/quota";
 import { type StoreWriter, storeWriter } from "@luke/database/models/writer";
 import { failureKind } from "@luke/runtime/effect";
-import { accountMeter } from "@luke/service/agents/agent-runtime/meter";
-import {
-  conversationReachableBy,
-  runtimeSessionReachableBy,
-} from "@luke/service/agents/brain-host/conversation";
-import type { SessionOwnership } from "@luke/service/agents/brain-host/door";
-import { CODER_ENVIRONMENT, CODER_MODEL_FIXTURE } from "@luke/service/agents/coder-host/bounds";
-import { CODER_TOOL_SET } from "@luke/service/agents/coder-host/tool-set";
-import {
-  MeterUnavailable,
-  type ResearchAccess,
-  researchOpenAiOf,
-} from "@luke/service/agents/public-research";
-import { auth } from "@luke/service/auth/auth";
-import { oauthUserInfoFromAuthAnswer, type UserInfoEndpoint } from "@luke/service/auth/bearer";
-import { unparsedWire, type WireBoundaryInput } from "@luke/service/core";
-import { HostedEnvironment } from "@luke/service/environment";
-import type { WebStoreRun } from "@luke/service/run";
 import type { LanguageModel } from "ai";
 import { Effect, type Redacted } from "effect";
+import { auth } from "../../auth/auth.js";
+import { oauthUserInfoFromAuthAnswer, type UserInfoEndpoint } from "../../auth/bearer.js";
+import { unparsedWire, type WireBoundaryInput } from "../../core.js";
+import { HostedEnvironment } from "../../environment.js";
+import type { WebStoreRun } from "../../run.js";
+import { accountMeter } from "../agent-runtime/meter.js";
+import { conversationReachableBy, runtimeSessionReachableBy } from "../brain-host/conversation.js";
+import type { SessionOwnership } from "../brain-host/door.js";
+import { MeterUnavailable, type ResearchAccess, researchOpenAiOf } from "../public-research.js";
 import { accountProviderKeys } from "./account-keys.js";
+import { CODER_ENVIRONMENT, CODER_MODEL_FIXTURE } from "./bounds.js";
 import { type LukeKeys, type ProviderKeys, titleModel } from "./model.js";
+import { CODER_TOOL_SET } from "./tool-set.js";
 
 /**
  * production.ts -- the deployment's real seams behind the coding-agent service's authored files.

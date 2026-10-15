@@ -23,10 +23,10 @@ import {
   type AutomationTrigger,
 } from "@luke/features/automation-wire";
 import { CODING_AGENT_STATUS, type CodingAgentStatus } from "@luke/features/coding-agent-wire";
+import type { StartServices } from "@luke/service/agents/coder-host/start";
+import { codingAgentStatusOf } from "@luke/service/agents/coder-host/status";
 import { Effect } from "effect";
 import { type EveForAccount, executeAutomationRun, recoverStrandedRun } from "./automation-runs.js";
-import type { StartServices } from "./coder-host/start.js";
-import { codingAgentStatusOf } from "./coder-host/status.js";
 
 /**
  * automation-sweep.ts -- the minute sweep's share of automations: claim the schedules due, once each, as queued runs, then act on the runs queued.

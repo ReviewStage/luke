@@ -1,11 +1,8 @@
 import { DEPLOYMENT_PRESENCE } from "@luke/service/agents/brain-host/auth";
+import { CODER_DEPLOYMENT_TURNS, coderChannelInput } from "@luke/service/agents/coder-host/channel";
 import { hostedUserId } from "@luke/service/auth/bearer";
 import { Effect, Option } from "effect";
 import { eveChannel } from "eve/channels/eve";
-import {
-  CODER_DEPLOYMENT_TURNS,
-  coderChannelInput,
-} from "../../server/hosted/coder-host/channel.js";
 import { runWeb } from "../../server/runtime.js";
 import { seams } from "../host.js";
 

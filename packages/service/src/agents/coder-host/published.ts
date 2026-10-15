@@ -8,23 +8,23 @@ import type {
   CodingAgentPullRequest,
   CodingAgentPullRequestAnswer,
 } from "@luke/features/coding-agent-wire";
-import { CODER } from "@luke/service/agents/coder-host/bounds";
+import { Cache, Data, Duration, Effect, Exit, type Layer, Option, type Redacted } from "effect";
+import type * as HttpClient from "effect/http/HttpClient";
 import {
   GitHubApp,
   type GitHubRepositoryToken,
   type GitHubWorkspaceReadFailure,
-} from "@luke/service/github/github-app";
+} from "../../github/github-app.js";
 import {
   branchStands,
   checkSummaryOf,
   type GitHubPullRequest,
   type PullRequestReadFailure,
   pullRequestOfBranch,
-} from "@luke/service/github/pull-requests";
-import { agentWorkspace } from "@luke/service/github/workspace-repository";
-import type { StoreFailure } from "@luke/service/http/store-failure";
-import { Cache, Data, Duration, Effect, Exit, type Layer, Option, type Redacted } from "effect";
-import type * as HttpClient from "effect/http/HttpClient";
+} from "../../github/pull-requests.js";
+import { agentWorkspace } from "../../github/workspace-repository.js";
+import type { StoreFailure } from "../../http/store-failure.js";
+import { CODER } from "./bounds.js";
 
 /**
  * published.ts -- what a coding agent published: the branch its sandbox stands on and the pull request from it, confirmed on GitHub.

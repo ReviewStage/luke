@@ -28,6 +28,7 @@ import {
   planTemplateAnswerSchema,
   planTemplateRevisionsAnswerSchema,
 } from "@luke/features/plan-document-template";
+import { anthropicFastAccess } from "@luke/service/agents/coder-host/account-keys";
 import { HostedEnvironment, type HostedEnvironmentValues } from "@luke/service/environment";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import { modelCatalogOf } from "@luke/service/providers/model-catalog";
@@ -42,7 +43,6 @@ import { Clock, Effect, Layer, Option, Result } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { accountApp } from "../server/account-app";
-import { anthropicFastAccess } from "../server/hosted/coder-host/account-keys";
 
 /**
  * The account's plan template, answered by the account group the way its

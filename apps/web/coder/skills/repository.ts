@@ -5,7 +5,7 @@ import { SCRIPTED_SKILLS } from "../scripted-model.js";
 
 /**
  * The skills the agent's repository keeps, offered to the session as it
- * starts and standing for its life (`server/hosted/coder-host/skills.ts`),
+ * starts and standing for its life (`packages/service/src/agents/coder-host/skills.ts`),
  * each under its own name, which is what a developer's `/name` names and
  * `load_skill` loads. A session that runs for a long time keeps the skills
  * its repository held when it began. Under the scripted fixture the session

@@ -20,6 +20,7 @@ import {
 import { planRevisionSeqSchema } from "@luke/features/plan-wire";
 import type { FastAccess } from "@luke/features/provider-key-wire";
 import { failureKind } from "@luke/runtime/effect";
+import { type EveReach, eveFor } from "@luke/service/agents/coder-host/stop";
 import { retireSessions } from "@luke/service/agents/retire-sessions";
 import { HostedEnvironment } from "@luke/service/environment";
 import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
@@ -51,7 +52,6 @@ import {
   HttpServerRequest,
   type HttpServerResponse,
 } from "effect/http";
-import { type EveReach, eveFor } from "./hosted/coder-host/stop.js";
 
 /**
  * The account group: the signed-in desktop's own delete, preferences, and

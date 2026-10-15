@@ -4,23 +4,23 @@ import { it } from "@effect/vitest";
 import { readCodingAgent } from "@luke/database/models/coding-agent-store";
 import { getTestDB, joinWorkspace, openWorkspace } from "@luke/database/testing";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
+import { Effect, Layer, Option, Result } from "effect";
+import { HOSTED_REFUSAL } from "../../http/http-effect.js";
+import { modelCatalogOf } from "../../providers/model-catalog.js";
+import {
+  connectWorkspaceGitHub,
+  githubReaching,
+  type InstallationFixture,
+  openGithubUser,
+} from "../../testing/github-app-fake.js";
 import {
   EVE_CANCEL_OUTCOME,
   EVE_RESET_OUTCOME,
   EVE_SEND_OUTCOME,
   type EveMessage,
   type EveSessions,
-} from "@luke/service/agents/brain-host/eve-sessions";
-import { HOSTED_REFUSAL } from "@luke/service/http/http-effect";
-import { modelCatalogOf } from "@luke/service/providers/model-catalog";
-import {
-  connectWorkspaceGitHub,
-  githubReaching,
-  type InstallationFixture,
-  openGithubUser,
-} from "@luke/service/testing/github-app-fake";
-import { Effect, Layer, Option, Result } from "effect";
-import { type StartAsk, startCodingAgent } from "../server/hosted/coder-host/start";
+} from "../brain-host/eve-sessions.js";
+import { type StartAsk, startCodingAgent } from "./start.js";
 
 /**
  * coder-start.test.ts -- an agent started in a workspace with no plan, as an automation's run starts one.

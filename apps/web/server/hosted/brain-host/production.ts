@@ -13,6 +13,7 @@ import {
 } from "@luke/service/agents/brain-host/conversation";
 import type { SessionOwnership } from "@luke/service/agents/brain-host/door";
 import { deploymentEveOrigin } from "@luke/service/agents/brain-host/eve-origin";
+import { titleModel } from "@luke/service/agents/coder-host/model";
 import { auth } from "@luke/service/auth/auth";
 import { oauthUserInfoFromAuthAnswer, type UserInfoEndpoint } from "@luke/service/auth/bearer";
 import { unparsedWire, type WireBoundaryInput } from "@luke/service/core";
@@ -21,7 +22,6 @@ import type { WebStoreRun } from "@luke/service/run";
 import type { LanguageModel } from "ai";
 import { Effect, type Redacted } from "effect";
 import { HOSTED_TOOL_SET } from "../brain-tool-set.js";
-import { titleModel } from "../coder-host/model.js";
 
 /**
  * The deployment's real seams behind the eve project's authored files, built

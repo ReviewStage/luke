@@ -22,11 +22,11 @@ import {
 } from "@luke/features/coding-agent-wire";
 import { PLAN_WORK_BOUNDS, PLAN_WORK_STATE, type PlanWorkTurn } from "@luke/features/planning-view";
 import { CODER } from "@luke/service/agents/coder-host/bounds";
+import type { TitleAwaited } from "@luke/service/agents/coder-host/transcript";
 import { MESSAGE_ROLE, TURN_STATUS, type TurnOrigin } from "@luke/service/core";
 import { Clock, Duration, Effect, Option, Schedule, type Schema } from "effect";
 import { planWorkOf, workerSessionCallsOf } from "../voice/plan-work.js";
 import { HOSTED_TOOL_SET } from "./brain-tool-set.js";
-import type { TitleAwaited } from "./coder-host/transcript.js";
 import {
   plannerDelegationJournalsOf,
   plannerDelegationRowsOf,

@@ -658,7 +658,7 @@ the id moved into
 the query by the rewrite `server/function-rewrites.ts` makes of every
 segment-captured id.
 Each row of the list carries `agents` where the plan has a coding agent
-(`server/hosted/plan-agents.ts`): how many it has and how many are starting
+(`packages/service/src/agents/plan-agents.ts`): how many it has and how many are starting
 or running, the three it names (those at work first, then the newest), each
 with its title, model, effort, status, and since when, and the pull requests
 they opened, each number once and at most three, as GitHub last answered a
@@ -841,9 +841,9 @@ how a question reaches the voice while the turn still runs, and the four
 tools about the plan's coding agents (`server/hosted/coding-agent-tools.ts`):
 a list with each agent's status and what it published, one agent's recent
 progress as a bounded tail, a message to one, which takes the message
-box's own steer path (`server/hosted/coder-host/steer.ts`), and a start of
+box's own steer path (`packages/service/src/agents/coder-host/steer.ts`), and a start of
 a new one on the call's plan, which takes the Start button's own path
-(`server/hosted/coder-host/start.ts`) under the tool call's id as its key;
+(`packages/service/src/agents/coder-host/start.ts`) under the tool call's id as its key;
 both reach eve as the deployment acting for the account, the two rows the
 coder channel's deployment table admits. A resumed session
 is seeded with the conversation so far. The writer holds rows to
@@ -1225,7 +1225,7 @@ composition built for the account as the deployment acting for it
 The run the service keys an exchange by is the ask's id, since eve names a
 turn only once it starts; the brain follows the ask through `askStanding` on
 a schedule, projects its turn's events with `projectTurnEvents`
-(`server/hosted/turn-events.ts`), and translates each back to the ask's id. There is no HTTP hop
+(`packages/service/src/agents/turn-events.ts`), and translates each back to the ask's id. There is no HTTP hop
 and so no second function ceiling to re-attach across. Each follow is a fiber of the socket's own scope, so
 the socket detaching interrupts it and nothing is emitted after. What the
 detach cut short is not lost with it: a spoken ask's row carries the voice
@@ -1509,18 +1509,6 @@ origin is the deployment's own unless `LUKE_EVE_ORIGIN` names another. No
 separate service is deployed. Tests run against a fake OpenAI on loopback and an in-memory account side
 (`tests/voice-service.test.ts`, `tests/support/voice-fakes.ts`).
 
-## The turn event projection
-
-`server/hosted/turn-events.ts`'s `projectTurnEvents` is what the voice's live
-brain hears of a turn while it runs, in process (above). Nothing is stored for
-it: the five events — a slow step began, a planning turn queued a question,
-every action settled, one sentence of the reply, the turn ended — are a
-projection over the turn row and the turn's journal, the assistant message the
-store writer opens under the turn's id and amends as each call is written
-ahead of its run, read again on every poll, and the projection only grows
-while the turn runs, so each event keeps the number it was first told under
-and a reader that has heard some hears the rest and the end exactly once.
-
 ## Hosted conversation store
 
 The `conversations`, `messages`, `turns`, and `asks` tables hold the hosted
@@ -1727,172 +1715,6 @@ writer against the database `DATABASE_URL` names. CI does not run it either, so
 run it by hand before a change to the brain host, the writer, or a schema
 module it reads back through.
 
-## The coding-agent service
-
-`coder/` is the second eve app root, built and deployed as the `coder`
-service beside `eve` on the same terms (`vercel.json`): its own
-`package.json` (`@luke/coder`, whose one dependency is `eve`), a flat layout
-eve resolves as an app root, and a build that prewarms its sandbox snapshot
-under the same Vercel Sandbox credentials. It stands at eve's named mount:
-the public route is `/eve/coder/v1/*`, which the deployment's first rewrite
-carries into the service, whose own one `routes` entry turns it back into
-`/eve/v1/*` with a `request.path` transform before eve's router reads it,
-and whose build exports `EVE_PUBLIC_ROUTE_PREFIX=/eve/coder` so the callback
-URLs eve mints resolve to the public path. The web functions reach it through
-`packages/service/src/agents/brain-host/eve-sessions.ts` with `mount: EVE_MOUNT.CODER`.
-`tests/vercel-services.test.ts` holds the three services and that routing.
-
-A coding agent is one eve session over a `coding_agent` conversation
-(`packages/database/src/models/coding-agent-store.ts`), and the host behind the authored
-files is `server/hosted/coder-host/`: the same door and conversation
-admission as the planning brain's (`brain-host/door.ts`,
-`brain-host/conversation.ts`), with the developer's own bearer the caller
-the channel walks in for the desktop's routes (`coder-host/channel.ts`): a
-Start and a Stop come from a route still holding it, and a follow-up
-steers; the deployment acting for the account is admitted for the two things
-the voice brain does there on the developer's behalf, a typed opening that
-starts an agent and a typed line that steers one, each minted as the
-developer's own principal with the deployment named as its carrier. The agent (`coder/agent.ts`) runs none of eve's default
-tools and authors its own under `coder/tools/`, which is exactly the set the
-store writer registers (`coder-host/tool-set.ts`): eve's `bash`, `read_file`,
-`write_file`, and `glob`, the code extension's `apply_patch` and `grep` from
-`eve/extensions/code/tools`, the planning model's own `search_web` and
-`read_web_page` (`public-research.ts`: the search screened, cited, and
-budgeted per turn on Luke's key and counted on the account's meter, the page
-read refusing any address off the public internet), and two of Luke's own: `delegate`, the hand-off to a worker (below), and
-`edit_plan` (`coder-host/plan-edit.ts`), which takes the
-notetaker's own notes (`@luke/features/plan-template`'s `planNotesSchema`)
-into the agent's plan through the plan's one write (`plan-notes.ts`): an open
-question the agent met with the assumption it goes on under, a fact it
-corrected in the code, a decision it made. The save is journaled on the plan
-row (`plan.agent_edits`, the last fifty, the agent's id and its notes as
-taken) and named from the agent's row at read time, so the window's "Updated
-by" line and the planning model's "recent edits by coding agents" say what the
-row says now; the developer reads them on their next planning call while the
-agent runs on, and a turn may take only so many notes. The
-extension itself is not mounted, since its `worker` subagent runs on an AI
-Gateway model and its `gh` tool on Vercel Connect, and Luke runs neither.
-`gh` and `git` run through the shell, authenticated at the firewall. The
-session's input tokens are uncapped and compaction is eve's default.
-
-The worker (`coder/subagents/worker/`) is Luke's own declared subagent, in
-the planning worker's shape (`eve/subagents/worker/`): read-only in the
-agent's own sandbox and checkout, uncommitted edits included
-(`defineParentSandbox`), authored exactly the agent's reads
-(`WORKER_TOOL_NAMES`: `bash`, `read_file`, `glob`, `grep`, `search_web`,
-`read_web_page`), told to change nothing, and uncapped in tokens, as the
-agent it runs under is. It is declared
-hidden (`tool: false`), because eve's own subagent tool carries a message
-and nothing else, and the agent chooses each worker's model and effort: the
-model sees `delegate` (`coder/tools/delegate.ts`), a resumable task
-(`serve`, the shape eve gives every agent call) whose input is
-`{ task, model?, effort?, background? }`. The call answers with eve's
-receipt at once and the worker's answer reaches the agent as a task result,
-so the turn stays open while it works; unless the agent sets `background`,
-the tool's words have it call `task_wait` right after, which is a foreground
-delegation in eve's terms, and a developer's message during the wait reaches
-the agent at once without stopping the worker. Several calls in one step run
-at once, and a call with the task's id sends the worker more, into the same
-session. The planning model delegates through the same shape
-(`eve/tools/delegate.ts`, `PLANNER_DELEGATE_TOOL`), always in the background
-and on its own model, its worker declared hidden too; the Work tab reads its
-calls as worker calls under either name, eve's `worker` in earlier
-transcripts (`PLANNER_DELEGATION_TOOLS`). A worker's row in an agent's tab
-says where the worker's own session stands (the page's `subagents`), since
-the call settles at the receipt.
-Its step fills the pair in from the agent's own row, holds it to the same
-catalog a Start is held to (`coder-host/delegation.ts`, refusing with the
-models offered or the named model's efforts, which the body throws so the
-model reads it and tries again), opens the child conversation the call
-names (`childConversationId(agent conversation, callId)`, as the planning
-worker's is named) and writes the pair under it
-(`coding_agent_delegation`, migration 0066); then the body opens the worker
-through `ctx.agent("worker")`. eve hands a resolver no lineage, so the
-worker's hook (`subagents/worker/hooks/store.ts`) pins the parent call's id
-in the worker's own state as the session starts, the model resolver reads
-it at every step and is told the recorded pair (`host.delegatedModel`), and
-the hook relays the worker's stream into the child conversation as a child
-turn naming that pair (`host.relayChild`). The task's result names the pair
-and the worker's answer; the starting call's `toolCallId` is what names the
-child. `delegate` is not among `SANDBOX_TOOLS`: a refused or web-only
-delegation opens no sandbox, and counting it would have the turn's end open
-one only to stop it, so a sandbox a worker opened is stopped at the end of
-the first turn in which the agent runs a sandbox tool of its own.
-
-The model is chosen at every step (`coder-host/model.ts`): the agent's row
-names the catalog id and effort, `providerModelOf` turns the id into the
-provider's own, and the step is told `@ai-sdk/anthropic` on
-`ANTHROPIC_API_KEY` with `providerOptions.anthropic.effort`, or
-`@ai-sdk/openai`'s Responses model on `OPENAI_API_KEY` with
-`providerOptions.openai.reasoningEffort`, with the context window the
-catalog lists for the model (`CatalogModel.contextWindow`) or a fallback
-where it lists none. Each step also asks for its reasoning in words, so the
-agent's and each worker's tab show it as the Work tab shows Luke's:
-`reasoningSummary: "auto"` on OpenAI, as the planning brain asks, and
-adaptive thinking with `display: "summarized"` on a Claude 5 model, which
-thinks whether asked or not. An older Claude is not asked, since the ask
-would start it thinking. Nothing goes through AI Gateway.
-
-The key a step runs on is read at every step too
-(`coder-host/account-keys.ts`): the account's own key for the provider where
-it saved one (above, "Accounts' own provider keys"), opened from its row,
-and Luke's own `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` only where it saved
-none. A row the deployment's ring cannot open, or a deployment holding no
-ring, refuses the step with `ACCOUNT_KEY_UNREADABLE` rather than run it on
-Luke's key, so nothing the account meant to pay for is quietly billed to
-Luke. A step on the account's key goes through a middleware that keeps the
-row's status as the provider answers: a 401 marks it `invalid`, OpenAI's
-429 `insufficient_quota` or Anthropic's "credit balance" refusal marks it
-`quota_exceeded`, and a call that goes through marks it `verified` again,
-each written only where the row still holds the key the step ran on. The
-first two fail the step with `ACCOUNT_KEY_REFUSED` or
-`ACCOUNT_KEY_NO_QUOTA` in place of the provider's own error, and the three
-refusals read as the agent's failure `provider_key`, which the desktop
-words as a key to replace in Settings. An agent's title stays on Luke's
-Anthropic key. Reading the row every
-step means a later change to it is the next step's model.
-
-The sandbox (`coder/sandbox.ts`) is one Vercel Sandbox per session at the
-platform's 24-hour maximum timeout, prepared with the code extension's
-tooling (`gh`, signed commits, TypeScript diagnostics), pnpm, and Python
-beside the image's Node and git. As it opens, the agent's repository is
-checked out whole at its default branch through the same firewall-scoped
-clone the planning checkout makes (`repository-shell.ts`'s
-`cloneRepository`), on a token `repositoryWriteToken` mints for that one
-repository with contents and pull requests write, plus checks, statuses, and
-Actions read where the installation has granted the App those
-(`CI_READ_PERMISSIONS`; a mint naming a permission the installation never
-granted fails whole, so they are asked only where granted), and the token is
-then set at the firewall for the session's own `gh` and `git` through eve's
-`authenticateGitHub`; it never enters the sandbox's filesystem or
-environment. The session's instructions say whether that read was granted
-(`host.prompt`, through `repositoryCiReadable`): where it was, the agent
-watches its pull request's checks with `gh pr checks` and fixes what fails
-for at most `CODER.CI_FIX_ROUNDS` rounds; where it was not, it says CI was
-not watched. A token lasts an hour, so the store hook renews it at the
-firewall on the first step past `CODER.GITHUB_TOKEN_REFRESH`.
-
-The store hook (`coder/hooks/store.ts`) relays every event into the store
-through the relay the planning brain shares (`brain-host/relay.ts`), composed
-with no ask record, so an agent's turns land as `turns` rows naming its
-model and effort and its `messages` rows as `UIMessage`s; it also stops the
-sandbox the moment a turn ends, completed, failed, or cancelled, where a
-sandbox tool ran in the session. The instructions (`coder-host/instructions.ts`)
-tell the agent to read `AGENTS.md` and `CLAUDE.md` first, reread the code the
-plan names and say where it no longer fits, run the repository's checks,
-work on a `luke/<slug>` branch and never push the default branch, and decide
-on a pull request and its draft state itself; the plan is the session's
-first message, or for an agent started on a developer's task, the task is,
-the agent is never handed the plan, and the instructions are worded for a
-task in the plan's place. The service needs `ANTHROPIC_API_KEY` and `OPENAI_API_KEY`,
-`DATABASE_URL`, the GitHub App's variables, and the Vercel Sandbox
-credentials its build prewarms under; `LUKE_CODER_MODEL_FIXTURE=scripted`
-selects the scripted model for `coder/evals/coder.eval.ts`, which
-`pnpm --filter @luke/web test:agent` runs beside the planning eval and which
-runs a turn under the scripted model with no tool call, so no sandbox opens,
-and a second turn that delegates to the worker, whose only call is the
-delegation, so no sandbox opens there either.
-
 ## The coding-agent routes
 
 `server/coding-agents-app.ts` is the group the desktop starts, lists,
@@ -2049,7 +1871,7 @@ reaches it and its diff is not kept in the store.
 scripted GitHub, a fixed catalog, and PGlite; `tests/coder-host.test.ts`
 drives the host, the shared relay, the branch recorded at a turn's end
 over the sandbox double, and the held read on the test clock;
-`tests/coder-host-checkout.test.ts` holds the checkout over the sandbox
+`packages/service/src/agents/coder-host/checkout.test.ts` holds the checkout over the sandbox
 double, reading every run for the token and never finding it.
 
 ## The scheduled sweep

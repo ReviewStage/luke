@@ -6,6 +6,7 @@ import {
   terminalCreateRequestSchema,
   terminalRenameRequestSchema,
 } from "@luke/features/terminal-wire";
+import { type AccountResolving, reachedAgent, uuidOf } from "@luke/service/agents/agent-reach";
 import {
   AgentSandbox,
   SHELL_REFUSAL,
@@ -30,13 +31,12 @@ import {
   HttpServerRequest,
   type HttpServerResponse,
 } from "effect/http";
-import { type AccountResolving, reachedAgent, uuidOf } from "./hosted/agent-reach.js";
 
 /**
  * The agent terminals group: a coding agent's shells as its Terminal tab
  * lists, starts, names, and ends them, and the developer's resume of its
  * sandbox. Every path reaches the agent through the one rule every agent
- * route keeps (`hosted/agent-reach.ts`), so a member of the plan's workspace
+ * route keeps (`packages/service/src/agents/agent-reach.ts`), so a member of the plan's workspace
  * reaches its terminals as they reach its transcript, and an archived agent
  * is gone. A list never wakes a stopped sandbox; only the resume path does,
  * on the developer's click, and a shell starts only in a running sandbox,

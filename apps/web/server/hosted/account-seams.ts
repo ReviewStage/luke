@@ -12,9 +12,9 @@ import {
 } from "@luke/database/models/plan-template-revisions";
 import { standingSessionsOf } from "@luke/database/models/recorded-session";
 import { deploymentEveOrigin } from "@luke/service/agents/brain-host/eve-origin";
+import { anthropicFastAccess } from "@luke/service/agents/coder-host/account-keys";
 import { resolveHostedUserId } from "@luke/service/auth/bearer";
 import type { AccountAppSeams } from "../account-app.js";
-import { anthropicFastAccess } from "./coder-host/account-keys.js";
 
 /**
  * The account group's seams over this deployment's real database. The

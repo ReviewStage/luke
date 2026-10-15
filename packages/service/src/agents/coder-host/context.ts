@@ -4,8 +4,8 @@ import {
   type CodingAgentContext,
   type ContextWindow,
 } from "@luke/features/coding-agent-wire";
-import { CODER } from "@luke/service/agents/coder-host/bounds";
-import type { OfferedModel } from "@luke/service/providers/model-catalog";
+import type { OfferedModel } from "../../providers/model-catalog.js";
+import { CODER } from "./bounds.js";
 
 /**
  * context.ts -- what a coding agent's model's context holds, as its tab's context ring reads it.

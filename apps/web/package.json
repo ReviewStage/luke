@@ -24,7 +24,6 @@
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "4.0.78",
     "@ai-sdk/openai": "4.0.91",
     "@better-auth/oauth-provider": "1.7.7",
     "@effect/sql-pg": "catalog:",

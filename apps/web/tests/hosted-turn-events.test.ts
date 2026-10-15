@@ -15,13 +15,13 @@ import {
   REPOSITORY_SHELL_STATUS,
   RUN_IN_REPOSITORY_TOOL,
 } from "@luke/service/agents/repository-shell";
+import { projectTurnEvents } from "@luke/service/agents/turn-events";
 import { BRAIN_RUN_EVENT, SLOW_STEP_KIND } from "@luke/service/core";
 import { stampedEveEvent } from "@luke/service/testing/eve-events";
 import { Effect } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll, test } from "vitest";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
-import { projectTurnEvents } from "../server/hosted/turn-events";
 
 /**
  * A turn's events over the real migrations on PGlite, with the turn written

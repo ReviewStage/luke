@@ -17,10 +17,10 @@ import {
   PROVIDER_KEY_PROVIDER,
   type ProviderKeyProvider,
 } from "@luke/features/provider-key-wire";
-import type { MeterSeams } from "@luke/service/agents/agent-runtime/meter";
-import { ModelCatalog } from "@luke/service/providers/model-catalog";
-import type { WebStoreRun } from "@luke/service/run";
 import { DateTime, Effect, type Redacted, Result } from "effect";
+import { ModelCatalog } from "../../providers/model-catalog.js";
+import type { WebStoreRun } from "../../run.js";
+import type { MeterSeams } from "../agent-runtime/meter.js";
 import type { LukeKeys, ProviderKey, ProviderKeys } from "./model.js";
 
 /**

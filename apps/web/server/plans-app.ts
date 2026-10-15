@@ -35,7 +35,16 @@ import {
   planRevisionSeqSchema,
   planTreeRequestSchema,
 } from "@luke/features/plan-wire";
+import { type EveReach, eveFor, stoppedForGood } from "@luke/service/agents/coder-host/stop";
 import { CODER_TOOL_SET } from "@luke/service/agents/coder-host/tool-set";
+import {
+  CURSOR_START,
+  cursorOfWire,
+  cursorToWire,
+  type TranscriptPage,
+  transcriptPast,
+} from "@luke/service/agents/coder-host/transcript";
+import { withPlanAgents } from "@luke/service/agents/plan-agents";
 import { retireSessions } from "@luke/service/agents/retire-sessions";
 import {
   PLAN_LIST_ARCHIVED,
@@ -79,15 +88,6 @@ import {
   type HttpServerResponse,
 } from "effect/http";
 import { HOSTED_TOOL_SET } from "./hosted/brain-tool-set.js";
-import { type EveReach, eveFor, stoppedForGood } from "./hosted/coder-host/stop.js";
-import {
-  CURSOR_START,
-  cursorOfWire,
-  cursorToWire,
-  type TranscriptPage,
-  transcriptPast,
-} from "./hosted/coder-host/transcript.js";
-import { withPlanAgents } from "./hosted/plan-agents.js";
 import { readPlanCode, readPlanWork } from "./hosted/plan-work-store.js";
 import {
   PLANNER_POLL,
@@ -115,9 +115,9 @@ import {
  * `GET /api/plans/{id}` is the window opening a plan, a read that moves
  * nothing: the list stands newest started first whatever is opened. Its
  * `DELETE` stops every coding agent of the plan first, through the one Stop
- * (`hosted/coder-host/stop.ts`), and only then deletes the plan. Each
+ * (`packages/service/src/agents/coder-host/stop.ts`), and only then deletes the plan. Each
  * row of the list carries what the plan's coding agents are doing and what
- * they published, in brief, where it has any (`hosted/plan-agents.ts`). A pin
+ * they published, in brief, where it has any (`packages/service/src/agents/plan-agents.ts`). A pin
  * and an archive are changes like a rename, and the list leaves the archived
  * plans out unless `archived=include` asks for them, so a build from before
  * archiving, which never asks, draws none of them rather than all of them.
