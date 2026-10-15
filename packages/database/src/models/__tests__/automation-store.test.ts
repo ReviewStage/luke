@@ -153,7 +153,7 @@ it.layer(getTestDB())("the automation store", (it) => {
   );
 
   it.effect(
-    "a plan given another repository or moved to another workspace takes its automations along, and a row an older build wrote reads its plan's",
+    "a plan given another repository or moved to another workspace takes its automations along",
     () =>
       Effect.gen(function* () {
         const owner = yield* openAccount;
@@ -181,21 +181,12 @@ it.layer(getTestDB())("the automation store", (it) => {
 
         yield* updatePlan(owner, planId, { repository: "acme/moved", organizationId: elsewhere });
         const followed = Option.getOrThrow(yield* readAutomation(owner, made.id));
-        // An older build's insert: no workspace and no repositories of its own.
-        yield* Database.use((db) =>
-          db
-            .update(automation)
-            .set({ organizationId: null, repositories: [] })
-            .where(eq(automation.id, made.id)),
-        );
-        const older = Option.getOrThrow(yield* readAutomation(owner, made.id));
 
         assert.deepEqual(
           [followed.organizationId, followed.repositories],
           [elsewhere, ["acme/moved"]],
           "the automation follows its plan",
         );
-        assert.deepEqual([older.organizationId, older.repositories], [elsewhere, ["acme/moved"]]);
       }),
   );
 

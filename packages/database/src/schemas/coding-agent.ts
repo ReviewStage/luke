@@ -94,10 +94,10 @@ export const codingAgent = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     /** The plan the agent works on; null for an agent an automation started with no plan. */
     planId: uuid("plan_id").references(() => plan.id, { onDelete: "cascade" }),
-    /** The workspace the agent belongs to, its plan's or its automation's; null only on rows the backfill has not reached. */
-    organizationId: text("organization_id").references(() => organization.id, {
-      onDelete: "cascade",
-    }),
+    /** The workspace the agent belongs to, its plan's or its automation's. */
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
     /** The automation whose run started the agent; null for one started by hand or once that automation is deleted. */
     automationId: uuid("automation_id").references((): AnyPgColumn => automation.id, {
       onDelete: "set null",
