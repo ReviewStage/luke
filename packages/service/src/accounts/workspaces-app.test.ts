@@ -64,6 +64,12 @@ const INSTALL_ADDRESS = "https://github.com/apps/luke/installations/new";
 const LANDING = "/github-installed.html?status=";
 
 const ACME = { id: 31_001, login: "acme", accountType: "Organization", repositories: [] } as const;
+const LABS = {
+  id: 31_002,
+  login: "acme-labs",
+  accountType: "Organization",
+  repositories: [],
+} as const;
 
 interface Answer {
   readonly status: number;
@@ -556,6 +562,54 @@ it.effect("an installation connected to one workspace is refused for a second", 
       assert.equal(githubOf(workspaces, second.id), null);
     }).pipe(Effect.provide(database));
   }),
+);
+
+it.effect(
+  "connecting a second GitHub account adds it beside the first, which stays the one a desktop from before several reads",
+  () =>
+    Effect.gen(function* () {
+      const { seams, database } = yield* openWorkspacePlugin;
+      yield* Effect.gen(function* () {
+        const ada = yield* openGithubAccount("Ada Lovelace");
+        const github = githubReaching([ACME, LABS]);
+        const acme = yield* createAs(seams, github, ada, "Acme");
+        const connect = (installation: { readonly id: number }) =>
+          Effect.flatMap(connectState(seams, github, ada, acme.id), (state) =>
+            landedAt(seams, github, {
+              installation_id: String(installation.id),
+              setup_action: "install",
+              state,
+            }),
+          );
+
+        const first = yield* connect(ACME);
+        yield* TestClock.adjust("1 minute");
+        const second = yield* connect(LABS);
+        const again = yield* connect(ACME);
+
+        assert.deepEqual(
+          [first, second, again],
+          [
+            GITHUB_INSTALL_STATUS.CONNECTED,
+            GITHUB_INSTALL_STATUS.CONNECTED,
+            GITHUB_INSTALL_STATUS.CONNECTED,
+          ],
+        );
+        const [workspace] = (yield* workspacesOf(seams, github, ada)).filter(
+          (one) => one.id === acme.id,
+        );
+        assert.deepEqual(
+          { github: workspace?.github, githubInstallations: workspace?.githubInstallations },
+          {
+            github: { login: "acme", active: true },
+            githubInstallations: [
+              { installationId: ACME.id, login: "acme", active: true },
+              { installationId: LABS.id, login: "acme-labs", active: true },
+            ],
+          },
+        );
+      }).pipe(Effect.provide(database));
+    }),
 );
 
 it.effect("the account's first workspace connects GitHub like any other, by its owner", () =>
