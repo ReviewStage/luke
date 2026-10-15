@@ -242,10 +242,12 @@ function ownerName(owner: AutomationScope, workspace: Workspace | undefined): st
  * alike, as the workspace switcher and Settings' heir picker draw them.
  */
 function OwnerRow({
+  owners,
   owner,
   workspace,
   onOwner,
 }: {
+  owners: readonly { value: AutomationScope; label: string }[];
   owner: AutomationScope;
   workspace: Workspace | undefined;
   onOwner: (owner: AutomationScope) => void;
@@ -260,14 +262,7 @@ function OwnerRow({
     ) : you === undefined ? null : (
       <ActorMark actor={you} size={inline ? ACTOR_SIZE.INLINE : ACTOR_SIZE.ROW} />
     );
-  const rows = [
-    { id: AUTOMATION_SCOPE.PERSONAL, label: "Personal", icon: mark(AUTOMATION_SCOPE.PERSONAL, false) },
-    {
-      id: AUTOMATION_SCOPE.WORKSPACE,
-      label: workspace?.name ?? "Workspace",
-      icon: mark(AUTOMATION_SCOPE.WORKSPACE, false),
-    },
-  ];
+  const rows = owners.map((each) => ({ id: each.value, label: each.label, icon: mark(each.value, false) }));
   return (
     <PickerRow
       copy={
@@ -286,7 +281,10 @@ function OwnerRow({
       valueIcon={mark(owner, true)}
       rows={rows}
       noMatch="No owners match"
-      onPick={(id) => onOwner(id === AUTOMATION_SCOPE.WORKSPACE ? AUTOMATION_SCOPE.WORKSPACE : AUTOMATION_SCOPE.PERSONAL)}
+      onPick={(id) => {
+        const picked = optionValue(owners)(id);
+        if (picked !== undefined) onOwner(picked);
+      }}
     />
   );
 }
@@ -1143,11 +1141,17 @@ function EditorForm({
   savedAgentId: string | null;
   onDraft: (patch: Partial<AutomationDraft>) => void;
 }): React.JSX.Element {
+  const workspaceName = workspace?.name ?? "Workspace";
+  const owners = [
+    { value: AUTOMATION_SCOPE.PERSONAL, label: "Personal" },
+    { value: AUTOMATION_SCOPE.WORKSPACE, label: workspaceName },
+  ] as const;
   return (
     <div className="automation-form">
       {offersOwner ? (
         <SettingsGroup title="Sharing">
           <OwnerRow
+            owners={owners}
             owner={draft.owner}
             workspace={workspace}
             onOwner={(owner) => onDraft({ owner })}
