@@ -1,8 +1,8 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "8ef8c233-c304-4ed4-93d5-470eb6d8ea10",
-  "prevIds": ["6d5f3ef0-7cf6-4e0d-8282-f28bd1202316"],
+  "id": "2a90fa80-758d-401e-8e7b-1d3ba4590cdd",
+  "prevIds": ["04a3ea44-d817-47da-92cc-eff857f6e8d0"],
   "ddl": [
     {
       "isRlsEnabled": false,
@@ -5604,6 +5604,45 @@
       "table": "messages"
     },
     {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "sender",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "messages"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "sender_user_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "messages"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "sender_name",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "messages"
+    },
+    {
       "type": "uuid",
       "typeSchema": null,
       "notNull": true,
@@ -8533,6 +8572,19 @@
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "messages_turn_id_turns_id_fk",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "messages"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["sender_user_id"],
+      "schemaTo": "public",
+      "tableTo": "user",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "SET NULL",
+      "name": "messages_sender_user_id_user_id_fkey",
       "entityType": "fks",
       "schema": "public",
       "table": "messages"
