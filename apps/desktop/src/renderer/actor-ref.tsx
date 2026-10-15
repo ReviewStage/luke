@@ -318,7 +318,7 @@ const GITHUB_WORDS = {
 } as const;
 
 /** Someone on GitHub's card: their face, their login, whether they are a person or an App's bot, and that a person is no member here. Read, never followed. */
-export function GitHubCard({ actor }: { actor: GitHubActor }): React.JSX.Element {
+function GitHubCard({ actor }: { actor: GitHubActor }): React.JSX.Element {
   return (
     <HoverCard data-actor-card={actor.kind}>
       <div className="actor-card-head">
