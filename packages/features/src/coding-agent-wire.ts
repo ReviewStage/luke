@@ -684,8 +684,12 @@ export const codingAgentChangesAnswerSchema = EffectSchema.Struct({
   ),
 });
 
-export type CodingAgentChanges = NonNullable<
-  (typeof codingAgentChangesAnswerSchema.Type)["pullRequest"]
+type CodingAgentChanges = NonNullable<(typeof codingAgentChangesAnswerSchema.Type)["pullRequest"]>;
+
+/** Who an agent's pull request names, as its changes carry them; every key absent from a service before them, or where they could not be read. */
+export type CodingAgentChangesPeople = Pick<
+  CodingAgentChanges,
+  "author" | "reviewers" | "commitAuthors" | "comments"
 >;
 
 /**

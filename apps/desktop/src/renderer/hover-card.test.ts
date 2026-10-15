@@ -177,6 +177,7 @@ test("a plan's, a skill's, an agent tab's, and a Changes tab's cards each name t
       ),
       models: [],
       pullRequest: PULL_REQUEST,
+      people: undefined,
       onOpenAgent: () => undefined,
     }),
   );

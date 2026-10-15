@@ -472,29 +472,76 @@ export function ActorLine({ children }: { children: ReactNode }): React.JSX.Elem
   return <span className="actor-words">{children}</span>;
 }
 
+/** One face of a facepile that hangs cards: what it says of the actor beyond their name, its badge, and the card it hangs where the actor's own is not the one. */
+export interface StackFace {
+  /** What the face says beside the actor's name to a screen reader and in its pill, "Approved". */
+  readonly says?: string;
+  /** A small mark at the face's corner, a reviewer's standing. */
+  readonly badge?: ReactNode;
+  /** The card the face hangs in place of the actor's own, an agent's tab's. */
+  readonly card?: ReactNode;
+}
+
+/** One face of a facepile that hangs its card: the actor's mark, its badge, named to a screen reader by its name and what it says. */
+function CardedFace({ actor, face }: { actor: Actor; face: StackFace }): React.JSX.Element {
+  const name = face.says === undefined ? actorName(actor) : `${actorName(actor)} · ${face.says}`;
+  return (
+    <Tooltip label={name} card={face.card ?? actorCard(actor)}>
+      <li className="actor-stack-face" aria-label={name}>
+        <ActorMark actor={actor} size={ACTOR_SIZE.STACK} />
+        {face.badge === undefined ? null : (
+          <span className="actor-stack-badge" aria-hidden="true">
+            {face.badge}
+          </span>
+        )}
+      </li>
+    </Tooltip>
+  );
+}
+
 /**
  * Many actors as a facepile: the first `drawn`, each cut from the ground
  * behind it by a ring of that ground, then how many more where `counted`;
  * a place whose words beside the pile already count them, "5 can edit",
- * draws no pill.
+ * draws no pill. Handed `faces`, one for each actor, each face hangs its
+ * card, the actor's own where the face names none, wears its badge, and is
+ * named to a screen reader, the pile a list under `label`; without them the
+ * pile is the words' picture beside them and a screen reader skips it.
  */
 export function ActorStack({
   actors,
   drawn = 4,
   counted = true,
+  faces,
+  label,
 }: {
   actors: readonly Actor[];
   drawn?: number;
   counted?: boolean;
+  faces?: readonly StackFace[];
+  /** What a pile of faces is, to a screen reader: "Reviewers". */
+  label?: string;
 }): React.JSX.Element {
   const rest = counted ? actors.length - drawn : 0;
+  const more = rest > 0 ? <span className="actor-stack-more">{`+${rest}`}</span> : null;
+  if (faces === undefined) {
+    return (
+      <span className="actor-stack" aria-hidden="true">
+        {actors.slice(0, drawn).map((actor, index) => (
+          // Note that a pile's order is its place's own and never moves under it, so a disc is keyed by where it stands.
+          <ActorMark key={index} actor={actor} size={ACTOR_SIZE.STACK} />
+        ))}
+        {more}
+      </span>
+    );
+  }
   return (
-    <span className="actor-stack" aria-hidden="true">
+    <ul className="actor-stack" aria-label={label}>
       {actors.slice(0, drawn).map((actor, index) => (
-        // Note that a pile's order is its place's own and never moves under it, so a disc is keyed by where it stands.
-        <ActorMark key={index} actor={actor} size={ACTOR_SIZE.STACK} />
+        // Note that a pile's order is its place's own and never moves under it, so a face is keyed by where it stands.
+        <CardedFace key={index} actor={actor} face={faces[index] ?? {}} />
       ))}
-      {rest > 0 ? <span className="actor-stack-more">{`+${rest}`}</span> : null}
-    </span>
+      {rest > 0 ? <li className="actor-stack-more">{`+${rest}`}</li> : null}
+    </ul>
   );
 }

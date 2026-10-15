@@ -556,6 +556,7 @@ function stripTabs(input: {
           subject={subject}
           models={agents.models}
           pullRequest={pullRequest}
+          people={agents.changesPeople.get(tab.changes)}
           onOpenAgent={() => onOpenAgent(tab.changes)}
         />
       );

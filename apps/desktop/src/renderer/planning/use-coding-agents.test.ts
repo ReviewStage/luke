@@ -273,3 +273,28 @@ test("another agent named with no plan open holds nothing of the last, even wher
   assert.equal(tab.control().agents, undefined, "the last agent is not drawn for the next");
   assert.equal(tab.control().listFailed, true);
 });
+
+test("a read of an agent's changes keeps who its pull request names, by agent, so its Changes card says them wherever it hangs; a read naming no pull request keeps nothing", async () => {
+  const tab = mount({ planId: undefined, agentId: AGENT, repository: null });
+  const author = { login: "luke[bot]", bot: true, luke: true };
+  const reviewers = [{ by: { login: "octocat", bot: false }, state: "approved" as const }];
+  tab.answer(ACT_KIND.CODING_AGENTS_CHANGES, {
+    pullRequest: {
+      url: "https://github.com/acme/relay/pull/42",
+      files: [],
+      truncated: false,
+      author,
+      reviewers,
+    },
+  });
+  tab.answer(ACT_KIND.CODING_AGENTS_CHANGES, { pullRequest: null });
+  await tab.mount();
+  assert.equal(tab.control().changesPeople.get(AGENT), undefined);
+
+  await act(() => tab.control().readChanges(AGENT));
+  assert.deepEqual(tab.control().changesPeople.get(AGENT), { author, reviewers });
+
+  const other = "3c2d1e0f-4a5b-4c6d-8e7f-9a0b1c2d3e4f";
+  await act(() => tab.control().readChanges(other));
+  assert.equal(tab.control().changesPeople.get(other), undefined);
+});

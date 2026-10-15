@@ -366,6 +366,7 @@ function withCards(
           subject={subject}
           models={agents.models}
           pullRequest={offer.pullRequest}
+          people={agents.changesPeople.get(offer.agent.id)}
           onOpenAgent={() => onOpenAgent(offer.agent.id)}
         />
       );
