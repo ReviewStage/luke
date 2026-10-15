@@ -165,16 +165,19 @@ const MESSAGE_CODING_AGENT_INPUT = Schema.Struct({
   ),
 });
 
+/** A prompt a start may name: the developer's words, bounded as a message to an agent is. */
+const START_PROMPT = Schema.Trim.check(
+  Schema.isNonEmpty(),
+  Schema.isMaxLength(CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS),
+);
+
 /** A start names a prompt at most, and a model with its effort or neither; the catalog decides whether the two name anything. */
 const START_CODING_AGENT_INPUT = Schema.Struct({
-  task: Schema.optionalKey(
+  prompt: Schema.optionalKey(
     describeWire(
-      Schema.Trim.check(
-        Schema.isNonEmpty(),
-        Schema.isMaxLength(CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS),
-      ),
-      "The prompt the agent starts on: what it should do, in the developer's words, typed to it " +
-        "as its first message; leave it out to start the agent on the plan itself.",
+      START_PROMPT,
+      "What the agent should do, in the developer's words, typed to it as its first message; " +
+        "leave it out to start the agent on the plan itself.",
     ),
   ),
   model: Schema.optionalKey(
@@ -194,7 +197,13 @@ const START_CODING_AGENT_INPUT = Schema.Struct({
 
 const readAgentRef = Schema.decodeUnknownResult(READ_CODING_AGENT_INPUT);
 const readMessage = Schema.decodeUnknownResult(MESSAGE_CODING_AGENT_INPUT);
-const readStart = Schema.decodeUnknownResult(START_CODING_AGENT_INPUT);
+/** A start as a call carries it: one the model made under the tool's earlier words names its prompt `task`. */
+const START_CODING_AGENT_CALL = Schema.Struct({
+  ...START_CODING_AGENT_INPUT.fields,
+  task: Schema.optionalKey(START_PROMPT),
+});
+
+const readStart = Schema.decodeUnknownResult(START_CODING_AGENT_CALL);
 
 /** The tools as a planning model is offered them: each its name, its words, and its input schema. */
 export const LIST_CODING_AGENTS_TOOL = {
@@ -560,8 +569,8 @@ export function runStartCodingAgent(
   ) {
     return Effect.succeed(rejected(START_CODING_AGENT_REFUSAL.UNREADABLE));
   }
-  // Note that the model names the prompt `task`, the key its tool has always taken.
-  const { task: prompt, model, effort } = asked.success;
+  const { model, effort } = asked.success;
+  const prompt = asked.success.prompt ?? asked.success.task;
   const choice = model !== undefined && effort !== undefined ? { model, effort } : undefined;
   const eve = call.eve;
   if (eve === undefined) return Effect.succeed(rejected(START_CODING_AGENT_REFUSAL.NO_SERVICE));

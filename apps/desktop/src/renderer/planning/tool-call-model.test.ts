@@ -409,6 +409,13 @@ test("the planning model's own calls draw from their parts as a coding agent's d
   assert.deepEqual([asked.kind, asked.subject], [CALL_KIND.QUEUE_QUESTION, "Who can invite?"]);
   const looked = toolCallView({ tool: "look_at_board", input: {}, output: { image: "…" } });
   assert.deepEqual([looked.kind, looked.output], [CALL_KIND.LOOK_AT_BOARD, undefined]);
+  const started = (input: Record<string, string>) =>
+    toolCallView({ tool: "start_coding_agent", input, output: undefined }).subject;
+  assert.deepEqual(
+    [started({ prompt: "Fix the invite email." }), started({ task: "Fix the invite email." })],
+    ["Fix the invite email.", "Fix the invite email."],
+    "a start names its prompt, and one journaled before it had its name names its task",
+  );
   const waited = toolCallView({ tool: "task_wait", input: {}, output: "1 task settled." });
   assert.equal(waited.kind, CALL_KIND.WORKER_WAIT);
   const stopped = toolCallView({
