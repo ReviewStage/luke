@@ -33,6 +33,26 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 const ADDRESS_IN_TEXT =
   /(?:https|tryluke):\/\/tryluke\.dev\/[^\s/()]{1,200}\/plan\/([0-9a-f-]{36})\/files\/([0-9a-f-]{36})(?![\w-])/gu;
 
+/** An image's opening, `![`, whose `!` no backslash escapes: none, or an even run of them, stands before it. */
+const PICTURE_OPENER = String.raw`(?<!(?<!\\)(?:\\\\)*\\)!\[`;
+
+/** An image's alt text: escaped characters, bracketed phrases one level deep, and any other character but a line break, bounded as the address's steps are. */
+const PICTURE_ALT = String.raw`(?:\\.|\[(?:\\.|[^\[\]\\\n]){0,1000}\]|[^\[\]\\\n]){0,1000}`;
+
+/** What may follow an image's address before its link closes: a caption in either quote or in parentheses, as Markdown allows, then the `)`. */
+const PICTURE_CLOSE = String.raw`(?:[ \t]+(?:"(?:\\.|[^"\\\n]){0,1000}"|'(?:\\.|[^'\\\n]){0,1000}'|\((?:\\.|[^()\\\n]){0,1000}\)))?[ \t]*\)`;
+
+/**
+ * Every picture a text draws by an address of a plan's picture, whole: its
+ * unescaped opening, its alt text, the address, and its caption and close.
+ * A line left open, or an image whose `!` is escaped, draws no picture and
+ * is not one. The address is the first group.
+ */
+const PICTURE_IN_TEXT = new RegExp(
+  `${PICTURE_OPENER}${PICTURE_ALT}\\]\\((${ADDRESS_IN_TEXT.source})${PICTURE_CLOSE}`,
+  "gu",
+);
+
 /** The most characters an address is read from; past this no picture's address is that long. */
 const MAX_ADDRESS_CHARS = 512;
 
@@ -86,4 +106,15 @@ export function planAttachmentIdsIn(text: string, planId: string): readonly stri
     if (plan === planId && attachment !== undefined && UUID.test(attachment)) named.add(attachment);
   }
   return [...named];
+}
+
+/**
+ * The address of every picture a text draws, `![alt](<address>`, of any
+ * plan, in order, each copy apart; an address standing as a link or as
+ * bare words draws no picture and is not among them.
+ */
+export function planPicturesIn(text: string): readonly string[] {
+  return [...text.matchAll(PICTURE_IN_TEXT)].flatMap(([, address]) =>
+    address === undefined ? [] : [address],
+  );
 }

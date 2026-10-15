@@ -7,6 +7,7 @@ import {
 } from "@luke/database/models/coding-agent-store";
 import { hostTurnId, sentLineId } from "@luke/database/models/ids";
 import { readMessageByClientId, sentLineStands } from "@luke/database/models/message-reads";
+import { keepPlanAttachment, PLAN_ATTACHMENT_KEEP } from "@luke/database/models/plan-attachments";
 import { openPlanConversation } from "@luke/database/models/plan-store";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
@@ -15,7 +16,10 @@ import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
+import { PICTURE_TYPE } from "@luke/features/picture-wire";
+import { planAttachmentAddress } from "@luke/features/plan-attachment-link";
 import { Effect, Layer, Option, Redacted, Result } from "effect";
+import { Base64 } from "effect/encoding";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
 import type { ToolContext as EveToolContext } from "eve/tools";
@@ -25,12 +29,18 @@ import {
   BRAIN_TURN_TRIGGER,
   isRecord,
   isWireString,
+  unparsedWire,
   type WireRecord,
 } from "../../core.js";
 import type { GitHubApp } from "../../github/github-app.js";
 import { LINK_OUTCOME } from "../../github/github-installations.js";
 import { HOSTED_TOOL_SET } from "../../plans/brain-tool-set.js";
 import { END_CALL_TOOL } from "../../plans/end-call.js";
+import {
+  LOOK_AT_PICTURE_TOOL,
+  PICTURE_LOOK_REFUSAL,
+  pictureNotLooked,
+} from "../../plans/picture-look.js";
 import { modelCatalogOf, type OfferedModel } from "../../providers/model-catalog.js";
 import {
   connectWorkspaceGitHub,
@@ -53,7 +63,7 @@ import {
   runtimeSessionReachableBy,
 } from "./conversation.js";
 import { type BrainHost, brainHost } from "./host.js";
-import { planningToolDeclarations } from "./planning.js";
+import { planningModelOutput, planningToolDeclarations } from "./planning.js";
 import type { BrainHostSeams } from "./production.js";
 
 /**
@@ -514,6 +524,38 @@ test("Luke's one start carries what the developer said beyond the plan: the note
   const texts = parts.map((part) => (isRecord(part) && isWireString(part.text) ? part.text : ""));
   assert.match(texts[0] ?? "", /^# Teammate invitations[\s\S]*## Note from the developer\n\nFix /u);
   assert.match(texts[1] ?? "", /pointed you at https:\/\/linear\.app\/acme\/issue\/LUKE-142/u);
+});
+
+test("Luke looks at a picture of the call's plan as a member speaking in it: the model is shown the picture under its own type, and a picture of another plan is refused", async () => {
+  const plan = await planConversation();
+  const teammate = await database.createUser();
+  await database.run(joinWorkspace(plan.workspaceId, teammate));
+  const elsewhere = await planConversation(plan.userId);
+  const picture = {
+    contentType: PICTURE_TYPE.JPEG,
+    bytes: Uint8Array.from([0xff, 0xd8, 0xff, 0xe0, 0, 16, 1, 2]),
+  };
+  const kept = await database.run(keepPlanAttachment(plan.userId, plan.planId, picture));
+  if (kept.status !== PLAN_ATTACHMENT_KEEP.KEPT) return assert.fail("no picture was kept");
+  const address = planAttachmentAddress({ planId: plan.planId, attachmentId: kept.id }, "acme");
+  const call = await callerOn(brainHost(seams), plan, NO_GITHUB, [], teammate);
+  const callElsewhere = await callerOn(brainHost(seams), elsewhere);
+
+  const looked = await call(LOOK_AT_PICTURE_TOOL.name, { address });
+  const refused = await callElsewhere(LOOK_AT_PICTURE_TOOL.name, { address });
+
+  assert.deepEqual(planningModelOutput(LOOK_AT_PICTURE_TOOL.name, unparsedWire(looked)), {
+    type: "content",
+    value: [
+      { type: "text", text: "The picture you asked to see:" },
+      {
+        type: "file",
+        data: { type: "data", data: Base64.encode(picture.bytes) },
+        mediaType: PICTURE_TYPE.JPEG,
+      },
+    ],
+  });
+  assert.deepEqual(refused, pictureNotLooked(PICTURE_LOOK_REFUSAL.ELSEWHERE));
 });
 
 test("end_call is the one planning tool eve is told ends its turn, so the model is asked for no step after the goodbye it was told to add nothing to", () => {

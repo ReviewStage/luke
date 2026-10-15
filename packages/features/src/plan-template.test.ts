@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { unparsedWire } from "@luke/wire";
 import { test } from "vitest";
+import { planPicturesIn } from "./plan-attachment-link.js";
 import {
   applyNotesToText,
   NOTE_KIND,
@@ -175,4 +176,92 @@ test("a correction that drops a mention past the plan's twentieth is not taken",
   };
 
   assert.deepEqual(applyNotesToText(text, [note]).missed, [note]);
+});
+
+/** A picture's address in a plan's text, under the plan's own address. */
+const PICTURE_ADDRESS =
+  "https://tryluke.dev/acme/plan/3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b/files/9d2e4c61-7a3b-4f0e-8b1a-2c6d4e8f0a13";
+
+/** A picture's line as the plan's text writes it: alt text, address, and caption. */
+const PICTURE_LINE = `![Members page with two pending invites](${PICTURE_ADDRESS} "Pending invites sit in the list")`;
+
+/** A plan's text holding a picture on its own line, between two points. */
+const PICTURED = [
+  "## Approach",
+  "",
+  "- The members page lists pending invites.",
+  "",
+  PICTURE_LINE,
+  "",
+  "- An invite expires after 7 days.",
+  "",
+].join("\n");
+
+test("a correction that drops a picture the plan held is not taken", () => {
+  const note: PlanNote = {
+    kind: NOTE_KIND.REPLACE,
+    find: `invites.\n\n${PICTURE_LINE}`,
+    text: "invites, shown on the members page.",
+  };
+
+  const taken = applyNotesToText(PICTURED, [note]);
+
+  assert.equal(taken.text, PICTURED);
+  assert.deepEqual(taken.missed, [note]);
+});
+
+test("a correction that leaves a picture's address drawing no picture, as a link, a line left open, or behind an escaped !, is not taken", () => {
+  for (const broken of [
+    `[Members page with two pending invites](${PICTURE_ADDRESS})`,
+    `![Members page with two pending invites](${PICTURE_ADDRESS}`,
+    `\\![Members page with two pending invites](${PICTURE_ADDRESS})`,
+  ]) {
+    const note: PlanNote = { kind: NOTE_KIND.REPLACE, find: PICTURE_LINE, text: broken };
+
+    assert.deepEqual(applyNotesToText(PICTURED, [note]).missed, [note], broken);
+  }
+});
+
+test("a picture whose alt text holds a bracketed phrase, or whose caption stands in single quotes or parentheses, is kept like any other", () => {
+  for (const line of [
+    `![Mock [v2]](${PICTURE_ADDRESS})`,
+    `![Mock](${PICTURE_ADDRESS} 'Version two')`,
+    `![Mock](${PICTURE_ADDRESS} (Version two))`,
+  ]) {
+    const note: PlanNote = { kind: NOTE_KIND.REPLACE, find: line, text: "No mock" };
+
+    assert.deepEqual(applyNotesToText(`## Approach\n\n${line}\n`, [note]).missed, [note], line);
+  }
+});
+
+test("a correction that rewords a picture's alt text and caption, or moves it within the phrase it corrects, keeping its address, is taken", () => {
+  const rewordedLine = `![Members page: one member, two pending invites](${PICTURE_ADDRESS})`;
+  const reworded = applyNotesToText(PICTURED, [
+    { kind: NOTE_KIND.REPLACE, find: PICTURE_LINE, text: rewordedLine },
+  ]);
+  const moved = applyNotesToText(PICTURED, [
+    {
+      kind: NOTE_KIND.REPLACE,
+      find: `- The members page lists pending invites.\n\n${PICTURE_LINE}`,
+      text: `${PICTURE_LINE}\n\n- The members page lists pending invites first.`,
+    },
+  ]);
+
+  assert.deepEqual(reworded.missed, []);
+  assert.ok(reworded.text.split("\n").includes(rewordedLine));
+  assert.deepEqual(moved.missed, []);
+  assert.ok(
+    moved.text.startsWith(
+      `## Approach\n\n${PICTURE_LINE}\n\n- The members page lists pending invites first.`,
+    ),
+  );
+});
+
+test("striking the line a picture stands on is a retraction, and is taken", () => {
+  const taken = applyNotesToText(PICTURED, [
+    { kind: NOTE_KIND.REMOVE, find: "Members page with two pending invites" },
+  ]);
+
+  assert.deepEqual(planPicturesIn(taken.text), []);
+  assert.deepEqual(taken.missed, []);
 });

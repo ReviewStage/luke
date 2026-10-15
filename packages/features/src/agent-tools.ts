@@ -24,6 +24,8 @@ export const AGENT_TOOL = {
   RUN_IN_REPOSITORY: "run_in_repository",
   DRAW_ON_BOARD: DRAW_ON_BOARD_TOOL_NAME,
   LOOK_AT_BOARD: LOOK_AT_BOARD_TOOL_NAME,
+  // A look at one of the plan's pictures, the planning model's and a coding agent's.
+  LOOK_AT_PICTURE: "look_at_picture",
   LIST_CODING_AGENTS: "list_coding_agents",
   READ_CODING_AGENT: "read_coding_agent",
   MESSAGE_CODING_AGENT: "message_coding_agent",

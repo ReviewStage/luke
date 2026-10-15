@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { CALL_KIND } from "@luke/features/turn-rows";
 import { test } from "vitest";
 import { TOOL_BLOCK } from "../ai-elements/tool";
-import { cardTitle, toolCallView } from "./tool-call-model";
+import { cardTitle, TOOL_TARGET, toolCallView, toolTarget } from "./tool-call-model";
 
 const ESCAPE = String.fromCharCode(27);
 
@@ -424,4 +424,23 @@ test("the planning model's own calls draw from their parts as a coding agent's d
     output: "Stopped delegate-7k2m9q.",
   });
   assert.deepEqual([stopped.kind, stopped.subject], [CALL_KIND.WORKER_CANCEL, "delegate-7k2m9q"]);
+});
+
+test("a look at one of the plan's pictures says it looked and opens the plan, and one refused shows why and opens nothing", () => {
+  const input = {
+    address:
+      "https://tryluke.dev/acme/plan/3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b/files/9d2e4c61-7a3b-4f0e-8b1a-2c6d4e8f0a13",
+  };
+  const looked = { tool: "look_at_picture", callId: "call-1", input, output: { status: "looked" } };
+  const refused = {
+    ...looked,
+    output: { status: "not-looked", reason: "Not looked: this task's plan holds no such picture." },
+  };
+
+  assert.equal(toolCallView(looked).kind, CALL_KIND.LOOK_AT_PICTURE);
+  assert.deepEqual(toolTarget(looked), { kind: TOOL_TARGET.PLAN });
+  const shown = toolCallView(refused).output;
+  assert.equal(shown?.kind, TOOL_BLOCK.JSON);
+  assert.ok(shown?.text.includes(refused.output.reason));
+  assert.equal(toolTarget(refused), undefined);
 });
