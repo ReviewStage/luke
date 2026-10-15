@@ -336,6 +336,48 @@ it.layer(getTestDB())("the automation routes", (it) => {
   );
 
   it.effect(
+    "an automation on a workspace is refused a change to a GitHub event, as it is refused one when made, and keeps its schedule, while one on a plan may take one",
+    () =>
+      Effect.gen(function* () {
+        const { owner, plan, ask } = yield* openAccounts;
+        const relay = `${RELAY.owner}/${RELAY.name}`;
+        const onGitHub = {
+          trigger: { kind: AUTOMATION_TRIGGER.GITHUB, event: GITHUB_TRIGGER_EVENT.ISSUE_OPENED },
+        };
+        const made = (body: WireBoundaryInput) =>
+          Effect.map(
+            ask(HOSTED_SERVICE_PATH.AUTOMATIONS, owner, { method: "POST", body }),
+            (answer) =>
+              readAnswer(automationAnswerSchema, HOSTED_HTTP_STATUS.CREATED, answer).automation,
+          );
+        const onWorkspaceMade = yield* made(onWorkspace(plan.workspaceId, [relay]));
+        const onPlanMade = yield* made(weekdays(plan.id));
+
+        const refused = yield* ask(automationPath(onWorkspaceMade.id), owner, {
+          method: "PATCH",
+          body: onGitHub,
+        });
+        const kept = readAnswer(
+          automationAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(automationPath(onWorkspaceMade.id), owner),
+        );
+        const onPlanChanged = yield* ask(automationPath(onPlanMade.id), owner, {
+          method: "PATCH",
+          body: onGitHub,
+        });
+
+        assert.equal(refused.status, HOSTED_HTTP_STATUS.BAD_REQUEST, JSON.stringify(refused.body));
+        assert.deepEqual(kept.automation.trigger, onWorkspaceMade.trigger);
+        assert.equal(
+          onPlanChanged.status,
+          HOSTED_HTTP_STATUS.OK,
+          JSON.stringify(onPlanChanged.body),
+        );
+      }),
+  );
+
+  it.effect(
     "an automation is made with its schedule's first due instant and read, changed, and deleted by its own account alone",
     () =>
       Effect.gen(function* () {
