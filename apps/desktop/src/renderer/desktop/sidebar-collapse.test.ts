@@ -324,6 +324,7 @@ test("a dialog raised from the open sidebar takes Escape first, leaving the side
   const page = mount(1000);
   act(() => toggle(page).click());
   const dialog = document.body.appendChild(document.createElement("div"));
+  dialog.setAttribute("role", "dialog");
   const field = dialog.appendChild(document.createElement("button"));
   field.focus();
   const press = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
@@ -331,4 +332,22 @@ test("a dialog raised from the open sidebar takes Escape first, leaving the side
     field.dispatchEvent(press);
   });
   assert.deepEqual([standing(page), press.defaultPrevented], ["floating", false]);
+});
+
+test("a peek opened by a press on no control keeps the keyboard in the work, and Escape there still puts it away", () => {
+  const page = mount(1000);
+  const main = page.querySelector("main.desktop-main");
+  const edge = page.querySelector("[data-sidebar-peek-edge]");
+  const work = main?.querySelector<HTMLButtonElement>("button");
+  assert.ok(main && edge && work);
+  work.focus();
+  pointerCross(main, edge);
+  pressDown(sidebarOf(page).querySelector(".sidebar-rule") ?? sidebarOf(page));
+  pointerCross(sidebarOf(page), main);
+  assert.equal(standing(page), "floating", "pressed, the peek is open");
+  const press = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+  act(() => {
+    work.dispatchEvent(press);
+  });
+  assert.deepEqual([standing(page), press.defaultPrevented], ["away", true]);
 });

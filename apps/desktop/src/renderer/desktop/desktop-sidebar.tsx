@@ -544,6 +544,9 @@ function SidebarInboxRow({
   );
 }
 
+/** The layers that answer their own Escape before a floating sidebar is put away. */
+const KEY_LAYERS = '[role="menu"], [role="dialog"], [role="alertdialog"]';
+
 /** What the sidebar is drawn with while it floats, or could. */
 interface FloatingSidebar {
   readonly ref: React.RefObject<HTMLElement | null>;
@@ -586,23 +589,26 @@ function useFloatingSidebar(sidebar: SidebarCollapse): FloatingSidebar {
     first?.focus();
   }, [overlay]);
   useEffect(() => () => onOverlay(SIDEBAR_OVERLAY.CLOSED), [onOverlay]);
-  // Note that a peek leaves the keyboard in the work under it, so Escape
-  // there is heard at the window, before the work's own layers hear it. An
-  // open sidebar holds the keyboard and hears its own Escape after any menu
-  // or dialog it raised, since a press in a peek opens it first.
-  const peeking = overlay === SIDEBAR_OVERLAY.PEEK;
+  // Note that a floating sidebar need not hold the keyboard, a peek or one a
+  // bare press opened leaving it in the work under it, so Escape is heard at
+  // the window before the work's layers hear it. A key aimed into the
+  // sidebar is left to its own handler, and one aimed into a menu or a
+  // dialog to that layer, which may have been raised from the sidebar.
   useEffect(() => {
-    if (!peeking) return;
+    if (!floating) return;
     const putAway = (event: KeyboardEvent) => {
       const held = ref.current;
+      const target = event.target instanceof Element ? event.target : null;
       if (event.key !== "Escape" || event.defaultPrevented) return;
-      if (held !== null && event.target instanceof Node && held.contains(event.target)) return;
+      if (target !== null && (held?.contains(target) || target.closest(KEY_LAYERS) !== null)) {
+        return;
+      }
       event.preventDefault();
       onOverlay(SIDEBAR_OVERLAY.CLOSED);
     };
     window.addEventListener("keydown", putAway, true);
     return () => window.removeEventListener("keydown", putAway, true);
-  }, [peeking, onOverlay]);
+  }, [floating, onOverlay]);
   return {
     ref,
     inSight: !sidebar.collapsed || floating,
