@@ -61,6 +61,32 @@ export function appLinkInArguments(argv: readonly string[]): string | undefined 
   return argv.findLast((argument) => argument.startsWith(`${APP_LINK_SCHEME}:`));
 }
 
+/** What a launch hands Electron after the scheme when it claims it: the binary a link starts, and the arguments it starts it with. */
+export type AppLinkClaim = [executable: string, args: string[]];
+
+/**
+ * Whether this launch asks macOS to send it the app's own scheme, and on
+ * what. A packaged build claims it as itself, its bundle declaring the
+ * scheme. A live development run asks too, on the Electron binary it runs
+ * and the app it was started on, so a link may reach the build
+ * `./scripts/run.sh` launched rather than an older Luke installed beside it.
+ * Note that the stock Electron bundle a development run is declares no
+ * scheme, so whether macOS honours that claim is LaunchServices' to decide;
+ * `pnpm package:dir`'s Luke.app declares it, and is the local build a link
+ * surely reaches. A fixture or capture run claims nothing, so a
+ * deterministic run never takes the developer's links.
+ */
+export function appLinkClaim(launch: {
+  readonly packaged: boolean;
+  readonly live: boolean;
+  readonly executable: string;
+  readonly appPath: string;
+}): AppLinkClaim | undefined {
+  if (launch.packaged) return [launch.executable, []];
+  if (!launch.live) return undefined;
+  return [launch.executable, [launch.appPath]];
+}
+
 /** An inbox holding no link and able to open none yet. */
 export function appLinkInbox(): AppLinkInbox {
   const held: AppLinkPlace[] = [];
