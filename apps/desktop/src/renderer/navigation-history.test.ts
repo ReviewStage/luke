@@ -9,7 +9,7 @@ import { afterEach, test } from "vitest";
 import { plansControl } from "#testing/plans-control";
 import { useWindowHistory, type WindowHistory } from "./navigation-history";
 import { PANEL_TAB } from "./panel-tabs";
-import type { PlansControl } from "./planning/use-plans-tab";
+import type { LeaveAsk, PlansControl } from "./planning/use-plans-tab";
 
 const PLAN_ID = "0f6a2c4e-8b1d-4e3f-9a57-1c2b3d4e5f60";
 
@@ -60,4 +60,44 @@ test("leaving a plan for the home page is a step Back returns from", () => {
   );
   window.stand(plansControl());
   assert.equal(window.history().canGoBack, true);
+});
+
+test("a step back cancelled at the leave ask leaves the trail where the window stands, so the next step is the same step", () => {
+  const asked: (() => void)[] = [];
+  const ask: LeaveAsk = (leave) => asked.push(leave);
+  let standing: LeaveAsk | undefined;
+  const asking = (base: PlansControl): PlansControl => ({
+    ...base,
+    leaveGuard: {
+      stand: () => () => undefined,
+      pass: (leave) => leave(),
+      guard:
+        (leave) =>
+        (...args) => {
+          if (standing === undefined) leave(...args);
+          else standing(() => leave(...args));
+        },
+    },
+  });
+  const homes: string[] = [];
+  const atPlan = asking(
+    plansControl({
+      page: PLANS_PAGE.DOCUMENT,
+      activePlanId: PLAN_ID,
+      boundFor: PLAN_ID,
+      onLeavePlan: () => homes.push("home"),
+    }),
+  );
+  const window = mount(asking(plansControl()));
+  window.stand(atPlan);
+  assert.equal(window.history().canGoBack, true);
+
+  standing = ask;
+  act(() => window.history().onBack());
+  assert.deepEqual(homes, [], "the step waits on the ask");
+  assert.equal(window.history().canGoBack, true, "and the trail has not moved");
+  assert.equal(window.history().canGoForward, false);
+
+  act(() => asked[0]?.());
+  assert.deepEqual(homes, ["home"], "Leave takes the step it asked about");
 });

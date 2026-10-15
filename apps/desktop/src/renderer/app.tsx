@@ -160,15 +160,17 @@ export function App(): React.JSX.Element {
    * the Workspace page shows while Settings stays open; its page; and its
    * section, which is looked for once drawn and given up on by itself.
    */
+  // Note that the link asks once, as a whole, so its page, workspace, and section all wait on the ask with its tab.
   const openSettings = useCallback(
-    (link: SettingsLink) => {
-      followSettingsLink(link, {
-        changeTab,
-        changeView: setSettingsView,
-        chooseWorkspace: (workspaceId) => linkWorkspace.current(workspaceId),
-      });
-    },
-    [changeTab, setSettingsView],
+    (link: SettingsLink) =>
+      guardLeave(() =>
+        followSettingsLink(link, {
+          changeTab,
+          changeView: setSettingsView,
+          chooseWorkspace: (workspaceId) => linkWorkspace.current(workspaceId),
+        }),
+      )(),
+    [changeTab, guardLeave, setSettingsView],
   );
 
   /** True while sign-in stands between Luke and anything to watch: the gate is then what the window shows. */

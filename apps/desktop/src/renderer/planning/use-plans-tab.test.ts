@@ -1558,8 +1558,9 @@ test("while a page stands its ask, a way out asks instead of going, Leave goes w
 
   act(() => tab.control().factoryView.onOpen());
   act(() => tab.control().onGoHome());
+  act(() => tab.control().onChooseWorkspace("workspace-other"));
   assert.equal(tab.control().inboxView.open, true, "the page stands while it is asked about");
-  assert.equal(asked.length, 2);
+  assert.equal(asked.length, 3, "the workspace switcher asks as the other doors do");
 
   act(() => asked[0]?.());
   assert.equal(tab.control().factoryView.open, true, "Leave goes where the first way out went");
@@ -1567,7 +1568,7 @@ test("while a page stands its ask, a way out asks instead of going, Leave goes w
   act(() => down());
   act(() => tab.control().inboxView.onOpen());
   assert.equal(tab.control().inboxView.open, true);
-  assert.equal(asked.length, 2, "nothing is asked once the ask is down");
+  assert.equal(asked.length, 3, "nothing is asked once the ask is down");
 });
 
 test("Factory and the Inbox stand in the plan's place in turn: opening one puts the other away, and Home or a plan's press puts Factory away", () => {

@@ -1805,7 +1805,7 @@ export function usePlansTab(input: {
     },
     workspaces: viewed.workspaces,
     workspace: listedWorkspace,
-    onChooseWorkspace: switchWorkspace,
+    onChooseWorkspace: guard(switchWorkspace),
     onCreateWorkspace: createWorkspace,
     onOpenWorkspaceSettings: () =>
       input.onOpenSettings({
