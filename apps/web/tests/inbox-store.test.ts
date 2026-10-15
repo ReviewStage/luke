@@ -2,13 +2,22 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
+import { createAutomation } from "@luke/database/models/automation-store";
 import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { updatePlan } from "@luke/database/models/plan-store";
 import { organization, user } from "@luke/database/schemas/auth";
+import { automation as automationTable } from "@luke/database/schemas/automation";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { inboxItem } from "@luke/database/schemas/inbox";
 import { getTestDB, joinWorkspace, openWorkspace, startPlan } from "@luke/database/testing";
 import {
+  AUTOMATION_ACTION,
+  AUTOMATION_DEFAULT_GUARDS,
+  AUTOMATION_SCOPE,
+  AUTOMATION_TRIGGER,
+} from "@luke/features/automation-wire";
+import {
+  INBOX_CURSOR_START,
   INBOX_REPLY,
   INBOX_RESPONSE,
   INBOX_STATUS,
@@ -16,6 +25,7 @@ import {
 } from "@luke/features/inbox-wire";
 import { eq } from "drizzle-orm";
 import { Effect, Option, Result } from "effect";
+import { accountInboxPast } from "../server/hosted/coder-host/inbox-page";
 import {
   accountInboxPlans,
   accountWaitingItems,
@@ -79,26 +89,100 @@ const SETTINGS: InboxPost = {
 /** The reply a task takes: done. */
 const DONE = { reply: INBOX_REPLY.DONE } as const;
 
-/** An account's workspace with one agent started in it on no plan, as an automation's run starts one. */
-const openPlanlessAgent = Effect.gen(function* () {
-  const userId = yield* openUser;
-  const workspaceId = yield* openWorkspace(userId);
-  const started = yield* createCodingAgent(userId, {
-    planId: null,
-    organizationId: workspaceId,
-    idempotencyKey: randomUUID(),
-    model: "anthropic/claude-opus-5.5",
-    effort: "high",
-    repository: "acme/relay",
-    planSnapshot: null,
-    task: "Sweep the flaky tests.",
+/** A workspace automation of the account's on a plan of the workspace, which its runs start agents beside. */
+const openAutomation = (userId: string, workspaceId: string) =>
+  Effect.gen(function* () {
+    const plan = yield* startPlan(userId, { name: "Flaky tests" });
+    yield* updatePlan(userId, plan.id, { organizationId: workspaceId });
+    const made = yield* createAutomation(userId, {
+      planId: plan.id,
+      name: "Flaky-test sweep",
+      scope: AUTOMATION_SCOPE.WORKSPACE,
+      trigger: { kind: AUTOMATION_TRIGGER.SCHEDULE, cron: "0 9 * * 1-5", timezone: "UTC" },
+      action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: "Fix the flakiest test." },
+      guards: AUTOMATION_DEFAULT_GUARDS,
+      nextRunAt: new Date("2026-10-15T09:00:00Z"),
+      webhookSecretHash: null,
+    });
+    return Option.getOrThrow(made).id;
   });
-  assert.ok(Option.isSome(started));
-  const agent: InboxAgent = { userId, planId: null, agentId: started.value.agent.id };
-  return { agent, workspaceId };
-});
+
+/** An account's workspace with one agent started in it on no plan, as an automation's run starts one, by an automation of the account's where asked. */
+const openPlanlessAgentOf = (byAutomation: boolean) =>
+  Effect.gen(function* () {
+    const userId = yield* openUser;
+    const workspaceId = yield* openWorkspace(userId);
+    const automationId = byAutomation ? yield* openAutomation(userId, workspaceId) : undefined;
+    const started = yield* createCodingAgent(userId, {
+      planId: null,
+      organizationId: workspaceId,
+      automationId,
+      idempotencyKey: randomUUID(),
+      model: "anthropic/claude-opus-5.5",
+      effort: "high",
+      repository: "acme/relay",
+      planSnapshot: null,
+      task: "Sweep the flaky tests.",
+    });
+    assert.ok(Option.isSome(started));
+    const agent: InboxAgent = { userId, planId: null, agentId: started.value.agent.id };
+    return { agent, workspaceId, automationId };
+  });
+
+const openPlanlessAgent = openPlanlessAgentOf(false);
 
 it.layer(getTestDB())("the inbox store", (it) => {
+  it.effect(
+    "the account's read carries an open item of an agent with no plan under its own keys, by its automation and repository, for every member of the workspace and no one else, never among the plans' items, and names a personal automation only to who may read it",
+    () =>
+      Effect.gen(function* () {
+        const { agent, workspaceId, automationId } = yield* openPlanlessAgentOf(true);
+        const teammate = yield* openUser;
+        yield* joinWorkspace(workspaceId, teammate);
+        const outsider = yield* openUser;
+        yield* openWorkspace(outsider);
+        const posted = yield* postInboxItem(agent, SETTINGS);
+        assert.ok(Result.isSuccess(posted));
+
+        const theirs = yield* accountInboxPast(teammate, INBOX_CURSOR_START);
+        const others = yield* accountInboxPast(outsider, INBOX_CURSOR_START);
+
+        assert.deepEqual(
+          theirs.planless?.map((entry) => [
+            entry.id,
+            entry.automationId,
+            entry.automationName,
+            entry.repository,
+          ]),
+          [[posted.success.id, automationId, "Flaky-test sweep", "acme/relay"]],
+        );
+        assert.deepEqual(
+          theirs.automations?.map((group) => [group.automationId, group.items]),
+          [[automationId, 1]],
+        );
+        assert.ok(!theirs.items.some((entry) => entry.id === posted.success.id));
+        assert.deepEqual([others.planless, others.automations], [[], []]);
+
+        // Made personal, the automation's runs stay the workspace's, and its name its creator's.
+        yield* Database.use((db) =>
+          db
+            .update(automationTable)
+            .set({ scope: AUTOMATION_SCOPE.PERSONAL })
+            .where(eq(automationTable.id, automationId ?? "")),
+        );
+        const teammateRead = yield* accountInboxPast(teammate, INBOX_CURSOR_START);
+        const creatorRead = yield* accountInboxPast(agent.userId, INBOX_CURSOR_START);
+        assert.deepEqual(
+          teammateRead.planless?.map((entry) => [entry.id, entry.automationName]),
+          [[posted.success.id, null]],
+        );
+        assert.deepEqual(
+          creatorRead.planless?.map((entry) => entry.automationName),
+          ["Flaky-test sweep"],
+        );
+      }),
+  );
+
   it.effect(
     "an agent with no plan posts to its workspace: a member who did not start it reads and answers the item, and an account outside the workspace does neither",
     () =>

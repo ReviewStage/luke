@@ -290,6 +290,11 @@ function allowedTo(userId: string, access: AutomationAccess, id?: string): SQL |
   );
 }
 
+/** The condition that the account may read the automation row a statement reads, by the rule above: what a read naming an automation from beside it, such as an agent its run started, gates the automation's own words on. */
+export function automationReadableBy(userId: string): SQL | undefined {
+  return allowedTo(userId, AUTOMATION_ACCESS.READ);
+}
+
 /** The columns only one kind of trigger uses, cleared under any other kind. */
 function triggerColumns(
   trigger: AutomationTrigger,
