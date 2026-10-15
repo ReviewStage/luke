@@ -213,3 +213,35 @@ it.effect(
       assert.deepEqual(read, { items: [], cursor: "3" });
     }),
 );
+
+it.effect(
+  "lists a workspace's agents by its id and the repository named, and a workspace the account is not in as not found",
+  () =>
+    Effect.gen(function* () {
+      const api = fakeCloudApi({ "GET /api/agents": { answer: () => ({ agents: [AGENT] }) } });
+      const refusing = fakeCloudApi({
+        "GET /api/agents": {
+          answer: () => ({ error: HOSTED_API_ERROR.NOT_FOUND }),
+          status: HTTP_STATUS.NOT_FOUND,
+        },
+      });
+
+      const listed = yield* Effect.provide(
+        client().listWorkspace({ workspaceId: "workspace-1", repository: "acme/relay" }),
+        api.layer,
+      );
+      const refused = yield* Effect.provide(
+        client().listWorkspace({ workspaceId: "workspace-2" }),
+        refusing.layer,
+      );
+
+      assert.deepEqual(listed, { agents: [AGENT] });
+      const query = api.requests()[0]?.searchParams;
+      assert.deepEqual(
+        [query?.get("workspaceId"), query?.get("repository")],
+        ["workspace-1", "acme/relay"],
+      );
+      assert.equal(refusing.requests()[0]?.searchParams.get("repository"), null);
+      assert.deepEqual(refused, { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND });
+    }),
+);

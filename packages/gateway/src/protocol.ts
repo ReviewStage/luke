@@ -96,6 +96,8 @@ export const GATEWAY_METHOD = {
   CODING_AGENTS_DEFAULT_WRITE: "codingAgents.defaultWrite",
   /** One plan's coding agents with their status, read from the service now. */
   CODING_AGENTS_LIST: "codingAgents.list",
+  /** A workspace's coding agents, newest started first, narrowed to one repository where one is named. */
+  CODING_AGENTS_WORKSPACE_LIST: "codingAgents.workspaceList",
   /** A coding agent started on one plan under the panel's own key; the agent, or why none started. */
   CODING_AGENTS_START: "codingAgents.start",
   /** One agent's transcript past a cursor, held open by the service while the agent runs. */

@@ -181,6 +181,11 @@ function fakeService() {
         asked.push(includeArchived === true ? `list:${planId}:archived` : `list:${planId}`);
         return { agents: [AGENT] };
       }),
+    listWorkspace: ({ workspaceId, repository }) =>
+      Effect.sync(() => {
+        asked.push(`workspace:${workspaceId}:${repository ?? "any"}`);
+        return { agents: [AGENT] };
+      }),
     start: (planId, request) =>
       Effect.sync(() => {
         asked.push(`start:${planId}:${request.idempotencyKey}:${request.model ?? "default"}`);
@@ -379,6 +384,13 @@ it.effect("each method asks the service once and answers what it said, whole", (
       { agents: [AGENT] },
     );
     assert.deepEqual(
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_WORKSPACE_LIST, {
+        workspaceId: "workspace-1",
+        repository: "acme/relay",
+      }),
+      { agents: [AGENT] },
+    );
+    assert.deepEqual(
       yield* call(GATEWAY_METHOD.CODING_AGENTS_START, {
         planId: PLAN_ID,
         idempotencyKey: "press-1",
@@ -509,6 +521,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
       "default:openai/gpt-6.1-sol:xhigh",
       `list:${PLAN_ID}`,
       `list:${PLAN_ID}:archived`,
+      "workspace:workspace-1:acme/relay",
       `start:${PLAN_ID}:press-1:default`,
       `messages:${AGENT_ID}:${CODING_AGENT_CURSOR_START}`,
       `worker:${AGENT_ID}:call-7:${CODING_AGENT_CURSOR_START}`,

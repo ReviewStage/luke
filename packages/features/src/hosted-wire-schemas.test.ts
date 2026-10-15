@@ -124,6 +124,7 @@ const EFFECT_MODULE_SCHEMAS = {
     dictationTranscribeParamsSchema: codingAgentView.dictationTranscribeParamsSchema,
     dictationTranscribeAnswerViewSchema: codingAgentView.dictationTranscribeAnswerViewSchema,
     codingAgentListParamsSchema: codingAgentView.codingAgentListParamsSchema,
+    codingAgentWorkspaceListParamsSchema: codingAgentView.codingAgentWorkspaceListParamsSchema,
     codingAgentServersParamsSchema: codingAgentView.codingAgentServersParamsSchema,
     codingAgentListAnswerViewSchema: codingAgentView.codingAgentListAnswerViewSchema,
     codingAgentStartParamsSchema: codingAgentView.codingAgentStartParamsSchema,

@@ -13,6 +13,7 @@ import { getTestDB } from "../../testing/index.js";
 import {
   archiveUnmovedCodingAgent,
   delegationsOf,
+  listWorkspaceCodingAgents,
   readCodingAgent,
   recordTurnFastRefused,
   turnUsagesOf,
@@ -25,7 +26,8 @@ import { conversationReachableBy } from "../recorded-session.js";
  * dialect: every delegation its conversation recorded by a kept call, oldest
  * first, each on the pair it recorded, and none of another account's. And
  * a turn Anthropic refused Fast for, as its usage reads it. And an agent
- * with no plan, which its workspace's members reach and no one else does.
+ * with no plan, which its workspace's members reach and no one else does,
+ * and the workspace's agents listed for its members alone.
  *
  * Synthetic accounts and conversations throughout.
  */
@@ -152,8 +154,12 @@ const openWorkspace = (userId: string) =>
     return id;
   });
 
-/** An agent of the workspace on no plan, as an automation's run leaves one. */
-const planlessAgent = (userId: string, organizationId: string) =>
+/** An agent of the workspace on no plan, as an automation's run leaves one, on the repository and at the instant given where they are. */
+const planlessAgent = (
+  userId: string,
+  organizationId: string,
+  patch: { readonly repository?: string; readonly createdAt?: Date } = {},
+) =>
   Effect.gen(function* () {
     const db = yield* Database;
     const id = randomUUID();
@@ -166,9 +172,10 @@ const planlessAgent = (userId: string, organizationId: string) =>
       model: "anthropic/claude-opus-5.5",
       effort: "high",
       task: "Sweep the flaky tests.",
-      repository: "acme/api",
-      repositories: ["acme/api"],
+      repository: patch.repository ?? "acme/api",
+      repositories: [patch.repository ?? "acme/api"],
       idempotencyKey: randomUUID(),
+      ...(patch.createdAt === undefined ? undefined : { createdAt: patch.createdAt }),
     });
     return { agentId: id, conversationId };
   });
@@ -239,6 +246,64 @@ it.layer(getTestDB())("the coding-agent store's archive of an agent left as it w
 
         assert.deepEqual([stale, current, again], [false, true, false]);
         assert.ok(Option.getOrThrow(yield* readCodingAgent(starter, agentId)).archivedAt !== null);
+      }),
+  );
+});
+
+it.layer(getTestDB())("the coding-agent store's agents of a workspace", (it) => {
+  it.effect(
+    "a workspace's agents are listed newest first for any member, an archived one left out, narrowed to a repository whatever its case, held to the limit, and none for an account outside it",
+    () =>
+      Effect.gen(function* () {
+        const starter = yield* openAccount;
+        const teammate = yield* openAccount;
+        const outsider = yield* openAccount;
+        const workspace = yield* openWorkspace(starter);
+        const elsewhere = yield* openWorkspace(outsider);
+        yield* Effect.flatMap(Database, (db) =>
+          db.insert(member).values({
+            id: randomUUID(),
+            organizationId: workspace,
+            userId: teammate,
+            role: "member",
+            createdAt: new Date("2026-10-14T12:00:00Z"),
+          }),
+        );
+        const at = (hour: number) => new Date(`2026-10-14T${String(hour).padStart(2, "0")}:00:00Z`);
+        const oldest = yield* planlessAgent(starter, workspace, { createdAt: at(8) });
+        const web = yield* planlessAgent(teammate, workspace, {
+          repository: "Acme/Web",
+          createdAt: at(9),
+        });
+        const archived = yield* planlessAgent(starter, workspace, { createdAt: at(10) });
+        const newest = yield* planlessAgent(starter, workspace, { createdAt: at(11) });
+        yield* planlessAgent(outsider, elsewhere, { createdAt: at(12) });
+        yield* Effect.flatMap(Database, (db) =>
+          db
+            .update(codingAgent)
+            .set({ archivedAt: at(13) })
+            .where(eq(codingAgent.id, archived.agentId)),
+        );
+        const ids = (agents: readonly { readonly id: string }[]) => agents.map((agent) => agent.id);
+
+        assert.deepEqual(
+          ids(yield* listWorkspaceCodingAgents(teammate, workspace, { limit: 10 })),
+          [newest.agentId, web.agentId, oldest.agentId],
+        );
+        assert.deepEqual(
+          ids(
+            yield* listWorkspaceCodingAgents(starter, workspace, {
+              repository: "acme/web",
+              limit: 10,
+            }),
+          ),
+          [web.agentId],
+        );
+        assert.deepEqual(ids(yield* listWorkspaceCodingAgents(starter, workspace, { limit: 2 })), [
+          newest.agentId,
+          web.agentId,
+        ]);
+        assert.deepEqual(yield* listWorkspaceCodingAgents(outsider, workspace, { limit: 10 }), []);
       }),
   );
 });

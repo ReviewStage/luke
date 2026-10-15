@@ -212,6 +212,10 @@
     "dest": "/api/default.js?route=admin/users"
   },
   {
+    "src": "/api/agents",
+    "dest": "/api/default.js?route=agents"
+  },
+  {
     "src": "/api/automations",
     "dest": "/api/default.js?route=automations"
   },

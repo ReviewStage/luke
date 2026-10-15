@@ -49,6 +49,7 @@ import {
   type CodingAgentServersParams,
   type CodingAgentStartParams,
   type CodingAgentStopParams,
+  type CodingAgentWorkspaceListParams,
   codingAgentAccountInboxAnswerViewSchema,
   codingAgentAgentAnswerSchema,
   codingAgentChangesAnswerViewSchema,
@@ -396,6 +397,10 @@ export interface HostOperator {
   codingAgentDefaultWrite(choice: ModelChoice): Effect.Effect<CodingAgentDefaultAnswer>;
   /** One plan's coding agents with their status; or why there is no list. */
   codingAgentList(params: CodingAgentListParams): Effect.Effect<CodingAgentListAnswer>;
+  /** One workspace's coding agents, newest started first, on one repository where one is named; or why there is no list. */
+  codingAgentWorkspaceList(
+    params: CodingAgentWorkspaceListParams,
+  ): Effect.Effect<CodingAgentListAnswer>;
   /** An agent started on a plan under the press's own key; the agent, or why none started. */
   codingAgentStart(params: CodingAgentStartParams): Effect.Effect<CodingAgentAgentAnswer>;
   /** One agent's transcript past a cursor, held by the service while the agent runs; or why there is none. */
@@ -1095,6 +1100,11 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
             : { contextWindow: choice.contextWindow }),
         }),
         codingAgentAnswer(codingAgentDefaultAnswerViewSchema),
+      ),
+    codingAgentWorkspaceList: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_WORKSPACE_LIST, params),
+        codingAgentAnswer(codingAgentListAnswerViewSchema),
       ),
     codingAgentList: (params) =>
       Effect.map(

@@ -56,6 +56,7 @@ import {
   codingAgentServersParamsSchema,
   codingAgentStartParamsSchema,
   codingAgentStopParamsSchema,
+  codingAgentWorkspaceListParamsSchema,
   type DictationTranscribeAnswerView,
   dictationTranscribeAnswerViewSchema,
   dictationTranscribeParamsSchema,
@@ -347,6 +348,8 @@ export const ACT_KIND = {
   CODING_AGENTS_DEFAULT_READ: "codingAgents.defaultRead",
   CODING_AGENTS_DEFAULT_WRITE: "codingAgents.defaultWrite",
   CODING_AGENTS_LIST: "codingAgents.list",
+  /** One workspace's agents, newest started first: what an automation's Same agent is chosen from. */
+  CODING_AGENTS_WORKSPACE_LIST: "codingAgents.workspaceList",
   CODING_AGENTS_START: "codingAgents.start",
   CODING_AGENTS_MESSAGES: "codingAgents.messages",
   CODING_AGENTS_MESSAGE: "codingAgents.message",
@@ -992,6 +995,11 @@ export const ACT = {
     payload: actSchema(codingAgentListParamsSchema),
     result: wireResult<CodingAgentListAnswer>(isReadable(codingAgentListAnswerViewSchema)),
     refusal: "Could not read the plan's agents on this system.",
+  },
+  [ACT_KIND.CODING_AGENTS_WORKSPACE_LIST]: {
+    payload: actSchema(codingAgentWorkspaceListParamsSchema),
+    result: wireResult<CodingAgentListAnswer>(isReadable(codingAgentListAnswerViewSchema)),
+    refusal: "Could not read the workspace's agents on this system.",
   },
   [ACT_KIND.CODING_AGENTS_START]: {
     payload: actSchema(codingAgentStartParamsSchema),
