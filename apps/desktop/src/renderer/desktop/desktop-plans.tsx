@@ -618,6 +618,24 @@ function PlanDocument({
                           workspace={home}
                           repository={plan.repository}
                           archived={archived}
+                          doors={{
+                            personal: plans.workspaces[0]?.id === home.id,
+                            onOpenWorkspace: () => {
+                              if (plans.workspace?.id !== home.id) {
+                                plans.onChooseWorkspace(home.id);
+                              }
+                              plans.onGoHome();
+                            },
+                            repository: {
+                              pictures: plans.repositories.pictures,
+                              read: plans.newPlan.repositoriesIn(home.id).read,
+                              onOpenGitHub: () => plans.onOpenOnGitHub(plan.id),
+                              onNewPlanIn: plans.onNewPlanIn,
+                              onChange: archived
+                                ? undefined
+                                : () => plans.onChangeRepository(plan.id),
+                            },
+                          }}
                         />
                       )
                     }

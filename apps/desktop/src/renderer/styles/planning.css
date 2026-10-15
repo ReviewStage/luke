@@ -187,6 +187,36 @@
   color: var(--text-primary);
 }
 
+/* The repository as a chip (plan-crumb.tsx): a pill at the crumb's own
+   type, smaller than the composer's, its owner's picture before its name. */
+.plan-crumb .plan-crumb-repository {
+  height: 22px;
+  min-height: 0;
+  padding: 0 var(--space-6) 0 var(--space-4);
+  gap: var(--space-4);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.plan-crumb .plan-crumb-repository :is(.repository-picture, .provider-mark) {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+}
+
+/* The repository's card names its default branch beside a branch glyph. */
+.plan-crumb-branch {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.plan-crumb-branch > svg {
+  width: 12px;
+  height: 12px;
+  flex: none;
+}
+
 .plan-crumb-separator {
   width: 12px;
   height: 12px;

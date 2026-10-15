@@ -9,6 +9,7 @@ import {
   type InboxItem,
 } from "@luke/features/inbox-wire";
 import type { Plan } from "@luke/features/plan-wire";
+import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { DOCUMENT_REGION, PLANS_PAGE } from "@luke/ui/planning-model";
 import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
 import { Effect } from "effect";
@@ -240,4 +241,46 @@ test("a plan's Inbox tab too narrow for its list and the item side by side shows
   assert.deepEqual([list?.hasAttribute("hidden"), pane()?.hasAttribute("hidden")], [false, true]);
   act(() => root.unmount());
   container.remove();
+});
+
+test("the crumb's workspace opens that workspace's home page, the window switching to it first where another is listed", () => {
+  const acme = { id: "workspace-acme", name: "Acme", role: WORKSPACE_ROLE.MEMBER, github: null };
+  const personal = { ...acme, id: PLAN.workspaceId, name: "Personal" };
+  const asked: string[] = [];
+  const pressHome = (listed: typeof acme) => {
+    const container = document.body.appendChild(document.createElement("div"));
+    const root = createRoot(container);
+    act(() =>
+      root.render(
+        onRegistry(
+          AtomRegistry.make(),
+          createElement(DesktopPlans, {
+            summary: UNPINNED_SUMMARY,
+            looks: NO_LOOKS,
+            plans: plansControl({
+              page: PLANS_PAGE.DOCUMENT,
+              activePlanId: PLAN.id,
+              region: { kind: DOCUMENT_REGION.READY, plan: PLAN },
+              workspaces: [personal, acme],
+              workspace: listed,
+              onChooseWorkspace: (workspaceId) => asked.push(`choose ${workspaceId}`),
+              onGoHome: () => asked.push("home"),
+            }),
+          }),
+        ),
+      ),
+    );
+    const crumb = container.querySelector<HTMLButtonElement>(
+      'nav[aria-label="Where this plan is"] button.plan-crumb-item',
+    );
+    assert.ok(crumb, "the crumb names the plan's workspace");
+    act(() => crumb.click());
+    act(() => root.unmount());
+    container.remove();
+  };
+
+  pressHome(personal);
+  pressHome(acme);
+
+  assert.deepEqual(asked, ["home", `choose ${personal.id}`, "home"]);
 });
