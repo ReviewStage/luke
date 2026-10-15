@@ -3944,7 +3944,8 @@ body:has(.app-stage[data-capture="true"])
 /* Automations ---------------------------------------------------------------- */
 
 /* A window-wide place beside the sidebar, as Factory is: its toolbar, then
-   each owner's automations in a Settings card, at a Settings measure. */
+   each owner's automations in a Settings card, at the measure a plan is read
+   at and centred in the room beside the sidebar, as a plan is. */
 .automations-view {
   display: flex;
   min-width: 0;
@@ -3961,7 +3962,8 @@ body:has(.app-stage[data-capture="true"])
 }
 
 .automation-group {
-  max-width: 820px; /* off-scale */
+  max-width: var(--reading-width);
+  margin-inline: auto;
 }
 
 .automation-group + .automation-group {
@@ -4107,8 +4109,9 @@ body:has(.app-stage[data-capture="true"])
 
 .automation-editor {
   display: flex;
-  max-width: 780px; /* off-scale */
+  max-width: var(--reading-width);
   flex-direction: column;
+  margin-inline: auto;
   gap: var(--space-12);
 }
 
@@ -4294,8 +4297,9 @@ body:has(.app-stage[data-capture="true"])
   font-size: 12px;
 }
 
-/* An automation's page: its setup at a Settings measure, then its runs in
-   a panel of their own on the right, each scrolling by itself. */
+/* An automation's page: its setup at the measure a plan is read at, centred
+   in the room between the sidebar and its runs, then its runs in a panel of
+   their own on the right, each scrolling by itself. */
 .automation-editor-layout {
   display: flex;
   min-height: 0;
