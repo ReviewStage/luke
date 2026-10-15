@@ -25,8 +25,16 @@ marks a picture only with the change's red or green.
   (`@luke/features/picture-wire`), the window's picture cache, and its
   picture block are named for pictures rather than plans, so the agents'
   transcript pictures can share them.
-- **Shipped so far:** #2886 (PR 1, the editor's bug), #2890 (PR 7,
-  Mermaid). PRs 2 to 6 follow.
+- **Shipped, all of v1:** #2886 (PR 1, the editor's bug), #2895 (PR 2,
+  the store and its addresses), #2913 (PR 3, drawn on the page and in
+  versions), #2914 (PR 4, paste, drop, and Insert image on ⌥⌘I), #2943
+  (PR 5, `look_at_picture` and a correction that keeps its pictures),
+  #2945 (PR 6, a coding agent adds a sandbox screenshot), and #2890 (PR 7,
+  Mermaid).
+- **Left open:** `look_at_picture` allows four looks a turn, coding agents
+  included, whose one turn is their whole run. If an agent working from
+  several mockups runs out, raise `PICTURE_LOOK.MAX_PER_TURN` or give
+  coding agents a bound of their own.
 
 The show is `docs/proposals/plan-media/index.html`, one self-contained file
 that fetches nothing. Open it in a browser. Each frame uses main's compiled
