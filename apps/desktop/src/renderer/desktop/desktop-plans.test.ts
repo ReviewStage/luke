@@ -9,6 +9,7 @@ import {
   type InboxItem,
 } from "@luke/features/inbox-wire";
 import type { Plan } from "@luke/features/plan-wire";
+import { DOCUMENT_REGION, PLANS_PAGE } from "@luke/ui/planning-model";
 import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -20,7 +21,6 @@ import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
 import { codingAgentsControl, plansControl, UNPINNED_SUMMARY } from "#testing/plans-control";
 import { relayout } from "#testing/resize-observer";
-import { DOCUMENT_REGION, PLANS_PAGE } from "../planning/planning-model";
 import { MAIN_TAB } from "../planning/use-main-tabs";
 import { NO_LOOKS } from "../planning/use-plan-looks";
 import { SIDE_PANEL_TAB } from "../planning/use-side-panel";

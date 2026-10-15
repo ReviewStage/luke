@@ -2,6 +2,7 @@ import { ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot
 import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import type { PlanRevisionLine } from "@luke/features/plan-wire";
 import { BackIcon, EllipsisIcon, WingFace } from "@luke/ui";
+import { DOCUMENT_REGION } from "@luke/ui/planning-model";
 import { ArrowUpRightIcon, FileDiffIcon, HistoryIcon, RotateCcwIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
@@ -27,7 +28,6 @@ import {
   versionDiff,
 } from "../planning/plan-history-model";
 import { useMinute } from "../planning/plan-time";
-import { DOCUMENT_REGION } from "../planning/planning-model";
 import { RelativeTime } from "../planning/relative-time";
 import { AgentMark } from "../planning/tab-look";
 import {

@@ -19,7 +19,13 @@
     "./skill-mention": "./src/skill-mention.js",
     "./tab-strip-model": "./src/tab-strip-model.js",
     "./integration-search": "./src/integration-search.js",
-    "./agent-servers-model": "./src/agent-servers-model.js"
+    "./agent-servers-model": "./src/agent-servers-model.js",
+    "./held-link": "./src/held-link.js",
+    "./confirm-state": "./src/confirm-state.js",
+    "./use-setting-write": "./src/use-setting-write.js",
+    "./use-state-with-ref": "./src/use-state-with-ref.js",
+    "./planning-model": "./src/planning-model.js",
+    "./call-card-model": "./src/call-card-model.js"
   },
   "types": "./src/index.ts",
   "scripts": {
@@ -29,6 +35,9 @@
   "dependencies": {
     "@luke/brand": "workspace:*",
     "@luke/features": "workspace:*",
+    "@luke/live": "workspace:*",
+    "@luke/voice": "workspace:*",
+    "@luke/wire": "workspace:*",
     "clsx": "2.1.1",
     "effect": "catalog:",
     "react": "catalog:",

@@ -1,6 +1,7 @@
 import { useAtomValue } from "@effect/atom-react";
 import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
+import { sandboxRead } from "@luke/features/terminal-store";
 import { SANDBOX_STATE, type TerminalSummary } from "@luke/features/terminal-wire";
 import { CloseIcon, PlusIcon } from "@luke/ui";
 import { PencilIcon, TerminalIcon, Trash2Icon } from "lucide-react";
@@ -12,7 +13,6 @@ import { Tooltip } from "../tooltip";
 import { AgentRef, type AgentSubject } from "./agent-ref";
 import { agentStillWriting } from "./coding-agent-model";
 import { AgentGlyph } from "./tab-look";
-import { sandboxRead } from "./terminal-store";
 import type { TerminalSession } from "./use-terminal-session";
 
 /**

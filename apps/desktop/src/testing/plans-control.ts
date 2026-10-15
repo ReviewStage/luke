@@ -2,10 +2,11 @@ import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import type { InboxItem } from "@luke/features/inbox-wire";
 import { PLAN_CALL_FAILURE } from "@luke/features/planning-view";
 import type { AppInboxWaitingItem } from "@luke/host/app-state";
+import { CONFIRM_STAGE } from "@luke/ui/confirm-state";
+import { DOCUMENT_REGION, PLANS_PAGE } from "@luke/ui/planning-model";
 import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import type { SummaryPin } from "../renderer/desktop/plan-summary";
-import { DOCUMENT_REGION, PLANS_PAGE } from "../renderer/planning/planning-model";
 import type { CodingAgentsControl } from "../renderer/planning/use-coding-agents";
 import { MAIN_TAB } from "../renderer/planning/use-main-tabs";
 import { HISTORY_READ } from "../renderer/planning/use-plan-history";
@@ -15,7 +16,6 @@ import {
   SIDE_PANEL_TABS,
   SIDE_PANEL_WIDTH,
 } from "../renderer/planning/use-side-panel";
-import { CONFIRM_STAGE } from "../renderer/settings/confirm-state";
 
 const ignore = () => undefined;
 

@@ -21,6 +21,7 @@ import { ACT, ACT_KIND, type ActKind, type ActResultFor } from "@luke/host/acts"
 import { type AppInboxPlan, type AppInboxPlanHolding, RUN_PROFILE } from "@luke/host/app-state";
 import { LIVE_STATUS } from "@luke/live";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
+import { PLANS_PAGE } from "@luke/ui/planning-model";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import {
   messageText,
@@ -42,7 +43,6 @@ import { afterEach, test, vi } from "vitest";
 import { onRegistry } from "#testing/copy-feedback";
 import { newestToastAction, newestToastSays } from "#testing/toast";
 import { ToastHost } from "../toast";
-import { PLANS_PAGE } from "./planning-model";
 import { MAIN_TAB } from "./use-main-tabs";
 import { type PlansControl, usePlansTab } from "./use-plans-tab";
 import { SIDE_PANEL_TAB } from "./use-side-panel";

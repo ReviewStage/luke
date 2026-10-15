@@ -10,7 +10,7 @@
 import type { PlanningView } from "@luke/features/planning-view";
 import { LIVE_STATUS } from "@luke/live";
 import { callInProgress, type VoiceView } from "@luke/voice/voice-view";
-import { type CallStatus, standingCallStatus } from "../planning/planning-model";
+import { type CallStatus, standingCallStatus } from "./planning-model.js";
 
 /** The plan's name where the document has none to give, which a plan just started can briefly be. */
 const CALL_CARD_UNNAMED = "Planning call";

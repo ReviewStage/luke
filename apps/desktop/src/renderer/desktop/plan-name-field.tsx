@@ -1,6 +1,6 @@
 import { PLAN_BOUNDS } from "@luke/features/plan-wire";
+import { RENAME_FAILED_NOTE } from "@luke/ui/planning-model";
 import { useLayoutEffect, useRef, useState } from "react";
-import { RENAME_FAILED_NOTE } from "../planning/planning-model";
 
 /**
  * plan-name-field.tsx -- a name edited where it is drawn, in the sidebar's row, on the open plan's tab, or on an agent's, the way a desktop list renames in place.

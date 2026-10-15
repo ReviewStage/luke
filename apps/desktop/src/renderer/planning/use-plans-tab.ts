@@ -16,57 +16,7 @@ import type { Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import type { AppInboxPlan, AppInboxPlanHolding } from "@luke/host/app-state";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
-import {
-  isAgentTab,
-  isChangesTab,
-  isDraftTab,
-  isFileTab,
-  isPageTab,
-  isSubagentTab,
-  isTerminalTab,
-  type StripTab,
-  sameTab,
-} from "@luke/ui/tab-strip-model";
-import type { MicrophoneStatus } from "@luke/voice/audio";
-import { shownFiles } from "@luke/voice/code-pane-model";
-import {
-  type HeardCall,
-  heardCalls,
-  TRANSCRIPT_REGION,
-  type TranscriptRegion,
-  transcriptRegion,
-} from "@luke/voice/transcript-model";
-import { callInProgress, VOICE_COMMAND, type VoiceView } from "@luke/voice/voice-view";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ActHandle } from "../act";
-import { callCard } from "../call/call-card-model";
-import { useCopyToast } from "../copy-feedback";
-import { useChosenWorkspace } from "../desktop/chosen-workspace";
-import {
-  DIALOG_TONE,
-  type DialogConfirm,
-  type DialogQuestion,
-  useConfirmDialog,
-} from "../settings/confirm-dialog";
-import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast";
-import { useStateWithRef } from "../use-state-with-ref";
-import {
-  CLOSED_TAB_STRIP,
-  type ClosedTab,
-  NO_CLOSED_TABS,
-  withClosedTab,
-  withUndrawnPassed,
-} from "./closed-tabs";
-import { agentTabLabel } from "./coding-agent-model";
-import type { SectionReveal } from "./plan-body";
-import { REVISION_SOURCE, type RevisionSource } from "./plan-history-model";
-import {
-  FIXTURE_PLANNING_CALL,
-  fixturePlanningView,
-  fixtureRepositories,
-  fixtureSidePanel,
-} from "./planning-fixture";
+import { callCard } from "@luke/ui/call-card-model";
 import {
   archivedPlansNote,
   archivePlansFailedNote,
@@ -100,7 +50,57 @@ import {
   unsettledMarks,
   unsettledRenames,
   unsettledRepositoryPins,
-} from "./planning-model";
+} from "@luke/ui/planning-model";
+import {
+  isAgentTab,
+  isChangesTab,
+  isDraftTab,
+  isFileTab,
+  isPageTab,
+  isSubagentTab,
+  isTerminalTab,
+  type StripTab,
+  sameTab,
+} from "@luke/ui/tab-strip-model";
+import { useStateWithRef } from "@luke/ui/use-state-with-ref";
+import type { MicrophoneStatus } from "@luke/voice/audio";
+import { shownFiles } from "@luke/voice/code-pane-model";
+import {
+  type HeardCall,
+  heardCalls,
+  TRANSCRIPT_REGION,
+  type TranscriptRegion,
+  transcriptRegion,
+} from "@luke/voice/transcript-model";
+import { callInProgress, VOICE_COMMAND, type VoiceView } from "@luke/voice/voice-view";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { ActHandle } from "../act";
+import { useCopyToast } from "../copy-feedback";
+import { useChosenWorkspace } from "../desktop/chosen-workspace";
+import {
+  DIALOG_TONE,
+  type DialogConfirm,
+  type DialogQuestion,
+  useConfirmDialog,
+} from "../settings/confirm-dialog";
+import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast";
+import {
+  CLOSED_TAB_STRIP,
+  type ClosedTab,
+  NO_CLOSED_TABS,
+  withClosedTab,
+  withUndrawnPassed,
+} from "./closed-tabs";
+import { agentTabLabel } from "./coding-agent-model";
+import type { SectionReveal } from "./plan-body";
+import { REVISION_SOURCE, type RevisionSource } from "./plan-history-model";
+import {
+  FIXTURE_PLANNING_CALL,
+  fixturePlanningView,
+  fixtureRepositories,
+  fixtureSidePanel,
+} from "./planning-fixture";
 import type { RepositoryChooser } from "./repository-chip";
 import type { TranscriptReader } from "./use-agent-transcript";
 import { type CodingAgentsControl, useCodingAgents } from "./use-coding-agents";

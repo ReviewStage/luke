@@ -15,6 +15,10 @@ import { SETTINGS_VIEW, type SettingsLink, type SettingsView } from "@luke/setti
 import { fixtureUpdate } from "@luke/settings/update-row";
 import { appSettingsView } from "@luke/settings/wire";
 import { cssCustomProperties } from "@luke/ui";
+import { callBarPlanId, callCard, callCardShown } from "@luke/ui/call-card-model";
+import { useLinkOpener } from "@luke/ui/held-link";
+import { PLANS_PAGE } from "@luke/ui/planning-model";
+import { useStateWithRef } from "@luke/ui/use-state-with-ref";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import type {
   MicrophoneControl,
@@ -34,7 +38,6 @@ import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "./act";
 import { runAppCommand, useAppCommand, useAppKeymap, useMenuCommands } from "./app-commands";
 import { type CallCardInput, callControls } from "./call/call-card";
-import { callBarPlanId, callCard, callCardShown } from "./call/call-card-model";
 import { useWindowFocused } from "./call/use-window-focused";
 import { CommandPalette } from "./desktop/command-palette";
 import { DesktopShell } from "./desktop/desktop-shell";
@@ -50,9 +53,7 @@ import { OpenFeedbackProvider } from "./open-feedback";
 import { OpenSettingsProvider } from "./open-settings";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
 import { useAgentEndToasts } from "./planning/agent-end-toast";
-import { useLinkOpener } from "./planning/held-link";
 import { useInboxToasts } from "./planning/inbox-toast";
-import { PLANS_PAGE } from "./planning/planning-model";
 import { type RepositoryRemedyDoors, RepositoryRemedyProvider } from "./planning/repository-remedy";
 import { OpenPlanProvider } from "./planning/use-open-link";
 import { usePlansTab } from "./planning/use-plans-tab";
@@ -66,7 +67,6 @@ import { useAppState } from "./use-app-state";
 import { useCaptionPresentation } from "./use-caption-presentation";
 import { usePrefersReducedMotion } from "./use-reduced-motion";
 import { useSignIn } from "./use-sign-in";
-import { useStateWithRef } from "./use-state-with-ref";
 import { FIXTURE_SPEAKING_CAPTIONS, fixtureVoice, useVoiceView } from "./use-voice-view";
 import { useWindowFullScreen } from "./window-full-screen";
 import { useWindowZoom } from "./window-zoom";

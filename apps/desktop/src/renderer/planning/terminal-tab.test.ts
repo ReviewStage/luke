@@ -27,11 +27,11 @@ import { afterEach, beforeEach, test, vi } from "vitest";
 import { onRegistry } from "#testing/copy-feedback";
 import { codingAgentsControl } from "#testing/plans-control";
 import "../terminal/index";
+import { shellsAsked } from "@luke/features/terminal-store";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { runAppCommand } from "../app-commands";
 import { FindScope } from "../find-in-tab";
 import { TerminalCardFoot } from "./terminal-shells";
-import { shellsAsked } from "./terminal-store";
 import { TerminalTab } from "./terminal-tab";
 
 /**

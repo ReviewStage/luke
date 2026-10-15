@@ -1,7 +1,3 @@
-import type { ActionResult } from "@luke/wire";
-import { useId, useRef } from "react";
-import { MODAL_ROLE, ModalShell } from "../modal-shell";
-import { BusyLabel } from "../spinner";
 import {
   CONFIRM_STAGE,
   type ConfirmSurroundings,
@@ -9,7 +5,11 @@ import {
   confirmWithdrawable,
   type HeldConfirm,
   useConfirm,
-} from "./confirm-state";
+} from "@luke/ui/confirm-state";
+import type { ActionResult } from "@luke/wire";
+import { useId, useRef } from "react";
+import { MODAL_ROLE, ModalShell } from "../modal-shell";
+import { BusyLabel } from "../spinner";
 
 /**
  * confirm-dialog.tsx -- an irreversible act's question as a modal over the window: what goes, then Cancel and the act.

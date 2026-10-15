@@ -5,7 +5,7 @@ import { LIVE_STATUS } from "@luke/live";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { VOICE_KEYLESS_NOTE } from "@luke/voice/microphone-access";
 import { test } from "vitest";
-import { MICROPHONE_PRESS, microphoneButton } from "./planning-model";
+import { MICROPHONE_PRESS, microphoneButton } from "./planning-model.js";
 
 const INVITES = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const _BILLING = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
