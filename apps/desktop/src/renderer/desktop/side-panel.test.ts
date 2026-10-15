@@ -8,11 +8,14 @@ import {
   type CodingAgentSummary,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
-import { createElement } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
+import { act, createElement } from "react";
+import { createRoot } from "react-dom/client";
 import { test } from "vitest";
+import { onRegistry } from "#testing/copy-feedback";
 import { plansControl } from "#testing/plans-control";
 import { ChangesCard } from "../planning/agent-changes-tab";
+import { agentSubject, NOTHING_HELD } from "../planning/agent-ref";
 import type { CodingAgentsControl } from "../planning/use-coding-agents";
 import { changesOffers, changesTabOf } from "./side-panel";
 
@@ -103,19 +106,43 @@ test("a shared pull request whose later agent's tab opened before the earlier ag
   );
 });
 
-test("a Changes card names the coding agent whose pull request it is, wearing its glyph, under the pull request", () => {
-  const page = document.createElement("div");
-  page.innerHTML = renderToStaticMarkup(
-    createElement(ChangesCard, {
-      agent: THIRD,
-      agentLabel: "Expiry job",
-      pullRequest: pullRequest(42, "Expire invitations"),
-    }),
+test("a Changes card names the coding agent whose pull request it is by its tile and name, which hang the agent's card and open its tab", async () => {
+  const opened: string[] = [];
+  const control = agents();
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  act(() =>
+    root.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(ChangesCard, {
+          subject: agentSubject(control, THIRD.id, NOTHING_HELD, false),
+          models: [],
+          pullRequest: pullRequest(42, "Expire invitations"),
+          onOpenAgent: () => opened.push(THIRD.id),
+        }),
+      ),
+    ),
   );
-  assert.equal(page.querySelector(".card-name")?.textContent, "Expire invitations");
-  assert.equal(page.querySelector(".card-corner")?.textContent, "#42");
-  const named = page.querySelector(".card-sub");
-  assert.equal(named?.textContent, "Expiry job");
-  assert.ok(named?.querySelector(".state-glyph svg"), "the agent's glyph, as its tab wears it");
-  assert.match(page.querySelector(".card-note")?.textContent ?? "", /^6 files changed/);
+  assert.equal(container.querySelector(".card-name")?.textContent, "Expire invitations");
+  assert.equal(container.querySelector(".card-corner")?.textContent, "#42");
+  assert.match(container.querySelector(".card-note")?.textContent ?? "", /^6 files changed/);
+  const named = container.querySelector<HTMLButtonElement>(
+    '.card-sub button.actor-ref[data-kind="agent"]',
+  );
+  assert.ok(named, "the agent is named as an actor");
+  assert.equal(named.textContent, "Expiry job");
+  assert.ok(named.querySelector('.actor-mark[data-kind="agent"]'), "the agent wears its tile");
+
+  await act(async () => {
+    named.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+    await Promise.resolve();
+  });
+  const card = document.querySelector(".tooltip-card [data-tab-card] .card-name");
+  assert.equal(card?.textContent, "Expiry job", "the agent's own card hangs from its name");
+  act(() => named.click());
+  assert.deepEqual(opened, [THIRD.id]);
+  act(() => root.unmount());
+  container.remove();
 });

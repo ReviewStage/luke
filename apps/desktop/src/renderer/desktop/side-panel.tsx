@@ -480,9 +480,11 @@ function stripTabs(input: {
   copied: TranscriptCopier;
   /** Reads a planning worker's whole session for a copy, the plan standing in the agent's place. */
   readWorker: (callId: string) => Promise<readonly CodingAgentMessage[] | undefined>;
+  /** Opens an agent's tab in the plan's column, as a card naming the agent offers. */
+  onOpenAgent: (agentId: string) => void;
 }): DrawnTab[] {
   const { panel, unread, agents, subagents, files, changes, pages, terminals, shown, held } = input;
-  const { repository, copied, readWorker } = input;
+  const { repository, copied, readWorker, onOpenAgent } = input;
   const chosen = (tab: SidePanelTab) => panel.tab !== undefined && sameTab(tab, panel.tab);
   const models = agents.models ?? [];
   const look = (tab: SidePanelTab, drawn: Omit<TabLook, "selected" | "onSelect">) => ({
@@ -544,14 +546,15 @@ function stripTabs(input: {
   });
   // A Changes tab hangs its pull request's card, naming the agent whose it is.
   const changesTabs = changes.map((tab) => {
-    const agent = agents.agents?.find((each) => each.id === tab.changes);
+    const subject = agentSubject(agents, tab.changes, held, false);
     const pullRequest = agents.pullRequests.get(tab.changes);
     const card =
-      agent === undefined || pullRequest === undefined ? undefined : (
+      subject.agent === undefined || pullRequest === undefined ? undefined : (
         <ChangesCard
-          agent={agent}
-          agentLabel={agentTabLabel(agent, agents.models)}
+          subject={subject}
+          models={agents.models}
           pullRequest={pullRequest}
+          onOpenAgent={() => onOpenAgent(tab.changes)}
         />
       );
     return {
@@ -631,6 +634,7 @@ function PanelTabs({
   held,
   readWorker,
   actionsSlot,
+  onOpenAgent,
 }: {
   panel: SidePanelControl;
   /** The open plan, which a tab's pin is of. */
@@ -665,6 +669,8 @@ function PanelTabs({
   readWorker: TranscriptReader;
   /** The bar's slot the chosen tab's ⋯ stands in. */
   actionsSlot: HTMLElement | null;
+  /** Opens an agent's tab in the plan's column, as a Changes tab's card offers. */
+  onOpenAgent: (agentId: string) => void;
 }): React.JSX.Element {
   const copied = useTranscriptCopier();
   // The panel's "+" asks for a new shell where the panel already holds the keys.
@@ -683,6 +689,7 @@ function PanelTabs({
     held,
     copied,
     readWorker: (callId) => readWholeTranscript(readWorker, { agentId: planId, callId }),
+    onOpenAgent,
   });
   const strip = inPlanOrder(kinds, panel.order, (entry) => entry.tab);
   // ⌘W closes the tab chosen, as its menu's Close does; with none, the key
@@ -1652,6 +1659,7 @@ export function SidePanel({
             held={drawnTranscripts}
             readWorker={work.readWorker}
             actionsSlot={actionsSlot}
+            onOpenAgent={(agent) => onOpenTarget({ kind: TOOL_TARGET.AGENT, agent })}
           />
           <span ref={setActionsSlot} className="toolbar-tab-actions" />
           <FullScreenToggle

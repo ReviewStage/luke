@@ -16,6 +16,7 @@ import { afterEach, beforeAll, test } from "vitest";
 import { markdownHtmlParserLanded } from "#testing/markdown";
 import { PlanCard } from "./desktop/plan-card";
 import { ChangesCard } from "./planning/agent-changes-tab";
+import { agentSubject, NOTHING_HELD } from "./planning/agent-ref";
 import { AgentTabCard, cardCorner } from "./planning/agent-tab-card";
 import { CallEnded } from "./planning/call-card";
 import { SentWords, SkillFiles } from "./planning/skill-chip";
@@ -151,18 +152,32 @@ test("a plan's, a skill's, an agent tab's, and a Changes tab's cards each name t
 
   const changes = drawn(
     createElement(ChangesCard, {
-      agent: {
-        id: AGENT,
-        planId: PLAN,
-        model: "anthropic/claude-opus-5.5",
-        effort: "high",
-        title: "Invite flow",
-        createdAt: 1,
-        status: CODING_AGENT_STATUS.COMPLETED,
-        turnId: null,
-      },
-      agentLabel: "Invite flow",
+      subject: agentSubject(
+        {
+          agents: [
+            {
+              id: AGENT,
+              planId: PLAN,
+              model: "anthropic/claude-opus-5.5",
+              effort: "high",
+              title: "Invite flow",
+              createdAt: 1,
+              status: CODING_AGENT_STATUS.COMPLETED,
+              turnId: null,
+            },
+          ],
+          archived: [],
+          models: [],
+          me: undefined,
+          pullRequests: new Map(),
+        },
+        AGENT,
+        NOTHING_HELD,
+        false,
+      ),
+      models: [],
       pullRequest: PULL_REQUEST,
+      onOpenAgent: () => undefined,
     }),
   );
   assert.deepEqual(headOf(changes), {

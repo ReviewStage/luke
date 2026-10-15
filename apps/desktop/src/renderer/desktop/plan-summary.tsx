@@ -5,7 +5,7 @@ import { ChevronsLeftIcon, ChevronsRightIcon, ListIcon } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { CardHead, CardNote, HoverCard } from "../hover-card";
 import { ChangesCard } from "../planning/agent-changes-tab";
-import { agentCardReading } from "../planning/agent-ref";
+import { agentCardReading, agentSubject } from "../planning/agent-ref";
 import { AgentTabCard } from "../planning/agent-tab-card";
 import { agentTabLabel } from "../planning/coding-agent-model";
 import { FileCard, newestFileNote } from "../planning/file-ref";
@@ -357,8 +357,14 @@ function withCards(
       // Note that a pull request's row is named by its page (`panelEntries`).
       const offer = changes.find((each) => each.pullRequest.url === row.id);
       if (offer === undefined) return entry;
+      const subject = agentSubject(agents, offer.agent.id, held, false);
       const card = (
-        <ChangesCard agent={offer.agent} agentLabel={offer.label} pullRequest={offer.pullRequest} />
+        <ChangesCard
+          subject={subject}
+          models={agents.models}
+          pullRequest={offer.pullRequest}
+          onOpenAgent={() => mainTabs.onChoose({ agent: offer.agent.id })}
+        />
       );
       return { ...entry, card };
     }
