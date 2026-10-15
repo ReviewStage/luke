@@ -143,7 +143,6 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
       inbox: overrides.inbox ?? [],
       inboxPlans: overrides.inboxPlans ?? [],
     },
-    waitingIn: new Map(),
     workspaces: [],
     workspace: undefined,
     onChooseWorkspace: ignore,

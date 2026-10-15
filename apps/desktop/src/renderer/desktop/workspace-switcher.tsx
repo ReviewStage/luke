@@ -1,6 +1,6 @@
 import type { Workspace } from "@luke/features/workspace-wire";
 import { ChevronDownIcon, GearIcon, PlusIcon } from "@luke/ui";
-import { LockIcon, UsersIcon } from "lucide-react";
+import { UsersIcon } from "lucide-react";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { ActionMenu, dropBelowStart, type MenuAction, useActionMenu } from "./action-menu";
 import { useNewWorkspaceDialog } from "./new-workspace-dialog";
@@ -14,29 +14,18 @@ import { TILE_SIZE, WorkspaceTile } from "./workspace-tile";
  * sidebar's top left, where Slack, Linear, and Vercel name the scope
  * everything under it belongs to (`docs/proposals/workspace-clarity.md`,
  * variant A): the workspace's tile, its name, and under it who shares it,
- * "5 members", or "Only you" for a workspace of one. A press drops the menu
- * of every workspace the account is a member of from its left edge, each by
- * its tile, the listed one checked and each other counting what waits on the
- * developer there, as a dot by the head's chevron says something does
- * (`use-plans-tab.ts`), then New workspace, which asks a name
- * and lists the workspace made, and Workspace settings, which opens Settings
- * on the listed workspace's page, where its members and its GitHub are
- * managed. Nothing else stands in the menu. The head stands whenever an
- * account is signed in and its workspaces are read, its first workspace
- * alone included, because its menu is where a workspace is made; before
- * then the sidebar's head is Luke's.
+ * "5 members", or "Personal workspace" for a workspace of one. A press
+ * drops the menu of every workspace the account is a member of from its left
+ * edge, each by its tile, the listed one checked, then New workspace, which
+ * asks a name and lists the workspace made, and Workspace settings, which
+ * opens Settings on the listed workspace's page, where its members and its
+ * GitHub are managed. Nothing else stands in the menu. The head stands
+ * whenever an account is signed in and its workspaces are read, its first
+ * workspace alone included, because its menu is where a workspace is made;
+ * before then the sidebar's head is Luke's.
  */
 
-/** How many items wait in the workspaces not listed, which the head marks and the menu counts. */
-function waitingElsewhere(listed: Workspace, plans: PlansControl): number {
-  let count = 0;
-  for (const [workspaceId, waiting] of plans.waitingIn) {
-    if (workspaceId !== listed.id) count += waiting;
-  }
-  return count;
-}
-
-/** The menu's items: every workspace by its tile, the listed one checked and each other counting what waits in it; then New workspace and Workspace settings. */
+/** The menu's items: every workspace by its tile, the listed one checked; then New workspace and Workspace settings. */
 function workspaceMenuGroups(
   listed: Workspace,
   plans: PlansControl,
@@ -47,7 +36,6 @@ function workspaceMenuGroups(
       label: workspace.name,
       icon: <WorkspaceTile workspace={workspace} />,
       checked: workspace.id === listed.id,
-      waiting: plans.waitingIn.get(workspace.id) ?? 0,
       onSelect: () => plans.onChooseWorkspace(workspace.id),
     }),
   );
@@ -60,19 +48,19 @@ function workspaceMenuGroups(
   ];
 }
 
-/** Who shares a workspace in words: "Only you" for a workspace of one, its members counted otherwise, nothing from a service that does not count them. */
+/** Who shares a workspace in words: "Personal workspace" for a workspace of one, its members counted otherwise, nothing from a service that does not count them. */
 export function sharedWords(count: number | undefined): string | undefined {
   if (count === undefined) return undefined;
-  return count <= 1 ? "Only you" : `${count} members`;
+  return count <= 1 ? "Personal workspace" : `${count} members`;
 }
 
-/** The head's line saying who shares the workspace, a lock for a workspace of one. */
+/** The head's line saying who shares the workspace, a people glyph before a team's members counted. */
 function SharedLine({ count }: { count: number | undefined }): React.JSX.Element | null {
   const words = sharedWords(count);
   if (count === undefined || words === undefined) return null;
   return (
     <span className="sidebar-workspace-shared">
-      {count <= 1 ? <LockIcon aria-hidden="true" /> : <UsersIcon aria-hidden="true" />}
+      {count <= 1 ? null : <UsersIcon aria-hidden="true" />}
       {words}
     </span>
   );
@@ -94,18 +82,13 @@ export function WorkspaceSwitcher({
   const menu = useActionMenu(plans.shown && inSight);
   const listed = plans.workspace;
   if (listed === undefined) return null;
-  const elsewhere = waitingElsewhere(listed, plans);
   return (
     <div className="sidebar-workspace">
       <button
         type="button"
         className="sidebar-workspace-toggle"
         // The name a reader hears says who shares it too, since the label stands for the button's text.
-        aria-label={[
-          `Workspace: ${listed.name}`,
-          sharedWords(listed.memberCount),
-          elsewhere > 0 ? `${elsewhere} waiting in other workspaces` : undefined,
-        ]
+        aria-label={[`Workspace: ${listed.name}`, sharedWords(listed.memberCount)]
           .filter((part) => part !== undefined)
           .join(", ")}
         {...menu.trigger(dropBelowStart)}
@@ -115,7 +98,6 @@ export function WorkspaceSwitcher({
           <span className="sidebar-workspace-name">{listed.name}</span>
           <SharedLine count={listed.memberCount} />
         </span>
-        {elsewhere > 0 ? <span className="sidebar-workspace-waiting" aria-hidden="true" /> : null}
         <ChevronDownIcon />
       </button>
       {menu.drawn === undefined ? null : (
