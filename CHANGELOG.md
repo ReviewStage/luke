@@ -305,9 +305,10 @@ read-only board of every task, from Plan to Build to Ship, beside the Inbox.
 - The sign-in's buttons stand taller and wear "Last used" on the corner of the
   one it marks ([#2782](https://github.com/ReviewStage/luke/pull/2782),
   [#2785](https://github.com/ReviewStage/luke/pull/2785))
-- A tool-call group leads with its fold's chevron, and a subagent's tab groups
-  its calls as its agent's does
-  ([#2892](https://github.com/ReviewStage/luke/pull/2892))
+- A tool-call group leads with its fold's chevron, wears the failed mark where
+  a call it holds failed, and a subagent's tab groups its calls as its agent's
+  does ([#2892](https://github.com/ReviewStage/luke/pull/2892),
+  [#2907](https://github.com/ReviewStage/luke/pull/2907))
 - No button, menu item, or command ends its name with an ellipsis
   ([#2821](https://github.com/ReviewStage/luke/pull/2821))
 
