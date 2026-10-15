@@ -121,6 +121,8 @@ const MENTION_SIGIL = "@";
 /** The settled form: a plan's address on Luke's home (`link-home.ts`), by the web's scheme or the desktop's. */
 const LINK = {
   TASK_STEP: "plan",
+  /** The steps a task's link is read under: `plan`, which every release writes, and `task`, the next spelling. */
+  TASK_STEPS: new Set(["plan", "task"]),
   PAGE_STEP: "page",
   AGENT_STEP: "agent",
 } as const;
@@ -469,7 +471,7 @@ function planFields(url: URL) {
   const [first, workspace, step, id, ...rest] = url.pathname.split("/");
   if (first !== "" || workspace === "" || id === undefined) return undefined;
   if (step === LINK.AGENT_STEP) return taskFields(undefined, [step, id, ...rest], url.hash);
-  if (step !== LINK.TASK_STEP) return undefined;
+  if (step === undefined || !LINK.TASK_STEPS.has(step)) return undefined;
   if (rest.length > 0) return taskFields(decodedPart(id), rest, url.hash);
   const taskId = decodedPart(id);
   if (url.hash === "" || url.hash === "#") return { kind: MENTION_KIND.TASK, taskId };

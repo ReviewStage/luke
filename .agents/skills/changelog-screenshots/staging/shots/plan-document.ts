@@ -9,16 +9,16 @@
 import {
   PLAN_ACTOR,
   type Plan,
-  type PlanAgentsSummary,
+  type TaskAgentsSummary,
   type PlanSectionEdit,
-  type PlanSummary,
+  type TaskSummary,
 } from "@luke/features/plan-wire";
-import { PLANNING_READ, type PlanningView } from "@luke/features/planning-view";
+import { TASKS_READ, type TasksView } from "@luke/features/planning-view";
 import { ago, daysAgo, hoursAgo } from "./clock";
 
 /** The ids the shots share, so a shot's plan, agent, and revisions agree with one another. */
 export const SHOT_ID = {
-  PLAN: "0f6a2c4e-8b1d-4e3f-9a57-1c2b3d4e5f60",
+  TASK: "0f6a2c4e-8b1d-4e3f-9a57-1c2b3d4e5f60",
   BILLING: "1a7b3d5f-9c2e-4f40-8b68-2d3e4f5a6b71",
   WEBHOOKS: "2b8c4e6a-0d3f-4a51-9c79-3e4f5a6b7c82",
   AUDIT: "3c9d5f7b-1e4a-4b62-8d8a-4f5a6b7c8d93",
@@ -35,8 +35,8 @@ export const SHOT_ID = {
 } as const;
 
 /** The plan everything is about. */
-export const PLAN_NAME = "Teammate invitations";
-export const PLAN_REPOSITORY = "acme/relay";
+export const TASK_NAME = "Teammate invitations";
+export const TASK_REPOSITORY = "acme/relay";
 
 /** The finished coding agent's title, as its tab, its bylines, and its revisions name it. */
 export const AGENT_TITLE = "Add teammate invitations";
@@ -162,13 +162,13 @@ export function shotSectionEdits(): PlanSectionEdit[] {
 }
 
 /** The open plan, written through, its bylines mixed. */
-export function shotPlan(overrides: Partial<Plan> = {}): Plan {
+export function shotTask(overrides: Partial<Plan> = {}): Plan {
   return {
-    id: SHOT_ID.PLAN,
-    name: PLAN_NAME,
+    id: SHOT_ID.TASK,
+    name: TASK_NAME,
     createdAt: daysAgo(2),
     updatedAt: ago(4),
-    repository: PLAN_REPOSITORY,
+    repository: TASK_REPOSITORY,
     document: { body: `${SHOT_DOCUMENT_TEXT}\n`, assumptions: [] },
     lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: ago(4), duringCall: true },
     sectionEdits: shotSectionEdits(),
@@ -178,7 +178,7 @@ export function shotPlan(overrides: Partial<Plan> = {}): Plan {
 }
 
 /** What the plan's two agents are doing, as its row and hover card name them. */
-export function shotPlanAgents(): PlanAgentsSummary {
+export function shotTaskAgents(): TaskAgentsSummary {
   return {
     total: 2,
     working: 1,
@@ -225,19 +225,19 @@ export function shotPlanAgents(): PlanAgentsSummary {
 }
 
 /** The open plan as its list row. */
-export function shotPlanSummary(overrides: Partial<PlanSummary> = {}): PlanSummary {
+export function shotTaskSummary(overrides: Partial<TaskSummary> = {}): TaskSummary {
   const {
     document: _document,
     lastEdit: _lastEdit,
     sectionEdits: _edits,
     agentEdits: _agentEdits,
     ...row
-  } = shotPlan();
-  return { ...row, agents: shotPlanAgents(), ...overrides };
+  } = shotTask();
+  return { ...row, agents: shotTaskAgents(), ...overrides };
 }
 
 /** The plan's siblings, across three repositories, updated minutes to days ago. */
-export function shotOtherPlans(): PlanSummary[] {
+export function shotOtherTasks(): TaskSummary[] {
   return [
     {
       id: SHOT_ID.WEBHOOKS,
@@ -285,7 +285,7 @@ export function shotOtherPlans(): PlanSummary[] {
 }
 
 /** A plan long done, under Archived. */
-export function shotArchivedPlan(): PlanSummary {
+export function shotArchivedTask(): TaskSummary {
   return {
     id: SHOT_ID.ARCHIVED,
     name: "SSO with Okta",
@@ -301,18 +301,18 @@ export function shotArchivedPlan(): PlanSummary {
  * the list, the plan, and an empty transcript and work, so no tab waits on a
  * read that never comes.
  */
-export function shotPlanningView(input: {
-  readonly plan?: Plan;
-  readonly plans?: readonly PlanSummary[];
-  readonly extra?: Partial<PlanningView>;
-}): PlanningView {
-  const plan = input.plan ?? shotPlan();
+export function shotTasksView(input: {
+  readonly task?: Plan;
+  readonly tasks?: readonly TaskSummary[];
+  readonly extra?: Partial<TasksView>;
+}): TasksView {
+  const task = input.task ?? shotTask();
   return {
-    plans: input.plans ?? [shotPlanSummary(), ...shotOtherPlans()],
-    listStatus: PLANNING_READ.READY,
-    activePlanId: plan.id,
-    document: { status: PLANNING_READ.READY, plan },
-    transcript: { status: PLANNING_READ.READY, transcript: { calls: [], earlierOmitted: false } },
+    tasks: input.tasks ?? [shotTaskSummary(), ...shotOtherTasks()],
+    listStatus: TASKS_READ.READY,
+    activeTaskId: task.id,
+    document: { status: TASKS_READ.READY, task },
+    transcript: { status: TASKS_READ.READY, transcript: { calls: [], earlierOmitted: false } },
     work: [],
     shownCode: [],
     ...input.extra,

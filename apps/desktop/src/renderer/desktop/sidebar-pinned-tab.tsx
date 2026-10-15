@@ -6,18 +6,18 @@ import { shownFiles } from "@luke/voice/code-pane-model";
 import { ScrollTextIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { CardHead, CardNote, CardRule, HoverCard } from "../hover-card";
-import { TAB_KIND, type TabSubject, tabLook } from "../planning/tab-look";
-import { TRANSCRIPT_COPY } from "../planning/transcript-copy";
-import type { PullRequestReader } from "../planning/use-agent-pull-request";
-import { MAIN_TAB } from "../planning/use-main-tabs";
-import type { PlansControl } from "../planning/use-plans-tab";
-import type { PinnedTab } from "../planning/use-side-panel";
+import { TAB_KIND, type TabSubject, tabLook } from "../tasks/tab-look";
+import { TRANSCRIPT_COPY } from "../tasks/transcript-copy";
+import type { PullRequestReader } from "../tasks/use-agent-pull-request";
+import { MAIN_TAB } from "../tasks/use-main-tabs";
+import type { PinnedTab } from "../tasks/use-side-panel";
+import type { TasksControl } from "../tasks/use-tasks-tab";
 import { Tooltip } from "../tooltip";
 import { useClipped } from "../use-clipped";
 import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
 import { agentTranscriptRead } from "./main-tabs";
-import { CardDetail, PullRequestLine, RepositoryDetail } from "./plan-card";
 import { type TranscriptCopier, useTranscriptCopier } from "./strip-tabs";
+import { CardDetail, PullRequestLine, RepositoryDetail } from "./task-card";
 
 /**
  * sidebar-pinned-tab.tsx -- a tab of the plan's columns pinned to the sidebar: its row under Pinned, its Unpin, and its menu.
@@ -27,7 +27,7 @@ import { type TranscriptCopier, useTranscriptCopier } from "./strip-tabs";
  * the pinned plans, as a row in the plan rows' own shape: the tab's glyph,
  * an agent's its harness's mark wearing where it stands as its tab does,
  * and its name on one line, cut short with a fade as a tab is. Its hover card
- * is a plan card (`plan-card.tsx`), drawn from its rows: the tab's whole
+ * is a plan card (`task-card.tsx`), drawn from its rows: the tab's whole
  * name after its glyph, then the plan it is of, which opens the plan, and
  * the plan's repository, which opens on GitHub, and for an agent's pin or
  * its Changes' the pull request it opened, which opens on GitHub too, once the one read of
@@ -53,16 +53,16 @@ import { type TranscriptCopier, useTranscriptCopier } from "./strip-tabs";
 const GONE_NOTE = "No longer on this task";
 
 /** Whether the open plan has said the pin's agent, the agent of its Changes, or its file is gone from it; another plan's pins and a fixed tab's never are. */
-function pinGone(pin: PinnedTab, plans: PlansControl): boolean {
+function pinGone(pin: PinnedTab, tasks: TasksControl): boolean {
   const { tab } = pin;
-  if (pin.plan !== plans.activePlanId) return false;
+  if (pin.task !== tasks.activeTaskId) return false;
   const agentId = pinAgentId(pin);
   if (agentId !== undefined) {
-    const { agents } = plans.agents;
+    const { agents } = tasks.agents;
     return agents !== undefined && !agents.some((agent) => agent.id === agentId);
   }
-  if (!isFileTab(tab) || plans.shownCode === undefined) return false;
-  return !shownFiles(plans.shownCode).some((ref) => ref.path === tab.file);
+  if (!isFileTab(tab) || tasks.shownCode === undefined) return false;
+  return !shownFiles(tasks.shownCode).some((ref) => ref.path === tab.file);
 }
 
 /**
@@ -97,21 +97,21 @@ function pinAgentId({ tab }: PinnedTab): string | undefined {
  */
 function pinActionGroups(
   pin: PinnedTab,
-  plans: PlansControl,
+  tasks: TasksControl,
   copied: TranscriptCopier,
 ): MenuAction[][] {
   const { tab } = pin;
   const unpin: MenuAction = {
     label: "Unpin",
     icon: <UnpinIcon />,
-    onSelect: () => plans.sidePanel.onUnpin(pin.plan, tab),
+    onSelect: () => tasks.sidePanel.onUnpin(pin.task, tab),
   };
   const agent =
-    isAgentTab(tab) && pin.plan === plans.activePlanId
-      ? plans.agents.agents?.find((each) => each.id === tab.agent)
+    isAgentTab(tab) && pin.task === tasks.activeTaskId
+      ? tasks.agents.agents?.find((each) => each.id === tab.agent)
       : undefined;
   if (agent === undefined) return [[unpin]];
-  const read = agentTranscriptRead(plans.agents.readTranscript, agent.id, pin.label, agent.brief);
+  const read = agentTranscriptRead(tasks.agents.readTranscript, agent.id, pin.label, agent.brief);
   const copy = copied(read);
   return [
     [
@@ -137,13 +137,13 @@ function pinActionGroups(
  */
 function pinAgent(
   pin: PinnedTab,
-  plan: TaskSummary,
-  plans: PlansControl,
+  task: TaskSummary,
+  tasks: TasksControl,
 ): TaskAgentLine | undefined {
   const { tab } = pin;
   if (!isAgentTab(tab)) return undefined;
-  const open = pin.plan === plans.activePlanId ? plans.agents.agents : undefined;
-  return (open ?? plan.agents?.agents)?.find((agent) => agent.id === tab.agent);
+  const open = pin.task === tasks.activeTaskId ? tasks.agents.agents : undefined;
+  return (open ?? task.agents?.agents)?.find((agent) => agent.id === tab.agent);
 }
 
 /**
@@ -184,27 +184,27 @@ function usePinPullRequest(
  */
 function PinnedTabCard({
   pin,
-  plan,
+  task,
   agent,
   gone,
-  plans,
-  onOpenPlan,
+  tasks,
+  onOpenTask,
 }: {
   pin: PinnedTab;
-  plan: TaskSummary;
+  task: TaskSummary;
   agent: TaskAgentLine | undefined;
   gone: boolean;
-  plans: PlansControl;
-  onOpenPlan: () => void;
+  tasks: TasksControl;
+  onOpenTask: () => void;
 }): React.JSX.Element {
-  const pullRequest = usePinPullRequest(pin, plans.agents.readPullRequest);
-  const { repository } = plan;
-  const { openGitHub, pictures } = plans.repositories;
+  const pullRequest = usePinPullRequest(pin, tasks.agents.readPullRequest);
+  const { repository } = task;
+  const { openGitHub, pictures } = tasks.repositories;
   return (
     <HoverCard data-pinned-tab-card="">
       <CardHead glyph={tabLook(pinSubject(pin, agent)).icon} name={pin.label} />
-      <div className="plan-card-rows">
-        <CardDetail glyph={<DocumentIcon />} label={plan.name} onPress={onOpenPlan} />
+      <div className="task-card-rows">
+        <CardDetail glyph={<DocumentIcon />} label={task.name} onPress={onOpenTask} />
         {repository === null ? null : (
           <RepositoryDetail repository={repository} pictures={pictures} onOpenGitHub={openGitHub} />
         )}
@@ -213,7 +213,7 @@ function PinnedTabCard({
       {pullRequest === undefined ? null : (
         <>
           <CardRule />
-          <ul className="plan-card-rows" aria-label="Pull request">
+          <ul className="task-card-rows" aria-label="Pull request">
             <PullRequestLine pullRequest={pullRequest} onOpenGitHub={openGitHub} />
           </ul>
         </>
@@ -229,48 +229,48 @@ function PinnedTabCard({
  * left to do with it.
  */
 export function SidebarPinnedTab({
-  plans,
+  tasks,
   pin,
-  plan,
+  task,
   current,
   inSight,
   onOpen,
-  onOpenPlan,
+  onOpenTask,
 }: {
-  plans: PlansControl;
+  tasks: TasksControl;
   pin: PinnedTab;
   /** Whether the open plan was opened from this pin, which the sidebar marks in the plan's place. */
   current: boolean;
   /** The plan the tab is of, whose name the row's card carries. */
-  plan: TaskSummary;
+  task: TaskSummary;
   /** Whether the sidebar is in sight: folded away, its menu stands over nothing. */
   inSight: boolean;
   onOpen: () => void;
   /** Opens the plan the tab is of, as its own row does. */
-  onOpenPlan: () => void;
+  onOpenTask: () => void;
 }): React.JSX.Element {
   const [words, clipped] = useClipped();
   const copied = useTranscriptCopier();
-  const menu = useActionMenu(plans.shown && inSight);
+  const menu = useActionMenu(tasks.shown && inSight);
   const row = useRef<HTMLButtonElement | null>(null);
   const item = useRef<HTMLLIElement | null>(null);
-  const gone = pinGone(pin, plans);
-  const agent = pinAgent(pin, plan, plans);
+  const gone = pinGone(pin, tasks);
+  const agent = pinAgent(pin, task, tasks);
   // The row is what the menu rings and hands focus back to, even when the
   // right-click lands on Unpin over its end.
   const showMenu = menu.contextMenu(row);
   return (
-    <li ref={item} className="sidebar-plan-item sidebar-pinned-tab">
+    <li ref={item} className="sidebar-task-item sidebar-pinned-tab">
       <Tooltip
         label={pin.label}
         card={
           <PinnedTabCard
             pin={pin}
-            plan={plan}
+            task={task}
             agent={agent}
             gone={gone}
-            plans={plans}
-            onOpenPlan={onOpenPlan}
+            tasks={tasks}
+            onOpenTask={onOpenTask}
           />
         }
         cardBeside
@@ -279,7 +279,7 @@ export function SidebarPinnedTab({
         <button
           ref={row}
           type="button"
-          className="sidebar-plan"
+          className="sidebar-task"
           aria-current={current ? "page" : undefined}
           aria-disabled={gone}
           data-menu-open={String(menu.open !== undefined)}
@@ -289,7 +289,7 @@ export function SidebarPinnedTab({
           }}
           onContextMenu={showMenu}
         >
-          <span className="sidebar-plan-line">
+          <span className="sidebar-task-line">
             <span className="sidebar-pinned-tab-glyph">{tabLook(pinSubject(pin, agent)).icon}</span>
             <span ref={words} className="sidebar-pinned-tab-name" data-overflow={String(clipped)}>
               {pin.label}
@@ -297,13 +297,13 @@ export function SidebarPinnedTab({
           </span>
         </button>
       </Tooltip>
-      <span className="sidebar-plan-marks">
+      <span className="sidebar-task-marks">
         <Tooltip label="Unpin">
           <button
             type="button"
-            className="sidebar-plan-mark"
+            className="sidebar-task-mark"
             aria-label={`Unpin ${pin.label}`}
-            onClick={() => plans.sidePanel.onUnpin(pin.plan, pin.tab)}
+            onClick={() => tasks.sidePanel.onUnpin(pin.task, pin.tab)}
             onContextMenu={showMenu}
           >
             <UnpinIcon />
@@ -314,7 +314,7 @@ export function SidebarPinnedTab({
         <ActionMenu
           label={`${pin.label} actions`}
           menu={menu.drawn}
-          groups={pinActionGroups(pin, plans, copied)}
+          groups={pinActionGroups(pin, tasks, copied)}
           onClose={menu.close}
         />
       )}

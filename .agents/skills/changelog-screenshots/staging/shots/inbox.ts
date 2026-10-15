@@ -9,7 +9,7 @@
  * the agent took in its sandbox of the expired invite page, and a manual
  * step with a link. The inbox read is answered once from its start and
  * held after, since its loop asks again as soon as an answer lands; the
- * code block's lines are answered through `PLANNING_FILE` and the picture
+ * code block's lines are answered through `TASKS_FILE` and the picture
  * through `CODING_AGENTS_INBOX_ATTACHMENT` (`expired-invite-picture.ts`).
  */
 
@@ -25,12 +25,12 @@ import {
   type InboxItem,
 } from "@luke/features/inbox-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { FIXTURE_CLOSED_PANEL } from "../planning/planning-fixture";
-import { MAIN_TAB } from "../planning/use-main-tabs";
+import { FIXTURE_CLOSED_PANEL } from "../tasks/tasks-fixture";
+import { MAIN_TAB } from "../tasks/use-main-tabs";
 import { ago } from "./clock";
 import { codingAgentAnswers } from "./coding-agent";
 import { EXPIRED_INVITE_PNG_BASE64 } from "./expired-invite-picture";
-import { PLAN_REPOSITORY, SHOT_ID, shotPlanningView } from "./plan-document";
+import { TASK_REPOSITORY, SHOT_ID, shotTasksView } from "./plan-document";
 import { NEVER, type ShotSpec } from "./shot-spec";
 
 /** The items waiting, by id; the answer to the inbox read must carry the same ids. */
@@ -232,7 +232,7 @@ function shotInboxItems(): InboxItem[] {
           },
           {
             type: INBOX_BLOCK.CODE,
-            repo: PLAN_REPOSITORY,
+            repo: TASK_REPOSITORY,
             path: INVITE_PATH,
             startLine: TTL_LINE,
             endLine: TTL_LINE,
@@ -261,31 +261,31 @@ function shotInboxItems(): InboxItem[] {
 }
 
 /** The plan's inbox read past `after`: every item from the start, then held, since nothing changes. */
-function inboxPage(planId: string, after: string): InboxAnswer | typeof NEVER {
+function inboxPage(taskId: string, after: string): InboxAnswer | typeof NEVER {
   if (after !== INBOX_CURSOR_START) return NEVER;
-  return { items: planId === SHOT_ID.PLAN ? shotInboxItems() : [], cursor: READ_THROUGH };
+  return { items: taskId === SHOT_ID.TASK ? shotInboxItems() : [], cursor: READ_THROUGH };
 }
 
 export function inboxShot(): ShotSpec {
   return {
-    planning: shotPlanningView({}),
+    tasks: shotTasksView({}),
     sidePanel: FIXTURE_CLOSED_PANEL,
     answers: {
       ...codingAgentAnswers(),
-      [ACT_KIND.CODING_AGENTS_INBOX]: (payload) => inboxPage(payload.planId, payload.after),
+      [ACT_KIND.CODING_AGENTS_INBOX]: (payload) => inboxPage(payload.taskId, payload.after),
       [ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT]: (payload) =>
         payload.attachmentId === ATTACHMENT_ID
           ? { contentType: INBOX_IMAGE_TYPE.PNG, base64: EXPIRED_INVITE_PNG_BASE64 }
           : undefined,
       // Note that the window is answered as the agent's commit held it, the block's line lit in it.
-      [ACT_KIND.PLANNING_FILE]: (payload) => {
+      [ACT_KIND.TASKS_FILE]: (payload) => {
         if (payload.path !== INVITE_PATH) return undefined;
         const firstLine = Math.max(1, payload.firstLine);
         const lastLine = Math.min(INVITE_FILE.length, payload.lastLine);
         return {
           file: {
             path: INVITE_PATH,
-            repository: PLAN_REPOSITORY,
+            repository: TASK_REPOSITORY,
             branch: "luke/teammate-invitations",
             firstLine,
             lineCount: INVITE_FILE.length,
@@ -295,8 +295,8 @@ export function inboxShot(): ShotSpec {
       },
     },
     inbox: {
-      waiting: [{ planId: SHOT_ID.PLAN, items: INBOX_ITEM_IDS }],
-      plans: [{ planId: SHOT_ID.PLAN, items: INBOX_ITEM_IDS.length, updatedAt: ago(3) }],
+      waiting: [{ taskId: SHOT_ID.TASK, items: INBOX_ITEM_IDS }],
+      tasks: [{ taskId: SHOT_ID.TASK, items: INBOX_ITEM_IDS.length, updatedAt: ago(3) }],
     },
     layout: { mainTab: MAIN_TAB.INBOX },
   };

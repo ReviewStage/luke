@@ -59,11 +59,11 @@ it.layer(getTestDB())("the session sandbox queue", (it) => {
       Effect.gen(function* () {
         const userId = yield* openUser;
         const other = yield* openUser;
-        const planning = mintSession();
+        const tasks = mintSession();
         const agent = mintSession();
-        const planConversation = yield* openConversation(userId, {
+        const taskConversation = yield* openConversation(userId, {
           kind: CONVERSATION_KIND.TASK,
-          sessionId: planning,
+          sessionId: tasks,
         });
         yield* openConversation(userId, { kind: CONVERSATION_KIND.CODING_AGENT, sessionId: agent });
         yield* openConversation(userId, {
@@ -78,14 +78,14 @@ it.layer(getTestDB())("the session sandbox queue", (it) => {
         assert.deepEqual(
           [...all].sort((a, b) => a.sessionId.localeCompare(b.sessionId)),
           [
-            { sessionId: planning, kind: CONVERSATION_KIND.TASK },
+            { sessionId: tasks, kind: CONVERSATION_KIND.TASK },
             { sessionId: agent, kind: CONVERSATION_KIND.CODING_AGENT },
           ].sort((a, b) => a.sessionId.localeCompare(b.sessionId)),
         );
-        assert.deepEqual(yield* standingSessionsOf(userId, [planConversation]), [
-          { sessionId: planning, kind: CONVERSATION_KIND.TASK },
+        assert.deepEqual(yield* standingSessionsOf(userId, [taskConversation]), [
+          { sessionId: tasks, kind: CONVERSATION_KIND.TASK },
         ]);
-        assert.deepEqual(yield* standingSessionsOf(other, [planConversation]), []);
+        assert.deepEqual(yield* standingSessionsOf(other, [taskConversation]), []);
       }),
   );
 });

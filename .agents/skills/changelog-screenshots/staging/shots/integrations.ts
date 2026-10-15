@@ -13,10 +13,10 @@ import type {
   IntegrationToolsView,
 } from "@luke/features/integration-view";
 import { ACT_KIND } from "@luke/host/acts";
-import { FIXTURE_CLOSED_PANEL } from "../planning/planning-fixture";
+import { FIXTURE_CLOSED_PANEL } from "../tasks/tasks-fixture";
 import { SETTINGS_VIEW } from "../settings-views";
 import { codingAgentAnswers } from "./coding-agent";
-import { shotPlanningView } from "./plan-document";
+import { shotTasksView } from "./plan-document";
 import type { ShotSpec } from "./shot-spec";
 
 /** Each provider's tools, as its server offers them, which a row's menu may list. */
@@ -48,7 +48,7 @@ export function integrationsShot(): ShotSpec {
     },
   };
   return {
-    planning: shotPlanningView({}),
+    tasks: shotTasksView({}),
     sidePanel: FIXTURE_CLOSED_PANEL,
     answers: {
       ...codingAgentAnswers(),

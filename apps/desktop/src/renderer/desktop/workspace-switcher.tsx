@@ -1,7 +1,7 @@
 import type { Workspace } from "@luke/features/workspace-wire";
 import { ChevronDownIcon, GearIcon, PlusIcon } from "@luke/ui";
 import { UsersIcon } from "lucide-react";
-import type { PlansControl } from "../planning/use-plans-tab";
+import type { TasksControl } from "../tasks/use-tasks-tab";
 import { ActionMenu, dropBelowStart, type MenuAction, useActionMenu } from "./action-menu";
 import { useNewWorkspaceDialog } from "./new-workspace-dialog";
 import { sharedWords, WORKSPACE_REF_SIZE, WorkspaceRef } from "./workspace-ref";
@@ -32,24 +32,24 @@ import { WorkspaceTile } from "./workspace-tile";
 /** The menu's items: every workspace by its tile, with who shares it under its name as the head says it, the listed one checked; then New workspace and Workspace settings. */
 function workspaceMenuGroups(
   listed: Workspace,
-  plans: PlansControl,
+  tasks: TasksControl,
   onNew: () => void,
 ): MenuAction[][] {
-  const first = plans.workspaces[0]?.id;
-  const choices = plans.workspaces.map(
+  const first = tasks.workspaces[0]?.id;
+  const choices = tasks.workspaces.map(
     (workspace): MenuAction => ({
       label: workspace.name,
       icon: <WorkspaceTile workspace={workspace} />,
       detail: sharedWords(workspace.memberCount, workspace.id === first),
       checked: workspace.id === listed.id,
-      onSelect: () => plans.onChooseWorkspace(workspace.id),
+      onSelect: () => tasks.onChooseWorkspace(workspace.id),
     }),
   );
   return [
     choices,
     [
       { label: "New workspace", icon: <PlusIcon />, onSelect: onNew },
-      { label: "Workspace settings", icon: <GearIcon />, onSelect: plans.onOpenWorkspaceSettings },
+      { label: "Workspace settings", icon: <GearIcon />, onSelect: tasks.onOpenWorkspaceSettings },
     ],
   ];
 }
@@ -68,21 +68,21 @@ function sharedLine(count: number | undefined, personal: boolean): React.JSX.Ele
 
 /** The sidebar's head while an account is signed in and its workspaces are read. */
 export function WorkspaceSwitcher({
-  plans,
+  tasks,
   inSight,
 }: {
-  plans: PlansControl;
+  tasks: TasksControl;
   /** Whether the sidebar is in sight, so the menu closes with it folding away. */
   inSight: boolean;
 }): React.JSX.Element | null {
-  const naming = useNewWorkspaceDialog(plans.onCreateWorkspace, {
-    signedIn: plans.signedIn,
-    surfaceOpen: plans.shown && inSight,
+  const naming = useNewWorkspaceDialog(tasks.onCreateWorkspace, {
+    signedIn: tasks.signedIn,
+    surfaceOpen: tasks.shown && inSight,
   });
-  const menu = useActionMenu(plans.shown && inSight);
-  const listed = plans.workspace;
+  const menu = useActionMenu(tasks.shown && inSight);
+  const listed = tasks.workspace;
   if (listed === undefined) return null;
-  const personal = plans.workspaces[0]?.id === listed.id;
+  const personal = tasks.workspaces[0]?.id === listed.id;
   return (
     <div className="sidebar-workspace">
       <button
@@ -105,7 +105,7 @@ export function WorkspaceSwitcher({
         <ActionMenu
           label="Workspaces"
           menu={menu.drawn}
-          groups={workspaceMenuGroups(listed, plans, naming.ask)}
+          groups={workspaceMenuGroups(listed, tasks, naming.ask)}
           onClose={menu.close}
         />
       )}

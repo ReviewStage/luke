@@ -159,7 +159,7 @@
   --terminal-find-current: #b36b00;
   /* A file's type icon in the file tree's own palette (`@pierre/trees`),
      which its shadow root keeps to itself, said again for a file drawn
-     outside the tree (`planning.css`). */
+     outside the tree (`tasks.css`). */
   --file-icon-gray: #adadb1;
   --file-icon-red: #ff6762;
   --file-icon-vermilion: #d5512f;

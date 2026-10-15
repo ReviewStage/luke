@@ -601,9 +601,9 @@ test("the plan template's title line drops its history and Reset under the title
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
   const line =
-    page.querySelector<HTMLElement>(".plan-page-head .plan-title-line") ??
+    page.querySelector<HTMLElement>(".task-page-head .task-title-line") ??
     assert.fail("no title line");
-  assert.ok(line.querySelector(".plan-title-actions"), "the actions stand on the title's line");
+  assert.ok(line.querySelector(".task-title-actions"), "the actions stand on the title's line");
 
   const sheets = layContainersAt({});
   try {

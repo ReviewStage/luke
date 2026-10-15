@@ -35,6 +35,11 @@ test("a task's address, or a section's, opens that task in the app, whichever ho
     appLinkFromAddress(`/acme/plan/${TASK_ID}`, "#rollout"),
     `tryluke://tryluke.dev/acme/plan/${TASK_ID}#rollout`,
   );
+  // A task's link a later build writes under task hands the app the link it reads now.
+  assert.equal(
+    appLinkFromAddress(`/acme/task/${TASK_ID}`, "#rollout"),
+    `tryluke://tryluke.dev/acme/plan/${TASK_ID}#rollout`,
+  );
 });
 
 test("a picture's address opens the plan it is of, and nothing else of it", () => {

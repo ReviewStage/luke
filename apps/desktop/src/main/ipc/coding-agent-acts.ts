@@ -274,10 +274,10 @@ export function codingAgentActRows(
       refuseUnlessPanel(ACT_KIND.CODING_AGENTS_PIN, sender);
       return notedAgent(host.codingAgentPin(params));
     },
-    [ACT_KIND.CODING_AGENTS_SHOWN]: ({ agentId, inboxTaskId: inboxPlanId }, sender) => {
+    [ACT_KIND.CODING_AGENTS_SHOWN]: ({ agentId, inboxTaskId }, sender) => {
       refuseUnlessPanel(ACT_KIND.CODING_AGENTS_SHOWN, sender);
       notices.shown(agentId);
-      notices.shownInbox(inboxPlanId);
+      notices.shownInbox(inboxTaskId);
     },
     [ACT_KIND.CODING_AGENTS_PAGE]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.CODING_AGENTS_PAGE, sender);

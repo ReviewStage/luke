@@ -8,8 +8,8 @@ import { createElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { test } from "vitest";
 import { TOOL_STATE, ToolLine, type ToolState } from "./ai-elements/tool";
-import { PlanStatusMark } from "./desktop/plan-card";
-import { AgentGlyph, agentEndMark } from "./planning/tab-look";
+import { TaskStatusMark } from "./desktop/task-card";
+import { AgentGlyph, agentEndMark } from "./tasks/tab-look";
 
 /**
  * state-glyph.test.ts -- work that is working or failed wears one mark for
@@ -73,7 +73,7 @@ function namedMark(surface: HTMLElement): string {
 
 test("a sidebar plan's row, an agent's tab, and a running call draw one working mark under one name", () => {
   const surfaces = {
-    sidebar: drawn(createElement(PlanStatusMark, { plan: WORKED_ON })),
+    sidebar: drawn(createElement(TaskStatusMark, { task: WORKED_ON })),
     tab: drawn(
       createElement(AgentGlyph, { agent: { model: MODEL, status: CODING_AGENT_STATUS.RUNNING } }),
     ),

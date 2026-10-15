@@ -17,19 +17,19 @@ import { FindScope } from "../find-in-tab";
 import { usePageWorkspace } from "../links-at-hand";
 import { MemberDirectory } from "../member-directory";
 import { NOT_FOUND_THING, NotFound } from "../not-found";
-import { agentTabLabel } from "../planning/coding-agent-model";
+import { ReadFailure } from "../read-failure";
+import { SPINNER_SIZE, Spinner } from "../spinner";
+import { agentTabLabel } from "../tasks/coding-agent-model";
 import {
   PlanMentions,
   type PlanMentionsValue,
   planlessMentions,
   useMentionAgentsReader,
-} from "../planning/plan-mentions";
-import { SkillFiles } from "../planning/skill-chip";
-import { TOOL_TARGET, type ToolTarget } from "../planning/tool-call-model";
-import { useCodingAgents } from "../planning/use-coding-agents";
-import { AUTOMATIONS_PAGE, type PlansControl } from "../planning/use-plans-tab";
-import { ReadFailure } from "../read-failure";
-import { SPINNER_SIZE, Spinner } from "../spinner";
+} from "../tasks/plan-mentions";
+import { SkillFiles } from "../tasks/skill-chip";
+import { TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model";
+import { useCodingAgents } from "../tasks/use-coding-agents";
+import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { Tooltip } from "../tooltip";
 import { useExperiment } from "../use-app-state";
@@ -38,9 +38,9 @@ import { AgentPane } from "./main-tabs";
 import {
   COLUMN,
   changesTabOf,
-  planCards,
   SIDE_PANEL_HOLDER,
   SidePanel,
+  taskCards,
   useColumnFocus,
   useSidePanelDrawing,
 } from "./side-panel";
@@ -145,16 +145,16 @@ function AgentMentions({
 
 /** One agent's page, in the plan's place: the agent read by its id, drawn as the task column's agent pane. */
 export function DesktopAgentPage({
-  plans,
+  tasks,
   agentId,
 }: {
-  plans: PlansControl;
+  tasks: TasksControl;
   agentId: string;
 }): React.JSX.Element {
-  useAppCommand(APP_COMMAND.EXIT_AGENT_PAGE, plans.agentView.onClose);
+  useAppCommand(APP_COMMAND.EXIT_AGENT_PAGE, tasks.agentView.onClose);
   const { act, tell } = useAct();
   const views = useTabViews();
-  const { sidePanel } = plans;
+  const { sidePanel } = tasks;
   const drawing = useSidePanelDrawing(sidePanel);
   const { onArea, focus, setFocus } = useColumnFocus();
   // The panel holds the keys while the focus went into it last, or while it fills the window over the page.
@@ -167,15 +167,15 @@ export function DesktopAgentPage({
   });
   const agents = useCodingAgents({
     acts: { act },
-    planId: undefined,
+    taskId: undefined,
     agentId,
     repository: null,
     archived: false,
     onUnarchive: nothing,
-    onOpenIntegrations: plans.agents.onOpenIntegrations,
-    onOpenApiKeys: plans.agents.onOpenApiKeys,
+    onOpenIntegrations: tasks.agents.onOpenIntegrations,
+    onOpenApiKeys: tasks.agents.onOpenApiKeys,
     onStarted: nothing,
-    me: plans.me,
+    me: tasks.me,
   });
   const agent = agents.agents?.[0] ?? agents.archived?.[0];
   // Note that the models come from the open plan's agents where this page has not read them, so
@@ -196,11 +196,11 @@ export function DesktopAgentPage({
   usePageWorkspace(agentId, workspaceId);
   // The workspace's agents an `@` offers, named by the tasks the window lists.
   const mentionTasks = useMemo(
-    () => [...plans.plans, ...plans.archived],
-    [plans.plans, plans.archived],
+    () => [...tasks.tasks, ...tasks.archived],
+    [tasks.tasks, tasks.archived],
   );
   const readMentionAgents = useMentionAgentsReader(workspaceId, mentionTasks, agents.models);
-  const listed = plans.workspaces.find((each) => each.id === workspaceId);
+  const listed = tasks.workspaces.find((each) => each.id === workspaceId);
   const workspace = workspaceId === undefined ? undefined : (listed ?? { id: workspaceId });
   // The words a dictation into the agent's box listens for: its repository and its title.
   const keywords = useMemo(
@@ -217,20 +217,20 @@ export function DesktopAgentPage({
     ...agents,
     agents: agent === undefined ? agents.agents : [agent],
     agentIds: agent === undefined ? agents.agentIds : [agent.id],
-    models: agents.models ?? plans.agents.models,
+    models: agents.models ?? tasks.agents.models,
     keywords,
     onUnarchive: agent?.archivedAt === undefined ? undefined : unarchive,
   };
   const tab = { agent: agentId };
   const automationsOn = useExperiment(EXPERIMENT.AUTOMATIONS);
-  const { onOpen: onOpenAutomations } = plans.automationsView;
+  const { onOpen: onOpenAutomations } = tasks.automationsView;
   const openAutomation = useCallback(
     (automationId: string) => onOpenAutomations({ kind: AUTOMATIONS_PAGE.EDIT, automationId }),
     [onOpenAutomations],
   );
   // Note that an inbox call is the one row of a coding agent's own that opens a tab, a worker's opening through its delegation.
   const openTarget = (target: ToolTarget) => {
-    if (target.kind === TOOL_TARGET.INBOX) plans.inboxView.onOpen();
+    if (target.kind === TOOL_TARGET.INBOX) tasks.inboxView.onOpen();
   };
   // A delegation's row opens its worker in the side panel, and the Changes chip the pull request's changes, as on a task.
   const openDelegation = (
@@ -244,8 +244,8 @@ export function DesktopAgentPage({
   };
   const openChanges = (changed: string) =>
     sidePanel.onChoose(changesTabOf(control, changed, sidePanel.changes));
-  const shown = plans.shown && !sidePanel.fullScreen;
-  const cards = planCards({
+  const shown = tasks.shown && !sidePanel.fullScreen;
+  const cards = taskCards({
     agents: control,
     workRows: [],
     held: views.held,
@@ -273,7 +273,7 @@ export function DesktopAgentPage({
       ? undefined
       : planlessMentions(
           { workspace: listed?.slug ?? workspaceId, workspaceId, repository: agentRepository },
-          plans.onShowMention,
+          tasks.onShowMention,
           readMentionAgents,
         );
   const toolbar = (
@@ -285,7 +285,7 @@ export function DesktopAgentPage({
       </div>
       {agent === undefined ? null : (
         <div className="desktop-toolbar-actions">
-          <AgentPageActions agent={agent} shown={plans.shown} />
+          <AgentPageActions agent={agent} shown={tasks.shown} />
         </div>
       )}
     </header>
@@ -308,7 +308,7 @@ export function DesktopAgentPage({
   }
   return (
     <LinkWorkspaceProvider value={listed?.slug ?? workspaceId}>
-      <MemberDirectory workspace={workspace} readerId={plans.me}>
+      <MemberDirectory workspace={workspace} readerId={tasks.me}>
         <AutomationDirectory
           workspace={listed}
           on={automationsOn}
@@ -317,13 +317,13 @@ export function DesktopAgentPage({
         >
           <SkillFiles source={control.readSkills} onOpen={openSkill}>
             <AgentMentions value={mentions}>
-              <div ref={onArea} className="desktop-plan" data-panel-open={String(sidePanel.open)}>
+              <div ref={onArea} className="desktop-task" data-panel-open={String(sidePanel.open)}>
                 {/* Hidden rather than left out while the panel fills the window, as a plan's column is. */}
                 <section className="agent-page" aria-label="Agent" hidden={sidePanel.fullScreen}>
                   {toolbar}
                   <FindScope
-                    className="desktop-plan-column"
-                    active={plans.shown && !sideFocused}
+                    className="desktop-task-column"
+                    active={tasks.shown && !sideFocused}
                     subject={tab}
                   >
                     <AgentPane
@@ -357,7 +357,7 @@ export function DesktopAgentPage({
                     openAgents={openAgents}
                     shownAgent={shown ? agentId : undefined}
                     views={views}
-                    shown={plans.shown}
+                    shown={tasks.shown}
                     focused={sideFocused}
                     onOpenTarget={openTarget}
                     cards={cards}

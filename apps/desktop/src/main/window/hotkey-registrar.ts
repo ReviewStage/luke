@@ -45,7 +45,7 @@ export interface HotkeyHost {
    * and nothing otherwise. It is the plan a press opens a call about where
    * none stands; a standing call takes the press whatever it names.
    */
-  talkPlanId(): string | undefined;
+  talkTaskId(): string | undefined;
   /**
    * One key's registration moved, so what the renderers are teaching is
    * written again. The raw accelerator is what travels, as in bootstrap: the
@@ -303,8 +303,8 @@ export class HotkeyRegistrar {
 
   /** What a talk press carries: the plan it is about, where the panel has one open. */
   #talkPress(): UnparsedWireValue | undefined {
-    const planId = this.#host.talkPlanId();
-    return planId === undefined ? undefined : { planId };
+    const taskId = this.#host.talkTaskId();
+    return taskId === undefined ? undefined : { taskId };
   }
 
   /**

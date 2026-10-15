@@ -13,7 +13,7 @@ import { pageResponse } from "./page-protocol";
  * synthetic versions.
  */
 
-const PLAN_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
+const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 
 const CHART: PageVersion = {
   id: "5d1c3f9a-7e2b-4c8d-9f10-2a3b4c5d6e7f",
@@ -26,7 +26,7 @@ const CHART: PageVersion = {
 /** The service as the host reads it for a frame: the one version above, of the one plan. */
 const readPage = (page: TasksPageParams) =>
   Effect.succeed(
-    page.taskId === PLAN_ID && page.pageId === CHART.id && page.version === CHART.version
+    page.taskId === TASK_ID && page.pageId === CHART.id && page.version === CHART.version
       ? { page: CHART }
       : { failure: TASK_CALL_FAILURE.UNANSWERED },
   );
@@ -47,7 +47,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const response = yield* pageResponse(
-        pageFrameUrl({ taskId: PLAN_ID, pageId: CHART.id, version: 2 }),
+        pageFrameUrl({ taskId: TASK_ID, pageId: CHART.id, version: 2 }),
         readPage,
       );
       const policy = directivesOf(response);

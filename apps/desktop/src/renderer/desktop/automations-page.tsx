@@ -25,11 +25,11 @@ import { LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item";
 import { EmptyState } from "../empty-state";
 import { ExperimentTag, SendFeedbackButton } from "../experiment-marks";
 import { NOT_FOUND_THING, NotFound } from "../not-found";
-import { momentText, useMinute } from "../planning/plan-time";
-import { AUTOMATIONS_PAGE, type PlansControl } from "../planning/use-plans-tab";
 import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { StateGlyph, stateEndMark } from "../state-glyph";
 import { Switch } from "../switch";
+import { momentText, useMinute } from "../tasks/task-time";
+import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { ActionMenu, useActionMenu } from "./action-menu";
 import { AutomationEditor } from "./automation-editor";
@@ -256,17 +256,17 @@ function SuggestedAutomations({
 
 /** The list's page: the listed workspace's automations, a new one a press away. */
 function ListPage({
-  plans,
+  tasks,
   automations,
 }: {
-  plans: PlansControl;
+  tasks: TasksControl;
   automations: ReturnType<typeof useAutomations>;
 }): React.JSX.Element {
-  const view = plans.automationsView;
+  const view = tasks.automationsView;
   useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, view.onClose);
   const toast = useToast();
   const now = useMinute();
-  const workspace = plans.workspace;
+  const workspace = tasks.workspace;
   const { read, reload, toggle } = automations;
   const onToggle = (automation: AutomationSummary, enabled: boolean) => {
     toggle(automation.id, enabled).then((answer) => {
@@ -380,17 +380,17 @@ function GonePage({ onBack }: { onBack: () => void }): React.JSX.Element {
  * them, so an automation opened from it opens as it was listed, and an
  * edit is in the list the moment it lands.
  */
-export function AutomationsPage({ plans }: { plans: PlansControl }): React.JSX.Element {
+export function AutomationsPage({ tasks: plans }: { tasks: TasksControl }): React.JSX.Element {
   // Every Copy link on these pages is written under the listed workspace, whose automations they are.
   return (
     <LinkWorkspaceProvider value={plans.workspace?.slug ?? plans.workspace?.id}>
-      <AutomationsPages plans={plans} />
+      <AutomationsPages tasks={plans} />
     </LinkWorkspaceProvider>
   );
 }
 
 /** The Automations pages themselves, under the workspace their links are written in. */
-function AutomationsPages({ plans }: { plans: PlansControl }): React.JSX.Element {
+function AutomationsPages({ tasks: plans }: { tasks: TasksControl }): React.JSX.Element {
   const view = plans.automationsView;
   const workspace = plans.workspace;
   const automations = useAutomations(workspace?.id);
@@ -399,7 +399,7 @@ function AutomationsPages({ plans }: { plans: PlansControl }): React.JSX.Element
   const back = () => view.onOpen({ kind: AUTOMATIONS_PAGE.LIST });
   const { place } = view;
   if (place.kind === AUTOMATIONS_PAGE.LIST) {
-    return <ListPage plans={plans} automations={automations} />;
+    return <ListPage tasks={plans} automations={automations} />;
   }
   const { read, reload } = automations;
   if (read !== undefined && "failure" in read) {
@@ -430,7 +430,7 @@ function AutomationsPages({ plans }: { plans: PlansControl }): React.JSX.Element
         preset={preset}
         workspace={workspace}
         offersOwner={offersOwner}
-        repositories={plans.newPlan.repositoriesIn(workspace?.id)}
+        repositories={plans.newTask.repositoriesIn(workspace?.id)}
         writes={automations}
         onBack={back}
         onOpenAgent={(agentId) => plans.agentView.onOpen(agentId)}

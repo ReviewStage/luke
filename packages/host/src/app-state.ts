@@ -33,13 +33,13 @@ export const RUN_PROFILE = {
   MUTED: "muted",
   DUPLEX: "duplex",
   /** The panel's Plans tab, opened at launch over a synthetic plan. */
-  TASKS: "planning",
+  TASKS: "tasks",
   /** The same plan, opened at launch on the whiteboard Luke drew for it. */
-  TASKS_BOARD: "planning-board",
+  TASKS_BOARD: "tasks-board",
   /** The same plan mid-call, opened at launch on the transcript of what was said on its calls. */
-  TASKS_TRANSCRIPT: "planning-transcript",
+  TASKS_TRANSCRIPT: "tasks-transcript",
   /** The same plan mid-call, opened at launch on the work Luke's planning model did on its calls. */
-  TASKS_WORK: "planning-work",
+  TASKS_WORK: "tasks-work",
 } as const;
 
 export type RunProfile = (typeof RUN_PROFILE)[keyof typeof RUN_PROFILE];

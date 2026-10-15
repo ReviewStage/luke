@@ -22,14 +22,14 @@ import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { onRegistry } from "#testing/copy-feedback";
-import { codingAgentsControl, plansControl } from "#testing/plans-control";
+import { codingAgentsControl, tasksControl } from "#testing/tasks-control";
 import { DesktopInbox } from "./desktop/desktop-inbox";
 import { DesktopSidebar } from "./desktop/desktop-sidebar";
 import { SIDEBAR_OVERLAY } from "./desktop/sidebar-collapse";
 import { PANEL_TAB } from "./panel-tabs";
-import { AgentChangesTab } from "./planning/agent-changes-tab";
 import { ApiKeysSection } from "./settings/api-keys-section";
 import { WorkspacePage } from "./settings/workspace-page";
+import { AgentChangesTab } from "./tasks/agent-changes-tab";
 
 /**
  * A read that did not land says so alike on every surface that reads: the
@@ -42,7 +42,7 @@ import { WorkspacePage } from "./settings/workspace-page";
 const ignore = () => undefined;
 const UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
 
-const PLAN: TaskSummary = {
+const TASK: TaskSummary = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
   workspaceId: "workspace-personal",
   name: "Billing usage alerts",
@@ -153,7 +153,7 @@ test("the sidebar's plans that could not be read say so in the fault red, and Re
         staged: false,
       },
       history: { canGoBack: false, canGoForward: false, onBack: ignore, onForward: ignore },
-      plans: plansControl({
+      tasks: tasksControl({
         listFailed: true,
         onRetryList: () => {
           retried += 1;
@@ -193,9 +193,9 @@ test("the sidebar's plans that could not be read say so in the fault red, and Re
 test("the Inbox's list says a plan it could not read as the sidebar does, and Retry lists what the plan holds", async () => {
   const page = await mount(
     createElement(DesktopInbox, {
-      plans: plansControl({
-        plans: [PLAN],
-        inboxPlans: [{ taskId: PLAN.id, items: 1, updatedAt: 2 }],
+      tasks: tasksControl({
+        tasks: [TASK],
+        inboxTasks: [{ taskId: TASK.id, items: 1, updatedAt: 2 }],
         inboxView: {
           open: true,
           chosen: undefined,

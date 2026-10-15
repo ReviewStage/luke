@@ -38,7 +38,7 @@ import { onRegistry } from "#testing/copy-feedback";
 import { relayout } from "#testing/resize-observer";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { OpenPersonProvider } from "../person-door";
-import { dayAndTimeText } from "../planning/plan-time";
+import { dayAndTimeText } from "../tasks/task-time";
 import { ToastHost } from "../toast";
 import { WorkspacePage, type WorkspaceSettingsControl } from "./workspace-page";
 

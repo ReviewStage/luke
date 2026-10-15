@@ -3,7 +3,7 @@ import type { TaskSummary } from "@luke/features/task-wire";
 import type { FormerMember, Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { type Actor, accountActor, creatorActor, personActor } from "@luke/ui/actor-model";
 import { createContext, type ReactNode, useContext } from "react";
-import { useFormerMembers, useWorkspaceMembers } from "./planning/use-workspace-members";
+import { useFormerMembers, useWorkspaceMembers } from "./tasks/use-workspace-members";
 import { useAppState } from "./use-app-state";
 
 /**

@@ -28,10 +28,10 @@ import { type ReactNode, useState } from "react";
 import { automationNextText, automationOwnerName } from "./desktop/automation-words";
 import { CardHead, CardNote, CardRule, HoverCard } from "./hover-card";
 import { useActorDoor } from "./person-door";
-import { useMinute } from "./planning/plan-time";
-import { RelativeTime } from "./planning/relative-time";
-import { AgentMark } from "./planning/tab-look";
 import { GLYPH_STATE, type GlyphState, StateGlyph } from "./state-glyph";
+import { RelativeTime } from "./tasks/relative-time";
+import { AgentMark } from "./tasks/tab-look";
+import { useMinute } from "./tasks/task-time";
 import { Tooltip } from "./tooltip";
 
 /**
