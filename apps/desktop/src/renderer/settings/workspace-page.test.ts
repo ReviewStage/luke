@@ -71,6 +71,7 @@ const FIRST: Workspace = {
   slug: "dana",
   role: WORKSPACE_ROLE.OWNER,
   github: null,
+  personal: true,
 };
 
 /** The members the test's service holds. */
@@ -242,10 +243,11 @@ async function settle(): Promise<void> {
   });
 }
 
-/** The page over `workspace` listed beside the account's first one, and how often a leave asked to fall back. */
+/** The page over `workspace` listed beside the account's first one, or as it, and how often a leave asked to fall back. */
 async function mount(workspace: Workspace, others: readonly Workspace[] = []) {
   const pressed = { left: 0 };
-  const workspaces = [FIRST, workspace, ...others].filter(
+  const first = workspace.id === FIRST.id ? workspace : FIRST;
+  const workspaces = [first, workspace, ...others].filter(
     (each, at, all) => all.findIndex((other) => other.id === each.id) === at,
   );
   const container = document.createElement("div");
@@ -383,6 +385,18 @@ test("an admin's rename the service refuses says so under the row, and a member 
   assert.equal(roleLine(member.page), "Member");
   assert.equal(buttons(member.page, "Rename").length, 0);
   assert.equal(member.page.querySelector(".workspace-name") === null, true);
+});
+
+test("a personal workspace shows its owner's name with no Rename to its owner and an admin alike, and still offers its photo", async () => {
+  for (const role of [WORKSPACE_ROLE.OWNER, WORKSPACE_ROLE.ADMIN]) {
+    const { page } = await mount({ ...FIRST, role });
+
+    assert.equal(rowNamed(page, "Name").querySelector("small")?.textContent, FIRST.name);
+    assert.equal(buttons(page, "Rename").length, 0);
+    assert.ok(rowNamed(page, "Photo"));
+  }
+  const team = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
+  assert.equal(buttons(team.page, "Rename").length, 1);
 });
 
 /** The photos the page sent, by their payloads. */

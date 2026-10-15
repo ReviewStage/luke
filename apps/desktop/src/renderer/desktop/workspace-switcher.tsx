@@ -18,7 +18,8 @@ import { TILE_SIZE, WorkspaceTile } from "./workspace-tile";
  * workspace while no one else is in it (`automations-page.tsx` reads the
  * first listed as the account's own too). A press
  * drops the menu of every workspace the account is a member of from its left
- * edge, each by its tile, the listed one checked, then New workspace, which
+ * edge, each by its tile with who shares it under its name, the listed one
+ * checked, then New workspace, which
  * asks a name and lists the workspace made, and Workspace settings, which
  * opens Settings on the listed workspace's page, where its members and its
  * GitHub are managed. Nothing else stands in the menu. The head stands
@@ -27,16 +28,18 @@ import { TILE_SIZE, WorkspaceTile } from "./workspace-tile";
  * before then the sidebar's head is Luke's.
  */
 
-/** The menu's items: every workspace by its tile, the listed one checked; then New workspace and Workspace settings. */
+/** The menu's items: every workspace by its tile, with who shares it under its name as the head says it, the listed one checked; then New workspace and Workspace settings. */
 function workspaceMenuGroups(
   listed: Workspace,
   plans: PlansControl,
   onNew: () => void,
 ): MenuAction[][] {
+  const first = plans.workspaces[0]?.id;
   const choices = plans.workspaces.map(
     (workspace): MenuAction => ({
       label: workspace.name,
       icon: <WorkspaceTile workspace={workspace} />,
+      detail: sharedWords(workspace.memberCount, workspace.id === first),
       checked: workspace.id === listed.id,
       onSelect: () => plans.onChooseWorkspace(workspace.id),
     }),

@@ -65,6 +65,8 @@ export interface MenuAction {
   label: string;
   /** The glyph leading the label, drawn in a column every item keeps whether or not it has one. */
   icon?: React.JSX.Element;
+  /** A muted second line under the label, such as who shares a workspace, which a reader hears after it. */
+  detail?: string | undefined;
   onSelect: () => void;
   /** Drawn red: the action cannot be taken back. */
   danger?: boolean;
@@ -264,13 +266,23 @@ export function MenuItem({
   inMenu: boolean;
   onChoose: () => void;
 }): React.JSX.Element {
+  const label = <span className="plan-menu-label">{action.label}</span>;
   const body = (
     <>
       <span className="menu-item-glyph">{action.icon}</span>
-      <span className="plan-menu-label">{action.label}</span>
+      {action.detail === undefined ? (
+        label
+      ) : (
+        <span className="menu-item-copy">
+          {label}
+          <span className="menu-item-detail">{action.detail}</span>
+        </span>
+      )}
       <ItemEnd action={action} />
     </>
   );
+  // Note that a detail is heard after the label with a pause, because the two spans would otherwise run together.
+  const heard = action.detail === undefined ? undefined : `${action.label}, ${action.detail}`;
   // A setting in a menu says whether it is on as a menu's check does.
   if (inMenu && action.checked !== undefined) {
     return (
@@ -278,8 +290,10 @@ export function MenuItem({
         type="button"
         role="menuitemcheckbox"
         aria-checked={action.checked}
+        aria-label={heard}
         tabIndex={-1}
         className="menu-item"
+        data-detail={action.detail === undefined ? undefined : "true"}
         disabled={action.disabled}
         onClick={onChoose}
       >
@@ -291,9 +305,11 @@ export function MenuItem({
     <button
       type="button"
       role={inMenu ? "menuitem" : undefined}
+      aria-label={heard}
       tabIndex={inMenu ? -1 : undefined}
       className="menu-item"
       data-danger={action.danger ? "true" : undefined}
+      data-detail={action.detail === undefined ? undefined : "true"}
       disabled={action.disabled}
       onClick={onChoose}
     >
