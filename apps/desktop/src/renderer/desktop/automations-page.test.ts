@@ -18,6 +18,7 @@ import {
 } from "@luke/features/automation-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import { EXPERIMENT, type Experiment } from "@luke/settings";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -27,6 +28,7 @@ import { onRegistry } from "#testing/copy-feedback";
 import { plansControl } from "#testing/plans-control";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { runAppCommand } from "../app-commands";
+import { OpenFeedbackProvider } from "../open-feedback";
 import { AUTOMATIONS_PAGE, type AutomationsPlace } from "../planning/use-plans-tab";
 import { ToastHost } from "../toast";
 import { appStateNow } from "../use-app-state";
@@ -153,11 +155,14 @@ const ROTATED_SECRET = "whsec-fixture-rotated-once";
 let secretsAsked: string[] = [];
 /** What the window handed main's clipboard itself. */
 let copied: string[] = [];
+/** The experiments a Send feedback was about, in order. */
+let feedbackAbout: Experiment[] = [];
 
 beforeEach(() => {
   installScrollIntoView();
   secretsAsked = [];
   copied = [];
+  feedbackAbout = [];
   standing = [DIGEST, SWEEP, FAILING];
   lists = [];
   listHeld = false;
@@ -593,7 +598,11 @@ function mountPages(start: AutomationsPlace, workspace: Workspace = WORKSPACE): 
     root?.render(
       onRegistry(
         registry,
-        createElement(Fragment, null, createElement(Pages), createElement(ToastHost)),
+        createElement(
+          OpenFeedbackProvider,
+          { value: (about: Experiment) => feedbackAbout.push(about) },
+          createElement(Fragment, null, createElement(Pages), createElement(ToastHost)),
+        ),
       ),
     ),
   );
@@ -621,6 +630,36 @@ function type(field: HTMLInputElement | HTMLTextAreaElement | null, value: strin
     setter?.call(field, value);
     field.dispatchEvent(new Event("input", { bubbles: true }));
   });
+}
+
+/** The picker named, by its chip's own name: "Event: Issue opened". */
+function picker(page: HTMLElement, label: string): HTMLButtonElement {
+  const found = page.querySelector<HTMLButtonElement>(`button[aria-label^="${label}: "]`);
+  assert.ok(found, `no picker ${label}`);
+  return found;
+}
+
+/** What the picker named says it holds now. */
+function picked(page: HTMLElement, label: string): string | undefined {
+  return picker(page, label)
+    .getAttribute("aria-label")
+    ?.slice(label.length + 2);
+}
+
+/** What the row of the picker named says under its name: the trigger's sentence under Type. */
+function pickerDetail(page: HTMLElement, label: string): string | undefined {
+  const id = picker(page, label).getAttribute("aria-describedby");
+  return id === null ? undefined : (document.getElementById(id)?.textContent ?? undefined);
+}
+
+/** Picks an option as a developer would: the picker's chip, then the menu's row of that name. */
+function pick(page: HTMLElement, label: string, option: string): void {
+  act(() => picker(page, label).click());
+  const row = [...document.querySelectorAll<HTMLButtonElement>("[role=option]")].find(
+    (each) => each.querySelector(".plan-compose-menu-name")?.textContent === option,
+  );
+  assert.ok(row, `no ${option} in ${label}`);
+  act(() => row.click());
 }
 
 /** The crumbs' words, in order. */
@@ -756,14 +795,24 @@ test("Escape leaves a page with nothing unsaved for the list, and keeps one whos
 test("the Owner row stands in a shared workspace, and not in the account's personal one", async () => {
   const shared = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
   await settle();
-  assert.ok(shared.querySelector("[aria-label='Owner']"));
+  assert.equal(picked(shared, "Owner"), "Personal");
   act(() => root?.unmount());
   document.body.innerHTML = "";
 
   const personal = mountPages({ kind: AUTOMATIONS_PAGE.NEW }, PERSONAL);
   await settle();
-  assert.equal(personal.querySelector("[aria-label='Owner']"), null);
+  assert.equal(personal.querySelector("button[aria-label^='Owner: ']"), null);
   assert.match(personal.textContent ?? "", /Your automation, in your personal workspace\./u);
+});
+
+test("an automation's page says it is an experiment, and its Send feedback is about Automations", async () => {
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+
+  assert.equal(page.querySelector(".experiment-badge")?.textContent, "Experimental");
+  act(() => button("Send feedback").click());
+
+  assert.deepEqual(feedbackAbout, [EXPERIMENT.AUTOMATIONS]);
 });
 
 test("a page naming an automation the list no longer holds says it is gone", async () => {
@@ -839,15 +888,9 @@ test("an automation fired by an event says its trigger in one sentence, and a sa
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: onEvent.id });
   await settle();
 
-  assert.equal(
-    page.querySelector(".automation-trigger-sentence")?.textContent,
-    "When an issue is opened in acme/ledger labelled bug",
-  );
-  assert.equal(
-    page.querySelector<HTMLSelectElement>("[aria-label='GitHub event']")?.value,
-    "issue-opened",
-  );
-  assert.equal(page.querySelector("[aria-label='Time zone']"), null);
+  assert.equal(pickerDetail(page, "Type"), "When an issue is opened in acme/ledger labelled bug");
+  assert.equal(picked(page, "Event"), "Issue opened");
+  assert.equal(page.querySelector("button[aria-label^='Time zone: ']"), null);
   type(page.querySelector("textarea[aria-label='Task']"), "Reproduce the bug first.");
   act(() => button("Save").click());
   await settle();
@@ -861,10 +904,10 @@ test("an automation fired by an event says its trigger in one sentence, and a sa
 });
 
 test("Escape keeps a new page whose schedule was changed, though nothing was typed", async () => {
-  mountPages({ kind: AUTOMATIONS_PAGE.NEW });
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
   await settle();
 
-  act(() => button("Daily").click());
+  pick(page, "Repeats", "Daily");
   act(() => runAppCommand(APP_COMMAND.EXIT_AUTOMATIONS));
 
   assert.equal(places.length, 1);
@@ -896,7 +939,7 @@ test("the repository chosen first is not said again among the others its runs wo
   await settle();
   assert.match(page.textContent ?? "", /also work in acme\/web\./u);
 
-  act(() => page.querySelector<HTMLButtonElement>(".automation-form .chip")?.click());
+  act(() => page.querySelector<HTMLButtonElement>(".repository-chip .chip")?.click());
   await settle();
   act(() => button("acme/web").click());
   await settle();
@@ -909,19 +952,62 @@ test("runs land in a new agent on the account's default until a model is chosen,
   await settle();
 
   assert.match(page.textContent ?? "", /Your default, until you choose one\./u);
-  const archive = page.querySelector<HTMLInputElement>(".automation-check input");
-  act(() => archive?.click());
+  act(() => button("Archive successful runs").click());
   act(() => button("Save").click());
   await settle();
 
   assert.deepEqual(changes, [{ automationId: SWEEP.id, change: { archiveSuccessful: true } }]);
 });
 
+test("an agent the workspace's list no longer holds stays the pick it was saved as, and can be picked again after another", async () => {
+  const gone = "5b6c7d8e-9f0a-4b1c-8d2e-3f4a5b6c7d8e";
+  const following = automation(10, {
+    name: "Follow-up digest",
+    target: { kind: AUTOMATION_TARGET.SAME_AGENT, agentId: gone },
+  });
+  standing = [following];
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: following.id });
+  await settle();
+  assert.equal(picked(page, "Agent"), "The agent it goes to now");
+
+  pick(page, "Agent", "CI digest");
+  assert.equal(page.querySelector(".automation-editor-status")?.textContent, "Unsaved changes");
+  pick(page, "Agent", "The agent it goes to now");
+
+  assert.equal(picked(page, "Agent"), "The agent it goes to now");
+  assert.equal(page.querySelector(".automation-editor-status")?.textContent, "Saved");
+});
+
+test("the agent a same-agent automation was saved with is not offered once its repository is changed", async () => {
+  const gone = "5b6c7d8e-9f0a-4b1c-8d2e-3f4a5b6c7d8e";
+  const following = automation(11, {
+    name: "Follow-up digest",
+    target: { kind: AUTOMATION_TARGET.SAME_AGENT, agentId: gone },
+  });
+  standing = [following];
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: following.id });
+  await settle();
+
+  act(() => page.querySelector<HTMLButtonElement>(".repository-chip .chip")?.click());
+  await settle();
+  act(() => button("acme/web").click());
+  await settle();
+  assert.equal(picked(page, "Agent"), "Choose an agent");
+  act(() => picker(page, "Agent").click());
+
+  assert.deepEqual(
+    [...document.querySelectorAll("[role=option] .plan-compose-menu-name")].map(
+      (name) => name.textContent,
+    ),
+    ["CI digest"],
+  );
+});
+
 test("Same agent is chosen from the workspace's agents on the automation's repository, and saved as its target", async () => {
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
   await settle();
 
-  act(() => button("Same agent").click());
+  pick(page, "Runs land in", "Same agent");
   await settle();
   assert.deepEqual(agentsAsked, [{ workspaceId: WORKSPACE.id, repository: "acme/ledger" }]);
   act(() => button("Save").click());
@@ -929,12 +1015,8 @@ test("Same agent is chosen from the workspace's agents on the automation's repos
   assert.deepEqual(changes, [], "a same agent with none chosen is not saved");
   assert.match(page.textContent ?? "", /Choose the agent its runs go to\./u);
 
-  const picker = page.querySelector<HTMLSelectElement>("select[aria-label='Agent']");
-  assert.ok(picker);
-  act(() => {
-    picker.value = CI_DIGEST.id;
-    picker.dispatchEvent(new Event("change", { bubbles: true }));
-  });
+  pick(page, "Agent", "CI digest");
+  assert.equal(picked(page, "Agent"), "CI digest");
   act(() => button("Save").click());
   await settle();
 
@@ -1114,9 +1196,9 @@ test("a new automation set to a GitHub event is created on it, the trigger said 
   const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
   await settle();
 
-  act(() => button("GitHub event").click());
+  pick(page, "Type", "GitHub event");
   assert.equal(
-    page.querySelector(".automation-trigger-sentence")?.textContent,
+    pickerDetail(page, "Type"),
     "When a pull request is opened or updated in acme/ledger",
   );
   type(page.querySelector("input[aria-label='Automation name']"), "Code review");
@@ -1140,7 +1222,7 @@ test("a webhook made in the window shows its secret once, read-only with Copy, l
   const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
   await settle();
 
-  act(() => button("Webhook").click());
+  pick(page, "Type", "Webhook");
   type(page.querySelector("input[aria-label='Automation name']"), "Fix Sentry alerts");
   type(page.querySelector("textarea[aria-label='Task']"), "Fix the error the alert names.");
   act(() => button("Create").click());
@@ -1162,10 +1244,39 @@ test("a webhook made in the window shows its secret once, read-only with Copy, l
   assert.ok(button("New secret"), "a new secret is the only way to another");
 });
 
+test("a new secret shown after one was copied says nothing was copied of it yet", async () => {
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
+  await settle();
+  pick(page, "Type", "Webhook");
+  type(page.querySelector("input[aria-label='Automation name']"), "Fix Sentry alerts");
+  type(page.querySelector("textarea[aria-label='Task']"), "Fix the error the alert names.");
+  act(() => button("Create").click());
+  await settle();
+  act(() => button("Copy secret").click());
+  await settle();
+  assert.ok(button("Copied"), "the first secret's copy is said");
+
+  act(() => button("Done").click());
+  act(() => button("New secret").click());
+  act(() => {
+    const confirm = [
+      ...document.querySelectorAll<HTMLButtonElement>(".confirm-dialog button"),
+    ].find((each) => each.textContent === "New secret");
+    confirm?.click();
+  });
+  await settle();
+
+  assert.equal(
+    page.querySelector<HTMLInputElement>("input[aria-label='Secret']")?.value,
+    ROTATED_SECRET,
+  );
+  assert.ok(button("Copy secret"), "the new secret is not said to be copied");
+});
+
 test("a shown secret is let go of once the automation is saved as anything but a webhook", async () => {
   const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
   await settle();
-  act(() => button("Webhook").click());
+  pick(page, "Type", "Webhook");
   type(page.querySelector("input[aria-label='Automation name']"), "Fix Sentry alerts");
   type(page.querySelector("textarea[aria-label='Task']"), "Fix the error the alert names.");
   act(() => button("Create").click());
@@ -1175,10 +1286,10 @@ test("a shown secret is let go of once the automation is saved as anything but a
     MADE_SECRET,
   );
 
-  act(() => button("Schedule").click());
+  pick(page, "Type", "Schedule");
   act(() => button("Save").click());
   await settle();
-  act(() => button("Webhook").click());
+  pick(page, "Type", "Webhook");
 
   assert.equal(page.querySelector("input[aria-label='Secret']"), null);
   assert.ok(!(page.ownerDocument.body.innerHTML ?? "").includes(MADE_SECRET));
@@ -1240,12 +1351,9 @@ test("a webhook not yet saved as one says it gets its address once it is saved",
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
   await settle();
 
-  act(() => button("Webhook").click());
+  pick(page, "Type", "Webhook");
 
   assert.equal(page.querySelector("input[aria-label='Webhook address']"), null);
   assert.match(page.textContent ?? "", /Save it as a webhook to get its address/u);
-  assert.equal(
-    page.querySelector(".automation-trigger-sentence")?.textContent,
-    "When its webhook is called",
-  );
+  assert.equal(pickerDetail(page, "Type"), "When its webhook is called");
 });

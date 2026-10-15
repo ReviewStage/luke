@@ -39,6 +39,7 @@ import {
 } from "@luke/features/automation-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
+import { EXPERIMENT } from "@luke/settings";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import {
   BuildingIcon,
@@ -54,13 +55,17 @@ import { AnchoredPopover, POPOVER_ALIGN } from "../anchored-popover";
 import { useAppCommand } from "../app-commands";
 import { CHIP_LOOK, Chip } from "../chip";
 import { CopyGlyph, copyHint, useCopyFeedback } from "../copy-feedback";
+import { useOpenFeedback } from "../open-feedback";
 import { AgentModelChip } from "../planning/agent-model-chip";
 import { ModelMenu } from "../planning/model-menu";
 import { dayAndTimeText, sinceText, useMinute } from "../planning/plan-time";
 import { CHIP_PLACE, RepositoryChip, type RepositoryChooser } from "../planning/repository-chip";
-import { Segmented } from "../segmented";
 import { ConfirmDialog, useConfirmDialog } from "../settings/confirm-dialog";
-import { BusyLabel } from "../spinner";
+import { Picker, PickerRow } from "../settings/picker-row";
+import { SelectRow } from "../settings/select-row";
+import { SettingsGroup } from "../settings/settings-group";
+import { SwitchRow } from "../settings/switch-row";
+import { BusyLabel, Spinner } from "../spinner";
 import { Switch } from "../switch";
 import { useDisclosure } from "../use-disclosure";
 import { AutomationRunsPanel } from "./automation-runs-panel";
@@ -71,12 +76,16 @@ import { type AgentsRead, type RunChoices, useRunChoices } from "./use-run-choic
  * automation-editor.tsx -- one automation's page, or a new one's: under breadcrumbs that name its owner, its name, its schedule, its task, its repository, and who owns it, saved by an explicit Create or Save.
  *
  * It stands where the list stood, in the plan's place, and the first crumb
- * goes back to the list. Who owns it is said three times over, since it is
- * what the list must never leave in doubt: in the crumbs, under its name,
- * and in the Owner row a team workspace offers. Where its runs land is
- * one row: a new agent each run, on the agent box's model chip and
- * archived once it succeeds where asked, or the same agent, chosen from
- * the workspace's agents on its repository. Its runs stand in the panel on
+ * goes back to the list. Its form is drawn as a Settings page is, from
+ * Settings' own rows: a group per part, each a card of rows naming a
+ * setting and why on the left and its control on the right, every pick a
+ * Settings picker on the window's menu and every yes or no a switch. Who
+ * owns it is said three times over, since it is what the list must never
+ * leave in doubt: in the crumbs, under its name, and in the Owner row a
+ * team workspace offers. Where its runs land is picked: a new agent each
+ * run, on the agent box's model chip and archived once it succeeds where
+ * asked, or the same agent, chosen from the workspace's agents on its
+ * repository. Its runs stand in the panel on
  * the right (`automation-runs-panel.tsx`), with Run now in the toolbar. A schedule is chosen as the
  * picker writes one, every hour, every day, on weekdays, or on one day of
  * the week, at a time in a zone, and a cron the picker did not write stands
@@ -108,7 +117,7 @@ const SCHEDULE_KINDS: readonly { value: ScheduleKind; label: string }[] = [
   { value: SCHEDULE_KIND.CUSTOM, label: "Custom" },
 ];
 
-/** What may fire an automation, as the Trigger row's segments name them. */
+/** What may fire an automation, as the Type picker names them. */
 const TRIGGERS: readonly { value: AutomationTriggerKind; label: string }[] = [
   { value: AUTOMATION_TRIGGER.SCHEDULE, label: "Schedule" },
   { value: AUTOMATION_TRIGGER.GITHUB, label: "GitHub event" },
@@ -142,6 +151,9 @@ const HOURLY_MINUTES = [0, 15, 30, 45] as const;
 
 /** Every zone this Mac knows, as the zone menu lists them. */
 const TIME_ZONES = Intl.supportedValuesOf("timeZone");
+
+/** What a short menu says where a search matches nothing, which it has no search to say. */
+const NO_MATCH = "Nothing matches.";
 
 /** Why a save the service refused did not land, as the line under the name says it. */
 const SAVE_REFUSAL_WORDS = {
@@ -193,6 +205,16 @@ function clockOf(value: string): { hour: number; minute: number } | undefined {
   return { hour, minute };
 }
 
+/** A minute past the hour as the hourly picker names it: "At :15". */
+function hourlyLabel(minute: number): string {
+  return `At :${String(minute).padStart(2, "0")}`;
+}
+
+/** A zone as the zone picker names it, its underscores read as spaces. */
+function zoneLabel(zone: string): string {
+  return zone.replaceAll("_", " ");
+}
+
 /** The zone this Mac is in, which a new automation runs in until another is chosen. */
 function windowZone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -238,76 +260,65 @@ function OwnerMark({
   );
 }
 
-/** One row of the form: its label on the left, its control and any problem on the right. */
-function FormRow({
-  label,
-  problem,
-  children,
-}: {
-  label: string;
-  problem: string | undefined;
-  children: React.ReactNode;
-}): React.JSX.Element {
+/** What stops a save, said under the row it belongs to once a save was pressed. */
+function Problem({ problem }: { problem: string | undefined }): React.JSX.Element | null {
+  if (problem === undefined) return null;
   return (
-    <div className="automation-form-row" data-invalid={problem === undefined ? undefined : "true"}>
-      <span className="automation-form-label">{label}</span>
-      <div className="automation-form-control">
-        {children}
-        {problem === undefined ? null : (
-          <p className="error-message automation-form-problem" role="alert">
-            {problem}
-          </p>
-        )}
-      </div>
-    </div>
+    <p className="error-message automation-form-problem" role="alert">
+      {problem}
+    </p>
   );
 }
 
-/** The schedule's controls: its kind, then the time, day, or cron that kind asks for, then its zone. */
-function ScheduleControl({
-  schedule,
-  timezone,
+/** The parse a picker of `options` reads its picked id back with: the option of that value, or none. */
+function optionValue<Value extends string>(
+  options: readonly { value: Value; label: string }[],
+): (raw: string) => Value | undefined {
+  return (raw) => options.find((option) => option.value === raw)?.value;
+}
+
+/** When the draft runs next, its next two runs; nothing for one Luke cannot read. */
+function nextRunsText(draft: AutomationDraft): string | undefined {
+  const [first, second] = draftNextRuns(draft, new Date(), 2);
+  if (first === undefined) return undefined;
+  const then = second === undefined ? "" : `, then ${dayAndTimeText(second)}`;
+  return `Next: ${dayAndTimeText(first)}${then}`;
+}
+
+/** The parse the schedule's picker reads its kind back with. */
+const scheduleKindOf = optionValue(SCHEDULE_KINDS);
+
+/**
+ * A schedule's rows: how often, under its next runs; then the time, day,
+ * or cron that kind asks for; then its zone, searched since every zone this
+ * Mac knows is listed.
+ */
+function ScheduleRows({
+  draft,
   onSchedule,
   onTimezone,
 }: {
-  schedule: ScheduleDraft;
-  timezone: string;
+  draft: AutomationDraft;
   onSchedule: (schedule: ScheduleDraft) => void;
   onTimezone: (timezone: string) => void;
 }): React.JSX.Element {
-  const choose = (kind: ScheduleKind) => onSchedule({ ...schedule, kind });
+  const { schedule, timezone } = draft;
+  const zones = TIME_ZONES.includes(timezone) ? TIME_ZONES : [timezone, ...TIME_ZONES];
   return (
-    <div className="automation-schedule">
-      <Segmented legend="Runs" options={SCHEDULE_KINDS} value={schedule.kind} onChange={choose} />
-      <div className="automation-schedule-at">
-        {schedule.kind === SCHEDULE_KIND.WEEKLY ? (
-          <select
-            className="settings-input automation-select"
-            aria-label="Day"
-            value={schedule.weekday}
-            onChange={(event) => onSchedule({ ...schedule, weekday: Number(event.target.value) })}
-          >
-            {WEEKDAYS.map((day, weekday) => (
-              <option key={day} value={weekday}>
-                {day}
-              </option>
-            ))}
-          </select>
-        ) : null}
-        {schedule.kind === SCHEDULE_KIND.HOURLY ? (
-          <select
-            className="settings-input automation-select"
-            aria-label="Minutes past the hour"
-            value={schedule.minute}
-            onChange={(event) => onSchedule({ ...schedule, minute: Number(event.target.value) })}
-          >
-            {HOURLY_MINUTES.map((minute) => (
-              <option key={minute} value={minute}>
-                {`At :${String(minute).padStart(2, "0")}`}
-              </option>
-            ))}
-          </select>
-        ) : schedule.kind === SCHEDULE_KIND.CUSTOM ? (
+    <>
+      <SelectRow
+        label="Repeats"
+        detail={nextRunsText(draft)}
+        value={schedule.kind}
+        options={SCHEDULE_KINDS}
+        parse={scheduleKindOf}
+        onChange={(kind) => onSchedule({ ...schedule, kind })}
+      />
+      {schedule.kind === SCHEDULE_KIND.CUSTOM ? (
+        <div className="settings-row">
+          <span className="settings-copy">
+            <strong>Cron</strong>
+          </span>
           <input
             className="settings-input automation-cron"
             aria-label="Cron"
@@ -316,42 +327,63 @@ function ScheduleControl({
             value={schedule.cron}
             onChange={(event) => onSchedule({ ...schedule, cron: event.target.value })}
           />
-        ) : (
-          <input
-            type="time"
-            className="settings-input automation-time"
-            aria-label="Time"
-            value={clockValue(schedule.hour, schedule.minute)}
-            onKeyDown={releaseOnEscape}
-            onChange={(event) => {
-              const clock = clockOf(event.target.value);
-              if (clock !== undefined) onSchedule({ ...schedule, ...clock });
-            }}
-          />
-        )}
-        <select
-          className="settings-input automation-select automation-zone"
-          aria-label="Time zone"
-          value={timezone}
-          onChange={(event) => onTimezone(event.target.value)}
-        >
-          {(TIME_ZONES.includes(timezone) ? TIME_ZONES : [timezone, ...TIME_ZONES]).map((zone) => (
-            <option key={zone} value={zone}>
-              {zone.replaceAll("_", " ")}
-            </option>
-          ))}
-        </select>
-      </div>
-    </div>
+        </div>
+      ) : (
+        <div className="settings-row">
+          <span className="settings-copy">
+            <strong>{schedule.kind === SCHEDULE_KIND.WEEKLY ? "Day and time" : "Time"}</strong>
+          </span>
+          <span className="automation-row-controls">
+            {schedule.kind === SCHEDULE_KIND.WEEKLY ? (
+              <Picker
+                label="Day"
+                value={String(schedule.weekday)}
+                valueLabel={WEEKDAYS[schedule.weekday] ?? WEEKDAYS[0]}
+                rows={WEEKDAYS.map((day, weekday) => ({ id: String(weekday), label: day }))}
+                noMatch={NO_MATCH}
+                onPick={(id) => onSchedule({ ...schedule, weekday: Number(id) })}
+              />
+            ) : null}
+            {schedule.kind === SCHEDULE_KIND.HOURLY ? (
+              <Picker
+                label="Minutes past the hour"
+                value={String(schedule.minute)}
+                valueLabel={hourlyLabel(schedule.minute)}
+                rows={HOURLY_MINUTES.map((minute) => ({
+                  id: String(minute),
+                  label: hourlyLabel(minute),
+                }))}
+                noMatch={NO_MATCH}
+                onPick={(id) => onSchedule({ ...schedule, minute: Number(id) })}
+              />
+            ) : (
+              <input
+                type="time"
+                className="settings-input automation-time"
+                aria-label="Time"
+                value={clockValue(schedule.hour, schedule.minute)}
+                onKeyDown={releaseOnEscape}
+                onChange={(event) => {
+                  const clock = clockOf(event.target.value);
+                  if (clock !== undefined) onSchedule({ ...schedule, ...clock });
+                }}
+              />
+            )}
+          </span>
+        </div>
+      )}
+      <PickerRow
+        label="Time zone"
+        copy={<strong>Time zone</strong>}
+        value={timezone}
+        valueLabel={zoneLabel(timezone)}
+        rows={zones.map((zone) => ({ id: zone, label: zoneLabel(zone) }))}
+        placeholder="Search time zones"
+        noMatch="No time zones match"
+        onPick={onTimezone}
+      />
+    </>
   );
-}
-
-/** When the draft runs next, its next two runs said under the schedule; nothing for one Luke cannot read. */
-function NextRuns({ draft }: { draft: AutomationDraft }): React.JSX.Element | null {
-  const [first, second] = draftNextRuns(draft, new Date(), 2);
-  if (first === undefined) return null;
-  const then = second === undefined ? "" : `, then ${dayAndTimeText(second)}`;
-  return <p className="automation-form-note">{`Next: ${dayAndTimeText(first)}${then}`}</p>;
 }
 
 /** The editor's toolbar: the crumbs back to the list, then where the draft stands, its save, its switch, and its delete. */
@@ -381,11 +413,12 @@ function EditorToolbar({
   running: boolean;
   onRunNow: () => void;
 }): React.JSX.Element {
+  const openFeedback = useOpenFeedback();
   const status =
     automation === undefined
       ? "Not created yet"
       : saving
-        ? "Saving…"
+        ? "Saving"
         : dirty
           ? "Unsaved changes"
           : "Saved";
@@ -404,8 +437,16 @@ function EditorToolbar({
             {automation === undefined ? "New automation" : automation.name}
           </span>
         </nav>
+        <span className="integration-tool-badge experiment-badge">Experimental</span>
       </div>
       <div className="desktop-toolbar-actions">
+        <button
+          type="button"
+          className="experiment-feedback"
+          onClick={() => openFeedback(EXPERIMENT.AUTOMATIONS)}
+        >
+          Send feedback
+        </button>
         <span className="automation-editor-status" data-dirty={String(dirty)}>
           {status}
         </span>
@@ -464,13 +505,12 @@ const NEW_SECRET_REFUSAL_WORDS = {
 
 /**
  * A webhook's secret, shown the one time the write that minted it answers:
- * read-only, with Copy, and said never to be shown again. Note that it is
- * left out of the screen recording whole (`ph-no-capture`), beside the
+ * read-only, with Copy and Done, and said never to be shown again. Note that
+ * it is left out of the screen recording whole (`ph-no-capture`), beside the
  * masking every input already has, because it is a credential; and that it
- * stands in this page's state alone, never the window's app state, so it is
- * gone once Done is pressed or the page is left.
+ * is keyed by the secret, so a Copied said of one is never said of the next.
  */
-function ShownSecret({
+function ShownSecretRow({
   secret,
   onDone,
 }: {
@@ -479,8 +519,12 @@ function ShownSecret({
 }): React.JSX.Element {
   const copy = useCopyFeedback();
   return (
-    <div className="automation-webhook-secret ph-no-capture">
-      <div className="automation-webhook-address">
+    <div className="settings-row ph-no-capture">
+      <span className="settings-copy">
+        <strong>Secret</strong>
+        <small>You won't be able to see this again. Copy it into your sender now.</small>
+      </span>
+      <span className="automation-row-controls">
         <input
           className="settings-input automation-webhook-url"
           aria-label="Secret"
@@ -498,21 +542,20 @@ function ShownSecret({
         <button type="button" className="toolbar-button" onClick={onDone}>
           Done
         </button>
-      </div>
-      <p className="automation-form-note">
-        You won't be able to see this again. Copy it into your sender now.
-      </p>
+      </span>
     </div>
   );
 }
 
 /**
- * A webhook's address and secret: the address to copy once it is saved as
- * a webhook, the secret shown once where the write that minted it just
- * answered, and New secret, which asks first, since the new one stops the
- * one a sender holds, and then shows the new one once.
+ * A webhook's rows: its address to copy once it is saved as a webhook, and
+ * its secret, shown once where the write that minted it just answered, and
+ * New secret, which asks first, since the new one stops the one a sender
+ * holds, and then shows the new one once. Note that a shown secret stands
+ * in this page's state alone, never the window's app state, so it is gone
+ * once Done is pressed or the page is left.
  */
-function WebhookControl({
+function WebhookRows({
   automation,
   writes,
   secret,
@@ -546,41 +589,55 @@ function WebhookControl({
     automation?.trigger.kind === AUTOMATION_TRIGGER.WEBHOOK ? automation.webhookUrl : undefined;
   if (automation === undefined || url === undefined) {
     return (
-      <p className="automation-form-note">
-        Save it as a webhook to get its address and a secret to call it with.
-      </p>
+      <div className="settings-row">
+        <span className="settings-copy">
+          <strong>Address</strong>
+          <small>Save it as a webhook to get its address and a secret to call it with.</small>
+        </span>
+      </div>
     );
   }
   return (
-    <div className="automation-webhook">
-      <div className="automation-webhook-address">
-        <input
-          className="settings-input automation-webhook-url"
-          aria-label="Webhook address"
-          readOnly
-          value={url}
-        />
-        <button
-          type="button"
-          className="icon-button"
-          aria-label={copyHint(address.state, "Copy address")}
-          onClick={() => address.copy(url)}
-        >
-          <CopyGlyph state={address.state} />
-        </button>
+    <>
+      <div className="settings-row">
+        <span className="settings-copy">
+          <strong>Address</strong>
+          <small>
+            POST to the address with the secret as <code>Authorization: Bearer</code>. Don't send
+            secrets in the body: Luke hands the body to the run's agent, and it shows in the run's
+            transcript.
+          </small>
+        </span>
+        <span className="automation-row-controls">
+          <input
+            className="settings-input automation-webhook-url"
+            aria-label="Webhook address"
+            readOnly
+            value={url}
+          />
+          <button
+            type="button"
+            className="icon-button"
+            aria-label={copyHint(address.state, "Copy address")}
+            onClick={() => address.copy(url)}
+          >
+            <CopyGlyph state={address.state} />
+          </button>
+        </span>
       </div>
       {secret === undefined ? (
-        <button type="button" className="toolbar-button bordered-button" onClick={rotation.ask}>
-          New secret
-        </button>
+        <div className="settings-row">
+          <span className="settings-copy">
+            <strong>Secret</strong>
+            <small>A new secret stops the one before.</small>
+          </span>
+          <button type="button" className="toolbar-button bordered-button" onClick={rotation.ask}>
+            New secret
+          </button>
+        </div>
       ) : (
-        <ShownSecret secret={secret} onDone={() => onSecret(undefined)} />
+        <ShownSecretRow key={secret} secret={secret} onDone={() => onSecret(undefined)} />
       )}
-      <p className="automation-form-note">
-        POST to the address with the secret as <code>Authorization: Bearer</code>. A new secret
-        stops the one before. Don't send secrets in the body: Luke hands the body to the run's
-        agent, and it shows in the run's transcript.
-      </p>
       <ConfirmDialog
         confirm={rotation}
         question={{
@@ -590,11 +647,11 @@ function WebhookControl({
           running: "Making",
         }}
       />
-    </div>
+    </>
   );
 }
 
-/** Where a run may land, as the row's segments name them. */
+/** Where a run may land, as the row's picker names them. */
 const TARGETS: readonly { value: AutomationTargetKind; label: string }[] = [
   { value: AUTOMATION_TARGET.NEW_AGENT, label: "New agent each run" },
   { value: AUTOMATION_TARGET.SAME_AGENT, label: "Same agent" },
@@ -628,8 +685,9 @@ function ModelPicker({
     <div className="automation-model-picker" ref={root}>
       <Chip
         ref={trigger}
-        look={CHIP_LOOK.TOOLBAR}
+        look={CHIP_LOOK.FIELD}
         chevron
+        className="settings-picker-chip"
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
@@ -638,10 +696,10 @@ function ModelPicker({
           setOpen(!open);
         }}
       >
-        Choose a model
+        <span className="chip-name">Choose a model</span>
       </Chip>
       {drawn.mounted ? (
-        <AnchoredPopover align={POPOVER_ALIGN.START}>
+        <AnchoredPopover align={POPOVER_ALIGN.END}>
           <ModelMenu
             leaving={drawn.leaving}
             ref={drawn.ref}
@@ -664,8 +722,8 @@ function ModelPicker({
   );
 }
 
-/** A new agent's model: the chip the agent box wears, on the account's default until one is chosen. */
-function ModelControl({
+/** A new agent's model: the agent box's chip and menu at a form's look, on the account's default until one is chosen. */
+function ModelRow({
   draft,
   choices,
   onDraft,
@@ -675,95 +733,149 @@ function ModelControl({
   onDraft: (patch: Partial<AutomationDraft>) => void;
 }): React.JSX.Element {
   const shown = draft.choice ?? choices.defaultChoice;
-  if (shown === undefined) {
-    // Note that a default that could not be read is said as unknown rather than drawn as some
-    // model it may not be, and a model can still be chosen, which the chip then names.
-    return choices.defaultFailed ? (
-      <div className="automation-model">
-        <span className="automation-form-note">
-          It runs on your default model, which could not be read.
-        </span>
+  // Note that a default that could not be read is said as unknown rather than drawn as some
+  // model it may not be, and a model can still be chosen, which the chip then names.
+  const note =
+    shown !== undefined
+      ? draft.choice === null
+        ? "Your default, until you choose one."
+        : undefined
+      : choices.defaultFailed
+        ? "It runs on your default model, which could not be read."
+        : "Your default model.";
+  return (
+    <div className="settings-row">
+      <span className="settings-copy">
+        <strong>Model</strong>
+        {note === undefined ? null : <small>{note}</small>}
+      </span>
+      {shown !== undefined ? (
+        <AgentModelChip
+          model={{ choice: shown, note: undefined, choose: (choice) => onDraft({ choice }) }}
+          models={choices.models}
+          readModels={choices.readModels}
+          usage={undefined}
+          look={CHIP_LOOK.FIELD}
+          className="settings-picker-chip"
+        />
+      ) : choices.defaultFailed ? (
         <ModelPicker
           models={choices.models}
           readModels={choices.readModels}
           onChoose={(choice) => onDraft({ choice })}
         />
-      </div>
-    ) : (
-      <p className="automation-form-note">Your default model.</p>
-    );
-  }
-  return (
-    <div className="automation-model">
-      <AgentModelChip
-        model={{ choice: shown, note: undefined, choose: (choice) => onDraft({ choice }) }}
-        models={choices.models}
-        readModels={choices.readModels}
-        usage={undefined}
-      />
-      {draft.choice === null ? (
-        <span className="automation-form-note">Your default, until you choose one.</span>
       ) : null}
     </div>
   );
 }
 
-/** The agent each run goes to, chosen from the workspace's agents on the repository, the one it goes to now kept where the list no longer holds it. */
-function AgentPicker({
+/** An agent as the agent picker names it. */
+function agentLabel(agent: { title: string | null }): string {
+  return agent.title ?? "Untitled agent";
+}
+
+/** What the agent picker names the saved agent the workspace's list no longer holds. */
+const KEPT_AGENT_LABEL = "The agent it goes to now";
+
+/**
+ * The agent each run goes to, chosen from the workspace's agents on the
+ * repository. The agent it goes to as saved is kept first in the menu where
+ * the list no longer holds it, so another pick can still be taken back.
+ */
+function AgentRow({
   draft,
+  savedAgentId,
   agents,
   onDraft,
 }: {
   draft: AutomationDraft;
+  /** The agent its runs go to as saved, or none. */
+  savedAgentId: string | null;
   agents: AgentsRead;
   onDraft: (patch: Partial<AutomationDraft>) => void;
 }): React.JSX.Element {
   const now = useMinute();
-  if (agents !== undefined && "failed" in agents) {
-    return <p className="error-message">The workspace's agents could not be read.</p>;
-  }
-  const listed = agents?.agents ?? [];
-  const kept = draft.agentId !== null && !listed.some((agent) => agent.id === draft.agentId);
-  return (
+  const copy = (
     <>
-      <select
-        className="settings-input automation-select automation-agent"
-        aria-label="Agent"
-        value={draft.agentId ?? ""}
-        onChange={(event) =>
-          onDraft({ agentId: event.target.value === "" ? null : event.target.value })
-        }
-      >
-        <option value="" disabled>
-          {agents === undefined ? "Reading the workspace's agents…" : "Choose an agent"}
-        </option>
-        {kept && draft.agentId !== null ? (
-          <option value={draft.agentId}>The agent it goes to now</option>
-        ) : null}
-        {listed.map((agent) => (
-          <option key={agent.id} value={agent.id}>
-            {`${agent.title ?? "Untitled agent"} · ${sinceText(agent.createdAt, now)}`}
-          </option>
-        ))}
-      </select>
-      <p className="automation-form-note">
+      <strong>Agent</strong>
+      <small>
         Each run goes to that agent as a message, as if you'd typed it, even mid-turn, and it keeps
         its own model and effort.
-      </p>
+      </small>
     </>
+  );
+  if (agents !== undefined && "failed" in agents) {
+    return (
+      <div className="settings-row">
+        <span className="settings-copy">
+          {copy}
+          <small className="error-message">The workspace's agents could not be read.</small>
+        </span>
+      </div>
+    );
+  }
+  const listed = agents?.agents ?? [];
+  const chosen = listed.find((agent) => agent.id === draft.agentId);
+  const kept =
+    savedAgentId !== null && !listed.some((agent) => agent.id === savedAgentId)
+      ? savedAgentId
+      : undefined;
+  const rows = [
+    ...(kept === undefined ? [] : [{ id: kept, label: KEPT_AGENT_LABEL }]),
+    ...listed.map((agent) => ({
+      id: agent.id,
+      label: agentLabel(agent),
+      detail: sinceText(agent.createdAt, now),
+    })),
+  ];
+  return (
+    <PickerRow
+      label="Agent"
+      copy={copy}
+      value={draft.agentId ?? ""}
+      valueLabel={
+        chosen !== undefined
+          ? agentLabel(chosen)
+          : draft.agentId !== null && draft.agentId === kept
+            ? KEPT_AGENT_LABEL
+            : "Choose an agent"
+      }
+      rows={rows}
+      note={
+        agents === undefined ? (
+          <div className="plan-compose-menu-note">
+            <Spinner label="Loading agents" />
+          </div>
+        ) : rows.length === 0 ? (
+          <p className="plan-compose-menu-note">No agents of this workspace work in it yet.</p>
+        ) : undefined
+      }
+      noMatch={NO_MATCH}
+      onPick={(agentId) => onDraft({ agentId })}
+    />
   );
 }
 
-/** Where a run lands: a new agent each time, on a model, archived once it succeeds where asked, or the one agent chosen. */
-function RunsLandIn({
+/** The parse the Runs land in picker reads its target back with. */
+const targetOf = optionValue(TARGETS);
+
+/** Where a run lands, under the repository it works in: a new agent each time, on a model, archived once it succeeds where asked, or the one agent chosen. */
+function RunsGroup({
   draft,
+  savedAgentId,
   workspace,
-  problem,
+  problems,
+  planBacked,
+  repositories,
   onDraft,
 }: {
   draft: AutomationDraft;
+  /** The agent its runs go to as saved, or none. */
+  savedAgentId: string | null;
   workspace: Workspace | undefined;
-  problem: string | undefined;
+  problems: DraftProblems;
+  planBacked: boolean;
+  repositories: RepositoryChooser;
   onDraft: (patch: Partial<AutomationDraft>) => void;
 }): React.JSX.Element {
   const sameAgent = draft.target === AUTOMATION_TARGET.SAME_AGENT;
@@ -772,175 +884,174 @@ function RunsLandIn({
     repository: draft.repository,
     wantsAgents: sameAgent,
   });
+  // The other repositories as a save would send them: the one shown first left out.
+  const also = draft.alsoRepositories.filter((repository) => repository !== draft.repository);
   return (
-    <FormRow label="Runs land in" problem={problem}>
-      <Segmented
-        legend="Runs land in"
-        options={TARGETS}
+    <SettingsGroup title="Runs">
+      <div className="settings-row">
+        <span className="settings-copy">
+          <strong>Repository</strong>
+          {planBacked ? (
+            <small>Its plan's repository.</small>
+          ) : also.length === 0 ? null : (
+            <small>{`Runs start here, and also work in ${also.join(", ")}.`}</small>
+          )}
+        </span>
+        {planBacked ? null : (
+          <RepositoryChip
+            key={repositories.scope}
+            place={CHIP_PLACE.FIELD}
+            value={draft.repository}
+            chooser={repositories}
+            onChoose={(repository) => onDraft(withRepository(draft, repository))}
+          />
+        )}
+      </div>
+      <Problem problem={problems[DRAFT_FIELD.REPOSITORY]} />
+      <SelectRow
+        label="Runs land in"
         value={draft.target}
+        options={TARGETS}
+        parse={targetOf}
         onChange={(target) => onDraft({ target })}
       />
       {sameAgent ? (
-        <AgentPicker draft={draft} agents={choices.agents} onDraft={onDraft} />
+        <AgentRow
+          draft={draft}
+          savedAgentId={savedAgentId}
+          agents={choices.agents}
+          onDraft={onDraft}
+        />
       ) : (
         <>
-          <ModelControl draft={draft} choices={choices} onDraft={onDraft} />
-          <label className="automation-check">
-            <input
-              type="checkbox"
-              checked={draft.archiveSuccessful}
-              onChange={(event) => onDraft({ archiveSuccessful: event.target.checked })}
-            />
-            <span className="settings-copy">
-              <strong>Archive successful runs</strong>
-              <small>
-                A run's agent is archived once it finishes without failing. Its transcript and pull
-                request stay reachable.
-              </small>
-            </span>
-          </label>
+          <ModelRow draft={draft} choices={choices} onDraft={onDraft} />
+          <SwitchRow
+            label="Archive successful runs"
+            detail="A run's agent is archived once it finishes without failing. Its transcript and pull request stay reachable."
+            checked={draft.archiveSuccessful}
+            onChange={(archiveSuccessful) => onDraft({ archiveSuccessful })}
+          />
         </>
       )}
-    </FormRow>
+      <Problem problem={problems[DRAFT_FIELD.AGENT]} />
+    </SettingsGroup>
   );
 }
 
-/** The form: its trigger, task, repository, and, where the workspace is shared, its owner. */
+/** The parse the Trigger picker reads its kind back with. */
+const triggerKindOf = optionValue(TRIGGERS);
+
+/** The parse the event picker reads its event back with. */
+const githubEventOf = optionValue(GITHUB_EVENTS);
+
+/**
+ * The form, as Settings draws a page: its trigger, its task, where its runs
+ * land, and, where the workspace is shared, its owner, each a group of rows.
+ */
 function EditorForm({
   draft,
   automation,
   writes,
-  shownSecret,
-  onSecret,
   problems,
   planBacked,
   workspace,
   offersOwner,
   repositories,
+  shownSecret,
+  onSecret,
+  savedAgentId,
   onDraft,
 }: {
   draft: AutomationDraft;
   automation: AutomationSummary | undefined;
   writes: AutomationWrites;
-  shownSecret: string | undefined;
-  onSecret: (secret: string | undefined) => void;
   problems: DraftProblems;
   planBacked: boolean;
   workspace: Workspace | undefined;
   offersOwner: boolean;
   repositories: RepositoryChooser;
+  shownSecret: string | undefined;
+  onSecret: (secret: string | undefined) => void;
+  /** The agent its runs go to as saved, while the draft is still on the repository it was saved on; none otherwise. */
+  savedAgentId: string | null;
   onDraft: (patch: Partial<AutomationDraft>) => void;
 }): React.JSX.Element {
-  const promptId = useId();
-  // The other repositories as a save would send them: the one shown first left out.
-  const also = draft.alsoRepositories.filter((repository) => repository !== draft.repository);
+  const workspaceName = workspace?.name ?? "Workspace";
+  const owners = [
+    { value: AUTOMATION_SCOPE.PERSONAL, label: "Personal" },
+    { value: AUTOMATION_SCOPE.WORKSPACE, label: workspaceName },
+  ] as const;
   return (
-    <div className="settings-card automation-form">
-      <FormRow label="Trigger" problem={problems[DRAFT_FIELD.SCHEDULE]}>
-        <Segmented
-          legend="Trigger"
-          options={TRIGGERS}
+    <div className="automation-form">
+      <SettingsGroup title="Trigger">
+        <SelectRow
+          label="Type"
+          detail={automationTriggerText(draftTrigger(draft), draftRepositories(draft))}
           value={draft.triggerKind}
+          options={TRIGGERS}
+          parse={triggerKindOf}
           onChange={(triggerKind) => onDraft({ triggerKind })}
         />
-        <p className="automation-trigger-sentence">
-          {automationTriggerText(draftTrigger(draft), draftRepositories(draft))}
-        </p>
         {draft.triggerKind === AUTOMATION_TRIGGER.SCHEDULE ? (
-          <>
-            <ScheduleControl
-              schedule={draft.schedule}
-              timezone={draft.timezone}
-              onSchedule={(schedule) => onDraft({ schedule })}
-              onTimezone={(timezone) => onDraft({ timezone })}
-            />
-            <NextRuns draft={draft} />
-          </>
+          <ScheduleRows
+            draft={draft}
+            onSchedule={(schedule) => onDraft({ schedule })}
+            onTimezone={(timezone) => onDraft({ timezone })}
+          />
         ) : draft.triggerKind === AUTOMATION_TRIGGER.GITHUB ? (
-          <>
-            <select
-              className="settings-input automation-select"
-              aria-label="GitHub event"
-              value={draft.githubEvent}
-              onChange={(event) => {
-                const chosen = GITHUB_EVENTS.find((each) => each.value === event.target.value);
-                if (chosen !== undefined) onDraft(withGithubEvent(draft, chosen.value));
-              }}
-            >
-              {GITHUB_EVENTS.map((each) => (
-                <option key={each.value} value={each.value}>
-                  {each.label}
-                </option>
-              ))}
-            </select>
-            <p className="automation-form-note">
-              Heard through the workspace's GitHub App, in the repositories below. Events Luke's own
-              agents cause, and draft pull requests, start nothing.
-            </p>
-          </>
+          <SelectRow
+            label="Event"
+            detail="Heard through the workspace's GitHub App, in the repositories below. Events Luke's own agents cause, and draft pull requests, start nothing."
+            value={draft.githubEvent}
+            options={GITHUB_EVENTS}
+            parse={githubEventOf}
+            onChange={(event) => onDraft(withGithubEvent(draft, event))}
+          />
         ) : (
-          <WebhookControl
+          <WebhookRows
             automation={automation}
             writes={writes}
             secret={shownSecret}
             onSecret={onSecret}
           />
         )}
-      </FormRow>
-      <FormRow label="Task" problem={problems[DRAFT_FIELD.PROMPT]}>
+        <Problem problem={problems[DRAFT_FIELD.SCHEDULE]} />
+      </SettingsGroup>
+      <SettingsGroup title="Task">
         <textarea
-          id={promptId}
-          className="settings-input automation-prompt"
+          className="automation-prompt"
           aria-label="Task"
           placeholder="What the agent is told each run: find the flakiest test in CI this week and fix it."
           value={draft.prompt}
           onKeyDown={releaseOnEscape}
           onChange={(event) => onDraft({ prompt: event.target.value })}
         />
-      </FormRow>
-      <FormRow label="Repository" problem={problems[DRAFT_FIELD.REPOSITORY]}>
-        {planBacked ? (
-          <p className="automation-form-note">Its plan's repository.</p>
-        ) : (
-          <>
-            <RepositoryChip
-              key={repositories.scope}
-              place={CHIP_PLACE.COMPOSER}
-              value={draft.repository}
-              chooser={repositories}
-              onChoose={(repository) => onDraft(withRepository(draft, repository))}
-            />
-            {also.length === 0 ? null : (
-              <p className="automation-form-note">
-                {`Runs start here, and also work in ${also.join(", ")}.`}
-              </p>
-            )}
-          </>
-        )}
-      </FormRow>
-      <RunsLandIn
+        <Problem problem={problems[DRAFT_FIELD.PROMPT]} />
+      </SettingsGroup>
+      <RunsGroup
         draft={draft}
+        savedAgentId={savedAgentId}
         workspace={workspace}
-        problem={problems[DRAFT_FIELD.AGENT]}
+        problems={problems}
+        planBacked={planBacked}
+        repositories={repositories}
         onDraft={onDraft}
       />
       {offersOwner ? (
-        <FormRow label="Owner" problem={undefined}>
-          <Segmented
-            legend="Owner"
-            options={[
-              { value: AUTOMATION_SCOPE.PERSONAL, label: "Personal" },
-              { value: AUTOMATION_SCOPE.WORKSPACE, label: workspace?.name ?? "Workspace" },
-            ]}
+        <SettingsGroup title="Sharing">
+          <SelectRow
+            label="Owner"
+            detail={
+              draft.owner === AUTOMATION_SCOPE.WORKSPACE
+                ? `Everyone in ${workspace?.name ?? "the workspace"} sees it, runs it, and turns it off. You, owners, and admins change it.`
+                : "Only you see and change it. Owners and admins can see it and turn it off."
+            }
             value={draft.owner}
+            options={owners}
+            parse={optionValue(owners)}
             onChange={(owner) => onDraft({ owner })}
           />
-          <p className="automation-form-note">
-            {draft.owner === AUTOMATION_SCOPE.WORKSPACE
-              ? `Everyone in ${workspace?.name ?? "the workspace"} sees it, runs it, and turns it off. You, owners, and admins change it.`
-              : "Only you see and change it. Owners and admins can see it and turn it off."}
-          </p>
-        </FormRow>
+        </SettingsGroup>
       ) : null}
     </div>
   );
@@ -992,10 +1103,13 @@ export function AutomationEditor({
   const [shownSecret, setShownSecret] = useState<string | undefined>(undefined);
   const planBacked = automation !== undefined && automation.planId !== null;
   const change = automation === undefined ? undefined : changeOf(draft, automation, defaults);
+  const saved = automation === undefined ? undefined : automationDraft(automation, defaults);
   // Note that a draft is unsaved wherever it differs from the automation, even where what differs
   // cannot be written yet, a same agent with none chosen, so Save stands to say what is missing.
-  const dirty =
-    automation === undefined || !sameDraft(draft, automationDraft(automation, defaults));
+  const dirty = saved === undefined || !sameDraft(draft, saved);
+  // Note that the saved agent is offered back only on the repository it was saved on, because an agent works in its own repository.
+  const savedAgentId =
+    saved !== undefined && saved.repository === draft.repository ? saved.agentId : null;
   // Note that a new draft nothing was changed in is no work to lose, so Escape may leave it.
   const written = automation === undefined ? !sameDraft(draft, start) : dirty;
   // Escape goes back to the list while nothing written would be lost, and is kept, doing nothing, while it would.
@@ -1122,13 +1236,14 @@ export function AutomationEditor({
               draft={draft}
               automation={automation}
               writes={writes}
-              shownSecret={shownSecret}
-              onSecret={setShownSecret}
               problems={shownProblems ? problems : {}}
               planBacked={planBacked}
               workspace={workspace}
               offersOwner={offersOwner}
               repositories={repositories}
+              shownSecret={shownSecret}
+              onSecret={setShownSecret}
+              savedAgentId={savedAgentId}
               onDraft={editDraft}
             />
           </div>
