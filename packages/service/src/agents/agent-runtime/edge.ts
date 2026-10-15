@@ -93,8 +93,8 @@ export function edgeKit(run: WebAgentRun, root: EdgeRoot): EdgeKit {
       const policy = ROLE_PROFILE[role].connections;
       return integrationConnections({
         servers: (auth, sessionId) => run(turnServers(admit(auth, sessionId), policy)),
-        token: (provider) => (auth, sessionId) =>
-          run(integrationAccessToken(provider, admit(auth, sessionId))),
+        token: (account) => (auth, sessionId) =>
+          run(integrationAccessToken(account, admit(auth, sessionId))),
       });
     },
     sessionSkills(role, auth, sessionId) {

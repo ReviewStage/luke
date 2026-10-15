@@ -1,6 +1,6 @@
 import { MENTIONED_HEADING } from "@luke/database/models/attached-file-parts";
 import { CONNECTION_TOOL } from "@luke/features/agent-tools";
-import { INTEGRATION_NAME, type IntegrationProvider } from "@luke/features/integration-wire";
+import { INTEGRATION_NAME } from "@luke/features/integration-wire";
 import {
   MENTION_KIND,
   type Mention,
@@ -142,7 +142,11 @@ function linesNoteOf({ path, lines }: LinesMention): string {
 
 /** What a mention of an MCP server or one of its tools is handed as: which the developer pointed the agent at, and how to reach it. */
 function noteOf(mention: ServerMention): string {
-  const server = `the ${INTEGRATION_NAME[mention.provider]} MCP server (connection \`${mention.provider}\`)`;
+  const connection =
+    mention.kind === MENTION_KIND.LINK
+      ? mention.provider
+      : (mention.connection ?? mention.provider);
+  const server = `the ${INTEGRATION_NAME[mention.provider]} MCP server (connection \`${connection}\`)`;
   const joins = "If that connection is not among yours in this turn, it joins at your next.";
   if (mention.kind === MENTION_KIND.SERVER) {
     return `The developer pointed you at ${server} for this message: find its tools with \`${CONNECTION_TOOL.SEARCH}\` on that connection and run them with \`${CONNECTION_TOOL.EXECUTE}\` before reaching for anything else. ${joins}`;
@@ -193,11 +197,16 @@ function sameMention(
     case MENTION_KIND.SECTION:
       return second.kind === MENTION_KIND.SECTION && first.anchor === second.anchor;
     case MENTION_KIND.SERVER:
-      return second.kind === MENTION_KIND.SERVER && first.provider === second.provider;
+      return (
+        second.kind === MENTION_KIND.SERVER &&
+        first.provider === second.provider &&
+        first.connection === second.connection
+      );
     case MENTION_KIND.TOOL:
       return (
         second.kind === MENTION_KIND.TOOL &&
         first.provider === second.provider &&
+        first.connection === second.connection &&
         first.tool === second.tool
       );
     case MENTION_KIND.LINK:
@@ -213,20 +222,17 @@ function handedAs({ mention, name }: HandedMention, plan: Plan | undefined): str
   return mention.kind === MENTION_KIND.FILE ? linesNoteOf(mention) : noteOf(mention);
 }
 
-/** The MCP servers the words mention, by themselves, by one of their tools, or by a page of theirs, each once: the ones the turn the words open is handed whatever the agent's switches say. */
-export function mentionedServers(
-  words: string,
-  repository: string | null,
-): readonly IntegrationProvider[] {
+/** The MCP servers the words mention, by connection name, by themselves, by one of their tools, or by a page of theirs, each once: the ones the turn the words open is handed whatever the agent's switches say. */
+export function mentionedServers(words: string, repository: string | null): readonly string[] {
   // Note that the plan's repository is handed, so a page that is a file of it brings in no server.
-  const providers = mentionsIn(words, repository).flatMap(({ mention }) =>
-    mention.kind === MENTION_KIND.SERVER ||
-    mention.kind === MENTION_KIND.TOOL ||
-    mention.kind === MENTION_KIND.LINK
-      ? [mention.provider]
-      : [],
-  );
-  return [...new Set(providers)];
+  const connections = mentionsIn(words, repository).flatMap(({ mention }) => {
+    if (mention.kind === MENTION_KIND.SERVER || mention.kind === MENTION_KIND.TOOL) {
+      return [mention.connection ?? mention.provider];
+    }
+    // A page names its provider and no account, so it brings in the provider's first.
+    return mention.kind === MENTION_KIND.LINK ? [mention.provider] : [];
+  });
+  return [...new Set(connections)];
 }
 
 /**

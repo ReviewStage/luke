@@ -1,11 +1,7 @@
 import { MESSAGE_ROLE, TURN_ORIGIN, WireValueSchema } from "@luke/wire";
 import { readEither, verbatimJsonSchema, wireKeys } from "@luke/wire/effect";
 import { Schema as EffectSchema, Result, SchemaTransformation } from "effect";
-import {
-  INTEGRATION_PROVIDER_LIST,
-  type IntegrationProvider,
-  integrationProviderFromWire,
-} from "./integration-wire.js";
+import { integrationConnectionNameSchema, integrationConnectionOf } from "./integration-wire.js";
 import { countedNumber, memberRefSchema, wireUuidSchema } from "./service-wire.js";
 
 /**
@@ -289,21 +285,23 @@ export function hasWordsOrFiles(
 }
 
 /**
- * The MCP servers switched off for an agent, by integration provider. A
- * provider this build does not know is left out rather than refused, so a
- * service that offers one more provider than a desktop knows still answers
- * that desktop its agents, and a provider retired from the list reads as
- * nothing switched off.
+ * The MCP servers switched off for an agent, by connection name: one
+ * account at an integration (`notion`, `notion-2`), the first account's
+ * name being its provider's, so a list stored before a second account was
+ * possible keeps its meaning. A name of a provider this build does not know
+ * is left out rather than refused, so a service that offers one more
+ * provider than a desktop knows still answers that desktop its agents, and
+ * a provider retired from the list reads as nothing switched off.
  */
 export const disabledServersSchema = EffectSchema.Array(
   EffectSchema.String.check(EffectSchema.isMaxLength(CODING_AGENT_BOUNDS.MAX_SERVER_CHARS)),
 ).pipe(
   EffectSchema.check(EffectSchema.isMaxLength(CODING_AGENT_BOUNDS.MAX_SERVERS)),
   EffectSchema.decodeTo(
-    EffectSchema.Array(EffectSchema.Literals(INTEGRATION_PROVIDER_LIST)),
+    EffectSchema.Array(integrationConnectionNameSchema),
     SchemaTransformation.transform({
-      decode: (named): readonly IntegrationProvider[] =>
-        named.flatMap((id) => integrationProviderFromWire(id) ?? []),
+      decode: (named): readonly string[] =>
+        named.filter((name) => integrationConnectionOf(name) !== undefined),
       encode: (servers): readonly string[] => servers,
     }),
   ),

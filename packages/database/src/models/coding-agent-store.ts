@@ -10,9 +10,8 @@ import {
   contextWindowSchema,
 } from "@luke/features/coding-agent-wire";
 import {
-  INTEGRATION_PROVIDER_LIST,
-  type IntegrationProvider,
-  integrationProviderFromWire,
+  integrationConnectionNameSchema,
+  integrationConnectionOf,
 } from "@luke/features/integration-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
 import { TURN_STATUS } from "@luke/wire";
@@ -153,7 +152,7 @@ export interface CodingAgent {
   /** When the developer archived the agent; null while it is not. */
   readonly archivedAt: Date | null;
   /** The MCP servers switched off for this agent, which its next turns are not handed; empty where none is. */
-  readonly disabledServers: readonly IntegrationProvider[];
+  readonly disabledServers: readonly string[];
   /** Who the agent's commits are by and its pull request is opened as; null until its first session settles it. */
   readonly author: CodingAgentAuthor | null;
   readonly createdAt: Date;
@@ -211,9 +210,9 @@ export type NewCodingAgent = CodingAgentPlace & {
   readonly contextWindow?: ContextWindow | undefined;
   readonly repository: string;
   /** The MCP servers the draft switched off before it started; none where the Start names none. */
-  readonly disabledServers?: readonly IntegrationProvider[] | undefined;
+  readonly disabledServers?: readonly string[] | undefined;
   /** The MCP servers the prompt mentions, which the first turn is handed whatever the switches say; none where it mentions none. */
-  readonly mentionedServers?: readonly IntegrationProvider[] | undefined;
+  readonly mentionedServers?: readonly string[] | undefined;
 };
 
 /** The columns every read and every `returning` projects, so a row decodes one way whatever wrote it. */
@@ -240,25 +239,26 @@ const CODING_AGENT_COLUMNS = {
 };
 
 /**
- * The `disabled_servers` column as an agent reads it: null is none, and a
- * provider no longer offered is left out rather than failing the row, so a
- * provider retired from the list never takes an agent's reads down with it.
+ * The `disabled_servers` column as an agent reads it: connection names
+ * (`notion`, `notion-2`), null for none, and a name of a provider no longer
+ * offered is left out rather than failing the row, so a provider retired
+ * from the list never takes an agent's reads down with it. A name stored
+ * before a second account was possible is the provider's own, which is its
+ * first account's.
  */
 const DisabledServersColumnSchema = Schema.NullOr(Schema.Array(Schema.String)).pipe(
   Schema.decodeTo(
-    Schema.Array(Schema.Literals(INTEGRATION_PROVIDER_LIST)),
+    Schema.Array(integrationConnectionNameSchema),
     SchemaTransformation.transform({
-      decode: (stored): readonly IntegrationProvider[] =>
-        (stored ?? []).flatMap((id) => integrationProviderFromWire(id) ?? []),
+      decode: (stored): readonly string[] =>
+        (stored ?? []).filter((name) => integrationConnectionOf(name) !== undefined),
       encode: (servers): readonly string[] | null => servers,
     }),
   ),
 );
 
-/** The column as a write stores it: each provider once, and null for none, which is what a row from before the column reads as. */
-function storedServers(
-  servers: readonly IntegrationProvider[],
-): readonly IntegrationProvider[] | null {
+/** The column as a write stores it: each connection once, and null for none, which is what a row from before the column reads as. */
+function storedServers(servers: readonly string[]): readonly string[] | null {
   return servers.length === 0 ? null : [...new Set(servers)];
 }
 
@@ -399,8 +399,8 @@ const insertAgent = SqlSchema.findOne({
     planSnapshot: Schema.NullOr(Schema.String),
     prompt: Schema.NullOr(Schema.String),
     repository: Schema.String,
-    disabledServers: Schema.NullOr(Schema.Array(Schema.Literals(INTEGRATION_PROVIDER_LIST))),
-    mentionedServers: Schema.NullOr(Schema.Array(Schema.Literals(INTEGRATION_PROVIDER_LIST))),
+    disabledServers: Schema.NullOr(Schema.Array(integrationConnectionNameSchema)),
+    mentionedServers: Schema.NullOr(Schema.Array(integrationConnectionNameSchema)),
     now: Schema.Date,
   }),
   Result: CodingAgentRowSchema,
@@ -455,7 +455,7 @@ const updateAgentServers = SqlSchema.findOneOption({
   Request: Schema.Struct({
     userId: Schema.String,
     agentId: Schema.String,
-    disabledServers: Schema.NullOr(Schema.Array(Schema.Literals(INTEGRATION_PROVIDER_LIST))),
+    disabledServers: Schema.NullOr(Schema.Array(integrationConnectionNameSchema)),
   }),
   Result: CodingAgentRowSchema,
   execute: ({ userId, agentId, disabledServers }) =>
@@ -500,7 +500,7 @@ const lockReachableMentionedServers = SqlSchema.findOneOption({
 const setAgentMentionedServers = SqlSchema.void({
   Request: Schema.Struct({
     agentId: Schema.String,
-    mentionedServers: Schema.NullOr(Schema.Array(Schema.Literals(INTEGRATION_PROVIDER_LIST))),
+    mentionedServers: Schema.NullOr(Schema.Array(integrationConnectionNameSchema)),
   }),
   execute: ({ agentId, mentionedServers }) =>
     Database.use((db) =>
@@ -1089,7 +1089,7 @@ export function updateCodingAgentChoice(
 export function updateCodingAgentServers(
   userId: string,
   agentId: string,
-  disabledServers: readonly IntegrationProvider[],
+  disabledServers: readonly string[],
 ): CodingAgentStoreEffect<Option.Option<CodingAgent>> {
   return updateAgentServers({ userId, agentId, disabledServers: storedServers(disabledServers) });
 }
@@ -1110,7 +1110,7 @@ export function updateCodingAgentServers(
 export function dispatchMentioningServers<E, R>(
   userId: string,
   agentId: string,
-  mentioned: readonly IntegrationProvider[],
+  mentioned: readonly string[],
   dispatch: Effect.Effect<boolean, E, R>,
 ): Effect.Effect<boolean, E | CodingAgentStoreFailure, R | DatabaseServices> {
   if (mentioned.length === 0) return dispatch;
@@ -1139,7 +1139,7 @@ export function dispatchMentioningServers<E, R>(
 export function takeCodingAgentMentionedServers(
   userId: string,
   conversationId: string,
-): CodingAgentStoreEffect<readonly IntegrationProvider[]> {
+): CodingAgentStoreEffect<readonly string[]> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {

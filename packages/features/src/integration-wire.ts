@@ -143,6 +143,52 @@ export function integrationProviderFromWire(value: string | null): IntegrationPr
 export const integrationProviderSchema = EffectSchema.Literals(INTEGRATION_PROVIDER_LIST);
 
 /**
+ * The name one account at a provider goes by everywhere: the eve connection
+ * an agent reaches it through, a coding agent's switch and mention, and the
+ * routes' `connection` query. The first account at a provider is named after
+ * the provider (`notion`), so every name stored before a second account was
+ * possible keeps naming it; another is the provider and its place, `notion-2`.
+ * eve allows a connection's name lowercase letters, digits, and dashes, from
+ * a letter, up to 64 characters, and qualifies a tool's name with two
+ * underscores, which this grammar never spells.
+ */
+const CONNECTION_NAME_PATTERN = new RegExp(
+  `^(${INTEGRATION_PROVIDER_LIST.join("|")})(?:-([2-9]|[1-9][0-9]{1,2}))?$`,
+  "u",
+);
+
+export const integrationConnectionNameSchema = EffectSchema.String.check(
+  EffectSchema.isPattern(CONNECTION_NAME_PATTERN),
+);
+
+/** The provider a connection name is an account at, and its place there (1 for the first); nothing for any other string. */
+export function integrationConnectionOf(
+  name: string,
+): { readonly provider: IntegrationProvider; readonly place: number } | undefined {
+  const match = CONNECTION_NAME_PATTERN.exec(name);
+  const provider = integrationProviderFromWire(match?.[1] ?? null);
+  if (match === null || provider === undefined) return undefined;
+  return { provider, place: match[2] === undefined ? 1 : Number(match[2]) };
+}
+
+/**
+ * The name a new account at the provider takes: the provider's own while no
+ * account holds it, else the lowest free place. Note that this is the one
+ * place a name is spelled from its parts, because eve takes a connection by
+ * one flat name; everywhere else reads it back from the row it was minted on.
+ */
+export function mintIntegrationConnectionName(
+  provider: IntegrationProvider,
+  taken: readonly string[],
+): string {
+  // Note that the grammar caps a place at three digits, far past any account count the routes allow.
+  if (!taken.includes(provider)) return provider;
+  let place = 2;
+  while (taken.includes(`${provider}-${place}`)) place += 1;
+  return `${provider}-${place}`;
+}
+
+/**
  * The fixed name a nested call of each provider's own MCP tools is stored
  * under in an agent's transcript, whatever the provider's server names the
  * tool itself: the service records the call under it
@@ -190,55 +236,11 @@ export const integrationRemoteCallSchema = EffectSchema.Struct({
   parentCallId: EffectSchema.String,
   /** The input eve validated against the tool's schema and sent; empty where it sent none. */
   input: verbatimJsonSchema(WireValueSchema, { type: "object", additionalProperties: true }),
+  /** The account it ran against, by connection name, where it was not the provider's first. */
+  connection: EffectSchema.optionalKey(integrationConnectionNameSchema),
 });
 
 export type IntegrationRemoteCall = typeof integrationRemoteCallSchema.Type;
-
-/**
- * The name one account at a provider goes by everywhere: the eve connection
- * an agent reaches it through, a coding agent's switch and mention, and the
- * routes' `connection` query. The first account at a provider is named after
- * the provider (`notion`), so every name stored before a second account was
- * possible keeps naming it; another is the provider and its place, `notion-2`.
- * eve allows a connection's name lowercase letters, digits, and dashes, from
- * a letter, up to 64 characters, and qualifies a tool's name with two
- * underscores, which this grammar never spells.
- */
-const CONNECTION_NAME_PATTERN = new RegExp(
-  `^(${INTEGRATION_PROVIDER_LIST.join("|")})(?:-([2-9]|[1-9][0-9]{1,2}))?$`,
-  "u",
-);
-
-export const integrationConnectionNameSchema = EffectSchema.String.check(
-  EffectSchema.isPattern(CONNECTION_NAME_PATTERN),
-);
-
-/** The provider a connection name is an account at, and its place there (1 for the first); nothing for any other string. */
-export function integrationConnectionOf(
-  name: string,
-): { readonly provider: IntegrationProvider; readonly place: number } | undefined {
-  const match = CONNECTION_NAME_PATTERN.exec(name);
-  const provider = integrationProviderFromWire(match?.[1] ?? null);
-  if (match === null || provider === undefined) return undefined;
-  return { provider, place: match[2] === undefined ? 1 : Number(match[2]) };
-}
-
-/**
- * The name a new account at the provider takes: the provider's own while no
- * account holds it, else the lowest free place. Note that this is the one
- * place a name is spelled from its parts, because eve takes a connection by
- * one flat name; everywhere else reads it back from the row it was minted on.
- */
-export function mintIntegrationConnectionName(
-  provider: IntegrationProvider,
-  taken: readonly string[],
-): string {
-  // Note that the grammar caps a place at three digits, far past any account count the routes allow.
-  if (!taken.includes(provider)) return provider;
-  let place = 2;
-  while (taken.includes(`${provider}-${place}`)) place += 1;
-  return `${provider}-${place}`;
-}
 
 /** Where an account's connection to one provider stands. */
 export const INTEGRATION_STATUS = {
@@ -290,6 +292,18 @@ export const integrationAccountSchema = EffectSchema.Struct({
 });
 
 export type IntegrationAccount = typeof integrationAccountSchema.Type;
+
+/**
+ * What an account is called where Luke names it among its provider's
+ * others: its label, or "Account 2" by its place while it has none.
+ */
+export function integrationAccountLabel(account: {
+  readonly connection: string;
+  readonly label?: string | undefined;
+}): string {
+  if (account.label !== undefined && account.label.trim() !== "") return account.label;
+  return `Account ${integrationConnectionOf(account.connection)?.place ?? 1}`;
+}
 
 /** A label as the developer names an account (POST): trimmed, never blank, and bounded. */
 export const integrationRenameRequestSchema = EffectSchema.Struct({

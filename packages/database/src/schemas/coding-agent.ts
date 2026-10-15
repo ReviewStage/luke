@@ -5,7 +5,6 @@ import {
   type CodingAgentPullRequest,
   type ContextWindow,
 } from "@luke/features/coding-agent-wire";
-import type { IntegrationProvider } from "@luke/features/integration-wire";
 import {
   type AnyPgColumn,
   foreignKey,
@@ -52,9 +51,10 @@ import { conversations } from "./storage.js";
  * `archived_at` is when the developer put the agent away, which leaves it
  * out of every list but the one that asks for archived agents, and null
  * while it stands; its conversation and pull request are kept either way.
- * `disabled_servers` is the MCP servers, by integration provider, the
- * developer switched off for this agent from its composer, which its next
- * turns are not handed; null, like an empty list, switches none off, so a
+ * `disabled_servers` is the MCP servers, by connection name (one account
+ * at an integration: `notion`, `notion-2`, the first account's name being
+ * its provider's), the developer switched off for this agent from its
+ * composer, which its next turns are not handed; null, like an empty list, switches none off, so a
  * server connected later is on for every agent. A provider no longer
  * offered may stand in the list and is ignored where it is read.
  * `mentioned_servers` is the MCP servers a message to the agent mentioned
@@ -165,9 +165,9 @@ export const codingAgent = pgTable(
     /** When the developer archived the agent; null while it is not. */
     archivedAt: timestamptz("archived_at"),
     /** The MCP servers switched off for this agent, by integration provider; null switches none off. */
-    disabledServers: jsonb("disabled_servers").$type<readonly IntegrationProvider[]>(),
+    disabledServers: jsonb("disabled_servers").$type<readonly string[]>(),
     /** The MCP servers mentioned since the agent's last turn started, by integration provider; null for none. */
-    mentionedServers: jsonb("mentioned_servers").$type<readonly IntegrationProvider[]>(),
+    mentionedServers: jsonb("mentioned_servers").$type<readonly string[]>(),
     /** Who the agent's commits are by and its pull request is opened as; null until its first session settles it. */
     author: text("author").$type<CodingAgentAuthor>(),
     idempotencyKey: text("idempotency_key").notNull(),

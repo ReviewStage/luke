@@ -1,6 +1,5 @@
 import type { CodingAgentAgentAnswer } from "@luke/features/coding-agent-view";
 import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
-import type { IntegrationProvider } from "@luke/features/integration-wire";
 import { useRef, useState } from "react";
 import type { AgentServersControl } from "./agent-servers";
 
@@ -19,15 +18,15 @@ import type { AgentServersControl } from "./agent-servers";
 /** How a change is sent: the agent and the whole list of servers off, answered as the view hears it. */
 export type ServersWriter = (
   agentId: string,
-  disabledServers: readonly IntegrationProvider[],
+  disabledServers: readonly string[],
 ) => Promise<CodingAgentAgentAnswer>;
 
 /** Nothing switched off, which is what an agent from a service before the switch holds. */
-const NONE_OFF: readonly IntegrationProvider[] = [];
+const NONE_OFF: readonly string[] = [];
 
 interface Held {
   agentId: string;
-  pending: readonly IntegrationProvider[] | undefined;
+  pending: readonly string[] | undefined;
 }
 
 export function useAgentServers(input: {
@@ -45,7 +44,7 @@ export function useAgentServers(input: {
   /** How many changes have been sent, so an answer to an earlier one is told apart from the latest. */
   const writes = useRef(0);
 
-  const onSwitch = (next: readonly IntegrationProvider[]) => {
+  const onSwitch = (next: readonly string[]) => {
     writes.current += 1;
     const write = writes.current;
     setHeld((was) => ({ ...was, pending: next }));

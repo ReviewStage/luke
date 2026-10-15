@@ -47,6 +47,7 @@ import {
   INTEGRATION_PROVIDER_LIST,
   INTEGRATION_STATUS,
   type IntegrationProvider,
+  integrationConnectionOf,
 } from "@luke/features/integration-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
 import type { ModelChoice } from "@luke/features/models-wire";
@@ -299,6 +300,14 @@ function OwnerRow({
   );
 }
 
+/** A server the creator switched off, as another reader sees it: its provider's name, and its place where it is not the provider's first account. */
+function switchedOffName(connection: string): string {
+  const account = integrationConnectionOf(connection);
+  if (account === undefined) return connection;
+  const name = INTEGRATION_NAME[account.provider];
+  return account.place === 1 ? name : `${name} (account ${account.place})`;
+}
+
 /**
  * Which of the owner's connected MCP servers a run's new agent is handed:
  * a field chip like its neighbours', holding the marks of those left on and
@@ -316,8 +325,8 @@ function ServersRow({
 }: {
   /** Whether the reading account made it, so its connections are the ones a run is handed. */
   mine: boolean;
-  disabled: readonly IntegrationProvider[];
-  onSwitch: (disabled: readonly IntegrationProvider[]) => void;
+  disabled: readonly string[];
+  onSwitch: (disabled: readonly string[]) => void;
 }): React.JSX.Element {
   if (!mine) {
     return (
@@ -327,7 +336,7 @@ function ServersRow({
           <small>
             {disabled.length === 0
               ? "Its creator's connected servers, every one."
-              : `Its creator's connected servers, but ${disabled.map((provider) => INTEGRATION_NAME[provider]).join(", ")} switched off.`}
+              : `Its creator's connected servers, but ${disabled.map(switchedOffName).join(", ")} switched off.`}
           </small>
         </span>
       </div>
@@ -351,8 +360,8 @@ function OwnServersRow({
   disabled,
   onSwitch,
 }: {
-  disabled: readonly IntegrationProvider[];
-  onSwitch: (disabled: readonly IntegrationProvider[]) => void;
+  disabled: readonly string[];
+  onSwitch: (disabled: readonly string[]) => void;
 }): React.JSX.Element {
   const statuses = useIntegrationStatuses();
   const openSettings = useOpenSettings();

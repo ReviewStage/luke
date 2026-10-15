@@ -113,7 +113,7 @@ const statuses: IntegrationStatuses = {
 
 /** The button over the servers, opened once every tools read has answered, keeping each switch it was asked for. */
 async function opened() {
-  const switched: (readonly IntegrationProvider[])[] = [];
+  const switched: (readonly string[])[] = [];
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);

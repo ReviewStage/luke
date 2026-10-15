@@ -3,6 +3,7 @@ import { Schema } from "effect";
 import { describe, it } from "vitest";
 import {
   INTEGRATION_PROVIDER,
+  integrationAccountLabel,
   integrationConnectionNameSchema,
   integrationConnectionOf,
   mintIntegrationConnectionName,
@@ -42,5 +43,14 @@ describe("an integration account's connection name", () => {
       assert.equal(integrationConnectionOf(name), undefined, name);
       assert.ok(!Schema.is(integrationConnectionNameSchema)(name), name);
     }
+  });
+
+  it("is called by its label among its provider's others, or by its place while it has none", () => {
+    assert.equal(
+      integrationAccountLabel({ connection: "notion-2", label: "Personal" }),
+      "Personal",
+    );
+    assert.equal(integrationAccountLabel({ connection: "notion-3" }), "Account 3");
+    assert.equal(integrationAccountLabel({ connection: "notion", label: "  " }), "Account 1");
   });
 });

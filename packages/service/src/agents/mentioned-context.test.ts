@@ -350,3 +350,24 @@ test("a file's lines the words mention are handed as a note naming the lines and
   assert.match(part, /git show 0123456789abcdef0123456789abcdef01234567:src\/app\.ts/u);
   assert.equal(mentionedContext(`Fix ${whole}.`, PLAN), undefined);
 });
+
+test("a server of an account past its provider's first is pointed at and brought in by its own connection, beside the provider's first", () => {
+  const personal = mentionMarkdown(
+    { kind: MENTION_KIND.SERVER, provider: INTEGRATION_PROVIDER.NOTION, connection: "notion-2" },
+    "Notion · Personal",
+    PLACE,
+  );
+  const acme = mentionMarkdown(
+    { kind: MENTION_KIND.SERVER, provider: INTEGRATION_PROVIDER.NOTION },
+    "Notion · Acme",
+    PLACE,
+  );
+  const part = mentionedContext(`Move it from ${personal} to ${acme}.`, PLAN) ?? "";
+
+  assert.match(part, /the Notion MCP server \(connection `notion-2`\)/u);
+  assert.match(part, /the Notion MCP server \(connection `notion`\)/u);
+  assert.deepEqual(mentionedServers(`Move it from ${personal} to ${acme}.`, PLAN.repository), [
+    "notion-2",
+    INTEGRATION_PROVIDER.NOTION,
+  ]);
+});

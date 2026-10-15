@@ -11,6 +11,8 @@ import { eq } from "drizzle-orm";
 import { Effect, Layer, Logger, Option, Redacted, Result } from "effect";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
 import { test } from "vitest";
+import { CONNECTION_POLICY } from "../agents/agent-runtime/role.js";
+import { turnServers } from "../agents/agent-runtime/servers.js";
 import {
   BRAIN_HOST_ATTRIBUTE,
   BRAIN_HOST_PRINCIPAL_TYPE,
@@ -28,6 +30,7 @@ import {
   CONNECTOR_ASKED_NOTHING,
   firstIntegrationAccount,
   integrationConnectOf,
+  integrationConnectOver,
 } from "../testing/integration-connect.js";
 import { noNetwork } from "../testing/no-network.js";
 import {
@@ -42,7 +45,11 @@ import {
   integrationConnection,
   integrationUnavailable,
 } from "./integration-connection.js";
-import { beginIntegrationSignIn, completeIntegrationSignIn } from "./integration-store.js";
+import {
+  beginIntegrationSignIn,
+  completeIntegrationSignIn,
+  deleteIntegrationConnection,
+} from "./integration-store.js";
 import {
   beginWorkspaceIntegrationSignIn,
   completeWorkspaceIntegrationSignIn,
@@ -189,7 +196,9 @@ const connected = (userId: string) =>
 
 /** The token the session reads under the admission given, with Connect holding the grants given. */
 const tokenRead = (admission: IntegrationAdmission, grants: Map<string, FakeGrant>) =>
-  integrationAccessToken(LINEAR, admission).pipe(Effect.provide(connectLayer(grants)));
+  integrationAccessToken({ provider: LINEAR, connectionName: LINEAR }, admission).pipe(
+    Effect.provide(connectLayer(grants)),
+  );
 
 /** The test's store, no network, and a deployment holding the GitHub App, which is what GitHub's token is read through. */
 const SUITE = Layer.mergeAll(getTestDB(), noNetwork, GitHubApp.layer(GITHUB_APP_SETTINGS));
@@ -218,6 +227,82 @@ it.layer(SUITE)("an integration connection's token read", (it) => {
           yield* tokenRead(host.admit(crossed, theirs.sessionId), grants),
           Result.fail(LINEAR_UNAVAILABLE.NO_ACCOUNT),
         );
+      }),
+  );
+
+  it.effect(
+    "a second account at a provider reads its own grant, under its own subject, and the first reads the first's",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* planningHost;
+        const session = yield* plannedSession(host, typedSeat);
+        const subject = `subject-${session.userId}`;
+        yield* connected(session.userId);
+        yield* beginIntegrationSignIn(
+          session.userId,
+          { provider: LINEAR, connectionName: "linear-2", connectSubject: subject },
+          `state-second-${session.userId}`,
+          Redacted.make("connect-verifier"),
+        );
+        yield* completeIntegrationSignIn(
+          session.userId,
+          "linear-2",
+          `state-second-${session.userId}`,
+        );
+        const grants = new Map([
+          [session.userId, {}],
+          [subject, {}],
+        ]);
+        const read = (connectionName: string) =>
+          integrationAccessToken(
+            { provider: LINEAR, connectionName },
+            host.admit(session.auth, session.sessionId),
+          ).pipe(Effect.provide(connectLayer(grants)));
+
+        assert.deepEqual(
+          [yield* read(LINEAR), yield* read("linear-2")].map((answer) =>
+            Result.isSuccess(answer) ? answer.success.token : answer.failure,
+          ),
+          [tokenOf(session.userId), tokenOf(subject)],
+        );
+      }),
+  );
+
+  it.effect(
+    "a connection handed for one account never reaches another added later under the same name",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* planningHost;
+        const session = yield* plannedSession(host, typedSeat);
+        const second = (subject: string) =>
+          Effect.gen(function* () {
+            yield* beginIntegrationSignIn(
+              session.userId,
+              { provider: LINEAR, connectionName: "linear-2", connectSubject: subject },
+              `state-${subject}`,
+              Redacted.make("connect-verifier"),
+            );
+            yield* completeIntegrationSignIn(session.userId, "linear-2", `state-${subject}`);
+          });
+        yield* connected(session.userId);
+        yield* second("subject-handed");
+        const grants = new Map([
+          ["subject-handed", {}],
+          ["subject-replacing", {}],
+        ]);
+        const read = integrationAccessToken(
+          { provider: LINEAR, connectionName: "linear-2", connectSubject: "subject-handed" },
+          host.admit(session.auth, session.sessionId),
+        ).pipe(Effect.provide(connectLayer(grants)));
+
+        const before = yield* read;
+        yield* deleteIntegrationConnection(session.userId, "linear-2");
+        yield* second("subject-replacing");
+        const after = yield* read;
+
+        assert.ok(Result.isSuccess(before));
+        assert.equal(before.success.token, tokenOf("subject-handed"));
+        assert.ok(Result.isFailure(after));
       }),
   );
 
@@ -284,6 +369,78 @@ it.layer(SUITE)("an integration connection's token read", (it) => {
   );
 
   it.effect(
+    "in a plan of a workspace with Linear connected, a member's second Linear account reads the workspace's token too",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* planningHost;
+        const session = yield* plannedSession(host, typedSeat);
+        const subject = `subject-${session.userId}`;
+        yield* connected(session.userId);
+        yield* beginIntegrationSignIn(
+          session.userId,
+          { provider: LINEAR, connectionName: "linear-2", connectSubject: subject },
+          `state-second-${session.userId}`,
+          Redacted.make("connect-verifier"),
+        );
+        yield* completeIntegrationSignIn(
+          session.userId,
+          "linear-2",
+          `state-second-${session.userId}`,
+        );
+        const state = `workspace-state-${session.workspaceId}`;
+        yield* beginWorkspaceIntegrationSignIn(
+          session.workspaceId,
+          LINEAR,
+          session.userId,
+          state,
+          Redacted.make("connect-verifier"),
+        );
+        yield* completeWorkspaceIntegrationSignIn(session.workspaceId, LINEAR, state);
+        const grants = new Map([
+          [session.userId, {}],
+          [subject, {}],
+          [session.workspaceId, {}],
+        ]);
+
+        const read = yield* integrationAccessToken(
+          { provider: LINEAR, connectionName: "linear-2" },
+          host.admit(session.auth, session.sessionId),
+        ).pipe(Effect.provide(connectLayer(grants)));
+        assert.ok(Result.isSuccess(read));
+        assert.equal(read.success.token, tokenOf(session.workspaceId));
+      }),
+  );
+
+  it.effect(
+    "a member speaking in a plan conversation a teammate opened is handed the providers offered to the member, by the member's own allowlist",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* planningHost;
+        const opened = yield* plannedSession(host, typedSeat);
+        const member = yield* openGithubUser();
+        yield* joinWorkspace(opened.workspaceId, member);
+        const auth = {
+          current: typedSeat(member, opened.conversationId).current,
+          initiator: opened.auth.initiator,
+        };
+        // Linear is offered to the member alone, never to the teammate who opened the conversation.
+        const standing = yield* turnServers(
+          host.admit(auth, opened.sessionId),
+          CONNECTION_POLICY.ALWAYS_ON,
+        ).pipe(
+          Effect.provide(
+            integrationConnectOver({
+              LINEAR_CONNECTOR_UID: "oauth/linear",
+              LINEAR_ALLOWED_ACCOUNTS: `${member}@luke.test`,
+            }),
+          ),
+        );
+        assert.ok(standing.on);
+        assert.ok(standing.connections.some(({ provider }) => provider === LINEAR));
+      }),
+  );
+
+  it.effect(
     "Connect unreachable or unconfigured fails the read with a fixed sentence, and nothing it said reaches the log",
     () =>
       Effect.gen(function* () {
@@ -305,7 +462,7 @@ it.layer(SUITE)("an integration connection's token read", (it) => {
         });
 
         const unreachable = yield* integrationAccessToken(
-          LINEAR,
+          { provider: LINEAR, connectionName: LINEAR },
           host.admit(session.auth, session.sessionId),
         ).pipe(
           Effect.provide(integrationConnectOf(() => leaking)),
@@ -342,9 +499,10 @@ it.layer(SUITE)("an integration connection's token read", (it) => {
         const db = yield* Database;
         yield* db.delete(account).where(eq(account.userId, googleOnly.userId));
         const read = (session: { auth: SessionAuth; sessionId: string }) =>
-          integrationAccessToken(GITHUB, host.admit(session.auth, session.sessionId)).pipe(
-            Effect.provide(integrationConnectOf(() => CONNECTOR_ASKED_NOTHING)),
-          );
+          integrationAccessToken(
+            { provider: GITHUB, connectionName: GITHUB },
+            host.admit(session.auth, session.sessionId),
+          ).pipe(Effect.provide(integrationConnectOf(() => CONNECTOR_ASKED_NOTHING)));
 
         const token = yield* read(signedIn);
         assert.ok(Result.isSuccess(token));
@@ -359,7 +517,7 @@ it.layer(SUITE)("an integration connection's token read", (it) => {
 test.for(INTEGRATION_PROVIDER_LIST)(
   "%s's connection offers every tool its server lists, the ones that write among them",
   (provider) => {
-    const connection = integrationConnection(provider, () =>
+    const connection = integrationConnection({ provider }, () =>
       Promise.reject(new Error("no token is read to define a connection")),
     );
     assert.equal(connection.tools, undefined);
