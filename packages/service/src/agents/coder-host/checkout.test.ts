@@ -169,8 +169,11 @@ it.layer(getTestDB())("a coding agent's checkout", (it) => {
         const github = githubReaching([installation], undefined, {}, developerReach(false));
         const sandbox = sandboxDouble(() => undefined);
 
-        yield* checkOutAgentRepository(target, agent, sandbox).pipe(Effect.provide(github.layer));
+        const token = yield* checkOutAgentRepository(target, agent, sandbox).pipe(
+          Effect.provide(github.layer),
+        );
 
+        assert.equal(Redacted.value(token), GITHUB_FIXTURE_INSTALLATION_TOKEN);
         assert.deepEqual(sandbox.clones, [
           {
             repository: RELAY_FULL_NAME,
@@ -198,11 +201,7 @@ it.layer(getTestDB())("a coding agent's checkout", (it) => {
             },
           },
         ]);
-        // The clone's own rule is withdrawn as it ends, and the session's set after it.
-        assert.deepEqual(sandbox.policies.slice(-2), [
-          "allow-all",
-          sessionPolicy(GITHUB_FIXTURE_INSTALLATION_TOKEN),
-        ]);
+        assert.equal(sandbox.policies.at(-1), "allow-all");
         for (const run of sandbox.runs) {
           assert.equal(carriesToken(JSON.stringify(run)), false);
         }

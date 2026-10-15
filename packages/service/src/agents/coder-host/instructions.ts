@@ -14,9 +14,6 @@ import { CODER_TOOL } from "./tool-set.js";
 
 const CODING_AGENT_EDIT_PLAN_TOOL = EDIT_PLAN_TOOL.name;
 
-/** The line every pull request the agent opens ends its description with. */
-const PULL_REQUEST_FOOTER = "Made with [Luke](https://tryluke.dev)";
-
 /**
  * instructions.ts -- what a coding agent's session runs under.
  *

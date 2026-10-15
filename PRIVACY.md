@@ -902,7 +902,7 @@ only when you press Send.
   minutes after you last typed, unless a turn is running, and a stopped
   sandbox comes back only when you resume it. While a terminal is connected,
   the agent's GitHub access at the sandbox's firewall is kept fresh, so what
-  you run there reaches GitHub as the agent does, never holding a token
+  you run there reaches GitHub as the agent does, never holding the token
   itself.
 - Anthropic, for titles. As a coding agent's turn completes, until it has a
   title and for its first three turns at most, our service asks a small Claude

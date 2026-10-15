@@ -202,70 +202,29 @@ export const agentCiReadable = /* @__PURE__ */ Effect.fn("web/agentCiReadable")(
  * installation of its plan's workspace still reaches the repository, with
  * the repository as GitHub spells it.
  */
-const agentRepositoryToken = /* @__PURE__ */ Effect.fn("web/agentRepositoryToken")(function* (
-  target: ConversationTarget,
-  agent: CodingAgent,
-): Effect.fn.Return<
-  {
-    readonly token: Redacted.Redacted;
-    readonly defaultBranch: string;
-    readonly fullName: string;
-  },
-  CheckoutRefused,
-  CheckoutServices
-> {
-  const app = yield* GitHubApp;
-  const reached = yield* Effect.gen(function* () {
-    const workspace = yield* agentWorkspace(target, agent);
-    if (Option.isNone(workspace)) return Option.none();
-    return yield* app.repositoryWriteToken(workspace.value, agent.repository);
-  }).pipe(Effect.mapError(refusedBy));
-  if (Option.isNone(reached))
-    return yield* new CheckoutRefused({ reason: CODER_REFUSAL.NOT_REACHABLE });
-  const { repository, token } = reached.value;
-  return { token, defaultBranch: repository.defaultBranch, fullName: repository.fullName };
-});
-
-/**
- * The developer's own token for GitHub's API, where the agent writes as
- * them; the App's token given otherwise, and where their token could not be
- * had, which is said in the log, so a sign-in that lapsed mid-session leaves
- * the agent publishing as the App rather than not at all.
- */
-const apiToken = /* @__PURE__ */ Effect.fn("web/agentApiToken")(function* (
-  target: ConversationTarget,
-  author: CodingAgentAuthor,
-  appToken: Redacted.Redacted,
-): Effect.fn.Return<Redacted.Redacted, never, CheckoutServices> {
-  if (author !== CODING_AGENT_AUTHOR.DEVELOPER) return appToken;
-  const app = yield* GitHubApp;
-  return yield* app
-    .userToken(target.userId)
-    .pipe(
-      Effect.catch((failure) =>
-        Effect.as(
-          Effect.logWarning(
-            `The developer's GitHub token for conversation ${target.conversationId} was not read: ${failure._tag}`,
-          ),
-          appToken,
-        ),
-      ),
-    );
-});
-
-/**
- * The agent's two GitHub credentials, minted afresh: the App's write token
- * for its repository, and the token its API calls go out on, the
- * developer's where the agent writes as them.
- */
-export const agentGitHubCredentials = /* @__PURE__ */ Effect.fn("web/agentGitHubCredentials")(
+export const agentRepositoryToken = /* @__PURE__ */ Effect.fn("web/agentRepositoryToken")(
   function* (
     target: ConversationTarget,
     agent: CodingAgent,
-  ): Effect.fn.Return<AgentGitHubCredentials, CheckoutRefused | StoreFailure, CheckoutServices> {
-    const minted = yield* agentRepositoryToken(target, agent);
-    const author = yield* agentAuthor(target, agent);
-    return { git: minted.token, api: yield* apiToken(target, author, minted.token) };
+  ): Effect.fn.Return<
+    {
+      readonly token: Redacted.Redacted;
+      readonly defaultBranch: string;
+      readonly fullName: string;
+    },
+    CheckoutRefused,
+    CheckoutServices
+  > {
+    const app = yield* GitHubApp;
+    const reached = yield* Effect.gen(function* () {
+      const workspace = yield* agentWorkspace(target, agent);
+      if (Option.isNone(workspace)) return Option.none();
+      return yield* app.repositoryWriteToken(workspace.value, agent.repository);
+    }).pipe(Effect.mapError(refusedBy));
+    if (Option.isNone(reached))
+      return yield* new CheckoutRefused({ reason: CODER_REFUSAL.NOT_REACHABLE });
+    const { repository, token } = reached.value;
+    return { token, defaultBranch: repository.defaultBranch, fullName: repository.fullName };
   },
 );
 
