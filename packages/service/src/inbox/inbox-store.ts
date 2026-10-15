@@ -13,7 +13,7 @@ import { automation } from "@luke/database/schemas/automation";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { inboxItem } from "@luke/database/schemas/inbox";
 import { inboxAttachment } from "@luke/database/schemas/inbox-attachment";
-import { task } from "@luke/database/schemas/plan";
+import { task } from "@luke/database/schemas/task";
 import type {
   AccountInboxAutomation,
   AccountInboxEntry,

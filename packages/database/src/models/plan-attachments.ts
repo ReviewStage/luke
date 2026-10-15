@@ -5,8 +5,8 @@ import { and, asc, eq, inArray, isNull, lt, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database } from "../core/query.js";
-import { task } from "../schemas/plan.js";
 import { planAttachment } from "../schemas/plan-attachment.js";
+import { task } from "../schemas/task.js";
 import type { TaskStoreEffect } from "./task-store.js";
 import { reachableTask, taskReachableBy } from "./workspace-store.js";
 

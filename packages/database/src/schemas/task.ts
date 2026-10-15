@@ -8,7 +8,7 @@ import { organization, user } from "./auth.js";
 import { conversations } from "./storage.js";
 
 /**
- * plan.ts -- a named feature plan and its one current document.
+ * task.ts -- a named task and its plan, its one current document.
  *
  * One row per plan, keyed by a UUID of the service's own and owned by the
  * account that started it, in the workspace it was started in: its name, whether it is archived (a pin is each member's own, `plan-pin.ts`), its
@@ -26,7 +26,7 @@ import { conversations } from "./storage.js";
  * account is still one statement, and with its workspace.
  */
 export const task = pgTable(
-  "plan",
+  "task",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     userId: text("user_id")
@@ -76,9 +76,9 @@ export const task = pgTable(
   },
   (table) => [
     // The plan list reads one account's plans, newest started first.
-    index("plan_user_created").on(table.userId, table.createdAt),
+    index("task_user_created").on(table.userId, table.createdAt),
     // A workspace's plans, newest started first.
-    index("plan_organization_created").on(table.organizationId, table.createdAt),
+    index("task_organization_created").on(table.organizationId, table.createdAt),
   ],
 );
 
@@ -92,8 +92,8 @@ export const task = pgTable(
  * drawing, each whole and each the last write winning (`board-store.ts`).
  * The row goes with its plan.
  */
-export const taskBoard = pgTable("plan_board", {
-  taskId: uuid("plan_id")
+export const taskBoard = pgTable("task_board", {
+  taskId: uuid("task_id")
     .primaryKey()
     .references(() => task.id, { onDelete: "cascade" }),
   elements: jsonb("elements").$type<readonly BoardElement[]>().notNull().default(sql`'[]'::jsonb`),
