@@ -72,11 +72,9 @@ export function ExperimentalPage({
   if (!signedIn) return <p className="settings-note">{SIGN_IN_NOTE}</p>;
   if (entries.length === 0) {
     return (
-      <div className="settings-empty">
-        <EmptyState icon={<FlaskConicalIcon />} title={NO_EXPERIMENTS_TITLE}>
-          {NO_EXPERIMENTS_LINE}
-        </EmptyState>
-      </div>
+      <EmptyState icon={<FlaskConicalIcon />} title={NO_EXPERIMENTS_TITLE}>
+        {NO_EXPERIMENTS_LINE}
+      </EmptyState>
     );
   }
   return (

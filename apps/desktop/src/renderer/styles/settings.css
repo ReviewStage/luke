@@ -244,14 +244,6 @@
   cursor: pointer;
 }
 
-/* A Settings page with nothing on it (Experimental, between experiments):
-   the window's empty state, centred in the page's own measure. */
-.settings-empty {
-  display: flex;
-  max-width: var(--settings-width);
-  min-height: min(420px, 60vh);
-}
-
 /* The app's one switch (`switch.tsx`). On is the accent (`--switch-on`), so
    a switch reads as the primary button beside it does. Its state is keyed on
    its own `data-checked`, so a switch drawn inside a row button that carries

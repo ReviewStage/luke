@@ -994,8 +994,9 @@ test("Run now starts a run under a key of its own, and the run stands first once
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
   await settle();
   assert.match(
-    page.querySelector("aside[aria-label='Runs']")?.textContent ?? "",
-    /No runs yet\. Run now to try it\./u,
+    page.querySelector("aside[aria-label='Runs'] .empty-state")?.textContent ?? "",
+    /^No runs yetRun now to try it\.$/u,
+    "the panel with no run stands the empty state",
   );
 
   act(() => button("Run now").click());

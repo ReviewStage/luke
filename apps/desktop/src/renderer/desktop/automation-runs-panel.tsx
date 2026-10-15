@@ -7,6 +7,7 @@ import {
 } from "@luke/features/automation-list-model";
 import { AUTOMATION_FIRING, type AutomationRunSummary } from "@luke/features/automation-wire";
 import { ClockIcon, PlayIcon } from "lucide-react";
+import { EmptyState } from "../empty-state";
 import { momentText, sinceText, useMinute } from "../planning/plan-time";
 import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { GLYPH_STATE, type GlyphState, StateGlyph, stateEndMark } from "../state-glyph";
@@ -21,8 +22,11 @@ import type { RunsRead } from "./use-automation-runs";
  * agent's title or what fired it, a line saying where its agent stands or
  * why it did not start, and when it fired. A run that started an agent
  * opens that agent's page; one that started none is no press. A new
- * automation has no runs yet, and the panel says how to have one.
+ * automation has no runs yet, and the panel, empty, says how to have one.
  */
+
+/** What the panel says while the automation has no run, over how to have one. */
+const NO_RUNS_TITLE = "No runs yet";
 
 /** The glyph each standing of a run wears. */
 export const STANDING_GLYPH = {
@@ -84,7 +88,9 @@ export function AutomationRunsPanel({
     <aside className="automation-runs" aria-label="Runs">
       <h2 className="settings-group-title">Runs</h2>
       {!created ? (
-        <p className="automation-form-note">No runs yet. Create it, then Run now to try it.</p>
+        <EmptyState icon={<ClockIcon />} title={NO_RUNS_TITLE}>
+          Create it, then Run now to try it.
+        </EmptyState>
       ) : runs === undefined ? null : "failed" in runs ? (
         <ReadFailure
           line="Its runs could not be read."
@@ -92,7 +98,9 @@ export function AutomationRunsPanel({
           place={READ_FAILURE_PLACE.INLINE}
         />
       ) : runs.runs.length === 0 ? (
-        <p className="automation-form-note">No runs yet. Run now to try it.</p>
+        <EmptyState icon={<ClockIcon />} title={NO_RUNS_TITLE}>
+          Run now to try it.
+        </EmptyState>
       ) : (
         <div className="automation-runs-list">
           {runs.runs.map((run) => (
