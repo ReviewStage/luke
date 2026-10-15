@@ -9,6 +9,7 @@ import {
   draftNextRuns,
   draftProblems,
   SCHEDULE_KIND,
+  sameDraft,
   scheduleDraftOf,
 } from "./automation-draft-model.js";
 import {
@@ -207,4 +208,45 @@ test("a save changes only what moved, the task keeping its model, and a draft th
     undefined,
     "a plan's automation works in its plan's repository",
   );
+});
+
+test("a change of the repository shown keeps the others its runs work in behind it, once each", () => {
+  const several = { ...SAVED, repositories: ["acme/ledger", "acme/web"] };
+  const opened = automationDraft(several, DEFAULTS);
+
+  assert.deepEqual(changeOf({ ...opened, repository: "acme/api" }, several, DEFAULTS), {
+    repositories: ["acme/api", "acme/web"],
+  });
+  assert.deepEqual(changeOf({ ...opened, repository: "acme/web" }, several, DEFAULTS), {
+    repositories: ["acme/web"],
+  });
+});
+
+test("an automation fired by an event keeps its trigger: its schedule fields stop nothing and save nothing", () => {
+  const onEvent = {
+    ...SAVED,
+    trigger: { kind: AUTOMATION_TRIGGER.GITHUB, event: "issue-opened" as const },
+  };
+  const opened = automationDraft(onEvent, DEFAULTS);
+  const rescheduled = { ...opened, schedule: scheduleDraftOf("*/5 * * * *") };
+
+  assert.equal(opened.scheduled, false);
+  assert.deepEqual(draftProblems(rescheduled, false, NOW), {});
+  assert.deepEqual(draftNextRuns(rescheduled, NOW, 2), []);
+  assert.equal(changeOf(rescheduled, onEvent, DEFAULTS), undefined);
+});
+
+test("two drafts are the same where every field the editor writes is, the words trimmed", () => {
+  const fresh = automationDraft(undefined, DEFAULTS);
+
+  assert.ok(sameDraft(fresh, { ...fresh, name: "  " }));
+  for (const moved of [
+    { ...fresh, name: "Sweep" },
+    { ...fresh, schedule: scheduleDraftOf("0 10 * * 1-5") },
+    { ...fresh, timezone: "Europe/London" },
+    { ...fresh, repository: "acme/ledger" },
+    { ...fresh, owner: AUTOMATION_SCOPE.WORKSPACE },
+  ]) {
+    assert.ok(!sameDraft(fresh, moved));
+  }
 });

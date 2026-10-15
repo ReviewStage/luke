@@ -1,7 +1,11 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { AUTOMATION_CALL_FAILURE, type AutomationListView } from "@luke/features/automation-view";
+import {
+  AUTOMATION_CALL_FAILURE,
+  type AutomationCreateParams,
+  type AutomationListView,
+} from "@luke/features/automation-view";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -90,7 +94,7 @@ let listed: (string | undefined)[] = [];
 /** Every change asked, as the act carried it. */
 let changes: unknown[] = [];
 /** Every automation made, as the act carried it. */
-let creates: unknown[] = [];
+let creates: AutomationCreateParams[] = [];
 /** Every automation deleted, by its id. */
 let deletes: string[] = [];
 /** What a change answers: the automation as changed, or why not. */
@@ -410,6 +414,9 @@ const PERSONAL: Workspace = { ...WORKSPACE, id: "workspace-personal", name: "Ada
 /** Every page the Automations pages stood on, in order, as the window moved them. */
 let places: AutomationsPlace[] = [];
 
+/** Lists another workspace under the mounted pages, as the switcher would. */
+let moveTo: (workspace: Workspace) => void = () => undefined;
+
 /**
  * The Automations pages as the window holds them, standing on `start` and
  * moved by their own presses, over the workspace listed, the personal one
@@ -419,8 +426,10 @@ function mountPages(start: AutomationsPlace, workspace: Workspace = WORKSPACE): 
   places = [start];
   function Pages() {
     const [place, setPlace] = useState(start);
+    const [listed, setListed] = useState(workspace);
+    moveTo = setListed;
     const plans = plansControl({
-      workspace,
+      workspace: listed,
       workspaces: [PERSONAL, WORKSPACE],
       automationsView: {
         open: true,
@@ -438,7 +447,11 @@ function mountPages(start: AutomationsPlace, workspace: Workspace = WORKSPACE): 
         ...plans,
         newPlan: {
           ...base,
-          repositoriesIn: () => ({ ...base.repositoriesIn(workspace.id), recent: ["acme/ledger"] }),
+          repositoriesIn: () => ({
+            ...base.repositoriesIn(listed.id),
+            scope: listed.id,
+            recent: [listed.id === WORKSPACE.id ? "acme/ledger" : "beta/app"],
+          }),
         },
       },
     });
@@ -630,4 +643,91 @@ test("a page naming an automation the list no longer holds says it is gone", asy
   await settle();
 
   assert.match(page.textContent ?? "", /This automation is gone/u);
+});
+
+test("what is typed while a save is out stands, unsaved, once the save lands", async () => {
+  heldChanges = [];
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+
+  type(page.querySelector("input[aria-label='Automation name']"), "Sweep");
+  act(() => button("Save").click());
+  await settle();
+  type(page.querySelector("textarea[aria-label='Task']"), "Fix the two flakiest tests.");
+  heldChanges[0]?.();
+  await settle();
+
+  assert.equal(
+    page.querySelector<HTMLTextAreaElement>("textarea[aria-label='Task']")?.value,
+    "Fix the two flakiest tests.",
+  );
+  assert.equal(page.querySelector(".automation-editor-status")?.textContent, "Unsaved changes");
+});
+
+test("an automation's page whose list could not be read says so with Retry, rather than calling it gone", async () => {
+  lists = [{ failure: AUTOMATION_CALL_FAILURE.UNANSWERED }];
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+
+  assert.match(page.textContent ?? "", /The automations could not be read\./u);
+  assert.doesNotMatch(page.textContent ?? "", /gone/u);
+  act(() => button("Retry").click());
+  await settle();
+
+  assert.equal(
+    page.querySelector<HTMLInputElement>("input[aria-label='Automation name']")?.value,
+    SWEEP.name,
+  );
+});
+
+test("a new automation's page moved to another workspace starts afresh in that workspace's repository", async () => {
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
+  await settle();
+  type(page.querySelector("input[aria-label='Automation name']"), "Morning triage");
+
+  act(() => moveTo({ ...WORKSPACE, id: "workspace-beta", name: "Beta" }));
+  await settle();
+  type(page.querySelector("input[aria-label='Automation name']"), "Beta triage");
+  type(page.querySelector("textarea[aria-label='Task']"), "Triage Beta's issues.");
+  act(() => button("Create").click());
+  await settle();
+
+  assert.equal(creates.length, 1);
+  assert.deepEqual(
+    [creates[0]?.workspaceId, creates[0]?.repositories],
+    ["workspace-beta", ["beta/app"]],
+  );
+});
+
+test("an automation fired by an event shows its trigger as it is, and a save leaves it so", async () => {
+  const onEvent = automation(7, {
+    name: "Triage new bugs",
+    trigger: { kind: AUTOMATION_TRIGGER.GITHUB, event: "issue-opened" },
+  });
+  standing = [onEvent];
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: onEvent.id });
+  await settle();
+
+  assert.match(page.textContent ?? "", /It runs on an event rather than a schedule/u);
+  assert.equal(page.querySelector("[aria-label='Time zone']"), null);
+  type(page.querySelector("textarea[aria-label='Task']"), "Reproduce the bug first.");
+  act(() => button("Save").click());
+  await settle();
+
+  assert.deepEqual(changes, [
+    {
+      automationId: onEvent.id,
+      change: { action: { ...onEvent.action, prompt: "Reproduce the bug first." } },
+    },
+  ]);
+});
+
+test("Escape keeps a new page whose schedule was changed, though nothing was typed", async () => {
+  mountPages({ kind: AUTOMATIONS_PAGE.NEW });
+  await settle();
+
+  act(() => button("Daily").click());
+  act(() => runAppCommand(APP_COMMAND.EXIT_AUTOMATIONS));
+
+  assert.equal(places.length, 1);
 });

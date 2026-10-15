@@ -17,6 +17,7 @@ import {
 } from "@luke/features/automation-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { BuildingIcon, ClockIcon, LockIcon, PlusIcon, ZapIcon } from "lucide-react";
+import { Fragment, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 import { EmptyState } from "../empty-state";
@@ -281,6 +282,32 @@ function ListPage({
   );
 }
 
+/** One automation's page whose list could not be read: said so, with Retry, rather than called gone. */
+function UnreadPage({
+  onBack,
+  onRetry,
+}: {
+  onBack: () => void;
+  onRetry: () => void;
+}): React.JSX.Element {
+  useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, onBack);
+  return (
+    <section className="automations-view" aria-label="Automation">
+      <header className="desktop-toolbar">
+        <div className="desktop-toolbar-heading">
+          <button type="button" className="toolbar-button" onClick={onBack}>
+            <ZapIcon />
+            Automations
+          </button>
+        </div>
+      </header>
+      <div className="automations-scroll">
+        <ReadFailure line={UNREAD_LINE} onRetry={onRetry} place={READ_FAILURE_PLACE.CENTRED} />
+      </div>
+    </section>
+  );
+}
+
 /** One automation's page that names an automation the list no longer holds: it was deleted, or is not this workspace's. */
 function GonePage({ onBack }: { onBack: () => void }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, onBack);
@@ -313,13 +340,18 @@ export function AutomationsPage({ plans }: { plans: PlansControl }): React.JSX.E
   const view = plans.automationsView;
   const workspace = plans.workspace;
   const automations = useAutomations(workspace?.id);
+  // The automation the new page made, whose page is that same editor still, so what was typed while it was made stands.
+  const [made, setMade] = useState<string | undefined>(undefined);
   const back = () => view.onOpen({ kind: AUTOMATIONS_PAGE.LIST });
   const { place } = view;
   if (place.kind === AUTOMATIONS_PAGE.LIST) {
     return <ListPage plans={plans} automations={automations} />;
   }
-  const { read } = automations;
-  const listedAutomations = read !== undefined && "automations" in read ? read.automations : [];
+  const { read, reload } = automations;
+  if (read !== undefined && "failure" in read) {
+    return <UnreadPage onBack={back} onRetry={reload} />;
+  }
+  const listedAutomations = read === undefined ? [] : read.automations;
   const opened =
     place.kind === AUTOMATIONS_PAGE.EDIT
       ? listedAutomations.find((automation) => automation.id === place.automationId)
@@ -333,17 +365,23 @@ export function AutomationsPage({ plans }: { plans: PlansControl }): React.JSX.E
   }
   // Note that the account's first workspace is its personal one, where everything is its own.
   const offersOwner = workspace !== undefined && plans.workspaces[0]?.id !== workspace.id;
+  const editing = opened === undefined || opened.id === made ? AUTOMATIONS_PAGE.NEW : opened.id;
   return (
-    <AutomationEditor
-      // Keyed by what it edits, so another automation's page holds nothing of the last's draft.
-      key={opened?.id ?? AUTOMATIONS_PAGE.NEW}
-      automation={opened}
-      workspace={workspace}
-      offersOwner={offersOwner}
-      repositories={plans.newPlan.repositoriesIn(workspace?.id)}
-      writes={automations}
-      onBack={back}
-      onCreated={(automationId) => view.onOpen({ kind: AUTOMATIONS_PAGE.EDIT, automationId })}
-    />
+    // Keyed by the workspace, then by what it edits, so another workspace's page or another automation's holds nothing of the last's draft.
+    <Fragment key={workspace?.id}>
+      <AutomationEditor
+        key={editing}
+        automation={opened}
+        workspace={workspace}
+        offersOwner={offersOwner}
+        repositories={plans.newPlan.repositoriesIn(workspace?.id)}
+        writes={automations}
+        onBack={back}
+        onCreated={(automationId) => {
+          setMade(automationId);
+          view.onOpen({ kind: AUTOMATIONS_PAGE.EDIT, automationId });
+        }}
+      />
+    </Fragment>
   );
 }

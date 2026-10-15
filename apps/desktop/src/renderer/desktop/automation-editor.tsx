@@ -11,6 +11,7 @@ import {
   SCHEDULE_KIND,
   type ScheduleDraft,
   type ScheduleKind,
+  sameDraft,
 } from "@luke/features/automation-draft-model";
 import {
   AUTOMATION_CALL_FAILURE,
@@ -397,13 +398,21 @@ function EditorForm({
   return (
     <div className="settings-card automation-form">
       <FormRow label="Schedule" problem={problems[DRAFT_FIELD.SCHEDULE]}>
-        <ScheduleControl
-          schedule={draft.schedule}
-          timezone={draft.timezone}
-          onSchedule={(schedule) => onDraft({ schedule })}
-          onTimezone={(timezone) => onDraft({ timezone })}
-        />
-        <NextRuns draft={draft} />
+        {draft.scheduled ? (
+          <>
+            <ScheduleControl
+              schedule={draft.schedule}
+              timezone={draft.timezone}
+              onSchedule={(schedule) => onDraft({ schedule })}
+              onTimezone={(timezone) => onDraft({ timezone })}
+            />
+            <NextRuns draft={draft} />
+          </>
+        ) : (
+          <p className="automation-form-note">
+            It runs on an event rather than a schedule, which this page leaves as it is.
+          </p>
+        )}
       </FormRow>
       <FormRow label="Task" problem={problems[DRAFT_FIELD.PROMPT]}>
         <textarea
@@ -420,13 +429,20 @@ function EditorForm({
         {planBacked ? (
           <p className="automation-form-note">Its plan's repository.</p>
         ) : (
-          <RepositoryChip
-            key={repositories.scope}
-            place={CHIP_PLACE.COMPOSER}
-            value={draft.repository}
-            chooser={repositories}
-            onChoose={(repository) => onDraft({ repository })}
-          />
+          <>
+            <RepositoryChip
+              key={repositories.scope}
+              place={CHIP_PLACE.COMPOSER}
+              value={draft.repository}
+              chooser={repositories}
+              onChoose={(repository) => onDraft({ repository })}
+            />
+            {draft.alsoRepositories.length === 0 ? null : (
+              <p className="automation-form-note">
+                {`Runs start here, and also work in ${draft.alsoRepositories.join(", ")}.`}
+              </p>
+            )}
+          </>
         )}
       </FormRow>
       {offersOwner ? (
@@ -479,22 +495,20 @@ export function AutomationEditor({
     owner: AUTOMATION_SCOPE.PERSONAL,
   }));
   // A new automation starts in the repository the workspace's plans were about lately, as a new plan does.
-  const [draft, setDraft] = useState(() =>
+  const [start] = useState(() =>
     automation === undefined
       ? { ...automationDraft(undefined, defaults), repository: repositories.recent[0] ?? null }
       : automationDraft(automation, defaults),
   );
+  const [draft, setDraft] = useState(start);
   const [shownProblems, setShownProblems] = useState(false);
   const [saving, setSaving] = useState(false);
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
   const planBacked = automation !== undefined && automation.planId !== null;
   const change = automation === undefined ? undefined : changeOf(draft, automation, defaults);
   const dirty = automation === undefined || change !== undefined;
-  // Note that a new draft nothing was written into is no work to lose, so Escape may leave it.
-  const written =
-    automation === undefined
-      ? draft.name.trim() !== "" || draft.prompt.trim() !== ""
-      : change !== undefined;
+  // Note that a new draft nothing was changed in is no work to lose, so Escape may leave it.
+  const written = automation === undefined ? !sameDraft(draft, start) : change !== undefined;
   // Escape goes back to the list while nothing written would be lost, and is kept, doing nothing, while it would.
   useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, written ? keepEscape : onBack);
   const problems = draftProblems(draft, planBacked, new Date());
@@ -508,7 +522,7 @@ export function AutomationEditor({
       setRefusal(SAVE_REFUSAL_WORDS[answer.failure]);
       return;
     }
-    setDraft(automationDraft(answer.automation, defaults));
+    // Note that the draft is kept rather than replaced by the answer, so what was typed while the save was out stands, unsaved.
     setShownProblems(false);
     if (automation === undefined) onCreated(answer.automation.id);
   };

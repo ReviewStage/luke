@@ -21,7 +21,10 @@ import {
  * The picker writes a schedule as a kind and a time, every hour, every day,
  * on weekdays, or on one day of the week, and keeps a cron it did not write
  * as it was, so opening an automation made elsewhere never rewrites its
- * schedule. A save sends only what changed, so a field the editor does not
+ * schedule; one fired by an event rather than a schedule keeps its trigger
+ * untouched, since the editor writes schedules alone. The repository the
+ * editor shows is the first, where a run starts; any others it was given
+ * are kept behind it. A save sends only what changed, so a field the editor does not
  * show, a model or a target, stands as the service holds it. Every word a
  * field's problem says is here, beside the rule it states.
  */
@@ -63,8 +66,12 @@ export interface AutomationDraft {
   readonly schedule: ScheduleDraft;
   readonly timezone: string;
   readonly prompt: string;
-  /** The repository its runs work in, `owner/name`, or none chosen yet. */
+  /** Whether it runs on a schedule, which the editor writes, rather than on an event, which it keeps as it was. */
+  readonly scheduled: boolean;
+  /** The repository a run starts in, `owner/name`, or none chosen yet. */
   readonly repository: string | null;
+  /** Any other repositories its runs work in, kept behind the first as they were given. */
+  readonly alsoRepositories: readonly string[];
   readonly owner: AutomationScope;
 }
 
@@ -103,6 +110,13 @@ function cronNumber(field: string | undefined, most: number): number | undefined
   if (field === undefined || !/^\d+$/u.test(field)) return undefined;
   const value = Number(field);
   return value <= most ? value : undefined;
+}
+
+/** The repositories a draft's runs work in: the one shown first, then the others it kept, the first among them once. */
+function repositoriesOf(draft: AutomationDraft): readonly string[] {
+  if (draft.repository === null) return draft.alsoRepositories;
+  const first = draft.repository;
+  return [first, ...draft.alsoRepositories.filter((repository) => repository !== first)];
 }
 
 /** A trimmed text past its bound, or empty, as its field says it; nothing while it reads. */
@@ -152,8 +166,9 @@ export function cronOf(schedule: ScheduleDraft): string {
 
 /**
  * The draft an automation opens as, or a new one's from the defaults. A
- * trigger the picker does not write, which the window never makes, opens
- * as a new schedule, since the editor shows a schedule alone.
+ * trigger the picker does not write, an event's, opens unscheduled, kept as
+ * it was, its schedule fields standing at a new one's only so a draft has
+ * them.
  */
 export function automationDraft(
   automation: AutomationSummary | undefined,
@@ -165,7 +180,9 @@ export function automationDraft(
       schedule: NEW_SCHEDULE,
       timezone: defaults.timezone,
       prompt: "",
+      scheduled: true,
       repository: null,
+      alsoRepositories: [],
       owner: defaults.owner,
     };
   }
@@ -176,7 +193,9 @@ export function automationDraft(
     schedule: scheduled ? scheduleDraftOf(trigger.cron) : NEW_SCHEDULE,
     timezone: scheduled ? trigger.timezone : defaults.timezone,
     prompt: automation.action.prompt,
+    scheduled,
     repository: automation.repositories?.[0] ?? null,
+    alsoRepositories: automation.repositories?.slice(1) ?? [],
     owner: automation.scope ?? AUTOMATION_SCOPE.PERSONAL,
   };
 }
@@ -205,7 +224,8 @@ export function draftProblems(
     `Keep the task under ${AUTOMATION_BOUNDS.MAX_PROMPT_CHARS.toLocaleString("en-US")} characters.`,
   );
   const read = readSchedule({ cron: cronOf(draft.schedule), timezone: draft.timezone }, now);
-  const schedule = Result.isFailure(read) ? SCHEDULE_REFUSAL_WORDS[read.failure] : undefined;
+  const schedule =
+    draft.scheduled && Result.isFailure(read) ? SCHEDULE_REFUSAL_WORDS[read.failure] : undefined;
   const repository =
     !planBacked && draft.repository === null ? "Choose the repository it works in." : undefined;
   const problems: { [Field in DraftField]?: string } = {};
@@ -218,6 +238,7 @@ export function draftProblems(
 
 /** The next instants a draft's schedule is due after `now`, as many as asked; none for one Luke cannot read. */
 export function draftNextRuns(draft: AutomationDraft, now: Date, count: number): readonly number[] {
+  if (!draft.scheduled) return [];
   const schedule = { cron: cronOf(draft.schedule), timezone: draft.timezone };
   const runs: number[] = [];
   let after = now;
@@ -246,7 +267,19 @@ export function createRequestOf(
     action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: draft.prompt.trim() },
     scope: draft.owner,
   } as const;
-  return draft.repository === null ? made : { ...made, repositories: [draft.repository] };
+  return draft.repository === null ? made : { ...made, repositories: repositoriesOf(draft) };
+}
+
+/** Whether two drafts say the same: what a page compares to know whether anything was written into it. */
+export function sameDraft(one: AutomationDraft, other: AutomationDraft): boolean {
+  return (
+    one.name.trim() === other.name.trim() &&
+    one.prompt.trim() === other.prompt.trim() &&
+    cronOf(one.schedule) === cronOf(other.schedule) &&
+    one.timezone === other.timezone &&
+    one.repository === other.repository &&
+    one.owner === other.owner
+  );
 }
 
 /**
@@ -262,7 +295,8 @@ export function changeOf(
 ): AutomationChangeParams["change"] | undefined {
   const was = automationDraft(automation, defaults);
   const cron = cronOf(draft.schedule);
-  const scheduleMoved = cron !== cronOf(was.schedule) || draft.timezone !== was.timezone;
+  const scheduleMoved =
+    draft.scheduled && (cron !== cronOf(was.schedule) || draft.timezone !== was.timezone);
   const promptMoved = draft.prompt.trim() !== was.prompt;
   const repositoryMoved = automation.planId === null && draft.repository !== was.repository;
   const change: ChangeDraft = {};
@@ -271,7 +305,7 @@ export function changeOf(
     change.trigger = { kind: AUTOMATION_TRIGGER.SCHEDULE, cron, timezone: draft.timezone };
   }
   if (promptMoved) change.action = { ...automation.action, prompt: draft.prompt.trim() };
-  if (repositoryMoved && draft.repository !== null) change.repositories = [draft.repository];
+  if (repositoryMoved && draft.repository !== null) change.repositories = repositoriesOf(draft);
   if (draft.owner !== was.owner) change.scope = draft.owner;
   return Object.keys(change).length === 0 ? undefined : change;
 }
