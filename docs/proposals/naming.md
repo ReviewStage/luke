@@ -938,8 +938,10 @@ Conflicts come from [getluke.app](https://www.getluke.app),
 [Cometline](https://github.com/Cometline/cometline),
 [Afternic: coralworks.com](https://www.afternic.com/domain/coralworks.com),
 [Afternic: slatepoint.com](https://www.afternic.com/domain/slatepoint.com), and
-[Trademarkia: zinclight](https://www.trademarkia.com/search/trademarks?q=zinclight). The gut-check page (every pass's .com table, and each name in a title bar,
-a plan link, and an icon tile) is committed self-contained, with its data
+[Trademarkia: zinclight](https://www.trademarkia.com/search/trademarks?q=zinclight).
+
+The gut-check page (every pass's .com table, and each name in a title
+bar, a plan link, and an icon tile) is committed self-contained, with its data
 inline and no external fetches, at
 [`naming/index.html`](naming/index.html). Open it directly or serve the
 folder with any static server.
