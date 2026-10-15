@@ -9,6 +9,8 @@ import { inPlanOrder, isDraftTab, type StripTab, sameTab, tabKey } from "@luke/u
 import { useEffect, useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
+import { useDraftedAgents } from "../composer-drafts";
+import { DraftMark } from "../draft-mark";
 import { agentCardReading } from "../planning/agent-ref";
 import { AgentTab } from "../planning/agent-tab";
 import { AgentTabCard } from "../planning/agent-tab-card";
@@ -223,7 +225,9 @@ interface DrawnTab {
  * The agents' tabs and the draft's, in the order started, each closing
  * through `main`. An agent's transcript is read whole from the service for a
  * copy, since its tab holds it only while shown, and its card previews its
- * latest step from what its tab last held (`heldLatest`).
+ * latest step from what its tab last held (`heldLatest`). An agent's tab
+ * whose box holds a draft wears the draft's pencil at its end, where a
+ * failure's mark does not stand there first (`draft-mark.tsx`).
  */
 function agentTabs(input: {
   main: MainTabsControl;
@@ -231,8 +235,10 @@ function agentTabs(input: {
   unread: readonly StripTab[];
   views: TabViews;
   copied: TranscriptCopier;
+  /** The agents whose box holds a draft, by id. */
+  drafted: readonly string[];
 }): DrawnTab[] {
-  const { main, agents, unread, views, copied } = input;
+  const { main, agents, unread, views, copied, drafted } = input;
   const chosen = (tab: MainTab) => sameTab(tab, main.tab);
   const models = agents.models ?? [];
   const look = (tab: MainTab, drawn: Omit<TabLook, "selected" | "onSelect">) => ({
@@ -252,7 +258,8 @@ function agentTabs(input: {
       agent,
       look: look(tab, {
         ...tabLook({ kind: TAB_KIND.AGENT, name: label, agent }),
-        endMark: agentEndMark(agent, false),
+        endMark:
+          agentEndMark(agent, false) ?? (drafted.includes(agent.id) ? <DraftMark /> : undefined),
         card: <AgentTabCard name={label} models={models} read={readCard} />,
       }),
       close: () => main.onClose(tab),
@@ -401,6 +408,7 @@ export function MainTabStrip({
   onOpenTerminal: (agentId: string) => void;
 }): React.JSX.Element {
   const copied = useTranscriptCopier();
+  const drafted = useDraftedAgents();
   const pinnedOf = (tab: ColumnPinnableTab) =>
     pins.pinned.some((pin) => pin.plan === plan.id && sameTab(pin.tab, tab));
   // A pinned Inbox stands whatever arrives, so it offers no close until unpinned.
@@ -422,7 +430,7 @@ export function MainTabStrip({
   // The agents', the draft's, and the Inbox's tabs in the column's order,
   // which the developer's moves and the Inbox's opening set (`use-main-tabs.ts`).
   const own = inPlanOrder(
-    [...agentTabs({ main, agents, unread, views, copied }), ...inboxTab],
+    [...agentTabs({ main, agents, unread, views, copied, drafted }), ...inboxTab],
     main.tabs,
     (entry) => entry.tab,
   );
