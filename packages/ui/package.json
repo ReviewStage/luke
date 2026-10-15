@@ -19,6 +19,7 @@
     "./search-tokens": "./src/search-tokens.js",
     "./skill-mention": "./src/skill-mention.js",
     "./tab-strip-model": "./src/tab-strip-model.js",
+    "./task-list-model": "./src/task-list-model.js",
     "./integration-search": "./src/integration-search.js",
     "./agent-servers-model": "./src/agent-servers-model.js",
     "./held-link": "./src/held-link.js",

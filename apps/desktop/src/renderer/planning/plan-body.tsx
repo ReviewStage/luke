@@ -71,7 +71,8 @@ import { NO_LOOKS, type PlanLooks } from "./use-plan-looks";
  * they dismiss them or leave the plan (`use-plan-looks.ts`).
  * The plan's name is drawn as the title over its text (`plan-title.tsx`),
  * and each section is known by its heading, and its link by the heading's
- * anchor (`sectionAnchors`).
+ * anchor (`sectionAnchors`). A Mermaid fence draws as its diagram once Luke
+ * has finished typing it (`../plan-diagram.tsx`).
  *
  * On a plan's own page each section has a link: its ⋯, shown while the
  * pointer or the keyboard is on it, copies the section's mention
@@ -594,6 +595,7 @@ function DocumentUnit({
       edit={view.edit}
       link={link}
       openLink={openLink}
+      diagrams
     />
   );
   const menu =

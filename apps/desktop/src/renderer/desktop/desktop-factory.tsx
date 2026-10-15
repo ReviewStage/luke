@@ -1,6 +1,7 @@
 import type { PlanSummary } from "@luke/features/plan-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { CodingAgentsIcon } from "@luke/ui";
+import { type Actor, teammateCreator } from "@luke/ui/actor-model";
 import {
   ArrowRightIcon,
   AudioLinesIcon,
@@ -11,8 +12,10 @@ import {
 } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
+import { ACTOR_SIZE, ActorMark, CreatorHeard } from "../actor-ref";
 import { useAppCommand } from "../app-commands";
-import { useOpenFeedback } from "../open-feedback";
+import { ExperimentTag, SendFeedbackButton } from "../experiment-marks";
+import { MemberDirectory, useMemberDirectory } from "../member-directory";
 import { NEEDS_YOU } from "../planning/inbox-model";
 import { useMinute } from "../planning/plan-time";
 import { PullRequestMark } from "../planning/pull-request-mark";
@@ -57,7 +60,7 @@ import { planCardOf } from "./plan-card";
  * nothing else moves, and the times count on with the window's minute.
  * Escape leaves it for the plan it stood over, and so does any row of the
  * sidebar. It is an experiment (`EXPERIMENT.FACTORY`): every door to it is
- * gated on the account's switch, and its toolbar says so with a quiet badge
+ * gated on the account's switch, and its toolbar says so with the Experimental tag
  * and Send feedback.
  */
 
@@ -149,16 +152,19 @@ function useRowSlide(root: HTMLElement | null, board: FactoryBoard): void {
   }, [root, board]);
 }
 
-/** A row as the sidebar draws a plan: its glyph, its words, and how long ago it moved, or a word in its time's place; one waiting on the developer in the unread weight with a dot past its time. Its hover hangs `card`, or says its words whole. */
+/** A row as the sidebar draws a plan: its glyph, its words, and how long ago it moved, or a word in its time's place, led by its creator's face where a teammate created its task; one waiting on the developer in the unread weight with a dot past its time. Its hover hangs `card`, or says its words whole. */
 function FactoryRow({
   slide,
   glyph,
   words,
   time,
   waiting = false,
+  creator,
   card,
   onOpen,
 }: {
+  /** Who created the row's task, where a teammate did, worn before its time. */
+  creator?: Actor | undefined;
   /** What the row is across steps, so a move slides it: its plan, or its question. */
   slide: string;
   glyph: React.ReactNode;
@@ -182,7 +188,9 @@ function FactoryRow({
           <span className="sidebar-plan-line">
             <span className="sidebar-pinned-tab-glyph">{glyph}</span>
             <span className="sidebar-plan-name">{words}</span>
+            {creator === undefined ? null : <CreatorHeard actor={creator} />}
             <span className="sidebar-plan-time">
+              {creator === undefined ? null : <ActorMark actor={creator} size={ACTOR_SIZE.MARK} />}
               {"word" in time ? time.word : <RelativeTime at={time.at} now={now} hint={false} />}
             </span>
             {waiting ? (
@@ -280,6 +288,8 @@ function Line({
   now: number;
 }): React.JSX.Element {
   const card = (plan: PlanSummary) => planCardOf(plans, plan, now);
+  const reader = useMemberDirectory();
+  const creator = (plan: PlanSummary) => teammateCreator(plan, reader);
   const order = (step: FactoryStep) =>
     board.questions.length > 0 && board.merges.length > 0
       ? board.first === step
@@ -297,6 +307,7 @@ function Line({
       glyph={onCall ? <CallGlyph /> : <FileTextIcon />}
       words={plan.name}
       time={onCall ? { word: "On a call" } : { at: plan.updatedAt }}
+      creator={creator(plan)}
       card={card(plan)}
       onOpen={() => plans.onSelect(plan.id)}
     />
@@ -314,6 +325,7 @@ function Line({
       }
       words={plan.name}
       time={{ at: agent?.at ?? plan.updatedAt }}
+      creator={creator(plan)}
       card={card(plan)}
       onOpen={() =>
         agent === undefined ? plans.onSelect(plan.id) : plans.onShowAgent(plan.id, agent.id)
@@ -339,6 +351,7 @@ function Line({
       words={ready.plan.name}
       time={{ word: `#${ready.pullRequest.number}` }}
       waiting
+      creator={creator(ready.plan)}
       card={card(ready.plan)}
       onOpen={() => openMerge(plans, ready)}
     />
@@ -350,6 +363,7 @@ function Line({
       glyph={<CircleCheckIcon className="factory-shipped" />}
       words={plan.name}
       time={{ at }}
+      creator={creator(plan)}
       card={card(plan)}
       onOpen={() => plans.onSelect(plan.id)}
     />
@@ -449,7 +463,6 @@ function Summary({
 /** The window's Factory, in the plan's place: the line as it stands now. */
 export function DesktopFactory({ plans }: { plans: PlansControl }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_FACTORY, plans.factoryView.onClose);
-  const openFeedback = useOpenFeedback();
   const now = useMinute();
   const board = useFactoryBoard(plans, now);
   const [root, setRoot] = useState<HTMLElement | null>(null);
@@ -465,16 +478,10 @@ export function DesktopFactory({ plans }: { plans: PlansControl }): React.JSX.El
       <header className="desktop-toolbar">
         <div className="desktop-toolbar-heading">
           <h1 className="desktop-toolbar-title">Factory</h1>
-          <span className="integration-tool-badge experiment-badge">Experimental</span>
+          <ExperimentTag />
         </div>
         <div className="desktop-toolbar-actions">
-          <button
-            type="button"
-            className="experiment-feedback"
-            onClick={() => openFeedback(EXPERIMENT.FACTORY)}
-          >
-            Send feedback
-          </button>
+          <SendFeedbackButton experiment={EXPERIMENT.FACTORY} />
         </div>
       </header>
       <div className="factory-scroll">
@@ -483,7 +490,10 @@ export function DesktopFactory({ plans }: { plans: PlansControl }): React.JSX.El
         ) : (
           <Summary plans={plans} board={board} />
         )}
-        <Line plans={plans} board={board} now={now} />
+        {/* A teammate's task names its creator against the listed workspace's members. */}
+        <MemberDirectory workspace={plans.workspace} readerId={plans.me}>
+          <Line plans={plans} board={board} now={now} />
+        </MemberDirectory>
         {empty ? (
           <div className="factory-empty">
             <span>Talk an idea through with Luke to start.</span>

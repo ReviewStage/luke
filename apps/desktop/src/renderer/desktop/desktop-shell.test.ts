@@ -24,6 +24,7 @@ import { useAct } from "../act";
 import { runAppCommand } from "../app-commands";
 import { callControls } from "../call/call-card";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
+import { MAIN_TAB } from "../planning/use-main-tabs";
 import { AUTOMATIONS_PAGE, type PlansControl } from "../planning/use-plans-tab";
 import type { SettingsPanelProps } from "../settings/settings-panel";
 import { DesktopShell } from "./desktop-shell";
@@ -128,7 +129,6 @@ function mount(
         accountRequired: false,
         onBeginSignIn: ignore,
         onCancelSignIn: ignore,
-        signInFace: { play: 0 },
       },
       tab,
       onTabChange,
@@ -298,6 +298,40 @@ test("the window is called by what stands in it: the plan on screen in its own w
     region: { kind: DOCUMENT_REGION.READY, plan: DOCUMENT_PLAN },
   });
   assert.equal(document.title, "Factory — Acme");
+});
+
+test("a plan opened on its Inbox tab rather than its own is read at once, its row out of the unread weight, while the window's Inbox standing in its place leaves it unread", () => {
+  const unreadOnOpen = (inboxOpen: boolean) => {
+    window.localStorage.setItem("luke.planLooks", JSON.stringify({ [DOCUMENT_PLAN.id]: 1 }));
+    window.localStorage.setItem("luke.planLooksSeeded", "1");
+    const page = mount(
+      inboxOpen,
+      false,
+      {
+        page: PLANS_PAGE.DOCUMENT,
+        plans: [DOCUMENT_PLAN],
+        activePlanId: DOCUMENT_PLAN.id,
+        region: { kind: DOCUMENT_REGION.READY, plan: DOCUMENT_PLAN },
+        mainTabs: {
+          ...plansControl().mainTabs,
+          tabs: [MAIN_TAB.PLAN, MAIN_TAB.INBOX],
+          tab: MAIN_TAB.INBOX,
+        },
+      },
+      PANEL_TAB.PLANS,
+      ignore,
+      { collapsed: false },
+    );
+    const row = page.querySelector(".sidebar-plan");
+    assert.ok(row, "the plan's row stands in the sidebar");
+    const unread = row.getAttribute("data-unread");
+    act(() => root?.unmount());
+    window.localStorage.clear();
+    return unread;
+  };
+
+  assert.equal(unreadOnOpen(false), "false");
+  assert.equal(unreadOnOpen(true), "true");
 });
 
 /** Lets every promise settled so far run its continuations. */
@@ -494,7 +528,6 @@ function CallShell({ place, folded }: { place: Place; folded: boolean }): React.
       accountRequired: false,
       onBeginSignIn: ignore,
       onCancelSignIn: ignore,
-      signInFace: { play: 0 },
     },
     tab,
     onTabChange: ignore,

@@ -12,15 +12,16 @@ import {
   UnarchiveIcon,
   UnpinIcon,
 } from "@luke/ui";
-import { accountActor, creatorActor } from "@luke/ui/actor-model";
+import { accountActor, creatorActor, teammateCreator } from "@luke/ui/actor-model";
 import { confirmAsked } from "@luke/ui/confirm-state";
 import { DOCUMENT_REGION, PLAN_MARK, type PlanMark } from "@luke/ui/planning-model";
 import { FolderInputIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
-import { ActorRef } from "../actor-ref";
+import { ACTOR_SIZE, ActorMark, ActorRef, CreatorHeard } from "../actor-ref";
 import { useAppCommand } from "../app-commands";
 import { useCopyToast } from "../copy-feedback";
+import { useMemberDirectory } from "../member-directory";
 import { EditedBy, type EditPlace, useEditReader } from "../planning/edit-ref";
 import { lastEditOf } from "../planning/plan-body";
 import {
@@ -396,8 +397,14 @@ export function PlanActions({
  * body's weight unless the plan is unread, and at the row's end how long ago
  * it was last updated, led by one mark for a repository that belongs to
  * another workspace, an agent at work, or a pull request (`plan-card.tsx`),
- * the first named in the row's card, which Pin and Archive stand in place of while
- * the row is hovered or reached from the keyboard.
+ * the first named in the row's card, and before that, on a task someone else
+ * created, its creator's face (`teammateCreator`), read against the members
+ * of the directory around the list; the reader's own tasks wear none. A row
+ * says what its group does not: its repository's name, muted, where its
+ * group is not its repository's, and no face where its group is its
+ * creator's. Its time is the one the list's order chooses. Pin
+ * and Archive stand in place of all of it while the row is hovered or
+ * reached from the keyboard.
  * A press opens it, and a right-click offers its actions where the pointer is. Renamed,
  * the row is its name's field until the edit ends, and a key that ends it
  * hands focus back to the row.
@@ -409,6 +416,9 @@ export function SidebarPlan({
   current,
   unread,
   now,
+  at = plan.updatedAt,
+  repository,
+  face = true,
   onOpen,
 }: {
   plans: PlansControl;
@@ -419,6 +429,12 @@ export function SidebarPlan({
   unread: boolean;
   /** The time the row's last update is counted back from. */
   now: number;
+  /** The time the row shows, which the list's order chooses: its last update unless said. */
+  at?: number;
+  /** The repository's name the row says, muted before its time, where its group does not say it. */
+  repository?: string | undefined;
+  /** Whether a teammate's task wears its creator's face, which a group by creator says instead. */
+  face?: boolean;
   onOpen: () => void;
 }): React.JSX.Element {
   const rename = usePlanRename(plan.id, plans.onRenamePlan);
@@ -426,6 +442,8 @@ export function SidebarPlan({
     rename: rename.begin,
     drawn: true,
   });
+  const teammate = teammateCreator(plan, useMemberDirectory());
+  const creator = face ? teammate : undefined;
   const row = useRef<HTMLButtonElement | null>(null);
   const item = useRef<HTMLLIElement | null>(null);
   const refocus = useRef(false);
@@ -469,9 +487,16 @@ export function SidebarPlan({
             <span className="sidebar-plan-line">
               <span className="sidebar-plan-name">{plan.name}</span>
               {unread ? <span className="visually-hidden">(unread)</span> : null}
+              {creator === undefined ? null : <CreatorHeard actor={creator} />}
               <span className="sidebar-plan-time">
+                {repository === undefined ? null : (
+                  <span className="sidebar-plan-repository">{repository}</span>
+                )}
+                {creator === undefined ? null : (
+                  <ActorMark actor={creator} size={ACTOR_SIZE.MARK} />
+                )}
                 <PlanStatusMark plan={plan} stranded={strandedHome(plans, plan)} />
-                <RelativeTime at={plan.updatedAt} now={now} hint={false} />
+                <RelativeTime at={at} now={now} hint={false} />
               </span>
             </span>
           </button>

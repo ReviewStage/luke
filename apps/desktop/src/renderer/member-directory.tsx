@@ -1,7 +1,10 @@
+import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
+import type { PlanSummary } from "@luke/features/plan-wire";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
-import { type Actor, personActor } from "@luke/ui/actor-model";
+import { type Actor, accountActor, creatorActor, personActor } from "@luke/ui/actor-model";
 import { createContext, type ReactNode, useContext } from "react";
 import { useWorkspaceMembers } from "./planning/use-workspace-members";
+import { useAppState } from "./use-app-state";
 
 /**
  * member-directory.tsx -- the members of the workspace the open plan lives in, read once for everything in the plan that names a person.
@@ -50,4 +53,21 @@ export function usePerson(
 ): Actor {
   const { members, readerId } = useMemberDirectory();
   return personActor(ref, members, readerId);
+}
+
+/**
+ * Who created a task, as the directory around the caller draws them
+ * (`creatorActor`). Note that a task the list names by its owner's id alone
+ * is the reader's own wherever that id is theirs, drawn as their account
+ * signs in, so a members read that failed never names their own task as
+ * someone's; `readerId` stands for the reader outside a directory.
+ */
+export function useCreator(
+  plan: Pick<PlanSummary, "createdBy" | "ownerId">,
+  readerId?: string | undefined,
+): Actor {
+  const directory = useMemberDirectory();
+  const account = useAppState()?.account;
+  const you = account?.status === ACCOUNT_STATUS.SIGNED_IN ? accountActor(account) : undefined;
+  return creatorActor(plan, { ...directory, readerId: directory.readerId ?? readerId }, you);
 }

@@ -399,6 +399,62 @@ test("a settled choice keeps every option its agent offered with the developer's
   assert.ok(reply.querySelector(".actor-ref[data-kind='person']"), "the answerer by their disc");
 });
 
+/** An item's options as a reader meets them: each label, then its Recommended badge's words, and whether the badge has gone quiet, where it wears one. */
+function optionHeads(page: HTMLElement, option: string): (string | null | undefined)[][] {
+  const pane = page.querySelector<HTMLElement>(".inbox-view-items");
+  assert.ok(pane, "the pane is drawn");
+  return [...pane.querySelectorAll<HTMLElement>(option)].map((each) => {
+    const badge = each.querySelector<HTMLElement>(".inbox-option-head > .inbox-recommended");
+    return [
+      each.querySelector(".font-medium")?.textContent,
+      badge?.textContent ?? null,
+      badge?.dataset.settled ?? null,
+    ];
+  });
+}
+
+test("a waiting choice wears a Recommended badge at the head of the option its agent recommends and of no other, and a choice recommending nothing wears none", async () => {
+  const { page } = mount();
+  await settle();
+  assert.deepEqual(optionHeads(page, "button.inbox-option"), [
+    ["Retry 3 times over an hour", "Recommended", "false"],
+    ["Retry once", null, null],
+  ]);
+
+  act(() => root?.unmount());
+  root = undefined;
+  const response = {
+    type: INBOX_RESPONSE.CHOICE,
+    options: [{ label: "Retry 3 times over an hour" }, { label: "Retry once" }],
+  };
+  inboxes.set(BILLING.id, [{ ...THRESHOLD, response }, RETRY]);
+  const again = mount();
+  await settle();
+  assert.deepEqual(optionHeads(again.page, "button.inbox-option"), [
+    ["Retry 3 times over an hour", null, null],
+    ["Retry once", null, null],
+  ]);
+});
+
+test("a settled choice whose pick is not the one recommended marks each apart: the pick by whose it was, and the recommended option by its badge, gone quiet", async () => {
+  inboxes.set(BILLING.id, [
+    THRESHOLD,
+    { ...RETRY, answer: { reply: INBOX_REPLY.CHOSE, choices: ["Retry once"] } },
+  ]);
+  const { page } = mount();
+  await settle();
+  act(() => rowNamed(page, "How is a failed email retried?").click());
+  await settle();
+
+  assert.deepEqual(optionHeads(page, "li.inbox-option"), [
+    ["Retry 3 times over an hour", "Recommended", "true"],
+    ["Retry once", null, null],
+  ]);
+  const picked = page.querySelector<HTMLElement>('li.inbox-option[data-picked="true"]');
+  assert.equal(picked?.querySelector(".font-medium")?.textContent, "Retry once");
+  assert.equal(wordsOf(picked?.querySelector(".inbox-picked")), "Your pick");
+});
+
 test("a teammate's answer names them by their disc and name, beside their pick and over what they chose, and their name hangs their card", async () => {
   const CHARLES = { userId: "user-charles", name: "Charles Pan" };
   inboxes.set(BILLING.id, [THRESHOLD, { ...RETRY, answeredBy: CHARLES }]);
@@ -833,27 +889,26 @@ test("an Inbox with nothing in it stands its empty state in the pane beside the 
   assert.equal(emptyStateIn(page, ".inbox-plans"), "Nothing needs you");
 });
 
-test("an Inbox too narrow for the list and the item side by side shows its list alone, the whole Inbox wide; a press opens the item alone under a way back, which, Back's chord, and Escape each take, the keyboard landing on the item's row, before Escape leaves the Inbox", async () => {
+test("an Inbox too narrow for the list and the item side by side shows the chosen item alone, the whole Inbox wide, under a way back that Back's chord and Escape take as well, the keyboard landing on the item's row; a row pressed opens its item again, and from the list Escape leaves the Inbox", async () => {
   const { page, asked } = mount();
   await settle();
   layOut(page, 800);
-  assert.deepEqual(columnsShown(page), ["list"]);
-  assert.equal(listEdge(page), null, "a list standing alone has no edge to drag");
-
-  act(() => rowNamed(page, "Alert at 80%?").click());
   assert.deepEqual(columnsShown(page), ["item"]);
   assert.equal(page.querySelector("[data-inbox-title]")?.textContent, "Alert at 80%?");
   assert.equal(backToList(page).textContent, "Inbox");
-  assert.ok(document.activeElement === backToList(page), "the keyboard lands on the way back");
 
   act(() => backToList(page).click());
   assert.deepEqual(columnsShown(page), ["list"]);
+  assert.equal(listEdge(page), null, "a list standing alone has no edge to drag");
   assert.ok(
     document.activeElement === rowNamed(page, "Alert at 80%?"),
     "the keyboard is on its row",
   );
 
   act(() => rowNamed(page, "Expire after 7 days?").click());
+  assert.deepEqual(columnsShown(page), ["item"]);
+  assert.equal(page.querySelector("[data-inbox-title]")?.textContent, "Expire after 7 days?");
+  assert.ok(document.activeElement === backToList(page), "the keyboard lands on the way back");
   act(() => runAppCommand(APP_COMMAND.BACK));
   assert.deepEqual(columnsShown(page), ["list"]);
   assert.ok(
@@ -868,35 +923,30 @@ test("an Inbox too narrow for the list and the item side by side shows its list 
   assert.equal(asked.closed, 1, "from the list, Escape leaves the Inbox");
 });
 
-test("the Inbox splits again only once widened past the band, an item a press opened standing beside the list, and joins again only once narrowed past it; narrowed with nothing pressed, it lands on its list, the keyboard on the chosen row where the item held it", async () => {
+test("the Inbox joins only once narrowed past the band, keeping the item it shows, and splits again only once widened past it; split again, it forgets the list was asked for, so narrowed it lands on its item", async () => {
   const { page } = mount();
   await settle();
   layOut(page, 900);
   assert.deepEqual(columnsShown(page), ["list", "item"]);
   layOut(page, 860);
   assert.deepEqual(columnsShown(page), ["list", "item"], "within the band it stays split");
-  const option = page.querySelector<HTMLElement>(".inbox-view-items button");
-  assert.ok(option, "the item offers a press");
-  option.focus();
+  rowNamed(page, "Alert at 80%?").focus();
   layOut(page, 850);
-  assert.deepEqual(columnsShown(page), ["list"], "the item it chose for itself is not opened");
+  assert.deepEqual(columnsShown(page), ["item"], "narrowed, the item it shows stays");
+  assert.equal(page.querySelector("[data-inbox-title]")?.textContent, "Alert at 80%?");
   assert.ok(
-    document.activeElement === rowNamed(page, "Alert at 80%?"),
-    "the keyboard leaves the hidden item for its row",
+    document.activeElement === backToList(page),
+    "the keyboard leaves the hidden row for the item's way back",
   );
 
-  act(() => rowNamed(page, "Expire after 7 days?").click());
+  act(() => backToList(page).click());
   layOut(page, 880);
-  assert.deepEqual(columnsShown(page), ["item"], "within the band it stays one column");
+  assert.deepEqual(columnsShown(page), ["list"], "within the band it stays one column");
   layOut(page, 900);
   assert.deepEqual(columnsShown(page), ["list", "item"]);
-  assert.deepEqual(
-    listed(page).filter((row) => row.startsWith("▸")),
-    ["▸ *Expire after 7 days?"],
-  );
   assert.equal(page.querySelector(".inbox-view-items button.inbox-back"), null);
   layOut(page, 800);
-  assert.deepEqual(columnsShown(page), ["item"], "an item a press opened stays open");
+  assert.deepEqual(columnsShown(page), ["item"]);
 });
 
 /** An answer the act gives the renderer, the view it carries settled now. */
@@ -1213,12 +1263,13 @@ test("an agent whose waiting items come back to what it was read for lets go of 
   assert.ok(listed(page).includes("*Skip the slow suite?"), listed(page).join(" | "));
 });
 
-test("an item chosen by a notification's click, in an Inbox showing one column, is shown itself rather than the list", async () => {
+test("an item chosen by a notification's click, in an Inbox showing its list alone, is shown itself, and Back stands on the list again, the notification's ask taken once", async () => {
   agentInboxes = new Map([[SECOND_AGENT, [SECOND_ASK, THIRD_ASK]]]);
   const { page } = mount([QUARANTINE, SECOND_ASK, THIRD_ASK].map(waitingPlanless));
   await settle();
   layOut(page, 700);
   await settle();
+  act(() => backToList(page).click());
   assert.equal(page.querySelector(".inbox-view")?.getAttribute("data-columns"), "list");
 
   act(() => chooseFromOutside({ agentId: SECOND_AGENT, itemId: SECOND_ASK.id, opened: true }));
@@ -1227,7 +1278,7 @@ test("an item chosen by a notification's click, in an Inbox showing one column, 
   assert.equal(page.querySelector(".inbox-view")?.getAttribute("data-columns"), "item");
   assert.equal(page.querySelector("[data-inbox-title]")?.textContent, "Skip the slow suite?");
 
-  act(() => page.querySelector<HTMLButtonElement>(".inbox-back")?.click());
+  act(() => backToList(page).click());
   await settle();
   assert.equal(
     page.querySelector(".inbox-view")?.getAttribute("data-columns"),

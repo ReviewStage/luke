@@ -29,7 +29,10 @@ import { HISTORY_READ, type PlanHistoryControl, type ViewedVersion } from "./use
  * show. The version is drawn whole against the version before it, which
  * shows what that revision changed: words written in wear the accent and
  * words struck out are struck, so neither reads by its colour alone
- * (`plan-history-model.ts`). A version is drawn under the plan's name, as
+ * (`plan-history-model.ts`). A Mermaid fence draws as its diagram, and one
+ * whose code the revision changed as its code with the changes marked,
+ * since two diagrams side by side would hide what changed (`../plan-diagram.tsx`).
+ * A version is drawn under the plan's name, as
  * the plan's own tab draws it. The first version has nothing before it, so
  * it is drawn with nothing marked. A section opened from its revision's
  * list is drawn alone, without the plan's name over it, marked as the whole
@@ -108,6 +111,7 @@ function VersionBody({
           edit={unit.marks.length === 0 ? undefined : { marks: unit.marks }}
           link={link}
           openLink={openLink}
+          diagrams
         />
       ))}
     </div>

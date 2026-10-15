@@ -18,10 +18,12 @@ import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeAll, test, vi } from "vitest";
+import { APP_COMMAND } from "#shared/shortcuts";
 import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
 import { codingAgentsControl, plansControl, UNPINNED_SUMMARY } from "#testing/plans-control";
 import { relayout } from "#testing/resize-observer";
+import { runAppCommand } from "../app-commands";
 import { MAIN_TAB } from "../planning/use-main-tabs";
 import { NO_LOOKS } from "../planning/use-plan-looks";
 import { SIDE_PANEL_TAB } from "../planning/use-side-panel";
@@ -170,7 +172,26 @@ test("a plan's Inbox tab whose read holds nothing says nothing needs you under t
   container.remove();
 });
 
-test("a plan's Inbox tab too narrow for its list and the item side by side shows its list alone, a press opening the item alone under a way back to the list", async () => {
+/** An item of the plan's agent, open and asking for an approval, as the service answers one. */
+function approvalItem(id: string, title: string, at: number): InboxItem {
+  return {
+    id,
+    agentId: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
+    key: id.slice(-4),
+    revision: 1,
+    version: INBOX_WIRE_VERSION,
+    title,
+    blocks: [],
+    response: { type: INBOX_RESPONSE.APPROVAL },
+    needsReply: true,
+    status: INBOX_STATUS.OPEN,
+    postedAt: at,
+    updatedAt: at,
+  };
+}
+
+/** The plan's Inbox tab over the items given, laid out 700px wide, too narrow for its list and the item side by side. */
+async function narrowPlanInbox(items: readonly InboxItem[]) {
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
     value: () => ({
@@ -179,21 +200,6 @@ test("a plan's Inbox tab too narrow for its list and the item side by side shows
       removeEventListener: () => undefined,
     }),
   });
-  const agentId = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
-  const asked: InboxItem = {
-    id: "a1b2c3d4-0000-4000-8000-000000000001",
-    agentId,
-    key: "0001",
-    revision: 1,
-    version: INBOX_WIRE_VERSION,
-    title: "Expire after 7 days?",
-    blocks: [],
-    response: { type: INBOX_RESPONSE.APPROVAL },
-    needsReply: true,
-    status: INBOX_STATUS.OPEN,
-    postedAt: 1_000,
-    updatedAt: 1_000,
-  };
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   act(() =>
@@ -214,10 +220,10 @@ test("a plan's Inbox tab too narrow for its list and the item side by side shows
               tab: MAIN_TAB.INBOX,
             },
             agents: codingAgentsControl({
-              agentIds: [agentId],
+              agentIds: ["8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21"],
               readInbox: ({ after }) =>
                 after === INBOX_CURSOR_START
-                  ? Promise.resolve({ items: [asked], cursor: "1" })
+                  ? Promise.resolve({ items, cursor: "1" })
                   : new Promise(() => undefined),
             }),
           }),
@@ -234,19 +240,48 @@ test("a plan's Inbox tab too narrow for its list and the item side by side shows
     DOMRect.fromRect({ width: 700, height: 800 }),
   );
   act(() => relayout());
-  const list = tab.querySelector(".inbox-plans");
-  const pane = () => tab.querySelector(".inbox-view-items");
-  assert.deepEqual([list?.hasAttribute("hidden"), pane()?.hasAttribute("hidden")], [false, true]);
+  return {
+    /** What a reader finds standing: the list or the item, and the item's title. */
+    standing: () => [
+      tab.querySelector(".inbox-plans")?.hasAttribute("hidden") === false ? "list" : "",
+      tab.querySelector(".inbox-view-items")?.hasAttribute("hidden") === false
+        ? (tab.querySelector("[data-inbox-title]")?.textContent ?? "item")
+        : "",
+    ],
+    back: () => tab.querySelector<HTMLButtonElement>("button.inbox-back"),
+    row: (title: string) =>
+      [...tab.querySelectorAll<HTMLButtonElement>(".inbox-plans .sidebar-plan")].find((each) =>
+        each.textContent?.includes(title),
+      ),
+    unmount: () => {
+      act(() => root.unmount());
+      container.remove();
+    },
+  };
+}
 
-  const row = tab.querySelector<HTMLButtonElement>(".inbox-plans .sidebar-plan");
-  act(() => row?.click());
-  assert.deepEqual([list?.hasAttribute("hidden"), pane()?.hasAttribute("hidden")], [true, false]);
-  const back = tab.querySelector<HTMLButtonElement>("button.inbox-back");
-  assert.equal(back?.textContent, "Inbox");
-  act(() => back?.click());
-  assert.deepEqual([list?.hasAttribute("hidden"), pane()?.hasAttribute("hidden")], [false, true]);
-  act(() => root.unmount());
-  container.remove();
+test("a plan's Inbox tab too narrow for its list and the item side by side is the item it holds, with no way back to a list of one", async () => {
+  const inbox = await narrowPlanInbox([
+    approvalItem("a1b2c3d4-0000-4000-8000-000000000001", "Expire after 7 days?", 1_000),
+  ]);
+  assert.deepEqual(inbox.standing(), ["", "Expire after 7 days?"]);
+  assert.equal(inbox.back(), null, "no way back to a list of one");
+  assert.equal(runAppCommand(APP_COMMAND.BACK), false, "nor does Back's chord go to one");
+  inbox.unmount();
+});
+
+test("a plan's Inbox tab too narrow for its list and the item side by side shows the chosen item under a way back to the list, whose rows open their items again", async () => {
+  const inbox = await narrowPlanInbox([
+    approvalItem("a1b2c3d4-0000-4000-8000-000000000001", "Expire after 7 days?", 1_000),
+    approvalItem("a1b2c3d4-0000-4000-8000-000000000002", "Resend on bounce?", 2_000),
+  ]);
+  assert.deepEqual(inbox.standing(), ["", "Resend on bounce?"], "the newest that needs you");
+  assert.equal(inbox.back()?.textContent, "Inbox");
+  act(() => inbox.back()?.click());
+  assert.deepEqual(inbox.standing(), ["list", ""]);
+  act(() => inbox.row("Expire after 7 days?")?.click());
+  assert.deepEqual(inbox.standing(), ["", "Expire after 7 days?"]);
+  inbox.unmount();
 });
 
 test("the crumb's workspace opens that workspace's home page, the window switching to it first where another is listed", () => {

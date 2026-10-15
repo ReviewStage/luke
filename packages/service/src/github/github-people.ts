@@ -18,7 +18,7 @@
 
 import { Database, type DatabaseServices } from "@luke/database/core/query";
 import { account, member } from "@luke/database/schemas/auth";
-import type { CodingAgentChanges, GitHubPerson } from "@luke/features/coding-agent-wire";
+import type { CodingAgentChangesPeople, GitHubPerson } from "@luke/features/coding-agent-wire";
 import { and, eq, inArray } from "drizzle-orm";
 import { Effect, Option, type Redacted, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
@@ -27,10 +27,7 @@ import { GITHUB_PROVIDER_ID, GitHubApp } from "./github-app.js";
 import { type GitHubAccount, type PullRequestPeople, pullRequestPeople } from "./pull-requests.js";
 
 /** What an agent's changes say of who their pull request names; every key absent where the people could not be read. */
-export type ChangesPeople = Pick<
-  CodingAgentChanges,
-  "author" | "reviewers" | "commitAuthors" | "comments"
->;
+type ChangesPeople = CodingAgentChangesPeople;
 
 const findLinkedMembers = SqlSchema.findAll({
   Request: Schema.Struct({

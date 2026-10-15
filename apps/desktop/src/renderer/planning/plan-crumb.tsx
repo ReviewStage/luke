@@ -1,19 +1,22 @@
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import type { PlanSummary } from "@luke/features/plan-wire";
 import type { PlanningRepositoriesAnswer } from "@luke/features/planning-view";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { SETTINGS_SECTION, SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { ProviderMark } from "@luke/ui";
-import { memberActor, ROLE_WORDS } from "@luke/ui/actor-model";
+import { type Actor, actorName, memberActor, ROLE_WORDS } from "@luke/ui/actor-model";
 import { ChevronRightIcon, GitBranchIcon, LockIcon } from "lucide-react";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, ActorStack, YouBadge } from "../actor-ref";
 import { WORKSPACE_REF_SIZE, WorkspaceCard, WorkspaceRef } from "../desktop/workspace-ref";
 import { WorkspaceTile } from "../desktop/workspace-tile";
 import { CardHead, CardNote, CardRule, HoverCard } from "../hover-card";
-import { useMemberDirectory } from "../member-directory";
+import { useCreator, useMemberDirectory } from "../member-directory";
 import { useOpenSettings } from "../open-settings";
 import { RepositoryPicture } from "../repository-picture";
 import { Tooltip } from "../tooltip";
+import { useMinute } from "./plan-time";
+import { RelativeTime } from "./relative-time";
 
 /**
  * plan-crumb.tsx -- the line over a plan's title that says where it lives and who can edit it: "Acme › relay", then "5 can edit".
@@ -33,7 +36,9 @@ import { Tooltip } from "../tooltip";
  * stands who can edit: the first few members' faces and "5 can edit", or a
  * lock and "Only you" for a workspace of one. Resting on it hangs a card
  * listing everyone by name and role, and pressing it opens the workspace's
- * members in Settings. Each face is drawn as the window draws any person
+ * members in Settings. Where the list names who created the task, its
+ * creator leads the faces and the list, the card says "Created by Charles
+ * Pan · 3d ago" over the list, and the creator's row says so beside their role. Each face is drawn as the window draws any person
  * (`actor-ref.tsx`): the member's sign-in picture where the members read
  * lists one, their letter on its hue otherwise, and the reader's own row
  * wears You. The members are the plan's directory's (`member-directory.tsx`),
@@ -52,13 +57,57 @@ function editorsOf(
   return workspace.memberCount ?? members?.length;
 }
 
-/** The card hung from the crumb's end: everyone who can edit, by name and role. */
+/** Who created the task, and when, where the list names its creator. */
+interface Creation {
+  readonly creator: Actor;
+  /** The creator's account id, whose row leads the faces and the list. */
+  readonly userId: string;
+  readonly at: number;
+}
+
+/** What a task's creation says to the crumb; none where the list names no creator. */
+function useCreation(
+  created: Pick<PlanSummary, "createdBy" | "ownerId" | "createdAt"> | undefined,
+): Creation | undefined {
+  const creator = useCreator(created ?? {});
+  const userId = created?.createdBy?.userId ?? created?.ownerId;
+  if (created === undefined || userId === undefined) return undefined;
+  return { creator, userId, at: created.createdAt };
+}
+
+/** The members with the task's creator first, the rest in the members' own order. */
+function creatorFirst(
+  members: readonly WorkspaceMember[],
+  creation: Creation | undefined,
+): readonly WorkspaceMember[] {
+  if (creation === undefined) return members;
+  const isCreator = (member: WorkspaceMember) => member.userId === creation.userId;
+  return [...members.filter(isCreator), ...members.filter((member) => !isCreator(member))];
+}
+
+/** The card's line saying who created the task: "Created by [face] Charles Pan · 3d ago". */
+function CreatedBy({ creation }: { creation: Creation }): React.JSX.Element {
+  const now = useMinute();
+  return (
+    <CardNote>
+      <span className="actor-line plan-crumb-created">
+        {"Created by "}
+        <ActorMark actor={creation.creator} />
+        {` ${actorName(creation.creator, { sentence: true })} · `}
+        <RelativeTime at={creation.at} now={now} hint={false} ago />
+      </span>
+    </CardNote>
+  );
+}
+
+/** The card hung from the crumb's end: who created the task, then everyone who can edit, by name and role. */
 function PeopleCard({
   workspace,
   members,
   count,
   archived,
   readerId,
+  creation,
 }: {
   workspace: Workspace;
   members: readonly WorkspaceMember[] | undefined;
@@ -66,6 +115,7 @@ function PeopleCard({
   archived: boolean;
   /** The reader's account id, whose own row wears You. */
   readerId: string | undefined;
+  creation: Creation | undefined;
 }): React.JSX.Element {
   const only = count <= 1;
   const note = archived
@@ -78,6 +128,7 @@ function PeopleCard({
         name={only ? "Only you" : `Everyone in ${workspace.name}`}
         sub={only ? `${workspace.name} has no other members` : `${count} members`}
       />
+      {only || creation === undefined ? null : <CreatedBy creation={creation} />}
       <CardNote>
         {only ? "Invite someone to this workspace and they can read and edit its tasks." : note}
       </CardNote>
@@ -85,12 +136,16 @@ function PeopleCard({
         <>
           <CardRule />
           <ul className="plan-crumb-people-list">
-            {members.map((member) => (
+            {creatorFirst(members, creation).map((member) => (
               <li key={member.userId}>
                 <ActorMark actor={memberActor(member, readerId)} size={ACTOR_SIZE.ROW} />
                 <span className="plan-crumb-person">{member.name}</span>
                 {member.userId === readerId ? <YouBadge /> : null}
-                <span className="plan-crumb-role">{ROLE_WORDS[member.role]}</span>
+                <span className="plan-crumb-role">
+                  {member.userId === creation?.userId
+                    ? `Creator · ${ROLE_WORDS[member.role]}`
+                    : ROLE_WORDS[member.role]}
+                </span>
               </li>
             ))}
           </ul>
@@ -107,6 +162,7 @@ function People({
   count,
   archived,
   readerId,
+  creation,
   onOpen,
 }: {
   workspace: Workspace;
@@ -114,6 +170,7 @@ function People({
   count: number;
   archived: boolean;
   readerId: string | undefined;
+  creation: Creation | undefined;
   onOpen: () => void;
 }): React.JSX.Element {
   const only = count <= 1;
@@ -127,6 +184,7 @@ function People({
           count={count}
           archived={archived}
           readerId={readerId}
+          creation={creation}
         />
       }
     >
@@ -140,7 +198,9 @@ function People({
           <>
             {members === undefined ? null : (
               <ActorStack
-                actors={members.map((member) => memberActor(member, readerId))}
+                actors={creatorFirst(members, creation).map((member) =>
+                  memberActor(member, readerId),
+                )}
                 drawn={FACES_DRAWN}
                 counted={false}
               />
@@ -291,16 +351,20 @@ export function PlanCrumb({
   workspace,
   repository,
   archived,
+  created,
   doors,
 }: {
   workspace: Workspace;
   /** The repository the plan is about, `owner/name`, or none. */
   repository: string | null;
   archived: boolean;
+  /** Who created the task and when, as the list names them; none where it names nobody. */
+  created?: Pick<PlanSummary, "createdBy" | "ownerId" | "createdAt"> | undefined;
   doors: PlanCrumbDoors;
 }): React.JSX.Element {
   const openSettings = useOpenSettings();
   const { members, readerId } = useMemberDirectory();
+  const creation = useCreation(created);
   const count = editorsOf(workspace, members);
   const page = { page: SETTINGS_VIEW.WORKSPACE, workspaceId: workspace.id };
   return (
@@ -335,6 +399,7 @@ export function PlanCrumb({
           count={count}
           archived={archived}
           readerId={readerId}
+          creation={creation}
           onOpen={() => openSettings({ ...page, section: SETTINGS_SECTION.MEMBERS })}
         />
       )}

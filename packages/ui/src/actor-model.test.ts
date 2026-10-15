@@ -22,6 +22,7 @@ import {
   latestActivity,
   personActor,
   SOMEONE_REASON,
+  teammateCreator,
 } from "./actor-model.js";
 
 /**
@@ -227,6 +228,25 @@ test("a plan's creator is the member it names, or, from a service that names onl
   assert.equal(called(creatorActor({ ownerId: DANA.userId }, SAM_READS, you)), "Dana Reyes");
   assert.deepEqual(creatorActor({ ownerId: SAM.userId }, unread, undefined), someone);
   assert.deepEqual(creatorActor({ ownerId: DANA.userId }, unread, you), someone);
+});
+
+test("a task wears its creator only where someone other than the reader created it, a member by their face and one whose account is gone on the outline", () => {
+  const dana = { createdBy: DANA_REF, ownerId: DANA.userId };
+  assert.equal(called(teammateCreator(dana, SAM_READS)), "Dana Reyes");
+  assert.equal(teammateCreator(dana, { ...SAM_READS, readerId: DANA.userId }), undefined);
+  // A member who left is drawn as having left, and an account that is gone sends only its id.
+  assert.deepEqual(teammateCreator(dana, { members: [SAM], readerId: SAM.userId }), {
+    kind: ACTOR_KIND.SOMEONE,
+    reason: SOMEONE_REASON.FORMER,
+    name: "Dana Reyes",
+  });
+  assert.deepEqual(teammateCreator({ ownerId: "user-gone" }, SAM_READS), {
+    kind: ACTOR_KIND.SOMEONE,
+    reason: SOMEONE_REASON.UNNAMED,
+  });
+  // Nobody is worn where the row cannot tell the task is someone else's.
+  assert.equal(teammateCreator({}, SAM_READS), undefined);
+  assert.equal(teammateCreator(dana, { members: [DANA, SAM], readerId: undefined }), undefined);
 });
 
 test("the signed-in account is drawn as the reader, by the name, address, and picture their sign-in holds", () => {

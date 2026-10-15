@@ -3,6 +3,7 @@ import { type AnyExtension, Editor, Extension } from "@tiptap/core";
 import Heading from "@tiptap/extension-heading";
 import Image from "@tiptap/extension-image";
 import { TaskItem, TaskList } from "@tiptap/extension-list";
+import Paragraph from "@tiptap/extension-paragraph";
 import { TableKit } from "@tiptap/extension-table";
 import { Placeholder } from "@tiptap/extensions";
 import { Markdown } from "@tiptap/markdown";
@@ -15,6 +16,7 @@ import type {
   PlanEditorPlacement,
   PlanEditorProps,
 } from "./contract";
+import { diagramPreview } from "./diagram-preview";
 import {
   documentManager,
   documentMarkdown,
@@ -31,12 +33,15 @@ import { planMentions } from "./plan-mentions";
  * plan-editor.ts -- a plan's text, edited in place on TipTap, drawn exactly as the document draws it.
  *
  * What the text may hold, and every shortcut for writing it, is TipTap's
- * own: StarterKit, `@tiptap/markdown`, task lists, tables, and images;
+ * own: StarterKit, `@tiptap/markdown`, task lists, tables, and images,
+ * each image inline in a paragraph even where it stands alone on its line;
  * underline alone is left out, because Markdown cannot store it and the
  * document could not draw it. A heading wears the read view's own class and
  * level, so the editor's words stand where the drawn words stood and opening
  * the text moves nothing. Each untouched block keeps its exact source
- * (`./document-source.ts`). Esc and ⌘↩ finish, naming the section the caret
+ * (`./document-source.ts`). A Mermaid code block stays code, its diagram
+ * previewed under it where the panel draws one (`./diagram-preview.ts`).
+ * Esc and ⌘↩ finish, naming the section the caret
  * stood in; ↑ on the text's first line goes to the title above it.
  */
 
@@ -54,6 +59,43 @@ const DocumentHeading = Heading.extend({
   renderHTML({ node }) {
     const level = Number(node.attrs.level);
     return [`h${level}`, { class: "markdown-heading", "data-level": String(level) }, 0];
+  },
+});
+
+/**
+ * A paragraph that keeps a picture standing alone on its line as its one
+ * inline child. Note that TipTap's own unwraps such a picture into a block,
+ * which a plan's inline image cannot be, so the document opened invalid and
+ * the first edit beside the picture threw; every other paragraph reads as
+ * TipTap's does.
+ */
+const DocumentParagraph = Paragraph.extend({
+  parseMarkdown(token, helpers) {
+    const tokens = token.tokens ?? [];
+    if (tokens.length === 1 && tokens[0]?.type === "image") {
+      return helpers.createNode("paragraph", undefined, helpers.parseInline(tokens));
+    }
+    return this.parent?.(token, helpers) ?? [];
+  },
+});
+
+/** Escapes the characters that would end a picture's alt text, address, or title early. */
+function escaped(words: string, ends: RegExp): string {
+  return words.replace(ends, "\\$&");
+}
+
+/**
+ * A picture written back as `![alt](src "title")` with its alt text's
+ * brackets, its address's parentheses, and its title's quotes escaped, so
+ * the text reads back as the picture it was. Note that TipTap's own writes
+ * all three bare.
+ */
+const DocumentImage = Image.extend({
+  renderMarkdown: (node) => {
+    const alt = escaped(String(node.attrs?.alt ?? ""), /[\\[\]]/gu);
+    const src = escaped(String(node.attrs?.src ?? ""), /[\\()]/gu);
+    const title = node.attrs?.title ? ` "${escaped(String(node.attrs.title), /[\\"]/gu)}"` : "";
+    return `![${alt}](${src}${title})`;
   },
 });
 
@@ -107,18 +149,20 @@ export function markdownExtensions(
 ): AnyExtension[] {
   const kit = StarterKit.configure({
     heading: false,
+    paragraph: false,
     underline: false,
     trailingNode: false,
     link: { openOnClick: false },
   });
   return [
     kit,
+    DocumentParagraph,
     DocumentHeading,
     Markdown,
     TaskList,
     TaskItem,
     TableKit,
-    Image.configure({ inline: true }),
+    DocumentImage.configure({ inline: true }),
     RawBlock,
     mentionNode(drawMention),
     linkLook(namesMention),
@@ -170,8 +214,18 @@ function placed(editor: Editor, placement: PlanEditorPlacement | undefined): Sel
  * caret where the placement says, and focused if it is asked to be.
  */
 export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): PlanEditorHandle {
-  const { markdown, placement, focus, label, className, onDraft, onFinish, onLeaveUp, mentions } =
-    props;
+  const {
+    markdown,
+    placement,
+    focus,
+    label,
+    className,
+    onDraft,
+    onFinish,
+    onLeaveUp,
+    mentions,
+    drawDiagram,
+  } = props;
   const extensions = markdownExtensions(mentions?.drawMention, mentions?.namesMention);
   const manager = documentManager(extensions);
   // Filled once the editor is built, since a block's source is known by the node it opened as.
@@ -184,7 +238,11 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
   held = { sources: new Map(), lead: opened.lead, ending: opened.ending };
   const editor: Editor = new Editor({
     element: host,
-    extensions: [...extensions, Placeholder.configure({ placeholder: "Write the plan" })],
+    extensions: [
+      ...extensions,
+      Placeholder.configure({ placeholder: "Write the plan" }),
+      ...(drawDiagram === undefined ? [] : [diagramPreview(drawDiagram)]),
+    ],
     content: opened.content,
     contentType: "json",
     editorProps: {

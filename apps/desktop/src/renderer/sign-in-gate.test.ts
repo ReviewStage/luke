@@ -67,7 +67,6 @@ function gate(
 ): React.ReactElement<Parameters<typeof SignInGate>[0]> {
   return createElement(SignInGate, {
     account: SIGNED_OUT,
-    face: { play: 0 },
     onBegin: ignore,
     onCancel: ignore,
     ...props,
@@ -83,6 +82,13 @@ function button(container: HTMLElement, words: string): HTMLButtonElement {
   assert.ok(found, `a "${words}" button is drawn`);
   return found;
 }
+
+test("Luke's face stands still in its resting pose over the sign-in", () => {
+  const container = mount(gate());
+  const face = container.querySelector(".sign-in-face .luke-face");
+  assert.ok(face, "the face is drawn");
+  assert.equal(face.hasAttribute("data-motion"), false);
+});
 
 test("each provider's button begins that provider's sign-in", () => {
   const pressed: AccountProvider[] = [];

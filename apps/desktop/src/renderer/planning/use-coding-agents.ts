@@ -9,6 +9,7 @@ import {
 import {
   CONTEXT_WINDOW,
   type CodingAgentAttachment,
+  type CodingAgentChangesPeople,
   type CodingAgentPullRequest,
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
@@ -91,6 +92,12 @@ const NO_KEYWORDS: readonly string[] = [];
  * service answers moves between the two at once, and a toast offers Undo,
  * as an archived plan's does.
  */
+
+/** Who an agent's pull request names, as its Changes tab last read them, and the pull request's page they were read for. */
+export interface HeldPeople {
+  readonly url: string;
+  readonly people: CodingAgentChangesPeople;
+}
 
 /** Everything the Start button, the tabs, and the agent tab draw and press. */
 export interface CodingAgentsControl {
@@ -193,8 +200,10 @@ export interface CodingAgentsControl {
   readPullRequest: PullRequestReader;
   /** Each of the plan's agents' pull requests, by agent, of those that have one (`usePlanPullRequests`). */
   pullRequests: ReadonlyMap<string, CodingAgentPullRequest>;
-  /** One read of an agent's changes, its pull request's files, as its Changes tab asks it. */
+  /** One read of an agent's changes, its pull request's files, as its Changes tab asks it, who it names kept in `changesPeople`. */
   readChanges: (agentId: string) => Promise<CodingAgentChangesAnswerView>;
+  /** Who each agent's pull request names, by agent, as its Changes tab last read them, with the pull request they were read for; none for an agent whose changes were not read, or name no pull request. */
+  changesPeople: ReadonlyMap<string, HeldPeople>;
   /** The words a dictation into an agent's box is likely to say, read off the open plan. */
   keywords: readonly string[];
   /** The skills of the open plan's repository a `/` in an agent's box offers, read once for the plan (`repository-skills.ts`); nothing while the plan names no repository. */
@@ -739,8 +748,35 @@ export function useCodingAgents(input: {
   );
   const published = usePlanPullRequests(planId, agents, readPullRequestOnce);
 
+  // Note that who a pull request names is kept beside the agent, with the
+  // pull request it was read for, so its Changes card says them wherever it
+  // hangs once its tab has read them, and never for another pull request.
+  // Each agent's reads are numbered, so only its newest read's answer is kept,
+  // as the tab draws only its newest.
+  const [changesPeople, setChangesPeople] = useState<ReadonlyMap<string, HeldPeople>>(
+    () => new Map(),
+  );
+  const changesAsked = useRef(new Map<string, number>());
   const readChanges = useCallback<CodingAgentsControl["readChanges"]>(
-    (agentId) => act(ACT_KIND.CODING_AGENTS_CHANGES, { agentId }),
+    (agentId) => {
+      const ask = (changesAsked.current.get(agentId) ?? 0) + 1;
+      changesAsked.current.set(agentId, ask);
+      return act(ACT_KIND.CODING_AGENTS_CHANGES, { agentId }).then((answer) => {
+        if (changesAsked.current.get(agentId) !== ask || !("pullRequest" in answer)) return answer;
+        const read = answer.pullRequest;
+        setChangesPeople((was) => {
+          const next = new Map(was);
+          if (read === null) {
+            next.delete(agentId);
+          } else {
+            const { url, files: _files, truncated: _truncated, ...people } = read;
+            next.set(agentId, { url, people });
+          }
+          return next;
+        });
+        return answer;
+      });
+    },
     [act],
   );
 
@@ -811,6 +847,7 @@ export function useCodingAgents(input: {
     readPullRequest: published.read,
     pullRequests: published.pullRequests,
     readChanges,
+    changesPeople,
     keywords: input.keywords ?? NO_KEYWORDS,
     readSkills,
     readInbox,

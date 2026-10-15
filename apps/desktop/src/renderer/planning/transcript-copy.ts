@@ -211,7 +211,7 @@ export function agentTranscript(input: {
       const text = messageWords(message);
       return [{ speaker: SPEAKER.DEVELOPER, blocks: [{ kind: COPIED_BLOCK.WORDS, text }] }];
     }
-    const blocks = rowBlocks(agentRows(message, false, task === undefined)).flatMap(agentBlock);
+    const blocks = rowBlocks(agentRows(message, false)).flatMap(agentBlock);
     return [{ speaker: task === undefined ? SPEAKER.AGENT : SPEAKER.SUBAGENT, blocks }];
   });
   return {

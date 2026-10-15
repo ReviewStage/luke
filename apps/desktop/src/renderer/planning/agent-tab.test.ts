@@ -20,8 +20,8 @@ import { TOOL_TARGET, type ToolTarget } from "./tool-call-model";
  * agent-tab.test.ts -- a call about something the window draws in a tab of
  * its own is a row that opens that tab, and every other call a row that
  * folds open in place; a run of calls and a finished turn's lead fold under
- * a line that wears no icon, while the calls under it, a list of the agents
- * among them, keep their own. A row that opens an agent's or a worker's tab
+ * a line led by a chevron saying whether it is open, while the calls under
+ * it, a list of the agents among them, keep their own icons. A row that opens an agent's or a worker's tab
  * hangs that tab's card.
  */
 
@@ -244,7 +244,20 @@ for (const call of FOLDING_CALLS) {
   });
 }
 
-test("a run of calls folds under a line with no icon, and its calls keep theirs, a list of the agents a list's", () => {
+/** The chevron leading a fold's line: a right-pointing chevron, turned down where the line says it is open; nothing where the line has none. */
+function chevronOf(line: Element | null | undefined): { open: boolean } | undefined {
+  const glyph = line?.firstElementChild;
+  if (!glyph?.classList.contains("lucide-chevron-right")) return undefined;
+  const open = glyph.classList.contains("rotate-90");
+  assert.equal(
+    line?.getAttribute("aria-expanded"),
+    String(open),
+    "the chevron agrees with the line",
+  );
+  return { open };
+}
+
+test("a run of calls folds under a line whose chevron says it is open, and its calls keep their icons, a list of the agents a list's", () => {
   const { container } = drawn(
     assistant([
       toolPart("list_coding_agents", {}, { agents: [] }),
@@ -254,7 +267,7 @@ test("a run of calls folds under a line with no icon, and its calls keep theirs,
   );
   const group = container.querySelector("[data-turn-fold] > summary");
   assert.equal(group?.textContent, "2 tools called");
-  assert.ok(group?.querySelector("svg") === null, "the group's line wears no icon");
+  assert.deepEqual(chevronOf(group), { open: true }, "the open group's chevron points down");
   const rows = [...container.querySelectorAll("[data-turn-fold] summary")];
   const listed = rows.find((row) => row.textContent?.includes("Listed the coding agents"));
   assert.ok(
@@ -268,7 +281,7 @@ test("a run of calls folds under a line with no icon, and its calls keep theirs,
   );
 });
 
-test("a finished turn's lead folds under a line with no icon, and its calls keep theirs", () => {
+test("a finished turn's lead folds under a line whose chevron turns as it opens, and its calls keep their icons", () => {
   const { container } = drawn(
     assistant([
       toolPart("read_file", { filePath: "src/new.ts" }, { content: "export {}" }),
@@ -279,8 +292,9 @@ test("a finished turn's lead folds under a line with no icon, and its calls keep
   );
   const fold = container.querySelector<HTMLElement>("[data-turn-fold] > summary");
   assert.equal(fold?.textContent, "2 tool calls, 1 message");
-  assert.ok(fold?.querySelector("svg") === null, "the fold's line wears no icon");
+  assert.deepEqual(chevronOf(fold), { open: false }, "the closed fold's chevron points right");
   act(() => fold?.click());
+  assert.deepEqual(chevronOf(fold), { open: true }, "the opened fold's chevron points down");
   const rows = [...container.querySelectorAll("[data-turn-fold] summary")];
   const read = rows.find((row) => row.textContent?.includes("src/new.ts"));
   assert.ok(

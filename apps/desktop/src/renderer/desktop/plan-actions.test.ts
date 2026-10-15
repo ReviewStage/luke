@@ -12,6 +12,7 @@ import { afterEach, beforeEach, test } from "vitest";
 import { lineWords } from "#testing/actor-line";
 import { plansControl, UNPINNED_SUMMARY } from "#testing/plans-control";
 import { installScrollIntoView } from "#testing/scroll-into-view";
+import { MemberDirectory } from "../member-directory";
 import { MAIN_TAB, type MainTab } from "../planning/use-main-tabs";
 import { NO_LOOKS } from "../planning/use-plan-looks";
 import type { PlansControl } from "../planning/use-plans-tab";
@@ -310,6 +311,38 @@ test("the plan's ⋯ menu ends with who created the plan and who last edited it,
   assert.deepEqual(menuFooter(), ["Created by someone", "Last edited"]);
 });
 
+test("a sidebar task someone else created wears its creator's face before its time, and the reader's own wears none", () => {
+  /** The faces each row wears, by the task's name, read as Dean sees them. */
+  const faces = (plan: PlanSummary) => {
+    const { plans, asked } = openTab();
+    const container = mount(
+      createElement(MemberDirectory, {
+        workspace: undefined,
+        readerId: DEAN.userId,
+        children: sidebarPlan(plans, plan, asked),
+      }),
+    );
+    const marks = container.querySelectorAll(".sidebar-plan-time .actor-mark");
+    // What the row says while it holds the keyboard, its time stepped out for Pin and Archive.
+    const line = container.querySelector(".sidebar-plan-line");
+    const said = [...(line?.childNodes ?? [])]
+      .filter((part) => !(part instanceof Element && part.matches(".sidebar-plan-time")))
+      .map(heard)
+      .join("")
+      .match(/\(created by [^)]*\)/u)?.[0];
+    unmountAll();
+    return [[...marks].map((mark) => mark.textContent), said];
+  };
+
+  assert.deepEqual(faces(SHARED_PLAN), [["C"], "(created by Charles Pan)"]);
+  assert.deepEqual(faces({ ...SHARED_PLAN, ownerId: DEAN.userId, createdBy: DEAN }), [
+    [],
+    undefined,
+  ]);
+  // A task from a service that named no creator can't be told apart, so it wears nothing.
+  assert.deepEqual(faces(OTHER), [[], undefined]);
+});
+
 test("Start and the plan's ⋯ stand in the toolbar on the Plan tab alone", () => {
   const drawn = (tab: MainTab) => {
     const container = mount(
@@ -448,3 +481,88 @@ test("Copy link to task copies the plan's address on tryluke.dev, alike from the
 
   assert.deepEqual(copied, [link, link, link]);
 });
+
+test("a task's card says who created it where others share its workspace, the reader as you, and nothing in a workspace of one", () => {
+  /** The card's lines under its name, as Dean hears them with the creation's time left off. */
+  const details = (plan: PlanSummary, workspace: Workspace) => {
+    const plans = plansControl({ me: DEAN.userId, workspaces: [workspace] });
+    const card = mount(
+      createElement(MemberDirectory, {
+        workspace: undefined,
+        readerId: DEAN.userId,
+        children: planCardOf(plans, { ...plan, workspaceId: workspace.id }, plan.updatedAt),
+      }),
+    );
+    const lines = [...card.querySelectorAll(".plan-card-detail")].map((line) =>
+      heard(line).replace(/ · .*$/u, ""),
+    );
+    unmountAll();
+    return lines;
+  };
+  const charles = { ...OTHER, createdAt: 60_000, ownerId: CHARLES.userId, createdBy: CHARLES };
+
+  assert.deepEqual(details(charles, STAGE), ["Created by Charles Pan"]);
+  assert.deepEqual(details({ ...charles, ownerId: DEAN.userId, createdBy: DEAN }, STAGE), [
+    "Created by you",
+  ]);
+  assert.deepEqual(details(charles, PERSONAL), []);
+  // A service that names no creator leaves the card as it was.
+  assert.deepEqual(details(OTHER, STAGE), []);
+});
+
+test("a task's card says you of the reader's own task outside a member directory, and, where the service counts no members, says who created it only once the members read lists someone else", async () => {
+  const { memberCount: _uncounted, ...stage } = STAGE;
+  const mine = { ...OTHER, workspaceId: STAGE.id, ownerId: DEAN.userId, createdBy: DEAN };
+  const lines = async (
+    workspace: Workspace,
+    members: readonly { userId: string; name: string }[] | undefined,
+  ) => {
+    installMembers(members);
+    const plans = plansControl({ me: DEAN.userId, workspaces: [PERSONAL, workspace] });
+    const card = mount(
+      members === undefined
+        ? planCardOf(plans, mine, mine.updatedAt)
+        : createElement(MemberDirectory, {
+            workspace,
+            readerId: DEAN.userId,
+            children: planCardOf(plans, mine, mine.updatedAt),
+          }),
+    );
+    await act(async () => {
+      for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+    });
+    const said = [...card.querySelectorAll(".plan-card-detail")].map((line) =>
+      heard(line).replace(/ · .*$/u, ""),
+    );
+    unmountAll();
+    return said;
+  };
+
+  assert.deepEqual(await lines(STAGE, undefined), ["Created by you"]);
+  assert.deepEqual(await lines(stage, [DEAN, CHARLES]), ["Created by you"]);
+  assert.deepEqual(await lines(stage, [DEAN]), []);
+  assert.deepEqual(await lines(stage, undefined), []);
+});
+
+/** The bridge answering the members read with `members`, each a member of the workspace. */
+function installMembers(members: readonly { userId: string; name: string }[] | undefined): void {
+  Object.defineProperty(window, "luke", {
+    configurable: true,
+    value: {
+      ...window.luke,
+      act: (request: Act): Promise<ActOutcome> =>
+        Promise.resolve(
+          request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ && members !== undefined
+            ? {
+                status: ACT_OUTCOME_STATUS.DONE,
+                value: members.map((member) => ({
+                  ...member,
+                  email: `${member.userId}@example.com`,
+                  role: WORKSPACE_ROLE.MEMBER,
+                })),
+              }
+            : { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Could not read." },
+        ),
+    },
+  });
+}

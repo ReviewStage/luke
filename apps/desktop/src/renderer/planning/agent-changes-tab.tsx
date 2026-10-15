@@ -5,6 +5,7 @@ import {
 import {
   CODING_AGENT_STATUS,
   type CodingAgentChangedFile,
+  type CodingAgentChangesPeople,
   type CodingAgentPullRequest,
 } from "@luke/features/coding-agent-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
@@ -21,7 +22,7 @@ import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { SpinnerRegion } from "../spinner";
 import { Tooltip } from "../tooltip";
 import { LinesChanged } from "./agent-published";
-import { AgentActorRef, type AgentSubject } from "./agent-ref";
+import { AgentActorRef, type AgentSubject, agentSubject, NOTHING_HELD } from "./agent-ref";
 import {
   CHANGES_WORDS,
   changedFolders,
@@ -41,7 +42,8 @@ import { useLinesLook } from "./file-tab";
 import { FileTreePane } from "./file-tree-pane";
 import { FileViewBar, useTreeSlide } from "./file-view";
 import { PullRequestMark } from "./pull-request-mark";
-import type { CodingAgentsControl } from "./use-coding-agents";
+import { OpenedBy, PullRequestPeople, ReviewComments, ReviewersLine } from "./pull-request-people";
+import type { CodingAgentsControl, HeldPeople } from "./use-coding-agents";
 
 /**
  * agent-changes-tab.tsx -- one agent's Changes tab in the side panel: its pull request's files drawn as a File tab draws a file, the chosen file's unified diff under the same bar and beside the same tree.
@@ -55,6 +57,10 @@ import type { CodingAgentsControl } from "./use-coding-agents";
  * request yet, or one whose pull request changes nothing, says that. The
  * panel keys the tab by its agent, so one agent's answer is never drawn in
  * another's tab.
+ *
+ * Under its bar the tab says who the pull request names, who opened it,
+ * its reviewers, who authored its commits, and its review comments folded
+ * under their count (`pull-request-people.tsx`).
  *
  * Otherwise the tab is a File view (`file-view.tsx`) over the diff: its bar
  * names the chosen file as breadcrumbs, whose trees list only the changed
@@ -256,6 +262,14 @@ function FileDiff({ file }: { file: CodingAgentChangedFile }): React.JSX.Element
   );
 }
 
+/** Who a pull request names, as its tab last read them for that very pull request; none where the tab read them for another, or has not yet. */
+export function peopleOf(
+  held: HeldPeople | undefined,
+  pullRequest: Pick<CodingAgentPullRequest, "url">,
+): CodingAgentChangesPeople | undefined {
+  return held?.url === pullRequest.url ? held.people : undefined;
+}
+
 /**
  * The card a Changes tab hangs, and its row in the plan's summary, in a tab
  * card's look: the pull request's title with its mark and number at the
@@ -263,12 +277,14 @@ function FileDiff({ file }: { file: CodingAgentChangedFile }): React.JSX.Element
  * tile and name as every place naming an agent draws it (`ActorRef`),
  * which hang the agent's card and open its tab, and under them how many
  * files it changes and the lines it adds and removes, as GitHub counts
- * them.
+ * them, then, once its Changes tab has read them, who opened it and its
+ * reviewers, each face wearing where they stand (`pull-request-people.tsx`).
  */
 export function ChangesCard({
   subject,
   models,
   pullRequest,
+  people,
   onOpenAgent,
 }: {
   /** The agent whose pull request it is, as the plan's list names it. */
@@ -276,10 +292,14 @@ export function ChangesCard({
   /** The catalog as last read, which names the agent's model on its card. */
   models: readonly CatalogModel[] | undefined;
   pullRequest: CodingAgentPullRequest;
+  /** Who the pull request names, as its Changes tab last read them; none before it has. */
+  people: CodingAgentChangesPeople | undefined;
   /** Opens the agent's tab in the plan's column. */
   onOpenAgent: () => void;
 }): React.JSX.Element {
   const count = pullRequest.changedFiles;
+  const agent = { subject, models };
+  const reviewers = people?.reviewers ?? [];
   return (
     <HoverCard data-tab-card="">
       <CardHead
@@ -296,6 +316,16 @@ export function ChangesCard({
         {count} {count === 1 ? "file" : "files"} changed{" "}
         <LinesChanged additions={pullRequest.additions} deletions={pullRequest.deletions} />
       </CardNote>
+      {people?.author === undefined ? null : (
+        <CardNote oneLine>
+          <OpenedBy person={people.author} agent={agent} />
+        </CardNote>
+      )}
+      {reviewers.length === 0 ? null : (
+        <CardNote>
+          <ReviewersLine reviewers={reviewers} agent={agent} />
+        </CardNote>
+      )}
     </HoverCard>
   );
 }
@@ -333,6 +363,11 @@ export function AgentChangesTab({
   const choose = useCallback((path: string) => setChosen(path), []);
   const shownFile =
     pullRequest?.files.find((file) => file.path === chosen) ?? pullRequest?.files[0];
+  // Luke's own bot is the agent whose pull request it is, wherever the pull request names it.
+  const named = {
+    subject: agentSubject(control, agentId, NOTHING_HELD, false),
+    models: control.models,
+  };
   // A failure gives way to the wait as soon as it is asked again; files drawn stand until the answer lands.
   if (answer === undefined || (out && "failure" in answer)) {
     return <SpinnerRegion label={CHANGES_WORDS.READING} />;
@@ -344,11 +379,17 @@ export function AgentChangesTab({
       </div>
     );
   }
-  if (pullRequest === null || shownFile === undefined) {
+  if (pullRequest === null) {
+    return <EmptyState icon={<FileDiffIcon />}>{CHANGES_WORDS.NO_PULL_REQUEST}</EmptyState>;
+  }
+  // A pull request that changes no file still names its people, over the line saying so.
+  if (shownFile === undefined) {
     return (
-      <EmptyState icon={<FileDiffIcon />}>
-        {pullRequest === null ? CHANGES_WORDS.NO_PULL_REQUEST : CHANGES_WORDS.EMPTY}
-      </EmptyState>
+      <div className="file-view ph-no-capture">
+        <PullRequestPeople people={pullRequest} agent={named} />
+        <ReviewComments comments={pullRequest.comments} agent={named} />
+        <EmptyState icon={<FileDiffIcon />}>{CHANGES_WORDS.EMPTY}</EmptyState>
+      </div>
     );
   }
   const count = pullRequest.files.length;
@@ -374,6 +415,8 @@ export function AgentChangesTab({
         menu={<ChangesMenu file={shownFile} reading={out} onRefresh={ask} />}
         tree={tree}
       />
+      <PullRequestPeople people={pullRequest} agent={named} />
+      <ReviewComments comments={pullRequest.comments} agent={named} />
       {pullRequest.truncated ? (
         <div className="file-tab-notice">
           <p className="m-0">{CHANGES_WORDS.TRUNCATED}</p>

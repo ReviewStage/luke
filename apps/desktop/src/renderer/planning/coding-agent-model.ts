@@ -1126,16 +1126,15 @@ function drawnParts(message: CodingAgentMessage): readonly AgentPart[] {
  * the Call tab folds Luke's (`turn-rows.ts`). A step boundary and a part
  * this build does not draw are left out, because the parts keep one rhythm
  * across them. The turn moves while the agent may still write to it, which
- * is its last message; any other has ended. A worker's session is read for
- * its detail, so its calls stand each on a line of its own and its lead
- * never folds, as the Call tab's worker's do. The agent's newest to-do
- * list, named by the call that wrote it (`newestTodos`), stays out of
- * a finished turn's fold, so the list standing is never folded away.
+ * is its last message; any other has ended. A worker's session folds as
+ * its agent's does, since a run of calls reads the same whoever made it.
+ * The agent's newest to-do list, named by the call that wrote it
+ * (`newestTodos`), stays out of a finished turn's fold, so the list
+ * standing is never folded away.
  */
 export function agentRows(
   message: CodingAgentMessage,
   moving: boolean,
-  grouped = true,
   { newestTodos, workers = NO_WORKERS, said = false }: AgentTurnPlace = {},
 ): readonly TurnRow<AgentPart>[] {
   const parts = drawnParts(message);
@@ -1148,8 +1147,7 @@ export function agentRows(
   return turnRows(parts, reading, {
     key: message.id,
     moving,
-    done: grouped && !moving,
-    grouped,
+    done: !moving,
     said,
   });
 }

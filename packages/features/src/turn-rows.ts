@@ -273,10 +273,10 @@ interface Keyed<B> {
  * that moves. A run of thoughts with no work in it stands as its rows. A
  * run of one call or subagent is its own row, unless it is that latest
  * work, which is drawn as a group so the work after it joins it rather
- * than redraw it. Not grouped, every block stands on a row of its own, for
- * a session read for its detail and for a lead the fold already holds. On
- * a turn whose words were said aloud, the words run with the work, and a
- * run with no work drops them, since Luke's line after the turn holds them.
+ * than redraw it. Not grouped, as a lead the fold already holds is not,
+ * every block stands on a row of its own. On a turn whose words were said
+ * aloud, the words run with the work, and a run with no work drops them,
+ * since Luke's line after the turn holds them.
  */
 function groupedRows<B>(
   blocks: readonly Keyed<B>[],
@@ -360,7 +360,6 @@ export function turnRows<B>(
     readonly moving: boolean;
     /** Whether the turn ended as it meant to, which folds its lead; a turn cut off keeps its rows as they were. */
     readonly done: boolean;
-    readonly grouped: boolean;
     /** Whether its words were said aloud and stand after it, which folds all of a finished turn's blocks. */
     readonly said?: boolean;
   },
@@ -370,13 +369,13 @@ export function turnRows<B>(
   const last = said
     ? blocks.length
     : blocks.findLastIndex((block) => read.part(block) === ROW_PART.WORDS);
-  if (!turn.done || last < 1) return groupedRows(keyed, read, turn.moving, turn.grouped, said);
+  if (!turn.done || last < 1) return groupedRows(keyed, read, turn.moving, true, said);
   // Note that the lead's calls are not grouped, because the fold already holds them and a group inside it would fold the same run twice.
   const kept = keyed.slice(0, last).filter((each) => read.kept?.(each.block) === true);
   const lead = keyed.slice(0, last).filter((each) => !kept.includes(each));
   const held = counted(lead, read);
   if (held.calls + held.subagents + held.codingAgents === 0)
-    return groupedRows(keyed, read, turn.moving, turn.grouped, said);
+    return groupedRows(keyed, read, turn.moving, true, said);
   return [
     {
       kind: TURN_ROW.FOLDED,
@@ -384,6 +383,6 @@ export function turnRows<B>(
       summary: foldedSummary(held, said),
       rows: groupedRows(lead, read, false, false, said),
     },
-    ...groupedRows([...kept, ...keyed.slice(last)], read, turn.moving, turn.grouped, said),
+    ...groupedRows([...kept, ...keyed.slice(last)], read, turn.moving, true, said),
   ];
 }

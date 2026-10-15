@@ -605,3 +605,47 @@ test("Search lists the listed workspace's plans first, then every other workspac
     "the other workspace is named by its tile and its name",
   );
 });
+
+test("a teammate's task wears its creator's face at its row's end, and is found by their name, which the row then says", () => {
+  const charles = { userId: "user-charles", name: "Charles Pan" };
+  const dean = { userId: "user-dean", name: "Dean Stratakos" };
+  const task = (id: string, by: typeof dean) => ({
+    id,
+    workspaceId: "workspace-personal",
+    name: id,
+    createdAt: 1,
+    updatedAt: 1,
+    repository: "acme/relay",
+    ownerId: by.userId,
+    createdBy: by,
+  });
+  openPalette(
+    plansControl({
+      me: dean.userId,
+      plans: [task("Retry budget", charles), task("Rate limits", dean)],
+    }),
+  );
+  chooseFilter("Tasks");
+  const faces = () =>
+    [...document.querySelectorAll(".menu-item")].map(
+      (row) => row.querySelector(".menu-item-end .actor-mark")?.textContent ?? null,
+    );
+
+  assert.deepEqual(rows(), ["Retry budget · acme/relay", "Rate limits · acme/relay"]);
+  assert.deepEqual(faces(), ["C", null]);
+  assert.match(
+    document.querySelector(".menu-item-end")?.textContent ?? "",
+    /\(created by Charles Pan\)/u,
+  );
+  type("charles");
+  assert.deepEqual(rows(), ["Retry budget · acme/relay · Charles Pan"]);
+  // A query the creator's name answers only loosely still shows the name it was found by,
+  // and one the task's other words answer, however loosely, leaves the name unsaid.
+  type("chrls");
+  assert.deepEqual(rows(), ["Retry budget · acme/relay · Charles Pan"]);
+  type("rtry");
+  assert.equal(rows()[0], "Retry budget · acme/relay");
+  // A query running from the task's name into its creator's names them too.
+  type("budgetch");
+  assert.deepEqual(rows(), ["Retry budget · acme/relay · Charles Pan"]);
+});

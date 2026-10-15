@@ -600,6 +600,62 @@
   white-space: pre-wrap;
 }
 
+/* A Mermaid fence drawn as its diagram (`plan-diagram.tsx`): a picture the
+   diagram bundle drew, on the section's fill, its code a press away. The
+   picture is an `<img>`, so its own size holds it and the column bounds it. */
+.plan-diagram {
+  display: block;
+  margin: var(--space-12) 0;
+  padding: var(--space-12) var(--space-16);
+  border: 1px solid var(--hairline);
+  border-radius: var(--control-radius);
+  background: var(--section-fill);
+}
+
+.plan-diagram-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-8);
+  color: var(--text-tertiary);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.plan-diagram-toggle {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-secondary);
+  font: inherit;
+  font-weight: 500;
+}
+
+.plan-diagram-toggle:hover {
+  color: var(--text-primary);
+}
+
+.plan-diagram-picture {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+}
+
+/* A fence Mermaid refused says so over its code, in the failure's red. */
+.plan-diagram-failed {
+  margin: 0 0 var(--space-8);
+  color: var(--danger-text);
+  font-size: 12px;
+}
+
+/* In the editor the fence stays code, and its diagram stands under it,
+   out of the text: nothing in it takes the caret or a selection. */
+.plan-diagram-preview {
+  margin-top: var(--space-4);
+  user-select: none;
+}
+
 /* What stands under the editor: a failed save, or Luke's change and the
    choice it asks, in the muted meta weight. */
 .plan-editor-note {
@@ -1143,6 +1199,109 @@ button.file-ref:hover .file-ref-path {
   flex: 1;
 }
 
+/* Who a Changes tab's pull request names, under its bar in a notice's
+   voice: who opened it, its reviewers, who authored its commits, each a
+   line of words around its faces (`pull-request-people.tsx`). */
+.changes-people {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-4) var(--space-16);
+  padding: var(--space-8) var(--space-12);
+  border-bottom: 1px solid var(--hairline);
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+/* A reviewer's standing, in GitHub's colours: approved green, changes asked
+   for red, a review asked for amber, a comment or a dismissal quiet. */
+[data-review-state="approved"] {
+  --review-tone: var(--state-complete);
+}
+
+[data-review-state="changes-requested"] {
+  --review-tone: var(--danger);
+}
+
+[data-review-state="requested"] {
+  --review-tone: var(--state-attention);
+}
+
+[data-review-state="commented"],
+[data-review-state="dismissed"] {
+  --review-tone: var(--text-tertiary);
+}
+
+.review-state {
+  display: inline-grid;
+  place-items: center;
+  color: var(--review-tone);
+}
+
+/* The reviews that said something, folded under their count until opened. */
+.changes-comments {
+  border-bottom: 1px solid var(--hairline);
+  color: var(--text-secondary);
+  font-size: 12.5px;
+}
+
+.changes-comments > summary {
+  padding: var(--space-6) var(--space-12);
+  cursor: default;
+}
+
+.changes-comments-count {
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.changes-comments > ul {
+  display: flex;
+  max-height: 40vh;
+  flex-direction: column;
+  gap: var(--space-8);
+  margin: 0;
+  padding: 0 var(--space-12) var(--space-8);
+  overflow-y: auto;
+  list-style: none;
+}
+
+.changes-comment-head {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-8);
+  color: var(--text-primary);
+}
+
+.changes-comment-state {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  color: var(--text-secondary);
+}
+
+.changes-comment-state .review-state > svg {
+  width: 12px;
+  height: 12px;
+}
+
+.changes-comment-time {
+  color: var(--text-tertiary);
+}
+
+/* A review's words, cut at two lines and faded where they run on. */
+.changes-comment-words {
+  display: -webkit-box;
+  margin: var(--space-2) 0 0;
+  padding-left: 21px; /* off-scale: past an inline actor's 16px mark and its 5px gap */
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  user-select: text;
+}
+
 .file-tab-snippet-label {
   margin: 0;
   padding: var(--space-8) var(--space-12) var(--space-4);
@@ -1531,6 +1690,14 @@ button.file-ref:hover .file-ref-path {
    column or a panel that pads the composer in pads the list in alike. */
 .agent-todos-dock {
   padding: 0 16px 8px;
+}
+
+/* A to-do list a call's row opens onto is a record of one write, so the
+   working mark on its item in progress holds still, on the frame a capture
+   holds it on, while the call's own working mark on the row above runs. Only
+   the docked list, the one the agent is at, keeps the mark moving. */
+[data-todos] > .disclosure-body {
+  --loop-motion: paused;
 }
 
 /* The list opens upward, since the composer under it holds the card's foot
@@ -3088,6 +3255,45 @@ button.inbox-option:hover:not(:disabled) {
 
 .inbox-option:disabled {
   opacity: 0.4;
+}
+
+/* An option's head (`inbox-pane.tsx`'s `OptionHead`): its label, and the
+   agent's recommendation as a badge at the option's top right, so it stands
+   in one place however the label wraps. The badge is the app's badge
+   (`.integration-tool-badge`) in the accent's fill, the primary button's,
+   while the item waits, and steps back to the quiet badge once it is
+   settled. It sits on the label's first line, centred on its 13px words. */
+.inbox-option-head {
+  display: flex;
+  width: 100%;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-8);
+}
+
+/* The label gives the badge its room: it shrinks past its longest word,
+   and a word too long for what is left, a path or an identifier, breaks
+   anywhere rather than pushing the badge out past the option's edge. */
+.inbox-option-label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.inbox-recommended {
+  flex: none;
+  margin-top: 3px;
+  padding: 0 var(--space-6);
+  border-radius: 4px;
+  background: var(--message-sent);
+  color: var(--on-accent);
+  font-size: 10.5px;
+  font-weight: 560;
+  line-height: 16px;
+}
+
+.inbox-recommended[data-settled="true"] {
+  background: var(--raised-strong);
+  color: var(--text-secondary);
 }
 
 /* An image block on the Inbox (`inbox-pane.tsx`): the picture the

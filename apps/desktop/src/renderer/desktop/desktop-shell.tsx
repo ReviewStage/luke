@@ -1,4 +1,3 @@
-import type { FaceMotion } from "@luke/brand";
 import { ACCOUNT_STATUS, type AccountProvider } from "@luke/credentials/snapshot";
 import type { Plan } from "@luke/features/plan-wire";
 import { EXPERIMENT } from "@luke/settings";
@@ -87,8 +86,6 @@ export interface DesktopGates {
   lastSignIn?: AccountProvider | undefined;
   onBeginSignIn: (provider: AccountProvider) => void;
   onCancelSignIn: () => void;
-  /** The signed-out Luke's introduction cycle, walked over the sign-in. */
-  signInFace: { play: number; motion?: FaceMotion };
 }
 
 /**
@@ -381,7 +378,7 @@ export function DesktopShell({
       ? region.plan
       : undefined;
   useWindowTitle(titleSubject(tab, plans, shownPlan));
-  // The plan is looked at only while it is on screen.
+  // The plan is looked at the moment it is on screen, whichever of its column's tabs is chosen.
   const looks = usePlanLooks(shownPlan, plans.me);
   if (gated) {
     return (
@@ -389,7 +386,6 @@ export function DesktopShell({
         <div className="desktop-drag-strip" />
         <SignInGate
           account={account}
-          face={gates.signInFace}
           {...(gates.signInWait ? { waiting: gates.signInWait } : undefined)}
           {...(gates.signInFailure ? { failure: gates.signInFailure } : undefined)}
           {...(gates.lastSignIn ? { lastUsed: gates.lastSignIn } : undefined)}

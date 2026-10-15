@@ -39,7 +39,7 @@ import { useAppCommand } from "../app-commands";
 import { CallTabVideo } from "../call/panel-avatar";
 import { EmptyState } from "../empty-state";
 import { FindScope } from "../find-in-tab";
-import { AgentChangesTab, ChangesCard } from "../planning/agent-changes-tab";
+import { AgentChangesTab, ChangesCard, peopleOf } from "../planning/agent-changes-tab";
 import { AgentCard, agentSubject } from "../planning/agent-ref";
 import { AgentSubagentTab, type TranscriptCards } from "../planning/agent-tab";
 import {
@@ -557,6 +557,7 @@ function stripTabs(input: {
           subject={subject}
           models={agents.models}
           pullRequest={pullRequest}
+          people={peopleOf(agents.changesPeople.get(tab.changes), pullRequest)}
           onOpenAgent={() => onOpenAgent(tab.changes)}
         />
       );

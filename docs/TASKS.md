@@ -224,7 +224,8 @@ composer card, and nothing spoken. Leaving or deleting a task lands here.
 - The task's name. The toolbar is one row, the side panel's bar's height
   exactly (`--desktop-bar-height`, the one token both take), so their bottom
   borders are one line across the window.
-- The task's repository is the sidebar's to name, by the group it stands in.
+- The task's repository is the sidebar's to name: by the group it stands in,
+  or on its row where the list's view groups by creator or not at all.
   A task with none yet, the 13 tasks from before repositories among them,
   shows a compact `Choose repository` chip in the toolbar's actions row, left
   of Start, with the composer's menu: a pick is saved through

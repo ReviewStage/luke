@@ -805,14 +805,19 @@ test("the Owner row stands in a shared workspace, and not in the account's perso
   assert.match(personal.textContent ?? "", /Your automation, in your personal workspace\./u);
 });
 
-test("an automation's page says it is an experiment, and its Send feedback is about Automations", async () => {
+test("the list and an automation's page each say they are an experiment, and each Send feedback is about Automations", async () => {
+  const list = mountPages({ kind: AUTOMATIONS_PAGE.LIST });
+  await settle();
+  assert.equal(list.querySelector(".experiment-tag")?.textContent, "Experimental");
+  act(() => button("Send feedback").click());
+  act(() => root?.unmount());
+
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
   await settle();
-
-  assert.equal(page.querySelector(".experiment-badge")?.textContent, "Experimental");
+  assert.equal(page.querySelector(".experiment-tag")?.textContent, "Experimental");
   act(() => button("Send feedback").click());
 
-  assert.deepEqual(feedbackAbout, [EXPERIMENT.AUTOMATIONS]);
+  assert.deepEqual(feedbackAbout, [EXPERIMENT.AUTOMATIONS, EXPERIMENT.AUTOMATIONS]);
 });
 
 test("a page naming an automation the list no longer holds says it is gone", async () => {

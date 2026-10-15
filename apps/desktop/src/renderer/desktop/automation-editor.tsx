@@ -55,7 +55,7 @@ import { AnchoredPopover, POPOVER_ALIGN } from "../anchored-popover";
 import { useAppCommand } from "../app-commands";
 import { CHIP_LOOK, Chip } from "../chip";
 import { CopyGlyph, copyHint, useCopyFeedback } from "../copy-feedback";
-import { useOpenFeedback } from "../open-feedback";
+import { ExperimentTag, SendFeedbackButton } from "../experiment-marks";
 import { AgentModelChip } from "../planning/agent-model-chip";
 import { ModelMenu } from "../planning/model-menu";
 import { dayAndTimeText, sinceText, useMinute } from "../planning/plan-time";
@@ -413,7 +413,6 @@ function EditorToolbar({
   running: boolean;
   onRunNow: () => void;
 }): React.JSX.Element {
-  const openFeedback = useOpenFeedback();
   const status =
     automation === undefined
       ? "Not created yet"
@@ -437,16 +436,10 @@ function EditorToolbar({
             {automation === undefined ? "New automation" : automation.name}
           </span>
         </nav>
-        <span className="integration-tool-badge experiment-badge">Experimental</span>
+        <ExperimentTag />
       </div>
       <div className="desktop-toolbar-actions">
-        <button
-          type="button"
-          className="experiment-feedback"
-          onClick={() => openFeedback(EXPERIMENT.AUTOMATIONS)}
-        >
-          Send feedback
-        </button>
+        <SendFeedbackButton experiment={EXPERIMENT.AUTOMATIONS} />
         <span className="automation-editor-status" data-dirty={String(dirty)}>
           {status}
         </span>

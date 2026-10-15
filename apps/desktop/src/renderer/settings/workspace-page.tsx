@@ -10,6 +10,7 @@ import {
   WORKSPACE_PHOTO_TYPE,
   WORKSPACE_ROLE,
   type Workspace,
+  type WorkspaceGithubInstallation,
   type WorkspaceMember,
   workspacePhotoOfDataUrl,
 } from "@luke/features/workspace-wire";
@@ -61,11 +62,13 @@ import { ReadFailed, SettingsGroup } from "./settings-group";
  * then invites people by address and role, an admin as a member alone,
  * sees the invitations still pending with each one's accept link to copy and
  * send, and cancels one. GitHub, the one place a workspace's repositories
- * are set, is drawn as Settings › Integrations draws its rows: an owner or an
- * admin connects one GitHub account's installation of the Luke GitHub App,
- * or manages it from Manage, whose menu holds Choose repositories on GitHub,
- * the App's page there, and Disconnect; a member sees whether GitHub is
- * connected, or is told to ask. Last, anyone but the owner leaves, and the
+ * are set, is drawn as Settings › Integrations draws its rows: every GitHub
+ * account whose installation of the Luke GitHub App is connected, each
+ * Connected or suspended; an owner or an admin connects the first with
+ * Connect and another with Add connection, beside those standing, and
+ * Manage's one item chooses repositories on GitHub, where which accounts and
+ * repositories Luke reaches is managed, so nothing here disconnects one. A
+ * member sees the same list, or is told to ask. Last, anyone but the owner leaves, and the
  * owner hands the workspace to an admin first.
  *
  * Its rows are the Settings kit's: a row's one constructive act stands at
@@ -177,14 +180,21 @@ const INVITED_ACTOR = { kind: ACTOR_KIND.SOMEONE, reason: SOMEONE_REASON.UNNAMED
 /** What the connected GitHub account's line says once the App's installation was suspended or removed. */
 const GITHUB_SUSPENDED = "Suspended or removed on GitHub.";
 
-/** What the GitHub row's line says while the App's installation stands, naming the account it is on, as Integrations' rows name theirs. */
-const GITHUB_CONNECTED = (login: string) => `Connected to ${login}`;
+/** What a connected account's row says while its installation stands. */
+const GITHUB_CONNECTED = "Connected";
 
 /** What the GitHub row says where no GitHub is connected, by who is reading it. */
 const GITHUB_UNCONNECTED = {
   MANAGES: "Not connected.",
   MEMBER: "Not connected. Ask an owner or admin.",
 } as const;
+
+/** What the GitHub row says once an account is connected: where its access is changed. */
+const GITHUB_MANAGED_ON_GITHUB = "Accounts and repositories are managed on GitHub.";
+
+/** One connected GitHub account as the page lists it: its login, whether its installation is active, and its id where the service named it. */
+type ShownConnection = Pick<WorkspaceGithubInstallation, "login" | "active"> &
+  Partial<Pick<WorkspaceGithubInstallation, "installationId">>;
 
 /**
  * What a refused act answers in the dialog that asked: its refusal's own
@@ -943,118 +953,118 @@ function Invitations({
 }
 
 /**
- * The connected GitHub row's words: GitHub, and under it the account it is
- * connected to, or that GitHub suspended or removed the installation.
+ * The GitHub accounts connected to the workspace, the first linked first:
+ * every one a service with several lists, else the one a service from
+ * before them names.
  */
-function ConnectedCopy({
-  github,
-}: {
-  github: NonNullable<Workspace["github"]>;
-}): React.JSX.Element {
+function connectionsOf(workspace: Workspace): readonly ShownConnection[] {
+  if (workspace.githubInstallations !== undefined) return workspace.githubInstallations;
+  return workspace.github === null ? [] : [workspace.github];
+}
+
+/** One connected account's row: its login, and under it Connected, or that GitHub suspended or removed its installation. */
+function ConnectionRow({ connection }: { connection: ShownConnection }): React.JSX.Element {
   return (
-    <RowCopy
-      name="GitHub"
-      line={
-        github.active ? (
-          <span className="settings-state" data-state="connected">
-            {GITHUB_CONNECTED(github.login)}
-          </span>
-        ) : (
-          <span className="settings-state" data-state="attention">
-            {GITHUB_SUSPENDED}
-          </span>
-        )
-      }
-    />
+    <div className="settings-row">
+      <RowCopy
+        name={connection.login}
+        line={
+          connection.active ? (
+            <span className="settings-state" data-state="connected">
+              {GITHUB_CONNECTED}
+            </span>
+          ) : (
+            <span className="settings-state" data-state="attention">
+              {GITHUB_SUSPENDED}
+            </span>
+          )
+        }
+      />
+    </div>
   );
 }
 
 /**
  * The workspace's GitHub, for an owner or an admin: Connect while none is,
  * which installs the Luke GitHub App on a GitHub account for this
- * workspace, or Manage once one is, whose menu holds Choose repositories on
- * GitHub, the App's page there, and, past a rule, Disconnect, which asks
- * first. Both GitHub pages open in the browser through the one connect,
- * whose return to Luke links the installation to this workspace; a page
- * that could not be opened says why under the row.
+ * workspace, and once one is, Add connection, which connects another beside
+ * it, and Manage, whose one item chooses repositories on GitHub. Every
+ * press opens the browser through the one connect, whose return to Luke
+ * adds the installation to this workspace; a page that could not be opened
+ * says why under the row.
  */
-function ManagedGitHub({ workspace }: { workspace: Workspace }): React.JSX.Element {
+function ManagedGitHub({
+  workspace,
+  connections,
+}: {
+  workspace: Workspace;
+  connections: readonly ShownConnection[];
+}): React.JSX.Element {
   const { act } = useAct();
-  const { github } = workspace;
   const workspaceId = workspace.id;
   const [refusal, setRefusal] = useState<string>();
-  const disconnect = useConfirmDialog({ subject: github !== null, surfaceOpen: true }, () =>
-    act(ACT_KIND.WORKSPACE_GITHUB_DISCONNECT, { workspaceId }).then(() => ACCEPTED, refusedWith),
-  );
   const open = () => {
     setRefusal(undefined);
     act(ACT_KIND.WORKSPACE_GITHUB_CONNECT, { workspaceId }).catch((refused: Error) =>
       setRefusal(refused.message),
     );
   };
-  const actions =
-    github === null
-      ? []
-      : [
-          [{ label: "Choose repositories on GitHub", icon: <ExternalLinkIcon />, onSelect: open }],
-          [{ label: "Disconnect", icon: <TrashIcon />, danger: true, onSelect: disconnect.ask }],
-        ];
+  const connected = connections.length > 0;
+  const actions = connected
+    ? [[{ label: "Choose repositories on GitHub", icon: <ExternalLinkIcon />, onSelect: open }]]
+    : [];
   return (
     <>
       <MenuRow label="GitHub actions" actions={actions} triggerLabel="Manage">
         <span className="settings-row-mark">
           <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />
         </span>
-        {github === null ? (
-          <>
-            <RowCopy name="GitHub" line={GITHUB_UNCONNECTED.MANAGES} />
-            <button type="button" className="toolbar-button bordered-button" onClick={open}>
-              Connect
-            </button>
-          </>
-        ) : (
-          <ConnectedCopy github={github} />
-        )}
+        <RowCopy
+          name="GitHub"
+          line={connected ? GITHUB_MANAGED_ON_GITHUB : GITHUB_UNCONNECTED.MANAGES}
+        />
+        <button type="button" className="toolbar-button bordered-button" onClick={open}>
+          {connected ? "Add connection" : "Connect"}
+        </button>
       </MenuRow>
       {refusal === undefined ? null : (
         <p className="error-message" role="alert">
           {refusal}
         </p>
       )}
-      {github === null ? null : (
-        <ConfirmDialog
-          confirm={disconnect}
-          question={{
-            title: `Disconnect ${github.login} from ${workspace.name}?`,
-            body: "Its tasks lose these repositories until GitHub is connected again.",
-            verb: "Disconnect",
-            running: "Disconnecting",
-          }}
-        />
-      )}
     </>
   );
 }
 
 /**
- * The workspace's GitHub: an owner's or an admin's to set, and for a
- * member, read only, whether it is connected or the ask to have it.
+ * The workspace's GitHub: an owner's or an admin's to connect, and for a
+ * member, read only, or the ask to have it; then every account connected,
+ * the same for both.
  */
 function WorkspaceGitHub({ workspace }: { workspace: Workspace }): React.JSX.Element {
-  if (managesWorkspace(workspace)) {
-    return <ManagedGitHub workspace={workspace} />;
-  }
+  const connections = connectionsOf(workspace);
   return (
-    <div className="settings-row">
-      <span className="settings-row-mark">
-        <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />
-      </span>
-      {workspace.github === null ? (
-        <RowCopy name="GitHub" line={GITHUB_UNCONNECTED.MEMBER} />
+    <>
+      {managesWorkspace(workspace) ? (
+        <ManagedGitHub workspace={workspace} connections={connections} />
       ) : (
-        <ConnectedCopy github={workspace.github} />
+        <div className="settings-row">
+          <span className="settings-row-mark">
+            <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />
+          </span>
+          <RowCopy
+            name="GitHub"
+            line={connections.length === 0 ? GITHUB_UNCONNECTED.MEMBER : GITHUB_MANAGED_ON_GITHUB}
+          />
+        </div>
       )}
-    </div>
+      {connections.map((connection) => (
+        <ConnectionRow
+          key={connection.installationId ?? connection.login}
+          connection={connection}
+        />
+      ))}
+    </>
   );
 }
 

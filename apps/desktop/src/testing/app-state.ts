@@ -1,5 +1,5 @@
 /**
- * app-state.ts -- what a test of a surface gated by an experiment stands on: main's document as the bridge hands it, with the account's experiments as given.
+ * app-state.ts -- what a test of a surface gated by an experiment, or one that names the signed-in account, stands on: main's document as the bridge hands it, with the account's experiments and its identity as given.
  */
 
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
@@ -49,6 +49,16 @@ function snapshotWith(experiments: ExperimentChoices): AppStateSnapshot {
     sessionReplay: { permitted: false, halted: false },
     window: { role: WINDOW_ROLE.PANEL, fullScreen: false },
   };
+}
+
+/** Main's document for the account signed in as given, no experiment on. */
+export function signedInAs(account: {
+  readonly id: string;
+  readonly email: string;
+  readonly name: string;
+}): AppStateSnapshot {
+  const snapshot = snapshotWith({});
+  return { ...snapshot, account: { ...snapshot.account, ...account } };
 }
 
 /** Hands the window main's document with the account's experiments as given, beside whatever else the bridge already holds. */
