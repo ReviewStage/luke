@@ -1,6 +1,11 @@
 # Proposal: the sidebar's task list, grouped, ordered and filtered
 
-Status: **For Dean to pick (§6).** Nothing is built yet.
+Status: **A decided by Dean on 2026-10-15, with every recommended pick in
+§6, and being built in the PR order in §5.** Dean: "let's do A, and also
+separately pins should be per-user, not per-workspace, if they aren't
+already." A task's pin was a column on the shared plan row, so one member's
+pin showed for every member. A PR of its own moves it to a per-user
+`plan_pin` table. Repository pins were already per user.
 
 Dean: "I don't really like any of the options for the created by me filter.
 It feels weird because we already have groups in the sidebar. Although the
@@ -176,7 +181,7 @@ PRs 2 and 3 stand on PR 1 and can run in parallel.
 - Archived's fold was only ever in memory, so there is nothing to move.
 - Every workspace starts on today's view.
 
-## 6. Decisions for Dean
+## 6. Decisions (Dean took every recommendation)
 
 1. **The model:** **A** (recommended), B or C.
 2. **Created by:** a submenu of Anyone, Me and each member (recommended), or a single checkable "Created by me" item.
