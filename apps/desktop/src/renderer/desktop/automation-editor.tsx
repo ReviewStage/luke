@@ -504,14 +504,56 @@ const NEW_SECRET_REFUSAL_WORDS = {
 } as const satisfies Record<AutomationCallFailure, string>;
 
 /**
+ * A webhook's secret, shown the one time the write that minted it answers:
+ * read-only, with Copy and Done, and said never to be shown again. Note that
+ * it is left out of the screen recording whole (`ph-no-capture`), beside the
+ * masking every input already has, because it is a credential; and that it
+ * is keyed by the secret, so a Copied said of one is never said of the next.
+ */
+function ShownSecretRow({
+  secret,
+  onDone,
+}: {
+  secret: string;
+  onDone: () => void;
+}): React.JSX.Element {
+  const copy = useCopyFeedback();
+  return (
+    <div className="settings-row ph-no-capture">
+      <span className="settings-copy">
+        <strong>Secret</strong>
+        <small>You won't be able to see this again. Copy it into your sender now.</small>
+      </span>
+      <span className="automation-row-controls">
+        <input
+          className="settings-input automation-webhook-url"
+          aria-label="Secret"
+          readOnly
+          value={secret}
+        />
+        <button
+          type="button"
+          className="icon-button"
+          aria-label={copyHint(copy.state, "Copy secret")}
+          onClick={() => copy.copy(secret)}
+        >
+          <CopyGlyph state={copy.state} />
+        </button>
+        <button type="button" className="toolbar-button" onClick={onDone}>
+          Done
+        </button>
+      </span>
+    </div>
+  );
+}
+
+/**
  * A webhook's rows: its address to copy once it is saved as a webhook, and
  * its secret, shown once where the write that minted it just answered, and
  * New secret, which asks first, since the new one stops the one a sender
- * holds, and then shows the new one once. Note that a shown secret's row is
- * left out of the screen recording whole (`ph-no-capture`), beside the
- * masking every input already has, because it is a credential; and that it
- * stands in this page's state alone, never the window's app state, so it is
- * gone once Done is pressed or the page is left.
+ * holds, and then shows the new one once. Note that a shown secret stands
+ * in this page's state alone, never the window's app state, so it is gone
+ * once Done is pressed or the page is left.
  */
 function WebhookRows({
   automation,
@@ -526,7 +568,6 @@ function WebhookRows({
   onSecret: (secret: string | undefined) => void;
 }): React.JSX.Element {
   const address = useCopyFeedback();
-  const secretCopy = useCopyFeedback();
   const rotation = useConfirmDialog(
     { subject: automation !== undefined, surfaceOpen: true },
     () => {
@@ -595,31 +636,7 @@ function WebhookRows({
           </button>
         </div>
       ) : (
-        <div className="settings-row ph-no-capture">
-          <span className="settings-copy">
-            <strong>Secret</strong>
-            <small>You won't be able to see this again. Copy it into your sender now.</small>
-          </span>
-          <span className="automation-row-controls">
-            <input
-              className="settings-input automation-webhook-url"
-              aria-label="Secret"
-              readOnly
-              value={secret}
-            />
-            <button
-              type="button"
-              className="icon-button"
-              aria-label={copyHint(secretCopy.state, "Copy secret")}
-              onClick={() => secretCopy.copy(secret)}
-            >
-              <CopyGlyph state={secretCopy.state} />
-            </button>
-            <button type="button" className="toolbar-button" onClick={() => onSecret(undefined)}>
-              Done
-            </button>
-          </span>
-        </div>
+        <ShownSecretRow key={secret} secret={secret} onDone={() => onSecret(undefined)} />
       )}
       <ConfirmDialog
         confirm={rotation}
@@ -942,6 +959,7 @@ function EditorForm({
   repositories,
   shownSecret,
   onSecret,
+  savedAgentId,
   onDraft,
 }: {
   draft: AutomationDraft;
@@ -954,6 +972,8 @@ function EditorForm({
   repositories: RepositoryChooser;
   shownSecret: string | undefined;
   onSecret: (secret: string | undefined) => void;
+  /** The agent its runs go to as saved, while the draft is still on the repository it was saved on; none otherwise. */
+  savedAgentId: string | null;
   onDraft: (patch: Partial<AutomationDraft>) => void;
 }): React.JSX.Element {
   const workspaceName = workspace?.name ?? "Workspace";
@@ -1010,11 +1030,7 @@ function EditorForm({
       </SettingsGroup>
       <RunsGroup
         draft={draft}
-        savedAgentId={
-          automation?.target?.kind === AUTOMATION_TARGET.SAME_AGENT
-            ? automation.target.agentId
-            : null
-        }
+        savedAgentId={savedAgentId}
         workspace={workspace}
         problems={problems}
         planBacked={planBacked}
@@ -1087,10 +1103,13 @@ export function AutomationEditor({
   const [shownSecret, setShownSecret] = useState<string | undefined>(undefined);
   const planBacked = automation !== undefined && automation.planId !== null;
   const change = automation === undefined ? undefined : changeOf(draft, automation, defaults);
+  const saved = automation === undefined ? undefined : automationDraft(automation, defaults);
   // Note that a draft is unsaved wherever it differs from the automation, even where what differs
   // cannot be written yet, a same agent with none chosen, so Save stands to say what is missing.
-  const dirty =
-    automation === undefined || !sameDraft(draft, automationDraft(automation, defaults));
+  const dirty = saved === undefined || !sameDraft(draft, saved);
+  // Note that the saved agent is offered back only on the repository it was saved on, because an agent works in its own repository.
+  const savedAgentId =
+    saved !== undefined && saved.repository === draft.repository ? saved.agentId : null;
   // Note that a new draft nothing was changed in is no work to lose, so Escape may leave it.
   const written = automation === undefined ? !sameDraft(draft, start) : dirty;
   // Escape goes back to the list while nothing written would be lost, and is kept, doing nothing, while it would.
@@ -1224,6 +1243,7 @@ export function AutomationEditor({
               repositories={repositories}
               shownSecret={shownSecret}
               onSecret={setShownSecret}
+              savedAgentId={savedAgentId}
               onDraft={editDraft}
             />
           </div>

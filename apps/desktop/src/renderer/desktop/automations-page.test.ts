@@ -978,6 +978,31 @@ test("an agent the workspace's list no longer holds stays the pick it was saved 
   assert.equal(page.querySelector(".automation-editor-status")?.textContent, "Saved");
 });
 
+test("the agent a same-agent automation was saved with is not offered once its repository is changed", async () => {
+  const gone = "5b6c7d8e-9f0a-4b1c-8d2e-3f4a5b6c7d8e";
+  const following = automation(11, {
+    name: "Follow-up digest",
+    target: { kind: AUTOMATION_TARGET.SAME_AGENT, agentId: gone },
+  });
+  standing = [following];
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: following.id });
+  await settle();
+
+  act(() => page.querySelector<HTMLButtonElement>(".repository-chip .chip")?.click());
+  await settle();
+  act(() => button("acme/web").click());
+  await settle();
+  assert.equal(picked(page, "Agent"), "Choose an agent");
+  act(() => picker(page, "Agent").click());
+
+  assert.deepEqual(
+    [...document.querySelectorAll("[role=option] .plan-compose-menu-name")].map(
+      (name) => name.textContent,
+    ),
+    ["CI digest"],
+  );
+});
+
 test("Same agent is chosen from the workspace's agents on the automation's repository, and saved as its target", async () => {
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
   await settle();
@@ -1216,6 +1241,35 @@ test("a webhook made in the window shows its secret once, read-only with Copy, l
   assert.equal(page.querySelector("input[aria-label='Secret']"), null);
   assert.ok(!(page.ownerDocument.body.innerHTML ?? "").includes(MADE_SECRET), "it is gone");
   assert.ok(button("New secret"), "a new secret is the only way to another");
+});
+
+test("a new secret shown after one was copied says nothing was copied of it yet", async () => {
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
+  await settle();
+  pick(page, "Type", "Webhook");
+  type(page.querySelector("input[aria-label='Automation name']"), "Fix Sentry alerts");
+  type(page.querySelector("textarea[aria-label='Task']"), "Fix the error the alert names.");
+  act(() => button("Create").click());
+  await settle();
+  act(() => button("Copy secret").click());
+  await settle();
+  assert.ok(button("Copied"), "the first secret's copy is said");
+
+  act(() => button("Done").click());
+  act(() => button("New secret").click());
+  act(() => {
+    const confirm = [
+      ...document.querySelectorAll<HTMLButtonElement>(".confirm-dialog button"),
+    ].find((each) => each.textContent === "New secret");
+    confirm?.click();
+  });
+  await settle();
+
+  assert.equal(
+    page.querySelector<HTMLInputElement>("input[aria-label='Secret']")?.value,
+    ROTATED_SECRET,
+  );
+  assert.ok(button("Copy secret"), "the new secret is not said to be copied");
 });
 
 test("a shown secret is let go of once the automation is saved as anything but a webhook", async () => {
