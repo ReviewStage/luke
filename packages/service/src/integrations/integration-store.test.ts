@@ -167,7 +167,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the integration connection row
   );
 
   it.effect(
-    "two accounts at one provider are two rows, each settled and disconnected on its own, the first of them primary",
+    "two accounts at one provider are two rows, each settled and disconnected on its own",
     () =>
       Effect.gen(function* () {
         const userId = yield* openGithubUser();
@@ -200,10 +200,10 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the integration connection row
 
         const rows = yield* readIntegrationConnections(userId);
         assert.deepEqual(
-          rows.map((row) => [row.connectionName, row.connectSubject, row.primary, row.status]),
+          rows.map((row) => [row.connectionName, row.connectSubject, row.status]),
           [
-            ["notion", userId, true, INTEGRATION_ROW_STATUS.PENDING],
-            ["notion-2", "subject-2", false, INTEGRATION_ROW_STATUS.CONNECTED],
+            ["notion", userId, INTEGRATION_ROW_STATUS.PENDING],
+            ["notion-2", "subject-2", INTEGRATION_ROW_STATUS.CONNECTED],
           ],
         );
         assert.notEqual(rows[0]?.id, rows[1]?.id);

@@ -1119,7 +1119,7 @@ test("a tool its server says nothing of has a page that says so", async () => {
   assert.equal(page.querySelector(".integration-tool-parameters"), null);
 });
 
-test("two accounts at a provider stand as two rows named by their labels, the primary's wearing the word, each offering Rename and Add another account, and the other Make primary", async () => {
+test("two accounts at a provider stand as two rows named by their labels, each offering Rename and Add another account", async () => {
   const notion = INTEGRATION_PROVIDER.NOTION;
   standing.set(notion, INTEGRATION_STATUS.CONNECTED);
   addable = [notion];
@@ -1128,14 +1128,14 @@ test("two accounts at a provider stand as two rows named by their labels, the pr
       provider: notion,
       connection: "notion",
       label: "Acme",
-      primary: true,
+
       status: INTEGRATION_STATUS.CONNECTED,
     },
     {
       provider: notion,
       connection: "notion-2",
       label: "Personal",
-      primary: false,
+
       status: INTEGRATION_STATUS.CONNECTED,
     },
   ];
@@ -1145,21 +1145,14 @@ test("two accounts at a provider stand as two rows named by their labels, the pr
       row.querySelector(".settings-copy strong")?.textContent?.startsWith(`Notion · ${label}`),
     ) ?? assert.fail(`Notion · ${label} has a row`);
 
-  assert.equal(rowOf("Acme").querySelector(".settings-changed")?.textContent, "Primary");
-  assert.equal(rowOf("Personal").querySelector(".settings-changed"), null);
-  assert.deepEqual(menuOf(rowOf("Acme")).items, [
-    "Rename",
-    "Add another account",
-    "Reconnect",
-    "Disconnect",
-  ]);
-  assert.deepEqual(menuOf(rowOf("Personal")).items, [
-    "Rename",
-    "Make primary",
-    "Add another account",
-    "Reconnect",
-    "Disconnect",
-  ]);
+  for (const label of ["Acme", "Personal"]) {
+    assert.deepEqual(menuOf(rowOf(label)).items, [
+      "Rename",
+      "Add another account",
+      "Reconnect",
+      "Disconnect",
+    ]);
+  }
 
   await choose(rowOf("Acme"), "Add another account");
   const connects = sent.filter((request) => request.kind === ACT_KIND.INTEGRATIONS_CONNECT);
@@ -1184,7 +1177,7 @@ test("an added account whose first sign-in Connect refused keeps its row with th
       provider: notion,
       connection: "notion",
       label: "Acme",
-      primary: true,
+
       status: INTEGRATION_STATUS.CONNECTED,
     },
   ];
@@ -1237,7 +1230,6 @@ test("an account added under the provider's own name, beside one that stands, wa
       provider: notion,
       connection: "notion-2",
       label: "Personal",
-      primary: true,
       status: INTEGRATION_STATUS.CONNECTED,
     },
   ];
@@ -1270,13 +1262,11 @@ test("an added account whose first sign-in is cancelled leaves its row, so the n
       provider: notion,
       connection: "notion",
       label: "Acme",
-      primary: true,
       status: INTEGRATION_STATUS.CONNECTED,
     },
     {
       provider: notion,
       connection: "notion-2",
-      primary: false,
       status: INTEGRATION_STATUS.PENDING,
     },
   ];
@@ -1311,7 +1301,6 @@ test("a cancelled sign-in that held a provider's last place frees it at once, of
     provider: notion,
     connection: place === 1 ? notion : `notion-${place}`,
     label: `Workspace ${place}`,
-    primary: place === 1,
     status: place === 5 ? INTEGRATION_STATUS.PENDING : INTEGRATION_STATUS.CONNECTED,
   }));
   const page = await mount();
@@ -1343,7 +1332,6 @@ test("a statuses read answered after a newer one changes nothing the newer one d
     provider: notion,
     connection: "notion",
     label: "Acme",
-    primary: true,
     status: INTEGRATION_STATUS.CONNECTED,
   };
   accounts = [acme];
@@ -1356,7 +1344,6 @@ test("a statuses read answered after a newer one changes nothing the newer one d
       provider: notion,
       connection: "notion-2",
       label: "Personal",
-      primary: false,
       status: INTEGRATION_STATUS.CONNECTED,
     },
   ];

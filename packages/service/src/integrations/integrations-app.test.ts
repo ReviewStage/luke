@@ -43,7 +43,6 @@ import {
   deleteIntegrationConnection,
   endIntegrationSignIn,
   expireIntegrationConnection,
-  makeIntegrationPrimary,
   readIntegrationConnections,
   readIntegrationSignIn,
   renameIntegrationConnection,
@@ -160,7 +159,6 @@ const standing = (
         endSignIn: endIntegrationSignIn,
         deleteConnection: deleteIntegrationConnection,
         renameConnection: renameIntegrationConnection,
-        makePrimary: makeIntegrationPrimary,
         mintState: mintIntegrationState,
         mintSubject: () => {
           subjects += 1;
@@ -545,7 +543,7 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
       }),
   );
   it.effect(
-    "a second account at a provider signs in beside the first, and is named, made primary, and disconnected on its own",
+    "a second account at a provider signs in beside the first, and is named and disconnected on its own",
     () =>
       Effect.gen(function* () {
         const group = yield* standing(NOTION_CONNECTOR);
@@ -565,18 +563,8 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
         // The read settles both sign-ins: a Connect that grants every subject holds a grant for each.
         const settled = yield* group.ask(HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS, { userId });
         assert.deepEqual(accountsIn(settled.body), [
-          {
-            provider: NOTION,
-            connection: NOTION,
-            primary: true,
-            status: INTEGRATION_STATUS.CONNECTED,
-          },
-          {
-            provider: NOTION,
-            connection: "notion-2",
-            primary: false,
-            status: INTEGRATION_STATUS.CONNECTED,
-          },
+          { provider: NOTION, connection: NOTION, status: INTEGRATION_STATUS.CONNECTED },
+          { provider: NOTION, connection: "notion-2", status: INTEGRATION_STATUS.CONNECTED },
         ]);
         assert.ok(addableIn(settled.body).includes(NOTION));
         assert.equal(statusIn(settled.body, NOTION), INTEGRATION_STATUS.CONNECTED);
@@ -591,32 +579,18 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
             provider: NOTION,
             connection: "notion-2",
             label: "Personal",
-            primary: false,
             status: INTEGRATION_STATUS.CONNECTED,
           },
         });
-        yield* group.ask(notion(`primary?provider=${NOTION}&connection=notion-2`), {
-          method: "POST",
-          userId,
-        });
-        const swapped = yield* group.ask(HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS, { userId });
-        assert.deepEqual(
-          accountsIn(swapped.body).map((account) => [account.connection, account.primary]),
-          [
-            [NOTION, false],
-            ["notion-2", true],
-          ],
-        );
-
         yield* group.ask(notion(`disconnect?provider=${NOTION}&connection=notion-2`), {
           method: "POST",
           userId,
         });
         const after = yield* group.ask(HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS, { userId });
-        // The first account stands, and falls back to primary with no other left.
+        // The first account stands alone.
         assert.deepEqual(
-          accountsIn(after.body).map((account) => [account.connection, account.primary]),
-          [[NOTION, true]],
+          accountsIn(after.body).map((account) => account.connection),
+          [NOTION],
         );
       }),
   );

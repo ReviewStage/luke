@@ -520,8 +520,9 @@ name stored before a second account was possible keeps naming the first.
 A row also keeps a `label`, the account's name at the provider where
 Connect's grant carries one shaped like no credential, or the developer's
 own; it is an identity at the provider, never a credential, answered to the
-desktop and to no log line, span, counted event, or fixture; and an
-`is_primary` flag, which only what the agents are told of the account reads.
+desktop and to no log line, span, counted event, or fixture. No account at
+a provider is primary: the agents are told each by its label, and to ask
+which one where the developer has not said.
 A provider offers more than one account where its catalog entry names a
 `MULTIPLE_ACCOUNTS_VARIABLE` (Notion, Linear, Slack, Supabase, PostHog,
 Executor), unless that variable (`NOTION_MULTIPLE_ACCOUNTS`, …) is `off`,
@@ -540,7 +541,7 @@ without one means the provider's first account, so a desktop that predates
 more than one sees exactly what it saw before:
 
 - `GET /api/account/integrations` answers `{ integrations: { <provider>:
-  status }, accounts?: [{ provider, connection, label?, primary, status }],
+  status }, accounts?: [{ provider, connection, label?, status }],
   addable?: [provider], signInFailures?: [{ provider, connection?, reason,
   message? }] }`: each provider's first account's word, every account the
   Luke account holds but one whose first sign-in ended without a grant, the
@@ -571,9 +572,8 @@ more than one sees exactly what it saw before:
   the native node; no window draws it and nothing logs it.
 - `POST /api/account/integrations/{provider}/rename` names the account a
   `connection` names, `{ label }` trimmed to between 1 and 64 characters,
-  and `…/primary` makes it the provider's primary and every other account
-  there not, in one statement; each answers `{ account }` as it then stands,
-  and one the account does not hold is `not-found`.
+  and answers `{ account }` as it then stands; one the account does not hold
+  is `not-found`.
 - `POST /api/account/integrations/{provider}/cancel` ends the sign-in under
   way and nothing else: a first sign-in's row goes, any other row keeps its
   status, and no grant is revoked, so a sign-in that completed just before
@@ -633,9 +633,12 @@ connection name and keyed in eve by its own grant's subject, which its
 token read is held to, so a name a later account takes never reaches it from
 a turn handed the old one, and a provider with none is handed bare, so its first call says how to connect it. Where a
 provider hands more than one account, each description gains one sentence
-naming which account it is, whether it is primary, and the others, and
-asking the agent to say which it used; a developer with one account per
-provider is told the same bytes as before. Luke's brain and its worker are handed every integration; a coding
+naming which account it is and the others, by their labels alone, each
+quoted as a string, asking the agent to ask which account before a write
+the developer has not pointed at one, and to say which it used; a
+developer with one account per provider is told the same bytes as before.
+A conversation whose workspace connected Linear for every member is handed
+Linear once, bare, on the workspace's grant. Luke's brain and its worker are handed every integration; a coding
 agent and its worker are handed every one the developer has not switched off
 for that agent, the switches naming connections. The
 definition's auth is eve's plain `getToken` form, credentialed as the app,

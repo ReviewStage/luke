@@ -78,15 +78,15 @@ it.effect(
           answer: () => ({
             integrations: { notion: "connected" },
             accounts: [
-              { provider: "notion", connection: "notion", primary: true, status: "connected" },
+              { provider: "notion", connection: "notion", status: "connected" },
               {
                 provider: "notion",
                 connection: "notion-2",
                 label: "Personal",
-                primary: false,
+
                 status: "pending",
               },
-              { provider: "gmail", connection: "gmail", primary: true, status: "connected" },
+              { provider: "gmail", connection: "gmail", status: "connected" },
             ],
             addable: ["notion", "gmail"],
           }),
@@ -100,7 +100,7 @@ it.effect(
               provider: "notion",
               connection: request.searchParams.get("connection") ?? "",
               label: JSON.parse(request.body ?? "{}").label,
-              primary: false,
+
               status: "connected",
             },
           }),

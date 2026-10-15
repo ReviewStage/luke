@@ -67,16 +67,8 @@ function fixture() {
               provider,
               connection,
               label,
-              primary: false,
               status: INTEGRATION_STATUS.CONNECTED,
             },
-          };
-        }),
-      integrationsPrimary: ({ provider, connection }) =>
-        Effect.sync(() => {
-          asked.push(`primary ${provider} ${connection}`);
-          return {
-            account: { provider, connection, primary: true, status: INTEGRATION_STATUS.CONNECTED },
           };
         }),
     },

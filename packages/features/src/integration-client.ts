@@ -41,7 +41,6 @@ import {
   integrationCancelPath,
   integrationConnectPath,
   integrationDisconnectPath,
-  integrationPrimaryPath,
   integrationRenamePath,
   integrationToolsPath,
 } from "./service-paths.js";
@@ -274,20 +273,6 @@ export class HostedIntegrationsClient {
         method: HTTP_METHOD.POST,
         path: accountPath(integrationRenamePath(provider), { connection }),
         body: JSON.stringify({ label }),
-      }),
-      (answer) => readAnswer(answer, integrationAccountAnswerSchema),
-    );
-  }
-
-  /** One account made its provider's primary, answering the account as it then stands. */
-  primary(
-    provider: IntegrationProvider,
-    connection: string,
-  ): Effect.Effect<IntegrationAccountView, never, HttpClient.HttpClient> {
-    return Effect.flatMap(
-      this.#call.send({
-        method: HTTP_METHOD.POST,
-        path: accountPath(integrationPrimaryPath(provider), { connection }),
       }),
       (answer) => readAnswer(answer, integrationAccountAnswerSchema),
     );

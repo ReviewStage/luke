@@ -83,7 +83,6 @@ import {
 } from "@luke/features/coding-agent-view";
 import {
   INTEGRATION_CALL_FAILURE,
-  type IntegrationAccountParams,
   type IntegrationAccountView,
   type IntegrationConnectView,
   type IntegrationProviderParams,
@@ -376,8 +375,6 @@ export interface HostOperator {
   integrationsDisconnect(params: IntegrationProviderParams): Effect.Effect<IntegrationStatusView>;
   /** One account at a provider named as the developer calls it; the account as it then stands, or why there is no answer. */
   integrationsRename(params: IntegrationRenameParams): Effect.Effect<IntegrationAccountView>;
-  /** One account made its provider's primary; the account as it then stands, or why there is no answer. */
-  integrationsPrimary(params: IntegrationAccountParams): Effect.Effect<IntegrationAccountView>;
   /** The page that connects the account's GitHub, asked of the service; its address, or why there is none. */
   githubConnect(): Effect.Effect<PlanningGitHubPageAnswer>;
   /** The account's GitHub disconnected under the Mac's session; the connection as it then stands, or why it is not. */
@@ -761,14 +758,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           provider: params.provider,
           connection: params.connection,
           label: params.label,
-        }),
-        integrationAnswer(integrationAccountViewSchema),
-      ),
-    integrationsPrimary: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.INTEGRATIONS_PRIMARY, {
-          provider: params.provider,
-          connection: params.connection,
         }),
         integrationAnswer(integrationAccountViewSchema),
       ),

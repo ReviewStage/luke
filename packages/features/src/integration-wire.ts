@@ -17,8 +17,8 @@ import { Schema as EffectSchema } from "effect";
  * or for a new one with `add=true`, and answers the address the browser
  * opens, which the desktop opens and never draws.
  * `POST /api/account/integrations/{provider}/disconnect` ends one account's
- * connection and answers its word; `…/rename` and `…/primary` name one or
- * make it the provider's primary. The browser returns from a sign-in to the
+ * connection and answers its word; `…/rename` names one. The browser
+ * returns from a sign-in to the
  * service's own callback, which settles it and sends the browser on to the
  * landing page below with the provider and one word of its own. No answer
  * carries a token. An account's label is its name at the provider (a
@@ -286,8 +286,6 @@ export const integrationAccountSchema = EffectSchema.Struct({
   connection: integrationConnectionNameSchema,
   /** Its name at the provider, or the developer's own for it, where either is known. */
   label: EffectSchema.optionalKey(EffectSchema.String),
-  /** Whether it is the provider's primary account, which the agents use unless told otherwise. */
-  primary: EffectSchema.Boolean,
   status: integrationStatusSchema,
 });
 
@@ -305,6 +303,27 @@ export function integrationAccountLabel(account: {
   return `Account ${integrationConnectionOf(account.connection)?.place ?? 1}`;
 }
 
+/**
+ * What each of a provider's accounts is called among the others, by its
+ * connection name: its label, or "Account 2" by its place, and where two
+ * would be called alike, each of those with its place after ("Work (2)"),
+ * so no two accounts at a provider ever read the same.
+ */
+export function integrationAccountNames(
+  accounts: readonly { readonly connection: string; readonly label?: string | undefined }[],
+): ReadonlyMap<string, string> {
+  const called = accounts.map(
+    (account) => [account.connection, integrationAccountLabel(account)] as const,
+  );
+  const alike = (name: string) => called.filter(([, each]) => each === name).length > 1;
+  return new Map(
+    called.map(([connection, name]) => [
+      connection,
+      alike(name) ? `${name} (${integrationConnectionOf(connection)?.place ?? 1})` : name,
+    ]),
+  );
+}
+
 /** A label as the developer names an account (POST): trimmed, never blank, and bounded. */
 export const integrationRenameRequestSchema = EffectSchema.Struct({
   label: EffectSchema.Trim.check(
@@ -313,7 +332,7 @@ export const integrationRenameRequestSchema = EffectSchema.Struct({
   ),
 });
 
-/** One account as a rename or a Make primary leaves it (POST). */
+/** One account as a rename leaves it (POST). */
 export const integrationAccountAnswerSchema = EffectSchema.Struct({
   account: integrationAccountSchema,
 });

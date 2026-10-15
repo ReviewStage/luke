@@ -11,7 +11,7 @@ import {
   type IntegrationAccount,
   type IntegrationProvider,
   type IntegrationStatus,
-  integrationAccountLabel,
+  integrationAccountNames,
 } from "@luke/features/integration-wire";
 import { matchIntegration } from "./integration-search.js";
 import { searchTokens } from "./search-tokens.js";
@@ -168,6 +168,7 @@ export function serverRows(input: {
   );
   return offered.flatMap((provider) => {
     const accounts = input.accountsOf?.(provider) ?? [];
+    const names = integrationAccountNames(accounts);
     const servers = accounts.length > 0 ? accounts : [undefined];
     return servers.map((account): ServerRow => {
       const connection = account?.connection ?? provider;
@@ -175,14 +176,15 @@ export function serverRows(input: {
       const health = input.healthOf(connection);
       const signIn = input.signInOf(connection);
       const connected = status === INTEGRATION_STATUS.CONNECTED;
+      const named = names.get(connection);
       return {
         provider,
         connection,
         ...(account !== undefined ? { account } : undefined),
         accounts: accounts.length,
         name:
-          account !== undefined && accounts.length > 1
-            ? `${INTEGRATION_NAME[provider]} · ${integrationAccountLabel(account)}`
+          named !== undefined && accounts.length > 1
+            ? `${INTEGRATION_NAME[provider]} · ${named}`
             : INTEGRATION_NAME[provider],
         kind: kindOf(status, health, signIn, input.readFailed),
         on: !input.disabled.includes(connection),
@@ -295,6 +297,7 @@ export function namedServers(input: {
 }): readonly NamedServer[] {
   return INTEGRATION_PROVIDER_LIST.flatMap((provider) => {
     const accounts = input.accountsOf(provider);
+    const names = integrationAccountNames(accounts);
     const servers: readonly NamedServer[] =
       accounts.length === 0
         ? [{ provider, connection: provider, name: INTEGRATION_NAME[provider] }]
@@ -303,7 +306,7 @@ export function namedServers(input: {
             connection: account.connection,
             name:
               accounts.length > 1
-                ? `${INTEGRATION_NAME[provider]} · ${integrationAccountLabel(account)}`
+                ? `${INTEGRATION_NAME[provider]} · ${names.get(account.connection)}`
                 : INTEGRATION_NAME[provider],
           }));
     return servers.filter((server) => input.standing(input.statusOf(server.connection)));

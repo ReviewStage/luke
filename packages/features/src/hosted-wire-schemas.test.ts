@@ -178,7 +178,6 @@ const EFFECT_MODULE_SCHEMAS = {
   } satisfies RecordedEffectJsonSchemas<typeof githubRepositoriesWire>,
   "integration-view": {
     integrationProviderParamsSchema: integrationView.integrationProviderParamsSchema,
-    integrationAccountParamsSchema: integrationView.integrationAccountParamsSchema,
     integrationRenameParamsSchema: integrationView.integrationRenameParamsSchema,
     integrationAccountViewSchema: integrationView.integrationAccountViewSchema,
     integrationStatusesViewSchema: integrationView.integrationStatusesViewSchema,

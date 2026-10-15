@@ -1,5 +1,4 @@
 import type {
-  IntegrationAccountParams,
   IntegrationAccountView,
   IntegrationConnectView,
   IntegrationProviderParams,
@@ -29,7 +28,6 @@ export interface IntegrationActsDependencies {
     integrationsDisconnect(params: IntegrationProviderParams): Effect.Effect<IntegrationStatusView>;
     integrationsTools(params: IntegrationProviderParams): Effect.Effect<IntegrationToolsView>;
     integrationsRename(params: IntegrationRenameParams): Effect.Effect<IntegrationAccountView>;
-    integrationsPrimary(params: IntegrationAccountParams): Effect.Effect<IntegrationAccountView>;
   };
 }
 
@@ -39,8 +37,7 @@ type IntegrationActKind =
   | typeof ACT_KIND.INTEGRATIONS_CANCEL
   | typeof ACT_KIND.INTEGRATIONS_DISCONNECT
   | typeof ACT_KIND.INTEGRATIONS_TOOLS
-  | typeof ACT_KIND.INTEGRATIONS_RENAME
-  | typeof ACT_KIND.INTEGRATIONS_PRIMARY;
+  | typeof ACT_KIND.INTEGRATIONS_RENAME;
 
 /** The refusal a window that draws no Settings hears, in its kind's own words. */
 function refuseUnlessPanel(kind: IntegrationActKind, sender: ActSender): void {
@@ -75,10 +72,6 @@ export function integrationActRows(
     [ACT_KIND.INTEGRATIONS_RENAME]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.INTEGRATIONS_RENAME, sender);
       return host.integrationsRename(params);
-    },
-    [ACT_KIND.INTEGRATIONS_PRIMARY]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.INTEGRATIONS_PRIMARY, sender);
-      return host.integrationsPrimary(params);
     },
   };
 }
