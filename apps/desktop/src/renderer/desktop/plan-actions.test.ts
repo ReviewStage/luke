@@ -481,3 +481,88 @@ test("Copy link to task copies the plan's address on tryluke.dev, alike from the
 
   assert.deepEqual(copied, [link, link, link]);
 });
+
+test("a task's card says who created it where others share its workspace, the reader as you, and nothing in a workspace of one", () => {
+  /** The card's lines under its name, as Dean hears them with the creation's time left off. */
+  const details = (plan: PlanSummary, workspace: Workspace) => {
+    const plans = plansControl({ me: DEAN.userId, workspaces: [workspace] });
+    const card = mount(
+      createElement(MemberDirectory, {
+        workspace: undefined,
+        readerId: DEAN.userId,
+        children: planCardOf(plans, { ...plan, workspaceId: workspace.id }, plan.updatedAt),
+      }),
+    );
+    const lines = [...card.querySelectorAll(".plan-card-detail")].map((line) =>
+      heard(line).replace(/ · .*$/u, ""),
+    );
+    unmountAll();
+    return lines;
+  };
+  const charles = { ...OTHER, createdAt: 60_000, ownerId: CHARLES.userId, createdBy: CHARLES };
+
+  assert.deepEqual(details(charles, STAGE), ["Created by Charles Pan"]);
+  assert.deepEqual(details({ ...charles, ownerId: DEAN.userId, createdBy: DEAN }, STAGE), [
+    "Created by you",
+  ]);
+  assert.deepEqual(details(charles, PERSONAL), []);
+  // A service that names no creator leaves the card as it was.
+  assert.deepEqual(details(OTHER, STAGE), []);
+});
+
+test("a task's card says you of the reader's own task outside a member directory, and, where the service counts no members, says who created it only once the members read lists someone else", async () => {
+  const { memberCount: _uncounted, ...stage } = STAGE;
+  const mine = { ...OTHER, workspaceId: STAGE.id, ownerId: DEAN.userId, createdBy: DEAN };
+  const lines = async (
+    workspace: Workspace,
+    members: readonly { userId: string; name: string }[] | undefined,
+  ) => {
+    installMembers(members);
+    const plans = plansControl({ me: DEAN.userId, workspaces: [PERSONAL, workspace] });
+    const card = mount(
+      members === undefined
+        ? planCardOf(plans, mine, mine.updatedAt)
+        : createElement(MemberDirectory, {
+            workspace,
+            readerId: DEAN.userId,
+            children: planCardOf(plans, mine, mine.updatedAt),
+          }),
+    );
+    await act(async () => {
+      for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+    });
+    const said = [...card.querySelectorAll(".plan-card-detail")].map((line) =>
+      heard(line).replace(/ · .*$/u, ""),
+    );
+    unmountAll();
+    return said;
+  };
+
+  assert.deepEqual(await lines(STAGE, undefined), ["Created by you"]);
+  assert.deepEqual(await lines(stage, [DEAN, CHARLES]), ["Created by you"]);
+  assert.deepEqual(await lines(stage, [DEAN]), []);
+  assert.deepEqual(await lines(stage, undefined), []);
+});
+
+/** The bridge answering the members read with `members`, each a member of the workspace. */
+function installMembers(members: readonly { userId: string; name: string }[] | undefined): void {
+  Object.defineProperty(window, "luke", {
+    configurable: true,
+    value: {
+      ...window.luke,
+      act: (request: Act): Promise<ActOutcome> =>
+        Promise.resolve(
+          request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ && members !== undefined
+            ? {
+                status: ACT_OUTCOME_STATUS.DONE,
+                value: members.map((member) => ({
+                  ...member,
+                  email: `${member.userId}@example.com`,
+                  role: WORKSPACE_ROLE.MEMBER,
+                })),
+              }
+            : { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Could not read." },
+        ),
+    },
+  });
+}

@@ -1,13 +1,14 @@
 # Proposal: which tasks are mine (the creator's face)
 
 Status: **A decided by Dean on 2026-10-15 and being built in the PR order in
-§5. Where the filter lives is still Dean's pick (§3).** Dean: "Let's go with
-A, with a small icon for filtering (not the All/Mine sliders). And make sure
-faces are pushed to the right instead of all in the same column, because we
-don't want to give up space for the title if we don't have to." Then, on the
-filter: "I don't know how the filter icon would fit into the sidebar, to be
-honest. Can we get some designs of what that would look like? I want to do
-whatever is standard", with the bar "standard and obvious".
+§5. No filter here (§3).** Dean: "Let's go with A, with a small icon for
+filtering (not the All/Mine sliders). And make sure faces are pushed to the
+right instead of all in the same column, because we don't want to give up
+space for the title if we don't have to." He then turned down all four
+places a filter could live ("it feels weird because we already have groups
+in the sidebar") and asked for the sidebar's grouping, sorting, and
+filtering to be rethought as a whole, which is designed apart from this
+proposal; the filter comes from that design.
 
 Dean asked: "I can't tell which plans are 'mine' vs Charles. I think it should
 be based on who created the plan." Since then the sidebar's units have been
@@ -67,34 +68,18 @@ Everywhere else a task appears:
 | ⌘K | The face at a task row's end. The creator's name is one of the words a task is found by ("charles" finds his tasks), and the detail names the creator after the repository when the name is what matched |
 | The Move dialog | Unchanged: only a task's creator may move it |
 
-## 3. Where a "Created by me" filter lives (Dean to pick)
+## 3. A "Created by me" filter (not taken)
 
-Every option is drawn in the show with its filtered state and the way back.
-In each one, the open task stays listed while filtered, as it does under a
-fold. The choice is kept per workspace on this Mac, as the folds are. A
-personal workspace offers no filter.
-
-- **(c) A "My tasks" row under Inbox (recommended).** It is drawn as Home
-  and Inbox are. Pressing it lists only the tasks you created and marks the
-  row. Pressing it again, or "Show all" in the line heading the list, lists
-  everything. It is the most standard and obvious of the four: Linear puts
-  "My issues" in the sidebar under Inbox
-  (https://linear.app/docs/my-issues), Drive's sidebar leads with "My
-  Drive", and GitHub's dashboards name "Created by me" and "Authored by me"
-  views. It is labelled, never hover-revealed, and costs one row.
-- **(a) A filter icon on a "Tasks" header, revealed on hover**, dropping
-  "All tasks" and "Created by me", as Notion's and Slack's section headers
-  reveal ••• with Sort and Filter
-  (https://www.notion.com/help/navigate-with-the-sidebar,
-  https://slack.com/help/articles/360043207674). It is standard but not
-  obvious, and it adds a header row.
-- **(b) A view option in the workspace switcher's menu.** It adds nothing at
-  rest, but it is the least obvious: that menu chooses a workspace, not a
-  view.
-- **(d) No sidebar filter, only ⌘K.** Typing "created by me" or a
-  teammate's name finds their tasks, which PR 3 makes nearly free. This is
-  how Notion, Figma and Drive treat a creator: as a search filter. But
-  nothing keeps the list to your tasks while you work.
+The show draws the four places weighed for a filter: (c) a "My tasks" row
+under Inbox, as Linear puts "My issues" (https://linear.app/docs/my-issues);
+(a) a hover-revealed filter icon on a "Tasks" header, as Notion's and
+Slack's section headers reveal Sort and Filter
+(https://www.notion.com/help/navigate-with-the-sidebar,
+https://slack.com/help/articles/360043207674); (b) a view option in the
+workspace switcher's menu; and (d) ⌘K alone. Dean turned all four down,
+since the sidebar already groups its tasks, and the filter now comes from
+the redesign of the sidebar's grouping, sorting, and filtering. ⌘K's search
+by creator (PR 3) stands either way.
 
 ## 4. Created by, not assigned to
 
@@ -119,6 +104,5 @@ Desktop only, since `createdBy` and members' photos are already on the wire.
 | 1 | `feat(desktop): a task someone else created wears its creator's face in the sidebar`. Adds `teammateCreator` to `@luke/ui/actor-model` and `ACTOR_SIZE.MARK`, puts the face in the time's slot, puts a `MemberDirectory` around the list, and updates this doc and its show | S |
 | 2 | `feat(desktop): a task's card and its plan's crumb say who created it` | S |
 | 3 | `feat(desktop): Home, Factory and ⌘K name a task's creator` | S |
-| 4 | The filter, once Dean picks where it lives (§3) | S |
 
 PRs 2 and 3 stand on PR 1 and can run in parallel.
