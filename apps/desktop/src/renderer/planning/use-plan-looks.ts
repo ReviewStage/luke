@@ -1,22 +1,22 @@
-import { useAtom, useAtomSet, useAtomValue } from "@effect/atom-react";
+import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import {
   PLAN_ACTOR,
   type Plan,
   type PlanSectionEdit,
   type PlanSummary,
 } from "@luke/features/plan-wire";
-import { Duration, Effect, Option, Schema } from "effect";
-import { AsyncResult, Atom } from "effect/reactivity";
+import { Option, Schema } from "effect";
+import { Atom } from "effect/reactivity";
 import { useEffect, useState } from "react";
-import { rendererRuntime } from "../renderer-runtime";
 
 /**
  * use-plan-looks.ts -- what changed since the developer last looked at a plan on this Mac: the open plan's sections, and the sidebar's unread plans.
  *
- * A look is the plan held open for a few seconds: from then on, every save
- * the developer has the plan open for is one they watched land, so the
- * newest save the plan names is kept as what they last saw. Opening the plan
- * again reads that mark, and each section a save by anyone but the developer
+ * A look is the plan opened, whichever of its column's tabs it opens on:
+ * from then on, every save the developer has the plan open for is one they
+ * watched land, so the newest save the plan names is kept as what they last
+ * saw. The visit reads the mark the last look left as the plan opens, before
+ * this one moves it, and each section a save by anyone but the developer
  * changed after it is a section changed since they last looked, held for the
  * visit until they dismiss it or leave. A section is known by its heading.
  * A save that lands while the plan is open is typed in before
@@ -39,9 +39,6 @@ import { rendererRuntime } from "../renderer-runtime";
  * unread once anything has been saved in it since it started.
  */
 
-/** How long the plan is open before the developer has looked at it. */
-const PLAN_LOOK = Duration.seconds(3);
-
 /** Where the plans' marks are kept in the renderer's storage. */
 const STORAGE_KEY = "luke.planLooks";
 
@@ -62,26 +59,18 @@ interface KeptLooks {
   readonly seeded: boolean;
 }
 
-/** One stay on a plan, as the look's wait knows it: a fresh object each visit, so a wait from an earlier one never counts. */
-interface VisitToken {
-  readonly planId: string | undefined;
-}
-
-/** The look's wait, as an atom whose work is the wait; a new visit starts it over. */
-const lookAtom = rendererRuntime.fn((visit: VisitToken) =>
-  Effect.as(Effect.sleep(PLAN_LOOK), visit),
-);
-
 /**
- * One stay on a plan: the sections changed since the last look as it opened,
- * and its token for the look's wait, as read for the reader it names. Note
- * that a reader's id arriving mid-stay starts the stay over, because the
- * sections read without it took every developer's save as the reader's.
+ * One stay on a plan: the mark the last look left as it opened, and the
+ * sections changed since it, as read for the reader it names. Note that a
+ * reader's id arriving mid-stay reads the sections again against the mark
+ * the stay opened with, because the sections read without it took every
+ * developer's save as the reader's, and this stay's own look has moved the
+ * kept mark since.
  */
 interface Visit {
   readonly planId: string | undefined;
   readonly readerId: string | undefined;
-  readonly token: VisitToken;
+  readonly mark: number | undefined;
   readonly changed: ReadonlySet<string>;
 }
 
@@ -147,7 +136,7 @@ const looksAtom = Atom.writable(
   },
 );
 
-/** The plan the developer is looking at now: open past `PLAN_LOOK`, so every save that lands on it is seen. */
+/** The plan the developer is looking at now: open, so every save that lands on it is seen. */
 const watchedAtom = Atom.make<string | undefined>(undefined);
 
 /** The save that last changed each of the plan's sections, each by its heading. */
@@ -180,11 +169,14 @@ function readersOwn(edit: PlanSectionEdit, readerId: string | undefined): boolea
   return edit.by === undefined || readerId === undefined || edit.by.userId === readerId;
 }
 
-/** A visit to the plan as it opens: each section someone else, a teammate or Luke or an agent, saved after the last look; none while no plan is drawn. */
-function visited(plan: Plan | undefined, readerId: string | undefined): Visit {
+/** A visit to the plan at `mark`, the last look's: each section someone else, a teammate or Luke or an agent, saved after it; none while no plan is drawn. */
+function visited(
+  plan: Plan | undefined,
+  readerId: string | undefined,
+  mark: number | undefined,
+): Visit {
   if (plan === undefined)
-    return { planId: undefined, readerId, token: { planId: undefined }, changed: NOTHING_CHANGED };
-  const mark = readLooks()[plan.id];
+    return { planId: undefined, readerId, mark: undefined, changed: NOTHING_CHANGED };
   const changed =
     mark === undefined
       ? NOTHING_CHANGED
@@ -193,43 +185,51 @@ function visited(plan: Plan | undefined, readerId: string | undefined): Visit {
             .filter((edit) => !readersOwn(edit, readerId) && edit.at > mark)
             .map((edit) => edit.section),
         );
-  return { planId: plan.id, readerId, token: { planId: plan.id }, changed };
+  return { planId: plan.id, readerId, mark, changed };
+}
+
+/** The visit as the plan opens, or as the reader's id arrives on the one already open, whose mark it keeps. */
+function revisited(
+  held: Visit | undefined,
+  plan: Plan | undefined,
+  readerId: string | undefined,
+): Visit {
+  const staying = held !== undefined && plan !== undefined && held.planId === plan.id;
+  const mark = staying ? held.mark : plan === undefined ? undefined : readLooks()[plan.id];
+  return visited(plan, readerId, mark);
 }
 
 /**
  * The drawn plan's sections changed since the developer last looked at it,
- * and the mark moved on once they have: after `PLAN_LOOK` open, and again
- * with every save while it stays open. Note that it is held by the window's
- * shell rather than the plan's page, because the plan's version history
- * standing in the page's place is still a stay on the plan.
+ * and the mark moved on at once: as the plan opens, and again with every
+ * save while it stays open. Note that the visit reads the last look's mark
+ * as it renders, before the effect that moves it runs, so the plan opening
+ * still lights what changed since the stay before. It is held by the
+ * window's shell rather than the plan's page, because the plan's version
+ * history standing in the page's place is still a stay on the plan.
  */
 export function usePlanLooks(plan: Plan | undefined, readerId: string | undefined): PlanLooks {
-  const [visit, setVisit] = useState(() => visited(plan, readerId));
-  const [look, restartLook] = useAtom(lookAtom);
+  const [visit, setVisit] = useState(() => revisited(undefined, plan, readerId));
   const keep = useAtomSet(looksAtom);
   const watch = useAtomSet(watchedAtom);
   let current = visit;
   if (visit.planId !== plan?.id || visit.readerId !== readerId) {
-    current = visited(plan, readerId);
+    current = revisited(visit, plan, readerId);
     setVisit(current);
   }
-  const { token } = current;
-  const looked = AsyncResult.isSuccess(look) && !look.waiting && look.value === token;
   const planId = plan?.id;
   const newest = plan === undefined ? undefined : newestSaveOf(plan);
 
-  useEffect(() => restartLook(token), [token, restartLook]);
-
   useEffect(() => {
-    if (looked && planId !== undefined && newest !== undefined)
+    if (planId !== undefined && newest !== undefined)
       keep({ marks: { [planId]: newest }, seeded: false });
-  }, [looked, planId, newest, keep]);
+  }, [planId, newest, keep]);
 
   useEffect(() => {
-    if (!looked || planId === undefined) return;
+    if (planId === undefined) return;
     watch(planId);
     return () => watch(undefined);
-  }, [looked, planId, watch]);
+  }, [planId, watch]);
 
   return {
     changed: current.changed,
