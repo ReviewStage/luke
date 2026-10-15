@@ -140,7 +140,7 @@ command run on someone's Mac each say whose it was.
 [#2853](https://github.com/ReviewStage/luke/pull/2853),
 [#2854](https://github.com/ReviewStage/luke/pull/2854))
 
-![A plan edited by Dana Moreno on her face, its sections signed by Dana, Luke during your call, a coding agent, and Jordan Lee, and its ⋯ menu ending with who created and last edited it.](apps/web/public/changelog/0.14.0/who-did-what.png)
+![The Teammate invitations plan, edited by Dana Moreno on her face under its acme › relay crumb and the five who can edit it, its sections signed by Dana, Luke during your call, a coding agent, and Jordan Lee.](apps/web/public/changelog/0.14.0/who-did-what.png)
 
 ### Workspaces, clearer
 
@@ -181,7 +181,7 @@ tab and offers Move to workspace, which says who loses and gains it.
 [#2804](https://github.com/ReviewStage/luke/pull/2804),
 [#2870](https://github.com/ReviewStage/luke/pull/2870))
 
-![The sidebar headed by acme's mark and its five members, its switcher open on Dean's personal workspace, acme, and Harbor Labs, over acme's plans.](apps/web/public/changelog/0.14.0/workspaces-clearer.png)
+![The sidebar headed by acme's mark and its five members, its switcher open on Dean's personal workspace, acme, and Harbor Labs, over acme's tasks.](apps/web/public/changelog/0.14.0/workspaces-clearer.png)
 
 ### Tasks
 

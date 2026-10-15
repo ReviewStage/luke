@@ -113,10 +113,10 @@ index 2a9bea48b..f2ad28d0a 100644
                        }),
                        onViewChange: setSettingsView,
 diff --git a/apps/desktop/src/renderer/desktop/desktop-plans.tsx b/apps/desktop/src/renderer/desktop/desktop-plans.tsx
-index 8a471263b..2304c01fd 100644
+index ce23565ac..9ef2c8a5a 100644
 --- a/apps/desktop/src/renderer/desktop/desktop-plans.tsx
 +++ b/apps/desktop/src/renderer/desktop/desktop-plans.tsx
-@@ -46,6 +46,7 @@ import { SIDE_PANEL_TAB } from "../planning/use-side-panel";
+@@ -52,6 +52,7 @@ import { SIDE_PANEL_TAB } from "../planning/use-side-panel";
  import { workRowsOf } from "../planning/work-model";
  import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
  import { ConfirmDialog } from "../settings/confirm-dialog";
@@ -124,7 +124,7 @@ index 8a471263b..2304c01fd 100644
  import { Skeleton } from "../skeleton";
  import { SPINNER_SIZE, Spinner } from "../spinner";
  import { useExperiment } from "../use-app-state";
-@@ -714,7 +715,9 @@ function PlanDocument({
+@@ -716,7 +717,9 @@ function PlanDocument({
                </div>
                {/* Note that a call of the plan's own still stands, so it can be
              ended, when only a race left one on a plan just archived. */}
@@ -136,7 +136,7 @@ index 8a471263b..2304c01fd 100644
                    {captions}
                    <CallBar
 diff --git a/apps/desktop/src/renderer/desktop/desktop-sidebar.tsx b/apps/desktop/src/renderer/desktop/desktop-sidebar.tsx
-index 32b0db755..aaef3fa38 100644
+index 58a65141e..4ee0c69cc 100644
 --- a/apps/desktop/src/renderer/desktop/desktop-sidebar.tsx
 +++ b/apps/desktop/src/renderer/desktop/desktop-sidebar.tsx
 @@ -39,6 +39,7 @@ import { inColumn, type PinnedTab } from "../planning/use-side-panel";
@@ -191,7 +191,7 @@ index da7e74880..7f3e0d13f 100644
    const onToggle = useCallback(
      () => (fixtureMode ? setStaged : setKept)((was) => !was),
 diff --git a/apps/desktop/src/renderer/planning/planning-fixture.ts b/apps/desktop/src/renderer/planning/planning-fixture.ts
-index 9e7f5466e..d431c1ce4 100644
+index d03d3f624..60d2b0478 100644
 --- a/apps/desktop/src/renderer/planning/planning-fixture.ts
 +++ b/apps/desktop/src/renderer/planning/planning-fixture.ts
 @@ -390,7 +390,8 @@ const FIXTURE_TRANSCRIPT: PlanTranscript = {
@@ -262,7 +262,7 @@ index 037f14dbd..d8aa0a4fa 100644
        setVisit((held) => (held.planId === planId ? { ...held, changed: NOTHING_CHANGED } : held));
        if (planId !== undefined && newest !== undefined)
 diff --git a/apps/desktop/src/renderer/planning/use-plans-tab.ts b/apps/desktop/src/renderer/planning/use-plans-tab.ts
-index e2fe8ffa4..d54923e99 100644
+index bd3514860..6add14e3a 100644
 --- a/apps/desktop/src/renderer/planning/use-plans-tab.ts
 +++ b/apps/desktop/src/renderer/planning/use-plans-tab.ts
 @@ -85,6 +85,7 @@ import {
@@ -3520,10 +3520,10 @@ index 000000000..47b89d62b
 +}
 diff --git a/apps/desktop/src/renderer/shots/who.ts b/apps/desktop/src/renderer/shots/who.ts
 new file mode 100644
-index 000000000..889533188
+index 000000000..467c89b4c
 --- /dev/null
 +++ b/apps/desktop/src/renderer/shots/who.ts
-@@ -0,0 +1,249 @@
+@@ -0,0 +1,250 @@
 +/**
 + * who.ts -- shot "Who did what": the "Teammate invitations" plan's header and first sections, every writer on their own face, with the plan's ⋯ menu held open.
 + *
@@ -3693,7 +3693,7 @@ index 000000000..889533188
 +    return undefined;
 +  return (
 +    document.querySelector<HTMLButtonElement>(
-+      '.toolbar-tab-actions button[aria-label="Plan actions"]',
++      '.toolbar-tab-actions button[aria-label="Task actions"]',
 +    ) ?? undefined
 +  );
 +}
@@ -3770,7 +3770,8 @@ index 000000000..889533188
 +      [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => members,
 +    },
 +    layout: { sidebarCollapsed: true, bylines: true },
-+    steps: [OPEN_PLAN_MENU],
++    // Note that the task's ⋯ menu stays closed, as Dean asked for 0.14.0's picture; OPEN_PLAN_MENU holds it open where a redo wants it.
++    steps: [],
 +  };
 +}
 diff --git a/apps/desktop/src/renderer/shots/workspaces.ts b/apps/desktop/src/renderer/shots/workspaces.ts
