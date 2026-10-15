@@ -1401,10 +1401,17 @@ repositories; a run whose automation no longer lists that repository by the
 time the sweep acts on it is skipped as `repository-changed`. A run is queued under the delivery's `X-GitHub-Delivery`, which a
 redelivery carries again, so each automation records one run per
 delivery, and the sweep starts its agent within the minute rather than
-inside GitHub's ten seconds. An automation cannot fire itself: a pull
-request, issue, or push whose sender is a bot, the App's own installation
-token among them, fires nothing, and neither does a failed check on a
-`luke/` branch, where a coding agent works and already watches its checks.
+inside GitHub's ten seconds. Each event is read with who sent it: Luke's
+agents where the sender is the App's own bot (`<slug>[bot]`), another bot,
+or a person; and, for a pull request, its moment (opened or reopened, marked
+ready, pushed to), whether it is a draft, and whether it comes from a fork
+(its head in another repository, or in none). The trigger's settings choose
+among them (`senders`, `moments`, `drafts`, `forks` in
+`@luke/features/automation-wire`): people's events alone, every moment, and
+no draft or fork where it names none. An automation cannot fire itself
+whatever its settings say: a push by Luke's agents, to a branch or to a pull
+request, fires nothing, and neither does a failed check on a `luke/` branch,
+where a coding agent works and already watches its checks.
 The agent is handed the event by number, address, and branch, its title
 fenced as the event's own text to read as data, its angle brackets spelled
 as entities so it cannot close the fence, and reads the rest with `gh`. The App must subscribe to the Issues and Push events beside the pull

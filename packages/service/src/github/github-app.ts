@@ -334,6 +334,8 @@ export interface GitHubAuthorizeReturn {
 export interface GitHubAppService {
   /** Where a user installs the App, or changes which repositories it sees; GitHub returns them to the App's Setup URL. */
   readonly installUrl: Effect.Effect<string, GitHubAppNotConfigured>;
+  /** The login the App's own bot acts under on GitHub, `<slug>[bot]`: who Luke's agents are in a delivery. */
+  readonly botLogin: Effect.Effect<string, GitHubAppNotConfigured>;
   /** A JWT the App speaks as itself with, good for a few minutes from now. */
   readonly appJwt: Effect.Effect<Redacted.Redacted, GitHubAppNotConfigured>;
   /** One installation of this App by the id GitHub hands the Setup URL; none for an id that is not this App's. */
@@ -1159,6 +1161,7 @@ function githubAppService(
 
   return {
     installUrl: Effect.map(ready, (app) => `${GITHUB_APPS}/${app.slug}/installations/new`),
+    botLogin: Effect.map(ready, (app) => `${app.slug}${BOT_LOGIN_SUFFIX}`),
     appJwt,
     installation,
     authorizeUrl: (request) =>
