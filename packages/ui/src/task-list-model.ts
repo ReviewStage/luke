@@ -4,7 +4,8 @@ import type { PlanSummary } from "@luke/features/plan-wire";
  * task-list-model.ts -- how the sidebar's task list is grouped, ordered, and filtered: the view a workspace keeps, the groups it draws, and the time each row shows.
  *
  * The list is one section of the sidebar, its tasks drawn under the groups
- * the view chooses: by repository, by who created them, or in one run. The
+ * the view chooses: by repository, by who created them, or in one run.
+ * Home's Recent and ⌘K order tasks by the same last activity (`taskTime`). The
  * order chosen orders the rows within a group and the groups themselves,
  * and is the time each row shows, so the order and the label never
  * disagree.
@@ -53,9 +54,18 @@ export interface CreatorGroup {
   readonly plans: readonly PlanSummary[];
 }
 
-/** The time a row shows and is ordered by: when it was started under Created, else when it was last updated. */
+/**
+ * The time a row shows and is ordered by: when it was started under
+ * Created, else when it last saw activity, the later of its plan's last save
+ * and its agents' last settled activity (`agents.activityAt`: one started,
+ * handed a message, or a turn ended), so a task an agent is working through
+ * stands with the tasks worked on lately, as "last activity" does in Linear
+ * and Cursor. Neither moves while an agent's turn streams, so a row holds its
+ * place while the agent works.
+ */
 export function taskTime(plan: PlanSummary, order: TaskOrder): number {
-  return order === TASK_ORDER.CREATED ? plan.createdAt : plan.updatedAt;
+  if (order === TASK_ORDER.CREATED) return plan.createdAt;
+  return Math.max(plan.updatedAt, plan.agents?.activityAt ?? 0);
 }
 
 /** Two plans in the order chosen; a tie in name falls to the newer update. */

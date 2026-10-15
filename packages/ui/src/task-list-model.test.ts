@@ -151,3 +151,38 @@ test("filtered to one creator, the list holds only the tasks they created; filte
   expect(createdByOnly(tasks, DEAN).map((plan) => plan.name)).toEqual(["Dean's"]);
   expect(createdByOnly(tasks, undefined)).toHaveLength(3);
 });
+
+test("a task whose agent ended a turn after another task's plan was edited stands first, showing its agent's time", () => {
+  const edited = task("Plan edited at 500", "acme/relay", 1, 500);
+  const worked = {
+    ...task("Agent finished at 800", "acme/relay", 1, 100),
+    agents: {
+      total: 1,
+      working: 0,
+      activityAt: 800,
+      agents: [],
+      pullRequestTotal: 0,
+      pullRequests: [],
+    },
+  };
+  const groups = repositoryGroups([edited, worked]);
+  expect(names(groups)).toEqual([["Agent finished at 800", "Plan edited at 500"]]);
+  expect(taskTime(worked, TASK_ORDER.UPDATED)).toBe(800);
+  expect(taskTime(edited, TASK_ORDER.UPDATED)).toBe(500);
+});
+
+test("an agent's activity older than the plan's own edit leaves the plan's time standing", () => {
+  const plan = {
+    ...task("Edited after its agent", "acme/relay", 1, 900),
+    agents: {
+      total: 1,
+      working: 0,
+      activityAt: 300,
+      agents: [],
+      pullRequestTotal: 0,
+      pullRequests: [],
+    },
+  };
+  expect(taskTime(plan, TASK_ORDER.UPDATED)).toBe(900);
+  expect(taskTime(plan, TASK_ORDER.CREATED)).toBe(1);
+});

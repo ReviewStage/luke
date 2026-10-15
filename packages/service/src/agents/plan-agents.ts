@@ -20,7 +20,11 @@ import {
   type PlanSummary,
 } from "@luke/features/plan-wire";
 import { Clock, Effect } from "effect";
-import { codingAgentRunStartedAt, codingAgentStatusOf } from "./coder-host/status.js";
+import {
+  codingAgentActivityAt,
+  codingAgentRunStartedAt,
+  codingAgentStatusOf,
+} from "./coder-host/status.js";
 
 /**
  * plan-agents.ts -- what each listed plan's coding agents are doing and what they published, in brief, for the sidebar's row and its hover card.
@@ -42,10 +46,11 @@ const WORKING_STATUSES: ReadonlySet<CodingAgentStatus> = new Set([
   CODING_AGENT_STATUS.RUNNING,
 ]);
 
-/** One agent read for the list: its line, and when it was started, which orders the lines. */
+/** One agent read for the list: its line, when it was started, which orders the lines, and when it last did something settled. */
 interface ReadAgent {
   readonly line: PlanAgentLine;
   readonly createdAt: number;
+  readonly activityAt: number;
   readonly published: PublishedCodingAgent["published"];
 }
 
@@ -77,6 +82,7 @@ function agentLine(
       ...(agent.automationId === null ? undefined : { automationId: agent.automationId }),
     },
     createdAt: agent.createdAt.getTime(),
+    activityAt: codingAgentActivityAt(turn, agent),
     published: held.published,
   };
 }
@@ -95,7 +101,9 @@ const PULL_REQUEST_RANK = {
  * their page, since two agents on one branch share theirs and a plan whose
  * repository changed may hold two of one number, those still open first, then
  * merged, then closed, newest agent's first within each, so the few a row
- * names always hold the one its mark is drawn for.
+ * names always hold the one its mark is drawn for; and the latest settled
+ * activity of every agent, named or not, which the plan's last update is
+ * read beside.
  */
 function summaryOf(agents: readonly ReadAgent[]): PlanAgentsSummary {
   const newest = [...agents].sort((a, b) => b.createdAt - a.createdAt);
@@ -110,6 +118,9 @@ function summaryOf(agents: readonly ReadAgent[]): PlanAgentsSummary {
   return {
     total: agents.length,
     working: working.length,
+    ...(agents.length === 0
+      ? undefined
+      : { activityAt: Math.max(...agents.map((agent) => agent.activityAt)) }),
     agents: [...working, ...resting]
       .slice(0, PLAN_AGENTS_BOUNDS.MAX_AGENTS)
       .map((agent) => agent.line),
