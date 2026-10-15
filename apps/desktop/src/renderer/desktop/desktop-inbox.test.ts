@@ -1175,6 +1175,19 @@ test("an item that needs no reply, once settled, says a note was sent to the age
   assert.match(where("Add the secret") ?? "", /Saved for the agent to read$/u);
 });
 
+test("an answered item that asked to be heard back, carried without its answer, still says it was sent to the agent", async () => {
+  const { answer: _dropped, ...bare } = RETRY;
+  inboxes = new Map([
+    [BILLING.id, [THRESHOLD, bare]],
+    [INVITES.id, [EXPIRY]],
+  ]);
+  const { page } = mount();
+  await settle();
+  act(() => rowNamed(page, "How is a failed email retried?").click());
+  const lines = page.querySelectorAll(".inbox-view-items [data-inbox-answer] p");
+  assert.match(wordsOf(lines[lines.length - 1]) ?? "", /· Sent to /u);
+});
+
 test("a note answered on an item that needs no reply reaches the agent, so the window reads its agents again, as it does for no bare press", async () => {
   const todo = (id: string, title: string): InboxItem => ({
     ...item(id, title, 6_000),

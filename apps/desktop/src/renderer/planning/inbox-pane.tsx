@@ -721,9 +721,9 @@ function AgentName({ by }: { by: ItemAgent }): React.JSX.Element {
 
 /** What a settled item's line says of where the answer went: to the agent as a message, its name its reference, or, a bare press on an item asking nothing back, kept for it to read. */
 function Delivered({ item, by }: { item: InboxItem; by: ItemAgent }): React.JSX.Element {
-  if (item.answer === undefined || !inboxAnswerHeard(item, item.answer)) {
-    return <>Saved for the agent to read</>;
-  }
+  // Note that an answered item the wire carries without its answer was heard where it asked to be.
+  const heard = item.answer === undefined ? item.needsReply : inboxAnswerHeard(item, item.answer);
+  if (!heard) return <>Saved for the agent to read</>;
   return (
     <ActorLine>
       {"Sent to "}
