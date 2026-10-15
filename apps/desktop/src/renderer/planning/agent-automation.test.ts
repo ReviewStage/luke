@@ -163,9 +163,9 @@ async function agentCard(on: boolean) {
 
 test("an agent an automation started says it was started by the automation, its clock and name, which a press opens the page of", async () => {
   const { card, opened } = await agentCard(true);
-  const starter = card.querySelector<HTMLElement>(".actor-line .actor-ref");
+  const starter = card.querySelector<HTMLElement>(".actor-words .actor-ref");
   assert.ok(starter, "the card names who started the agent");
-  assert.equal(card.querySelector(".actor-line")?.firstChild?.textContent, "Started by ");
+  assert.equal(card.querySelector(".actor-words")?.firstChild?.textContent, "Started by ");
   assert.equal(starter.dataset.kind, "automation");
   assert.equal(starter.textContent, "Morning Sentry triage");
   assert.equal(starter.tagName, "BUTTON");
@@ -177,7 +177,7 @@ test("an agent an automation started says it was started by the automation, its 
 
 test("the automation's name hangs its card over the agent's: its schedule, whose it is, when it runs next, how its last run went, and Open automation", async () => {
   const { card, opened } = await agentCard(true);
-  hover(card.querySelector(".actor-line .actor-ref") ?? assert.fail("the automation is named"));
+  hover(card.querySelector(".actor-words .actor-ref") ?? assert.fail("the automation is named"));
   const standing = cards();
   assert.equal(standing.length, 2, "the automation's card hangs over the agent's");
   const automation = standing[1]?.querySelector<HTMLElement>("[data-actor-card='automation']");
@@ -197,7 +197,7 @@ test("the automation's name hangs its card over the agent's: its schedule, whose
 
 test("with the Automations experiment off, the card says nothing of the automation, names the teammate who started the agent as before, and the automations go unread", async () => {
   const { card } = await agentCard(false);
-  const starter = card.querySelector<HTMLElement>(".actor-line .actor-ref");
+  const starter = card.querySelector<HTMLElement>(".actor-words .actor-ref");
   assert.equal(starter?.dataset.kind, "person");
   assert.equal(starter?.querySelector(".actor-ref-name")?.textContent, "Charles Pan");
   assert.doesNotMatch(card.textContent ?? "", /Morning Sentry triage/u);
