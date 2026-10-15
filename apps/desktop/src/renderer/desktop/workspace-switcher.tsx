@@ -48,13 +48,20 @@ function workspaceMenuGroups(
   ];
 }
 
-/** Who shares a workspace, as the head's line says it: "Only you" for a workspace of one, its members counted otherwise, nothing from a service that does not count them. */
+/** Who shares a workspace in words: "Only you" for a workspace of one, its members counted otherwise, nothing from a service that does not count them. */
+function sharedWords(count: number | undefined): string | undefined {
+  if (count === undefined) return undefined;
+  return count <= 1 ? "Only you" : `${count} members`;
+}
+
+/** The head's line saying who shares the workspace, a lock for a workspace of one. */
 function SharedLine({ count }: { count: number | undefined }): React.JSX.Element | null {
-  if (count === undefined) return null;
+  const words = sharedWords(count);
+  if (count === undefined || words === undefined) return null;
   return (
     <span className="sidebar-workspace-shared">
       {count <= 1 ? <LockIcon aria-hidden="true" /> : <UsersIcon aria-hidden="true" />}
-      {count <= 1 ? "Only you" : `${count} members`}
+      {words}
     </span>
   );
 }
@@ -80,7 +87,10 @@ export function WorkspaceSwitcher({
       <button
         type="button"
         className="sidebar-workspace-toggle"
-        aria-label={`Workspace: ${listed.name}`}
+        // The name a reader hears says who shares it too, since the label stands for the button's text.
+        aria-label={[`Workspace: ${listed.name}`, sharedWords(listed.memberCount)]
+          .filter((part) => part !== undefined)
+          .join(", ")}
         {...menu.trigger(dropBelowStart)}
       >
         <WorkspaceTile workspace={listed} size={TILE_SIZE.HEAD} />
