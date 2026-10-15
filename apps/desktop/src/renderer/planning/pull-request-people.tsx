@@ -1,9 +1,10 @@
 import type {
+  CodingAgentAuthor,
   CodingAgentChangesPeople,
   GitHubPerson,
   ReviewState,
 } from "@luke/features/coding-agent-wire";
-import { REVIEW_STATE } from "@luke/features/coding-agent-wire";
+import { CODING_AGENT_AUTHOR, REVIEW_STATE } from "@luke/features/coding-agent-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { ACTOR_KIND, type Actor, githubActor } from "@luke/ui/actor-model";
 import {
@@ -31,7 +32,9 @@ import { RelativeTime } from "./relative-time";
  * bot's square, by their avatar and a card saying so. A reviewer's face
  * wears where they stand at its corner, in GitHub's own colours: approved
  * green, changes asked for red, a review asked for and not given amber,
- * and a comment or a dismissed review quiet. Every name and word here is
+ * and a comment or a dismissed review quiet. A pull request the agent
+ * opened as the Luke GitHub App, where it writes as the developer who
+ * started it whenever it can, says why it could not. Every name and word here is
  * the repository's, so the places drawing them are left out of the screen
  * recording, as the Changes tab is.
  */
@@ -44,6 +47,19 @@ const REVIEW_WORDS = {
   [REVIEW_STATE.COMMENTED]: "Commented",
   [REVIEW_STATE.REQUESTED]: "Review requested",
 } as const satisfies Record<ReviewState, string>;
+
+/**
+ * Why the agent opened its pull request as the App rather than as the
+ * developer who started it, as the "Opened by" line ends; nothing where it
+ * writes as the developer.
+ */
+const WRITTEN_AS_WORDS = {
+  [CODING_AGENT_AUTHOR.DEVELOPER]: "",
+  [CODING_AGENT_AUTHOR.APP_UNLINKED]: " as the GitHub App, since its starter has no GitHub linked",
+  [CODING_AGENT_AUTHOR.APP_NO_PUSH]: " as the GitHub App, since its starter can't push here",
+  [CODING_AGENT_AUTHOR.APP_AUTOMATION]: " as the GitHub App, for an automation",
+  [CODING_AGENT_AUTHOR.APP_UNREAD]: " as the GitHub App, since GitHub didn't answer",
+} as const satisfies Record<CodingAgentAuthor, string>;
 
 /** The glyph a reviewer's standing wears, as GitHub draws each. */
 const REVIEW_GLYPHS = {
@@ -134,12 +150,17 @@ function CommitAuthorPile({
   );
 }
 
-/** Who opened the pull request, in a line: "Opened by [face] Luke". */
+/**
+ * Who opened the pull request, in a line: "Opened by [face] Luke", and,
+ * where Luke's own bot opened it, why the agent wrote as the App.
+ */
 export function OpenedBy({
   person,
+  writtenAs,
   agent,
 }: {
   person: GitHubPerson;
+  writtenAs: CodingAgentAuthor | undefined;
   agent: PullRequestAgent;
 }): React.JSX.Element {
   const { actor, card } = useNamer(agent)(person);
@@ -147,6 +168,7 @@ export function OpenedBy({
     <ActorLine>
       {"Opened by "}
       <ActorRef actor={actor} card={card} />
+      {person.luke === true && writtenAs !== undefined ? WRITTEN_AS_WORDS[writtenAs] : null}
     </ActorLine>
   );
 }
@@ -180,11 +202,13 @@ export function PullRequestPeople({
   people: CodingAgentChangesPeople;
   agent: PullRequestAgent;
 }): React.JSX.Element | null {
-  const { author, reviewers = [], commitAuthors = [] } = people;
+  const { author, writtenAs, reviewers = [], commitAuthors = [] } = people;
   if (author === undefined && reviewers.length === 0 && commitAuthors.length === 0) return null;
   return (
     <div className="changes-people ph-no-capture">
-      {author === undefined ? null : <OpenedBy person={author} agent={agent} />}
+      {author === undefined ? null : (
+        <OpenedBy person={author} writtenAs={writtenAs} agent={agent} />
+      )}
       {reviewers.length === 0 ? null : <ReviewersLine reviewers={reviewers} agent={agent} />}
       {commitAuthors.length === 0 ? null : (
         <ActorLine>

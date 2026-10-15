@@ -318,7 +318,7 @@ export function ChangesCard({
       </CardNote>
       {people?.author === undefined ? null : (
         <CardNote oneLine>
-          <OpenedBy person={people.author} agent={agent} />
+          <OpenedBy person={people.author} writtenAs={people.writtenAs} agent={agent} />
         </CardNote>
       )}
       {reviewers.length === 0 ? null : (

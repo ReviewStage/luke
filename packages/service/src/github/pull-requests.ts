@@ -165,7 +165,23 @@ const ReviewsSchema = Schema.Array(
 );
 
 /** A pull request's commits, as GitHub lists them: the GitHub account each is by, where GitHub links its address to one. */
-const CommitsSchema = Schema.Array(Schema.Struct({ author: Schema.NullOr(GitHubAccountSchema) }));
+/** A pull request's commits, as much of each as names who made it: its author's account, and its message for the co-authors it names. */
+const CommitsSchema = Schema.Array(
+  Schema.Struct({
+    author: Schema.NullOr(GitHubAccountSchema),
+    commit: Schema.optionalKey(Schema.Struct({ message: Schema.String })),
+  }),
+);
+
+/**
+ * A `Co-authored-by` trailer naming an account by the noreply address
+ * GitHub links to it, `<id>+<login>@users.noreply.github.com`, which is how
+ * a coding agent that writes as its developer names the Luke GitHub App's
+ * bot beside them; a trailer at any other address names no account GitHub
+ * would show, and is left unread.
+ */
+const CO_AUTHOR_TRAILER =
+  /^co-authored-by:[^<\n]*<(\d+)\+([^@>\s]+)@users\.noreply\.github\.com>\s*$/gimu;
 
 /** GitHub's own words for a review's standing; a pending review is its author's draft, which nobody else sees. */
 const GITHUB_REVIEW_STATE = new Map<string, ReviewState>([
@@ -460,7 +476,7 @@ export interface GitHubReviewComment {
   readonly at: number;
 }
 
-/** Who a pull request names: who opened it, its reviewers, who authored its commits, and its reviews that said something, each up to the bound. */
+/** Who a pull request names: who opened it, its reviewers, who authored its commits or is named their co-author, and its reviews that said something, each up to the bound. */
 export interface PullRequestPeople {
   readonly author: GitHubAccount | undefined;
   readonly reviewers: readonly GitHubReviewer[];
@@ -476,6 +492,17 @@ function accountOf(record: typeof GitHubAccountSchema.Type): GitHubAccount {
     bot: record.type === GITHUB_BOT_TYPE || record.login.endsWith(BOT_LOGIN_SUFFIX),
     avatarUrl: githubAvatarUrl(record.avatar_url),
   };
+}
+
+/** The accounts a commit's message names as co-authors by their noreply addresses, in the order it names them. */
+function coAuthorsOf(message: string | undefined): readonly GitHubAccount[] {
+  if (message === undefined) return [];
+  return [...message.matchAll(CO_AUTHOR_TRAILER)].map(([, id = "", login = ""]) => ({
+    id: Number(id),
+    login,
+    bot: login.endsWith(BOT_LOGIN_SUFFIX),
+    avatarUrl: undefined,
+  }));
 }
 
 /** Each account once, the first time it stands, up to the bound. */
@@ -566,7 +593,8 @@ const everyPage = /* @__PURE__ */ Effect.fnUntraced(function* <A>(
  * pull request itself, for who opened it and who it still asks for a
  * review; every page of its reviews, since a reviewer stands by their
  * newest; and every page of its commits, since a later commit may be by
- * someone new. Each list is cut at the bound only once read whole. Nobody
+ * someone new, each commit naming its author and the co-authors its
+ * message's trailers name by their noreply addresses. Each list is cut at the bound only once read whole. Nobody
  * where the repository holds no such pull request.
  */
 export const pullRequestPeople = /* @__PURE__ */ Effect.fn("web/pullRequestPeople")(function* (
@@ -589,7 +617,10 @@ export const pullRequestPeople = /* @__PURE__ */ Effect.fn("web/pullRequestPeopl
     author: pull.value.user === null ? undefined : accountOf(pull.value.user),
     reviewers: reviewersOf(reviews, requested),
     commitAuthors: distinctAccounts(
-      commits.flatMap((commit) => (commit.author === null ? [] : [accountOf(commit.author)])),
+      commits.flatMap((commit) => [
+        ...(commit.author === null ? [] : [accountOf(commit.author)]),
+        ...coAuthorsOf(commit.commit?.message),
+      ]),
     ),
     comments: commentsOf(reviews),
   };

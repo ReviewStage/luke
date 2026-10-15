@@ -731,7 +731,8 @@ const pullRequestEndpoint = /* @__PURE__ */ Effect.fn("web/agentPullRequestEndpo
  * GET reads the agent's changes: the files of the pull request its kept
  * published answer names, and who it names (`github-people.ts`), read from
  * GitHub afresh on a token minted for the agent's repository on its plan's
- * workspace installation, or none where it names no pull request yet.
+ * workspace installation, with who its row says it writes as, or none
+ * where it names no pull request yet.
  */
 const changesEndpoint = /* @__PURE__ */ Effect.fn("web/agentChangesEndpoint")(function* (
   seams: CodingAgentsAppSeams,
@@ -770,7 +771,11 @@ const changesEndpoint = /* @__PURE__ */ Effect.fn("web/agentChangesEndpoint")(fu
     }),
   );
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
-    pullRequest: { url: pullRequest.url, ...listed },
+    pullRequest: {
+      url: pullRequest.url,
+      ...listed,
+      ...(agent.author === null ? undefined : { writtenAs: agent.author }),
+    },
   });
 });
 
