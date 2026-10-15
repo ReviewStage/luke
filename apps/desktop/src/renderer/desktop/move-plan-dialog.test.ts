@@ -1,17 +1,20 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import type { Plan } from "@luke/features/plan-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { DOCUMENT_REGION, PLANS_PAGE } from "@luke/ui/planning-model";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
-import { plansControl, UNPINNED_SUMMARY } from "#testing/plans-control";
+import { afterEach, beforeEach, test, vi } from "vitest";
+import { codingAgentsControl, plansControl, UNPINNED_SUMMARY } from "#testing/plans-control";
+import { relayout } from "#testing/resize-observer";
 import { installScrollIntoView } from "#testing/scroll-into-view";
-import { MAIN_TAB } from "../planning/use-main-tabs";
+import { MAIN_TAB, type MainTab } from "../planning/use-main-tabs";
 import { NO_LOOKS } from "../planning/use-plan-looks";
 import type { PlansControl } from "../planning/use-plans-tab";
+import { SIDE_PANEL_TAB } from "../planning/use-side-panel";
 import { DesktopPlans } from "./desktop-plans";
 
 /**
@@ -19,8 +22,9 @@ import { DesktopPlans } from "./desktop-plans";
  * to the plan's owner while the account has another workspace, it lists the
  * other workspaces, disables one whose GitHub cannot reach the plan's
  * repository with the reason, says who loses and gains the plan, and moves
- * it, closing on a move and staying up saying so on a refusal. Synthetic
- * throughout.
+ * it, closing on a move and staying up saying so on a refusal. A plan
+ * stranded in a workspace that cannot reach its repository says so over
+ * every tab of it, naming the workspace that can. Synthetic throughout.
  */
 
 const DANA = "user-dana";
@@ -66,6 +70,20 @@ const PLAN: Plan = {
   document: { body: "# Checkout retries", assumptions: [] },
 };
 
+const AGENT: CodingAgentSummary = {
+  id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
+  planId: PLAN.id,
+  model: "anthropic/claude-opus-5.5",
+  effort: "high",
+  title: "Retry the webhook",
+  createdAt: 1,
+  status: CODING_AGENT_STATUS.COMPLETED,
+  turnId: null,
+};
+
+/** The agent's tab in the plan's column. */
+const AGENT_TAB: MainTab = { agent: AGENT.id };
+
 const roots: Root[] = [];
 
 beforeEach(installScrollIntoView);
@@ -78,7 +96,10 @@ function unmountAll(): void {
   document.body.innerHTML = "";
 }
 
-afterEach(unmountAll);
+afterEach(() => {
+  unmountAll();
+  vi.restoreAllMocks();
+});
 
 /** Lets a move's answer, and the redraw it causes, land. */
 async function settle(): Promise<void> {
@@ -256,12 +277,43 @@ function openPlan(plans: PlansControl): HTMLElement {
   return container;
 }
 
-/** The banner over a stranded plan's document, where one stands. */
+/** The plan-wide banner over a stranded plan, where one stands. */
 function strandedBanner(within: HTMLElement): HTMLElement | null {
-  return within.querySelector<HTMLElement>(".stranded-plan-banner");
+  return within.querySelector<HTMLElement>(".plan-banner");
 }
 
-test("a plan whose repository its workspace cannot reach and another of the account's can says which, and its press moves it there through the move's dialog", async () => {
+/** The words a reader hears in an element: its text but for a mark hidden from a screen reader, a workspace's tile's letter among them. */
+function heard(node: Node): string {
+  if (node instanceof Element && node.getAttribute("aria-hidden") === "true") return "";
+  if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? "";
+  return [...node.childNodes].map(heard).join("");
+}
+
+/** The open plan's tab as `openTab` gives it, its column showing `tab` and its side panel as given. */
+function onTab(
+  plans: PlansControl,
+  tab: MainTab,
+  sidePanel: Partial<PlansControl["sidePanel"]> = {},
+): PlansControl {
+  return {
+    ...plans,
+    mainTabs: { ...plans.mainTabs, tabs: [MAIN_TAB.PLAN, MAIN_TAB.INBOX, AGENT_TAB], tab },
+    sidePanel: { ...plans.sidePanel, ...sidePanel },
+    agents: codingAgentsControl({ agents: [AGENT], agentIds: [AGENT.id] }),
+  };
+}
+
+/** Lays the plan's Inbox tab out this wide, as the window would report it resized. */
+function layOutInbox(page: HTMLElement, width: number): void {
+  const inbox =
+    page.querySelector<HTMLElement>("section.inbox-view") ?? assert.fail("the Inbox tab is drawn");
+  vi.spyOn(inbox, "getBoundingClientRect").mockReturnValue(
+    DOMRect.fromRect({ width, height: 800 }),
+  );
+  act(() => relayout());
+}
+
+test("a plan whose repository its workspace cannot reach and another of the account's can names that workspace by its tile and name, and its press moves it there through the move's dialog", async () => {
   const moves: [string, string][] = [];
   const page = openPlan(
     openTab(PLAN, [STUDIO, NORTHWIND, ACME], (planId, workspaceId) => {
@@ -270,12 +322,9 @@ test("a plan whose repository its workspace cannot reach and another of the acco
     }),
   );
   const banner = strandedBanner(page) ?? assert.fail("the stranded plan says so");
-  const title = document.getElementById(banner.getAttribute("aria-labelledby") ?? "");
-  assert.equal(title?.textContent, "This plan's repository belongs to Acme");
-  assert.equal(
-    banner.querySelector(".document-banner-detail")?.textContent,
-    "Studio can't reach acme-corp/relay, so agents can't start on it here.",
-  );
+  const words = document.getElementById(banner.getAttribute("aria-labelledby") ?? "");
+  assert.equal(words === null ? undefined : heard(words), "This plan's repository belongs to Acme");
+  assert.equal(banner.querySelector(".workspace-ref .workspace-tile")?.textContent, "A");
   for (const element of [banner, ...banner.querySelectorAll("*")]) {
     for (const attribute of element.attributes) {
       assert.doesNotMatch(attribute.value, /Acme|Studio|acme-corp/u, attribute.name);
@@ -295,7 +344,33 @@ test("a plan whose repository its workspace cannot reach and another of the acco
   assert.deepEqual(moves, [[PLAN.id, ACME.id]]);
 });
 
-test("no banner stands over a plan its own workspace reaches, one no other workspace's active GitHub reaches, one with no repository, or a teammate's, nor over the plan's other tabs", () => {
+test("a stranded plan's banner stands over every tab of the plan: its Inbox too narrow for its list and item side by side, an agent's, beside the side panel, and over the side panel filling the window", () => {
+  const plans = openTab(PLAN, [STUDIO, ACME]);
+  const inbox = openPlan(onTab(plans, MAIN_TAB.INBOX));
+  layOutInbox(inbox, 700);
+  const agent = openPlan(onTab(plans, AGENT_TAB, { open: true, tab: SIDE_PANEL_TAB.CALL }));
+  const full = openPlan(
+    onTab(plans, MAIN_TAB.PLAN, { open: true, fullScreen: true, tab: SIDE_PANEL_TAB.CALL }),
+  );
+
+  assert.equal(inbox.querySelector(".inbox-view")?.getAttribute("data-columns"), "list");
+  assert.deepEqual(
+    [inbox, agent, full].map((page) => {
+      const banner = strandedBanner(page);
+      return [
+        banner === null ? undefined : heard(banner),
+        banner?.closest(".desktop-plan-main, .side-panel")?.className,
+      ];
+    }),
+    [
+      ["This plan's repository belongs to AcmeMove to Acme…", "desktop-plan-main"],
+      ["This plan's repository belongs to AcmeMove to Acme…", "desktop-plan-main"],
+      ["This plan's repository belongs to AcmeMove to Acme…", "side-panel"],
+    ],
+  );
+});
+
+test("no banner stands over any tab of a plan its own workspace reaches, one no other workspace's active GitHub reaches, one with no repository, or a teammate's", () => {
   const suspended = { ...ACME, github: { login: "acme-corp", active: false } };
   const cases: [Plan, readonly Workspace[]][] = [
     [{ ...PLAN, workspaceId: ACME.id }, [STUDIO, ACME]],
@@ -304,18 +379,17 @@ test("no banner stands over a plan its own workspace reaches, one no other works
     [{ ...PLAN, repository: null }, [STUDIO, ACME]],
     [{ ...PLAN, ownerId: SAM }, [STUDIO, ACME]],
   ];
-  const banners = cases.map(([plan, workspaces]) => {
-    const page = openPlan(openTab(plan, workspaces));
-    const found = strandedBanner(page) !== null;
-    unmountAll();
-    return found;
-  });
-  const plans = openTab(PLAN, [STUDIO, ACME]);
-  const inbox = openPlan({
-    ...plans,
-    mainTabs: { ...plans.mainTabs, tabs: [MAIN_TAB.PLAN, MAIN_TAB.INBOX], tab: MAIN_TAB.INBOX },
-  });
+  const banners = cases.flatMap(([plan, workspaces]) =>
+    [MAIN_TAB.PLAN, MAIN_TAB.INBOX, AGENT_TAB].map((tab) => {
+      const page = openPlan(onTab(openTab(plan, workspaces), tab));
+      const found = strandedBanner(page) !== null;
+      unmountAll();
+      return found;
+    }),
+  );
 
-  assert.deepEqual(banners, [false, false, false, false, false]);
-  assert.equal(strandedBanner(inbox), null, "the banner is the plan tab's alone");
+  assert.deepEqual(
+    banners,
+    Array.from({ length: cases.length * 3 }, () => false),
+  );
 });

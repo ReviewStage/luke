@@ -13,6 +13,10 @@
   --workspace-hue-5: #6c55b3;
   --workspace-hue-6: #477a3a;
   --workspace-tile-ink: #fff;
+  /* The attention mark's disc (`attention-mark.tsx`): the attention orange
+     deepened until its white exclamation holds on it, in the dark as in the
+     light, where the orange is deep already. */
+  --attention-mark-ground: #c4620c;
   /* An actor's square (`actor-ref.tsx`): Luke's face in his own blue, an
      agent's harness, or an automation's clock, each on one solid neutral, so
      a tile reads as one object on any ground beneath it. */
@@ -161,6 +165,7 @@
     --desktop-well: #f8f8f9;
     --surface-popover: #fff;
     --find-match: rgba(255, 204, 0, 0.42);
+    --attention-mark-ground: #a65400;
     --workspace-hue-1: #4a5fc0;
     --workspace-hue-2: #23766f;
     --workspace-hue-3: #94631a;
@@ -2352,6 +2357,76 @@ body,
   width: 40px;
   height: 40px;
   stroke-width: 1.4;
+}
+
+/* Something wanting a hand (`attention-mark.tsx`): a white exclamation on a
+   disc of the attention orange, at a row glyph's size. */
+.attention-mark {
+  display: inline-grid;
+  width: 14px;
+  height: 14px;
+  flex: none;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--attention-mark-ground);
+  color: #fff;
+}
+
+.attention-mark svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* A notice about the whole plan (`plan-banner.tsx`): one slim line across
+   the plan's column under its toolbar, or under the side panel's bar while
+   the panel fills the window, on a faint attention tint with a hairline of
+   it beneath. Its words are cut short rather than wrapped, so the line keeps
+   its height at any width, and its one press stands at its end, a quiet
+   bordered button as a devtool's notice draws one. */
+.plan-banner {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-8);
+  min-height: 32px; /* off-scale: a 22px press and its inset */
+  padding: var(--space-4) var(--column-inset) var(--space-4) var(--content-inset);
+  border-bottom: 1px solid color-mix(in srgb, var(--state-attention) 30%, var(--hairline));
+  background: color-mix(in srgb, var(--state-attention) 9%, var(--desktop-ground));
+  color: var(--text-body);
+  font-size: 12.5px;
+}
+
+.plan-banner-words {
+  min-width: 0;
+  flex: 1;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plan-banner-words .workspace-ref {
+  max-width: none;
+  color: var(--text-primary);
+  font-weight: 560;
+}
+
+.plan-banner-action {
+  flex: none;
+  height: 22px;
+  padding: 0 var(--space-8);
+  border: 1px solid var(--hairline-strong);
+  border-radius: 6px;
+  background: none;
+  color: var(--text-primary);
+  font: inherit;
+  font-weight: 560;
+  white-space: nowrap;
+  transition: background-color var(--duration-hover) ease;
+}
+
+.plan-banner-action:hover {
+  background: var(--raised);
 }
 
 /* The document ------------------------------------------------------------- */

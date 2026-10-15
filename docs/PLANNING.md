@@ -162,7 +162,8 @@ new-plan page, which leaves the plan, and the new-plan page closes the panel. Es
   where it has no GitHub connected, and the plan starts with none), and the
   choice is remembered on this Mac. A plan whose repository its own
   workspace cannot reach but another of the account's can, one stranded by
-  #2524, says so over its document with "Move to <workspace>…", which opens
+  #2524, says so in a banner over every tab of the plan, "This plan's
+  repository belongs to <workspace> · Move to <workspace>…", whose press opens
   Move to workspace… on that workspace; nothing moves it without that press,
   since a move shares the plan with the other workspace's members.
 - Clicking a row opens that plan on the document page (see "Leaving and

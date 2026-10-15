@@ -53,7 +53,7 @@ import { usePlanRename } from "./plan-name-field";
 import { PlanSummary, SummaryButton, type SummaryPin, useSummaryLayout } from "./plan-summary";
 import { changesTabOf, planCards, SidePanel, useSidePanelDrawing } from "./side-panel";
 import { StartAgentButton } from "./start-agent-button";
-import { StrandedPlanBanner } from "./stranded-plan-banner";
+import { useStrandedPlanBanner } from "./stranded-plan-banner";
 import { useTabViews } from "./strip-tabs";
 
 /**
@@ -90,6 +90,12 @@ import { useTabViews } from "./strip-tabs";
  *
  * A skill named in a message to a coding agent, in either column, opens
  * its `SKILL.md` in a File tab of the side panel (`../planning/skill-chip.tsx`).
+ *
+ * What is wrong with the plan itself, whichever tab is read, is said in one
+ * line under the toolbar, over every tab of the column, and under the side
+ * panel's bar while the panel covers the column (`plan-banner.tsx`): a
+ * plan whose repository belongs to another of the account's workspaces says
+ * which, with the press that moves it there (`stranded-plan-banner.tsx`).
  *
  * An archived plan reads and takes nothing until it is brought back: its
  * banner under the toolbar says so with Unarchive as its primary button,
@@ -319,6 +325,15 @@ function PlanDocument({
   // another the chosen tab's own, drawn there from the tab (`strip-tabs.tsx`).
   // Held above the states with no document for the same reason.
   const [actionsSlot, setActionsSlot] = useState<HTMLElement | null>(null);
+  // The plan as the list names it, its owner, agents, and pull requests
+  // among it, which its card and its banner read. Held above the states
+  // with no document for the same reason.
+  const opened = region.kind === DOCUMENT_REGION.READY ? region.plan : undefined;
+  const listedOpen =
+    opened === undefined
+      ? undefined
+      : ([...plans.plans, ...plans.archived].find((each) => each.id === opened.id) ?? opened);
+  const stranded = useStrandedPlanBanner(plans, listedOpen);
   const openMention = plans.onShowMention;
   const revealed = plans.sectionReveal;
   // A file a mention names opens in its tab, its lines at the commit the mention pins them to.
@@ -383,8 +398,7 @@ function PlanDocument({
   // The slug the plan's links are written under; only the plan's id finds it, so its workspace's id stands in until the workspaces are read.
   const workspace = home?.slug ?? plan.workspaceId;
   const archived = plan.archivedAt !== undefined;
-  // The plan as the list names it, its agents and pull requests among it, which its card reads.
-  const listed = [...plans.plans, ...plans.archived].find((each) => each.id === plan.id) ?? plan;
+  const listed = listedOpen ?? plan;
   const unarchive = () => plans.onMarkPlan(plan.id, PLAN_MARK.UNARCHIVE);
   const repositoryNote = refusal?.planId === plan.id ? refusal.note : undefined;
   const chooseRepository = (repository: string) => {
@@ -560,6 +574,9 @@ function PlanDocument({
               </Fragment>
               <SummaryButton layout={summaryLayout} cardId={summaryCard} />
             </Toolbar>
+            {/* The plan's banner is the whole plan's, so it stands over every
+            tab of the column, and over the panel's while that fills the window. */}
+            {sidePanel.fullScreen ? null : stranded.banner}
             {/* The summary stands beside what the column shows, under the
             toolbar and over the call bar, which both span the column. */}
             <div className="desktop-plan-body">
@@ -569,10 +586,6 @@ function PlanDocument({
                 subject={{ plan: plan.id, tab }}
               >
                 {archived ? <ArchivedBanner onUnarchive={unarchive} /> : null}
-                {/* The stranded plan's banner is the plan's own, so it stands over the plan's tab alone. */}
-                {archived || tab !== MAIN_TAB.PLAN ? null : (
-                  <StrandedPlanBanner plans={plans} plan={listed} />
-                )}
                 <section
                   className="desktop-document"
                   role="tabpanel"
@@ -688,8 +701,10 @@ function PlanDocument({
               focused={sideFocused}
               onOpenTarget={openTarget}
               cards={cards}
+              banner={stranded.banner}
             />
           ) : null}
+          {stranded.dialog}
         </div>
       </PlanMentions>
     </MemberDirectory>

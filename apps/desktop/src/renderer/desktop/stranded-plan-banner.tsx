@@ -1,12 +1,11 @@
 import type { PlanSummary } from "@luke/features/plan-wire";
-import { strandedPlanHome } from "@luke/ui/planning-model";
-import { FolderInputIcon } from "lucide-react";
-import { useId } from "react";
 import type { PlansControl } from "../planning/use-plans-tab";
-import { useMovePlanDialog } from "./move-plan-dialog";
+import { strandedHome, useMovePlanDialog } from "./move-plan-dialog";
+import { PlanBanner } from "./plan-banner";
+import { WorkspaceCard, WorkspaceRef } from "./workspace-ref";
 
 /**
- * stranded-plan-banner.tsx -- the banner over a plan whose repository its own workspace cannot reach and another of the account's can: which one, and Move to it.
+ * stranded-plan-banner.tsx -- the plan-wide banner of a plan whose repository its own workspace cannot reach and another of the account's can: which one, and Move to it.
  *
  * Since #2524 a workspace reaches only its own GitHub installation's
  * repositories, so a plan written before then in a workspace with no GitHub
@@ -14,50 +13,41 @@ import { useMovePlanDialog } from "./move-plan-dialog";
  * there can work in: an agent will not start on it and its files will not
  * open. Where another workspace the account is in reaches that repository,
  * moving the plan there is what mends it, so the plan says so before
- * anything is refused, with the press that opens Move to workspace… (#2761)
- * on that workspace. The dialog is the move's confirmation and says who
- * gains the plan, since a plan moved from a workspace of the reader's own
+ * anything is refused, over every tab of it (`plan-banner.tsx`), naming
+ * that workspace by its tile and name, with the press that opens Move to
+ * workspace… (#2761) on it. The dialog is the move's confirmation and says
+ * who gains the plan, since a plan moved from a workspace of the reader's own
  * into a team's is read by that team. Note that the plan is never moved
- * without the press, for that same reason. The banner stands only where
- * the menu offers the move: a plan the reader owns, not archived. Its
- * names stand in text alone, never an attribute, because the session
- * recording masks text and nothing else.
+ * without the press, for that same reason. The banner stands only where the
+ * menu offers the move: a plan the reader owns, not archived.
  */
 
-/** The banner over a stranded plan's document; nothing over any other plan. */
-export function StrandedPlanBanner({
-  plans,
-  plan,
-}: {
-  plans: PlansControl;
-  plan: PlanSummary;
-}): React.JSX.Element | null {
+/** A stranded plan's banner, drawn wherever the plan places it, and the Move dialog it opens, drawn once beside the plan. */
+interface StrandedPlanNotice {
+  readonly banner: React.JSX.Element | null;
+  readonly dialog: React.JSX.Element | null;
+}
+
+/** The open plan's banner while it is stranded, nothing otherwise, and the dialog its press opens. */
+export function useStrandedPlanBanner(
+  plans: PlansControl,
+  plan: PlanSummary | undefined,
+): StrandedPlanNotice {
   const moving = useMovePlanDialog(plans, plan);
-  const titleId = useId();
-  const home = strandedPlanHome(plan, plans.workspaces);
-  if (home === undefined || moving.ask === undefined || plan.repository === null) {
-    return moving.dialog;
-  }
-  const own = plans.workspaces.find((workspace) => workspace.id === plan.workspaceId);
-  return (
-    <>
-      <section className="document-banner stranded-plan-banner" aria-labelledby={titleId}>
-        <span className="document-banner-glyph" aria-hidden="true">
-          <FolderInputIcon />
-        </span>
-        <div className="document-banner-words">
-          <p id={titleId} className="document-banner-title">
-            {`This plan's repository belongs to ${home.name}`}
-          </p>
-          <p className="document-banner-detail">
-            {`${own?.name ?? "This workspace"} can't reach ${plan.repository}, so agents can't start on it here.`}
-          </p>
-        </div>
-        <button type="button" className="primary-button" onClick={moving.ask}>
-          {`Move to ${home.name}…`}
-        </button>
-      </section>
-      {moving.dialog}
-    </>
-  );
+  const home = plan === undefined ? undefined : strandedHome(plans, plan);
+  const { ask } = moving;
+  if (home === undefined || ask === undefined) return { banner: null, dialog: moving.dialog };
+  const personal = plans.workspaces[0]?.id === home.id;
+  return {
+    banner: (
+      <PlanBanner action={{ label: `Move to ${home.name}…`, onPress: ask }}>
+        This plan's repository belongs to{" "}
+        <WorkspaceRef
+          workspace={home}
+          card={<WorkspaceCard workspace={home} personal={personal} />}
+        />
+      </PlanBanner>
+    ),
+    dialog: moving.dialog,
+  };
 }
