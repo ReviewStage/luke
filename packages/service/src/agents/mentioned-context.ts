@@ -1,4 +1,5 @@
 import { MENTIONED_HEADING } from "@luke/database/models/attached-file-parts";
+import { CONNECTION_TOOL } from "@luke/features/agent-tools";
 import { INTEGRATION_NAME, type IntegrationProvider } from "@luke/features/integration-wire";
 import {
   MENTION_KIND,
@@ -12,7 +13,6 @@ import {
 import { planSections } from "@luke/features/plan-document";
 import { planMarkdown } from "@luke/features/plan-markdown";
 import type { Plan } from "@luke/features/plan-wire";
-import { CONNECTION_TOOL } from "../integrations/connection-tools.js";
 
 /**
  * mentioned-context.ts -- what a coding agent's message mentions that the agent cannot read for itself, as it stood when the message was sent.

@@ -1,0 +1,21 @@
+{
+  "type": "object",
+  "properties": {
+    "remoteTool": {
+      "type": "string"
+    },
+    "parentCallId": {
+      "type": "string"
+    },
+    "input": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  },
+  "required": [
+    "remoteTool",
+    "parentCallId",
+    "input"
+  ],
+  "additionalProperties": false
+}

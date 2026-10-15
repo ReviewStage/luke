@@ -9,56 +9,39 @@
  * result. The store writer holds every call of a row to a registered tool,
  * and a remote server names its tools itself, so a nested call of one
  * integration's tool is stored under that integration's one fixed name
- * (`integrations.ts`'s `REMOTE_TOOL`, `linear_remote` for Linear), whose
+ * (the wire's `INTEGRATION_REMOTE_TOOL`, `linear_remote` for Linear), whose
  * input is an envelope of the remote tool's name, the input eve validated
- * for it, and the call it ran under. Every name is registered in every
+ * for it, and the call it ran under (`integrationRemoteCallSchema`), which
+ * the desktop reads back to draw the row. Every name is registered in every
  * agent's tool set whatever any account's connections stand at, so a
  * transcript that used an integration reads back the same after a
  * Disconnect.
  */
 
+import { CONNECTION_TOOL } from "@luke/features/agent-tools";
 import {
   INTEGRATION_NAME,
   INTEGRATION_PROVIDER_LIST,
+  INTEGRATION_REMOTE_TOOL,
   type IntegrationProvider,
+  integrationRemoteCallSchema,
 } from "@luke/features/integration-wire";
 import { WireValueSchema } from "@luke/wire";
 import { verbatimJsonSchema } from "@luke/wire/effect";
 import type { Tool } from "ai";
 import { Schema } from "effect";
 import { type UnparsedWireValue, wireValidatedTool } from "../core.js";
-import { INTEGRATION } from "./integrations.js";
-
-/** eve's own two calls a connection's use leaves in a transcript, beside each integration's nested ones. */
-export const CONNECTION_TOOL = {
-  SEARCH: "connection_search",
-  EXECUTE: "connection_execute",
-} as const;
 
 /** How eve qualifies a remote tool's name: the connection, two underscores, and the tool. */
 const QUALIFIED_SEPARATOR = "__";
 
-/**
- * A remote tool's own name as the envelope keeps it: the characters MCP
- * allows a tool's name, dots among them (Y Combinator's `hiring.list_jobs`),
- * and nothing shaped like a sentence.
- */
-const REMOTE_TOOL_PATTERN = /^[A-Za-z0-9_.-]{1,128}$/;
+/** Whether a name is one the envelope keeps a remote tool's own name as. */
+const isRemoteToolWord = Schema.is(integrationRemoteCallSchema.fields.remoteTool);
 
 /** A call's input as the row keeps it: one JSON object, whose fields eve's or the remote server's own schema already read. */
 const OBJECT_INPUT = verbatimJsonSchema(WireValueSchema, {
   type: "object",
   additionalProperties: true,
-});
-
-/** A nested call of an integration's tool as the row keeps it. */
-const RemoteInputSchema = Schema.Struct({
-  /** The provider's own name for the tool, without the connection's. */
-  remoteTool: Schema.String.check(Schema.isPattern(REMOTE_TOOL_PATTERN)),
-  /** The `connection_execute` call it ran under. */
-  parentCallId: Schema.String,
-  /** The input eve validated against the tool's schema and sent; empty where it sent none. */
-  input: OBJECT_INPUT,
 });
 
 /** The connection calls as stored rows are held to them, for every agent's tool set. */
@@ -69,10 +52,10 @@ export function connectionToolEntries(): ReadonlyArray<readonly [string, Tool]> 
     ...INTEGRATION_PROVIDER_LIST.map(
       (provider) =>
         [
-          INTEGRATION[provider].REMOTE_TOOL,
+          INTEGRATION_REMOTE_TOOL[provider],
           wireValidatedTool(
             `One of ${INTEGRATION_NAME[provider]}'s own tools, run by connection_execute`,
-            RemoteInputSchema,
+            integrationRemoteCallSchema,
           ),
         ] as const,
     ),
@@ -94,7 +77,7 @@ function remoteToolOf(
   // Note that a provider's value is its connection's name, which eve names it by (`agent-runtime/connections.ts`).
   const provider = INTEGRATION_PROVIDER_LIST.find((each) => each === connection);
   const remoteTool = toolName.slice(separator + QUALIFIED_SEPARATOR.length);
-  if (provider === undefined || !REMOTE_TOOL_PATTERN.test(remoteTool)) return undefined;
+  if (provider === undefined || !isRemoteToolWord(remoteTool)) return undefined;
   return { provider, remoteTool };
 }
 
@@ -113,7 +96,7 @@ export function storedRemoteCall(
   const remote = remoteToolOf(toolName);
   if (remote === undefined) return undefined;
   return {
-    name: INTEGRATION[remote.provider].REMOTE_TOOL,
+    name: INTEGRATION_REMOTE_TOOL[remote.provider],
     // eve validated an object, so an empty one stands for an input it never had.
     input: { remoteTool: remote.remoteTool, parentCallId, input: input ?? {} },
   };

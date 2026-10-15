@@ -1,4 +1,4 @@
-import { AGENT_TOOL, EVE_TOOL } from "@luke/features/agent-tools";
+import { AGENT_TOOL, CONNECTION_TOOL, EVE_TOOL } from "@luke/features/agent-tools";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentCallFailure,
@@ -52,7 +52,7 @@ import {
 import { isRecord, isWireString, MESSAGE_ROLE, type WireValue } from "@luke/wire";
 import { TOOL_STATE, type ToolState } from "../ai-elements/tool";
 import { GLYPH_STATE, type GlyphState, glyphStateWords } from "../state-glyph";
-import { TOOL_TARGET, todosView, toolTarget } from "./tool-call-model";
+import { remoteCallOf, TOOL_TARGET, todosView, toolTarget } from "./tool-call-model";
 
 /**
  * coding-agent-model.ts -- what the agent tabs, the Start button, and an agent's transcript draw, decided from what the service answered.
@@ -1114,10 +1114,37 @@ interface AgentTurnPlace {
   readonly said?: boolean;
 }
 
-/** The parts of a message a row is drawn from: every part but a step boundary and a kind this build does not draw. */
+/** The `connection_execute` calls among the parts that an integration's own call ran under, by their ids. */
+function runConnectionCalls(parts: readonly AgentPart[]): ReadonlySet<string> {
+  return new Set(
+    parts.flatMap((part) => {
+      const remote =
+        part.kind === AGENT_PART.TOOL ? remoteCallOf(part.tool, part.input) : undefined;
+      return remote === undefined ? [] : [remote.call.parentCallId];
+    }),
+  );
+}
+
+/**
+ * The parts of a message a row is drawn from: every part but a step
+ * boundary, a kind this build does not draw, and a `connection_execute`
+ * whose integration's own call stands in the message. Note that such a
+ * wrapper is left out, because the call it ran is the same call told
+ * twice, and that one with no such call keeps its row, because there is
+ * nothing else to read it by.
+ */
 function drawnParts(message: CodingAgentMessage): readonly AgentPart[] {
-  return agentParts(message).filter(
-    (part) => part.kind !== AGENT_PART.STEP_START && part.kind !== AGENT_PART.OTHER,
+  const parts = agentParts(message);
+  const ran = runConnectionCalls(parts);
+  return parts.filter(
+    (part) =>
+      part.kind !== AGENT_PART.STEP_START &&
+      part.kind !== AGENT_PART.OTHER &&
+      !(
+        part.kind === AGENT_PART.TOOL &&
+        part.tool === CONNECTION_TOOL.EXECUTE &&
+        ran.has(part.callId)
+      ),
   );
 }
 
