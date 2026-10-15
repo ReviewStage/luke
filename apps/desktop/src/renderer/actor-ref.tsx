@@ -14,6 +14,7 @@ import {
   type Actor,
   type ActorState,
   actorName,
+  type GitHubActor,
   identityHue,
   identityLetter,
   LUKE_ACTOR,
@@ -21,7 +22,7 @@ import {
   ROLE_WORDS,
   SOMEONE_REASON,
 } from "@luke/ui/actor-model";
-import { ClockIcon, HistoryIcon, UserRoundIcon, UserRoundXIcon } from "lucide-react";
+import { BotIcon, ClockIcon, HistoryIcon, UserRoundIcon, UserRoundXIcon } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { automationNextText, automationOwnerName } from "./desktop/automation-words";
 import { CardHead, CardNote, CardRule, HoverCard } from "./hover-card";
@@ -37,7 +38,9 @@ import { Tooltip } from "./tooltip";
  * A person's circle holds their sign-in picture once it loads, and the first
  * letter of their name on the hue read off their id until then and where it
  * fails, as a workspace's tile does; a member who left, or someone the
- * service names nobody for, stands on a quiet outline. Luke's square holds
+ * service names nobody for, stands on a quiet outline. Someone GitHub names
+ * who is no member stands by their GitHub avatar, a person on a circle and
+ * an App's bot on a square, its robot until the avatar loads. Luke's square holds
  * his face in his own blue, an agent's its harness, swapped for the working
  * mark while it writes as its tab's glyph is, and an automation's its clock,
  * each on one solid neutral fill, never the ground showing through, so a
@@ -69,16 +72,29 @@ const GLYPH_OF_STATE = {
   [ACTOR_STATE.REST]: GLYPH_STATE.REST,
 } as const satisfies Record<ActorState, GlyphState>;
 
-/** A person's picture once it loads, their letter on its hue until then and where it fails. */
-function PersonFace({ actor }: { actor: PersonActor }): React.JSX.Element {
+/**
+ * A picture once it loads, and `stand` until then and where it fails: a
+ * person's letter on the hue read off `id`, or a bot's own glyph on its
+ * tile, which never holds a letter.
+ */
+function PictureFace({
+  id,
+  pictureUrl,
+  stand,
+}: {
+  id: string;
+  pictureUrl: string | undefined;
+  stand: { readonly letter: string } | { readonly glyph: ReactNode };
+}): React.JSX.Element {
   const [failedUrl, setFailedUrl] = useState<string | undefined>(undefined);
   const [loadedUrl, setLoadedUrl] = useState<string | undefined>(undefined);
-  const url = actor.pictureUrl !== failedUrl ? actor.pictureUrl : undefined;
+  const url = pictureUrl !== failedUrl ? pictureUrl : undefined;
   const shown = url !== undefined && url === loadedUrl;
-  // Note that the letter stands until the picture has loaded, because a picture on the network may take a while, and goes once it has, so a transparent one shows no letter through.
+  const lettered = "letter" in stand;
+  // Note that the stand-in stands until the picture has loaded, because a picture on the network may take a while, and goes once it has, so a transparent one shows nothing through.
   return (
-    <span className="actor-face" data-hue={shown ? undefined : identityHue(actor.userId)}>
-      {shown ? null : identityLetter(actor.name)}
+    <span className="actor-face" data-hue={shown || !lettered ? undefined : identityHue(id)}>
+      {shown ? null : lettered ? stand.letter : stand.glyph}
       {url === undefined ? null : (
         <img
           className="actor-picture"
@@ -92,6 +108,28 @@ function PersonFace({ actor }: { actor: PersonActor }): React.JSX.Element {
         />
       )}
     </span>
+  );
+}
+
+/** A person's picture once it loads, their letter on its hue until then and where it fails. */
+function PersonFace({ actor }: { actor: PersonActor }): React.JSX.Element {
+  return (
+    <PictureFace
+      id={actor.userId}
+      pictureUrl={actor.pictureUrl}
+      stand={{ letter: identityLetter(actor.name) }}
+    />
+  );
+}
+
+/** Someone on GitHub: their avatar once it loads, a person's letter or a bot's glyph until then. */
+function GitHubFace({ actor }: { actor: GitHubActor }): React.JSX.Element {
+  return (
+    <PictureFace
+      id={actor.login}
+      pictureUrl={actor.avatarUrl}
+      stand={actor.bot ? { glyph: <BotIcon /> } : { letter: identityLetter(actor.login) }}
+    />
   );
 }
 
@@ -121,6 +159,8 @@ function Face({ actor }: { actor: Actor }): React.JSX.Element {
           <StateGlyph glyph={<ClockIcon />} state={GLYPH_OF_STATE[actor.state]} />
         </span>
       );
+    case ACTOR_KIND.GITHUB:
+      return <GitHubFace actor={actor} />;
     case ACTOR_KIND.SOMEONE:
       return (
         <span className="actor-face">
@@ -145,7 +185,13 @@ export function ActorMark({
   size?: ActorSize;
 }): React.JSX.Element {
   return (
-    <span className="actor-mark" data-kind={actor.kind} data-size={size} aria-hidden="true">
+    <span
+      className="actor-mark"
+      data-kind={actor.kind}
+      data-bot={actor.kind === ACTOR_KIND.GITHUB && actor.bot ? "true" : undefined}
+      data-size={size}
+      aria-hidden="true"
+    >
       <Face actor={actor} />
     </span>
   );
@@ -264,6 +310,29 @@ function SomeoneCard({
   );
 }
 
+/** What a GitHub account's card says it is, a person's or an App's bot's, and where a person stands. */
+const GITHUB_WORDS = {
+  USER: "GitHub user",
+  APP: "GitHub app",
+  OUTSIDE: "Not in this workspace",
+} as const;
+
+/** Someone on GitHub's card: their face, their login, whether they are a person or an App's bot, and that a person is no member here. Read, never followed. */
+export function GitHubCard({ actor }: { actor: GitHubActor }): React.JSX.Element {
+  return (
+    <HoverCard data-actor-card={actor.kind}>
+      <div className="actor-card-head">
+        <ActorMark actor={actor} size={ACTOR_SIZE.CARD} />
+        <CardHead
+          name={`@${actor.login}`}
+          sub={actor.bot ? GITHUB_WORDS.APP : GITHUB_WORDS.USER}
+          corner={actor.bot ? undefined : GITHUB_WORDS.OUTSIDE}
+        />
+      </div>
+    </HoverCard>
+  );
+}
+
 /** What an automation's card's way to its page says. */
 const OPEN_AUTOMATION = "Open automation";
 
@@ -322,13 +391,15 @@ export function AutomationCard({
   );
 }
 
-/** The card an actor hangs where the place naming it adds nothing: a person's or someone's; none for the rest, whose name stands as a pill. */
+/** The card an actor hangs where the place naming it adds nothing: a person's, someone's, or a GitHub account's; none for the rest, whose name stands as a pill. */
 function actorCard(actor: Actor): ReactNode {
   switch (actor.kind) {
     case ACTOR_KIND.PERSON:
       return <PersonCard actor={actor} />;
     case ACTOR_KIND.SOMEONE:
       return <SomeoneCard actor={actor} />;
+    case ACTOR_KIND.GITHUB:
+      return <GitHubCard actor={actor} />;
     default:
       return undefined;
   }
