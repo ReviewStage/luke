@@ -32,9 +32,12 @@ mount it, the hosted service's logic in `packages/service`, its contract
 and clients in `packages/features`, and a wire value in `packages/wire`. A
 `.ts` module whose imports name no module of its app and no platform
 library (`electron`, `react-dom`, a DOM API, `better-auth`, `eve`,
-`@vercel/*`) is logic and belongs in a package;
-`scripts/repository-checks.sh` refuses one under `apps/` once stack C
-lands. A component is placed by review under the same rule.
+`@vercel/*`) is logic and belongs in a package. The logic-lives-in-packages
+check in `scripts/repository-checks.sh` refuses one under
+`apps/desktop/src`, `apps/web/src`, or `apps/web/server` unless it is shell:
+an app entry in `knip.json`, a `runtimeEdges` row in
+`tools/anti-slop/effect-edges.json`, or a deployment or test-support file
+the check names. A component is placed by review under the same rule.
 
 ## Never
 

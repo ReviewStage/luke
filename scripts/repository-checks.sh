@@ -362,6 +362,109 @@ node --input-type=module -e '
   }
 ' "$LUKE_REPO_ROOT"
 
+# Application logic lives in `packages/` (AGENTS.md's "Layout"). A `.ts`
+# module under an app that imports nothing of its app (`./`, `../`, a `#`
+# import) and no platform library, and names no DOM global, could run on any
+# platform, so it is logic and belongs in a package. Shell is stated by role
+# rather than by list: an app's entries in `knip.json`, its runtime edges in
+# `effect-edges.json`, and the deployment and test-support files named here.
+# The source is parsed with the root's `typescript`, so a comment or a string
+# that says "window" is not a reach into the DOM. `react` is deliberately not
+# a platform, so a DOM-free hook is flagged and belongs in `@luke/ui`; a
+# `.tsx` component is placed by review, because a site-only component and a
+# shareable one look the same to a parser. There is no baseline: moving a leaf
+# exposes the next layer, so the check ratchets without one.
+node --input-type=module -e '
+  import { glob, readFile } from "node:fs/promises";
+  import { createRequire } from "node:module";
+  import path from "node:path";
+  const root = process.argv[1];
+  const ts = createRequire(path.join(root, "package.json"))("typescript");
+  const SCANNED = ["apps/desktop/src", "apps/web/src", "apps/web/server"];
+  const APP_MODULE = /^(?:\.{1,2}\/|#(?:main|renderer|shared|preload|testing)\/)/;
+  const PLATFORM =
+    /^(?:electron|electron-updater|@sentry\/electron|react-dom|better-auth|@better-auth\/[^/]+|eve|@vercel\/[^/]+|vite|@tailwindcss\/[^/]+|posthog-js|@fontsource[^/]*(?:\/[^/]+)?)(?:\/.*)?$/;
+  const DOM_GLOBALS = new Set([
+    "window", "document", "navigator", "location", "history", "screen", "localStorage",
+    "sessionStorage", "customElements", "devicePixelRatio", "getComputedStyle", "matchMedia",
+    "requestAnimationFrame", "cancelAnimationFrame", "requestIdleCallback", "Element", "Node",
+    "Document", "DocumentFragment", "Window", "Range", "Selection", "DOMRect", "DOMParser",
+    "CSSStyleDeclaration", "ResizeObserver", "MutationObserver", "IntersectionObserver",
+    "KeyboardEvent", "MouseEvent", "PointerEvent", "DragEvent", "ClipboardEvent", "FocusEvent",
+    "WheelEvent", "InputEvent", "TouchEvent", "UIEvent", "Image", "Audio", "AudioContext",
+    "AudioWorkletNode", "MediaStream", "MediaRecorder", "RTCPeerConnection", "IDBDatabase",
+    "indexedDB", "FileReader", "DataTransfer",
+  ]);
+  const ELEMENT_TYPE = /^(?:HTML|SVG)\w*Element$/;
+  // A DOM global is a name the checker resolves to `lib.dom`, so a local
+  // that shadows one in its own scope (a plan `document`, say) is not a reach
+  // into the DOM, while `globalThis.location` is. The set narrows `lib.dom`
+  // to what only a browser has, because Node shares `fetch`, `URL`, `Event`.
+  const reachesDom = (checker, node) => {
+    if (!DOM_GLOBALS.has(node.text) && !ELEMENT_TYPE.test(node.text)) return false;
+    const symbol = checker.getSymbolAtLocation(node);
+    const declarations = symbol?.declarations ?? [];
+    return declarations.length > 0 &&
+      declarations.every((one) => path.basename(one.getSourceFile().fileName) === "lib.dom.d.ts");
+  };
+  // Shell, stated by role: the knip entries of each app, the runtime edges,
+  // and the deployment and test-support files named here.
+  const knip = JSON.parse(await readFile(path.join(root, "knip.json"), "utf8"));
+  const edges = JSON.parse(await readFile(path.join(root, "tools/anti-slop/effect-edges.json"), "utf8"));
+  const shellGlobs = [
+    ...["apps/desktop", "apps/web"].flatMap((app) =>
+      (knip.workspaces[app]?.entry ?? []).map((entry) => `${app}/${entry}`),
+    ),
+    "apps/web/server/function-*.ts",
+    "apps/web/server/build-output.ts",
+    "apps/web/server/api-callers.ts",
+    "apps/web/server/preview-*.ts",
+    "apps/desktop/src/renderer/global.d.ts",
+    "apps/desktop/src/testing/**",
+  ];
+  const shell = new Set(edges.runtimeEdges);
+  for await (const found of glob(shellGlobs, { cwd: root })) shell.add(found.split(path.sep).join("/"));
+  const candidates = [];
+  for await (const found of glob(SCANNED.map((dir) => `${dir}/**/*.ts`), { cwd: root })) {
+    const file = found.split(path.sep).join("/");
+    if (/\.test\.ts$/.test(file) || /\/(?:__tests__|tests)\//.test(file) || shell.has(file)) continue;
+    candidates.push(file);
+  }
+  // One program over every candidate, resolving no import, so the checker
+  // binds each file against the DOM library and nothing else.
+  const program = ts.createProgram(candidates.map((file) => path.join(root, file)), {
+    lib: ["lib.esnext.d.ts", "lib.dom.d.ts"],
+    noResolve: true,
+    noEmit: true,
+    types: [],
+  });
+  const checker = program.getTypeChecker();
+  const offenders = [];
+  for (const file of candidates) {
+    const source = program.getSourceFile(path.join(root, file));
+    let anchored = false;
+    const visit = (node) => {
+      const specifier =
+        (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) ? node.moduleSpecifier :
+        (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) ? node.arguments[0] :
+        ts.isImportTypeNode(node) ? node.argument?.literal :
+        undefined;
+      if (specifier && ts.isStringLiteralLike(specifier) &&
+          (APP_MODULE.test(specifier.text) || PLATFORM.test(specifier.text))) anchored = true;
+      if (ts.isIdentifier(node) && reachesDom(checker, node)) anchored = true;
+      if (!anchored) ts.forEachChild(node, visit);
+    };
+    visit(source);
+    if (!anchored) offenders.push(file);
+  }
+  if (offenders.length > 0) {
+    process.stderr.write(
+      `error: these modules under apps/ import nothing of their app and no platform library, so they are logic and belong in a package (@luke/ui, @luke/service, @luke/features, @luke/host, @luke/wire); a module is shell only as an app entry in knip.json, a runtimeEdges row in tools/anti-slop/effect-edges.json, or a deployment or test-support file named in scripts/repository-checks.sh:\n${offenders.sort().map((one) => `  ${one}`).join("\n")}\n`,
+    );
+    process.exit(1);
+  }
+' "$LUKE_REPO_ROOT"
+
 # The root `vitest.config.ts` names every workspace with tests, which is what
 # `pnpm exec vitest run <path>` from the root reads, and each of those
 # workspaces runs its tests through turbo under a name in `lib/turbo.mjs`'s
