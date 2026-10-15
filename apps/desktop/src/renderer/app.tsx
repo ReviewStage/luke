@@ -287,25 +287,31 @@ export function App(): React.JSX.Element {
   // A coding agent's notification clicked: the Plans tab, on that agent,
   // its plan's tab or its own page where it has no plan. Read through refs,
   // because the tab hands new closures each render and the subscription is
-  // owed to the window, not to a render.
+  // owed to the window, not to a render. Note that each way here the window
+  // is moved by more than one step asks once, as a whole, while a page holds
+  // unsaved work, so Leave takes every step and Cancel takes none.
   const showAgent = useRef(plans.onShowAgent);
   showAgent.current = plans.onShowAgent;
   const showAgentPage = useRef(plans.agentView.onOpen);
   showAgentPage.current = plans.agentView.onOpen;
   useEffect(
     () =>
-      window.luke.onShowAgent(({ planId, agentId }) => {
-        changeTab(PANEL_TAB.PLANS);
-        if (planId === null) showAgentPage.current(agentId);
-        else showAgent.current(planId, agentId);
-      }),
-    [changeTab],
+      window.luke.onShowAgent(({ planId, agentId }) =>
+        guardLeave(() => {
+          changeTab(PANEL_TAB.PLANS);
+          if (planId === null) showAgentPage.current(agentId);
+          else showAgent.current(planId, agentId);
+        })(),
+      ),
+    [changeTab, guardLeave],
   );
   // A Luke link the system handed the app: the Plans tab, on its plan, scrolled to its section, once sign-in no longer stands in the way.
-  const openLink = useLinkOpener(accountGated, (mention) => {
-    changeTab(PANEL_TAB.PLANS);
-    plans.onShowMention(mention);
-  });
+  const openLink = useLinkOpener(accountGated, (mention) =>
+    guardLeave(() => {
+      changeTab(PANEL_TAB.PLANS);
+      plans.onShowMention(mention);
+    })(),
+  );
   useEffect(
     () =>
       window.luke.onShowLink(({ planId, anchor }) =>
@@ -323,11 +329,13 @@ export function App(): React.JSX.Element {
   showPlan.current = plans.onShowPlan;
   useEffect(
     () =>
-      window.luke.onShowPlan(({ planId }) => {
-        changeTab(PANEL_TAB.PLANS);
-        showPlan.current(planId);
-      }),
-    [changeTab],
+      window.luke.onShowPlan(({ planId }) =>
+        guardLeave(() => {
+          changeTab(PANEL_TAB.PLANS);
+          showPlan.current(planId);
+        })(),
+      ),
+    [changeTab, guardLeave],
   );
   // The call card, while this window has the keyboard and its call bar is not
   // on screen: another plan, the home page, Settings, or the plan itself
@@ -353,19 +361,24 @@ export function App(): React.JSX.Element {
   // An agent's end said in the toast while the window was focused: its View
   // goes where the notification's click would, and it goes with the agent's
   // unseen dot.
-  useAgentEndToasts((planId, agentId) => {
-    changeTab(PANEL_TAB.PLANS);
-    showAgent.current(planId, agentId);
-  }, state?.codingAgents.unseen ?? NO_UNSEEN_AGENTS);
+  useAgentEndToasts(
+    (planId, agentId) =>
+      guardLeave(() => {
+        changeTab(PANEL_TAB.PLANS);
+        showAgent.current(planId, agentId);
+      })(),
+    state?.codingAgents.unseen ?? NO_UNSEEN_AGENTS,
+  );
   // An inbox notification clicked, or an item's toast's View: the Plans tab, on that plan's Inbox.
   const showInbox = useRef(plans.onShowInbox);
   showInbox.current = plans.onShowInbox;
   const openInbox = useCallback(
-    (planId: string) => {
-      changeTab(PANEL_TAB.PLANS);
-      showInbox.current(planId);
-    },
-    [changeTab],
+    (planId: string) =>
+      guardLeave(() => {
+        changeTab(PANEL_TAB.PLANS);
+        showInbox.current(planId);
+      })(),
+    [changeTab, guardLeave],
   );
   useEffect(() => window.luke.onShowInbox(({ planId }) => openInbox(planId)), [openInbox]);
   // A notification of an item of an agent with no plan clicked: the window's Inbox, on that item
@@ -374,16 +387,18 @@ export function App(): React.JSX.Element {
   inboxDoors.current = plans;
   useEffect(
     () =>
-      window.luke.onShowInboxItem(({ agentId, itemId, workspaceId }) => {
-        const doors = inboxDoors.current;
-        changeTab(PANEL_TAB.PLANS);
-        if (workspaceId !== undefined && doors.workspace?.id !== workspaceId) {
-          doors.onChooseWorkspace(workspaceId);
-        }
-        doors.inboxView.onOpen();
-        doors.inboxView.onChoose({ agentId, itemId, opened: true });
-      }),
-    [changeTab],
+      window.luke.onShowInboxItem(({ agentId, itemId, workspaceId }) =>
+        guardLeave(() => {
+          const doors = inboxDoors.current;
+          changeTab(PANEL_TAB.PLANS);
+          if (workspaceId !== undefined && doors.workspace?.id !== workspaceId) {
+            doors.onChooseWorkspace(workspaceId);
+          }
+          doors.inboxView.onOpen();
+          doors.inboxView.onChoose({ agentId, itemId, opened: true });
+        })(),
+      ),
+    [changeTab, guardLeave],
   );
   useInboxToasts(
     openInbox,
