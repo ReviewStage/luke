@@ -2,7 +2,6 @@ import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import type { PlanSummary } from "@luke/features/plan-wire";
 import type { PlanningRepositoriesAnswer } from "@luke/features/planning-view";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
-import { SETTINGS_SECTION, SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { ProviderMark } from "@luke/ui";
 import { type Actor, actorName, memberActor, ROLE_WORDS } from "@luke/ui/actor-model";
 import { ChevronRightIcon, GitBranchIcon, LockIcon } from "lucide-react";
@@ -12,7 +11,6 @@ import { WORKSPACE_REF_SIZE, WorkspaceCard, WorkspaceRef } from "../desktop/work
 import { WorkspaceTile } from "../desktop/workspace-tile";
 import { CardHead, CardNote, CardRule, HoverCard } from "../hover-card";
 import { useCreator, useMemberDirectory } from "../member-directory";
-import { useOpenSettings } from "../open-settings";
 import { RepositoryPicture } from "../repository-picture";
 import { Tooltip } from "../tooltip";
 import { useMinute } from "./plan-time";
@@ -35,8 +33,8 @@ import { RelativeTime } from "./relative-time";
  * and changes it, and the sidebar starts a new task in it. At its end
  * stands who can edit: the first few members' faces and "5 can edit", or a
  * lock and "Only you" for a workspace of one. Resting on it hangs a card
- * listing everyone by name and role, and pressing it opens the workspace's
- * members in Settings. Where the list names who created the task, its
+ * listing everyone by name and role, and, as the repository, it presses
+ * nowhere. Where the list names who created the task, its
  * creator leads the faces and the list, the card says "Created by Charles
  * Pan · 3d ago" over the list, and the creator's row says so beside their role. Each face is drawn as the window draws any person
  * (`actor-ref.tsx`): the member's sign-in picture where the members read
@@ -155,7 +153,7 @@ function PeopleCard({
   );
 }
 
-/** The crumb's end: who can edit, its card on rest and the workspace's members on a press. */
+/** The crumb's end: who can edit, its card on rest; no press. */
 function People({
   workspace,
   members,
@@ -163,7 +161,6 @@ function People({
   archived,
   readerId,
   creation,
-  onOpen,
 }: {
   workspace: Workspace;
   members: readonly WorkspaceMember[] | undefined;
@@ -171,7 +168,6 @@ function People({
   archived: boolean;
   readerId: string | undefined;
   creation: Creation | undefined;
-  onOpen: () => void;
 }): React.JSX.Element {
   const only = count <= 1;
   return (
@@ -188,7 +184,7 @@ function People({
         />
       }
     >
-      <button type="button" className="plan-crumb-people" onClick={onOpen}>
+      <span className="plan-crumb-item plan-crumb-people">
         {only ? (
           <>
             <LockIcon aria-hidden="true" />
@@ -208,7 +204,7 @@ function People({
             {archived ? `${count} members` : `${count} can edit`}
           </>
         )}
-      </button>
+      </span>
     </Tooltip>
   );
 }
@@ -362,11 +358,9 @@ export function PlanCrumb({
   created?: Pick<PlanSummary, "createdBy" | "ownerId" | "createdAt"> | undefined;
   doors: PlanCrumbDoors;
 }): React.JSX.Element {
-  const openSettings = useOpenSettings();
   const { members, readerId } = useMemberDirectory();
   const creation = useCreation(created);
   const count = editorsOf(workspace, members);
-  const page = { page: SETTINGS_VIEW.WORKSPACE, workspaceId: workspace.id };
   return (
     <nav className="plan-crumb" aria-label="Where this task is">
       <Tooltip
@@ -400,7 +394,6 @@ export function PlanCrumb({
           archived={archived}
           readerId={readerId}
           creation={creation}
-          onOpen={() => openSettings({ ...page, section: SETTINGS_SECTION.MEMBERS })}
         />
       )}
     </nav>
