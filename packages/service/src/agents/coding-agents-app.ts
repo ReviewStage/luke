@@ -18,6 +18,7 @@ import {
   type StoreWriter,
   storeWriter,
 } from "@luke/database/models/writer";
+import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import {
   base64Chars,
   CODING_AGENT_BOUNDS,
@@ -491,7 +492,10 @@ const sendMessageEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   const asked = readEither(codingAgentMessageRequestSchema)(body);
   if (Result.isFailure(asked)) return yield* Effect.fail(messageRefusal(body));
   const eve = yield* eveFor(seams, request);
-  yield* steerCodingAgent(eve, writer, userId, agent, asked.success);
+  yield* steerCodingAgent(eve, writer, userId, agent, {
+    ...asked.success,
+    sender: { kind: MESSAGE_SENDER.MEMBER, userId },
+  });
   return hostedJsonResponse(HOSTED_HTTP_STATUS.ACCEPTED, {
     agent: yield* summaryOf(agent),
   });
@@ -894,6 +898,7 @@ const inboxAnswerEndpoint = /* @__PURE__ */ Effect.fn("web/inboxAnswerEndpoint")
     yield* steerCodingAgent(eve, writer, userId, agent.value, {
       text: inboxAnswerMessage(taken, answer),
       clientKey,
+      sender: { kind: MESSAGE_SENDER.MEMBER, userId },
     });
   });
   yield* handedOver.pipe(

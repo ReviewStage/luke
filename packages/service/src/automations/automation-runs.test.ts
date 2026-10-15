@@ -15,14 +15,16 @@ import {
 import {
   archiveCodingAgent,
   createCodingAgent,
+  lineSendersOf,
   readCodingAgent,
 } from "@luke/database/models/coding-agent-store";
 import { sentLineId } from "@luke/database/models/ids";
-import { sentLineStands } from "@luke/database/models/message-reads";
+import { readMessageByClientId, sentLineStands } from "@luke/database/models/message-reads";
 import { claimRuntimeSession } from "@luke/database/models/recorded-session";
-import { storeWriter } from "@luke/database/models/writer";
+import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
 import { automationRun, automation as automationTable } from "@luke/database/schemas/automation";
 import { turns } from "@luke/database/schemas/storage";
+import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { getTestDB, joinWorkspace, leaveWorkspace, startPlan } from "@luke/database/testing";
 import {
   AUTOMATION_ACTION,
@@ -202,6 +204,19 @@ const startedNow = (eve: ReturnType<typeof fakeEve>, automation: Automation) =>
     return outcome?.status === AUTOMATION_RUN_STATUS.STARTED ? outcome.codingAgentId : "";
   });
 
+/** What sent the line standing under a send's key, as an agent's page names it; nothing where no line or no sender stands. */
+const lineSenderUnder = (target: ConversationTarget, clientKey: string) =>
+  Effect.gen(function* () {
+    const read = yield* readMessageByClientId(
+      target.userId,
+      target.conversationId,
+      {},
+      sentLineId(clientKey),
+    );
+    const id = read.ok ? read.value[0]?.id : undefined;
+    return id === undefined ? undefined : (yield* lineSendersOf(target, [id])).get(id);
+  });
+
 /** The automation turned to hand every run to the agent named, as its editor's Same agent leaves it. */
 const toSameAgent = (automation: Automation, agentId: string) =>
   Effect.gen(function* () {
@@ -245,6 +260,11 @@ it.layer(getTestDB())("an automation's runs", (it) => {
         assert.ok(
           yield* sentLineStands(owner, agent.conversationId, sentLineId(run.id)),
           "the task stands as the creator's line under the run's key",
+        );
+        // The agent's tab names the automation over it, by the name it had when the run sent it.
+        assert.deepEqual(
+          yield* lineSenderUnder({ userId: owner, conversationId: agent.conversationId }, run.id),
+          { kind: MESSAGE_SENDER.AUTOMATION, name: automation.name },
         );
 
         yield* archiveCodingAgent(owner, first, true);
@@ -423,7 +443,11 @@ it.layer(getTestDB())("an automation's runs", (it) => {
           storeWriter({ tools: CODER_TOOL_SET }),
           owner,
           otherAgent,
-          { text: "Not the run.", clientKey: lost.id },
+          {
+            text: "Not the run.",
+            clientKey: lost.id,
+            sender: { kind: MESSAGE_SENDER.MEMBER, userId: owner },
+          },
         ).pipe(Effect.provide(services));
         for (const run of [delivered, lost]) {
           yield* recoverStrandedRun({

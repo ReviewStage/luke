@@ -1,10 +1,15 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { createCodingAgent, readCodingAgent } from "@luke/database/models/coding-agent-store";
+import {
+  createCodingAgent,
+  lineSendersOf,
+  readCodingAgent,
+} from "@luke/database/models/coding-agent-store";
 import { hostTurnId, sentLineId } from "@luke/database/models/ids";
-import { sentLineStands } from "@luke/database/models/message-reads";
+import { readMessageByClientId, sentLineStands } from "@luke/database/models/message-reads";
 import { openPlanConversation } from "@luke/database/models/plan-store";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
+import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { joinWorkspace, openHostedStoreTestDatabase, startPlan } from "@luke/database/testing";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
@@ -199,6 +204,19 @@ async function planConversation(
   return { userId: owner, conversationId, planId: plan.id, workspaceId: plan.workspaceId };
 }
 
+/** What sent the line standing under a send's key, as an agent's page names it; nothing where no line or no sender stands. */
+const lineSenderUnder = (target: ConversationTarget, clientKey: string) =>
+  Effect.gen(function* () {
+    const read = yield* readMessageByClientId(
+      target.userId,
+      target.conversationId,
+      {},
+      sentLineId(clientKey),
+    );
+    const id = read.ok ? read.value[0]?.id : undefined;
+    return id === undefined ? undefined : (yield* lineSendersOf(target, [id])).get(id);
+  });
+
 /** An agent started on the plan, the session eve runs it in recorded on its conversation as the store hook records it. */
 async function agentOn(
   userId: string,
@@ -287,6 +305,10 @@ test("a message to the plan's agent steers its session as the deployment acting 
     await database.run(sentLineStands(userId, agent.conversationId, sentLineId("call-1"))),
     true,
   );
+  // The agent's tab names Luke over it, the line being his rather than the member's on the call.
+  assert.deepEqual(await database.run(lineSenderUnder(agent, "call-1")), {
+    kind: MESSAGE_SENDER.LUKE,
+  });
   const again = await call(MESSAGE_CODING_AGENT_TOOL.name, {
     agentId: agent.id,
     text: INSTRUCTION,

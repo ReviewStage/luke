@@ -95,7 +95,7 @@ he answers a spoken ask he reads on our service, from the plan and the record
 described under "Your account". During the call, Luke's planning model can
 list the plan's coding agents, read the last few turns of one's transcript,
 send one a message it writes for you (kept in that agent's transcript as
-yours), and start a new one; what it read and sent is kept with the plan's
+Luke's), and start a new one; what it read and sent is kept with the plan's
 planning conversation. A fixture or evidence run keeps no conversation at all.
 
 **Feature plans.** When you start a named plan, our service stores it in a
@@ -103,7 +103,11 @@ workspace: the first workspace made for your account unless you start it in
 another workspace you are a member of, and the plan records which. Every member of that
 workspace can read, change, and delete the plan, its board, its pages, and
 its history, read what was said on its calls, yours included, and read,
-message, rename, and stop the coding agents any member started on it. It stores
+message, rename, and stop the coding agents any member started on it. Each
+message a member sends a coding agent keeps which member sent it, as their
+account, and the agent's tab names them over it to every other member; a
+message of a member whose account is deleted keeps no account and reads as a
+former member's. It stores
 under your account its name and its one Markdown document, which begins as a copy of
 your plan template and is written by the planning call's notetaker, by coding
 agents started on it, and by you, when you edit a section or restore an

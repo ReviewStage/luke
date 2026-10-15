@@ -29,15 +29,15 @@ import {
 import { DateTime, Effect, Option, Schema, SchemaTransformation } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError, queryBuilder } from "../core/query.js";
-import { organization } from "../schemas/auth.js";
+import { organization, user } from "../schemas/auth.js";
 import {
   codingAgent,
   codingAgentDelegation,
   type StoredAgentStep,
 } from "../schemas/coding-agent.js";
 import { plan } from "../schemas/plan.js";
-import { conversations, turns } from "../schemas/storage.js";
-import { CONVERSATION_KIND } from "../storage-vocabulary.js";
+import { conversations, messages, turns } from "../schemas/storage.js";
+import { CONVERSATION_KIND, MESSAGE_SENDER } from "../storage-vocabulary.js";
 import { InstantColumnSchema } from "./columns.js";
 import {
   awaitingLinesOf,
@@ -1296,6 +1296,101 @@ export function delegationStartsOf(
       childConversationIds,
     }),
     (rows) => new Map(rows.map((row) => [row.childConversationId, row.createdAt])),
+  );
+}
+
+/**
+ * What sent one of the developer's lines to an agent, as a reader names it:
+ * a member by their account's id and the name it holds now, or nobody where
+ * their account is gone; Luke; or an automation by the name its run kept.
+ */
+export type LineSent =
+  | {
+      readonly kind: typeof MESSAGE_SENDER.MEMBER;
+      readonly member: { readonly userId: string; readonly name: string } | undefined;
+    }
+  | { readonly kind: typeof MESSAGE_SENDER.LUKE }
+  | { readonly kind: typeof MESSAGE_SENDER.AUTOMATION; readonly name: string };
+
+/** A line's sender as its row keeps it, with the member's account where it still stands. */
+const LineSenderRowSchema = Schema.Struct({
+  id: Schema.String,
+  sender: Schema.Literals(Object.values(MESSAGE_SENDER)),
+  memberId: Schema.NullOr(Schema.String),
+  memberName: Schema.NullOr(Schema.String),
+  senderName: Schema.NullOr(Schema.String),
+});
+
+const findLineSenders = SqlSchema.findAll({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    conversationId: Schema.String,
+    messageIds: Schema.Array(Schema.String),
+  }),
+  Result: LineSenderRowSchema,
+  execute: ({ userId, conversationId, messageIds }) =>
+    Database.use((db) =>
+      db
+        .select({
+          id: messages.id,
+          sender: messages.sender,
+          memberId: user.id,
+          memberName: user.name,
+          senderName: messages.senderName,
+        })
+        .from(messages)
+        .leftJoin(user, eq(user.id, messages.senderUserId))
+        .where(
+          and(
+            inArray(messages.id, [...messageIds]),
+            eq(messages.userId, userId),
+            eq(messages.conversationId, conversationId),
+            isNotNull(messages.sender),
+          ),
+        ),
+    ),
+});
+
+/** A sender's row as a reader names it; an automation's that kept no name names nothing. */
+function lineSentOf(row: typeof LineSenderRowSchema.Type): LineSent | undefined {
+  switch (row.sender) {
+    case MESSAGE_SENDER.MEMBER:
+      return {
+        kind: MESSAGE_SENDER.MEMBER,
+        member:
+          row.memberId === null || row.memberName === null
+            ? undefined
+            : { userId: row.memberId, name: row.memberName },
+      };
+    case MESSAGE_SENDER.LUKE:
+      return { kind: MESSAGE_SENDER.LUKE };
+    case MESSAGE_SENDER.AUTOMATION:
+      return row.senderName === null
+        ? undefined
+        : { kind: MESSAGE_SENDER.AUTOMATION, name: row.senderName };
+  }
+}
+
+/**
+ * What sent each of these rows of the account's conversation, by row, for
+ * the lines whose sender was kept: every row but a developer's line to an
+ * agent, and a line written before senders were, names none. None asked,
+ * none read.
+ */
+export function lineSendersOf(
+  target: ConversationTarget,
+  messageIds: readonly string[],
+): CodingAgentStoreEffect<ReadonlyMap<string, LineSent>> {
+  if (messageIds.length === 0) return Effect.succeed(new Map());
+  return Effect.map(
+    findLineSenders({ userId: target.userId, conversationId: target.conversationId, messageIds }),
+    (rows) =>
+      new Map(
+        rows.flatMap((row) => {
+          const sent = lineSentOf(row);
+          return sent === undefined ? [] : [[row.id, sent] as const];
+        }),
+      ),
   );
 }
 

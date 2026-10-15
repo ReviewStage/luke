@@ -6,7 +6,9 @@ import {
   delegationStartsOf,
   delegationsOf,
   delegationTitlesOf,
+  type LineSent,
   latestTurnsOf,
+  lineSendersOf,
   readCodingAgentContext,
   readCodingAgentOfConversation,
   readDelegation,
@@ -24,6 +26,7 @@ import {
   turnsNamed,
 } from "@luke/database/models/message-reads";
 import type { ConversationTarget } from "@luke/database/models/writer";
+import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import {
   CODING_AGENT_BOUNDS,
   CODING_AGENT_CURSOR_START,
@@ -32,6 +35,7 @@ import {
   type CodingAgentContext,
   type CodingAgentDelegationStart,
   type CodingAgentFailure,
+  type CodingAgentSender,
   type CodingAgentStatus,
   type CodingAgentSubagentStanding,
   type CodingAgentSubagentTitle,
@@ -109,11 +113,12 @@ export function cursorToWire(cursor: MessageCursor): string {
 /** The cursor before every message, as the store reads it. */
 export const CURSOR_START: MessageCursor = cursorOfWire(CODING_AGENT_CURSOR_START);
 
-/** One row of the transcript as the route answers it: its message as the store holds it, and for a turn's journal when the turn began and closed and what it ran on and spent, which is the wire's `CodingAgentMessage` once serialized. */
+/** One row of the transcript as the route answers it: its message as the store holds it, for a turn's journal when the turn began and closed and what it ran on and spent, and for a developer's line what sent it, which is the wire's `CodingAgentMessage` once serialized. */
 type TranscriptMessage = StoredUIMessage &
   TurnRecord & {
     readonly startedAt?: number;
     readonly finishedAt?: number;
+    readonly sentBy?: CodingAgentSender;
   };
 
 /** A page of the transcript as the route answers it: each row's message, the agent's status as it stood, and why where its newest turn failed. */
@@ -215,11 +220,41 @@ const journalTurnsOf = (userId: string, records: readonly StoredMessageRecord[])
   );
 };
 
-/** A row as the page carries it: its message, and for a turn's journal when the turn began and what it ran on and, once the journal closed, when it did and what it spent. */
+/** The names a line is sent under where no member's account names it: Luke's, and a member's whose account is gone. */
+const SENDER_NAME = {
+  LUKE: "Luke",
+  FORMER_MEMBER: "Former member",
+} as const;
+
+/** What sent a line, as the page names it. */
+function senderOf(sent: LineSent): CodingAgentSender {
+  switch (sent.kind) {
+    case MESSAGE_SENDER.MEMBER:
+      return sent.member ?? { name: SENDER_NAME.FORMER_MEMBER };
+    case MESSAGE_SENDER.LUKE:
+      return { name: SENDER_NAME.LUKE };
+    case MESSAGE_SENDER.AUTOMATION:
+      return { name: sent.name };
+  }
+}
+
+/** What sent each of the developer's lines among the rows, by row, where its row kept it. */
+const lineSendersAmong = (target: ConversationTarget, records: readonly StoredMessageRecord[]) =>
+  lineSendersOf(
+    target,
+    records
+      .filter((record) => record.message.role === MESSAGE_ROLE.USER)
+      .map((record) => record.id),
+  );
+
+/** A row as the page carries it: its message, for a developer's line what sent it, and for a turn's journal when the turn began and what it ran on and, once the journal closed, when it did and what it spent. */
 function transcriptMessageOf(
   record: StoredMessageRecord,
   journalTurns: ReadonlyMap<string, JournalTurn>,
+  senders: ReadonlyMap<string, LineSent>,
 ): TranscriptMessage {
+  const sent = senders.get(record.id);
+  if (sent !== undefined) return { ...record.message, sentBy: senderOf(sent) };
   const turn = record.turnId === undefined ? undefined : journalTurns.get(record.turnId);
   if (turn === undefined) return record.message;
   return {
@@ -357,9 +392,10 @@ function pagePast(
     const { status, runStartedAt, failureReason, turn } = yield* statusNow(target, createdAt);
     const records = read.ok ? read.value : [];
     const journalTurns = yield* journalTurnsOf(target.userId, records);
+    const senders = yield* lineSendersAmong(target, records);
     return {
       page: {
-        messages: records.map((record) => transcriptMessageOf(record, journalTurns)),
+        messages: records.map((record) => transcriptMessageOf(record, journalTurns, senders)),
         cursor,
         status,
         ...(runStartedAt === undefined ? undefined : { runStartedAt }),
