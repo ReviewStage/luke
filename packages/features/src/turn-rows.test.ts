@@ -37,9 +37,7 @@ function scanned(rows: readonly TurnRow<Block>[]): unknown[] {
 
 /** The rows of a turn of `blocks`, moving or finished. */
 function rowsOf(blocks: readonly Block[], moving: boolean, said = false) {
-  return scanned(
-    turnRows(blocks, READING, { key: "turn", moving, done: !moving, grouped: true, said }),
-  );
+  return scanned(turnRows(blocks, READING, { key: "turn", moving, done: !moving, said }));
 }
 
 test("a thought between two calls joins their group, whose line counts the calls alone", () => {

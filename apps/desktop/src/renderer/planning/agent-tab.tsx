@@ -164,8 +164,6 @@ interface TranscriptLead {
   icon: ReactNode;
   /** What the tab says before the first message lands; a turn that ended before one says how instead. */
   startingLine: string;
-  /** Whether runs of calls fold under one line; a worker's session is read for its detail, so its do not. */
-  grouped: boolean;
 }
 
 /** An agent's transcript: the plan it was handed, and the agent starting; the planning model's turns on the Call tab, which open on no card, alike. */
@@ -177,7 +175,6 @@ export const AGENT_LEAD: TranscriptLead = {
     </span>
   ),
   startingLine: "The agent is starting.",
-  grouped: true,
 };
 
 /** What the tab says where its transcript could not be read. */
@@ -188,7 +185,6 @@ const WORKER_LEAD: TranscriptLead = {
   label: "Subagent task",
   icon: <BotIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />,
   startingLine: "The worker is starting.",
-  grouped: false,
 };
 
 /** A worker as its delegation's row knows it: the call that started it, the task it was handed, and where it stands. */
@@ -566,7 +562,7 @@ export function AgentMessage({
       {named}
       <MessageContent>
         <TranscriptRows
-          rows={agentRows(message, moving, lead.grouped, {
+          rows={agentRows(message, moving, {
             newestTodos: todos.kept,
             workers,
             said,
