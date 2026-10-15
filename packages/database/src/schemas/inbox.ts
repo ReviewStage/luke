@@ -25,9 +25,9 @@ import { plan } from "./plan.js";
  * as the wire's own JSON (`@luke/features/inbox-wire`), so a block type
  * added later is a member of that JSON rather than a column; `needs_reply`
  * is whether the agent is to hear the answer as a message. The status is
- * open until the developer answers it, which writes the answer and the key
- * the client sent it under, so an answer sent again after a lost reply is
- * taken once, or until the agent closes it, which writes why. The plan is
+ * open until a member answers it, which writes the answer, the member, and
+ * the key the client sent it under, so an answer sent again after a lost
+ * reply is taken once, or until the agent closes it, which writes why. The plan is
  * the agent's, kept on the row so a plan's inbox is read by one index, and
  * the account's open items are read by another. The row goes with its
  * account, its plan, and its agent alike. The columns
@@ -68,6 +68,12 @@ export const inboxItem = pgTable(
     answer: jsonb("answer").$type<InboxReply>(),
     /** The key the answer was sent under; null until they answer. */
     answerKey: text("answer_key"),
+    /**
+     * The member who answered, any member of the plan's workspace; null until
+     * one does, for an answer from before answerers were kept, and once their
+     * account is gone, which reads as nobody the service can name.
+     */
+    answeredBy: text("answered_by").references(() => user.id, { onDelete: "set null" }),
     /** Why the agent took the item back; null until it does. */
     closedReason: text("closed_reason"),
     postedAt: timestamptz("posted_at").notNull(),

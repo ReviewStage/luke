@@ -3,7 +3,7 @@ import { Schema as EffectSchema } from "effect";
 import { CODING_AGENT_ATTACHMENT_TYPE, CODING_AGENT_BOUNDS } from "./coding-agent-wire.js";
 import { githubRepositoryFullNameSchema } from "./github-repositories-wire.js";
 import { CODE_PATH_MAX_CHARS, codeLineSchema, commitShaSchema } from "./plan-wire.js";
-import { countedNumber, wireUuidSchema } from "./service-wire.js";
+import { countedNumber, memberRefSchema, wireUuidSchema } from "./service-wire.js";
 
 /**
  * inbox-wire.ts -- the developer's inbox: what a plan's coding agents need of the developer, posted by the agents and answered on the desktop.
@@ -492,6 +492,13 @@ export const inboxItemSchema = EffectSchema.Struct({
   status: EffectSchema.Literals(Object.values(INBOX_STATUS)),
   /** The developer's answer, on an answered item. */
   answer: EffectSchema.optionalKey(inboxReplySchema),
+  /**
+   * The member who answered, on an answered item, any member of the plan's
+   * workspace; absent for an answer nobody can be named for, and from a
+   * service before answerers were kept. The window says "You" only where it
+   * is the signed-in account.
+   */
+  answeredBy: EffectSchema.optionalKey(memberRefSchema),
   /** Why the agent took the item back, on a closed one. */
   closedReason: EffectSchema.optionalKey(EffectSchema.String),
   /** When the agent first posted the item under its key. */
