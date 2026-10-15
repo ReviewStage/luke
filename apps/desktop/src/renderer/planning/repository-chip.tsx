@@ -56,8 +56,13 @@ export interface RepositoryChooser {
   manages: boolean;
   /** The workspace's name, which a list with no GitHub connected says it of. */
   workspaceName?: string | undefined;
-  /** Whether the workspace's GitHub was removed or suspended on GitHub, which an empty list says rather than that none is connected. */
-  lapsed?: boolean | undefined;
+  /**
+   * Whether the workspace has a GitHub connected, as its row last said: a read
+   * that then finds none installed means GitHub removed or suspended it, which
+   * the list says rather than that none is connected, whether or not the row
+   * has heard yet.
+   */
+  connected?: boolean | undefined;
   /** Where the repositories come from, as the list's heading says it: "acme-corp on GitHub · Acme"; none where no GitHub is connected. */
   source?: string | undefined;
 }
@@ -104,7 +109,7 @@ const MENU_NOTE = {
  */
 function unconnectedNotes(chooser: RepositoryChooser): readonly string[] {
   const name = chooser.workspaceName;
-  if (chooser.lapsed === true) {
+  if (chooser.connected === true) {
     const lapsed = name === undefined ? MENU_NOTE.LAPSED : MENU_NOTE.LAPSED_IN(name);
     return chooser.manages ? [lapsed] : [lapsed, MENU_NOTE.ASK_TO_RECONNECT];
   }

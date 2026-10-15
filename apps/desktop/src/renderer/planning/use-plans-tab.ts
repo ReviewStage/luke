@@ -1362,8 +1362,9 @@ export function usePlansTab(input: {
    * starts on another workspace's nor on one a plan stranded there by #2524
    * still names; a read of every repository its GitHub reaches; where they
    * come from, which the list's heading says; whether the account manages
-   * it, so can connect its GitHub; and whether that GitHub was removed or
-   * suspended on GitHub, which the list says. A workspace not yet read is taken
+   * it, so can connect its GitHub; and whether it has a GitHub connected,
+   * so a read finding none installed says GitHub removed or suspended it. A
+   * workspace not yet read is taken
    * as managed, so the chip still points somewhere, and its recent
    * repositories are left to the service's read to judge.
    */
@@ -1396,7 +1397,7 @@ export function usePlansTab(input: {
       scope: workspaceId,
       manages: workspace === undefined || managesWorkspace(workspace),
       ...(workspace === undefined ? undefined : { workspaceName: workspace.name }),
-      ...(workspace?.github?.active === false ? { lapsed: true } : undefined),
+      ...(workspace?.github == null ? undefined : { connected: true }),
       ...(workspace?.github == null
         ? undefined
         : { source: `${workspace.github.login} on GitHub · ${workspace.name}` }),

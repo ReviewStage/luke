@@ -304,12 +304,12 @@ test("a member of a workspace with no GitHub connected is told only to ask an ow
   );
 });
 
-/** The notes the chip's menu draws, and whether it offers Open Settings, for a workspace whose GitHub lapsed. */
+/** The notes the chip's menu draws, and whether it offers Open Settings, for a workspace with a GitHub connected whose read finds none installed. */
 async function lapsedMenu(manages: boolean) {
   await mount(undefined, undefined, {
     scope: "workspace-acme",
     workspaceName: "Acme",
-    lapsed: true,
+    connected: true,
     manages,
     read: NOWHERE_INSTALLED,
   });
