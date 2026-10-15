@@ -24,7 +24,10 @@ tabs described next. On disk, under its application data, Luke keeps only
 the layout of its window: which tasks' tabs are open and which are pinned,
 each pin with its label (a coding agent's title or a file's path), which
 inbox items you have seen, and which groups you folded and how you sorted
-the Inbox. None of it is sent anywhere.
+the Inbox; and the words of a message you typed to a coding agent and have
+not sent, mentions and skills among them, kept per agent until you send it
+or empty its box. The files attached to such a message stay in memory only.
+None of it is sent anywhere.
 
 **Commands agents run on your Mac.** Luke, the workers he
 hands work to, every coding agent, and the workers a coding agent hands work

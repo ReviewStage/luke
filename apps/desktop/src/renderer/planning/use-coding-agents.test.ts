@@ -10,7 +10,7 @@ import {
 import type { Failure } from "@luke/features/failure-remedy";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { ACT_KIND, type ActKind, type ActPayload, type ActResultFor } from "@luke/host/acts";
-import type { AtomRegistry } from "effect/reactivity/AtomRegistry";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
@@ -50,6 +50,7 @@ const roots: Root[] = [];
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
+  window.localStorage.clear();
 });
 
 async function settle(): Promise<void> {
@@ -61,9 +62,10 @@ async function settle(): Promise<void> {
 /**
  * Mounts the hook over a service the test scripts act by act: each kind
  * answers from its own queue of answers, and every ask is written down. The
- * window's toast stands beside it, its atoms on `registry` where given.
+ * window's toast stands beside it, its atoms on `registry`, one of its own,
+ * as a window's, where none is given.
  */
-function mount(initial: Standing, registry?: AtomRegistry) {
+function mount(initial: Standing, registry: AtomRegistry.AtomRegistry = AtomRegistry.make()) {
   const asked: Asked[] = [];
   const started: string[] = [];
   let unarchives = 0;
@@ -120,7 +122,7 @@ function mount(initial: Standing, registry?: AtomRegistry) {
     },
     mount: async () => {
       const surface = createElement(Fragment, null, createElement(Probe), createElement(ToastHost));
-      act(() => root.render(registry === undefined ? surface : onRegistry(registry, surface)));
+      act(() => root.render(onRegistry(registry, surface)));
       await settle();
     },
     control: () => {
@@ -218,6 +220,64 @@ test("a draft asks nothing of the service, one per plan, until its first message
   await tab.stand({ planId: OTHER_PLAN });
   assert.equal(tab.control().draft?.id, other, "another plan's draft stands");
   assert.equal(tab.control().start.note, undefined, "the toolbar's Start says nothing of it");
+});
+
+test("a draft's words outlast a relaunch, the plan opening on its draft again under the same key, its files and chips left behind, and a draft let go stays gone", async () => {
+  const before = mount({ planId: PLAN, repository: "acme/relay" });
+  before.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [] });
+  await before.mount();
+  let draft = "";
+  act(() => {
+    draft = before.control().onNewDraft();
+  });
+  const prompt = "Rename the invite email's subject.";
+  const notes = { name: "notes.md", mediaType: "text/plain", data: "IyBOb3Rlcw==" } as const;
+  act(() => before.control().onDraftChange({ prompt }));
+  act(() =>
+    before.control().onDraftChange({ choice: { model: "openai/gpt-6.1-sol", effort: "xhigh" } }),
+  );
+  act(() => before.control().onDraftAttachments((held) => [...held, notes]));
+  for (const root of roots.splice(0)) act(() => root.unmount());
+
+  const after = mount({ planId: PLAN, repository: "acme/relay" });
+  after.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [] });
+  await after.mount();
+  assert.deepEqual(after.control().draft, {
+    id: draft,
+    prompt,
+    attachments: [],
+    choice: undefined,
+    disabledServers: [],
+  });
+  act(() => after.control().onDiscardDraft(draft));
+  assert.equal(after.control().draft, undefined);
+  for (const root of roots.splice(0)) act(() => root.unmount());
+
+  const again = mount({ planId: PLAN, repository: "acme/relay" });
+  again.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [] });
+  await again.mount();
+  assert.equal(again.control().draft, undefined);
+});
+
+test("a draft of files alone waits while another plan is open, but no relaunch brings back a draft with no words", async () => {
+  const OTHER_PLAN = "3c2d1e0f-4a5b-4c6d-8e7f-9a0b1c2d3e4f";
+  const notes = { name: "notes.md", mediaType: "text/plain", data: "IyBOb3Rlcw==" } as const;
+  const before = mount({ planId: PLAN, repository: "acme/relay" });
+  before.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [] }, { agents: [] }, { agents: [] });
+  await before.mount();
+  act(() => {
+    before.control().onNewDraft();
+  });
+  act(() => before.control().onDraftAttachments((held) => [...held, notes]));
+  await before.stand({ planId: OTHER_PLAN });
+  await before.stand({ planId: PLAN });
+  assert.deepEqual(before.control().draft?.attachments, [notes]);
+  for (const root of roots.splice(0)) act(() => root.unmount());
+
+  const after = mount({ planId: PLAN, repository: "acme/relay" });
+  after.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [] });
+  await after.mount();
+  assert.equal(after.control().draft, undefined);
 });
 
 test("with no plan open, the agent named is read as its page and held as a list of one, so its title from a transcript page moves it", async () => {

@@ -20,7 +20,9 @@ import { useEffect, useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { ACTOR_SIZE, ActorMark, ActorRef, CreatorHeard } from "../actor-ref";
 import { useAppCommand } from "../app-commands";
+import { usePlanDrafted } from "../composer-drafts";
 import { useCopyToast } from "../copy-feedback";
+import { DraftMark } from "../draft-mark";
 import { useMemberDirectory } from "../member-directory";
 import { EditedBy, type EditPlace, useEditReader } from "../planning/edit-ref";
 import { lastEditOf } from "../planning/plan-body";
@@ -397,7 +399,8 @@ export function PlanActions({
  * body's weight unless the plan is unread, and at the row's end how long ago
  * it was last updated, led by one mark for a repository that belongs to
  * another workspace, an agent at work, or a pull request (`plan-card.tsx`),
- * the first named in the row's card, and before that, on a task someone else
+ * the first named in the row's card, before that a pencil while a draft
+ * waits in one of its boxes (`draft-mark.tsx`), and before that, on a task someone else
  * created, its creator's face (`teammateCreator`), read against the members
  * of the directory around the list; the reader's own tasks wear none. A row
  * says what its group does not: its repository's name, muted, where its
@@ -444,6 +447,7 @@ export function SidebarPlan({
   });
   const teammate = teammateCreator(plan, useMemberDirectory());
   const creator = face ? teammate : undefined;
+  const drafted = usePlanDrafted(plan.id);
   const row = useRef<HTMLButtonElement | null>(null);
   const item = useRef<HTMLLIElement | null>(null);
   const refocus = useRef(false);
@@ -495,6 +499,7 @@ export function SidebarPlan({
                 {creator === undefined ? null : (
                   <ActorMark actor={creator} size={ACTOR_SIZE.MARK} />
                 )}
+                {drafted ? <DraftMark /> : null}
                 <PlanStatusMark plan={plan} stranded={strandedHome(plans, plan)} />
                 <RelativeTime at={at} now={now} hint={false} />
               </span>

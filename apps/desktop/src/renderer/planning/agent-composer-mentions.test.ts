@@ -19,7 +19,8 @@ import {
 import { PLAN_TREE_ENTRY } from "@luke/features/plan-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { Effect } from "effect";
-import { act, createElement, type ReactNode } from "react";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
+import { act, createElement, Fragment, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import {
@@ -30,6 +31,7 @@ import {
   QUIET_COMPOSER,
   typeInComposer,
 } from "#testing/composer";
+import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { AgentComposer } from "./agent-composer";
@@ -151,6 +153,7 @@ beforeEach(() => {
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
+  window.localStorage.clear();
 });
 
 async function settle(): Promise<void> {
@@ -195,10 +198,16 @@ function drawing(node: ReactNode, page: PlanMentionsValue | undefined) {
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
+  const registry = AtomRegistry.make();
   const redraw = (on: PlanMentionsValue | undefined) =>
     act(() =>
       root.render(
-        on === undefined ? node : createElement(PlanMentions, { value: on, children: node }),
+        onRegistry(
+          registry,
+          on === undefined
+            ? createElement(Fragment, null, node)
+            : createElement(PlanMentions, { value: on, children: node }),
+        ),
       ),
     );
   redraw(page);

@@ -768,6 +768,23 @@ body,
   height: 100%;
 }
 
+/* A draft waiting in a box (`draft-mark.tsx`): a pencil in the muted ink, at
+   the failed mark's size where it takes the same place at a tab's end. */
+.draft-mark {
+  display: inline-flex;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+}
+
+.draft-mark > svg {
+  width: 100%;
+  height: 100%;
+}
+
 /* A fault's words, in the danger text colour: a refusal under the row or
    the dialog it answers, a press that did not land, and a read that did not
    (`read-failure.tsx`). The one class for them, so a failure reads alike

@@ -1402,6 +1402,15 @@ ul.actor-stack {
   margin-right: var(--space-4);
 }
 
+/* A row holding a draft wears its pencil at the glyph's size, before the mark
+   of its work (`draft-mark.tsx`). */
+.sidebar-plan-time .draft-mark {
+  width: 12px;
+  height: 12px;
+  margin-right: var(--space-4);
+  vertical-align: -1.5px; /* off-scale */
+}
+
 /* A plan whose repository belongs to another workspace wears the attention
    mark in that place, the white exclamation on its orange disc
    (`attention-mark.tsx`), a size under the glyph's, so the disc's edge

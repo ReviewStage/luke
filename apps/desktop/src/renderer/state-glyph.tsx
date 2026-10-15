@@ -12,7 +12,8 @@
  * of its row or its tab (`stateEndMark`), before its time where it has
  * one, as an editor marks a file's tab with its problems; a call that
  * failed wears the same alert at its row's end. Only a failure has an end
- * mark, so no other row keeps room for one. At rest, finished or stopped
+ * mark of its work, so no other row keeps room for one; a tab whose box
+ * holds a draft wears the draft's pencil there instead (`draft-mark.tsx`). At rest, finished or stopped
  * by hand, the glyph stands alone, since that is where every piece of work
  * ends and a mark on each says nothing. Working and failed are said aloud in a fixed word, so nothing of
  * the work rides the attribute the screen recording keeps; the glyph at
