@@ -22,7 +22,7 @@ package.
 ## The auth group
 
 `src/auth/auth-app.ts` is the auth route group: Better Auth's own `fetch`
-handler on the path set `apps/web/vercel.json` routes here, and the hosted
+handler on the path set the root `vercel.json` routes here, and the hosted
 vocabulary's `not-found` on any other path, which nothing routes to this
 function. The handler is held as a passthrough rather than described as
 endpoints — an `HttpApi` declaring them would be a second copy of a contract
@@ -755,7 +755,7 @@ Then set the provider's variable (`EXECUTOR_CONNECTOR_UID`, `GRANOLA_CONNECTOR_U
 `SLACK_CONNECTOR_UID`, `SUPABASE_CONNECTOR_UID`, `VERCEL_CONNECTOR_UID`,
 `YCOMBINATOR_CONNECTOR_UID`) to that UID in the `luke-web` project for
 production, preview, and development. The web, `eve`, and `coder` are services of that
-one project (`apps/web/vercel.json`'s `services`), so its variables and the
+one project (the root `vercel.json`'s `services`), so its variables and the
 connector's link reach all three, which matters because the agents read
 tokens too. Asking Connect about an arbitrary user id needs the deployment's
 own Vercel OIDC token, which the SDK reads from the request
@@ -874,7 +874,7 @@ for it. Disconnect and deleting the account still revoke its grant.
 ## The coding-agent service
 
 `apps/web/coder/` is the second eve app root, built and deployed as the `coder`
-service beside `eve` on the same terms (`apps/web/vercel.json`): its own
+service beside `eve` on the same terms (the root `vercel.json`): its own
 `package.json` (`@luke/coder`, whose one dependency is `eve`), a flat layout
 eve resolves as an app root, and a build that prewarms its sandbox snapshot
 under the same Vercel Sandbox credentials. It stands at eve's named mount:
@@ -2378,7 +2378,7 @@ answered 429.
 ## The scheduled sweep
 
 `apps/web/server/routes/maintenance/sweep.ts` is what Vercel's cron calls:
-`apps/web/vercel.json` schedules it every minute (`* * * * *`) and
+the root `vercel.json` schedules it every minute (`* * * * *`) and
 `apps/web/server/function-durations.ts` gives its function group, `maintenance-sweep`,
 a 60-second duration (`MAINTENANCE_SWEEP.MAX_DURATION_SECONDS` in
 `src/maintenance/maintenance-bounds.ts`). The logic lives in
@@ -2419,7 +2419,7 @@ bearer is 401, compared in constant time, and any method but GET is 405.
 `src/events/events-app.ts` and `src/maintenance/maintenance-app.ts` are two route groups of
 one path each — `apps/web/server/routes/events.ts` mounts `eventsApp()` and
 `apps/web/server/routes/maintenance/sweep.ts` mounts `maintenanceApp()` — since
-`apps/web/vercel.json` already sends each function only the requests for its own path.
+the root `vercel.json` already sends each function only the requests for its own path.
 Each path is declared with `HttpRouter.add` under `ANY_METHOD` rather than a
 method-specific builder, because each handler still enforces its own method
 and answers its own 405 exactly as it did before conversion; only a path
