@@ -15,21 +15,28 @@ import {
   SearchIcon,
   UnpinIcon,
 } from "@luke/ui";
+import { actorName, creatorActor } from "@luke/ui/actor-model";
+import { PLANS_PAGE, repositoryPageUrl } from "@luke/ui/planning-model";
+import { sameTab } from "@luke/ui/tab-strip-model";
 import {
-  PLANS_PAGE,
+  type CreatorGroup,
+  creatorGroups,
+  orderTasks,
   type RepositoryGroup,
   repositoryGroups,
   repositoryLabel,
-  repositoryPageUrl,
-} from "@luke/ui/planning-model";
-import { sameTab } from "@luke/ui/tab-strip-model";
+  TASK_GROUPING,
+  type TaskOrder,
+  taskTime,
+} from "@luke/ui/task-list-model";
 import type { UpdateControl } from "@luke/voice/settings-controls";
 import { FactoryIcon, HouseIcon, InboxIcon, ZapIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
+import { ACTOR_SIZE, ActorMark } from "../actor-ref";
 import { runAppCommand, useAppCommand } from "../app-commands";
 import { type CallCardInput, ColumnFoot } from "../call/call-card";
-import { MemberDirectory } from "../member-directory";
+import { MemberDirectory, useMemberDirectory } from "../member-directory";
 import type { NavigationHistory } from "../navigation-history";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { NEEDS_YOU } from "../planning/inbox-model";
@@ -51,6 +58,8 @@ import { SIDEBAR_OVERLAY, SIDEBAR_WIDTH, type SidebarCollapse } from "./sidebar-
 import { SidebarFoot } from "./sidebar-foot";
 import { type CountNoun, SidebarGroupHeader } from "./sidebar-group-header";
 import { SidebarPinnedTab } from "./sidebar-pinned-tab";
+import { SidebarSectionHead, TaskViewOptions } from "./sidebar-task-view";
+import { useTaskListView } from "./task-list-view";
 import { EDGE_SIDE, type ResizableEdgeProps, useResizableEdge } from "./use-resizable-edge";
 import { WorkspaceSwitcher } from "./workspace-switcher";
 
@@ -145,17 +154,28 @@ interface RowContext {
   readonly unread: (plan: PlanSummary) => boolean;
   /** The time each row's last update is counted back from. */
   readonly now: number;
+  /** The list's order, whose time each of its rows shows. */
+  readonly order: TaskOrder;
   /** Whether the sidebar is in sight: folded away, nothing it opened stands over the window. */
   readonly inSight: boolean;
 }
 
-/** One section's plans, each a row of the sidebar. */
+/**
+ * One group's plans, each a row of the sidebar showing the time the list's
+ * order chooses. A row says what its group does not: its repository's name
+ * where `repository` names one, and a teammate's face unless `face` is off,
+ * as under a group by creator.
+ */
 function PlanRows({
   rows,
   context,
+  repository,
+  face = true,
 }: {
   rows: readonly PlanSummary[];
   context: RowContext;
+  repository?: (plan: PlanSummary) => string | undefined;
+  face?: boolean;
 }): React.JSX.Element {
   return (
     <ul className="sidebar-plans">
@@ -167,6 +187,9 @@ function PlanRows({
           current={context.marked(plan.id, undefined)}
           unread={context.unread(plan)}
           now={context.now}
+          at={taskTime(plan, context.order)}
+          repository={repository?.(plan)}
+          face={face}
           onOpen={() => context.onOpen(plan.id)}
         />
       ))}
@@ -239,11 +262,12 @@ function PinnedRows({
 }
 
 /**
- * The Pinned section, its header drawn as a repository's is: the pin in the
- * picture's place, giving way to the fold's chevron while hovered or reached
- * from the keyboard, and folded, the count after its name. The fold is kept
- * across launches as a repository's is, and folded, the open plan, or the
- * pinned tab on show, still stands under it, as under a repository's fold.
+ * The Pinned section, a section of its own above Tasks rather than a group
+ * among them, so whatever the list's view groups by or filters, the pins
+ * stand as they were pinned. Its head folds it, and folded counts its pins.
+ * The fold is kept across launches as a repository's is, and folded, the
+ * open plan, or the pinned tab on show, still stands under it, as under a
+ * repository's fold.
  */
 function PinnedSection({
   rows,
@@ -263,8 +287,7 @@ function PinnedSection({
   const drawn = folded ? rows.filter(shown) : rows;
   return (
     <nav className="sidebar-group" aria-label="Pinned">
-      <SidebarGroupHeader
-        glyph={<PinIcon />}
+      <SidebarSectionHead
         name="Pinned"
         folded={folded}
         count={rows.length}
@@ -418,6 +441,160 @@ function RepositorySection({
       {rows.length === 0 ? null : <PlanRows rows={rows} context={context} />}
     </div>
   );
+}
+
+/**
+ * One creator's tasks under a header naming them by face, the reader's own
+ * as You, a former member's on the quiet outline, folded and kept as a
+ * repository's group is. The face is the group's to say, so the rows wear
+ * none, and say their repository instead, which the group does not.
+ */
+function CreatorSection({
+  group,
+  folds,
+  repositoryOf,
+  context,
+}: {
+  group: CreatorGroup;
+  folds: FoldedGroups;
+  repositoryOf: (plan: PlanSummary) => string | undefined;
+  context: RowContext;
+}): React.JSX.Element {
+  const reader = useMemberDirectory();
+  const first = group.plans[0];
+  const actor = creatorActor(first ?? {}, reader, undefined);
+  const folded = folds.creatorFolded(group.creatorId);
+  const rows = folded ? group.plans.filter((plan) => context.current(plan.id)) : group.plans;
+  return (
+    <div className="sidebar-repository">
+      <SidebarGroupHeader
+        glyph={<ActorMark actor={actor} size={ACTOR_SIZE.INLINE} />}
+        name={actorName(actor)}
+        folded={folded}
+        count={group.plans.length}
+        onToggle={() => folds.toggleCreator(group.creatorId)}
+      />
+      {rows.length === 0 ? null : (
+        <PlanRows rows={rows} context={context} repository={repositoryOf} face={false} />
+      )}
+    </div>
+  );
+}
+
+/** The listed tasks as the view groups them: by repository, by creator, or in one run. */
+type TaskSections =
+  | {
+      readonly grouping: typeof TASK_GROUPING.REPOSITORY;
+      readonly groups: readonly RepositoryGroup[];
+    }
+  | { readonly grouping: typeof TASK_GROUPING.CREATOR; readonly groups: readonly CreatorGroup[] }
+  | { readonly grouping: typeof TASK_GROUPING.NONE; readonly plans: readonly PlanSummary[] };
+
+/**
+ * The tasks under Tasks as the view groups and orders them. Grouped by
+ * repository, the pinned repositories' groups stand above the rest, newest
+ * pinned first, and the rest keep the order's.
+ */
+function taskSections(
+  tasks: readonly PlanSummary[],
+  grouping: TaskSections["grouping"],
+  order: TaskOrder,
+  plans: PlansControl,
+  creatorName: (plan: PlanSummary) => string,
+): TaskSections {
+  if (grouping === TASK_GROUPING.CREATOR) {
+    return { grouping, groups: creatorGroups(tasks, order, plans.me, creatorName) };
+  }
+  if (grouping === TASK_GROUPING.NONE) return { grouping, plans: orderTasks(tasks, order) };
+  const grouped = repositoryGroups(tasks, order);
+  const pinnedAt = (group: RepositoryGroup) =>
+    group.repository === null ? -1 : plans.pinnedRepositories.indexOf(group.repository);
+  return {
+    grouping,
+    groups: [
+      ...grouped.filter((group) => pinnedAt(group) >= 0).sort((a, b) => pinnedAt(a) - pinnedAt(b)),
+      ...grouped.filter((group) => pinnedAt(group) < 0),
+    ],
+  };
+}
+
+/** The rows the sections draw, in their order: each group's unless folded, the open plan standing under its fold. */
+function drawnTasks(
+  sections: TaskSections,
+  folds: FoldedGroups,
+  current: (planId: string) => boolean,
+): PlanSummary[] {
+  const under = (folded: boolean, rows: readonly PlanSummary[]) =>
+    folded ? rows.filter((plan) => current(plan.id)) : rows;
+  switch (sections.grouping) {
+    case TASK_GROUPING.REPOSITORY:
+      return sections.groups.flatMap((group) => under(folds.folded(group.repository), group.plans));
+    case TASK_GROUPING.CREATOR:
+      return sections.groups.flatMap((group) =>
+        under(folds.creatorFolded(group.creatorId), group.plans),
+      );
+    case TASK_GROUPING.NONE:
+      return [...sections.plans];
+  }
+}
+
+/**
+ * The Tasks section's groups as the view draws them. A row says what its
+ * group does not: under a repository's header a teammate's face; under a
+ * creator's its repository; in one run both.
+ */
+function TaskGroups({
+  sections,
+  repositoryOf,
+  folds,
+  onNewPlanIn,
+  context,
+}: {
+  sections: TaskSections;
+  repositoryOf: (plan: PlanSummary) => string | undefined;
+  folds: FoldedGroups;
+  onNewPlanIn: (repository: string) => void;
+  context: RowContext;
+}): React.JSX.Element | null {
+  switch (sections.grouping) {
+    case TASK_GROUPING.REPOSITORY:
+      return (
+        <>
+          {sections.groups.map((group) => (
+            <RepositorySection
+              key={group.repository ?? NO_REPOSITORY}
+              group={group}
+              label={
+                group.repository === null
+                  ? NO_REPOSITORY
+                  : repositoryLabel(group.repository, sections.groups)
+              }
+              folds={folds}
+              onNewPlanIn={onNewPlanIn}
+              context={context}
+            />
+          ))}
+        </>
+      );
+    case TASK_GROUPING.CREATOR:
+      return (
+        <>
+          {sections.groups.map((group) => (
+            <CreatorSection
+              key={group.creatorId ?? NO_REPOSITORY}
+              group={group}
+              folds={folds}
+              repositoryOf={repositoryOf}
+              context={context}
+            />
+          ))}
+        </>
+      );
+    case TASK_GROUPING.NONE:
+      return sections.plans.length === 0 ? null : (
+        <PlanRows rows={sections.plans} context={context} repository={repositoryOf} />
+      );
+  }
 }
 
 /**
@@ -709,6 +886,23 @@ function SidebarAutomationsRow({
   );
 }
 
+/** What the sidebar is drawn from. */
+interface DesktopSidebarProps {
+  sidebar: SidebarCollapse;
+  history: NavigationHistory;
+  plans: PlansControl;
+  tab: PanelTab;
+  onTabChange: (tab: PanelTab) => void;
+  account: AccountSnapshot;
+  updates: UpdateControl;
+  /** Signs the account out, once the account menu's Log out is answered. */
+  onSignOut: () => Promise<void>;
+  /** The call card, at the column's foot above the account row, while one is to be drawn here. */
+  call: CallCardInput | undefined;
+  /** Hears every press in the sidebar, which a press outside it would put away while it floats. */
+  onPressWithin: () => void;
+}
+
 /**
  * The window's left column: at its head the workspace chosen, by its tile
  * and name and who shares it, with the menu that chooses another
@@ -720,13 +914,15 @@ function SidebarAutomationsRow({
  * home page, the Inbox's counts what waits on the developer and opens the
  * window's Inbox, and Factory's, while its experiment is on, opens the
  * window's Factory, and the Automations page's likewise opens it. The pinned plans, and the side panel tabs
- * pinned to the sidebar, stand in a section of their own above the rest
- * while any are pinned, newest pinned first, under a header that folds as
- * a repository's does, every row one line whose hover card says the rest;
- * the rest are grouped
- * under their repositories' headers, the pinned repositories first, newest
- * pinned first, then the group updated most recently first;
- * and the archived ones are folded away under them all.
+ * pinned to the sidebar, stand in the Pinned section while any are pinned,
+ * newest pinned first, under a head that folds it, every row one line whose
+ * hover card says the rest; whatever the list's view says, they stand as
+ * pinned. The rest stand in the Tasks section, grouped and ordered as its
+ * View options say and the workspace keeps on this Mac
+ * (`task-list-view.ts`): under their repositories' headers by default, the
+ * pinned repositories first, newest pinned first, then the group updated
+ * most recently first; under their creators'; or in one run. The archived
+ * ones are folded away under them all.
  * It is where the developer moves between things; what they work on is the
  * column beside it.
  * The open plan's row is marked, or, where the plan was opened from a pin,
@@ -743,7 +939,7 @@ function SidebarAutomationsRow({
  * keyboard back where it was. Floating, it has no edge to drag, since only a
  * pinned sidebar is resized.
  */
-export function DesktopSidebar({
+function SidebarColumn({
   sidebar,
   history,
   plans,
@@ -754,21 +950,7 @@ export function DesktopSidebar({
   onSignOut,
   call,
   onPressWithin,
-}: {
-  sidebar: SidebarCollapse;
-  history: NavigationHistory;
-  plans: PlansControl;
-  tab: PanelTab;
-  onTabChange: (tab: PanelTab) => void;
-  account: AccountSnapshot;
-  updates: UpdateControl;
-  /** Signs the account out, once the account menu's Log out is answered. */
-  onSignOut: () => Promise<void>;
-  /** The call card, at the column's foot above the account row, while one is to be drawn here. */
-  call: CallCardInput | undefined;
-  /** Hears every press in the sidebar, which a press outside it would put away while it floats. */
-  onPressWithin: () => void;
-}): React.JSX.Element {
+}: DesktopSidebarProps): React.JSX.Element {
   const onPlans = tab === PANEL_TAB.PLANS;
   const overlay = useFloatingSidebar(sidebar);
   // The window's Inbox, an agent's page, Factory, and the Automations page stand in the plan's place, so while one does no plan is the place shown.
@@ -818,6 +1000,10 @@ export function DesktopSidebar({
     plans.onNewPlanIn(repository);
   };
   const folds = useFoldedGroups(sidebar.staged);
+  const taskView = useTaskListView(plans.workspace?.id, sidebar.staged);
+  const reader = useMemberDirectory();
+  // Only a workspace somebody shares has creators to group by.
+  const shared = (plans.workspace?.memberCount ?? 1) > 1;
   const unread = useUnreadPlans([...plans.plans, ...plans.archived], {
     listRead: plans.listRead,
     staged: sidebar.staged,
@@ -849,6 +1035,7 @@ export function DesktopSidebar({
     onOpen: chosen(openPlan),
     unread,
     now,
+    order: taskView.view.order,
     inSight: overlay.inSight,
   };
   // A pinned tab is on show where its plan is open and its column shows it:
@@ -863,25 +1050,26 @@ export function DesktopSidebar({
           : plans.sidePanel.open &&
             plans.sidePanel.tab !== undefined &&
             sameTab(plans.sidePanel.tab, pin.tab))));
-  // The pinned repositories' groups stand above the rest, newest pinned
-  // first, and the rest keep the groups' own order.
-  const grouped = repositoryGroups(
-    plans.listed.plans.filter((plan) => plan.pinnedAt === undefined),
+  const tasks = plans.listed.plans.filter((plan) => plan.pinnedAt === undefined);
+  const { grouping, order } = taskView.view;
+  const sections = taskSections(
+    tasks,
+    grouping === TASK_GROUPING.CREATOR && !shared ? TASK_GROUPING.REPOSITORY : grouping,
+    order,
+    plans,
+    // A creator's group is ordered by the name its header says.
+    (plan) => actorName(creatorActor(plan, reader, undefined)),
   );
-  const pinnedAt = (group: RepositoryGroup) =>
-    group.repository === null ? -1 : plans.pinnedRepositories.indexOf(group.repository);
-  const groups = [
-    ...grouped.filter((group) => pinnedAt(group) >= 0).sort((a, b) => pinnedAt(a) - pinnedAt(b)),
-    ...grouped.filter((group) => pinnedAt(group) < 0),
-  ];
+  // A row names its repository as its group's header would, owner and all where two share a name.
+  const named = repositoryGroups(tasks);
+  const repositoryOf = (plan: PlanSummary) =>
+    plan.repository === null ? undefined : repositoryLabel(plan.repository, named);
   // The rows as the list draws them: the pinned, then each group not folded
   // away, the open plan standing in its place even under a fold, so walking
   // the list still moves from it.
   const drawn = [
     ...(folds.pinnedFolded ? pinned.filter((plan) => current(plan.id)) : pinned),
-    ...groups.flatMap((group) =>
-      folds.folded(group.repository) ? group.plans.filter((plan) => current(plan.id)) : group.plans,
-    ),
+    ...drawnTasks(sections, folds, current),
   ];
   // Moving up and down the list as it reads: down from the home page, where
   // no plan is open, is the first plan. The ends go no further.
@@ -966,54 +1154,51 @@ export function DesktopSidebar({
       <hr className="sidebar-rule" />
 
       {/* One scroller for both sections, so the pinned plans scroll away
-          with the rest rather than holding half the column. The rows read a
-          teammate's task's creator against the listed workspace's members. */}
-      <MemberDirectory workspace={plans.workspace} readerId={plans.me}>
-        <div className="sidebar-section">
-          {plans.signedIn && pinnedSection.length > 0 ? (
-            <PinnedSection
-              rows={pinnedSection}
-              folds={folds}
-              shown={pinnedShown}
-              context={context}
-              onOpenTab={chosen(openPinnedTab)}
-            />
-          ) : null}
-          {/* The rule above heads the list, so it carries no heading of its
-            own; its name is for a screen reader alone. */}
-          <nav className="sidebar-group" aria-label="Plans">
-            {plans.listFailed ? (
-              <div className="sidebar-note">
-                <ReadFailure line="Your tasks could not be read." onRetry={plans.onRetryList} />
-              </div>
-            ) : null}
-            {/* The list is empty before its first read lands, so that it
-              holds none says nothing until the service has answered. */}
-            {plans.signedIn && unlisted && !plans.listRead && !plans.listFailed ? (
-              <ListSkeleton />
-            ) : null}
-            {plans.signedIn && unlisted && plans.listRead && !plans.listFailed ? (
-              <p className="sidebar-note">No tasks yet.</p>
-            ) : null}
-            {plans.signedIn ? null : <p className="sidebar-note">Sign in to start a task.</p>}
-            {groups.map((group) => (
-              <RepositorySection
-                key={group.repository ?? NO_REPOSITORY}
-                group={group}
-                label={
-                  group.repository === null
-                    ? NO_REPOSITORY
-                    : repositoryLabel(group.repository, groups)
-                }
-                folds={folds}
-                onNewPlanIn={chosen(newPlanIn)}
-                context={context}
+          with the rest rather than holding half the column. */}
+      <div className="sidebar-section">
+        {plans.signedIn && pinnedSection.length > 0 ? (
+          <PinnedSection
+            rows={pinnedSection}
+            folds={folds}
+            shown={pinnedShown}
+            context={context}
+            onOpenTab={chosen(openPinnedTab)}
+          />
+        ) : null}
+        <nav className="sidebar-group" aria-label="Tasks">
+          {plans.signedIn ? (
+            <SidebarSectionHead name="Tasks">
+              <TaskViewOptions
+                shown={plans.shown && overlay.inSight}
+                control={taskView}
+                shared={shared}
               />
-            ))}
-            {plans.signedIn ? <ArchivedPlans context={context} /> : null}
-          </nav>
-        </div>
-      </MemberDirectory>
+            </SidebarSectionHead>
+          ) : null}
+          {plans.listFailed ? (
+            <div className="sidebar-note">
+              <ReadFailure line="Your tasks could not be read." onRetry={plans.onRetryList} />
+            </div>
+          ) : null}
+          {/* The list is empty before its first read lands, so that it
+              holds none says nothing until the service has answered. */}
+          {plans.signedIn && unlisted && !plans.listRead && !plans.listFailed ? (
+            <ListSkeleton />
+          ) : null}
+          {plans.signedIn && unlisted && plans.listRead && !plans.listFailed ? (
+            <p className="sidebar-note">No tasks yet.</p>
+          ) : null}
+          {plans.signedIn ? null : <p className="sidebar-note">Sign in to start a task.</p>}
+          <TaskGroups
+            sections={sections}
+            repositoryOf={repositoryOf}
+            folds={folds}
+            onNewPlanIn={chosen(newPlanIn)}
+            context={context}
+          />
+          {plans.signedIn ? <ArchivedPlans context={context} /> : null}
+        </nav>
+      </div>
 
       <ColumnFoot call={call}>
         <SidebarFoot
@@ -1028,5 +1213,18 @@ export function DesktopSidebar({
       {/* Last, so the drag strip above Luke does not take the edge's top from it. */}
       {sidebar.collapsed ? null : <SidebarResizeEdge edge={edge} />}
     </aside>
+  );
+}
+
+/**
+ * The sidebar, read against the listed workspace's members: a teammate's
+ * face on a row, a creator's group's header, and the order of those groups
+ * by the names their headers say.
+ */
+export function DesktopSidebar(props: DesktopSidebarProps): React.JSX.Element {
+  return (
+    <MemberDirectory workspace={props.plans.workspace} readerId={props.plans.me}>
+      <SidebarColumn {...props} />
+    </MemberDirectory>
   );
 }

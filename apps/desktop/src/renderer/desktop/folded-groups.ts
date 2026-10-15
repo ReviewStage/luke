@@ -3,7 +3,7 @@ import { useState } from "react";
 import { INBOX_GROUPING, type InboxGrouping } from "../planning/inbox-model";
 
 /**
- * folded-groups.ts -- which of the sidebar's groups the developer folded, Pinned and the repositories', kept across launches, and the Inbox's plan groups, how it lists its items, and how wide its list stands kept the same way.
+ * folded-groups.ts -- which of the sidebar's groups the developer folded, Pinned, the repositories', and the creators', kept across launches, and the Inbox's plan groups, how it lists its items, and how wide its list stands kept the same way.
  *
  * A fold is this window's alone, as the sidebar's width is, so it is kept in
  * the renderer's own storage rather than on the account: a group folded on
@@ -11,7 +11,9 @@ import { INBOX_GROUPING, type InboxGrouping } from "../planning/inbox-model";
  * name, and the plans with no repository by null. A repository whose last
  * plan goes leaves its entry behind: it is a few bytes, and a plan on it
  * later comes back folded as it was left. Pinned is kept under a key of
- * its own, since it is no repository. A fixture run starts with every group open
+ * its own, since it is no repository, and so are the creators' groups, each
+ * by its creator's account id and the tasks nobody is named for by null,
+ * so a repository's fold stands through a while grouped by creator. A fixture run starts with every group open
  * and keeps nothing, so its frames never wear a developer's folds. The
  * Inbox's plan groups are kept on the same terms, each by its plan's id,
  * and so are its two view choices, Needs you and how it groups, and its
@@ -22,6 +24,7 @@ import { INBOX_GROUPING, type InboxGrouping } from "../planning/inbox-model";
 /** Where the folds are kept in the renderer's storage. */
 const STORAGE_KEY = {
   GROUPS: "luke.sidebarFoldedGroups",
+  CREATORS: "luke.sidebarFoldedCreators",
   PINNED: "luke.sidebarPinnedFolded",
   INBOX_PLANS: "luke.inboxFoldedPlans",
   INBOX_WAITING_ONLY: "luke.inboxWaitingOnly",
@@ -42,7 +45,7 @@ export const INBOX_LIST_WIDTH = {
   DEFAULT: 320,
 } as const;
 
-/** The folded groups, each by its repository, null for the plans with none. */
+/** The folded groups, each by its repository, or its creator, null for the plans with none. */
 const storedFolds = Schema.fromJsonString(Schema.Array(Schema.NullOr(Schema.String)));
 
 /** Whether Pinned is folded, or the Inbox lists only what waits. */
@@ -60,10 +63,11 @@ const storedGrouping = Schema.fromJsonString(Schema.Literals(Object.values(INBOX
 /** Every fold the sidebar keeps. */
 interface Folds {
   readonly groups: readonly (string | null)[];
+  readonly creators: readonly (string | null)[];
   readonly pinned: boolean;
 }
 
-const OPEN: Folds = { groups: [], pinned: false };
+const OPEN: Folds = { groups: [], creators: [], pinned: false };
 
 /** A kept value, or `fallback` where none was kept, it no longer reads, or storage refuses the read. */
 export function readKept<A>(key: string, schema: Schema.Codec<A, string>, fallback: A): A {
@@ -88,6 +92,7 @@ export function writeKept<A>(key: string, schema: Schema.Codec<A, string>, value
 function readFolds(): Folds {
   return {
     groups: readKept(STORAGE_KEY.GROUPS, storedFolds, OPEN.groups),
+    creators: readKept(STORAGE_KEY.CREATORS, storedFolds, OPEN.creators),
     pinned: readKept(STORAGE_KEY.PINNED, storedFlag, OPEN.pinned),
   };
 }
@@ -95,6 +100,7 @@ function readFolds(): Folds {
 /** Keeps every fold. */
 function writeFolds(folds: Folds): void {
   writeKept(STORAGE_KEY.GROUPS, storedFolds, folds.groups);
+  writeKept(STORAGE_KEY.CREATORS, storedFolds, folds.creators);
   writeKept(STORAGE_KEY.PINNED, storedFlag, folds.pinned);
 }
 
@@ -102,6 +108,9 @@ function writeFolds(folds: Folds): void {
 export interface FoldedGroups {
   folded: (repository: string | null) => boolean;
   toggle: (repository: string | null) => void;
+  /** Whether a creator's group is folded, by their account id; undefined is the tasks nobody is named for. */
+  creatorFolded: (creatorId: string | undefined) => boolean;
+  toggleCreator: (creatorId: string | undefined) => void;
   pinnedFolded: boolean;
   togglePinned: () => void;
 }
@@ -128,9 +137,18 @@ export function useFoldedGroups(staged: boolean): FoldedGroups {
       : [...folds.groups, repository];
     fold({ ...folds, groups });
   };
+  const toggleCreator = (creatorId: string | undefined) => {
+    const held = creatorId ?? null;
+    const creators = folds.creators.includes(held)
+      ? folds.creators.filter((each) => each !== held)
+      : [...folds.creators, held];
+    fold({ ...folds, creators });
+  };
   return {
     folded: (repository) => folds.groups.includes(repository),
     toggle,
+    creatorFolded: (creatorId) => folds.creators.includes(creatorId ?? null),
+    toggleCreator,
     pinnedFolded: folds.pinned,
     togglePinned: () => fold({ ...folds, pinned: !folds.pinned }),
   };
