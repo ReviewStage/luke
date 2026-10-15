@@ -243,30 +243,37 @@ function removes(reader: Workspace["role"], role: WorkspaceMember["role"]): bool
   return reader === WORKSPACE_ROLE.ADMIN && role === WORKSPACE_ROLE.MEMBER;
 }
 
-/** The workspace's members, read afresh whenever the workspace changes, a write's answer standing in once it lands, and Retry. */
-function useMembersRead(workspaceId: string) {
+/**
+ * The workspace's members, read afresh whenever the workspace changes or
+ * the window's list says it holds another count of them, as someone
+ * joining or leaving elsewhere makes it; a write's answer stands in once it
+ * lands. Retry reads again from nothing; a refresh reads again keeping the
+ * list it has on screen until the new one lands, and a refresh that fails
+ * keeps it.
+ */
+function useMembersRead(workspaceId: string, memberCount: number | undefined) {
   const { act } = useAct();
   const [read, setRead] = useState<ListRead<WorkspaceMember>>(undefined);
-  const [attempt, setAttempt] = useState(0);
-  // A Retry reads again by bumping the attempt.
+  const [attempt, setAttempt] = useState({ count: 0, keep: false });
   useEffect(() => {
     let live = true;
-    setRead(undefined);
+    if (!attempt.keep) setRead(undefined);
     act(ACT_KIND.WORKSPACE_MEMBERS_READ, { workspaceId }).then(
       (items) => {
         if (live) setRead({ items });
       },
       () => {
-        if (live) setRead({ failed: READ_FAILED.MEMBERS });
+        if (live && !attempt.keep) setRead({ failed: READ_FAILED.MEMBERS });
       },
     );
     return () => {
       live = false;
     };
-  }, [act, workspaceId, attempt]);
+  }, [act, workspaceId, memberCount, attempt]);
   return {
     read,
-    retry: () => setAttempt((count) => count + 1),
+    retry: () => setAttempt((was) => ({ count: was.count + 1, keep: false })),
+    refresh: () => setAttempt((was) => ({ count: was.count + 1, keep: true })),
     changed: (items: readonly WorkspaceMember[]) => setRead({ items }),
   };
 }
@@ -393,27 +400,31 @@ function MemberRow({
   );
 }
 
-/** The automations the reader made in the workspace, by name, which a leave stops; undefined where the service does not say whose they are. */
-function useOwnAutomations(workspaceId: string): readonly string[] | undefined {
+/**
+ * The automations the reader made in the workspace, by name, which a leave
+ * stops, read afresh each time the leave is asked, since one made in
+ * another window meanwhile stops too; undefined until that read lands, and
+ * where the service does not say whose they are, which the dialog says
+ * without names.
+ */
+function useOwnAutomations(workspaceId: string) {
   const { act } = useAct();
   const [names, setNames] = useState<readonly string[] | undefined>(undefined);
-  useEffect(() => {
-    let live = true;
+  // Note that only the read asked last is shown, because two leaves asked in turn can answer out of order.
+  const latest = useRef(0);
+  const read = () => {
+    const asked = ++latest.current;
     setNames(undefined);
     act(ACT_KIND.AUTOMATIONS_LIST, { workspaceId }).then(
       (view) => {
-        if (!live || "failure" in view) return;
-        // Note that a service before `mine` says nobody's, which the dialog says without names.
+        if (asked !== latest.current || "failure" in view) return;
         if (view.automations.some((each) => each.mine === undefined)) return;
         setNames(view.automations.filter((each) => each.mine === true).map((each) => each.name));
       },
       () => undefined,
     );
-    return () => {
-      live = false;
-    };
-  }, [act, workspaceId]);
-  return names;
+  };
+  return { names, read };
 }
 
 /**
@@ -450,11 +461,11 @@ function MemberLeave({
     }, refusedWith),
   );
   const automationsLine =
-    automations === undefined
+    automations.names === undefined
       ? LEAVE_WORDS.AUTOMATIONS
-      : automations.length === 0
+      : automations.names.length === 0
         ? undefined
-        : LEAVE_WORDS.AUTOMATIONS_NAMED(automations);
+        : LEAVE_WORDS.AUTOMATIONS_NAMED(automations.names);
   return (
     <>
       <div className="settings-row">
@@ -464,7 +475,10 @@ function MemberLeave({
           className="toolbar-button bordered-button"
           data-danger="true"
           disabled={leave.busy}
-          onClick={leave.ask}
+          onClick={() => {
+            automations.read();
+            leave.ask();
+          }}
         >
           Leave
         </button>
@@ -550,10 +564,13 @@ function OwnerLeave({
   workspace,
   members,
   onChanged,
+  onRefresh,
 }: {
   workspace: Workspace;
   members: ListRead<WorkspaceMember>;
   onChanged: (members: readonly WorkspaceMember[]) => void;
+  /** Reads the members again keeping the list on screen, so the admins offered are the workspace's now. */
+  onRefresh: () => void;
 }): React.JSX.Element {
   const { act } = useAct();
   const admins =
@@ -585,7 +602,10 @@ function OwnerLeave({
             type="button"
             className="toolbar-button bordered-button"
             disabled={transfer.busy}
-            onClick={transfer.ask}
+            onClick={() => {
+              onRefresh();
+              transfer.ask();
+            }}
           >
             {TRANSFER_WORDS.VERB}
           </button>
@@ -623,6 +643,7 @@ function LeaveGroup({
   ownName,
   onLeft,
   onChanged,
+  onRefresh,
 }: {
   workspace: Workspace;
   members: ListRead<WorkspaceMember>;
@@ -630,13 +651,19 @@ function LeaveGroup({
   ownName: string | undefined;
   onLeft: () => void;
   onChanged: (members: readonly WorkspaceMember[]) => void;
+  onRefresh: () => void;
 }): React.JSX.Element | null {
   const owner = workspace.role === WORKSPACE_ROLE.OWNER;
   if (owner && workspace.personal === true) return null;
   return (
     <SettingsGroup anchor={SETTINGS_SECTION.LEAVE}>
       {owner ? (
-        <OwnerLeave workspace={workspace} members={members} onChanged={onChanged} />
+        <OwnerLeave
+          workspace={workspace}
+          members={members}
+          onChanged={onChanged}
+          onRefresh={onRefresh}
+        />
       ) : (
         <MemberLeave workspace={workspace} ownName={ownName} onLeft={onLeft} />
       )}
@@ -1289,7 +1316,7 @@ function ShownWorkspace({
   workspace: Workspace;
   readerId: string | undefined;
 }): React.JSX.Element {
-  const members = useMembersRead(workspace.id);
+  const members = useMembersRead(workspace.id, workspace.memberCount);
   const ownName = control.workspaces.find((each) => each.personal === true)?.name;
   return (
     <>
@@ -1323,6 +1350,7 @@ function ShownWorkspace({
         ownName={ownName}
         onLeft={() => control.onLeft(workspace.id)}
         onChanged={members.changed}
+        onRefresh={members.refresh}
       />
     </>
   );

@@ -359,7 +359,17 @@ async function mount(workspace: Workspace, others: readonly Workspace[] = []) {
     render(next.id);
     await settle();
   };
-  return { page: container, pressed, relist };
+  /** Stands the page again over the workspace as the window's list now says it, as a list read after a change elsewhere does. */
+  const restand = async (next: Workspace) => {
+    workspaces.splice(
+      workspaces.findIndex((each) => each.id === next.id),
+      1,
+      next,
+    );
+    render(next.id);
+    await settle();
+  };
+  return { page: container, pressed, relist, restand };
 }
 
 const buttons = (within: Element, words: string) =>
@@ -913,6 +923,7 @@ test("the leave names the automations the reader made where the service says who
     automations = held;
     const { page } = await mount(ACME);
     act(() => button(leaveGroup(page) ?? assert.fail("no leave"), "Leave").click());
+    await settle();
     const lines = [...dialog().querySelectorAll(".leave-consequences li")].map(
       (li) => li.textContent,
     );
@@ -936,6 +947,55 @@ test("the leave names the automations the reader made where the service says who
     false,
   );
   assert.equal(unsaid[2], "Automations you created stop running.");
+});
+
+test("an automation made after the page opened is named when the leave is next asked, since the list is read as the leave is", async () => {
+  automations = [];
+  const { page } = await mount(ACME);
+  const leave = () => button(leaveGroup(page) ?? assert.fail("no leave"), "Leave");
+  /** The leave dialog's lines, once its read of the automations landed. */
+  const asked = async () => {
+    act(() => leave().click());
+    await settle();
+    const lines = [...dialog().querySelectorAll(".leave-consequences li")].map(
+      (li) => li.textContent,
+    );
+    act(() => button(dialog(), "Cancel").click());
+    return lines;
+  };
+
+  const before = await asked();
+  automations = [{ name: "Morning sweep", mine: true }];
+  const after = await asked();
+
+  assert.equal(
+    before.some((line) => line?.includes("automation")),
+    false,
+  );
+  assert.equal(after.includes("An automation you created stops running: Morning sweep."), true);
+});
+
+test("the members are read again when the window's list counts another, so an admin who joined meanwhile may be handed the workspace, and Transfer ownership reads them again as it opens", async () => {
+  const { page, restand } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER, memberCount: 2 });
+  const offeredBefore = buttons(
+    leaveGroup(page) ?? assert.fail("no leave"),
+    "Transfer ownership",
+  ).length;
+  stored = [OWNER, ADMIN_OLA, MEMBER];
+  await restand({ ...ACME, role: WORKSPACE_ROLE.OWNER, memberCount: 3 });
+  const reads = () =>
+    sent.filter((request) => request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ).length;
+  const readsBeforePress = reads();
+  act(() => button(leaveGroup(page) ?? assert.fail("no leave"), "Transfer ownership").click());
+  await settle();
+
+  assert.equal(offeredBefore, 0);
+  assert.equal(readsBeforePress, 2);
+  assert.equal(reads(), 3);
+  assert.equal(
+    dialog().querySelector('button[aria-label^="New owner"]')?.getAttribute("aria-label"),
+    "New owner: Ola",
+  );
 });
 
 test("a removal the account's role does not allow says so in the dialog that asked", async () => {
