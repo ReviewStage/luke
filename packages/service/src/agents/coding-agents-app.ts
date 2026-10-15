@@ -54,6 +54,7 @@ import { type HttpClient, HttpRouter, HttpServerRequest, HttpServerResponse } fr
 import { isRecord, isWireString, type UnparsedWireValue, unparsedWire } from "../core.js";
 import { HostedEnvironment } from "../environment.js";
 import type { GitHubApp } from "../github/github-app.js";
+import { changesPeople } from "../github/github-people.js";
 import { githubReadOrRefusal } from "../github/github-refusal.js";
 import { pullRequestFiles } from "../github/pull-requests.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
@@ -715,8 +716,9 @@ const pullRequestEndpoint = /* @__PURE__ */ Effect.fn("web/agentPullRequestEndpo
 
 /**
  * GET reads the agent's changes: the files of the pull request its kept
- * published answer names, read from GitHub afresh on a token minted for the
- * agent's repository on its plan's workspace installation, or none where it names no pull request yet.
+ * published answer names, and who it names (`github-people.ts`), read from
+ * GitHub afresh on a token minted for the agent's repository on its plan's
+ * workspace installation, or none where it names no pull request yet.
  */
 const changesEndpoint = /* @__PURE__ */ Effect.fn("web/agentChangesEndpoint")(function* (
   seams: CodingAgentsAppSeams,
@@ -732,7 +734,14 @@ const changesEndpoint = /* @__PURE__ */ Effect.fn("web/agentChangesEndpoint")(fu
   if (pullRequest === null) return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { pullRequest });
   const listed = yield* Effect.gen(function* () {
     const { token } = yield* agentPullRequestReach(userId, agent);
-    return yield* pullRequestFiles(token, agent.repository, pullRequest);
+    const [files, people] = yield* Effect.all(
+      [
+        pullRequestFiles(token, agent.repository, pullRequest),
+        changesPeople(token, agent, pullRequest.number),
+      ],
+      { concurrency: "unbounded" },
+    );
+    return { ...files, ...people };
   }).pipe(
     Effect.catch((failure) => {
       switch (failure._tag) {
