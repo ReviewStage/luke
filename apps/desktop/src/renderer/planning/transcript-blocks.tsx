@@ -3,7 +3,7 @@ import {
   type CodingAgentTodoStatus,
   type CodingAgentTodos,
 } from "@luke/features/coding-agent-wire";
-import { decodeMention, linkMention } from "@luke/features/mention-link";
+import { linkMention, mayNameMention } from "@luke/features/mention-link";
 import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
 import {
   CALL_KIND,
@@ -156,9 +156,10 @@ interface WordsNode {
   readonly children?: readonly WordsNode[];
 }
 
-/** A node of the words as markdown reads them, which a mention's link is marked on. */
+/** A node of the words as markdown reads them, which a mention's link is marked on: a link's target, or the label a reference link and its definition share. */
 interface MarkdownNode extends WordsNode {
   readonly url?: string;
+  readonly identifier?: string;
   readonly children?: readonly MarkdownNode[];
   data?: { hName?: string; hProperties?: Record<string, string> };
 }
@@ -173,32 +174,50 @@ function wordsOf(node: WordsNode): string {
  * Marks every link in the words whose target may name a mention to be
  * drawn as its own element, which reads what it names against the plan
  * its page is of (`linkMention`): the same rule for a developer's `@`
- * mention, an agent's link, and a bare address. A target is read here with
- * no repository, under which a file's GitHub page still names GitHub's
- * page, so no link the page would read as a mention goes unmarked, and
- * every other link is drawn as the library draws it. Note that the mark is
- * made on the markdown, before it is drawn, because the drawing's sanitizer
- * keeps no address on a link but the web's, so a mention's target would
- * never reach a link of ours. Code holds no link, so a mention in code
- * stays code.
+ * mention, an agent's link, a reference link, and a bare address. A target
+ * is read here before the page's repository is known (`mayNameMention`),
+ * so every page of GitHub's is marked, and every other link is drawn as
+ * the library draws it. Note that the mark is made on the markdown, before
+ * it is drawn, because the drawing's sanitizer keeps no address on a link
+ * but the web's, so a mention's target would never reach a link of ours.
+ * Code holds no link, so a mention in code stays code.
  */
-function markMentions(node: MarkdownNode): void {
-  if (
-    node.type === "link" &&
-    node.url !== undefined &&
-    decodeMention(node.url, null) !== undefined
-  ) {
+function markMentions(node: MarkdownNode, definitions: ReadonlyMap<string, string>): void {
+  const target =
+    node.type === "link"
+      ? node.url
+      : node.type === "linkReference" && node.identifier !== undefined
+        ? definitions.get(node.identifier)
+        : undefined;
+  if (target !== undefined && mayNameMention(target)) {
     node.data = {
       hName: MENTION_ELEMENT.TAG,
-      hProperties: { [MENTION_ELEMENT.TARGET]: node.url },
+      hProperties: { [MENTION_ELEMENT.TARGET]: target },
     };
     return;
   }
-  for (const child of node.children ?? []) markMentions(child);
+  for (const child of node.children ?? []) markMentions(child, definitions);
+}
+
+/** Each link definition in the words, by the label a reference link names it with, the first standing where one is defined twice, as markdown reads them. */
+function definitionsIn(
+  node: MarkdownNode,
+  found: Map<string, string> = new Map(),
+): Map<string, string> {
+  if (node.type === "definition" && node.identifier !== undefined && node.url !== undefined) {
+    if (!found.has(node.identifier)) found.set(node.identifier, node.url);
+  }
+  for (const child of node.children ?? []) definitionsIn(child, found);
+  return found;
+}
+
+/** The step that marks a transcript's links, a reference link's read through its definition. */
+function markLinks(tree: MarkdownNode): void {
+  markMentions(tree, definitionsIn(tree));
 }
 
 /** The markdown steps a transcript is read with: the library's own, then the mark on its links. */
-const TRANSCRIPT_REMARK_PLUGINS = [...Object.values(defaultRemarkPlugins), () => markMentions];
+const TRANSCRIPT_REMARK_PLUGINS = [...Object.values(defaultRemarkPlugins), () => markLinks];
 
 /**
  * A link in a transcript's words: the chip that opens what it names

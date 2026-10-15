@@ -747,9 +747,6 @@ export function mentionName(label: string): string {
 /** What a bare link's chip names a plan by, since its address holds no name of the plan's. */
 const BARE_PLAN_NAME = "Plan";
 
-/** A label that is an address spelled out, as a bare link's is: a scheme, then `//`. */
-const ADDRESS_LABEL = /^[a-z][a-z0-9+.-]*:\/\//iu;
-
 /** A file's lines as a chip names them, `app.ts:12–20`, as a mention of them picked from a File tab is named. */
 function linesName(path: string, lines: MentionLines | undefined): string {
   const name = path.split("/").at(-1) ?? path;
@@ -781,6 +778,24 @@ function bareName(mention: Mention): string {
   }
 }
 
+/** Whether a link's label is its target spelled out, as a bare address's is: the same address, however its characters are encoded. */
+function isBareLabel(label: string, target: string): boolean {
+  if (label === "" || label === target) return true;
+  const spelled = parsedUrl(label);
+  return spelled !== undefined && spelled.href === parsedUrl(target)?.href;
+}
+
+/**
+ * Whether a link's target may name a mention for some plan, so a reader
+ * who does not yet know the plan's repository knows to read it again when
+ * it does: one that names a mention with no repository, or any page of
+ * GitHub's, which may be a file or a folder of the plan's.
+ */
+export function mayNameMention(target: string): boolean {
+  if (decodeMention(target, null) !== undefined) return true;
+  return parsedUrl(target)?.origin === GITHUB.ORIGIN;
+}
+
 /**
  * A link in written words as the mention its chip draws, whoever wrote it:
  * any link whose target names a mention, a GitHub page as a file or a
@@ -799,7 +814,7 @@ export function linkMention(
   const mention = decodeMention(target, repository);
   if (mention === undefined) return undefined;
   const words = label.trim();
-  if (words === "" || ADDRESS_LABEL.test(words)) return { mention, name: bareName(mention) };
+  if (isBareLabel(words, target)) return { mention, name: bareName(mention) };
   return { mention, name: mentionName(words) };
 }
 

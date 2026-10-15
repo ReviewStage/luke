@@ -79,12 +79,12 @@ function planPage(
 }
 
 /** The words drawn as a transcript draws them, on the plan's page given or off any. */
-function drawn(page: PlanMentionsValue | undefined): HTMLElement {
+function drawn(page: PlanMentionsValue | undefined, text: string = WORDS): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  const words = createElement(TranscriptWords, { text: WORDS });
+  const words = createElement(TranscriptWords, { text });
   act(() =>
     root.render(
       page === undefined ? words : createElement(PlanMentions, { value: page, children: words }),
@@ -152,4 +152,31 @@ test("off a plan's page, as in the workspace's Inbox, the same links are chips, 
     ["the docs"],
   );
   assert.equal(carriesTarget(container), false);
+});
+
+test("a reference link is read through its definition, and a file's page far longer than a page's bound is still the file", () => {
+  const files: { path: string; lines: MentionLines | undefined }[] = [];
+  // Each letter spelled in six characters, so the address passes a page's bound while its path stays inside a path's.
+  const longPath = `apps/${"é".repeat(400)}.ts`;
+  const longPage = `https://github.com/${REPOSITORY}/blob/HEAD/apps/${"%C3%A9".repeat(400)}.ts`;
+  const container = drawn(
+    planPage([], files),
+    [
+      `See [the store][store] and [the long one](${longPage}).`,
+      "",
+      `[store]: https://github.com/${REPOSITORY}/blob/HEAD/apps/web/store.ts`,
+    ].join("\n"),
+  );
+
+  assert.deepEqual(chips(container), [
+    [MENTION_KIND.FILE, "the store"],
+    [MENTION_KIND.FILE, "the long one"],
+  ]);
+  for (const chip of container.querySelectorAll<HTMLButtonElement>("button.mention-chip")) {
+    act(() => chip.click());
+  }
+  assert.deepEqual(
+    files.map((file) => file.path),
+    ["apps/web/store.ts", longPath],
+  );
 });

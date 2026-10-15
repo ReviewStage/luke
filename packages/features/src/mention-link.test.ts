@@ -11,6 +11,7 @@ import {
   MENTION_KIND,
   type Mention,
   type MentionPlace,
+  mayNameMention,
   mentionLinksIn,
   mentionMarkdown,
   mentionName,
@@ -281,6 +282,27 @@ test("a bare address is named by what it says of the thing: a file's name and li
     "LUKE-142/fix-the-thing",
   );
   assert.equal(named("https://github.com/acme/relay/pull/123"), "relay/pull/123");
+});
+
+test("a label that spells another address than its target is the author's words, kept as its name", () => {
+  const issue = "https://linear.app/acme/issue/LUKE-142/fix-the-thing";
+
+  assert.equal(
+    linkMention("https://example.com/notes", issue, REPOSITORY)?.name,
+    "https://example.com/notes",
+  );
+  assert.equal(linkMention(issue, issue, REPOSITORY)?.name, "LUKE-142/fix-the-thing");
+});
+
+test("a target may name a mention when it names one with no repository, or is any page of GitHub's, however long", () => {
+  const long = `https://github.com/${REPOSITORY}/blob/HEAD/${"%C3%A9".repeat(400)}.ts`;
+
+  assert.ok(long.length > 2_000);
+  assert.equal(mayNameMention(long), true);
+  assert.equal(decodeMention(long, REPOSITORY)?.kind, MENTION_KIND.FILE);
+  assert.equal(mayNameMention(encodeMention(ROLLOUT, PLACE)), true);
+  assert.equal(mayNameMention("https://linear.app/acme/issue/LUKE-142"), true);
+  assert.equal(mayNameMention("https://example.com/docs"), false);
 });
 
 test("a step back at a path's root is taken by the address itself, and stays inside the repository", () => {
