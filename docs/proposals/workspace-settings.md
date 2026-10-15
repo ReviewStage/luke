@@ -1,18 +1,57 @@
 # Proposal: Settings › Workspace, finished
 
-Status: **decided by Dean on 2026-10-15 and being built.** He picked A
-("I think I like A, but let's focus more on the leave workspace flow. And
-also I do want to support changing role types. Also, is the member/admin
-toggle next to the invite button standard for the rest of our app's
-feel?"), then took every round-two recommendation in §7 ("let's go with
-the recommendations"), with two changes: no label carries a trailing
-ellipsis, and invitations stay valid after whoever sent them leaves (R-5,
-"Let's keep invitations valid when someone leaves"). Shipped: #2810 (the
+Status: **decided by Dean on 2026-10-15 and built.** He picked A ("I
+think I like A, but let's focus more on the leave workspace flow. And also
+I do want to support changing role types. Also, is the member/admin toggle
+next to the invite button standard for the rest of our app's feel?"), then
+took every round-two recommendation in §7 ("let's go with the
+recommendations"), with two changes: no label carries a trailing ellipsis,
+and invitations stay valid after whoever sent them leaves (R-5, "Let's keep
+invitations valid when someone leaves"). Shipped, in order: #2810 (the
 small mismatches), #2813 (Profile on `ActorMark`), #2820 (the reshaped
 page, the leave flow, the invite's role chip), #2824 (owner-only role
-changes and the handover, service side). In review: #2840 (the role
-changes and handover on the page), then 4c (invitations outlive their
-inviter).
+changes and the handover, service side, with the page's two gates),
+#2840 (the role changes and the handover on the page, and the leave naming
+the reader's automations), and #2845 (invitations outlive their inviter).
+Where what shipped differs from the text below, "As built" says so.
+
+## As built
+
+- **No trailing ellipsis on any label** (Dean): "Upload photo", "Replace
+  photo", "Remove photo", "Rename", "Make admin", "Make member", "Make
+  owner", "Transfer ownership", "Invite". §3's Direction B, which was not
+  taken, keeps the words it was shown with.
+- **R-1 to R-4 went as recommended.** The service holds the rules
+  (#2824); the page offers only what the service allows: an admin sees no
+  Remove on another admin and Admin dimmed in the invite's role chip, "Only
+  the owner invites admins".
+- **A personal workspace cannot be handed over**, a rule R-2 did not
+  state: it is named for its creator and cannot be renamed, so the service
+  refuses its transfer and the page offers no Make owner there. Its owner
+  sees no leave at all, since it cannot be left.
+- **A handover cut short can be finished.** The admin is made the owner
+  before the owner is made an admin, so a failure between the two writes
+  leaves two owners rather than none, and sending the handover again
+  finishes it.
+- **R-5, invitations stay valid** (#2845): the accept page reads an
+  invitation through `GET /api/workspaces/invitations/offer`, which makes
+  the organization plugin's checks but its inviter-is-a-member one, names
+  the inviter only while they are a member, and names an account's first
+  workspace by its owner's name as it stands now; acceptance is the
+  plugin's own, unchanged. An admin's leave dialog says "Invitations you
+  sent stay valid: they're the workspace's."
+- **R-6, a leaver's running agents stop at their next step**: each step
+  runs as its starter, read through their membership. The leave dialog
+  says "Agents you started stay in its history, named as a former member,
+  and any still working stop." Making them run to their end would be a
+  service change of its own, not taken.
+- **Settings search lands on each group**: Invitations and Leave wear
+  anchors of their own, found by "invite" where the reader may invite and
+  by "leave" where they may leave.
+- **What the page shows stays current**: the members are read again when
+  the window's list counts another and as Transfer ownership opens, a read
+  sent before a write never puts back what the write changed, and the
+  automations a leave names are read as the leave is asked.
 
 Dean's ask: "I really don't like the workspace settings page. It needs a
 redesign to look more finished." Then: "It should match our other settings
@@ -161,11 +200,11 @@ shows Admin dimmed.
 
 | Reading | On a member | On an admin | On themselves | Invites as |
 |---|---|---|---|---|
-| Owner | Make admin · Remove | Make member · Make owner… · Remove | Transfer ownership… | Member or Admin |
+| Owner | Make admin · Remove | Make member · Make owner · Remove | Transfer ownership | Member or Admin |
 | Admin | Remove | — | Leave | Member |
 | Member | — | — | Leave | — |
 
-Make admin and Make member apply at once; Make owner… asks first. The rule
+Make admin and Make member apply at once; Make owner asks first. The rule
 narrows one that ships today: an admin can currently remove another admin.
 
 **Leaving.** The page's last group holds a row in the shape of Profile's
@@ -185,7 +224,7 @@ which stays open to try again.
 
 **The owner can't leave.** A workspace has one owner, its creator, and the
 service already refuses an owner's leave. The owner's row says to make an
-admin the owner first and offers Transfer ownership…. That is a one-way
+admin the owner first and offers Transfer ownership. That is a one-way
 handoff to an admin, after which the old owner is an admin and can leave.
 With no admin, the row says to make one first. A personal workspace draws no
 Leave group. A teammate's personal workspace is left like any other.
@@ -198,11 +237,16 @@ Leave group. A teammate's personal workspace is left like any other.
 
 **Decisions:**
 
-- **R-1, who changes roles.** Owner only; admins remove members only.
-- **R-2, ownership.** One owner, handed off one way to an admin.
-- **R-3, invite as Admin.** The owner alone.
-- **R-4, naming the reader's automations in the leave dialog.** Needs one
-  optional field on the automation summary.
+- **R-1, who changes roles.** Decided as recommended: owner only; admins
+  remove members only (#2824, #2840).
+- **R-2, ownership.** Decided as recommended: one owner, handed off one
+  way to an admin, the old owner becoming an admin; never a personal
+  workspace (#2824, #2840).
+- **R-3, invite as Admin.** Decided as recommended: the owner alone
+  (#2824).
+- **R-4, naming the reader's automations in the leave dialog.** Decided as
+  recommended: the automation summary's optional `mine` (#2824) names them
+  (#2840).
 - **R-5, invitations the leaver sent.** Decided: **they stay valid**, an
   invitation being the workspace's. Better Auth's `getInvitation` refuses
   one whose inviter is no longer a member (`INVITER_IS_NO_LONGER_A_MEMBER_OF_THE_ORGANIZATION`),
@@ -219,10 +263,10 @@ Leave group. A teammate's personal workspace is left like any other.
   stop"). Making them finish would be a service change of its own, not
   taken.
 
-**PR plan, revised:**
+**PR plan, revised** (shipped as #2820, #2824, #2840, and #2845 for R-5):
 
 | # | PR | Size |
 |---|---|---|
-| 2 | The reshaped page with the "Member ⌄" chip and the leave flow; Transfer ownership… shows once 4a's act exists | M–L · ~500 |
+| 2 | The reshaped page with the "Member ⌄" chip and the leave flow; Transfer ownership shows once 4a's act exists | M–L · ~500 |
 | 4a | Service and host: role and transfer routes, the narrowed remove rule, the acts, the automation summary's "mine" | M · ~400 |
-| 4b | Desktop: Make admin, Make member, Make owner…, Transfer ownership…, the admin's dimmed Admin, the dialog naming automations | M · ~300 |
+| 4b | Desktop: Make admin, Make member, Make owner, Transfer ownership, the admin's dimmed Admin, the dialog naming automations | M · ~300 |
