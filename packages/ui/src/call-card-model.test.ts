@@ -141,11 +141,23 @@ test("the Call tab draws the video on the call's own plan alone, while the call 
   );
   const restartable = { status: AVATAR_STATUS.ENDED, endReason: AVATAR_END_REASON.SERVER_CLOSED };
   assert.equal(drawn(LISTENING, restartable, INVITES), AVATAR_STATUS.ENDED);
-  // Another plan's Call tab, a call that is over, or the experiment off draws nothing.
+  // Another plan's Call tab, a call that is over, or no avatar standing with the experiment off draws nothing.
   assert.equal(drawn(LISTENING, live, BILLING), undefined);
   assert.equal(drawn(IDLE_VOICE_VIEW, live, INVITES), undefined);
-  assert.equal(drawn(LISTENING, live, INVITES, false), undefined);
   assert.equal(drawn(LISTENING, AVATAR_OFF, INVITES, false), undefined);
+  assert.equal(drawn(LISTENING, restartable, INVITES, false), undefined);
+});
+
+test("an avatar still standing when the experiment is turned off keeps its tile, and with it Video off", () => {
+  const drawn = (avatar: AvatarState) =>
+    callTabVideoStatus({ view: LISTENING, avatar, planId: INVITES, videoCalls: false });
+  assert.equal(drawn({ status: AVATAR_STATUS.LIVE }), AVATAR_STATUS.LIVE);
+  assert.equal(drawn({ status: AVATAR_STATUS.STARTING }), AVATAR_STATUS.STARTING);
+  // Once it is down, nothing offers to put it up again.
+  assert.equal(
+    drawn({ status: AVATAR_STATUS.ENDED, endReason: AVATAR_END_REASON.USER }),
+    undefined,
+  );
 });
 
 test("video the developer turned off stays offered to turn on again for as long as the call stands", () => {
