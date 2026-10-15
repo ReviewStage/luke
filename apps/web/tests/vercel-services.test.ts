@@ -78,25 +78,18 @@ test("the /api/ rewrites are generated into the web service's routes, ahead of i
   assert.equal(await rewritesDrifted(WEB), false);
 });
 
-test("a public path enters its service: each agent at its workspace member's mount and at its mount from before the workspace, and everything else the website", () => {
+test("a public path enters its service: each agent at its workspace member's mount, and everything else the website", () => {
   assert.equal(serviceFor("/eve/luke/v1/session"), SERVICE.LUKE);
   assert.equal(serviceFor("/eve/luke/v1/health"), SERVICE.LUKE);
-  assert.equal(serviceFor("/eve/v1/session/s_1/stream"), SERVICE.LUKE);
   assert.equal(serviceFor("/eve/dev/v1/session"), SERVICE.DEV);
-  assert.equal(serviceFor("/eve/coder/v1/session/s_1/cancel"), SERVICE.DEV);
   assert.equal(serviceFor("/api/plans"), SERVICE.WEB);
   assert.equal(serviceFor("/acme/plan/p_1"), SERVICE.WEB);
 });
 
-test("an agent reads every path it is reached by as eve's own /eve/v1/*, which is what its door is written against", () => {
+test("an agent reads the path it is reached by as eve's own /eve/v1/*, which is what its door is written against", () => {
   assert.equal(pathInService(SERVICE.LUKE, "/eve/luke/v1/session"), "/eve/v1/session");
   assert.equal(
-    pathInService(SERVICE.LUKE, "/eve/v1/session/s_1/stream"),
-    "/eve/v1/session/s_1/stream",
-  );
-  assert.equal(pathInService(SERVICE.DEV, "/eve/dev/v1/session/s_1"), "/eve/v1/session/s_1");
-  assert.equal(
-    pathInService(SERVICE.DEV, "/eve/coder/v1/callback/hook_1"),
+    pathInService(SERVICE.DEV, "/eve/dev/v1/callback/hook_1"),
     "/eve/v1/callback/hook_1",
   );
 });

@@ -870,9 +870,7 @@ prewarms its sandbox snapshot under the same Vercel Sandbox credentials. Its
 public mount is `/eve/dev/v1/*`, which the service's own route turns back into
 `/eve/v1/*` with a `request.path` transform before eve's router reads it, and
 its build exports `EVE_PUBLIC_ROUTE_PREFIX=/eve/dev` so the callback URLs eve
-mints resolve to the public path. Its mount from before the workspace,
-`/eve/coder/v1/*`, still enters the service and is turned back the same way,
-for the turns begun there. The web functions reach it through
+mints resolve to the public path. The web functions reach it through
 `src/agents/brain-host/eve-sessions.ts` with `mount: EVE_MOUNT.CODER`.
 `apps/web/tests/vercel-services.test.ts` holds the services and that routing.
 

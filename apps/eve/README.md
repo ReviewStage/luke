@@ -35,12 +35,7 @@ A generated service's routes turn `/eve/<member>/v1/*` back into `/eve/v1/*`
 before the member reads a request, so the member's door
 (`packages/service/src/agents/brain-host/door.ts`, `auth.ts`) spells the paths
 it sees as `/eve/v1/*` while callers address the public mount
-(`brain-host/eve-sessions.ts`'s `EVE_MOUNT`). Each agent's mount from before
-the workspace still routes to its service for the sessions already running and
-their eve callbacks: Luke's `/eve/v1/*`, read as it stands, and the coding
-agent's `/eve/coder/v1/*`, which `vercel.ts` adds to `eve-dev`'s routes so it is
-turned back into `/eve/v1/*` too. A coding agent's turn runs for up to
-twenty-five hours, so they stand until the turns begun on them are over.
+(`brain-host/eve-sessions.ts`'s `EVE_MOUNT`).
 
 `agents/luke/sandbox.ts` (and `agents/dev/sandbox.ts`, the coding agent's
 checkout) is the session's sandbox, a

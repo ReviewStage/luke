@@ -364,9 +364,8 @@ ignore rule, and the `routes` above unchanged.
 workspace (`apps/eve/README.md`).
 Public routing is the top-level `routes`, each naming the service a request
 enters: `withEve`'s own put `/eve/luke/v1/*` into `eve-luke` and
-`/eve/dev/v1/*` into `eve-dev`, ahead of the authored ones, which put each
-agent's mount from before the workspace, `/eve/v1/*` and `/eve/coder/v1/*`,
-into its service, and everything else into the web service. A service's own routes run only once a request has
+`/eve/dev/v1/*` into `eve-dev`, ahead of the authored one, which puts
+everything else into the web service. A service's own routes run only once a request has
 entered it, which is why the generated `/api/` rewrites live under the web
 service's `routes` rather than among the top-level ones. The project's
 environment variables reach every service alike, and each service's own

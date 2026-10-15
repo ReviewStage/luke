@@ -36,16 +36,6 @@ type PathRoute = {
   readonly dest: string;
 };
 
-/** A route that rewrites the path a request entered its service with, and names no destination. */
-type TransformRoute = {
-  readonly src: string;
-  readonly transforms: readonly {
-    readonly type: string;
-    readonly op: string;
-    readonly args: string;
-  }[];
-};
-
 /**
  * One service of a services deployment. `@vercel/config`'s `VercelConfig` has
  * no `services` key yet (only the private `experimentalServices`, without
@@ -58,7 +48,7 @@ type Service = {
   readonly installCommand: string;
   readonly buildCommand: string;
   readonly ignoreCommand: string;
-  readonly routes?: readonly (PathRoute | TransformRoute)[];
+  readonly routes?: readonly PathRoute[];
 };
 
 /**
@@ -96,22 +86,6 @@ const PAGE_ROUTES: readonly PathRoute[] = [
   { src: "/[^/]+/plan/[^/]+/?", dest: "/open.html" },
 ];
 
-/**
- * Each agent's public mount from before the workspace: Luke's at eve's own
- * `/eve/v1/*`, which its member reads as it stands, and the coding agent's at
- * `/eve/coder/v1/*`, which its service turns back into `/eve/v1/*` the way the
- * generated routes turn `/eve/dev/v1/*`. A coding agent's turn runs for up to
- * twenty-five hours, so these stand until the turns begun on them are over.
- */
-const LEGACY_MOUNT = {
-  [SERVICE.LUKE]: "^/eve/v1/(.*)$",
-  [SERVICE.DEV]: "^/eve/coder/v1/(.*)$",
-} as const;
-const LEGACY_DEV_PATH: TransformRoute = {
-  src: LEGACY_MOUNT[SERVICE.DEV],
-  transforms: [{ type: "request.path", op: "set", args: "/eve/v1/$1" }],
-};
-
 /** The repository root, found from where Vercel or a test evaluates this module. */
 function repositoryRoot(from: string): string {
   if (existsSync(join(from, "vercel.ts"))) return from;
@@ -132,27 +106,16 @@ const authored: ServicesConfig = {
     },
   },
   crons: [{ path: "/api/maintenance/sweep", schedule: "* * * * *" }],
-  routes: [
-    // Each agent's mount from before the workspace, kept for the sessions already running and their callbacks.
-    { src: LEGACY_MOUNT[SERVICE.DEV], destination: { type: "service", service: SERVICE.DEV } },
-    { src: LEGACY_MOUNT[SERVICE.LUKE], destination: { type: "service", service: SERVICE.LUKE } },
-    { src: "^/(.*)$", destination: { type: "service", service: SERVICE.WEB } },
-  ],
+  routes: [{ src: "^/(.*)$", destination: { type: "service", service: SERVICE.WEB } }],
 };
 
 const composed = await withEve(authored, {
   root: join(repositoryRoot(process.cwd()), EVE_WORKSPACE),
 });
 
-/** The routes a generated service takes in front of its own: the coding agent's old mount, turned back into eve's path. */
-const LEGACY_SERVICE_ROUTES: ReadonlyMap<string, readonly TransformRoute[]> = new Map([
-  [SERVICE.DEV, [LEGACY_DEV_PATH]],
-]);
-
 /**
  * Each generated member service, rooted from this file and installed and
- * skipped like the website, the coding agent's taking its old mount too.
- * Note that eve 0.74 computes a generated service's `root` from the eve
+ * skipped like the website. Note that eve 0.74 computes a generated service's `root` from the eve
  * workspace root (`.eve/vercel-services/<name>`) rather than from the
  * configuration file, which only coincides when `vercel.ts` stands at the
  * workspace root, so the workspace's path is put in front of it here;
@@ -168,7 +131,6 @@ const generatedServices = Object.fromEntries(
           {
             ...service,
             root: join(EVE_WORKSPACE, service.root ?? "."),
-            routes: [...(LEGACY_SERVICE_ROUTES.get(name) ?? []), ...(service.routes ?? [])],
             installCommand: "pnpm install --frozen-lockfile --filter @luke/eve...",
             ignoreCommand: `git diff --quiet HEAD^ HEAD -- ${AGENTS_TREE} ${DEPLOYMENT_FILES}`,
           },
