@@ -392,7 +392,6 @@ function fullMenuTemplate(appName: string, update?: UpdateMenu): MenuItemConstru
       submenu: [
         commandItem(APP_COMMAND.HOME),
         commandItem(APP_COMMAND.INBOX),
-        commandItem(APP_COMMAND.FACTORY),
         commandItem(APP_COMMAND.AUTOMATIONS),
         SEPARATOR,
         commandItem(APP_COMMAND.BACK),
