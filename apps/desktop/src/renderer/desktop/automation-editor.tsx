@@ -29,19 +29,33 @@ import {
   type AutomationSummary,
   type AutomationTargetKind,
 } from "@luke/features/automation-wire";
+import type { ModelChoice } from "@luke/features/models-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
-import { BuildingIcon, ChevronRightIcon, LockIcon, Trash2Icon, ZapIcon } from "lucide-react";
-import { useId, useState } from "react";
+import {
+  BuildingIcon,
+  ChevronRightIcon,
+  LockIcon,
+  PlayIcon,
+  Trash2Icon,
+  ZapIcon,
+} from "lucide-react";
+import { useId, useRef, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
+import { AnchoredPopover, POPOVER_ALIGN } from "../anchored-popover";
 import { useAppCommand } from "../app-commands";
+import { CHIP_LOOK, Chip } from "../chip";
 import { AgentModelChip } from "../planning/agent-model-chip";
+import { ModelMenu } from "../planning/model-menu";
 import { dayAndTimeText, sinceText, useMinute } from "../planning/plan-time";
 import { CHIP_PLACE, RepositoryChip, type RepositoryChooser } from "../planning/repository-chip";
 import { Segmented } from "../segmented";
 import { ConfirmDialog, useConfirmDialog } from "../settings/confirm-dialog";
 import { BusyLabel } from "../spinner";
 import { Switch } from "../switch";
+import { useDisclosure } from "../use-disclosure";
+import { AutomationRunsPanel } from "./automation-runs-panel";
+import { useAutomationRuns } from "./use-automation-runs";
 import { type AgentsRead, type RunChoices, useRunChoices } from "./use-run-choices";
 
 /**
@@ -53,7 +67,8 @@ import { type AgentsRead, type RunChoices, useRunChoices } from "./use-run-choic
  * and in the Owner row a team workspace offers. Where its runs land is
  * one row: a new agent each run, on the agent box's model chip and
  * archived once it succeeds where asked, or the same agent, chosen from
- * the workspace's agents on its repository. A schedule is chosen as the
+ * the workspace's agents on its repository. Its runs stand in the panel on
+ * the right (`automation-runs-panel.tsx`), with Run now in the toolbar. A schedule is chosen as the
  * picker writes one, every hour, every day, on weekdays, or on one day of
  * the week, at a time in a zone, and a cron the picker did not write stands
  * as custom, kept as it was; its next two runs are said under it. What
@@ -69,6 +84,8 @@ export interface AutomationWrites {
   change(params: AutomationChangeParams): Promise<AutomationView>;
   toggle(automationId: string, enabled: boolean): Promise<AutomationView>;
   remove(automationId: string): Promise<AutomationDeletedView>;
+  /** Reads the list again, as a Run now settling moves an automation's newest run. */
+  reload(): void;
 }
 
 /** The kinds of schedule as the picker offers them, in its order. */
@@ -108,6 +125,14 @@ const SAVE_REFUSAL_WORDS = {
     "Luke couldn't save it as written. Check its schedule and task.",
   [AUTOMATION_CALL_FAILURE.NOT_PERMITTED]:
     "Only its creator, or the workspace's owners and admins, can change it.",
+} as const satisfies Record<AutomationCallFailure, string>;
+
+/** Why a Run now did not start a run, as the line under the name says it. */
+const RUN_REFUSAL_WORDS = {
+  ...SAVE_REFUSAL_WORDS,
+  [AUTOMATION_CALL_FAILURE.UNANSWERED]: "Couldn't run it now. Try again.",
+  [AUTOMATION_CALL_FAILURE.NOT_PERMITTED]:
+    "Only its creator, or the workspace's owners and admins, can run it.",
 } as const satisfies Record<AutomationCallFailure, string>;
 
 const ACCEPTED: ActionResult = { status: ACTION_RESULT_STATUS.ACCEPTED };
@@ -311,6 +336,8 @@ function EditorToolbar({
   onSave,
   onToggle,
   onDelete,
+  running,
+  onRunNow,
 }: {
   draft: AutomationDraft;
   automation: AutomationSummary | undefined;
@@ -321,6 +348,9 @@ function EditorToolbar({
   onSave: () => void;
   onToggle: (enabled: boolean) => void;
   onDelete: () => void;
+  /** Whether a Run now is out. */
+  running: boolean;
+  onRunNow: () => void;
 }): React.JSX.Element {
   const status =
     automation === undefined
@@ -350,6 +380,19 @@ function EditorToolbar({
         <span className="automation-editor-status" data-dirty={String(dirty)}>
           {status}
         </span>
+        {automation === undefined ? null : (
+          <button
+            type="button"
+            className="toolbar-button bordered-button"
+            disabled={running}
+            onClick={onRunNow}
+          >
+            <PlayIcon />
+            <BusyLabel busy={running} label="Running">
+              Run now
+            </BusyLabel>
+          </button>
+        )}
         <button
           type="button"
           className="primary-button"
@@ -390,6 +433,64 @@ const TARGETS: readonly { value: AutomationTargetKind; label: string }[] = [
   { value: AUTOMATION_TARGET.SAME_AGENT, label: "Same agent" },
 ];
 
+/**
+ * Choose a model, where the default could not be read: a chip naming no
+ * model, whose menu is the agent box's model menu with nothing checked, so
+ * nothing is chosen until a model is picked in it.
+ */
+function ModelPicker({
+  models,
+  onChoose,
+}: {
+  models: RunChoices["models"];
+  onChoose: (choice: ModelChoice) => void;
+}): React.JSX.Element {
+  const [open, setOpen] = useState(false);
+  const drawn = useDisclosure(open);
+  const menuId = useId();
+  const root = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const close = () => {
+    setOpen(false);
+    trigger.current?.focus();
+  };
+  return (
+    <div className="automation-model-picker" ref={root}>
+      <Chip
+        ref={trigger}
+        look={CHIP_LOOK.TOOLBAR}
+        chevron
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-controls={open ? menuId : undefined}
+        onClick={() => setOpen(!open)}
+      >
+        Choose a model
+      </Chip>
+      {drawn.mounted ? (
+        <AnchoredPopover align={POPOVER_ALIGN.START}>
+          <ModelMenu
+            leaving={drawn.leaving}
+            ref={drawn.ref}
+            id={menuId}
+            className="agent-model-menu"
+            models={models}
+            chosen={undefined}
+            onChoose={(choice) => {
+              onChoose(choice);
+              setOpen(false);
+            }}
+            onClose={close}
+            onLeave={(left) => {
+              if (!(left instanceof Node && root.current?.contains(left))) setOpen(false);
+            }}
+          />
+        </AnchoredPopover>
+      ) : null}
+    </div>
+  );
+}
+
 /** A new agent's model: the chip the agent box wears, on the account's default until one is chosen. */
 function ModelControl({
   draft,
@@ -401,7 +502,20 @@ function ModelControl({
   onDraft: (patch: Partial<AutomationDraft>) => void;
 }): React.JSX.Element {
   const shown = draft.choice ?? choices.defaultChoice;
-  if (shown === undefined) return <p className="automation-form-note">Your default model.</p>;
+  if (shown === undefined) {
+    // Note that a default that could not be read is said as unknown rather than drawn as some
+    // model it may not be, and a model can still be chosen, which the chip then names.
+    return choices.defaultFailed ? (
+      <div className="automation-model">
+        <span className="automation-form-note">
+          It runs on your default model, which could not be read.
+        </span>
+        <ModelPicker models={choices.models} onChoose={(choice) => onDraft({ choice })} />
+      </div>
+    ) : (
+      <p className="automation-form-note">Your default model.</p>
+    );
+  }
   return (
     <div className="automation-model">
       <AgentModelChip
@@ -626,6 +740,7 @@ export function AutomationEditor({
   writes,
   onBack,
   onCreated,
+  onOpenAgent,
 }: {
   automation: AutomationSummary | undefined;
   workspace: Workspace | undefined;
@@ -635,7 +750,11 @@ export function AutomationEditor({
   writes: AutomationWrites;
   onBack: () => void;
   onCreated: (automationId: string) => void;
+  /** Opens a run's agent on its own page. */
+  onOpenAgent: (agentId: string) => void;
 }): React.JSX.Element {
+  const runs = useAutomationRuns(automation?.id);
+  const [running, setRunning] = useState(false);
   const [defaults] = useState<DraftDefaults>(() => ({
     timezone: windowZone(),
     owner: AUTOMATION_SCOPE.PERSONAL,
@@ -689,6 +808,30 @@ export function AutomationEditor({
         : writes.change({ automationId: automation.id, change: change ?? {} });
     saved.then(landed);
   };
+  const runNow = () => {
+    setRunning(true);
+    setRefusal(undefined);
+    runs.runNow().then((answer) => {
+      setRunning(false);
+      // The automation's newest run moved, so the list it stands in is read again too.
+      writes.reload();
+      if ("failure" in answer) setRefusal(RUN_REFUSAL_WORDS[answer.failure]);
+    });
+  };
+  // Note that opening a run's agent leaves the page and its draft with it, so unsaved changes ask first.
+  const [leavingFor, setLeavingFor] = useState<string | undefined>(undefined);
+  const leaving = useConfirmDialog({ subject: leavingFor !== undefined, surfaceOpen: true }, () => {
+    if (leavingFor !== undefined) onOpenAgent(leavingFor);
+    return Promise.resolve(ACCEPTED);
+  });
+  const openRun = (agentId: string) => {
+    if (!dirty) {
+      onOpenAgent(agentId);
+      return;
+    }
+    setLeavingFor(agentId);
+    leaving.ask();
+  };
   const toggle = (enabled: boolean) => {
     if (automation === undefined) return;
     writes.toggle(automation.id, enabled).then((answer) => {
@@ -723,42 +866,61 @@ export function AutomationEditor({
         onSave={save}
         onToggle={toggle}
         onDelete={deletion.ask}
+        running={running}
+        onRunNow={runNow}
       />
-      <div className="automations-scroll">
-        <div className="automation-editor">
-          <input
-            className="automation-editor-name"
-            aria-label="Automation name"
-            placeholder="Untitled automation"
-            value={draft.name}
-            onKeyDown={releaseOnEscape}
-            onChange={(event) => editDraft({ name: event.target.value })}
-          />
-          {shownProblems && problems[DRAFT_FIELD.NAME] !== undefined ? (
-            <p className="error-message automation-form-problem" role="alert">
-              {problems[DRAFT_FIELD.NAME]}
+      <div className="automation-editor-layout">
+        <div className="automations-scroll">
+          <div className="automation-editor">
+            <input
+              className="automation-editor-name"
+              aria-label="Automation name"
+              placeholder="Untitled automation"
+              value={draft.name}
+              onKeyDown={releaseOnEscape}
+              onChange={(event) => editDraft({ name: event.target.value })}
+            />
+            {shownProblems && problems[DRAFT_FIELD.NAME] !== undefined ? (
+              <p className="error-message automation-form-problem" role="alert">
+                {problems[DRAFT_FIELD.NAME]}
+              </p>
+            ) : null}
+            <p className="automation-owner-line">
+              <OwnerMark owner={draft.owner} workspace={workspace} />
+              {ownerLine(draft.owner, workspace, offersOwner)}
             </p>
-          ) : null}
-          <p className="automation-owner-line">
-            <OwnerMark owner={draft.owner} workspace={workspace} />
-            {ownerLine(draft.owner, workspace, offersOwner)}
-          </p>
-          {refusal === undefined ? null : (
-            <p className="error-message automation-save-refusal" role="alert">
-              {refusal}
-            </p>
-          )}
-          <EditorForm
-            draft={draft}
-            problems={shownProblems ? problems : {}}
-            planBacked={planBacked}
-            workspace={workspace}
-            offersOwner={offersOwner}
-            repositories={repositories}
-            onDraft={editDraft}
-          />
+            {refusal === undefined ? null : (
+              <p className="error-message automation-save-refusal" role="alert">
+                {refusal}
+              </p>
+            )}
+            <EditorForm
+              draft={draft}
+              problems={shownProblems ? problems : {}}
+              planBacked={planBacked}
+              workspace={workspace}
+              offersOwner={offersOwner}
+              repositories={repositories}
+              onDraft={editDraft}
+            />
+          </div>
         </div>
+        <AutomationRunsPanel
+          created={automation !== undefined}
+          runs={runs.read}
+          onRetry={runs.reload}
+          onOpenAgent={openRun}
+        />
       </div>
+      <ConfirmDialog
+        confirm={leaving}
+        question={{
+          title: "Leave with unsaved changes?",
+          body: "Opening the run's agent leaves this page, and what you changed here is lost.",
+          verb: "Leave",
+          running: "Leaving",
+        }}
+      />
       <ConfirmDialog
         confirm={deletion}
         question={{

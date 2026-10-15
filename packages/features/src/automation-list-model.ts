@@ -1,14 +1,17 @@
 import { SCHEDULE_PRESET } from "./automation-schedule.js";
 import {
+  AUTOMATION_FIRING,
+  AUTOMATION_RUN_REASON,
   AUTOMATION_RUN_STATUS,
   AUTOMATION_SCOPE,
   AUTOMATION_TRIGGER,
+  type AutomationRunReason,
   type AutomationRunSummary,
   type AutomationScope,
   type AutomationSummary,
   type AutomationTrigger,
 } from "./automation-wire.js";
-import { CODING_AGENT_STATUS } from "./coding-agent-wire.js";
+import { CODING_AGENT_STATUS, type CodingAgentStatus } from "./coding-agent-wire.js";
 
 /**
  * automation-list-model.ts -- the Automations list as a window draws it: grouped by who owns each, with its trigger in words, where its newest run stands, and when it runs next.
@@ -32,6 +35,43 @@ const WEEKDAY_NAMES = [
   "Fridays",
   "Saturdays",
 ] as const;
+
+/** Why a run did not start, as its row's line says it. */
+const RUN_REASON_WORDS = {
+  [AUTOMATION_RUN_REASON.CONCURRENCY]: "Skipped: an earlier run's agent was still at work.",
+  [AUTOMATION_RUN_REASON.DAILY_CAP]:
+    "Skipped: it had already started as many runs today as it may.",
+  [AUTOMATION_RUN_REASON.PLAN_UNREACHABLE]:
+    "Its plan is gone, or no longer in one of your workspaces.",
+  [AUTOMATION_RUN_REASON.CREATOR_LEFT]: "Its creator is no longer in the workspace.",
+  [AUTOMATION_RUN_REASON.NO_REPOSITORY]: "It names no repository to work in.",
+  [AUTOMATION_RUN_REASON.REPOSITORY_UNREACHABLE]:
+    "Luke can no longer reach its repository on GitHub.",
+  [AUTOMATION_RUN_REASON.GITHUB_SIGN_IN]: "Its GitHub sign-in had lapsed.",
+  [AUTOMATION_RUN_REASON.MODEL]: "Its model is no longer offered. Choose another.",
+  [AUTOMATION_RUN_REASON.UNAVAILABLE]: "Coding agents couldn't be reached.",
+  [AUTOMATION_RUN_REASON.REPOSITORY_CHANGED]: "Its plan moved to another repository first.",
+  [AUTOMATION_RUN_REASON.PAUSED]: "It was turned off before the run could start.",
+  [AUTOMATION_RUN_REASON.MISSED]: "It waited too long to start.",
+  [AUTOMATION_RUN_REASON.AGENT_GONE]: "The agent its runs go to is gone or archived.",
+} as const satisfies Record<AutomationRunReason, string>;
+
+/** What fired a run, as its row's title says it while its agent has no title of its own. */
+const FIRING_WORDS = {
+  [AUTOMATION_FIRING.SCHEDULE]: "Scheduled run",
+  [AUTOMATION_FIRING.MANUAL]: "Run now",
+  [AUTOMATION_FIRING.GITHUB]: "GitHub event",
+  [AUTOMATION_FIRING.WEBHOOK]: "Webhook called",
+} as const satisfies Record<AutomationRunSummary["firing"]["kind"], string>;
+
+/** Where a started run's agent stands, as its row's line says it. */
+const AGENT_STATUS_WORDS = {
+  [CODING_AGENT_STATUS.STARTING]: "Starting",
+  [CODING_AGENT_STATUS.RUNNING]: "Working",
+  [CODING_AGENT_STATUS.COMPLETED]: "Finished",
+  [CODING_AGENT_STATUS.FAILED]: "Its agent failed",
+  [CODING_AGENT_STATUS.CANCELLED]: "Stopped",
+} as const satisfies Record<CodingAgentStatus, string>;
 
 /** The order the owners' groups stand in: the workspace's first, as the ones every member shares. */
 const OWNER_ORDER = [AUTOMATION_SCOPE.WORKSPACE, AUTOMATION_SCOPE.PERSONAL] as const;
@@ -158,4 +198,24 @@ export function automationNext(automation: AutomationSummary): AutomationNext {
   if (automation.pausedReason !== null) return { kind: AUTOMATION_NEXT.PAUSED };
   if (automation.nextRunAt === null) return { kind: AUTOMATION_NEXT.UNSCHEDULED };
   return { kind: AUTOMATION_NEXT.AT, at: automation.nextRunAt };
+}
+
+/** A run's title: its agent's own, where it has one, else what fired it. */
+export function automationRunTitle(run: AutomationRunSummary): string {
+  return run.agent?.title ?? FIRING_WORDS[run.firing.kind];
+}
+
+/** A run's line: why it did not start, where it did not, else where its agent stands, or that it waits to start. */
+export function automationRunLine(run: AutomationRunSummary): string {
+  if (run.reason !== null) return RUN_REASON_WORDS[run.reason];
+  switch (run.status) {
+    case AUTOMATION_RUN_STATUS.QUEUED:
+      return "Waiting to start";
+    case AUTOMATION_RUN_STATUS.FAILED:
+      return "It could not start.";
+    case AUTOMATION_RUN_STATUS.SKIPPED:
+      return "Skipped";
+    case AUTOMATION_RUN_STATUS.STARTED:
+      return run.agent === null ? "Its agent is gone" : AGENT_STATUS_WORDS[run.agent.status];
+  }
 }

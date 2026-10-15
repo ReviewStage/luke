@@ -13,6 +13,7 @@ import {
   AUTOMATION_SCOPE,
   AUTOMATION_TARGET,
   AUTOMATION_TRIGGER,
+  type AutomationRunSummary,
   type AutomationSummary,
 } from "@luke/features/automation-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
@@ -20,7 +21,7 @@ import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { onRegistry } from "#testing/copy-feedback";
 import { plansControl } from "#testing/plans-control";
@@ -82,6 +83,16 @@ const FAILING = automation(3, {
   },
 });
 
+/** The models a new agent may run on. */
+const CATALOG = [
+  {
+    id: "anthropic/claude-opus-5.5",
+    name: "Claude Opus 5.5",
+    provider: "anthropic",
+    efforts: ["low", "high"],
+  },
+] as const;
+
 /** The account's default model, which a new agent runs on until another is chosen. */
 const DEFAULT_CHOICE = { model: "anthropic/claude-opus-5.5", effort: "high" };
 
@@ -116,6 +127,16 @@ let creates: AutomationCreateParams[] = [];
 let deletes: string[] = [];
 /** Every ask for a workspace's agents, as the act carried it. */
 let agentsAsked: unknown[] = [];
+/** The service's runs of every automation, newest first, as a read of one's runs answers them. */
+let runs: AutomationRunSummary[] = [];
+/** Every Run now asked, by the automation it runs. */
+let runsAsked: string[] = [];
+/** What a Run now answers where it does not start a run. */
+let runRefusal: (typeof AUTOMATION_CALL_FAILURE)[keyof typeof AUTOMATION_CALL_FAILURE] | undefined;
+/** Every agent whose page a run opened. */
+let agentsOpened: string[] = [];
+/** Whether the account's default model reads, or answers that it could not. */
+let defaultRefused = false;
 /** What a change answers: the automation as changed, or why not. */
 let changeRefusal:
   | (typeof AUTOMATION_CALL_FAILURE)[keyof typeof AUTOMATION_CALL_FAILURE]
@@ -132,6 +153,11 @@ beforeEach(() => {
   creates = [];
   deletes = [];
   agentsAsked = [];
+  runs = [];
+  runsAsked = [];
+  runRefusal = undefined;
+  agentsOpened = [];
+  defaultRefused = false;
   changeRefusal = undefined;
   Object.defineProperty(window, "luke", {
     configurable: true,
@@ -182,13 +208,13 @@ beforeEach(() => {
           return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { automation: made } });
         }
         if (request.kind === ACT_KIND.CODING_AGENTS_MODELS) {
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { models: [] } });
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { models: CATALOG } });
         }
         if (request.kind === ACT_KIND.CODING_AGENTS_DEFAULT_READ) {
-          return Promise.resolve({
-            status: ACT_OUTCOME_STATUS.DONE,
-            value: { choice: DEFAULT_CHOICE },
-          });
+          const value = defaultRefused
+            ? { failure: AUTOMATION_CALL_FAILURE.UNANSWERED }
+            : { choice: DEFAULT_CHOICE };
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
         }
         if (request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST) {
           agentsAsked.push(request.payload);
@@ -196,6 +222,29 @@ beforeEach(() => {
             status: ACT_OUTCOME_STATUS.DONE,
             value: { agents: [CI_DIGEST] },
           });
+        }
+        if (request.kind === ACT_KIND.AUTOMATIONS_RUNS) {
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { runs } });
+        }
+        if (request.kind === ACT_KIND.AUTOMATIONS_RUN) {
+          runsAsked.push(request.payload.automationId);
+          if (runRefusal !== undefined) {
+            return Promise.resolve({
+              status: ACT_OUTCOME_STATUS.DONE,
+              value: { failure: runRefusal },
+            });
+          }
+          const made = {
+            id: "6e7f8091-a2b3-4c4d-8e5f-60718293a4b5",
+            firing: { kind: "manual" },
+            status: AUTOMATION_RUN_STATUS.STARTED,
+            reason: null,
+            agent: { id: CI_DIGEST.id, title: null, status: "starting" },
+            firedAt: 5,
+            settledAt: 5,
+          } as const;
+          runs = [made, ...runs];
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { run: made } });
         }
         if (request.kind === ACT_KIND.AUTOMATIONS_DELETE) {
           deletes.push(request.payload.automationId);
@@ -209,6 +258,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.restoreAllMocks();
   act(() => root?.unmount());
   root = undefined;
   document.body.innerHTML = "";
@@ -466,6 +516,11 @@ function mountPages(start: AutomationsPlace, workspace: Workspace = WORKSPACE): 
     const [listed, setListed] = useState(workspace);
     moveTo = setListed;
     const plans = plansControl({
+      agentView: {
+        agentId: undefined,
+        onOpen: (agentId) => agentsOpened.push(agentId),
+        onClose: () => undefined,
+      },
       workspace: listed,
       workspaces: [PERSONAL, WORKSPACE],
       automationsView: {
@@ -845,4 +900,149 @@ test("Same agent is chosen from the workspace's agents on the automation's repos
       change: { target: { kind: AUTOMATION_TARGET.SAME_AGENT, agentId: CI_DIGEST.id } },
     },
   ]);
+});
+
+test("an automation's runs stand on its page's right, newest first, a run that started an agent opening it", async () => {
+  runs = [
+    {
+      id: "1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f",
+      firing: { kind: AUTOMATION_TRIGGER.SCHEDULE, dueAt: 3 },
+      status: AUTOMATION_RUN_STATUS.STARTED,
+      reason: null,
+      agent: { id: CI_DIGEST.id, title: "Fix the flaky test", status: "running" },
+      firedAt: 3,
+      settledAt: 3,
+    },
+    {
+      id: "2d3e4f5a-6b7c-4d8e-9f0a-1b2c3d4e5f60",
+      firing: { kind: AUTOMATION_TRIGGER.SCHEDULE, dueAt: 2 },
+      status: AUTOMATION_RUN_STATUS.FAILED,
+      reason: "creator-left",
+      agent: null,
+      firedAt: 2,
+      settledAt: 2,
+    },
+  ];
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+
+  const panel = page.querySelector("aside[aria-label='Runs']");
+  assert.deepEqual(
+    [...(panel?.querySelectorAll(".automation-run") ?? [])].map((row) => [
+      row.querySelector(".automation-row-name")?.textContent,
+      row.querySelector(".automation-row-detail")?.textContent,
+    ]),
+    [
+      ["Fix the flaky test", "Working"],
+      ["Scheduled run", "Its creator is no longer in the workspace."],
+    ],
+  );
+  act(() => panel?.querySelector<HTMLButtonElement>("button.automation-run")?.click());
+  assert.deepEqual(agentsOpened, [CI_DIGEST.id]);
+  assert.equal(
+    panel?.querySelectorAll("button.automation-run").length,
+    1,
+    "a run that started no agent is no press",
+  );
+});
+
+test("Run now starts a run under a key of its own, and the run stands first once it settles", async () => {
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+  assert.match(
+    page.querySelector("aside[aria-label='Runs']")?.textContent ?? "",
+    /No runs yet\. Run now to try it\./u,
+  );
+
+  act(() => button("Run now").click());
+  await settle();
+
+  assert.deepEqual(runsAsked, [SWEEP.id]);
+  assert.equal(
+    page.querySelector("aside[aria-label='Runs'] .automation-row-name")?.textContent,
+    "Run now",
+  );
+});
+
+test("a Run now the service refuses says why under the name, and a new automation has no Run now", async () => {
+  runRefusal = AUTOMATION_CALL_FAILURE.NOT_PERMITTED;
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+
+  act(() => button("Run now").click());
+  await settle();
+  assert.equal(
+    page.querySelector(".automation-save-refusal")?.textContent,
+    "Only its creator, or the workspace's owners and admins, can run it.",
+  );
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  const fresh = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
+  await settle();
+  assert.ok(![...fresh.querySelectorAll("button")].some((each) => each.textContent === "Run now"));
+  assert.match(fresh.textContent ?? "", /Create it, then Run now to try it\./u);
+});
+
+/** A run of the sweep that started the CI digest agent, which a press on its row opens. */
+const SWEEP_RUN = {
+  id: "1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f",
+  firing: { kind: AUTOMATION_TRIGGER.SCHEDULE, dueAt: 3 },
+  status: AUTOMATION_RUN_STATUS.STARTED,
+  reason: null,
+  agent: { id: CI_DIGEST.id, title: "Fix the flaky test", status: "running" },
+  firedAt: 3,
+  settledAt: 3,
+} as const;
+
+test("opening a run's agent with unsaved changes asks first, and Leave opens it", async () => {
+  runs = [SWEEP_RUN];
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+  type(page.querySelector("input[aria-label='Automation name']"), "Sweep");
+
+  act(() => page.querySelector<HTMLButtonElement>("button.automation-run")?.click());
+  await settle();
+  assert.deepEqual(agentsOpened, []);
+  act(() => button("Leave").click());
+  await settle();
+
+  assert.deepEqual(agentsOpened, [CI_DIGEST.id]);
+});
+
+test("a Run now that settles reads the list again, so its newest run stands there too", async () => {
+  mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+  const before = listed.length;
+
+  act(() => button("Run now").click());
+  await settle();
+
+  assert.ok(listed.length > before);
+});
+
+test("a default model that could not be read is said as unknown, and a model can still be chosen", async () => {
+  defaultRefused = true;
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+
+  assert.equal(page.querySelector(".agent-model-chip"), null, "no model is drawn as the default");
+  assert.match(page.textContent ?? "", /It runs on your default model, which could not be read\./u);
+  // Note that the menu is hung from the chip by its laid-out boxes, which jsdom draws none of.
+  vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+    if (this.classList.contains("automation-model-picker"))
+      return DOMRect.fromRect({ x: 200, y: 400, width: 120, height: 24 });
+    if (this.classList.contains("anchored-popover"))
+      return DOMRect.fromRect({ x: 0, y: 0, width: 340, height: 300 });
+    return DOMRect.fromRect({ x: 0, y: 0, width: 0, height: 0 });
+  });
+  act(() => button("Choose a model").click());
+  await settle();
+
+  assert.ok(page.querySelector(".agent-model-menu"), "the model menu opens");
+  assert.equal(
+    page.querySelector(".automation-editor-status")?.textContent,
+    "Saved",
+    "opening the menu chooses nothing",
+  );
 });
