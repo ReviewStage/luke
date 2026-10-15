@@ -1,8 +1,10 @@
 import type { CodingAgentMessage } from "@luke/features/coding-agent-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
+import type { PlanEditor } from "@luke/features/plan-wire";
 import { PLAN_WORK_STATE } from "@luke/features/planning-view";
 import { TRANSCRIPT_PART_TYPE } from "@luke/features/transcript-wire";
 import { CallIcon } from "@luke/ui";
+import { LUKE_ACTOR } from "@luke/ui/actor-model";
 import {
   type CallTurn,
   callThread,
@@ -26,6 +28,7 @@ import {
   ConversationScrollButton,
 } from "../ai-elements/conversation";
 import { EmptyState } from "../empty-state";
+import { usePerson } from "../member-directory";
 import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { RetryRowLabel } from "../retry-button";
 import { BusyLabel, SPINNER_SIZE, Spinner } from "../spinner";
@@ -61,7 +64,10 @@ import { WorkingLine } from "./working-time";
  * draws nothing; what the voice and the brain hand each
  * other is never drawn. Each call begins at a divider saying when it
  * started, the standing one marked live, and one that ended closes on how
- * long it ran, its card on hover. The list keeps to its newest line while it
+ * long it ran, its card on hover. A teammate's call is named for them at
+ * its divider, and over each run of lines, theirs under their face and
+ * Luke's under his, so the thread reads as two named parties; the reader's
+ * own call names nobody. The list keeps to its newest line while it
  * is scrolled there, so a live call reads like a chat, and the turns before
  * the oldest drawn are read a page at a time as the developer scrolls up to
  * them. Every word here is the developer's, Luke's, or the developer's
@@ -217,20 +223,24 @@ function CallEntries({
 }: {
   entries: Extract<ThreadSection<WorkTurnRow>, { kind: typeof THREAD_ITEM.CALL }>["entries"];
   doors: WorkDoors;
-  /** The teammate whose call it was, whose lines are drawn under their name; none for the reader's own. */
-  caller: string | undefined;
+  /** The teammate whose call it was, whose lines are drawn under their name and Luke's under his; none for the reader's own. */
+  caller: PlanEditor | undefined;
 }): React.JSX.Element {
+  const teammate = usePerson(caller);
   const drawn: React.JSX.Element[] = [];
   let run: UIMessage[] = [];
   const flush = () => {
     const first = run[0];
     if (first === undefined) return;
+    const said = spokenMessage(run);
     drawn.push(
       <AgentMessage
         key={first.id}
-        message={spokenMessage(run)}
+        message={said}
         plan={false}
-        sender={caller}
+        sender={
+          caller === undefined ? undefined : said.role === MESSAGE_ROLE.USER ? teammate : LUKE_ACTOR
+        }
         lead={AGENT_LEAD}
         moving={false}
         delegation={undefined}

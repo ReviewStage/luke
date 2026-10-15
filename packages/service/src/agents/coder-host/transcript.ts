@@ -31,6 +31,7 @@ import {
   CODING_AGENT_BOUNDS,
   CODING_AGENT_CURSOR_START,
   CODING_AGENT_DELEGATE_TOOL,
+  CODING_AGENT_SENDER,
   CODING_AGENT_STATUS,
   type CodingAgentContext,
   type CodingAgentDelegationStart,
@@ -226,15 +227,17 @@ const SENDER_NAME = {
   FORMER_MEMBER: "Former member",
 } as const;
 
-/** What sent a line, as the page names it. */
+/** What sent a line, as the page names it and by its kind, so the window draws Luke and an automation as themselves. */
 function senderOf(sent: LineSent): CodingAgentSender {
   switch (sent.kind) {
     case MESSAGE_SENDER.MEMBER:
-      return sent.member ?? { name: SENDER_NAME.FORMER_MEMBER };
+      return sent.member === undefined
+        ? { name: SENDER_NAME.FORMER_MEMBER, kind: CODING_AGENT_SENDER.FORMER }
+        : { ...sent.member, kind: CODING_AGENT_SENDER.MEMBER };
     case MESSAGE_SENDER.LUKE:
-      return { name: SENDER_NAME.LUKE };
+      return { name: SENDER_NAME.LUKE, kind: CODING_AGENT_SENDER.LUKE };
     case MESSAGE_SENDER.AUTOMATION:
-      return { name: sent.name };
+      return { name: sent.name, kind: CODING_AGENT_SENDER.AUTOMATION };
   }
 }
 

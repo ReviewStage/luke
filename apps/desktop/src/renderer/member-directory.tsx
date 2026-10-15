@@ -1,4 +1,5 @@
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
+import { type Actor, personActor } from "@luke/ui/actor-model";
 import { createContext, type ReactNode, useContext } from "react";
 import { useWorkspaceMembers } from "./planning/use-workspace-members";
 
@@ -41,4 +42,12 @@ export function MemberDirectory({
 /** The directory standing around the caller: the members as read, and the reader's id. */
 export function useMemberDirectory(): Directory {
   return useContext(DirectoryContext);
+}
+
+/** A member the wire names, as the directory around the caller draws them (`personActor`). */
+export function usePerson(
+  ref: { readonly userId: string; readonly name: string } | undefined,
+): Actor {
+  const { members, readerId } = useMemberDirectory();
+  return personActor(ref, members, readerId);
 }

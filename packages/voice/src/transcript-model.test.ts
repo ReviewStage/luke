@@ -326,6 +326,7 @@ test("a teammate's call is named for the reader, the reader's own is not, and a 
     return region.kind === TRANSCRIPT_REGION.READY ? region.calls.map((each) => each.caller) : [];
   };
 
-  assert.deepEqual(callers(DEAN.userId), [undefined, "Charles Pan", undefined]);
-  assert.deepEqual(callers(CHARLES.userId), ["Dean Stratakos", undefined, undefined]);
+  // Note that the caller keeps their account's id, which the window reads their face by.
+  assert.deepEqual(callers(DEAN.userId), [undefined, CHARLES, undefined]);
+  assert.deepEqual(callers(CHARLES.userId), [DEAN, undefined, undefined]);
 });

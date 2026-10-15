@@ -1,4 +1,4 @@
-import type { CodeRef } from "@luke/features/plan-wire";
+import type { CodeRef, PlanEditor } from "@luke/features/plan-wire";
 import type { PlanCode, PlanCodeShowing } from "@luke/features/planning-view";
 import {
   type CallRecord,
@@ -32,7 +32,7 @@ export interface CodeFeedCall {
   readonly ended: string | undefined;
   readonly record: CallRecord | undefined;
   /** The teammate whose call it was, named over its run as the Call tab names it; none for the reader's own or a turn's run. */
-  readonly caller: string | undefined;
+  readonly caller: PlanEditor | undefined;
 }
 
 /** A reference as a place names it, read from a call's input or a stored note, its lines absent for a whole file. */

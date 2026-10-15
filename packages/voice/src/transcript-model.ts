@@ -1,3 +1,4 @@
+import type { PlanEditor } from "@luke/features/plan-wire";
 import { PLANNING_READ, type PlanningView } from "@luke/features/planning-view";
 import { TRANSCRIPT_PART_TYPE, type TranscriptCall } from "@luke/features/transcript-wire";
 import type { UIMessage } from "ai";
@@ -53,8 +54,8 @@ export interface TranscriptCallRow {
   readonly messages: readonly UIMessage[];
   /** What the record says of the call; nothing for a call the record does not hold yet, or one still standing. */
   readonly record?: CallRecord | undefined;
-  /** The teammate whose call it was, by name; none for the reader's own, a call heard on this Mac, or one nobody can be named for. */
-  readonly caller?: string | undefined;
+  /** The teammate whose call it was, by the account the record names, so the window can draw their face; none for the reader's own, a call heard on this Mac, or one nobody can be named for. */
+  readonly caller?: PlanEditor | undefined;
 }
 
 /** The line a call closes with: none while it stands, and who ended it where this window saw Luke do it. */
@@ -210,7 +211,7 @@ export function transcriptRegion(input: {
       return settled === undefined ? [] : [settled];
     });
     const { id, startedAt, messages: _messages, by, ...record } = call;
-    const caller = by === undefined || by.userId === input.readerId ? undefined : by.name;
+    const caller = by === undefined || by.userId === input.readerId ? undefined : by;
     const ahead = heard.get(id);
     const behind =
       ahead !== undefined && (ahead.live || wordCount(messages) < wordCount(ahead.messages));

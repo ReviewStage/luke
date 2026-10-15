@@ -2308,13 +2308,24 @@ body,
   padding-inline: max(var(--content-inset), var(--reading-room));
 }
 
-/* The teammate who said or wrote a developer's message on a shared plan,
-   named over its bubble in the muted meta voice; the reader's own carry no
-   name. */
+/* Who said or wrote a message on a shared plan, a teammate, Luke, or an
+   automation, named over it by their mark and name in the muted meta voice,
+   the mark centred on the words; the reader's own carry no name. */
 .message-sender {
+  display: flex;
+  align-items: center;
   padding-inline: var(--space-4);
   color: var(--text-secondary);
   font-size: 11.5px;
+}
+
+/* A teammate's call at its divider: their mark and name, then when it
+   started, centred on the mark, every space kept. */
+.call-caller {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  white-space: pre;
 }
 
 /* The transcript's way back to its newest line stands on the column's own
