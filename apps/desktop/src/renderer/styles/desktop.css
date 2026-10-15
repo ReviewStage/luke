@@ -849,6 +849,10 @@ body,
   vertical-align: middle;
 }
 
+.actor-mark[data-size="mark"] {
+  --actor-size: 14px;
+}
+
 .actor-mark[data-size="stack"] {
   --actor-size: 18px;
 }
@@ -1174,6 +1178,14 @@ body,
 
   margin-right: var(--space-4);
   vertical-align: -1.5px; /* off-scale */
+}
+
+/* A teammate's task wears its creator's face before its mark and time, in
+   the same slot, so it takes the room a short time leaves there before any
+   of the name's, and steps out with the time while the row is hovered. */
+.sidebar-plan-time > .actor-mark {
+  top: -1px; /* off-scale: centres the face on the time's figures */
+  margin-right: var(--space-4);
 }
 
 .plan-mark-glyph {

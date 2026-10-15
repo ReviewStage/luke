@@ -258,6 +258,28 @@ export function creatorActor(
 }
 
 /**
+ * Who created a task someone else created, as its row wears them: the
+ * creator `creatorActor` names, where the creator is not the reader. Note
+ * that a task is the reader's own, and wears nobody, wherever its creator's
+ * id is theirs, and that one whose creator nobody names, from a service
+ * before either field, or read before the reader's own id is known, wears
+ * nobody either, since the row cannot say it is someone else's. A creator
+ * whose account is gone is named by `ownerId` alone, and stands on the
+ * quiet outline.
+ */
+export function teammateCreator(
+  plan: { readonly createdBy?: PlanEditor | undefined; readonly ownerId?: string | undefined },
+  reader: EditReader,
+): Actor | undefined {
+  const creatorId = plan.createdBy?.userId ?? plan.ownerId;
+  const { readerId } = reader;
+  if (creatorId === undefined || readerId === undefined || creatorId === readerId) {
+    return undefined;
+  }
+  return creatorActor(plan, reader, undefined);
+}
+
+/**
  * Who reads a plan's edits, as each is named for them: the workspace's
  * members as read, the reader's own account id, and, where every edit is
  * the reader's own, as the account's template's are, the reader as their
