@@ -322,9 +322,13 @@ const FAILURE_DETAIL_BOUNDS = { MESSAGE_CHARS: 200, KEYS_CHARS: 120 } as const;
  * stand before the bare run, because the run would otherwise take a value's
  * head up to its first `-` or `_` and leave the tail; a value ends at a
  * space, an `&`, or a quote, so the parameter after it is still read.
+ * Note that a name's prefix is bounded at 64 word characters, because an
+ * unbounded `\w*` before the name reads as rescanned from every offset of a
+ * long word run, which is quadratic, even though the bare run takes such a
+ * run first; a longer prefix still loses its value to the bare run.
  */
 const CREDENTIAL_PATTERN =
-  /sk-[A-Za-z0-9_-]{8,}|Bearer\s+\S+|eyJ[A-Za-z0-9_.-]{16,}|(?:AKIA|ASIA)[0-9A-Z]{16}|\w*(?:key|token|secret)"?\s*[=:]\s*"?[^\s&"']+|[A-Za-z0-9+/=_-]{32,}/gi;
+  /sk-[A-Za-z0-9_-]{8,}|Bearer\s+\S+|eyJ[A-Za-z0-9_.-]{16,}|(?:AKIA|ASIA)[0-9A-Z]{16}|\w{0,64}(?:key|token|secret)"?\s*[=:]\s*"?[^\s&"']+|[A-Za-z0-9+/=_-]{32,}/gi;
 
 const REDACTED = "[redacted]";
 

@@ -468,4 +468,16 @@ it("a failure message keeps its words and loses every run shaped like a credenti
     "id [redacted] and [redacted] refused",
   );
   assert.equal(redactCredentials("Invalid API key provided"), "Invalid API key provided");
+  assert.equal(
+    redactCredentials(`{"accessToken": "fixture.value"} client_secret:fixture refused`),
+    `{"[redacted]"} [redacted] refused`,
+  );
+});
+
+it("a failure message of one long word run ending in a bare name is read in one pass", () => {
+  // Note that a name's prefix is bounded, so no offset of this run is rescanned to its end.
+  const run = `${"a".repeat(50_000)}key`;
+  assert.equal(redactCredentials(run), "[redacted]");
+  assert.equal(redactCredentials(`${run} refused`), "[redacted] refused");
+  assert.equal(redactCredentials(`${"a".repeat(100)}_key=fixture refused`), "[redacted] refused");
 });
