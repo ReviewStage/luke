@@ -202,12 +202,14 @@ function boundTitle(element: HTMLElement): void {
  * again. Its words are the name's own but while they are typed, so a
  * refused rename puts the saved name back here and everywhere, unless words
  * were typed since it was asked for, which are the newest and are kept for
- * the next pause to ask for again.
+ * the next pause to ask for again. Each Rename chosen from the title's ⋯
+ * puts the caret at its end, as ↑ from the text's first line does.
  */
 export function EditableTitle({
   name,
   entry,
   editing,
+  renaming = 0,
   onRename,
   onDraft,
 }: {
@@ -215,6 +217,8 @@ export function EditableTitle({
   /** Whether this block is where Tab enters the document. */
   entry: boolean;
   editing: PlanEditing;
+  /** How many times Rename was chosen; each change is an ask of its own. */
+  renaming?: number;
   /** Renames the plan, answering whether the name was taken. */
   onRename: (name: string) => Promise<boolean>;
   onDraft: (name: string | undefined) => void;
@@ -237,6 +241,13 @@ export function EditableTitle({
   const echo = useRef<string | undefined>(undefined);
   const doors = useRef({ onRename, onDraft });
   doors.current = { onRename, onDraft };
+  // The Rename last answered, so only a newer one puts the caret here.
+  const renamed = useRef(renaming);
+  useEffect(() => {
+    if (renaming === renamed.current || text.current === null) return;
+    renamed.current = renaming;
+    caretAtEnd(text.current);
+  }, [renaming]);
   useLayoutEffect(() => {
     const element = text.current;
     if (element === null || name === echo.current) return;
