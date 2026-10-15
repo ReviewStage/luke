@@ -243,14 +243,14 @@ const ACME: Workspace = {
   github: null,
 };
 
-test("the window is called by what stands in it: the plan on screen, else the Inbox or Settings, and Luke once signed out", () => {
-  const titled = (inboxOpen: boolean, tab: PanelTab, signedIn = true) => {
+test("the window is called by what stands in it: the plan on screen in its own workspace, else the Inbox or Settings, and Luke once signed out", () => {
+  const titled = (inboxOpen: boolean, tab: PanelTab, signedIn = true, workspaces = [ACME]) => {
     mount(
       inboxOpen,
       false,
       {
         signedIn,
-        workspaces: [ACME],
+        workspaces,
         workspace: ACME,
         region: { kind: DOCUMENT_REGION.READY, plan: DOCUMENT_PLAN },
       },
@@ -267,7 +267,8 @@ test("the window is called by what stands in it: the plan on screen, else the In
       titled(true, PANEL_TAB.PLANS),
       titled(false, PANEL_TAB.SETTINGS),
       titled(false, PANEL_TAB.PLANS, false),
+      titled(false, PANEL_TAB.PLANS, true, [{ ...ACME, id: "workspace-other" }]),
     ],
-    [`${DOCUMENT_NAME} — Acme`, "Inbox — Acme", "Settings", "Luke"],
+    [`${DOCUMENT_NAME} — Acme`, "Inbox — Acme", "Settings", "Luke", DOCUMENT_NAME],
   );
 });

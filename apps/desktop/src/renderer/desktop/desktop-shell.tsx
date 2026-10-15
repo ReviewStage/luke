@@ -203,7 +203,8 @@ function transcriptStreaming(plans: PlansControl): boolean {
 /**
  * What the window's title names: Settings alone, whose pages are not one
  * workspace's; the Inbox in the listed workspace, whatever plan its item is
- * from; the plan on screen in its own workspace; else the listed workspace.
+ * from; the plan on screen in its own workspace, or alone while that is not
+ * read; else the listed workspace.
  */
 function titleSubject(
   tab: PanelTab,
@@ -213,11 +214,10 @@ function titleSubject(
   const { signedIn } = plans;
   if (tab === PANEL_TAB.SETTINGS) return { signedIn, subject: "Settings", workspace: undefined };
   if (plans.inboxView.open) return { signedIn, subject: "Inbox", workspace: plans.workspace };
-  const workspace =
-    shownPlan === undefined
-      ? undefined
-      : plans.workspaces.find((each) => each.id === shownPlan.workspaceId);
-  return { signedIn, subject: shownPlan?.name, workspace: workspace ?? plans.workspace };
+  if (shownPlan === undefined) return { signedIn, subject: undefined, workspace: plans.workspace };
+  // Note that a plan whose workspace is not read yet is named alone, because the listed one may not be its.
+  const workspace = plans.workspaces.find((each) => each.id === shownPlan.workspaceId);
+  return { signedIn, subject: shownPlan.name, workspace };
 }
 
 /**
