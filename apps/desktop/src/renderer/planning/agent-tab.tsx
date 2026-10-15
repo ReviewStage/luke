@@ -77,6 +77,7 @@ import {
   type WorkerJobs,
 } from "./tool-call-model";
 import {
+  MacOwnerProvider,
   TranscriptNote,
   TranscriptOpeningCall,
   TranscriptReasoning,
@@ -761,35 +762,37 @@ function AgentTabView({
   const working = agentStillWriting(agent.status);
   return (
     <section className="agent-tab ph-no-capture" aria-label={agentTabLabel(agent, models)}>
-      <AgentTranscriptView
-        messages={lines}
-        brief={agent.brief}
-        briefSender={starter}
-        delegation={{
-          models,
-          own: { model: agent.model, effort: agent.effort },
-          starts: delegationStarts && workerStarts(delegationStarts, transcript.subagents),
-          onOpen: onOpenSubagent,
-          onOpenTarget,
-          cards,
-          standings: transcript.subagents,
-        }}
-        reading={transcript.reading}
-        failed={transcript.failed}
-        working={working}
-        sessionStarting={agent.status === CODING_AGENT_STATUS.STARTING}
-        startedAt={startedAt}
-        ended={endLine(agent.status, transcript.failure, transcript.turnUsage, starter)}
-        endReason={endLineReason(transcript.failure, starter)}
-        onOpenApiKeys={onOpenApiKeys}
-        onRetry={transcript.onRetry}
-        footer={
-          showsPublishedRow(agent.status, published) ? (
-            <PublishedRow pullRequest={published.pullRequest} openGitHub={openGitHub} />
-          ) : null
-        }
-        overComposer
-      />
+      <MacOwnerProvider value={starter}>
+        <AgentTranscriptView
+          messages={lines}
+          brief={agent.brief}
+          briefSender={starter}
+          delegation={{
+            models,
+            own: { model: agent.model, effort: agent.effort },
+            starts: delegationStarts && workerStarts(delegationStarts, transcript.subagents),
+            onOpen: onOpenSubagent,
+            onOpenTarget,
+            cards,
+            standings: transcript.subagents,
+          }}
+          reading={transcript.reading}
+          failed={transcript.failed}
+          working={working}
+          sessionStarting={agent.status === CODING_AGENT_STATUS.STARTING}
+          startedAt={startedAt}
+          ended={endLine(agent.status, transcript.failure, transcript.turnUsage, starter)}
+          endReason={endLineReason(transcript.failure, starter)}
+          onOpenApiKeys={onOpenApiKeys}
+          onRetry={transcript.onRetry}
+          footer={
+            showsPublishedRow(agent.status, published) ? (
+              <PublishedRow pullRequest={published.pullRequest} openGitHub={openGitHub} />
+            ) : null
+          }
+          overComposer
+        />
+      </MacOwnerProvider>
       <footer className="agent-tab-foot">
         <TodosDock messages={lines} working={working} />
         {onUnarchive !== undefined ? (

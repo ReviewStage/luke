@@ -48,7 +48,7 @@ import {
   WorkflowIcon,
   WrenchIcon,
 } from "lucide-react";
-import { type ComponentProps, Fragment, type ReactNode } from "react";
+import { type ComponentProps, createContext, Fragment, type ReactNode, useContext } from "react";
 import { type Components, defaultRemarkPlugins, type ExtraProps } from "streamdown";
 import { Fold, FoldBody, FoldChevron, FoldSummary } from "../ai-elements/fold";
 import { MessageResponse, PANEL_MARKDOWN_COMPONENTS } from "../ai-elements/message";
@@ -345,6 +345,12 @@ const CALL_ICON = {
   [CALL_KIND.OTHER]: WrenchIcon,
 } as const satisfies Record<CallKind, LucideIcon>;
 
+/** The teammate whose Mac a transcript's Mac commands ran on, its agent's starter; none for the reader's own, whose ran on their own. */
+const MacOwnerContext = createContext<string | undefined>(undefined);
+
+/** Names whose Mac the transcript under it ran its Mac commands on. */
+export const MacOwnerProvider = MacOwnerContext.Provider;
+
 export type TranscriptToolProps = Omit<ComponentProps<typeof Tool>, "children"> &
   Pick<ToolHeaderProps, "state" | "subject"> & {
     kind: CallKind;
@@ -376,6 +382,7 @@ export function TranscriptTool({
   const Icon = CALL_ICON[kind];
   const line = callLine(kind, subject, description);
   const command = isCommandKind(kind);
+  const macOwner = useContext(MacOwnerContext);
   return (
     <Tool {...props}>
       <ToolHeader
@@ -385,7 +392,7 @@ export function TranscriptTool({
         subject={line.subject}
         subjectIsCode={line.code}
         subjectInBody={command && input.kind === TOOL_BLOCK.COMMAND}
-        place={callPlace(kind)}
+        place={callPlace(kind, macOwner)}
       />
       <ToolContent>
         <ToolInput block={input} />
