@@ -4248,9 +4248,13 @@ body:has(.app-stage[data-capture="true"])
 /* Factory -------------------------------------------------------------------- */
 
 /* Factory stands in the plan's place as the Inbox does: the toolbar, the
-   summary line, then the line of stations, each a card on the sidebar's
-   ground holding Home's rows, what waits on the developer first and set off
-   from the rest by a hairline. */
+   summary line, then the line of stations, each Settings' card holding
+   Home's rows, what waits on the developer first and set off from the rest
+   by a hairline. The stations stretch to one height and fill the room, so
+   the line reads as one piece, and the arrows between them carry the flow
+   in the tertiary ink, past 3:1 against the ground in both appearances.
+   With too little room for three side by side the stations stack, and the
+   arrows turn down. */
 .factory-view {
   display: flex;
   min-width: 0;
@@ -4264,6 +4268,7 @@ body:has(.app-stage[data-capture="true"])
   flex: 1;
   overflow-y: auto;
   padding: 0 var(--content-inset) var(--space-32);
+  container-type: inline-size;
 }
 
 .factory-summary {
@@ -4292,26 +4297,28 @@ body:has(.app-stage[data-capture="true"])
 .factory-line-up {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr);
-  align-items: start;
+  align-items: stretch;
   column-gap: var(--space-8);
-  max-width: 1080px; /* off-scale */
 }
 
 .factory-step {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  padding: var(--space-8) var(--space-4) var(--space-4);
-  border: 1px solid var(--hairline);
-  border-radius: var(--menu-radius);
-  background: var(--desktop-sidebar);
+  padding: var(--space-8) var(--space-4) var(--space-6);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--control-radius);
+  background: var(--section-fill);
 }
 
+/* An arrow stands level with the stations' heads, where the eye reads the
+   line, rather than halfway down the longest list, which may stand below the
+   window's foot. */
 .factory-arrow {
   display: flex;
   align-self: start;
-  margin-top: var(--space-6);
-  color: var(--selected-edge);
+  margin-top: var(--space-12);
+  color: var(--text-tertiary);
 }
 
 .factory-arrow svg {
@@ -4396,10 +4403,17 @@ body:has(.app-stage[data-capture="true"])
   color: var(--text-tertiary);
 }
 
-.factory-more {
-  padding: var(--space-4) var(--row-inset) var(--space-6);
-  color: var(--text-tertiary);
-  font-size: 12px;
+@container (width < 720px) {
+  .factory-line-up {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: var(--space-6);
+  }
+
+  .factory-arrow {
+    justify-self: center;
+    margin-top: 0;
+    transform: rotate(90deg);
+  }
 }
 
 /* Automations ---------------------------------------------------------------- */

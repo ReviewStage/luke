@@ -85,9 +85,6 @@ const STEPS = {
   [FACTORY_STEP.SHIP]: { name: "Ship", Icon: GitMergeIcon, idle: "Nothing shipped today" },
 } as const;
 
-/** The most rows of work a station lists before it counts the rest; what waits on the developer is never cut. */
-const STEP_ROWS = 4;
-
 const CallGlyph = SIDE_PANEL_TAB_KIND[SIDE_PANEL_TAB.CALL].icon;
 
 /** What a block's row says it waits for. */
@@ -251,14 +248,7 @@ function Station({
           {needs}
         </ul>
       )}
-      {rows.length === 0 ? null : (
-        <ul className="sidebar-plans factory-rows">
-          {rows.slice(0, STEP_ROWS)}
-          {rows.length > STEP_ROWS ? (
-            <li className="factory-more">{rows.length - STEP_ROWS} more</li>
-          ) : null}
-        </ul>
-      )}
+      {rows.length === 0 ? null : <ul className="sidebar-plans factory-rows">{rows}</ul>}
     </section>
   );
 }
