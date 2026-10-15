@@ -421,7 +421,7 @@
           "dest": "/admin.html"
         },
         {
-          "src": "/[^/]+/plan/[^/]+(/files/[^/]+)?/?",
+          "src": "/(?!api/)[^/]+/(?:plan|task|agent|inbox|automations?|factory|settings)(?:/[^/]+)*/?",
           "dest": "/open.html"
         }
       ]

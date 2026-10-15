@@ -1,3 +1,4 @@
+import { isAppLinkProtocol, LINK_HOME } from "@luke/features/link-home";
 import { decodeMention, MENTION_KIND } from "@luke/features/mention-link";
 
 /**
@@ -21,7 +22,7 @@ import { decodeMention, MENTION_KIND } from "@luke/features/mention-link";
  */
 
 /** The app's own scheme, as the bundle registers it with macOS. */
-export const APP_LINK_SCHEME = "tryluke";
+export const APP_LINK_SCHEME = LINK_HOME.APP_SCHEME;
 
 /** The most links held while no window can open them; a launch hands one. */
 const MAX_HELD = 8;
@@ -45,9 +46,15 @@ export interface AppLinkInbox {
   readonly close: () => void;
 }
 
+/** Whether an argument is a link in the app's own scheme, or one it was once handed links in. */
+function isAppLink(argument: string): boolean {
+  const colon = argument.indexOf(":");
+  return colon > 0 && isAppLinkProtocol(argument.slice(0, colon + 1));
+}
+
 /** The plan and section a link in the app's own scheme names; nothing for any other address. */
 export function placeOfAppLink(url: string): AppLinkPlace | undefined {
-  if (!url.startsWith(`${APP_LINK_SCHEME}:`)) return undefined;
+  if (!isAppLink(url)) return undefined;
   const mention = decodeMention(url, null);
   if (mention?.kind === MENTION_KIND.PLAN) return { planId: mention.planId };
   if (mention?.kind === MENTION_KIND.SECTION) {
@@ -58,7 +65,7 @@ export function placeOfAppLink(url: string): AppLinkPlace | undefined {
 
 /** The link a launch's arguments carry, as a second launch hands one: the last argument in the app's own scheme. */
 export function appLinkInArguments(argv: readonly string[]): string | undefined {
-  return argv.findLast((argument) => argument.startsWith(`${APP_LINK_SCHEME}:`));
+  return argv.findLast(isAppLink);
 }
 
 /** What a launch hands Electron after the scheme when it claims it: the binary a link starts, and the arguments it starts it with. */
