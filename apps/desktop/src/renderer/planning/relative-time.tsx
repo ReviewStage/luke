@@ -11,8 +11,8 @@ import { agoText, momentText, sinceText } from "./plan-time";
  * (`agoText`), the plan's own "Edited by" line's word. The full moment hangs
  * in the window's pill rather than the system's `title`, as every other hint
  * here does. Note that a time drawn on a hover card raises no pill
- * (`hint={false}`), because one tooltip stands in the window at a time and a
- * pill on a card would take the card down; nor does a sidebar or Inbox row's,
+ * (`hint={false}`), because a pill hung from a card stands over the card and
+ * covers the words it is read beside; nor does a sidebar or Inbox row's,
  * which steps out of sight while its row is hovered, so no pointer rests on it.
  */
 
