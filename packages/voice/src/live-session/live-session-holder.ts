@@ -859,8 +859,11 @@ export class LiveSessionHolder {
    * start the service never answers ends at `AVATAR_START_BOUND`, and a
    * grant whose join hangs fails on livekit-client's own connect and
    * peer-connection timeouts, which the avatar's window reports as an error
-   * end that stops the avatar here. A call that ends first sends nothing: the
-   * service drops the held cue at the hang-up.
+   * end that stops the avatar here. A room that joins but never draws a
+   * video frame holds the greeting until the developer turns video off or
+   * speaks first; the call itself is never held, only Luke's opening. A call
+   * that ends first sends nothing: the service drops the held cue at the
+   * hang-up.
    */
   #letGreet(session: HeldSession | undefined): void {
     if (session === undefined || session.ended || !session.greetingHeld) return;
