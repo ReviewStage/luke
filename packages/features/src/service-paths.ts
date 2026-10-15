@@ -356,34 +356,6 @@ export function planAgentsPath(planId: string): string {
 }
 
 /**
- * One plan's inbox: every item its coding agents posted for the developer,
- * past a cursor (GET), held open while nothing changed, as an agent's
- * transcript is. `inbox-wire.ts` declares the answer.
- */
-export function planInboxPath(planId: string, after?: string): string {
-  const path = `${planPath(planId)}/inbox`;
-  if (after === undefined) return path;
-  const query = new URLSearchParams({ after });
-  return `${path}?${query}`;
-}
-
-/** One agent's inbox past a cursor (GET), held open while nothing changed as a plan's is, an agent with no plan as much as one on a plan; the same answer as `planInboxPath`'s read. */
-export function agentInboxPath(agentId: string, after: string): string {
-  const query = new URLSearchParams({ after });
-  return `/api/agents/${encodeURIComponent(agentId)}/inbox?${query}`;
-}
-
-/** One item of a plan's inbox, answered by the developer (POST) against the revision they saw; `inbox-wire.ts` declares the request and the answer. */
-export function inboxItemPath(itemId: string): string {
-  return `/api/inbox/${encodeURIComponent(itemId)}`;
-}
-
-/** One attachment of an inbox item, an image block's picture, as its bytes under its own media type (GET), served to the item's account alone. */
-export function inboxAttachmentPath(itemId: string, attachmentId: string): string {
-  return `${inboxItemPath(itemId)}/attachments/${encodeURIComponent(attachmentId)}`;
-}
-
-/**
  * One agent's messages: its transcript past a cursor (GET), held open while
  * the agent runs, or, with no cursor, a message sent to it (POST).
  * `coding-agent-wire.ts` declares the answer and the request.

@@ -4,17 +4,11 @@ import {
   ASK_STATUS,
   type ChatBlock,
   type ChatChoice,
-  type ChatCodeBlock,
-  type ChatField,
-  type ChatFieldValue,
   type ChatForm,
-  type ChatFormValue,
   type ChatImageBlock,
   type ChatImageType,
   type ChatPostBlock,
-  type ChatReadResponse,
   type ChatReply,
-  type ChatReplyKind,
   type ChatResponse,
   chatKeySchema,
   chatPostBlocksSchema,
@@ -127,8 +121,6 @@ export type InboxStatus = (typeof ASK_STATUS)[keyof typeof ASK_STATUS];
 /** How the developer answered an item: how an ask is answered. */
 export { CHAT_REPLY as INBOX_REPLY } from "./chat-blocks.js";
 
-export type InboxReplyKind = ChatReplyKind;
-
 function filledText(maximumChars: number) {
   return EffectSchema.String.check(
     EffectSchema.isNonEmpty(),
@@ -143,8 +135,6 @@ export {
 } from "./chat-blocks.js";
 
 export type InboxBlock = ChatBlock;
-
-export type InboxCodeBlock = ChatCodeBlock;
 
 export { codeLinesReadable } from "./chat-blocks.js";
 
@@ -161,11 +151,8 @@ export {
   chatFieldSchema as inboxFieldSchema,
   chatOptionSchema as inboxOptionSchema,
   chatPostBlocksSchema as inboxPostBlocksSchema,
+  chatResponseSchema as inboxResponseSchema,
 } from "./chat-blocks.js";
-
-export type InboxField = ChatField;
-
-export { chatResponseSchema as inboxResponseSchema } from "./chat-blocks.js";
 
 export type InboxResponse = ChatResponse;
 
@@ -199,15 +186,9 @@ export const inboxCloseInputSchema = EffectSchema.Struct({
 /** What a read's tool part carries as its input: nothing, since an agent reads its own items alone. */
 export const inboxReadInputSchema = EffectSchema.Struct({});
 
-export { chatFieldValueSchema as inboxFieldValueSchema } from "./chat-blocks.js";
-
-export type InboxFieldValue = ChatFieldValue;
-
-export { chatFormValueSchema as inboxFormValueSchema } from "./chat-blocks.js";
-
-export type InboxFormValue = ChatFormValue;
-
 export {
+  chatFieldValueSchema as inboxFieldValueSchema,
+  chatFormValueSchema as inboxFormValueSchema,
   chatFormValuesSchema as inboxFormValuesSchema,
   chatReplySchema as inboxReplySchema,
 } from "./chat-blocks.js";
@@ -218,8 +199,6 @@ export {
   chatReadBlockSchema as inboxReadBlockSchema,
   chatReadResponseSchema as inboxReadResponseSchema,
 } from "./chat-blocks.js";
-
-export type InboxReadResponse = ChatReadResponse;
 
 /** One item as the desktop reads it. */
 export const inboxItemSchema = EffectSchema.Struct({
@@ -274,8 +253,6 @@ export const inboxAnswerRequestSchema = EffectSchema.Struct({
   clientKey: filledText(INBOX_BOUNDS.MAX_CLIENT_KEY_CHARS),
 });
 
-export type InboxAnswerRequest = typeof inboxAnswerRequestSchema.Type;
-
 /** What an answer comes back as: the item as it then stands, and whether the answer was taken, which it is not where the agent changed the item first. */
 export const inboxAnsweredSchema = EffectSchema.Struct({
   item: inboxItemSchema,
@@ -284,8 +261,6 @@ export const inboxAnsweredSchema = EffectSchema.Struct({
 
 /** How the developer's answer opens, in the message that hands it to the agent. */
 export const INBOX_ANSWER_LEAD = "Inbox answer";
-
-export { fieldValueWords, knownBlock, knownResponse } from "./chat-blocks.js";
 
 /**
  * The message an answer reaches the agent as: a first line naming the item

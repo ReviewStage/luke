@@ -43,7 +43,6 @@ import type { ChoiceWriter } from "./use-agent-model";
 import { type PullRequestReader, usePlanPullRequests } from "./use-agent-pull-request";
 import type { ServersWriter } from "./use-agent-servers";
 import type { TranscriptReader } from "./use-agent-transcript";
-import type { InboxAnswerer, InboxImageReader, InboxReader } from "./use-plan-inbox";
 
 /** No words to listen for, one array so a render that has none hands down the same one. */
 const NO_KEYWORDS: readonly string[] = [];
@@ -102,8 +101,6 @@ export interface CodingAgentsControl {
   archived: readonly CodingAgentSummary[] | undefined;
   /** The agent tabs the panel may show, by agent id; nothing before the first read lands. */
   agentIds: readonly string[] | undefined;
-  /** Every agent of the plan by id, an archived one among them, which its Inbox stands on, since an archived agent's items still stand; nothing before the first read lands. */
-  heldIds: readonly string[] | undefined;
   /** Whether the last read of the list did not land. */
   listFailed: boolean;
   /** Reads the list again: after a read that failed, or as the column's "+" opens, so it says where each agent stands now. */
@@ -195,12 +192,6 @@ export interface CodingAgentsControl {
   keywords: readonly string[];
   /** The skills of the open plan's repository a `/` in an agent's box offers, read once for the plan (`repository-skills.ts`); nothing while the plan names no repository. */
   readSkills: SkillSource | undefined;
-  /** One read of a plan's inbox past a cursor, as the Inbox tab's loop asks it. */
-  readInbox: InboxReader;
-  /** One answer to an inbox item, as a card sends it. */
-  answerInbox: InboxAnswerer;
-  /** One read of an inbox item's image, as its card asks it. */
-  readInboxImage: InboxImageReader;
 }
 
 /** An agent not yet started: the key its first message starts it under, the words written so far, the files attached to them, the choice made on its chip, none while it runs on the account's default, and the MCP servers switched off for it. */
@@ -712,16 +703,6 @@ export function useCodingAgents(input: {
     [act],
   );
 
-  const readInbox = useCallback<InboxReader>(
-    (params) => act(ACT_KIND.CODING_AGENTS_INBOX, params),
-    [act],
-  );
-
-  const answerInbox = useCallback<InboxAnswerer>(
-    (params) => act(ACT_KIND.CODING_AGENTS_INBOX_ANSWER, params),
-    [act],
-  );
-
   // Note that the skills are kept for the plan and its repository as they
   // stand, so another plan, or the plan moved to another repository, reads afresh.
   const readSkills = useMemo(
@@ -732,16 +713,10 @@ export function useCodingAgents(input: {
     [act, planId, repository],
   );
 
-  const readInboxImage = useCallback<InboxImageReader>(
-    (params) => act(ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT, params),
-    [act],
-  );
-
   return {
     agents,
     archived: archivedAgents,
     agentIds: agents?.map((agent) => agent.id),
-    heldIds: held?.map((agent) => agent.id),
     draft,
     onNewDraft,
     onDraftChange,
@@ -780,8 +755,5 @@ export function useCodingAgents(input: {
     readChanges,
     keywords: input.keywords ?? NO_KEYWORDS,
     readSkills,
-    readInbox,
-    answerInbox,
-    readInboxImage,
   };
 }

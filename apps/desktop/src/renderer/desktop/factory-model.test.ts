@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { ACCOUNT_CHAT_REASON, type AccountChatEntry } from "@luke/features/account-inbox-wire";
 import {
   CHECK_SUMMARY,
   CODING_AGENT_STATUS,
@@ -11,7 +12,6 @@ import type {
   PlanSummary,
 } from "@luke/features/plan-wire";
 import { test } from "vitest";
-import type { AppInboxPlan } from "#shared/messages/app-state";
 import {
   EMPTY_MERGED,
   FACTORY_STEP,
@@ -77,6 +77,26 @@ function agents(
   };
 }
 
+/** A chat message main's read says waits on the developer: from whom, why, in which plan's channel, and when. */
+function waitingFor(
+  n: number,
+  reason: AccountChatEntry["reason"],
+  from: string,
+  planId: string | null,
+  at: number,
+): AccountChatEntry {
+  return {
+    messageId: `10000000-0000-4000-8000-${String(n).padStart(12, "0")}`,
+    seq: n,
+    workspaceId: "workspace-personal",
+    reason,
+    from,
+    planId,
+    touchedSeq: n,
+    updatedAt: at,
+  };
+}
+
 function board(patch: Partial<FactoryInput>) {
   return factoryBoard({
     plans: [],
@@ -126,40 +146,23 @@ test("the plan on the call is being planned however long ago it was saved, and s
   );
 });
 
-test("each open Inbox item waits under Build with its plan, the longest waiting first, and is the wait to take first", () => {
+test("each open ask in a plan's channel waits under Build with its plan, the longest waiting first, and is the wait to take first", () => {
   const stalled = agent(1, CODING_AGENT_STATUS.COMPLETED);
   const billing = plan(1, "Mercury payouts", 2 * HOUR, agents([stalled]));
   const invites = plan(2, "Invitations", HOUR, agents([agent(2, CODING_AGENT_STATUS.RUNNING)]));
-  const waiting: AppInboxPlan[] = [
-    {
-      planId: invites.id,
-      items: [
-        {
-          id: "i1",
-          agentId: "unlisted",
-          title: "Expire invites after a week?",
-          postedAt: NOW - 6 * MINUTE,
-        },
-      ],
-    },
-    {
-      planId: billing.id,
-      items: [
-        {
-          id: "i2",
-          agentId: stalled.id,
-          title: "Which account pays out?",
-          postedAt: NOW - 2 * HOUR,
-        },
-      ],
-    },
+  const waiting = [
+    waitingFor(1, ACCOUNT_CHAT_REASON.ASK, "invites-agent", invites.id, NOW - 6 * MINUTE),
+    waitingFor(2, ACCOUNT_CHAT_REASON.ASK, "billing-agent", billing.id, NOW - 2 * HOUR),
+    // A direct message is read rather than answered, and an ask in no plan's channel holds up no step.
+    waitingFor(3, ACCOUNT_CHAT_REASON.DIRECT, "ana", billing.id, NOW - 3 * HOUR),
+    waitingFor(4, ACCOUNT_CHAT_REASON.ASK, "planner", null, NOW - 4 * HOUR),
   ];
   const drawn = board({ plans: [billing, invites], waiting });
   assert.deepEqual(
-    drawn.questions.map((question) => [question.item.title, question.plan.name]),
+    drawn.questions.map((question) => [question.ask.from, question.plan.name]),
     [
-      ["Which account pays out?", "Mercury payouts"],
-      ["Expire invites after a week?", "Invitations"],
+      ["billing-agent", "Mercury payouts"],
+      ["invites-agent", "Invitations"],
     ],
   );
   // A plan whose only agent is stalled stands in the wait alone, not among the plans being built.

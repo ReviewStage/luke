@@ -22,7 +22,7 @@ import { SESSION_RECORDER_ASSET, sessionRecorderLoaded } from "./session-recorde
  * pictures of the person's screen, a plan's title and the editor its document
  * is edited in, whose masked value would still record the rhythm of the
  * typing, and its whiteboard, transcript, Work, Code, File, and page tabs,
- * version history, Inbox, Chat, and coding agents' tabs and their Terminal tabs,
+ * version history, Chat, and coding agents' tabs and their Terminal tabs,
  * among others. The whiteboard and a Terminal tab are the surfaces that draw
  * their words on a canvas, which the text masking cannot reach, so their
  * block is their only line, and canvas recording is held off by name rather
@@ -230,7 +230,7 @@ function preloadRemoteConfig(key: string): void {
  * bundle), inputs masked by the library's default, the attributes that carry
  * words or an image asterisked while `class` and `style` still lay out, every
  * `href` among them but the two the replay lays out by (a stylesheet's and an
- * icon's symbol), because a link in a transcript or an Inbox item may go to
+ * icon's symbol), because a link in a transcript or a chat message may go to
  * any page and its address can carry a token, autocapture off, since a click event carries the text of what was clicked,
  * and canvas recording off, since a canvas carries its words as pixels. Note
  * that the canvas option is set here rather than left to the library's

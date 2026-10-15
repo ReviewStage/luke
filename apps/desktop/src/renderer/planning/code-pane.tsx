@@ -144,7 +144,7 @@ export function CodeLineRows({
 const REVEAL_TOP_PX = 44;
 
 /** A card's lines. */
-export function CodeLines({ code }: { code: PlanCode }): React.JSX.Element {
+function CodeLines({ code }: { code: PlanCode }): React.JSX.Element {
   return (
     <div className="code-lines">
       <CodeLineRows firstLine={code.firstLine} lines={code.lines} pointed={code.ref} />

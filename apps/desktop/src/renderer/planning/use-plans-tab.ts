@@ -1,3 +1,4 @@
+import type { AccountChatEntry } from "@luke/features/account-inbox-wire";
 import type { Board } from "@luke/features/board-wire";
 import { dictationKeywords } from "@luke/features/dictation-keywords";
 import type { GitHubConnection } from "@luke/features/github-connection-wire";
@@ -38,11 +39,7 @@ import { callInProgress, VOICE_COMMAND, type VoiceView } from "@luke/voice/voice
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
-import {
-  type AppInboxPlan,
-  type AppInboxPlanHolding,
-  RUN_PROFILE,
-} from "#shared/messages/app-state";
+import { RUN_PROFILE } from "#shared/messages/app-state";
 import type { ActHandle } from "../act";
 import { callCard } from "../call/call-card-model";
 import { useCopyToast } from "../copy-feedback";
@@ -176,35 +173,12 @@ interface SourceReveal {
   readonly source: Exclude<RevisionSource, { kind: typeof REVISION_SOURCE.AGENT }>;
 }
 
-/** The item chosen in the window's Inbox, and the plan it belongs to. */
-export interface InboxChoice {
-  readonly planId: string;
-  readonly itemId: string;
-}
-
 /**
- * The window's Inbox, standing in the plan's place beside the sidebar: the
- * items of every plan holding one in a column of their own, and the chosen
- * item beside them. It is the window's alone, as a version history is, so
- * it leaves the plan the host has open, and the call bound to it, as they
- * stand; opening any plan, or a new one, leaves it. The item chosen is kept
- * while it stands, so the item answered stays in sight.
- */
-interface InboxViewControl {
-  readonly open: boolean;
-  /** The item chosen in it, none until one is, where the list's first stands in. */
-  readonly chosen: InboxChoice | undefined;
-  readonly onOpen: () => void;
-  readonly onClose: () => void;
-  readonly onChoose: (chosen: InboxChoice) => void;
-}
-
-/**
- * One agent's page, standing in the plan's place beside the sidebar as the
- * Inbox does: the agent an automation started with no plan, which has no
+ * One agent's page, standing in the plan's place beside the sidebar as
+ * Chat does: the agent an automation started with no plan, which has no
  * plan's column to stand in, drawn as its tab would be. It is the window's
- * alone, as the Inbox is, so it leaves the plan the host has open as it
- * stands; opening any plan, the Inbox, or home leaves it.
+ * alone, as Chat is, so it leaves the plan the host has open as it
+ * stands; opening any plan, Chat, or home leaves it.
  */
 interface AgentViewControl {
   /** The agent whose page stands, none while none does. */
@@ -215,15 +189,13 @@ interface AgentViewControl {
 
 /** What may stand in the plan's place, the window's own rather than the plan's. */
 const STAND_IN = {
-  INBOX: "inbox",
   AGENT: "agent",
   FACTORY: "factory",
   CHAT: "chat",
 } as const;
 
-/** The window's Inbox with the item chosen in it, one agent's page, Factory, or Chat with the place shown in it. */
+/** One agent's page, Factory, or Chat with the place shown in it. */
 type StandIn =
-  | { readonly kind: typeof STAND_IN.INBOX; readonly chosen: InboxChoice | undefined }
   | { readonly kind: typeof STAND_IN.AGENT; readonly agentId: string }
   | { readonly kind: typeof STAND_IN.FACTORY }
   | { readonly kind: typeof STAND_IN.CHAT; readonly place: ChatPlace };
@@ -236,10 +208,10 @@ interface FactoryViewControl {
 }
 
 /**
- * The window's Chat, standing in the plan's place beside the sidebar as the
- * Inbox does and on the same terms: the workspace's channels in a rail of
+ * The window's Chat, standing in the plan's place beside the sidebar: the
+ * workspace's channels in a rail of
  * their own, and For you or the channel chosen beside it. It gives way to
- * the Inbox, an agent's page, and Factory, and they to it. A live run reads
+ * an agent's page and Factory, and they to it. A live run reads
  * the listed workspace's chat from the service (`use-workspace-chat.ts`); a
  * fixture run stages its own.
  */
@@ -282,7 +254,7 @@ export interface PlansControl {
   signedIn: boolean;
   /** The signed-in account's id, whose own edits a plan names "you"; none while signed out, for a fixture, or an identity stored without one. */
   me: string | undefined;
-  /** Every plan of every workspace, in the sidebar's order: the pinned ones first, newest pinned first, then the rest, newest started first; what the palette, the inbox, and the history find a plan in. */
+  /** Every plan of every workspace, in the sidebar's order: the pinned ones first, newest pinned first, then the rest, newest started first; what the palette, Chat, and the history find a plan in. */
   plans: PlanningView["plans"];
   /** Every archived plan of every workspace, newest archived first. */
   archived: PlanningView["plans"];
@@ -383,18 +355,10 @@ export interface PlansControl {
   sectionReveal: { readonly planId: string; readonly reveal: SectionReveal } | undefined;
   /** The plan's page showed the section an ask named, so a later visit to the plan does not show it again. */
   onSectionRevealed: (ask: number) => void;
-  /** Opens a plan on its Inbox tab the same way, opening the tab where it was closed: what ⌘K's Inbox row asks. */
-  onShowInbox: (planId: string) => void;
   /** Opens a plan on its Chat tab, its channel of the workspace's chat, opening the tab where it was closed: what ⌘K's Chat row asks. */
   onShowChat: (planId: string) => void;
-  /** What waits on the developer across the account's plans, as main's read last answered: each plan with an open inbox item, and its items. */
-  inbox: readonly AppInboxPlan[];
-  /** The plan whose Inbox is on screen, or none: what main is told, so an item it shows is not announced. */
-  inboxShown: string | null;
-  /** Every plan holding an inbox item, waiting or settled, the plan whose item changed latest first: what the window's Inbox lists. */
-  inboxPlans: readonly AppInboxPlanHolding[];
-  /** The window's Inbox: whether it stands in the plan's place, the plan chosen in it, and its presses. */
-  inboxView: InboxViewControl;
+  /** What waits on the developer in chat across the account, as main's read last answered: what the sidebar's Chat counts, Home lists, and Factory lines up. */
+  chatWaiting: readonly AccountChatEntry[];
   /** One agent's page: which agent's stands in the plan's place, if any, and its presses. */
   agentView: AgentViewControl;
   /** The window's Factory: whether it stands in the plan's place, and its presses (`desktop-factory.tsx`). */
@@ -403,7 +367,7 @@ export interface PlansControl {
   callPlanId: string | undefined;
   /** The window's Chat: whether it stands in the plan's place, the chat it reads, the place shown in it, and its presses. */
   chatView: ChatViewControl;
-  /** Opens a plan's file in its side panel at the commit named, the reference's lines lit, opening the plan first where it is not the open one: what an inbox item's code opens. */
+  /** Opens a plan's file in its side panel at the commit named, the reference's lines lit, opening the plan first where it is not the open one: what a code reference opens. */
   onShowFile: (planId: string, ref: CodeRef, commit: string) => void;
   /** Opens a tab pinned to the sidebar: its plan, where it is not the open one, and the tab in its column, opening the side panel for one of its own. */
   onOpenPinnedTab: (pin: PinnedTab) => void;
@@ -457,7 +421,7 @@ export interface PlansControl {
   };
   /** Leaves the open plan for the home page; a call on it stands, as opening another plan leaves one. */
   onLeavePlan: () => void;
-  /** Goes to the home page from wherever the tab stands: the open plan left, and the window's Inbox put away. */
+  /** Goes to the home page from wherever the tab stands: the open plan left, and what stood in its place put away. */
   onGoHome: () => void;
   /**
    * Renames a plan to a name already trimmed and changed, drawn under it at
@@ -609,10 +573,8 @@ export function usePlansTab(input: {
   shown: boolean;
   /** The agents main says ended while no one was looking, each until its tab is shown. */
   unseenAgents: readonly string[];
-  /** What main says waits on the developer across the account's plans. */
-  inboxWaiting: readonly AppInboxPlan[];
-  /** Every plan main says holds an inbox item, waiting or settled. */
-  inboxPlans: readonly AppInboxPlanHolding[];
+  /** What main says waits on the developer in chat across the account. */
+  chatWaiting: readonly AccountChatEntry[];
   voice: {
     view: VoiceView;
     listening: boolean;
@@ -642,14 +604,13 @@ export function usePlansTab(input: {
    * opened on, none for the plan as it stands.
    */
   const [historyFor, setHistoryFor] = useState<HistoryOpening | undefined>(undefined);
-  /** What stands in the plan's place while one does: the window's Inbox and the item chosen in it, or one agent's page. */
+  /** What stands in the plan's place while one does: one agent's page, Factory, or Chat. */
   // The chat profile opens Chat at launch over its fixture.
   const [standIn, setStandIn] = useState<StandIn | undefined>(() =>
     input.run.fixtureMode && input.run.profile === RUN_PROFILE.CHAT
       ? { kind: STAND_IN.CHAT, place: FOR_YOU }
       : undefined,
   );
-  const inboxView = standIn?.kind === STAND_IN.INBOX ? standIn : undefined;
   const agentView = standIn?.kind === STAND_IN.AGENT ? standIn : undefined;
   /**
    * The chat a fixture run stages, stamped once at the moment it lands,
@@ -681,7 +642,7 @@ export function usePlansTab(input: {
     setChat(landed.chat);
     return Promise.resolve(undefined);
   };
-  /** A file an inbox item opens on a plan not yet open, opened once the host has it open. */
+  /** A file a code reference opens on a plan not yet open, opened once the host has it open. */
   const [fileFor, setFileFor] = useState<
     { readonly planId: string; readonly ref: CodeRef; readonly commit: string } | undefined
   >(undefined);
@@ -738,7 +699,7 @@ export function usePlansTab(input: {
   }, [accountSignedIn, setClosedTabs]);
   const planning = markedView(renamedView(renamedView(viewed, renames), drafts), marks);
   // The sidebar lists the chosen workspace's plans alone, and everything
-  // else that finds a plan, the palette, the inbox, and the history, finds
+  // else that finds a plan, the palette, Chat, and the history, finds
   // it among them all; with no workspace listed yet, every plan is listed.
   const workspace = useChosenWorkspace(viewed.workspaces, fixture !== undefined);
   // Every workspace listed by a choice is counted, so a move answered late can tell whether one was made since it was pressed.
@@ -865,8 +826,6 @@ export function usePlansTab(input: {
     viewed.activePlanId,
     agents.agentIds,
     agents.draft?.id,
-    input.inboxWaiting.some((plan) => plan.planId === viewed.activePlanId),
-    agents.heldIds,
   );
   mainRef.current = mainTabs;
   // A page's tab is held to the pages agents wrote for the plan.
@@ -894,11 +853,10 @@ export function usePlansTab(input: {
   useEffect(() => {
     if (viewed.activePlanId !== undefined) onRenamePins(viewed.activePlanId, pinLabels);
   }, [viewed.activePlanId, pinLabels, onRenamePins]);
-  // Main hears which agent's tab, or which plan's Inbox, is on screen, and
+  // Main hears which agent's tab is on screen, and whether Chat is, and
   // neither while the tab is away, the version history stands in the plan's
   // place, the side panel fills the window over the column, or the column
   // shows something else; a fixture's staged agents are no one's to announce.
-  // The window's Inbox stands in the column's place, showing the plan whose item is chosen there.
   const columnShown =
     shown &&
     historyFor === undefined &&
@@ -912,31 +870,17 @@ export function usePlansTab(input: {
       : columnShown && isAgentTab(mainTabs.tab)
         ? mainTabs.tab.agent
         : null;
-  const shownInbox =
-    shown && fixture === undefined && inboxView !== undefined
-      ? (inboxView.chosen?.planId ?? null)
-      : columnShown && mainTabs.tab === MAIN_TAB.INBOX
-        ? (viewed.activePlanId ?? null)
-        : null;
   // Chat on screen, the window's or a plan's Chat tab, is where what waits in chat is read, so main announces none of it then.
   const chatOnScreen =
     shown && (standIn?.kind === STAND_IN.CHAT || (columnShown && mainTabs.tab === MAIN_TAB.CHAT));
-  const reportedTab = useRef<
-    { agentId: string | null; inboxPlanId: string | null; chatShown: boolean } | undefined
-  >(undefined);
+  const reportedTab = useRef<{ agentId: string | null; chatShown: boolean } | undefined>(undefined);
   useEffect(() => {
     const was = reportedTab.current;
-    if (
-      was?.agentId === shownAgent &&
-      was.inboxPlanId === shownInbox &&
-      was.chatShown === chatOnScreen
-    ) {
-      return;
-    }
-    const now = { agentId: shownAgent, inboxPlanId: shownInbox, chatShown: chatOnScreen };
+    if (was?.agentId === shownAgent && was.chatShown === chatOnScreen) return;
+    const now = { agentId: shownAgent, chatShown: chatOnScreen };
     reportedTab.current = now;
     tell(ACT_KIND.CODING_AGENTS_SHOWN, now);
-  }, [shownAgent, shownInbox, chatOnScreen, tell]);
+  }, [shownAgent, chatOnScreen, tell]);
 
   // The tab showing is what asks the host to read the plans again; the open
   // plan and its call stand through it going away, and a call's drafts reach
@@ -970,13 +914,13 @@ export function usePlansTab(input: {
   }
   // An answer clears the ask it answers, never one made since.
   const revealed = () => setReveal((held) => (held === reveal ? undefined : held));
-  // A plan opened from another workspace, from the palette, the inbox, or
+  // A plan opened from another workspace, from the palette, Chat, or
   // the history, lists its workspace, so the sidebar holds the plan open.
   const chooseWorkspace = chooseListed;
   const listedId = listedWorkspace?.id;
   const plansNow = planning.plans;
   const workspacesNow = viewed.workspaces;
-  // Opening a plan, or leaving one, is leaving the window's Inbox for it.
+  // Opening a plan, or leaving one, is leaving what stood in its place for it.
   const select = useCallback(
     (planId: string) => {
       setStandIn(undefined);
@@ -1421,7 +1365,7 @@ export function usePlansTab(input: {
   });
 
   // A started plan becomes the host's open one, which turns the page to it,
-  // so the dialog closes and the Inbox or a version history standing behind
+  // so the dialog closes and Chat or a version history standing behind
   // it gives way. It starts in the chosen workspace; with none listed the
   // service starts it in the account's first one. A start opens its
   // plan's call at once, except over a call standing about another plan,
@@ -1467,7 +1411,7 @@ export function usePlansTab(input: {
     setHistoryFor(opening);
   };
 
-  // A plan's own tab, its Inbox, and an agent's are in its column, so a
+  // A plan's own tab, its Chat, and an agent's are in its column, so a
   // version history over it gives way, and so does a side panel filling the
   // window over it.
   const showColumnTab = (planId: string, tab: MainTab) => {
@@ -1478,7 +1422,7 @@ export function usePlansTab(input: {
     mainTabs.onShow(planId, tab);
   };
 
-  // An inbox item's code opens in its plan's File tab; on a plan not yet
+  // A code reference opens in its plan's File tab; on a plan not yet
   // open, once the host has it open, since the panel draws the open plan's.
   const showFile = (planId: string, ref: CodeRef, commit: string) => {
     setStandIn(undefined);
@@ -1541,8 +1485,7 @@ export function usePlansTab(input: {
     [panelStrip, panelFiles, closePanelTab, viewed.activePlanId, setClosedTabs, latestClosedTabs],
   );
   // Whether the open plan's strips draw a closed tab of it again: an agent's
-  // while the agent is not archived, the Inbox while the plan holds an
-  // agent, and a subagent's, a Changes or Terminal tab, or a page's on the strip's own
+  // while the agent is not archived, Chat always, and a subagent's, a Changes or Terminal tab, or a page's on the strip's own
   // terms. Note that what the plan has not read yet counts as drawn, as the
   // strips stand a tab until the read says otherwise.
   const drawsAgain = (closed: ClosedTab): boolean => {
@@ -1550,10 +1493,7 @@ export function usePlansTab(input: {
     const agentIds = agents.agentIds;
     if (closed.strip === CLOSED_TAB_STRIP.COLUMN) {
       if (isAgentTab(tab)) return agentIds === undefined || agentIds.includes(tab.agent);
-      if (tab !== MAIN_TAB.INBOX) return true;
-      const held = agents.heldIds;
-      const waiting = input.inboxWaiting.some((plan) => plan.planId === closed.plan);
-      return held === undefined || held.length > 0 || waiting;
+      return true;
     }
     if (isSubagentTab(tab))
       return drawsSubagent(tab, { agents: mainTabs.openAgents, subagents: workers });
@@ -1564,7 +1504,7 @@ export function usePlansTab(input: {
   };
   const reopenable = withUndrawnPassed(closedTabs, planning.activePlanId, drawsAgain);
   // A closed tab opens again where it stood, in its strip at its place and
-  // showing what it showed, so a version history or the window's Inbox over
+  // showing what it showed, so a version history or Chat over
   // the plan gives way, and a side panel filling the window over its column.
   // One the plan no longer draws, read only once a reopen opened its plan, opens nothing.
   const reopenHere = (closed: ClosedTab) => {
@@ -1724,26 +1664,8 @@ export function usePlansTab(input: {
       select(planId);
     },
     onShowAgent: (planId, agentId) => showColumnTab(planId, { agent: agentId }),
-    inbox: input.inboxWaiting,
-    inboxShown: shownInbox,
-    inboxPlans: input.inboxPlans,
-    // The window's Inbox stands over the plan's place, so a version history there gives way.
-    inboxView: {
-      open: inboxView !== undefined,
-      chosen: inboxView?.chosen,
-      onOpen: () => {
-        setHistoryFor(undefined);
-        setStandIn((held) =>
-          held?.kind === STAND_IN.INBOX ? held : { kind: STAND_IN.INBOX, chosen: undefined },
-        );
-      },
-      onClose: () => setStandIn(undefined),
-      onChoose: (chosen) =>
-        setStandIn((held) =>
-          held?.kind === STAND_IN.INBOX ? { kind: STAND_IN.INBOX, chosen } : held,
-        ),
-    },
-    // Chat stands over the plan's place on the Inbox's terms, each giving way to the other.
+    chatWaiting: input.chatWaiting,
+    // Chat stands over the plan's place, giving way to an agent's page and Factory, and they to it.
     chatView: {
       open: standIn?.kind === STAND_IN.CHAT,
       available: liveRun ? input.signedIn : chat !== undefined,
@@ -1775,7 +1697,7 @@ export function usePlansTab(input: {
           ? liveChat.onAnswer(answer)
           : stage((held, staging) => staging.stagedAnswer(held, answer, Date.now())),
     },
-    // An agent's page stands over the plan's place as the Inbox does, so a version history there gives way.
+    // An agent's page stands over the plan's place as Chat does, so a version history there gives way.
     agentView: {
       agentId: agentView?.agentId,
       onOpen: (agentId) => {
@@ -1784,7 +1706,7 @@ export function usePlansTab(input: {
       },
       onClose: () => setStandIn(undefined),
     },
-    // Factory stands over the plan's place as the Inbox and an agent's page do, each giving way to the others.
+    // Factory stands over the plan's place as Chat and an agent's page do, each giving way to the others.
     factoryView: {
       open: standIn?.kind === STAND_IN.FACTORY,
       onOpen: () => {
@@ -1825,7 +1747,6 @@ export function usePlansTab(input: {
     // Only the ask shown is let go; a newer one stands until its own plan shows it.
     onSectionRevealed: (ask) =>
       setSectionReveal((last) => (last?.reveal.ask === ask ? undefined : last)),
-    onShowInbox: (planId) => showColumnTab(planId, MAIN_TAB.INBOX),
     onShowChat: (planId) => showColumnTab(planId, MAIN_TAB.CHAT),
     // A pinned tab is in one of the plan's columns, so a version history over it gives way as well.
     onOpenPinnedTab: (pin) => {
@@ -1881,8 +1802,8 @@ export function usePlansTab(input: {
       onClose: () => setNewPlanAsk(undefined),
     },
     onLeavePlan: leavePlan,
-    // Home is the page with no plan open, so where none is, only the Inbox, an
-    // agent's page, Factory, or Chat standing over it is put away, and the host is asked nothing.
+    // Home is the page with no plan open, so where none is, only an agent's
+    // page, Factory, or Chat standing over it is put away, and the host is asked nothing.
     onGoHome: () => (boundFor === undefined ? setStandIn(undefined) : leavePlan()),
     onRenamePlan: renamePlan,
     onDraftName: draftName,

@@ -23,7 +23,7 @@ import { SPINNER_SIZE, Spinner } from "../spinner";
  * desktop-chat.tsx -- the window's Chat: the workspace's channels and direct messages in a rail of their own, and For you or the channel chosen read beside it.
  *
  * It stands in the plan's place beside the sidebar, whose Chat row is
- * marked while it does, as the window's Inbox (`desktop-inbox.tsx`) does.
+ * marked while it does, as Factory's row is while Factory stands there.
  * The rail is drawn from the sidebar's own pieces: For you at its head,
  * counting what waits on the developer, then the channels, then the direct
  * messages, each row counting what in it the developer has not read and
@@ -101,7 +101,7 @@ export function DesktopChat({
   accountName: string | undefined;
 }): React.JSX.Element {
   const view = plans.chatView;
-  useAppCommand(APP_COMMAND.EXIT_INBOX, view.onClose);
+  useAppCommand(APP_COMMAND.EXIT_CHAT, view.onClose);
   const now = useMinute();
   const openLink = useOpenLink();
   const read = view.chat;

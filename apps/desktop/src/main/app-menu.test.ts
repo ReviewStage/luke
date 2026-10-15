@@ -26,7 +26,7 @@ describe("the menu bar's gate", () => {
   test("every item stands while every command does", () => {
     assert.deepEqual(labelsOf(appMenuTemplate("Luke"), "Go"), [
       "Home",
-      "Inbox",
+      "Chat",
       "Factory",
       "-",
       "Back",
@@ -35,19 +35,19 @@ describe("the menu bar's gate", () => {
   });
 
   test("a command that does not stand has no item, and strands no separator", () => {
-    const withoutInbox = appMenuTemplate(
+    const withoutChat = appMenuTemplate(
       "Luke",
       undefined,
-      (command) => command !== APP_COMMAND.INBOX,
+      (command) => command !== APP_COMMAND.CHAT,
     );
-    assert.deepEqual(labelsOf(withoutInbox, "Go"), ["Home", "Factory", "-", "Back", "Forward"]);
+    assert.deepEqual(labelsOf(withoutChat, "Go"), ["Home", "Factory", "-", "Back", "Forward"]);
 
     const withoutPlaces = appMenuTemplate(
       "Luke",
       undefined,
       (command) =>
         command !== APP_COMMAND.HOME &&
-        command !== APP_COMMAND.INBOX &&
+        command !== APP_COMMAND.CHAT &&
         command !== APP_COMMAND.FACTORY,
     );
     assert.deepEqual(labelsOf(withoutPlaces, "Go"), ["Back", "Forward"]);

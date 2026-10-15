@@ -22,9 +22,8 @@ service. No part of Luke's judgment runs on this Mac, so no transcript,
 working memory, or inbox of his is held here on disk, and in memory only the
 tabs described next. On disk, under its application data, Luke keeps only
 the layout of its window: which plans' tabs are open and which are pinned,
-each pin with its label (a coding agent's title or a file's path), which
-inbox items you have seen, and which groups you folded and how you sorted
-the Inbox. None of it is sent anywhere.
+each pin with its label (a coding agent's title or a file's path), and
+which groups you folded. None of it is sent anywhere.
 
 **Commands agents run on your Mac.** Luke's planning model, the workers it
 hands work to, every coding agent, and the workers a coding agent hands work
@@ -166,18 +165,13 @@ picture goes when the item stops naming it. Your answer, and any note, is
 stored with the item under the account of whichever member gave it, which
 every member of the plan's workspace sees by name beside the answer, and,
 where the agent asked to hear back, handed to it as one of your messages,
-kept in its transcript. While you are signed in, Luke
-on your Mac keeps a read open to our service for every item waiting on you,
-each in brief (its plan, agent, and title), and for every plan holding an item,
-to count them in its sidebar and on its Dock icon. Opening the Inbox reads
-each of those plans' items whole, the ones you settled included, with what
-each offered and the answer you picked; Luke holds them in memory only, never
-on disk. While its window is behind, a Mac notification names a new item by
-its plan, agent, and title, and a coding agent's ended turn by its plan, the
-agent's title, and whether it finished or failed, or its branch's pull request
-number, unless you turn these off in Settings › Coding agents; macOS shows and
-keeps them as it does any app's. Deleting the plan, or your account, deletes
-its items.
+kept in its transcript. Luke's window has no inbox of its own: what an
+agent asks of you is answered in the workspace's chat (below). While its
+window is behind, a Mac notification names a coding agent's ended turn by
+its plan, the agent's title, and whether it finished or failed, or its
+branch's pull request number, unless you turn these off in Settings › Coding
+agents; macOS shows and keeps them as it does any app's. Deleting the plan,
+or your account, deletes its items.
 
 **A workspace's chat.** A workspace has one chat on our service where its
 coding agents, each plan's Luke, and the people in it talk: a general
@@ -196,11 +190,14 @@ read every channel and every direct message, one between two other people
 included; a coding agent and Luke read the channels and only their own
 direct messages, and only a direct message's two members post in it.
 Deleting a plan deletes its channel with its messages, deleting your account
-deletes your messages, and deleting the workspace deletes its chat. While you are signed in, the same read that keeps
-your waiting inbox items carries what waits on you in chat: every open ask
+deletes your messages, and deleting the workspace deletes its chat. While you are signed in, Luke on your Mac keeps a
+read open to our service for what waits on you in chat, to count it in its
+sidebar and on its Dock icon: every open ask
 someone else posted, and the last direct message or mention of you that you
 have not read, each named only by who posted it, its plan, and its place,
-never its words. While Luke's window is behind, a Mac notification says no
+never its words. The same read still carries each inbox item waiting on
+you in brief (its plan, agent, and title), which Luke reads past and keeps
+nowhere. While Luke's window is behind, a Mac notification says no
 more than that, such as "@agent-2 messaged you" under the plan's name,
 unless you turn notifications off in Settings › Coding agents.
 

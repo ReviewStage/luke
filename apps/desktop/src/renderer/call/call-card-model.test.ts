@@ -115,14 +115,14 @@ test("the call bar is on screen only on a plan's document, and not under its ver
     plansTab: true,
     documentPage: true,
     historyOpen: false,
-    inboxOpen: false,
+    chatOpen: false,
     agentPageOpen: false,
     sidePanelFullScreen: false,
     activePlanId: INVITES,
   };
   assert.equal(callBarPlanId(onPlan), INVITES);
   assert.equal(callBarPlanId({ ...onPlan, historyOpen: true }), undefined);
-  assert.equal(callBarPlanId({ ...onPlan, inboxOpen: true }), undefined);
+  assert.equal(callBarPlanId({ ...onPlan, chatOpen: true }), undefined);
   assert.equal(callBarPlanId({ ...onPlan, agentPageOpen: true }), undefined);
   assert.equal(callBarPlanId({ ...onPlan, sidePanelFullScreen: true }), undefined);
   assert.equal(callBarPlanId({ ...onPlan, documentPage: false }), undefined);

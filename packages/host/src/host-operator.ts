@@ -6,7 +6,6 @@ import {
   type CodingAgentAccountInboxAnswerView,
   type CodingAgentAccountInboxParams,
   type CodingAgentAgentAnswer,
-  type CodingAgentAgentInboxParams,
   type CodingAgentArchiveParams,
   type CodingAgentChangesAnswerView,
   type CodingAgentChatAnswerView,
@@ -15,12 +14,6 @@ import {
   type CodingAgentChatWriteAnswerView,
   type CodingAgentChooseParams,
   type CodingAgentDefaultAnswer,
-  type CodingAgentInboxAnsweredView,
-  type CodingAgentInboxAnswerParams,
-  type CodingAgentInboxAnswerView,
-  type CodingAgentInboxAttachmentParams,
-  type CodingAgentInboxAttachmentView,
-  type CodingAgentInboxParams,
   type CodingAgentListAnswer,
   type CodingAgentListParams,
   type CodingAgentMessageParams,
@@ -41,9 +34,6 @@ import {
   codingAgentChatAnswerViewSchema,
   codingAgentChatWriteAnswerViewSchema,
   codingAgentDefaultAnswerViewSchema,
-  codingAgentInboxAnsweredViewSchema,
-  codingAgentInboxAnswerViewSchema,
-  codingAgentInboxAttachmentViewSchema,
   codingAgentListAnswerViewSchema,
   codingAgentMessagesAnswerViewSchema,
   codingAgentModelsAnswerSchema,
@@ -427,24 +417,10 @@ export interface HostOperator {
   dictationTranscribe(
     params: DictationTranscribeParams,
   ): Effect.Effect<DictationTranscribeAnswerView>;
-  /** One plan's inbox past a cursor, held by the service while nothing changed; or why there is none. */
-  codingAgentInbox(params: CodingAgentInboxParams): Effect.Effect<CodingAgentInboxAnswerView>;
-  /** One agent's inbox past a cursor, an agent with no plan as much as one on a plan, held as a plan's is; or why there is none. */
-  codingAgentAgentInbox(
-    params: CodingAgentAgentInboxParams,
-  ): Effect.Effect<CodingAgentInboxAnswerView>;
-  /** One item of a plan's inbox answered; the item as it then stands and whether the answer was taken, or why there is no answer. */
-  codingAgentInboxAnswer(
-    params: CodingAgentInboxAnswerParams,
-  ): Effect.Effect<CodingAgentInboxAnsweredView>;
   /** What waits on the developer across the account past a cursor, held by the service while nothing changed; or why there is none. */
   codingAgentAccountInbox(
     params: CodingAgentAccountInboxParams,
   ): Effect.Effect<CodingAgentAccountInboxAnswerView>;
-  /** One image of an inbox item, fetched under the account; its bytes in base64 under its media type, or why there is none. */
-  codingAgentInboxAttachment(
-    params: CodingAgentInboxAttachmentParams,
-  ): Effect.Effect<CodingAgentInboxAttachmentView>;
   /** A workspace's chat past a cursor, held by the service while nothing moved; or why there is none. */
   codingAgentChat(params: CodingAgentChatParams): Effect.Effect<CodingAgentChatAnswerView>;
   /** A write to a workspace's chat as the account's own member; what it came to, or why there is no answer. */
@@ -1200,47 +1176,10 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         }),
         codingAgentAnswer(dictationTranscribeAnswerViewSchema),
       ),
-    codingAgentInbox: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_INBOX, {
-          planId: params.planId,
-          after: params.after,
-        }),
-        codingAgentAnswer(codingAgentInboxAnswerViewSchema),
-      ),
-    codingAgentAgentInbox: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_AGENT_INBOX, {
-          agentId: params.agentId,
-          after: params.after,
-        }),
-        codingAgentAnswer(codingAgentInboxAnswerViewSchema),
-      ),
-    codingAgentInboxAnswer: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_INBOX_ANSWER, {
-          itemId: params.itemId,
-          revision: params.revision,
-          reply: params.reply,
-          ...("choices" in params ? { choices: params.choices } : undefined),
-          ...("values" in params ? { values: params.values } : undefined),
-          ...("note" in params ? { note: params.note } : undefined),
-          clientKey: params.clientKey,
-        }),
-        codingAgentAnswer(codingAgentInboxAnsweredViewSchema),
-      ),
     codingAgentAccountInbox: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX, { after: params.after }),
         codingAgentAnswer(codingAgentAccountInboxAnswerViewSchema),
-      ),
-    codingAgentInboxAttachment: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_INBOX_ATTACHMENT, {
-          itemId: params.itemId,
-          attachmentId: params.attachmentId,
-        }),
-        codingAgentAnswer(codingAgentInboxAttachmentViewSchema),
       ),
     codingAgentChat: (params) =>
       Effect.map(

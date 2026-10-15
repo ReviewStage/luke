@@ -10,13 +10,6 @@ import {
   CODING_AGENT_STATUS,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
-import {
-  INBOX_IMAGE_TYPE,
-  INBOX_RESPONSE,
-  INBOX_STATUS,
-  INBOX_WIRE_VERSION,
-  type InboxItem,
-} from "@luke/features/inbox-wire";
 import { DEFAULT_PLAN_TEMPLATE } from "@luke/features/plan-document-template";
 import { PROVIDER_KEY_PROVIDER } from "@luke/features/provider-key-wire";
 import { Effect } from "effect";
@@ -61,20 +54,6 @@ const STARTED: CodingAgentAgentAnswer = {
     turnId: null,
   },
 };
-const ITEM: InboxItem = {
-  id: "5e2d7c3a-1b4f-4e6a-8c9d-0f1e2d3c4b5a",
-  agentId: AGENT_ID,
-  key: "push-access",
-  revision: 2,
-  version: INBOX_WIRE_VERSION,
-  title: "Push to the release branch?",
-  blocks: [],
-  response: { type: INBOX_RESPONSE.APPROVAL },
-  needsReply: true,
-  status: INBOX_STATUS.OPEN,
-  postedAt: 1_800_000_000_000,
-  updatedAt: 1_800_000_060_000,
-};
 
 function fixture() {
   const asked: string[] = [];
@@ -105,9 +84,6 @@ function fixture() {
       },
       shown: (agentId) => {
         noted.push(`shown:${agentId}`);
-      },
-      shownInbox: (planId) => {
-        noted.push(`inbox:${planId}`);
       },
       shownChat: (shown) => {
         noted.push(`chat:${shown}`);
@@ -180,8 +156,6 @@ function fixture() {
         }),
       codingAgentPage: () =>
         Effect.succeed({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const),
-      codingAgentAgentInbox: () =>
-        Effect.succeed({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const),
       codingAgentPullRequest: ({ agentId }) =>
         Effect.sync(() => {
           asked.push(`pull-request:${agentId}`);
@@ -251,21 +225,6 @@ function fixture() {
         Effect.sync(() => {
           asked.push(`transcribe:${audio}:${keywords.join(",")}`);
           return { text: "Run the tests" };
-        }),
-      codingAgentInbox: ({ planId, after }) =>
-        Effect.sync(() => {
-          asked.push(`inbox:${planId}:${after}`);
-          return { items: [ITEM], cursor: "7" };
-        }),
-      codingAgentInboxAnswer: ({ itemId, revision, reply, clientKey }) =>
-        Effect.sync(() => {
-          asked.push(`answer:${itemId}:${revision}:${reply}:${clientKey}`);
-          return { item: { ...ITEM, status: INBOX_STATUS.ANSWERED }, taken: true };
-        }),
-      codingAgentInboxAttachment: ({ itemId, attachmentId }) =>
-        Effect.sync(() => {
-          asked.push(`attachment:${itemId}:${attachmentId}`);
-          return { contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw0KGgo=" };
         }),
       codingAgentChat: ({ workspaceId, after }) =>
         Effect.sync(() => {

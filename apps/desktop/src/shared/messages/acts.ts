@@ -6,16 +6,12 @@ import {
   type CodingAgentChatAnswerView,
   type CodingAgentChatWriteAnswerView,
   type CodingAgentDefaultAnswer,
-  type CodingAgentInboxAnsweredView,
-  type CodingAgentInboxAnswerView,
-  type CodingAgentInboxAttachmentView,
   type CodingAgentListAnswer,
   type CodingAgentMessagesAnswerView,
   type CodingAgentModelsAnswer,
   type CodingAgentPageAnswerView,
   type CodingAgentPullRequestAnswerView,
   codingAgentAgentAnswerSchema,
-  codingAgentAgentInboxParamsSchema,
   codingAgentArchiveParamsSchema,
   codingAgentChangesAnswerViewSchema,
   codingAgentChatAnswerViewSchema,
@@ -25,12 +21,6 @@ import {
   codingAgentChooseParamsSchema,
   codingAgentDefaultAnswerViewSchema,
   codingAgentDefaultWriteParamsSchema,
-  codingAgentInboxAnsweredViewSchema,
-  codingAgentInboxAnswerParamsSchema,
-  codingAgentInboxAnswerViewSchema,
-  codingAgentInboxAttachmentParamsSchema,
-  codingAgentInboxAttachmentViewSchema,
-  codingAgentInboxParamsSchema,
   codingAgentListAnswerViewSchema,
   codingAgentListParamsSchema,
   codingAgentMessageParamsSchema,
@@ -260,7 +250,7 @@ export const ACT_KIND = {
   PLANNING_EDIT: "planning.edit",
   /** A page of GitHub's opened in the browser: a repository, or where the Luke GitHub App is installed. No other address opens through it. */
   GITHUB_OPEN: "github.open",
-  /** A web page opened in the default browser: a link a transcript's or an Inbox item's words hold, off GitHub. No address but an http or https one opens through it. */
+  /** A web page opened in the default browser: a link a transcript's or a chat message's words hold, off GitHub. No address but an http or https one opens through it. */
   WEB_OPEN: "web.open",
   /** The page that connects the account's GitHub, asked of the service and opened in the browser; the connection arrives on the document once the panel comes forward again. */
   GITHUB_CONNECT: "github.connect",
@@ -336,9 +326,9 @@ export const ACT_KIND = {
   CODING_AGENTS_STOP: "codingAgents.stop",
   CODING_AGENTS_ARCHIVE: "codingAgents.archive",
   /**
-   * Which agent's tab the panel shows, or none, and which plan's Inbox tab,
-   * or none: what main's notification of an agent's end or of an inbox item
-   * is held back by, and what clears an agent's tab's unseen dot.
+   * Which agent's tab the panel shows, or none, and whether Chat is on
+   * screen: what main's notification of an agent's end or of a message
+   * waiting in chat is held back by, and what clears an agent's tab's unseen dot.
    */
   CODING_AGENTS_SHOWN: "codingAgents.shown",
   CODING_AGENTS_PAGE: "codingAgents.page",
@@ -372,17 +362,6 @@ export const ACT_KIND = {
    * way keeps it.
    */
   DICTATION_TRANSCRIBE: "dictation.transcribe",
-  /**
-   * The plan's inbox of what its coding agents need of the developer: read
-   * past a cursor (held open by the service while nothing changed), and one
-   * item answered against the revision the panel drew, under the panel's own
-   * key. The window holds what it draws; nothing here does.
-   */
-  CODING_AGENTS_INBOX: "codingAgents.inbox",
-  CODING_AGENTS_AGENT_INBOX: "codingAgents.agentInbox",
-  CODING_AGENTS_INBOX_ANSWER: "codingAgents.inboxAnswer",
-  /** One image of an inbox item, fetched by the host under the account, so the window holds no bearer and no address. */
-  CODING_AGENTS_INBOX_ATTACHMENT: "codingAgents.inboxAttachment",
   /**
    * A coding agent's Terminal tab (`messages/terminal.ts`): its shells
    * listed, started, named, and ended, its sandbox resumed on the
@@ -1007,7 +986,6 @@ export const ACT = {
   [ACT_KIND.CODING_AGENTS_SHOWN]: {
     payload: record({
       agentId: EffectSchema.NullOr(exactId),
-      inboxPlanId: EffectSchema.NullOr(exactId),
       chatShown: EffectSchema.optionalKey(EffectSchema.Boolean),
     }),
     result: answersNothing,
@@ -1082,30 +1060,6 @@ export const ACT = {
       isReadable(dictationTranscribeAnswerViewSchema),
     ),
     refusal: "Could not transcribe the recording on this system.",
-  },
-  [ACT_KIND.CODING_AGENTS_INBOX]: {
-    payload: actSchema(codingAgentInboxParamsSchema),
-    result: wireResult<CodingAgentInboxAnswerView>(isReadable(codingAgentInboxAnswerViewSchema)),
-    refusal: "Could not read the plan's inbox on this system.",
-  },
-  [ACT_KIND.CODING_AGENTS_AGENT_INBOX]: {
-    payload: actSchema(codingAgentAgentInboxParamsSchema),
-    result: wireResult<CodingAgentInboxAnswerView>(isReadable(codingAgentInboxAnswerViewSchema)),
-    refusal: "Could not read the agent's inbox on this system.",
-  },
-  [ACT_KIND.CODING_AGENTS_INBOX_ANSWER]: {
-    payload: actSchema(codingAgentInboxAnswerParamsSchema),
-    result: wireResult<CodingAgentInboxAnsweredView>(
-      isReadable(codingAgentInboxAnsweredViewSchema),
-    ),
-    refusal: "Could not answer the inbox item on this system.",
-  },
-  [ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT]: {
-    payload: actSchema(codingAgentInboxAttachmentParamsSchema),
-    result: wireResult<CodingAgentInboxAttachmentView>(
-      isReadable(codingAgentInboxAttachmentViewSchema),
-    ),
-    refusal: "Could not read the inbox item's image on this system.",
   },
   [ACT_KIND.TERMINAL_LIST]: {
     payload: actSchema(terminalAgentParamsSchema),

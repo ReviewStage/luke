@@ -46,7 +46,7 @@ export function callCard(input: {
 
 /**
  * The plan whose call bar this window has on screen, or none: the Plans tab
- * on a plan's document, unless its version history, the window's Inbox, an
+ * on a plan's document, unless its version history, the window's Chat, an
  * agent's page, or a side panel filling the window covers the column the
  * call bar stands in.
  */
@@ -54,13 +54,13 @@ export function callBarPlanId(input: {
   plansTab: boolean;
   documentPage: boolean;
   historyOpen: boolean;
-  inboxOpen: boolean;
+  chatOpen: boolean;
   agentPageOpen: boolean;
   sidePanelFullScreen: boolean;
   activePlanId: string | undefined;
 }): string | undefined {
   const covered =
-    input.historyOpen || input.inboxOpen || input.agentPageOpen || input.sidePanelFullScreen;
+    input.historyOpen || input.chatOpen || input.agentPageOpen || input.sidePanelFullScreen;
   return input.plansTab && input.documentPage && !covered ? input.activePlanId : undefined;
 }
 

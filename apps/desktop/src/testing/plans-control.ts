@@ -1,9 +1,7 @@
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
-import type { InboxItem } from "@luke/features/inbox-wire";
 import { PLAN_CALL_FAILURE } from "@luke/features/planning-view";
 import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
-import type { AppInboxWaitingItem } from "#shared/messages/app-state";
 import type { SummaryPin } from "../renderer/desktop/plan-summary";
 import { FOR_YOU } from "../renderer/planning/chat-model";
 import { DOCUMENT_REGION, PLANS_PAGE } from "../renderer/planning/planning-model";
@@ -19,11 +17,6 @@ import {
 import { CONFIRM_STAGE } from "../renderer/settings/confirm-state";
 
 const ignore = () => undefined;
-
-/** An open item as main's read of the account carries it into what waits: its id, its agent, what it asks, and when it was posted. */
-export function waitingOf(item: InboxItem): AppInboxWaitingItem {
-  return { id: item.id, agentId: item.agentId, title: item.title, postedAt: item.postedAt };
-}
 
 /** The plan's summary unpinned, its press ignored, so a page drawn over it draws the summary as its narrow rail of glyphs. */
 export const UNPINNED_SUMMARY: SummaryPin = {
@@ -76,7 +69,6 @@ export function codingAgentsControl(
     archived: [],
     agentIds: [],
     // A plan with no archived agent holds exactly the agents given.
-    heldIds: overrides.agentIds ?? [],
     keywords: [],
     readSkills: undefined,
     draft: undefined,
@@ -114,9 +106,6 @@ export function codingAgentsControl(
     readPullRequest: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     pullRequests: new Map(),
     readChanges: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
-    readInbox: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
-    answerInbox: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
-    readInboxImage: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     ...overrides,
   };
 }
@@ -166,7 +155,6 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
       onChoose: ignore,
       onShow: ignore,
       onClose: ignore,
-      onInboxRead: ignore,
       onMove: ignore,
       onNewTab: ignore,
       onNewTabAnswered: ignore,
@@ -227,7 +215,6 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
     onShowMention: ignore,
     sectionReveal: undefined,
     onSectionRevealed: ignore,
-    onShowInbox: ignore,
     onShowChat: ignore,
     secondCall: {
       confirm: {
@@ -242,16 +229,7 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
       },
       question: { title: "", body: "", verb: "", running: "" },
     },
-    inbox: [],
-    inboxShown: null,
-    inboxPlans: [],
-    inboxView: {
-      open: false,
-      chosen: undefined,
-      onOpen: ignore,
-      onClose: ignore,
-      onChoose: ignore,
-    },
+    chatWaiting: [],
     agentView: { agentId: undefined, onOpen: ignore, onClose: ignore },
     factoryView: { open: false, onOpen: ignore, onClose: ignore },
     callPlanId: undefined,

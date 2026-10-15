@@ -14,8 +14,6 @@ import {
 } from "@luke/features/coding-agent-wire";
 import {
   INBOX_CURSOR_START,
-  INBOX_IMAGE_TYPE,
-  INBOX_REPLY,
   INBOX_RESPONSE,
   INBOX_STATUS,
   INBOX_WIRE_VERSION,
@@ -137,8 +135,6 @@ const KEPT: ProviderKeySummary = {
   statusAt: 1,
 };
 
-const ATTACHMENT_ID = "9b8a7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d";
-
 const ITEM: InboxItem = {
   id: "5e2d7c3a-1b4f-4e6a-8c9d-0f1e2d3c4b5a",
   agentId: AGENT_ID,
@@ -249,11 +245,6 @@ function fakeService() {
         asked.push(`page:${agentId}`);
         return { agent: PAGE };
       }),
-    agentInbox: (agentId, after) =>
-      Effect.sync(() => {
-        asked.push(`agent-inbox:${agentId}:${after}`);
-        return { items: [ITEM], cursor: "8" };
-      }),
     pullRequest: (agentId) =>
       Effect.sync(() => {
         asked.push(`pull-request:${agentId}`);
@@ -317,31 +308,6 @@ function fakeService() {
       Effect.sync(() => {
         asked.push(`transcribe:${clip.audio}:${clip.keywords.join(",")}`);
         return { text: "Run the tests" };
-      }),
-    inbox: (planId, after) =>
-      Effect.sync(() => {
-        asked.push(`inbox:${planId}:${after}`);
-        return { items: [ITEM], cursor: "7" };
-      }),
-    inboxAttachment: (itemId, attachmentId) =>
-      Effect.sync(() => {
-        asked.push(`attachment:${itemId}:${attachmentId}`);
-        return { contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw0KGgo=" };
-      }),
-    answerInbox: (itemId, request) =>
-      Effect.sync(() => {
-        asked.push(
-          `answer:${itemId}:${request.revision}:${request.reply}:${request.note ?? ""}:${request.clientKey}`,
-        );
-        return {
-          item: {
-            ...ITEM,
-            revision: 3,
-            status: INBOX_STATUS.ANSWERED,
-            answer: { reply: request.reply },
-          },
-          taken: true,
-        };
       }),
     accountInbox: (after) =>
       Effect.sync(() => {
@@ -474,51 +440,12 @@ it.effect("each method asks the service once and answers what it said, whole", (
       agent: PAGE,
     });
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_AGENT_INBOX, {
-        agentId: AGENT_ID,
-        after: INBOX_CURSOR_START,
-      }),
-      { items: [ITEM], cursor: "8" },
-    );
-    assert.deepEqual(
       yield* call(GATEWAY_METHOD.CODING_AGENTS_PULL_REQUEST, { agentId: AGENT_ID }),
       PUBLISHED,
     );
     assert.deepEqual(
       yield* call(GATEWAY_METHOD.CODING_AGENTS_CHANGES, { agentId: AGENT_ID }),
       CHANGES,
-    );
-    assert.deepEqual(
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX, {
-        planId: PLAN_ID,
-        after: INBOX_CURSOR_START,
-      }),
-      { items: [ITEM], cursor: "7" },
-    );
-    assert.deepEqual(
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_ATTACHMENT, {
-        itemId: ITEM.id,
-        attachmentId: ATTACHMENT_ID,
-      }),
-      { contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw0KGgo=" },
-    );
-    assert.deepEqual(
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_ANSWER, {
-        itemId: ITEM.id,
-        revision: 2,
-        reply: INBOX_REPLY.DECLINED,
-        note: "Not before the freeze lifts.",
-        clientKey: "answer-1",
-      }),
-      {
-        item: {
-          ...ITEM,
-          revision: 3,
-          status: INBOX_STATUS.ANSWERED,
-          answer: { reply: INBOX_REPLY.DECLINED },
-        },
-        taken: true,
-      },
     );
 
     assert.deepEqual(
@@ -556,12 +483,8 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `stop:${AGENT_ID}`,
       `archive:${AGENT_ID}:true`,
       `page:${AGENT_ID}`,
-      `agent-inbox:${AGENT_ID}:${INBOX_CURSOR_START}`,
       `pull-request:${AGENT_ID}`,
       `changes:${AGENT_ID}`,
-      `inbox:${PLAN_ID}:${INBOX_CURSOR_START}`,
-      `attachment:${ITEM.id}:${ATTACHMENT_ID}`,
-      `answer:${ITEM.id}:2:${INBOX_REPLY.DECLINED}:Not before the freeze lifts.:answer-1`,
       `account-inbox:${INBOX_CURSOR_START}`,
       `chat:${WORKSPACE_ID}:${CHAT_CURSOR_START}`,
       `chat-post:${WORKSPACE_ID}:{"readTo":4}`,

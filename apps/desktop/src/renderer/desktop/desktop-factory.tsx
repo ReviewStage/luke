@@ -13,7 +13,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 import { useOpenFeedback } from "../open-feedback";
-import { NEEDS_YOU } from "../planning/inbox-model";
+import { FOR_YOU, NEEDS_YOU, waitingLine } from "../planning/chat-model";
 import { useMinute } from "../planning/plan-time";
 import { PullRequestMark } from "../planning/pull-request-mark";
 import { RelativeTime } from "../planning/relative-time";
@@ -42,16 +42,16 @@ import { planCardOf } from "./plan-card";
 /**
  * desktop-factory.tsx -- the window's Factory: every plan of the workspace being planned, built, and shipped right now, on one line, with what waits on the developer at the foot of the step it holds up.
  *
- * It stands in the plan's place beside the sidebar, as the Inbox does, and
+ * It stands in the plan's place beside the sidebar, as Chat does, and
  * is a live view rather than a report: no range, no totals, only where work
- * stands now (`factory-model.ts`), read from the plan list, main's Inbox
- * read, and the call. Three steps run left to right, Plan, Build, and Ship,
+ * stands now (`factory-model.ts`), read from the plan list, main's read
+ * of what waits in chat, and the call. Three steps run left to right, Plan, Build, and Ship,
  * each a card listing its plans as the sidebar draws a plan, with the
  * plan's card on hover, and a question's hover saying it whole. What waits on the developer is the foot of a step,
- * lined up across the line: the Inbox's open questions under Build, each in
+ * lined up across the line: the open asks under Build, each in
  * full with the question's glyph rather than the working mark, since its
  * agent is stopped, and the pull requests ready to merge under Ship. Where
- * both wait, the one to take first says so. A question opens in the Inbox,
+ * both wait, the one to take first says so. A question opens Chat's For you,
  * a pull request on GitHub, and anything else its plan. A row that moves
  * from one step to another slides there once, and one that arrives fades in;
  * nothing else moves, and the times count on with the window's minute.
@@ -111,12 +111,12 @@ function useFactoryBoard(plans: PlansControl, now: number): FactoryBoard {
     () =>
       factoryBoard({
         plans: listed,
-        waiting: plans.inbox,
+        waiting: plans.chatWaiting,
         callPlanId: plans.callPlanId,
         merged,
         now,
       }),
-    [listed, plans.inbox, plans.callPlanId, merged, now],
+    [listed, plans.chatWaiting, plans.callPlanId, merged, now],
   );
 }
 
@@ -286,10 +286,6 @@ function Line({
         ? "start here"
         : "then"
       : undefined;
-  const ask = ({ plan, item }: FactoryQuestion) => {
-    plans.inboxView.onOpen();
-    plans.inboxView.onChoose({ planId: plan.id, itemId: item.id });
-  };
   const planRow = ({ plan, onCall }: FactoryPlanning) => (
     <FactoryRow
       key={plan.id}
@@ -322,13 +318,13 @@ function Line({
   );
   const questionRow = (question: FactoryQuestion) => (
     <FactoryRow
-      key={question.item.id}
-      slide={question.item.id}
+      key={question.ask.messageId}
+      slide={question.ask.messageId}
       glyph={<MessageCircleQuestionIcon className="factory-asking" />}
-      words={question.item.title}
-      time={{ at: question.item.postedAt }}
+      words={waitingLine(question.ask)}
+      time={{ at: question.ask.updatedAt }}
       waiting
-      onOpen={() => ask(question)}
+      onOpen={() => plans.chatView.onShow(FOR_YOU)}
     />
   );
   const mergeRow = (ready: FactoryMerge) => (
@@ -414,10 +410,10 @@ function Summary({
   board: FactoryBoard;
 }): React.JSX.Element {
   const needs = needsText(board);
-  // The summary leads to the wait to take first: the Inbox while a question waits, else the first pull request ready to merge.
+  // The summary leads to the wait to take first: Chat while a question waits, else the first pull request ready to merge.
   const [firstMerge] = board.merges;
   const takeFirst = () => {
-    if (board.questions.length > 0 || firstMerge === undefined) plans.inboxView.onOpen();
+    if (board.questions.length > 0 || firstMerge === undefined) plans.chatView.onShow(FOR_YOU);
     else openMerge(plans, firstMerge);
   };
   const working =

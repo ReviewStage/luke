@@ -1,13 +1,6 @@
 import { cn } from "@luke/ui";
 import { ArrowUpIcon, SquareIcon } from "lucide-react";
-import {
-  type ComponentProps,
-  type FormEventHandler,
-  type HTMLAttributes,
-  type KeyboardEventHandler,
-  type ReactNode,
-  useState,
-} from "react";
+import type { ComponentProps, FormEventHandler, HTMLAttributes, ReactNode } from "react";
 import { SpinnerRing } from "../spinner";
 
 /**
@@ -100,47 +93,6 @@ export function submitPromptInput(field: Element): void {
   const submit = form?.querySelector<HTMLButtonElement>('button[type="submit"]');
   if (submit?.disabled) return;
   form?.requestSubmit();
-}
-
-export type PromptInputTextareaProps = ComponentProps<"textarea">;
-
-/**
- * The field itself. Enter submits the form around it, unless the submit
- * button is disabled or an input method is still composing; Shift+Enter is
- * left to the browser, which is a new line.
- */
-export function PromptInputTextarea({
-  onKeyDown,
-  className,
-  placeholder,
-  ...props
-}: PromptInputTextareaProps): ReactNode {
-  const [isComposing, setIsComposing] = useState(false);
-
-  const handleKeyDown: KeyboardEventHandler<HTMLTextAreaElement> = (event) => {
-    onKeyDown?.(event);
-    if (event.defaultPrevented) return;
-    if (event.key !== "Enter") return;
-    if (isComposing || event.nativeEvent.isComposing) return;
-    if (event.shiftKey) return;
-    event.preventDefault();
-    submitPromptInput(event.currentTarget);
-  };
-
-  return (
-    <textarea
-      className={cn(
-        PROMPT_INPUT_FIELD_CLASS,
-        "field-sizing-content resize-none placeholder:text-muted-foreground disabled:opacity-60",
-        className,
-      )}
-      onCompositionEnd={() => setIsComposing(false)}
-      onCompositionStart={() => setIsComposing(true)}
-      onKeyDown={handleKeyDown}
-      placeholder={placeholder}
-      {...props}
-    />
-  );
 }
 
 export type PromptInputFooterProps = HTMLAttributes<HTMLDivElement>;

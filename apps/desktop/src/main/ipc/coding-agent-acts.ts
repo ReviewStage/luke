@@ -1,7 +1,6 @@
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAgentAnswer,
-  type CodingAgentAgentInboxParams,
   type CodingAgentArchiveParams,
   type CodingAgentChangesAnswerView,
   type CodingAgentChatAnswerView,
@@ -10,12 +9,6 @@ import {
   type CodingAgentChatWriteAnswerView,
   type CodingAgentChooseParams,
   type CodingAgentDefaultAnswer,
-  type CodingAgentInboxAnsweredView,
-  type CodingAgentInboxAnswerParams,
-  type CodingAgentInboxAnswerView,
-  type CodingAgentInboxAttachmentParams,
-  type CodingAgentInboxAttachmentView,
-  type CodingAgentInboxParams,
   type CodingAgentListAnswer,
   type CodingAgentListParams,
   type CodingAgentMessageParams,
@@ -56,8 +49,8 @@ import type { AgentNotices } from "../agent-notices";
  * the hidden voice window. What the service answers comes back as the
  * panel's own answer; on its way it is noted by the notices
  * (`main/agent-notices.ts`), which hold where each agent stands so an end
- * the panel is not looking at is still announced, and which plan's Inbox
- * the panel shows, so an item it is looking at is not. The plan's inbox is
+ * the panel is not looking at is still announced, and whether Chat is on
+ * screen, so a message waiting there is not. The workspace's chat is
  * answered to the panel alone: the notices watch what waits across the
  * account on a read of their own. Nothing else is held here.
  *
@@ -107,16 +100,6 @@ export interface CodingAgentActsDependencies {
     dictationTranscribe(
       params: DictationTranscribeParams,
     ): Effect.Effect<DictationTranscribeAnswerView>;
-    codingAgentInbox(params: CodingAgentInboxParams): Effect.Effect<CodingAgentInboxAnswerView>;
-    codingAgentAgentInbox(
-      params: CodingAgentAgentInboxParams,
-    ): Effect.Effect<CodingAgentInboxAnswerView>;
-    codingAgentInboxAnswer(
-      params: CodingAgentInboxAnswerParams,
-    ): Effect.Effect<CodingAgentInboxAnsweredView>;
-    codingAgentInboxAttachment(
-      params: CodingAgentInboxAttachmentParams,
-    ): Effect.Effect<CodingAgentInboxAttachmentView>;
     codingAgentChat(params: CodingAgentChatParams): Effect.Effect<CodingAgentChatAnswerView>;
     codingAgentChatPost(
       params: CodingAgentChatPostParams,
@@ -133,7 +116,6 @@ export interface CodingAgentActsDependencies {
     | "observePublished"
     | "observePlanGone"
     | "shown"
-    | "shownInbox"
     | "shownChat"
   >;
 }
@@ -164,10 +146,6 @@ type CodingAgentActKind =
   | typeof ACT_KIND.PLAN_TEMPLATE_REVISION
   | typeof ACT_KIND.PLAN_TEMPLATE_RESTORE
   | typeof ACT_KIND.DICTATION_TRANSCRIBE
-  | typeof ACT_KIND.CODING_AGENTS_INBOX
-  | typeof ACT_KIND.CODING_AGENTS_AGENT_INBOX
-  | typeof ACT_KIND.CODING_AGENTS_INBOX_ANSWER
-  | typeof ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT
   | typeof ACT_KIND.CODING_AGENTS_CHAT
   | typeof ACT_KIND.CODING_AGENTS_CHAT_POST;
 
@@ -257,10 +235,9 @@ export function codingAgentActRows(
       refuseUnlessPanel(ACT_KIND.CODING_AGENTS_ARCHIVE, sender);
       return notedAgent(host.codingAgentArchive(params));
     },
-    [ACT_KIND.CODING_AGENTS_SHOWN]: ({ agentId, inboxPlanId, chatShown }, sender) => {
+    [ACT_KIND.CODING_AGENTS_SHOWN]: ({ agentId, chatShown }, sender) => {
       refuseUnlessPanel(ACT_KIND.CODING_AGENTS_SHOWN, sender);
       notices.shown(agentId);
-      notices.shownInbox(inboxPlanId);
       notices.shownChat(chatShown === true);
     },
     [ACT_KIND.CODING_AGENTS_PAGE]: (params, sender) => {
@@ -312,22 +289,6 @@ export function codingAgentActRows(
     [ACT_KIND.DICTATION_TRANSCRIBE]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.DICTATION_TRANSCRIBE, sender);
       return host.dictationTranscribe(params);
-    },
-    [ACT_KIND.CODING_AGENTS_INBOX]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.CODING_AGENTS_INBOX, sender);
-      return host.codingAgentInbox(params);
-    },
-    [ACT_KIND.CODING_AGENTS_AGENT_INBOX]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.CODING_AGENTS_AGENT_INBOX, sender);
-      return host.codingAgentAgentInbox(params);
-    },
-    [ACT_KIND.CODING_AGENTS_INBOX_ANSWER]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.CODING_AGENTS_INBOX_ANSWER, sender);
-      return host.codingAgentInboxAnswer(params);
-    },
-    [ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT, sender);
-      return host.codingAgentInboxAttachment(params);
     },
     [ACT_KIND.CODING_AGENTS_CHAT]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.CODING_AGENTS_CHAT, sender);

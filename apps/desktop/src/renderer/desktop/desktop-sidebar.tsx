@@ -17,7 +17,7 @@ import {
 } from "@luke/ui";
 import { sameTab } from "@luke/ui/tab-strip-model";
 import type { UpdateControl } from "@luke/voice/settings-controls";
-import { FactoryIcon, HouseIcon, InboxIcon, MessagesSquareIcon } from "lucide-react";
+import { FactoryIcon, HouseIcon, MessagesSquareIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
 import { runAppCommand, useAppCommand } from "../app-commands";
@@ -25,7 +25,6 @@ import { CALL_CARD_SURFACE, CallCardDock, type CallCardInput } from "../call/cal
 import type { NavigationHistory } from "../navigation-history";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { forYou } from "../planning/chat-model";
-import { NEEDS_YOU } from "../planning/inbox-model";
 import { useMinute } from "../planning/plan-time";
 import {
   PLANS_PAGE,
@@ -466,13 +465,8 @@ function ListSkeleton(): React.JSX.Element {
   );
 }
 
-/** How many items wait on the developer across every plan: the sum of the Inbox's row counts. */
-function waitingItems(plans: PlansControl): number {
-  return plans.inbox.reduce((sum, plan) => sum + plan.items.length, 0);
-}
-
 /**
- * The home page's row, between Search and the Inbox and drawn as they are:
+ * The home page's row, between Search and Chat and drawn as they are:
  * the house, its name, and its chord at its end while the row is hovered or
  * reached from the keyboard. A press goes to the home page from wherever the
  * window stands, and the row is the place shown while the home page is.
@@ -503,15 +497,26 @@ function SidebarHomeRow({
 }
 
 /**
- * The Inbox's row, last of the rows heading the list and drawn as they are:
- * the tray, its name, and how many items wait on the developer across every
- * plan at its end, the sum of the counts the Inbox's rows show, muted in
- * even figures as a group's count is, and nothing at none. Its chord takes the count's place while the row is hovered or
- * reached from the keyboard, as New plan's and Search's show theirs. A press
- * opens the window's Inbox (`desktop-inbox.tsx`), and the row is the place
- * shown while it stands.
+ * How many messages wait on the developer in chat: what main's read of the
+ * account says waits, or what For you lists of the chat the window holds,
+ * whichever says more, since a fixture's staged chat is read by no service.
  */
-function SidebarInboxRow({
+function waitingMessages(plans: PlansControl): number {
+  const read = plans.chatView.chat;
+  const held = read === undefined ? 0 : forYou(read.answer).length;
+  return Math.max(plans.chatWaiting.length, held);
+}
+
+/**
+ * Chat's row, last of the rows heading the list but Factory's and drawn as
+ * they are: the glyph, its name, and how many messages wait on the
+ * developer at its end, muted in even figures as a group's count is, and
+ * nothing at none. Its chord takes the count's place while the row is
+ * hovered or reached from the keyboard, as New plan's and Search's show
+ * theirs. A press opens the window's Chat (`desktop-chat.tsx`), and the row
+ * is the place shown while it stands.
+ */
+function SidebarChatRow({
   waiting,
   current,
   disabled,
@@ -525,64 +530,21 @@ function SidebarInboxRow({
   return (
     <button
       type="button"
-      className="sidebar-search sidebar-inbox"
+      className="sidebar-search sidebar-chat"
       aria-current={current ? "page" : undefined}
-      aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.INBOX)}
+      aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.CHAT)}
       disabled={disabled}
-      onClick={onOpen}
-    >
-      <InboxIcon />
-      Inbox
-      {waiting === 0 ? null : (
-        <span className="sidebar-inbox-waiting">
-          {waiting}
-          <span className="visually-hidden">
-            {" "}
-            {waiting === 1 ? NEEDS_YOU.COUNT.one : NEEDS_YOU.COUNT.many}
-          </span>
-        </span>
-      )}
-      <Shortcut chord={APP_SHORTCUTS[APP_COMMAND.INBOX].chord} className="row-shortcut" />
-    </button>
-  );
-}
-
-/** How many messages wait on the developer in Chat: what For you lists. */
-function waitingMessages(plans: PlansControl): number {
-  const read = plans.chatView.chat;
-  return read === undefined ? 0 : forYou(read.answer).length;
-}
-
-/**
- * Chat's row, under the Inbox's and drawn as it is: the glyph, its name, and
- * how many messages wait on the developer in For you at its end, in the
- * Inbox's muted figures, nothing at none. A press opens the window's Chat
- * (`desktop-chat.tsx`), and the row is the place shown while it stands.
- */
-function SidebarChatRow({
-  waiting,
-  current,
-  onOpen,
-}: {
-  waiting: number;
-  current: boolean;
-  onOpen: () => void;
-}): React.JSX.Element {
-  return (
-    <button
-      type="button"
-      className="sidebar-search sidebar-inbox"
-      aria-current={current ? "page" : undefined}
       onClick={onOpen}
     >
       <MessagesSquareIcon />
       Chat
       {waiting === 0 ? null : (
-        <span className="sidebar-inbox-waiting">
+        <span className="sidebar-chat-waiting">
           {waiting}
           <span className="visually-hidden"> waiting on you</span>
         </span>
       )}
+      <Shortcut chord={APP_SHORTCUTS[APP_COMMAND.CHAT].chord} className="row-shortcut" />
     </button>
   );
 }
@@ -682,7 +644,7 @@ function useFloatingSidebar(sidebar: SidebarCollapse): FloatingSidebar {
 }
 
 /**
- * Factory's row, after the Inbox's and drawn as it is: the factory, its
+ * Factory's row, after Chat's and drawn as it is: the factory, its
  * name, and its chord at its end while the row is hovered or reached from
  * the keyboard. A press opens the window's Factory (`desktop-factory.tsx`),
  * and the row is the place shown while it stands.
@@ -718,12 +680,11 @@ function SidebarFactoryRow({
  * (`workspace-switcher.tsx`), or Luke while no workspace is read; the way to
  * a new plan, Search, which opens the command palette, every plan of the
  * workspace chosen, and the account's
- * row, whose menu and gear lead to Settings and the rest. Home's row, the
- * Inbox's, and Factory's follow Search above the rule: Home's goes to the
- * home page, the Inbox's counts what waits on the developer and opens the
- * window's Inbox, and Factory's, while its experiment is on, opens the
- * window's Factory; Chat's, where a chat is read, counts what waits on the
- * developer in Chat and opens it. The pinned plans, and the side panel tabs
+ * row, whose menu and gear lead to Settings and the rest. Home's row,
+ * Chat's, and Factory's follow Search above the rule: Home's goes to the
+ * home page, Chat's counts what waits on the developer and opens the
+ * window's Chat, and Factory's, while its experiment is on, opens the
+ * window's Factory. The pinned plans, and the side panel tabs
  * pinned to the sidebar, stand in a section of their own above the rest
  * while any are pinned, newest pinned first, under a header that folds as
  * a repository's does, every row one line whose hover card says the rest;
@@ -775,12 +736,10 @@ export function DesktopSidebar({
 }): React.JSX.Element {
   const onPlans = tab === PANEL_TAB.PLANS;
   const overlay = useFloatingSidebar(sidebar);
-  // The window's Inbox, an agent's page, Factory, and Chat stand in the plan's place, so while one does no plan is the place shown.
-  const inInbox = onPlans && plans.inboxView.open;
+  // An agent's page, Factory, and Chat stand in the plan's place, so while one does no plan is the place shown.
   const inFactory = onPlans && plans.factoryView.open;
   const inChat = onPlans && plans.chatView.open;
-  const standingIn =
-    inInbox || inFactory || inChat || (onPlans && plans.agentView.agentId !== undefined);
+  const standingIn = inFactory || inChat || (onPlans && plans.agentView.agentId !== undefined);
   // Factory is an experiment: its row stands only while the account has it on.
   const factoryOn = useExperiment(EXPERIMENT.FACTORY);
   // A press in the list is always about plans, so it brings the Plans tab
@@ -797,10 +756,6 @@ export function DesktopSidebar({
     if (!onPlans) onTabChange(PANEL_TAB.PLANS);
     plans.onOpenPinnedTab(pin);
   };
-  const openInbox = () => {
-    if (!onPlans) onTabChange(PANEL_TAB.PLANS);
-    plans.inboxView.onOpen();
-  };
   const openFactory = () => {
     if (!onPlans) onTabChange(PANEL_TAB.PLANS);
     plans.factoryView.onOpen();
@@ -813,7 +768,7 @@ export function DesktopSidebar({
     if (!onPlans) onTabChange(PANEL_TAB.PLANS);
     plans.onGoHome();
   };
-  // The home page is the place shown while no plan is open, the Inbox is not
+  // The home page is the place shown while no plan is open, Chat is not
   // standing in its place, and no launch is still reopening a plan.
   const atHome = onPlans && !standingIn && plans.page === PLANS_PAGE.HOME && !plans.restoring;
   const newPlanIn = (repository: string) => {
@@ -855,7 +810,7 @@ export function DesktopSidebar({
     inSight: overlay.inSight,
   };
   // A pinned tab is on show where its plan is open and its column shows it:
-  // an agent's or the Inbox in the plan's own column, any other in the side panel. The
+  // an agent's in the plan's own column, any other in the side panel. The
   // pin marked stands too, so a fold never hides the row the sidebar marks.
   const pinnedShown = ({ plan, pin }: PinnedRow) =>
     (pin !== undefined && pin === pinMarked) ||
@@ -946,20 +901,12 @@ export function DesktopSidebar({
         />
       </button>
       <SidebarHomeRow current={atHome} disabled={!plans.signedIn} onOpen={chosen(goHome)} />
-      <SidebarInboxRow
-        waiting={plans.signedIn ? waitingItems(plans) : 0}
-        current={inInbox}
+      <SidebarChatRow
+        waiting={plans.signedIn ? waitingMessages(plans) : 0}
+        current={inChat}
         disabled={!plans.signedIn}
-        onOpen={chosen(openInbox)}
+        onOpen={chosen(openChat)}
       />
-      {/* Chat's row stands wherever there is a chat to read: a signed-in run, or a fixture's staged one. */}
-      {plans.signedIn && plans.chatView.available ? (
-        <SidebarChatRow
-          waiting={waitingMessages(plans)}
-          current={inChat}
-          onOpen={chosen(openChat)}
-        />
-      ) : null}
       {factoryOn ? (
         <SidebarFactoryRow
           current={inFactory}

@@ -146,25 +146,25 @@ const OPENING_CALLS: readonly {
     },
   },
   {
-    name: "a post to the inbox opens the Inbox",
+    name: "a post to the inbox, which lives in Chat, opens the plan's Chat",
     tool: "post_to_inbox",
     input: { title: "Which currency?", response: { type: "text" } },
     output: { items: [] },
-    target: { kind: TOOL_TARGET.INBOX },
+    target: { kind: TOOL_TARGET.CHAT },
   },
   {
-    name: "a close in the inbox opens the Inbox",
+    name: "a close in the inbox opens the plan's Chat",
     tool: "close_inbox_item",
     input: { key: "currency", reason: "Settled in the plan" },
     output: { items: [] },
-    target: { kind: TOOL_TARGET.INBOX },
+    target: { kind: TOOL_TARGET.CHAT },
   },
   {
-    name: "a read of the inbox opens the Inbox",
+    name: "a read of the inbox opens the plan's Chat",
     tool: "read_inbox",
     input: {},
     output: { items: [] },
-    target: { kind: TOOL_TARGET.INBOX },
+    target: { kind: TOOL_TARGET.CHAT },
   },
 ];
 

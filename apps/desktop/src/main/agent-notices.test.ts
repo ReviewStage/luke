@@ -1,10 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import {
-  ACCOUNT_CHAT_REASON,
-  type AccountChatEntry,
-  type AccountInboxEntry,
-} from "@luke/features/account-inbox-wire";
+import { ACCOUNT_CHAT_REASON, type AccountChatEntry } from "@luke/features/account-inbox-wire";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAccountInboxAnswerView,
@@ -19,7 +15,6 @@ import {
 import { INBOX_CURSOR_START } from "@luke/features/inbox-wire";
 import { Duration, Effect, Layer, Queue, Stream } from "effect";
 import { TestClock } from "effect/testing";
-import type { AppInboxPlan, AppInboxPlanHolding } from "#shared/messages/app-state";
 import {
   type AgentEndToast,
   type AgentNotice,
@@ -27,7 +22,6 @@ import {
   type AgentPlace,
   type ChatMessageToast,
   createAgentNotices,
-  type InboxItemToast,
 } from "./agent-notices";
 
 const PLAN_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
@@ -79,21 +73,17 @@ function fixture() {
   const published = new Map<string, CodingAgentPullRequestAnswerView>();
   const posted: AgentNotice[] = [];
   const toasted: AgentEndToast[] = [];
-  const inboxToasted: InboxItemToast[] = [];
   const chatToasted: ChatMessageToast[] = [];
   let chatOpened = 0;
   const badges: number[] = [];
   const doors = Layer.succeed(AgentNoticeDoors, {
     post: (notice) => posted.push(notice),
     toast: (end) => toasted.push(end),
-    toastInbox: (item) => inboxToasted.push(item),
     toastChat: (message) => chatToasted.push(message),
     badge: (count) => badges.push(count),
   });
   const inboxReads: string[] = [];
-  const waiting: (readonly AppInboxPlan[])[] = [];
-  const holding: (readonly AppInboxPlanHolding[])[] = [];
-  const openedInboxes: string[] = [];
+  const waiting: (readonly AccountChatEntry[])[] = [];
   let inboxAnswers: Queue.Queue<CodingAgentAccountInboxAnswerView> | undefined;
   let accounts: Queue.Queue<string | undefined> | undefined;
   const opened: AgentPlace[] = [];
@@ -148,11 +138,9 @@ function fixture() {
           return Queue.take(inboxAnswers);
         }),
       accounts: Stream.fromQueue(accounts),
-      onInboxChanged: (next) => {
+      onChatChanged: (next) => {
         waiting.push(next.waiting);
-        holding.push(next.plans);
       },
-      openInbox: (planId) => openedInboxes.push(planId),
       openChat: () => {
         chatOpened += 1;
       },
@@ -192,10 +180,7 @@ function fixture() {
     },
     inboxReads,
     waiting,
-    holding,
     badges,
-    inboxToasted,
-    openedInboxes,
     chatToasted,
     /** How many times a chat notification's click opened Chat. */
     chatOpened: () => chatOpened,
@@ -239,38 +224,20 @@ it.effect(
  */
 const settled = Effect.repeat(Effect.yieldNow, { times: 20 });
 
-/** An item waiting on the developer, as the account's inbox read carries it. */
-function waitingItem(id: string, patch: Partial<AccountInboxEntry> = {}): AccountInboxEntry {
-  return {
-    id,
-    planId: PLAN_ID,
-    agentId: AGENT_ID,
-    agentTitle: "Fix invitations",
-    agentModel: MODEL,
-    title: "Push to the release branch?",
-    revision: 1,
-    postedAt: READ_AT,
-    updatedAt: READ_AT,
-    ...patch,
-  };
-}
-
 /** When the service read each answer, by its clock: the instant every item is posted at unless a test says. */
 const READ_AT = 1_800_000_000_000;
 
-const ITEM_A = "5e2d7c3a-1b4f-4e6a-8c9d-0f1e2d3c4b5a";
-const ITEM_B = "6f3e8d4b-2c5a-4f7b-9d0e-1a2b3c4d5e6f";
-const ITEM_C = "7a4f9e5c-3d6b-4a8c-8e1f-2b3c4d5e6f7a";
 it.effect(
-  "another account ends the read held for the last and lets go of its items, its counts, and its badge, and its first answer is where it stands; nobody signed in reads nothing",
+  "another account ends the read held for the last and lets go of what waited and its badge, and its first answer is where it stands; nobody signed in reads nothing",
   () =>
     Effect.gen(function* () {
       const f = fixture();
       yield* f.notices;
       f.focus(false);
-      f.answerInbox({ items: [waitingItem(ITEM_A)], cursor: "1", readAt: READ_AT });
+      f.answerInbox({ items: [], chat: [chatEntry(40)], cursor: "1", readAt: READ_AT });
       yield* settled;
       assert.equal(f.badges.at(-1), 1);
+      assert.deepEqual(f.waiting.at(-1), [chatEntry(40)]);
 
       f.changeAccount(OTHER_ACCOUNT);
       yield* settled;
@@ -281,12 +248,13 @@ it.effect(
 
       // The next answer is the new account's first, which announces nothing it holds.
       f.answerInbox({
-        items: [waitingItem(ITEM_B), waitingItem(ITEM_C)],
+        items: [],
+        chat: [chatEntry(41), chatEntry(42)],
         cursor: "7",
         readAt: READ_AT,
       });
       yield* settled;
-      assert.deepEqual(f.posted, []);
+      assert.equal(f.posted.length, 0);
       assert.equal(f.badges.at(-1), 2);
 
       f.changeAccount(undefined);
@@ -294,61 +262,6 @@ it.effect(
       assert.deepEqual(f.waiting.at(-1), []);
       assert.equal(f.badges.at(-1), 0);
       assert.deepEqual(f.inboxReads, [INBOX_CURSOR_START, "1", INBOX_CURSOR_START, "7"]);
-    }),
-);
-it.effect(
-  "what waits carries each open item's agent, what it asks, and when it was posted, grouped by plan as the read answered them",
-  () =>
-    Effect.gen(function* () {
-      const f = fixture();
-      yield* f.notices;
-      const otherPlan = "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32";
-      const otherAgent = "a3e4f5a6-5f4a-4fad-8d88-8b6e9c4a5d43";
-      f.answerInbox({
-        items: [
-          waitingItem(ITEM_A, { title: "Push to the release branch?", postedAt: READ_AT - 60_000 }),
-          waitingItem(ITEM_B, {
-            planId: otherPlan,
-            agentId: otherAgent,
-            title: "Which account pays out?",
-            postedAt: READ_AT - 3_600_000,
-          }),
-          waitingItem(ITEM_C, { title: "Expire invites after a week?", postedAt: READ_AT }),
-        ],
-        cursor: "1",
-        readAt: READ_AT,
-      });
-      yield* settled;
-      assert.deepEqual(f.waiting.at(-1), [
-        {
-          planId: PLAN_ID,
-          items: [
-            {
-              id: ITEM_A,
-              agentId: AGENT_ID,
-              title: "Push to the release branch?",
-              postedAt: READ_AT - 60_000,
-            },
-            {
-              id: ITEM_C,
-              agentId: AGENT_ID,
-              title: "Expire invites after a week?",
-              postedAt: READ_AT,
-            },
-          ],
-        },
-        {
-          planId: otherPlan,
-          items: [
-            {
-              id: ITEM_B,
-              agentId: otherAgent,
-              title: "Which account pays out?",
-              postedAt: READ_AT - 3_600_000,
-            },
-          ],
-        },
-      ]);
     }),
 );
 it.effect(
@@ -384,7 +297,7 @@ function chatEntry(seq: number, patch: Partial<AccountChatEntry> = {}): AccountC
 }
 
 it.effect(
-  "a chat message that comes to wait is announced once by who and why under its plan, never what was said: as a notification behind, in the toast in front, and nowhere while Chat is on screen; the badge counts it beside the items",
+  "a chat message that comes to wait is announced once by who and why under its plan, never what was said: as a notification behind, in the toast in front, and nowhere while Chat is on screen; the badge counts what waits",
   () =>
     Effect.gen(function* () {
       const f = fixture();
@@ -397,24 +310,21 @@ it.effect(
       assert.equal(f.badges.at(-1), 1);
 
       f.answerInbox({
-        items: [waitingItem(ITEM_A)],
+        items: [],
         chat: [chatEntry(40), chatEntry(47, { reason: ACCOUNT_CHAT_REASON.MENTION, from: "luke" })],
         cursor: "2",
         readAt: READ_AT,
       });
       yield* settled;
-      // The item and the mention that came to wait are each announced; the message already waiting is not.
-      assert.deepEqual(f.said(), [
-        { title: PLAN_NAME, body: "@luke mentioned you" },
-        { title: PLAN_NAME, body: "Fix invitations: Push to the release branch?" },
-      ]);
-      assert.equal(f.badges.at(-1), 3);
+      // The mention that came to wait is announced; the message already waiting is not.
+      assert.deepEqual(f.said(), [{ title: PLAN_NAME, body: "@luke mentioned you" }]);
+      assert.equal(f.badges.at(-1), 2);
       f.posted[0]?.onClick();
       assert.equal(f.chatOpened(), 1);
 
       f.focus(true);
       f.answerInbox({
-        items: [waitingItem(ITEM_A)],
+        items: [],
         chat: [
           chatEntry(40),
           chatEntry(47),
@@ -430,13 +340,13 @@ it.effect(
 
       notices.shownChat(true);
       f.answerInbox({
-        items: [waitingItem(ITEM_A)],
+        items: [],
         chat: [chatEntry(40), chatEntry(47), chatEntry(51), chatEntry(52)],
         cursor: "4",
         readAt: READ_AT,
       });
       yield* settled;
       assert.equal(f.chatToasted.length, 1);
-      assert.equal(f.posted.length, 2);
+      assert.equal(f.posted.length, 1);
     }),
 );

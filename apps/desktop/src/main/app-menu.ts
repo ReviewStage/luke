@@ -393,7 +393,7 @@ function fullMenuTemplate(appName: string, update?: UpdateMenu): MenuItemConstru
       label: "Go",
       submenu: [
         commandItem(APP_COMMAND.HOME),
-        commandItem(APP_COMMAND.INBOX),
+        commandItem(APP_COMMAND.CHAT),
         commandItem(APP_COMMAND.FACTORY),
         SEPARATOR,
         commandItem(APP_COMMAND.BACK),

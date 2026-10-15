@@ -22,7 +22,7 @@ import {
 import { channels } from "#shared/bridge";
 import type { AppHotkeysSlice, AppStateSnapshot, AppWindowFacts } from "#shared/messages/app-state";
 import { APP_COMMAND } from "#shared/shortcuts";
-import type { AgentEndToast, AgentPlace, ChatMessageToast, InboxItemToast } from "../agent-notices";
+import type { AgentEndToast, AgentPlace, ChatMessageToast } from "../agent-notices";
 import { type AppStateStore, voiceWindowState } from "../app-state";
 import { APP_LINK_SCHEME, type AppLinkPlace } from "../window/app-links";
 import { CallWindow } from "../window/call-window";
@@ -91,12 +91,8 @@ export interface WindowService extends DesktopService {
   panelReady: () => void;
   /** Asks the panels to say an agent's turn ended in their toast: its end while the window is focused. */
   toastAgentEnd: (end: AgentEndToast) => void;
-  /** Asks the panels to open a plan on its Inbox tab: an inbox notification's click. */
-  showInbox: (planId: string) => void;
   /** Asks the panels to open Settings: the menu bar's Check for Updates, whose answer is drawn there. */
   showSettings: () => void;
-  /** Asks the panels to say an inbox item opened in their toast: one that opened while the window is focused. */
-  toastInboxItem: (item: InboxItemToast) => void;
   /** Asks the panels to open their Chat: a chat notification's click. */
   showChat: () => void;
   /** Asks the panels to say a chat message waits in their toast: one that came to wait while the window is focused. */
@@ -266,16 +262,8 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     panels.broadcast(channels.onAgentEnded, { ...place, words, detail, failed });
   }
 
-  function showInbox(planId: string): void {
-    panels.broadcast(channels.onShowInbox, { planId });
-  }
-
   function showSettings(): void {
     panels.broadcast(channels.onMenuCommand, APP_COMMAND.SETTINGS);
-  }
-
-  function toastInboxItem(item: InboxItemToast): void {
-    panels.broadcast(channels.onInboxItemOpened, item);
   }
 
   function showChat(): void {
@@ -425,9 +413,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     sendToVoice,
     showAgent,
     panelReady: () => config.appLinks.ready(openAppLink),
-    showInbox,
     showSettings,
-    toastInboxItem,
     showChat,
     toastChatMessage,
     toastAgentEnd,

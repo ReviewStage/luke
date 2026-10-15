@@ -15,12 +15,6 @@ import {
   codingAgentSummarySchema,
 } from "./coding-agent-wire.js";
 import { dictationAnswerSchema, dictationRequestSchema } from "./dictation-wire.js";
-import {
-  inboxAnsweredSchema,
-  inboxAnswerRequestSchema,
-  inboxAnswerSchema,
-  inboxImageTypeSchema,
-} from "./inbox-wire.js";
 import { catalogModelSchema, modelChoiceSchema } from "./models-wire.js";
 import {
   planTemplateAnswerSchema,
@@ -323,40 +317,6 @@ export const dictationTranscribeAnswerViewSchema = EffectSchema.Union([
 
 export type DictationTranscribeAnswerView = typeof dictationTranscribeAnswerViewSchema.Type;
 
-/** One plan's inbox past a cursor, as the window asks it: the plan, and where the window stands. */
-export const codingAgentInboxParamsSchema = EffectSchema.Struct({
-  planId: EffectSchema.NonEmptyString,
-  after: EffectSchema.NonEmptyString,
-});
-
-export type CodingAgentInboxParams = typeof codingAgentInboxParamsSchema.Type;
-
-/** One agent's inbox past a cursor, as the window asks it: the agent, and where the window stands; it is heard as a plan's inbox is. */
-export const codingAgentAgentInboxParamsSchema = EffectSchema.Struct({
-  agentId: EffectSchema.NonEmptyString,
-  after: EffectSchema.NonEmptyString,
-});
-
-export type CodingAgentAgentInboxParams = typeof codingAgentAgentInboxParamsSchema.Type;
-
-/** The plan's inbox, as the window hears it: every item its agents posted and the cursor to read on from, or why there is none. */
-export const codingAgentInboxAnswerViewSchema = EffectSchema.Union([inboxAnswerSchema, failed]);
-
-export type CodingAgentInboxAnswerView = typeof codingAgentInboxAnswerViewSchema.Type;
-
-/** An answer to one item of the inbox, as the window asks it: the item, and the answer request the service takes, its key the window's own. */
-export const codingAgentInboxAnswerParamsSchema = EffectSchema.Struct({
-  itemId: EffectSchema.NonEmptyString,
-  ...inboxAnswerRequestSchema.fields,
-});
-
-export type CodingAgentInboxAnswerParams = typeof codingAgentInboxAnswerParamsSchema.Type;
-
-/** The answer, as the window hears it: the item as it then stands and whether the answer was taken, or why there is no answer. */
-export const codingAgentInboxAnsweredViewSchema = EffectSchema.Union([inboxAnsweredSchema, failed]);
-
-export type CodingAgentInboxAnsweredView = typeof codingAgentInboxAnsweredViewSchema.Type;
-
 /** What waits across the account past a cursor, as main asks it: where it stands. */
 export const codingAgentAccountInboxParamsSchema = EffectSchema.Struct({
   after: EffectSchema.NonEmptyString,
@@ -371,29 +331,6 @@ export const codingAgentAccountInboxAnswerViewSchema = EffectSchema.Union([
 ]);
 
 export type CodingAgentAccountInboxAnswerView = typeof codingAgentAccountInboxAnswerViewSchema.Type;
-/** One image of an inbox item, as the window asks it: the item and the attachment its block names. */
-export const codingAgentInboxAttachmentParamsSchema = EffectSchema.Struct({
-  itemId: EffectSchema.NonEmptyString,
-  attachmentId: EffectSchema.NonEmptyString,
-});
-
-export type CodingAgentInboxAttachmentParams = typeof codingAgentInboxAttachmentParamsSchema.Type;
-
-/**
- * The image, as the window hears it: its bytes in base64 under the media
- * type the service sniffed and kept, which the window draws from a `data:`
- * URL of its own making, or why there is none. The host fetched it under
- * the account, so the window holds no bearer and no address.
- */
-export const codingAgentInboxAttachmentViewSchema = EffectSchema.Union([
-  EffectSchema.Struct({
-    contentType: inboxImageTypeSchema,
-    base64: EffectSchema.String,
-  }),
-  failed,
-]);
-
-export type CodingAgentInboxAttachmentView = typeof codingAgentInboxAttachmentViewSchema.Type;
 
 /** A workspace's chat past a cursor, as the window asks it: the workspace, and the cursor the service last handed back or the start. */
 export const codingAgentChatParamsSchema = EffectSchema.Struct({

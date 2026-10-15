@@ -38,11 +38,7 @@ import { act, createElement, Fragment, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import { ACT, ACT_KIND, type ActKind, type ActResultFor } from "#shared/messages/acts";
-import {
-  type AppInboxPlan,
-  type AppInboxPlanHolding,
-  RUN_PROFILE,
-} from "#shared/messages/app-state";
+import { RUN_PROFILE } from "#shared/messages/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { newestToastAction, newestToastSays } from "#testing/toast";
 import { ToastHost } from "../toast";
@@ -73,7 +69,7 @@ const OPEN: PlanningView = {
 const readShown = Schema.decodeUnknownOption(
   Schema.Struct({
     agentId: Schema.NullOr(Schema.String),
-    inboxPlanId: Schema.NullOr(Schema.String),
+    chatShown: Schema.optionalKey(Schema.Boolean),
   }),
 );
 
@@ -89,8 +85,6 @@ interface Standing {
   fixtureMode: boolean;
   voice: VoiceView;
   unseenAgents: readonly string[];
-  inboxWaiting: readonly AppInboxPlan[];
-  inboxPlans: readonly AppInboxPlanHolding[];
   /** Whether an account is signed in to the window. */
   signedIn: boolean;
   /** The signed-in account's email. */
@@ -108,8 +102,8 @@ function mount(
   const agentActs: ActKind[] = [];
   /** Which agent's tab main was told is shown, each time it was told. */
   const shownAgents: (string | null)[] = [];
-  /** Which plan's Inbox main was told is shown, each time it was told. */
-  const shownInboxes: (string | null)[] = [];
+  /** Whether main was told Chat is on screen, each time it was told. */
+  const shownChats: boolean[] = [];
   /** What the voice window was told to do, each time it was told. */
   const voiceCommands: VoiceCommand[] = [];
   /** Each asked act's payload, unread until a test reads it as the act's schema would. */
@@ -127,8 +121,6 @@ function mount(
     fixtureMode: false,
     voice: IDLE_VOICE_VIEW,
     unseenAgents: [],
-    inboxWaiting: [],
-    inboxPlans: [],
     signedIn: true,
     account: "dev@example.com",
     ...initial,
@@ -155,7 +147,7 @@ function mount(
           const shown = Option.getOrUndefined(readShown(args[0]));
           if (kind === ACT_KIND.CODING_AGENTS_SHOWN && shown !== undefined) {
             shownAgents.push(shown.agentId);
-            shownInboxes.push(shown.inboxPlanId);
+            shownChats.push(shown.chatShown === true);
           }
           const voiceCommand = Option.getOrUndefined(readVoiceCommand(args[0]));
           if (kind === ACT_KIND.VOICE_COMMAND && voiceCommand !== undefined) {
@@ -171,8 +163,7 @@ function mount(
       microphoneStatus: MICROPHONE_STATUS.GRANTED,
       shown: held.shown,
       unseenAgents: held.unseenAgents,
-      inboxWaiting: held.inboxWaiting,
-      inboxPlans: held.inboxPlans,
+      chatWaiting: [],
       voice: { view: held.voice, listening: false, requestMicrophoneAccess: () => undefined },
       onOpenIntegrations: () => undefined,
       onOpenApiKeys: () => undefined,
@@ -191,7 +182,7 @@ function mount(
     told,
     agentActs,
     shownAgents,
-    shownInboxes,
+    shownChats,
     voiceCommands,
     payloads,
     /** Every Settings link the tab followed, in order. */
@@ -800,7 +791,7 @@ test("the sidebar lists the first workspace's plans first, a workspace chosen li
   assert.deepEqual(
     tab.control().plans.map((plan) => plan.id),
     ["notes", "alerts", "billing"],
-    "the palette, the inbox, and the history find every workspace's plans",
+    "the palette and the history find every workspace's plans",
   );
   assert.deepEqual(
     tab.control().archived.map((plan) => plan.id),
@@ -1233,16 +1224,16 @@ test("another account signing in after a sign-out keeps its own plan, and has it
   assert.deepEqual(selected(tab), [PLAN.id]);
 });
 
-test("Factory and the Inbox stand in the plan's place in turn: opening one puts the other away, and Home or a plan's press puts Factory away", () => {
+test("Factory and Chat stand in the plan's place in turn: opening one puts the other away, and Home or a plan's press puts Factory away", () => {
   const tab = mount({ shown: true, planning: listRead([listed()]) });
-  act(() => tab.control().inboxView.onOpen());
+  act(() => tab.control().chatView.onOpen());
   act(() => tab.control().factoryView.onOpen());
   assert.equal(tab.control().factoryView.open, true);
-  assert.equal(tab.control().inboxView.open, false);
+  assert.equal(tab.control().chatView.open, false);
 
-  act(() => tab.control().inboxView.onOpen());
+  act(() => tab.control().chatView.onOpen());
   assert.equal(tab.control().factoryView.open, false);
-  assert.equal(tab.control().inboxView.open, true);
+  assert.equal(tab.control().chatView.open, true);
 
   act(() => tab.control().factoryView.onOpen());
   act(() => tab.control().onGoHome());
@@ -1253,22 +1244,29 @@ test("Factory and the Inbox stand in the plan's place in turn: opening one puts 
   assert.equal(tab.control().factoryView.open, false);
 });
 
-test("Home from an open plan leaves it, and from the home page only puts the Inbox away, asking the host nothing", () => {
+test("Home from an open plan leaves it, and from the home page only puts Chat away, asking the host nothing", () => {
   const tab = mount(
     { shown: true, planning: OPEN },
     { [ACT_KIND.PLANNING_CLOSE]: () => Promise.resolve() },
   );
-  act(() => tab.control().inboxView.onOpen());
+  act(() => tab.control().chatView.onOpen());
   act(() => tab.control().onGoHome());
-  assert.equal(tab.control().inboxView.open, false);
+  assert.equal(tab.control().chatView.open, false);
   assert.equal(tab.told.at(-1), ACT_KIND.PLANNING_CLOSE);
   assert.equal(tab.control().boundFor, undefined);
 
   const home = mount({ shown: true, planning: listRead([]) });
-  act(() => home.control().inboxView.onOpen());
+  act(() => home.control().chatView.onOpen());
   act(() => home.control().onGoHome());
-  assert.equal(home.control().inboxView.open, false);
+  assert.equal(home.control().chatView.open, false);
   assert.ok(!home.told.includes(ACT_KIND.PLANNING_CLOSE));
+});
+
+test("main is told when Chat comes on screen and when it leaves, so it announces nothing waiting in chat while the developer reads it there", () => {
+  const tab = mount({ shown: true, planning: listRead([listed()]) });
+  act(() => tab.control().chatView.onOpen());
+  act(() => tab.control().chatView.onClose());
+  assert.deepEqual(tab.shownChats, [false, true, false]);
 });
 
 test("a fixture run on the chat profile opens Chat at once and its staged chat lands there; a live run stages none", async () => {

@@ -8,7 +8,7 @@ import { searchAnchorProps } from "@luke/settings/settings-anchors";
  * is the value, Tab lands on the checked option (the first while none is) and
  * leaves the group in one press, and the arrow keys move along it and choose
  * as they go. A press on the chosen option does nothing, unless the control
- * is `clearable`, where it takes the choice back — an optional Inbox field's,
+ * is `clearable`, where it takes the choice back — an optional ask's field's,
  * which has no other way to be left unanswered once picked.
  */
 

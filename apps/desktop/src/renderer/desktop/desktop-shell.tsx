@@ -25,7 +25,6 @@ import { useColumnDock } from "./column-dock";
 import { DesktopAgentPage } from "./desktop-agent-page";
 import { DesktopChat } from "./desktop-chat";
 import { DesktopFactory } from "./desktop-factory";
-import { DesktopInbox } from "./desktop-inbox";
 import { DesktopPlans } from "./desktop-plans";
 import { DesktopSidebar } from "./desktop-sidebar";
 import { DesktopVersionHistory, planVersionSubject } from "./desktop-version-history";
@@ -96,7 +95,7 @@ function SidebarToggle({ sidebar }: { sidebar: SidebarCollapse }): React.JSX.Ele
 
 /**
  * The shortcuts that reach a place from anywhere past the sign-in: a new
- * plan, Settings, the home page, the Inbox, the tab closed latest, opened again on its
+ * plan, Settings, the home page, Chat, the tab closed latest, opened again on its
  * plan, the Keyboard shortcuts page that lists them all, and back and
  * forward, which answer whether or not their buttons are drawn.
  */
@@ -133,11 +132,11 @@ function usePlaceCommands(
       : undefined,
   );
   useAppCommand(
-    APP_COMMAND.INBOX,
+    APP_COMMAND.CHAT,
     pastGate && plans.signedIn
       ? () => {
           if (tab !== PANEL_TAB.PLANS) onTabChange(PANEL_TAB.PLANS);
-          plans.inboxView.onOpen();
+          plans.chatView.onOpen();
         }
       : undefined,
   );
@@ -239,9 +238,9 @@ function transcriptStreaming(plans: PlansControl): boolean {
 
 /**
  * What the window's title names: Settings alone, whose pages are not one
- * workspace's; the Inbox in the listed workspace, whatever plan its item is
- * from; Factory and Chat in the listed workspace; the plan on screen in its own workspace, or alone while that is not
- * read; else the listed workspace.
+ * workspace's; Factory and Chat in the listed workspace; the plan on
+ * screen in its own workspace, or alone while that is not read; else the
+ * listed workspace.
  */
 function titleSubject(
   tab: PanelTab,
@@ -250,7 +249,6 @@ function titleSubject(
 ): Parameters<typeof useWindowTitle>[0] {
   const { signedIn } = plans;
   if (tab === PANEL_TAB.SETTINGS) return { signedIn, subject: "Settings", workspace: undefined };
-  if (plans.inboxView.open) return { signedIn, subject: "Inbox", workspace: plans.workspace };
   if (plans.agentView.agentId !== undefined) {
     return { signedIn, subject: "Agent", workspace: plans.workspace };
   }
@@ -271,8 +269,8 @@ function titleSubject(
  * mirror of the sidebar's, at the window's top right on a plan's page, so
  * neither pane carries the button that moves it. A plan's version history
  * takes the whole window as Settings does, its versions listed where the
- * sidebar was, and leaves the same way; the Inbox stands in the plan's
- * place beside the sidebar (`desktop-inbox.tsx`); it is still a stay on the plan, so
+ * sidebar was, and leaves the same way; Chat stands in the plan's
+ * place beside the sidebar (`desktop-chat.tsx`); it is still a stay on the plan, so
  * what changed since the developer last looked is held here, across it,
  * rather than by the plan's page (`use-plan-looks.ts`). Folding the sidebar,
  * opening, shutting, or growing the side panel, or the plan's summary pinned
@@ -329,15 +327,12 @@ export function DesktopShell({
   useColumnDock(
     shell,
     plans.sidePanel.fullScreen,
-    `${tab}:${plans.page}:${plans.history.open}:${plans.inboxView.open}:${plans.agentView.agentId}:${plans.factoryView.open}:${plans.chatView.open}:${sidebar.collapsed}`,
+    `${tab}:${plans.page}:${plans.history.open}:${plans.agentView.agentId}:${plans.factoryView.open}:${plans.chatView.open}:${sidebar.collapsed}`,
   );
   // The window's title names what stands in it, the plan only while it is on screen, and its workspace;
-  // the Inbox, an agent's page, Factory, or Chat standing in its place is not the plan.
+  // an agent's page, Factory, or Chat standing in its place is not the plan.
   const standingIn =
-    plans.inboxView.open ||
-    plans.agentView.agentId !== undefined ||
-    plans.factoryView.open ||
-    plans.chatView.open;
+    plans.agentView.agentId !== undefined || plans.factoryView.open || plans.chatView.open;
   const shownPlan =
     tab === PANEL_TAB.PLANS && !standingIn && region.kind === DOCUMENT_REGION.READY
       ? region.plan
@@ -401,9 +396,8 @@ export function DesktopShell({
     );
   }
   // Note that the shell says whether the panel's toggle stands, because the
-  // toolbar beneath it leaves the toggle room then and only then. The Inbox
-  // an agent's page, Factory, and Chat stand in the plan's place, so they draw no panel to toggle.
-  const inboxOpen = plans.inboxView.open;
+  // toolbar beneath it leaves the toggle room then and only then. An
+  // agent's page, Factory, and Chat stand in the plan's place, so they draw no panel to toggle.
   const pageAgent = plans.agentView.agentId;
   const factoryOpen = plans.factoryView.open && factoryOn;
   const chatOpen = plans.chatView.open;
@@ -441,8 +435,6 @@ export function DesktopShell({
             plans={plans}
             accountName={account.status === ACCOUNT_STATUS.SIGNED_IN ? account.name : undefined}
           />
-        ) : inboxOpen ? (
-          <DesktopInbox plans={plans} />
         ) : pageAgent !== undefined ? (
           // Keyed by the agent, so another agent's page is a page of its own, holding nothing of the last.
           <DesktopAgentPage key={pageAgent} plans={plans} agentId={pageAgent} />

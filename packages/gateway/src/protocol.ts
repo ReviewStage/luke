@@ -131,11 +131,6 @@ export const GATEWAY_METHOD = {
   PLAN_TEMPLATE_RESTORE: "planTemplate.restore",
   /** One clip dictated into an agent's message box, carried once to the service; its words, or why there are none. Nothing of it is kept. */
   DICTATION_TRANSCRIBE: "dictation.transcribe",
-  /** One plan's inbox past a cursor: every item its coding agents posted for the developer, held open by the service while nothing changed. */
-  CODING_AGENTS_INBOX: "codingAgents.inbox",
-  CODING_AGENTS_AGENT_INBOX: "codingAgents.agentInbox",
-  /** One item of a plan's inbox answered against the revision the panel drew, under the panel's own key; the item as it then stands and whether the answer was taken, or why there is no answer. */
-  CODING_AGENTS_INBOX_ANSWER: "codingAgents.inboxAnswer",
   /** A workspace's chat past a cursor: what a person in it sees of it, held open by the service while nothing moved. */
   CODING_AGENTS_CHAT: "codingAgents.chat",
   /** A write to a workspace's chat as the account's own member: a post, an answer to an ask, a resolve, or how far it has read; what the write came to, or why there is no answer. */
@@ -150,10 +145,8 @@ export const GATEWAY_METHOD = {
   INTEGRATIONS_CANCEL: "integrations.cancel",
   /** The account's connection to one provider ended on the service; where it then stands. */
   INTEGRATIONS_DISCONNECT: "integrations.disconnect",
-  /** What waits on the developer across the account's plans past a cursor: every open inbox item, held open by the service while nothing changed. Main's own read, which no window asks. */
+  /** What waits on the developer across the account's plans past a cursor: every open inbox item and every chat message waiting on them, held open by the service while nothing changed. Main's own read, which no window asks. */
   CODING_AGENTS_ACCOUNT_INBOX: "codingAgents.accountInbox",
-  /** One image of an inbox item, fetched under the account: its bytes in base64 under the media type the service kept, or why there is none. */
-  CODING_AGENTS_INBOX_ATTACHMENT: "codingAgents.inboxAttachment",
   /**
    * A coding agent's terminals (`@luke/features/terminal-view`): its shells
    * listed, started, named, and ended, and its sandbox resumed on the

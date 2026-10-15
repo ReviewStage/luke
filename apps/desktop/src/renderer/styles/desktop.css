@@ -326,16 +326,11 @@ body,
   display: flex;
 }
 
-/* The Inbox's list and Chat's rail stand on the sidebar's ground, so the
-   folded sidebar's buttons over their heads do too, as they do over the
-   floating sidebar. */
+/* Chat's rail stands on the sidebar's ground, so the folded sidebar's
+   buttons over its head do too, as they do over the floating sidebar. */
 .desktop-shell[data-sidebar-collapsed="false"] .title-bar-controls:not([data-edge]),
 .desktop-shell[data-sidebar-overlay="peek"] .title-bar-controls:not([data-edge]),
 .desktop-shell[data-sidebar-overlay="open"] .title-bar-controls:not([data-edge]),
-.desktop-shell[data-sidebar-collapsed="true"]:has(
-    .desktop-main > .inbox-view:not([data-columns="item"])
-  )
-  .title-bar-controls:not([data-edge]),
 .desktop-shell[data-sidebar-collapsed="true"]:has(.desktop-main > .chat-view)
   .title-bar-controls:not([data-edge]) {
   --title-bar-ground: var(--desktop-sidebar);
@@ -443,7 +438,7 @@ body,
 
 .sidebar-new-plan:disabled,
 .sidebar-home:disabled,
-.sidebar-inbox:disabled,
+.sidebar-chat:disabled,
 .sidebar-factory:disabled {
   opacity: 0.45;
 }
@@ -455,26 +450,26 @@ body,
    group count's ink, and gives way to its chord while the row is hovered
    or reached from the keyboard, as the rows above show theirs. */
 .sidebar-home[aria-current="page"],
-.sidebar-inbox[aria-current="page"],
+.sidebar-chat[aria-current="page"],
 .sidebar-factory[aria-current="page"] {
   background: var(--raised-strong);
 }
 
-.sidebar-inbox-waiting {
+.sidebar-chat-waiting {
   margin-left: auto;
   color: var(--text-tertiary);
   font-size: 11.5px;
   font-variant-numeric: tabular-nums;
 }
 
-.sidebar-inbox-waiting ~ .row-shortcut,
-.sidebar-inbox:hover > .sidebar-inbox-waiting,
-:root[data-keyboard="true"] .sidebar-inbox:focus-visible > .sidebar-inbox-waiting {
+.sidebar-chat-waiting ~ .row-shortcut,
+.sidebar-chat:hover > .sidebar-chat-waiting,
+:root[data-keyboard="true"] .sidebar-chat:focus-visible > .sidebar-chat-waiting {
   display: none;
 }
 
-.sidebar-inbox:hover > .sidebar-inbox-waiting ~ .row-shortcut,
-:root[data-keyboard="true"] .sidebar-inbox:focus-visible > .sidebar-inbox-waiting ~ .row-shortcut {
+.sidebar-chat:hover > .sidebar-chat-waiting ~ .row-shortcut,
+:root[data-keyboard="true"] .sidebar-chat:focus-visible > .sidebar-chat-waiting ~ .row-shortcut {
   display: inline-flex;
 }
 
@@ -1289,11 +1284,9 @@ body,
 }
 
 /* The plan's toolbar leads with its tab rather than a title, so it starts
-   the tab's pill a row's inset in, as the side panel's row starts its own;
-   the Inbox pane's bar leads with its crumbs, drawn as tabs, alike. */
+   the tab's pill a row's inset in, as the side panel's row starts its own. */
 .desktop-plan-main .desktop-toolbar,
-.desktop-toolbar:has(.tab-skeleton),
-.inbox-view-items .desktop-toolbar {
+.desktop-toolbar:has(.tab-skeleton) {
   padding-left: var(--column-inset);
 }
 
@@ -1998,10 +1991,8 @@ body,
 /* An agent's or the draft's tab in the plan's column: its transcript, its
    docked to-do list, and its composer, each keeping to the document's
    measure in the middle of the column, as they keep to it in a wide side
-   panel, so the list's card and the composer's share both edges. The
-   Inbox's pane is laid out the same way, its thread and box at that measure. */
-.desktop-agent,
-.desktop-inbox {
+   panel, so the list's card and the composer's share both edges. */
+.desktop-agent {
   --reading-room: calc((100% - var(--reading-width)) / 2);
   position: relative;
   display: flex;
@@ -2012,9 +2003,7 @@ body,
 
 .desktop-agent [role="log"],
 .desktop-agent .agent-todos-dock,
-.desktop-agent .agent-composer,
-.desktop-inbox .inbox-board,
-.desktop-inbox .agent-composer {
+.desktop-agent .agent-composer {
   padding-inline: max(var(--content-inset), var(--reading-room));
 }
 
@@ -2973,103 +2962,16 @@ body:has(.app-stage[data-capture="true"])
 
 /* Inbox ---------------------------------------------------------------------- */
 
-/* The window's Inbox, in the plan's place beside the sidebar, and a plan's
-   own Inbox tab: the items in a column on the sidebar's ground, under a bar
-   the work column's height, and the chosen item beside it, at the Inbox's
-   own measure (`.desktop-inbox`). The column is as wide as it was last
-   dragged (`inbox-list.tsx`), held to what the Inbox's own width leaves the
-   pane, which is why the Inbox is the container it measures; its edge is
-   drawn as the sidebar's is. */
-.inbox-view {
-  container-type: inline-size;
-  display: grid;
-  min-height: 0;
-  flex: 1;
-  grid-template-columns: auto minmax(0, 1fr);
-}
-
-/* Too narrow for both, the Inbox shows its list or the item a press opened,
-   the whole Inbox wide (`inbox-columns.ts`); the list then needs no edge to
-   part it from the item. */
-.inbox-view:is([data-columns="list"], [data-columns="item"]) {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.inbox-view[data-columns="list"] .inbox-plans {
-  border-right: 0;
-}
-
-.inbox-view > [hidden] {
-  display: none;
-}
-
-.inbox-plans {
-  position: relative;
-  display: flex;
-  min-width: 0;
-  min-height: 0;
-  flex-direction: column;
-  border-right: 1px solid var(--hairline);
-  background: var(--desktop-sidebar);
-}
-
-/* Its buttons end as far in from the list's edge as the side panel's toggle
-   stands from the window's. */
-.inbox-plans-bar {
-  padding-right: var(--column-inset);
-}
-
-/* While the sidebar is folded the list is the window's first column, so its
-   name stands centred over the list, as a sidebar's title does, rather than
-   pushed past the title bar's buttons. Each side of the name holds at least
-   what stands there, the title bar's buttons at the left and the list's own
-   at the right, so the name moves aside only once it would meet them, and is
-   cut short only once it no longer fits between them. The bar is inset alike
-   on both sides, so centred in the bar is centred in the list. */
-.desktop-shell[data-sidebar-collapsed="true"] .desktop-main .inbox-plans-bar {
-  display: grid;
-  grid-template-columns:
-    minmax(calc(var(--sidebar-toggle-clearance) - var(--column-inset) - var(--control-gap)), 1fr)
-    minmax(0, max-content)
-    minmax(max-content, 1fr);
-  padding-left: var(--column-inset);
-}
-
-.desktop-shell[data-sidebar-collapsed="true"] .inbox-plans-bar .desktop-toolbar-heading {
-  grid-column: 2;
-}
-
-.desktop-shell[data-sidebar-collapsed="true"] .inbox-plans-bar .desktop-toolbar-actions {
-  grid-column: 3;
-  justify-self: end;
-}
-
-/* The list standing alone is a page rather than a column, so its name leads
-   its bar past the title bar's buttons, as a page's title does. */
-.desktop-shell[data-sidebar-collapsed="true"]
-  .desktop-main
-  .inbox-view[data-columns="list"]
-  .inbox-plans-bar {
-  display: flex;
-  padding-left: var(--sidebar-toggle-clearance);
-}
-
-.inbox-plans-scroll {
-  min-height: 0;
-  flex: 1;
-  overflow-y: auto;
-  padding: var(--space-8) var(--column-inset) var(--column-inset);
-}
-
-/* An item's row is a sidebar row led by its agent's mark, centred on the
-   line as a pinned tab's is, with no Unpin to leave room for. */
+/* A waiting row (Home's For you, Factory's) is a sidebar row led by its
+   mark, centred on the line as a pinned tab's is, with no Unpin to leave
+   room for. */
 .inbox-row .sidebar-plan-line {
   align-items: center;
   gap: var(--space-6);
 }
 
-/* An item that needs the developer wears a mail app's unread dot in the system
-   blue, beside its title's unread weight; an answered one wears neither. The
+/* A row that waits on the developer wears a mail app's unread dot in the system
+   blue, beside its title's unread weight; a settled one wears neither. The
    dot is the window's one mark for what waits on the developer, as a plan or
    a tab with something unseen on it is unread, not waiting. The dots stand
    in a column of their own past the times, kept on every row, so the times
@@ -3094,30 +2996,7 @@ body:has(.app-stage[data-capture="true"])
   transform: translateY(-50%);
 }
 
-/* The pane's words under the agent's byline start where its name does, past its mark. */
-.inbox-indent {
-  padding-left: calc(var(--control-glyph) + var(--glyph-gap));
-}
-
-/* The pane's crumbs are drawn as the plan's column's tabs (`.tab`), parted
-   by the strip's gap and the breadcrumbs' chevron. The path clips what runs
-   past it, though not the keyboard's ring on a crumb, and a crumb under the
-   pointer's press takes the chosen tab's fill, where a tab pressed lands. */
-.inbox-crumbs {
-  overflow: clip;
-  overflow-clip-margin: var(--focus-ring-reach);
-}
-
-.inbox-crumbs ol {
-  gap: var(--list-gap);
-}
-
-.inbox-crumb:active {
-  background: var(--raised-strong);
-  color: var(--text-primary);
-}
-
-/* One agent's page stands in the plan's place as the Inbox does: its toolbar
+/* One agent's page stands in the plan's place as Chat does: its toolbar
    over the agent's tab, which fills the rest as it fills a plan's column. */
 .agent-page {
   display: flex;
@@ -3131,32 +3010,9 @@ body:has(.app-stage[data-capture="true"])
   padding: var(--section-gap) var(--space-12);
 }
 
-.inbox-view-items {
-  display: flex;
-  min-width: 0;
-  min-height: 0;
-  flex-direction: column;
-}
-
-/* Only the column's bar meets the folded sidebar's toggle, so the items' bar
-   keeps its own inset then. */
-.desktop-shell[data-sidebar-collapsed="true"] .inbox-view-items .desktop-toolbar {
-  padding-left: var(--column-inset);
-}
-
-/* An item standing alone in the window's Inbox is its first column, so its
-   bar, led by the way back, leaves the title bar's buttons their room. */
-.desktop-shell[data-sidebar-collapsed="true"]
-  .desktop-main
-  > .inbox-view[data-columns="item"]
-  .inbox-view-items
-  .desktop-toolbar {
-  padding-left: var(--sidebar-toggle-clearance);
-}
-
 /* Factory -------------------------------------------------------------------- */
 
-/* Factory stands in the plan's place as the Inbox does: the toolbar, the
+/* Factory stands in the plan's place as Chat does: the toolbar, the
    summary line, then the line of steps, each a card on the sidebar's ground
    holding sidebar rows. The steps share one grid row each for their work and
    their wait, so what waits on the developer lines up as one band across the
@@ -4640,30 +4496,6 @@ body:has(.app-stage[data-capture="true"])
   width: var(--summary-rail-width);
 }
 
-/* Needs you's glyph is the Inbox's own, wearing the rows' blue dot at its
-   top right while anything needs the developer, filtered out or not, so the
-   dot says there is something to answer and the pressed fill alone says the
-   filter is on. The stroke is cut back in a ring around the dot, as lucide's
-   own dotted glyphs are drawn. The dot stands in the glyph's 24-unit box,
-   the cut in the glyph's pixels at the same point, scaled by one unit. */
-.inbox-needs-you-dot {
-  cx: 19px;
-  cy: 5px;
-  r: 3.6px;
-  fill: var(--message-sent);
-  stroke: none;
-}
-
-.inbox-needs-you-only[data-waiting="true"] svg {
-  --needs-you-unit: calc(var(--control-glyph) / 24);
-  mask: radial-gradient(
-    circle at calc(19 * var(--needs-you-unit)) calc(5 * var(--needs-you-unit)),
-    #000 calc(3.7 * var(--needs-you-unit)),
-    transparent calc(3.7 * var(--needs-you-unit)) calc(5.6 * var(--needs-you-unit)),
-    #000 calc(5.6 * var(--needs-you-unit))
-  );
-}
-
 /* Expanded where it cannot be pinned, the whole summary stands in a card
    over the rail's own footprint, its top and right edges the rail's, drawn
    as a menu is, and its chevron, shown while the pointer is on it, stands
@@ -4823,15 +4655,6 @@ body:has(.app-stage[data-capture="true"])
   margin-left: var(--space-6);
   color: var(--text-secondary);
   font-size: 12px;
-}
-
-/* The Inbox row's count of what waits, at its end in the quiet count a
-   folded sidebar group shows after its name. */
-.inbox-row-count {
-  flex: none;
-  color: var(--text-tertiary);
-  font-size: 11.5px;
-  font-variant-numeric: tabular-nums;
 }
 
 /* The files Luke showed, in rows the file tree's own (`planning.css`): its
@@ -5590,10 +5413,8 @@ body:has(.app-stage[data-capture="true"])
 /* The plan's tab alone in its column takes the room the heading has rather
    than a most of its own, and gives way to the toolbar's buttons by
    truncating its label, down to a few of its characters, rather than by
-   scrolling. Beside an agent's it is a tab like any other. The Inbox pane's
-   crumbs give way alike, within a tab's most. */
-.desktop-toolbar-heading .tab[data-quiet="true"],
-.inbox-crumbs .tab {
+   scrolling. Beside an agent's it is a tab like any other. */
+.desktop-toolbar-heading .tab[data-quiet="true"] {
   min-width: calc(
     var(--tab-start) +
     var(--control-glyph) +

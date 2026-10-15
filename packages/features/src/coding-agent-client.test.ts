@@ -201,22 +201,6 @@ it.effect(
 );
 
 it.effect(
-  "reads one agent's inbox past a cursor at the agent's own path, held as a plan's is",
-  () =>
-    Effect.gen(function* () {
-      const api = fakeCloudApi({
-        [`GET /api/agents/${AGENT_ID}/inbox`]: {
-          answer: () => ({ items: [], cursor: "3" }),
-        },
-      });
-
-      const read = yield* Effect.provide(client().agentInbox(AGENT_ID, "0"), api.layer);
-
-      assert.deepEqual(read, { items: [], cursor: "3" });
-    }),
-);
-
-it.effect(
   "reads a workspace's chat past the cursor it names, and a workspace the account is not in as not found",
   () =>
     Effect.gen(function* () {

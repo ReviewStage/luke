@@ -1,10 +1,10 @@
+import { ACCOUNT_CHAT_REASON, type AccountChatEntry } from "@luke/features/account-inbox-wire";
 import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
 import type { PlanAgentLine, PlanPullRequestLine, PlanSummary } from "@luke/features/plan-wire";
-import type { AppInboxPlan, AppInboxWaitingItem } from "#shared/messages/app-state";
 import { agentStillWriting } from "../planning/coding-agent-model";
 
 /**
- * factory-model.ts -- what the Factory tab draws: the plans being planned, built, and shipped right now, and what of them waits on the developer, from the plan list, main's Inbox read, and the call.
+ * factory-model.ts -- what the Factory tab draws: the plans being planned, built, and shipped right now, and what of them waits on the developer, from the plan list, main's read of what waits in chat, and the call.
  *
  * Factory is a live view, not a report: it holds no range and no totals,
  * only where work stands now. A plan stands in the step its own state puts
@@ -12,10 +12,10 @@ import { agentStillWriting } from "../planning/coding-agent-model";
  * and was saved lately or is on the call, Build while an agent works on it
  * or its pull request is still in checks, Ship for a minute after one of
  * its pull requests was seen to merge. What waits on the developer is the
- * bottom of two steps: the Inbox's open items under Build, since an agent
- * that asks is stopped until it is answered, and the pull requests ready
+ * bottom of two steps: the open asks posted in a plan's channel under
+ * Build, since an agent that asks is stopped until it is answered, and the pull requests ready
  * to merge under Ship, since nothing merges without the developer. An
- * agent is stalled by holding an open item, not by a status of its own.
+ * agent is stalled by holding an open ask, not by a status of its own.
  * Every list is read from what the window already holds; nothing here
  * fetches. Note that the list's row names at most three pull requests,
  * open and draft ones first (`PLAN_AGENTS_BOUNDS`), so a plan with more
@@ -50,10 +50,10 @@ export interface FactoryBuilding {
   readonly pullRequest: PlanPullRequestLine | undefined;
 }
 
-/** An open Inbox item and its plan: the agent that posted it is stopped until it is answered. */
+/** An open ask and its plan: whoever posted it is stopped until it is answered. */
 export interface FactoryQuestion {
   readonly plan: PlanSummary;
-  readonly item: AppInboxWaitingItem;
+  readonly ask: AccountChatEntry;
 }
 
 /** A pull request waiting on the developer to merge it. */
@@ -79,8 +79,8 @@ export type MergedSeen = ReadonlyMap<string, ReadonlyMap<PullRequestIdentity, nu
 export interface FactoryInput {
   /** The plans the sidebar lists. */
   readonly plans: readonly PlanSummary[];
-  /** What main's Inbox read says waits, by plan. */
-  readonly waiting: readonly AppInboxPlan[];
+  /** What main's read of the account says waits in chat. */
+  readonly waiting: readonly AccountChatEntry[];
   /** The plan on this Mac's call, or none. */
   readonly callPlanId: string | undefined;
   readonly merged: MergedSeen;
@@ -91,7 +91,7 @@ export interface FactoryInput {
 export interface FactoryBoard {
   readonly planning: readonly FactoryPlanning[];
   readonly building: readonly FactoryBuilding[];
-  /** The open Inbox items, the longest waiting first. */
+  /** The open asks, the longest waiting first. */
   readonly questions: readonly FactoryQuestion[];
   readonly merges: readonly FactoryMerge[];
   /** What shipped within the last minute, the latest first. */
@@ -132,8 +132,9 @@ function pullRequestsOf(plan: PlanSummary): readonly PlanPullRequestLine[] {
 /** Where one plan stands: its build row, its merges, its questions, and whether it is being planned. */
 function placePlan(plan: PlanSummary, input: FactoryInput) {
   const agents = plan.agents;
-  const items = input.waiting.find((each) => each.planId === plan.id)?.items ?? [];
-  const questions = items.map((item) => ({ plan, item }));
+  const questions = input.waiting
+    .filter((each) => each.reason === ACCOUNT_CHAT_REASON.ASK && each.planId === plan.id)
+    .map((ask) => ({ plan, ask }));
   const merges = pullRequestsOf(plan)
     .filter(readyToMerge)
     .map((pullRequest) => ({ plan, pullRequest }));
@@ -177,7 +178,7 @@ export function factoryBoard(input: FactoryInput): FactoryBoard {
     .toSorted((a, b) => (b.agent?.at ?? b.plan.updatedAt) - (a.agent?.at ?? a.plan.updatedAt));
   const questions = placed
     .flatMap((each) => each.questions)
-    .toSorted((a, b) => a.item.postedAt - b.item.postedAt);
+    .toSorted((a, b) => a.ask.updatedAt - b.ask.updatedAt);
   const merges = placed.flatMap((each) => each.merges);
   const shipped = plans.flatMap((plan) => shippedOf(plan, input)).toSorted((a, b) => b.at - a.at);
   const working = plans.filter((plan) => (plan.agents?.working ?? 0) > 0);

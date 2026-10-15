@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
+import { ACCOUNT_CHAT_REASON, type AccountChatEntry } from "@luke/features/account-inbox-wire";
 import { IDLE_PLANNING_VIEW } from "@luke/features/planning-view";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { WINDOW_ROLE } from "@luke/gateway/window-session";
@@ -105,12 +106,12 @@ afterEach(() => {
 });
 
 /**
- * The window's shell on the home page with the sidebar folded, the Inbox
- * open over it or not, New plan opening its dialog and Cancel putting it
+ * The window's shell on the home page with the sidebar folded, Chat open
+ * over it or not, New plan opening its dialog and Cancel putting it
  * away as the tab does.
  */
 function mount(
-  inboxOpen: boolean,
+  chatOpen: boolean,
   restoring = false,
   overrides: Partial<PlansControl> = {},
   tab: PanelTab = PANEL_TAB.PLANS,
@@ -135,13 +136,7 @@ function mount(
       plans: plansControl({
         page: PLANS_PAGE.HOME,
         restoring,
-        inboxView: {
-          open: inboxOpen,
-          chosen: undefined,
-          onOpen: ignore,
-          onClose: ignore,
-          onChoose: ignore,
-        },
+        chatView: { ...control.chatView, open: chatOpen, available: chatOpen },
         onNewPlan: () => setAsked(true),
         newPlan: { ...control.newPlan, open: asked, onClose: () => setAsked(false) },
         ...overrides,
@@ -196,7 +191,7 @@ test("Escape pressed while Settings is still loading leaves Settings for the pla
   assert.deepEqual(tabs, [PANEL_TAB.PLANS]);
 });
 
-test("with the sidebar folded, New plan stands beside its toggle over the home page and the Inbox alike", () => {
+test("with the sidebar folded, New plan stands beside its toggle over the home page and Chat alike", () => {
   assert.deepEqual(titleBarButtons(mount(false)), ["Show sidebar", "New plan"]);
   act(() => root?.unmount());
   root = undefined;
@@ -233,7 +228,7 @@ function homeRow(page: HTMLElement): HTMLButtonElement {
   return row;
 }
 
-test("the sidebar's Home row is the place shown on the home page, and neither over the Inbox nor while a launch reopens a plan", () => {
+test("the sidebar's Home row is the place shown on the home page, and neither over Chat nor while a launch reopens a plan", () => {
   assert.equal(homeRow(mount(false)).getAttribute("aria-current"), "page");
   act(() => root?.unmount());
   assert.equal(homeRow(mount(true)).getAttribute("aria-current"), null);
@@ -262,10 +257,10 @@ const ACME: Workspace = {
   github: null,
 };
 
-test("the window is called by what stands in it: the plan on screen in its own workspace, else the Inbox, Factory, or Settings, and Luke once signed out", () => {
-  const titled = (inboxOpen: boolean, tab: PanelTab, signedIn = true, workspaces = [ACME]) => {
+test("the window is called by what stands in it: the plan on screen in its own workspace, else Chat, Factory, or Settings, and Luke once signed out", () => {
+  const titled = (chatOpen: boolean, tab: PanelTab, signedIn = true, workspaces = [ACME]) => {
     mount(
-      inboxOpen,
+      chatOpen,
       false,
       {
         signedIn,
@@ -288,7 +283,7 @@ test("the window is called by what stands in it: the plan on screen in its own w
       titled(false, PANEL_TAB.PLANS, false),
       titled(false, PANEL_TAB.PLANS, true, [{ ...ACME, id: "workspace-other" }]),
     ],
-    [`${DOCUMENT_NAME} — Acme`, "Inbox — Acme", "Settings", "Luke", DOCUMENT_NAME],
+    [`${DOCUMENT_NAME} — Acme`, "Chat — Acme", "Settings", "Luke", DOCUMENT_NAME],
   );
 
   mount(false, false, {
@@ -327,7 +322,7 @@ function snapshotWith(experiments: ExperimentChoices): AppStateSnapshot {
     voice: {},
     planning: IDLE_PLANNING_VIEW,
     codingAgents: { unseen: [] },
-    inbox: { waiting: [], plans: [] },
+    chat: { waiting: [] },
     notifications: { refused: false },
     sessionReplay: { permitted: false, halted: false },
     window: { role: WINDOW_ROLE.PANEL, fullScreen: false },
@@ -384,15 +379,31 @@ test("a press on Factory's row in a floating sidebar puts the sidebar away, as e
   assert.deepEqual(told, [SIDEBAR_OVERLAY.CLOSED]);
 });
 
+/** An ask main's read of the account says waits on the developer. */
+const WAITING_ASK: AccountChatEntry = {
+  messageId: "10000000-0000-4000-8000-000000000001",
+  seq: 1,
+  workspaceId: DOCUMENT_PLAN.workspaceId,
+  reason: ACCOUNT_CHAT_REASON.ASK,
+  from: "invites-agent",
+  planId: DOCUMENT_PLAN.id,
+  touchedSeq: 1,
+  updatedAt: 1,
+};
+
 /** The sidebar's Chat row, where one stands. */
 function chatRow(page: HTMLElement): HTMLButtonElement | undefined {
-  return [...page.querySelectorAll<HTMLButtonElement>("button.sidebar-inbox")].find((button) =>
+  return [...page.querySelectorAll<HTMLButtonElement>("button.sidebar-chat")].find((button) =>
     button.textContent?.startsWith("Chat"),
   );
 }
 
-test("the sidebar's Chat row stands only where Chat is available, counts what waits on the developer, and opens Chat in the plan's place, which it marks while Home's row is not", () => {
-  assert.equal(chatRow(mount(false)), undefined);
+test("the sidebar's Chat row stands where the Inbox's did, counts what waits on the developer by main's read or Chat's own, and opens Chat in the plan's place, which it marks while Home's row is not", () => {
+  const signedOut = chatRow(mount(false, false, { signedIn: false }));
+  assert.equal(signedOut?.disabled, true, "signed out, Chat stands but cannot open");
+  act(() => root?.unmount());
+  const waiting = chatRow(mount(false, false, { chatWaiting: [WAITING_ASK] }));
+  assert.equal(waiting?.textContent, "Chat1 waiting on you⇧⌘I");
   act(() => root?.unmount());
 
   let opened = 0;
@@ -400,7 +411,7 @@ test("the sidebar's Chat row stands only where Chat is available, counts what wa
   const view = { ...plansControl().chatView, available: true, chat, onOpen: () => (opened += 1) };
   const page = mount(false, false, { chatView: view });
   const row = chatRow(page);
-  assert.equal(row?.textContent, "Chat4 waiting on you");
+  assert.equal(row?.textContent, "Chat4 waiting on you⇧⌘I");
   assert.equal(row?.getAttribute("aria-current"), null);
   act(() => row?.click());
   assert.equal(opened, 1);

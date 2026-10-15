@@ -10,6 +10,7 @@ import {
   MEMBER_KIND,
 } from "@luke/features/chat-wire";
 import { useState } from "react";
+import { Tooltip } from "../tooltip";
 import { AskCard } from "./chat-ask";
 import { ChatComposer } from "./chat-composer";
 import type { ChatTarget } from "./chat-mention";
@@ -30,10 +31,10 @@ import {
   placeChannel,
   postTarget,
 } from "./chat-model";
-import { LinkBlock } from "./inbox-pane";
 import { RelativeTime } from "./relative-time";
 import { AgentGlyph } from "./tab-look";
 import { TranscriptWords } from "./transcript-blocks";
+import { opensAsLink } from "./use-open-link";
 
 /**
  * chat-pane.tsx -- one place of the window's Chat at reading size: For you, or a channel's messages with their threads.
@@ -102,6 +103,39 @@ export function MemberMark({ who, small }: { who: ChatWho; small?: boolean }): R
     <span className="chat-mark" data-kind={kind ?? "unknown"} data-size={size} aria-hidden="true">
       {initial}
     </span>
+  );
+}
+
+/** A link block: a press where it is a web page, as a transcript's links are, else its label with the address beside it to copy. */
+function LinkBlock({
+  url,
+  label,
+  openLink,
+}: {
+  url: string;
+  label: string;
+  openLink: (url: string) => void;
+}): React.JSX.Element {
+  if (opensAsLink(url)) {
+    return (
+      <a
+        href={url}
+        className="agent-link"
+        onClick={(event) => {
+          event.preventDefault();
+          openLink(url);
+        }}
+      >
+        {label}
+      </a>
+    );
+  }
+  return (
+    <Tooltip label={url}>
+      <span className="agent-link-inert">
+        {label} <span className="select-text text-muted-foreground">{url}</span>
+      </span>
+    </Tooltip>
   );
 }
 

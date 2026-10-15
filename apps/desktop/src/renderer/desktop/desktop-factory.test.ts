@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { ACCOUNT_CHAT_REASON, type AccountChatEntry } from "@luke/features/account-inbox-wire";
 import {
   CHECK_SUMMARY,
   CODING_AGENT_STATUS,
@@ -15,7 +16,8 @@ import { afterEach, beforeEach, test } from "vitest";
 import { onRegistry } from "#testing/copy-feedback";
 import { plansControl } from "#testing/plans-control";
 import { OpenFeedbackProvider } from "../open-feedback";
-import type { InboxChoice, PlansControl } from "../planning/use-plans-tab";
+import { type ChatPlace, FOR_YOU } from "../planning/chat-model";
+import type { PlansControl } from "../planning/use-plans-tab";
 import { DesktopFactory } from "./desktop-factory";
 
 const NOW = Date.now();
@@ -90,7 +92,22 @@ const INVITES = plan(4, "Workspace invites", HOUR, {
     ],
   },
 });
-const QUESTION = "Which Mercury account should payouts draw from: Operating or Payroll?";
+/** The ask the stalled agent posted in Mercury payouts' channel, as main's read of the account carries it. */
+function askOn(planId: string, at: number): AccountChatEntry {
+  return {
+    messageId: "10000000-0000-4000-8000-000000000001",
+    seq: 7,
+    workspaceId: "workspace-personal",
+    reason: ACCOUNT_CHAT_REASON.ASK,
+    from: "payouts-agent",
+    planId,
+    touchedSeq: 7,
+    updatedAt: at,
+  };
+}
+
+/** The ask's row as Build draws it: who asked. */
+const QUESTION = "@payouts-agent asked you";
 
 let root: Root | undefined;
 
@@ -110,7 +127,7 @@ afterEach(() => {
 /** Every door the page opens, in order. */
 interface Opened {
   readonly plans: string[];
-  readonly inbox: (InboxChoice | "inbox")[];
+  readonly chat: ChatPlace[];
   readonly github: string[];
   readonly feedback: Experiment[];
   newPlans: number;
@@ -118,7 +135,7 @@ interface Opened {
 
 /** Factory over `listed`, what waits, and the call, every door it opens recorded. */
 function mount(listed: readonly PlanSummary[], overrides: Partial<PlansControl> = {}) {
-  const opened: Opened = { plans: [], inbox: [], github: [], feedback: [], newPlans: 0 };
+  const opened: Opened = { plans: [], chat: [], github: [], feedback: [], newPlans: 0 };
   const base = plansControl();
   const plans = plansControl({
     plans: listed,
@@ -128,13 +145,7 @@ function mount(listed: readonly PlanSummary[], overrides: Partial<PlansControl> 
       opened.newPlans += 1;
     },
     repositories: { ...base.repositories, openGitHub: (url) => opened.github.push(url) },
-    inboxView: {
-      open: false,
-      chosen: undefined,
-      onOpen: () => opened.inbox.push("inbox"),
-      onClose: () => undefined,
-      onChoose: (chosen) => opened.inbox.push(chosen),
-    },
+    chatView: { ...base.chatView, onShow: (place) => opened.chat.push(place) },
     factoryView: { open: true, onOpen: () => undefined, onClose: () => undefined },
     ...overrides,
   });
@@ -182,19 +193,7 @@ function row(page: HTMLElement, words: string): HTMLButtonElement {
 
 test("each plan stands in its step, and what waits on the developer stands at the foot of the step it holds up, the question first and in full", () => {
   const { page } = mount([DRAFT, SEARCH, BILLING, INVITES], {
-    inbox: [
-      {
-        planId: BILLING.id,
-        items: [
-          {
-            id: "i1",
-            agentId: "a0000000-0000-4000-8000-000000000002",
-            title: QUESTION,
-            postedAt: NOW - 2 * HOUR,
-          },
-        ],
-      },
-    ],
+    chatWaiting: [askOn(BILLING.id, NOW - 2 * HOUR)],
   });
   assert.equal(
     page.querySelector(".factory-summary")?.textContent,
@@ -213,14 +212,9 @@ test("each plan stands in its step, and what waits on the developer stands at th
   assert.equal(asking.querySelector(working), null);
 });
 
-test("a question opens the Inbox on its item, a pull request ready to merge opens on GitHub, a plan opens itself, and Send feedback is about Factory", () => {
+test("a question opens Chat's For you, where it is answered, a pull request ready to merge opens on GitHub, a plan opens itself, and Send feedback is about Factory", () => {
   const { page, opened } = mount([DRAFT, BILLING, INVITES], {
-    inbox: [
-      {
-        planId: BILLING.id,
-        items: [{ id: "i1", agentId: AGENT_ID, title: QUESTION, postedAt: NOW - HOUR }],
-      },
-    ],
+    chatWaiting: [askOn(BILLING.id, NOW - HOUR)],
   });
   act(() => row(page, QUESTION).click());
   act(() => row(page, "Workspace invites").click());
@@ -231,7 +225,7 @@ test("a question opens the Inbox on its item, a pull request ready to merge open
   assert.ok(feedback);
   act(() => feedback.click());
   assert.deepEqual(opened.feedback, [EXPERIMENT.FACTORY]);
-  assert.deepEqual(opened.inbox, ["inbox", { planId: BILLING.id, itemId: "i1" }]);
+  assert.deepEqual(opened.chat, [FOR_YOU]);
   assert.deepEqual(opened.github, ["https://github.com/acme/relay/pull/2505"]);
   assert.deepEqual(opened.plans, [DRAFT.id]);
 });
@@ -255,23 +249,18 @@ test("the plan on the call stands in Plan however old, and with nothing standing
   assert.equal(opened.newPlans, 1);
 });
 
-test("with only merges waiting, the summary opens the first one on GitHub; with a question waiting, it opens the Inbox", () => {
+test("with only merges waiting, the summary opens the first one on GitHub; with a question waiting, it opens Chat's For you", () => {
   const merges = mount([INVITES]);
   act(() => merges.page.querySelector<HTMLButtonElement>(".factory-needs")?.click());
   assert.deepEqual(merges.opened.github, ["https://github.com/acme/relay/pull/2505"]);
-  assert.deepEqual(merges.opened.inbox, []);
+  assert.deepEqual(merges.opened.chat, []);
   act(() => root?.unmount());
 
   const asked = mount([BILLING, INVITES], {
-    inbox: [
-      {
-        planId: BILLING.id,
-        items: [{ id: "i1", agentId: AGENT_ID, title: QUESTION, postedAt: NOW - HOUR }],
-      },
-    ],
+    chatWaiting: [askOn(BILLING.id, NOW - HOUR)],
   });
   act(() => asked.page.querySelector<HTMLButtonElement>(".factory-needs")?.click());
-  assert.deepEqual(asked.opened.inbox, ["inbox"]);
+  assert.deepEqual(asked.opened.chat, [FOR_YOU]);
   assert.deepEqual(asked.opened.github, []);
 });
 

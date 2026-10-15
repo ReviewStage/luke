@@ -1,3 +1,4 @@
+import { ACCOUNT_CHAT_REASON, type AccountChatEntry } from "@luke/features/account-inbox-wire";
 import {
   ASK_STATUS,
   CHANNEL_KIND,
@@ -47,6 +48,24 @@ export type ChatPlace =
 
 /** Where the window's Chat opens: For you. */
 export const FOR_YOU: ChatPlace = { kind: CHAT_PLACE.FOR_YOU };
+
+/** What says a row waits on the developer: its dot's words, and the words where nothing does. */
+export const NEEDS_YOU = {
+  LABEL: "Needs you",
+  NONE: "Nothing needs you",
+} as const;
+
+/** Why a message waits on the developer, as a row beside its sender says it. */
+const WAITING_WORDS = {
+  [ACCOUNT_CHAT_REASON.ASK]: "asked you",
+  [ACCOUNT_CHAT_REASON.DIRECT]: "messaged you",
+  [ACCOUNT_CHAT_REASON.MENTION]: "mentioned you",
+} as const;
+
+/** A message main's read of the account says waits on the developer, as a row says it: who, and why. */
+export function waitingLine(entry: AccountChatEntry): string {
+  return `@${entry.from} ${WAITING_WORDS[entry.reason]}`;
+}
 
 /** Why a message is in For you. */
 export const FOR_YOU_REASON = {

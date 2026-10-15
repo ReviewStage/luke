@@ -2,7 +2,7 @@
  * navigation-history.ts -- the window's back and forward: the places it has stood on, and the moves between them.
  *
  * A place is a plan's page, a plan's version history, the home page,
- * the Inbox, or Settings, and the history is the one a browser keeps: the places behind,
+ * Chat, or Settings, and the history is the one a browser keeps: the places behind,
  * the one standing, and the places ahead, which a new visit clears. It is
  * written by watching where the window is rather than by each door that
  * moves it, so a plan opened from the sidebar, by a key, by starting it, or
@@ -44,7 +44,6 @@ const PLACE_KIND = {
   PLAN: "plan",
   VERSION_HISTORY: "version-history",
   HOME: "home",
-  INBOX: "inbox",
   AGENT: "agent",
   FACTORY: "factory",
   CHAT: "chat",
@@ -60,7 +59,6 @@ type Place =
       readonly spot: HistorySpot | undefined;
     }
   | { readonly kind: typeof PLACE_KIND.HOME }
-  | { readonly kind: typeof PLACE_KIND.INBOX }
   | { readonly kind: typeof PLACE_KIND.AGENT; readonly agentId: string }
   | { readonly kind: typeof PLACE_KIND.FACTORY }
   | { readonly kind: typeof PLACE_KIND.CHAT }
@@ -73,7 +71,7 @@ interface Trail {
 
 const EMPTY_TRAIL: Trail = { places: [], at: -1 };
 
-/** Whether two places are one step of the history: the same plan, the same plan's version history, the home page, the Inbox on any plan, the same agent's page, Factory, or Settings on any page. */
+/** Whether two places are one step of the history: the same plan, the same plan's version history, the home page, Chat, the same agent's page, Factory, or Settings on any page. */
 function sameStep(one: Place | undefined, other: Place): boolean {
   if (one === undefined || one.kind !== other.kind) return false;
   if ("planId" in one && "planId" in other) return one.planId === other.planId;
@@ -207,7 +205,7 @@ function useHistory(input: {
 /**
  * The window's history: Plans on the plan it is bound for — the one asked
  * for, so a move waiting on the host's answer is already where it is going —
- * or on that plan's version history, or the Inbox, or Settings on its page. A plan the
+ * or on that plan's version history, or Chat, or Settings on its page. A plan the
  * account's list once held and holds no more is passed over, unless the list
  * itself could not be read, and so is an archived plan, which the developer
  * put out of the way, unless it is the plan the window is bound for, as it is
@@ -235,7 +233,6 @@ export function useWindowHistory(input: {
     | "onSelect"
     | "onLeavePlan"
     | "history"
-    | "inboxView"
     | "agentView"
     | "factoryView"
     | "chatView"
@@ -246,7 +243,6 @@ export function useWindowHistory(input: {
   const { boundFor } = plans;
   const historyOpen = plans.history.open;
   const { spot } = plans.history;
-  const inboxOpen = plans.inboxView.open;
   const pageAgent = plans.agentView.agentId;
   const factoryOpen = plans.factoryView.open;
   const factoryOn = useExperiment(EXPERIMENT.FACTORY);
@@ -260,7 +256,6 @@ export function useWindowHistory(input: {
   const place = useMemo((): Place | undefined => {
     if (!known) return undefined;
     if (tab === PANEL_TAB.SETTINGS) return { kind: PLACE_KIND.SETTINGS, view: settingsView };
-    if (inboxOpen) return { kind: PLACE_KIND.INBOX };
     if (pageAgent !== undefined) return { kind: PLACE_KIND.AGENT, agentId: pageAgent };
     if (factoryOpen) return { kind: PLACE_KIND.FACTORY };
     if (chatOpen) return { kind: PLACE_KIND.CHAT };
@@ -268,18 +263,7 @@ export function useWindowHistory(input: {
     return historyOpen
       ? { kind: PLACE_KIND.VERSION_HISTORY, planId: boundFor, spot }
       : { kind: PLACE_KIND.PLAN, planId: boundFor };
-  }, [
-    known,
-    tab,
-    settingsView,
-    boundFor,
-    historyOpen,
-    spot,
-    inboxOpen,
-    pageAgent,
-    factoryOpen,
-    chatOpen,
-  ]);
+  }, [known, tab, settingsView, boundFor, historyOpen, spot, pageAgent, factoryOpen, chatOpen]);
   const reachable = (to: Place) => {
     // Factory is an experiment, so back and forward pass over it while it is off.
     if (to.kind === PLACE_KIND.FACTORY) return factoryOn;
@@ -298,10 +282,6 @@ export function useWindowHistory(input: {
       return;
     }
     if (tab !== PANEL_TAB.PLANS) input.onTabChange(PANEL_TAB.PLANS);
-    if (to.kind === PLACE_KIND.INBOX) {
-      plans.inboxView.onOpen();
-      return;
-    }
     if (to.kind === PLACE_KIND.AGENT) {
       plans.agentView.onOpen(to.agentId);
       return;
@@ -314,8 +294,7 @@ export function useWindowHistory(input: {
       plans.chatView.onOpen();
       return;
     }
-    // Every other place of the Plans tab is the plan's, which the Inbox, an agent's page, Factory, and Chat stand over.
-    if (inboxOpen) plans.inboxView.onClose();
+    // Every other place of the Plans tab is the plan's, which an agent's page, Factory, and Chat stand over.
     if (pageAgent !== undefined) plans.agentView.onClose();
     if (factoryOpen) plans.factoryView.onClose();
     if (chatOpen) plans.chatView.onClose();

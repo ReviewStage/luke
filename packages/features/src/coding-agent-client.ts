@@ -6,7 +6,6 @@ import {
 } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Effect, Result, type Schema } from "effect";
-import { Base64 } from "effect/encoding";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
   type AccountCallEffects,
@@ -33,9 +32,6 @@ import {
   type CodingAgentChatAnswerView,
   type CodingAgentChatWriteAnswerView,
   type CodingAgentDefaultAnswer,
-  type CodingAgentInboxAnsweredView,
-  type CodingAgentInboxAnswerView,
-  type CodingAgentInboxAttachmentView,
   type CodingAgentListAnswer,
   type CodingAgentMessagesAnswerView,
   type CodingAgentModelsAnswer,
@@ -75,13 +71,6 @@ import {
 } from "./coding-agent-wire.js";
 import { dictationAnswerSchema, dictationRequestSchema } from "./dictation-wire.js";
 import {
-  type InboxAnswerRequest,
-  inboxAnsweredSchema,
-  inboxAnswerRequestSchema,
-  inboxAnswerSchema,
-  inboxImageTypeSchema,
-} from "./inbox-wire.js";
-import {
   codingAgentDefaultAnswerSchema,
   codingAgentDefaultWriteSchema,
   type ModelChoice,
@@ -102,17 +91,13 @@ import {
 import { type RepositoryUnreached, repositoryNotReachableSchema } from "./repository-reach-wire.js";
 import {
   agentChangesPath,
-  agentInboxPath,
   agentMessagesPath,
   agentPath,
   agentPullRequestPath,
   agentStopPath,
   agentSubagentMessagesPath,
   HOSTED_SERVICE_PATH,
-  inboxAttachmentPath,
-  inboxItemPath,
   planAgentsPath,
-  planInboxPath,
   planMessagesPath,
   planSubagentMessagesPath,
   planTemplateRestorePath,
@@ -193,9 +178,6 @@ const MESSAGE_REFUSALS = {
   [HOSTED_API_ERROR.PLAN_ARCHIVED]: CODING_AGENT_CALL_FAILURE.PLAN_ARCHIVED,
 } satisfies NamedRefusals;
 
-/** The refusals an answer to the inbox can answer with: a message's own, since an answer the agent needs to hear reaches it as one. */
-const INBOX_ANSWER_REFUSALS = MESSAGE_REFUSALS;
-
 /** The refusals writing the default can answer with: a choice the catalog does not offer. */
 const DEFAULT_REFUSALS = {
   [HOSTED_API_ERROR.INVALID_REQUEST]: CODING_AGENT_CALL_FAILURE.INVALID_CHOICE,
@@ -224,25 +206,6 @@ function refusedAs(payload: UnparsedWireValue, named: NamedRefusals): Failed {
   if (failure !== CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE) return { failure };
   const reached = Result.getOrUndefined(readServiceAnswer(repositoryNotReachableSchema)(payload));
   return reached === undefined ? { failure } : { failure, unreached: reached.unreached };
-}
-
-/** An image's bytes read whole and spelled in base64 under the type the service named, or unanswered where the type is none an image block may be or the body could not be read. */
-function readImage(response: Response): Effect.Effect<CodingAgentInboxAttachmentView> {
-  const contentType = Result.getOrUndefined(
-    readEither(inboxImageTypeSchema)(unparsedWire(response.headers.get("content-type"))),
-  );
-  if (contentType === undefined) return Effect.succeed(UNANSWERED);
-  return Effect.promise(() =>
-    response
-      .arrayBuffer()
-      .then(
-        (bytes): CodingAgentInboxAttachmentView => ({
-          contentType,
-          base64: Base64.encode(new Uint8Array(bytes)),
-        }),
-      )
-      .catch(() => UNANSWERED),
-  );
 }
 
 /**
@@ -653,28 +616,6 @@ export class HostedCodingAgentClient {
     );
   }
 
-  /** One plan's inbox past the cursor: every item its agents posted, held by the service while nothing changed. */
-  inbox(
-    planId: string,
-    after: string,
-  ): Effect.Effect<CodingAgentInboxAnswerView, never, HttpClient.HttpClient> {
-    return Effect.flatMap(
-      this.#held.send({ method: HTTP_METHOD.GET, path: planInboxPath(planId, after) }),
-      (answer) => readAnswer(answer, inboxAnswerSchema, ROW_REFUSALS),
-    );
-  }
-
-  /** One agent's inbox past the cursor, an agent with no plan as much as one on a plan: every item it posted, held by the service while nothing changed. */
-  agentInbox(
-    agentId: string,
-    after: string,
-  ): Effect.Effect<CodingAgentInboxAnswerView, never, HttpClient.HttpClient> {
-    return Effect.flatMap(
-      this.#held.send({ method: HTTP_METHOD.GET, path: agentInboxPath(agentId, after) }),
-      (answer) => readAnswer(answer, inboxAnswerSchema, ROW_REFUSALS),
-    );
-  }
-
   /** What waits on the developer across the account past the cursor: every open item, held by the service while nothing changed. */
   accountInbox(
     after: string,
@@ -727,55 +668,6 @@ export class HostedCodingAgentClient {
         body: JSON.stringify(admitted),
       }),
       (answer) => readAnswer(answer, chatWriteAnswerSchema, MESSAGE_REFUSALS),
-    );
-  }
-
-  /**
-   * One image of an inbox item, fetched under the account: its bytes in
-   * base64 under the media type the service kept, where the service answered
-   * with one of the types an image block may be; not found where the item or
-   * the attachment is not the account's; unanswered for anything else,
-   * another media type included, so nothing the window draws is a type it
-   * did not expect.
-   */
-  inboxAttachment(
-    itemId: string,
-    attachmentId: string,
-  ): Effect.Effect<CodingAgentInboxAttachmentView, never, HttpClient.HttpClient> {
-    return Effect.flatMap(
-      this.#call.send({ method: HTTP_METHOD.GET, path: inboxAttachmentPath(itemId, attachmentId) }),
-      (answer) => {
-        if (!callAnswered(answer)) return Effect.succeed(UNANSWERED);
-        if (!answer.response.ok) {
-          return Effect.map(jsonOf(answer.response), (body) =>
-            refusedAs(unparsedWire(body), ROW_REFUSALS),
-          );
-        }
-        return readImage(answer.response);
-      },
-    );
-  }
-
-  /**
-   * Answers one item of the inbox against the revision the window drew,
-   * under the key the window made for the answer, which a retry carries
-   * again, and answers the item as it then stands with whether the answer
-   * was taken; an answer the service would refuse by shape is refused here
-   * without traveling.
-   */
-  answerInbox(
-    itemId: string,
-    request: InboxAnswerRequest,
-  ): Effect.Effect<CodingAgentInboxAnsweredView, never, HttpClient.HttpClient> {
-    const admitted = Result.getOrUndefined(readEither(inboxAnswerRequestSchema)(request));
-    if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return Effect.flatMap(
-      this.#call.send({
-        method: HTTP_METHOD.POST,
-        path: inboxItemPath(itemId),
-        body: JSON.stringify(admitted),
-      }),
-      (answer) => readAnswer(answer, inboxAnsweredSchema, INBOX_ANSWER_REFUSALS),
     );
   }
 }

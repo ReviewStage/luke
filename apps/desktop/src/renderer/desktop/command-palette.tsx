@@ -82,7 +82,7 @@ import {
 } from "../settings-search";
 import { Shortcut } from "../shortcut";
 import { Tooltip } from "../tooltip";
-import { agentEntries, chatEntries, inboxEntries } from "./main-tabs";
+import { agentEntries, chatEntries } from "./main-tabs";
 import { changesOffers, panelEntries, planWorkers } from "./side-panel";
 
 /** The kinds of row the palette lists, each a filter of its own after All, in the order the chips stand. */
@@ -384,11 +384,11 @@ function shownOverHistory(plans: PlansControl, show: () => void): void {
 }
 
 /**
- * The open plan's Inbox, Chat, and coding agents, as the column's "+" lists them,
+ * The open plan's Chat and coding agents, as the column's "+" lists them,
  * then its subagents and its agents' Changes tabs, as the side panel's "+"
  * lists them, each in its row's look and words, found by its row's words,
  * and beside the plan's name; none while no plan is open. An agent opens as
- * its notification's click opens it, the Inbox the same way, and a
+ * its notification's click opens it, Chat the same way, and a
  * subagent's or a Changes tab as the "+" opens it, the version history
  * giving way to each, so none opens behind what covers it.
  */
@@ -397,7 +397,6 @@ function agentRows(plans: PlansControl, show: (pick: () => void) => void): reado
   if (planId === undefined) return [];
   const planName = [...plans.plans, ...plans.archived].find((plan) => plan.id === planId)?.name;
   const workers = planWorkers(workRowsOf(plans.work.conversation, plans.work.callLive));
-  const inbox = inboxEntries(plans.agents, () => plans.onShowInbox(planId));
   const chat = chatEntries(plans.chatView.available, () => plans.onShowChat(planId));
   const agents = agentEntries(plans.mainTabs, plans.agents).map((entry) => ({
     ...entry,
@@ -410,7 +409,7 @@ function agentRows(plans: PlansControl, show: (pick: () => void) => void): reado
     files: [],
     changes: changesOffers(plans.agents, plans.sidePanel.changes),
   }).map((entry) => ({ ...entry, onPick: () => shownOverHistory(plans, entry.onPick) }));
-  const entries = [...inbox, ...chat, ...agents, ...subagents];
+  const entries = [...chat, ...agents, ...subagents];
   return entries.map(({ row, endMark, onPick, agent }) => ({
     icon: row.icon,
     label: row.label,

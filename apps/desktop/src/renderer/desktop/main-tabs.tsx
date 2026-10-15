@@ -15,7 +15,6 @@ import { AgentTabCard } from "../planning/agent-tab-card";
 import type { ChatNoticeDoors } from "../planning/chat-notice";
 import { agentTabLabel } from "../planning/coding-agent-model";
 import { DraftAgentTab } from "../planning/draft-agent-tab";
-import { NEEDS_YOU } from "../planning/inbox-model";
 import { agentEndMark, TAB_KIND, tabLook } from "../planning/tab-look";
 import type { ToolTarget } from "../planning/tool-call-model";
 import {
@@ -46,7 +45,7 @@ import {
 import { TabStrip } from "./tab-strip";
 
 /**
- * main-tabs.tsx -- the plan's column's tabs: the plan's own, each coding agent's, the draft agent's, and the Inbox's after it, the "+" that opens one, and what an agent's or the draft's tab shows in the column.
+ * main-tabs.tsx -- the plan's column's tabs: the plan's own, each coding agent's, the draft agent's, and its Chat after them, the "+" that opens one, and what an agent's or the draft's tab shows in the column.
  *
  * Each part draws what `use-main-tabs.ts` holds and hands every press back
  * to it. The strip is the side panel's in every way but its first tab: the
@@ -62,14 +61,9 @@ import { TabStrip } from "./tab-strip";
  * only tab it is quiet, drawing no fill at rest, as a lone tab need not be
  * told from others; beside an agent's it is drawn as any tab is.
  *
- * The plan's Inbox tab stands among the agents' while it is open: an item
- * the developer has not seen opens it after every tab, and it closes and
- * moves as an agent's tab does (`use-main-tabs.ts`). It counts the items
- * that wait on the developer after its name, dimmed as a model's effort is
- * after the model's, so an item posted while the developer reads elsewhere
- * is seen from any tab. Its menu offers Pin tab as an agent's does; pinned,
- * it wears no × and offers no Close, so it stands on its plan whether or
- * not anything new waits, until Unpin tab.
+ * The plan's Chat tab, its own channel of the workspace's chat, stands
+ * among the agents' while it is open: the "+" or ⌘K opens it after every
+ * tab, and it closes and moves as an agent's tab does (`use-main-tabs.ts`).
  *
  * Each agent's tab is named by its title, or its model until it has one,
  * wearing its harness's mark for where the agent stands, a ring while it
@@ -87,7 +81,7 @@ import { TabStrip } from "./tab-strip";
  * The "+" after the last tab drops the shared searchable menu: New coding
  * agent, which opens a draft agent's tab, or chooses the plan's draft where
  * it has one, unavailable with Start's own reason while Start could not
- * run, the plan's Inbox where it has an agent, and each of the plan's
+ * run, the plan's Chat where there is a chat to read, and each of the plan's
  * agents in the order started, picking one choosing its tab or opening it
  * again. An archived plan starts no agent,
  * so its menu offers only the agents to read, and its agents are not
@@ -102,9 +96,6 @@ const NEW_AGENT_ROW = "new-coding-agent";
 
 /** What the row that opens a draft says while a Start is out. */
 const NEW_AGENT_STARTING = "Starting…";
-
-/** The row that opens the plan's Inbox, which no agent's id spells. */
-export const INBOX_ROW = "inbox";
 
 /** The "+" menu's row for the plan's Chat tab. */
 const CHAT_ROW = "chat";
@@ -288,39 +279,6 @@ export function agentEntries(main: MainTabsControl, agents: CodingAgentsControl)
   }));
 }
 
-/**
- * The plan's Inbox as a row: its tray and its name, then what waits on the
- * developer counted at its end in the sidebar's quiet count, and nothing at
- * none. It names no section, so the summary lists it under Tabs, beside the
- * panel's kinds.
- */
-export function inboxEntry(onPick: () => void, waiting: number): AddEntry {
-  const row = { id: INBOX_ROW, ...tabLook({ kind: TAB_KIND.INBOX }) };
-  const endMark =
-    waiting === 0 ? undefined : (
-      <span className="inbox-row-count">
-        {waiting}
-        <span className="visually-hidden">
-          {" "}
-          {waiting === 1 ? NEEDS_YOU.COUNT.one : NEEDS_YOU.COUNT.many}
-        </span>
-      </span>
-    );
-  return { row, endMark, onPick };
-}
-
-/**
- * The plan's Inbox as the "+" menu and ⌘K offer it, by itself rather than
- * among the plan's agents, though only they post to it; none on a plan with
- * no agent. Picking it opens the tab where it was closed and chooses it,
- * through `onPick`.
- */
-export function inboxEntries(agents: CodingAgentsControl, onPick: () => void): AddEntry[] {
-  // An archived agent's items still stand, so the row stands while the plan holds any agent.
-  if ((agents.heldIds?.length ?? 0) === 0) return [];
-  return [inboxEntry(onPick, 0)];
-}
-
 /** The plan's Chat tab as the "+" menu and ⌘K offer it, by itself, while there is a chat to read. */
 export function chatEntries(available: boolean, onPick: () => void): AddEntry[] {
   if (!available) return [];
@@ -330,8 +288,8 @@ export function chatEntries(available: boolean, onPick: () => void): AddEntry[] 
 }
 
 /**
- * The "+" menu's rows: the plan's Inbox and Chat first, by itself under no heading
- * (`inboxEntries`); New coding agent, unavailable with Start's own reason
+ * The "+" menu's rows: the plan's Chat first, by itself under no heading
+ * (`chatEntries`); New coding agent, unavailable with Start's own reason
  * while Start could not run, and left out on an archived plan; then each
  * of its agents under Coding agents (`agentEntries`).
  */
@@ -346,20 +304,14 @@ function addEntries(main: MainTabsControl, agents: CodingAgentsControl, chat: bo
     },
     onPick: () => main.onChoose({ draft: agents.onNewDraft() }),
   };
-  const inbox = inboxEntries(agents, () => main.onChoose(MAIN_TAB.INBOX));
   const chatRows = chatEntries(chat, () => main.onChoose(MAIN_TAB.CHAT));
   const agentRows = agentEntries(main, agents);
-  return [
-    ...inbox,
-    ...chatRows,
-    ...(agents.onUnarchive === undefined ? [newAgent] : []),
-    ...agentRows,
-  ];
+  return [...chatRows, ...(agents.onUnarchive === undefined ? [newAgent] : []), ...agentRows];
 }
 
 /**
  * The column's strip across its toolbar: the plan's tab, the agents', the
- * draft's, and the Inbox's, then the "+", which stands apart from the strip so it is
+ * draft's, and Chat's, then the "+", which stands apart from the strip so it is
  * never dragged nor dropped before. ⌘W closes the chosen tab while the
  * column holds the window's focus (`keys`), and nothing on the plan's.
  */
@@ -374,7 +326,6 @@ export function MainTabStrip({
   rename,
   keys,
   shown,
-  inbox,
   chat,
 }: {
   plan: PlanSummary;
@@ -397,30 +348,12 @@ export function MainTabStrip({
   keys: boolean;
   /** Whether the plan's page is on screen, which a tab's Archive asks its question on. */
   shown: boolean;
-  /** How many of the plan's inbox items wait on the developer, which its Inbox tab counts. */
-  inbox: number;
   /** Whether there is a chat to read, so the "+" menu offers the plan's Chat tab. */
   chat: boolean;
 }): React.JSX.Element {
   const copied = useTranscriptCopier();
   const pinnedOf = (tab: ColumnPinnableTab) =>
     pins.pinned.some((pin) => pin.plan === plan.id && sameTab(pin.tab, tab));
-  // A pinned Inbox stands whatever arrives, so it offers no close until unpinned.
-  const inboxPinned = pinnedOf(MAIN_TAB.INBOX);
-  const inboxTab: DrawnTab[] = main.tabs.includes(MAIN_TAB.INBOX)
-    ? [
-        {
-          tab: MAIN_TAB.INBOX,
-          look: {
-            ...tabLook({ kind: TAB_KIND.INBOX }),
-            detail: inbox === 0 ? undefined : String(inbox),
-            selected: main.tab === MAIN_TAB.INBOX,
-            onSelect: () => main.onChoose(MAIN_TAB.INBOX),
-          },
-          close: inboxPinned ? undefined : () => main.onClose(MAIN_TAB.INBOX),
-        },
-      ]
-    : [];
   const chatTab: DrawnTab[] = main.tabs.includes(MAIN_TAB.CHAT)
     ? [
         {
@@ -434,10 +367,10 @@ export function MainTabStrip({
         },
       ]
     : [];
-  // The agents', the draft's, the Inbox's, and Chat's tabs in the column's order,
+  // The agents', the draft's, and Chat's tabs in the column's order,
   // which the developer's moves and their opening set (`use-main-tabs.ts`).
   const own = inPlanOrder(
-    [...agentTabs({ main, agents, unread, views, copied }), ...inboxTab, ...chatTab],
+    [...agentTabs({ main, agents, unread, views, copied }), ...chatTab],
     main.tabs,
     (entry) => entry.tab,
   );
@@ -469,11 +402,7 @@ export function MainTabStrip({
     );
     const { agent } = entry;
     const pinTab: ColumnPinnableTab | undefined =
-      agent !== undefined
-        ? { agent: agent.id }
-        : entry.tab === MAIN_TAB.INBOX
-          ? MAIN_TAB.INBOX
-          : undefined;
+      agent !== undefined ? { agent: agent.id } : undefined;
     return {
       chosen: entry.look.selected,
       onClose: entry.close,
@@ -543,7 +472,6 @@ export function MainTabStrip({
 /** What an agent's or the draft's tab is called to a reader of the column. */
 export function mainTabLabel(tab: MainTab, agents: CodingAgentsControl): string | undefined {
   if (tab === MAIN_TAB.PLAN) return undefined;
-  if (tab === MAIN_TAB.INBOX) return tabLook({ kind: TAB_KIND.INBOX }).label;
   if (tab === MAIN_TAB.CHAT) return tabLook({ kind: TAB_KIND.CHAT }).label;
   if (isDraftTab(tab)) return tabLook({ kind: TAB_KIND.DRAFT }).label;
   const agent = agents.agents?.find((each) => each.id === tab.agent);
@@ -572,7 +500,7 @@ export function MainTabContent({
   cards,
   chat,
 }: {
-  tab: Exclude<MainTab, typeof MAIN_TAB.PLAN | typeof MAIN_TAB.INBOX | typeof MAIN_TAB.CHAT>;
+  tab: Exclude<MainTab, typeof MAIN_TAB.PLAN | typeof MAIN_TAB.CHAT>;
   agents: CodingAgentsControl;
   /** Whether the column is on screen, so an agent's tab knows to follow its transcript. */
   shown: boolean;

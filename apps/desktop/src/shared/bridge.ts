@@ -244,19 +244,8 @@ export const BRIDGE = {
     ),
   }),
   /**
-   * An inbox notification clicked: the panel is to open the plan on its
-   * Inbox tab. An event, as an agent's notification's click is, because it
-   * is an ask the window answers once.
-   */
-  onShowInbox: entry({
-    kind: "subscribe",
-    channel: "app:show-inbox",
-    args: noArgs,
-    result: result<{ planId: string }>((value) => isRecord(value) && isWireString(value.planId)),
-  }),
-  /**
    * A chat notification clicked: the panel is to open its Chat. An event,
-   * as an inbox notification's click is, because it is an ask the window
+   * as an agent's notification's click is, because it is an ask the window
    * answers once.
    */
   onShowChat: entry({
@@ -329,28 +318,9 @@ export const BRIDGE = {
     ),
   }),
   /**
-   * An inbox item opened while the window was focused away from its plan's
-   * Inbox tab: the panel says so in its toast, whose View opens that tab.
-   * An event, as an agent's end is, because it is said once and never
-   * bootstrapped from.
-   */
-  onInboxItemOpened: entry({
-    kind: "subscribe",
-    channel: "app:inbox-item-opened",
-    args: noArgs,
-    result: result<{ planId: string; itemId: string; words: string; detail: string }>(
-      (value) =>
-        isRecord(value) &&
-        isWireString(value.planId) &&
-        isWireString(value.itemId) &&
-        isWireString(value.words) &&
-        isWireString(value.detail),
-    ),
-  }),
-  /**
    * A chat message came to wait while the window was focused away from its
    * Chat: the panel says so in its toast, whose View opens Chat. An event,
-   * as an opened inbox item is.
+   * as an agent's end is.
    */
   onChatMessageWaiting: entry({
     kind: "subscribe",

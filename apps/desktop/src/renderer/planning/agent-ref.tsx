@@ -1,6 +1,5 @@
 import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
-import type { PlanAgentLine } from "@luke/features/plan-wire";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import type { HeldTranscripts } from "../desktop/strip-tabs";
 import { Tooltip } from "../tooltip";
@@ -89,25 +88,6 @@ export function agentCardReading(
       startedBy: teammateStarter(agent.startedBy, readerId),
     };
   };
-}
-
-/** An agent as the sidebar's list names it: where it stands and since when, and its pair, with no step to preview. */
-export function lineSubject(
-  line: PlanAgentLine,
-  models: readonly CatalogModel[] | undefined,
-): AgentSubject {
-  const writing = agentStillWriting(line.status);
-  const reading: CardReading = {
-    corner: cardCorner({
-      writing,
-      startedAt: writing ? line.at : undefined,
-      movedAt: writing ? undefined : line.at,
-      state: agentStateWords(line.status),
-    }),
-    choice: { model: line.model, effort: line.effort },
-    transcript: undefined,
-  };
-  return { name: agentTabLabel(line, models), read: () => reading };
 }
 
 /**

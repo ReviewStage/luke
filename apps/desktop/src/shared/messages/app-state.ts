@@ -1,4 +1,5 @@
 import type { AccountSnapshot } from "@luke/credentials/snapshot";
+import type { AccountChatEntry } from "@luke/features/account-inbox-wire";
 import type { PlanningView } from "@luke/features/planning-view";
 import {
   type SessionReplayBootstrap,
@@ -121,39 +122,17 @@ interface AppCodingAgentsSlice {
   unseen: readonly string[];
 }
 
-/** One inbox item waiting on the developer: the item, the agent that posted it, what it asks, and when the agent first posted it, by the service's clock. */
-export interface AppInboxWaitingItem {
-  id: string;
-  agentId: string;
-  title: string;
-  postedAt: number;
-}
-
-/** One plan with inbox items waiting on the developer: the plan, and its open items, the latest changed first. */
-export interface AppInboxPlan {
-  planId: string;
-  items: readonly AppInboxWaitingItem[];
-}
-
-/** One plan holding inbox items, waiting or settled: the plan, how many, and when the latest changed, by the service's clock. */
-export interface AppInboxPlanHolding {
-  planId: string;
-  items: number;
-  updatedAt: number;
-}
-
 /**
- * What waits on the developer across the account's plans, as main's own
- * read of it last answered (`main/agent-notices.ts`): each plan with an
- * open inbox item, the plan whose item changed latest first. What the
- * sidebar's Inbox counts, and what an item's toast is withdrawn by once it
- * no longer waits. Main's, because main holds that read whichever plan is
+ * What waits on the developer in their workspaces' chat, as main's own read
+ * of it last answered (`main/agent-notices.ts`): every open ask someone else
+ * posted, and the direct message or mention of theirs they have not read,
+ * the latest changed first, each by who posted it and its plan, never its
+ * words. What the sidebar's Chat counts, Home lists, and Factory lines up
+ * under each plan. Main's, because main holds that read whichever plan is
  * open, and empty while nobody is signed in.
  */
-export interface AppInboxSlice {
-  waiting: readonly AppInboxPlan[];
-  /** Every plan holding an inbox item, waiting or settled, the plan whose item changed latest first: what the window's Inbox lists. */
-  plans: readonly AppInboxPlanHolding[];
+export interface AppChatSlice {
+  waiting: readonly AccountChatEntry[];
 }
 
 /**
@@ -193,7 +172,7 @@ export interface AppState {
    */
   planning: PlanningView;
   codingAgents: AppCodingAgentsSlice;
-  inbox: AppInboxSlice;
+  chat: AppChatSlice;
   notifications: AppNotificationsSlice;
   sessionReplay: AppSessionReplaySlice;
 }

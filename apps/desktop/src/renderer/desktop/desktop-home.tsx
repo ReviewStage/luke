@@ -1,28 +1,16 @@
-import type { CodingAgentInboxParams } from "@luke/features/coding-agent-view";
+import type { AccountChatEntry } from "@luke/features/account-inbox-wire";
 import type { PlanSummary } from "@luke/features/plan-wire";
 import { FolderIcon, SearchIcon, WingFace } from "@luke/ui";
-import { TAB_WORDS } from "@luke/ui/tab-strip-model";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { ACT_KIND } from "#shared/messages/acts";
+import { MessagesSquareIcon } from "lucide-react";
+import { useEffect, useState } from "react";
 import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
-import { useAct } from "../act";
 import { runAppCommand } from "../app-commands";
-import { InboxItemRow } from "../planning/inbox-list";
-import {
-  INBOX_GROUPING,
-  type InboxListed,
-  inboxList,
-  listedItems,
-  NEEDS_YOU,
-} from "../planning/inbox-model";
+import { FOR_YOU, NEEDS_YOU, waitingLine } from "../planning/chat-model";
 import { useMinute } from "../planning/plan-time";
 import { RelativeTime } from "../planning/relative-time";
-import { useInboxItems } from "../planning/use-inbox-items";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { RepositoryPicture } from "../repository-picture";
-import { RetryButton } from "../retry-button";
 import { Shortcut } from "../shortcut";
-import { SPINNER_SIZE, Spinner } from "../spinner";
 import { commandKeyshortcuts } from "../tooltip";
 import { PlanStatusMark } from "./plan-card";
 
@@ -30,13 +18,13 @@ import { PlanStatusMark } from "./plan-card";
  * desktop-home.tsx -- the home page: the column the window rests on with no plan open, saying what needs the developer and the plans saved latest, and offering New plan.
  *
  * It is one column at a reading measure, as a chat app's empty page is: a
- * greeting with New plan beside it, then Inbox, every Inbox item
- * waiting on the developer's answer as the Inbox's own row draws it, the
- * plan it is about after its title, a press opening the Inbox on it; then
+ * greeting with New plan beside it, then For you, every chat message
+ * waiting on the developer, who sent it and why, the plan whose channel it
+ * was posted in after it, a press opening Chat's For you; then
  * Recent, the plans of the workspace listed saved latest, each as the
  * sidebar draws a plan, with its repository after its name, a press opening
  * it, and Search all of them, the command palette, where there are more.
- * Nothing waiting says so in the Inbox's own words. An account with no plan
+ * Nothing waiting says so in For you's own words. An account with no plan
  * yet in any workspace is welcomed instead: Luke's face, one line of what he does, and New
  * plan. Nothing here names the sidebar, which may be folded away.
  *
@@ -62,39 +50,6 @@ function greeting(name: string | undefined): string {
 /** The workspace's plans saved latest, the archived left out. */
 function recentPlans(plans: readonly PlanSummary[]): PlanSummary[] {
   return plans.toSorted((a, b) => b.updatedAt - a.updatedAt).slice(0, RECENT_COUNT);
-}
-
-/**
- * Every Inbox item waiting on the developer, the latest changed first, read
- * as the window's Inbox reads them: each plan main says holds a waiting item
- * and the account's list holds, read whole.
- */
-function useWaitingItems(plans: PlansControl) {
-  const { act } = useAct();
-  const readInbox = useCallback(
-    (params: CodingAgentInboxParams) => act(ACT_KIND.CODING_AGENTS_INBOX, params),
-    [act],
-  );
-  const { inbox, inboxPlans, plans: listed } = plans;
-  const holdings = useMemo(
-    () =>
-      inboxPlans.filter(
-        (holding) =>
-          inbox.some((waiting) => waiting.planId === holding.planId) &&
-          listed.some((plan) => plan.id === holding.planId),
-      ),
-    [inbox, inboxPlans, listed],
-  );
-  const read = useInboxItems({ holdings, readInbox });
-  const entries = holdings.flatMap((holding) => {
-    const plan = listed.find((each) => each.id === holding.planId);
-    return plan === undefined ? [] : [{ plan, items: read.items.get(holding.planId) ?? [] }];
-  });
-  const items = listedItems(
-    inboxList(entries, { grouping: INBOX_GROUPING.NEWEST, waitingOnly: true, chosen: undefined }),
-  );
-  const reading = holdings.some((holding) => !read.items.has(holding.planId));
-  return { items, reading, failed: read.failed, onRetry: read.onRetry };
 }
 
 /**
@@ -179,50 +134,66 @@ function RecentRow({
   );
 }
 
-/**
- * Inbox: the waiting items, or what stands in their place while they are
- * read, failed, or none. It is headed by the Inbox's name, the place a press
- * on a row opens, and says it holds nothing waiting in the Inbox's own words.
- */
-function HomeInbox({ plans, now }: { plans: PlansControl; now: number }): React.JSX.Element {
-  const waiting = useWaitingItems(plans);
-  const { inboxView } = plans;
-  const open = ({ plan, item }: InboxListed) => {
-    inboxView.onOpen();
-    inboxView.onChoose({ planId: plan.id, itemId: item.id });
-  };
-  const empty = waiting.items.length === 0;
+/** A message waiting on the developer: who sent it and why, the plan whose channel it was posted in, and when. */
+function WaitingRow({
+  entry,
+  plan,
+  now,
+  onOpen,
+}: {
+  entry: AccountChatEntry;
+  plan: PlanSummary | undefined;
+  now: number;
+  onOpen: () => void;
+}): React.JSX.Element {
   return (
-    <section className="home-section" aria-labelledby="home-inbox">
-      <h2 className="home-section-title" id="home-inbox">
-        {TAB_WORDS.INBOX}
-        {empty ? null : <span className="home-section-count">{waiting.items.length}</span>}
+    <li className="sidebar-plan-item inbox-row">
+      <button type="button" className="sidebar-plan" data-unread="true" onClick={onOpen}>
+        <span className="sidebar-plan-line">
+          <span className="sidebar-pinned-tab-glyph">
+            <MessagesSquareIcon />
+          </span>
+          <span className="sidebar-plan-name">{waitingLine(entry)}</span>
+          {plan === undefined ? null : <span className="home-row-context">{plan.name}</span>}
+          <RelativeTime className="sidebar-plan-time" at={entry.updatedAt} now={now} hint={false} />
+          <span className="inbox-row-dot">
+            <span className="visually-hidden">{NEEDS_YOU.LABEL}</span>
+          </span>
+        </span>
+      </button>
+    </li>
+  );
+}
+
+/**
+ * For you: every message main's read of the account says waits on the
+ * developer, the latest first, or the words where none does. A press on a
+ * row opens Chat's For you, where it is answered or read.
+ */
+function HomeForYou({ plans, now }: { plans: PlansControl; now: number }): React.JSX.Element {
+  const waiting = plans.chatWaiting;
+  const empty = waiting.length === 0;
+  return (
+    <section className="home-section" aria-labelledby="home-for-you">
+      <h2 className="home-section-title" id="home-for-you">
+        For you
+        {empty ? null : <span className="home-section-count">{waiting.length}</span>}
       </h2>
-      {empty ? null : (
-        <ul className="sidebar-plans">
-          {waiting.items.map((listed) => (
-            <InboxItemRow
-              key={listed.item.id}
-              listed={listed}
-              chosen={false}
+      {empty ? (
+        <p className="sidebar-note">{NEEDS_YOU.NONE}</p>
+      ) : (
+        <ul className="sidebar-plans ph-no-capture">
+          {waiting.map((entry) => (
+            <WaitingRow
+              key={entry.messageId}
+              entry={entry}
+              plan={plans.plans.find((plan) => plan.id === entry.planId)}
               now={now}
-              models={plans.agents.models}
-              context={listed.plan.name}
-              onChoose={open}
+              onOpen={() => plans.chatView.onShow(FOR_YOU)}
             />
           ))}
         </ul>
       )}
-      {waiting.failed ? (
-        <div className="sidebar-note flex items-center gap-2" role="alert">
-          <span>Some items could not be read.</span>
-          <RetryButton onRetry={waiting.onRetry} />
-        </div>
-      ) : empty && waiting.reading ? (
-        <Spinner label="Loading inbox" size={SPINNER_SIZE.INLINE} />
-      ) : empty ? (
-        <p className="sidebar-note">{NEEDS_YOU.NONE}</p>
-      ) : null}
     </section>
   );
 }
@@ -267,7 +238,7 @@ export function DesktopHome({
           <h1 className="home-title">{greeting(accountName)}</h1>
           <NewPlanButton plans={plans} />
         </header>
-        <HomeInbox plans={plans} now={now} />
+        <HomeForYou plans={plans} now={now} />
         {recent.length === 0 ? null : (
           <section className="home-section" aria-labelledby="home-recent">
             <h2 className="home-section-title" id="home-recent">

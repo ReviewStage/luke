@@ -3036,9 +3036,9 @@ button.subagent-line:hover {
   white-space: nowrap;
 }
 
-/* Inbox ----------------------------------------------------------------------- */
+/* Asks ------------------------------------------------------------------------ */
 
-/* A choice's option on the Inbox (`inbox-pane.tsx`): a row the width of
+/* A choice's option on an ask's card (`chat-ask.tsx`): a row the width of
    its card, its label over its trade-off, picked the way Settings' segments
    are (`.segment`), the fill of a chosen segment once pressed, ringed
    so it reads apart from the hover that shares the fill. The
@@ -3093,36 +3093,9 @@ button.inbox-option:hover:not(:disabled) {
   opacity: 0.4;
 }
 
-/* An image block on the Inbox (`inbox-pane.tsx`): the picture the
-   agent took, at the card's own reading width and no wider than itself, a
-   press on it opening the attached-file viewer. The spinner's room stands
-   in for it while its bytes are read, so the card does not jump. */
-.inbox-image {
-  display: block;
-  max-width: 100%;
-  padding: 0;
-  border: 1px solid var(--hairline);
-  border-radius: var(--control-radius);
-  background: var(--section-fill);
-  cursor: zoom-in;
-  overflow: clip;
-}
-
-.inbox-image img {
-  display: block;
-  max-width: 100%;
-  height: auto;
-}
-
 /* A form's text field takes Settings' well, but in the card's body type:
    Settings' tracking is for a key's characters, not an answer's words. */
 .inbox-field-input {
   font-size: 13px;
   letter-spacing: 0;
-}
-
-.inbox-image-pending {
-  display: flex;
-  align-items: center;
-  min-height: var(--space-24);
 }

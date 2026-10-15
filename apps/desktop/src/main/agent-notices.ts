@@ -1,10 +1,4 @@
-import {
-  ACCOUNT_CHAT_REASON,
-  type AccountChatEntry,
-  type AccountInboxAnswer,
-  type AccountInboxEntry,
-  type AccountInboxPlan,
-} from "@luke/features/account-inbox-wire";
+import { ACCOUNT_CHAT_REASON, type AccountChatEntry } from "@luke/features/account-inbox-wire";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAccountInboxAnswerView,
@@ -23,10 +17,10 @@ import type { CatalogModel } from "@luke/features/models-wire";
 import type { PlanningView } from "@luke/features/planning-view";
 import { scheduleOnce } from "@luke/runtime/effect";
 import { Context, Duration, Effect, Queue, Schedule, type Scope, Stream } from "effect";
-import type { AppInboxSlice, AppInboxWaitingItem } from "#shared/messages/app-state";
+import type { AppChatSlice } from "#shared/messages/app-state";
 
 /**
- * agent-notices.ts -- tells the developer when a coding agent's turn ends or an inbox item lands: the ledger of where each agent stands, the poll that keeps it current while no tab does, the held read of what waits across the account, and the notification, toast, and badge they announce by.
+ * agent-notices.ts -- tells the developer when a coding agent's turn ends or a chat message comes to wait on them: the ledger of where each agent stands, the poll that keeps it current while no tab does, the held read of what waits across the account, and the notification, toast, and badge they announce by.
  *
  * The panel reads an agent's status only while its tab is on screen, so
  * main keeps a ledger of its own, fed by every coding-agent answer that
@@ -76,41 +70,28 @@ import type { AppInboxSlice, AppInboxWaitingItem } from "#shared/messages/app-st
  * that agent, since that read is what the service keeps for the list.
  *
  * The notices hold one more read of their own: what waits on the developer
- * across the account's plans, every open inbox item, on the service's held
- * read, for as long as an account is signed in, so an item an agent posts
- * is heard whichever plan is open, or none, and whichever Mac started the
- * agent. Each answer is written whole as each plan's open items, which the
- * sidebar counts, and the Dock's badge is their number. The first answer
- * for an account is where it stands and announces nothing; after it, an
- * item that opens, newly posted or posted again under the key of one the
- * developer answered or the agent closed, is announced once, by the same
+ * in their workspaces' chat, on the service's held read of the account, for
+ * as long as an account is signed in, so a message that comes to wait is
+ * heard whichever plan is open, or none, and whichever Mac it came from:
+ * every open ask someone else posted, and the direct message or mention of
+ * theirs they have not read. Each answer is written whole, which the
+ * sidebar's Chat counts, Home lists, and Factory lines up under its plans,
+ * and the Dock's badge is their number. The first answer for an account is
+ * where it stands and announces nothing; after it, a message that comes to
+ * wait, one the last answer did not hold, is announced once, by the same
  * doors and the same gates as a turn's end: nowhere while the window is
- * focused on that plan's Inbox tab, in the window's toast while it is
- * focused on anything else, and as a notification while it is behind,
- * unless the developer turned notifications off. An item the agent posts
- * again while it is still open is the same ask kept current, and announces
- * nothing, and so does one whose plan comes back from the archive, which
- * changed before the last answer was read. What waits in chat rides on the
- * same read (`chat`): an ask someone else posted, or a direct message or a
- * mention of the developer's, each announced once as it first waits, by
- * the same doors and gates, nowhere while the window is focused on its
- * Chat, and counted in the Dock's badge beside the items. A chat
- * announcement says who and why, "@agent-2 messaged you", under the plan of
- * the channel it stands in, and nothing of what was said. Another account, or nobody,
- * ends the read held for the last, and lets go of its items, its counts,
- * and its badge before anything of the next is read. A read that did not
- * answer is asked again on the watch's clock.
+ * focused on Chat, in the window's toast while it is focused on anything
+ * else, and as a notification while it is behind, unless the developer
+ * turned notifications off. An announcement says who and why, "@agent-2
+ * messaged you", under the plan of the channel it stands in, and nothing of
+ * what was said. Another account, or nobody, ends the read held for the
+ * last, and lets go of what waited and its badge before anything of the
+ * next is read. A read that did not answer is asked again on the watch's
+ * clock.
  */
 
 /** How often a plan with an agent still writing has its agents listed again. */
 const WATCH_INTERVAL = Duration.seconds(30);
-
-/**
- * How long before the last answer of what waits was read an item's change
- * still counts as since it: room for the clocks of the service's instances
- * to disagree, so an item written as the last read was made is not missed.
- */
-const READ_SKEW = Duration.minutes(1);
 
 /** What the notification is titled for a plan main holds no name for. */
 const UNNAMED_PLAN_TITLE = "Luke";
@@ -165,17 +146,9 @@ export interface ChatMessageToast {
   detail: string;
 }
 
-/** An inbox item that opened as the window's own toast says it: the plan and the item, the words, and the plan's name under them. */
-export interface InboxItemToast {
-  planId: string;
-  itemId: string;
-  words: string;
-  detail: string;
-}
-
 /**
  * The doors an announcement leaves this process through: the OS's
- * notification, the panel's toast for a turn's end or an inbox item, and
+ * notification, the panel's toast for a turn's end or a waiting chat message, and
  * the Dock's badge. A service rather than a dependency handed in, because
  * it is this process's door to Electron, so a test stands a Layer of its
  * own on it.
@@ -183,9 +156,8 @@ export interface InboxItemToast {
 export interface AgentNoticeDoorsSurface {
   post(notice: AgentNotice): void;
   toast(end: AgentEndToast): void;
-  toastInbox(item: InboxItemToast): void;
   toastChat(message: ChatMessageToast): void;
-  /** How many inbox items and chat messages wait across the account, which the Dock's badge counts; none clears it. */
+  /** How many chat messages wait on the developer across the account, which the Dock's badge counts; none clears it. */
   badge(count: number): void;
 }
 
@@ -218,10 +190,8 @@ export interface AgentNoticesDependencies {
   readAccountInbox: (after: string) => Effect.Effect<CodingAgentAccountInboxAnswerView>;
   /** Who is signed in, by the account's own key, from where the launch stands and at each change: whose items the inbox read reads. */
   accounts: Stream.Stream<string | undefined>;
-  /** Where each plan's waiting items, and every plan holding an item, are written, for the window's Inbox. */
-  onInboxChanged: (inbox: AppInboxSlice) => void;
-  /** Brings Luke forward on the plan with its Inbox tab open: an inbox notification's click. */
-  openInbox: (planId: string) => void;
+  /** Where what waits in chat is written, for the window's Chat, Home, and Factory. */
+  onChatChanged: (chat: AppChatSlice) => void;
   /** Brings Luke forward on its Chat: a chat notification's click. */
   openChat: () => void;
   watchInterval?: Duration.Duration;
@@ -245,8 +215,6 @@ export interface AgentNotices {
   observePlanGone(planId: string): void;
   /** The panel said which agent's tab it shows, or none. */
   shown(agentId: string | null): void;
-  /** The panel said which plan's Inbox tab it shows, or none. */
-  shownInbox(planId: string | null): void;
   /** The panel said whether its Chat is on screen. */
   shownChat(shown: boolean): void;
 }
@@ -346,20 +314,6 @@ function noticeText(input: {
   return { title: input.planName ?? UNNAMED_PLAN_TITLE, body: `${name} ${ended}` };
 }
 
-/**
- * What an inbox item's announcement says: the plan's name over the agent,
- * by its title or else its model's name, and the item's title, and nothing
- * of what the item details.
- */
-function inboxNoticeText(
-  item: AccountInboxEntry,
-  planName: string | undefined,
-  models: readonly CatalogModel[] | undefined,
-): Pick<AgentNotice, "title" | "body"> {
-  const agent = item.agentTitle ?? modelLabel(item.agentModel, models);
-  return { title: planName ?? UNNAMED_PLAN_TITLE, body: `${agent}: ${item.title}` };
-}
-
 /** What a chat message's announcement says: who and why, under the plan of its channel, and nothing of what was said. */
 function chatNoticeText(
   entry: AccountChatEntry,
@@ -369,39 +323,6 @@ function chatNoticeText(
     title: planName ?? CHAT_NOTICE_TITLE,
     body: `@${entry.from} ${CHAT_NOTICE_WORDS[entry.reason]}`,
   };
-}
-
-/** The items each plan holds waiting, the plan whose item changed latest first, as the read answered them latest first. */
-function waitingPlans(items: readonly AccountInboxEntry[]): AppInboxSlice["waiting"] {
-  const plans = new Map<string, AppInboxWaitingItem[]>();
-  for (const item of items) {
-    const waiting = {
-      id: item.id,
-      agentId: item.agentId,
-      title: item.title,
-      postedAt: item.postedAt,
-    };
-    const held = plans.get(item.planId);
-    if (held === undefined) plans.set(item.planId, [waiting]);
-    else held.push(waiting);
-  }
-  return [...plans].map(([planId, held]) => ({ planId, items: held }));
-}
-
-/** Whether two answers list the same plans holding items, alike in order, count, and instant. */
-function samePlans(one: readonly AccountInboxPlan[], other: readonly AccountInboxPlan[]): boolean {
-  return (
-    one.length === other.length &&
-    one.every((plan, at) => {
-      const was = other[at];
-      return (
-        was !== undefined &&
-        was.planId === plan.planId &&
-        was.items === plan.items &&
-        was.updatedAt === plan.updatedAt
-      );
-    })
-  );
 }
 
 /**
@@ -426,17 +347,8 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     let focused = false;
     /** Whose agents the ledger holds: read as it takes its first, and moved only by another account. */
     let holder: string | undefined;
-    /** The inbox read's last answer for the account signed in, and its items and chat messages by id; none before its first. */
-    let waiting:
-      | {
-          readonly answer: AccountInboxAnswer;
-          readonly items: ReadonlySet<string>;
-          readonly chat: ReadonlySet<string>;
-        }
-      | undefined;
-    /** The highest revision any answer for the account held of each item, so one back unchanged is known. */
-    const seenRevision = new Map<string, number>();
-    let shownInbox: string | null = null;
+    /** The account read's last cursor for the account signed in, and the messages it held waiting, by id; none before its first answer. */
+    let waiting: { readonly cursor: string; readonly chat: ReadonlySet<string> } | undefined;
     let shownChat = false;
 
     function publishUnseen(): void {
@@ -519,14 +431,10 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     // Each announce suspends on the queue itself, so the loop need not yield between ends: the ends queued together are posted together.
     yield* Effect.forkScoped(Effect.forever(announce, { disableYield: true }));
 
-    /** Writes what waits, each plan's items and every plan holding one for the window, and their number for the Dock. */
-    function publishWaiting(
-      items: readonly AccountInboxEntry[],
-      plans: readonly AccountInboxPlan[],
-      chat: readonly AccountChatEntry[],
-    ): void {
-      dependencies.onInboxChanged({ waiting: waitingPlans(items), plans });
-      doors.badge(items.length + chat.length);
+    /** Writes what waits for the window, and its number for the Dock. */
+    function publishWaiting(chat: readonly AccountChatEntry[]): void {
+      dependencies.onChatChanged({ waiting: chat });
+      doors.badge(chat.length);
     }
 
     /** A chat message came to wait: told nowhere on Chat in front, in the toast elsewhere in front, and as a notification behind. */
@@ -543,63 +451,22 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       if (dependencies.notifying()) doors.post({ ...text, onClick: dependencies.openChat });
     }
 
-    /** An item opened: told nowhere on its plan's Inbox in front, in the toast elsewhere in front, and as a notification behind. */
-    function announceItem(item: AccountInboxEntry): void {
-      if (focused && shownInbox === item.planId) return;
-      const text = inboxNoticeText(item, planName(item.planId), models);
-      if (focused) {
-        doors.toastInbox({
-          planId: item.planId,
-          itemId: item.id,
-          words: text.body,
-          detail: text.title,
-        });
-        return;
-      }
-      if (dependencies.notifying()) {
-        doors.post({ ...text, onClick: () => dependencies.openInbox(item.planId) });
-      }
-    }
-
     /**
-     * An answer of the inbox read: written whole, and each item that opened
-     * since the last answer announced, unless this is the first. Note that
-     * an item opened since is one the last answer did not hold, at a
-     * revision no answer for the account held, that changed after the last
-     * answer was read, because a plan brought back from the archive brings
-     * its items back unchanged, and they are not news; an item posted again
-     * after it was answered or closed moves its revision on, and is.
+     * An answer of the account's read: written whole, and each message that
+     * came to wait since the last answer announced, unless this is the
+     * first, which is where the account stands.
      */
-    function observeWaiting(answer: AccountInboxAnswer): void {
+    function observeWaiting(answer: {
+      readonly cursor: string;
+      readonly chat?: readonly AccountChatEntry[];
+    }): void {
       const was = waiting;
-      if (was?.answer.cursor === answer.cursor) {
-        // Note that the plans holding items may move with nothing waiting moving, an archive or a hold let go, so they are written alone.
-        if (samePlans(was.answer.plans, answer.plans)) return;
-        waiting = { ...was, answer: { ...was.answer, plans: answer.plans } };
-        dependencies.onInboxChanged({
-          waiting: waitingPlans(was.answer.items),
-          plans: answer.plans,
-        });
-        return;
-      }
+      if (was?.cursor === answer.cursor) return;
       const chat = answer.chat ?? [];
-      waiting = {
-        answer,
-        items: new Set(answer.items.map((item) => item.id)),
-        chat: new Set(chat.map((entry) => entry.messageId)),
-      };
-      publishWaiting(answer.items, answer.plans, chat);
-      // A chat message is news once, as it first waits: the first answer is where the account stands.
+      waiting = { cursor: answer.cursor, chat: new Set(chat.map((entry) => entry.messageId)) };
+      publishWaiting(chat);
       for (const entry of chat) {
         if (was !== undefined && !was.chat.has(entry.messageId)) announceChat(entry);
-      }
-      const since =
-        was === undefined ? undefined : was.answer.readAt - Duration.toMillis(READ_SKEW);
-      for (const item of answer.items) {
-        const known = seenRevision.get(item.id);
-        seenRevision.set(item.id, Math.max(known ?? 0, item.revision));
-        if (since === undefined || was?.items.has(item.id) === true) continue;
-        if ((known ?? 0) < item.revision && item.updatedAt > since) announceItem(item);
       }
     }
 
@@ -615,8 +482,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     const waitingOf = (reader: string | undefined): Effect.Effect<void> =>
       Effect.suspend(() => {
         waiting = undefined;
-        seenRevision.clear();
-        publishWaiting([], [], []);
+        publishWaiting([]);
         if (reader === undefined) return Effect.void;
         let cursor = INBOX_CURSOR_START;
         const look = Effect.gen(function* () {
@@ -752,9 +618,6 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       },
       shownChat: (shown) => {
         shownChat = shown;
-      },
-      shownInbox: (planId) => {
-        shownInbox = planId;
       },
     };
 
