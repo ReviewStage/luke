@@ -68,7 +68,7 @@ export const ASSIGNABLE_ROLE = {
 /**
  * The first steps of tryluke.dev's paths that are Luke's own, now or likely
  * soon, which no workspace's slug may be: every page the web app serves
- * under its own name (the root `vercel.ts`, `apps/web/vite.config.ts`),
+ * under its own name (`apps/web/vercel.json`, `apps/web/vite.config.ts`),
  * and the words a later page is likeliest to want.
  */
 export const RESERVED_WORKSPACE_SLUGS: ReadonlySet<string> = new Set([

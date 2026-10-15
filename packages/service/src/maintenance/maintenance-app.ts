@@ -30,7 +30,7 @@ import { sweepTerminalLeases } from "./terminal-lease-sweep.js";
 
 /**
  * The maintenance group: the scheduled sweep's one entry, called by Vercel's
- * cron on the cadence `vercel.ts` fixes. The logic lives in
+ * cron on the cadence `vercel.json` fixes. The logic lives in
  * `maintenance/maintenance-sweep.ts`; this hands it the deployment's real
  * seams and the database queries behind them, each answering an Effect over
  * the group's own `SqlClient.SqlClient`. A deployment without the voice key
@@ -100,7 +100,7 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
 /**
  * The group: the sweep carried to an `HttpApp`, and the hosted vocabulary's
  * own refusal for a path it does not declare — unreachable in production,
- * since `vercel.ts` sends the function only its own path.
+ * since `vercel.json` sends the function only its own path.
  */
 export function maintenanceApp(): WebRoutes<
   DatabaseServices | HostedEnvironment | HttpClient.HttpClient | GitHubApp | ModelCatalog

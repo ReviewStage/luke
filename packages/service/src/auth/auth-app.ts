@@ -5,7 +5,7 @@ import { ANY_METHOD, type WebRoutes } from "../route.js";
 
 /**
  * The auth surface as the one route group this function serves: Better Auth's
- * own `fetch` handler, mounted on the path set `vercel.ts` routes here.
+ * own `fetch` handler, mounted on the path set `vercel.json` routes here.
  *
  * Better Auth owns every answer under that path — the endpoints, the
  * redirects, the cookies, and its own refusals — so the group holds it as a
@@ -14,7 +14,7 @@ import { ANY_METHOD, type WebRoutes } from "../route.js";
  * versions, and the first one to drift would be the one Luke ships.
  */
 
-/** The path set `vercel.ts`'s `/api/auth/(.*)` entry sends to this function. */
+/** The path set `vercel.json`'s `/api/auth/(.*)` entry sends to this function. */
 const AUTH_PATH_SET = "/api/auth/*";
 
 /**

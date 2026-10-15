@@ -2,7 +2,6 @@
   "name": "luke",
   "version": "0.13.0",
   "private": true,
-  "type": "module",
   "description": "Luke is a macOS app for planning a feature by voice before you hand it to a coding agent",
   "packageManager": "pnpm@10.34.5",
   "engines": {
@@ -33,7 +32,6 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.8",
-    "@vercel/config": "0.12.0",
     "effect": "catalog:",
     "husky": "9.1.7",
     "knip": "6.35.1",
