@@ -81,6 +81,7 @@ const PullRequestSchema = Schema.Struct({
     labels: Schema.Array(LabelSchema),
     base: Schema.Struct({ ref: Schema.String }),
     head: Schema.Struct({ ref: Schema.String }),
+    merged: Schema.optionalKey(Schema.Boolean),
   }),
 });
 
@@ -160,6 +161,8 @@ function githubEventOf(event: string, payload: UnparsedWireValue): GitHubEventRe
       const { pull_request: pull, label, repository } = read.success;
       // A merge is a close: the pull request's merged branch is where a follow-up starts.
       if (read.success.action === GITHUB_ACTION.CLOSED) {
+        // A close without a merge, or one a bot made, fires nothing, so an automation cannot fire itself.
+        if (pull.merged !== true || read.success.sender.type === BOT_SENDER) return undefined;
         return {
           event: GITHUB_TRIGGER_EVENT.PULL_REQUEST_MERGED,
           repository: repository.full_name,
