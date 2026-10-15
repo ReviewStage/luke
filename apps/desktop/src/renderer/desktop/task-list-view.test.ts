@@ -330,3 +330,32 @@ test("a workspace nobody shares offers no Created by", async () => {
   const items = [...document.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent);
   assert.ok(!items.some((item) => item?.startsWith("Created by")), "no Created by is offered");
 });
+
+test("with every task pinned, a filter still says it leaves nothing under Tasks, with Show all", async () => {
+  const pinnedAll = TASKS.map((each, at) => ({ ...each, pinnedAt: 900 + at }));
+  const sidebar = await mountRead(ACME, pinnedAll);
+  choose(sidebar, "Created by", "Charles Pan");
+  const notes = [...sidebar.querySelectorAll(".sidebar-note")].map((note) => note.textContent);
+  assert.ok(
+    notes.some((note) => note?.startsWith("None of their tasks here.")),
+    "the empty filter says so",
+  );
+});
+
+test("a workspace whose list names no member count still groups and filters by creator once its members are read", async () => {
+  const { memberCount: _, ...uncounted } = ACME;
+  const sidebar = await mountRead(uncounted);
+  choose(sidebar, "Group by", "Creator");
+  assert.deepEqual(groupNames(sidebar), ["You", "Charles Pan"]);
+});
+
+test("in one run, a task with no repository says so on its row", async () => {
+  const notes = task("t-6", "Hiring loop notes", null, CHARLES, { createdAt: 1, updatedAt: 700 });
+  const sidebar = await mountRead(ACME, [...TASKS, notes]);
+  choose(sidebar, "Group by", "None");
+  assert.deepEqual(taskRows(sidebar)[0], {
+    name: "Hiring loop notes",
+    repository: "No repository",
+    face: true,
+  });
+});

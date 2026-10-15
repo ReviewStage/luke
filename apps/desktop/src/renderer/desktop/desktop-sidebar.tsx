@@ -27,6 +27,7 @@ import {
   repositoryGroups,
   repositoryLabel,
   TASK_GROUPING,
+  TASK_ORDER,
   type TaskOrder,
   taskTime,
 } from "@luke/ui/task-list-model";
@@ -623,7 +624,11 @@ function ArchivedPlans({ context }: { context: RowContext }): React.JSX.Element 
         count={archived.length}
         onToggle={() => setUnfolded((was) => !was)}
       />
-      {unfolded ? <PlanRows rows={archived} context={context} /> : null}
+      {/* Note that the archived rows stand apart from the Tasks view, so they
+          wear their faces and their last update whatever it filters by or orders. */}
+      {unfolded ? (
+        <PlanRows rows={archived} context={{ ...context, order: TASK_ORDER.UPDATED }} face />
+      ) : null}
     </div>
   );
 }
@@ -1006,7 +1011,8 @@ function SidebarColumn({
   const taskView = useTaskListView(plans.workspace?.id, sidebar.staged);
   const reader = useMemberDirectory();
   // Only a workspace somebody shares has creators to group and filter by.
-  const shared = (plans.workspace?.memberCount ?? 1) > 1;
+  const { memberCount } = plans.workspace ?? {};
+  const shared = memberCount === undefined ? (reader.members?.length ?? 0) > 1 : memberCount > 1;
   const createdBy = shared ? taskView.view.createdBy : undefined;
   const unread = useUnreadPlans([...plans.plans, ...plans.archived], {
     listRead: plans.listRead,
@@ -1070,7 +1076,7 @@ function SidebarColumn({
   // A row names its repository as its group's header would, owner and all where two share a name.
   const named = repositoryGroups(unpinned);
   const repositoryOf = (plan: PlanSummary) =>
-    plan.repository === null ? undefined : repositoryLabel(plan.repository, named);
+    plan.repository === null ? NO_REPOSITORY : repositoryLabel(plan.repository, named);
   // The rows as the list draws them: the pinned, then each group not folded
   // away, the open plan standing in its place even under a fold, so walking
   // the list still moves from it.
@@ -1190,7 +1196,7 @@ function SidebarColumn({
               onClear={() => taskView.onCreatedBy(undefined)}
             />
           ) : null}
-          {createdBy !== undefined && tasks.length === 0 && unpinned.length > 0 ? (
+          {createdBy !== undefined && tasks.length === 0 && plans.listRead && !plans.listFailed ? (
             <p className="sidebar-note">
               {createdBy === plans.me ? "None of your tasks here." : "None of their tasks here."}{" "}
               <button
