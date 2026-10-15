@@ -69,7 +69,15 @@
         "diff",
         "ws"
       ],
-      "entry": ["instructions/*.ts", "evals/evals.config.ts", "evals/*.eval.ts"],
+      "entry": [
+        "{,subagents/*/}agent.ts",
+        "{,subagents/*/}sandbox.ts",
+        "{,subagents/*/}instructions.ts",
+        "{,subagents/*/}instructions/*.ts",
+        "{,subagents/*/}{channels,connections,hooks,skills,tools}/**/*.ts",
+        "evals/evals.config.ts",
+        "evals/*.eval.ts"
+      ],
       "project": ["**/*.ts"]
     },
     "apps/luke": {
@@ -85,7 +93,15 @@
         "diff",
         "ws"
       ],
-      "entry": ["instructions/*.ts", "evals/evals.config.ts", "evals/*.eval.ts"],
+      "entry": [
+        "{,subagents/*/}agent.ts",
+        "{,subagents/*/}sandbox.ts",
+        "{,subagents/*/}instructions.ts",
+        "{,subagents/*/}instructions/*.ts",
+        "{,subagents/*/}{channels,connections,hooks,skills,tools}/**/*.ts",
+        "evals/evals.config.ts",
+        "evals/*.eval.ts"
+      ],
       "project": ["**/*.ts"]
     },
     "tools/anti-slop": {

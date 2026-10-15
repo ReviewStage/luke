@@ -1,7 +1,7 @@
 import { offeredSkills } from "@luke/service/agents/agent-runtime/skills";
+import { SCRIPTED_SKILLS } from "@luke/service/testing/coder-scripted-model";
 import { defineDynamic } from "eve/skills";
 import { seams, sessionSkills } from "../host.js";
-import { SCRIPTED_SKILLS } from "../scripted-model.js";
 
 /**
  * The skills the agent's repository keeps, offered to the session as it
