@@ -539,6 +539,7 @@
    chips into underlined words; its glyph is the read view's alone. */
 .plan-document-text a.plan-mention-link {
   padding: 0 var(--space-4);
+  color: inherit;
   border-radius: 5px;
   background: var(--raised-strong);
   font-weight: 500;
