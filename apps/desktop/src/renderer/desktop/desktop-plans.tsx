@@ -152,6 +152,9 @@ function NewTabChord({ onNewTab }: { onNewTab: () => void }): null {
   return null;
 }
 
+/** The plan's own Inbox lists one plan's items in one run, so nothing in it folds. */
+const NO_FOLDS = () => false;
+
 /**
  * The plan's own Inbox tab: its items newest first in the window's Inbox's
  * list, with neither head nor groups since they are one plan's, and the
@@ -192,7 +195,11 @@ function PlanInboxTab({
   });
   const chosen = listedItems(list).find(({ item }) => item.id === asked) ?? firstChoice(list);
   const columns = useInboxColumns(chosen?.item.id, listedItems(list).length > 1);
-  const pager = useInboxPager(list, chosen?.item.id, ({ item }) => setAsked(item.id));
+  // Note that the column is hidden, though drawn, while the side panel fills the window.
+  const pager = useInboxPager(list, chosen?.item.id, ({ item }) => setAsked(item.id), {
+    shown: plans.shown && !plans.sidePanel.fullScreen,
+    folded: NO_FOLDS,
+  });
   return (
     <section
       ref={columns.ref}

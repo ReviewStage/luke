@@ -8,8 +8,10 @@ import { type InboxListed, type InboxListView, inboxSteps } from "./inbox-model"
  * inbox-pager.tsx -- stepping through the Inbox's items one at a time: where the chosen one stands, "2 of 8", and the presses and keys that choose the one above or below it.
  *
  * The steps follow the list's own order, its grouping and its Needs-you
- * filter as drawn, settled items among them, so the count matches the
- * list, and they stop at its ends rather than wrapping round. K and J
+ * filter as drawn, settled items among them and a folded group's left out,
+ * so the count matches the rows, and they stop at its ends rather than
+ * wrapping round. K and J are offered only while the Inbox is on screen, so
+ * a page drawn over it, a full-screen side panel or Settings, keeps them. K and J
  * choose the item above and below wherever the Inbox stands, as Linear's
  * Inbox has them: split, they move the chosen row and the item beside it;
  * one column wide, the item standing alone, whose bar draws the pager with
@@ -27,19 +29,26 @@ export interface InboxPager {
   readonly onNext: (() => void) | undefined;
 }
 
-/** The chosen item's place in the list and the steps either side of it, K and J offered while each has somewhere to go; none where nothing listed is chosen. */
+/** Where the Inbox stands: whether it is on screen, and which of its groups are folded away. */
+export interface InboxPagerPlace {
+  readonly shown: boolean;
+  readonly folded: (key: string) => boolean;
+}
+
+/** The chosen item's place among the rows and the steps either side of it, K and J offered while the Inbox is on screen and each has somewhere to go; none where no row holds the chosen item. */
 export function useInboxPager(
   view: InboxListView,
   chosen: string | undefined,
   onChoose: (listed: InboxListed) => void,
+  place: InboxPagerPlace,
 ): InboxPager | undefined {
-  const steps = inboxSteps(view, chosen);
+  const steps = inboxSteps(view, chosen, place.folded);
   const previous = steps?.previous;
   const next = steps?.next;
   const onPrevious = previous === undefined ? undefined : () => onChoose(previous);
   const onNext = next === undefined ? undefined : () => onChoose(next);
-  useAppCommand(APP_COMMAND.PREVIOUS_INBOX_ITEM, onPrevious);
-  useAppCommand(APP_COMMAND.NEXT_INBOX_ITEM, onNext);
+  useAppCommand(APP_COMMAND.PREVIOUS_INBOX_ITEM, place.shown ? onPrevious : undefined);
+  useAppCommand(APP_COMMAND.NEXT_INBOX_ITEM, place.shown ? onNext : undefined);
   if (steps === undefined) return undefined;
   return { at: steps.at, total: steps.total, onPrevious, onNext };
 }

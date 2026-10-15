@@ -465,15 +465,24 @@ export interface InboxSteps {
   readonly next: InboxListed | undefined;
 }
 
-/** The chosen item's place in the list, in the list's own order, its grouping and filter as drawn; none where the list does not hold it. */
+/** The items a reader finds a row for, in the list's order: every one listed, but a folded group's. */
+function rowedItems(view: InboxListView, folded: (key: string) => boolean): readonly InboxListed[] {
+  if (view.grouping === INBOX_GROUPING.NEWEST) return view.items;
+  return view.groups.flatMap(({ holder, items }) =>
+    folded(holderKey(holder)) ? [] : items.map((item) => ({ holder, item })),
+  );
+}
+
+/** The chosen item's place among the rows, in the list's own order, its grouping and filter as drawn and a folded group's items left out; none where no row holds it. */
 export function inboxSteps(
   view: InboxListView,
   chosen: string | undefined,
+  folded: (key: string) => boolean,
 ): InboxSteps | undefined {
-  const listed = listedItems(view);
-  const at = listed.findIndex(({ item }) => item.id === chosen);
+  const rowed = rowedItems(view, folded);
+  const at = rowed.findIndex(({ item }) => item.id === chosen);
   if (at < 0) return undefined;
-  return { at: at + 1, total: listed.length, previous: listed[at - 1], next: listed[at + 1] };
+  return { at: at + 1, total: rowed.length, previous: rowed[at - 1], next: rowed[at + 1] };
 }
 
 /** The item that stands chosen where none is: the first listed that waits, else the first listed. */

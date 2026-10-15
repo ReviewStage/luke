@@ -235,7 +235,10 @@ export function DesktopInbox({ plans }: { plans: PlansControl }): React.JSX.Elem
     holdings.some((holding) => !read.items.has(holding.planId)) ||
     plans.inboxPlanless.some((each) => !planless.items.has(each.agentId));
   const columns = useInboxColumns(chosen?.item.id, true);
-  const pager = useInboxPager(list, chosen?.item.id, choose);
+  const pager = useInboxPager(list, chosen?.item.id, choose, {
+    shown: plans.shown,
+    folded: folds.folded,
+  });
   // A choice that asks for its item opens it once, the one column the Inbox shows being the
   // item's; Back from it then stands on the list, the choice taken already.
   const opensItem = asked?.opened === true && chosen?.item.id === asked.itemId;

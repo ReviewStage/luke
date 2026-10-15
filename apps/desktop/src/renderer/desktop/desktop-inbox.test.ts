@@ -1032,6 +1032,18 @@ test("split, K and J move the chosen row and the item beside it, which draws no 
   act(() => keys.unmount());
 });
 
+test("a folded plan's items have no row, so K and J pass over them and the pager counts the rows a reader finds", async () => {
+  const { page } = mount();
+  await settle();
+  const keys = standKeymap();
+  act(() => headerNamed(page, "Invites").click());
+  pressKey("j");
+  assert.equal(readTitle(page), "Alert at 80%?", "nothing below the last row");
+  layOut(page, 800);
+  assert.equal(pagerOf(page), "2 of 2");
+  act(() => keys.unmount());
+});
+
 /** An answer the act gives the renderer, the view it carries settled now. */
 function answered(value: CodingAgentInboxAnswerView): Promise<ReadOutcome> {
   return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
