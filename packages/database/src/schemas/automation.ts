@@ -129,6 +129,15 @@ export const automationRun = pgTable(
     /** When it was started, skipped, or failed; null while queued. */
     settledAt: timestamptz("settled_at"),
     /**
+     * The agent a run of an automation that hands every run to the same
+     * agent was claimed to send its task to, as it was at the claim, so the
+     * run is recovered by that agent's line whatever the automation names
+     * since; null for any other run, and once that agent is deleted.
+     */
+    claimedAgentId: uuid("claimed_agent_id").references(() => codingAgent.id, {
+      onDelete: "set null",
+    }),
+    /**
      * When the sweep settled what becomes of the agent a run started for an
      * automation that archives its successful runs: archived once it
      * finished well, or left standing for good as failed, stopped, or put

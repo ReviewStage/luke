@@ -17,13 +17,13 @@ import {
 } from "@luke/database/models/automation-store";
 import {
   awaitingLinesOfReached,
-  codingAgentOfSentLine,
   discardCodingAgent,
   latestTurnsOfReached,
   readCodingAgent,
   readCodingAgentByKey,
 } from "@luke/database/models/coding-agent-store";
 import { sentLineId } from "@luke/database/models/ids";
+import { sentLineStands } from "@luke/database/models/message-reads";
 import { storeWriter } from "@luke/database/models/writer";
 import {
   AUTOMATION_FIRING,
@@ -379,7 +379,10 @@ const decide = (automationId: string, run: AutomationRun) =>
           ? ({ kind: DECISION.HELD, reason: held, automation } satisfies Decision)
           : ({ kind: DECISION.TAKEN } satisfies Decision);
       }
-      const claimed = yield* claimAutomationRun(run.id);
+      // A run handed to the same agent is claimed for that agent as it stands now, which its recovery reads.
+      const claimedFor =
+        automation.targetKind === AUTOMATION_TARGET.SAME_AGENT ? automation.targetAgentId : null;
+      const claimed = yield* claimAutomationRun(run.id, claimedFor);
       return claimed
         ? ({ kind: DECISION.CLAIMED, automation } satisfies Decision)
         : ({ kind: DECISION.TAKEN } satisfies Decision);
@@ -509,17 +512,29 @@ export const executeAutomationRun = /* @__PURE__ */ Effect.fn("web/executeAutoma
  * settled as the start its key made where that agent's session ran, and
  * failed as unavailable where none did, an agent made but never opened let
  * go with it, so no run is left starting for good. A run handed to the
- * same agent is settled with the agent whose conversation holds the line
- * it sent under its key, and failed as unavailable where none does.
+ * same agent is settled with the agent it was claimed for, where that
+ * agent holds the line it sent under its key, and failed as unavailable
+ * where it does not.
  */
 export const recoverStrandedRun = /* @__PURE__ */ Effect.fn("web/recoverStrandedRun")(function* (
   stranded: StrandedRun,
 ): Effect.fn.Return<void, unknown, DatabaseServices> {
-  // A run handed to the same agent made none: it is the start of whichever agent holds the line it
-  // sent under its key, read off the line rather than the automation, whose target may have moved since.
-  const steered = yield* codingAgentOfSentLine(sentLineId(stranded.id));
-  if (Option.isSome(steered)) {
-    yield* attachRunAgent(stranded.id, steered.value);
+  // A run handed to the same agent made none: it is the start of the agent it was claimed for, where
+  // that agent holds the line it sent under its key, and of no other agent whatever its lines hold.
+  if (stranded.claimedAgentId !== null) {
+    const agent = yield* readCodingAgent(stranded.userId, stranded.claimedAgentId);
+    const sent =
+      Option.isSome(agent) &&
+      (yield* sentLineStands(
+        agent.value.userId,
+        agent.value.conversationId,
+        sentLineId(stranded.id),
+      ));
+    if (sent) {
+      yield* attachRunAgent(stranded.id, stranded.claimedAgentId);
+      return;
+    }
+    yield* failClaimedRun(stranded.id, AUTOMATION_RUN_REASON.UNAVAILABLE);
     return;
   }
   const started = yield* readCodingAgentByKey(stranded.userId, stranded.id);

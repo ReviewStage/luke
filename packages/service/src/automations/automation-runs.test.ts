@@ -20,6 +20,7 @@ import {
 import { sentLineId } from "@luke/database/models/ids";
 import { sentLineStands } from "@luke/database/models/message-reads";
 import { claimRuntimeSession } from "@luke/database/models/recorded-session";
+import { storeWriter } from "@luke/database/models/writer";
 import { automationRun, automation as automationTable } from "@luke/database/schemas/automation";
 import { turns } from "@luke/database/schemas/storage";
 import { getTestDB, joinWorkspace, leaveWorkspace, startPlan } from "@luke/database/testing";
@@ -46,6 +47,8 @@ import {
   type EveMessage,
   type EveSessions,
 } from "../agents/brain-host/eve-sessions.js";
+import { steerCodingAgent } from "../agents/coder-host/steer.js";
+import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import { closeInboxItem, postInboxItem } from "../inbox/inbox-store.js";
 import { modelCatalogOf, type OfferedModel } from "../providers/model-catalog.js";
 import {
@@ -344,7 +347,12 @@ it.layer(getTestDB())("an automation's runs", (it) => {
             .where(eq(automationRun.id, run.id)),
         );
 
-        yield* recoverStrandedRun({ id: run.id, automationId: automation.id, userId: owner });
+        yield* recoverStrandedRun({
+          id: run.id,
+          automationId: automation.id,
+          userId: owner,
+          claimedAgentId: theirs.id,
+        });
 
         const [settled] = (yield* listAutomationRuns(owner, automation.id)).filter(
           (each) => each.id === run.id,
@@ -357,11 +365,11 @@ it.layer(getTestDB())("an automation's runs", (it) => {
   );
 
   it.effect(
-    "a same-agent run left claimed is settled with the agent holding its line, whatever the automation hands runs to since, and failed as unavailable where no line stands",
+    "a same-agent run left claimed is settled with the agent it was claimed for where that agent holds its line, whatever the automation hands runs to since, and failed as unavailable otherwise, a line under its key in any other agent's conversation counting for nothing",
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { owner, automation } = yield* openAutomation({
+        const { owner, automation, workspaceId } = yield* openAutomation({
           guards: { ...AUTOMATION_DEFAULT_GUARDS, maxConcurrentRuns: 5 },
         });
         const first = yield* startedNow(eve, automation);
@@ -375,8 +383,18 @@ it.layer(getTestDB())("an automation's runs", (it) => {
         const delivered = yield* runNow(same);
         yield* executeAutomationRun(eve.eveFor, delivered).pipe(Effect.provide(services));
         const lost = yield* runNow(same);
-        // The automation turned to another agent since: the run is still its own line's.
-        const other = yield* startedNow(eve, automation);
+        // The automation turned to another agent of the workspace since: the run is still its claim's.
+        const made = yield* createCodingAgent(owner, {
+          planId: null,
+          organizationId: workspaceId,
+          idempotencyKey: randomUUID(),
+          model: SOL,
+          effort: "low",
+          planSnapshot: null,
+          task: "Watch the nightly build.",
+          repository: `${RELAY.owner}/${RELAY.name}`,
+        });
+        const other = Option.getOrThrow(made).agent.id;
         yield* toSameAgent(automation, other);
         // Both left as a function that died after its claim would leave them.
         yield* Database.use((db) =>
@@ -386,11 +404,27 @@ it.layer(getTestDB())("an automation's runs", (it) => {
             .where(inArray(automationRun.id, [delivered.id, lost.id])),
         );
 
+        // A line under the lost run's key planted in the other agent, as anyone who read the run's id
+        // could send there, is no recovery of the run: it was claimed for the first agent.
+        const otherAgent = Option.getOrThrow(yield* readCodingAgent(owner, other));
+        yield* claimRuntimeSession(
+          { userId: owner, conversationId: otherAgent.conversationId },
+          "wrun_other",
+          new Date("2026-10-15T12:00:00Z"),
+        );
+        yield* steerCodingAgent(
+          yield* eve.eveFor(owner),
+          storeWriter({ tools: CODER_TOOL_SET }),
+          owner,
+          otherAgent,
+          { text: "Not the run.", clientKey: lost.id },
+        ).pipe(Effect.provide(services));
         for (const run of [delivered, lost]) {
           yield* recoverStrandedRun({
             id: run.id,
             automationId: automation.id,
             userId: owner,
+            claimedAgentId: first,
           });
         }
 
@@ -793,6 +827,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
             id: run.id,
             automationId: automation.id,
             userId: owner,
+            claimedAgentId: null,
           });
         }
 
