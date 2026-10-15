@@ -1,6 +1,6 @@
 import type { AdminMetrics, AdminRetentionCell } from "@luke/service/admin/admin-metrics";
+import { formatDayTick, formatNumber } from "@luke/ui/admin-format";
 import { Fragment } from "react";
-import { formatDayTick, formatNumber } from "../format";
 
 /**
  * The floor under a cell's fill, so a small nonzero share still reads as a

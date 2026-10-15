@@ -1,7 +1,7 @@
+import { appLinkFromAddress } from "@luke/features/open-address";
 import { AUTH_CARD, AUTH_SHELL, AUTH_TITLE } from "@luke/ui/auth-surface";
 import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { appLinkFromAddress } from "./open-address";
 import { DMG_URL, LukeMark } from "./SiteChrome";
 import "./styles.css";
 

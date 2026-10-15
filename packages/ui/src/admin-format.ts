@@ -1,5 +1,18 @@
+/**
+ * admin-format.ts -- how the admin page draws its counts, days, and trends.
+ */
+
 import { SOCIAL_PROVIDER, SOCIAL_PROVIDER_LABEL } from "@luke/features/sign-in-provider";
-import type { AdminTrend } from "@luke/service/admin/admin-metrics";
+
+/**
+ * The two runs a trend compares. The service's `AdminTrend` carries them, and
+ * is read here by shape, because this package sits below the service and
+ * must not import it.
+ */
+interface Trend {
+  recent: number;
+  prior: number;
+}
 
 const numberFormat = new Intl.NumberFormat("en-US");
 
@@ -50,7 +63,7 @@ const TREND_TONE = {
   FLAT: "text-muted-foreground",
 } as const;
 
-export function trendTone(trend: AdminTrend): string {
+export function trendTone(trend: Trend): string {
   if (trend.recent > trend.prior) return TREND_TONE.UP;
   if (trend.recent < trend.prior) return TREND_TONE.DOWN;
   return TREND_TONE.FLAT;
@@ -62,7 +75,7 @@ export function trendTone(trend: AdminTrend): string {
  * infinite — so the move stands as its own count rather than a figure that
  * reads as precision it does not have.
  */
-export function formatTrendMove(trend: AdminTrend): string {
+export function formatTrendMove(trend: Trend): string {
   const delta = trend.recent - trend.prior;
   if (delta === 0) return "flat";
   const sign = delta > 0 ? "+" : "−";

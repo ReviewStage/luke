@@ -1,4 +1,4 @@
-import { accountLabel } from "@luke/ui/account-initials";
+import { accountLabel } from "./account-initials.js";
 
 /**
  * The account fields both admin tables' rows carry — the shared columns'

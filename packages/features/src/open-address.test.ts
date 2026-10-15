@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, test, vi } from "vitest";
-import { appLinkFromAddress } from "../src/open-address";
+import { appLinkFromAddress } from "./open-address.js";
 
 /**
  * What the "Open in Luke" page hands the desktop app: the plan its address
