@@ -153,12 +153,13 @@ export function notesOf(
 }
 
 /**
- * The file's page on GitHub at the branch its lines were read on, its lit
- * lines marked where it still has them: a file shortened past them, which
- * the tab lights nothing of, opens at its top.
+ * The file's page on GitHub at the commit its lines were read at, or the
+ * branch where the service named no commit, so the page holds the lines
+ * the tab draws; its lit lines marked where it still has them: a file
+ * shortened past them, which the tab lights nothing of, opens at its top.
  */
 export function fileUrl(held: FileLines, file: OpenFile): string {
-  const page = `https://github.com/${held.repository}/blob/${githubPath(held.branch)}/${githubPath(file.path)}`;
+  const page = `https://github.com/${held.repository}/blob/${githubPath(held.commit ?? held.branch)}/${githubPath(file.path)}`;
   if (file.range === undefined || file.range.startLine > held.lineCount) return page;
   const { startLine, endLine } = file.range;
   return startLine === endLine ? `${page}#L${startLine}` : `${page}#L${startLine}-L${endLine}`;

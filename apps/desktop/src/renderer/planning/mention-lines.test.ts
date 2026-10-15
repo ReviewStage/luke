@@ -112,8 +112,8 @@ function Box({ sender }: { sender: MessageSender }): ReactNode {
   });
 }
 
-/** A plan's page drawing the file's tab and the agent's box, every message the box sends written down. */
-async function page() {
+/** A plan's page drawing the file's tab and, unless it is asked not to, the agent's box, every message the box sends written down. */
+async function page({ box = true }: { box?: boolean } = {}) {
   const sent: string[] = [];
   const sender: MessageSender = (_agentId, text) => {
     sent.push(text);
@@ -136,7 +136,7 @@ async function page() {
             readFile,
             onRead: ignore,
           }),
-          createElement(Box, { key: "box", sender }),
+          box ? createElement(Box, { key: "box", sender }) : null,
         ],
       }),
     ),
@@ -217,4 +217,12 @@ test("a selection that ends where the next line begins, as a line selected whole
   assert.deepEqual(sent, [
     `[@invite.ts:2](https://github.com/acme/relay/blob/${HEAD}/src/invite.ts#L2)`,
   ]);
+});
+
+test("with no agent's box on the page, ⌥⌘K is not offered, so the key is left to whatever else wants it", async () => {
+  const { container } = await page({ box: false });
+
+  select(lineText(container, 2), 1, lineText(container, 3), 2);
+
+  assert.equal(runAppCommand(APP_COMMAND.MENTION_LINES), false);
 });
