@@ -162,6 +162,8 @@ export interface ComposerEditorHandle {
   readonly chooseMention: (mention: MentionNode) => void;
   /** The `@` word the caret ends written as the skill named, as a `/` word's pick writes it. */
   readonly chooseSkillAtMention: (name: string) => void;
+  /** A mention made elsewhere (a File tab's ⌥K) laid in where the caret stands, a space after it, the box focused; nothing where it has no room under the bound. */
+  readonly insertMention: (mention: MentionNode) => void;
   /** The skills a `/name` names: each such word is drawn as a chip from now on. */
   readonly setSkills: (skills: ReadonlySet<string>) => void;
   /** Whether the words take a change: off while a message is held, read-only while a dictation stands, which keeps the caret. */

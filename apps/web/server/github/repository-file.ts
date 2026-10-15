@@ -108,3 +108,41 @@ export function readRepositoryFile(
     );
   });
 }
+
+/** What GitHub answers for a branch's ref: the commit it stands at. */
+const BranchRefSchema = Schema.Struct({
+  object: Schema.Struct({ type: Schema.Literal("commit"), sha: Schema.String }),
+});
+
+/**
+ * The commit a branch of the repository stands at now, so lines read at it
+ * can be named by the commit they were read at; nothing where GitHub names
+ * no commit for it.
+ */
+export function readBranchHead(
+  token: Redacted.Redacted,
+  repository: { readonly fullName: string },
+  branch: string,
+): Effect.Effect<string | undefined, GitHubUnavailable, HttpClient.HttpClient> {
+  return Effect.gen(function* () {
+    // Note that a branch's name may hold a slash, which stays a step of the ref's path.
+    const ref = branch.split("/").map(encodeURIComponent).join("/");
+    const request = githubRead(`/repos/${repository.fullName}/git/ref/heads/${ref}`, token);
+    const client = yield* HttpClient.HttpClient;
+    return yield* Effect.scoped(
+      Effect.gen(function* () {
+        const response = yield* Effect.mapError(
+          client.execute(request),
+          (error) =>
+            new GitHubUnavailable({
+              reason: GITHUB_FAILURE.TRANSPORT,
+              status: error.response?.status,
+            }),
+        );
+        if (response.status === GITHUB_HTTP_STATUS.NOT_FOUND) return undefined;
+        const answer = yield* readBody(response, BranchRefSchema);
+        return answer.object.sha;
+      }),
+    );
+  });
+}

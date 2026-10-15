@@ -14,7 +14,7 @@ import {
   type GitHubWorkspaceReadFailure,
 } from "../github/github-app.js";
 import { logGitHubReadFailure, logWorkspaceReadFailure } from "../github/github-refusal.js";
-import { readRepositoryFile } from "../github/repository-file.js";
+import { readBranchHead, readRepositoryFile } from "../github/repository-file.js";
 import {
   fileLines,
   holdsNul,
@@ -157,7 +157,17 @@ const readWindow = /* @__PURE__ */ Effect.fn("web/planFileWindow")(function* (
   const reach = yield* reachPlanRepository(organizationId, repository);
   if ("refused" in reach) return reach.refused;
   const { token, repository: confirmed } = reach.reached;
-  const at = request.ref ?? confirmed.defaultBranch;
+  const branch = request.ref ?? confirmed.defaultBranch;
+  // Note that a read of the default branch reads at the commit its head
+  // stands at, and names it, so lines picked from the read are pinned to the
+  // commit they were read at; a head GitHub did not name leaves the read on
+  // the branch, naming none, since the file is still worth showing.
+  const commit =
+    request.ref ??
+    (yield* readBranchHead(token, confirmed, confirmed.defaultBranch).pipe(
+      Effect.catch(() => Effect.succeed(undefined)),
+    ));
+  const at = commit ?? branch;
   const file = yield* readRepositoryFile(token, confirmed, at, request.path);
   const content = file.regular ? file.content : undefined;
   const refusal = shownFileRefusal({
@@ -170,7 +180,7 @@ const readWindow = /* @__PURE__ */ Effect.fn("web/planFileWindow")(function* (
   // it was looked for at, because the snippet's checkout may hold a file that
   // branch no longer does; a link or a directory there is missing on no branch.
   if (refusal === SHOWN_FILE_REFUSAL.MISSING && !file.regular && file.notFound) {
-    return { refusal: PLAN_FILE_REFUSAL.MISSING, branch: at } satisfies PlanFileAnswer;
+    return { refusal: PLAN_FILE_REFUSAL.MISSING, branch } satisfies PlanFileAnswer;
   }
   if (refusal !== undefined) return refused(FILE_REFUSAL_OF[refusal]);
   // A regular file GitHub carried no bytes of is past the bound, which the rule refused above.
@@ -180,19 +190,18 @@ const readWindow = /* @__PURE__ */ Effect.fn("web/planFileWindow")(function* (
     const raw = content === undefined ? undefined : rawText(content);
     if (raw === undefined) return refused(PLAN_FILE_REFUSAL.NOT_TEXT);
     return {
-      text: { path: request.path, repository, branch: at, text: raw },
+      text: { path: request.path, repository, branch, text: raw },
     } satisfies PlanFileAnswer;
   }
   const all = fileLines(new TextDecoder().decode(content));
   const lines = all.slice(request.firstLine - 1, request.lastLine).map(shownLine);
-  return {
-    file: {
-      path: request.path,
-      repository,
-      branch: at,
-      firstLine: request.firstLine,
-      lineCount: all.length,
-      lines,
-    },
-  } satisfies PlanFileAnswer;
+  const window = {
+    path: request.path,
+    repository,
+    branch,
+    firstLine: request.firstLine,
+    lineCount: all.length,
+    lines,
+  };
+  return { file: commit === undefined ? window : { ...window, commit } } satisfies PlanFileAnswer;
 });

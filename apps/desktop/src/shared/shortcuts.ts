@@ -60,6 +60,7 @@ export const APP_COMMAND = {
   COMMAND_PALETTE: "command-palette",
   SHOW_TERMINAL: "show-terminal",
   NEW_TERMINAL: "new-terminal",
+  MENTION_LINES: "mention-lines",
 } as const;
 
 export type AppCommand = (typeof APP_COMMAND)[keyof typeof APP_COMMAND];
@@ -218,7 +219,8 @@ export interface AppShortcut {
  * ⇧⌘M to toggle the call's microphone as Teams has it, with ⇧⌘S for its
  * speaker beside it, ⌘K for the command palette as Linear, Slack, and
  * Raycast have it, ⌘J for the terminal as VS Code and Cursor have the
- * panel that holds it, ⌘F to find, and ⌘G and ⇧⌘G to step through what it
+ * panel that holds it, ⌥⌘K to mention a File tab's selected lines in the
+ * agent's message box, beside the palette's ⌘K, ⌘F to find, and ⌘G and ⇧⌘G to step through what it
  * found, as every Mac app has them, and ⌘+, ⌘−, and ⌘0 to zoom as every
  * browser has them.
  *
@@ -326,6 +328,10 @@ export const APP_SHORTCUTS = {
   [APP_COMMAND.FORWARD]: { label: "Forward", chord: { key: SHORTCUT_KEY.CLOSE_BRACKET } },
   [APP_COMMAND.COMMAND_PALETTE]: { label: "Command palette", chord: { key: SHORTCUT_KEY.K } },
   [APP_COMMAND.SHOW_TERMINAL]: { label: "Show terminal", chord: { key: SHORTCUT_KEY.J } },
+  [APP_COMMAND.MENTION_LINES]: {
+    label: "Mention lines in agent",
+    chord: { key: SHORTCUT_KEY.K, option: true },
+  },
 } as const satisfies Record<KeyedCommand, AppShortcut>;
 
 /**
@@ -375,6 +381,7 @@ export const APP_SHORTCUT_GROUPS = [
       APP_COMMAND.MOVE_TAB_LEFT,
       APP_COMMAND.MOVE_TAB_RIGHT,
       APP_COMMAND.SHOW_TERMINAL,
+      APP_COMMAND.MENTION_LINES,
     ],
   },
   {

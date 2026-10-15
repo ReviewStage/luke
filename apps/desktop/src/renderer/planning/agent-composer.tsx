@@ -46,7 +46,7 @@ import { ComposerField } from "./composer-field";
 import { DictateButton, DictationStrip } from "./dictation-strip";
 import { MentionNodeChip, pastedMentionNode } from "./mention-chip";
 import { MENTION_MENU_SIDE, useMentionPicker } from "./mention-picker";
-import { usePlanMentions } from "./plan-mentions";
+import { useMentionBox, usePlanMentions } from "./plan-mentions";
 import { useRepositoryRemedy } from "./repository-remedy";
 import { useSkillOpener } from "./skill-chip";
 import { type SkillSource, useSkillPicker } from "./skill-picker";
@@ -276,6 +276,8 @@ export function AgentComposer({
 
   // An `@` picks a mention of the plan the box stands on, where it stands on a plan's page.
   const planMentions = usePlanMentions();
+  // A file's lines picked in a File tab on the page (⌥⌘K) are laid in here, where the caret stands.
+  useMentionBox((mention) => editor.current?.insertMention(mention));
   const mentionPicker = useMentionPicker({
     source: planMentions,
     // The repository's skills, a pick written as the `/name` chip the `/` list writes.

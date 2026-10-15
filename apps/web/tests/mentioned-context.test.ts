@@ -334,3 +334,23 @@ test("a GitHub page that is a file of the plan's repository brings in no server"
 
   assert.deepEqual(mentionedServers(`See ${file}.`, PLAN.repository), []);
 });
+
+test("a file's lines the words mention are handed as a note naming the lines and the commit they were read at, and a whole file as nothing", () => {
+  const commit = "0123456789abcdef0123456789abcdef01234567";
+  const lines = mentionMarkdown(
+    { kind: MENTION_KIND.FILE, path: "src/app.ts", lines: { commit, startLine: 12, endLine: 20 } },
+    "app.ts:12–20",
+    PLACE,
+  );
+  const whole = mentionMarkdown({ kind: MENTION_KIND.FILE, path: "src/app.ts" }, "app.ts", PLACE);
+
+  const part = mentionedContext(`Fix ${lines}, as ${lines} says.`, PLAN) ?? "";
+
+  assert.equal(part.split("The developer pointed you at").length - 1, 1, part);
+  assert.match(
+    part,
+    /lines 12–20 of `src\/app\.ts` as they stood at commit `0123456789abcdef0123456789abcdef01234567`/u,
+  );
+  assert.match(part, /git show 0123456789abcdef0123456789abcdef01234567:src\/app\.ts/u);
+  assert.equal(mentionedContext(`Fix ${whole}.`, PLAN), undefined);
+});
