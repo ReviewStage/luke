@@ -60,7 +60,7 @@ import {
 } from "@luke/gateway";
 import { MESSAGE_ROLE, type WireRecord } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { Deferred, Duration, Effect, Fiber, Queue, Result } from "effect";
+import { Deferred, Duration, Effect, Exit, Fiber, Queue, Result } from "effect";
 import { TestClock } from "effect/testing";
 import {
   composePlanning,
@@ -191,6 +191,8 @@ const ACME: Workspace = {
   role: WORKSPACE_ROLE.ADMIN,
   github: { login: "acme", active: true },
 };
+/** A workspace's photo as the window sends it: a WebP's `data:` URL. */
+const PHOTO_URL = "data:image/webp;base64,UklGRgAAAABXRUJQ";
 const RELAY: Workspace = {
   id: "workspace-relay",
   name: "Relay Labs",
@@ -341,6 +343,20 @@ function fakeService(plans: Plan[]): FakeService {
           const again = service.renamedAgain;
           service.memberships = service.memberships.map((each) =>
             each.id !== workspaceId ? each : again === undefined ? now : { ...now, name: again },
+          );
+          return { ok: true, answer: now } as const;
+        }),
+      // A photo set stands as its version, the photo's own text, and null takes the version away.
+      setPhoto: (workspaceId, photo) =>
+        Effect.sync(() => {
+          service.reads.push(`photoSet:${workspaceId}:${photo ?? "none"}`);
+          if (service.notPermitted) return NOT_PERMITTED_WORKSPACE;
+          const found = service.memberships.find((each) => each.id === workspaceId);
+          if (found === undefined) return UNANSWERED_WORKSPACE;
+          const { photoVersion: _replaced, ...rest } = found;
+          const now = photo === null ? rest : { ...rest, photoVersion: photo };
+          service.memberships = service.memberships.map((each) =>
+            each.id === workspaceId ? now : each,
           );
           return { ok: true, answer: now } as const;
         }),
@@ -1284,6 +1300,75 @@ it.effect(
 );
 
 it.effect(
+  "a workspace's photo set reaches the service and the view then holds its version, removing it takes the version away, and a photo the role does not allow moves nothing",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      service.memberships = [PERSONAL, ACME];
+      const { call, last } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+      const before = service.reads.length;
+
+      const set = yield* call(GATEWAY_METHOD.WORKSPACES_PHOTO_SET, {
+        workspaceId: ACME.id,
+        photo: PHOTO_URL,
+      });
+      const drawn = last()?.workspaces;
+      const removed = yield* call(GATEWAY_METHOD.WORKSPACES_PHOTO_SET, {
+        workspaceId: ACME.id,
+        photo: null,
+      });
+      service.notPermitted = true;
+      const refused = yield* call(GATEWAY_METHOD.WORKSPACES_PHOTO_SET, {
+        workspaceId: ACME.id,
+        photo: PHOTO_URL,
+      });
+
+      assert.deepEqual(set, { workspace: { ...ACME, photoVersion: PHOTO_URL } });
+      assert.deepEqual(drawn, [PERSONAL, { ...ACME, photoVersion: PHOTO_URL }]);
+      assert.deepEqual(removed, { workspace: ACME });
+      assert.deepEqual(refused, { failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED });
+      assert.deepEqual(last()?.workspaces, [PERSONAL, ACME]);
+      assert.deepEqual(service.reads.slice(before), [
+        `photoSet:${ACME.id}:${PHOTO_URL}`,
+        "workspaces",
+        `photoSet:${ACME.id}:none`,
+        "workspaces",
+        `photoSet:${ACME.id}:${PHOTO_URL}`,
+        "workspaces",
+      ]);
+    }),
+);
+
+it.effect(
+  "a photo whose read after it fails still draws the version the service answered, and an SVG is refused before the service",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      service.memberships = [PERSONAL, ACME];
+      const { call, last } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+      service.workspacesFail = true;
+      const before = service.reads.length;
+
+      yield* call(GATEWAY_METHOD.WORKSPACES_PHOTO_SET, { workspaceId: ACME.id, photo: PHOTO_URL });
+      const svg = yield* Effect.exit(
+        call(GATEWAY_METHOD.WORKSPACES_PHOTO_SET, {
+          workspaceId: ACME.id,
+          photo: "data:image/svg+xml;base64,PHN2Zy8+",
+        }),
+      );
+
+      assert.deepEqual(last()?.workspaces, [PERSONAL, { ...ACME, photoVersion: PHOTO_URL }]);
+      assert.ok(Exit.isFailure(svg), "an SVG is no photo");
+      assert.deepEqual(service.reads.slice(before), [
+        `photoSet:${ACME.id}:${PHOTO_URL}`,
+        "workspaces",
+      ]);
+    }),
+);
+
+it.effect(
   "connecting GitHub answers the service's install address and reads nothing, and disconnecting draws the workspace without its organization",
   () =>
     Effect.gen(function* () {
@@ -1751,6 +1836,10 @@ it.effect("behind a closed account gate no workspace call reaches the service", 
     );
     assert.deepEqual(
       yield* call(GATEWAY_METHOD.WORKSPACES_RENAME, { workspaceId: ACME.id, name: "Acme Labs" }),
+      unanswered,
+    );
+    assert.deepEqual(
+      yield* call(GATEWAY_METHOD.WORKSPACES_PHOTO_SET, { workspaceId: ACME.id, photo: null }),
       unanswered,
     );
     assert.deepEqual(

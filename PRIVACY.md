@@ -427,7 +427,10 @@ show a photo an owner or admin of it uploads: the service keeps it with the
 workspace, a PNG, JPEG, or WebP image, and serves its bytes only to Luke
 signed in as one of the workspace's members, never caching it on the way;
 the list of your workspaces names only a short digest of it, so your Mac
-reads the photo again only when it changes. Your own first workspace, while
+reads the photo again only when it changes. The photo is the one picture
+you choose, which your Mac first redraws as a small square, 256 pixels a
+side, and sends nothing else of the file; an owner or admin who removes it
+deletes it from the service, and a new upload replaces it. Your own first workspace, while
 it has no photo, shows your profile picture, from the address your sign-in
 gave us where it is Google's or GitHub's, and only to you. When an owner
 or admin connects GitHub to a workspace, the

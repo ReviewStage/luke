@@ -48,10 +48,11 @@ function letterOf(name: string): string {
   return first === undefined ? "" : first.segment.toUpperCase();
 }
 
-/** The tile's sizes: a row's glyph, or the sidebar's head. */
+/** The tile's sizes: a row's glyph, the sidebar's head, or the photo's row on Settings › Workspace. */
 export const TILE_SIZE = {
   ROW: "row",
   HEAD: "head",
+  SETTINGS: "settings",
 } as const;
 
 type TileSize = (typeof TILE_SIZE)[keyof typeof TILE_SIZE];

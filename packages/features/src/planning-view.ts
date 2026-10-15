@@ -50,6 +50,7 @@ import {
   workspaceLeaveRequestSchema,
   workspaceMemberRemovalSchema,
   workspaceMemberSchema,
+  workspacePhotoSetRequestSchema,
   workspacePhotoTypeSchema,
   workspaceRenameRequestSchema,
   workspaceSchema,
@@ -759,12 +760,17 @@ export const planningWorkspaceRenameParamsSchema = workspaceRenameRequestSchema;
 
 export type PlanningWorkspaceRenameParams = typeof planningWorkspaceRenameParamsSchema.Type;
 
+/** Setting or removing a workspace's photo, as the window asks it: the workspace and the photo as a `data:` URL, or null, as the service takes them. */
+export const planningWorkspacePhotoSetParamsSchema = workspacePhotoSetRequestSchema;
+
+export type PlanningWorkspacePhotoSetParams = typeof planningWorkspacePhotoSetParamsSchema.Type;
+
 /** One workspace, as the window names it to read its invitations, or to connect or disconnect its GitHub organization. */
 export const planningWorkspaceParamsSchema = workspaceGithubRequestSchema;
 
 export type PlanningWorkspaceParams = typeof planningWorkspaceParamsSchema.Type;
 
-/** A workspace made or renamed or its GitHub organization disconnected, as the window hears it: the workspace as it then stands, or why it does not. */
+/** A workspace made, renamed, or given a photo, or its GitHub organization disconnected, as the window hears it: the workspace as it then stands, or why it does not. */
 export const planningWorkspaceAnswerSchema = EffectSchema.Union([
   EffectSchema.Struct({ workspace: workspaceSchema }),
   workspaceCallFailureSchema,

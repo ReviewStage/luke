@@ -42,6 +42,8 @@ const INVITATION = {
   acceptUrl: "https://luke.test/accept-invitation.html?id=inv-1",
 };
 const INSTALL_URL = "https://github.com/apps/luke/installations/new?state=intent-1";
+/** A workspace's photo as the window sends it: a WebP's `data:` URL. */
+const PHOTO_URL = "data:image/webp;base64,UklGRgAAAABXRUJQ";
 const ACME = {
   id: "workspace-acme",
   name: "acme",
@@ -233,6 +235,12 @@ function fixture() {
         Effect.sync(() => {
           asked.push(`rename:${params.workspaceId}:${params.name}`);
           return host.notPermitted ? refusal() : { workspace: { ...ACME, name: params.name } };
+        }),
+      workspacePhotoSet: (params) =>
+        Effect.sync(() => {
+          asked.push(`photoSet:${params.workspaceId}:${params.photo ?? "none"}`);
+          if (host.notPermitted) return refusal();
+          return { workspace: params.photo === null ? ACME : { ...ACME, photoVersion: "v2" } };
         }),
       workspaceGitHubConnect: (params) =>
         Effect.sync((): PlanningWorkspaceGitHubConnectAnswer => {
@@ -472,6 +480,14 @@ it.effect(
         { kind: ACT_KIND.WORKSPACE_RENAME, payload: { ...workspace, name: "  Acme Labs " } },
         PANEL,
       );
+      const photographed = yield* f.router.performAct(
+        { kind: ACT_KIND.WORKSPACE_PHOTO_SET, payload: { ...workspace, photo: PHOTO_URL } },
+        PANEL,
+      );
+      const unphotographed = yield* f.router.performAct(
+        { kind: ACT_KIND.WORKSPACE_PHOTO_SET, payload: { ...workspace, photo: null } },
+        PANEL,
+      );
       const connected = yield* f.router.performAct(
         { kind: ACT_KIND.WORKSPACE_GITHUB_CONNECT, payload: workspace },
         PANEL,
@@ -505,6 +521,11 @@ it.effect(
         status: ACT_OUTCOME_STATUS.DONE,
         value: { ...ACME, name: "Acme Labs" },
       });
+      assert.deepEqual(photographed, {
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: { ...ACME, photoVersion: "v2" },
+      });
+      assert.deepEqual(unphotographed, { status: ACT_OUTCOME_STATUS.DONE, value: ACME });
       assert.equal(connected.status, ACT_OUTCOME_STATUS.DONE);
       assert.equal(disconnected.status, ACT_OUTCOME_STATUS.DONE);
       assert.deepEqual(members, { status: ACT_OUTCOME_STATUS.DONE, value: [GRACE] });
@@ -514,6 +535,8 @@ it.effect(
       assert.deepEqual(f.asked, [
         "create:Relay Labs",
         `rename:${ACME.id}:Acme Labs`,
+        `photoSet:${ACME.id}:${PHOTO_URL}`,
+        `photoSet:${ACME.id}:none`,
         `connect:${ACME.id}`,
         `disconnect:${ACME.id}`,
         `members:${ACME.id}`,
@@ -643,6 +666,10 @@ it.effect(
           { kind: ACT_KIND.WORKSPACE_RENAME, payload: { ...workspace, name: "Acme Labs" } },
           PANEL,
         ),
+        f.router.performAct(
+          { kind: ACT_KIND.WORKSPACE_PHOTO_SET, payload: { ...workspace, photo: null } },
+          PANEL,
+        ),
       ]);
       f.host.notPermitted = false;
       const unread = yield* f.router.performAct(
@@ -655,6 +682,7 @@ it.effect(
         reason: WORKSPACE_NOT_PERMITTED_REFUSAL,
       };
       assert.deepEqual(refusedNow, [
+        notPermitted,
         notPermitted,
         notPermitted,
         notPermitted,

@@ -154,6 +154,8 @@ export const HOSTED_SERVICE_PATH = {
   WORKSPACE_GITHUB_DISCONNECT: "/api/workspaces/github/disconnect",
   /** A workspace renamed by an owner or an admin (POST), answering the workspace; its slug stays as it was. */
   WORKSPACES_RENAME: "/api/workspaces/rename",
+  /** A workspace's photo set as a `data:` URL, or removed with null, by an owner or an admin (POST), answering the workspace. */
+  WORKSPACES_PHOTO_SET: "/api/workspaces/photo/set",
   /** One workspace's members, to a member of it (GET), the workspace named in `workspace-wire.ts`'s `WORKSPACE_MEMBERS_QUERY`. */
   WORKSPACES_MEMBERS: "/api/workspaces/members",
   /** An owner or an admin removes a member who is not an owner (POST), answered with those who remain. */

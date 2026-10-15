@@ -24,11 +24,13 @@ import {
 } from "@luke/features/workspace-invitation-wire";
 import {
   WORKSPACE_MEMBERS_QUERY,
+  WORKSPACE_PHOTO_BOUNDS,
   WORKSPACE_ROLE,
   workspaceCreateRequestSchema,
   workspaceGithubRequestSchema,
   workspaceLeaveRequestSchema,
   workspaceMemberRemovalSchema,
+  workspacePhotoSetRequestSchema,
   workspaceRenameRequestSchema,
 } from "@luke/features/workspace-wire";
 import { readEither } from "@luke/wire/effect";
@@ -59,7 +61,7 @@ import { ANY_METHOD, type WebRoutes } from "../route.js";
 import { listMembers, memberIdOf } from "./workspace-members.js";
 
 /**
- * workspaces-app.ts -- the account's workspaces as the Mac reads and asks for them: the list, a workspace created or renamed, a GitHub organization connected or disconnected, and its members read, removed, or left.
+ * workspaces-app.ts -- the account's workspaces as the Mac reads and asks for them: the list, a workspace created, renamed, or given a photo, a GitHub organization connected or disconnected, and its members read, removed, or left.
  *
  * `GET /api/workspaces` answers every workspace the bearer's account is a
  * member of, the one made for it first and the rest by name, each with the
@@ -83,10 +85,13 @@ import { listMembers, memberIdOf } from "./workspace-members.js";
  * answering it under its new name and its old slug.
  * `GET /api/workspaces/<id>/photo` serves a workspace's photo as its bytes
  * to a member of it; the list names only which version of it stands.
+ * `POST /api/workspaces/photo/set` lets an owner or admin set the photo, as
+ * a `data:` URL of a photo's type within its bound, or remove it with null,
+ * answering the workspace with its photo's new version or none.
  * The bearer is resolved before any row is touched.
  *
- * Removing, leaving, and renaming are Better Auth's own `removeMember`,
- * `leaveOrganization`, and `updateOrganization`
+ * Removing, leaving, renaming, and setting the photo are Better Auth's own
+ * `removeMember`, `leaveOrganization`, and `updateOrganization`
  * (https://www.better-auth.com/docs/plugins/organization#remove-member),
  * so their bearer is the Mac's Better Auth session, signed, which the bearer
  * plugin reads as the session cookie those calls take; every other path
@@ -113,6 +118,9 @@ const INVITATIONS_PATH = "/api/workspaces/invitations";
 const INVITATIONS_CANCEL_PATH = "/api/workspaces/invitations/cancel";
 /** GET serves a workspace's photo; the rewrite moves the path's workspace id into the `id` query. */
 const PHOTO_PATH = "/api/workspaces/photo";
+
+/** POST sets or removes a workspace's photo. */
+const PHOTO_SET_PATH = "/api/workspaces/photo/set";
 
 /** The query the photo's rewrite names its workspace under. */
 const PHOTO_QUERY = { ID: "id" } as const;
@@ -145,7 +153,15 @@ const INSTALL_STATE_PARAM = "state";
 /** A workspace's name or id is a few dozen characters, so a body past this is not one. */
 const MAXIMUM_BODY_BYTES = 1_024;
 
-/** The roles that remove a member or rename the workspace. */
+/**
+ * A photo's body: its bytes at their bound spelled in base64, four
+ * characters to every three bytes, and a name's body beside them for the
+ * URL's prefix and the workspace's id. Note that a photo just past the
+ * bound still fits, because its refusal is the invalid one the schema says.
+ */
+const PHOTO_BODY_BYTES = Math.ceil(WORKSPACE_PHOTO_BOUNDS.MAX_BYTES / 3) * 4 + MAXIMUM_BODY_BYTES;
+
+/** The roles that remove a member, rename the workspace, or set its photo. */
 const MANAGING_ROLES: ReadonlySet<string> = new Set([WORKSPACE_ROLE.OWNER, WORKSPACE_ROLE.ADMIN]);
 
 export interface WorkspacesAppSeams {
@@ -463,7 +479,7 @@ const leaveEndpoint = Effect.fn("web/workspaceLeaveEndpoint")(function* (
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { workspaceId });
 });
 
-/** A workspace the account is an owner or an admin of; the one whose invitations it manages or that it renames. */
+/** A workspace the account is an owner or an admin of; the one whose invitations it manages, that it renames, or whose photo it sets. */
 const managedWorkspace = Effect.fn("web/managedWorkspace")(function* (
   userId: string,
   organizationId: string,
@@ -492,7 +508,38 @@ const renameEndpoint = Effect.fn("web/workspaceRenameEndpoint")(function* (
   const { workspaceId, name } = asked.success;
   const workspace = yield* managedWorkspace(userId, workspaceId);
   yield* pluginCallOrRefused(
-    seams.members.updateOrganization({ headers, organizationId: workspace.id, name }),
+    seams.members.updateOrganization({ headers, organizationId: workspace.id, data: { name } }),
+  );
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
+    workspace: yield* answeredWorkspace(userId, workspace.id),
+  });
+});
+
+/**
+ * POST: an owner or admin sets a workspace's photo, or removes it with
+ * null, answered with the workspace as it then stands. Note that the photo
+ * is kept as the very `data:` URL the schema read, because the list's
+ * version is a digest of that text and the photo's route decodes it again.
+ */
+const photoSetEndpoint = Effect.fn("web/workspacePhotoSetEndpoint")(function* (
+  seams: WorkspacesAppSeams,
+): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, Requirements> {
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  if (incoming.method !== HTTP_METHOD.POST) {
+    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
+  }
+  const { userId, headers } = yield* sessionAccountOf(seams);
+  const body = yield* readJsonBodyEffect(PHOTO_BODY_BYTES);
+  const asked = readEither(workspacePhotoSetRequestSchema)(body);
+  if (Result.isFailure(asked)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  const { workspaceId, photo } = asked.success;
+  const workspace = yield* managedWorkspace(userId, workspaceId);
+  yield* pluginCallOrRefused(
+    seams.members.updateOrganization({
+      headers,
+      organizationId: workspace.id,
+      data: { logo: photo },
+    }),
   );
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
     workspace: yield* answeredWorkspace(userId, workspace.id),
@@ -587,7 +634,7 @@ const cancelInvitationEndpoint = Effect.fn("web/workspaceInvitationCancelEndpoin
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { invitations });
 });
 
-/** The group: the workspaces path, the rename, the two GitHub paths, the three members paths, the photo's path, the two invitations paths, and the hosted vocabulary's own refusal for any other. */
+/** The group: the workspaces path, the rename, the two GitHub paths, the three members paths, the photo's two paths, the two invitations paths, and the hosted vocabulary's own refusal for any other. */
 export function workspacesApp(
   seams: WorkspacesAppSeams,
 ): WebRoutes<DatabaseServices | HttpClient.HttpClient | GitHubApp> {
@@ -600,6 +647,7 @@ export function workspacesApp(
     HttpRouter.add(ANY_METHOD, LEAVE_PATH, hostedRefusing(leaveEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, RENAME_PATH, hostedRefusing(renameEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, PHOTO_PATH, hostedRefusing(photoEndpoint(seams))),
+    HttpRouter.add(ANY_METHOD, PHOTO_SET_PATH, hostedRefusing(photoSetEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, INVITATIONS_PATH, hostedRefusing(invitationsEndpoint(seams))),
     HttpRouter.add(
       ANY_METHOD,

@@ -4,13 +4,12 @@ import {
   RESERVED_WORKSPACE_SLUGS,
   type Workspace as WireWorkspace,
   WORKSPACE_ROLE,
-  type WorkspacePhotoType,
+  type WorkspacePhoto,
   type WorkspaceRole,
-  workspacePhotoTypeSchema,
+  workspacePhotoOfDataUrl,
 } from "@luke/features/workspace-wire";
 import { and, asc, eq, exists, inArray, type SQL, type SQLWrapper, sql } from "drizzle-orm";
-import { type Cause, DateTime, Effect, Option, Result, Schema } from "effect";
-import { Base64 } from "effect/encoding";
+import { type Cause, DateTime, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import {
   Database,
@@ -69,22 +68,11 @@ const PERSONAL_SLUG_PREFIX = "personal-";
 /** How many hex characters of a photo's digest name its version: enough that two photos of one workspace never share one. */
 const PHOTO_VERSION_CHARS = 16;
 
-/** A photo as `organization.logo` keeps it: a `data:` URL naming its media type, then its bytes in base64. */
-const PHOTO_DATA_URL = /^data:([^;,]+);base64,([A-Za-z0-9+/]+={0,2})$/u;
-
-const isPhotoType = Schema.is(workspacePhotoTypeSchema);
-
 /**
  * One workspace as its members see it: the account's role in it and the
  * GitHub account its connected installation is on, if any.
  */
 export type Workspace = WireWorkspace;
-
-/** A workspace's photo, as its bytes under its media type. */
-export interface WorkspacePhoto {
-  readonly contentType: WorkspacePhotoType;
-  readonly bytes: Uint8Array;
-}
 
 const WORKSPACE_ROLES: readonly WorkspaceRole[] = Object.values(WORKSPACE_ROLE);
 
@@ -287,13 +275,7 @@ const findWorkspace = SqlSchema.findOneOption({
 
 /** The photo a workspace's `logo` holds, where it is a `data:` URL of a photo's type whose bytes read; nothing for any other text. */
 function photoOfLogo(logo: string | null): WorkspacePhoto | undefined {
-  const matched = logo === null ? null : PHOTO_DATA_URL.exec(logo);
-  const [, contentType, base64] = matched ?? [];
-  if (contentType === undefined || base64 === undefined || !isPhotoType(contentType)) {
-    return undefined;
-  }
-  const bytes = Base64.decode(base64);
-  return Result.isSuccess(bytes) ? { contentType, bytes: bytes.success } : undefined;
+  return logo === null ? undefined : workspacePhotoOfDataUrl(logo);
 }
 
 /**

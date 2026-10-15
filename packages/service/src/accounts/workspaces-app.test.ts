@@ -17,6 +17,7 @@ import {
 } from "@luke/features/workspace-invitation-wire";
 import {
   WORKSPACE_BOUNDS,
+  WORKSPACE_PHOTO_BOUNDS,
   WORKSPACE_ROLE,
   type Workspace,
   workspaceAnswerSchema,
@@ -728,6 +729,27 @@ const leaving = (plugin: WorkspacePlugin, userId: string, workspaceId: string) =
 const renaming = (plugin: WorkspacePlugin, userId: string, workspaceId: string, name: string) =>
   postedInSession(plugin, userId, HOSTED_SERVICE_PATH.WORKSPACES_RENAME, { workspaceId, name });
 
+/** The account setting the workspace's photo, or removing it with null, under its session. */
+const settingPhoto = (
+  plugin: WorkspacePlugin,
+  userId: string,
+  workspaceId: string,
+  photo: string | null,
+) =>
+  postedInSession(plugin, userId, HOSTED_SERVICE_PATH.WORKSPACES_PHOTO_SET, { workspaceId, photo });
+
+/** The text a workspace's `logo` holds, as the plugin's row keeps it. */
+const logoOf = (organizationId: string) =>
+  Effect.map(
+    Database.use((db) =>
+      db
+        .select({ logo: organization.logo })
+        .from(organization)
+        .where(eq(organization.id, organizationId)),
+    ),
+    ([row]) => (row ?? assert.fail(`no organization ${organizationId}`)).logo,
+  );
+
 /** A workspace's name and slug, as the plugin's row holds them. */
 const organizationOf = (organizationId: string) =>
   Effect.map(
@@ -1028,8 +1050,128 @@ it.effect(
     }),
 );
 
+/** A photo's `data:` URL of the type given, holding `bytes` bytes. */
+const photoOfBytes = (type: string, bytes: number) =>
+  `data:${type};base64,${Buffer.alloc(bytes, 7).toString("base64")}`;
+
 it.effect(
-  "a removal, a leaving, or a rename under the Mac's OAuth token rather than its session is refused as unauthenticated",
+  "an owner and an admin set the workspace's photo, which the list then versions and the photo's path serves, null removes it, and a member is refused",
+  () =>
+    Effect.gen(function* () {
+      const plugin = yield* openWorkspacePlugin;
+      yield* Effect.gen(function* () {
+        const ada = yield* openGithubAccount("Ada Lovelace");
+        const grace = yield* openGithubAccount("Grace Hopper");
+        const alan = yield* openGithubAccount("Alan Turing");
+        const acme = yield* openTeam(plugin.api, ada, [
+          { userId: grace, role: "admin" },
+          { userId: alan, role: "member" },
+        ]);
+        const png = "iVBORw0KGgo=";
+        const webp = "UklGRgAAAABXRUJQ";
+        const listed = (userId: string) =>
+          Effect.map(
+            workspacesOf(plugin.seams, NO_GITHUB_TO_READ, userId),
+            (workspaces) => workspaces.find((each) => each.id === acme)?.photoVersion,
+          );
+
+        const byOwner = readAs(
+          yield* settingPhoto(plugin, ada, acme, `data:image/png;base64,${png}`),
+          workspaceAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+        ).workspace;
+        const ownerVersion = yield* listed(alan);
+        const ownerPhoto = yield* readPhoto(plugin.seams, alan, acme);
+        const byAdmin = readAs(
+          yield* settingPhoto(plugin, grace, acme, `data:image/webp;base64,${webp}`),
+          workspaceAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+        ).workspace;
+        const adminPhoto = yield* readPhoto(plugin.seams, alan, acme);
+        const byMember = yield* settingPhoto(plugin, alan, acme, null);
+        const keptThroughMember = yield* logoOf(acme);
+        const removed = readAs(
+          yield* settingPhoto(plugin, grace, acme, null),
+          workspaceAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+        ).workspace;
+
+        assert.ok(byOwner.photoVersion !== undefined, "the owner's photo is versioned");
+        assert.equal(ownerVersion, byOwner.photoVersion);
+        assert.deepEqual(
+          {
+            status: ownerPhoto.status,
+            contentType: ownerPhoto.contentType,
+            base64: ownerPhoto.base64,
+          },
+          { status: HOSTED_HTTP_STATUS.OK, contentType: "image/png", base64: png },
+        );
+        assert.ok(byAdmin.photoVersion !== undefined, "the admin's photo is versioned");
+        assert.notEqual(byAdmin.photoVersion, byOwner.photoVersion);
+        assert.deepEqual(
+          {
+            status: adminPhoto.status,
+            contentType: adminPhoto.contentType,
+            base64: adminPhoto.base64,
+          },
+          { status: HOSTED_HTTP_STATUS.OK, contentType: "image/webp", base64: webp },
+        );
+        assert.deepEqual(
+          byMember,
+          refusedAs(HOSTED_HTTP_STATUS.FORBIDDEN, HOSTED_API_ERROR.NOT_PERMITTED),
+        );
+        assert.equal(keptThroughMember, `data:image/webp;base64,${webp}`);
+        assert.equal(removed.photoVersion, undefined);
+        assert.equal(yield* listed(alan), undefined);
+        assert.equal(
+          (yield* readPhoto(plugin.seams, alan, acme)).status,
+          HOSTED_HTTP_STATUS.NOT_FOUND,
+        );
+        assert.equal(yield* logoOf(acme), null);
+      }).pipe(Effect.provide(plugin.database));
+    }),
+);
+
+it.effect(
+  "a photo that is not a PNG, JPEG, or WebP data: URL, or is past the byte bound, is refused as invalid, one of a workspace the account is not in as not found, and one at the bound is set",
+  () =>
+    Effect.gen(function* () {
+      const plugin = yield* openWorkspacePlugin;
+      yield* Effect.gen(function* () {
+        const ada = yield* openGithubAccount("Ada Lovelace");
+        const mallory = yield* openGithubAccount("Mallory");
+        const acme = yield* openTeam(plugin.api, ada, []);
+        const atBound = photoOfBytes("image/jpeg", WORKSPACE_PHOTO_BOUNDS.MAX_BYTES);
+
+        const refusals = [];
+        for (const photo of [
+          "data:text/plain;base64,aGVsbG8=",
+          "data:image/svg+xml;base64,PHN2Zy8+",
+          "https://example.test/acme.png",
+          "data:image/png;base64,not base64",
+          photoOfBytes("image/png", WORKSPACE_PHOTO_BOUNDS.MAX_BYTES + 1),
+        ]) {
+          refusals.push(yield* settingPhoto(plugin, ada, acme, photo));
+        }
+        const outsider = yield* settingPhoto(plugin, mallory, acme, atBound);
+        const untouched = yield* logoOf(acme);
+        const set = yield* settingPhoto(plugin, ada, acme, atBound);
+
+        const invalid = refusedAs(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
+        assert.deepEqual(refusals, [invalid, invalid, invalid, invalid, invalid]);
+        assert.deepEqual(
+          outsider,
+          refusedAs(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+        assert.equal(untouched, null);
+        assert.equal(set.status, HOSTED_HTTP_STATUS.OK);
+        assert.equal(yield* logoOf(acme), atBound);
+      }).pipe(Effect.provide(plugin.database));
+    }),
+);
+
+it.effect(
+  "a removal, a leaving, a rename, or a photo under the Mac's OAuth token rather than its session is refused as unauthenticated",
   () =>
     Effect.gen(function* () {
       const plugin = yield* openWorkspacePlugin;
@@ -1056,6 +1198,10 @@ it.effect(
           workspaceId: acme,
           name: "Acme Labs",
         });
+        const photographed = yield* underToken(HOSTED_SERVICE_PATH.WORKSPACES_PHOTO_SET, {
+          workspaceId: acme,
+          photo: "data:image/png;base64,iVBORw0KGgo=",
+        });
 
         const unauthenticated = refusedAs(
           HOSTED_HTTP_STATUS.UNAUTHORIZED,
@@ -1064,6 +1210,8 @@ it.effect(
         assert.deepEqual(removed, unauthenticated);
         assert.deepEqual(left, unauthenticated);
         assert.deepEqual(renamed, unauthenticated);
+        assert.deepEqual(photographed, unauthenticated);
+        assert.equal(yield* logoOf(acme), null);
         assert.deepEqual(yield* organizationOf(acme), { name: "Acme", slug: `acme-${ada}` });
         assert.deepEqual(yield* membersOf(acme), [
           { userId: grace, role: WORKSPACE_ROLE.MEMBER },

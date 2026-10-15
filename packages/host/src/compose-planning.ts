@@ -79,9 +79,11 @@ import {
   planningWorkspaceMembersParamsSchema,
   planningWorkspaceParamsSchema,
   planningWorkspacePhotoParamsSchema,
+  planningWorkspacePhotoSetParamsSchema,
   planningWorkspaceRenameParamsSchema,
 } from "@luke/features/planning-view";
 import { EMPTY_TRANSCRIPT } from "@luke/features/transcript-wire";
+import type { Workspace } from "@luke/features/workspace-wire";
 import {
   carried,
   GATEWAY_EVENT,
@@ -158,8 +160,9 @@ import type { RunMode } from "./run-mode.js";
  * the plans and read apart from them, so the plans never wait on them: on
  * the first refresh after a launch or a sign-in, when the panel comes
  * forward, at most once a minute either way, and after a workspace call
- * moved them. A workspace made, a GitHub organization connected or
- * disconnected, a removal of a member, and a leave are carried to the
+ * moved them. A workspace made, renamed, or given a photo, a GitHub
+ * organization connected or disconnected, a removal of a member, and a
+ * leave are carried to the
  * service on the developer's word, and a workspace's members and a
  * connection's install address are answered to the caller that asked and
  * held nowhere here.
@@ -291,6 +294,7 @@ export type PlanningClient = Pick<
     | "list"
     | "create"
     | "rename"
+    | "setPhoto"
     | "githubConnect"
     | "githubDisconnect"
     | "members"
@@ -1009,6 +1013,28 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
     );
   }
 
+  /**
+   * A write whose answer is the workspace as it then stands, then the
+   * workspaces read again. Note that the workspace the service answered
+   * lands on the view before the read after it, because that read may fail
+   * and keep the workspace as it was, and one that answers is the newer word.
+   */
+  function workspaceWrite(
+    call: Effect.Effect<WorkspaceCallResult<Workspace>, never, HttpClient.HttpClient>,
+  ): Effect.Effect<PlanningWorkspaceAnswer> {
+    return Effect.gen(function* () {
+      const written = yield* Effect.provide(call, FetchHttpClient.layer);
+      if (written.ok) {
+        const answered = written.answer;
+        write({
+          workspaces: view.workspaces.map((each) => (each.id === answered.id ? answered : each)),
+        });
+      }
+      yield* readWorkspaces;
+      return written.ok ? { workspace: written.answer } : { failure: written.failure };
+    });
+  }
+
   const methods: GatewayMethodTable = {
     // The workspaces are read beside the plans rather than before them, and
     // only where the last read is stale: the first refresh after a launch or
@@ -1526,21 +1552,23 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
         }
         if (!gate()) return carried<PlanningWorkspaceAnswer>(WORKSPACE_UNANSWERED);
         const { workspaceId, name } = read.success;
-        const renamed = yield* Effect.provide(
-          client.workspaces.rename(workspaceId, name),
-          FetchHttpClient.layer,
-        );
-        // Note that the workspace the service answered lands on the view before the read after it,
-        // because that read may fail and keep the old name, and one that answers is the newer word.
-        if (renamed.ok) {
-          const answered = renamed.answer;
-          write({
-            workspaces: view.workspaces.map((each) => (each.id === answered.id ? answered : each)),
-          });
-        }
-        yield* readWorkspaces;
         return carried<PlanningWorkspaceAnswer>(
-          renamed.ok ? { workspace: renamed.answer } : { failure: renamed.failure },
+          yield* workspaceWrite(client.workspaces.rename(workspaceId, name)),
+        );
+      }),
+    // A photo moves no plan either, so it is a rename's twin: the answered
+    // workspace, its photo's new version or none, lands, and the
+    // workspaces are read again; the window's tiles read the photo by it.
+    [GATEWAY_METHOD.WORKSPACES_PHOTO_SET]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(planningWorkspacePhotoSetParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) {
+          return yield* invalid("setting a workspace's photo names it and a photo or none");
+        }
+        if (!gate()) return carried<PlanningWorkspaceAnswer>(WORKSPACE_UNANSWERED);
+        const { workspaceId, photo } = read.success;
+        return carried<PlanningWorkspaceAnswer>(
+          yield* workspaceWrite(client.workspaces.setPhoto(workspaceId, photo)),
         );
       }),
     // The install address is answered to the caller that opens it and held
