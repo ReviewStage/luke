@@ -510,30 +510,29 @@ it.effect(
 );
 
 it.effect(
-  "a desktop that sends past the bound while its first token is minted ends as unavailable, holding none of it for the shell",
+  "a desktop that sends past the bound while its first token is minted is attached at once, every byte it sent reaching the shell",
   () =>
     Effect.gen(function* () {
       const pty = yield* scriptedSocket;
       const device = yield* scriptedSocket;
       const hanging = world({ pty, tokensWait: yield* Deferred.make<void>() });
+      const paste = [encode("cat <<EOF\r"), new Uint8Array(1024 * 1024), encode("EOF\r")];
 
       const relay = yield* Effect.forkChild(
         Effect.scoped(relayTerminal(device.socket, ASK, hanging.deps)),
       );
       yield* settle;
-      yield* device.push({ bytes: encode("cat <<EOF\r") });
-      yield* device.push({ bytes: new Uint8Array(1024 * 1024) });
+      for (const bytes of paste) yield* device.push({ bytes });
       yield* settle;
-      const closedWhileMinting = [...device.closed];
       yield* device.leave;
       yield* Fiber.join(relay);
 
-      assert.deepEqual(closedWhileMinting, [TERMINAL_RELAY_CLOSE.UNAVAILABLE]);
-      assert.deepEqual(texts(device.sent), [], "the shell was never said attached");
-      assert.ok(
-        pty.sent.every((frame) => !("bytes" in frame)),
-        "nothing typed reached the PTY",
+      assert.deepEqual(texts(device.sent), [{ type: TERMINAL_RELAY_FRAME.ATTACHED }]);
+      assert.deepEqual(device.closed, []);
+      assert.deepEqual(
+        pty.sent.flatMap((frame) => ("bytes" in frame ? [frame.bytes] : [])),
+        paste,
       );
-      assert.equal(hanging.asked.released, 1, "the stalled mint gave its claim back");
+      assert.equal(hanging.asked.released, 1, "the mint still pending ended with the desktop");
     }),
 );
