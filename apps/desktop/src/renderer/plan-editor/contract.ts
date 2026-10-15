@@ -35,6 +35,23 @@ export interface PlanEditorProps {
   readonly onLeaveUp: () => void;
   /** What the text's mentions are drawn and picked with; none where the text takes no mentions, as a template does not. */
   readonly mentions?: PlanEditorMentions | undefined;
+  /**
+   * Draws a Mermaid code block's diagram into the element the editor stands
+   * under the block, as the panel draws it in the read view, so the panel's
+   * one copy of the diagram bundle serves both; answers what takes the
+   * drawing down. None where the text draws no diagrams.
+   */
+  readonly drawDiagram?: ((element: HTMLElement, diagram: EditorDiagram) => () => void) | undefined;
+}
+
+/**
+ * A Mermaid code block as the editor asks its diagram drawn: its code, and
+ * the code the block held before the change that asked again, whose picture
+ * may stand while the new one is drawn; nothing for a block just opened.
+ */
+export interface EditorDiagram {
+  readonly code: string;
+  readonly previous: string | undefined;
 }
 
 /** The composer's mentions, as the box picks and draws them. */

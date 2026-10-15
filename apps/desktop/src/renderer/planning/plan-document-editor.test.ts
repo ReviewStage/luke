@@ -9,6 +9,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { DOCUMENT_NAME, DOCUMENT_PLAN } from "#testing/document-plan";
 import { installScrollIntoView } from "#testing/scroll-into-view";
+import { DIAGRAM_DRAWING } from "../diagram/contract";
 import type { PlanEditorModule, PlanEditorProps } from "../plan-editor/contract";
 import { PlanBody } from "./plan-body";
 
@@ -49,6 +50,14 @@ const STAND_IN: PlanEditorModule = {
 
 // Set before any document renders, since the document reads the bundle once per window.
 window.lukePlanEditor = STAND_IN;
+
+/** The diagram bundle's stand-in: a picture named by the code and the appearance it was asked to draw. */
+const diagramPicture = (code: string, appearance: string) =>
+  `data:image/svg+xml,${encodeURIComponent(`${appearance}:${code}`)}`;
+window.lukeDiagram = {
+  draw: (code, appearance) =>
+    Promise.resolve({ kind: DIAGRAM_DRAWING.DRAWN, url: diagramPicture(code, appearance) }),
+};
 
 const roots: Root[] = [];
 
@@ -148,6 +157,28 @@ test("a click into a section opens the whole text in place, the caret where the 
   assert.deepEqual(open().placement, { x: 120, y: 48 });
   assert.ok(container.querySelector(".plan-document-editor")?.classList.contains("ph-no-capture"));
   assert.equal(title(container).textContent, DOCUMENT_NAME, "the title stays over the text");
+});
+
+test("the editor's preview of a Mermaid block is the picture the diagram bundle answered, drawn by the panel until the editor takes it down", async () => {
+  const { container } = mount();
+  act(() => block(container, "Goal").click());
+  const draw = open().drawDiagram;
+  assert.ok(draw, "the document hands the editor its diagrams");
+  // The element the editor stands under the block, inside its own host.
+  const under = document.createElement("div");
+  container.querySelector(".plan-document-editor")?.append(under);
+  const code = "flowchart LR\n  Invite --> Join";
+
+  let takeDown: () => void = () => undefined;
+  act(() => {
+    takeDown = draw(under, { code, previous: undefined });
+  });
+  await settle();
+
+  // The window stands in its dark appearance, as `matchMedia` answers here.
+  assert.equal(under.querySelector("img")?.getAttribute("src"), diagramPicture(code, "dark"));
+  act(() => takeDown());
+  assert.equal(under.querySelector("img"), null);
 });
 
 test("a press on the name in a section's byline opens no editor, while a press on the section's words still does", () => {

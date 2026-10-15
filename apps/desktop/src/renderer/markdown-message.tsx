@@ -1,7 +1,8 @@
 import { matchRanges } from "@luke/ui/search-tokens";
-import { type ReactNode, useMemo } from "react";
+import { createContext, type ReactNode, useContext, useMemo } from "react";
 import Markdown, { type AllowElement, type Components, type Options } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { PlanDiagram } from "./plan-diagram";
 import { TextLink } from "./text-link";
 
 const SAFE_LINK = /^https?:\/\//i;
@@ -195,11 +196,54 @@ function editChildren(
   parent.children.splice(0, original.length, ...(kept as typeof parent.children));
 }
 
+/** The lines a fenced block opens on. */
+const FENCE_OPENINGS = ["```", "~~~"] as const;
+
+/** Whether a run of text inside a block is that block's code. */
+function isCodeOf(parent: HastParent, code: HastElement): boolean {
+  return parent.type === "element" && parent.tagName === "pre" && code.tagName === "code";
+}
+
+/**
+ * Gives each fenced block's code its place in the words, which the tree
+ * leaves off the run of text the code is, so an edit marks, hides, and
+ * places the caret inside code as it does anywhere else. A fence's code is
+ * the words letter for letter from the line after its opening one, unless
+ * it stands in a list or a quote, whose lines lose their indent; a code that
+ * does not read back from there keeps no place, and is drawn whole.
+ */
+function placeFencedCode(parent: HastParent, words: string): void {
+  for (const child of parent.children) {
+    if (child.type !== "element") continue;
+    const opened = child.position?.start;
+    const [text, ...rest] = child.children;
+    if (!isCodeOf(parent, child) || opened?.offset === undefined) {
+      placeFencedCode(child, words);
+      continue;
+    }
+    if (text?.type !== "text" || rest.length > 0 || text.position !== undefined) continue;
+    const fenced = FENCE_OPENINGS.some((opening) => words.startsWith(opening, opened.offset));
+    const from = words.indexOf("\n", opened.offset) + 1;
+    if (!fenced || from === 0 || !words.startsWith(text.value, from)) continue;
+    const lines = text.value.split("\n");
+    text.position = {
+      start: { line: opened.line + 1, column: 1, offset: from },
+      end: {
+        line: opened.line + lines.length,
+        column: (lines.at(-1)?.length ?? 0) + 1,
+        offset: from + text.value.length,
+      },
+    };
+  }
+}
+
 /** The rehype step that draws a message mid-edit, the caret at the end of the drawing when its offset falls past every run. */
 const drawEdit =
-  (edit: MarkdownEdit, end: number) =>
+  (edit: MarkdownEdit, words: string) =>
   (tree: HastParent): void => {
+    const end = words.length;
     const walk: EditWalk = { edit, end, caretPlaced: false };
+    placeFencedCode(tree, words);
     editChildren(tree, 0, end, walk);
     if (edit.caret !== undefined && !walk.caretPlaced) {
       lastParent(tree).children.push(structuredClone(CARET));
@@ -275,7 +319,9 @@ const REMARK_PLUGINS: Options["remarkPlugins"] = [[remarkGfm, { singleTilde: fal
  *
  * A heading is styled, never announced: a reader walking the document's
  * headings should meet the panel's, not a reply's. An image has no picture
- * to draw in a caption, so its alternative words stand in for it.
+ * to draw in a caption, so its alternative words stand in for it. A fence
+ * is its code, and a Mermaid one draws as its diagram only where the place
+ * showing the words asks for it (`diagrams`), as a plan's page does.
  */
 const COMPONENTS: Components = {
   a: ({ href, children, node }) => plainLink(href, children, node, undefined),
@@ -382,6 +428,58 @@ function plainLabelOf(link: HastParent | undefined): string | undefined {
   return marked ? undefined : labelOf(link);
 }
 
+/** The class a fence's code wears when the fence names Mermaid as its language. */
+const DIAGRAM_FENCE_CLASS = "language-mermaid";
+
+/**
+ * A fence's code where it may be drawn as its diagram: a Mermaid fence whose
+ * code holds its words alone. Nothing for any other fence, or for one whose
+ * code wears a change mark, the caret, a selection, or a search's match,
+ * since a diagram drawn from marked words would hide what is marked, and
+ * two diagrams side by side would hide what changed between them.
+ */
+function diagramCode(pre: HastElement | undefined): string | undefined {
+  const [code, ...rest] = (pre?.children ?? []).filter((child) => !isBlockBreak(child));
+  if (rest.length > 0 || code?.type !== "element" || code.tagName !== "code") return undefined;
+  const classes = code.properties.className;
+  if (!Array.isArray(classes) || !classes.includes(DIAGRAM_FENCE_CLASS)) return undefined;
+  if (!code.children.every((child) => child.type === "text")) return undefined;
+  // Note that the fence's closing line break is dropped, so the code is the editor's block's own and one picture serves both.
+  return wordsOf(code).replace(/\n$/u, "");
+}
+
+/** The edit the words are drawn partway through, which a fence reads to know whether it is being changed. */
+const FenceEdit = createContext<MarkdownEdit | undefined>(undefined);
+
+/**
+ * Whether an edit reaches into a block: a change mark, the caret, a
+ * selection, or a stretch still hidden. Read off the block's own place, so
+ * a fence whose code keeps no place of its own (`placeFencedCode`) is still
+ * known to be changed.
+ */
+function editReaches(edit: MarkdownEdit | undefined, block: HastElement | undefined): boolean {
+  const from = block?.position?.start.offset;
+  const to = block?.position?.end.offset;
+  if (edit === undefined || from === undefined || to === undefined) return false;
+  if (edit.caret !== undefined && edit.caret >= from && edit.caret <= to) return true;
+  const spans = [edit.hidden, edit.selection, ...(edit.marks ?? [])];
+  return spans.some((span) => span !== undefined && span.from < to && span.to > from);
+}
+
+/** A fence drawn as its diagram where it may be, and as its code while an edit reaches into it. */
+function DiagramFence({
+  node,
+  children,
+}: {
+  node?: HastElement | undefined;
+  children?: ReactNode;
+}): React.JSX.Element {
+  const edit = useContext(FenceEdit);
+  const source = <pre>{children}</pre>;
+  const code = editReaches(edit, node) ? undefined : diagramCode(node);
+  return code === undefined ? source : <PlanDiagram code={code} source={source} />;
+}
+
 function heading(level: number, children: ReactNode): React.JSX.Element {
   return (
     <p className="markdown-heading" data-level={level}>
@@ -413,6 +511,7 @@ export function MarkdownMessage({
   link,
   openLink,
   found,
+  diagrams,
 }: {
   words: string;
   className?: string;
@@ -424,39 +523,42 @@ export function MarkdownMessage({
   openLink?: ((href: string) => void) | undefined;
   /** The words a search asks for, marked where they landed. */
   found?: readonly string[] | undefined;
+  /** Whether a Mermaid fence draws as its diagram, as on the plan's page and its versions; every fence is code without it. */
+  diagrams?: boolean | undefined;
 }): React.JSX.Element {
   const rehypePlugins: NonNullable<Options["rehypePlugins"]> = [];
-  if (edit !== undefined) rehypePlugins.push([drawEdit, edit, words.length]);
+  if (edit !== undefined) rehypePlugins.push([drawEdit, edit, words]);
   if (found !== undefined && found.length > 0) rehypePlugins.push([markFound, found]);
   // Note that a place drawing its own links is handed every destination,
   // since only it knows which it draws; any it leaves is drawn as above,
   // so a destination that is not the web's is still words alone.
-  const components = useMemo<Components>(
-    () =>
-      link === undefined && openLink === undefined
-        ? COMPONENTS
-        : {
-            ...COMPONENTS,
-            a: ({ href, children, node }) => {
-              const drawn =
-                href === undefined || link === undefined ? undefined : link(href, labelOf(node));
-              return drawn === undefined || href === undefined
-                ? plainLink(href, children, node, openLink)
-                : drawnMarked(drawn, node, href, children, openLink);
-            },
-          },
-    [link, openLink],
-  );
+  const components = useMemo<Components>(() => {
+    if (link === undefined && openLink === undefined && diagrams !== true) return COMPONENTS;
+    const drawing: Components = {
+      ...COMPONENTS,
+      a: ({ href, children, node }) => {
+        const drawn =
+          href === undefined || link === undefined ? undefined : link(href, labelOf(node));
+        return drawn === undefined || href === undefined
+          ? plainLink(href, children, node, openLink)
+          : drawnMarked(drawn, node, href, children, openLink);
+      },
+    };
+    if (diagrams === true) drawing.pre = DiagramFence;
+    return drawing;
+  }, [link, openLink, diagrams]);
   return (
     <div className={className === undefined ? "markdown" : `markdown ${className}`}>
-      <Markdown
-        remarkPlugins={REMARK_PLUGINS}
-        rehypePlugins={rehypePlugins}
-        components={components}
-        urlTransform={link === undefined ? safeUrl : keptUrl}
-      >
-        {words}
-      </Markdown>
+      <FenceEdit.Provider value={edit}>
+        <Markdown
+          remarkPlugins={REMARK_PLUGINS}
+          rehypePlugins={rehypePlugins}
+          components={components}
+          urlTransform={link === undefined ? safeUrl : keptUrl}
+        >
+          {words}
+        </Markdown>
+      </FenceEdit.Provider>
     </div>
   );
 }

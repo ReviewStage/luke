@@ -6,6 +6,7 @@
     "renderer/file-tree.js": 71587,
     "renderer/plan-editor.js": 167125,
     "renderer/session-recorder.js": 61872,
-    "renderer/terminal.js": 146170
+    "renderer/terminal.js": 146170,
+    "renderer/diagram.js": 195262
   }
 }
