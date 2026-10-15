@@ -99,6 +99,7 @@ export type EveForAccount = (
 const GITHUB_EVENT_WORDS = {
   [GITHUB_TRIGGER_EVENT.PULL_REQUEST_OPENED]: "a pull request was opened",
   [GITHUB_TRIGGER_EVENT.PULL_REQUEST_LABELED]: "a pull request was labelled",
+  [GITHUB_TRIGGER_EVENT.PULL_REQUEST_UPDATED]: "a pull request was opened or pushed to",
   [GITHUB_TRIGGER_EVENT.ISSUE_OPENED]: "an issue was opened",
   [GITHUB_TRIGGER_EVENT.ISSUE_LABELED]: "an issue was labelled",
   [GITHUB_TRIGGER_EVENT.CHECK_FAILED]: "a check suite failed",
@@ -169,6 +170,19 @@ function automationTask(automation: Automation, run: AutomationRun): string {
     `Luke started this run for the automation "${automation.name}" because ${firingSentence(automation, run)}. No one is watching it as it runs: decide on your own, and post to the inbox only what needs the developer.`,
     ...githubEventLines(run),
   ].join("\n\n");
+}
+
+/**
+ * The repository a run starts in: a GitHub event's own, as the automation
+ * spells it among its repositories, and the first of them for any other
+ * firing; none where a GitHub event names a repository the automation no
+ * longer works in.
+ */
+function runRepository(automation: Automation, run: AutomationRun): string | undefined {
+  const { firing } = run;
+  if (firing.kind !== AUTOMATION_FIRING.GITHUB) return automation.repositories[0];
+  const named = firing.repository.toLowerCase();
+  return automation.repositories.find((repository) => repository.toLowerCase() === named);
 }
 
 /** The fixed word for why a start was refused, so nothing a provider or GitHub said reaches the history. */
@@ -365,7 +379,7 @@ const decide = (automationId: string, run: AutomationRun) =>
       // A GitHub event is about the repository it named; an automation that works elsewhere since starts nothing.
       const moved =
         run.firing.kind === AUTOMATION_FIRING.GITHUB &&
-        automation.repositories[0]?.toLowerCase() !== run.firing.repository.toLowerCase();
+        runRepository(automation, run) === undefined;
       const held = paused
         ? AUTOMATION_RUN_REASON.PAUSED
         : moved
@@ -393,7 +407,8 @@ const decide = (automationId: string, run: AutomationRun) =>
 /**
  * A claimed run's agent started, the run settled with it, or failed with
  * the start's refusal in one fixed word. The agent starts in the
- * automation's workspace on no plan, on the first of its repositories, so
+ * automation's workspace on no plan, in the repository a GitHub event named
+ * and on the first of its repositories otherwise, so
  * the automation's runs stand apart from the plan it was made on and
  * group under the automation itself.
  */
@@ -409,7 +424,7 @@ const startClaimed = Effect.fnUntraced(function* (
       ? yield* failedRun(run, AUTOMATION_RUN_REASON.AGENT_GONE)
       : yield* steerClaimed(eveFor, automation, run, automation.targetAgentId);
   }
-  const [repository] = automation.repositories;
+  const repository = runRepository(automation, run);
   const { organizationId } = automation;
   if (organizationId === null || repository === undefined) {
     const reason =

@@ -13,12 +13,15 @@ import { readEither } from "@luke/wire/effect";
 import { Clock, Effect, Option, Result, Schema } from "effect";
 
 /**
- * automation-github.ts -- a GitHub delivery read as an automation's trigger: which event it is, the issue, pull request, or branch it names, and the runs it queues.
+ * automation-github.ts -- a GitHub delivery read as an automation's trigger: which events it is, the issue, pull request, or branch it names, and the runs it queues.
  *
  * The Luke GitHub App's webhook (`github-webhook-app.ts`) hands every signed
- * delivery here as well. A pull request opened or labelled, an issue opened
- * or labelled, a check suite that completed without passing, and a push to
- * a branch are read; nothing else is. Only what the run's history shows is
+ * delivery here as well. A pull request opened or labelled, a pull request
+ * ready for review opened, reopened, marked ready, or pushed to, an issue
+ * opened or labelled, a check suite that completed without passing, and a
+ * push to a branch are read; nothing else is. A pull request opened is
+ * both its own event and an update, so it fires the automations listening
+ * for either. Only what the run's history shows is
  * read off the delivery: the repository, the number, title, and address of
  * the issue or pull request, the branch, and a failed check's commit by its
  * address, never a body. The run is
@@ -48,6 +51,14 @@ const GITHUB_ACTION = {
   LABELED: "labeled",
   COMPLETED: "completed",
 } as const;
+
+/** A pull request's actions that leave new code to review: opened, reopened, marked ready, or pushed to. */
+const PULL_REQUEST_UPDATE_ACTIONS: ReadonlySet<string> = new Set([
+  GITHUB_ACTION.OPENED,
+  "reopened",
+  "ready_for_review",
+  "synchronize",
+]);
 
 /** The conclusions of a check suite that read as failed. */
 const FAILED_CONCLUSIONS: ReadonlySet<string> = new Set(["failure", "timed_out"]);
@@ -79,6 +90,7 @@ const PullRequestSchema = Schema.Struct({
     html_url: Schema.String,
     labels: Schema.Array(LabelSchema),
     base: Schema.Struct({ ref: Schema.String }),
+    draft: Schema.optionalKey(Schema.Boolean),
   }),
 });
 
@@ -149,38 +161,61 @@ function itemEvent(
   return undefined;
 }
 
-/** The delivery as a trigger, where it is one an automation listens for; nothing otherwise. */
+/**
+ * The events a pull request's delivery is: opened or labelled, as
+ * `itemEvent` reads them, and an update where its action leaves new code
+ * on a pull request ready for review. Note that a draft is no update,
+ * because a review of work its author has not offered yet is spent on
+ * code about to change; marking it ready is.
+ */
+function pullRequestEvents(read: typeof PullRequestSchema.Type): readonly GitHubEventRead[] {
+  const { pull_request: pull, label, repository } = read;
+  const kind = itemEvent(
+    read,
+    {
+      opened: GITHUB_TRIGGER_EVENT.PULL_REQUEST_OPENED,
+      labeled: GITHUB_TRIGGER_EVENT.PULL_REQUEST_LABELED,
+    },
+    label?.name,
+  );
+  const updated =
+    read.sender.type !== BOT_SENDER &&
+    PULL_REQUEST_UPDATE_ACTIONS.has(read.action) &&
+    pull.draft !== true;
+  const kinds = [
+    ...(kind === undefined ? [] : [kind]),
+    ...(updated ? [GITHUB_TRIGGER_EVENT.PULL_REQUEST_UPDATED] : []),
+  ];
+  return kinds.map((each) => ({
+    event: each,
+    repository: repository.full_name,
+    labels: label === undefined ? pull.labels.map((one) => one.name) : [label.name],
+    branch: pull.base.ref,
+    firing: {
+      kind: AUTOMATION_FIRING.GITHUB,
+      event: each,
+      repository: repository.full_name,
+      number: pull.number,
+      title: pull.title,
+      branch: pull.base.ref,
+      url: pull.html_url,
+    },
+  }));
+}
+
+/** The delivery as the triggers it is, where it is one an automation listens for; none otherwise. */
+function githubEventsOf(event: string, payload: UnparsedWireValue): readonly GitHubEventRead[] {
+  if (event === GITHUB_EVENT.PULL_REQUEST) {
+    const read = readDelivery(PullRequestSchema, payload);
+    return Result.isFailure(read) ? [] : pullRequestEvents(read.success);
+  }
+  const read = githubEventOf(event, payload);
+  return read === undefined ? [] : [read];
+}
+
+/** An issue's, a check suite's, or a push's delivery as a trigger, where it is one an automation listens for; nothing otherwise. */
 function githubEventOf(event: string, payload: UnparsedWireValue): GitHubEventRead | undefined {
   switch (event) {
-    case GITHUB_EVENT.PULL_REQUEST: {
-      const read = readDelivery(PullRequestSchema, payload);
-      if (Result.isFailure(read)) return undefined;
-      const { pull_request: pull, label, repository } = read.success;
-      const kind = itemEvent(
-        read.success,
-        {
-          opened: GITHUB_TRIGGER_EVENT.PULL_REQUEST_OPENED,
-          labeled: GITHUB_TRIGGER_EVENT.PULL_REQUEST_LABELED,
-        },
-        label?.name,
-      );
-      if (kind === undefined) return undefined;
-      return {
-        event: kind,
-        repository: repository.full_name,
-        labels: label === undefined ? pull.labels.map((each) => each.name) : [label.name],
-        branch: pull.base.ref,
-        firing: {
-          kind: AUTOMATION_FIRING.GITHUB,
-          event: kind,
-          repository: repository.full_name,
-          number: pull.number,
-          title: pull.title,
-          branch: pull.base.ref,
-          url: pull.html_url,
-        },
-      };
-    }
     case GITHUB_EVENT.ISSUES: {
       const read = readDelivery(IssueSchema, payload);
       if (Result.isFailure(read) || read.success.issue.pull_request !== undefined) return undefined;
@@ -278,29 +313,37 @@ function triggerMatches(trigger: AutomationTrigger, read: GitHubEventRead): bool
   return labelled && branched;
 }
 
+/** Queues a run under the delivery's id for every automation listening for the one event read, answering how many it queued. */
+const queueRunsOf = Effect.fnUntraced(function* (deliveryId: string, read: GitHubEventRead) {
+  const listening = (yield* githubAutomationsOn(
+    read.repository,
+    read.event,
+    MAXIMUM_AUTOMATIONS,
+  )).filter((automation) => triggerMatches(automation.trigger, read));
+  const firedAt = new Date(yield* Clock.currentTimeMillis);
+  const recorded = yield* Effect.forEach(listening, (automation) =>
+    recordAutomationRun(automation, { dedupeKey: deliveryId, firing: read.firing, firedAt }),
+  );
+  return recorded.filter(Option.isSome).length;
+});
+
 /**
  * Queues a run, under the delivery's own id, for every enabled automation
- * on a plan of the delivery's repository whose trigger listens for the
- * event; answers how many it queued, none for a delivery no automation
- * listens for or one recorded before.
+ * working in the delivery's repository whose trigger listens for one of the
+ * events it is; answers how many it queued, none for a delivery no
+ * automation listens for or one recorded before. Note that the one id
+ * serves every event of the delivery, because an automation listens for
+ * one event and so records at most one run of it.
  */
 export function queueGithubRuns(
   deliveryId: string,
   event: string,
   payload: UnparsedWireValue,
 ): PlanStoreEffect<number> {
-  const read = githubEventOf(event, payload);
-  if (read === undefined || deliveryId.length === 0) return Effect.succeed(0);
-  return Effect.gen(function* () {
-    const listening = (yield* githubAutomationsOn(
-      read.repository,
-      read.event,
-      MAXIMUM_AUTOMATIONS,
-    )).filter((automation) => triggerMatches(automation.trigger, read));
-    const firedAt = new Date(yield* Clock.currentTimeMillis);
-    const recorded = yield* Effect.forEach(listening, (automation) =>
-      recordAutomationRun(automation, { dedupeKey: deliveryId, firing: read.firing, firedAt }),
-    );
-    return recorded.filter(Option.isSome).length;
-  });
+  const reads = githubEventsOf(event, payload);
+  if (reads.length === 0 || deliveryId.length === 0) return Effect.succeed(0);
+  return Effect.map(
+    Effect.forEach(reads, (read) => queueRunsOf(deliveryId, read)),
+    (counts) => counts.reduce((sum, count) => sum + count, 0),
+  );
 }

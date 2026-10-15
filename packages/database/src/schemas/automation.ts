@@ -88,7 +88,7 @@ export const automation = pgTable(
     index("automation_user_created").on(table.userId, table.createdAt),
     // The sweep claims the schedules due, soonest first.
     index("automation_next_run").on(table.nextRunAt).where(sql`${table.nextRunAt} is not null`),
-    // A delivery finds the automations of its trigger kind on the plans of its repository.
+    // A delivery finds the automations of its trigger kind, then reads each one's repositories.
     index("automation_trigger_plan").on(table.triggerKind, table.planId),
     // A workspace's automations, each scope newest first.
     index("automation_org_scope_created").on(table.organizationId, table.scope, table.createdAt),
