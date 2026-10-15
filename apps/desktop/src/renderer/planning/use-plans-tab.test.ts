@@ -835,8 +835,8 @@ test("opening a plan of another workspace lists that workspace once it opened, o
   );
 });
 
-test("a Settings link naming another workspace, as the repository chip's Open Settings names a plan's own, lists that workspace in the sidebar", () => {
-  const tab = mount({ shown: true, planning: TWO_WORKSPACES });
+test("a Settings link naming another workspace, as the repository chip's Open Settings names a plan's own, lists that workspace in the sidebar and leaves the plan open behind Settings", async () => {
+  const tab = mount({ shown: true, planning: { ...TWO_WORKSPACES, activePlanId: "notes" } }, OPENS);
   const listedBefore = tab.control().workspace?.id;
 
   act(() => tab.control().onOpenWorkspaceGitHub("alerts"));
@@ -846,13 +846,19 @@ test("a Settings link naming another workspace, as the repository chip's Open Se
     followSettingsLink(link, {
       changeTab: () => undefined,
       changeView: () => undefined,
-      chooseWorkspace: tab.control().onChooseWorkspace,
+      chooseWorkspace: tab.control().onListWorkspace,
       land: () => () => undefined,
     });
   });
+  await settle();
 
   assert.equal(listedBefore, PERSONAL.id);
   assert.equal(tab.control().workspace?.id, ACME.id);
+  assert.deepEqual(
+    [opensAsked(tab.payloads), tab.told.includes(ACT_KIND.PLANNING_CLOSE)],
+    [[], false],
+    "the plan open behind Settings stays open, for Back to come back to",
+  );
 });
 
 /** A plan's inbox waiting on the developer: `count` open items, each asked by one agent. */

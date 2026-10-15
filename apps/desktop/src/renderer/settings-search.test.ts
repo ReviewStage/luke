@@ -66,7 +66,7 @@ test("Integrations, and every word GitHub repositories was found by, find the Wo
   }
 });
 
-test("the Workspace page's group reads Integrations, under its Workspace page apart from the Integrations page's rows", () => {
+test("the Workspace page's group reads GitHub, found by Integrations too, under its Workspace page apart from the Integrations page's rows", () => {
   const groups =
     searchSettings(
       settingsSearchEntries({
@@ -81,7 +81,7 @@ test("the Workspace page's group reads Integrations, under its Workspace page ap
 
   assert.deepEqual(
     workspaceGroup?.items.map((entry) => [entry.id, entry.label]),
-    [[SETTINGS_SECTION.GITHUB_REPOSITORIES, "Integrations"]],
+    [[SETTINGS_SECTION.GITHUB_REPOSITORIES, "GitHub"]],
   );
   assert.equal(
     groups

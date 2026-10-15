@@ -281,6 +281,12 @@ export interface PlansControl {
   workspace: Workspace | undefined;
   /** Lists another of the account's workspaces, and starts the next new plan in it. */
   onChooseWorkspace: (workspaceId: string) => void;
+  /**
+   * Lists another of the account's workspaces and nothing more: the plan
+   * on screen stays open, as a Settings link naming a workspace lists it
+   * for the page it opens while the developer means to come back.
+   */
+  onListWorkspace: (workspaceId: string) => void;
   /** Lists the first other workspace where the workspace left is the one listed. */
   onLeftWorkspace: (workspaceId: string) => void;
   /** Creates a workspace of that name and lists it; answers why it was not created, or nothing once it was. */
@@ -1735,6 +1741,7 @@ export function usePlansTab(input: {
     workspaces: viewed.workspaces,
     workspace: listedWorkspace,
     onChooseWorkspace: switchWorkspace,
+    onListWorkspace: chooseListed,
     onCreateWorkspace: createWorkspace,
     onOpenWorkspaceSettings: () =>
       input.onOpenSettings({

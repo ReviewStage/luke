@@ -278,7 +278,8 @@ export function App(): React.JSX.Element {
     onOpenIntegrations: () => openSettings({ page: SETTINGS_VIEW.INTEGRATIONS }),
     onOpenApiKeys: () => openSettings({ page: SETTINGS_VIEW.CODING_AGENTS }),
   });
-  chooseListedWorkspace.current = plans.onChooseWorkspace;
+  // Note that a link lists its workspace without moving the plan on screen, because Back from Settings returns to it.
+  chooseListedWorkspace.current = plans.onListWorkspace;
   // A coding agent's notification clicked: the Plans tab, on that agent,
   // its plan's tab or its own page where it has no plan. Read through refs,
   // because the tab hands new closures each render and the subscription is
