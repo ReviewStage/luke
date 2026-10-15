@@ -135,6 +135,8 @@ let inboxes = new Map<string, readonly InboxItem[]>();
 let setHolding: (holding: readonly AppInboxPlanHolding[]) => void = () => undefined;
 /** Moves the account's list of plans, as an archive on another Mac would. */
 let setPlans: (plans: readonly PlanSummary[]) => void = () => undefined;
+/** Chooses an item from outside the list, as a notification's click does. */
+let chooseFromOutside: (chosen: InboxChoice) => void = () => undefined;
 /** Moves main's read of what waits on the agents with no plan, as main does when an item opens or is answered. */
 let setPlanless: (planless: readonly AppInboxPlanlessItem[]) => void = () => undefined;
 /** Whether an agent's own inbox read answers that it could not be read. */
@@ -226,6 +228,7 @@ function mount(firstPlanless: readonly AppInboxPlanlessItem[] = []) {
   const asked: Asked = { shownPlans: [], shownAgents: [], closed: 0 };
   function Page() {
     const [chosen, setChosen] = useState<InboxChoice | undefined>(undefined);
+    chooseFromOutside = setChosen;
     const [holding, setHeld] = useState(HOLDING);
     const [listed, setListed] = useState<readonly PlanSummary[]>([BILLING, INVITES]);
     setHolding = setHeld;
@@ -1021,4 +1024,19 @@ test("an agent whose waiting items come back to what it was read for lets go of 
   await settle();
 
   assert.ok(listed(page).includes("*Skip the slow suite?"), listed(page).join(" | "));
+});
+
+test("an item chosen by a notification's click, in an Inbox showing one column, is shown itself rather than the list", async () => {
+  agentInboxes = new Map([[SECOND_AGENT, [SECOND_ASK, THIRD_ASK]]]);
+  const { page } = mount([QUARANTINE, SECOND_ASK, THIRD_ASK].map(waitingPlanless));
+  await settle();
+  layOut(page, 700);
+  await settle();
+  assert.equal(page.querySelector(".inbox-view")?.getAttribute("data-columns"), "list");
+
+  act(() => chooseFromOutside({ agentId: SECOND_AGENT, itemId: SECOND_ASK.id, opened: true }));
+  await settle();
+
+  assert.equal(page.querySelector(".inbox-view")?.getAttribute("data-columns"), "item");
+  assert.equal(page.querySelector("[data-inbox-title]")?.textContent, "Skip the slow suite?");
 });

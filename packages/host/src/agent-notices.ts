@@ -204,7 +204,12 @@ export interface AgentNoticesDependencies {
   /** Brings Luke forward on the plan with its Inbox tab open: an inbox notification's click. */
   openInbox: (planId: string) => void;
   /** Brings Luke forward on the window's Inbox with an item of an agent with no plan chosen: that item's notification's click. */
-  openPlanlessItem: (item: { readonly agentId: string; readonly itemId: string }) => void;
+  openPlanlessItem: (item: {
+    readonly agentId: string;
+    readonly itemId: string;
+    /** The workspace whose list holds the item, which the window lists first; absent from a service before it. */
+    readonly workspaceId?: string;
+  }) => void;
   watchInterval?: Duration.Duration;
   report: (line: string) => void;
 }
@@ -597,7 +602,12 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         const text = planlessNoticeText(item, models);
         doors.post({
           ...text,
-          onClick: () => dependencies.openPlanlessItem({ agentId: item.agentId, itemId: item.id }),
+          onClick: () =>
+            dependencies.openPlanlessItem({
+              agentId: item.agentId,
+              itemId: item.id,
+              ...(item.workspaceId === undefined ? undefined : { workspaceId: item.workspaceId }),
+            }),
         });
       }
     }

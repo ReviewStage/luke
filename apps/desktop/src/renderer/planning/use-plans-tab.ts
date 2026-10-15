@@ -165,9 +165,13 @@ interface SourceReveal {
 
 /** The item chosen in the window's Inbox, and the plan it belongs to. */
 /** The item chosen in the window's Inbox, by the plan it stands on, or, for an agent with no plan, by its agent. */
-export type InboxChoice =
+export type InboxChoice = (
   | { readonly planId: string; readonly itemId: string }
-  | { readonly agentId: string; readonly itemId: string };
+  | { readonly agentId: string; readonly itemId: string }
+) & {
+  /** Whether the item itself is shown where the Inbox shows one column: a notification's ask, rather than a row's choice the list stays standing for. */
+  readonly opened?: true;
+};
 
 /**
  * The window's Inbox, standing in the plan's place beside the sidebar: the

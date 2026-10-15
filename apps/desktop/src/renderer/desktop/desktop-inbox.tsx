@@ -218,6 +218,12 @@ export function DesktopInbox({ plans }: { plans: PlansControl }): React.JSX.Elem
     holdings.some((holding) => !read.items.has(holding.planId)) ||
     plans.inboxPlanless.some((each) => !planless.items.has(each.agentId));
   const columns = useInboxColumns(chosen?.item.id);
+  // A choice that asks for its item opens it, the one column the Inbox shows being the item's.
+  const opensItem = asked?.opened === true && chosen?.item.id === asked.itemId;
+  const openColumn = columns.onOpen;
+  useEffect(() => {
+    if (opensItem && asked !== undefined) openColumn(asked.itemId);
+  }, [opensItem, asked, openColumn]);
   const onRetry = () => {
     read.onRetry();
     planless.onRetry();

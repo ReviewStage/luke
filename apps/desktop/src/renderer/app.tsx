@@ -362,15 +362,20 @@ export function App(): React.JSX.Element {
     [changeTab],
   );
   useEffect(() => window.luke.onShowInbox(({ planId }) => openInbox(planId)), [openInbox]);
-  // A notification of an item of an agent with no plan clicked: the window's Inbox, on that item.
-  const inboxView = useRef(plans.inboxView);
-  inboxView.current = plans.inboxView;
+  // A notification of an item of an agent with no plan clicked: the window's Inbox, on that item
+  // in its own workspace's list, the item itself shown where the Inbox shows one column.
+  const inboxDoors = useRef(plans);
+  inboxDoors.current = plans;
   useEffect(
     () =>
-      window.luke.onShowInboxItem(({ agentId, itemId }) => {
+      window.luke.onShowInboxItem(({ agentId, itemId, workspaceId }) => {
+        const doors = inboxDoors.current;
         changeTab(PANEL_TAB.PLANS);
-        inboxView.current.onOpen();
-        inboxView.current.onChoose({ agentId, itemId });
+        if (workspaceId !== undefined && doors.workspace?.id !== workspaceId) {
+          doors.onChooseWorkspace(workspaceId);
+        }
+        doors.inboxView.onOpen();
+        doors.inboxView.onChoose({ agentId, itemId, opened: true });
       }),
     [changeTab],
   );

@@ -90,7 +90,11 @@ function fixture() {
   let inboxAnswers: Queue.Queue<CodingAgentAccountInboxAnswerView> | undefined;
   let accounts: Queue.Queue<string | undefined> | undefined;
   const opened: AgentPlace[] = [];
-  const openedPlanless: { readonly agentId: string; readonly itemId: string }[] = [];
+  const openedPlanless: {
+    readonly agentId: string;
+    readonly itemId: string;
+    readonly workspaceId?: string;
+  }[] = [];
   const unseen: (readonly string[])[] = [];
   const answers = new Map<string, CodingAgentListAnswer[]>();
   let focus: ((focused: boolean) => void) | undefined;
@@ -419,7 +423,9 @@ it.effect(
         { title: "Nightly flake sweep", body: "Sweep the flaky tests: Quarantine the flaky test?" },
       ]);
       f.posted.at(-1)?.onClick();
-      assert.deepEqual(f.openedPlanless, [{ agentId: AGENT_ID, itemId: ITEM_B }]);
+      assert.deepEqual(f.openedPlanless, [
+        { agentId: AGENT_ID, itemId: ITEM_B, workspaceId: "workspace-acme" },
+      ]);
       assert.deepEqual(
         f.opened,
         [],

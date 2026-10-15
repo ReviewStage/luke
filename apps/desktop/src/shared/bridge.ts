@@ -267,8 +267,12 @@ export const BRIDGE = {
     kind: "subscribe",
     channel: "app:show-inbox-item",
     args: noArgs,
-    result: result<{ agentId: string; itemId: string }>(
-      (value) => isRecord(value) && isWireString(value.agentId) && isWireString(value.itemId),
+    result: result<{ agentId: string; itemId: string; workspaceId?: string }>(
+      (value) =>
+        isRecord(value) &&
+        isWireString(value.agentId) &&
+        isWireString(value.itemId) &&
+        (value.workspaceId === undefined || isWireString(value.workspaceId)),
     ),
   }),
   /**
