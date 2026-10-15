@@ -137,6 +137,8 @@ let runRefusal: (typeof AUTOMATION_CALL_FAILURE)[keyof typeof AUTOMATION_CALL_FA
 let agentsOpened: string[] = [];
 /** Whether the account's default model reads, or answers that it could not. */
 let defaultRefused = false;
+/** How many times the model catalog was read. */
+let catalogReads = 0;
 /** What a change answers: the automation as changed, or why not. */
 let changeRefusal:
   | (typeof AUTOMATION_CALL_FAILURE)[keyof typeof AUTOMATION_CALL_FAILURE]
@@ -158,6 +160,7 @@ beforeEach(() => {
   runRefusal = undefined;
   agentsOpened = [];
   defaultRefused = false;
+  catalogReads = 0;
   changeRefusal = undefined;
   Object.defineProperty(window, "luke", {
     configurable: true,
@@ -208,6 +211,7 @@ beforeEach(() => {
           return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { automation: made } });
         }
         if (request.kind === ACT_KIND.CODING_AGENTS_MODELS) {
+          catalogReads += 1;
           return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { models: CATALOG } });
         }
         if (request.kind === ACT_KIND.CODING_AGENTS_DEFAULT_READ) {
@@ -1036,10 +1040,12 @@ test("a default model that could not be read is said as unknown, and a model can
       return DOMRect.fromRect({ x: 0, y: 0, width: 340, height: 300 });
     return DOMRect.fromRect({ x: 0, y: 0, width: 0, height: 0 });
   });
+  const readsBefore = catalogReads;
   act(() => button("Choose a model").click());
   await settle();
 
   assert.ok(page.querySelector(".agent-model-menu"), "the model menu opens");
+  assert.equal(catalogReads, readsBefore + 1, "opening it reads the catalog again");
   assert.equal(
     page.querySelector(".automation-editor-status")?.textContent,
     "Saved",

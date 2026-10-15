@@ -440,9 +440,12 @@ const TARGETS: readonly { value: AutomationTargetKind; label: string }[] = [
  */
 function ModelPicker({
   models,
+  readModels,
   onChoose,
 }: {
   models: RunChoices["models"];
+  /** Reads the catalog now, as the menu opens, so a catalog that failed to read is asked for again. */
+  readModels: () => void;
   onChoose: (choice: ModelChoice) => void;
 }): React.JSX.Element {
   const [open, setOpen] = useState(false);
@@ -463,7 +466,10 @@ function ModelPicker({
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
-        onClick={() => setOpen(!open)}
+        onClick={() => {
+          if (!open) readModels();
+          setOpen(!open);
+        }}
       >
         Choose a model
       </Chip>
@@ -510,7 +516,11 @@ function ModelControl({
         <span className="automation-form-note">
           It runs on your default model, which could not be read.
         </span>
-        <ModelPicker models={choices.models} onChoose={(choice) => onDraft({ choice })} />
+        <ModelPicker
+          models={choices.models}
+          readModels={choices.readModels}
+          onChoose={(choice) => onDraft({ choice })}
+        />
       </div>
     ) : (
       <p className="automation-form-note">Your default model.</p>
