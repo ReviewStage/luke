@@ -1101,15 +1101,15 @@ const AGENT_READING: RowReading<AgentPart> = {
     (part.state === TOOL_STATE.INPUT_STREAMING || part.state === TOOL_STATE.INPUT_AVAILABLE),
 };
 
-/** No subagent's session saying it runs. */
-const NO_WORKERS: ReadonlySet<string> = new Set();
+/** No subagent's session saying where it stands. */
+const NO_WORKERS: ReadonlyMap<string, ToolState> = new Map();
 
 /** What a tab knows of a turn beyond its message, which its rows read. */
 interface AgentTurnPlace {
   /** The call whose to-do list stays out of a finished turn's fold. */
   readonly newestTodos?: string | undefined;
-  /** The calls whose subagent its own session says still runs, since a call may settle the moment its worker is under way. */
-  readonly workers?: ReadonlySet<string>;
+  /** Where each call's subagent stands as its own session says, which its row draws over the call's own state, since a call may settle the moment its worker is under way. */
+  readonly workers?: ReadonlyMap<string, ToolState>;
   /** Whether the turn's words were said aloud and stand after it, as a spoken turn's on the Call tab do, which folds all of a finished turn. */
   readonly said?: boolean;
 }
@@ -1141,7 +1141,11 @@ export function agentRows(
   const reading: RowReading<AgentPart> = {
     ...AGENT_READING,
     running: (part) =>
-      AGENT_READING.running(part) || (part.kind === AGENT_PART.TOOL && workers.has(part.callId)),
+      AGENT_READING.running(part) ||
+      (part.kind === AGENT_PART.TOOL && workers.get(part.callId) === TOOL_STATE.INPUT_AVAILABLE),
+    failed: (part) =>
+      part.kind === AGENT_PART.TOOL &&
+      (workers.get(part.callId) ?? part.state) === TOOL_STATE.OUTPUT_ERROR,
     kept: (part) => part.kind === AGENT_PART.TOOL && part.callId === newestTodos,
   };
   return turnRows(parts, reading, {

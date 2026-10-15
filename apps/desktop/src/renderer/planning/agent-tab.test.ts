@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   CODING_AGENT_STATUS,
   type CodingAgentMessage,
+  type CodingAgentSubagentStanding,
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
 import { MESSAGE_ROLE, type WireRecord } from "@luke/wire";
@@ -47,8 +48,12 @@ function assistant(parts: readonly WireRecord[]): CodingAgentMessage {
   return { id: "turn", role: MESSAGE_ROLE.ASSISTANT, parts };
 }
 
-/** The message drawn as an agent's turn is, every target its rows open recorded. */
-function drawn(message: CodingAgentMessage, moving = false) {
+/** The message drawn as an agent's turn is, every target its rows open recorded, its workers standing as their own sessions say. */
+function drawn(
+  message: CodingAgentMessage,
+  moving = false,
+  standings?: ReadonlyMap<string, CodingAgentSubagentStanding>,
+) {
   const opened: ToolTarget[] = [];
   const container = document.createElement("div");
   document.body.append(container);
@@ -61,7 +66,7 @@ function drawn(message: CodingAgentMessage, moving = false) {
         plan: false,
         lead: AGENT_LEAD,
         moving,
-        delegation: { models: [], onOpenTarget: (target) => opened.push(target) },
+        delegation: { models: [], standings, onOpenTarget: (target) => opened.push(target) },
       }),
     ),
   );
@@ -302,6 +307,97 @@ test("a finished turn's lead folds under a line whose chevron turns as it opens,
     "the read's row wears FileText",
   );
 });
+
+/** A stored tool part whose call failed. */
+function failedPart(tool: string, input: WireRecord): WireRecord {
+  return {
+    type: `tool-${tool}`,
+    toolCallId: `call-${tool}`,
+    state: "output-error",
+    input,
+    errorText: "The command did not run.",
+  };
+}
+
+/** What a closed fold's line says of a failure: its failed mark, and its label. */
+function failureOn(line: Element | null | undefined) {
+  assert.equal(line?.getAttribute("aria-expanded"), "false", "the fold is closed");
+  return {
+    marked: line?.querySelector('[role="img"][aria-label="Failed"]') !== null,
+    label: line?.getAttribute("aria-label") ?? undefined,
+  };
+}
+
+const FAILURE_LINES: readonly {
+  readonly name: string;
+  readonly parts: readonly WireRecord[];
+  readonly standings?: ReadonlyMap<string, CodingAgentSubagentStanding>;
+  readonly label: string | undefined;
+}[] = [
+  {
+    name: "a stopped turn's run of calls, one of which failed",
+    parts: [
+      failedPart("run_on_mac", { command: "pnpm test" }),
+      toolPart("read_file", { filePath: "src/new.ts" }, { content: "export {}" }),
+    ],
+    label: "2 tools called, a call failed",
+  },
+  {
+    name: "a stopped turn's run of calls that all answered",
+    parts: [
+      toolPart("run_on_mac", { command: "pnpm test" }, { output: "ok" }),
+      toolPart("read_file", { filePath: "src/new.ts" }, { content: "export {}" }),
+    ],
+    label: undefined,
+  },
+  {
+    name: "a finished turn's lead holding a call that failed",
+    parts: [
+      failedPart("run_on_mac", { command: "pnpm test" }),
+      { type: "text", text: "The tests did not run." },
+      toolPart("read_file", { filePath: "src/new.ts" }, { content: "export {}" }),
+      { type: "text", text: "Read it." },
+    ],
+    label: "2 tool calls, 1 message, a call failed",
+  },
+  {
+    name: "a finished turn's lead whose calls all answered",
+    parts: [
+      toolPart("run_on_mac", { command: "pnpm test" }, { output: "ok" }),
+      toolPart("read_file", { filePath: "src/new.ts" }, { content: "export {}" }),
+      { type: "text", text: "All green." },
+    ],
+    label: undefined,
+  },
+  {
+    name: "a run whose worker's own session failed after its call answered",
+    parts: [
+      toolPart("delegate", { task: "Audit the retry paths" }, { status: "accepted" }),
+      toolPart("read_file", { filePath: "src/new.ts" }, { content: "export {}" }),
+    ],
+    standings: new Map([
+      [
+        "call-delegate",
+        {
+          callId: "call-delegate",
+          status: CODING_AGENT_STATUS.FAILED,
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          startedAt: 1,
+        },
+      ],
+    ]),
+    label: "1 tool called, 1 subagent, a call failed",
+  },
+];
+
+for (const { name, parts, standings, label } of FAILURE_LINES) {
+  test(`a closed fold's line wears the failed mark where a call it holds failed: ${name}`, () => {
+    const { container } = drawn(assistant(parts), false, standings);
+    const line = container.querySelector("[data-turn-fold] > summary");
+    assert.deepEqual(failureOn(line), { marked: label !== undefined, label });
+  });
+}
 
 /** An agent of the plan's, as its list holds it. */
 function listedAgent(id: string, title: string, overrides: Partial<CodingAgentSummary> = {}) {
