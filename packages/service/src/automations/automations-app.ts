@@ -196,6 +196,7 @@ function agentOf(
   id: string,
   title: string | null,
   createdAt: Date,
+  ownKey: boolean,
   standing: AgentTurnStanding,
   now: number,
 ): NonNullable<AutomationRunSummary["agent"]> {
@@ -206,7 +207,13 @@ function agentOf(
   });
   const failureReason =
     status === CODING_AGENT_STATUS.FAILED ? codingAgentFailureOf(standing.turn) : undefined;
-  return { id, title, status, ...(failureReason === undefined ? undefined : { failureReason }) };
+  return {
+    id,
+    title,
+    status,
+    ownKey,
+    ...(failureReason === undefined ? undefined : { failureReason }),
+  };
 }
 
 /** One run for the wire, its agent's status read from the standing given. */
@@ -214,6 +221,7 @@ function runSummaryOf(
   run: AutomationRunInHistory,
   standingOf: (conversationId: string) => AgentTurnStanding,
   now: number,
+  readerId: string,
 ): AutomationRunSummary {
   const agent =
     run.codingAgentId === null || run.agentConversationId === null || run.agentCreatedAt === null
@@ -222,6 +230,7 @@ function runSummaryOf(
           run.codingAgentId,
           run.agentTitle,
           run.agentCreatedAt,
+          run.agentUserId === readerId,
           standingOf(run.agentConversationId),
           now,
         );
@@ -238,6 +247,7 @@ function runSummaryOf(
 
 /** The runs given summarized, their agents' standings read in one pass. */
 const runSummaries = /* @__PURE__ */ Effect.fnUntraced(function* (
+  readerId: string,
   runs: readonly AutomationRunInHistory[],
 ): Effect.fn.Return<readonly AutomationRunSummary[], HostedRefusal, DatabaseServices> {
   const conversations = runs.flatMap((run) =>
@@ -245,7 +255,7 @@ const runSummaries = /* @__PURE__ */ Effect.fnUntraced(function* (
   );
   const standingOf = yield* standingsOf(conversations);
   const now = yield* Clock.currentTimeMillis;
-  return runs.map((run) => runSummaryOf(run, standingOf, now));
+  return runs.map((run) => runSummaryOf(run, standingOf, now, readerId));
 });
 
 /** One automation for the wire as the account reads it, with its newest run and whether the account made it. */
@@ -254,7 +264,7 @@ const summaryOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   automation: Automation,
 ): Effect.fn.Return<AutomationSummary, HostedRefusal, DatabaseServices> {
   const newest = yield* hostedStoreOrUnavailable(listAutomationRuns(userId, automation.id, 1));
-  const [lastRun] = yield* runSummaries(newest);
+  const [lastRun] = yield* runSummaries(userId, newest);
   return {
     id: automation.id,
     planId: automation.planId,
@@ -627,7 +637,7 @@ const runEndpoint = /* @__PURE__ */ Effect.fn("web/automationRunEndpoint")(funct
   }
   const run = yield* hostedStoreOrUnavailable(automationRunByKey(userId, id, key));
   if (Option.isNone(run)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  const [summary] = yield* runSummaries([run.value]);
+  const [summary] = yield* runSummaries(userId, [run.value]);
   return hostedJsonResponse(
     Option.isSome(recorded) ? HOSTED_HTTP_STATUS.CREATED : HOSTED_HTTP_STATUS.OK,
     { run: summary },
@@ -648,7 +658,7 @@ const runsEndpoint = /* @__PURE__ */ Effect.fn("web/automationRunsEndpoint")(fun
   const automation = yield* hostedStoreOrUnavailable(readAutomation(userId, id));
   if (Option.isNone(automation)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const runs = yield* hostedStoreOrUnavailable(listAutomationRuns(userId, id, RUNS_READ));
-  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { runs: yield* runSummaries(runs) });
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { runs: yield* runSummaries(userId, runs) });
 });
 
 /** The group: the four automation paths, and the hosted vocabulary's own refusal for any other. */

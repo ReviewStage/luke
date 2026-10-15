@@ -107,16 +107,20 @@ const FIRING_WORDS = {
   [AUTOMATION_FIRING.WEBHOOK]: "Webhook called",
 } as const satisfies Record<AutomationRunSummary["firing"]["kind"], string>;
 
+/** Whose key a run's agent ran on, where it is not the reader's, as its line names it. */
+const AGENT_OWNER = "its owner";
+
 /** Where a started run's agent stands, and why it failed where it did, in the words its own end line uses. */
 function agentLine(
   agent: NonNullable<AutomationRunSummary["agent"]>,
   keyHolder: string | undefined,
 ): string {
   const standing = AGENT_STATUS_WORDS[agent.status];
+  // Note that the agent's own account is whose keys it ran on, a same-agent run's a teammate's agent's,
+  // so the service's word for it goes before the guess the caller makes from the automation's maker.
+  const holder = agent.ownKey === undefined ? keyHolder : agent.ownKey ? undefined : AGENT_OWNER;
   const why =
-    agent.failureReason === undefined
-      ? undefined
-      : agentFailureWords(agent.failureReason, keyHolder);
+    agent.failureReason === undefined ? undefined : agentFailureWords(agent.failureReason, holder);
   return agent.status === CODING_AGENT_STATUS.FAILED && why !== undefined
     ? `${standing}: ${why}`
     : standing;

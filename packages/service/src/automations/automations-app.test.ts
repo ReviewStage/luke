@@ -594,6 +594,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
           id: agent.id,
           title: null,
           status: CODING_AGENT_STATUS.FAILED,
+          ownKey: true,
           failureReason: CODING_AGENT_FAILURE.ABANDONED,
         });
       }),

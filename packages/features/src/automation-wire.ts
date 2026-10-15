@@ -385,6 +385,8 @@ const automationRunSummarySchema = EffectSchema.Struct({
       id: wireUuidSchema,
       title: EffectSchema.NullOr(EffectSchema.String),
       status: EffectSchema.Literals(Object.values(CODING_AGENT_STATUS)),
+      /** Whether it runs on the reading account's own keys; absent from a service before it. */
+      ownKey: EffectSchema.optionalKey(EffectSchema.Boolean),
       /** Why it failed, where it did, as its own end line says; absent otherwise, and from a service before it. */
       failureReason: EffectSchema.optionalKey(
         EffectSchema.Literals(Object.values(CODING_AGENT_FAILURE)),
