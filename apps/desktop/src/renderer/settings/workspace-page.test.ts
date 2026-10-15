@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import type { WorkspaceInvitation } from "@luke/features/workspace-invitation-wire";
 import {
+  WORKSPACE_PHOTO_BOUNDS,
   WORKSPACE_ROLE,
   type Workspace,
   type WorkspaceMember,
@@ -24,7 +25,7 @@ import { ProviderMark } from "@luke/ui";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { focusedSegment, pressKeyIn, readSegmented, segmentedGroup } from "#testing/segmented";
 import { WorkspacePage, type WorkspaceSettingsControl } from "./workspace-page";
@@ -32,7 +33,8 @@ import { WorkspacePage, type WorkspaceSettingsControl } from "./workspace-page";
 /**
  * Settings' Workspace page over a bridge answering as the host would: the
  * picker chooses the workspace the page shows, an owner or an admin renames
- * it in place while a member is offered no rename, a team workspace's members
+ * it in place and uploads or removes its photo while a member is offered
+ * neither, a team workspace's members
  * are read and listed, the page holding itself back while they are, an
  * owner or an admin is offered Remove in a row's ⋯ for anyone but an owner,
  * a member leaves, a refusal the role earns says so, an owner or admin
@@ -96,6 +98,8 @@ let refuseGitHubOpen = false;
 let refuseGitHubDisconnect = false;
 /** Whether the service refuses a rename for the account's role. */
 let refuseRename = false;
+/** Whether the service refuses a photo for the account's role. */
+let refusePhoto = false;
 
 const done = (value: ActResultFor<ActKind>): ActOutcome => ({
   status: ACT_OUTCOME_STATUS.DONE,
@@ -182,6 +186,16 @@ function answer(request: Act): Promise<ActOutcome> {
         });
       }
       return Promise.resolve(done({ ...ACME, name: request.payload.name }));
+    case ACT_KIND.WORKSPACE_PHOTO_SET:
+      if (refusePhoto) {
+        return Promise.resolve({
+          status: ACT_OUTCOME_STATUS.REFUSED,
+          reason: WORKSPACE_NOT_PERMITTED_REFUSAL,
+        });
+      }
+      return Promise.resolve(
+        done(request.payload.photo === null ? ACME : { ...ACME, photoVersion: "v2" }),
+      );
     case ACT_KIND.WORKSPACE_LEAVE:
     case ACT_KIND.WINDOW_COPY_TEXT:
       return Promise.resolve(done(undefined));
@@ -207,6 +221,7 @@ beforeEach(() => {
   refuseGitHubOpen = false;
   refuseGitHubDisconnect = false;
   refuseRename = false;
+  refusePhoto = false;
   Object.defineProperty(window, "luke", {
     configurable: true,
     value: { act: answer, recordSurfaceEvent: () => undefined },
@@ -216,6 +231,8 @@ beforeEach(() => {
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 async function settle(): Promise<void> {
@@ -366,6 +383,153 @@ test("an admin's rename the service refuses says so under the row, and a member 
   assert.ok(rowNamed(member.page, "Workspace").textContent?.includes(ACME.name));
   assert.equal(buttons(member.page, "Rename").length, 0);
   assert.equal(member.page.querySelector(".workspace-name") === null, true);
+});
+
+/** The photos the page sent, by their payloads. */
+const photos = () =>
+  sent.flatMap((request) =>
+    request.kind === ACT_KIND.WORKSPACE_PHOTO_SET ? [request.payload] : [],
+  );
+
+/** What the platform's canvas was asked to draw: the picture's part, and the canvas it was drawn on. */
+interface Drawn {
+  readonly source: readonly number[];
+  readonly canvas: readonly number[];
+}
+
+/** A WebP's bytes as the encoder answers them: its RIFF and WEBP signature, then filler, `length` bytes in all. */
+function webpBytes(length = 16): Uint8Array<ArrayBuffer> {
+  const bytes = new Uint8Array(length);
+  bytes.set([0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x45, 0x42, 0x50]);
+  return bytes;
+}
+
+/**
+ * The platform's image decoder and canvas, which jsdom has not got, standing
+ * in at the browser's edge: every picture decodes at `width` by `height`, and
+ * every canvas writes `bytes` of WebP, so the real encoder runs between them.
+ */
+function stubCanvas(width: number, height: number, bytes: Uint8Array<ArrayBuffer>): Drawn[] {
+  const drawn: Drawn[] = [];
+  vi.stubGlobal("createImageBitmap", () => Promise.resolve({ width, height, close: () => {} }));
+  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(function (
+    this: HTMLCanvasElement,
+  ) {
+    // SAFETY: the encoder calls drawImage alone on the context it is handed.
+    return {
+      drawImage: (_bitmap: CanvasImageSource, ...at: number[]) =>
+        drawn.push({ source: at.slice(0, 4), canvas: [this.width, this.height] }),
+    } as unknown as CanvasRenderingContext2D;
+  });
+  vi.spyOn(HTMLCanvasElement.prototype, "toBlob").mockImplementation((callback, type) =>
+    callback(new Blob([bytes], type === undefined ? {} : { type })),
+  );
+  return drawn;
+}
+
+/** Lets the encoder's file read, which jsdom answers on the next turn, land. */
+async function drain(): Promise<void> {
+  for (let turn = 0; turn < 4; turn += 1) {
+    await act(async () => {
+      await new Promise((resolve) => setImmediate(resolve));
+    });
+  }
+  await settle();
+}
+
+/** Picks `file` in the Photo row's hidden picker, as the dialog Upload… opens would. */
+async function pickPhoto(page: HTMLElement, file: File): Promise<void> {
+  const picker =
+    rowNamed(page, "Photo").querySelector<HTMLInputElement>('input[type="file"]') ??
+    assert.fail("no photo picker");
+  Object.defineProperty(picker, "files", { configurable: true, value: [file] });
+  act(() => {
+    picker.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await drain();
+}
+
+test("an owner's picked photo is sent drawn as its centre square in WebP, 256 pixels a side, and Upload… opens the picker", async () => {
+  const webp = webpBytes();
+  const drawn = stubCanvas(400, 300, webp);
+  const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
+  const row = rowNamed(page, "Photo");
+  const picker = row.querySelector<HTMLInputElement>('input[type="file"]');
+  let opened = 0;
+  picker?.addEventListener("click", () => {
+    opened += 1;
+  });
+
+  act(() => button(row, "Upload…").click());
+  await pickPhoto(page, new File([new Uint8Array([1, 2, 3])], "team.png", { type: "image/png" }));
+
+  assert.equal(opened, 1);
+  assert.equal(picker?.accept, "image/png,image/jpeg,image/webp");
+  assert.equal(picker?.hidden, true);
+  assert.deepEqual(drawn, [{ source: [50, 0, 300, 300], canvas: [256, 256] }]);
+  assert.deepEqual(photos(), [
+    { workspaceId: ACME.id, photo: `data:image/webp;base64,${btoa(String.fromCharCode(...webp))}` },
+  ]);
+  assert.equal(page.querySelector('[role="alert"]') === null, true);
+});
+
+test("a photo the service refuses, a file that is no PNG, JPEG, or WebP, and a photo past the bound are said under the row", async () => {
+  stubCanvas(300, 300, webpBytes());
+  refusePhoto = true;
+  const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
+  const said = () => page.querySelector('.menu-row + [role="alert"]')?.textContent;
+
+  await pickPhoto(page, new File(["x"], "team.png", { type: "image/png" }));
+  const refused = said();
+  await pickPhoto(page, new File(["<svg/>"], "team.svg", { type: "image/svg+xml" }));
+  const kind = said();
+  vi.restoreAllMocks();
+  stubCanvas(300, 300, webpBytes(WORKSPACE_PHOTO_BOUNDS.MAX_BYTES + 1));
+  await pickPhoto(page, new File(["x"], "huge.jpg", { type: "image/jpeg" }));
+
+  assert.equal(refused, WORKSPACE_NOT_PERMITTED_REFUSAL);
+  assert.equal(kind, "team.svg isn't a PNG, JPEG, or WebP image.");
+  assert.equal(said(), "huge.jpg is too large for a workspace photo.");
+  assert.equal(photos().length, 1);
+});
+
+test("Remove photo stands disabled while an upload is still under way, so the upload cannot put a removed photo back", async () => {
+  // The picked image is still being drawn: the encoder's bitmap never arrives.
+  vi.stubGlobal("createImageBitmap", () => new Promise(() => undefined));
+  const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER, photoVersion: "v1" });
+  await pickPhoto(page, new File(["x"], "team.png", { type: "image/png" }));
+  const ellipsis =
+    rowNamed(page, "Photo").querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]') ??
+    assert.fail("the row draws no ⋯");
+  act(() => ellipsis.click());
+  const remove =
+    [...document.querySelectorAll<HTMLButtonElement>('[role="menu"] [role="menuitem"]')].find(
+      (each) => each.textContent === "Remove photo",
+    ) ?? assert.fail("no Remove photo in the row's menu");
+
+  assert.equal(remove.disabled || remove.getAttribute("aria-disabled") === "true", true);
+});
+
+test("Remove photo, offered only where a photo is set, asks first and then sends no photo", async () => {
+  const bare = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
+  assert.deepEqual(rowActions(rowNamed(bare.page, "Photo")), []);
+
+  const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER, photoVersion: "v1" });
+  await chooseAction(rowNamed(page, "Photo"), "Remove photo");
+  assert.deepEqual(photos(), []);
+  await confirm("Remove");
+
+  assert.deepEqual(photos(), [{ workspaceId: ACME.id, photo: null }]);
+});
+
+test("a member is offered no Photo row", async () => {
+  const { page } = await mount(ACME);
+
+  assert.equal(
+    [...page.querySelectorAll(".settings-row strong")].some((name) => name.textContent === "Photo"),
+    false,
+  );
+  assert.equal(page.querySelector('input[type="file"]') === null, true);
 });
 
 test("the chosen team workspace's members are listed with their email and role, and a member is offered no Remove", async () => {

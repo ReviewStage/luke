@@ -1,9 +1,11 @@
-import { Schema as EffectSchema } from "effect";
+import { Schema as EffectSchema, Result } from "effect";
+import { Base64 } from "effect/encoding";
+import { sniffImageType } from "./image-signature.js";
 import { workspaceIdSchema } from "./plan-wire.js";
 import { countedNumber } from "./service-wire.js";
 
 /**
- * workspace-wire.ts -- the workspaces an account is a member of, a workspace it creates or renames, and the GitHub organization an admin connects to one, as the desktop reads and asks for them.
+ * workspace-wire.ts -- the workspaces an account is a member of, a workspace it creates, renames, or gives a photo, and the GitHub organization an admin connects to one, as the desktop reads and asks for them.
  *
  * A workspace is a team in Luke: the first one, made for the account when it
  * first signs in, or one a member created; either way teammates join by
@@ -36,7 +38,9 @@ import { countedNumber } from "./service-wire.js";
  * A workspace may show a photo an owner or admin uploaded, served to its
  * members alone at `GET /api/workspaces/<id>/photo` as its bytes; the list
  * says only which version of it stands. The account's own first workspace
- * with no photo shows the account's sign-in picture instead.
+ * with no photo shows the account's sign-in picture instead. An owner or an
+ * admin sets the photo as a `data:` URL of one of `WORKSPACE_PHOTO_TYPE`, at
+ * most `WORKSPACE_PHOTO_BOUNDS.MAX_BYTES` of bytes, or removes it.
  */
 
 /** An account's role in a workspace, as the auth service's organization plugin names it. */
@@ -118,6 +122,50 @@ export type WorkspacePhotoType = (typeof WORKSPACE_PHOTO_TYPE)[keyof typeof WORK
 /** A workspace photo's media type as the wire carries it. */
 export const workspacePhotoTypeSchema = EffectSchema.Literals(Object.values(WORKSPACE_PHOTO_TYPE));
 
+export const WORKSPACE_PHOTO_BOUNDS = {
+  /**
+   * The most bytes a photo set on a workspace may hold, decoded. The desktop
+   * sends a 256-pixel square WebP, a few kilobytes, so this holds the bound
+   * well clear of any photo it makes while keeping the list's row small.
+   */
+  MAX_BYTES: 100_000,
+} as const;
+
+/** A photo as a `data:` URL spells it: its media type, then its bytes in base64. */
+const PHOTO_DATA_URL = /^data:([^;,]+);base64,([A-Za-z0-9+/]+={0,2})$/u;
+
+const isPhotoType = EffectSchema.is(workspacePhotoTypeSchema);
+
+/** A workspace's photo, as its bytes under its media type. */
+export interface WorkspacePhoto {
+  readonly contentType: WorkspacePhotoType;
+  readonly bytes: Uint8Array;
+}
+
+/**
+ * The photo a `data:` URL holds, where its type is one of
+ * `WORKSPACE_PHOTO_TYPE` and its base64 reads; nothing for any other text.
+ * The one reading of a photo's URL, for the photo set and the photo kept.
+ */
+export function workspacePhotoOfDataUrl(text: string): WorkspacePhoto | undefined {
+  const [, contentType, base64] = PHOTO_DATA_URL.exec(text) ?? [];
+  if (contentType === undefined || base64 === undefined || !isPhotoType(contentType)) {
+    return undefined;
+  }
+  const bytes = Base64.decode(base64);
+  // Note that the bytes must be the image the label names, because a tile draws them as one.
+  if (Result.isFailure(bytes) || sniffImageType(bytes.success) !== contentType) return undefined;
+  return { contentType, bytes: bytes.success };
+}
+
+/** A photo to set, as the `data:` URL it is kept as: one `workspacePhotoOfDataUrl` reads, within `WORKSPACE_PHOTO_BOUNDS.MAX_BYTES`. */
+const workspacePhotoUrlSchema = EffectSchema.String.check(
+  EffectSchema.makeFilter((text: string) => {
+    const photo = workspacePhotoOfDataUrl(text);
+    return photo !== undefined && photo.bytes.length <= WORKSPACE_PHOTO_BOUNDS.MAX_BYTES;
+  }),
+);
+
 /** The GitHub account a workspace's connected installation is on: its login, and whether the installation is active. */
 export const workspaceGithubSchema = EffectSchema.Struct({
   login: EffectSchema.String,
@@ -171,7 +219,7 @@ export const workspacesAnswerSchema = EffectSchema.Struct({
 
 export type WorkspacesAnswer = typeof workspacesAnswerSchema.Type;
 
-/** One workspace: the one created or renamed, or the one whose GitHub organization was disconnected. */
+/** One workspace: the one created, renamed, or given a photo, or the one whose GitHub organization was disconnected. */
 export const workspaceAnswerSchema = EffectSchema.Struct({ workspace: workspaceSchema });
 
 /** A workspace created (POST): its name, its ends trimmed; the account creating it is its owner. */
@@ -186,6 +234,12 @@ export const workspaceCreateRequestSchema = EffectSchema.Struct({
 export const workspaceRenameRequestSchema = EffectSchema.Struct({
   workspaceId: workspaceIdSchema,
   name: workspaceCreateRequestSchema.fields.name,
+});
+
+/** A workspace's photo set or removed (POST) by an owner or admin of it: the photo as a `data:` URL, or null to remove it; answered with the workspace. */
+export const workspacePhotoSetRequestSchema = EffectSchema.Struct({
+  workspaceId: workspaceIdSchema,
+  photo: EffectSchema.NullOr(workspacePhotoUrlSchema),
 });
 
 /** The workspace a GitHub organization is connected to or disconnected from (POST), by an owner or admin of it. */

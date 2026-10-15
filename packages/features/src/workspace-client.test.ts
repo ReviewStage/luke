@@ -5,7 +5,7 @@ import { Effect } from "effect";
 import { HOSTED_API_ERROR } from "./service-wire.js";
 import { WORKSPACE_CALL_FAILURE } from "./workspace-call.js";
 import { HostedWorkspaceClient, type HostedWorkspaceClientOptions } from "./workspace-client.js";
-import { WORKSPACE_PHOTO_TYPE, WORKSPACE_ROLE } from "./workspace-wire.js";
+import { WORKSPACE_PHOTO_BOUNDS, WORKSPACE_PHOTO_TYPE, WORKSPACE_ROLE } from "./workspace-wire.js";
 
 const PERSONAL = {
   id: "org-personal-1",
@@ -266,6 +266,55 @@ it.effect(
             route: "POST /api/workspaces/rename",
             body: { workspaceId: ACME.id, name: "Acme Labs" },
           },
+        ],
+      );
+    }),
+);
+
+it.effect(
+  "sets a workspace's photo or removes it under the Mac's session, sends an SVG or one past the bound nowhere, and names a refusal",
+  () =>
+    Effect.gen(function* () {
+      const photo = "data:image/webp;base64,UklGRgAAAABXRUJQ";
+      const photographed = { ...ACME, photoVersion: "0123456789abcdef" };
+      const api = fakeCloudApi({
+        "POST /api/workspaces/photo/set": {
+          answer: (request) =>
+            request.body?.includes(photo) ? { workspace: photographed } : { workspace: ACME },
+        },
+      });
+      const refusing = fakeCloudApi({
+        "POST /api/workspaces/photo/set": {
+          answer: () => ({ error: HOSTED_API_ERROR.NOT_PERMITTED }),
+          status: HTTP_STATUS.FORBIDDEN,
+        },
+      });
+      const workspaces = client();
+      const tooLarge = `data:image/png;base64,${btoa("x".repeat(WORKSPACE_PHOTO_BOUNDS.MAX_BYTES + 1))}`;
+
+      const set = yield* Effect.provide(workspaces.setPhoto(ACME.id, photo), api.layer);
+      const removed = yield* Effect.provide(workspaces.setPhoto(ACME.id, null), api.layer);
+      const svg = yield* Effect.provide(
+        workspaces.setPhoto(ACME.id, "data:image/svg+xml;base64,PHN2Zy8+"),
+        api.layer,
+      );
+      const large = yield* Effect.provide(workspaces.setPhoto(ACME.id, tooLarge), api.layer);
+      const refused = yield* Effect.provide(workspaces.setPhoto(ACME.id, null), refusing.layer);
+
+      assert.deepEqual(set, { ok: true, answer: photographed });
+      assert.deepEqual(removed, { ok: true, answer: ACME });
+      assert.deepEqual(svg, { ok: false, failure: WORKSPACE_CALL_FAILURE.UNANSWERED });
+      assert.deepEqual(large, { ok: false, failure: WORKSPACE_CALL_FAILURE.UNANSWERED });
+      assert.deepEqual(refused, { ok: false, failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED });
+      assert.deepEqual(api.credentials(), ["session-1", "session-1"]);
+      assert.deepEqual(
+        api.requests().map(({ method, pathname, body }) => ({
+          route: `${method} ${pathname}`,
+          body: body === undefined ? undefined : JSON.parse(body),
+        })),
+        [
+          { route: "POST /api/workspaces/photo/set", body: { workspaceId: ACME.id, photo } },
+          { route: "POST /api/workspaces/photo/set", body: { workspaceId: ACME.id, photo: null } },
         ],
       );
     }),

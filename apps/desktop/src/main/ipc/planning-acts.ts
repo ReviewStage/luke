@@ -48,6 +48,7 @@ import type {
   PlanningWorkspaceParams,
   PlanningWorkspacePhotoAnswer,
   PlanningWorkspacePhotoParams,
+  PlanningWorkspacePhotoSetParams,
   PlanningWorkspaceRenameParams,
 } from "@luke/features/planning-view";
 import { GITHUB_DISCONNECT_FAILURE } from "@luke/features/planning-view";
@@ -105,6 +106,9 @@ export interface PlanningActsDependencies {
     githubDisconnect(): Effect.Effect<PlanningGitHubDisconnectAnswer>;
     workspaceCreate(params: PlanningWorkspaceCreateParams): Effect.Effect<PlanningWorkspaceAnswer>;
     workspaceRename(params: PlanningWorkspaceRenameParams): Effect.Effect<PlanningWorkspaceAnswer>;
+    workspacePhotoSet(
+      params: PlanningWorkspacePhotoSetParams,
+    ): Effect.Effect<PlanningWorkspaceAnswer>;
     workspaceGitHubConnect(
       params: PlanningWorkspaceParams,
     ): Effect.Effect<PlanningWorkspaceGitHubConnectAnswer>;
@@ -182,6 +186,7 @@ type PlanningActKind =
   | typeof ACT_KIND.PLANNING_PAGE_SOURCE
   | typeof ACT_KIND.WORKSPACE_CREATE
   | typeof ACT_KIND.WORKSPACE_RENAME
+  | typeof ACT_KIND.WORKSPACE_PHOTO_SET
   | typeof ACT_KIND.WORKSPACE_INVITATIONS_READ
   | typeof ACT_KIND.WORKSPACE_INVITE
   | typeof ACT_KIND.WORKSPACE_INVITATION_CANCEL
@@ -195,6 +200,7 @@ type PlanningActKind =
 type WorkspaceActKind =
   | typeof ACT_KIND.WORKSPACE_CREATE
   | typeof ACT_KIND.WORKSPACE_RENAME
+  | typeof ACT_KIND.WORKSPACE_PHOTO_SET
   | typeof ACT_KIND.WORKSPACE_INVITATIONS_READ
   | typeof ACT_KIND.WORKSPACE_INVITE
   | typeof ACT_KIND.WORKSPACE_INVITATION_CANCEL
@@ -448,6 +454,14 @@ export function planningActRows(
         "workspace" in answer
           ? Effect.succeed(answer.workspace)
           : refusedWorkspace(ACT_KIND.WORKSPACE_RENAME, answer.failure),
+      );
+    },
+    [ACT_KIND.WORKSPACE_PHOTO_SET]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.WORKSPACE_PHOTO_SET, sender);
+      return Effect.flatMap(host.workspacePhotoSet(params), (answer) =>
+        "workspace" in answer
+          ? Effect.succeed(answer.workspace)
+          : refusedWorkspace(ACT_KIND.WORKSPACE_PHOTO_SET, answer.failure),
       );
     },
     [ACT_KIND.WORKSPACE_INVITATIONS_READ]: (params, sender) => {

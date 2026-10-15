@@ -141,6 +141,7 @@ import {
   type PlanningWorkspaceParams,
   type PlanningWorkspacePhotoAnswer,
   type PlanningWorkspacePhotoParams,
+  type PlanningWorkspacePhotoSetParams,
   type PlanningWorkspaceRenameParams,
   planningEditAnswerSchema,
   planningFileAnswerSchema,
@@ -357,6 +358,10 @@ export interface HostOperator {
   workspaceCreate(params: PlanningWorkspaceCreateParams): Effect.Effect<PlanningWorkspaceAnswer>;
   /** A workspace renamed by an owner or admin; the workspace under its new name, or why it was not. */
   workspaceRename(params: PlanningWorkspaceRenameParams): Effect.Effect<PlanningWorkspaceAnswer>;
+  /** A workspace's photo set or removed by an owner or admin; the workspace with its photo's new version or none, or why it was not. */
+  workspacePhotoSet(
+    params: PlanningWorkspacePhotoSetParams,
+  ): Effect.Effect<PlanningWorkspaceAnswer>;
   /** A workspace's GitHub organization connection begun; the install address to open, or why there is none. */
   workspaceGitHubConnect(
     params: PlanningWorkspaceParams,
@@ -959,6 +964,14 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.WORKSPACES_RENAME, {
           workspaceId: params.workspaceId,
           name: params.name,
+        }),
+        workspaceAnswer(planningWorkspaceAnswerSchema),
+      ),
+    workspacePhotoSet: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.WORKSPACES_PHOTO_SET, {
+          workspaceId: params.workspaceId,
+          photo: params.photo,
         }),
         workspaceAnswer(planningWorkspaceAnswerSchema),
       ),

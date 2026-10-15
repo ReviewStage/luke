@@ -143,6 +143,7 @@ import {
   planningWorkspaceParamsSchema,
   planningWorkspacePhotoAnswerSchema,
   planningWorkspacePhotoParamsSchema,
+  planningWorkspacePhotoSetParamsSchema,
   planningWorkspaceRenameParamsSchema,
 } from "@luke/features/planning-view";
 import {
@@ -311,7 +312,9 @@ export const ACT_KIND = {
   /**
    * The account's workspaces: one made under a name, answered as made, which
    * the account owns; one renamed by its owners and admins, answered under
-   * its new name; one's pending invitations read, one made, answered
+   * its new name; one's photo set as a `data:` URL or removed with null by
+   * its owners and admins, answered with the photo's new version or none;
+   * one's pending invitations read, one made, answered
    * with its accept link, and one canceled, for its owners and admins; a GitHub
    * organization connected to one, the Luke GitHub App's install address the
    * service answers opened in the browser, or disconnected from it; one
@@ -333,6 +336,7 @@ export const ACT_KIND = {
   WORKSPACE_MEMBER_REMOVE: "workspace.memberRemove",
   WORKSPACE_LEAVE: "workspace.leave",
   WORKSPACE_PHOTO_READ: "workspace.photoRead",
+  WORKSPACE_PHOTO_SET: "workspace.photoSet",
   /**
    * A plan's coding agents, asked of the service: the models one may run
    * on, the account's default among them read and written, the plan's
@@ -536,8 +540,8 @@ function actSchema<Value, Encoded>(schema: EffectSchema.Codec<Value, Encoded>): 
 
 /**
  * What a workspace act whose role does not allow it is refused with, in place
- * of its kind's own sentence: a member renaming the workspace or removing
- * someone, or an owner removed or leaving.
+ * of its kind's own sentence: a member renaming the workspace, setting its
+ * photo, or removing someone, or an owner removed or leaving.
  */
 export const WORKSPACE_NOT_PERMITTED_REFUSAL =
   "Your role in this workspace does not allow that." as const;
@@ -889,6 +893,11 @@ export const ACT = {
       isReadable(planningWorkspacePhotoAnswerSchema),
     ),
     refusal: "Could not read that workspace's photo on this system.",
+  },
+  [ACT_KIND.WORKSPACE_PHOTO_SET]: {
+    payload: actSchema(planningWorkspacePhotoSetParamsSchema),
+    result: wireResult<Workspace>(isReadable(workspaceSchema)),
+    refusal: "Could not change that workspace's photo on this system.",
   },
   [ACT_KIND.PLANNING_BOARD_SAVE]: {
     payload: actSchema(planningBoardSaveParamsSchema),

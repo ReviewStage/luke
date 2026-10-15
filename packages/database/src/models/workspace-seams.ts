@@ -11,9 +11,10 @@ import { Cause, Data, Effect, Option, Schema } from "effect";
  * plugin's `removeMember` and `leaveOrganization`, called with the headers
  * of the request that asked, which carry the Mac's own Better Auth session
  * as a signed bearer token, so the plugin checks the caller's role and
- * membership itself. A rename is the plugin's `updateOrganization` under
- * the same headers, given the name alone, so the plugin checks that the
- * caller may update the workspace and leaves its slug as it was. An
+ * membership itself. A rename, and a photo set or removed, is the plugin's
+ * `updateOrganization` under the same headers, given the name alone or the
+ * logo alone, so the plugin checks that the caller may update the workspace
+ * and leaves its slug as it was. An
  * invitation is made, listed, and canceled the same way, through
  * `createInvitation`, `listInvitations`, and `cancelInvitation`. Each call is the auth service's promise, wrapped once
  * here the way `bearer.ts` wraps `oauth2UserInfo`. The auth service is
@@ -66,11 +67,14 @@ interface WorkspaceLeaving {
   readonly organizationId: string;
 }
 
-/** A workspace given a new name under the session the headers carry. */
-interface WorkspaceRenaming {
+/**
+ * A workspace changed under the session the headers carry: given a new name,
+ * or a new logo, which holds its photo as a `data:` URL, null removing it.
+ */
+interface WorkspaceUpdate {
   readonly headers: Headers;
   readonly organizationId: string;
-  readonly name: string;
+  readonly data: { readonly name: string } | { readonly logo: string | null };
 }
 
 /** The plugin's write the workspace store makes. */
@@ -111,7 +115,7 @@ export interface MemberSeams {
   }) => Effect.Effect<void, MemberFailure>;
   readonly removeMember: (removal: MemberRemoval) => Effect.Effect<void, MemberFailure>;
   readonly leaveOrganization: (leaving: WorkspaceLeaving) => Effect.Effect<void, MemberFailure>;
-  readonly updateOrganization: (renaming: WorkspaceRenaming) => Effect.Effect<void, MemberFailure>;
+  readonly updateOrganization: (update: WorkspaceUpdate) => Effect.Effect<void, MemberFailure>;
 }
 
 /** The part of a Better Auth `api` with the organization plugin that the workspace seam calls. */
@@ -145,7 +149,7 @@ export interface MemberAuthApi {
   }) => Promise<object | null>;
   readonly updateOrganization: (input: {
     headers: Headers;
-    body: { data: { name: string }; organizationId: string };
+    body: { data: { name: string } | { logo: string | null }; organizationId: string };
   }) => Promise<object | null>;
 }
 
@@ -254,12 +258,12 @@ export function memberSeams(api: MemberAuthApi): MemberSeams {
           }),
         ),
       ),
-    updateOrganization: (renaming) =>
+    updateOrganization: (update) =>
       Effect.asVoid(
         pluginCall(() =>
           api.updateOrganization({
-            headers: renaming.headers,
-            body: { data: { name: renaming.name }, organizationId: renaming.organizationId },
+            headers: update.headers,
+            body: { data: { ...update.data }, organizationId: update.organizationId },
           }),
         ),
       ),

@@ -6,9 +6,12 @@ import {
 import { managesWorkspace } from "@luke/features/workspace-role";
 import {
   WORKSPACE_BOUNDS,
+  WORKSPACE_PHOTO_BOUNDS,
+  WORKSPACE_PHOTO_TYPE,
   WORKSPACE_ROLE,
   type Workspace,
   type WorkspaceMember,
+  workspacePhotoOfDataUrl,
 } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SECTION } from "@luke/settings/settings-views";
@@ -19,6 +22,8 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import { useAct } from "../act";
 import { useCopyToast } from "../copy-feedback";
 import { type NameEdit, PlanNameField } from "../desktop/plan-name-field";
+import { TILE_SIZE, WorkspaceTile } from "../desktop/workspace-tile";
+import { encodeImage } from "../feedback-images";
 import { Segmented } from "../segmented";
 import { SpinnerRegion } from "../spinner";
 import { ConfirmDialog, useConfirmDialog } from "./confirm-dialog";
@@ -31,7 +36,8 @@ import { ReadFailed, SettingsGroup } from "./settings-group";
  *
  * A picker at the page's head chooses the workspace, the one the sidebar
  * lists until another is chosen or a link names one, and says the account's
- * role in it; under it an owner or an admin renames the workspace in place.
+ * role in it; under it an owner or an admin renames the workspace in place
+ * and uploads or removes its photo.
  * The workspace then lists its members as the service holds
  * them now, each with its email and role. An owner or an admin invites
  * people by address and role, sees the invitations still pending with each
@@ -51,6 +57,22 @@ import { ReadFailed, SettingsGroup } from "./settings-group";
  * failed says so in red with Retry. Every workspace draws the same, the
  * first one made for the account included.
  */
+
+/** How many pixels a side a workspace's photo is drawn to before it is sent: well past the largest tile's 48, so it stays sharp on a Retina screen. */
+const PHOTO_EDGE = 256;
+
+/** The image types a photo is picked from, which are the ones a photo may be kept as. */
+const PHOTO_TYPES: ReadonlySet<string> = new Set(Object.values(WORKSPACE_PHOTO_TYPE));
+
+/** The photo picker's `accept`: those types alone. */
+const PHOTO_ACCEPT = [...PHOTO_TYPES].join(",");
+
+/** Why a picked file did not become the workspace's photo, in the words said under its row. */
+const PHOTO_REFUSAL = {
+  KIND: (name: string) => `${name} isn't a PNG, JPEG, or WebP image.`,
+  UNREADABLE: (name: string) => `${name} couldn't be read.`,
+  TOO_LARGE: (name: string) => `${name} is too large for a workspace photo.`,
+} as const;
 
 /** What each role reads as on a member's row. */
 export const ROLE_WORDS = {
@@ -623,7 +645,121 @@ function WorkspaceName({ workspace }: { workspace: Workspace }): React.JSX.Eleme
   );
 }
 
-/** The page's head: the picker, saying under its name the account's role in the workspace chosen, and for an owner or an admin the workspace's name to rename. */
+/** A picked file read into a workspace's photo: the `data:` URL to send, or why it cannot be one. */
+type PhotoRead = { readonly photo: string } | { readonly refusal: string };
+
+/**
+ * A picked file drawn as a workspace's photo on this machine: its centre
+ * square at `PHOTO_EDGE` pixels a side, written as WebP. Note that it is
+ * encoded with no bound of its own, because a photo past the service's is
+ * said as too large rather than as a file that could not be read.
+ */
+async function photoOfFile(file: File): Promise<PhotoRead> {
+  if (!PHOTO_TYPES.has(file.type)) return { refusal: PHOTO_REFUSAL.KIND(file.name) };
+  const image = await encodeImage(file, Number.POSITIVE_INFINITY, PHOTO_EDGE);
+  if (image === undefined) return { refusal: PHOTO_REFUSAL.UNREADABLE(file.name) };
+  const photo = `data:${image.mediaType};base64,${image.base64}`;
+  const bytes = workspacePhotoOfDataUrl(photo)?.bytes.length;
+  if (bytes === undefined) return { refusal: PHOTO_REFUSAL.UNREADABLE(file.name) };
+  if (bytes > WORKSPACE_PHOTO_BOUNDS.MAX_BYTES) {
+    return { refusal: PHOTO_REFUSAL.TOO_LARGE(file.name) };
+  }
+  return { photo };
+}
+
+/**
+ * The workspace's photo, for an owner or an admin: its tile at the size it
+ * is looked at, Upload… at the row's end, which picks a PNG, JPEG, or WebP
+ * image and sends it drawn square, and, where a photo is set, Remove photo
+ * in its ⋯, which asks first. The photo arrives with the workspaces the host
+ * reads again after it; a file that cannot be one, or an upload refused, is
+ * said under the row until the next Upload…, and a removal refused in the
+ * dialog that asked.
+ */
+function WorkspacePhoto({ workspace }: { workspace: Workspace }): React.JSX.Element {
+  const { act } = useAct();
+  const workspaceId = workspace.id;
+  const picker = useRef<HTMLInputElement | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [refusal, setRefusal] = useState<string>();
+  const set = workspace.photoVersion !== undefined;
+  const remove = useConfirmDialog({ subject: set, surfaceOpen: true }, () =>
+    act(ACT_KIND.WORKSPACE_PHOTO_SET, { workspaceId, photo: null }).then(
+      () => ACCEPTED,
+      refusedWith,
+    ),
+  );
+  const upload = (file: File) => {
+    setRefusal(undefined);
+    setBusy(true);
+    photoOfFile(file)
+      .then((read) => {
+        if ("refusal" in read) throw new Error(read.refusal);
+        return act(ACT_KIND.WORKSPACE_PHOTO_SET, { workspaceId, photo: read.photo });
+      })
+      .then(
+        () => undefined,
+        (refused: Error) => setRefusal(refused.message),
+      )
+      .finally(() => setBusy(false));
+  };
+  const actions = set
+    ? [
+        // An upload still under way would put a photo back after its removal, so none is asked meanwhile.
+        {
+          label: "Remove photo",
+          icon: <TrashIcon />,
+          danger: true,
+          disabled: busy,
+          onSelect: remove.ask,
+        },
+      ]
+    : [];
+  return (
+    <>
+      <MenuRow label="Photo actions" actions={actions}>
+        <WorkspaceTile workspace={workspace} size={TILE_SIZE.SETTINGS} />
+        <RowCopy name="Photo" />
+        <button
+          type="button"
+          className="toolbar-button bordered-button"
+          disabled={busy || remove.busy}
+          onClick={() => picker.current?.click()}
+        >
+          Upload…
+        </button>
+        <input
+          ref={picker}
+          type="file"
+          accept={PHOTO_ACCEPT}
+          hidden
+          onChange={(event) => {
+            const [picked] = Array.from(event.currentTarget.files ?? []);
+            // Cleared so the same file can be picked again after it was refused.
+            event.currentTarget.value = "";
+            if (picked !== undefined) upload(picked);
+          }}
+        />
+      </MenuRow>
+      {refusal === undefined ? null : (
+        <p className="error-message" role="alert">
+          {refusal}
+        </p>
+      )}
+      <ConfirmDialog
+        confirm={remove}
+        question={{
+          title: `Remove ${workspace.name}'s photo?`,
+          body: "Its members see its letter in its place until a photo is uploaded again.",
+          verb: "Remove",
+          running: "Removing",
+        }}
+      />
+    </>
+  );
+}
+
+/** The page's head: the picker, saying under its name the account's role in the workspace chosen, and for an owner or an admin the workspace's name to rename and its photo to set. */
 function WorkspaceHead({
   control,
   workspace,
@@ -642,7 +778,10 @@ function WorkspaceHead({
         onChange={control.onChooseWorkspace}
       />
       {managesWorkspace(workspace) ? (
-        <WorkspaceName key={workspace.id} workspace={workspace} />
+        <Fragment key={workspace.id}>
+          <WorkspaceName workspace={workspace} />
+          <WorkspacePhoto workspace={workspace} />
+        </Fragment>
       ) : null}
     </SettingsGroup>
   );

@@ -52,17 +52,19 @@ import {
   workspaceLeaveRequestSchema,
   workspaceMemberRemovalSchema,
   workspaceMembersAnswerSchema,
+  workspacePhotoSetRequestSchema,
   workspacePhotoTypeSchema,
   workspaceRenameRequestSchema,
   workspacesAnswerSchema,
 } from "./workspace-wire.js";
 
 /**
- * workspace-client.ts -- the account's workspaces as the host asks the service for them: the list, a workspace created or renamed, a GitHub organization connected or disconnected, and its members read, removed, or left.
+ * workspace-client.ts -- the account's workspaces as the host asks the service for them: the list, a workspace created, renamed, or given a photo, a GitHub organization connected or disconnected, and its members read, removed, or left.
  *
  * Every call is the account call, so the bearer is read fresh per attempt
- * and a 401 is renewed and retried once. Renaming, removing a member, and
- * leaving write through Better Auth's own organization calls, so they carry the
+ * and a 401 is renewed and retried once. Renaming, setting the photo,
+ * removing a member, and leaving write through Better Auth's own
+ * organization calls, so they carry the
  * Mac's Better Auth session rather than its OAuth token: with no session
  * yet, or one the service no longer takes, the call asks for one through
  * the browser's hand-off and is sent once more on it. An owner's or an
@@ -160,6 +162,27 @@ export class HostedWorkspaceClient {
       {
         method: HTTP_METHOD.POST,
         path: HOSTED_SERVICE_PATH.WORKSPACES_RENAME,
+        body: JSON.stringify(admitted),
+      },
+      workspaceAnswerSchema,
+      (answer) => answer.workspace,
+      this.#inSession,
+    );
+  }
+
+  /** The workspace's photo set as a `data:` URL, or removed with null, by an owner or admin, answering the workspace as it then stands; a photo the service would refuse by shape never travels. */
+  setPhoto(
+    workspaceId: string,
+    photo: string | null,
+  ): Effect.Effect<WorkspaceCallResult<Workspace>, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(
+      readEither(workspacePhotoSetRequestSchema)({ workspaceId, photo }),
+    );
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return this.#answered(
+      {
+        method: HTTP_METHOD.POST,
+        path: HOSTED_SERVICE_PATH.WORKSPACES_PHOTO_SET,
         body: JSON.stringify(admitted),
       },
       workspaceAnswerSchema,

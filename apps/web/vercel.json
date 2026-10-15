@@ -329,6 +329,10 @@
           "dest": "/api/default.js?route=workspaces/members/remove"
         },
         {
+          "src": "/api/workspaces/photo/set",
+          "dest": "/api/default.js?route=workspaces/photo/set"
+        },
+        {
           "src": "/api/workspaces/rename",
           "dest": "/api/default.js?route=workspaces/rename"
         },
