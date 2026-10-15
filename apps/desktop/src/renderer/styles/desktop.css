@@ -4255,12 +4255,6 @@ body:has(.app-stage[data-capture="true"])
   white-space: nowrap;
 }
 
-.automation-owner svg {
-  width: 13px;
-  height: 13px;
-  flex: none;
-}
-
 .automation-owner-name {
   min-width: 0;
   overflow: hidden;
@@ -4352,26 +4346,6 @@ body:has(.app-stage[data-capture="true"])
 
 .automation-editor-name::placeholder {
   color: var(--text-tertiary);
-}
-
-/* The line under the name, in a Settings row's detail type: who owns it, by
-   glyph and name, then who sees it. */
-.automation-owner-line {
-  display: flex;
-  align-items: center;
-  gap: var(--space-8);
-  margin: 0;
-  color: var(--text-tertiary);
-  font-size: 12px;
-}
-
-.automation-owner-line .automation-owner {
-  width: auto;
-  font-size: 12px;
-}
-
-.automation-crumbs .automation-owner {
-  width: auto;
 }
 
 /* The form, drawn as a Settings page: each group's name over a card of

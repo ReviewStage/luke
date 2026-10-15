@@ -8,13 +8,10 @@ import {
   automationTriggerText,
 } from "@luke/features/automation-list-model";
 import { AUTOMATION_CALL_FAILURE, type AutomationView } from "@luke/features/automation-view";
-import {
-  AUTOMATION_SCOPE,
-  type AutomationScope,
-  type AutomationSummary,
-} from "@luke/features/automation-wire";
+import type { AutomationScope, AutomationSummary } from "@luke/features/automation-wire";
+import type { Workspace } from "@luke/features/workspace-wire";
 import { EXPERIMENT } from "@luke/settings";
-import { BuildingIcon, ClockIcon, LockIcon, PlusIcon, ZapIcon } from "lucide-react";
+import { ClockIcon, PlusIcon, ZapIcon } from "lucide-react";
 import { Fragment, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
@@ -27,6 +24,7 @@ import { StateGlyph, stateEndMark } from "../state-glyph";
 import { Switch } from "../switch";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { AutomationEditor } from "./automation-editor";
+import { OWNER_MARK_SIZE, OwnerMark } from "./automation-owner";
 import { STANDING_GLYPH } from "./automation-runs-panel";
 import { automationNextText, automationOwnerName } from "./automation-words";
 import { useAutomations } from "./use-automations";
@@ -59,26 +57,21 @@ function toggleRefusal(answer: AutomationView, enabled: boolean): string | undef
   return enabled ? "Couldn't turn it on. Try again." : "Couldn't turn it off. Try again.";
 }
 
-/** Who owns an automation, as its row's column says it: a building and the workspace, or a lock and Personal, its name whole on hover where the column cuts it short. */
+/** Who owns an automation, as its row's column says it: the workspace's photo and its name, or the maker's picture and Personal, its name whole on hover where the column cuts it short. */
 function OwnerCell({
   owner,
-  workspaceName,
+  mine,
+  workspace,
 }: {
   owner: AutomationScope;
-  workspaceName: string | undefined;
+  mine: boolean | undefined;
+  workspace: Workspace | undefined;
 }): React.JSX.Element {
+  const name = automationOwnerName(owner, workspace?.name);
   return (
-    <span
-      className="automation-owner"
-      data-owner={owner}
-      title={automationOwnerName(owner, workspaceName)}
-    >
-      {owner === AUTOMATION_SCOPE.WORKSPACE ? (
-        <BuildingIcon aria-hidden="true" />
-      ) : (
-        <LockIcon aria-hidden="true" />
-      )}
-      <span className="automation-owner-name">{automationOwnerName(owner, workspaceName)}</span>
+    <span className="automation-owner" data-owner={owner} title={name}>
+      <OwnerMark owner={owner} workspace={workspace} mine={mine} size={OWNER_MARK_SIZE.INLINE} />
+      <span className="automation-owner-name">{name}</span>
     </span>
   );
 }
@@ -90,13 +83,13 @@ function OwnerCell({
  */
 function AutomationRow({
   automation,
-  workspaceName,
+  workspace,
   now,
   onOpen,
   onToggle,
 }: {
   automation: AutomationSummary;
-  workspaceName: string | undefined;
+  workspace: Workspace | undefined;
   now: number;
   onOpen: () => void;
   onToggle: (enabled: boolean) => void;
@@ -114,7 +107,7 @@ function AutomationRow({
           </span>
         </span>
       </button>
-      <OwnerCell owner={automationOwner(automation)} workspaceName={workspaceName} />
+      <OwnerCell owner={automationOwner(automation)} mine={automation.mine} workspace={workspace} />
       <span
         className="automation-row-when"
         title={next.kind === AUTOMATION_NEXT.AT ? momentText(next.at) : undefined}
@@ -134,13 +127,13 @@ function AutomationRow({
 /** The list, each owner's automations under its own heading where both stand. */
 function AutomationList({
   groups,
-  workspaceName,
+  workspace,
   now,
   onOpen,
   onToggle,
 }: {
   groups: readonly AutomationGroup[];
-  workspaceName: string | undefined;
+  workspace: Workspace | undefined;
   now: number;
   onOpen: (automation: AutomationSummary) => void;
   onToggle: (automation: AutomationSummary, enabled: boolean) => void;
@@ -151,11 +144,11 @@ function AutomationList({
         <section
           key={group.owner}
           className="automation-group"
-          aria-label={automationOwnerName(group.owner, workspaceName)}
+          aria-label={automationOwnerName(group.owner, workspace?.name)}
         >
           {groups.length > 1 ? (
             <h2 className="settings-group-title">
-              {automationOwnerName(group.owner, workspaceName)}
+              {automationOwnerName(group.owner, workspace?.name)}
             </h2>
           ) : null}
           <div className="settings-card">
@@ -163,7 +156,7 @@ function AutomationList({
               <AutomationRow
                 key={automation.id}
                 automation={automation}
-                workspaceName={workspaceName}
+                workspace={workspace}
                 now={now}
                 onOpen={() => onOpen(automation)}
                 onToggle={(enabled) => onToggle(automation, enabled)}
@@ -232,7 +225,7 @@ function ListPage({
         ) : (
           <AutomationList
             groups={groups}
-            workspaceName={workspace?.name}
+            workspace={workspace}
             now={now}
             onOpen={(automation) =>
               view.onOpen({ kind: AUTOMATIONS_PAGE.EDIT, automationId: automation.id })
