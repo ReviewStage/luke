@@ -463,8 +463,9 @@ writes the migration that brings the newest snapshot under
 migrator above applies; hand-edit the generated SQL only for what drizzle-kit
 cannot know, such as a backfill. `0095_snapshot.json` is the baseline the loop
 restarted from: `0026`–`0094` were hand-written and carry no snapshot.
-`packages/database/src/schemas/__tests__/migrations.test.ts` fails when a
-module changes without its generated migration, and
+`./scripts/check.sh` fails when a module changes without its generated
+migration, by running `drizzle-kit generate` and refusing any folder it
+writes, and
 `tests/drizzle-schema.test.ts` still compares the barrel against the
 `information_schema` of a database `runWebMigrations` has just built, in both
 directions, which is what catches a generated migration edited into
