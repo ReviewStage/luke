@@ -37,6 +37,14 @@ export function followSettingsLink(link: SettingsLink, targets: SettingsLinkTarg
   return (targets.land ?? landOnSettingsRow)(link.section);
 }
 
+/** The workspace Settings shows, and the door a link's workspace is handed to. */
+export interface SettingsWorkspace {
+  /** The workspace's id: one a link named, else the one the sidebar lists. */
+  readonly shownId: string | undefined;
+  /** Shows the workspace while Settings stays open. */
+  readonly link: (workspaceId: string) => void;
+}
+
 /**
  * The workspace Settings shows: the one a link named, while Settings stays
  * open and the sidebar lists the same one it did when the link was followed,
@@ -50,7 +58,7 @@ export function useSettingsWorkspace(input: {
   workspaces: readonly { readonly id: string }[];
   /** Whether Settings is the tab on screen. */
   settingsShown: boolean;
-}): { shownId: string | undefined; link: (workspaceId: string) => void } {
+}): SettingsWorkspace {
   const [linked, setLinked] = useState<{ workspaceId: string; over: string | undefined }>();
   // A link's workspace gives way once Settings is left or the sidebar lists another.
   if (linked !== undefined && (!input.settingsShown || linked.over !== input.listedId)) {
