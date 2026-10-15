@@ -37,7 +37,7 @@ import { RelativeTime } from "./relative-time";
  */
 
 /** Where a reviewer stands, in the words their face's pill and a comment's line say it. */
-export const REVIEW_WORDS = {
+const REVIEW_WORDS = {
   [REVIEW_STATE.APPROVED]: "Approved",
   [REVIEW_STATE.CHANGES_REQUESTED]: "Changes requested",
   [REVIEW_STATE.DISMISSED]: "Dismissed",
