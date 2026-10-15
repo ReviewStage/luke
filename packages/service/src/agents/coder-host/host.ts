@@ -13,7 +13,7 @@ import { sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
 import { CODING_AGENT_BRIEF, CONTEXT_WINDOW } from "@luke/features/coding-agent-wire";
 import { INBOX_TOOL } from "@luke/features/inbox-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
-import { Effect, Option, type Redacted, Result, type Schema } from "effect";
+import { Effect, Option, Result, type Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionContext } from "eve/context";
@@ -46,6 +46,7 @@ import {
 import { EVE_MOUNT, eveSessionsComposer } from "../brain-host/eve-sessions.js";
 import type { SessionPromptRecord } from "../brain-host/host.js";
 import { type RelayStanding, type RelayStateStore, StreamRelay } from "../brain-host/relay.js";
+import { setGitHubCredentials } from "../github-credentials.js";
 import {
   AGENT_CALLER,
   agentToolRejected,
@@ -221,15 +222,16 @@ export interface CoderHost extends HostAdmission {
     admitted: AdmittedConversation,
     agent: CodingAgent,
   ): Effect.Effect<readonly AgentSkill[], never, CheckoutServices>;
-  /** The agent's repository checked out into the sandbox; answers the write token for the caller to set at the firewall. */
+  /** The agent's repository checked out into the sandbox, with its GitHub credentials set at the sandbox's firewall. */
   checkOut(
     admitted: AdmittedConversation,
     sandbox: RepositorySandbox,
-  ): Effect.Effect<Redacted.Redacted, CheckoutFailure, CheckoutServices>;
-  /** A fresh write token for the agent's repository, for the firewall once the standing one is old. */
-  repositoryToken(
+  ): Effect.Effect<void, CheckoutFailure, CheckoutServices>;
+  /** The agent's GitHub credentials minted afresh and set at the sandbox's firewall, in place of the standing ones once they are old. */
+  renewCredentials(
     admitted: AdmittedConversation,
-  ): Effect.Effect<Redacted.Redacted, CheckoutFailure, CheckoutServices>;
+    sandbox: RepositorySandbox,
+  ): Effect.Effect<void, CheckoutFailure, CheckoutServices>;
   /**
    * The branch checked out in the sandbox as the turn ended, written on the
    * agent's row for its pull request to be read from; null where the
@@ -587,10 +589,14 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         checkOutAgentRepository(admitted.target, agent, sandbox),
       ),
 
-    repositoryToken: (admitted) =>
-      Effect.flatMap(agentOrRefused(admitted), (agent) =>
-        Effect.map(agentRepositoryToken(admitted.target, agent), (minted) => minted.token),
-      ),
+    renewCredentials: (admitted, sandbox) =>
+      Effect.gen(function* () {
+        const agent = yield* agentOrRefused(admitted);
+        const credentials = yield* agentGitHubCredentials(admitted.target, agent);
+        yield* setGitHubCredentials(sandbox, credentials).pipe(
+          Effect.mapError((refused) => new CheckoutRefused({ reason: refused.reason })),
+        );
+      }),
 
     recordBranch: (admitted, sandbox) =>
       Effect.gen(function* () {

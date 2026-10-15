@@ -1130,7 +1130,7 @@ agent or open a terminal in it. The session's instructions say whether the CI re
 (`host.prompt`, through `repositoryCiReadable`): where it was, the agent
 watches its pull request's checks with `gh pr checks` and fixes what fails
 for at most `CODER.CI_FIX_ROUNDS` rounds; where it was not, it says CI was
-not watched. A token lasts an hour, so the store hook renews it at the
+not watched. An App token lasts an hour, so the store hook renews both at the
 firewall on the first step past `CODER.GITHUB_TOKEN_REFRESH`.
 
 The store hook (`apps/dev/hooks/store.ts`) relays every event into the store

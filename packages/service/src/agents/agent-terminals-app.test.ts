@@ -64,7 +64,7 @@ function scriptedSandbox(state: SandboxState) {
         return SANDBOX_STATE.RUNNING;
       }),
     attach: () => Effect.die("the routes attach nothing"),
-    setGitHubToken: () => Effect.die("the routes set no credential"),
+    setGitHubCredentials: () => Effect.die("the routes set no credential"),
   };
   return { layer: Layer.succeed(AgentSandbox, service), service, asked };
 }

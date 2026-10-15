@@ -18,8 +18,9 @@ import {
   type TerminalSummary,
   type TerminalsAnswer,
 } from "@luke/features/terminal-wire";
-import { Context, Effect, Layer, Redacted, Result } from "effect";
+import { Context, Effect, Layer, Result } from "effect";
 import type { HttpClient } from "effect/http";
+import { type AgentGitHubCredentials, githubCredentialPolicy } from "../github-credentials.js";
 import {
   deploymentOidcToken,
   type InteractiveShell,
@@ -71,9 +72,6 @@ type SandboxAttach =
   | { readonly state: typeof SANDBOX_STATE.STOPPED | typeof SANDBOX_STATE.STARTING }
   | { readonly state: typeof SANDBOX_STATE.RUNNING; readonly gone: true };
 
-/** The hosts the GitHub token is set on at the firewall, as eve's own `authenticateGitHub` sets it for the agent. */
-const GITHUB_HOSTS = ["github.com", "api.github.com"] as const;
-
 export interface AgentSandboxService {
   /** The agent's shells and where its sandbox stands; none while it is not running. */
   readonly terminals: (sessionId: string) => Effect.Effect<TerminalsAnswer, SandboxUnavailable>;
@@ -95,13 +93,14 @@ export interface AgentSandboxService {
     terminalId: string,
   ) => Effect.Effect<SandboxAttach, SandboxUnavailable>;
   /**
-   * A fresh GitHub token set at the running sandbox session's firewall, on
-   * the same hosts and in the same shape eve sets the agent's, so the shell
-   * reaches GitHub as the agent does and never holds the token's bytes.
+   * Fresh GitHub credentials set at the running sandbox session's firewall,
+   * in the same policy the agent's checkout sets (`github-credentials.ts`),
+   * so the shell reaches GitHub as the agent does and never holds a token's
+   * bytes.
    */
-  readonly setGitHubToken: (
+  readonly setGitHubCredentials: (
     sandboxSessionId: string,
-    token: Redacted.Redacted,
+    credentials: AgentGitHubCredentials,
   ) => Effect.Effect<void, SandboxUnavailable>;
 }
 
@@ -193,13 +192,8 @@ function agentSandboxOver(api: VercelSandboxApi): AgentSandboxService {
         const shell = yield* api.openInteractive(running);
         return { state: SANDBOX_STATE.RUNNING, sandboxSessionId: running, shell };
       }),
-    setGitHubToken: (sandboxSessionId, token) => {
-      const authorization = `Basic ${Buffer.from(`x-access-token:${Redacted.value(token)}`).toString("base64")}`;
-      const transform = [{ transform: [{ headers: { authorization } }] }];
-      return api.updateNetworkPolicy(sandboxSessionId, {
-        allow: { "*": [], ...Object.fromEntries(GITHUB_HOSTS.map((host) => [host, transform])) },
-      });
-    },
+    setGitHubCredentials: (sandboxSessionId, credentials) =>
+      api.updateNetworkPolicy(sandboxSessionId, githubCredentialPolicy(credentials)),
     resume: (sessionId) =>
       Effect.gen(function* () {
         const { sandbox, state } = yield* standing(sessionId);

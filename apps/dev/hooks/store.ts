@@ -10,9 +10,8 @@ import { EMPTY_RELAY_STATE, type RelayState } from "@luke/service/agents/brain-h
 import type { CheckoutFailure } from "@luke/service/agents/coder-host/host";
 import { opensSandbox } from "@luke/service/agents/coder-host/tool-set";
 import type { RepositorySandbox } from "@luke/service/agents/repository-shell";
-import { Effect, Redacted, Result } from "effect";
+import { Effect, Result } from "effect";
 import { defineState } from "eve/context";
-import { authenticateGitHub } from "eve/extensions/code/sandbox";
 import { defineHook, type HookContext } from "eve/hooks";
 import { host, seams } from "../host.js";
 import { runAgent } from "../runtime.js";
@@ -92,34 +91,32 @@ async function terminalHolds(ctx: HookContext): Promise<boolean> {
   );
 }
 
-/** A fresh token set at the firewall, in place of the aged one; a renewal that fails is logged and the next step tries again. */
+/** Fresh credentials set at the firewall, in place of the aged ones; a renewal that fails is logged and the next step tries again. */
 async function renewCredential(
   ctx: HookContext,
   record: ReturnType<typeof pinnedState<SandboxRecord>>,
   now: number,
 ): Promise<void> {
-  const minted = await runAgent(
+  // The sandbox under its Vercel environment, which is the handle that carries the firewall.
+  const sandbox = await ctx.getSandbox(environment);
+  const renewed = await runAgent(
     Effect.gen(function* () {
       const admitted = yield* host.admit(ctx.session.auth, ctx.session.id);
-      if (Result.isFailure(admitted)) return undefined;
-      return yield* host.repositoryToken(admitted.success);
+      if (Result.isFailure(admitted)) return false;
+      yield* host.renewCredentials(admitted.success, sandbox);
+      return true;
     }).pipe(
       Effect.catch((failure) =>
         Effect.as(
           Effect.logWarning(
             `The repository credential of session ${ctx.session.id} was not renewed: ${describeRefusal(failure)}`,
           ),
-          undefined,
+          false,
         ),
       ),
     ),
   );
-  if (minted === undefined) return;
-  // The sandbox under its Vercel environment, which is the handle that carries the firewall.
-  const sandbox = await ctx.getSandbox(environment);
-  // The token is revealed here alone, into the firewall rules eve sets for github.com.
-  await authenticateGitHub(sandbox, { token: Redacted.value(minted), delivery: "firewall" });
-  record.update((held) => ({ ...held, credentialAt: now }));
+  if (renewed) record.update((held) => ({ ...held, credentialAt: now }));
 }
 
 export default defineHook({
