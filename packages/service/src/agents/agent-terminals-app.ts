@@ -27,6 +27,7 @@ import {
 import { ANY_METHOD, type WebRoutes } from "../route.js";
 import { type AccountResolving, reachedAgent, uuidOf } from "./agent-reach.js";
 import { AgentSandbox, SHELL_REFUSAL, type ShellRefusal } from "./terminal/agent-sandbox.js";
+import type { SandboxUnavailable } from "./vercel-sandbox-api.js";
 
 /**
  * The agent terminals group: a coding agent's shells as its Terminal tab
@@ -98,13 +99,13 @@ const reachedSession = /* @__PURE__ */ Effect.fnUntraced(function* (
   return session?.sessionId;
 });
 
-/** A sandbox Vercel could not be asked about, as the refusal a caller may retry. */
+/** A sandbox Vercel could not be asked about, as the refusal a caller may retry; the log names the status Vercel answered, where it answered one. */
 function sandboxOrUnavailable<A, R>(
-  effect: Effect.Effect<A, { readonly _tag: "SandboxUnavailable" }, R>,
+  effect: Effect.Effect<A, SandboxUnavailable, R>,
 ): Effect.Effect<A, HostedRefusal, R> {
   return Effect.catch(effect, (failure) =>
     Effect.andThen(
-      Effect.logWarning(`a terminal's sandbox call failed: ${failure._tag}`),
+      Effect.logWarning(`a terminal's sandbox call failed: ${failure.message}`),
       Effect.fail(HOSTED_REFUSAL.UNAVAILABLE),
     ),
   );

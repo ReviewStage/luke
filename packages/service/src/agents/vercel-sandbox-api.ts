@@ -38,8 +38,12 @@ const OK_STATUS = { FIRST: 200, LAST: 299 } as const;
 const SANDBOX_API = {
   ORIGIN: "https://vercel.com",
   PATH: "/api/v2/sandboxes",
-  /** A session has one sandbox; the page is wide enough that the first is all of them. */
-  PAGE: 100,
+  /**
+   * A session has one sandbox, so the first page is all of them. Note that
+   * the page is the API's widest, because a list asked for more is refused
+   * whole (`limit`'s maximum in Vercel's REST reference is 50).
+   */
+  PAGE: 50,
 } as const;
 
 /** Vercel could not be asked, or did not confirm what was asked; the status where it answered one. */
