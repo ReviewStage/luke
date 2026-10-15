@@ -147,7 +147,12 @@ export function documentMarkdown(manager: MarkdownManager, doc: PmNode, held: He
     const block = blockMarkdown(manager, node, held);
     // Note that a new block that writes nothing, an empty paragraph or a picture still being kept, writes no blank line either.
     if (held.sources.get(node) === undefined && block.trim() === "") return;
-    out += index === doc.childCount - 1 ? block.trimEnd() + held.ending : block;
+    if (index === doc.childCount - 1) {
+      out += block.trimEnd() + held.ending;
+      return;
+    }
+    // Note that the text's last block kept its source without the blank line after it, which a block laid in after it needs.
+    out += /\n[^\S\n]*\n$/u.test(block) ? block : block.trimEnd() + BLOCK_GAP;
   });
   return out;
 }

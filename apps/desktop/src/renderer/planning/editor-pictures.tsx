@@ -251,10 +251,12 @@ function KeptPicture({
   );
 }
 
-/** What the editor's pictures hand the document: the editor's doors, the pictures drawn into their nodes, and the chooser Insert image opens. */
+/** What the editor's pictures hand the document: the editor's doors, the pictures drawn into their nodes, the chooser Insert image opens, and whether one is still being sent. */
 export interface EditorPictures {
   readonly pictures: PlanEditorPictures | undefined;
   readonly drawn: ReactNode;
+  /** Whether a picture laid in is still on its way to being kept, which the editor stays open for, since only it can lay in the address that comes back. */
+  readonly sending: boolean;
 }
 
 /**
@@ -396,6 +398,7 @@ export function useEditorPictures(
   );
   return {
     pictures: pictures.current,
+    sending: [...uploads.values()].some((upload) => upload.kind === UPLOAD.SENDING),
     drawn: (
       <>
         {portals}

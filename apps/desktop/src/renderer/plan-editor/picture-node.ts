@@ -86,20 +86,16 @@ export function pictureNode(pictures: PlanEditorPictures | undefined) {
         dom.contentEditable = "false";
         let current = held;
         let selected = false;
-        const at = () => {
-          const pos = getPos();
-          return typeof pos === "number" ? pos : undefined;
-        };
         const drawing = pictures.draw(dom, pictureOf(held), {
           describe: (change) => {
-            const pos = at();
+            const pos = getPos();
             if (pos === undefined) return;
             editor.view.dispatch(
               editor.state.tr.setNodeMarkup(pos, undefined, { ...current.attrs, ...change }),
             );
           },
           remove: () => {
-            const pos = at();
+            const pos = getPos();
             if (pos !== undefined) removedAt(editor.view, pos);
           },
         });

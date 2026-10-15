@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import type { Plan } from "@luke/features/plan-wire";
+import { PICTURE_KEEP_FAILURE, type PlanningPictureKeepAnswer } from "@luke/features/planning-view";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -55,6 +56,9 @@ const SECTION_LINKS = {
 
 const roots: Root[] = [];
 
+/** The texts the editor saved, in order. */
+const saved: string[] = [];
+
 /** The keep the host answers next: held until the test lets it go, with what it answers. */
 let keeping: { resolve: (outcome: ActOutcome) => void } | undefined;
 
@@ -79,6 +83,7 @@ beforeEach(() => {
 
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
+  saved.length = 0;
   keeping = undefined;
   document.body.innerHTML = "";
 });
@@ -104,7 +109,10 @@ async function editing(): Promise<HTMLElement> {
     createElement(PlanBody, {
       plan: PLAN,
       live: false,
-      onEdit: () => Promise.reject(new Error("Nothing is saved in this test.")),
+      onEdit: (request) => {
+        saved.push(request.document.value);
+        return Promise.resolve({ saved: true });
+      },
       sectionLinks: SECTION_LINKS,
     }),
   );
@@ -141,9 +149,9 @@ async function keepAsked(): Promise<void> {
   assert.ok(keeping, "a keep is asked");
 }
 
-async function answerKeep(value: unknown): Promise<void> {
+async function answerKeep(value: PlanningPictureKeepAnswer): Promise<void> {
   const held = keeping ?? assert.fail("a keep is asked");
-  act(() => held.resolve({ status: ACT_OUTCOME_STATUS.DONE, value } as ActOutcome));
+  act(() => held.resolve({ status: ACT_OUTCOME_STATUS.DONE, value }));
   await settle();
 }
 
@@ -176,7 +184,7 @@ test("a keep that failed says why with Retry and Remove, and Remove takes the pi
   await pasteScreenshot(container);
   await keepAsked();
 
-  await answerKeep({ failure: "too-many" });
+  await answerKeep({ failure: PICTURE_KEEP_FAILURE.TOO_MANY });
 
   const failed = container.querySelector(".picture-block[data-upload='failed'] .picture-status");
   assert.equal(
@@ -223,4 +231,30 @@ test("Insert image is offered while the plan's text is edited, and lays in the f
 
   assert.equal(chose, true);
   assert.ok(container.querySelector(".picture-block[data-upload='sending']"));
+});
+
+test("Escape while a picture is being kept leaves the editor open until it is, then closes with the picture in the text", async () => {
+  const container = await editing();
+  await pasteScreenshot(container);
+  await keepAsked();
+  const editable = container.querySelector(".ProseMirror") ?? assert.fail("the editor stands");
+
+  act(() => {
+    editable.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+  await settle();
+  assert.ok(container.querySelector(".ProseMirror"), "the editor waits for the picture");
+
+  await answerKeep({ id: KEPT_ID });
+
+  assert.ok(
+    container.querySelector(".ProseMirror") === null,
+    "the editor closed once the picture was kept",
+  );
+  assert.ok(
+    saved
+      .at(-1)
+      ?.includes(`![Screenshot](https://tryluke.dev/acme/plan/${PLAN_ID}/files/${KEPT_ID})`),
+    "the saved text names the kept picture",
+  );
 });

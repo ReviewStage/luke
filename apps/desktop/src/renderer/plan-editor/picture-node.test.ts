@@ -28,11 +28,7 @@ afterEach(() => {
 });
 
 /** The editor on `TEXT`, its caret at the end of the Approach section, with the panel's pictures stood in for. */
-function opened(markdown = TEXT): {
-  handle: PlanEditorHandle;
-  taken: PictureTaken[];
-  host: HTMLElement;
-} {
+function opened(markdown = TEXT) {
   const taken: PictureTaken[] = [];
   const pictures: PlanEditorPictures = {
     draw: () => ({ redraw: () => undefined, undraw: () => undefined }),
@@ -121,4 +117,16 @@ test("a picture of another plan pasted in is kept again on this one, and one of 
   );
   assert.ok(handle.markdown().includes(`![The mock](${KEPT})`));
   assert.equal(handle.markdown().includes(OTHER_PLAN_ID), false);
+});
+
+test("a picture laid in after the text's last block stands apart from it by a blank line", () => {
+  const { handle, taken } = opened("## Approach\n\nThe invite email follows the mock.\n");
+
+  handle.insertPictures([PNG()]);
+  handle.settlePicture(taken[0]?.upload ?? "", KEPT);
+
+  assert.equal(
+    handle.markdown(),
+    `## Approach\n\nThe invite email follows the mock.\n\n![members](${KEPT})\n`,
+  );
 });

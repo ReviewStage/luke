@@ -577,6 +577,18 @@ export function PlanDocumentEditor({
   const chips = useEditorDrawings<MentionNode>();
   const diagrams = useEditorDrawings<EditorDiagram>();
   const pictures = useEditorPictures(plan.id, mentions?.place.workspace, handle);
+  // Note that a finish or a leaving waits for a picture still being kept, since only the open editor can lay in its address; it goes once none is.
+  const held = useRef<(() => void) | undefined>(undefined);
+  const once = (close: () => void) => {
+    if (pictures.sending) held.current = close;
+    else close();
+  };
+  useEffect(() => {
+    const close = held.current;
+    if (pictures.sending || close === undefined) return;
+    held.current = undefined;
+    close();
+  });
   // Note that the editor's own text is read, since the draft is handed over only once typing pauses.
   const text = () => handle.current?.markdown() ?? editor.draft;
   const picker = useMentionPicker({
@@ -610,7 +622,7 @@ export function PlanDocumentEditor({
     label: "Plan",
     className: "markdown plan-unit",
     onDraft: doors.onDraft,
-    onFinish: doors.onFinish,
+    onFinish: (section) => once(() => doors.onFinish(section)),
     onLeaveUp: doors.onLeaveUp,
     mentions:
       mentions === undefined
@@ -634,7 +646,7 @@ export function PlanDocumentEditor({
       className="plan-document-editor ph-no-capture"
       aria-label="Editing the plan"
       onBlur={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget)) doors.onLeave();
+        if (!event.currentTarget.contains(event.relatedTarget)) once(doors.onLeave);
       }}
     >
       <MountedPlanEditor module={module.value} props={props} handle={handle} />
