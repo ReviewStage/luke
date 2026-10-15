@@ -288,10 +288,8 @@ sent as a header or the OPTIONS allowlist, and names which it relies on.
 It runs by hand, against an address or a commit's preview found through its
 GitHub deployment record (`server/preview-deployment.ts`); CI does not run
 it, since a PR's preview could take twenty minutes to appear or never come. The
-table is its own file so a `vercel.ts` can one day import it and `vercel.json`
-be deleted (LUKE-183); Vercel evaluates a config module in plain Node and
-bundles only its relative imports, which takes a JSON table and not this
-generator's dependencies. `server/feedback.mjs` is the one
+table is its own file, and the root `vercel.json` is assembled from it
+(LUKE-183). `server/feedback.mjs` is the one
 hand-written function, emitted into the tree at `api/feedback.mjs` as it
 stands.
 
@@ -352,10 +350,12 @@ commit with no migration and no dashboard state, and the deploy shape returns
 to Vercel's own pass.
 
 The Vercel project is three services in one deployment, declared under `services`
-in `vercel.json`, which Vercel reads only while the project's Framework Preset
-is Services. `web` is this app at its root and carries the migrate-and-seed
+in the repository root's `vercel.json`, which Vercel reads at the project's
+Root Directory (the repository root, so each service's `root` is relative to
+it) and only while the project's Framework Preset is Services. `web` is this
+app, rooted at `apps/web`, and carries the migrate-and-seed
 build, the install filter, the ignore rule, and the `routes` above unchanged.
-`eve` is the hosted brain: its root is `eve/`, the flat eve app root described
+`eve` is the hosted brain: its root is `apps/web/eve/`, the flat eve app root described
 below, whose own `package.json` declares `eve`, so the service's install pulls
 `@luke/eve` beside this app and its build is a plain `pnpm exec eve build` run
 in that root. eve resolves that directory as its app root and writes its Build
@@ -363,7 +363,7 @@ Output there, which is where static-build reads a service's output, so nothing
 relocates it and no variable of eve's own is set by hand. The block is one
 isolated declaration with no shared keys, so replacing it with a generated
 service later is removing a block rather than untangling one (LUKE-183).
-`coder` is the coding-agent service, a second eve app root at `coder/` built
+`coder` is the coding-agent service, a second eve app root at `apps/web/coder/` built
 and deployed on the same terms ("The coding-agent service" below).
 Public routing is the top-level `rewrites`:
 `/eve/coder/v1/*` enters the coder service, `/eve/v1/*` the eve service, and
@@ -376,7 +376,10 @@ file generated into the old location would pass every check and 404 every
 `/api/` route in production. The project's
 environment variables reach all three services alike, and each service's own
 `ignoreCommand` is what skips its build, so a commit that changes nothing under
-`apps/web`, `packages`, or the workspace manifests deploys none of them.
+`apps/web`, `packages`, the workspace manifests, or `vercel.json` deploys none
+of them. A Vercel `vercel.ts` is not used: Vercel's Git builds refuse a
+`{ service }` destination in a `vercel.ts` (`rewrites[0].destination should be
+string`, #2838) although `vercel.json` takes the same rewrites.
 
 ## The data layer
 

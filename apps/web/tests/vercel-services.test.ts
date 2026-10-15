@@ -43,7 +43,7 @@ interface Services {
 
 // SAFETY: the file is this repository's own vercel.json, read for its deployment shape.
 const vercel = JSON.parse(
-  readFileSync(fileURLToPath(new URL("../vercel.json", import.meta.url)), "utf8"),
+  readFileSync(fileURLToPath(new URL("../../../vercel.json", import.meta.url)), "utf8"),
 ) as { services: Services; rewrites: readonly Rewrite[] };
 
 const WEB = fileURLToPath(new URL("..", import.meta.url));
