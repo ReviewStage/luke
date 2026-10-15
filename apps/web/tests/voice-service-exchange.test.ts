@@ -31,13 +31,13 @@ import {
   type EveMessage,
   type EveSessions,
 } from "@luke/service/agents/brain-host/eve-sessions";
+import { memoryRelayState, StreamRelay } from "@luke/service/agents/brain-host/relay";
 import { HOSTED_API_ERROR, MESSAGE_ROLE } from "@luke/service/core";
 import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import { isRecord, unparsedWire, type WireRecord } from "@luke/wire";
 import { Effect, Exit, Option, Redacted, Schema, Scope } from "effect";
 import { afterAll } from "vitest";
 import { PLANNING_EXPLORE_ASK } from "../server/hosted/brain-host/planning";
-import { memoryRelayState, StreamRelay } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { deploymentExchange } from "../server/voice/deployment-exchange";
 import type { AttachedSession } from "../server/voice/live-exchange";

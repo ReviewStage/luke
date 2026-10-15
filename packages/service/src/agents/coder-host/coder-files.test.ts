@@ -8,8 +8,8 @@ import { text } from "node:stream/consumers";
 import type { SandboxCommandResult, SandboxRunOptions } from "eve/sandbox";
 import type { ToolContext as EveToolContext } from "eve/tools";
 import { test } from "vitest";
-import { readFileIn } from "../server/hosted/coder-host/files";
-import { linuxShellPath } from "./support/linux-shell-tools";
+import { linuxShellPath } from "../../testing/linux-shell-tools.js";
+import { readFileIn } from "./files.js";
 
 /**
  * The coding agent's file tools resolve every path from the checkout: a

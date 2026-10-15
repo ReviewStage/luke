@@ -1,9 +1,9 @@
+import { edgeKit } from "@luke/service/agents/agent-runtime/edge";
 import { AGENT_ROLE } from "@luke/service/agents/agent-runtime/role";
+import type { AgentSkill } from "@luke/service/agents/agent-runtime/skills";
 import { hostedEnvironment } from "@luke/service/environment";
 import { Effect } from "effect";
 import type { SessionAuth } from "eve/context";
-import { edgeKit } from "../server/hosted/agent-runtime/edge.js";
-import type { AgentSkill } from "../server/hosted/agent-runtime/skills.js";
 import { type BrainHost, brainHost } from "../server/hosted/brain-host/host.js";
 import {
   type BrainHostSeams,
@@ -31,7 +31,7 @@ export const host: BrainHost = brainHost(seams);
 
 /**
  * The doors this project's authored files open onto the agent runtime
- * (`server/hosted/agent-runtime/edge.ts`), run here on the edge's runner.
+ * (`packages/service/src/agents/agent-runtime/edge.ts`), run here on the edge's runner.
  * Each task a subagent receives wakes its title on a fiber of its own once
  * relayed, so its turn is not held for it; the title always names the
  * first task the subagent received, and only the first title that lands

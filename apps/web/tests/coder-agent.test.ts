@@ -8,15 +8,15 @@ import {
   BRAIN_HOST_REFUSAL,
   BRAIN_HOST_TURN,
 } from "@luke/service/agents/brain-host/bounds";
+import { BRAIN_HOST_TURN_POLICY } from "@luke/service/agents/brain-host/channel";
+import { CODER_TOOL } from "@luke/service/agents/coder-host/tool-set";
 import { Redacted } from "effect";
 import { routeAuth } from "eve/channels/auth";
 import type { SessionAuthContext } from "eve/context";
 import { test } from "vitest";
-import { BRAIN_HOST_TURN_POLICY } from "../server/hosted/brain-host/channel";
 import { CODER_DEPLOYMENT_TURNS, coderChannelInput } from "../server/hosted/coder-host/channel";
 import { INBOX_TOOLS } from "../server/hosted/coder-host/inbox";
 import { coderInstructions } from "../server/hosted/coder-host/instructions";
-import { CODER_TOOL } from "../server/hosted/coder-host/tool-set";
 
 const SECRET = "cron-secret-1";
 const ACCOUNT = "user-a";

@@ -1,6 +1,6 @@
 import { AGENT_ROLE } from "@luke/service/agents/agent-runtime/role";
+import { environment, openSandbox } from "@luke/service/agents/agent-runtime/sandbox";
 import { defineSandbox } from "eve/sandbox";
-import { environment, openSandbox } from "../server/hosted/agent-runtime/sandbox.js";
 
 /**
  * sandbox.ts -- the planning session's sandbox: one Vercel Sandbox per eve session, where `run_in_repository` checks the plan's repository out and runs its commands.
@@ -19,7 +19,7 @@ import { environment, openSandbox } from "../server/hosted/agent-runtime/sandbox
  *
  * The image and how the sandbox opens and lives are the planner's policy
  * over the one environment both roots share
- * (`server/hosted/agent-runtime/sandbox.ts`).
+ * (`packages/service/src/agents/agent-runtime/sandbox.ts`).
  */
 export { environment };
 

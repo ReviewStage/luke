@@ -11,11 +11,15 @@ import {
   lukeAccount,
 } from "@luke/service/agents/brain-host/auth";
 import { BRAIN_HOST_TURN } from "@luke/service/agents/brain-host/bounds";
+import { BRAIN_HOST_TURN_POLICY } from "@luke/service/agents/brain-host/channel";
+import {
+  messageAuth,
+  ownedAuth,
+  type SessionOwnership,
+} from "@luke/service/agents/brain-host/door";
 import type { TurnPolicy } from "eve/channels";
 import { localDev } from "eve/channels/auth";
 import type { EveChannelInput } from "eve/channels/eve";
-import { BRAIN_HOST_TURN_POLICY } from "../brain-host/channel.js";
-import { messageAuth, ownedAuth, type SessionOwnership } from "../brain-host/door.js";
 
 /**
  * channel.ts -- how the coding-agent service's eve channel is configured.

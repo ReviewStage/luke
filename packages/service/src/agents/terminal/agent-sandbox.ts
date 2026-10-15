@@ -18,6 +18,8 @@ import {
   type TerminalSummary,
   type TerminalsAnswer,
 } from "@luke/features/terminal-wire";
+import { Context, Effect, Layer, Redacted, Result } from "effect";
+import type { HttpClient } from "effect/http";
 import {
   deploymentOidcToken,
   type InteractiveShell,
@@ -25,9 +27,7 @@ import {
   SandboxUnavailable,
   type VercelSandboxApi,
   vercelSandboxApi,
-} from "@luke/service/agents/vercel-sandbox-api";
-import { Context, Effect, Layer, Redacted, Result } from "effect";
-import type { HttpClient } from "effect/http";
+} from "../vercel-sandbox-api.js";
 import {
   holdsTerminal,
   killTerminal,

@@ -1,4 +1,16 @@
 import type { StoredAgentStep } from "@luke/database/schemas/coding-agent";
+import { CODER } from "@luke/service/agents/coder-host/bounds";
+import {
+  applyPatchIn,
+  globIn,
+  grepIn,
+  readFileIn,
+  writeFileIn,
+} from "@luke/service/agents/coder-host/files";
+import { EDIT_PLAN_TOOL } from "@luke/service/agents/coder-host/plan-edit";
+import { bashStartingIn } from "@luke/service/agents/coder-host/shell";
+import { TODOS_TOOL } from "@luke/service/agents/coder-host/todos";
+import { CODER_TOOL } from "@luke/service/agents/coder-host/tool-set";
 import { RUN_ON_MAC_TOOL } from "@luke/service/agents/mac-command";
 import { READ_WEB_PAGE_TOOL, SEARCH_WEB_TOOL } from "@luke/service/agents/public-research";
 import { SHOW_PAGE_TOOL } from "@luke/service/plans/page-tool";
@@ -6,14 +18,8 @@ import { emitJsonSchema } from "@luke/wire/effect";
 import type { MessageStreamEvent } from "eve/client";
 import { serializeModelInputSchema, type ToolDefinition } from "eve/tools";
 import loadSkill from "eve/tools/load_skill";
-import { CODER } from "./bounds.js";
 import { DELEGATE_TOOL } from "./delegation.js";
-import { applyPatchIn, globIn, grepIn, readFileIn, writeFileIn } from "./files.js";
 import { INBOX_TOOLS } from "./inbox.js";
-import { EDIT_PLAN_TOOL } from "./plan-edit.js";
-import { bashStartingIn } from "./shell.js";
-import { TODOS_TOOL } from "./todos.js";
-import { CODER_TOOL } from "./tool-set.js";
 
 /**
  * context-estimate.ts -- what a coding agent's newest step read: the counts its provider gave, and estimates of the parts no provider counts apart.

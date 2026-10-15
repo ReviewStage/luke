@@ -1,5 +1,5 @@
+import { CODER_REFUSAL } from "@luke/service/agents/coder-host/bounds";
 import { defineAgent, defineDynamic } from "eve";
-import { CODER_REFUSAL } from "../../../server/hosted/coder-host/bounds.js";
 import { readStepStarted, selectDelegatedModel, stepTurnId } from "../../host.js";
 import { delegationRecord } from "../../session-prompt.js";
 

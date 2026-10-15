@@ -591,7 +591,7 @@ never guessed into another; a note that does not read under the schema is
 passed over alone. The rest save.
 
 A coding agent takes the same notes through its `edit_plan` tool
-(`apps/web/server/hosted/coder-host/plan-edit.ts`). Its save is written into
+(`packages/service/src/agents/coder-host/plan-edit.ts`). Its save is written into
 the plan's journal (`plan.agent_edits`, the last fifty) as the agent's id,
 the instant, and the notes as taken; the agent is named at read time from its
 row, so the window's "Edited by" line over the document and the "recent

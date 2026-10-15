@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type { AccountInboxAnswer } from "@luke/features/account-inbox-wire";
 import type { InboxAnswer } from "@luke/features/inbox-wire";
+import { CODER } from "@luke/service/agents/coder-host/bounds";
 import {
   accountInboxAutomations,
   accountInboxPlans,
@@ -13,7 +14,6 @@ import {
   planInboxStamps,
 } from "@luke/service/inbox/inbox-store";
 import { Clock, type Duration, Effect, Schedule } from "effect";
-import { CODER } from "./bounds.js";
 
 /**
  * inbox-page.ts -- a plan's inbox as the desktop reads it, and what waits across the account: each held open while nothing changed since the reader's cursor.

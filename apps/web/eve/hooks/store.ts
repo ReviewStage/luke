@@ -1,8 +1,8 @@
 import { pinnedState } from "@luke/service/agents/brain-host/pinned-state";
+import { EMPTY_RELAY_STATE, type RelayState } from "@luke/service/agents/brain-host/relay";
 import { Effect, Result } from "effect";
 import { defineState } from "eve/context";
 import { defineHook } from "eve/hooks";
-import { EMPTY_RELAY_STATE, type RelayState } from "../../server/hosted/brain-host/relay.js";
 import { runWeb } from "../../server/runtime.js";
 import { host } from "../host.js";
 import { sessionPrompt } from "../session-prompt.js";

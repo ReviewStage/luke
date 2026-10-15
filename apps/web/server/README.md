@@ -810,7 +810,7 @@ where it can be, and answered as a conflict with the text as it stands, with
 nothing saved, where it cannot (`packages/features/src/plan-edit.ts`); a
 restore above is the second. A planning call's notetaker
 (`server/voice/plan-scribe.ts`) and a coding agent's `edit_plan`
-(`server/hosted/coder-host/plan-edit.ts`) answer with notes
+(`packages/service/src/agents/coder-host/plan-edit.ts`) answer with notes
 (`packages/features/src/plan-template.ts`): a point added under a heading, a
 phrase corrected, or a line struck. `saveNotes` takes them in order over the
 text as it stands, passing over a note that names a phrase the plan does not
@@ -866,7 +866,7 @@ every module may import it. eve's own injected tools (`task_wait`,
 listed.
 
 The planning session is offered the skills the plan's repository keeps
-(`eve/skills/repository.ts`, `server/hosted/agent-runtime/skills.ts`), read
+(`eve/skills/repository.ts`, `packages/service/src/agents/agent-runtime/skills.ts`), read
 from GitHub on a read token for that repository as the session starts, which
 is the call's warm-up ask, and loaded with eve's own `load_skill`; each body
 says where the skill stands in the repository, so its files are read with
@@ -1380,7 +1380,7 @@ under the deployment's `CRON_SECRET` as its bearer with the account in
 `x-luke-account`, and the eve door's first authenticator admits that pair as
 a principal of the deployment's own type — the deployment's one id, the
 account as its attribute — for a message naming a kind of turn its table,
-`DEPLOYMENT_TURNS` in `server/hosted/brain-host/channel.ts`, admits (a spoken
+`DEPLOYMENT_TURNS` in `packages/service/src/agents/brain-host/channel.ts`, admits (a spoken
 turn) and for a cancel of a turn in a session, which is how the stop key's
 `stopAsk` and the hook's carried Stop reach eve, and nothing else: any other
 route or kind of turn carrying the secret is refused outright rather than

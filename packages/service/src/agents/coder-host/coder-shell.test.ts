@@ -9,7 +9,7 @@ import type { ReadableStream } from "node:stream/web";
 import type { SandboxSpawnOptions } from "eve/sandbox";
 import type { ToolContext as EveToolContext } from "eve/tools";
 import { test } from "vitest";
-import { bashStartingIn } from "../server/hosted/coder-host/shell";
+import { bashStartingIn } from "./shell.js";
 
 /**
  * The coding agent's shell: every command starts in the checkout, in a

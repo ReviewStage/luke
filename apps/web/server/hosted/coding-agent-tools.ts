@@ -20,6 +20,11 @@ import { type ModelChoice, modelChoiceSchema } from "@luke/features/models-wire"
 import { AGENT_TOOL } from "@luke/service/agents/agent-runtime/tools";
 import type { EveSessions } from "@luke/service/agents/brain-host/eve-sessions";
 import {
+  CODER_TOOL,
+  CODER_TOOL_SET,
+  RETIRED_CODER_TOOL,
+} from "@luke/service/agents/coder-host/tool-set";
+import {
   ACTION_RESULT_STATUS,
   HOSTED_API_ERROR,
   isRecord,
@@ -49,7 +54,6 @@ import { agentPublished } from "./coder-host/published.js";
 import { startCodingAgent } from "./coder-host/start.js";
 import { codingAgentFailureOf, codingAgentStatusOf } from "./coder-host/status.js";
 import { steerCodingAgent } from "./coder-host/steer.js";
-import { CODER_TOOL, CODER_TOOL_SET, RETIRED_CODER_TOOL } from "./coder-host/tool-set.js";
 
 /**
  * coding-agent-tools.ts -- the planning model's four tools about the plan's coding agents: list them, read one's recent progress, message one, start one.

@@ -1,19 +1,19 @@
 import { AGENT_ROLE } from "@luke/service/agents/agent-runtime/role";
-import { pinnedState } from "@luke/service/agents/brain-host/pinned-state";
-import type { RepositorySandbox } from "@luke/service/agents/repository-shell";
-import { Effect, Redacted, Result } from "effect";
-import { defineState } from "eve/context";
-import { authenticateGitHub } from "eve/extensions/code/sandbox";
-import { defineHook, type HookContext } from "eve/hooks";
 import {
   endsTurn,
   renewsCredential,
   type SandboxRecord,
   stopsAtTurnEnd,
-} from "../../server/hosted/agent-runtime/sandbox.js";
-import { EMPTY_RELAY_STATE, type RelayState } from "../../server/hosted/brain-host/relay.js";
+} from "@luke/service/agents/agent-runtime/sandbox";
+import { pinnedState } from "@luke/service/agents/brain-host/pinned-state";
+import { EMPTY_RELAY_STATE, type RelayState } from "@luke/service/agents/brain-host/relay";
+import { opensSandbox } from "@luke/service/agents/coder-host/tool-set";
+import type { RepositorySandbox } from "@luke/service/agents/repository-shell";
+import { Effect, Redacted, Result } from "effect";
+import { defineState } from "eve/context";
+import { authenticateGitHub } from "eve/extensions/code/sandbox";
+import { defineHook, type HookContext } from "eve/hooks";
 import type { CheckoutFailure } from "../../server/hosted/coder-host/host.js";
-import { opensSandbox } from "../../server/hosted/coder-host/tool-set.js";
 import { runWeb } from "../../server/runtime.js";
 import { host, seams } from "../host.js";
 import { environment } from "../sandbox.js";
@@ -24,7 +24,7 @@ import { sandboxRecord, sessionPrompt } from "../session-prompt.js";
  * session's sandbox needs of the stream: every event eve records for a
  * session is read here, after eve has written it, and told to the writer as
  * the agent's own event through the relay the planning brain shares
- * (`server/hosted/brain-host/relay.ts`). A session the host does not admit
+ * (`packages/service/src/agents/brain-host/relay.ts`). A session the host does not admit
  * writes nothing. Beside the relay, the hook watches the sandbox: a call of
  * a sandbox tool, or a message received with files eve staged there, is
  * when the sandbox opened and its checkout set the repository credential
@@ -36,7 +36,7 @@ import { sandboxRecord, sessionPrompt } from "../session-prompt.js";
  * developer's terminal holds it, when the scheduled sweep stops it once the
  * terminal's lease lapses (`sandbox-terminal-lease.ts`). Whether a
  * step renews the credential and whether a turn's end stops the sandbox are
- * the coding agent's sandbox policy (`server/hosted/agent-runtime/sandbox.ts`),
+ * the coding agent's sandbox policy (`packages/service/src/agents/agent-runtime/sandbox.ts`),
  * not this hook's. Note that the branch is written before the end is
  * relayed, because a tab reads the pull request the moment it hears the
  * agent ended and the service keeps that answer a while: an end relayed

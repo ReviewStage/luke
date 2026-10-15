@@ -558,7 +558,7 @@ The rewrite moves a provider's path segment into the `provider` query
 (`apps/web/server/function-rewrites.ts`), as a plan's id is moved into `id`.
 
 **The agents** (`src/integrations/integration-connection.ts`,
-`apps/web/server/hosted/agent-runtime/connections.ts`). eve hands a declared subagent
+`src/agents/agent-runtime/connections.ts`). eve hands a declared subagent
 none of its parent's connections, so each of the four agents registers one
 `connections/integrations.ts`: a dynamic connection resolved as each turn
 starts, which hands the turn every server its role's policy has on

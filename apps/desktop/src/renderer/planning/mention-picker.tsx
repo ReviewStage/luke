@@ -42,7 +42,7 @@ import { FileTypeIcon } from "./file-type-icon";
  * while the list stands open through the same read the agent's servers
  * popover draws its tools from (`../integration-tools.ts`); a mention of one
  * hands the agent's next turn that server whatever its switch says
- * (`apps/web/server/hosted/agent-runtime/servers.ts`).
+ * (`packages/service/src/agents/agent-runtime/servers.ts`).
  *
  * A pick hands the editor the mention's name and its target
  * (`@luke/features/mention-link`), which the editor writes in place of

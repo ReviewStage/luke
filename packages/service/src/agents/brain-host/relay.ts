@@ -7,14 +7,8 @@ import {
   receivedMessageId,
 } from "@luke/database/models/ids";
 import type { ConversationTarget, StoreWriter } from "@luke/database/models/writer";
-import { type ReceivedMessage, receivedMessage } from "@luke/service/agents/attached-files";
-import {
-  BRAIN_HOST_TURN,
-  BRAIN_HOST_TURN_KIND,
-  RECEIVED_LINE,
-  RELAY_TURN,
-  type RelayTurn,
-} from "@luke/service/agents/brain-host/bounds";
+import { Effect, Option, Result, Schema } from "effect";
+import type { MessageStreamEvent } from "eve/client";
 import {
   ACTION_RESULT_STATUS,
   AssistantMessageBuilder,
@@ -42,15 +36,21 @@ import {
   unparsedWire,
   userMessage,
   userMetadataOf,
-} from "@luke/service/core";
+} from "../../core.js";
 import {
   CONNECTION_TOOL,
   isRemoteToolName,
   storedRemoteCall,
-} from "@luke/service/integrations/connection-tools";
-import { LOOK_AT_BOARD_TOOL, storedLookOutput } from "@luke/service/plans/board-look";
-import { Effect, Option, Result, Schema } from "effect";
-import type { MessageStreamEvent } from "eve/client";
+} from "../../integrations/connection-tools.js";
+import { LOOK_AT_BOARD_TOOL, storedLookOutput } from "../../plans/board-look.js";
+import { type ReceivedMessage, receivedMessage } from "../attached-files.js";
+import {
+  BRAIN_HOST_TURN,
+  BRAIN_HOST_TURN_KIND,
+  RECEIVED_LINE,
+  RELAY_TURN,
+  type RelayTurn,
+} from "./bounds.js";
 
 /**
  * The relay from eve's stream into the brain's own, which both eve services

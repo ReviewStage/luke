@@ -9,10 +9,10 @@ import {
   type CodingAgentStatus,
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
+import { CODER, CODER_REFUSAL } from "@luke/service/agents/coder-host/bounds";
 import { REPOSITORY_REFUSAL } from "@luke/service/agents/repository-shell";
 import { BRAIN_REQUEST_FAILURE, TURN_STATUS } from "@luke/service/core";
 import { Duration } from "effect";
-import { CODER, CODER_REFUSAL } from "./bounds.js";
 
 /**
  * status.ts -- where a coding agent stands, read from its newest turn.

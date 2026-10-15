@@ -1,6 +1,11 @@
 import { hostTurnId } from "@luke/database/models/ids";
 import type { ModelChoice } from "@luke/features/models-wire";
+import { edgeKit } from "@luke/service/agents/agent-runtime/edge";
 import { AGENT_ROLE } from "@luke/service/agents/agent-runtime/role";
+import type { AgentSkill } from "@luke/service/agents/agent-runtime/skills";
+import type { InboxSandboxDoor } from "@luke/service/agents/coder-host/inbox-image";
+import { type PlanEditResult, planEditRejected } from "@luke/service/agents/coder-host/plan-edit";
+import type { CODER_TOOL } from "@luke/service/agents/coder-host/tool-set";
 import {
   MAC_COMMAND_STATUS,
   type MacCommandAnswer,
@@ -20,19 +25,14 @@ import { emitJsonSchema } from "@luke/wire/effect";
 import { Effect, Result, Schema } from "effect";
 import type { SessionAuth } from "eve/context";
 import { defineTool } from "eve/tools";
-import { edgeKit } from "../server/hosted/agent-runtime/edge.js";
-import type { AgentSkill } from "../server/hosted/agent-runtime/skills.js";
 import type { DelegationAsk } from "../server/hosted/coder-host/delegation.js";
 import { type CoderHost, coderHost, type InboxCall } from "../server/hosted/coder-host/host.js";
 import { type InboxToolResult, inboxRejected } from "../server/hosted/coder-host/inbox.js";
-import type { InboxSandboxDoor } from "../server/hosted/coder-host/inbox-image.js";
 import type { CoderModelSelection } from "../server/hosted/coder-host/model.js";
-import { type PlanEditResult, planEditRejected } from "../server/hosted/coder-host/plan-edit.js";
 import {
   type CoderHostSeams,
   productionCoderHostSeams,
 } from "../server/hosted/coder-host/production.js";
-import type { CODER_TOOL } from "../server/hosted/coder-host/tool-set.js";
 import { runWeb } from "../server/runtime.js";
 import { scriptedModel } from "./scripted-model.js";
 
@@ -73,7 +73,7 @@ export function stepTurnId(sessionId: string, started: typeof StepStartedSchema.
 
 /**
  * The doors this project's authored files open onto the agent runtime
- * (`server/hosted/agent-runtime/edge.ts`), run here on the edge's runner. A
+ * (`packages/service/src/agents/agent-runtime/edge.ts`), run here on the edge's runner. A
  * session is offered skills only once its conversation is read as an
  * agent's, whose repository they are read from.
  */
@@ -230,7 +230,7 @@ export function sessionSkills(
 /**
  * Every integration one of this project's agents is handed, for that
  * agent's own `connections/integrations.ts`: a turn is handed only the
- * servers the agent has switched on (`server/hosted/agent-runtime/servers.ts`).
+ * servers the agent has switched on (`packages/service/src/agents/agent-runtime/servers.ts`).
  */
 export function integrationConnectionsFor(
   role: typeof AGENT_ROLE.CODER | typeof AGENT_ROLE.CODER_WORKER,

@@ -33,12 +33,12 @@ import {
 import { CODING_AGENT_STATUS, type CodingAgentStatus } from "@luke/features/coding-agent-wire";
 import { failureKind } from "@luke/runtime/effect";
 import type { EveSessions } from "@luke/service/agents/brain-host/eve-sessions";
+import { CODER } from "@luke/service/agents/coder-host/bounds";
 import { HOSTED_API_ERROR } from "@luke/service/http/http";
 import type { HostedRefusal } from "@luke/service/http/http-effect";
 import type { ModelChoiceRefused } from "@luke/service/providers/model-catalog";
 import { Clock, Duration, Effect, Option, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
-import { CODER } from "./coder-host/bounds.js";
 import { type StartServices, startCodingAgent } from "./coder-host/start.js";
 import { codingAgentStatusOf } from "./coder-host/status.js";
 

@@ -8,12 +8,12 @@ import {
   PROVIDER_KEY_PROVIDER,
   type ProviderKeyProvider,
 } from "@luke/features/provider-key-wire";
+import { CODER_REFUSAL } from "@luke/service/agents/coder-host/bounds";
 import { jsonResponse } from "@luke/wire/testing";
 import { generateText } from "ai";
 import { Redacted, Result } from "effect";
 import { afterAll, test } from "vitest";
 import { accountProviderKeys } from "../server/hosted/coder-host/account-keys";
-import { CODER_REFUSAL } from "../server/hosted/coder-host/bounds";
 import { coderModel, type LukeKeys } from "../server/hosted/coder-host/model";
 
 /**

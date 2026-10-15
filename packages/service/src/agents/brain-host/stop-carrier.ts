@@ -4,12 +4,8 @@
 
 import type { DatabaseServices, QueryError } from "@luke/database/core/query";
 import type { ConversationTarget, StoreWriter } from "@luke/database/models/writer";
-import {
-  describeUnreachable,
-  EVE_CANCEL_OUTCOME,
-  type EveSessions,
-} from "@luke/service/agents/brain-host/eve-sessions";
 import { Effect, type Schema } from "effect";
+import { describeUnreachable, EVE_CANCEL_OUTCOME, type EveSessions } from "./eve-sessions.js";
 
 /** What carrying a waiting ask's Stop at its turn's start needs: eve as the carrier reaches it, the writer's stamp, the clock, and where a refusal is said. */
 export interface StopCarrierSeams {

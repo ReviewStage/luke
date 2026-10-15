@@ -1,11 +1,7 @@
 import assert from "node:assert/strict";
-import { DEPLOYMENT_PRESENCE } from "@luke/service/agents/brain-host/auth";
 import { test } from "vitest";
-import {
-  BRAIN_HOST_TURN_POLICY,
-  brainHostChannelInput,
-  DEPLOYMENT_TURNS,
-} from "../server/hosted/brain-host/channel";
+import { DEPLOYMENT_PRESENCE } from "./auth.js";
+import { BRAIN_HOST_TURN_POLICY, brainHostChannelInput, DEPLOYMENT_TURNS } from "./channel.js";
 
 test("a follow-up steers the turn under way rather than queueing behind it, and the account bearer is checked before the development principal", () => {
   const channel = brainHostChannelInput(

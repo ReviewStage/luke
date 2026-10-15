@@ -1,5 +1,5 @@
+import { offeredSkills } from "@luke/service/agents/agent-runtime/skills";
 import { defineDynamic } from "eve/skills";
-import { offeredSkills } from "../../server/hosted/agent-runtime/skills.js";
 import { seams, sessionSkills } from "../host.js";
 import { SCRIPTED_SKILLS } from "../scripted-model.js";
 

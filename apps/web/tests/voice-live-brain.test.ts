@@ -20,7 +20,9 @@ import {
   RELAY_TURN,
 } from "@luke/service/agents/brain-host/bounds";
 import { askStanding } from "@luke/service/agents/brain-host/brain-ask";
+import { DEPLOYMENT_TURNS } from "@luke/service/agents/brain-host/channel";
 import { openChildConversation } from "@luke/service/agents/brain-host/conversation";
+import { ownedAuth } from "@luke/service/agents/brain-host/door";
 import {
   EVE_CANCEL_OUTCOME,
   EVE_SEND_OUTCOME,
@@ -29,11 +31,17 @@ import {
   eveSessions,
 } from "@luke/service/agents/brain-host/eve-sessions";
 import {
+  memoryRelayState,
+  type RelayStanding,
+  StreamRelay,
+} from "@luke/service/agents/brain-host/relay";
+import {
   SEARCH_WEB_REFUSAL,
   SEARCH_WEB_STATUS,
   SEARCH_WEB_TOOL,
 } from "@luke/service/agents/public-research";
 import { ASK_ORIGIN, TURN_SLOW_STEP } from "@luke/service/core";
+import { stampedEveEvent } from "@luke/service/testing/eve-events";
 import {
   LIVE_BRAIN_CANCEL,
   LIVE_BRAIN_RUN_END,
@@ -48,21 +56,13 @@ import { Duration, Effect, Exit, Option, Redacted, Scope } from "effect";
 import { type AuthFn, ForbiddenError } from "eve/channels/auth";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll } from "vitest";
-import { DEPLOYMENT_TURNS } from "../server/hosted/brain-host/channel";
-import { ownedAuth } from "../server/hosted/brain-host/door";
 import { PLANNER_DELEGATE_TOOL } from "../server/hosted/brain-host/planning";
-import {
-  memoryRelayState,
-  type RelayStanding,
-  StreamRelay,
-} from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import {
   type HostedLiveBrain,
   type HostedLiveBrainOptions,
   hostedLiveBrain,
 } from "../server/voice/live-brain";
-import { stampedEveEvent } from "./support/eve-events";
 import { FIRST_EVE_TURN, spokenTurn } from "./support/eve-turns";
 
 /**

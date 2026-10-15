@@ -1,6 +1,6 @@
+import { agentSandboxLayer } from "@luke/service/agents/terminal/agent-sandbox";
 import { resolveHostedUserId } from "@luke/service/auth/bearer";
 import { agentTerminalsApp } from "../../agent-terminals-app.js";
-import { agentSandboxLayer } from "../../hosted/terminal/agent-sandbox.js";
 import { routeFromHttpRouter } from "../../route-effect.js";
 
 /** Lists a coding agent's shells (GET) or starts one (POST). The logic lives in `server/agent-terminals-app.ts`; this file only hands it the deployment's real seams. */

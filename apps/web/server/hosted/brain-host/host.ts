@@ -7,6 +7,12 @@ import { listMessagesPast, type MessageCursor } from "@luke/database/models/mess
 import { readPlanOfConversation } from "@luke/database/models/plan-store";
 import type { ConversationTarget } from "@luke/database/models/writer";
 import { EMPTY_BOARD } from "@luke/features/board-wire";
+import {
+  delegatedChildOf,
+  type HostAdmission,
+  hostAdmission,
+} from "@luke/service/agents/agent-runtime/host-core";
+import { type AgentSkill, repositorySkills } from "@luke/service/agents/agent-runtime/skills";
 import { turnKindOf } from "@luke/service/agents/brain-host/auth";
 import {
   BRAIN_HOST,
@@ -24,7 +30,13 @@ import {
   SESSION_STANDING,
 } from "@luke/service/agents/brain-host/conversation";
 import { EVE_MOUNT, eveSessionsComposer } from "@luke/service/agents/brain-host/eve-sessions";
+import {
+  type RelayStanding,
+  type RelayStateStore,
+  StreamRelay,
+} from "@luke/service/agents/brain-host/relay";
 import { rotationSeedText } from "@luke/service/agents/brain-host/seed";
+import { carryStop } from "@luke/service/agents/brain-host/stop-carrier";
 import { MeterUnavailable, ResearchBudget } from "@luke/service/agents/public-research";
 import type { RepositorySkill } from "@luke/service/agents/repository-skills";
 import {
@@ -45,8 +57,6 @@ import type * as HttpClient from "effect/http/HttpClient";
 import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionContext } from "eve/context";
 import type { ToolContext as EveToolContext } from "eve/tools";
-import { delegatedChildOf, type HostAdmission, hostAdmission } from "../agent-runtime/host-core.js";
-import { type AgentSkill, repositorySkills } from "../agent-runtime/skills.js";
 import { HOSTED_TOOL_SET } from "../brain-tool-set.js";
 import type { CoderModelSelection } from "../coder-host/model.js";
 import { titleSubagent } from "../coder-host/title.js";
@@ -60,8 +70,6 @@ import {
   runPlanningTool,
 } from "./planning.js";
 import type { BrainHostSeams } from "./production.js";
-import { type RelayStanding, type RelayStateStore, StreamRelay } from "./relay.js";
-import { carryStop } from "./stop-carrier.js";
 
 /**
  * The hosted brain composed over eve and the store: what the eve project's

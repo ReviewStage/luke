@@ -8,6 +8,9 @@
 
 import type { DatabaseServices } from "@luke/database/core/query";
 import type { Effect } from "effect";
+import type { HttpClient } from "effect/http";
+import type { GitHubApp } from "./github/github-app.js";
+import type { IntegrationConnect } from "./integrations/integration-connect.js";
 
 /**
  * The edge's own runner as a composition below it is handed one: a
@@ -18,3 +21,17 @@ import type { Effect } from "effect";
  * fiber's own face: the runner it names is always one built at an edge.
  */
 export type WebStoreRun = <A, E>(effect: Effect.Effect<A, E, DatabaseServices>) => Promise<A>;
+
+/** What the doors an eve root opens onto the agent runtime may require (`agents/agent-runtime/edge.ts`). */
+export type WebAgentServices =
+  | DatabaseServices
+  | HttpClient.HttpClient
+  | GitHubApp
+  | IntegrationConnect;
+
+/**
+ * The edge's own runner as an eve root's doors are handed one, on the same
+ * terms as `WebStoreRun`: the root's `host.ts` hands it `runWeb`, and a test
+ * the runner over its own test database and fakes of the rest.
+ */
+export type WebAgentRun = <A, E>(effect: Effect.Effect<A, E, WebAgentServices>) => Promise<A>;

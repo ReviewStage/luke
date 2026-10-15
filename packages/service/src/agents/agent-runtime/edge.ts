@@ -14,18 +14,18 @@
  */
 
 import type { QueryError } from "@luke/database/core/query";
-import { type AgentRole, ROLE_PROFILE } from "@luke/service/agents/agent-runtime/role";
-import type { AdmittedConversation } from "@luke/service/agents/brain-host/conversation";
-import {
-  type IntegrationAdmission,
-  integrationAccessToken,
-} from "@luke/service/integrations/integration-connection";
 import { Effect, Result, type Schema } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionContext } from "eve/context";
-import type { WebAgentRun, WebAgentServices } from "../../runtime.js";
+import {
+  type IntegrationAdmission,
+  integrationAccessToken,
+} from "../../integrations/integration-connection.js";
+import type { WebAgentRun, WebAgentServices } from "../../run.js";
+import type { AdmittedConversation } from "../brain-host/conversation.js";
 import type { RelayStateStore } from "../brain-host/relay.js";
 import { integrationConnections } from "./connections.js";
+import { type AgentRole, ROLE_PROFILE } from "./role.js";
 import { turnServers } from "./servers.js";
 import type { AgentSkill } from "./skills.js";
 

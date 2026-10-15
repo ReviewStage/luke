@@ -45,6 +45,7 @@ import {
   inboxReplyRefusal,
 } from "@luke/features/inbox-wire";
 import { modelChoiceSchema } from "@luke/features/models-wire";
+import { CODER_TOOL_SET } from "@luke/service/agents/coder-host/tool-set";
 import { isRecord, isWireString, type UnparsedWireValue, unparsedWire } from "@luke/service/core";
 import { HostedEnvironment } from "@luke/service/environment";
 import type { GitHubApp } from "@luke/service/github/github-app";
@@ -93,7 +94,6 @@ import {
   stoppedTurn,
   summaryOf,
 } from "./hosted/coder-host/stop.js";
-import { CODER_TOOL_SET } from "./hosted/coder-host/tool-set.js";
 import {
   cursorOfWire,
   cursorToWire,

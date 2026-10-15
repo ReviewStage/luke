@@ -8,11 +8,11 @@
 
 import type { CodingAgent } from "@luke/database/models/coding-agent-store";
 import type { ConversationTarget } from "@luke/database/models/writer";
+import { type AgentSkill, repositorySkills } from "@luke/service/agents/agent-runtime/skills";
+import { CODER } from "@luke/service/agents/coder-host/bounds";
 import type { RepositorySkill } from "@luke/service/agents/repository-skills";
 import { agentWorkspace } from "@luke/service/github/workspace-repository";
 import type { Effect } from "effect";
-import { type AgentSkill, repositorySkills } from "../agent-runtime/skills.js";
-import { CODER } from "./bounds.js";
 import type { CheckoutServices } from "./checkout.js";
 
 /** The body a skill loads as: where it stands in the checkout, so its relative paths resolve, and then its own words. */
