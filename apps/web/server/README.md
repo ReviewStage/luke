@@ -111,8 +111,8 @@ inside `client.withTransaction`: Better Auth writes over its own pool, outside
 the fiber's `SqlClient`. `auth-database.test.ts` creates a workspace and adds a
 member through the plugin over PGlite.
 
-Every account gets a first workspace made for it, called "Personal" (one
-made before 2026-10-15 kept the account's name), slugged `personal-<user id>`, with `{"personal":true}` as its metadata text
+Every account gets a first workspace made for it, named for the account,
+slugged `personal-<user id>`, with `{"personal":true}` as its metadata text
 (stored only; nothing reads it to behave differently), and named the
 account's by a `personal_workspace` row
 (`packages/database/src/schemas/personal-workspace.ts`; its generated migration
@@ -125,7 +125,11 @@ the plugin's own; no transaction encloses it, so two Macs ensuring at once
 settle on the unique slug and the row's primary key, and the one the plugin
 refuses adopts the workspace under the slug. `listWorkspaces` answers every
 workspace the account is a member of, its first one first and the rest by
-name. `tests/workspace-store.test.ts` holds the three. That row is only how a
+name. Every read names an account's first workspace by its owner's name as
+it stands now (`workspace-store.ts`'s `WORKSPACE_NAME`), to a teammate in it
+too, so a renamed account renames it and the name it was made under, the
+account's or, for one made on 2026-10-15, "Personal", stands only once the
+account is gone. `tests/workspace-store.test.ts` holds the three. Beyond its name, that row is only how a
 plan start or a repository listing that names no workspace finds the
 account's default; the workspace is otherwise one like any other: it takes
 invitations, its members are read, removed, and left, and it connects GitHub,

@@ -204,7 +204,7 @@ it.layer(getTestDB())("an account's workspaces over effect/unstable/sql", (it) =
       assert.deepEqual(yield* listWorkspaces(userId), [
         {
           id: first.value,
-          name: "Personal",
+          name: "Ada Lovelace",
           slug: `personal-${userId}`,
           role: WORKSPACE_ROLE.OWNER,
           github: null,
@@ -212,6 +212,70 @@ it.layer(getTestDB())("an account's workspaces over effect/unstable/sql", (it) =
         },
       ]);
     }),
+  );
+
+  it.effect(
+    "an account's first workspace is listed under its owner's name as it stands now, to its owner and a teammate in it alike, one made as Personal included, while a team keeps its own",
+    () =>
+      Effect.gen(function* () {
+        const seams = yield* fakeWorkspaceSeams;
+        const owner = yield* openUser("Ada Lovelace");
+        const teammate = yield* openUser("Teammate");
+        const personal = yield* ensurePersonalWorkspace(owner, seams);
+        assert.ok(Option.isSome(personal));
+        yield* joinWorkspace(personal.value, teammate, WORKSPACE_ROLE.MEMBER);
+        const acme = yield* openSharedWorkspace(seams, "Acme", owner, [teammate]);
+        const namesOf = (userId: string) =>
+          Effect.map(listWorkspaces(userId), (listed) =>
+            listed.map((workspace) => [workspace.id, workspace.name]),
+          );
+
+        const before = yield* namesOf(owner);
+        yield* Database.use((db) =>
+          db.update(user).set({ name: "Ada King" }).where(eq(user.id, owner)),
+        );
+        // The name an account's first workspace was made under between 2026-10-15 and its revert.
+        yield* Database.use((db) =>
+          db
+            .update(organization)
+            .set({ name: "Personal" })
+            .where(eq(organization.id, personal.value)),
+        );
+
+        assert.deepEqual(before, [
+          [personal.value, "Ada Lovelace"],
+          [acme.id, "Acme"],
+        ]);
+        assert.deepEqual(yield* namesOf(owner), [
+          [personal.value, "Ada King"],
+          [acme.id, "Acme"],
+        ]);
+        assert.deepEqual(yield* namesOf(teammate), [
+          [acme.id, "Acme"],
+          [personal.value, "Ada King"],
+        ]);
+      }),
+  );
+
+  it.effect(
+    "an account's first workspace outlives the account under the name the account had when it was made",
+    () =>
+      Effect.gen(function* () {
+        const seams = yield* fakeWorkspaceSeams;
+        const owner = yield* openUser("Ada Lovelace");
+        const teammate = yield* openUser("Teammate");
+        const personal = yield* ensurePersonalWorkspace(owner, seams);
+        assert.ok(Option.isSome(personal));
+        yield* joinWorkspace(personal.value, teammate, WORKSPACE_ROLE.MEMBER);
+
+        yield* Database.use((db) => db.delete(user).where(eq(user.id, owner)));
+
+        const listed = yield* listWorkspaces(teammate);
+        assert.deepEqual(
+          listed.map((workspace) => [workspace.id, workspace.name]),
+          [[personal.value, "Ada Lovelace"]],
+        );
+      }),
   );
 
   it.effect("a first workspace a racing ensure made first is adopted, not doubled", () =>
@@ -240,7 +304,7 @@ it.layer(getTestDB())("an account's workspaces over effect/unstable/sql", (it) =
       assert.deepEqual(yield* listWorkspaces(userId), [
         {
           id: raced[0],
-          name: "Personal",
+          name: "Grace Hopper",
           slug: `personal-${userId}`,
           role: WORKSPACE_ROLE.OWNER,
           github: null,
@@ -273,7 +337,7 @@ it.layer(getTestDB())("an account's workspaces over effect/unstable/sql", (it) =
         assert.deepEqual(yield* listWorkspaces(userId), [
           {
             id: raced[0],
-            name: "Personal",
+            name: "Katherine Johnson",
             slug: `personal-${userId}`,
             role: WORKSPACE_ROLE.OWNER,
             github: null,
@@ -306,7 +370,7 @@ it.layer(getTestDB())("an account's workspaces over effect/unstable/sql", (it) =
         assert.deepEqual(yield* listWorkspaces(victim), [
           {
             id: ensured.value,
-            name: "Personal",
+            name: "Grace Hopper",
             slug: listed?.slug,
             role: WORKSPACE_ROLE.OWNER,
             github: null,
@@ -332,7 +396,7 @@ it.layer(getTestDB())("an account's workspaces over effect/unstable/sql", (it) =
         assert.deepEqual(yield* listWorkspaces(owner), [
           {
             id: ownerPersonal.value,
-            name: "Personal",
+            name: "Owner",
             slug: `personal-${owner}`,
             role: WORKSPACE_ROLE.OWNER,
             github: null,
@@ -344,7 +408,7 @@ it.layer(getTestDB())("an account's workspaces over effect/unstable/sql", (it) =
         assert.deepEqual(yield* listWorkspaces(teammate), [
           {
             id: teammatePersonal.value,
-            name: "Personal",
+            name: "Teammate",
             slug: `personal-${teammate}`,
             role: WORKSPACE_ROLE.OWNER,
             github: null,
@@ -415,7 +479,7 @@ it.effect(
         assert.deepEqual(yield* listWorkspaces(grace), [
           {
             id: graces.value,
-            name: "Personal",
+            name: "Grace Hopper",
             slug: gracesSlug?.slug,
             role: WORKSPACE_ROLE.OWNER,
             github: null,

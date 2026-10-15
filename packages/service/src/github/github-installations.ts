@@ -6,6 +6,7 @@ import {
   type GitHubAccountType,
   type GitHubInstallationStatus,
 } from "@luke/database/github-installation-vocabulary";
+import { WORKSPACE_NAME } from "@luke/database/models/workspace-store";
 import { member, organization } from "@luke/database/schemas/auth";
 import { githubInstallIntent } from "@luke/database/schemas/github-install-intent";
 import { githubInstallation } from "@luke/database/schemas/github-installation";
@@ -200,7 +201,7 @@ const findMemberWorkspaceOnOwner = SqlSchema.findOneOption({
   execute: ({ userId, owner, excludingOrganizationId }) =>
     Database.use((db) =>
       db
-        .select({ id: organization.id, name: organization.name })
+        .select({ id: organization.id, name: WORKSPACE_NAME })
         .from(githubInstallation)
         .innerJoin(organization, eq(organization.id, githubInstallation.organizationId))
         .innerJoin(member, eq(member.organizationId, githubInstallation.organizationId))

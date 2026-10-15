@@ -39,10 +39,12 @@ import {
  * take. A workspace is made through the plugin's server-only
  * `createOrganization` (`workspace-seams.ts`), so the organization and its
  * owner are the plugin's own rows. The account's first workspace is made the
- * first time it is asked for, called "Personal", its metadata marked
- * personal, and named the account's in `personal_workspace`. The row is
- * only how a start or a listing finds the account's default and nothing reads the mark: it is
- * otherwise a workspace like any other. That write is no transaction: Better
+ * first time it is asked for, under the account's name, its metadata marked
+ * personal, and named the account's in `personal_workspace`. That row is
+ * how a start or a listing finds the account's default, and how every read
+ * names the workspace for its owner as the owner is called now
+ * (`WORKSPACE_NAME`), so it has no name of its own; nothing reads the mark,
+ * and it is otherwise a workspace like any other. That write is no transaction: Better
  * Auth writes over its own pool, outside the fiber's `SqlClient`, so two Macs
  * ensuring at once settle on unique keys instead, the workspace's slug and
  * the account's row, and the one that loses adopts what the other made.
@@ -59,9 +61,6 @@ import {
  * Every function is an effect over the ambient `Database`.
  */
 
-/** What an account's first workspace is called as it is made, its owner or an admin renaming it after; the account's own name read as a person rather than a place. */
-const PERSONAL_WORKSPACE_NAME = "Personal";
-
 /** The slug every account's first workspace is made under, one per account, which is what makes the plugin refuse a second. */
 const PERSONAL_SLUG_PREFIX = "personal-";
 
@@ -77,6 +76,16 @@ export type Workspace = WireWorkspace;
 const WORKSPACE_ROLES: readonly WorkspaceRole[] = Object.values(WORKSPACE_ROLE);
 
 /** What a workspace read answers: an effect over the ambient database. */
+/**
+ * A workspace's name as its members read it: an account's first workspace is
+ * called by that account's name as it stands now, so a renamed account
+ * renames it, and any other by its own. Note that the owner is read by the
+ * workspace alone, never the account asking, because a teammate in someone's
+ * first workspace reads it under the owner's name too; the workspace's own
+ * name is what stands once the account is gone.
+ */
+export const WORKSPACE_NAME = sql<string>`coalesce((select "owner"."name" from ${personalWorkspace} as "personal" inner join ${user} as "owner" on "owner"."id" = "personal"."user_id" where "personal"."organization_id" = ${organization.id}), ${organization.name})`;
+
 export type WorkspaceStoreEffect<A, E = never> = Effect.Effect<
   A,
   QueryError | Schema.SchemaError | E,
@@ -230,7 +239,7 @@ function workspaceRows(db: DatabaseShape, userId: string, organizationId?: strin
   return db
     .select({
       id: organization.id,
-      name: organization.name,
+      name: WORKSPACE_NAME,
       slug: organization.slug,
       personalOf: personalWorkspace.userId,
       role: member.role,
@@ -257,7 +266,7 @@ function workspaceRows(db: DatabaseShape, userId: string, organizationId?: strin
         organizationId === undefined ? undefined : eq(organization.id, organizationId),
       ),
     )
-    .orderBy(asc(organization.name), asc(organization.id));
+    .orderBy(asc(WORKSPACE_NAME), asc(organization.id));
 }
 
 const findWorkspaces = SqlSchema.findAll({
@@ -438,7 +447,7 @@ export function ensurePersonalWorkspace(
     if (Option.isNone(account)) return Option.none();
     const slug = personalSlugOf(userId);
     const organizationId = yield* createLinkedOrganization(
-      { name: PERSONAL_WORKSPACE_NAME, userId, metadata: PERSONAL_WORKSPACE_METADATA },
+      { name: account.value.name, userId, metadata: PERSONAL_WORKSPACE_METADATA },
       // Note that the second slug is one nobody can know beforehand, for a first taken by someone else.
       [slug, `${slug}-${randomUUID()}`],
       (candidate) => isOwnPersonalOrganization(userId, candidate),
