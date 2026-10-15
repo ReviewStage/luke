@@ -4,10 +4,10 @@ import assert from "node:assert/strict";
 import type { CodingAgentInboxAnswerView } from "@luke/features/coding-agent-view";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import { INBOX_CURSOR_START } from "@luke/features/inbox-wire";
+import type { AppInboxPlanHolding } from "@luke/host/app-state";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
-import type { AppInboxPlanHolding } from "#shared/messages/app-state";
 import { type InboxItemsControl, useInboxItems } from "./use-inbox-items";
 
 /**
