@@ -1121,11 +1121,21 @@ function ManagedLinear({ workspace }: { workspace: Workspace }): React.JSX.Eleme
   const { linear } = workspace;
   const workspaceId = workspace.id;
   const [refusal, setRefusal] = useState<string>();
+  // Note that a second press while the browser is being sent is taken as
+  // none, because a sign-in begun again replaces the first one's state.
+  const [connecting, setConnecting] = useState(false);
+  const underWay = useRef(false);
   const connect = () => {
+    if (underWay.current) return;
+    underWay.current = true;
+    setConnecting(true);
     setRefusal(undefined);
-    act(ACT_KIND.WORKSPACE_LINEAR_CONNECT, { workspaceId }).catch((refused: Error) =>
-      setRefusal(refused.message),
-    );
+    act(ACT_KIND.WORKSPACE_LINEAR_CONNECT, { workspaceId })
+      .catch((refused: Error) => setRefusal(refused.message))
+      .finally(() => {
+        underWay.current = false;
+        setConnecting(false);
+      });
   };
   const disconnect = useConfirmDialog({ subject: linear !== undefined, surfaceOpen: true }, () =>
     act(ACT_KIND.WORKSPACE_LINEAR_DISCONNECT, { workspaceId }).then(() => ACCEPTED, refusedWith),
@@ -1142,7 +1152,13 @@ function ManagedLinear({ workspace }: { workspace: Workspace }): React.JSX.Eleme
         </span>
         <LinearCopy linear={linear} manages />
         {linear?.active === true ? null : (
-          <button type="button" className="toolbar-button bordered-button" onClick={connect}>
+          <button
+            type="button"
+            className="toolbar-button bordered-button"
+            disabled={connecting}
+            aria-busy={connecting}
+            onClick={connect}
+          >
             {linear === undefined ? "Connect" : "Connect again"}
           </button>
         )}

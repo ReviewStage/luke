@@ -1629,12 +1629,15 @@ const linearSent = () =>
       : [],
   );
 
-test("an admin's Linear row in Integrations connects Linear for the workspace at once, asking nothing first", async () => {
+test("an admin's Linear row in Integrations connects Linear for the workspace at once, asking nothing first, and a second press while it starts begins no second sign-in", async () => {
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
   const row = rowNamed(githubGroup(page), "Linear");
   const before = rowWords(row);
 
-  act(() => button(row, "Connect").click());
+  act(() => {
+    button(row, "Connect").click();
+    button(row, "Connect").click();
+  });
   await settle();
 
   assert.deepEqual(before, ["Linear", "Not connected."]);
