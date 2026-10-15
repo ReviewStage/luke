@@ -1128,9 +1128,11 @@ const rowWords = (row: HTMLElement) => [
   row.querySelector("small")?.textContent,
 ];
 
-/** What every row of the GitHub group says, in order. */
+/** What every GitHub row of the Integrations group says, in order: every row but Linear's, which the group holds beside them. */
 const integrationRows = (page: HTMLElement) =>
-  [...githubGroup(page).querySelectorAll<HTMLElement>(".settings-row")].map(rowWords);
+  [...githubGroup(page).querySelectorAll<HTMLElement>(".settings-row")]
+    .map(rowWords)
+    .filter(([name]) => name !== "Linear");
 
 /** The words of every button a row draws. */
 const rowButtons = (row: HTMLElement) =>
