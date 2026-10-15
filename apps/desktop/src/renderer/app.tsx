@@ -44,6 +44,7 @@ import { FeedbackDialog } from "./feedback-dialog";
 import { GitHubConnectProvider } from "./github-connect";
 import { useKeyboardModality } from "./keyboard-modality";
 import { useLastSignIn } from "./last-sign-in";
+import { prefetchMarkdownHtmlParser } from "./markdown-html-parser";
 import { useHistoryMouseButtons, useWindowHistory } from "./navigation-history";
 import { OpenFeedbackProvider } from "./open-feedback";
 import { OpenSettingsProvider } from "./open-settings";
@@ -129,6 +130,8 @@ export function App(): React.JSX.Element {
   }, [run, sessionReplay]);
   // The editor bundle loads once the panel has painted, so an agent's message box and a plan's editor find it there.
   useEffect(prefetchEditorBundle, []);
+  // So does the parser a reply's markdown is drawn through, so a transcript opened finds it there.
+  useEffect(prefetchMarkdownHtmlParser, []);
   const changeTab = useCallback(
     (next: PanelTab) => {
       setTab(next);

@@ -50,6 +50,23 @@ const excalidrawTrim = {
   },
 };
 
+// The HTML parser Streamdown draws every reply through, `rehype-raw` and
+// parse5 under it, loaded after the panel's first paint rather than parsed
+// with the bundle every window opens with: Streamdown's own import of it is
+// answered with the module that loads it on demand
+// (`src/renderer/markdown-html-parser.ts`), whose `import()` of the library
+// the splitting below makes a chunk of its own. `vitest.config.ts` answers
+// the import the same way, so the tests draw what the panel draws.
+const MARKDOWN_HTML_PARSER = path.join(appRoot, "src/renderer/markdown-html-parser.ts");
+const markdownHtmlParserOnDemand = {
+  name: "markdown-html-parser-on-demand",
+  setup(build) {
+    build.onResolve({ filter: /^rehype-raw$/ }, (args) =>
+      args.importer === MARKDOWN_HTML_PARSER ? undefined : { path: MARKDOWN_HTML_PARSER },
+    );
+  },
+};
+
 // Excalidraw's fonts, copied beside the whiteboard bundle so the panel loads
 // nothing from the network. Xiaolai is left out: it is 13 MB of CJK glyphs,
 // and the system's own font draws those characters instead.
@@ -147,7 +164,7 @@ const rendererBuild = build({
   target: "chrome140",
   jsx: "automatic",
   minify: true,
-  plugins: sentryPlugins(),
+  plugins: [markdownHtmlParserOnDemand, ...sentryPlugins()],
   sourcemap: true,
   logLevel: "info",
   define: {

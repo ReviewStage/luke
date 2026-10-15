@@ -2,10 +2,12 @@
 
 import assert from "node:assert/strict";
 import { MENTION_KIND, type PlanMention } from "@luke/features/mention-link";
+import { Effect } from "effect";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "#shared/messages/acts";
+import { markdownHtmlParserLanded } from "#testing/markdown";
 import { TranscriptWords } from "./transcript-blocks";
 import { OpenPlanProvider } from "./use-open-link";
 
@@ -25,6 +27,9 @@ const WORDS = [
   "[the pull request](https://github.com/acme/relay/pull/12),",
   "and [the docs](https://example.com/docs).",
 ].join(" ");
+
+// A reply is drawn once the parser has landed, as the panel lands it after its first paint.
+beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
 const roots: Root[] = [];
 let sent: Act[] = [];

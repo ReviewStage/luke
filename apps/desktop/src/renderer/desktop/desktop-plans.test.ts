@@ -10,12 +10,14 @@ import {
 } from "@luke/features/inbox-wire";
 import type { Plan } from "@luke/features/plan-wire";
 import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
+import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, test, vi } from "vitest";
+import { afterEach, beforeAll, test, vi } from "vitest";
 import { onRegistry } from "#testing/copy-feedback";
+import { markdownHtmlParserLanded } from "#testing/markdown";
 import { codingAgentsControl, plansControl, UNPINNED_SUMMARY } from "#testing/plans-control";
 import { relayout } from "#testing/resize-observer";
 import { DOCUMENT_REGION, PLANS_PAGE } from "../planning/planning-model";
@@ -34,6 +36,9 @@ const PLAN: Plan = {
   repository: null,
   document: { body: "", assumptions: [] },
 };
+
+// A reply is drawn once the parser has landed, as the panel lands it after its first paint.
+beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
 afterEach(() => {
   vi.restoreAllMocks();

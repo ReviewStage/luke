@@ -1,7 +1,10 @@
+import { useAtomValue } from "@effect/atom-react";
 import { cn } from "@luke/ui";
 import type { UIMessage } from "ai";
+import { AsyncResult } from "effect/reactivity";
 import { type ComponentProps, type HTMLAttributes, memo, type ReactNode } from "react";
 import { type Components, Streamdown } from "streamdown";
+import { markdownHtmlParserAtom } from "../markdown-html-parser";
 import { Tooltip } from "../tooltip";
 
 /**
@@ -143,10 +146,14 @@ export type MessageResponseProps = ComponentProps<typeof Streamdown>;
 /**
  * A reply's markdown, drawn as it streams. Note that it is memoised on every
  * prop rather than on the words alone, as the registry has it, because a
- * mode or a class changed under the same words has to be drawn too.
+ * mode or a class changed under the same words has to be drawn too. Nothing
+ * is drawn until the HTML parser has landed (`markdown-html-parser.ts`),
+ * because a reply drawn without it is not the reply drawn with it.
  */
-export const MessageResponse = memo(
-  ({ className, ...props }: MessageResponseProps): ReactNode => (
+export const MessageResponse = memo(({ className, ...props }: MessageResponseProps): ReactNode => {
+  const parser = useAtomValue(markdownHtmlParserAtom);
+  if (AsyncResult.isInitial(parser)) return null;
+  return (
     <Streamdown
       className={cn(
         "select-text [overflow-wrap:anywhere] [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
@@ -154,7 +161,7 @@ export const MessageResponse = memo(
       )}
       {...props}
     />
-  ),
-);
+  );
+});
 
 MessageResponse.displayName = "MessageResponse";
