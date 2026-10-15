@@ -14,6 +14,7 @@ import {
   type ScheduleDraft,
   type ScheduleKind,
   sameDraft,
+  withGithubEvent,
   withRepository,
 } from "@luke/features/automation-draft-model";
 import { automationTriggerText } from "@luke/features/automation-list-model";
@@ -476,8 +477,27 @@ function WebhookControl({
   writes: AutomationWrites;
 }): React.JSX.Element {
   const address = useCopyFeedback();
-  const [copying, setCopying] = useState(false);
   const [said, setSaid] = useState<string | undefined>(undefined);
+  // Note that a fresh secret stops the one a sender holds, so the press asks first, as anything that cannot be undone does.
+  const rotation = useConfirmDialog(
+    { subject: automation !== undefined, surfaceOpen: true },
+    () => {
+      if (automation === undefined) return Promise.resolve(ACCEPTED);
+      setSaid(undefined);
+      return writes.copyWebhookSecret(automation.id).then((answer): ActionResult => {
+        if ("failure" in answer) {
+          return {
+            status: ACTION_RESULT_STATUS.REJECTED,
+            reason: COPY_SECRET_REFUSAL_WORDS[answer.failure],
+          };
+        }
+        setSaid(
+          "A new secret is on your clipboard. Paste it into your sender now: Luke never shows it, and the one before has stopped working.",
+        );
+        return ACCEPTED;
+      });
+    },
+  );
   const url =
     automation?.trigger.kind === AUTOMATION_TRIGGER.WEBHOOK ? automation.webhookUrl : undefined;
   if (automation === undefined || url === undefined) {
@@ -487,18 +507,6 @@ function WebhookControl({
       </p>
     );
   }
-  const copySecret = () => {
-    setCopying(true);
-    setSaid(undefined);
-    writes.copyWebhookSecret(automation.id).then((answer) => {
-      setCopying(false);
-      setSaid(
-        "failure" in answer
-          ? COPY_SECRET_REFUSAL_WORDS[answer.failure]
-          : "A new secret is on your clipboard. Paste it into your sender now: Luke never shows it, and the one before has stopped working.",
-      );
-    });
-  };
   return (
     <div className="automation-webhook">
       <div className="automation-webhook-address">
@@ -517,15 +525,8 @@ function WebhookControl({
           <CopyGlyph state={address.state} />
         </button>
       </div>
-      <button
-        type="button"
-        className="toolbar-button bordered-button"
-        disabled={copying}
-        onClick={copySecret}
-      >
-        <BusyLabel busy={copying} label="Copying">
-          Copy a new secret
-        </BusyLabel>
+      <button type="button" className="toolbar-button bordered-button" onClick={rotation.ask}>
+        Copy a new secret
       </button>
       {said === undefined ? null : (
         <p className="automation-form-note" role="status">
@@ -537,6 +538,15 @@ function WebhookControl({
         secret stops the one before. Don't send secrets in the body: Luke hands the body to the
         run's agent, and it shows in the run's transcript.
       </p>
+      <ConfirmDialog
+        confirm={rotation}
+        question={{
+          title: "Copy a new secret?",
+          body: "Luke puts a new secret on your clipboard, and the secret your sender uses now stops working until you paste in the new one.",
+          verb: "Copy new secret",
+          running: "Copying",
+        }}
+      />
     </div>
   );
 }
@@ -807,7 +817,7 @@ function EditorForm({
               value={draft.githubEvent}
               onChange={(event) => {
                 const chosen = GITHUB_EVENTS.find((each) => each.value === event.target.value);
-                if (chosen !== undefined) onDraft({ githubEvent: chosen.value });
+                if (chosen !== undefined) onDraft(withGithubEvent(draft, chosen.value));
               }}
             >
               {GITHUB_EVENTS.map((each) => (

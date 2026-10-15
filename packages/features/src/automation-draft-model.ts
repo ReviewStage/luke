@@ -419,6 +419,21 @@ export function changeOf(
 }
 
 /**
+ * A draft moved to another GitHub event. The label and branch filters a
+ * trigger was given go with the event they were given for, since the
+ * editor does not show them and one event's filter can match nothing of
+ * another's: a label filter on a push, whose delivery has no labels, would
+ * keep the trigger from ever firing.
+ */
+export function withGithubEvent(
+  draft: AutomationDraft,
+  event: GitHubTriggerEvent,
+): AutomationDraft {
+  if (event === draft.githubEvent) return draft;
+  return { ...draft, githubEvent: event, githubFilters: {} };
+}
+
+/**
  * A draft moved to another repository. An agent works in its own
  * repository, so a same-agent draft lets go of the agent it had chosen,
  * which the picker then offers again from the new repository's agents,

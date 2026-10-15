@@ -1122,7 +1122,7 @@ test("a new automation set to a GitHub event is created on it, the trigger said 
   );
 });
 
-test("a saved webhook shows its address to copy, and a new secret goes to the clipboard by the host, never into the window", async () => {
+test("a saved webhook shows its address to copy, and a new secret, asked for first, goes to the clipboard by the host, never into the window", async () => {
   const hooked = automation(8, {
     name: "Fix Sentry alerts",
     trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK },
@@ -1138,6 +1138,13 @@ test("a saved webhook shows its address to copy, and a new secret goes to the cl
   );
   act(() => button("Copy address").click());
   act(() => button("Copy a new secret").click());
+  await settle();
+  assert.deepEqual(secretsAsked, [], "nothing is replaced before the developer says so");
+  assert.match(
+    page.ownerDocument.body.textContent ?? "",
+    /stops working until you paste in the new one/u,
+  );
+  act(() => button("Copy new secret").click());
   await settle();
 
   assert.deepEqual(copied, [hooked.webhookUrl]);
