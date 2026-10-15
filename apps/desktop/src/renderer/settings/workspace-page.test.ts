@@ -28,6 +28,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { focusedSegment, pressKeyIn, readSegmented, segmentedGroup } from "#testing/segmented";
+import { dayAndTimeText } from "../planning/plan-time";
 import { WorkspacePage, type WorkspaceSettingsControl } from "./workspace-page";
 
 /**
@@ -298,7 +299,7 @@ const rowNamed = (page: HTMLElement, name: string) =>
 /** The rows of the invitations still pending, by the line each wears. */
 const invitationRows = (page: HTMLElement) =>
   [...page.querySelectorAll<HTMLElement>(".settings-row")].filter((row) =>
-    row.querySelector("small")?.textContent?.startsWith("Invited · "),
+    row.querySelector("small")?.textContent?.startsWith("Invited as "),
   );
 
 /** The items of the ⋯ on `row`, or none where it draws no ⋯. */
@@ -580,6 +581,12 @@ test("each member's row leads with their face, their picture where the read list
   );
   assert.equal(dana.querySelector(".actor-you")?.textContent, "You");
   assert.equal(sam.querySelector(".actor-you"), null);
+  // The person card's wrapper holds the name and You together, which is what stands the badge off the name.
+  assert.equal(
+    dana.querySelector(".actor-card-name")?.textContent,
+    "DanaYou",
+    "the reader's name and its You share the person card's wrapper",
+  );
 });
 
 test("while the members are being read the page holds itself back, and a read that failed says so with Retry", async () => {
@@ -602,7 +609,7 @@ test("while the members are being read the page holds itself back, and a read th
   assert.equal(heldBack, true);
   assert.equal(
     container.querySelector('[role="alert"] .failure-note-words')?.textContent,
-    "Could not read.",
+    "The members could not be read.",
   );
   refuseMembersRead = false;
   act(() => button(container, "Retry").click());
@@ -630,6 +637,19 @@ test("an admin is offered Remove for a member but not for the owner, and Remove 
     [...page.querySelectorAll(".settings-row strong")].some((each) => each.textContent === "Sam"),
     false,
   );
+});
+
+test("an admin is offered no Remove on their own row, since their way out is Leave", async () => {
+  stored = [
+    { ...OWNER, userId: "user-ola", name: "Ola", email: "ola@example.com" },
+    { ...OWNER, role: WORKSPACE_ROLE.ADMIN },
+    MEMBER,
+  ];
+  const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
+
+  assert.deepEqual(rowActions(rowNamed(page, "Dana")), []);
+  assert.deepEqual(rowActions(rowNamed(page, "Sam")), ["Remove from workspace"]);
+  assert.equal(buttons(page, "Leave").length, 1);
 });
 
 test("a removal the account's role does not allow says so in the dialog that asked", async () => {
@@ -937,6 +957,7 @@ test("an admin invites an address as a role, sees it pending with its link to co
 
   await invite(page, "alan@example.com", WORKSPACE_ROLE.ADMIN);
   const row = invitationRows(page)[0] ?? assert.fail("no pending invitation");
+  const face = row.querySelector<HTMLElement>(".actor-mark")?.dataset.kind;
   const listed = [
     row.querySelector("strong")?.textContent,
     row.querySelector("small")?.textContent,
@@ -944,7 +965,15 @@ test("an admin invites an address as a role, sees it pending with its link to co
   act(() => button(row, "Copy link").click());
   await chooseAction(row, "Cancel invitation");
 
-  assert.deepEqual(listed, ["alan@example.com", "Invited · Admin"]);
+  assert.deepEqual(listed, [
+    "alan@example.com",
+    `Invited as Admin · Expires ${dayAndTimeText(Date.parse("2026-10-16T12:00:00.000Z"))}`,
+  ]);
+  assert.equal(
+    face,
+    "someone",
+    "an invited address wears the outline face, in the members' column",
+  );
   assert.deepEqual(invitationRows(page), []);
   assert.deepEqual(
     sent
@@ -1172,7 +1201,7 @@ test("an invitations read that failed says so with Retry in the list's place, wh
 
   assert.equal(
     [...page.querySelectorAll('[role="alert"] .failure-note-words')].some(
-      (each) => each.textContent === "Could not read.",
+      (each) => each.textContent === "The invitations could not be read.",
     ),
     true,
   );
