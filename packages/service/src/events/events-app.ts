@@ -45,7 +45,7 @@ const eventsEffect = /* @__PURE__ */ Effect.fn("web/eventsEffect")(function* (
 /**
  * The group: the ingest carried to an `HttpApp`, and the hosted vocabulary's
  * own refusal for a path it does not declare — unreachable in production,
- * since `vercel.json` sends the function only its own path, but the same
+ * since `vercel.ts` sends the function only its own path, but the same
  * shape `auth-app.ts` answers with.
  */
 export function eventsApp(): WebRoutes<DatabaseServices | HostedEnvironment> {

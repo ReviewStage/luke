@@ -83,7 +83,7 @@ node --input-type=module -e '
 # telling a story the artwork does not; --check fails on any drift.
 pnpm --dir "$LUKE_REPO_ROOT" --filter @luke/brand --silent check
 
-# The vercel.json rewrites are what land a route on its grouped function, and
+# The /api/ rewrites the root vercel.ts imports land a route on its grouped function, and
 # they are generated from server/routes/; --check fails if a rewrite went stale.
 pnpm --dir "$LUKE_REPO_ROOT/apps/web" exec tsx scripts/function-rewrites.ts --check
 

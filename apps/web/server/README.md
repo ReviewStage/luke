@@ -61,7 +61,7 @@ The auth service also needs `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`,
 `GITHUB_APP_CLIENT_SECRET`; the GitHub App beneath the last two is described
 under "The Luke GitHub App" below.
 
-The web service's `routes` in `vercel.json` carry a legacy entry for
+The web service's `routes` in the root `vercel.ts` carry a legacy entry for
 `/api/auth/(.*)` because Vercel's zero-config `api/` detection treats
 `[...all].js` as a single dynamic segment and adds a hard 404 for deeper API
 paths. A `rewrites` entry runs after that detected filesystem routing phase, so
@@ -264,10 +264,11 @@ deploys are the ones the Build Output tree below emits, and a file under
 builders claiming one path. A function's public path is still
 `api/<function>.js` (`functionPublicPath` in `server/function-layout.ts`),
 because that is the `.func` name in the tree and the destination the `/api/`
-rewrites of `vercel.json` carry. Those rewrites are generated into a committed
-table, `server/api-rewrites.json`, and `vercel.json` is assembled from the
-table: `pnpm functions:rewrites` regenerates both after adding, moving, or
-removing a route, and `repository-checks.sh` refuses drift on either half. The
+rewrites of the root `vercel.ts` carry. Those rewrites are generated into a
+committed table, `api-rewrites.json` beside `vercel.ts`, which imports it ahead
+of the web service's page routes: `pnpm functions:rewrites` regenerates it
+after adding, moving, or removing a route, and `repository-checks.sh` refuses
+drift. The
 same script reads the other side of the table through `scripts/api-callers.ts`
 (`server/api-callers.ts`): every `/api/` literal and path builder a client in
 the repository spells — the desktop's, the packages', the
@@ -288,10 +289,9 @@ sent as a header or the OPTIONS allowlist, and names which it relies on.
 It runs by hand, against an address or a commit's preview found through its
 GitHub deployment record (`server/preview-deployment.ts`); CI does not run
 it, since a PR's preview could take twenty minutes to appear or never come. The
-table is its own file so a `vercel.ts` can one day import it and `vercel.json`
-be deleted (LUKE-183); Vercel evaluates a config module in plain Node and
+table is its own file because Vercel evaluates `vercel.ts` in plain Node and
 bundles only its relative imports, which takes a JSON table and not this
-generator's dependencies. `server/feedback.mjs` is the one
+generator's dependencies (LUKE-183). `server/feedback.mjs` is the one
 hand-written function, emitted into the tree at `api/feedback.mjs` as it
 stands.
 
@@ -352,10 +352,14 @@ commit with no migration and no dashboard state, and the deploy shape returns
 to Vercel's own pass.
 
 The Vercel project is three services in one deployment, declared under `services`
-in `vercel.json`, which Vercel reads only while the project's Framework Preset
-is Services. `web` is this app at its root and carries the migrate-and-seed
-build, the install filter, the ignore rule, and the `routes` above unchanged.
-`eve` is the hosted brain: its root is `eve/`, the flat eve app root described
+in the root `vercel.ts`, which Vercel reads at the project's Root Directory
+(the repository root, so each service's `root` is relative to it) and only
+while the project's Framework Preset is Services. `@vercel/config`'s
+`VercelConfig` type has no `services` key yet, so `vercel.ts` states the
+service and service-rewrite shapes beside it. `web` is this app, rooted at
+`apps/web`, and carries the migrate-and-seed build, the install filter, the
+ignore rule, and the `routes` above unchanged.
+`eve` is the hosted brain: its root is `apps/web/eve/`, the flat eve app root described
 below, whose own `package.json` declares `eve`, so the service's install pulls
 `@luke/eve` beside this app and its build is a plain `pnpm exec eve build` run
 in that root. eve resolves that directory as its app root and writes its Build
@@ -363,20 +367,20 @@ Output there, which is where static-build reads a service's output, so nothing
 relocates it and no variable of eve's own is set by hand. The block is one
 isolated declaration with no shared keys, so replacing it with a generated
 service later is removing a block rather than untangling one (LUKE-183).
-`coder` is the coding-agent service, a second eve app root at `coder/` built
+`coder` is the coding-agent service, a second eve app root at `apps/web/coder/` built
 and deployed on the same terms ("The coding-agent service" below).
 Public routing is the top-level `rewrites`:
 `/eve/coder/v1/*` enters the coder service, `/eve/v1/*` the eve service, and
 everything else the web service, and a
 service's own routes run only once a request has entered it. That is why the
-generated `/api/` rewrites live under the web service's `routes` and the
-generator (`server/function-rewrites.ts`) refuses a `routes` key at the top
-level beside `services`: Vercel ignores one there rather than erroring, so a
-file generated into the old location would pass every check and 404 every
-`/api/` route in production. The project's
+generated `/api/` rewrites live under the web service's `routes`, and
+`tests/vercel-services.test.ts` refuses a `routes` key at the top level beside
+`services`: Vercel ignores one there rather than erroring, so a route left
+there would pass every check and 404 in production. The project's
 environment variables reach all three services alike, and each service's own
 `ignoreCommand` is what skips its build, so a commit that changes nothing under
-`apps/web`, `packages`, or the workspace manifests deploys none of them.
+`apps/web`, `packages`, the workspace manifests, `vercel.ts`, or
+`api-rewrites.json` deploys none of them.
 
 ## The data layer
 
