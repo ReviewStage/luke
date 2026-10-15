@@ -155,6 +155,8 @@ interface FakeService extends PlanningClient {
   installUrl: string;
   /** Whether the workspaces list is refused, as a service that did not answer refuses it. */
   workspacesFail: boolean;
+  /** The name another Mac renames a workspace to just after this one's rename answers, where one does. */
+  renamedAgain: string | undefined;
   /** Where a workspaces read waits after reading the table and before answering, so a test can hold one on the wire. */
   workspacesGate: Effect.Effect<void>;
   /** Each workspace's members, by its id. */
@@ -271,6 +273,7 @@ function fakeService(plans: Plan[]): FakeService {
     memberships: [PERSONAL],
     installUrl: INSTALL_URL,
     workspacesFail: false,
+    renamedAgain: undefined,
     workspacesGate: Effect.void,
     members: {},
     invitations: {},
@@ -330,8 +333,9 @@ function fakeService(plans: Plan[]): FakeService {
           const renamed = service.memberships.find((each) => each.id === workspaceId);
           if (renamed === undefined) return UNANSWERED_WORKSPACE;
           const now = { ...renamed, name };
+          const again = service.renamedAgain;
           service.memberships = service.memberships.map((each) =>
-            each.id === workspaceId ? now : each,
+            each.id !== workspaceId ? each : again === undefined ? now : { ...now, name: again },
           );
           return { ok: true, answer: now } as const;
         }),
@@ -1247,6 +1251,22 @@ it.effect(
         service.reads.slice(before).includes("workspaces"),
         "the failed read is not taken as fresh",
       );
+    }),
+);
+
+it.effect(
+  "a rename another Mac renames again before the read after it draws the newer name the read answers",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      service.memberships = [PERSONAL, ACME];
+      const { call, last } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+      service.renamedAgain = "Acme Research";
+
+      yield* call(GATEWAY_METHOD.WORKSPACES_RENAME, { workspaceId: ACME.id, name: "Acme Labs" });
+
+      assert.deepEqual(last()?.workspaces, [PERSONAL, { ...ACME, name: "Acme Research" }]);
     }),
 );
 

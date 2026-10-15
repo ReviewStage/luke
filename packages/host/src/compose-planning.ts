@@ -1523,16 +1523,19 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
         }
         if (!gate()) return carried<PlanningWorkspaceAnswer>(WORKSPACE_UNANSWERED);
         const { workspaceId, name } = read.success;
-        const renamed = yield* workspaceCall(client.workspaces.rename(workspaceId, name), {
-          plans: false,
-        });
-        // Note that the workspace the service answered lands on the view itself, because the read after it may fail and keep the old name.
+        const renamed = yield* Effect.provide(
+          client.workspaces.rename(workspaceId, name),
+          FetchHttpClient.layer,
+        );
+        // Note that the workspace the service answered lands on the view before the read after it,
+        // because that read may fail and keep the old name, and one that answers is the newer word.
         if (renamed.ok) {
           const answered = renamed.answer;
           write({
             workspaces: view.workspaces.map((each) => (each.id === answered.id ? answered : each)),
           });
         }
+        yield* readWorkspaces;
         return carried<PlanningWorkspaceAnswer>(
           renamed.ok ? { workspace: renamed.answer } : { failure: renamed.failure },
         );
