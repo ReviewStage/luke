@@ -52,7 +52,7 @@ import { plan } from "../schemas/plan.js";
 import { conversations } from "../schemas/storage.js";
 import { InstantColumnSchema } from "./columns.js";
 import type { PlanStoreEffect, PlanStoreFailure } from "./plan-store.js";
-import { reachablePlan } from "./workspace-store.js";
+import { AGENT_WORKSPACE, reachablePlan } from "./workspace-store.js";
 
 /**
  * automation-store.ts -- an account's automations and their runs: made, listed, changed, and deleted by the account, and a run recorded once per firing.
@@ -718,8 +718,9 @@ export type ArchivableRunAgent = typeof ArchivableAgentSchema.Type;
  * archive the sweep has not settled yet and that hold no open inbox item,
  * at most `limit`, oldest run first. Note that an agent waiting on the
  * inbox is left for a later sweep, because archiving it would put away the
- * question it is waiting on, and that one the sweep settled is never read
- * again, so an agent the developer brought back stays.
+ * question it is waiting on, that one the sweep settled is never read
+ * again, so an agent the developer brought back stays, and that one whose
+ * starter left the workspace is read again only once they are back.
  */
 const findArchivableAgents = SqlSchema.findAll({
   Request: Schema.Struct({ since: Schema.Date, limit: Schema.Number }),
@@ -747,6 +748,18 @@ const findArchivableAgents = SqlSchema.findAll({
             eq(automationRun.status, AUTOMATION_RUN_STATUS.STARTED),
             gte(automationRun.firedAt, since),
             isNull(automationRun.archiveSettledAt),
+            // An agent whose starter left its workspace is no one's to archive, so it takes no place in the read.
+            exists(
+              queryBuilder
+                .select({ one: member.id })
+                .from(member)
+                .where(
+                  and(
+                    eq(member.userId, codingAgent.userId),
+                    eq(member.organizationId, AGENT_WORKSPACE),
+                  ),
+                ),
+            ),
             notExists(
               queryBuilder
                 .select({ one: inboxItem.id })

@@ -5,6 +5,7 @@ import { Database } from "@luke/database/core/query";
 import { readAccountPreferences } from "@luke/database/models/account-store";
 import {
   type Automation,
+  archivableRunAgents,
   createAutomation,
   listAutomationRuns,
   readAutomation,
@@ -186,6 +187,27 @@ const startedNow = (eve: ReturnType<typeof fakeEve>, automation: Automation) =>
   });
 
 it.layer(getTestDB())("an automation's runs", (it) => {
+  it.effect(
+    "a run whose agent's starter left the workspace takes no place in the archive's read, so a later run's agent is read in its stead",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const departing = yield* openAutomation({ archiveSuccessful: true });
+        const staying = yield* openAutomation({ archiveSuccessful: true });
+        const orphaned = yield* startedNow(eve, departing.automation);
+        const standing = yield* startedNow(eve, staying.automation);
+        yield* leaveWorkspace(departing.workspaceId, departing.owner);
+
+        const read = yield* archivableRunAgents(new Date(departing.now - 86_400_000), 1);
+
+        assert.deepEqual(
+          read.map((agent) => agent.codingAgentId),
+          [standing],
+        );
+        assert.notEqual(standing, orphaned);
+      }),
+  );
+
   it.effect(
     "an automation that archives its successful runs archives a run's agent once its turn settled well, once, and leaves standing one that failed, one brought back by hand, one waiting on the inbox until its question closes, and every agent of an automation that does not",
     () =>
