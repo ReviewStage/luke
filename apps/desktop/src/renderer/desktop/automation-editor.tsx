@@ -513,7 +513,7 @@ const SENDER_CHOICES: readonly { value: GitHubSender; label: string; detail?: st
   {
     value: GITHUB_SENDER.LUKE_AGENTS,
     label: "From Luke's agents",
-    detail: "What Luke's coding agents open, as the workspace's GitHub App.",
+    detail: "What Luke's coding agents open, as you or as the workspace's GitHub App.",
   },
   {
     value: GITHUB_SENDER.OTHER_BOTS,

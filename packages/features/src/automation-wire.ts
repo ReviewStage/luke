@@ -115,7 +115,7 @@ const scheduleTriggerSchema = EffectSchema.Struct({
 export const GITHUB_SENDER = {
   /** A person's own account. */
   PEOPLE: "people",
-  /** The Luke GitHub App, which Luke's coding agents act as. */
+  /** Luke's coding agents: the Luke GitHub App, and a developer an agent opening its pull request from a `luke/` branch writes as. */
   LUKE_AGENTS: "luke-agents",
   /** Any other App or bot account: Dependabot, Renovate, and their like. */
   OTHER_BOTS: "other-bots",
