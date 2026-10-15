@@ -2837,6 +2837,40 @@ ul.actor-stack {
   font-size: 11.5px;
 }
 
+/* What a transcript opens on, the plan, an automation's prompt, or a
+   worker's task, stands as a sent message does, at the right under the line
+   naming who sent it, its card at a sent message's measure. */
+.agent-origin > .agent-origin-card {
+  width: min(420px, 100%);
+}
+
+.agent-origin > .message-sender {
+  max-width: 100%;
+}
+
+/* A task named as the sender of its plan: its document glyph standing in a
+   16px mark's place, in the line's own quiet ink. */
+.agent-origin-glyph {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  color: var(--text-tertiary);
+}
+
+.agent-origin-glyph > svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* The issue or pull request a run's event named, cut to the line. */
+.agent-origin-subject {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* A teammate's call at its divider: their mark and name, then when it
    started, centred on the mark, every space kept. */
 .call-caller {

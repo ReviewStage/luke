@@ -523,6 +523,7 @@ function PlanDocument({
     chosen: (opened) =>
       sameTab(opened, tab) || (sidePanel.tab !== undefined && sameTab(opened, sidePanel.tab)),
     shownCode: plans.shownCode ?? [],
+    task: { name: plan.name, card: planCardOf(plans, listed, now) },
   });
   // The panel's toggle is the window's (desktop-shell.tsx); while no panel
   // stands beside the toolbar, the toolbar is the one that leaves it room.

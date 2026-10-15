@@ -47,9 +47,10 @@ import { useAppCommand } from "../app-commands";
 import { CallTabVideo } from "../call/panel-avatar";
 import { EmptyState } from "../empty-state";
 import { FindScope } from "../find-in-tab";
+import { drawnVisibly, focusSeek } from "../focus-seek";
 import { AgentChangesTab, ChangesCard, peopleOf } from "../planning/agent-changes-tab";
-import { AgentCard, agentSubject } from "../planning/agent-ref";
-import { AgentSubagentTab, type TranscriptCards } from "../planning/agent-tab";
+import { AgentActorRef, AgentCard, agentSubject, NOTHING_HELD } from "../planning/agent-ref";
+import { AgentSubagentTab, type BriefTask, type TranscriptCards } from "../planning/agent-tab";
 import {
   AgentTabCard,
   type CardReading,
@@ -58,7 +59,7 @@ import {
   heldLatest,
   lastFinished,
 } from "../planning/agent-tab-card";
-import { CodePane } from "../planning/code-pane";
+import { CodePane, centreWithin } from "../planning/code-pane";
 import {
   agentGlyphState,
   agentStateWords,
@@ -1069,6 +1070,25 @@ function subagentCardReading(
   };
 }
 
+/**
+ * Brings a call's row to the middle of the plan column's transcript once the
+ * column draws it, as a worker's sender line opens its agent at the call
+ * that started the worker; a row folded away, or never drawn, is left be.
+ */
+function seekCall(callId: string): void {
+  focusSeek({
+    find: () =>
+      document.querySelector<HTMLElement>(
+        `.desktop-plan-column [role="log"] [data-call-id="${CSS.escape(callId)}"]`,
+      ),
+    ready: drawnVisibly,
+    act: (row) => {
+      const log = row.closest<HTMLElement>('[role="log"]');
+      if (log !== null) centreWithin(log, row);
+    },
+  });
+}
+
 /** What a transcript's rows hang, by where they stand: the Call tab's, whose workers are the plan's own, and an agent's transcript's, whose workers are its delegations. */
 export interface PlanCards {
   readonly call: TranscriptCards;
@@ -1081,7 +1101,8 @@ export interface PlanCards {
  * the file's, with Luke's note on the lines (`file-ref.tsx`), and a
  * subagent's row its worker's, read as its tab reads its own, `chosen`
  * telling whether that tab is the one shown, whose transcript follows the
- * run. A worker the plan's work no longer holds hangs none.
+ * run. A worker the plan's work no longer holds hangs none. An agent's
+ * transcript also names the task whose plan it was handed, by `task`.
  */
 export function planCards(input: {
   agents: CodingAgentsControl;
@@ -1090,8 +1111,10 @@ export function planCards(input: {
   chosen: (tab: StripTab) => boolean;
   /** Every code Luke showed on the plan, whose note on a `show_code` call's lines its row's card says. */
   shownCode: readonly PlanCodeShowing[];
+  /** The plan's task, which an agent's plan card names as its sender. */
+  task?: BriefTask | undefined;
 }): PlanCards {
-  const { agents, workRows, held, chosen, shownCode } = input;
+  const { agents, workRows, held, chosen, shownCode, task } = input;
   const target = (opened: ToolTarget) => {
     if (opened.kind === TOOL_TARGET.SHOWN_CODE) {
       const note = shownCode.find((each) => each.callId === opened.call)?.code.note;
@@ -1119,6 +1142,7 @@ export function planCards(input: {
     },
     agent: (agentId) => ({
       target,
+      task,
       worker: ({ callId, task, status }) =>
         card(
           drawnSubagent(
@@ -1304,9 +1328,21 @@ function TabContent({
     // A planning worker's tab is an agent's worker's own, reading its session under the plan.
     const planningWorkers = { ...agents, readTranscript: work.readWorker };
     if (tab.delegation !== undefined) {
+      const parent: ToolTarget = { kind: TOOL_TARGET.AGENT, agent: tab.delegation.agent };
+      const { subagent } = tab;
       return (
         <AgentSubagentTab
           key={tab.subagent}
+          sender={
+            <AgentActorRef
+              subject={agentSubject(agents, parent.agent, NOTHING_HELD, false)}
+              models={agents.models}
+              onOpen={() => {
+                onOpenTarget(parent);
+                seekCall(subagent);
+              }}
+            />
+          }
           agentId={tab.delegation.agent}
           callId={tab.subagent}
           task={tab.delegation.task}

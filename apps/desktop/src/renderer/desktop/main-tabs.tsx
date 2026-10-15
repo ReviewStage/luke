@@ -611,6 +611,7 @@ export function MainTabContent({
       onOpenTarget={onOpenTarget}
       cards={cards.agent(agent.id)}
       onHeld={views.onAgentHeld}
+      run={agents.origin}
     />
   );
 }

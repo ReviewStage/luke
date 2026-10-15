@@ -2,12 +2,20 @@
 
 import assert from "node:assert/strict";
 import {
+  AUTOMATION_ACTION,
+  AUTOMATION_DEFAULT_GUARDS,
+  AUTOMATION_SCOPE,
+  AUTOMATION_TRIGGER,
+  type AutomationSummary,
+} from "@luke/features/automation-wire";
+import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentMessagesAnswerView,
   type CodingAgentPageAnswerView,
 } from "@luke/features/coding-agent-view";
 import {
   CHECK_SUMMARY,
+  CODING_AGENT_BRIEF,
   CODING_AGENT_SENDER,
   CODING_AGENT_STATUS,
   type CodingAgentPage,
@@ -16,6 +24,8 @@ import {
 } from "@luke/features/coding-agent-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import { EXPERIMENT } from "@luke/settings";
+import { experimentsOn } from "@luke/settings/testing";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -23,6 +33,7 @@ import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
+import { handState } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
 import { plansControl } from "#testing/plans-control";
@@ -35,7 +46,7 @@ import { ToastHost } from "../toast";
 import { DesktopAgentPage } from "./desktop-agent-page";
 
 /**
- * desktop-agent-page.test.ts -- one agent's page as the window draws it: the agent read by its id, titled as its tab would be, and a read that did not land said with a retry.
+ * desktop-agent-page.test.ts -- one agent's page as the window draws it: the agent read by its id, titled as its tab would be, and a read that did not land said with a retry; an automation's agent opens on the automation's prompt alone, as a message the automation sent, which opens the automation's page where the window can, and names it plainly where it cannot, deleted or the experiment off, with the pull request its event named and who ran it now; a webhook's body stands inside the card alone.
  *
  * The service is a script at the act boundary; synthetic agents and words throughout.
  */
@@ -56,10 +67,55 @@ const PAGE: CodingAgentPage = {
   repository: "acme/relay",
 };
 
+/** The automation whose run started the agent, as the workspace's automations list it. */
+const SWEEP: AutomationSummary = {
+  id: PAGE.automationId ?? "",
+  planId: null,
+  planName: null,
+  workspaceId: PAGE.workspaceId,
+  name: "Flaky-test sweep",
+  enabled: true,
+  pausedReason: null,
+  trigger: { kind: AUTOMATION_TRIGGER.SCHEDULE, cron: "0 9 * * 1-5", timezone: "UTC" },
+  action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: "Sweep the flaky tests." },
+  guards: AUTOMATION_DEFAULT_GUARDS,
+  nextRunAt: null,
+  lastRun: null,
+  createdAt: 1,
+  scope: AUTOMATION_SCOPE.WORKSPACE,
+};
+
+/** The prompt an automation's run handed its agent: the automation's own, then what Luke adds of the firing. */
+const HANDED = `Sweep the flaky tests.
+
+---
+
+Luke started this run for the automation "Flaky-test sweep" because its schedule was due.`;
+
+/** The agent an automation's run started, read as its page with the run. */
+const RUN_PAGE: CodingAgentPage = {
+  ...PAGE,
+  title: null,
+  brief: CODING_AGENT_BRIEF.PROMPT,
+  automationName: "Flaky-test sweep",
+  origin: { prompt: "Sweep the flaky tests." },
+};
+
+/** The agent's workspace, as the account lists it. */
+const ACME = {
+  id: PAGE.workspaceId,
+  name: "Acme",
+  role: WORKSPACE_ROLE.OWNER,
+  github: null,
+  memberCount: 2,
+};
+
 let root: Root | undefined;
 
 // A message is drawn once the parser has landed, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
+/** Every address handed to GitHub, in order. */
+let openedOnGitHub: string[] = [];
 /** How the next reads of the agent's page answer, in order; the last stands for every read after it. */
 let pages: CodingAgentPageAnswerView[] = [];
 /** Every agent whose page was read, in order. */
@@ -86,6 +142,7 @@ beforeEach(() => {
   transcript = undefined;
   told = [];
   published = undefined;
+  openedOnGitHub = [];
   Object.defineProperty(window, "luke", {
     configurable: true,
     value: {
@@ -127,6 +184,16 @@ beforeEach(() => {
         }
         if (request.kind === ACT_KIND.CODING_AGENTS_PULL_REQUEST && published !== undefined) {
           return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: published });
+        }
+        if (request.kind === ACT_KIND.AUTOMATIONS_LIST) {
+          return Promise.resolve({
+            status: ACT_OUTCOME_STATUS.DONE,
+            value: { automations: [SWEEP] },
+          });
+        }
+        if (request.kind === ACT_KIND.GITHUB_OPEN) {
+          openedOnGitHub.push(request.payload.url);
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
         }
         if (request.kind === ACT_KIND.CODING_AGENTS_PAGE) {
           read.push(request.payload.agentId);
@@ -470,7 +537,132 @@ test("a teammate's message to an agent on its own page carries their sign-in pic
   );
   await settle();
 
-  const sender = page.querySelector(".message-sender .actor-ref");
+  const sender = page.querySelector(".is-user:not(.agent-origin) .message-sender .actor-ref");
   assert.equal(sender?.querySelector(".actor-ref-name")?.textContent, "Charles Pan");
   assert.equal(sender?.querySelector("img")?.getAttribute("src"), picture);
+});
+
+/** The transcript of an automation's agent: the prompt its run handed it, and its answer. */
+function handedTranscript(): CodingAgentMessagesAnswerView {
+  return {
+    messages: [
+      { id: "brief", role: MESSAGE_ROLE.USER, parts: [{ type: "text", text: HANDED }] },
+      { id: "turn", role: MESSAGE_ROLE.ASSISTANT, parts: [{ type: "text", text: "Done." }] },
+    ],
+    cursor: "1:0",
+    status: CODING_AGENT_STATUS.COMPLETED,
+    title: null,
+  };
+}
+
+/** What a line says, its actors' faces left out, as a reader reads it. */
+function words(line: Element | null | undefined): string {
+  if (line == null) return "";
+  const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT);
+  let said = "";
+  for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+    if (node.parentElement?.closest(".actor-face") == null) said += node.textContent ?? "";
+  }
+  return said;
+}
+
+/** The card a page opens on, and the line naming who sent it. */
+interface OpenedOrigin {
+  readonly card: HTMLElement;
+  readonly sender: HTMLElement | null;
+}
+
+/** The card the page opens on, opened, and the line naming who sent it. */
+function origin(page: HTMLElement): OpenedOrigin {
+  const card =
+    page.querySelector<HTMLElement>(".agent-origin") ?? assert.fail("the page opens on its card");
+  const head = card.querySelector<HTMLElement>("[data-plan-card] > summary");
+  act(() => head?.click());
+  return { card, sender: card.querySelector<HTMLElement>(".message-sender") };
+}
+
+test("an automation's agent opens on the automation's prompt alone, sent by the automation, whose name opens its page", async () => {
+  handState(experimentsOn(EXPERIMENT.AUTOMATIONS));
+  pages = [{ agent: RUN_PAGE }];
+  transcript = handedTranscript();
+  const opened: unknown[] = [];
+  const plans = plansControl({ workspaces: [ACME] });
+  const page = mount({
+    ...plans,
+    automationsView: { ...plans.automationsView, onOpen: (place) => opened.push(place) },
+  });
+  await settle();
+
+  const { card, sender } = origin(page);
+  const automation = sender?.querySelector<HTMLButtonElement>("button.actor-ref");
+  assert.equal(words(automation), "Flaky-test sweep");
+  assert.match(card.textContent ?? "", /Sweep the flaky tests\./u);
+  assert.doesNotMatch(card.textContent ?? "", /Luke started this run/u);
+  act(() => automation?.click());
+
+  assert.deepEqual(opened, [{ kind: "edit", automationId: SWEEP.id }]);
+});
+
+test("a deleted automation's agent still names it, plainly, with nothing to open", async () => {
+  handState(experimentsOn(EXPERIMENT.AUTOMATIONS));
+  pages = [{ agent: { ...RUN_PAGE, automationId: null } }];
+  transcript = handedTranscript();
+  const page = mount(plansControl({ workspaces: [ACME] }));
+  await settle();
+
+  const { sender } = origin(page);
+  assert.equal(words(sender), "Flaky-test sweep (deleted)");
+  assert.equal(sender?.querySelector("button"), null, "nothing opens it");
+});
+
+test("with the Automations experiment off, an automation's agent names it plainly, with nothing to open", async () => {
+  pages = [{ agent: RUN_PAGE }];
+  transcript = handedTranscript();
+  const page = mount(plansControl({ workspaces: [ACME] }));
+  await settle();
+
+  const { sender } = origin(page);
+  assert.equal(words(sender), "Flaky-test sweep");
+  assert.equal(sender?.querySelector("button"), null, "nothing opens it");
+});
+
+test("a GitHub event's run names its pull request beside the automation, which opens on GitHub, and a run now names who ran it", async () => {
+  const url = "https://github.com/acme/relay/pull/2905";
+  pages = [
+    {
+      agent: {
+        ...RUN_PAGE,
+        origin: {
+          prompt: "Review it.",
+          subject: { number: 2905, title: "View commands", url },
+          runBy: { userId: "user-dean", name: "Dean Stratakos" },
+        },
+      },
+    },
+  ];
+  transcript = handedTranscript();
+  const page = mount(plansControl({ me: "user-dean" }));
+  await settle();
+
+  const { sender } = origin(page);
+  assert.equal(words(sender), "Flaky-test sweep · #2905 View commands · Run by you");
+  act(() => sender?.querySelector<HTMLElement>("a")?.click());
+  assert.deepEqual(openedOnGitHub, [url]);
+});
+
+test("a webhook's body stands folded inside the card under the prompt, and nowhere in the line naming who sent it", async () => {
+  const body = '{"release":"v2.4.0"}';
+  pages = [{ agent: { ...RUN_PAGE, origin: { prompt: "Write the notes.", body } } }];
+  transcript = handedTranscript();
+  const page = mount();
+  await settle();
+
+  const { card, sender } = origin(page);
+  assert.doesNotMatch(sender?.textContent ?? "", /release/u);
+  const fold = [...card.querySelectorAll<HTMLElement>("summary")].find(
+    (each) => each.textContent === "Webhook body",
+  );
+  assert.ok(fold, "the body folds under its own line");
+  act(() => fold.click());
+  assert.equal(card.querySelector("pre")?.textContent, body);
 });
