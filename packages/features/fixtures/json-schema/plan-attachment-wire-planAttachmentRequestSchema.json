@@ -1,0 +1,12 @@
+{
+  "type": "object",
+  "properties": {
+    "picture": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "picture"
+  ],
+  "additionalProperties": false
+}

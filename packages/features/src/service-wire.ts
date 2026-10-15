@@ -82,6 +82,13 @@ export const HOSTED_API_ERROR = {
   ALREADY_INVITED: "already-invited",
   /** The coding agent's sandbox is stopped, so no shell starts in it until the developer resumes it; nothing was started. */
   SANDBOX_STOPPED: "sandbox-stopped",
+  /**
+   * The workspace's Linear could not be read: none is connected, Linear no
+   * longer honours its grant, or the issue is none it reaches. An owner or
+   * admin mends the first two in Settings › Workspace › Integrations.
+   * Nothing was written.
+   */
+  LINEAR_UNAVAILABLE: "linear-unavailable",
 } as const;
 
 export type HostedApiError = (typeof HOSTED_API_ERROR)[keyof typeof HOSTED_API_ERROR];

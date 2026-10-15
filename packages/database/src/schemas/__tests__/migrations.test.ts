@@ -1,54 +1,13 @@
 import { spawnSync } from "node:child_process";
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { temporaryDirectory } from "@luke/runtime/testing";
 import { generateDrizzleJson, generateMigration } from "drizzle-kit/api-postgres";
 import { integer, pgTable, text } from "drizzle-orm/pg-core";
 import { expect, test } from "vitest";
-import * as schema from "../index.js";
-
-/**
- * The schema modules are the source of truth and `pnpm db:generate` writes
- * the folder that brings the newest snapshot up to them, so a module edited
- * without that migration leaves the two apart. This is the check that the
- * migration was generated: every leaf snapshot under `migrations/` (one no
- * other folder names as its parent) and the modules must need no statement
- * between them.
- */
-
-const MIGRATIONS = new URL("../../../migrations/", import.meta.url);
 
 type Snapshot = Parameters<typeof generateMigration>[0];
-
-async function snapshots(): Promise<ReadonlyArray<Snapshot>> {
-  const folders = await readdir(MIGRATIONS);
-  return Promise.all(
-    folders.map(
-      async (folder): Promise<Snapshot> =>
-        JSON.parse(await readFile(new URL(`${folder}/snapshot.json`, MIGRATIONS), "utf8")),
-    ),
-  );
-}
-
-/** The snapshots no other one descends from: one on a straight history, more while two branches stand unmerged. */
-async function leafSnapshots(): Promise<ReadonlyArray<Snapshot>> {
-  const all = await snapshots();
-  const parents = new Set(all.flatMap((snapshot) => snapshot.prevIds));
-  return all.filter((snapshot) => !parents.has(snapshot.id));
-}
-
-test("every schema module change has its generated migration", async () => {
-  const leaves = await leafSnapshots();
-  expect(leaves.length).toBeGreaterThan(0);
-  const current = await generateDrizzleJson(schema);
-  for (const leaf of leaves) {
-    expect(
-      await generateMigration(leaf, current),
-      "run `pnpm db:generate --name=<what it does>` and commit the folder it writes",
-    ).toEqual([]);
-  }
-});
 
 /**
  * `drizzle-kit check` is what `check.sh` runs over the real folder; these

@@ -10,7 +10,8 @@ import {
   readCodingAgent,
   takeCodingAgentMentionedServers,
 } from "@luke/database/models/coding-agent-store";
-import { sentLineId } from "@luke/database/models/ids";
+import { keepConversationPicture } from "@luke/database/models/conversation-pictures";
+import { childConversationId, sentLineId } from "@luke/database/models/ids";
 import { sentLineStands } from "@luke/database/models/message-reads";
 import { openPlanConversation, savePlanText, updatePlan } from "@luke/database/models/plan-store";
 import { claimRuntimeSession } from "@luke/database/models/recorded-session";
@@ -20,7 +21,7 @@ import { user } from "@luke/database/schemas/auth";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { githubInstallation } from "@luke/database/schemas/github-installation";
 import { conversations } from "@luke/database/schemas/storage";
-import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
+import { CONVERSATION_KIND, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import {
   fakeWorkspaceSeams,
   getTestDB,
@@ -33,8 +34,11 @@ import { accountInboxAnswerSchema } from "@luke/features/account-inbox-wire";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
+  AUTOMATION_FIRING,
   AUTOMATION_SCOPE,
   AUTOMATION_TRIGGER,
+  type AutomationFiring,
+  GITHUB_TRIGGER_EVENT,
 } from "@luke/features/automation-wire";
 import {
   CODING_AGENT_BOUNDS,
@@ -48,6 +52,7 @@ import {
   codingAgentPageAnswerSchema,
 } from "@luke/features/coding-agent-wire";
 import {
+  INBOX_ANSWER_LEAD,
   INBOX_BLOCK,
   INBOX_CURSOR_START,
   INBOX_IMAGE_TYPE,
@@ -108,6 +113,7 @@ import {
   openGithubUser,
   type RepositoryScript,
 } from "../testing/github-app-fake.js";
+import { CONNECTOR_ASKED_NOTHING, integrationConnectOf } from "../testing/integration-connect.js";
 import { BRAIN_HOST_TURN } from "./brain-host/bounds.js";
 import {
   EVE_CANCEL_OUTCOME,
@@ -328,6 +334,7 @@ const standing = (
       }),
       github.layer,
       modelCatalogOf(CATALOG),
+      integrationConnectOf(() => CONNECTOR_ASKED_NOTHING),
     );
     const seams = {
       resolveUserId: (incoming: Request) =>
@@ -380,6 +387,7 @@ function request(
     call?: string;
     archived?: string | undefined;
     attachment?: string;
+    picture?: string;
   } = {},
 ): Request {
   const url = new URL(path, ORIGIN);
@@ -388,6 +396,7 @@ function request(
   if (init.after !== undefined) url.searchParams.set("after", init.after);
   if (init.call !== undefined) url.searchParams.set("call", init.call);
   if (init.attachment !== undefined) url.searchParams.set("attachment", init.attachment);
+  if (init.picture !== undefined) url.searchParams.set("picture", init.picture);
   return new Request(url, {
     method: init.method ?? "GET",
     headers: bearer === undefined ? {} : { authorization: `Bearer ${bearer}` },
@@ -1188,6 +1197,55 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   );
 
   it.effect(
+    "an automation's agent reads as its page with the run that started it: the automation's name, the prompt alone, the pull request its event named, and who asked for a run now",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, plan, agent, ask } = yield* startedAgent(eve, { running: false });
+        const ranAs = (firing: AutomationFiring) =>
+          Effect.gen(function* () {
+            yield* Database.use((db) =>
+              db
+                .update(codingAgent)
+                .set({
+                  planId: null,
+                  organizationId: plan.workspaceId,
+                  automationOrigin: { name: "Code review", firing, prompt: "Review it." },
+                })
+                .where(eq(codingAgent.id, agent.id)),
+            );
+            return readAnswer(
+              codingAgentPageAnswerSchema,
+              HOSTED_HTTP_STATUS.OK,
+              yield* ask(request(AGENT, owner, { id: agent.id })),
+            ).agent;
+          });
+
+        const reviewed = yield* ranAs({
+          kind: AUTOMATION_FIRING.GITHUB,
+          event: GITHUB_TRIGGER_EVENT.PULL_REQUEST_OPENED,
+          repository: RELAY_FULL_NAME,
+          number: 2905,
+          title: "View commands",
+          url: "https://github.com/acme/relay/pull/2905",
+        });
+        const ranNow = yield* ranAs({ kind: AUTOMATION_FIRING.MANUAL, userId: owner });
+
+        assert.equal(reviewed.automationName, "Code review");
+        assert.deepEqual(reviewed.origin, {
+          prompt: "Review it.",
+          subject: {
+            number: 2905,
+            title: "View commands",
+            url: "https://github.com/acme/relay/pull/2905",
+          },
+        });
+        assert.equal(ranNow.origin?.runBy?.userId, owner);
+        assert.equal(ranNow.origin?.subject, undefined);
+      }),
+  );
+
+  it.effect(
     "an agent's inbox reads by the agent for a member of its workspace, an agent with no plan among them, and as not found for anyone else",
     () =>
       Effect.gen(function* () {
@@ -1654,6 +1712,46 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
   );
 
   it.effect(
+    "an answer to an item that asks nothing back reaches the agent as the developer's message where it carries a typed note, and a bare press is kept for the agent to read",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { post, answer } = yield* openInbox(eve);
+        const todo = (key: string) =>
+          post({
+            key,
+            title: "Turn on the agent-mail flag in staging",
+            response: { type: INBOX_RESPONSE.TODO },
+            needsReply: false,
+          });
+        const noted = yield* todo("flag-noted");
+        const bare = yield* todo("flag-bare");
+        assert.ok(Result.isSuccess(noted) && Result.isSuccess(bare));
+        const before = eve.sent.length;
+
+        const pressed = yield* answer(bare.success.id, {
+          revision: bare.success.revision,
+          clientKey: randomUUID(),
+          reply: INBOX_REPLY.DONE,
+        });
+        assert.equal(pressed.status, HOSTED_HTTP_STATUS.OK);
+        assert.equal(eve.sent.length, before, "a bare Done messages nobody");
+
+        const written = yield* answer(noted.success.id, {
+          revision: noted.success.revision,
+          clientKey: randomUUID(),
+          reply: INBOX_REPLY.DONE,
+          note: "Done, and on preview too.",
+        });
+        assert.equal(written.status, HOSTED_HTTP_STATUS.OK);
+        assert.equal(eve.sent.length, before + 1, "a typed note reaches the agent");
+        const handed = JSON.stringify(eve.sent.at(-1)?.message.message);
+        assert.ok(handed.includes(INBOX_ANSWER_LEAD), "it reads as an Inbox answer");
+        assert.ok(handed.includes("Done, and on preview too."), "it carries the note");
+      }),
+  );
+
+  it.effect(
     "an item's attachment is served as its bytes under the type the service kept, not to be sniffed and not to be cached, to the item's account alone: another account, no bearer, another item, and a name that is no attachment are refused",
     () =>
       Effect.gen(function* () {
@@ -1710,6 +1808,87 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
           ),
           refusal(HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED, HOSTED_API_ERROR.METHOD_NOT_ALLOWED),
         );
+      }),
+  );
+});
+
+const AGENT_PICTURE = "/api/agents/picture";
+
+/** A picture a tool answered: its bytes, the type they were sniffed to be, and its size; synthetic, as the store keeps what it is handed. */
+const picture = (mark: number) => ({
+  bytes: Uint8Array.from([...PNG, mark]),
+  contentType: INBOX_IMAGE_TYPE.PNG,
+  width: 1200,
+  height: 720,
+});
+
+it.layer(getTestDB())("an agent's pictures", (it) => {
+  it.effect(
+    "a picture a tool answered an agent or its worker is served as its bytes, not to be sniffed and not to be cached, to whoever may read the agent, and through its own transcript alone",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, plan, ask, fetch } = yield* openPlan();
+        const { agent, target } = yield* startedAgent(owner, plan.id, ask);
+        const callId = "call-worker";
+        const workerConversation = childConversationId(target.conversationId, callId);
+        const db = yield* Database;
+        yield* db.insert(conversations).values({
+          id: workerConversation,
+          userId: owner,
+          kind: CONVERSATION_KIND.CHILD,
+          parentConversationId: target.conversationId,
+        });
+        const agentPicture = Option.getOrThrow(yield* keepConversationPicture(target, picture(1)));
+        const workerPicture = Option.getOrThrow(
+          yield* keepConversationPicture(
+            { userId: owner, conversationId: workerConversation },
+            picture(2),
+          ),
+        );
+        const at = (bearer: string | undefined, pictureId: string, call?: string) =>
+          request(AGENT_PICTURE, bearer, {
+            id: agent.id,
+            picture: pictureId,
+            ...(call === undefined ? undefined : { call }),
+          });
+        const notFound = refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
+
+        const served = yield* fetch(at(owner, agentPicture.id));
+        assert.equal(served.status, HOSTED_HTTP_STATUS.OK);
+        assert.equal(served.headers.get("content-type"), INBOX_IMAGE_TYPE.PNG);
+        assert.equal(served.headers.get("x-content-type-options"), "nosniff");
+        assert.equal(served.headers.get("cache-control"), "private, no-store");
+        assert.deepEqual(
+          new Uint8Array(yield* Effect.promise(() => served.arrayBuffer())),
+          picture(1).bytes,
+        );
+        const workerServed = yield* fetch(at(owner, workerPicture.id, callId));
+        assert.deepEqual(
+          new Uint8Array(yield* Effect.promise(() => workerServed.arrayBuffer())),
+          picture(2).bytes,
+        );
+
+        assert.deepEqual(yield* ask(at(other, agentPicture.id)), notFound, "not a member");
+        assert.deepEqual(
+          yield* ask(at(owner, workerPicture.id)),
+          notFound,
+          "a worker's picture is not the agent's",
+        );
+        assert.deepEqual(
+          yield* ask(at(owner, agentPicture.id, callId)),
+          notFound,
+          "the agent's picture is not its worker's",
+        );
+        assert.deepEqual(yield* ask(at(owner, randomUUID())), notFound);
+        assert.deepEqual(yield* ask(at(owner, "members.png")), notFound);
+        assert.deepEqual(
+          yield* ask(at(undefined, agentPicture.id)),
+          refusal(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN),
+        );
+
+        yield* joinWorkspace(plan.workspaceId, other);
+        const teammate = yield* fetch(at(other, agentPicture.id));
+        assert.equal(teammate.status, HOSTED_HTTP_STATUS.OK, "a member of the agent's workspace");
       }),
   );
 });

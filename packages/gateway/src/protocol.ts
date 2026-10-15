@@ -56,6 +56,8 @@ export const GATEWAY_METHOD = {
   PLANNING_REVISION: "planning.revision",
   /** One version of one page of one plan with its HTML, read from the service for the frame that draws it; answered to the caller, never held in the view. */
   PLANNING_PAGE: "planning.page",
+  /** One picture of one plan, read from the service now as its bytes in base64; answered to the caller, never held in the view. */
+  PLANNING_PICTURE: "planning.picture",
   /** One revision of one plan put back as its content on the service; the view takes the plan as the service answered it. */
   PLANNING_RESTORE: "planning.restore",
   /** The developer's scene of the open plan's whiteboard, saved over the revision it was drawn on; the view takes the board as the service answered it. */
@@ -72,6 +74,12 @@ export const GATEWAY_METHOD = {
   WORKSPACES_GITHUB_CONNECT: "workspaces.githubConnect",
   /** A workspace's GitHub organization disconnected on the service; the view's workspaces are read again. */
   WORKSPACES_GITHUB_DISCONNECT: "workspaces.githubDisconnect",
+  /** A workspace's Linear connection begun on the service by an owner or admin: Vercel Connect's sign-in address, for the caller to open. */
+  WORKSPACES_LINEAR_CONNECT: "workspaces.linearConnect",
+  /** A workspace's Linear disconnected on the service; the view's workspaces are read again. */
+  WORKSPACES_LINEAR_DISCONNECT: "workspaces.linearDisconnect",
+  /** The Linear issues a workspace's connection reaches, read from the service now; answered to the caller, never held in the view. */
+  WORKSPACES_LINEAR_ISSUES: "workspaces.linearIssues",
   /** One workspace's members, read from the service now; answered to the caller, never held in the view. */
   WORKSPACES_MEMBERS: "workspaces.members",
   /** One workspace's photo, read from the service now as its bytes in base64; answered to the caller, never held in the view. */

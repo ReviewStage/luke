@@ -19,7 +19,8 @@ import {
 import { PLAN_TREE_ENTRY } from "@luke/features/plan-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { Effect } from "effect";
-import { act, createElement, type ReactNode } from "react";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
+import { act, createElement, Fragment, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import {
@@ -30,10 +31,11 @@ import {
   QUIET_COMPOSER,
   typeInComposer,
 } from "#testing/composer";
+import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { AgentComposer } from "./agent-composer";
-import { PlanMentions, type PlanMentionsValue } from "./plan-mentions";
+import { PlanMentions, type PlanMentionsValue, planlessMentions } from "./plan-mentions";
 import type { SkillSource } from "./skill-picker";
 import { TranscriptWords } from "./transcript-blocks";
 import { type MessageSender, useAgentComposer } from "./use-agent-composer";
@@ -151,6 +153,7 @@ beforeEach(() => {
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
+  window.localStorage.clear();
 });
 
 async function settle(): Promise<void> {
@@ -195,10 +198,16 @@ function drawing(node: ReactNode, page: PlanMentionsValue | undefined) {
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
+  const registry = AtomRegistry.make();
   const redraw = (on: PlanMentionsValue | undefined) =>
     act(() =>
       root.render(
-        on === undefined ? node : createElement(PlanMentions, { value: on, children: node }),
+        onRegistry(
+          registry,
+          on === undefined
+            ? createElement(Fragment, null, node)
+            : createElement(PlanMentions, { value: on, children: node }),
+        ),
       ),
     );
   redraw(page);
@@ -265,6 +274,23 @@ test("an @ typed in the box on a plan's page offers the plan's sections, and the
     ["Rollout"],
   );
   assert.deepEqual(sent, [`Follow ${mentionMarkdown(ROLLOUT, "Rollout", PLACE)}`]);
+});
+
+test("on the page of an agent no plan holds an @ offers its repository's files, read through its workspace, and no plan's sections", async () => {
+  const page = planlessMentions(
+    { workspace: "acme", workspaceId: "workspace-1", repository: "acme/relay" },
+    ignore,
+  );
+  const { container } = await box(page);
+
+  typeInComposer(container, "Follow @roll");
+  await settle();
+
+  assert.deepEqual(listed(container), ["rollout-store.ts"]);
+  assert.deepEqual(
+    told.filter((each) => each.kind === ACT_KIND.PLANNING_TREE).map((each) => each.payload),
+    [{ workspaceId: "workspace-1", repository: "acme/relay", path: "", recursive: true }],
+  );
 });
 
 test("off a plan's page an @ in the box opens nothing and is sent as the letter it is", async () => {

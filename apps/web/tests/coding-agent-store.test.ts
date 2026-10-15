@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import {
+  archiveCodingAgent,
   type CodingAgent,
   type CodingAgentBriefText,
   type CodingAgentPlace,
@@ -19,6 +20,7 @@ import {
   takeCodingAgentMentionedServers,
   updateCodingAgentChoice,
 } from "@luke/database/models/coding-agent-store";
+import { listPlans } from "@luke/database/models/plan-store";
 import { user } from "@luke/database/schemas/auth";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { conversations } from "@luke/database/schemas/storage";
@@ -30,8 +32,10 @@ import {
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import { withPlanAgents } from "@luke/service/agents/plan-agents";
 import { count, eq } from "drizzle-orm";
 import { Effect, Option } from "effect";
+import { TestClock } from "effect/testing";
 
 /**
  * The coding agents of an account's plans, through the store's public
@@ -149,6 +153,43 @@ it.layer(getTestDB())("the coding agents of an account's plans", (it) => {
         assert.deepEqual(yield* listPublishedCodingAgents(userId, [planId]), [
           { agent, published: null },
         ]);
+      }),
+  );
+
+  it.effect("an archived agent is left out of its plan's agents unless asked for", () =>
+    Effect.gen(function* () {
+      const { userId, planId } = yield* openPlan;
+      const agent = started(yield* createCodingAgent(userId, start(planId)));
+      const archived = Option.getOrElse(yield* archiveCodingAgent(userId, agent.id, true), () =>
+        assert.fail("the agent is archived"),
+      );
+
+      assert.deepEqual(yield* listPublishedCodingAgents(userId, [planId]), []);
+      assert.deepEqual(
+        yield* listPublishedCodingAgents(userId, [planId], { includeArchived: true }),
+        [{ agent: archived, published: null }],
+      );
+    }),
+  );
+
+  it.effect(
+    "a plan whose agent was archived still reads that agent's activity, naming the agent no more",
+    () =>
+      Effect.gen(function* () {
+        const { userId, planId } = yield* openPlan;
+        yield* TestClock.adjust("1 hour");
+        const agent = started(yield* createCodingAgent(userId, start(planId)));
+        yield* archiveCodingAgent(userId, agent.id, true);
+
+        const [listed] = yield* withPlanAgents(userId, yield* listPlans(userId));
+        assert.ok(listed, "the plan is listed");
+        assert.equal(listed.agents?.activityAt, agent.createdAt.getTime());
+        assert.ok(
+          (listed.agents?.activityAt ?? 0) > listed.updatedAt,
+          "later than the plan's save",
+        );
+        assert.equal(listed.agents?.total, 0);
+        assert.deepEqual(listed.agents?.agents, []);
       }),
   );
 

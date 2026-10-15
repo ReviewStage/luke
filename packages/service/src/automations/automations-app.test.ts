@@ -587,7 +587,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
         );
 
         assert.equal(first.run.status, AUTOMATION_RUN_STATUS.STARTED);
-        assert.deepEqual(first.run.firing, { kind: AUTOMATION_FIRING.MANUAL });
+        assert.deepEqual(first.run.firing, { kind: AUTOMATION_FIRING.MANUAL, userId: owner });
         assert.equal(first.run.agent?.status, CODING_AGENT_STATUS.STARTING);
         assert.deepEqual(again.run, first.run, "the same key answers the run it made");
         assert.equal(opened.length, 1, "and starts nothing again");

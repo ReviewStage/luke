@@ -17,7 +17,8 @@ import { INBOX_GROUPING, type InboxGrouping } from "../planning/inbox-model";
  * and keeps nothing, so its frames never wear a developer's folds. The
  * Inbox's plan groups are kept on the same terms, each by its plan's id,
  * and so are its two view choices, Needs you and how it groups, and its
- * list's width; a fixture run draws no inbox, so it has nothing staged to
+ * list's width; a task's own Inbox keeps a Needs you of its own, one for
+ * every task, apart from the window's; a fixture run draws no inbox, so it has nothing staged to
  * keep apart.
  */
 
@@ -28,6 +29,7 @@ const STORAGE_KEY = {
   PINNED: "luke.sidebarPinnedFolded",
   INBOX_PLANS: "luke.inboxFoldedPlans",
   INBOX_WAITING_ONLY: "luke.inboxWaitingOnly",
+  TASK_INBOX_WAITING_ONLY: "luke.taskInboxWaitingOnly",
   INBOX_GROUPING: "luke.inboxGrouping",
   INBOX_LIST_WIDTH: "luke.inboxListWidth",
 } as const;
@@ -175,12 +177,30 @@ export function useInboxPlanFolds(): InboxPlanFolds {
   };
 }
 
-/** How the Inbox lists its items, and the presses that change it. */
-export interface InboxViewChoices {
+/** Whether an Inbox lists only what needs the developer, and the press that changes it. */
+export interface InboxWaitingOnly {
   waitingOnly: boolean;
-  grouping: InboxGrouping;
   onWaitingOnly: (waitingOnly: boolean) => void;
+}
+
+/** How the window's Inbox lists its items, and the presses that change it. */
+export interface InboxViewChoices extends InboxWaitingOnly {
+  grouping: InboxGrouping;
   onGrouping: (grouping: InboxGrouping) => void;
+}
+
+/** A task's own Inbox's Needs you, every item listed until first pressed, kept apart from the window's and shared by every task. */
+export function useTaskInboxWaitingOnly(): InboxWaitingOnly {
+  const [waitingOnly, setWaitingOnly] = useState(() =>
+    readKept(STORAGE_KEY.TASK_INBOX_WAITING_ONLY, storedFlag, false),
+  );
+  return {
+    waitingOnly,
+    onWaitingOnly: (next) => {
+      setWaitingOnly(next);
+      writeKept(STORAGE_KEY.TASK_INBOX_WAITING_ONLY, storedFlag, next);
+    },
+  };
 }
 
 /** The Inbox's view choices, every item grouped by plan until first changed, and kept as each is pressed. */

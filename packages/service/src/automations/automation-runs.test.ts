@@ -7,6 +7,7 @@ import {
   type Automation,
   archivableRunAgents,
   createAutomation,
+  deleteAutomation,
   listAutomationRuns,
   readAutomation,
   recordAutomationRun,
@@ -972,6 +973,89 @@ it.layer(getTestDB())("an automation's runs", (it) => {
         assert.match(
           agent.prompt ?? "",
           /because a pull request was opened or pushed to on GitHub\./u,
+        );
+      }),
+  );
+
+  it.effect(
+    "a run's agent keeps its automation's name, what fired it, and the prompt alone, and still names the automation once it is deleted",
+    () =>
+      Effect.gen(function* () {
+        const { owner, automation } = yield* openAutomation();
+        const eve = fakeEve();
+        const run = Option.getOrThrow(
+          yield* recordAutomationRun(automation, {
+            dedupeKey: randomUUID(),
+            firing: { kind: AUTOMATION_FIRING.MANUAL, userId: owner },
+            firedAt: new Date(),
+          }),
+        );
+        const outcome = yield* executeAutomationRun(eve.eveFor, run).pipe(Effect.provide(services));
+        const agentId =
+          outcome?.status === AUTOMATION_RUN_STATUS.STARTED ? outcome.codingAgentId : "";
+
+        yield* deleteAutomation(owner, automation.id);
+        const agent = Option.getOrThrow(yield* readCodingAgent(owner, agentId));
+
+        assert.equal(agent.automationId, null, "the automation is gone");
+        assert.deepEqual(agent.automationOrigin, {
+          name: "Flaky-test sweep",
+          firing: { kind: AUTOMATION_FIRING.MANUAL, userId: owner },
+          prompt: PROMPT,
+        });
+      }),
+  );
+
+  it.effect(
+    "a webhook run's agent keeps the caller's body as they sent it, beside the prompt alone",
+    () =>
+      Effect.gen(function* () {
+        const { owner, automation } = yield* openAutomation();
+        const eve = fakeEve();
+        const payload = '{"title":"Release <v2> & notes"}';
+        const run = Option.getOrThrow(
+          yield* recordAutomationRun(automation, {
+            dedupeKey: randomUUID(),
+            firing: { kind: AUTOMATION_FIRING.WEBHOOK, bytes: payload.length },
+            payload,
+            firedAt: new Date(),
+          }),
+        );
+        const outcome = yield* executeAutomationRun(eve.eveFor, run).pipe(Effect.provide(services));
+        const agentId =
+          outcome?.status === AUTOMATION_RUN_STATUS.STARTED ? outcome.codingAgentId : "";
+        const agent = Option.getOrThrow(yield* readCodingAgent(owner, agentId));
+
+        assert.equal(agent.automationOrigin?.prompt, PROMPT);
+        assert.equal(agent.automationOrigin?.body, payload);
+      }),
+  );
+
+  it.effect(
+    "a webhook body cut to fit the task is kept cut where the task cut it, however much fencing spells it out",
+    () =>
+      Effect.gen(function* () {
+        const { owner, automation } = yield* openAutomation();
+        const eve = fakeEve();
+        const payload = "<".repeat(40_000);
+        const run = Option.getOrThrow(
+          yield* recordAutomationRun(automation, {
+            dedupeKey: randomUUID(),
+            firing: { kind: AUTOMATION_FIRING.WEBHOOK, bytes: payload.length },
+            payload,
+            firedAt: new Date(),
+          }),
+        );
+        const outcome = yield* executeAutomationRun(eve.eveFor, run).pipe(Effect.provide(services));
+        const agentId =
+          outcome?.status === AUTOMATION_RUN_STATUS.STARTED ? outcome.codingAgentId : "";
+        const agent = Option.getOrThrow(yield* readCodingAgent(owner, agentId));
+        const told = /<webhook-body>\n([\s\S]*?)\n<\/webhook-body>/u.exec(agent.prompt ?? "")?.[1];
+
+        assert.equal(
+          told?.replaceAll("&lt;", "<"),
+          agent.automationOrigin?.body,
+          "the agent keeps the words it was told",
         );
       }),
   );

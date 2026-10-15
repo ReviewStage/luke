@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { fakeCloudApi, HTTP_STATUS, type JsonValue } from "@luke/wire/testing";
+import { fakeCloudApi, HTTP_STATUS, type JsonValue, recordingHttpClient } from "@luke/wire/testing";
 import { Effect } from "effect";
 import { HostedCodingAgentClient } from "./coding-agent-client.js";
 import { CODING_AGENT_CALL_FAILURE } from "./coding-agent-view.js";
@@ -263,5 +263,40 @@ it.effect(
       );
       assert.equal(refusing.requests()[0]?.searchParams.get("repository"), null);
       assert.deepEqual(refused, { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND });
+    }),
+);
+
+it.effect(
+  "reads an agent's picture, or its worker's, as base64 under the type the service named, and anything else as unanswered",
+  () =>
+    Effect.gen(function* () {
+      const pictureId = "3ea06f44-b05d-4182-ad94-6f7a8b9cadb4";
+      const bytes = Uint8Array.from([0x89, 0x50, 0x4e, 0x47]);
+      const served = recordingHttpClient(
+        () => new Response(bytes, { status: 200, headers: { "content-type": "image/png" } }),
+      );
+      const read = yield* Effect.provide(client().agentPicture(AGENT_ID, pictureId), served.layer);
+      const worker = yield* Effect.provide(
+        client().agentPicture(AGENT_ID, pictureId, "call-worker"),
+        served.layer,
+      );
+      const other = recordingHttpClient(
+        () => new Response("<svg/>", { status: 200, headers: { "content-type": "image/svg+xml" } }),
+      );
+      const unexpected = yield* Effect.provide(
+        client().agentPicture(AGENT_ID, pictureId),
+        other.layer,
+      );
+
+      assert.deepEqual(
+        served.requests.map((request) => request.pathname),
+        [
+          `/api/agents/${AGENT_ID}/pictures/${pictureId}`,
+          `/api/agents/${AGENT_ID}/subagents/call-worker/pictures/${pictureId}`,
+        ],
+      );
+      assert.deepEqual(read, { contentType: "image/png", base64: "iVBORw==" });
+      assert.deepEqual(worker, read);
+      assert.deepEqual(unexpected, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
     }),
 );

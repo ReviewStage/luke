@@ -8,18 +8,18 @@ import {
   openHostedStoreTestDatabase,
   readMessagesByConversationTyped,
 } from "@luke/database/testing";
+import { CONNECTION_TOOL } from "@luke/features/agent-tools";
 import {
   CONVERSATION_PICTURE_BOUNDS,
   PICTURE_OMISSION,
 } from "@luke/features/conversation-picture-wire";
 import { INBOX_IMAGE_TYPE } from "@luke/features/inbox-wire";
+import { INTEGRATION_PROVIDER, INTEGRATION_REMOTE_TOOL } from "@luke/features/integration-wire";
 import { isRecord, type WireValue } from "@luke/wire";
 import { isToolUIPart } from "ai";
 import { Effect, Option } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll } from "vitest";
-import { CONNECTION_TOOL } from "../../integrations/connection-tools.js";
-import { INTEGRATION } from "../../integrations/integrations.js";
 import { HOSTED_TOOL_SET } from "../../plans/brain-tool-set.js";
 import { stampedEveEvent } from "../../testing/eve-events.js";
 import { BRAIN_HOST_TURN } from "./bounds.js";
@@ -57,7 +57,7 @@ const relay = new StreamRelay({
 const stamped = <Event extends Omit<MessageStreamEvent, "meta">>(event: Event) =>
   stampedEveEvent(event, NOW);
 
-const LINEAR_REMOTE = INTEGRATION.linear.REMOTE_TOOL;
+const LINEAR_REMOTE = INTEGRATION_REMOTE_TOOL[INTEGRATION_PROVIDER.LINEAR];
 
 /** The first bytes of a PDF, a blob no picture, which the record keeps as the tool wrote it. */
 const PDF_HEAD = Buffer.from("%PDF-1.7\n").toString("base64");

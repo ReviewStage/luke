@@ -17,8 +17,11 @@ import * as githubRepositoriesWire from "./github-repositories-wire.js";
 import * as inboxWire from "./inbox-wire.js";
 import * as integrationView from "./integration-view.js";
 import * as integrationWire from "./integration-wire.js";
+import * as linearWire from "./linear-wire.js";
 import * as liveContract from "./live-contract.js";
 import * as modelsWire from "./models-wire.js";
+import * as pictureWire from "./picture-wire.js";
+import * as planAttachmentWire from "./plan-attachment-wire.js";
 import * as planDocumentTemplate from "./plan-document-template.js";
 import * as planEdit from "./plan-edit.js";
 import * as planWire from "./plan-wire.js";
@@ -66,6 +69,7 @@ const EFFECT_MODULE_SCHEMAS = {
     codingAgentServersRequestSchema: codingAgentWire.codingAgentServersRequestSchema,
     codingAgentSummarySchema: codingAgentWire.codingAgentSummarySchema,
     codingAgentAnswerSchema: codingAgentWire.codingAgentAnswerSchema,
+    codingAgentOriginSchema: codingAgentWire.codingAgentOriginSchema,
     codingAgentPageSchema: codingAgentWire.codingAgentPageSchema,
     codingAgentPageAnswerSchema: codingAgentWire.codingAgentPageAnswerSchema,
     codingAgentListAnswerSchema: codingAgentWire.codingAgentListAnswerSchema,
@@ -183,6 +187,7 @@ const EFFECT_MODULE_SCHEMAS = {
     integrationToolAnnotationsSchema: integrationWire.integrationToolAnnotationsSchema,
     integrationToolParameterSchema: integrationWire.integrationToolParameterSchema,
     integrationToolsAnswerSchema: integrationWire.integrationToolsAnswerSchema,
+    integrationRemoteCallSchema: integrationWire.integrationRemoteCallSchema,
   } satisfies RecordedEffectJsonSchemas<typeof integrationWire>,
   "live-contract": {
     sessionCreateFrameSchema: liveContract.sessionCreateFrameSchema,
@@ -225,6 +230,14 @@ const EFFECT_MODULE_SCHEMAS = {
     planEditAnswerSchema: planEdit.planEditAnswerSchema,
     planEditValueSchema: planEdit.planEditValueSchema,
   } satisfies RecordedEffectJsonSchemas<typeof planEdit>,
+  "picture-wire": {
+    pictureTypeSchema: pictureWire.pictureTypeSchema,
+    pictureDataUrlSchema: pictureWire.pictureDataUrlSchema,
+  } satisfies RecordedEffectJsonSchemas<typeof pictureWire>,
+  "plan-attachment-wire": {
+    planAttachmentRequestSchema: planAttachmentWire.planAttachmentRequestSchema,
+    planAttachmentAnswerSchema: planAttachmentWire.planAttachmentAnswerSchema,
+  } satisfies RecordedEffectJsonSchemas<typeof planAttachmentWire>,
   "plan-wire": {
     workspaceIdSchema: planWire.workspaceIdSchema,
     agentEditLineSchema: planWire.agentEditLineSchema,
@@ -286,6 +299,12 @@ const EFFECT_MODULE_SCHEMAS = {
     wireUuidSchema: serviceWire.wireUuidSchema,
     memberRefSchema: serviceWire.memberRefSchema,
   } satisfies RecordedEffectJsonSchemas<typeof serviceWire>,
+  "linear-wire": {
+    linearIssueIdSchema: linearWire.linearIssueIdSchema,
+    linearIssueSummarySchema: linearWire.linearIssueSummarySchema,
+    planLinearIssueSchema: linearWire.planLinearIssueSchema,
+    linearIssuesAnswerSchema: linearWire.linearIssuesAnswerSchema,
+  } satisfies RecordedEffectJsonSchemas<typeof linearWire>,
   "transcript-wire": {
     transcriptTextPartSchema: transcriptWire.transcriptTextPartSchema,
     transcriptMessageSchema: transcriptWire.transcriptMessageSchema,
@@ -305,6 +324,10 @@ const EFFECT_MODULE_SCHEMAS = {
     workspacePhotoSetRequestSchema: workspaceWire.workspacePhotoSetRequestSchema,
     workspaceGithubRequestSchema: workspaceWire.workspaceGithubRequestSchema,
     workspaceGithubConnectAnswerSchema: workspaceWire.workspaceGithubConnectAnswerSchema,
+    workspaceLinearSchema: workspaceWire.workspaceLinearSchema,
+    workspaceLinearRequestSchema: workspaceWire.workspaceLinearRequestSchema,
+    workspaceLinearConnectAnswerSchema: workspaceWire.workspaceLinearConnectAnswerSchema,
+    linearIssuesRequestSchema: workspaceWire.linearIssuesRequestSchema,
     workspaceMemberSchema: workspaceWire.workspaceMemberSchema,
     workspaceMembersAnswerSchema: workspaceWire.workspaceMembersAnswerSchema,
     workspaceMemberRemovalSchema: workspaceWire.workspaceMemberRemovalSchema,

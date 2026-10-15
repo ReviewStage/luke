@@ -1,3 +1,4 @@
+import { automationFiringSchema } from "@luke/features/automation-wire";
 import {
   CONTEXT_WINDOW,
   type CodingAgentPullRequest,
@@ -34,6 +35,7 @@ import {
   codingAgent,
   codingAgentDelegation,
   type StoredAgentStep,
+  type StoredAutomationOrigin,
 } from "../schemas/coding-agent.js";
 import { plan } from "../schemas/plan.js";
 import { conversations, messages, turns } from "../schemas/storage.js";
@@ -127,6 +129,8 @@ export interface CodingAgent {
   readonly organizationId: string;
   /** The automation whose run started the agent; null for one started by hand or once that automation is deleted. */
   readonly automationId: string | null;
+  /** The run of an automation that started the agent, as it stood then, kept once that automation is deleted; null for one started by hand. */
+  readonly automationOrigin: StoredAutomationOrigin | null;
   readonly conversationId: string;
   readonly model: string;
   readonly effort: string;
@@ -188,6 +192,8 @@ export type CodingAgentPlace =
 export type NewCodingAgent = CodingAgentPlace & {
   /** The automation whose run starts the agent; none for one started by hand. */
   readonly automationId?: string | undefined;
+  /** That automation's run as it starts the agent; none for one started by hand. */
+  readonly automationOrigin?: StoredAutomationOrigin | undefined;
   readonly idempotencyKey: string;
   readonly model: string;
   readonly effort: string;
@@ -207,6 +213,7 @@ const CODING_AGENT_COLUMNS = {
   planId: codingAgent.planId,
   organizationId: AGENT_WORKSPACE,
   automationId: codingAgent.automationId,
+  automationOrigin: codingAgent.automationOrigin,
   conversationId: codingAgent.conversationId,
   model: codingAgent.model,
   effort: codingAgent.effort,
@@ -244,12 +251,23 @@ function storedServers(
   return servers.length === 0 ? null : [...new Set(servers)];
 }
 
+/** The `automation_origin` column as a row holds it. */
+const AutomationOriginColumnSchema = Schema.NullOr(
+  Schema.Struct({
+    name: Schema.String,
+    firing: automationFiringSchema,
+    prompt: Schema.String,
+    body: Schema.optionalKey(Schema.String),
+  }),
+);
+
 const CodingAgentRowSchema = Schema.Struct({
   id: Schema.String,
   userId: Schema.String,
   planId: Schema.NullOr(Schema.String),
   organizationId: Schema.String,
   automationId: Schema.NullOr(Schema.String),
+  automationOrigin: AutomationOriginColumnSchema,
   conversationId: Schema.String,
   model: Schema.String,
   effort: Schema.String,
@@ -358,6 +376,7 @@ const insertAgent = SqlSchema.findOne({
     planId: Schema.NullOr(Schema.String),
     organizationId: Schema.String,
     automationId: Schema.NullOr(Schema.String),
+    automationOrigin: AutomationOriginColumnSchema,
     idempotencyKey: Schema.String,
     model: Schema.String,
     effort: Schema.String,
@@ -379,6 +398,7 @@ const insertAgent = SqlSchema.findOne({
           planId: write.planId,
           organizationId: write.organizationId,
           automationId: write.automationId,
+          automationOrigin: write.automationOrigin,
           conversationId: write.conversationId,
           model: write.model,
           effort: write.effort,
@@ -701,12 +721,16 @@ const updateAgentPublished = SqlSchema.void({
 });
 
 const findAgentsOfPlans = SqlSchema.findAll({
-  Request: Schema.Struct({ userId: Schema.String, planIds: Schema.Array(Schema.String) }),
+  Request: Schema.Struct({
+    userId: Schema.String,
+    planIds: Schema.Array(Schema.String),
+    includeArchived: Schema.Boolean,
+  }),
   Result: Schema.Struct({
     ...CodingAgentRowSchema.fields,
     published: Schema.NullOr(codingAgentPullRequestSchema),
   }),
-  execute: ({ userId, planIds }) =>
+  execute: ({ userId, planIds, includeArchived }) =>
     Database.use((db) =>
       db
         .select({ ...CODING_AGENT_COLUMNS, published: codingAgent.published })
@@ -716,7 +740,7 @@ const findAgentsOfPlans = SqlSchema.findAll({
           and(
             inArray(plan.id, [...planIds]),
             planReachableBy(userId),
-            isNull(codingAgent.archivedAt),
+            includeArchived ? undefined : isNull(codingAgent.archivedAt),
           ),
         )
         .orderBy(asc(codingAgent.createdAt), asc(codingAgent.id)),
@@ -793,7 +817,7 @@ const deleteConversationRow = SqlSchema.void({
  * of the account's with no plan: a `coding_agent` conversation of the
  * account's and the row that binds it to the plan or the workspace, with
  * the plan text or the prompt, the repository, and the automation whose run
- * started it, as handed. A Start whose key the account has already used answers the agent
+ * started it with that run, as handed. A Start whose key the account has already used answers the agent
  * that Start made, whatever else the retry carries, and writes nothing.
  * Nothing where the account reaches no such plan or is no member of the
  * workspace. An archived plan starts no
@@ -832,6 +856,7 @@ export function createCodingAgent(
           planId: started.planId,
           organizationId: reached.value.organizationId,
           automationId: started.automationId ?? null,
+          automationOrigin: started.automationOrigin ?? null,
           idempotencyKey: started.idempotencyKey,
           model: started.model,
           effort: started.effort,
@@ -904,13 +929,15 @@ export interface PublishedCodingAgent {
   readonly published: CodingAgentPullRequest | null;
 }
 
-/** Every agent standing on the plans named, by any member, each with what it published, in the order they were started, an archived one left out; a plan of a workspace the account is not in names none. */
+/** Every agent standing on the plans named, by any member, each with what it published, in the order they were started, an archived one left out unless `includeArchived` asks for it; a plan of a workspace the account is not in names none. */
 export function listPublishedCodingAgents(
   userId: string,
   planIds: readonly string[],
+  options: { readonly includeArchived?: boolean } = {},
 ): CodingAgentStoreEffect<readonly PublishedCodingAgent[]> {
   if (planIds.length === 0) return Effect.succeed([]);
-  return Effect.map(findAgentsOfPlans({ userId, planIds }), (rows) =>
+  const includeArchived = options.includeArchived === true;
+  return Effect.map(findAgentsOfPlans({ userId, planIds, includeArchived }), (rows) =>
     rows.map(({ published, ...agent }) => ({ agent, published })),
   );
 }

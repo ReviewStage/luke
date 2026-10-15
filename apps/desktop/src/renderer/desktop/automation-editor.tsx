@@ -47,7 +47,7 @@ import type { Workspace } from "@luke/features/workspace-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { ChevronRightIcon, PlayIcon, Trash2Icon, ZapIcon } from "lucide-react";
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { AnchoredPopover, POPOVER_ALIGN } from "../anchored-popover";
 import { useAppCommand } from "../app-commands";
@@ -58,6 +58,7 @@ import { AgentModelChip } from "../planning/agent-model-chip";
 import { ModelMenu } from "../planning/model-menu";
 import { dayAndTimeText, sinceText, useMinute } from "../planning/plan-time";
 import { CHIP_PLACE, RepositoryChip, type RepositoryChooser } from "../planning/repository-chip";
+import type { LeaveAsk, LeaveGuard } from "../planning/use-plans-tab";
 import { ConfirmDialog, useConfirmDialog } from "../settings/confirm-dialog";
 import { Picker, PickerRow } from "../settings/picker-row";
 import { SelectRow } from "../settings/select-row";
@@ -186,9 +187,6 @@ function releaseOnEscape(event: React.KeyboardEvent<HTMLElement>): void {
   event.preventDefault();
   event.currentTarget.blur();
 }
-
-/** Escape kept and spent on nothing, while leaving would lose what was written. */
-function keepEscape(): void {}
 
 /** A time of day as the time field holds it, the hour and minute in two figures each. */
 function clockValue(hour: number, minute: number): string {
@@ -1188,6 +1186,7 @@ export function AutomationEditor({
   onBack,
   onCreated,
   onOpenAgent,
+  leaveGuard,
 }: {
   automation: AutomationSummary | undefined;
   workspace: Workspace | undefined;
@@ -1199,6 +1198,8 @@ export function AutomationEditor({
   onCreated: (automationId: string) => void;
   /** Opens a run's agent on its own page. */
   onOpenAgent: (agentId: string) => void;
+  /** The window's ask before leaving unsaved work, which this page stands while it holds some. */
+  leaveGuard: LeaveGuard;
 }): React.JSX.Element {
   const runs = useAutomationRuns(automation?.id);
   const [running, setRunning] = useState(false);
@@ -1229,8 +1230,8 @@ export function AutomationEditor({
     saved !== undefined && saved.repository === draft.repository ? saved.agentId : null;
   // Note that a new draft nothing was changed in is no work to lose, so Escape may leave it.
   const written = automation === undefined ? !sameDraft(draft, start) : dirty;
-  // Escape goes back to the list while nothing written would be lost, and is kept, doing nothing, while it would.
-  useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, written ? keepEscape : onBack);
+  // Escape goes back to the list, asking first, as every way out does, where something written would be lost.
+  useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, onBack);
   const problems = draftProblems(draft, planBacked, new Date());
   const editDraft = (patch: Partial<AutomationDraft>) => {
     setDraft((was) => ({ ...was, ...patch }));
@@ -1247,7 +1248,8 @@ export function AutomationEditor({
     // A save that leaves it no webhook lets go of any secret shown, since that secret no longer admits anything.
     if (answer.automation.trigger.kind !== AUTOMATION_TRIGGER.WEBHOOK) setShownSecret(undefined);
     else if (answer.webhookSecret !== undefined) setShownSecret(answer.webhookSecret);
-    if (automation === undefined) onCreated(answer.automation.id);
+    // Note that the page it now stands as is this one, saved, so the move there passes the ask.
+    if (automation === undefined) leaveGuard.pass(() => onCreated(answer.automation.id));
   };
   const save = () => {
     if (Object.keys(problems).length > 0) {
@@ -1273,20 +1275,22 @@ export function AutomationEditor({
       if ("failure" in answer) setRefusal(RUN_REFUSAL_WORDS[answer.failure]);
     });
   };
-  // Note that opening a run's agent leaves the page and its draft with it, so unsaved changes ask first.
-  const [leavingFor, setLeavingFor] = useState<string | undefined>(undefined);
-  const leaving = useConfirmDialog({ subject: leavingFor !== undefined, surfaceOpen: true }, () => {
-    if (leavingFor !== undefined) onOpenAgent(leavingFor);
+  // Note that any way out of the page, a crumb, Escape, a run's agent, the sidebar, ⌘K, history,
+  // or Settings, asks first while something written would be lost, and goes once Leave is pressed.
+  const [leavingBy, setLeavingBy] = useState<{ readonly leave: () => void } | undefined>(undefined);
+  const leaving = useConfirmDialog({ subject: leavingBy !== undefined, surfaceOpen: true }, () => {
+    leavingBy?.leave();
     return Promise.resolve(ACCEPTED);
   });
-  const openRun = (agentId: string) => {
-    if (!dirty) {
-      onOpenAgent(agentId);
-      return;
-    }
-    setLeavingFor(agentId);
+  const askLeave = useRef<LeaveAsk>(() => undefined);
+  askLeave.current = (leave) => {
+    setLeavingBy({ leave });
     leaving.ask();
   };
+  useEffect(
+    () => (written ? leaveGuard.stand((leave) => askLeave.current(leave)) : undefined),
+    [written, leaveGuard],
+  );
   const toggle = (enabled: boolean) => {
     if (automation === undefined) return;
     writes.toggle(automation.id, enabled).then((answer) => {
@@ -1304,7 +1308,7 @@ export function AutomationEditor({
             reason: SAVE_REFUSAL_WORDS[answer.failure],
           };
         }
-        onBack();
+        leaveGuard.pass(onBack);
         return ACCEPTED;
       });
     },
@@ -1363,14 +1367,17 @@ export function AutomationEditor({
           created={automation !== undefined}
           runs={runs.read}
           onRetry={runs.reload}
-          onOpenAgent={openRun}
+          onOpenAgent={onOpenAgent}
         />
       </div>
       <ConfirmDialog
         confirm={leaving}
         question={{
           title: "Leave with unsaved changes?",
-          body: "Opening the run's agent leaves this page, and what you changed here is lost.",
+          body:
+            automation === undefined
+              ? "This automation isn't created yet, and what you wrote here is lost."
+              : "What you changed here is lost.",
           verb: "Leave",
           running: "Leaving",
         }}

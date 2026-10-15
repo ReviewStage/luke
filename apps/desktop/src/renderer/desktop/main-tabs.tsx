@@ -9,6 +9,8 @@ import { inPlanOrder, isDraftTab, type StripTab, sameTab, tabKey } from "@luke/u
 import { useEffect, useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
+import { useDraftedAgents } from "../composer-drafts";
+import { DraftMark } from "../draft-mark";
 import { agentCardReading } from "../planning/agent-ref";
 import { AgentTab } from "../planning/agent-tab";
 import { AgentTabCard } from "../planning/agent-tab-card";
@@ -223,7 +225,9 @@ interface DrawnTab {
  * The agents' tabs and the draft's, in the order started, each closing
  * through `main`. An agent's transcript is read whole from the service for a
  * copy, since its tab holds it only while shown, and its card previews its
- * latest step from what its tab last held (`heldLatest`).
+ * latest step from what its tab last held (`heldLatest`). An agent's tab
+ * whose box holds a draft wears the draft's pencil at its end, where a
+ * failure's mark does not stand there first (`draft-mark.tsx`).
  */
 function agentTabs(input: {
   main: MainTabsControl;
@@ -231,8 +235,10 @@ function agentTabs(input: {
   unread: readonly StripTab[];
   views: TabViews;
   copied: TranscriptCopier;
+  /** The agents whose box holds a draft, by id. */
+  drafted: readonly string[];
 }): DrawnTab[] {
-  const { main, agents, unread, views, copied } = input;
+  const { main, agents, unread, views, copied, drafted } = input;
   const chosen = (tab: MainTab) => sameTab(tab, main.tab);
   const models = agents.models ?? [];
   const look = (tab: MainTab, drawn: Omit<TabLook, "selected" | "onSelect">) => ({
@@ -252,7 +258,8 @@ function agentTabs(input: {
       agent,
       look: look(tab, {
         ...tabLook({ kind: TAB_KIND.AGENT, name: label, agent }),
-        endMark: agentEndMark(agent, false),
+        endMark:
+          agentEndMark(agent, false) ?? (drafted.includes(agent.id) ? <DraftMark /> : undefined),
         card: <AgentTabCard name={label} models={models} read={readCard} />,
       }),
       close: () => main.onClose(tab),
@@ -401,6 +408,7 @@ export function MainTabStrip({
   onOpenTerminal: (agentId: string) => void;
 }): React.JSX.Element {
   const copied = useTranscriptCopier();
+  const drafted = useDraftedAgents();
   const pinnedOf = (tab: ColumnPinnableTab) =>
     pins.pinned.some((pin) => pin.plan === plan.id && sameTab(pin.tab, tab));
   // A pinned Inbox stands whatever arrives, so it offers no close until unpinned.
@@ -422,7 +430,7 @@ export function MainTabStrip({
   // The agents', the draft's, and the Inbox's tabs in the column's order,
   // which the developer's moves and the Inbox's opening set (`use-main-tabs.ts`).
   const own = inPlanOrder(
-    [...agentTabs({ main, agents, unread, views, copied }), ...inboxTab],
+    [...agentTabs({ main, agents, unread, views, copied, drafted }), ...inboxTab],
     main.tabs,
     (entry) => entry.tab,
   );
@@ -571,8 +579,8 @@ export function MainTabContent({
     task: string,
     status: CodingAgentStatus,
   ) => void;
-  /** Opens the agent's changes in the side panel, by the agent. */
-  onOpenChanges: (agentId: string) => void;
+  /** Opens the agent's changes in the side panel, by the agent; none where no side panel stands to show them. */
+  onOpenChanges?: ((agentId: string) => void) | undefined;
   /** Opens what a call in the agent's transcript is about in the tab that draws it. */
   onOpenTarget: (target: ToolTarget) => void;
   /** The cards the transcript's rows that open a tab hang, as those tabs hang them. */
@@ -599,10 +607,40 @@ export function MainTabContent({
       control={agents}
       shown={shown}
       onOpenSubagent={(callId, task, status) => onOpenDelegation(agent.id, callId, task, status)}
-      onOpenChanges={() => onOpenChanges(agent.id)}
+      onOpenChanges={onOpenChanges === undefined ? undefined : () => onOpenChanges(agent.id)}
       onOpenTarget={onOpenTarget}
       cards={cards.agent(agent.id)}
       onHeld={views.onAgentHeld}
     />
+  );
+}
+
+/**
+ * One agent's pane: what an agent's or the draft's tab shows
+ * (`MainTabContent`), at the document's reading width (`.desktop-agent`).
+ * The task column draws it for the tab it shows, as the panel of that tab,
+ * and the page of an agent no plan holds draws it for its agent
+ * (`desktop-agent-page.tsx`), so an agent reads, finds, and is written to
+ * alike wherever it stands.
+ */
+export function AgentPane({
+  label,
+  tabbed,
+  ...content
+}: Parameters<typeof MainTabContent>[0] & {
+  /** What the pane is called to a reader: the agent's tab's name. */
+  label: string | undefined;
+  /** Whether the pane is the panel of a tab in a strip, as the task column's is. */
+  tabbed: boolean;
+}): React.JSX.Element {
+  return (
+    <section
+      className="desktop-agent"
+      role={tabbed ? "tabpanel" : undefined}
+      aria-label={label}
+      data-popover-room=""
+    >
+      <MainTabContent {...content} />
+    </section>
   );
 }

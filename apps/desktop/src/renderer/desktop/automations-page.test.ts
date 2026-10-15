@@ -30,7 +30,7 @@ import { plansControl } from "#testing/plans-control";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { runAppCommand } from "../app-commands";
 import { OpenFeedbackProvider } from "../open-feedback";
-import { AUTOMATIONS_PAGE, type AutomationsPlace } from "../planning/use-plans-tab";
+import { AUTOMATIONS_PAGE, type AutomationsPlace, useLeaveGuard } from "../planning/use-plans-tab";
 import { ToastHost } from "../toast";
 import { appStateNow } from "../use-app-state";
 import { AutomationsPage } from "./automations-page";
@@ -177,6 +177,7 @@ beforeEach(() => {
   runsAsked = [];
   runRefusal = undefined;
   agentsOpened = [];
+  factoryOpens = [];
   defaultRefused = false;
   catalogReads = 0;
   changeRefusal = undefined;
@@ -541,6 +542,12 @@ test("with no automations the page says what one is, and with no workspace liste
 /** The workspace the account made first, its personal one, where everything is its own. */
 const PERSONAL: Workspace = { ...WORKSPACE, id: "workspace-personal", name: "Ada" };
 
+/** Each time Factory was opened past the page, as the sidebar's row opens it. */
+let factoryOpens: number[] = [];
+
+/** Opens Factory as the sidebar's row would, through the window's guarded door. */
+let openFactory: () => void = () => undefined;
+
 /** Every page the Automations pages stood on, in order, as the window moved them. */
 let places: AutomationsPlace[] = [];
 
@@ -558,10 +565,18 @@ function mountPages(start: AutomationsPlace, workspace: Workspace = WORKSPACE): 
     const [place, setPlace] = useState(start);
     const [listed, setListed] = useState(workspace);
     moveTo = setListed;
+    // The window's own guard, over doors guarded as the Plans tab guards its own.
+    const leaveGuard = useLeaveGuard();
     const plans = plansControl({
+      leaveGuard,
       agentView: {
         agentId: undefined,
-        onOpen: (agentId) => agentsOpened.push(agentId),
+        onOpen: leaveGuard.guard((agentId: string) => agentsOpened.push(agentId)),
+        onClose: () => undefined,
+      },
+      factoryView: {
+        open: false,
+        onOpen: leaveGuard.guard(() => factoryOpens.push(1)),
         onClose: () => undefined,
       },
       workspace: listed,
@@ -569,14 +584,15 @@ function mountPages(start: AutomationsPlace, workspace: Workspace = WORKSPACE): 
       automationsView: {
         open: true,
         place,
-        onOpen: (next = { kind: AUTOMATIONS_PAGE.LIST }) => {
+        onOpen: leaveGuard.guard((next: AutomationsPlace = { kind: AUTOMATIONS_PAGE.LIST }) => {
           places.push(next);
           setPlace(next);
-        },
+        }),
         onClose: () => undefined,
       },
     });
     const base = plans.newPlan;
+    openFactory = plans.factoryView.onOpen;
     return createElement(AutomationsPage, {
       plans: {
         ...plans,
@@ -789,17 +805,68 @@ test("a deletion asks first, then goes back to the list without the automation",
   assert.ok(!rows(page).some(([name]) => name === SWEEP.name));
 });
 
-test("Escape leaves a page with nothing unsaved for the list, and keeps one whose draft would be lost", async () => {
+/** The leave dialog's question, while it stands. */
+function leaveAsked(): string | undefined {
+  return [...document.querySelectorAll("[role=dialog], [role=alertdialog]")]
+    .map((dialog) => dialog.textContent ?? "")
+    .find((words) => words.includes("Leave with unsaved changes?"));
+}
+
+test("Escape leaves a page with nothing unsaved for the list, and asks first where its draft would be lost", async () => {
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
   await settle();
 
   type(page.querySelector("input[aria-label='Automation name']"), "Sweep");
   act(() => runAppCommand(APP_COMMAND.EXIT_AUTOMATIONS));
   assert.equal(places.length, 1, "the unsaved draft stands");
+  assert.match(leaveAsked() ?? "", /What you changed here is lost\./u);
+  act(() => button("Cancel").click());
+  await settle();
+  assert.equal(leaveAsked(), undefined);
 
   type(page.querySelector("input[aria-label='Automation name']"), SWEEP.name);
   act(() => runAppCommand(APP_COMMAND.EXIT_AUTOMATIONS));
   assert.deepEqual(places.at(-1), { kind: AUTOMATIONS_PAGE.LIST });
+});
+
+test("a new automation with something written asks before any way out leaves it, and Leave goes where was asked", async () => {
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
+  await settle();
+
+  type(page.querySelector("textarea[aria-label='Prompt']"), "Triage the issues opened overnight.");
+  act(() => button("Automations").click());
+  assert.equal(places.length, 1, "the crumb waits on the question");
+  assert.match(
+    leaveAsked() ?? "",
+    /This automation isn't created yet, and what you wrote here is lost\./u,
+  );
+  act(() => button("Cancel").click());
+  await settle();
+
+  act(() => openFactory());
+  assert.deepEqual(factoryOpens, [], "the sidebar's row waits on the question too");
+  act(() => button("Leave").click());
+  await settle();
+  assert.deepEqual(factoryOpens, [1]);
+});
+
+test("a new automation with nothing written leaves at once, and one just created stands as its own page without asking", async () => {
+  mountPages({ kind: AUTOMATIONS_PAGE.NEW });
+  await settle();
+  act(() => button("Automations").click());
+  assert.deepEqual(places.at(-1), { kind: AUTOMATIONS_PAGE.LIST });
+  assert.equal(leaveAsked(), undefined);
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
+  await settle();
+  type(page.querySelector("input[aria-label='Automation name']"), "Morning triage");
+  type(page.querySelector("textarea[aria-label='Prompt']"), "Triage the issues opened overnight.");
+  act(() => button("Create").click());
+  await settle();
+  assert.equal(places.at(-1)?.kind, AUTOMATIONS_PAGE.EDIT);
+  assert.equal(leaveAsked(), undefined);
 });
 
 test("the Owner row stands in a shared workspace, and not in the account's personal one", async () => {

@@ -27,7 +27,7 @@ import type { SettingsView } from "@luke/settings/settings-views";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
 import type { HistorySpot } from "./planning/use-plan-history";
-import type { PlansControl } from "./planning/use-plans-tab";
+import type { LeaveGuard, PlansControl } from "./planning/use-plans-tab";
 import { useExperiment } from "./use-app-state";
 
 /** The most places the history holds; the oldest go first. */
@@ -160,8 +160,10 @@ function useHistory(input: {
   place: Place | undefined;
   reachable: (place: Place) => boolean;
   go: (place: Place) => void;
+  /** Asks first, while a page holds unsaved work, before a step moves the trail at all. */
+  guard: LeaveGuard["guard"];
 }): NavigationHistory & { backTo: (place: Place) => boolean } {
-  const { place, reachable } = input;
+  const { place, reachable, guard } = input;
   const [trail, setTrail] = useState<Trail>(EMPTY_TRAIL);
   // Note that the presses read the latest trail through a ref, because a key
   // can land between a move and the render that shows it, and the latest
@@ -175,16 +177,24 @@ function useHistory(input: {
     if (place !== undefined) setTrail((held) => visited(held, place));
   }, [place]);
 
-  const step = useCallback((by: -1 | 1) => {
-    const held = latest.current;
-    const at = nearest(held.trail, by, held.reachable);
-    const target = at === undefined ? undefined : held.trail.places[at];
-    if (at === undefined || target === undefined) return;
-    const moved = { places: held.trail.places, at };
-    latest.current = { ...held, trail: moved };
-    setTrail(moved);
-    held.go(target);
-  }, []);
+  // Note that the whole step is what asks, the trail's move with the window's, so a step
+  // cancelled at the ask leaves the trail standing where the window still stands.
+  const step = useCallback(
+    (by: -1 | 1) => {
+      const asked = latest.current;
+      const at = nearest(asked.trail, by, asked.reachable);
+      const target = at === undefined ? undefined : asked.trail.places[at];
+      if (at === undefined || target === undefined) return;
+      guard(() => {
+        const held = latest.current;
+        const moved = { places: held.trail.places, at };
+        latest.current = { ...held, trail: moved };
+        setTrail(moved);
+        held.go(target);
+      })();
+    },
+    [guard],
+  );
 
   // A step back to `to`'s step only, answering whether it was the one behind.
   const backTo = (to: Place): boolean => {
@@ -240,6 +250,7 @@ export function useWindowHistory(input: {
     | "factoryView"
     | "automationsView"
     | "restoring"
+    | "leaveGuard"
   >;
 }): WindowHistory {
   const { tab, settingsView, plans } = input;
@@ -332,7 +343,12 @@ export function useWindowHistory(input: {
     if (to.kind === PLACE_KIND.PLAN && boundFor !== to.planId) plans.onSelect(to.planId);
     if (to.kind === PLACE_KIND.HOME && boundFor !== undefined) plans.onLeavePlan();
   };
-  const { backTo, ...history } = useHistory({ place, reachable, go });
+  const { backTo, ...history } = useHistory({
+    place,
+    reachable,
+    go,
+    guard: plans.leaveGuard.guard,
+  });
   return {
     ...history,
     onLeaveVersionHistory: () => {

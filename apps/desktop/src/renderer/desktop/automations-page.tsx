@@ -338,6 +338,7 @@ export function AutomationsPage({ plans }: { plans: PlansControl }): React.JSX.E
         writes={automations}
         onBack={back}
         onOpenAgent={(agentId) => plans.agentView.onOpen(agentId)}
+        leaveGuard={plans.leaveGuard}
         onCreated={(automationId) => {
           setMade(automationId);
           view.onOpen({ kind: AUTOMATIONS_PAGE.EDIT, automationId });

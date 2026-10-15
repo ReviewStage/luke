@@ -15,15 +15,21 @@ import { emitJsonSchema } from "@luke/wire/effect";
 import type { ToolSet } from "ai";
 import { Effect, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
-import type { ToolDefinition } from "eve/tools";
+import type { ToolDefinition, ToolModelOutput } from "eve/tools";
 import { ACTION_RESULT_STATUS, wireValidatedTool } from "../../core.js";
 import type { GitHubApp } from "../../github/github-app.js";
 import { connectionToolEntries } from "../../integrations/connection-tools.js";
 import { INTEGRATION_NAMES_SAID } from "../../integrations/integrations.js";
-import { LOOK_AT_BOARD_TOOL, runLookAtBoard } from "../../plans/board-look.js";
+import { LOOK_AT_BOARD_TOOL, lookModelOutput, runLookAtBoard } from "../../plans/board-look.js";
 import { DRAW_ON_BOARD_TOOL, runDrawOnBoard } from "../../plans/board-tool.js";
 import { END_CALL_TOOL, runEndCall } from "../../plans/end-call.js";
 import { runShowPage, SHOW_PAGE_TOOL } from "../../plans/page-tool.js";
+import {
+  LOOK_AT_PICTURE_TOOL,
+  type PictureLookCall,
+  pictureLookModelOutput,
+  runLookAtPicture,
+} from "../../plans/picture-look.js";
 import type { PlanDocumentBinding } from "../../plans/plan-notes.js";
 import {
   QUEUE_QUESTION_TOOL,
@@ -229,6 +235,7 @@ Never put a credential, token, or key into a message to an agent, into any tool'
 - task_cancel stops a worker's subagent task you no longer need.
 - draw_on_board draws a diagram of shapes, zones, arrows, and text on the task's whiteboard, replacing your previous one.
 - look_at_board shows you the whiteboard as the developer sees it, so you can check what you drew.
+- look_at_picture shows you one of the pictures in the plan, by its address, when its alt text and caption do not tell you enough.
 - show_page shows the developer an interactive HTML page in the task's side panel, such as a chart, a table to sort, or a mockup of a screen, when it says more than the board or your words; call it again with the page it answered to revise that page rather than making another.
 - list_coding_agents lists the coding agents working on this task, each with its id, its title as the developer sees it, its status, and what it last did.
 - read_coding_agent reads one agent's recent progress, as a short tail of what it said and did.
@@ -253,7 +260,11 @@ export const PLANNING_EXPLORE_ASK =
   "The call has just started, and the developer has not said what they want yet. " +
   "Start exploring the task's folder now, so you already know the code when they do: " +
   "what the project is, how it is laid out, how it is built and tested, and anything the " +
-  "task's name or the plan's saved document points to. Hand anything broader to the worker. " +
+  "task's name or the plan's saved document points to. Where the plan was started from a Linear issue, " +
+  "that issue is the work to plan: research it on your own, reading more of it and what it " +
+  "links to through the Linear connection where you need it, and explore the code it concerns. " +
+  "The issue is context, not a request to change it: change nothing in Linear unless the " +
+  "developer asks. Hand anything broader to the worker. " +
   "Queue no question until the developer has spoken. " +
   "Return one short sentence on what the project is.";
 
@@ -301,6 +312,7 @@ Transcripts can contain mistakes, unfinished phrases, and later corrections. Fol
 const TASK_MARKER = "[task]";
 const DOCUMENT_MARKER = "[saved document]";
 const AGENT_EDITS_MARKER = "[recent edits by coding agents]";
+const LINEAR_ISSUE_MARKER = "[linear issue the plan was started from]";
 /** The marker the sections the developer last wrote ride behind, which the brain and the notetaker are each told to keep as written. */
 export const DEVELOPER_FIELDS_MARKER = "[sections the developer wrote]";
 
@@ -352,9 +364,16 @@ function developerFieldsText(stored: StoredPlan): readonly string[] {
   ];
 }
 
+/** The issue the plan was started from, as JSON, as it was read then; nothing for a plan started from none. */
+function linearIssueText(stored: StoredPlan): readonly string[] {
+  if (stored.linearIssue === undefined) return [];
+  return [LINEAR_ISSUE_MARKER, JSON.stringify(stored.linearIssue)];
+}
+
 /**
  * What a planning turn is handed beside its instructions every turn: the
- * plan's name, the saved document as JSON, the newest saves coding agents
+ * plan's name, the Linear issue it was started from where it was, the saved
+ * document as JSON, the newest saves coding agents
  * made on it (so Luke can raise what an agent asked or decided), the sections
  * the developer last wrote themselves (so Luke treats them as decided), and the
  * whiteboard as the model reads it (`board-text.ts`), each read again every
@@ -372,6 +391,7 @@ export function planningStandingContext(
   return [
     heading,
     `Name: ${plan.name}`,
+    ...linearIssueText(stored),
     DOCUMENT_MARKER,
     JSON.stringify(plan.document),
     ...agentEditsText(stored.agentEdits),
@@ -396,11 +416,12 @@ export interface HostedToolDeclaration {
   readonly endsTurn?: boolean;
 }
 
-/** What one planning call runs under: the plan the conversation belongs to, its repository in the session's sandbox, the turn's research bounds, and the plan's coding agents. */
+/** What one planning call runs under: the plan the conversation belongs to, its repository in the session's sandbox, the turn's research bounds and its looks at the plan's pictures, and the plan's coding agents. */
 export interface PlanningCall {
   readonly plan: PlanDocumentBinding;
   readonly repository: RepositoryCall;
   readonly research: ResearchCall;
+  readonly pictures: PictureLookCall;
   readonly agents: CodingAgentCall;
 }
 
@@ -432,13 +453,15 @@ type PlanningToolServices = DatabaseServices | HttpClient.HttpClient | GitHubApp
  * (`repository-shell.ts`); the public search and page read (`public-research.ts`)
  * answer what the repository cannot; `draw_on_board` draws on the plan's
  * whiteboard under the same binding (`board-tool.ts`), and `look_at_board`
- * hands back the board as the Mac draws it (`board-look.ts`); `show_page`
+ * hands back the board as the Mac draws it (`board-look.ts`);
+ * `look_at_picture` hands back one of the plan's pictures (`picture-look.ts`); `show_page`
  * writes an interactive page for the side panel, the coding agents' tool
  * too (`page-tool.ts`); the four
  * agent tools read, message, and start the plan's coding agents
  * (`coding-agent-tools.ts`); `end_call` hangs up once the developer is done,
  * carried as `queue_question` is by its journaled call (`end-call.ts`).
- * Every read's result goes back to the model as data, a look's as an image.
+ * Every read's result goes back to the model as data, a look's as an image
+ * (`planningModelOutput`).
  */
 const PLANNING_TOOLS: readonly PlanningTool[] = [
   {
@@ -482,6 +505,11 @@ const PLANNING_TOOLS: readonly PlanningTool[] = [
   {
     ...LOOK_AT_BOARD_TOOL,
     run: (call, input) => Effect.map(runLookAtBoard(call.plan, input), (result) => ({ ...result })),
+  },
+  {
+    ...LOOK_AT_PICTURE_TOOL,
+    run: (call, input) =>
+      Effect.map(runLookAtPicture(call.pictures, input), (result) => ({ ...result })),
   },
   {
     ...SHOW_PAGE_TOOL,
@@ -635,6 +663,17 @@ export function planningToolSet(): ToolSet {
     ],
     ...connectionToolEntries(),
   ]);
+}
+
+/**
+ * What the model is shown of a planning call's result: a look at the board
+ * or at one of the plan's pictures as its image, and anything else as the
+ * JSON it is.
+ */
+export function planningModelOutput(name: string, output: UnparsedWireValue): ToolModelOutput {
+  return name === LOOK_AT_PICTURE_TOOL.name
+    ? pictureLookModelOutput(output)
+    : lookModelOutput(output);
 }
 
 /** Why a planning call ran nothing, in words the model can act on. */

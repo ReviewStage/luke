@@ -39,6 +39,11 @@ import {
   integrationUnavailable,
 } from "./integration-connection.js";
 import { beginIntegrationSignIn, completeIntegrationSignIn } from "./integration-store.js";
+import {
+  beginWorkspaceIntegrationSignIn,
+  completeWorkspaceIntegrationSignIn,
+  deleteWorkspaceIntegration,
+} from "./workspace-integration-store.js";
 
 /**
  * The one connection per integration all four agents register, through the
@@ -234,6 +239,42 @@ it.layer(SUITE)("an integration connection's token read", (it) => {
         const read = yield* tokenRead(host.admit(auth, opened.sessionId), grants);
         assert.ok(Result.isSuccess(read));
         assert.equal(read.success.token, tokenOf(member));
+      }),
+  );
+
+  it.effect(
+    "in a plan of a workspace with Linear connected, the Linear token is the workspace's for every member, and the account's own once the workspace disconnects",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* planningHost;
+        const session = yield* plannedSession(host, typedSeat);
+        yield* connected(session.userId);
+        const state = `workspace-state-${session.workspaceId}`;
+        yield* beginWorkspaceIntegrationSignIn(
+          session.workspaceId,
+          LINEAR,
+          session.userId,
+          state,
+          Redacted.make("connect-verifier"),
+        );
+        assert.equal(
+          yield* completeWorkspaceIntegrationSignIn(session.workspaceId, LINEAR, state),
+          true,
+        );
+        const grants = new Map([
+          [session.userId, {}],
+          [session.workspaceId, {}],
+        ]);
+        const admission = host.admit(session.auth, session.sessionId);
+
+        const workspace = yield* tokenRead(admission, grants);
+        yield* deleteWorkspaceIntegration(session.workspaceId, LINEAR);
+        const own = yield* tokenRead(admission, grants);
+
+        assert.ok(Result.isSuccess(workspace));
+        assert.equal(workspace.success.token, tokenOf(session.workspaceId));
+        assert.ok(Result.isSuccess(own));
+        assert.equal(own.success.token, tokenOf(session.userId));
       }),
   );
 

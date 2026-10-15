@@ -43,7 +43,7 @@ import { TOOL_TARGET, type ToolTarget } from "../planning/tool-call-model";
 import { MAIN_TAB, type MainTab } from "../planning/use-main-tabs";
 import { useOpenLink } from "../planning/use-open-link";
 import { type PlanInboxControl, usePlanInbox } from "../planning/use-plan-inbox";
-import type { PlanLooks } from "../planning/use-plan-looks";
+import { type PlanLooks, useReadMarks } from "../planning/use-plan-looks";
 import { AUTOMATIONS_PAGE, type PlansControl } from "../planning/use-plans-tab";
 import { SIDE_PANEL_TAB } from "../planning/use-side-panel";
 import { workRowsOf } from "../planning/work-model";
@@ -53,7 +53,8 @@ import { Skeleton } from "../skeleton";
 import { SPINNER_SIZE, Spinner } from "../spinner";
 import { useExperiment } from "../use-app-state";
 import { DesktopHome } from "./desktop-home";
-import { MainTabContent, MainTabStrip, mainTabLabel } from "./main-tabs";
+import { useTaskInboxWaitingOnly } from "./folded-groups";
+import { AgentPane, MainTabStrip, mainTabLabel } from "./main-tabs";
 import { PlanActions } from "./plan-actions";
 import { planCardOf } from "./plan-card";
 import { usePlanRename } from "./plan-name-field";
@@ -158,10 +159,12 @@ const NO_FOLDS = () => false;
 
 /**
  * The plan's own Inbox tab: its items newest first in the window's Inbox's
- * list, with neither head nor groups since they are one plan's, and the
- * chosen item read beside them in the same pane, on the plan's own held
- * read. With nothing chosen, the first item that waits stands chosen, else
- * the newest; a plan whose read holds nothing says so under the Inbox's
+ * list, under the window's head with its Needs you alone, which keeps a
+ * choice of its own (`folded-groups.ts`), and no groups since they are one
+ * plan's, and the chosen item read beside them in the same pane, on the
+ * plan's own held read. With nothing chosen, the first item listed that
+ * waits stands chosen, else the newest; a plan listing nothing, its read
+ * holding nothing or Needs you leaving nothing, says so under the Inbox's
  * glyph. The pane's plan crumb chooses the plan's tab and its agent crumb
  * the agent's. Too narrow for both, it shows the chosen item, and the list
  * once its way back is taken, as the window's Inbox does
@@ -188,14 +191,20 @@ function PlanInboxTab({
 }): React.JSX.Element {
   const now = useMinute();
   const [asked, setAsked] = useState<string | undefined>(undefined);
+  const needsYou = useTaskInboxWaitingOnly();
   const items = [...inbox.board.open, ...inbox.board.settled];
   const list = inboxList([{ holder: planHolder(plan), items }], {
     grouping: INBOX_GROUPING.NEWEST,
-    waitingOnly: false,
+    waitingOnly: needsYou.waitingOnly,
     chosen: asked,
   });
-  const chosen = listedItems(list).find(({ item }) => item.id === asked) ?? firstChoice(list);
-  const columns = useInboxColumns(chosen?.item.id, listedItems(list).length > 1);
+  const listed = listedItems(list);
+  const chosen = listed.find(({ item }) => item.id === asked) ?? firstChoice(list);
+  // Note that the item standing chosen is kept as asked, so Needs you keeps it listed once it is answered, as the window's Inbox keeps its stand-in.
+  if (chosen !== undefined && chosen.item.id !== asked) setAsked(chosen.item.id);
+  // Note that the way back counts every item, filtered out or not, since the list holds Needs you.
+  const columns = useInboxColumns(chosen?.item.id, items.length > 1);
+  const shown = plans.shown && !plans.sidePanel.fullScreen;
   const choose = ({ item }: InboxListed) => setAsked(item.id);
   // A row's press and Next's open their item alike, the keyboard following it.
   const open = (listed: InboxListed) => {
@@ -203,10 +212,7 @@ function PlanInboxTab({
     columns.onOpen(listed.item.id);
   };
   // Note that the column is hidden, though drawn, while the side panel fills the window.
-  const pager = useInboxPager(list, chosen?.item.id, choose, {
-    shown: plans.shown && !plans.sidePanel.fullScreen,
-    folded: NO_FOLDS,
-  });
+  const pager = useInboxPager(list, chosen?.item.id, choose, { shown, folded: NO_FOLDS });
   const next = inboxNext(
     list,
     chosen,
@@ -233,17 +239,22 @@ function PlanInboxTab({
         view={list}
         chosen={chosen?.item.id}
         columns={columns.shown}
-        head={undefined}
+        head={{
+          shown,
+          needsYou,
+          view: undefined,
+          waiting: inbox.board.open.length > 0,
+        }}
         models={plans.agents.models}
         readerId={plans.me}
         note={
           inbox.reading ? (
             <Spinner label="Loading inbox" size={SPINNER_SIZE.INLINE} />
-          ) : inbox.failed && items.length === 0 ? (
+          ) : inbox.failed && listed.length === 0 ? (
             <div className="sidebar-note">
               <ReadFailure line="The inbox could not be read." onRetry={inbox.onRetry} />
             </div>
-          ) : inbox.read && items.length === 0 && columns.shown !== INBOX_COLUMNS.BOTH ? (
+          ) : inbox.read && listed.length === 0 && columns.shown !== INBOX_COLUMNS.BOTH ? (
             // Note that the list standing alone says what the hidden pane would, as the pane says it.
             <EmptyState icon={<InboxIcon />}>{NEEDS_YOU.NONE}</EmptyState>
           ) : null
@@ -256,7 +267,9 @@ function PlanInboxTab({
           aria-label="Inbox"
           hidden={columns.shown !== INBOX_COLUMNS.BOTH}
         >
-          {inbox.read && items.length === 0 ? (
+          {/* The empty pane keeps a bar the list's head's height, as the window's Inbox does. */}
+          <header className="desktop-toolbar" />
+          {inbox.read && listed.length === 0 ? (
             <EmptyState icon={<InboxIcon />}>{NEEDS_YOU.NONE}</EmptyState>
           ) : null}
         </section>
@@ -322,6 +335,7 @@ function PlanDocument({
   // The clock the plan's tab's card counts its update back from.
   const now = useMinute();
   const automationsOn = useExperiment(EXPERIMENT.AUTOMATIONS);
+  const reads = useReadMarks();
   const { onOpen: onOpenAutomations } = plans.automationsView;
   const openAutomation = useCallback(
     (automationId: string) => onOpenAutomations({ kind: AUTOMATIONS_PAGE.EDIT, automationId }),
@@ -668,6 +682,10 @@ function PlanDocument({
                             onDraftName: (name) => plans.onDraftName(plan.id, name),
                           })}
                       looks={looks}
+                      readMark={{
+                        unread: reads.markedUnread(plan.id),
+                        onMark: (unread) => reads.mark(plan, unread),
+                      }}
                       sectionLinks={sectionLinksOf(plan.id, workspace)}
                       crumb={
                         home === undefined ? undefined : (
@@ -711,23 +729,18 @@ function PlanDocument({
                     />
                   ) : null}
                   {tab === MAIN_TAB.PLAN || tab === MAIN_TAB.INBOX ? null : (
-                    <section
-                      className="desktop-agent"
-                      role="tabpanel"
-                      aria-label={mainTabLabel(tab, agents)}
-                      data-popover-room=""
-                    >
-                      <MainTabContent
-                        tab={tab}
-                        agents={agents}
-                        shown={plans.shown && !sidePanel.fullScreen}
-                        views={views}
-                        onOpenDelegation={openDelegation}
-                        onOpenChanges={openChanges}
-                        onOpenTarget={openTarget}
-                        cards={cards}
-                      />
-                    </section>
+                    <AgentPane
+                      label={mainTabLabel(tab, agents)}
+                      tabbed
+                      tab={tab}
+                      agents={agents}
+                      shown={plans.shown && !sidePanel.fullScreen}
+                      views={views}
+                      onOpenDelegation={openDelegation}
+                      onOpenChanges={openChanges}
+                      onOpenTarget={openTarget}
+                      cards={cards}
+                    />
                   )}
                 </FindScope>
                 <PlanSummary

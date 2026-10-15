@@ -1,6 +1,5 @@
 import { eveTurnIdOf, type HostedToolBinding } from "@luke/service/agents/brain-host/host";
-import { PLANNER_TOOL_NAMES } from "@luke/service/agents/brain-host/planning";
-import { lookModelOutput } from "@luke/service/plans/board-look";
+import { PLANNER_TOOL_NAMES, planningModelOutput } from "@luke/service/agents/brain-host/planning";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { Effect, Result } from "effect";
 import type { SessionAuth } from "eve/context";
@@ -17,8 +16,8 @@ import { runAgent } from "../runtime.js";
  * the named few of the same tools through `hostedTools`, under the admission
  * its resolver can take (`host.admitDelegated`); each call is admitted again
  * as it runs, through the root eve then names. Every result is shown to the
- * model as the JSON it is, and a look at the board as its image
- * (`lookModelOutput`).
+ * model as the JSON it is, and a look at the board or at one of the plan's
+ * pictures as its image (`planningModelOutput`).
  */
 export function hostedTools(
   offered: ReadonlySet<string> = PLANNER_TOOL_NAMES,
@@ -54,7 +53,7 @@ export function hostedTools(
                       : { endsTurn: declared.endsTurn }),
                     // SAFETY: eve hands this the JSON the tool's own execute answered; the reader parses it as wire input.
                     toModelOutput: (output) =>
-                      lookModelOutput(unparsedWire(output as WireBoundaryInput)),
+                      planningModelOutput(name, unparsedWire(output as WireBoundaryInput)),
                     execute: (input, toolContext) =>
                       runAgent(
                         host.runTool(

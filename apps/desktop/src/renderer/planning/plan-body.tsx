@@ -32,7 +32,14 @@ import {
   EditableTitle,
   PlanDocumentEditor,
 } from "./plan-document-editor";
-import { copyPlanLinkItem, renamePlanItem, versionHistoryItem } from "./plan-menu-items";
+import {
+  copyPlanLinkItem,
+  markReadItem,
+  type ReadMark,
+  renamePlanItem,
+  versionHistoryItem,
+} from "./plan-menu-items";
+import { PlanPictures, usePlanPictureDrawer } from "./plan-pictures";
 import {
   type ChaseState,
   chaseBehind,
@@ -538,24 +545,28 @@ function SectionMenu({
 
 /**
  * The title's ⋯, drawn as a section's is: Copy link to plan, as the plan's
- * own ⋯ menu offers it, then Rename where the title can be edited and
- * Version history where the window opens it, and nothing more, since the
- * plan's menu holds the rest.
+ * own ⋯ menu offers it, then Mark as unread or read where the window keeps
+ * the plan's looks, Rename where the title can be edited, and Version
+ * history where the window opens it, and nothing more, since the plan's
+ * menu holds the rest.
  */
 function TitleMenu({
   linked,
   tabbable,
+  readMark,
   onRename,
   onShowHistory,
 }: {
   linked: LinkedPlan;
   tabbable: boolean;
+  readMark: ReadMark | undefined;
   onRename: (() => void) | undefined;
   onShowHistory: ShowHistory | undefined;
 }): React.JSX.Element {
   const copy = useCopyToast();
   const items = [
     copyPlanLinkItem(copy, linked.planId, linked.place),
+    ...(readMark === undefined ? [] : [markReadItem(readMark)]),
     ...(onRename === undefined ? [] : [renamePlanItem(onRename)]),
     ...(onShowHistory === undefined ? [] : [versionHistoryItem(() => onShowHistory(undefined))]),
   ];
@@ -588,6 +599,7 @@ function DocumentUnit({
 }): React.JSX.Element {
   const changed = marks.changed.has(view.heading);
   const openLink = useOpenLink();
+  const picture = usePlanPictureDrawer();
   const drawn = (
     <MarkdownMessage
       words={view.words}
@@ -596,6 +608,7 @@ function DocumentUnit({
       link={link}
       openLink={openLink}
       diagrams
+      picture={picture}
     />
   );
   const menu =
@@ -618,7 +631,8 @@ function DocumentUnit({
  * "Edited by" line and the page's note stand under the title. `looks` are the sections changed since the developer last
  * looked, which the plan's region keeps (`use-plan-looks.ts`); without them
  * none are. `crumb`, where given, stands over the "Edited by" line and
- * says where the plan lives (`plan-crumb.tsx`).
+ * says where the plan lives (`plan-crumb.tsx`). `readMark` is whether the
+ * plan is marked unread, which the title's ⋯ offers to flip.
  */
 export function PlanBody({
   plan,
@@ -628,6 +642,7 @@ export function PlanBody({
   onRename,
   onDraftName = NO_DRAFT,
   looks = NO_LOOKS,
+  readMark,
   page,
   sectionLinks,
   reader = NO_READER,
@@ -643,6 +658,8 @@ export function PlanBody({
   /** Draws the name typed into the title wherever the plan is named, or none once it is left. */
   onDraftName?: (name: string | undefined) => void;
   looks?: PlanLooks;
+  /** Whether the plan is marked unread, and the mark the title's ⋯ sets; without it, the ⋯ offers none. */
+  readMark?: ReadMark;
   /** The Settings page the document is drawn as: its actions and its note. */
   page?: { actions: React.ReactNode; note: React.ReactNode };
   /** What the plan's own page does with its sections' links; without it, sections have none and mentions are words. */
@@ -816,56 +833,59 @@ export function PlanBody({
         linked={linked}
         // Note that a document that cannot be edited has no block Tab stop, so the ⋯ is one.
         tabbable={editable ? entry === EDITOR_PLACE.TITLE : true}
+        readMark={readMark}
         onRename={titled ? () => setRenaming((count) => count + 1) : undefined}
         onShowHistory={onShowHistory}
       />
     );
   return (
-    <div ref={scroller} className="plan-document-scroll">
-      {page === undefined ? crumb : null}
-      {page === undefined ? editedNote : null}
-      <ChangedLine looks={looks} marks={marks} />
-      <div className="plan-body">
-        {titled ? (
-          attributed(
-            // Keyed by the plan, so words typed for one are saved to it as another opens.
-            <EditableTitle
-              key={plan.id}
-              name={plan.name}
-              entry={entry === EDITOR_PLACE.TITLE}
+    <PlanPictures planId={plan.id} text={plan.document.body}>
+      <div ref={scroller} className="plan-document-scroll">
+        {page === undefined ? crumb : null}
+        {page === undefined ? editedNote : null}
+        <ChangedLine looks={looks} marks={marks} />
+        <div className="plan-body">
+          {titled ? (
+            attributed(
+              // Keyed by the plan, so words typed for one are saved to it as another opens.
+              <EditableTitle
+                key={plan.id}
+                name={plan.name}
+                entry={entry === EDITOR_PLACE.TITLE}
+                editing={editing}
+                renaming={renaming}
+                onRename={onRename}
+                onDraft={onDraftName}
+              />,
+              null,
+              titleMenu,
+            )
+          ) : page === undefined ? (
+            attributed(<PlanTitle name={plan.name} />, null, titleMenu)
+          ) : (
+            <header className="plan-page-head">
+              <div className="plan-title-line">
+                <PlanTitle name={plan.name} />
+                {page.actions}
+              </div>
+              {editedNote}
+              {page.note}
+            </header>
+          )}
+          {editing.editor === undefined ? (
+            sections
+          ) : (
+            <PlanDocumentEditor
+              plan={plan}
+              editor={editing.editor}
               editing={editing}
-              renaming={renaming}
-              onRename={onRename}
-              onDraft={onDraftName}
-            />,
-            null,
-            titleMenu,
-          )
-        ) : page === undefined ? (
-          attributed(<PlanTitle name={plan.name} />, null, titleMenu)
-        ) : (
-          <header className="plan-page-head">
-            <div className="plan-title-line">
-              <PlanTitle name={plan.name} />
-              {page.actions}
-            </div>
-            {editedNote}
-            {page.note}
-          </header>
-        )}
-        {editing.editor === undefined ? (
-          sections
-        ) : (
-          <PlanDocumentEditor
-            plan={plan}
-            editor={editing.editor}
-            editing={editing}
-            drawn={sections}
-            hostOf={(section) => views[section]?.id ?? EDITOR_PLACE.TITLE}
-            mentions={mentionDoors}
-          />
-        )}
+              drawn={sections}
+              hostOf={(section) => views[section]?.id ?? EDITOR_PLACE.TITLE}
+              mentions={mentionDoors}
+            />
+          )}
+        </div>
       </div>
-    </div>
+    </PlanPictures>
   );
 }

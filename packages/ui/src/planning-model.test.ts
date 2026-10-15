@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
+import { PLAN_BOUNDS } from "@luke/features/plan-wire";
 import { PLANNING_READ, type PlanningView } from "@luke/features/planning-view";
 import { LIVE_STATUS } from "@luke/live";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { VOICE_KEYLESS_NOTE } from "@luke/voice/microphone-access";
 import { test } from "vitest";
-import { MICROPHONE_PRESS, microphoneButton } from "./planning-model.js";
+import { MICROPHONE_PRESS, microphoneButton, planNameOfIssue } from "./planning-model.js";
 
 const INVITES = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const _BILLING = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
@@ -94,3 +95,14 @@ test("the microphone asks for the permission first, then for a plan, and then ta
 function _onRepository(name: string, repository: string | null, updatedAt: number) {
   return { id: name, workspaceId: "workspace-personal", name, createdAt: 1, updatedAt, repository };
 }
+
+test("a plan started from a Linear issue is named by its title, cut to a name's bound, or by its key where the title is blank", () => {
+  const long = "x".repeat(PLAN_BOUNDS.MAX_NAME_CHARS + 20);
+
+  assert.equal(planNameOfIssue({ identifier: "ENG-1", title: "  Ship it  " }), "Ship it");
+  assert.equal(
+    planNameOfIssue({ identifier: "ENG-2", title: long }).length,
+    PLAN_BOUNDS.MAX_NAME_CHARS,
+  );
+  assert.equal(planNameOfIssue({ identifier: "ENG-3", title: "   " }), "ENG-3");
+});

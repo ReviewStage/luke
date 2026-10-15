@@ -20,18 +20,23 @@ import { useEffect, useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { ACTOR_SIZE, ActorMark, ActorRef, CreatorHeard } from "../actor-ref";
 import { useAppCommand } from "../app-commands";
+import { usePlanDrafted } from "../composer-drafts";
 import { useCopyToast } from "../copy-feedback";
+import { DraftMark } from "../draft-mark";
 import { useMemberDirectory } from "../member-directory";
 import { EditedBy, type EditPlace, useEditReader } from "../planning/edit-ref";
 import { lastEditOf } from "../planning/plan-body";
 import {
   copyPlanLinkItem,
+  markReadItem,
   planLinkPlace,
+  type ReadMark,
   renamePlanItem,
   versionHistoryItem,
 } from "../planning/plan-menu-items";
 import { useMinute } from "../planning/plan-time";
 import { RelativeTime } from "../planning/relative-time";
+import { useReadMarks } from "../planning/use-plan-looks";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { ConfirmDialog, type DialogQuestion, useConfirmDialog } from "../settings/confirm-dialog";
 import { Tooltip } from "../tooltip";
@@ -49,7 +54,9 @@ import { PlanNameField, usePlanRename } from "./plan-name-field";
  * so both doors draw it the same way and Permanently delete can be drawn red.
  *
  * Copy link to plan copies the plan's address on tryluke.dev, as the ⋯
- * beside the plan's title does (`plan-menu-items.tsx`). Rename edits the
+ * beside the plan's title does (`plan-menu-items.tsx`). Mark as unread
+ * draws the task's row in the unread weight until it next opens, and turns
+ * to Mark as read on a task already unread. Rename edits the
  * name where the door draws it: the sidebar's row turns into a field, and
  * the toolbar's ⋯ opens its title as one. Version history
  * opens the plan's versions over the whole window, opening the plan first
@@ -161,13 +168,14 @@ function SidebarPlanMarks({
 /**
  * One plan's actions in the groups a rule divides, offering only those that
  * apply to it now. Copy formats the document drawn, so only the open plan
- * offers it, ahead of Copy link to plan, Rename, and Version history; Pin
- * and Archive follow; the repository is changed from any plan and opened on
+ * offers it, ahead of Copy link to plan, Mark as unread or read, Rename,
+ * and Version history; Pin and Archive follow; the repository is changed from any plan and opened on
  * GitHub where there is one, beside Move to workspace where the plan may be
  * moved; Permanently delete is last and alone. An archived plan takes
  * nothing until it is brought back, so it offers neither Rename, Change
- * repository, nor a move, only what reads it, its link and its version
- * history (which restores nothing), Unarchive, and Permanently delete.
+ * repository, nor a move, only what reads it, its link, its read mark, and
+ * its version history (which restores nothing), Unarchive, and Permanently
+ * delete.
  */
 function planActionGroups(
   plans: PlansControl,
@@ -177,6 +185,7 @@ function planActionGroups(
     askDelete: () => void;
     askMove: (() => void) | undefined;
     copy: (words: string, label: string) => void;
+    read: ReadMark;
   },
 ): MenuAction[][] {
   const { region } = plans;
@@ -187,7 +196,10 @@ function planActionGroups(
   const link: MenuAction[] =
     plan === undefined
       ? []
-      : [copyPlanLinkItem(doors.copy, planId, planLinkPlace(plans.workspaces, plan))];
+      : [
+          copyPlanLinkItem(doors.copy, planId, planLinkPlace(plans.workspaces, plan)),
+          markReadItem(doors.read),
+        ];
   const rename = renamePlanItem(doors.rename);
   const versions = versionHistoryItem(() => plans.history.onOpen(planId));
   const change: MenuAction = {
@@ -303,9 +315,10 @@ function usePlanMenu(
   plans: PlansControl,
   planId: string,
   name: string,
-  doors: { rename: () => void; drawn: boolean },
+  doors: { rename: () => void; drawn: boolean; unread: boolean },
 ) {
   const plan = planOf(plans, planId);
+  const reads = useReadMarks();
   const deletion = useConfirmDialog({ subject: plan !== undefined, surfaceOpen: plans.shown }, () =>
     plans.onDeletePlan(planId),
   );
@@ -323,6 +336,12 @@ function usePlanMenu(
           askDelete: deletion.ask,
           askMove: moving.ask,
           copy,
+          read: {
+            unread: doors.unread,
+            onMark: (unread) => {
+              if (plan !== undefined) reads.mark(plan, unread);
+            },
+          },
         })}
         onClose={close}
       />
@@ -360,9 +379,11 @@ export function PlanActions({
   /** Opens the toolbar's title as the plan's name field. */
   onRename: () => void;
 }): React.JSX.Element {
+  // Note that the open plan is unread only by a mark by hand, since its saves are seen as they land.
   const actions = usePlanMenu(plans, plan.id, plan.name, {
     rename: onRename,
     drawn: button,
+    unread: useReadMarks().markedUnread(plan.id),
   });
   const { deletion } = actions;
   const asking = confirmAsked(deletion.stage);
@@ -397,7 +418,8 @@ export function PlanActions({
  * body's weight unless the plan is unread, and at the row's end how long ago
  * it was last updated, led by one mark for a repository that belongs to
  * another workspace, an agent at work, or a pull request (`plan-card.tsx`),
- * the first named in the row's card, and before that, on a task someone else
+ * the first named in the row's card, before that a pencil while a draft
+ * waits in one of its boxes (`draft-mark.tsx`), and before that, on a task someone else
  * created, its creator's face (`teammateCreator`), read against the members
  * of the directory around the list; the reader's own tasks wear none. A row
  * says what its group does not: its repository's name, muted, where its
@@ -441,9 +463,11 @@ export function SidebarPlan({
   const actions = usePlanMenu(plans, plan.id, plan.name, {
     rename: rename.begin,
     drawn: true,
+    unread,
   });
   const teammate = teammateCreator(plan, useMemberDirectory());
   const creator = face ? teammate : undefined;
+  const drafted = usePlanDrafted(plan.id);
   const row = useRef<HTMLButtonElement | null>(null);
   const item = useRef<HTMLLIElement | null>(null);
   const refocus = useRef(false);
@@ -495,6 +519,7 @@ export function SidebarPlan({
                 {creator === undefined ? null : (
                   <ActorMark actor={creator} size={ACTOR_SIZE.MARK} />
                 )}
+                {drafted ? <DraftMark /> : null}
                 <PlanStatusMark plan={plan} stranded={strandedHome(plans, plan)} />
                 <RelativeTime at={at} now={now} hint={false} />
               </span>

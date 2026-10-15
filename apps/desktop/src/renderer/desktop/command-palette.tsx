@@ -51,6 +51,7 @@ import { GearIcon, SearchIcon } from "@luke/ui";
 import { teammateCreator } from "@luke/ui/actor-model";
 import { DOCUMENT_REGION } from "@luke/ui/planning-model";
 import { matchesTokens, matchRanges, searchTokens } from "@luke/ui/search-tokens";
+import { orderTasks, TASK_ORDER } from "@luke/ui/task-list-model";
 import { Command, defaultFilter } from "cmdk";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -62,6 +63,7 @@ import {
   commandForKey,
   isKeyedCommand,
   type KeyedCommand,
+  PALETTE_COMMANDS,
   SHORTCUT_KEY,
   type ShortcutChord,
 } from "#shared/shortcuts";
@@ -71,7 +73,9 @@ import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { AgentCard, agentSubject, NOTHING_HELD } from "../planning/agent-ref";
 import { FileCard, fileLook, newestFileNote } from "../planning/file-ref";
 import { refusalLine } from "../planning/file-tab-model";
+import { markReadItem } from "../planning/plan-menu-items";
 import { TAB_KIND, tabLook } from "../planning/tab-look";
+import { type ReadMarks, useReadMarks } from "../planning/use-plan-looks";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { SIDE_PANEL_TABS } from "../planning/use-side-panel";
 import { useWorkspaceMembers } from "../planning/use-workspace-members";
@@ -210,12 +214,13 @@ const FILTER_HINT = {
 /** The word a Settings page is also found by, beside its own name, so "settings" lists the pages. */
 const SETTINGS_WORD = "Settings";
 
-/** The commands the palette lists: the Keyboard shortcuts page's, then the menu bar's own dialogs. */
-const PALETTE_COMMANDS: readonly AppCommand[] = [
+/** The commands the palette lists: the Keyboard shortcuts page's, then the menu bar's own dialogs, then its own, the sidebar's view of its tasks. */
+const LISTED_COMMANDS: readonly AppCommand[] = [
   ...APP_SHORTCUT_GROUPS.flatMap((group) => group.commands),
   APP_COMMAND.NEW_TERMINAL,
   APP_COMMAND.SEND_FEEDBACK,
   APP_COMMAND.SUGGEST_FEATURE,
+  ...PALETTE_COMMANDS,
 ];
 
 /** One row as the palette draws it, the words its search reads, and what choosing it does. */
@@ -373,7 +378,8 @@ function planDetail(plan: PlanSummary, archived: boolean): string | undefined {
 }
 
 /**
- * Every plan, the sidebar's first in its order, then the archived ones, each
+ * Every plan, the pinned first, then the rest by their last activity
+ * (`taskTime`), then the archived ones, each
  * in its tab's look, an archived one saying so in its detail. Within each,
  * the listed workspace's plans come first and every other workspace's after
  * them, naming its workspace and found by its name, since opening one
@@ -421,8 +427,17 @@ function planRows(
     ...list.filter((plan) => listedId === undefined || plan.workspaceId === listedId),
     ...list.filter((plan) => listedId !== undefined && plan.workspaceId !== listedId),
   ];
+  // The pinned stand first, as the sidebar's; the rest by their last
+  // activity, as the sidebar, Home's Recent, and the row's time read it.
+  const standing = [
+    ...plans.plans.filter((plan) => plan.pinnedAt !== undefined),
+    ...orderTasks(
+      plans.plans.filter((plan) => plan.pinnedAt === undefined),
+      TASK_ORDER.UPDATED,
+    ),
+  ];
   return [
-    ...listedFirst(plans.plans).map((plan) => row(plan, false)),
+    ...listedFirst(standing).map((plan) => row(plan, false)),
     ...listedFirst(plans.archived).map((plan) => row(plan, true)),
   ];
 }
@@ -479,7 +494,7 @@ function agentRows(plans: PlansControl, show: (pick: () => void) => void): reado
 
 /** The commands offered now, the palette's own left out, each with its chord. */
 function actionRows(run: (command: AppCommand) => void): readonly PaletteRow[] {
-  return PALETTE_COMMANDS.filter(
+  return LISTED_COMMANDS.filter(
     (command) => command !== APP_COMMAND.COMMAND_PALETTE && appCommandOffered(command),
   ).map((command) => ({
     label: appCommandLabel(command),
@@ -508,6 +523,36 @@ function panelTabRows(
     const pick = () => shownOverHistory(plans, () => plans.sidePanel.onChoose(tab));
     return { icon: look.icon, label, terms: [label], onChoose: () => show(pick) };
   });
+}
+
+/**
+ * Mark as unread for the plan on screen, or Mark as read once it is marked
+ * so, as the plan's menus offer it; none while no plan is looked at. Note
+ * that a plan Settings or the Inbox covers is offered nothing, because the
+ * row does not name the plan, and going back to it opens it, which takes
+ * the mark back before it is ever seen. No chord reaches it, since Mail's
+ * ⇧⌘U is Automations' here.
+ */
+function readMarkRows(
+  plans: PlansControl,
+  reads: ReadMarks,
+  choose: (run: () => void) => void,
+): readonly PaletteRow[] {
+  if (plans.region.kind !== DOCUMENT_REGION.READY) return [];
+  const { plan } = plans.region;
+  if (plan.id !== reads.watched) return [];
+  const item = markReadItem({
+    unread: reads.markedUnread(plan.id),
+    onMark: (unread) => reads.mark(plan, unread),
+  });
+  return [
+    {
+      icon: item.icon,
+      label: item.label,
+      terms: [item.label],
+      onChoose: () => choose(item.onSelect),
+    },
+  ];
 }
 
 /** Every Settings page, in the sidebar's order, under its own glyph and name. */
@@ -791,6 +836,7 @@ export function CommandPalette({
   const tokens = searchTokens(query);
   // The listed workspace's members, read once for it, name a teammate's task's creator by face.
   const members = useWorkspaceMembers(plans.workspace);
+  const reads = useReadMarks();
   const limit = filter === PALETTE_FILTER.ALL ? KIND_ROWS.ALL : KIND_ROWS.FILTERED;
   const planId = plans.activePlanId;
   const repository =
@@ -846,6 +892,7 @@ export function CommandPalette({
       [
         ...actionRows((command) => choose(() => runAppCommand(command))),
         ...panelTabRows(plans, onPlans),
+        ...readMarkRows(plans, reads, choose),
       ],
     ],
     [PALETTE_FILTER.SETTINGS]: () => [settingsPageRows(openPage), settingRows(settings.rows, land)],

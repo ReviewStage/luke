@@ -25,8 +25,8 @@ macOS check to wait for.
 Application logic lives in `packages/`. An app holds what is specific to
 its platform or deployment and nothing else: Electron's main and preload
 processes, the window and page roots, the Vercel function routes under
-`apps/web/server/routes/`, the deployment shell beside them, the two eve
-service roots, and build and release scripts. A React component, hook, or
+`apps/web/server/routes/`, the deployment shell beside them, the agents' eve
+apps, `apps/luke` and `apps/dev`, and build and release scripts. A React component, hook, or
 DOM-free view model lives in `packages/ui` when more than one app can
 mount it, the hosted service's logic in `packages/service`, its contract
 and clients in `packages/features`, and a wire value in `packages/wire`. A
@@ -34,7 +34,7 @@ and clients in `packages/features`, and a wire value in `packages/wire`. A
 library (`electron`, `react-dom`, a DOM API, `better-auth`, `eve`,
 `@vercel/*`) is logic and belongs in a package. The logic-lives-in-packages
 check in `scripts/repository-checks.sh` refuses one under
-`apps/desktop/src`, `apps/web/src`, or `apps/web/server` unless it is shell:
+`apps/desktop/src`, `apps/web/src`, `apps/web/server`, `apps/luke`, or `apps/dev` unless it is shell:
 an app entry in `knip.json`, a `runtimeEdges` row in
 `tools/anti-slop/effect-edges.json`, or a deployment or test-support file
 the check names. A component is placed by review under the same rule.

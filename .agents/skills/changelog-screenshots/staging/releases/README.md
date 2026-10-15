@@ -33,6 +33,12 @@ adjusting, and capture with the same profile, zoom, and crop.
 | 0.13.0 | `v0.13.0` | `workspaces.png`, `home.png`, `the-inbox-one-item-at-a-time.png` | `shot-workspaces`, `shot-home`, `shot-inbox` | 1 | whole window |
 | 0.13.0 | `v0.13.0` | `eight-more-integrations.png` | `shot-integrations` | 2 | `588,64,688,834` |
 | 0.13.0 | `v0.13.0` | `the-mcp-popover.png` | `shot-mcp` | 2 | `370,346,800,654` |
+| 0.14.0 | `2ec91a61` | `the-terminal-tab.png`, `automations.png` | `shot-terminal`, `shot-automations` | 1 | whole window |
+| 0.14.0 | `2ec91a61` | `workspaces-clearer.png` | `shot-switcher` | 1 | `-70,-70,660,1140` |
+| 0.14.0 | `2ec91a61` | `who-did-what.png` | `shot-who` | 2 | `343,-40,860,850` |
+| 0.14.0 | `2ec91a61` | `at-mentions.png` | `shot-mentions` | 2 | `522,330,820,710` |
+
+0.14.0 was shot from `2ec91a61`, the head of its version pull request (#2871) before its pictures landed; `v0.14.0.patch` carries 0.13.0's module onto it, with 0.14.0's five shots beside the earlier ones.
 
 0.12.0 was shot from `6d47d20f`, the head of its version pull request (#2421), before the tag existed; `v0.12.0` itself is `0dec8cda`.
 

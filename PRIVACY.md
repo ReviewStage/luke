@@ -24,7 +24,11 @@ tabs described next. On disk, under its application data, Luke keeps only
 the layout of its window: which tasks' tabs are open and which are pinned,
 each pin with its label (a coding agent's title or a file's path), which
 inbox items you have seen, and which groups you folded and how you sorted
-the Inbox. None of it is sent anywhere.
+the Inbox; and the words of a message you typed to a coding agent and have
+not sent, mentions and skills among them, kept per agent until you send it
+or empty its box, and shown only while the account that wrote them is signed
+in. The files attached to such a message stay in memory only.
+None of it is sent anywhere.
 
 **Commands agents run on your Mac.** Luke, the workers he
 hands work to, every coding agent, and the workers a coding agent hands work
@@ -140,6 +144,28 @@ call that has ended, and within a minute or so of its end for a call still
 open. Deleting your account removes every task. Pinning or archiving a task
 stores only when you did it and deletes nothing.
 
+**A plan's pictures.** When you paste, drop, or choose a picture into a
+task's plan, Luke re-encodes it on your Mac to at most 1.5 MB and sends it
+to our service, which keeps it in our database beside the task, under the
+task rather than your account, with which member added it. The plan's text
+names the picture by an address on tryluke.dev; our service serves its bytes
+only to Luke signed in as a member of the task's workspace, and opening the
+address in a browser shows a page that opens the task in Luke and nothing of
+the picture. Every member of the workspace sees it, as they see the plan.
+Pictures are stored as sent and readable by our own operators, like the plan.
+Luke and the coding agents read the plan with each picture's line, its
+address, its alt text, and its caption, but not the picture. Luke, or a
+coding agent on the task, may look at one of the plan's pictures when those
+words are not enough, at most four a turn, read as the member the turn runs
+for, which sends the picture to the model that looked; our service keeps
+only that it looked in the task conversation or the agent's transcript, not
+the picture, though the model's session history may keep it (see "Who we send
+it to"). A picture stays as long as the task does, even once the plan no
+longer shows it, so every earlier version still shows its pictures; one no save of the
+plan ever showed, pasted and undone, is deleted a day after it was sent.
+Deleting the task deletes its pictures; deleting your account leaves the
+pictures you added to a task that stays, as it leaves the words you wrote.
+
 **Your plan template.** The template a new task's plan starts from is kept with your
 account preferences on our service, as you write it in Settings › Plan
 template (up to 20,000 characters; a built-in one until you do), sent as you
@@ -208,8 +234,10 @@ beside the task's conversation or the agent's transcript the call is written
 to, which names the picture by an id rather than carrying it; a conversation
 or transcript keeps up to 200 MB of pictures. A larger picture, one past
 that, or one of another kind is not kept, and the record says only its kind
-and size. Kept pictures are readable by our own operators, like the
-transcript, and go when it does.
+and size. A coding agent's kept pictures, and its workers', are served only
+to Luke signed in as a member of the workspace who can read the agent. Kept
+pictures are readable by our own operators, like the transcript, and go
+when it does.
 
 **Your own API keys.** If you add an Anthropic or OpenAI API key in Settings,
 your Mac sends it once, over HTTPS, to our service, which keeps it only if the
@@ -506,6 +534,26 @@ Linear, and the record of it, stays. Deleting your account removes the record
 and asks Vercel Connect to revoke the grant in the same way; if Vercel Connect
 cannot be reached then, your account is deleted all the same and the grant
 stays until you revoke Luke in Linear's own settings.
+
+**Linear for a whole workspace, if an owner or admin connects it.** An owner
+or admin can also connect Linear once for everyone in a workspace, in Settings
+› Workspace › Integrations. That signs them in to Linear in their browser
+through Vercel Connect, which stores the Linear token under the workspace
+rather than under their account, and our service handles the token as it
+does an account's, sending it only to Linear. We keep the workspace
+connection's state, who last began its sign-in, when it last changed and last
+finished signing in, and, while a sign-in is under way, when it began and a
+one-time value that matches its return. While it is connected, every member
+of the workspace can list the issues that Linear account can see, private
+teams' issues included, and start a plan from one, and Luke's agents working
+on that workspace's plans and coding agents use this connection for Linear in
+place of a member's own, so what they change in Linear shows as made by the
+person who connected it. Starting a plan from an issue copies the issue's
+key, title, address, and description onto the plan, where it stays with the
+plan, is shown to the planning model on every turn of its call, and is
+deleted with the plan. Disconnecting stops every read through it at once,
+removes the connection's record, and asks Vercel Connect to revoke the grant;
+what plans already copied of an issue stays with them.
 
 **Notion, if you connect it.** Connecting Notion in Settings › Integrations
 signs you in to Notion in your browser through Vercel Connect, which stores

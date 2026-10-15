@@ -4,6 +4,7 @@ import {
   integrationOfHost,
   integrationProviderSchema,
 } from "./integration-wire.js";
+import { isLinkHome, LINK_ORIGIN } from "./link-home.js";
 import { PLAN_SECTION_BOUNDS } from "./plan-wire.js";
 
 /**
@@ -98,14 +99,8 @@ const MENTION_BOUNDS = {
 /** What marks a link's label as a mention's. */
 const MENTION_SIGIL = "@";
 
-/** The desktop's own scheme, which spells a plan's address with its scheme swapped. */
-const LUKE_APP_PROTOCOL = "tryluke:";
-
-/** The settled form: a plan's address on tryluke.dev, by the web's scheme or the desktop's. */
+/** The settled form: a plan's address on Luke's home (`link-home.ts`), by the web's scheme or the desktop's. */
 const LINK = {
-  ORIGIN: "https://tryluke.dev",
-  HOST: "tryluke.dev",
-  PROTOCOLS: new Set(["https:", LUKE_APP_PROTOCOL]),
   PLAN_STEP: "plan",
 } as const;
 
@@ -461,7 +456,7 @@ function fieldsOf(target: string, repository: string | null) {
   const url = parsedUrl(target);
   if (url === undefined) return undefined;
   if (url.protocol === LEGACY.PROTOCOL) return legacyFields(url);
-  if (LINK.PROTOCOLS.has(url.protocol) && url.host === LINK.HOST) return planFields(url);
+  if (isLinkHome(url)) return planFields(url);
   // Note that a page of an integration's is read last, so a GitHub page that is a file of the plan stays one.
   const fields = url.origin === GITHUB.ORIGIN ? repositoryFields(url, repository) : undefined;
   return fields ?? linkFields(url);
@@ -611,7 +606,7 @@ export function sectionAnchors(headings: readonly string[]): readonly string[] {
 
 /** A plan's address, a section's with its anchor; the plan's own where the anchor is empty. */
 function planTarget(planId: string, place: MentionPlace, anchor: string): string {
-  const plan = `${LINK.ORIGIN}/${encodedPart(place.workspace)}/${LINK.PLAN_STEP}/${encodedPart(planId)}`;
+  const plan = `${LINK_ORIGIN}/${encodedPart(place.workspace)}/${LINK.PLAN_STEP}/${encodedPart(planId)}`;
   return anchor === "" ? plan : `${plan}#${encodedPart(anchor)}`;
 }
 
@@ -665,26 +660,6 @@ export function encodeMention(mention: Mention, place: MentionPlace): string {
 export function decodeMention(target: string, repository: string | null): Mention | undefined {
   if (target.length > MENTION_BOUNDS.MAX_TARGET_CHARS) return undefined;
   return Option.getOrUndefined(readMention(fieldsOf(target, repository)));
-}
-
-/**
- * A plan's address on tryluke.dev, or a section's, spelled in the desktop's
- * own scheme (`tryluke://tryluke.dev/<workspace>/plan/<id>#<anchor>`), which
- * the system hands the app: written again from what the address names, so
- * nothing else it carried reaches the app; nothing for any other address.
- */
-export function appLinkOf(target: string): string | undefined {
-  if (target.length > MENTION_BOUNDS.MAX_TARGET_CHARS) return undefined;
-  const url = parsedUrl(target);
-  if (url === undefined || !LINK.PROTOCOLS.has(url.protocol) || url.host !== LINK.HOST) {
-    return undefined;
-  }
-  const mention = Option.getOrUndefined(readMention(planFields(url)));
-  const workspace = decodedPart(url.pathname.split("/")[1] ?? "");
-  if (mention === undefined || workspace === undefined) return undefined;
-  if (mention.kind !== MENTION_KIND.PLAN && mention.kind !== MENTION_KIND.SECTION) return undefined;
-  const address = encodeMention(mention, { workspace, repository: null });
-  return `${LUKE_APP_PROTOCOL}${address.slice(address.indexOf("//"))}`;
 }
 
 /** Words with each control character, a line break among them, made a space, so a name stays one line of a link's label. */

@@ -20,6 +20,7 @@ import { useAct } from "../act";
 import { type IntegrationToolsReads, useIntegrationTools } from "../integration-tools";
 import type { ComposerTrigger, MentionNode } from "../plan-editor/contract";
 import { FileTypeIcon } from "./file-type-icon";
+import { NO_PLAN } from "./plan-mentions";
 
 /**
  * mention-picker.tsx -- the list an `@` opens: the plan's repository's files and folders, the plan's sections, and the plan, grouped by kind, narrowed as the word is typed, the pick written as its mention.
@@ -145,8 +146,9 @@ function pathRow(entry: RepositoryPath): MentionRow {
   };
 }
 
-/** The plan's rows: each section by its heading, a heading borne twice once for each section, then the plan itself. */
+/** The plan's rows: each section by its heading, a heading borne twice once for each section, then the plan itself; none where no plan stands. */
 function planRows(planId: string, planName: string, text: string): MentionRow[] {
+  if (planId === NO_PLAN) return [];
   const headings = planSections(text).map((section) => section.heading);
   const anchors = sectionAnchors(headings);
   return [
@@ -353,7 +355,7 @@ export const MENTION_MENU_SIDE = {
 
 type MentionMenuSide = (typeof MENTION_MENU_SIDE)[keyof typeof MENTION_MENU_SIDE];
 
-/** The plan whose sections and repository the list offers, the workspace it stands in, and its text as it stands now. */
+/** The plan whose sections and repository the list offers, the workspace it stands in, and its text as it stands now; `NO_PLAN` for a page no plan holds, which offers its repository alone. */
 export interface MentionSource {
   readonly planId: string;
   readonly planName: string;
@@ -361,7 +363,20 @@ export interface MentionSource {
   readonly workspace: string;
   /** The plan's repository, `owner/name`; null before one is chosen. */
   readonly repository: string | null;
+  /** The id of the workspace whose installation the repository is read through, where no plan names it. */
+  readonly workspaceId?: string | undefined;
   readonly text: () => string;
+}
+
+/** What a repository's paths are read by: the plan whose repository it is, or, with no plan, the workspace and the repository; none where neither names one. */
+function treeKey(
+  planId: string,
+  workspaceId: string | undefined,
+  repository: string | null,
+): { planId: string } | { workspaceId: string; repository: string } | undefined {
+  if (planId !== NO_PLAN) return { planId };
+  if (workspaceId === undefined || repository === null) return undefined;
+  return { workspaceId, repository };
 }
 
 /**
@@ -395,11 +410,13 @@ export function useMentionPicker({
   const [closedAt, setClosedAt] = useState<number | undefined>(undefined);
   const [paths, setPaths] = useState<{
     planId: string;
+    workspaceId: string | undefined;
     repository: string | null;
     paths: readonly RepositoryPath[];
   }>();
 
-  const planId = source?.planId ?? "";
+  const planId = source?.planId ?? NO_PLAN;
+  const workspaceId = source?.workspaceId;
   const repository = source?.repository ?? null;
   const place: MentionPlace = { workspace: source?.workspace ?? "", repository };
   const open = source !== undefined && trigger !== undefined && closedAt !== trigger.start;
@@ -411,16 +428,21 @@ export function useMentionPicker({
 
   // The repository's paths are read the first time the list opens on the plan, and again once its repository changes.
   const read =
-    paths?.planId === planId && paths.repository === repository ? paths.paths : undefined;
+    paths?.planId === planId && paths.workspaceId === workspaceId && paths.repository === repository
+      ? paths.paths
+      : undefined;
   useEffect(() => {
     if (!open || read !== undefined) return;
+    const key = treeKey(planId, workspaceId, repository);
+    if (key === undefined) return;
     let live = true;
-    act(ACT_KIND.PLANNING_TREE, { planId, path: "", recursive: true }).then(
+    act(ACT_KIND.PLANNING_TREE, { ...key, path: "", recursive: true }).then(
       (answer) => {
         if (!live) return;
         const entries = "folder" in answer ? answer.folder.entries : [];
         setPaths({
           planId,
+          workspaceId,
           repository,
           paths: entries.map((entry) => ({
             path: entry.name,
@@ -433,7 +455,7 @@ export function useMentionPicker({
     return () => {
       live = false;
     };
-  }, [open, read, act, planId, repository]);
+  }, [open, read, act, planId, workspaceId, repository]);
 
   // The skills are asked for as each `@` word opens the list, as the `/` list asks for them; a read
   // that answered is kept, and one that failed is asked again by the next word.

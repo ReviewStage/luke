@@ -24,6 +24,8 @@ export const AGENT_TOOL = {
   RUN_IN_REPOSITORY: "run_in_repository",
   DRAW_ON_BOARD: DRAW_ON_BOARD_TOOL_NAME,
   LOOK_AT_BOARD: LOOK_AT_BOARD_TOOL_NAME,
+  // A look at one of the plan's pictures, the planning model's and a coding agent's.
+  LOOK_AT_PICTURE: "look_at_picture",
   LIST_CODING_AGENTS: "list_coding_agents",
   READ_CODING_AGENT: "read_coding_agent",
   MESSAGE_CODING_AGENT: "message_coding_agent",
@@ -67,6 +69,17 @@ export const EVE_TOOL = {
   WORKER: "worker",
   TASK_WAIT: "task_wait",
   TASK_CANCEL: "task_cancel",
+} as const;
+
+/**
+ * eve's own two tools for a connection, which any agent's transcript may
+ * carry: one lists a connection's tools and one runs one. The call it ran
+ * is stored beside the run, under its integration's remote name
+ * (`integration-wire.ts`'s `INTEGRATION_REMOTE_TOOL`).
+ */
+export const CONNECTION_TOOL = {
+  SEARCH: "connection_search",
+  EXECUTE: "connection_execute",
 } as const;
 
 /**

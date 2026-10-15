@@ -77,6 +77,10 @@
           "type": "number",
           "minimum": 0
         },
+        "activityAt": {
+          "type": "number",
+          "minimum": 0
+        },
         "agents": {
           "type": "array",
           "items": {

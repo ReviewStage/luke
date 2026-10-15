@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { WORKSPACE_CALL_FAILURE } from "@luke/features";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
+import { PICTURE_TYPE } from "@luke/features/picture-wire";
 import { PLAN_FILE_REFUSAL } from "@luke/features/plan-wire";
 import {
   GITHUB_DISCONNECT_FAILURE,
@@ -19,12 +20,16 @@ import {
   ACT_OUTCOME_STATUS,
   ALREADY_INVITED_REFUSAL,
   GITHUB_LAST_SIGN_IN_REFUSAL,
+  LINEAR_UNAVAILABLE_REFUSAL,
   WORKSPACE_NOT_PERMITTED_REFUSAL,
 } from "@luke/host/acts";
 import { Effect } from "effect";
 import type { WebContents } from "electron";
 import { type ActRows, type ActSender, createActRouter } from "../act-router";
 import { planningActRows } from "./planning-acts";
+
+/** The one picture the fake host holds. */
+const PICTURE_ID = "picture-1";
 
 // SAFETY: the router reads the sender by identity alone; one inert object is one window.
 const SENDER = {} as WebContents;
@@ -58,6 +63,13 @@ const GRACE = {
   role: WORKSPACE_ROLE.MEMBER,
 };
 const CONNECT_PAGE = `${SERVICE}/connect-github.html?intent=intent-1`;
+const LINEAR_SIGN_IN_URL = "https://vercel.com/connect/authorize/fixture";
+const LINEAR_ISSUE = {
+  id: "issue-1",
+  identifier: "ENG-1",
+  title: "Start a plan from Linear",
+  url: "https://linear.app/acme/issue/ENG-1",
+};
 
 /** The plan the host has open, as the fixture's main process reads it. */
 interface OpenPlan {
@@ -94,6 +106,7 @@ function fixture() {
     alreadyInvited: false,
     lastSignIn: false,
     connectUrl: INSTALL_URL,
+    linearConnectUrl: LINEAR_SIGN_IN_URL,
     githubUnanswered: false,
     connectPage: CONNECT_PAGE,
   };
@@ -187,7 +200,7 @@ function fixture() {
         }),
       planningSkills: (params) =>
         Effect.sync(() => {
-          asked.push(`skills:${params.planId}`);
+          asked.push(`skills:${"planId" in params ? params.planId : params.repository}`);
           return { refusal: PLAN_FILE_REFUSAL.NO_REPOSITORY } as const;
         }),
       planningRevisions: (params) =>
@@ -204,6 +217,13 @@ function fixture() {
         Effect.sync(() => {
           asked.push(`restore:${params.seq}`);
           return true;
+        }),
+      planningPicture: (params) =>
+        Effect.sync(() => {
+          asked.push(`picture:${params.planId}:${params.attachmentId}`);
+          return params.attachmentId === PICTURE_ID
+            ? { contentType: PICTURE_TYPE.WEBP, base64: "UklGRg==" }
+            : ({ failure: PLAN_CALL_FAILURE.NOT_FOUND } as const);
         }),
       planningPage: (params) =>
         Effect.sync(() => {
@@ -251,6 +271,23 @@ function fixture() {
         Effect.sync(() => {
           asked.push(`disconnect:${params.workspaceId}`);
           return host.notPermitted ? refusal() : { workspace: ACME };
+        }),
+      workspaceLinearConnect: (params) =>
+        Effect.sync((): PlanningWorkspaceGitHubConnectAnswer => {
+          asked.push(`linear-connect:${params.workspaceId}`);
+          return host.notPermitted ? refusal() : { url: host.linearConnectUrl };
+        }),
+      workspaceLinearDisconnect: (params) =>
+        Effect.sync(() => {
+          asked.push(`linear-disconnect:${params.workspaceId}`);
+          return host.notPermitted ? refusal() : { workspace: ACME };
+        }),
+      workspaceLinearIssues: (params) =>
+        Effect.sync(() => {
+          asked.push(`linear-issues:${params.workspaceId}`);
+          return params.workspaceId === ACME.id
+            ? { issues: [LINEAR_ISSUE] }
+            : ({ failure: WORKSPACE_CALL_FAILURE.LINEAR_UNAVAILABLE } as const);
         }),
       workspaceMembers: (params) =>
         Effect.sync(() => {
@@ -612,6 +649,32 @@ it.effect(
 );
 
 it.effect(
+  "a plan's picture is read through the host from a panel, its absence answered rather than refused, and never from the voice window",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const ask = (attachmentId: string) => ({
+        kind: ACT_KIND.PLANNING_PICTURE_READ,
+        payload: { planId: "plan-1", attachmentId },
+      });
+
+      const read = yield* f.router.performAct(ask(PICTURE_ID), PANEL);
+      const gone = yield* f.router.performAct(ask("picture-gone"), PANEL);
+      const fromVoice = yield* f.router.performAct(ask(PICTURE_ID), VOICE);
+
+      assert.deepEqual(read, {
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: { contentType: PICTURE_TYPE.WEBP, base64: "UklGRg==" },
+      });
+      assert.deepEqual(gone, {
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: { failure: PLAN_CALL_FAILURE.NOT_FOUND },
+      });
+      assert.equal(fromVoice.status, ACT_OUTCOME_STATUS.REFUSED);
+    }),
+);
+
+it.effect(
   "a workspace's photo is read through the host from a panel, its absence answered rather than refused, and never from the voice window",
   () =>
     Effect.gen(function* () {
@@ -702,6 +765,44 @@ it.effect("a connection's install address opens only where it is GitHub's", () =
     });
     assert.deepEqual(f.opened, []);
   }),
+);
+
+it.effect(
+  "a workspace's Linear sign-in opens only an https address, and its issues are answered or refused in words that say how to mend it",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+
+      const connected = yield* f.router.performAct(
+        { kind: ACT_KIND.WORKSPACE_LINEAR_CONNECT, payload: { workspaceId: ACME.id } },
+        PANEL,
+      );
+      f.host.linearConnectUrl = "http://vercel.test/connect";
+      const plain = yield* f.router.performAct(
+        { kind: ACT_KIND.WORKSPACE_LINEAR_CONNECT, payload: { workspaceId: ACME.id } },
+        PANEL,
+      );
+      const issues = yield* f.router.performAct(
+        { kind: ACT_KIND.WORKSPACE_LINEAR_ISSUES, payload: { workspaceId: ACME.id } },
+        PANEL,
+      );
+      const none = yield* f.router.performAct(
+        { kind: ACT_KIND.WORKSPACE_LINEAR_ISSUES, payload: { workspaceId: "workspace-other" } },
+        PANEL,
+      );
+
+      assert.equal(connected.status, ACT_OUTCOME_STATUS.DONE);
+      assert.deepEqual(plain, {
+        status: ACT_OUTCOME_STATUS.REFUSED,
+        reason: ACT[ACT_KIND.WORKSPACE_LINEAR_CONNECT].refusal,
+      });
+      assert.deepEqual(f.opened, [LINEAR_SIGN_IN_URL]);
+      assert.deepEqual(issues, { status: ACT_OUTCOME_STATUS.DONE, value: [LINEAR_ISSUE] });
+      assert.deepEqual(none, {
+        status: ACT_OUTCOME_STATUS.REFUSED,
+        reason: LINEAR_UNAVAILABLE_REFUSAL,
+      });
+    }),
 );
 
 it.effect(

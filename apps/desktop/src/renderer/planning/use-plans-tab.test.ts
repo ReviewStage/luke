@@ -41,10 +41,12 @@ import { act, createElement, Fragment, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import { onRegistry } from "#testing/copy-feedback";
+import { installScrollIntoView } from "#testing/scroll-into-view";
 import { newestToastAction, newestToastSays } from "#testing/toast";
 import { ToastHost } from "../toast";
+import { CHIP_PLACE, RepositoryChip } from "./repository-chip";
 import { MAIN_TAB } from "./use-main-tabs";
-import { type PlansControl, usePlansTab } from "./use-plans-tab";
+import { type LeaveAsk, type PlansControl, useLeaveGuard, usePlansTab } from "./use-plans-tab";
 import { SIDE_PANEL_TAB } from "./use-side-panel";
 
 const PLAN: Plan = {
@@ -174,6 +176,7 @@ function mount(
       onOpenIntegrations: () => undefined,
       onOpenApiKeys: () => undefined,
       onOpenSettings: (link) => links.push(link),
+      leaveGuard: useLeaveGuard(),
     });
     return null;
   }
@@ -1242,6 +1245,59 @@ test("the repository chip reads the chosen workspace's repositories on the new-p
   ]);
 });
 
+test("the repository chip's list for a workspace with GitHub connected is its repositories alone, under no heading", async () => {
+  const listed = {
+    repositories: {
+      installed: true,
+      repositories: [
+        {
+          owner: "acme",
+          name: "relay",
+          fullName: "acme/relay",
+          defaultBranch: "main",
+          private: true,
+          updatedAt: 1,
+        },
+      ],
+      installationUrl: "https://github.com/apps/luke/installations/new",
+    },
+  };
+  const tab = mount(
+    {
+      shown: true,
+      planning: {
+        ...TWO_WORKSPACES,
+        workspaces: [PERSONAL, { ...ACME, github: { login: "acme", active: true } }],
+      },
+    },
+    { [ACT_KIND.PLANNING_REPOSITORIES]: () => Promise.resolve(listed) },
+  );
+  installScrollIntoView();
+  const chip = document.body.appendChild(document.createElement("div"));
+  act(() =>
+    createRoot(chip).render(
+      createElement(RepositoryChip, {
+        value: null,
+        chooser: tab.control().newPlan.repositoriesIn(ACME.id),
+        onChoose: () => undefined,
+        place: CHIP_PLACE.FIELD,
+      }),
+    ),
+  );
+  await settle();
+  act(() => chip.querySelector<HTMLButtonElement>(".chip")?.click());
+  await settle();
+
+  const menu = chip.querySelector('[aria-label="Repository"]') ?? assert.fail("the menu opens");
+  assert.deepEqual(
+    [
+      [...menu.querySelectorAll('[role="option"]')].map((row) => row.textContent),
+      [...menu.querySelectorAll('[role="group"]')].map((group) => group.getAttribute("aria-label")),
+    ],
+    [["acme/relay"], []],
+  );
+});
+
 test("a workspace made is asked for by its name and listed at once, and a refusal answers why", async () => {
   let refuse = false;
   const tab = mount(
@@ -1543,6 +1599,31 @@ test("another account signing in after a sign-out keeps its own plan, and has it
   tab.stand({ signedIn: true, account: "other@example.com", planning: LAUNCHING });
   tab.stand({ planning: listRead([listed()]) });
   assert.deepEqual(selected(tab), [PLAN.id]);
+});
+
+test("while a page stands its ask, a way out asks instead of going, Leave goes where was asked, and once the ask is down the doors go at once", () => {
+  const tab = mount({ shown: true, planning: listRead([listed()]) });
+  act(() => tab.control().inboxView.onOpen());
+  const asked: (() => void)[] = [];
+  const ask: LeaveAsk = (leave) => asked.push(leave);
+  let down: () => void = () => undefined;
+  act(() => {
+    down = tab.control().leaveGuard.stand(ask);
+  });
+
+  act(() => tab.control().factoryView.onOpen());
+  act(() => tab.control().onGoHome());
+  act(() => tab.control().onChooseWorkspace("workspace-other"));
+  assert.equal(tab.control().inboxView.open, true, "the page stands while it is asked about");
+  assert.equal(asked.length, 3, "the workspace switcher asks as the other doors do");
+
+  act(() => asked[0]?.());
+  assert.equal(tab.control().factoryView.open, true, "Leave goes where the first way out went");
+
+  act(() => down());
+  act(() => tab.control().inboxView.onOpen());
+  assert.equal(tab.control().inboxView.open, true);
+  assert.equal(asked.length, 3, "nothing is asked once the ask is down");
 });
 
 test("Factory and the Inbox stand in the plan's place in turn: opening one puts the other away, and Home or a plan's press puts Factory away", () => {

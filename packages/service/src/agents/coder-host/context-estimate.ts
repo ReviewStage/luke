@@ -4,6 +4,7 @@ import type { MessageStreamEvent } from "eve/client";
 import { serializeModelInputSchema, type ToolDefinition } from "eve/tools";
 import loadSkill from "eve/tools/load_skill";
 import { SHOW_PAGE_TOOL } from "../../plans/page-tool.js";
+import { LOOK_AT_PICTURE_TOOL } from "../../plans/picture-look.js";
 import { RUN_ON_MAC_TOOL } from "../mac-command.js";
 import { READ_WEB_PAGE_TOOL, SEARCH_WEB_TOOL } from "../public-research.js";
 import { CODER } from "./bounds.js";
@@ -71,6 +72,10 @@ const AUTHORED_TOOLS = {
   [CODER_TOOL.EDIT_PLAN]: {
     description: EDIT_PLAN_TOOL.description,
     inputSchema: emitJsonSchema(EDIT_PLAN_TOOL.inputSchema),
+  },
+  [CODER_TOOL.LOOK_AT_PICTURE]: {
+    description: LOOK_AT_PICTURE_TOOL.description,
+    inputSchema: emitJsonSchema(LOOK_AT_PICTURE_TOOL.inputSchema),
   },
   [CODER_TOOL.WRITE_TODOS]: {
     description: TODOS_TOOL.description,

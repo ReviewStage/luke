@@ -71,11 +71,10 @@ interface FindTally {
   readonly more?: boolean;
 }
 
-/** What a scope shows: the plan, and its tab. */
-export interface FindSubject {
-  readonly plan: string;
-  readonly tab: StripTab;
-}
+/** What a scope shows: a plan's tab, or the page of an agent no plan holds. */
+export type FindSubject =
+  | { readonly plan: string; readonly tab: StripTab }
+  | { readonly agent: string };
 
 /** The bar standing open: what it was opened over, and how many times ⌘F has summoned it there. */
 interface OpenBar {
@@ -112,8 +111,9 @@ const FindSourceContext = createContext<(source: FindSource | undefined) => void
 /** No matches, and no match the find is at. */
 const NO_TALLY: FindTally = { count: 0, at: -1 };
 
-/** Whether two subjects name the same tab of the same plan. */
+/** Whether two subjects name the same tab of the same plan, or the same agent's page. */
 function sameSubject(a: FindSubject, b: FindSubject): boolean {
+  if ("agent" in a || "agent" in b) return "agent" in a && "agent" in b && a.agent === b.agent;
   return a.plan === b.plan && sameTab(a.tab, b.tab);
 }
 
@@ -331,8 +331,8 @@ export function useFindSource(source: FindSource | undefined): void {
  * is open, only while `active`, the column holding the window's keys with
  * a tab that has words to find; the bar stays open over a column that
  * loses them, so its matches stay tinted, as an unfocused editor's do.
- * `subject` names the tab shown and its plan: another closes the bar, which
- * a return to the first does not open again.
+ * `subject` names the tab shown and its plan, or the agent's page: another
+ * closes the bar, which a return to the first does not open again.
  */
 export function FindScope({
   active,

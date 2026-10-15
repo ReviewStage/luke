@@ -6,6 +6,7 @@ import type { Workspace } from "@luke/features/workspace-wire";
 import { ProviderMark } from "@luke/ui";
 import { ACTOR_KIND, actorName, SOMEONE_REASON } from "@luke/ui/actor-model";
 import { repositoryPageUrl } from "@luke/ui/planning-model";
+import { TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
 import { AttentionMark } from "../attention-mark";
 import { CardHead, CardRule, HoverCard } from "../hover-card";
@@ -302,7 +303,7 @@ export function PlanCard({
     <HoverCard data-plan-card="">
       <CardHead
         name={plan.name}
-        corner={<RelativeTime at={plan.updatedAt} now={now} hint={false} />}
+        corner={<RelativeTime at={taskTime(plan, TASK_ORDER.UPDATED)} now={now} hint={false} />}
       />
       {repository === null ? null : (
         <RepositoryDetail repository={repository} pictures={pictures} onOpenGitHub={onOpenGitHub} />

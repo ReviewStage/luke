@@ -103,11 +103,15 @@ import {
   type PlanningFileParams,
   type PlanningGitHubDisconnectAnswer,
   type PlanningGitHubPageAnswer,
+  type PlanningLinearIssuesAnswer,
+  type PlanningLinearIssuesParams,
   type PlanningMessagesParams,
   type PlanningMoveAnswer,
   type PlanningMoveParams,
   type PlanningPageAnswer,
   type PlanningPageParams,
+  type PlanningPictureAnswer,
+  type PlanningPictureParams,
   type PlanningPinParams,
   type PlanningPinRepositoryParams,
   type PlanningRenameParams,
@@ -149,8 +153,10 @@ import {
   planningFileAnswerSchema,
   planningGitHubDisconnectAnswerSchema,
   planningGitHubPageAnswerSchema,
+  planningLinearIssuesAnswerSchema,
   planningMoveAnswerSchema,
   planningPageAnswerSchema,
+  planningPictureAnswerSchema,
   planningRepositoriesAnswerSchema,
   planningRevisionAnswerSchema,
   planningRevisionsAnswerSchema,
@@ -345,6 +351,8 @@ export interface HostOperator {
   planningRestore(params: PlanningRevisionParams): Effect.Effect<boolean>;
   /** One version of one page of a plan with its HTML, for the frame that draws it; or that the service did not answer. */
   planningPage(params: PlanningPageParams): Effect.Effect<PlanningPageAnswer>;
+  /** One picture of one plan as its bytes in base64, or why there is none. */
+  planningPicture(params: PlanningPictureParams): Effect.Effect<PlanningPictureAnswer>;
   /** Where every one of the account's integrations stands; or why there is no answer. */
   integrationsStatus(): Effect.Effect<IntegrationStatusesView>;
   /** A sign-in to one provider begun and opened in the browser by the host; whether it was, never the address. */
@@ -375,6 +383,18 @@ export interface HostOperator {
   workspaceGitHubDisconnect(
     params: PlanningWorkspaceParams,
   ): Effect.Effect<PlanningWorkspaceAnswer>;
+  /** A workspace's Linear connection begun; Vercel Connect's sign-in address to open, or why there is none. */
+  workspaceLinearConnect(
+    params: PlanningWorkspaceParams,
+  ): Effect.Effect<PlanningWorkspaceGitHubConnectAnswer>;
+  /** A workspace's Linear disconnected; the workspace as it then stands, or why it is not. */
+  workspaceLinearDisconnect(
+    params: PlanningWorkspaceParams,
+  ): Effect.Effect<PlanningWorkspaceAnswer>;
+  /** The Linear issues a workspace's connection reaches; or why there are none. */
+  workspaceLinearIssues(
+    params: PlanningLinearIssuesParams,
+  ): Effect.Effect<PlanningLinearIssuesAnswer>;
   /** One workspace's members; or why there are none. */
   workspaceMembers(
     params: PlanningWorkspaceMembersParams,
@@ -897,7 +917,9 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     planningTree: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.PLANNING_TREE, {
-          planId: params.planId,
+          ...("planId" in params
+            ? { planId: params.planId }
+            : { workspaceId: params.workspaceId, repository: params.repository }),
           path: params.path,
           ...(params.recursive === undefined ? undefined : { recursive: params.recursive }),
         }),
@@ -910,7 +932,12 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       ),
     planningSkills: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.PLANNING_SKILLS, { planId: params.planId }),
+        client.call(
+          GATEWAY_METHOD.PLANNING_SKILLS,
+          "planId" in params
+            ? { planId: params.planId }
+            : { workspaceId: params.workspaceId, repository: params.repository },
+        ),
         (answer): PlanningSkillsAnswer =>
           (answer.ok
             ? Result.getOrUndefined(
@@ -940,6 +967,21 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           (answer.ok
             ? Result.getOrUndefined(
                 readEither(planningRevisionAnswerSchema, { excess: EXCESS_KEYS.DROP })(
+                  answer.result,
+                ),
+              )
+            : undefined) ?? { failure: PLAN_CALL_FAILURE.UNANSWERED },
+      ),
+    planningPicture: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.PLANNING_PICTURE, {
+          planId: params.planId,
+          attachmentId: params.attachmentId,
+        }),
+        (answer): PlanningPictureAnswer =>
+          (answer.ok
+            ? Result.getOrUndefined(
+                readEither(planningPictureAnswerSchema, { excess: EXCESS_KEYS.DROP })(
                   answer.result,
                 ),
               )
@@ -1009,6 +1051,26 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           workspaceId: params.workspaceId,
         }),
         workspaceAnswer(planningWorkspaceAnswerSchema),
+      ),
+    workspaceLinearConnect: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.WORKSPACES_LINEAR_CONNECT, { workspaceId: params.workspaceId }),
+        workspaceAnswer(planningWorkspaceGitHubConnectAnswerSchema),
+      ),
+    workspaceLinearDisconnect: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.WORKSPACES_LINEAR_DISCONNECT, {
+          workspaceId: params.workspaceId,
+        }),
+        workspaceAnswer(planningWorkspaceAnswerSchema),
+      ),
+    workspaceLinearIssues: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.WORKSPACES_LINEAR_ISSUES, {
+          workspaceId: params.workspaceId,
+          ...("query" in params ? { query: params.query } : undefined),
+        }),
+        workspaceAnswer(planningLinearIssuesAnswerSchema),
       ),
     workspaceMembers: (params) =>
       Effect.map(
@@ -1116,6 +1178,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           ...("name" in request ? { name: request.name } : undefined),
           ...("repository" in request ? { repository: request.repository } : undefined),
           ...("workspaceId" in request ? { workspaceId: request.workspaceId } : undefined),
+          ...("linearIssueId" in request ? { linearIssueId: request.linearIssueId } : undefined),
         }),
         (answer): PlanningStartAnswer =>
           (answer.ok

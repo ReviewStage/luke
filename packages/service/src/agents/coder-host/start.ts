@@ -11,6 +11,7 @@ import {
 } from "@luke/database/models/coding-agent-store";
 import { readPlan } from "@luke/database/models/plan-store";
 import { isWorkspaceMember } from "@luke/database/models/workspace-store";
+import type { StoredAutomationOrigin } from "@luke/database/schemas/coding-agent";
 import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import type { IntegrationProvider } from "@luke/features/integration-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
@@ -93,7 +94,7 @@ export type StartPlace =
       readonly prompt: string;
     };
 
-/** What a Start asks: where it goes, the key a retry carries again, the choice where one was made, the files attached to a prompt, the MCP servers its draft switched off, and the automation whose run asks. */
+/** What a Start asks: where it goes, the key a retry carries again, the choice where one was made, the files attached to a prompt, the MCP servers its draft switched off, and the automation whose run asks, with that run. */
 export type StartAsk = StartPlace & {
   readonly idempotencyKey: string;
   readonly choice: ModelChoice | undefined;
@@ -103,6 +104,8 @@ export type StartAsk = StartPlace & {
   readonly rememberChoice?: boolean;
   /** The automation whose run starts the agent; none for a Start by hand. */
   readonly automationId?: string | undefined;
+  /** That automation's run as it starts the agent, which the agent keeps; none for a Start by hand. */
+  readonly automationOrigin?: StoredAutomationOrigin | undefined;
 };
 
 /** What a Start came to: the agent, and whether this ask made it or found it under its key. */
@@ -215,6 +218,7 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
     createCodingAgent(userId, {
       ...brief,
       automationId: ask.automationId,
+      automationOrigin: ask.automationOrigin,
       idempotencyKey: ask.idempotencyKey,
       model: choice.model,
       effort: choice.effort,

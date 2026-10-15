@@ -148,6 +148,13 @@ names the workspace the listing is for, to a member of it; none named is the
 account's first workspace. One the account is not in is `not-found`
 (404), and the query given twice is `invalid-request`. A GitHub or a store
 the service could not reach is `unavailable`.
+`GET /api/github/repositories/tree` and `GET /api/github/repositories/skills`
+read one repository of that installation for a place no task names, such as
+an agent an automation started: the `workspaceId` and `repository` queries
+name it, each exactly once, and the answer is a task's own tree or skills
+read (`src/plans/plan-tree.ts`, `src/plans/plan-skills.ts`), through the
+same reach, to a member of the workspace; a repository the installation does
+not reach is refused as `not-reachable`, as a task's is.
 `src/github/github-repositories-app.test.ts` holds the route and
 `src/github/github-app.test.ts` the reads beneath it, over
 `src/testing/github-app-fake.ts`.
@@ -597,7 +604,11 @@ remote call as a call of its own nested under the `connection_execute` that
 ran it, named `<provider>__<tool>`, with id `<wrapper>:1`. The relay stores
 the nested call under the provider's fixed name (`linear_remote` for
 Linear), whose input is `{ remoteTool, parentCallId, input }`, and settles it
-with what the provider answered, before the wrapper's own result. Every name
+with what the provider answered, before the wrapper's own result. Both the
+names and that envelope are the wire's (`@luke/features/integration-wire`'s
+`INTEGRATION_REMOTE_TOOL` and `integrationRemoteCallSchema`), because the
+desktop draws the nested call as the provider's tool, under the provider's
+mark, and leaves its wrapper's row out. Every name
 is in both agents' tool sets whatever any account's connections stand at, so
 a transcript reads back the same after a Disconnect. Rows hold provider
 content (Linear's issues and comments, Notion's pages); no token reaches a
@@ -913,7 +924,11 @@ row (`plan.agent_edits`, the last fifty, the agent's id and its notes as
 taken) and named from the agent's row at read time, so the window's "Updated
 by" line and Luke's "recent edits by coding agents" say what the
 row says now; the developer reads them on their next call while the
-agent runs on, and a turn may take only so many notes. The
+agent runs on, and a turn may take only so many notes. `edit_plan` and
+`show_page` resolve at each turn's start (`tool-set.ts`'s `planToolsOf`):
+an agent on no plan, as an automation's run starts one, is offered
+neither, and one handed a prompt on a plan only `show_page`, so no agent is
+offered a tool its every call would refuse. The
 extension itself is not mounted, since its `worker` subagent runs on an AI
 Gateway model and its `gh` tool on Vercel Connect, and Luke runs neither.
 `gh` and `git` run through the shell, authenticated at the firewall. The

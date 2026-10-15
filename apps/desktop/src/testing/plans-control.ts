@@ -291,6 +291,7 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
       repositoriesIn: () => NO_REPOSITORIES,
       start: () => Promise.resolve(undefined),
       onClose: ignore,
+      linear: undefined,
     },
     onLeavePlan: ignore,
     onGoHome: ignore,
@@ -302,6 +303,12 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
     onPinRepository: ignore,
     onDeletePlan: () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED }),
     back: () => false,
+    // No page asks before it is left, so every way out goes at once.
+    leaveGuard: {
+      stand: () => ignore,
+      pass: (leave) => leave(),
+      guard: (leave) => leave,
+    },
     ...overrides,
   };
 }

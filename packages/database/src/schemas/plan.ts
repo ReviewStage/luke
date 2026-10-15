@@ -1,4 +1,5 @@
 import type { BoardElement, DrawingElement } from "@luke/features/board-wire";
+import type { PlanLinearIssue } from "@luke/features/linear-wire";
 import type { PlanAgentEdit } from "@luke/features/plan-template";
 import { sql } from "drizzle-orm";
 import { index, integer, jsonb, pgTable, text, uuid } from "drizzle-orm/pg-core";
@@ -50,6 +51,13 @@ export const plan = pgTable(
      * plan from before repositories stands and is no error.
      */
     repository: text("repository"),
+    /**
+     * The Linear issue the plan was started from, as the service read it
+     * through the workspace's Linear connection when it started: what every
+     * planning turn is told to research. Kept whatever becomes of the
+     * connection; null for a plan started from no issue.
+     */
+    linearIssue: jsonb("linear_issue").$type<PlanLinearIssue>(),
     /**
      * @deprecated A pin is its reader's own now, in `plan_pin`
      * (`plan-pin.ts`), and nothing writes or reads this. It was the

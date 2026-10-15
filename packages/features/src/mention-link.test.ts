@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 import { INTEGRATION_PROVIDER } from "./integration-wire.js";
 import {
-  appLinkOf,
   decodeMention,
   encodeMention,
   isMentionableTool,
@@ -491,26 +490,6 @@ test("a nested quote is one depth however far apart its markers stand, so a span
     mentionsIn(words, null).map(({ mention }) => mention),
     [{ kind: MENTION_KIND.FILE, path: "b.ts" }],
   );
-});
-
-test("a plan's address, by either scheme and on any page that reads it, is spelled in the desktop's own scheme, written again from what it names", () => {
-  assert.equal(
-    appLinkOf(`https://tryluke.dev/acme/plan/${PLAN_ID}?from=slack#Rollout`),
-    `tryluke://tryluke.dev/acme/plan/${PLAN_ID}#rollout`,
-  );
-  assert.equal(
-    appLinkOf(`tryluke://tryluke.dev/personal-u_1/plan/${PLAN_ID}`),
-    `tryluke://tryluke.dev/personal-u_1/plan/${PLAN_ID}`,
-  );
-  for (const target of [
-    `https://tryluke.dev//plan/${PLAN_ID}`,
-    `https://example.com/acme/plan/${PLAN_ID}`,
-    `luke://plan/${PLAN_ID}`,
-    "https://github.com/acme/checkout/blob/HEAD/src/a.ts",
-    `https://tryluke.dev/acme/plan/${PLAN_ID}#a%20b`,
-  ]) {
-    assert.equal(appLinkOf(target), undefined, target);
-  }
 });
 
 test("an MCP server and one of its tools read back as the mention they were written from", () => {

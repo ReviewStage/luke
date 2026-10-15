@@ -66,6 +66,12 @@ const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
   { src: "/api/plans/([^/]+)/tree", route: "plans/tree", query: "id=$1" },
   { src: "/api/plans/([^/]+)/skills", route: "plans/skills", query: "id=$1" },
   { src: "/api/plans/([^/]+)/edit", route: "plans/edit", query: "id=$1" },
+  {
+    src: "/api/plans/([^/]+)/attachments/([^/]+)",
+    route: "plans/attachment",
+    query: "id=$1&attachment=$2",
+  },
+  { src: "/api/plans/([^/]+)/attachments", route: "plans/attachments", query: "id=$1" },
   { src: "/api/plans/([^/]+)/agents", route: "plans/agents", query: "id=$1" },
   { src: "/api/plans/([^/]+)/inbox", route: "plans/inbox", query: "id=$1" },
   {
@@ -96,6 +102,16 @@ const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
     src: "/api/agents/([^/]+)/subagents/([^/]+)/messages",
     route: "agents/subagent-messages",
     query: "id=$1&call=$2",
+  },
+  {
+    src: "/api/agents/([^/]+)/subagents/([^/]+)/pictures/([^/]+)",
+    route: "agents/picture",
+    query: "id=$1&call=$2&picture=$3",
+  },
+  {
+    src: "/api/agents/([^/]+)/pictures/([^/]+)",
+    route: "agents/picture",
+    query: "id=$1&picture=$2",
   },
   { src: "/api/agents/([^/]+)/messages", route: "agents/messages", query: "id=$1" },
   { src: "/api/agents/([^/]+)/stop", route: "agents/stop", query: "id=$1" },

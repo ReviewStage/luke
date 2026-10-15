@@ -1,3 +1,4 @@
+import type { CodingAgent } from "@luke/database/models/coding-agent-store";
 import { WireValueSchema } from "@luke/wire";
 import { verbatimJsonSchema } from "@luke/wire/effect";
 import type { ToolSet } from "ai";
@@ -45,6 +46,7 @@ export const CODER_TOOL = {
   READ_WEB_PAGE: AGENT_TOOL.READ_WEB_PAGE,
   DELEGATE: AGENT_TOOL.DELEGATE,
   EDIT_PLAN: AGENT_TOOL.EDIT_PLAN,
+  LOOK_AT_PICTURE: AGENT_TOOL.LOOK_AT_PICTURE,
   WRITE_TODOS: AGENT_TOOL.WRITE_TODOS,
   POST_TO_INBOX: AGENT_TOOL.POST_TO_INBOX,
   CLOSE_INBOX_ITEM: AGENT_TOOL.CLOSE_INBOX_ITEM,
@@ -53,6 +55,22 @@ export const CODER_TOOL = {
   SHOW_PAGE: AGENT_TOOL.SHOW_PAGE,
   RUN_ON_MAC: AGENT_TOOL.RUN_ON_MAC,
 } as const;
+
+/** The tools that act on the agent's plan: `edit_plan`, which takes notes in it, and `show_page`, which shows a page on it. */
+export type PlanTool = typeof CODER_TOOL.EDIT_PLAN | typeof CODER_TOOL.SHOW_PAGE;
+
+/**
+ * The plan's tools an agent is offered: none for one on no plan, as an
+ * automation's run starts one, and no `edit_plan` for one handed a prompt,
+ * which never saw the plan. Note that each tool withheld is one its call
+ * would only be refused by (`host.ts`'s `editPlan` and `showPage`), and that
+ * the instructions leave out the same words (`instructions.ts`).
+ */
+export function planToolsOf(agent: Pick<CodingAgent, "planId" | "prompt">): ReadonlySet<PlanTool> {
+  if (agent.planId === null) return new Set();
+  if (agent.prompt !== null) return new Set([CODER_TOOL.SHOW_PAGE]);
+  return new Set([CODER_TOOL.EDIT_PLAN, CODER_TOOL.SHOW_PAGE]);
+}
 
 /**
  * eve's provider-run web reads, which coding agents ran before they had the

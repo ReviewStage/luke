@@ -7,6 +7,7 @@ import {
   latestTurnsOf,
 } from "@luke/database/models/coding-agent-store";
 import { hostTurnId } from "@luke/database/models/ids";
+import { keepPlanAttachment, PLAN_ATTACHMENT_KEEP } from "@luke/database/models/plan-attachments";
 import { openPlanConversation, readPlan } from "@luke/database/models/plan-store";
 import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
@@ -14,11 +15,14 @@ import { turns } from "@luke/database/schemas/storage";
 import { getTestDB, startPlan } from "@luke/database/testing";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
+import { PICTURE_TYPE } from "@luke/features/picture-wire";
+import { planAttachmentAddress } from "@luke/features/plan-attachment-link";
 import { planSections } from "@luke/features/plan-document";
 import { FAST_ACCESS } from "@luke/features/provider-key-wire";
 import { isReasoningUIPart, isTextUIPart, isToolUIPart, type LanguageModel } from "ai";
 import { eq } from "drizzle-orm";
 import { Clock, Effect, Layer, Option, Redacted, Result, Schema } from "effect";
+import { Base64 } from "effect/encoding";
 import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
 import {
@@ -31,6 +35,7 @@ import {
   TURN_STATUS,
   unparsedWire,
 } from "../../core.js";
+import { PICTURE_LOOK_STATUS } from "../../plans/picture-look.js";
 import { modelCatalogOf, type OfferedModel } from "../../providers/model-catalog.js";
 import { stampedEveEvent } from "../../testing/eve-events.js";
 import { githubReaching, openGithubUser } from "../../testing/github-app-fake.js";
@@ -461,6 +466,69 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
           stored.agentEdits.map((edit) => edit.notes.map((note) => note.kind)),
           [["add", "add"]],
         );
+      }),
+  );
+
+  it.effect(
+    "an agent's look at a picture of its plan answers the picture, and the transcript keeps only that it looked",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { userId, agent, target, auth, sessionId, admitted } = yield* openAgent(host);
+        assert.ok(agent.planId !== null);
+        const picture = {
+          contentType: PICTURE_TYPE.PNG,
+          bytes: Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 4, 2]),
+        };
+        const kept = yield* keepPlanAttachment(userId, agent.planId, picture);
+        if (kept.status !== PLAN_ATTACHMENT_KEEP.KEPT) return assert.fail("no picture was kept");
+        const ref = { planId: agent.planId, attachmentId: kept.id };
+        const input = { address: planAttachmentAddress(ref, "acme") };
+
+        const answer = yield* host.lookAtPicture(
+          admitted,
+          { sessionId, eveTurnId: "turn_0" },
+          unparsedWire(input),
+        );
+        assert.equal(answer.status, PICTURE_LOOK_STATUS.LOOKED);
+        if (answer.status !== PICTURE_LOOK_STATUS.LOOKED) return;
+        assert.equal(answer.image, Base64.encode(picture.bytes));
+
+        const call = { callId: "call-look", toolName: CODER_TOOL.LOOK_AT_PICTURE };
+        const at = { turnId: "turn_0", sequence: 0, stepIndex: 0 };
+        const events: MessageStreamEvent[] = [
+          stamped({ type: "turn.started", data: { turnId: "turn_0", sequence: 0 } }),
+          stamped({ type: "step.started", data: { ...at, modelId: "m" } }),
+          stamped({
+            type: "actions.requested",
+            data: { ...at, actions: [{ kind: "tool-call", ...call, input }] },
+          }),
+          stamped({
+            type: "action.result",
+            data: {
+              ...at,
+              status: "completed",
+              result: { kind: "tool-result", ...call, output: { ...answer } },
+            },
+          }),
+          stamped({ type: "step.completed", data: { ...at, finishReason: "tool-calls" } }),
+          stamped({ type: "turn.completed", data: { turnId: "turn_0", sequence: 0 } }),
+        ];
+        const state = memoryRelayState();
+        const session = { id: sessionId, auth, turn: { id: "turn_0" } };
+        for (const event of events) {
+          // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
+          yield* host.relay(event, admitted, session as never, state, {});
+        }
+
+        const page = yield* transcriptPast(target, CODER_TOOL_SET, CURSOR_START, agent).pipe(
+          Effect.provide(modelCatalogOf(CATALOG)),
+        );
+        const look = page.messages.flatMap((message) => message.parts).find(isToolUIPart);
+        assert.ok(look);
+        assert.equal(look.state, TOOL_PART_STATE.OUTPUT_AVAILABLE);
+        assert.deepEqual(look.output, { status: PICTURE_LOOK_STATUS.LOOKED });
+        assert.equal(JSON.stringify(page).includes(answer.image), false);
       }),
   );
 

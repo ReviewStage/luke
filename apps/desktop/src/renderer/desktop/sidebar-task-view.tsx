@@ -1,4 +1,5 @@
 import type { PlanSummary } from "@luke/features/plan-wire";
+import { ArchiveIcon } from "@luke/ui";
 import { type Actor, actorName, creatorActor, memberActor } from "@luke/ui/actor-model";
 import { TASK_GROUPING, TASK_ORDER } from "@luke/ui/task-list-model";
 import {
@@ -13,7 +14,9 @@ import {
   XIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
+import { APP_COMMAND } from "#shared/shortcuts";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
+import { useAppCommand } from "../app-commands";
 import { useMemberDirectory } from "../member-directory";
 import { Tooltip } from "../tooltip";
 import { ActionMenu, type MenuAction, type MenuEntry, useActionMenu } from "./action-menu";
@@ -29,10 +32,12 @@ import type { TaskListViewControl } from "./task-list-view";
  * section, and folded it counts what it holds. View options is the Inbox's
  * own sliders at the Tasks head's end, always in sight, dropping the
  * window's menu: Group by and Order by, each a submenu with its choice
- * checked, and in a shared workspace Created by: Anyone, Me, or each
- * member by face. While the view lists one member's tasks, a chip under
- * the head says whose, its × lists everyone's again, and the button wears
- * a dot, so a filtered list never passes for the whole of it.
+ * checked, in a shared workspace Created by: Anyone, Me, or each member by
+ * face, and last Archived tasks, which turns the section to the archived
+ * tasks, out of the way of the list rather than a group at its foot. While
+ * the view lists one member's tasks or the archived ones, a chip under the
+ * head says so, its × lifts it, and the button wears a dot, so a filtered
+ * list never passes for the whole of it.
  */
 
 /** What View options is called, on its button and its menu alike. */
@@ -137,11 +142,18 @@ function createdByEntries(
   ];
 }
 
-/** The menu's choices: how the list groups, Creator only where the workspace is shared, how it orders, and whose tasks it lists, where shared. */
+/** Whether the Tasks section shows the archived tasks, and the press that turns it to them or back. */
+export interface ArchivedView {
+  readonly shown: boolean;
+  readonly onShown: (shown: boolean) => void;
+}
+
+/** The menu's choices: how the list groups, Creator only where the workspace is shared, how it orders, whose tasks it lists, where shared, and the archived tasks. */
 function viewEntries(
   control: TaskListViewControl,
   shared: boolean,
   reader: ReturnType<typeof useMemberDirectory>,
+  archive: ArchivedView,
 ): MenuEntry[][] {
   const { view } = control;
   const grouping = (
@@ -196,6 +208,14 @@ function viewEntries(
           ],
         ]
       : []),
+    [
+      {
+        label: "Archived tasks",
+        icon: <ArchiveIcon />,
+        checked: archive.shown,
+        onSelect: () => archive.onShown(!archive.shown),
+      },
+    ],
   ];
 }
 
@@ -207,6 +227,7 @@ export function TaskViewOptions({
   shown,
   control,
   shared,
+  archive,
   filtered,
 }: {
   /** Whether the sidebar is on screen, for the menu not to outlive it. */
@@ -214,6 +235,7 @@ export function TaskViewOptions({
   control: TaskListViewControl;
   /** Whether the workspace is shared, which alone groups and filters by creator. */
   shared: boolean;
+  archive: ArchivedView;
   /** Whether the view leaves any task out, which the button's dot says. */
   filtered: boolean;
 }): React.JSX.Element {
@@ -237,7 +259,7 @@ export function TaskViewOptions({
         <ActionMenu
           label={VIEW_OPTIONS}
           menu={menu.drawn}
-          groups={viewEntries(control, shared, reader)}
+          groups={viewEntries(control, shared, reader, archive)}
           onClose={menu.close}
         />
       )}
@@ -245,35 +267,132 @@ export function TaskViewOptions({
   );
 }
 
+/** One chip under the Tasks head: what it says, led by a glyph, and its × that lifts it. */
+function ViewChip({
+  glyph,
+  words,
+  lift,
+  onLift,
+}: {
+  glyph: React.JSX.Element;
+  words: string;
+  /** What the × does, said in its hint and to a screen reader. */
+  lift: string;
+  onLift: () => void;
+}): React.JSX.Element {
+  return (
+    <span className="sidebar-view-chip">
+      {glyph}
+      <span className="sidebar-view-chip-words">{words}</span>
+      <Tooltip label={lift}>
+        <button type="button" aria-label={lift} onClick={onLift}>
+          <XIcon />
+        </button>
+      </Tooltip>
+    </span>
+  );
+}
+
 /**
- * The chip under the Tasks head while the list holds one member's tasks:
- * their face and "Created by me" or "Created by" their name, and an × that
- * lists everyone's again.
+ * The chips under the Tasks head, while the view leaves tasks out: one
+ * member's face and "Created by me" or "Created by" their name, whose ×
+ * lists everyone's again, and Archived, whose × goes back to the tasks.
  */
-export function CreatedByChip({
+export function ViewChips({
   createdBy,
   plans,
-  onClear,
+  onClearCreatedBy,
+  archive,
 }: {
-  createdBy: string;
+  createdBy: string | undefined;
   /** The listed tasks, which name a creator the members no longer list. */
   plans: readonly PlanSummary[];
-  onClear: () => void;
-}): React.JSX.Element {
+  onClearCreatedBy: () => void;
+  archive: ArchivedView;
+}): React.JSX.Element | null {
   const reader = useMemberDirectory();
-  const actor = filteredActor(createdBy, reader, plans);
-  const words = createdBy === reader.readerId ? "Created by me" : `Created by ${actorName(actor)}`;
+  if (createdBy === undefined && !archive.shown) return null;
+  const actor = createdBy === undefined ? undefined : filteredActor(createdBy, reader, plans);
   return (
     <div className="sidebar-view-chips">
-      <span className="sidebar-view-chip">
-        <ActorMark actor={actor} size={ACTOR_SIZE.MARK} />
-        <span className="sidebar-view-chip-words">{words}</span>
-        <Tooltip label="Show everyone's tasks">
-          <button type="button" aria-label="Show everyone's tasks" onClick={onClear}>
-            <XIcon />
-          </button>
-        </Tooltip>
-      </span>
+      {actor === undefined ? null : (
+        <ViewChip
+          glyph={<ActorMark actor={actor} size={ACTOR_SIZE.MARK} />}
+          words={createdBy === reader.readerId ? "Created by me" : `Created by ${actorName(actor)}`}
+          lift="Show everyone's tasks"
+          onLift={onClearCreatedBy}
+        />
+      )}
+      {archive.shown ? (
+        <ViewChip
+          glyph={<ArchiveIcon />}
+          words="Archived"
+          lift="Back to the tasks"
+          onLift={() => archive.onShown(false)}
+        />
+      ) : null}
     </div>
+  );
+}
+
+/** Each choice's command offered only where taking it changes the view; nothing where `offered` is false. */
+function offer(offered: boolean, changes: boolean, run: () => void): (() => void) | undefined {
+  return offered && changes ? run : undefined;
+}
+
+/**
+ * The view's choices as ⌘K offers them, each only while it would change
+ * the list: Group tasks by repository, by creator in a shared workspace, or
+ * in one list; Order tasks by last updated, created, or name; Show my tasks
+ * and Show everyone's tasks in a shared workspace; and Show or Hide archived
+ * tasks. They act as the View options menu's choices do.
+ */
+export function useTaskViewCommands({
+  offered,
+  control,
+  shared,
+  readerId,
+  archive,
+}: {
+  /** Whether the list stands to be changed: signed in, a workspace listed. */
+  offered: boolean;
+  control: TaskListViewControl;
+  shared: boolean;
+  readerId: string | undefined;
+  archive: ArchivedView;
+}): void {
+  const { order, createdBy } = control.view;
+  // A grouping by creator kept for a workspace nobody shares now is drawn by
+  // repository, so that is the grouping the commands read as standing.
+  const grouping =
+    !shared && control.view.grouping === TASK_GROUPING.CREATOR
+      ? TASK_GROUPING.REPOSITORY
+      : control.view.grouping;
+  const group = (to: typeof grouping, allowed = true) =>
+    offer(offered && allowed, grouping !== to, () => control.onGrouping(to));
+  const orderBy = (to: typeof order) => offer(offered, order !== to, () => control.onOrder(to));
+  useAppCommand(APP_COMMAND.GROUP_TASKS_BY_REPOSITORY, group(TASK_GROUPING.REPOSITORY));
+  useAppCommand(APP_COMMAND.GROUP_TASKS_BY_CREATOR, group(TASK_GROUPING.CREATOR, shared));
+  useAppCommand(APP_COMMAND.LIST_TASKS_UNGROUPED, group(TASK_GROUPING.NONE));
+  useAppCommand(APP_COMMAND.ORDER_TASKS_BY_UPDATED, orderBy(TASK_ORDER.UPDATED));
+  useAppCommand(APP_COMMAND.ORDER_TASKS_BY_CREATED, orderBy(TASK_ORDER.CREATED));
+  useAppCommand(APP_COMMAND.ORDER_TASKS_BY_NAME, orderBy(TASK_ORDER.NAME));
+  useAppCommand(
+    APP_COMMAND.SHOW_MY_TASKS,
+    offer(offered && shared && readerId !== undefined, createdBy !== readerId, () =>
+      control.onCreatedBy(readerId),
+    ),
+  );
+  useAppCommand(
+    APP_COMMAND.SHOW_EVERYONES_TASKS,
+    offer(offered && shared, createdBy !== undefined, () => control.onCreatedBy(undefined)),
+  );
+  useAppCommand(
+    APP_COMMAND.SHOW_ARCHIVED_TASKS,
+    offer(offered, !archive.shown, () => archive.onShown(true)),
+  );
+  useAppCommand(
+    APP_COMMAND.HIDE_ARCHIVED_TASKS,
+    offer(offered, archive.shown, () => archive.onShown(false)),
   );
 }

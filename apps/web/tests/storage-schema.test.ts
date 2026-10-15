@@ -74,6 +74,7 @@ const DECLARED_TABLES = [
   "organization",
   "personal_workspace",
   "plan",
+  "plan_attachment",
   "plan_board",
   "plan_page_version",
   "plan_pin",
@@ -89,6 +90,7 @@ const DECLARED_TABLES = [
   "voice_session_usage",
   "voice_sessions",
   "voice_transcript_segments",
+  "workspace_integration_connection",
 ].sort();
 
 async function publicTableNames(): Promise<readonly string[]> {

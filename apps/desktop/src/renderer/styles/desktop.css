@@ -1402,6 +1402,15 @@ ul.actor-stack {
   margin-right: var(--space-4);
 }
 
+/* A row holding a draft wears its pencil at the glyph's size, before the mark
+   of its work (`draft-mark.tsx`). */
+.sidebar-plan-time .draft-mark {
+  width: 12px;
+  height: 12px;
+  margin-right: var(--space-4);
+  vertical-align: -1.5px; /* off-scale */
+}
+
 /* A plan whose repository belongs to another workspace wears the attention
    mark in that place, the white exclamation on its orange disc
    (`attention-mark.tsx`), a size under the glyph's, so the disc's edge
@@ -1498,12 +1507,6 @@ ul.actor-stack {
    is hovered, holds focus, or has its menu open. */
 .sidebar-repository + .sidebar-repository,
 .sidebar-plans + .sidebar-repository {
-  margin-top: var(--space-8);
-}
-
-/* Archived stands at the foot of the list as one more group, its header a
-   repository's (`ArchivedPlans`). */
-.sidebar-archived {
   margin-top: var(--space-8);
 }
 
@@ -3125,10 +3128,16 @@ ul.actor-stack {
 }
 
 /* A form row's chip is a Settings picker (`settings/picker-row.tsx`), so its
-   menu hangs from the chip's trailing edge, where the column is. */
+   menu hangs from the chip's trailing edge, where the column is, or from its
+   leading edge where the chip leads its line. */
 .repository-chip[data-place="field"] .searchable-menu {
   right: 0;
   left: auto;
+}
+
+.repository-chip[data-place="field"][data-align="start"] .searchable-menu {
+  right: auto;
+  left: 0;
 }
 
 /* A harness's or a provider's mark keeps its box in a row however tight the
@@ -3842,14 +3851,14 @@ body:has(.app-stage[data-capture="true"])
   padding-right: var(--column-inset);
 }
 
-/* While the sidebar is folded the list is the window's first column, so its
+/* While the sidebar is folded the window's Inbox's list is its first column, so its
    name stands centred over the list, as a sidebar's title does, rather than
    pushed past the title bar's buttons. Each side of the name holds at least
    what stands there, the title bar's buttons at the left and the list's own
    at the right, so the name moves aside only once it would meet them, and is
    cut short only once it no longer fits between them. The bar is inset alike
    on both sides, so centred in the bar is centred in the list. */
-.desktop-shell[data-sidebar-collapsed="true"] .desktop-main .inbox-plans-bar {
+.desktop-shell[data-sidebar-collapsed="true"] .desktop-main > .inbox-view .inbox-plans-bar {
   display: grid;
   grid-template-columns:
     minmax(calc(var(--sidebar-toggle-clearance) - var(--column-inset) - var(--control-gap)), 1fr)
@@ -3858,20 +3867,36 @@ body:has(.app-stage[data-capture="true"])
   padding-left: var(--column-inset);
 }
 
-.desktop-shell[data-sidebar-collapsed="true"] .inbox-plans-bar .desktop-toolbar-heading {
+.desktop-shell[data-sidebar-collapsed="true"]
+  .desktop-main
+  > .inbox-view
+  .inbox-plans-bar
+  .desktop-toolbar-heading {
   grid-column: 2;
 }
 
-.desktop-shell[data-sidebar-collapsed="true"] .inbox-plans-bar .desktop-toolbar-actions {
+.desktop-shell[data-sidebar-collapsed="true"]
+  .desktop-main
+  > .inbox-view
+  .inbox-plans-bar
+  .desktop-toolbar-actions {
   grid-column: 3;
   justify-self: end;
+}
+
+/* A task's own Inbox stands under its column's tab strip, clear of the title
+   bar's buttons at either end, so its list's head and its item's bar keep the
+   column's own inset whether the sidebar is folded or the panel's toggle is
+   drawn. */
+.desktop-shell[data-sidebar-collapsed] .desktop-plan-main .inbox-view .desktop-toolbar {
+  padding-inline: var(--column-inset);
 }
 
 /* The list standing alone is a page rather than a column, so its name leads
    its bar past the title bar's buttons, as a page's title does. */
 .desktop-shell[data-sidebar-collapsed="true"]
   .desktop-main
-  .inbox-view[data-columns="list"]
+  > .inbox-view[data-columns="list"]
   .inbox-plans-bar {
   display: flex;
   padding-left: var(--sidebar-toggle-clearance);
@@ -6987,9 +7012,17 @@ button.automation-run:hover {
   gap: var(--space-6);
 }
 
-.new-plan-workspace {
-  position: relative;
+/* New task's chips are Settings pickers (`settings/picker-row.tsx`) standing
+   alone at the head of their lines, not in a column, so each is as wide as
+   its value and gives way, ellipsized, to a long one. */
+.new-plan-dialog .settings-picker {
   min-width: 0;
+  flex-shrink: 1;
+}
+
+.new-plan-dialog .settings-picker-chip {
+  width: auto;
+  max-width: 100%;
 }
 
 .dialog-name-field {
@@ -7395,4 +7428,35 @@ body:has(.confirm-dialog-backdrop) .toast[data-action="true"] {
 .run-card-figure dd {
   margin: 0;
   font-variant-numeric: tabular-nums;
+}
+
+/* New plan's Linear issue picker (`linear-issue-picker.tsx`) stands beside
+   the sidebar, level with the button it came from, and a notch on its
+   leading edge points back at that button, so the picker reads as New
+   plan's own rather than a menu of the page it floats over. */
+.sidebar-new-plan-wrap {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.searchable-menu.linear-issue-picker {
+  z-index: 20;
+  top: calc(var(--space-8) * -1);
+  left: calc(100% + var(--space-12));
+  width: 380px;
+  overflow: visible;
+}
+
+.searchable-menu.linear-issue-picker::before {
+  position: absolute;
+  top: calc(var(--space-8) + var(--control-height) / 2 - 6px);
+  left: -6px;
+  width: 12px;
+  height: 12px;
+  border-bottom: 1px solid var(--hairline);
+  border-left: 1px solid var(--hairline);
+  background: inherit;
+  content: "";
+  transform: rotate(45deg);
 }

@@ -2,7 +2,12 @@
 
 import assert from "node:assert/strict";
 import {
+  CODING_AGENT_CALL_FAILURE,
+  type CodingAgentInboxAnswerView,
+} from "@luke/features/coding-agent-view";
+import {
   INBOX_CURSOR_START,
+  INBOX_REPLY,
   INBOX_RESPONSE,
   INBOX_STATUS,
   INBOX_WIRE_VERSION,
@@ -190,8 +195,14 @@ function approvalItem(id: string, title: string, at: number): InboxItem {
   };
 }
 
-/** The plan's Inbox tab over the items given, laid out 700px wide, too narrow for its list and the item side by side. */
-async function narrowPlanInbox(items: readonly InboxItem[], fullScreen = false) {
+/** The plan's Inbox tab over the items given, laid out 700px wide, too narrow for its list and the item side by side, or as wide as given. */
+async function narrowPlanInbox(
+  items: readonly InboxItem[],
+  fullScreen = false,
+  width = 700,
+  /** What the read held open past the first answers, where a test settles it; else it stays open. */
+  later: Promise<CodingAgentInboxAnswerView> = new Promise(() => undefined),
+) {
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
     value: () => ({
@@ -225,7 +236,9 @@ async function narrowPlanInbox(items: readonly InboxItem[], fullScreen = false) 
               readInbox: ({ after }) =>
                 after === INBOX_CURSOR_START
                   ? Promise.resolve({ items, cursor: "1" })
-                  : new Promise(() => undefined),
+                  : after === "1"
+                    ? later
+                    : new Promise(() => undefined),
             }),
           }),
         }),
@@ -237,9 +250,7 @@ async function narrowPlanInbox(items: readonly InboxItem[], fullScreen = false) 
   });
   const tab = container.querySelector<HTMLElement>('section.inbox-view[aria-label="Inbox"]');
   assert.ok(tab, "the plan's Inbox tab");
-  vi.spyOn(tab, "getBoundingClientRect").mockReturnValue(
-    DOMRect.fromRect({ width: 700, height: 800 }),
-  );
+  vi.spyOn(tab, "getBoundingClientRect").mockReturnValue(DOMRect.fromRect({ width, height: 800 }));
   act(() => relayout());
   return {
     /** What a reader finds standing: the list or the item, and the item's title. */
@@ -250,6 +261,29 @@ async function narrowPlanInbox(items: readonly InboxItem[], fullScreen = false) 
         : "",
     ],
     title: () => tab.querySelector("[data-inbox-title]")?.textContent,
+    /** The list's head as a reader meets it: its name, and Needs you's pressed state. */
+    head: () => {
+      const head = tab.querySelector(".inbox-plans header");
+      const needsYou = head?.querySelector<HTMLButtonElement>('button[aria-label="Needs you"]');
+      return [head?.querySelector("h1")?.textContent, needsYou?.getAttribute("aria-pressed")];
+    },
+    pressNeedsYou: () =>
+      act(() =>
+        tab
+          .querySelector<HTMLButtonElement>('.inbox-plans button[aria-label="Needs you"]')
+          ?.click(),
+      ),
+    rows: () =>
+      [...tab.querySelectorAll(".inbox-plans .sidebar-plan-name")].map((row) => row.textContent),
+    pager: () => tab.querySelector(".inbox-pager-count")?.textContent ?? null,
+    /** What the list says of a read that did not land, and whether it offers Retry. */
+    failure: () => {
+      const alert = tab.querySelector('.inbox-plans [role="alert"]');
+      const retry = [...tab.querySelectorAll(".inbox-plans button")].some((button) =>
+        button.textContent?.includes("Retry"),
+      );
+      return [alert?.textContent?.includes("The inbox could not be read.") ?? false, retry];
+    },
     back: () => tab.querySelector<HTMLButtonElement>("button.inbox-back"),
     row: (title: string) =>
       [...tab.querySelectorAll<HTMLButtonElement>(".inbox-plans .sidebar-plan")].find((each) =>
@@ -269,6 +303,125 @@ test("a plan's Inbox tab too narrow for its list and the item side by side is th
   assert.deepEqual(inbox.standing(), ["", "Expire after 7 days?"]);
   assert.equal(inbox.back(), null, "no way back to a list of one");
   assert.equal(runAppCommand(APP_COMMAND.BACK), false, "nor does Back's chord go to one");
+  inbox.unmount();
+});
+
+/** An item of the plan's agent the developer approved, settled. */
+function approvedItem(id: string, title: string, at: number): InboxItem {
+  return {
+    ...approvalItem(id, title, at),
+    status: INBOX_STATUS.ANSWERED,
+    answer: { reply: INBOX_REPLY.APPROVED },
+  };
+}
+
+test("a task's Inbox heads its list with the Inbox's name and Needs you, whose press lists only what needs you, kept across a relaunch", async () => {
+  window.localStorage.clear();
+  const items = [
+    approvalItem("a1b2c3d4-0000-4000-8000-000000000001", "Expire after 7 days?", 1_000),
+    approvedItem("a1b2c3d4-0000-4000-8000-000000000002", "Resend on bounce?", 2_000),
+  ];
+  let inbox = await narrowPlanInbox(items, false, 1_200);
+  assert.deepEqual(inbox.head(), ["Inbox", "false"]);
+  assert.deepEqual(inbox.rows(), ["Resend on bounce?", "Expire after 7 days?"]);
+
+  inbox.pressNeedsYou();
+  assert.deepEqual(inbox.head(), ["Inbox", "true"]);
+  assert.deepEqual(inbox.rows(), ["Expire after 7 days?"]);
+  inbox.unmount();
+
+  inbox = await narrowPlanInbox(items, false, 1_200);
+  assert.deepEqual(inbox.rows(), ["Expire after 7 days?"], "Needs you outlives a relaunch");
+  inbox.unmount();
+  window.localStorage.clear();
+});
+
+test("one column wide, a task's Inbox filtered to what needs you pages through only those", async () => {
+  window.localStorage.clear();
+  const inbox = await narrowPlanInbox([
+    approvalItem("a1b2c3d4-0000-4000-8000-000000000001", "Expire after 7 days?", 1_000),
+    approvedItem("a1b2c3d4-0000-4000-8000-000000000002", "Resend on bounce?", 2_000),
+    approvalItem("a1b2c3d4-0000-4000-8000-000000000003", "Alert at 80%?", 3_000),
+  ]);
+  assert.deepEqual(inbox.standing(), ["", "Alert at 80%?"]);
+  assert.equal(inbox.pager(), "1 of 3");
+
+  act(() => inbox.back()?.click());
+  inbox.pressNeedsYou();
+  act(() => inbox.row("Alert at 80%?")?.click());
+  assert.equal(inbox.pager(), "1 of 2", "the settled item is passed over");
+  window.localStorage.clear();
+  inbox.unmount();
+});
+
+test("one column wide, a task's Inbox filtered down to one item still offers its way back, to the list that holds Needs you", async () => {
+  window.localStorage.clear();
+  const inbox = await narrowPlanInbox([
+    approvalItem("a1b2c3d4-0000-4000-8000-000000000001", "Expire after 7 days?", 1_000),
+    approvedItem("a1b2c3d4-0000-4000-8000-000000000002", "Resend on bounce?", 2_000),
+  ]);
+  act(() => inbox.back()?.click());
+  inbox.pressNeedsYou();
+  act(() => inbox.row("Expire after 7 days?")?.click());
+  assert.deepEqual(inbox.standing(), ["", "Expire after 7 days?"]);
+  act(() => inbox.back()?.click());
+  assert.deepEqual(inbox.head(), ["Inbox", "true"]);
+  window.localStorage.clear();
+  inbox.unmount();
+});
+
+/** A read the test settles by hand: the promise the Inbox awaits, and what settles it. */
+interface HeldAnswer {
+  readonly promise: Promise<CodingAgentInboxAnswerView>;
+  readonly settle: (answer: CodingAgentInboxAnswerView) => Promise<void>;
+}
+
+/** A read held open until the test settles it. */
+function heldAnswer(): HeldAnswer {
+  let settle: (answer: CodingAgentInboxAnswerView) => void = () => undefined;
+  const promise = new Promise<CodingAgentInboxAnswerView>((resolve) => {
+    settle = resolve;
+  });
+  return {
+    promise,
+    settle: async (answer) => {
+      settle(answer);
+      await act(async () => {
+        for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+      });
+    },
+  };
+}
+
+test("with Needs you on, the item a task's Inbox chose for itself stays listed and shown once it is answered", async () => {
+  window.localStorage.clear();
+  const asked = approvalItem("a1b2c3d4-0000-4000-8000-000000000001", "Expire after 7 days?", 1_000);
+  const read = heldAnswer();
+  const inbox = await narrowPlanInbox([asked], false, 1_200, read.promise);
+  inbox.pressNeedsYou();
+  assert.equal(inbox.title(), "Expire after 7 days?");
+  await read.settle({ items: [approvedItem(asked.id, asked.title, 1_000)], cursor: "2" });
+  assert.deepEqual(inbox.rows(), ["Expire after 7 days?"]);
+  assert.equal(inbox.title(), "Expire after 7 days?", "the answer is seen landing");
+  window.localStorage.clear();
+  inbox.unmount();
+});
+
+test("a task's Inbox whose read failed offers Retry though Needs you lists nothing it still holds", async () => {
+  window.localStorage.clear();
+  const settled = [
+    approvedItem("a1b2c3d4-0000-4000-8000-000000000002", "Resend on bounce?", 2_000),
+  ];
+  const first = await narrowPlanInbox(settled, false, 1_200);
+  first.pressNeedsYou();
+  first.unmount();
+
+  const read = heldAnswer();
+  const inbox = await narrowPlanInbox(settled, false, 1_200, read.promise);
+  assert.deepEqual(inbox.rows(), [], "Needs you, kept from before, lists nothing");
+  await read.settle({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+  assert.deepEqual(inbox.failure(), [true, true]);
+  window.localStorage.clear();
   inbox.unmount();
 });
 

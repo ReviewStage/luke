@@ -1,10 +1,17 @@
-import type { Plan, PlanSummary, RepositoryPin } from "@luke/features/plan-wire";
+import type { LinearIssueSummary } from "@luke/features/linear-wire";
+import {
+  PLAN_BOUNDS,
+  type Plan,
+  type PlanSummary,
+  type RepositoryPin,
+} from "@luke/features/plan-wire";
 import {
   PLAN_CALL_FAILURE,
   PLANNING_READ,
   type PlanActivity,
   type PlanningView,
   type RepositoryCallFailure,
+  type StartCallFailure,
   VOICE_PHASE,
   type VoicePhase,
 } from "@luke/features/planning-view";
@@ -115,6 +122,16 @@ export function workspaceReaches(
 }
 
 /**
+ * The name a plan started from a Linear issue takes: the issue's title,
+ * its ends trimmed and cut to a plan name's bound, or the issue's key where
+ * its title is blank.
+ */
+export function planNameOfIssue(issue: Pick<LinearIssueSummary, "identifier" | "title">): string {
+  const title = issue.title.trim().slice(0, PLAN_BOUNDS.MAX_NAME_CHARS).trim();
+  return title === "" ? issue.identifier : title;
+}
+
+/**
  * The other workspace a plan's repository belongs to, where its own
  * workspace's GitHub does not reach it and one of the account's other
  * workspaces' does: the plan stranded there by #2524, which moving it to
@@ -164,6 +181,17 @@ const REPOSITORY_FAILURE_NOTES = {
 /** The sentence the page shows for a start or a repository change the service refused. */
 export function repositoryFailureNote(failure: RepositoryCallFailure): string {
   return REPOSITORY_FAILURE_NOTES[failure];
+}
+
+/** What a start from a Linear issue says when the workspace's Linear could not be read for it. */
+const LINEAR_START_FAILED_NOTE =
+  "Linear could not be read for that issue. It may be disconnected from this workspace; an owner or admin can connect it again in Settings › Workspace.";
+
+/** The sentence the page shows for a start the service refused, by its reason. */
+export function startFailureNote(failure: StartCallFailure): string {
+  return failure === PLAN_CALL_FAILURE.LINEAR_UNAVAILABLE
+    ? LINEAR_START_FAILED_NOTE
+    : repositoryFailureNote(failure);
 }
 
 /** What a plan's name says, where it was edited, when the service refused the rename. */

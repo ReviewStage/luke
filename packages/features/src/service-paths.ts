@@ -1,3 +1,4 @@
+import { GITHUB_REPOSITORIES_QUERY } from "./github-repositories-wire.js";
 import type { IntegrationProvider } from "./integration-wire.js";
 
 /**
@@ -97,6 +98,20 @@ export const HOSTED_SERVICE_PATH = {
    */
   GITHUB_REPOSITORIES: "/api/github/repositories",
   /**
+   * One folder of a repository a workspace's installation reaches, as
+   * GitHub holds it now (GET), named by the workspace and the repository
+   * (`GITHUB_REPOSITORIES_QUERY`), for a place with no plan to name it by,
+   * such as an agent an automation started; the answer is a plan's tree's
+   * (`plan-wire.ts`).
+   */
+  GITHUB_REPOSITORY_TREE: "/api/github/repositories/tree",
+  /**
+   * The skills a developer may choose of a repository a workspace's
+   * installation reaches (GET), named as `GITHUB_REPOSITORY_TREE` names it;
+   * the answer is a plan's skills' (`plan-wire.ts`).
+   */
+  GITHUB_REPOSITORY_SKILLS: "/api/github/repositories/skills",
+  /**
    * Sends the browser to GitHub to install the Luke GitHub App, or to change
    * which repositories it reaches (GET). GitHub returns the browser to
    * `GITHUB_INSTALLED` afterwards.
@@ -152,6 +167,18 @@ export const HOSTED_SERVICE_PATH = {
   WORKSPACE_GITHUB_CONNECT: "/api/workspaces/github/connect",
   /** A workspace's GitHub organization disconnected by an owner or admin (POST), answering the workspace. */
   WORKSPACE_GITHUB_DISCONNECT: "/api/workspaces/github/disconnect",
+  /**
+   * Where an owner or admin connects Linear for a whole workspace (POST):
+   * answers Vercel Connect's sign-in address, which returns the browser to
+   * `/api/workspaces/linear/connected` (`linear-wire.ts`).
+   */
+  WORKSPACE_LINEAR_CONNECT: "/api/workspaces/linear/connect",
+  /** Where Vercel Connect returns the browser from a workspace's Linear sign-in (GET), which lands it on the integrations landing page. */
+  WORKSPACE_LINEAR_CONNECTED: "/api/workspaces/linear/connected",
+  /** A workspace's Linear disconnected by an owner or admin (POST), answering the workspace. */
+  WORKSPACE_LINEAR_DISCONNECT: "/api/workspaces/linear/disconnect",
+  /** The Linear issues a member of a workspace may start a plan from, or those a search matches (POST). */
+  WORKSPACE_LINEAR_ISSUES: "/api/workspaces/linear/issues",
   /** A workspace renamed by an owner or an admin (POST), answering the workspace; its slug stays as it was. */
   WORKSPACES_RENAME: "/api/workspaces/rename",
   /** A workspace's photo set as a `data:` URL, or removed with null, by an owner or an admin (POST), answering the workspace. */
@@ -330,6 +357,36 @@ export function planSkillsPath(planId: string): string {
   return `${planPath(planId)}/skills`;
 }
 
+/** A repository as a read with no plan names it: the workspace whose installation reaches it, and the repository, `owner/name`. */
+export interface RepositoryPlace {
+  readonly workspaceId: string;
+  readonly repository: string;
+}
+
+/** The query naming a repository place, which every read of one repository by its workspace opens with. */
+function repositoryPlaceQuery(place: RepositoryPlace): URLSearchParams {
+  return new URLSearchParams({
+    [GITHUB_REPOSITORIES_QUERY.WORKSPACE_ID]: place.workspaceId,
+    [GITHUB_REPOSITORIES_QUERY.REPOSITORY]: place.repository,
+  });
+}
+
+/** One folder of a repository a workspace reaches, as GitHub holds it now (GET), queried as `planTreePath`'s folder is. */
+export function repositoryTreePath(
+  place: RepositoryPlace,
+  folder: { readonly path: string; readonly recursive?: boolean },
+): string {
+  const query = repositoryPlaceQuery(place);
+  if (folder.path !== "") query.set("path", folder.path);
+  if (folder.recursive === true) query.set("recursive", "1");
+  return `${HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_TREE}?${query}`;
+}
+
+/** The skills a developer may choose of a repository a workspace reaches, as GitHub holds it now (GET). */
+export function repositorySkillsPath(place: RepositoryPlace): string {
+  return `${HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_SKILLS}?${repositoryPlaceQuery(place)}`;
+}
+
 /** One plan's history (GET): a page of its revisions, the newest of all or, with `before`, the newest before that revision. */
 export function planRevisionsPath(planId: string, before?: number): string {
   const path = `${planPath(planId)}/revisions`;
@@ -346,6 +403,16 @@ export function planRevisionPath(planId: string, seq: number): string {
 /** One revision of one plan put back as its content (POST). */
 export function planRestorePath(planId: string, seq: number): string {
   return `${planRevisionPath(planId, seq)}/restore`;
+}
+
+/** One plan's pictures: one kept on the plan (POST). */
+function planAttachmentsPath(planId: string): string {
+  return `${planPath(planId)}/attachments`;
+}
+
+/** One picture of one plan, as its bytes (GET). */
+export function planAttachmentPath(planId: string, attachmentId: string): string {
+  return `${planAttachmentsPath(planId)}/${encodeURIComponent(attachmentId)}`;
 }
 
 /** One plan's pages (GET): each page's newest version, the most recently written first. */
@@ -422,6 +489,13 @@ export function agentMessagesPath(agentId: string, after?: string): string {
 export function agentSubagentMessagesPath(agentId: string, callId: string, after: string): string {
   const query = new URLSearchParams({ after });
   return `/api/agents/${encodeURIComponent(agentId)}/subagents/${encodeURIComponent(callId)}/messages?${query}`;
+}
+
+/** One picture a tool answered an agent, as its bytes under its own media type (GET), served to whoever may read the agent; one of its workers' where `callId` names the delegation call that started the worker. */
+export function agentPicturePath(agentId: string, pictureId: string, callId?: string): string {
+  const agent = `/api/agents/${encodeURIComponent(agentId)}`;
+  const owner = callId === undefined ? agent : `${agent}/subagents/${encodeURIComponent(callId)}`;
+  return `${owner}/pictures/${encodeURIComponent(pictureId)}`;
 }
 
 /** One agent: its model and effort changed for its next step (PATCH), `models-wire.ts`'s choice as the body. */
