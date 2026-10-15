@@ -2,6 +2,13 @@
 
 import assert from "node:assert/strict";
 import {
+  AUTOMATION_ACTION,
+  AUTOMATION_DEFAULT_GUARDS,
+  AUTOMATION_SCOPE,
+  AUTOMATION_TRIGGER,
+  type AutomationSummary,
+} from "@luke/features/automation-wire";
+import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentInboxAnswerView,
   type CodingAgentListAnswer,
@@ -17,8 +24,11 @@ import {
   type InboxItem,
 } from "@luke/features/inbox-wire";
 import type { PlanSummary } from "@luke/features/plan-wire";
+import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import type { AppInboxPlanHolding, AppInboxPlanlessItem } from "@luke/host/app-state";
+import { EXPERIMENT } from "@luke/settings";
+import { experimentsOn } from "@luke/settings/testing";
 import { DocumentIcon } from "@luke/ui";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
@@ -26,6 +36,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
+import { handState } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { plansControl, waitingOf } from "#testing/plans-control";
 import { relayout } from "#testing/resize-observer";
@@ -157,6 +168,9 @@ let startRead: ((planId: string) => Promise<ReadOutcome> | undefined) | undefine
 let agentInboxes = new Map<string, readonly InboxItem[]>();
 /** Every agent whose own inbox was read from the start, in order. */
 let agentReads: string[] = [];
+/** The workspace the Inbox lists, and its automations as a read of them answers. */
+let listedWorkspace: Workspace | undefined;
+let automations: readonly AutomationSummary[] = [];
 
 beforeEach(() => {
   window.localStorage.clear();
@@ -171,6 +185,8 @@ beforeEach(() => {
   agentReads = [];
   agentReadFails = false;
   holdAgentRead = undefined;
+  listedWorkspace = undefined;
+  automations = [];
   Object.defineProperty(window, "luke", {
     configurable: true,
     value: {
@@ -180,6 +196,9 @@ beforeEach(() => {
         const done = (value: CodingAgentListAnswer | CodingAgentInboxAnswerView) =>
           Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
         if (request.kind === ACT_KIND.CODING_AGENTS_LIST) return done({ agents: listedAgents });
+        if (request.kind === ACT_KIND.AUTOMATIONS_LIST) {
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { automations } });
+        }
         if (request.kind === ACT_KIND.CODING_AGENTS_AGENT_INBOX) {
           const { agentId, after } = request.payload;
           if (after !== INBOX_CURSOR_START) return new Promise(() => undefined);
@@ -238,6 +257,7 @@ function mount(firstPlanless: readonly AppInboxPlanlessItem[] = []) {
     return createElement(DesktopInbox, {
       plans: plansControl({
         me: READER.userId,
+        workspace: listedWorkspace,
         plans: listed,
         inbox: [
           { planId: BILLING.id, items: [waitingOf(THRESHOLD)] },
@@ -483,9 +503,16 @@ function reach(control: HTMLElement): void {
   act(() => control.focus());
 }
 
-/** The agent's references in the pane's thread, each as its words. */
+/** The agent's references in the pane's thread, each its tile and its name as one button. */
 function threadRefs(page: HTMLElement): HTMLButtonElement[] {
-  return [...page.querySelectorAll<HTMLButtonElement>(".inbox-board button[data-agent-ref]")];
+  return [
+    ...page.querySelectorAll<HTMLButtonElement>('.inbox-board button.actor-ref[data-kind="agent"]'),
+  ];
+}
+
+/** Whether a reference wears an agent's tile, the solid rounded square every agent is drawn on. */
+function wearsAgentTile(element: Element): boolean {
+  return element.querySelector('.actor-mark[data-kind="agent"]') !== null;
 }
 
 test("the thread names its agent as one button wherever it does, its byline and the line saying an answer was sent to it: each hangs the agent's tab's card and opens its tab, leaving the Inbox", async () => {
@@ -494,6 +521,7 @@ test("the thread names its agent as one button wherever it does, its byline and 
   const [byline] = threadRefs(page);
   assert.ok(byline, "the byline names the agent");
   assert.equal(byline.textContent, "Alerts");
+  assert.ok(wearsAgentTile(byline), "the byline wears the agent's tile");
   reach(byline);
   assert.deepEqual(standingCard(), ["Alerts", "Working…"]);
   act(() => byline.click());
@@ -501,9 +529,12 @@ test("the thread names its agent as one button wherever it does, its byline and 
 
   act(() => rowNamed(page, "How is a failed email retried?").click());
   await settle();
-  const sent = page.querySelector<HTMLButtonElement>("[data-inbox-answer] button[data-agent-ref]");
+  const sent = page.querySelector<HTMLButtonElement>(
+    '[data-inbox-answer] button.actor-ref[data-kind="agent"]',
+  );
   assert.ok(sent, "the line saying the answer was sent names the agent");
   assert.equal(sent.textContent, "Alerts");
+  assert.ok(wearsAgentTile(sent), "the line names the agent by its tile too");
   reach(sent);
   assert.deepEqual(standingCard(), ["Alerts", "Working…"]);
   act(() => sent.click());
@@ -548,6 +579,7 @@ test("an item's mark in the list hangs its agent's card where its plan's row nam
   const row = rowNamed(page, "How is a failed email retried?");
   const mark = row.querySelector<HTMLElement>("[data-agent-ref]");
   assert.ok(mark, "the row's mark is the agent's reference");
+  assert.ok(wearsAgentTile(mark), "the row's mark is the agent's tile");
   act(() => {
     mark.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
@@ -569,6 +601,7 @@ test("an item's mark in the list hangs its agent's card where its plan's row nam
     null,
     "a plan whose row names no agent leaves the mark bare",
   );
+  assert.ok(wearsAgentTile(other), "a bare mark is still an agent's tile");
 });
 
 test("an item's mark hangs a card naming the teammate who started its agent, as the plan's row names them, and no starter on the reader's own agent", async () => {
@@ -988,6 +1021,95 @@ test("an item of an agent with no plan stands under the automation that started 
   assert.match(crumbs, /Nightly flake sweep/u);
   assert.equal(page.querySelector("[data-inbox-title]")?.textContent, "Quarantine the flaky test?");
   assert.deepEqual(asked.shownPlans, [], "the automation's crumb opens no plan");
+});
+
+/** The automation that started the agent with no plan, as its workspace's list reads it. */
+const SWEEP: AutomationSummary = {
+  id: "5a0c4d2e-8f1b-4c3a-9e7d-2b6f1a8c9d04",
+  planId: null,
+  planName: null,
+  workspaceId: "workspace-acme",
+  name: "Nightly flake sweep",
+  enabled: true,
+  pausedReason: null,
+  trigger: { kind: AUTOMATION_TRIGGER.SCHEDULE, cron: "0 3 * * *", timezone: "UTC" },
+  action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: "Sweep the flaky tests." },
+  guards: AUTOMATION_DEFAULT_GUARDS,
+  nextRunAt: null,
+  lastRun: null,
+  createdAt: 1,
+  scope: AUTOMATION_SCOPE.WORKSPACE,
+};
+
+/** An agent with no plan no automation the reader may read names, and its question. */
+const STRAY_AGENT = "7a8b9c0d-1e2f-4a3b-8c4d-5e6f7a8b9c0d";
+const BUMP: InboxItem = {
+  ...item("a1b2c3d4-0000-4000-8000-00000000000c", "Bump the Node image?", 1_500),
+  agentId: STRAY_AGENT,
+};
+
+/** The header of a group in the list, by its name. */
+function headerNamed(page: HTMLElement, name: string): HTMLButtonElement {
+  const header = [
+    ...page.querySelectorAll<HTMLButtonElement>(".inbox-plans .sidebar-repository-toggle"),
+  ].find((each) => each.querySelector(".sidebar-repository-name")?.textContent === name);
+  assert.ok(header, `no header for ${name}`);
+  return header;
+}
+
+/** Hovers a control as a resting pointer does, and answers the words of the card it hangs, its discs left out. */
+function hoveredCard(control: Element, card: string): string | null {
+  act(() => {
+    control.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+  });
+  return wordsOf(document.querySelector(`.tooltip-card ${card}`));
+}
+
+test("an automation's group wears its clock tile and hangs its card, as its crumb does; its agent's row wears the agent's tile and hangs a card naming the agent and the automation that started it; the agents no automation names stand under no actor", async () => {
+  handState(experimentsOn(EXPERIMENT.AUTOMATIONS));
+  listedWorkspace = {
+    id: "workspace-acme",
+    name: "Acme",
+    role: WORKSPACE_ROLE.OWNER,
+    github: null,
+  };
+  automations = [SWEEP];
+  agentInboxes = new Map([
+    [SWEEP_AGENT, [QUARANTINE]],
+    [STRAY_AGENT, [BUMP]],
+  ]);
+  const { page } = mount([
+    { ...waitingPlanless(QUARANTINE), agentTitle: "Sweep the flaky tests" },
+    { ...waitingPlanless(BUMP), automationId: null, automationName: null },
+  ]);
+  await settle();
+
+  const sweep = headerNamed(page, "Nightly flake sweep");
+  assert.ok(
+    sweep.querySelector('.sidebar-repository-glyph .actor-mark[data-kind="automation"]'),
+    "the automation's group wears its clock tile",
+  );
+  assert.match(
+    hoveredCard(sweep, '[data-actor-card="automation"]') ?? "",
+    /Nightly flake sweep.*Open automation/u,
+  );
+
+  const others = headerNamed(page, "Other agents");
+  assert.equal(others.querySelector(".actor-mark"), null, "a group of agents names no actor");
+
+  const mark = rowNamed(page, "Quarantine the flaky test?").querySelector("[data-agent-ref]");
+  assert.ok(mark, "the planless agent's row hangs its card");
+  assert.ok(wearsAgentTile(mark), "the planless agent's row wears its tile");
+  assert.match(
+    hoveredCard(mark, "[data-tab-card]") ?? "",
+    /Sweep the flaky tests.*Started by Nightly flake sweep/u,
+  );
+
+  act(() => rowNamed(page, "Quarantine the flaky test?").click());
+  await settle();
+  const crumb = page.querySelector<HTMLButtonElement>('nav[aria-label="Path"] button');
+  assert.ok(crumb, "the automation's crumb is drawn");
+  assert.match(hoveredCard(crumb, '[data-actor-card="automation"]') ?? "", /Nightly flake sweep/u);
 });
 
 /** Another agent with no plan the same automation started, whose two questions wait. */

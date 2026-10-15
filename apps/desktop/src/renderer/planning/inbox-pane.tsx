@@ -21,10 +21,10 @@ import type { CatalogModel } from "@luke/features/models-wire";
 import type { CodeRef } from "@luke/features/plan-wire";
 import { BackIcon, ChevronRightIcon } from "@luke/ui";
 import { copiedLines, fileRefText } from "@luke/voice/code-pane-model";
-import { CheckIcon, ZapIcon } from "lucide-react";
+import { CheckIcon, ClockIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
-import { ActorLine, ActorRef } from "../actor-ref";
+import { ActorLine, ActorRef, AutomationCard } from "../actor-ref";
 import { Message, MessageContent } from "../ai-elements/message";
 import {
   PROMPT_INPUT_STATUS,
@@ -34,6 +34,7 @@ import {
   PromptInputTextarea,
   PromptInputTools,
 } from "../ai-elements/prompt-input";
+import { useAutomation } from "../automation-directory";
 import { PlanRef } from "../desktop/plan-card";
 import { usePerson } from "../member-directory";
 import { ReadFailure } from "../read-failure";
@@ -43,7 +44,13 @@ import { Switch } from "../switch";
 import { TextLink } from "../text-link";
 import { Tooltip } from "../tooltip";
 import { useClipped } from "../use-clipped";
-import { AgentCard, AgentRef, type AgentSubject, agentSubject, NOTHING_HELD } from "./agent-ref";
+import {
+  AgentActorRef,
+  AgentCard,
+  type AgentSubject,
+  agentSubject,
+  NOTHING_HELD,
+} from "./agent-ref";
 import { AttachmentViewer } from "./attachment-viewer";
 import { CodeCardHeader, CodeLines } from "./code-pane";
 import type { ReadFileWindow } from "./file-tab";
@@ -68,7 +75,7 @@ import {
 } from "./inbox-model";
 import { useMinute } from "./plan-time";
 import { RelativeTime } from "./relative-time";
-import { AgentGlyph, type KindLook, TAB_KIND, tabLook } from "./tab-look";
+import { type KindLook, TAB_KIND, tabLook } from "./tab-look";
 import { cardTitle } from "./tool-call-model";
 import { TranscriptWords } from "./transcript-blocks";
 import type { CodingAgentsControl } from "./use-coding-agents";
@@ -660,22 +667,19 @@ interface ItemAgent {
   readonly onOpen: () => void;
 }
 
-/** The agent's name in a line of the thread, which hangs its card and opens its tab. */
+/** The agent in a line of the thread: its tile and name, which hang its card and open its tab. */
 function AgentName({ by }: { by: ItemAgent }): React.JSX.Element {
-  return (
-    <AgentRef subject={by.subject} models={by.models} onOpen={by.onOpen}>
-      <span className="agent-ref-name">{by.subject.name}</span>
-    </AgentRef>
-  );
+  return <AgentActorRef subject={by.subject} models={by.models} onOpen={by.onOpen} />;
 }
 
 /** What a settled item's line says of where the answer went: to the agent as a message, its name its reference, or kept for it to read. */
 function Delivered({ item, by }: { item: InboxItem; by: ItemAgent }): React.JSX.Element {
   if (!item.needsReply) return <>Saved for the agent to read</>;
   return (
-    <>
-      Sent to <AgentName by={by} />
-    </>
+    <ActorLine>
+      {"Sent to "}
+      <AgentName by={by} />
+    </ActorLine>
   );
 }
 
@@ -718,7 +722,7 @@ function Proposal({ item }: { item: InboxItem }): React.JSX.Element | null {
   );
 }
 
-/** Who wrote a message of the thread and when: the agent's mark and its name, which hang its card and open its tab, and what it did how long ago. */
+/** Who wrote a message of the thread and when: the agent's tile and its name, which hang its card and open its tab, and what it did how long ago. */
 function Byline({
   by,
   did,
@@ -732,14 +736,9 @@ function Byline({
 }): React.JSX.Element {
   return (
     <div className="flex min-w-0 items-center gap-(--glyph-gap) text-[12.5px] text-muted-foreground">
-      <AgentRef subject={by.subject} models={by.models} onOpen={by.onOpen}>
-        <span className="plan-summary-glyph">
-          <AgentGlyph agent={by.subject.agent} />
-        </span>
-        <span className="agent-ref-name truncate font-medium text-foreground">
-          {by.subject.name}
-        </span>
-      </AgentRef>
+      <span className="inbox-byline-agent">
+        <AgentName by={by} />
+      </span>
       <span className="shrink-0">
         {did} <RelativeTime className={THREAD_TIME_CLASS} at={at} now={now} />
       </span>
@@ -892,13 +891,38 @@ function CrumbWords({ look }: { look: KindLook }): React.JSX.Element {
 }
 
 /**
+ * An automation's crumb, as its page's own look names it: its clock and its
+ * name, hanging its card where the window reads it, and opening its page
+ * where that can be opened.
+ */
+function AutomationCrumb({
+  holder,
+  onOpen,
+}: {
+  holder: Extract<InboxHolder, { kind: typeof INBOX_HOLDER.AUTOMATION }>;
+  onOpen: (() => void) | undefined;
+}): React.JSX.Element {
+  const known = useAutomation(holder.automationId ?? undefined);
+  return (
+    <Tooltip
+      label={holder.name}
+      card={known === undefined ? undefined : <AutomationCard {...known} />}
+    >
+      <button type="button" className="tab-button" disabled={onOpen === undefined} onClick={onOpen}>
+        <CrumbWords look={{ icon: <ClockIcon />, label: holder.name }} />
+      </button>
+    </Tooltip>
+  );
+}
+
+/**
  * The pane's path, plan › agent, each crumb drawn as its tab is in the
  * plan's column, the plan's document glyph and the agent's mark: each opens
  * what it names, the plan or the agent's tab, and hangs the card its
  * sidebar row or tab hangs, the plan's crumb as every place naming the
  * plan does (`PlanRef`). An agent with no plan stands under the automation
- * that started it instead, by its zap and name, which opens the
- * automation's page where that can be opened. An agent this window does
+ * that started it instead, by its clock and name, which hang its card and
+ * open the automation's page where that can be opened. An agent this window does
  * not list, one started on another Mac, hangs a card saying so and still
  * opens its tab.
  */
@@ -926,14 +950,7 @@ function Crumbs({
               <CrumbWords look={tabLook({ kind: TAB_KIND.PLAN, name: holder.plan.name })} />
             </PlanRef>
           ) : (
-            <button
-              type="button"
-              className="tab-button"
-              disabled={doors.onOpenHolder === undefined}
-              onClick={doors.onOpenHolder}
-            >
-              <CrumbWords look={{ icon: <ZapIcon />, label: holder.name }} />
-            </button>
+            <AutomationCrumb holder={holder} onOpen={doors.onOpenHolder} />
           )}
         </li>
         <li className="file-breadcrumb-separator" aria-hidden="true">

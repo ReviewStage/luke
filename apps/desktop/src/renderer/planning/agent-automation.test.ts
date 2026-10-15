@@ -21,6 +21,7 @@ import { onRegistry } from "#testing/copy-feedback";
 import { AutomationDirectory } from "../automation-directory";
 import { MemberDirectory } from "../member-directory";
 import { AgentRef, agentCardReading, NOTHING_HELD } from "./agent-ref";
+import { agentActor } from "./coding-agent-model";
 
 /**
  * agent-automation.test.ts -- an agent an automation's run started says so
@@ -138,7 +139,7 @@ async function agentCard(on: boolean, nested = false) {
     pullRequests: new Map(),
   });
   const named = createElement(AgentRef, {
-    subject: { name: "Triage", read },
+    subject: { name: "Triage", tile: agentActor(AGENT, "Triage"), read },
     models: [],
     onOpen: () => undefined,
     children: "Triage",

@@ -1,7 +1,9 @@
 import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import type { PlanAgentLine } from "@luke/features/plan-wire";
+import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@luke/ui/actor-model";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
+import { ActorRef } from "../actor-ref";
 import type { HeldTranscripts } from "../desktop/strip-tabs";
 import { Tooltip } from "../tooltip";
 import {
@@ -16,6 +18,7 @@ import {
   agentStateWords,
   agentStillWriting,
   agentTabLabel,
+  providerOf,
   teammateRef,
 } from "./coding-agent-model";
 import { agentTranscript } from "./transcript-copy";
@@ -49,9 +52,11 @@ const UNLISTED_WORDS = "Not found";
 /** What a place that draws no agent's tab holds of their transcripts: nothing, so its cards preview no step. */
 export const NOTHING_HELD: HeldTranscripts = { agents: new Map(), workers: new Map() };
 
-/** An agent as a place names it: the name it goes by, what its card says, read as the card is hung, and its summary where the plan's list holds it. */
+/** An agent as a place names it: the name it goes by, its tile, what its card says, read as the card is hung, and its summary where the plan's list holds it. */
 export interface AgentSubject {
   readonly name: string;
+  /** The agent's tile, as every place naming an actor draws it (`actor-ref.tsx`). */
+  readonly tile: Actor;
   readonly read: () => CardReading;
   readonly agent?: CodingAgentSummary | undefined;
 }
@@ -118,7 +123,43 @@ export function lineSubject(
     automationId: line.automationId,
     tile: agentActor(line, name),
   };
-  return { name, read: () => reading };
+  return { name, tile: agentActor(line, name), read: () => reading };
+}
+
+/**
+ * An agent with no plan as main's read of what waits on the developer names
+ * it: its title, else its model, its harness's tile at rest, and the
+ * automation whose run started it. Note that the line says nothing of
+ * where the agent stands, so its card's corner says nothing either.
+ */
+export function planlessSubject(
+  line: {
+    readonly title: string | null;
+    readonly model: string;
+    readonly automationId: string | null;
+  },
+  models: readonly CatalogModel[] | undefined,
+): AgentSubject {
+  const name = agentTabLabel({ title: line.title, model: line.model }, models);
+  const tile: Actor = {
+    kind: ACTOR_KIND.AGENT,
+    name,
+    provider: providerOf(line.model),
+    state: ACTOR_STATE.REST,
+  };
+  const reading: CardReading = {
+    corner: cardCorner({
+      writing: false,
+      startedAt: undefined,
+      movedAt: undefined,
+      state: undefined,
+    }),
+    choice: undefined,
+    transcript: undefined,
+    automationId: line.automationId ?? undefined,
+    tile,
+  };
+  return { name, tile, read: () => reading };
 }
 
 /**
@@ -138,7 +179,8 @@ export function agentSubject(
     agents.archived?.find((each) => each.id === agentId);
   if (agent !== undefined) {
     const name = agentTabLabel(agent, agents.models);
-    return { name, agent, read: agentCardReading(agent, name, held, chosen, agents) };
+    const tile = agentActor(agent, name);
+    return { name, tile, agent, read: agentCardReading(agent, name, held, chosen, agents) };
   }
   const reading: CardReading = {
     corner: cardCorner({
@@ -150,7 +192,14 @@ export function agentSubject(
     choice: undefined,
     transcript: undefined,
   };
-  return { name: TAB_WORDS.CODING_AGENT, read: () => reading };
+  const name = TAB_WORDS.CODING_AGENT;
+  const tile: Actor = {
+    kind: ACTOR_KIND.AGENT,
+    name,
+    provider: undefined,
+    state: ACTOR_STATE.REST,
+  };
+  return { name, tile, read: () => reading };
 }
 
 /** The agent's tab's card, as a place naming the agent hangs it, ending on the way to its tab where the place offers one. */
@@ -205,5 +254,29 @@ export function AgentRef({
         </button>
       )}
     </Tooltip>
+  );
+}
+
+/**
+ * An agent named in a line as every actor is: its tile and its name as one
+ * button (`ActorRef`), hanging its tab's card, which ends on the way to its
+ * tab, and opening its tab on a press.
+ */
+export function AgentActorRef({
+  subject,
+  models,
+  onOpen,
+}: {
+  subject: AgentSubject;
+  /** The catalog as last read, which names the agent's model on its card. */
+  models: readonly CatalogModel[] | undefined;
+  onOpen: () => void;
+}): React.JSX.Element {
+  return (
+    <ActorRef
+      actor={subject.tile}
+      card={<AgentCard subject={subject} models={models} onOpen={onOpen} />}
+      onOpen={onOpen}
+    />
   );
 }

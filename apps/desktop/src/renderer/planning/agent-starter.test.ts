@@ -22,7 +22,13 @@ import { onRegistry } from "#testing/copy-feedback";
 import { TOOL_BLOCK, TOOL_STATE } from "../ai-elements/tool";
 import { MemberDirectory } from "../member-directory";
 import { AgentRef, agentCardReading, NOTHING_HELD } from "./agent-ref";
-import { endLine, endLineReason, macOwnerOf, teammateStarter } from "./coding-agent-model";
+import {
+  agentActor,
+  endLine,
+  endLineReason,
+  macOwnerOf,
+  teammateStarter,
+} from "./coding-agent-model";
 import { MacOwnerProvider, TranscriptTool } from "./transcript-blocks";
 
 /**
@@ -138,7 +144,7 @@ async function agentNamed(
   });
   const view = await drawn(
     createElement(AgentRef, {
-      subject: { name: "Invite flow", read },
+      subject: { name: "Invite flow", tile: agentActor(AGENT, "Invite flow"), read },
       models: [],
       onOpen: () => opened.push(AGENT.id),
       children: "Invite flow",

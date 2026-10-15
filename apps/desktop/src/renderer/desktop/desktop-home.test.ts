@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import type { CodingAgentInboxAnswerView } from "@luke/features/coding-agent-view";
+import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import {
   INBOX_RESPONSE,
   INBOX_STATUS,
@@ -9,6 +10,7 @@ import {
   type InboxItem,
 } from "@luke/features/inbox-wire";
 import type { PlanSummary } from "@luke/features/plan-wire";
+import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -103,6 +105,24 @@ const HOLDING: Pick<PlansControl, "inbox" | "inboxPlans"> = {
   ],
 };
 
+/** The teammate who started Invitations' agent, and the workspace's members as a read of them answers. */
+const CHARLES = { userId: "user-charles", name: "Charles Pan" };
+const CHARLES_PICTURE = "https://avatars.githubusercontent.com/u/1?v=4";
+const MEMBERS: readonly WorkspaceMember[] = [
+  {
+    userId: "user-dean",
+    name: "Dean Stratakos",
+    email: "dean@example.com",
+    role: WORKSPACE_ROLE.OWNER,
+  },
+  {
+    ...CHARLES,
+    email: "charles@example.com",
+    role: WORKSPACE_ROLE.MEMBER,
+    pictureUrl: CHARLES_PICTURE,
+  },
+];
+
 let root: Root | undefined;
 
 beforeEach(() => {
@@ -118,6 +138,9 @@ beforeEach(() => {
             cursor: "1",
           };
           return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+        }
+        if (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ) {
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS });
         }
         if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX) {
           return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
@@ -389,4 +412,53 @@ test("an account with no plan yet but an automation's question waiting on it is 
 
   assert.equal(page.querySelector("[aria-label='Welcome']") === null, true, "no welcome stands");
   assert.deepEqual(rows(page, "home-inbox"), ["Quarantine the flaky test? · Nightly flake sweep"]);
+});
+
+test("a waiting row wears its agent's tile, whose card names the teammate who started it by their face, read against the listed workspace's members", async () => {
+  const agents = {
+    total: 1,
+    working: 1,
+    agents: [
+      {
+        id: AGENT_ID,
+        title: "Invite emails",
+        model: "anthropic/claude-opus-5.5",
+        effort: "high",
+        status: CODING_AGENT_STATUS.RUNNING,
+        startedBy: CHARLES,
+      },
+    ],
+    pullRequestTotal: 0,
+    pullRequests: [],
+  };
+  const plans = PLANS.map((each) => (each.id === INVITES.id ? { ...each, agents } : each));
+  const { page } = mount({
+    me: "user-dean",
+    workspace: {
+      id: "workspace-personal",
+      name: "Personal",
+      role: WORKSPACE_ROLE.OWNER,
+      github: null,
+      memberCount: 2,
+    },
+    plans,
+    listed: { plans, archived: [], ...HOLDING },
+  });
+  await settle();
+
+  const row = button(page, "Email the invitee when an invite is withdrawn?");
+  const mark = row.querySelector("[data-agent-ref]");
+  assert.ok(mark, "the row's mark hangs its agent's card");
+  assert.ok(mark.querySelector('.actor-mark[data-kind="agent"]'), "the mark is the agent's tile");
+  act(() => {
+    mark.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+  });
+  const card = document.querySelector(".tooltip-card [data-tab-card]");
+  assert.match(card?.textContent ?? "", /Started by.*Charles Pan/u);
+  const face = card?.querySelector<HTMLImageElement>('.actor-mark[data-kind="person"] img');
+  assert.equal(
+    face?.getAttribute("src"),
+    CHARLES_PICTURE,
+    "the starter wears their member picture",
+  );
 });

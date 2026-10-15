@@ -21,6 +21,8 @@ import { Tooltip } from "../tooltip";
  * on the header is the ⋯'s second door, and the header stays ringed while
  * the menu it opened stands. The fold lands at once, as a sidebar's does,
  * so whatever a header folds is drawn or not in the render that pressed it.
+ * A header naming something with a card of its own, the Inbox's group of an
+ * automation's agents, hangs that card while the pointer rests on it.
  */
 
 /** What a folded group's count is read as, one and many. */
@@ -64,6 +66,7 @@ export function SidebarGroupHeader({
   trailing,
   actions,
   tooltip,
+  card,
   menuOpen = false,
   onContextMenu,
   onToggle,
@@ -81,6 +84,8 @@ export function SidebarGroupHeader({
   actions?: ReactNode;
   /** The fold's hover hint, where the name alone does not say the whole of it. */
   tooltip?: string | undefined;
+  /** The card the header hangs while the pointer rests on it, the Inbox's automation's, named by the group's name where no hint says more. */
+  card?: React.ReactNode;
   /** Whether a menu the header opened stands, which keeps it ringed and its actions shown. */
   menuOpen?: boolean;
   onContextMenu?: (event: React.MouseEvent<HTMLDivElement>) => void;
@@ -95,7 +100,7 @@ export function SidebarGroupHeader({
       data-menu-open={menuOpen ? "true" : undefined}
       onContextMenu={onContextMenu}
     >
-      <Tooltip label={tooltip}>
+      <Tooltip label={tooltip ?? (card === undefined ? undefined : name)} card={card}>
         <button
           type="button"
           className="sidebar-repository-toggle"
