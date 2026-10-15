@@ -22,6 +22,7 @@ import {
 } from "../planning/inbox-model";
 import { type InboxCodeDoors, InboxPane } from "../planning/inbox-pane";
 import { PlanBody, type SectionLinks } from "../planning/plan-body";
+import { PlanCrumb } from "../planning/plan-crumb";
 import { PlanMentions, type PlanMentionsValue } from "../planning/plan-mentions";
 import { useMinute } from "../planning/plan-time";
 import { DOCUMENT_REGION, PLAN_MARK, PLANS_PAGE } from "../planning/planning-model";
@@ -370,9 +371,9 @@ function PlanDocument({
   }
   const { plan } = region;
   const { mainTabs, sidePanel, agents } = plans;
+  const home = plans.workspaces.find((each) => each.id === plan.workspaceId);
   // The slug the plan's links are written under; only the plan's id finds it, so its workspace's id stands in until the workspaces are read.
-  const workspace =
-    plans.workspaces.find((each) => each.id === plan.workspaceId)?.slug ?? plan.workspaceId;
+  const workspace = home?.slug ?? plan.workspaceId;
   const archived = plan.archivedAt !== undefined;
   // The plan as the list names it, its agents and pull requests among it, which its card reads.
   const listed = [...plans.plans, ...plans.archived].find((each) => each.id === plan.id) ?? plan;
@@ -575,6 +576,11 @@ function PlanDocument({
                       })}
                   looks={looks}
                   sectionLinks={sectionLinksOf(plan.id, workspace)}
+                  crumb={
+                    home === undefined ? undefined : (
+                      <PlanCrumb workspace={home} repository={plan.repository} />
+                    )
+                  }
                 />
               </section>
               {tab === MAIN_TAB.INBOX ? (

@@ -546,7 +546,8 @@ function DocumentUnit({
  * as the plan template is: the page's actions end the title's line, and the
  * "Edited by" line and the page's note stand under the title. `looks` are the sections changed since the developer last
  * looked, which the plan's region keeps (`use-plan-looks.ts`); without them
- * none are.
+ * none are. `crumb`, where given, stands over the "Edited by" line and
+ * says where the plan lives (`plan-crumb.tsx`).
  */
 export function PlanBody({
   plan,
@@ -559,6 +560,7 @@ export function PlanBody({
   page,
   sectionLinks,
   reader = NO_READER,
+  crumb,
 }: {
   plan: Plan;
   live: boolean;
@@ -575,6 +577,8 @@ export function PlanBody({
   sectionLinks?: SectionLinks;
   /** Who reads it, whose own edits are named "you"; without it, no edit is. */
   reader?: EditReader;
+  /** Where the plan lives and who can edit it, over the "Edited by" line; a Settings page draws none. */
+  crumb?: React.ReactNode;
 }): React.JSX.Element {
   const { views, behind, jumps } = usePlanChase(plan, live, reader);
   const editable = onEdit !== undefined;
@@ -730,6 +734,7 @@ export function PlanBody({
     );
   return (
     <div ref={scroller} className="plan-document-scroll">
+      {page === undefined ? crumb : null}
       {page === undefined ? editedNote : null}
       <ChangedLine looks={looks} />
       <div className="plan-body">
