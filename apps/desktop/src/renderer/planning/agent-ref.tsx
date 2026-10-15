@@ -60,8 +60,8 @@ export interface AgentSubject {
  * What an agent's card says, read from what its tab last held as the card
  * is hung (`heldLatest`): where it stands and when it last moved, its pair,
  * and its latest step; an archived agent's says it was archived, and when.
- * It wears the agent's tile, names a teammate who started it, as the
- * reader `agents.me` tells them apart, and leads its corner with the pull
+ * It wears the agent's tile, names the automation whose run started it, or
+ * a teammate who did, as the reader `agents.me` tells them apart, and leads its corner with the pull
  * request the plan holds for it. Its tab's card and every other place naming it say it, `chosen` telling
  * whether its tab is the one shown, whose transcript follows the run. Note
  * that an agent with no turn finished in what its tab holds last moved
@@ -90,13 +90,14 @@ export function agentCardReading(
       choice: { model: agent.model, effort: agent.effort },
       transcript: messages && agentTranscript({ title: label, messages, brief: agent.brief }),
       startedBy: teammateRef(agent.startedBy, agents.me),
+      automationId: agent.automationId,
       tile: agentActor(agent, label),
       pullRequest: agents.pullRequests.get(agent.id),
     };
   };
 }
 
-/** An agent as the sidebar's list names it: its tile, where it stands and since when, its pair, and the teammate who started it, as `readerId` reads it, with no step or pull request to preview. */
+/** An agent as the sidebar's list names it: its tile, where it stands and since when, its pair, and the automation or teammate who started it, as `readerId` reads it, with no step or pull request to preview. */
 export function lineSubject(
   line: PlanAgentLine,
   models: readonly CatalogModel[] | undefined,
@@ -114,6 +115,7 @@ export function lineSubject(
     choice: { model: line.model, effort: line.effort },
     transcript: undefined,
     startedBy: teammateRef(line.startedBy, readerId),
+    automationId: line.automationId,
     tile: agentActor(line, name),
   };
   return { name, read: () => reading };

@@ -2,6 +2,11 @@
 
 import assert from "node:assert/strict";
 import {
+  AUTOMATION_ACTION,
+  AUTOMATION_DEFAULT_GUARDS,
+  AUTOMATION_TRIGGER,
+} from "@luke/features/automation-wire";
+import {
   CHECK_SUMMARY,
   CODING_AGENT_STATUS,
   PULL_REQUEST_STATE,
@@ -9,6 +14,7 @@ import {
 import { PLAN_TREE_ENTRY } from "@luke/features/plan-wire";
 import type { PlanCodeShowing, PlanningTreeAnswer } from "@luke/features/planning-view";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
+import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
 import { settingsView } from "@luke/settings/testing";
 import { shownFiles } from "@luke/voice/code-pane-model";
@@ -24,6 +30,7 @@ import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import type { PlansControl } from "../planning/use-plans-tab";
 import type { SidePanelControl } from "../planning/use-side-panel";
 import { CommandPalette } from "./command-palette";
+import { ListedAutomations } from "./listed-automations";
 import { panelEntries } from "./side-panel";
 
 /** Where the palette sent the window: each tab and each Settings page it asked for, in order. */
@@ -306,6 +313,117 @@ test("an agent's row hangs its tab's card beside it while the pointer rests on i
   assert.equal(card?.querySelector(".card-corner")?.textContent, "Working…");
   press("Invoice export · Billing usage alerts");
   assert.deepEqual(shown, [["plan-1", "agent-7"]]);
+});
+
+test("an agent's card in ⌘K names the automation that started it, the listed workspace's automations read once around the window while the experiment is on, and none read while it is off", async () => {
+  const automation = {
+    id: "3f0e6f5c-7d1a-4f6e-9a55-000000000001",
+    planId: null,
+    planName: null,
+    workspaceId: "workspace-acme",
+    name: "Morning Sentry triage",
+    enabled: true,
+    pausedReason: null,
+    trigger: { kind: AUTOMATION_TRIGGER.SCHEDULE, cron: "0 9 * * 1-5", timezone: "UTC" },
+    action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: "Triage Sentry." },
+    guards: AUTOMATION_DEFAULT_GUARDS,
+    nextRunAt: null,
+    lastRun: null,
+    createdAt: 1,
+  } as const;
+  const listed: (string | undefined)[] = [];
+  Object.defineProperty(window, "luke", {
+    configurable: true,
+    value: {
+      recordSurfaceEvent: () => undefined,
+      act: (request: Act): Promise<ActOutcome> => {
+        if (request.kind !== ACT_KIND.AUTOMATIONS_LIST) {
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
+        }
+        listed.push(request.payload.workspaceId);
+        const value = { automations: [automation] };
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+      },
+    },
+  });
+  const plans = plansControl({
+    activePlanId: "plan-1",
+    workspace: {
+      id: "workspace-acme",
+      name: "Acme",
+      slug: "acme",
+      role: WORKSPACE_ROLE.MEMBER,
+      github: null,
+    },
+    plans: [
+      {
+        id: "plan-1",
+        workspaceId: "workspace-acme",
+        name: "Billing usage alerts",
+        createdAt: 1,
+        updatedAt: 2,
+        repository: null,
+      },
+    ],
+    agents: codingAgentsControl({
+      agents: [
+        {
+          id: "agent-7",
+          planId: "plan-1",
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          title: "Invoice export",
+          createdAt: 1,
+          status: CODING_AGENT_STATUS.COMPLETED,
+          turnId: null,
+          automationId: automation.id,
+        },
+      ],
+      agentIds: ["agent-7"],
+    }),
+  });
+  /** The words "Started by" says on the agent's row's card in ⌘K, the experiment `on` or off. */
+  const startedBy = async (on: boolean): Promise<string | null | undefined> => {
+    const host = document.body.appendChild(document.createElement("div"));
+    const root = createRoot(host);
+    roots.push(root);
+    const palette = createElement(CommandPalette, {
+      available: true,
+      tab: PANEL_TAB.PLANS,
+      onTabChange: () => undefined,
+      plans,
+      settings: {
+        rows: { settings: settingsView(), voiceControlsDrawn: true, accountDrawn: true },
+        onViewChange: () => undefined,
+      },
+      readFiles: () => Promise.reject(new Error("no repository is open")),
+    });
+    act(() => root.render(createElement(ListedAutomations, { plans, on, children: palette })));
+    await act(async () => {
+      for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+    });
+    act(() => {
+      assert.ok(runAppCommand(APP_COMMAND.COMMAND_PALETTE), "⌘K is offered");
+    });
+    chooseFilter("Agents");
+    const row = [...document.querySelectorAll<HTMLElement>(".menu-item")].find((each) =>
+      each.textContent?.includes("Invoice export"),
+    );
+    assert.ok(row, "the agent is listed");
+    act(() => {
+      row.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+    });
+    const words = document.querySelector(".tooltip-card .actor-words .actor-ref")?.textContent;
+    act(() => root.unmount());
+    document.body.innerHTML = "";
+    return words;
+  };
+
+  assert.equal(await startedBy(true), "Morning Sentry triage");
+  assert.deepEqual(listed, ["workspace-acme"]);
+  listed.length = 0;
+  assert.equal(await startedBy(false), undefined);
+  assert.deepEqual(listed, []);
 });
 
 test("an agent's Changes row is named as its tab is, with its pull request's number beside it, and is found by that number and the pull request's title", () => {

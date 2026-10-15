@@ -247,10 +247,16 @@ function listRead(
   if (planId !== undefined) {
     return act(ACT_KIND.CODING_AGENTS_LIST, { planId, includeArchived: true });
   }
-  return act(ACT_KIND.CODING_AGENTS_PAGE, { agentId: agentId ?? "" }).then((answer) =>
-    "failure" in answer
-      ? answer
-      : { agents: [answer.agent], workspaceId: answer.agent.workspaceId },
+  // Note that a page names no automation by null where a summary leaves the key out.
+  return act(ACT_KIND.CODING_AGENTS_PAGE, { agentId: agentId ?? "" }).then(
+    (answer): CodingAgentListAnswer & { readonly workspaceId?: string } => {
+      if ("failure" in answer) return answer;
+      const { automationId, ...agent } = answer.agent;
+      return {
+        agents: [automationId === null ? agent : { ...agent, automationId }],
+        workspaceId: answer.agent.workspaceId,
+      };
+    },
   );
 }
 

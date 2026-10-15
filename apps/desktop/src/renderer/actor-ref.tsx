@@ -1,3 +1,12 @@
+import {
+  AUTOMATION_RUN_STANDING,
+  type AutomationRunStanding,
+  automationOwner,
+  automationRunLine,
+  automationRunStanding,
+  automationTriggerText,
+} from "@luke/features/automation-list-model";
+import type { AutomationSummary } from "@luke/features/automation-wire";
 import { WingFace } from "@luke/ui";
 import {
   ACTOR_KIND,
@@ -14,7 +23,10 @@ import {
 } from "@luke/ui/actor-model";
 import { ClockIcon, HistoryIcon, UserRoundIcon, UserRoundXIcon } from "lucide-react";
 import { type ReactNode, useState } from "react";
+import { automationNextText, automationOwnerName } from "./desktop/automation-words";
 import { CardHead, CardNote, CardRule, HoverCard } from "./hover-card";
+import { useMinute } from "./planning/plan-time";
+import { RelativeTime } from "./planning/relative-time";
 import { AgentMark } from "./planning/tab-look";
 import { GLYPH_STATE, type GlyphState, StateGlyph } from "./state-glyph";
 import { Tooltip } from "./tooltip";
@@ -248,6 +260,64 @@ function SomeoneCard({
         sub={former && actor.name !== undefined ? "Former member" : undefined}
       />
       <CardNote>{SOMEONE_NOTES[actor.reason]}</CardNote>
+    </HoverCard>
+  );
+}
+
+/** What an automation's card's way to its page says. */
+const OPEN_AUTOMATION = "Open automation";
+
+/** Where an automation's work stands, as its tile wears it: its newest run's standing. */
+const ACTOR_STATE_OF_RUN = {
+  [AUTOMATION_RUN_STANDING.WORKING]: ACTOR_STATE.WORKING,
+  [AUTOMATION_RUN_STANDING.FAILED]: ACTOR_STATE.FAILED,
+  [AUTOMATION_RUN_STANDING.REST]: ACTOR_STATE.REST,
+} as const satisfies Record<AutomationRunStanding, ActorState>;
+
+/** An automation as its tile draws it: its clock, wearing where its newest run stands, under its name. */
+export function automationActor(automation: AutomationSummary): Actor {
+  return {
+    kind: ACTOR_KIND.AUTOMATION,
+    name: automation.name,
+    state: ACTOR_STATE_OF_RUN[automationRunStanding(automation.lastRun)],
+  };
+}
+
+/**
+ * An automation's card: its clock, its name over what fires it, whose it
+ * is at the corner, when it runs next, how its last run went, and under a
+ * rule the way to its page.
+ */
+export function AutomationCard({
+  automation,
+  workspaceName,
+  onOpen,
+}: {
+  automation: AutomationSummary;
+  /** The workspace's name, which a workspace automation's corner says. */
+  workspaceName: string | undefined;
+  onOpen: () => void;
+}): React.JSX.Element {
+  const now = useMinute();
+  const actor = automationActor(automation);
+  const { lastRun } = automation;
+  return (
+    <HoverCard data-actor-card={actor.kind}>
+      <ActorHead
+        actor={actor}
+        sub={automationTriggerText(automation.trigger, automation.repositories ?? [])}
+        corner={automationOwnerName(automationOwner(automation), workspaceName)}
+      />
+      <CardNote>{automationNextText(automation, now)}</CardNote>
+      {lastRun === null ? null : (
+        <CardNote>
+          {"Last ran "}
+          <RelativeTime at={lastRun.firedAt} now={now} hint={false} ago />
+          {` · ${automationRunLine(lastRun)}`}
+        </CardNote>
+      )}
+      <CardRule />
+      <CardDoor label={OPEN_AUTOMATION} onOpen={onOpen} />
     </HoverCard>
   );
 }

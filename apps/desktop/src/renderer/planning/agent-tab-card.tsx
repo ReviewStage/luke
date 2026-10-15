@@ -6,7 +6,16 @@ import type {
 import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
 import type { PlanEditor } from "@luke/features/plan-wire";
 import type { Actor } from "@luke/ui/actor-model";
-import { ACTOR_SIZE, ActorLine, ActorMark, ActorRef, CardDoor } from "../actor-ref";
+import {
+  ACTOR_SIZE,
+  ActorLine,
+  ActorMark,
+  ActorRef,
+  AutomationCard,
+  automationActor,
+  CardDoor,
+} from "../actor-ref";
+import { useAutomation } from "../automation-directory";
 import { CardHead, CardNote, CardRule, HoverCard } from "../hover-card";
 import { usePerson } from "../member-directory";
 import {
@@ -43,9 +52,11 @@ import { WorkingTime } from "./working-time";
  * the concise copy says it (`transcript-copy.ts`'s `latestActivity`).
  *
  * An agent's card wears its tile beside its name (`actor-ref.tsx`), its
- * pull request at the corner's lead where the place holds one, and, for a
- * teammate's agent, "Started by" and the teammate's disc and name, which
- * hang their own card over this one. Hung from a place other than its tab,
+ * pull request at the corner's lead where the place holds one, and
+ * "Started by" and who did: the automation whose run started it, by its
+ * clock and name, where the window knows it, or else, for a teammate's
+ * agent, the teammate's disc and name; either hangs its own card over this
+ * one. Hung from a place other than its tab,
  * it ends on "Open agent" under a rule, which opens the tab.
  *
  * The step is read from what a tab already holds, never fetched on hover:
@@ -100,6 +111,8 @@ export interface CardReading {
   readonly transcript: CopiedTranscript | undefined;
   /** The teammate who started the agent, as the wire names them, drawn "Started by [disc] Charles Pan"; none for the reader's own, or a card that is no agent's. */
   readonly startedBy?: PlanEditor | undefined;
+  /** The automation whose run started the agent, drawn "Started by [clock] Morning Sentry triage" in the starter's place where the window knows it. */
+  readonly automationId?: string | undefined;
   /** The agent's own tile, beside its name; none on a card that is no agent's, or of one the place does not hold. */
   readonly tile?: Actor | undefined;
   /** The pull request the agent opened, where the place holds it, at the head's corner. */
@@ -146,14 +159,35 @@ function headCorner(
   );
 }
 
-/** Who started the agent: a teammate, by their disc and name, which hang their card. */
-function StartedBy({ by }: { by: PlanEditor }): React.JSX.Element {
-  const starter = usePerson(by);
+/**
+ * Who started the agent: the automation whose run did, by its clock and
+ * name, which hang its card and open its page, where the window knows it
+ * (`automation-directory.tsx`); else a teammate, by their disc and name,
+ * which hang their card; else nobody.
+ */
+function StartedBy({
+  by,
+  automationId,
+}: {
+  by: PlanEditor | undefined;
+  automationId: string | undefined;
+}): React.JSX.Element | null {
+  const person = usePerson(by);
+  const known = useAutomation(automationId);
+  if (known === undefined && by === undefined) return null;
   return (
     <CardNote oneLine>
       <ActorLine>
         {"Started by "}
-        <ActorRef actor={starter} />
+        {known === undefined ? (
+          <ActorRef actor={person} />
+        ) : (
+          <ActorRef
+            actor={automationActor(known.automation)}
+            card={<AutomationCard {...known} />}
+            onOpen={known.onOpen}
+          />
+        )}
       </ActorLine>
     </CardNote>
   );
@@ -266,7 +300,7 @@ export function AgentTabCard({
   /** Opens the agent's tab, offered under a rule where the card hangs from a place other than the tab. */
   onOpen?: (() => void) | undefined;
 }): React.JSX.Element {
-  const { corner, choice, transcript, startedBy, tile, pullRequest } = read();
+  const { corner, choice, transcript, startedBy, automationId, tile, pullRequest } = read();
   const head = (
     <CardHead
       name={name}
@@ -285,7 +319,7 @@ export function AgentTabCard({
           {head}
         </div>
       )}
-      {startedBy === undefined ? null : <StartedBy by={startedBy} />}
+      <StartedBy by={startedBy} automationId={automationId} />
       {transcript === undefined ? null : <ActivityLine transcript={transcript} />}
       {foot === undefined && onOpen === undefined ? null : <CardRule />}
       {foot === undefined ? null : <CardNote>{foot}</CardNote>}

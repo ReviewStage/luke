@@ -468,6 +468,8 @@ export const codingAgentSummarySchema = EffectSchema.Struct({
    * their account is gone, and from a service before it.
    */
   startedBy: EffectSchema.optionalKey(memberRefSchema),
+  /** The automation whose run started the agent; absent for one started by hand, once that automation is deleted, and from a service before it. */
+  automationId: EffectSchema.optionalKey(wireUuidSchema),
 });
 
 export type CodingAgentSummary = typeof codingAgentSummarySchema.Type;

@@ -12,6 +12,7 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "../act";
 import { useAppCommand } from "../app-commands";
+import { AutomationDirectory } from "../automation-directory";
 import { EmptyState } from "../empty-state";
 import { MemberDirectory } from "../member-directory";
 import { INBOX_COLUMNS, useInboxColumns } from "../planning/inbox-columns";
@@ -125,6 +126,12 @@ export function DesktopInbox({ plans }: { plans: PlansControl }): React.JSX.Elem
   const choices = useInboxViewChoices();
   const folds = useInboxPlanFolds();
   const automationsOn = useExperiment(EXPERIMENT.AUTOMATIONS);
+  const { onOpen: onOpenAutomations } = plans.automationsView;
+  // Note that the Inbox reads the automations whenever it stands, because the items of agents with no plan it lists are every one an automation's.
+  const openAutomation = useCallback(
+    (automationId: string) => onOpenAutomations({ kind: AUTOMATIONS_PAGE.EDIT, automationId }),
+    [onOpenAutomations],
+  );
   const readInbox = useCallback(
     (params: CodingAgentInboxParams) => act(ACT_KIND.CODING_AGENTS_INBOX, params),
     [act],
@@ -242,49 +249,56 @@ export function DesktopInbox({ plans }: { plans: PlansControl }): React.JSX.Elem
   };
   return (
     <MemberDirectory workspace={plans.workspace} readerId={plans.me}>
-      <div className="inbox-view" ref={columns.ref} data-columns={columns.shown}>
-        <InboxList
-          view={list}
-          chosen={chosen?.item.id}
-          columns={columns.shown}
-          head={{ shown: plans.shown, choices, folds, waiting: anyNeedsYou(entries) }}
-          models={named.models}
-          readerId={plans.me}
-          note={
-            <ListNote
-              failed={read.failed || planless.failed}
-              reading={reading}
-              empty={listedItems(list).length === 0}
-              alone={columns.shown === INBOX_COLUMNS.LIST}
-              onRetry={onRetry}
-            />
-          }
-          onChoose={(listed) => {
-            choose(listed);
-            columns.onOpen(listed.item.id);
-          }}
-        />
-        {chosen === undefined ? (
-          <section
-            className="inbox-view-items"
-            aria-label="Inbox"
-            hidden={columns.shown !== INBOX_COLUMNS.BOTH}
-          >
-            <header className="desktop-toolbar" />
-            {reading ? null : <EmptyState icon={<InboxIcon />}>{NEEDS_YOU.NONE}</EmptyState>}
-          </section>
-        ) : (
-          <InboxPane
-            holder={chosen.holder}
-            item={chosen.item}
-            control={live}
-            agents={named}
-            hidden={columns.shown === INBOX_COLUMNS.LIST}
-            onBack={columns.onBack}
-            doors={paneDoors(plans, chosen.holder, { act, openLink, now, automationsOn })}
+      <AutomationDirectory
+        workspace={plans.workspace}
+        on={automationsOn}
+        wanted
+        onOpen={openAutomation}
+      >
+        <div className="inbox-view" ref={columns.ref} data-columns={columns.shown}>
+          <InboxList
+            view={list}
+            chosen={chosen?.item.id}
+            columns={columns.shown}
+            head={{ shown: plans.shown, choices, folds, waiting: anyNeedsYou(entries) }}
+            models={named.models}
+            readerId={plans.me}
+            note={
+              <ListNote
+                failed={read.failed || planless.failed}
+                reading={reading}
+                empty={listedItems(list).length === 0}
+                alone={columns.shown === INBOX_COLUMNS.LIST}
+                onRetry={onRetry}
+              />
+            }
+            onChoose={(listed) => {
+              choose(listed);
+              columns.onOpen(listed.item.id);
+            }}
           />
-        )}
-      </div>
+          {chosen === undefined ? (
+            <section
+              className="inbox-view-items"
+              aria-label="Inbox"
+              hidden={columns.shown !== INBOX_COLUMNS.BOTH}
+            >
+              <header className="desktop-toolbar" />
+              {reading ? null : <EmptyState icon={<InboxIcon />}>{NEEDS_YOU.NONE}</EmptyState>}
+            </section>
+          ) : (
+            <InboxPane
+              holder={chosen.holder}
+              item={chosen.item}
+              control={live}
+              agents={named}
+              hidden={columns.shown === INBOX_COLUMNS.LIST}
+              onBack={columns.onBack}
+              doors={paneDoors(plans, chosen.holder, { act, openLink, now, automationsOn })}
+            />
+          )}
+        </div>
+      </AutomationDirectory>
     </MemberDirectory>
   );
 }
