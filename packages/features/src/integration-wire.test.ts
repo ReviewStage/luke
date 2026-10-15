@@ -71,4 +71,21 @@ describe("an integration account's connection name", () => {
       ],
     );
   });
+
+  it("is never called what another is, where a label already reads like a name told apart", () => {
+    assert.deepEqual(
+      [
+        ...integrationAccountNames([
+          { connection: "notion", label: "Work" },
+          { connection: "notion-2", label: "Work" },
+          { connection: "notion-3", label: "Work (1)" },
+        ]),
+      ],
+      [
+        ["notion", "Work (1) (1)"],
+        ["notion-2", "Work (2)"],
+        ["notion-3", "Work (1) (3)"],
+      ],
+    );
+  });
 });

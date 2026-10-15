@@ -303,25 +303,37 @@ export function integrationAccountLabel(account: {
   return `Account ${integrationConnectionOf(account.connection)?.place ?? 1}`;
 }
 
+/** The names more than one account would be called. */
+function sharedNames(called: readonly (readonly [string, string])[]): ReadonlySet<string> {
+  const seen = new Set<string>();
+  const shared = new Set<string>();
+  for (const [, name] of called) (seen.has(name) ? shared : seen).add(name);
+  return shared;
+}
+
 /**
  * What each of a provider's accounts is called among the others, by its
  * connection name: its label, or "Account 2" by its place, and where two
  * would be called alike, each of those with its place after ("Work (2)"),
- * so no two accounts at a provider ever read the same.
+ * so no two accounts at a provider ever read the same. Note that the places
+ * are added until no name is shared, because a label may itself read like a
+ * name told apart ("Work (1)").
  */
 export function integrationAccountNames(
   accounts: readonly { readonly connection: string; readonly label?: string | undefined }[],
 ): ReadonlyMap<string, string> {
-  const called = accounts.map(
+  const placeOf = (connection: string) => integrationConnectionOf(connection)?.place ?? 1;
+  let called = accounts.map(
     (account) => [account.connection, integrationAccountLabel(account)] as const,
   );
-  const alike = (name: string) => called.filter(([, each]) => each === name).length > 1;
-  return new Map(
-    called.map(([connection, name]) => [
-      connection,
-      alike(name) ? `${name} (${integrationConnectionOf(connection)?.place ?? 1})` : name,
-    ]),
-  );
+  for (let shared = sharedNames(called); shared.size > 0; shared = sharedNames(called)) {
+    const alike = shared;
+    called = called.map(
+      ([connection, name]) =>
+        [connection, alike.has(name) ? `${name} (${placeOf(connection)})` : name] as const,
+    );
+  }
+  return new Map(called);
 }
 
 /** A label as the developer names an account (POST): trimmed, never blank, and bounded. */
