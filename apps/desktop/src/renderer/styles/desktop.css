@@ -7306,3 +7306,9 @@ body:has(.confirm-dialog-backdrop) .toast[data-action="true"] {
 /* SHOW PROTOTYPE: a one-off agent's row leads with its harness mark. */
 .sidebar-agent .sidebar-agent-glyph { display: inline-flex; flex: none; width: 14px; height: 14px; margin-right: 6px; color: var(--text-secondary); }
 .sidebar-agent .sidebar-agent-glyph svg { width: 14px; height: 14px; }
+
+/* SHOW PROTOTYPE: the Automations row's failed mark, the paused note, and the MCP servers' marks. */
+.sidebar-automations .sidebar-automations-failed { display: inline-flex; margin-left: auto; margin-right: 4px; }
+.automation-runs-paused { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--hairline); border-radius: var(--control-radius); background: var(--raised); color: var(--text-secondary); font-size: 12.5px; }
+.automation-servers { display: inline-flex; align-items: center; gap: 6px; }
+.automation-servers .provider-mark { width: 16px; height: 16px; }

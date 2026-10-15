@@ -34,6 +34,7 @@ import { FactoryIcon, HouseIcon, InboxIcon, ZapIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
+import { FailedMark } from "../state-glyph";
 import { RelativeTime } from "../planning/relative-time";
 import { AgentMark } from "../planning/tab-look";
 import { runAppCommand, useAppCommand } from "../app-commands";
@@ -932,6 +933,11 @@ function SidebarAutomationsRow({
     >
       <ZapIcon />
       Automations
+      {(window as unknown as { __showFailedRuns?: number }).__showFailedRuns ? (
+        <span className="sidebar-automations-failed" title="A run failed">
+          <FailedMark hinted />
+        </span>
+      ) : null}
       <Shortcut chord={APP_SHORTCUTS[APP_COMMAND.AUTOMATIONS].chord} className="row-shortcut" />
     </button>
   );

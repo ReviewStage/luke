@@ -106,6 +106,16 @@ const FIRING_WORDS = {
   [AUTOMATION_FIRING.WEBHOOK]: "Webhook called",
 } as const satisfies Record<AutomationRunSummary["firing"]["kind"], string>;
 
+/** SHOW PROTOTYPE: why an agent failed, in the words its own end line uses. */
+const RUN_FAILURE_WORDS: Record<string, string> = {
+  model: "the model call failed",
+  sandbox: "the sandbox or checkout failed",
+  github: "GitHub refused or could not be reached",
+  abandoned: "the turn ran past its bound and was ended",
+  provider_key: "your API key was refused or can't be read",
+  not_started: "the agent never started",
+};
+
 /** Where a started run's agent stands, as its row's line says it. */
 const AGENT_STATUS_WORDS = {
   [CODING_AGENT_STATUS.STARTING]: "Starting",
@@ -300,6 +310,12 @@ export function automationRunLine(run: AutomationRunSummary): string {
     case AUTOMATION_RUN_STATUS.SKIPPED:
       return "Skipped";
     case AUTOMATION_RUN_STATUS.STARTED:
-      return run.agent === null ? "Its agent is gone" : AGENT_STATUS_WORDS[run.agent.status];
+      if (run.agent === null) return "Its agent is gone";
+      // SHOW PROTOTYPE: a failed agent's run says why, from the cause the service already reads (codingAgentFailureOf).
+      {
+        const cause = (run.agent as { failure?: string }).failure;
+        const why = cause === undefined ? undefined : RUN_FAILURE_WORDS[cause];
+        return why === undefined ? AGENT_STATUS_WORDS[run.agent.status] : `${AGENT_STATUS_WORDS[run.agent.status]}: ${why}`;
+      }
   }
 }

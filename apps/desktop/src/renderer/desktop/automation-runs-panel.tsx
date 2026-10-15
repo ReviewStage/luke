@@ -6,7 +6,9 @@ import {
   automationRunTitle,
 } from "@luke/features/automation-list-model";
 import { AUTOMATION_FIRING, type AutomationRunSummary } from "@luke/features/automation-wire";
-import { ClockIcon, PlayIcon } from "lucide-react";
+import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import { ProviderMark } from "@luke/ui";
+import { ClockIcon, PlayIcon, WebhookIcon } from "lucide-react";
 import { EmptyState } from "../empty-state";
 import { momentText, sinceText, useMinute } from "../planning/plan-time";
 import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
@@ -47,7 +49,17 @@ function RunRow({
   onOpenAgent: (agentId: string) => void;
 }): React.JSX.Element {
   const state = STANDING_GLYPH[automationRunStanding(run)];
-  const glyph = run.firing.kind === AUTOMATION_FIRING.MANUAL ? <PlayIcon /> : <ClockIcon />;
+  // A run wears what fired it: Run now's play, the schedule's clock, GitHub's mark, a webhook's hook.
+  const glyph =
+    run.firing.kind === AUTOMATION_FIRING.MANUAL ? (
+      <PlayIcon />
+    ) : run.firing.kind === AUTOMATION_FIRING.GITHUB ? (
+      <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />
+    ) : run.firing.kind === AUTOMATION_FIRING.WEBHOOK ? (
+      <WebhookIcon />
+    ) : (
+      <ClockIcon />
+    );
   const words = (
     <>
       <StateGlyph glyph={glyph} state={state} />
@@ -73,6 +85,7 @@ function RunRow({
 
 /** The runs panel: the runs, or that there are none yet, or that they could not be read. */
 export function AutomationRunsPanel({
+  paused = false,
   width,
   open,
   onResize,
@@ -82,6 +95,7 @@ export function AutomationRunsPanel({
   onRetry,
   onOpenAgent,
 }: {
+  paused?: boolean;
   width: number;
   open: boolean;
   onResize: (width: number) => void;
@@ -108,6 +122,12 @@ export function AutomationRunsPanel({
     <aside className="automation-runs" aria-label="Runs" style={{ width, position: "relative", overflow: "visible" }}>
       <div className="side-panel-resize" {...edge} />
       <h2 className="settings-group-title">Runs</h2>
+      {paused ? (
+        <div className="automation-runs-paused" role="status">
+          <span>Paused after 5 runs failed in a row. Its next run waits until you turn it back on.</span>
+          <button type="button" className="toolbar-button bordered-button">Turn on</button>
+        </div>
+      ) : null}
       {!created ? (
         <EmptyState icon={<ClockIcon />} title={NO_RUNS_TITLE}>
           Create it, then Run now to try it.

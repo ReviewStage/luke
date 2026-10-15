@@ -86,7 +86,7 @@ export function StateGlyph({
  * card's row leave the hint out, because the tab's card already says it
  * failed and a hint hung from a card would stand over the card's words.
  */
-function FailedMark({ hinted }: { hinted: boolean }): React.JSX.Element {
+export function FailedMark({ hinted }: { hinted: boolean }): React.JSX.Element {
   const words = GLYPH_STATE_WORDS[GLYPH_STATE.FAILED];
   const mark = (
     <span className="failed-mark" role="img" aria-label={words}>

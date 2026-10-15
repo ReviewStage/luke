@@ -26,7 +26,7 @@ export function automationNextText(automation: AutomationSummary, now: number): 
     case AUTOMATION_NEXT.OFF:
       return "Off";
     case AUTOMATION_NEXT.PAUSED:
-      return "Paused";
+      return "Paused after 5 failed runs";
     case AUTOMATION_NEXT.UNSCHEDULED:
       return "Not scheduled";
     case AUTOMATION_NEXT.AT:

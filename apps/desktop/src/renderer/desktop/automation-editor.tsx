@@ -53,6 +53,10 @@ import {
   ZapIcon,
 } from "lucide-react";
 import { useId, useRef, useState } from "react";
+import { INTEGRATION_PROVIDER_LIST, INTEGRATION_STATUS, type IntegrationProvider } from "@luke/features/integration-wire";
+import { ProviderMark } from "@luke/ui";
+import { useIntegrationStatuses } from "../integration-statuses";
+import { AgentServersButton } from "../planning/agent-servers";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { accountActor } from "@luke/ui/actor-model";
 import { SidePanelIcon } from "@luke/ui";
@@ -313,6 +317,34 @@ function useRunsPanel() {
     onResize: (width: number) => keep({ ...kept, width }),
     onToggle: () => keep({ ...kept, open: !kept.open }),
   };
+}
+
+/**
+ * Which of the owner's connected MCP servers each run's agent is handed,
+ * by the composer's own servers button and popover, every one on until
+ * switched off, as a task agent's Start offers them.
+ */
+function McpServersRow(): React.JSX.Element {
+  const statuses = useIntegrationStatuses();
+  const [disabled, setDisabled] = useState<readonly IntegrationProvider[]>(["sentry"]);
+  const connected = INTEGRATION_PROVIDER_LIST.filter((each) => statuses.statusOf(each) === INTEGRATION_STATUS.CONNECTED);
+  const on = connected.filter((each) => !disabled.includes(each));
+  return (
+    <div className="settings-row">
+      <span className="settings-copy">
+        <strong>MCP servers</strong>
+        <small>
+          {connected.length === 0 ? "None connected." : `${on.length} of ${connected.length} on. Each run's agent is handed the servers left on, under the owner's connections.`}
+        </small>
+      </span>
+      <span className="automation-row-controls automation-servers">
+        {on.map((each) => (
+          <ProviderMark key={each} provider={each} />
+        ))}
+        <AgentServersButton servers={{ disabled, onSwitch: setDisabled, onOpenSettings: () => undefined }} statuses={statuses} />
+      </span>
+    </div>
+  );
 }
 
 /** What stops a save, said under the row it belongs to once a save was pressed. */
@@ -1099,7 +1131,8 @@ function RunsGroup({
         </>
       )}
       <Problem problem={problems[DRAFT_FIELD.AGENT]} />
-    </SettingsGroup>
+      <McpServersRow />
+      </SettingsGroup>
   );
 }
 
@@ -1417,6 +1450,7 @@ export function AutomationEditor({
           </div>
         </div>
         <AutomationRunsPanel
+          paused={automation?.pausedReason != null}
           width={runsPanel.width}
           open={runsPanel.open}
           onResize={runsPanel.onResize}

@@ -373,6 +373,8 @@ const automationRunSummarySchema = EffectSchema.Struct({
       id: wireUuidSchema,
       title: EffectSchema.NullOr(EffectSchema.String),
       status: EffectSchema.Literals(Object.values(CODING_AGENT_STATUS)),
+      /** SHOW PROTOTYPE: why it failed, as codingAgentFailureOf reads it. */
+      failure: EffectSchema.optionalKey(EffectSchema.String),
     }),
   ),
   firedAt: countedNumber,

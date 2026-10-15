@@ -1,3 +1,4 @@
+import { AUTOMATION_TRIGGER } from "@luke/features/automation-wire";
 import { FindScope } from "../find-in-tab";
 import {
   AUTOMATION_NEXT,
@@ -15,7 +16,9 @@ import {
   type AutomationSummary,
 } from "@luke/features/automation-wire";
 import { EXPERIMENT } from "@luke/settings";
-import { BuildingIcon, ClockIcon, LockIcon, PlusIcon, ZapIcon } from "lucide-react";
+import { BuildingIcon, ClockIcon, LockIcon, PlusIcon, WebhookIcon, ZapIcon } from "lucide-react";
+import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import { ProviderMark } from "@luke/ui";
 import { Fragment, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
@@ -107,7 +110,18 @@ function AutomationRow({
   return (
     <div className="automation-row" data-enabled={String(automation.enabled)}>
       <button type="button" className="automation-row-open" onClick={onOpen}>
-        <StateGlyph glyph={<ClockIcon />} state={state} />
+        <StateGlyph
+          glyph={
+            automation.trigger.kind === AUTOMATION_TRIGGER.GITHUB ? (
+              <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />
+            ) : automation.trigger.kind === AUTOMATION_TRIGGER.WEBHOOK ? (
+              <WebhookIcon />
+            ) : (
+              <ClockIcon />
+            )
+          }
+          state={state}
+        />
         <span className="automation-row-copy">
           <span className="automation-row-name">{automation.name}</span>
           <span className="automation-row-detail">
