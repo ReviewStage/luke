@@ -653,6 +653,7 @@ export class VoiceService {
               },
         onOpeningSettled:
           opening === undefined ? undefined : (settled) => this.#greetingSettled(settled),
+        holdGreeting: opened.holdGreeting,
         onUsageUpdated: (seconds) => this.#written(this.#record.noteUsage({ sessionId, seconds })),
         onSessionClosed: (closed) =>
           this.#written(

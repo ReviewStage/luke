@@ -97,6 +97,8 @@ type Opened =
        * re-attached, which spoke its start to an earlier connection.
        */
       started: boolean;
+      /** Whether the greeting waits for the device's `session.greet`: asked for at creation alone, by a call opening with Luke's avatar. */
+      holdGreeting: boolean;
       /** The sideband the service attached to the session, open and paused. */
       sideband: WebSocket;
       answer: SessionCreatedFrame | SessionAttachedFrame;
@@ -408,6 +410,7 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
         attachId,
         voiceSessionId,
         started: false,
+        holdGreeting: frame.holdGreeting === true,
         sideband,
         answer,
         logEvent: LOG_EVENT.SESSION_CREATED,
@@ -458,6 +461,7 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
         attachId,
         voiceSessionId: owned.voiceSessionId,
         started: true,
+        holdGreeting: false,
         sideband,
         answer,
         logEvent: LOG_EVENT.SESSION_ATTACHED,

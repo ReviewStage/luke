@@ -8,10 +8,11 @@ import {
   SESSIONS_REPORT_FRAMES,
 } from "../server/voice/frames";
 
-test("a signed-in device forwards nothing, is read for its hang-up, its idle report, and its stop, and is refused on anything else", () => {
+test("a signed-in device forwards nothing, is read for its hang-up, its idle report, its stop, and its greet, and is refused on anything else", () => {
   assert.deepEqual(SESSIONS_REPORT_FRAMES, [
     VOICE_SERVICE_FRAME.SESSION_ACTIVITY,
     VOICE_SERVICE_FRAME.SESSION_STOP,
+    VOICE_SERVICE_FRAME.SESSION_GREET,
   ]);
   // The close is the service's to send: the Mac's hang-up and an older build's own close are both an ask for it.
   for (const type of [VOICE_SERVICE_FRAME.SESSION_HANG_UP, LIVE_CLIENT_EVENT.CLOSE]) {

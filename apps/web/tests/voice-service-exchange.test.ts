@@ -8,6 +8,7 @@ import { voiceSessionRecord } from "@sidecar/database/models/voice-session-recor
 import { type ConversationTarget, storeWriter } from "@sidecar/database/models/writer";
 import { VOICE_SERVICE_FRAME, VOICE_SERVICE_PATH } from "@sidecar/features";
 import {
+  greetingCue,
   LIVE_CLIENT_EVENT,
   LIVE_SERVER_EVENT,
   LIVE_VOICE,
@@ -353,14 +354,19 @@ async function stand(offer: Offer): Promise<Stand> {
   };
 }
 
-/** The desktop's opening frame for a call about the plan named. */
-function createFrame(planId: string, input: readonly WireRecord[] = []): WireRecord {
+/** The desktop's opening frame for a call about the plan named, its greeting held where it opens with Luke's avatar. */
+function createFrame(
+  planId: string,
+  input: readonly WireRecord[] = [],
+  holdGreeting = false,
+): WireRecord {
   return {
     type: VOICE_SERVICE_FRAME.SESSION_CREATE,
     sdp: SDP_OFFER,
     voice: LIVE_VOICE.MARIN,
     input: [...input],
     planId,
+    ...(holdGreeting ? { holdGreeting: true } : undefined),
   };
 }
 
@@ -369,11 +375,12 @@ async function openSession(
   context: Stand,
   planId: string = context.planId,
   input: readonly WireRecord[] = [],
+  holdGreeting = false,
 ) {
   const opened = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), { authorization: BEARER });
   assert.ok("reader" in opened);
   const desktop = opened.reader;
-  await send(desktop.socket, createFrame(planId, input));
+  await send(desktop.socket, createFrame(planId, input, holdGreeting));
   const attach = await context.openAi.nextAttach();
   // The upstream reader stands the instant the attach lands, ahead of the created frame, so a frame
   // the service sent between its attach and its answer is seen rather than lost before any listener.
@@ -553,6 +560,39 @@ async function hangUpConnection(
     }),
   );
 }
+
+it.effect(
+  "a call created with its greeting held is cued only once the desktop sends its greet",
+  () =>
+    Effect.promise(async () => {
+      const context = await stand(OFFER.EXCHANGE);
+      const session = await openSession(context, context.planId, [], true);
+      const sessionId = context.openAi.attaches[0]?.sessionId ?? "";
+      await sendText(session.attach.socket, JSON.stringify(sessionStarted(sessionId)));
+      const opening = clientEvent(await session.upstream.next(5_000));
+      assert.equal(opening.type, LIVE_CLIENT_EVENT.INSTRUCTIONS_APPEND);
+      await sendText(
+        session.attach.socket,
+        JSON.stringify({
+          type: LIVE_SERVER_EVENT.INSTRUCTIONS_APPENDED,
+          event_id: "evt_opening",
+          client_event_id: opening.event_id,
+          start_ms: 0,
+          end_ms: 0,
+        }),
+      );
+      // Acknowledged, and still held: the avatar is not yet live.
+      assert.deepEqual(await framesWithin(session.upstream, QUIET_MS), []);
+
+      await send(session.desktop.socket, { type: VOICE_SERVICE_FRAME.SESSION_GREET });
+
+      const cue = clientEvent(await session.upstream.next(5_000));
+      assert.ok(cue.type === LIVE_CLIENT_EVENT.COMMENTARY_APPEND);
+      assert.equal(cue.content, greetingCue());
+      await hangUpConnection(session.desktop, session.attach, session.upstream);
+      await context.stop();
+    }),
+);
 
 it.effect(
   "a call is created under the planning instructions, its spoken ask reaches eve in its plan's conversation and never another plan's, and a re-attach is bound to the same plan by the session's row",

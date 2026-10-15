@@ -95,6 +95,8 @@ export interface HostAvatar {
   readonly grants: Stream.Stream<AvatarGrant | undefined>;
   /** The call window's session closed while granted, and not by this side; answers whether the avatar was asked for again. */
   readonly closed: (reason: AvatarStopReason) => boolean;
+  /** The avatar's first frame was drawn while granted: a greeting held for it is let go. */
+  readonly live: () => void;
 }
 
 /** Everything constructed and linked, and nothing yet begun. */

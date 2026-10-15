@@ -25,7 +25,7 @@ import {
 } from "@sidecar/voice/live-session";
 import { type FakeLiveSocket, scriptedOpenSocket } from "@sidecar/voice/testing";
 import type { WireRecord, WireValue } from "@sidecar/wire";
-import { Effect, Fiber, Stream } from "effect";
+import { Duration, Effect, Fiber, Stream } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { TestClock } from "effect/testing";
@@ -572,5 +572,104 @@ it.effect("a start answered inside its bound is left standing when the bound pas
 
     assert.deepEqual(avatarSends(socket), [start("request-1")]);
     assert.equal(f.states.at(-1)?.status, LIVE_AVATAR_STATUS.GRANTED);
+  }),
+);
+
+/** Whether the call's `session.create` asked the service to hold Luke's greeting. */
+function heldGreeting(socket: FakeLiveSocket) {
+  const create = socket.sent
+    .map((data) => JSON.parse(data))
+    .find((frame) => frame.type === VOICE_SERVICE_FRAME.SESSION_CREATE);
+  assert.ok(create);
+  return create.holdGreeting === true;
+}
+
+/** How many times the desktop let Luke greet. */
+function greets(socket: FakeLiveSocket) {
+  return socket.sent
+    .map((data) => JSON.parse(data))
+    .filter((frame) => frame.type === VOICE_SERVICE_FRAME.SESSION_GREET).length;
+}
+
+it.effect("a call opening with the avatar holds Luke's greeting until the avatar is live", () =>
+  Effect.gen(function* () {
+    const f = yield* subject({ videoOnCall: true });
+    const socket = yield* f.openCall;
+    assert.equal(heldGreeting(socket), true);
+
+    // A first frame told before any grant is about no avatar of this start.
+    f.live.service.avatarLive();
+    grantFor(socket, "request-1");
+    yield* settle();
+    assert.equal(greets(socket), 0);
+
+    f.live.service.avatarLive();
+    f.live.service.avatarLive();
+
+    assert.equal(greets(socket), 1);
+  }),
+);
+
+it.effect("a held greeting is let go at once when the service has no avatar to give", () =>
+  Effect.gen(function* () {
+    const f = yield* subject({ videoOnCall: true });
+    const socket = yield* f.openCall;
+
+    socket.receive({
+      type: VOICE_SERVICE_FRAME.AVATAR_UNAVAILABLE,
+      requestId: "request-1",
+      reason: AVATAR_UNAVAILABLE_REASON.NO_CAPACITY,
+    });
+    yield* settle();
+
+    assert.equal(greets(socket), 1);
+  }),
+);
+
+it.effect("a held greeting is let go when a start nobody answers passes its bound", () =>
+  Effect.gen(function* () {
+    const f = yield* subject({ videoOnCall: true });
+    const socket = yield* f.openCall;
+    yield* TestClock.adjust(Duration.subtract(AVATAR_START_BOUND, Duration.millis(1)));
+    yield* settle();
+    assert.equal(greets(socket), 0);
+
+    yield* TestClock.adjust(Duration.millis(1));
+    yield* settle();
+
+    assert.equal(greets(socket), 1);
+  }),
+);
+
+it.effect(
+  "a held greeting is let go when the avatar's session ends before it is live, and the restart holds nothing",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* subject({ videoOnCall: true });
+      const socket = yield* f.openCall;
+      grantFor(socket, "request-1");
+      yield* settle();
+
+      f.live.service.closed(AVATAR_STOP_REASON.ERROR);
+      yield* settle();
+      grantFor(socket, "request-2", SECOND_GRANT);
+      yield* settle();
+      f.live.service.avatarLive();
+
+      assert.equal(greets(socket), 1);
+    }),
+);
+
+it.effect("a call with video off holds no greeting, and turning video on mid-call holds none", () =>
+  Effect.gen(function* () {
+    const f = yield* subject();
+    const socket = yield* f.openCall;
+    yield* f.call(GATEWAY_METHOD.VOICE_SET_VIDEO, { on: true });
+    grantFor(socket, "request-1");
+    yield* settle();
+    f.live.service.avatarLive();
+
+    assert.equal(heldGreeting(socket), false);
+    assert.equal(greets(socket), 0);
   }),
 );

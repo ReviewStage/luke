@@ -29,6 +29,7 @@ import {
   type SessionActivityFrame,
   type SessionAttachFrame,
   type SessionCreateFrame,
+  type SessionGreetFrame,
   type SessionHangUpFrame,
   type SessionStopFrame,
   sessionActivityFrameFromWire,
@@ -105,6 +106,8 @@ export interface LiveSessionCreateInput {
   sdpOffer: string;
   /** The plan the call is about. */
   planId: string;
+  /** Whether the service holds Luke's greeting until `greet`, on a call opening with his avatar. */
+  holdGreeting?: boolean;
 }
 
 /**
@@ -153,6 +156,12 @@ export interface LiveSessionOpened extends LiveSessionCreated {
    * `session.closed` it draws arrives on the sideband as every event does.
    */
   hangUp(): void;
+  /**
+   * Lets Luke greet on a session created with the greeting held: the service
+   * sends the cue that asks the model to begin once this arrives. Optional
+   * on the same terms as `reportActivity`.
+   */
+  greet?(): void;
   /**
    * Tells the listener each draft of a planning call's plan the service's
    * notetaker sends as it writes, as the service's own frame on the same
@@ -420,6 +429,7 @@ class ServiceLiveSessionSource {
         // it with the plan and what was said on the plan's earlier calls.
         input: [],
         planId: input.planId,
+        ...(input.holdGreeting === true ? { holdGreeting: true } : undefined),
       };
       const answer = yield* this.#firstFrame(socket, () => socket.send(JSON.stringify(frame)));
       const created = answer === undefined ? undefined : this.#readCreated(answer);
@@ -972,6 +982,12 @@ export class HostedLiveSessionSource extends ServiceLiveSessionSource implements
         // since the session it asks the service to close outlives the gap.
         hangUp: () => {
           const frame: SessionHangUpFrame = { type: VOICE_SERVICE_FRAME.SESSION_HANG_UP };
+          socket.send(JSON.stringify(frame));
+        },
+        // The greet rides the same socket, held through a gap like any send,
+        // since the cue it lets go is the session's and outlives the gap.
+        greet: () => {
+          const frame: SessionGreetFrame = { type: VOICE_SERVICE_FRAME.SESSION_GREET };
           socket.send(JSON.stringify(frame));
         },
         onPlanDraft: (listener) => {
