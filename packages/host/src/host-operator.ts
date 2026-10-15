@@ -138,6 +138,7 @@ import {
   type PlanningWorkspaceMembersAnswer,
   type PlanningWorkspaceMembersParams,
   type PlanningWorkspaceParams,
+  type PlanningWorkspaceRenameParams,
   planningEditAnswerSchema,
   planningFileAnswerSchema,
   planningGitHubDisconnectAnswerSchema,
@@ -350,6 +351,8 @@ export interface HostOperator {
   githubDisconnect(): Effect.Effect<PlanningGitHubDisconnectAnswer>;
   /** A workspace made under a name, owned by the account; the workspace, or why none was. */
   workspaceCreate(params: PlanningWorkspaceCreateParams): Effect.Effect<PlanningWorkspaceAnswer>;
+  /** A workspace renamed by an owner or admin; the workspace under its new name, or why it was not. */
+  workspaceRename(params: PlanningWorkspaceRenameParams): Effect.Effect<PlanningWorkspaceAnswer>;
   /** A workspace's GitHub organization connection begun; the install address to open, or why there is none. */
   workspaceGitHubConnect(
     params: PlanningWorkspaceParams,
@@ -939,6 +942,14 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     workspaceCreate: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.WORKSPACES_CREATE, { name: params.name }),
+        workspaceAnswer(planningWorkspaceAnswerSchema),
+      ),
+    workspaceRename: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.WORKSPACES_RENAME, {
+          workspaceId: params.workspaceId,
+          name: params.name,
+        }),
         workspaceAnswer(planningWorkspaceAnswerSchema),
       ),
     workspaceGitHubConnect: (params) =>

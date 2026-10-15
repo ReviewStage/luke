@@ -28,6 +28,7 @@ import {
   workspaceGithubRequestSchema,
   workspaceLeaveRequestSchema,
   workspaceMemberRemovalSchema,
+  workspaceRenameRequestSchema,
 } from "@luke/features/workspace-wire";
 import { readEither } from "@luke/wire/effect";
 import { type Cause, Clock, Effect, Layer, Option, Result } from "effect";
@@ -62,7 +63,7 @@ import { ANY_METHOD, type WebRoutes } from "../route.js";
 import { listMembers, memberIdOf } from "./workspace-members.js";
 
 /**
- * workspaces-app.ts -- the account's workspaces as the Mac reads and asks for them: the list, a workspace created, a GitHub organization connected or disconnected, and its members read, removed, or left.
+ * workspaces-app.ts -- the account's workspaces as the Mac reads and asks for them: the list, a workspace created or renamed, a GitHub organization connected or disconnected, and its members read, removed, or left.
  *
  * `GET /api/workspaces` answers every workspace the bearer's account is a
  * member of, the one made for it first and the rest by name, each with the
@@ -82,10 +83,12 @@ import { listMembers, memberIdOf } from "./workspace-members.js";
  * members to a member of it, `POST /api/workspaces/members/remove` lets an
  * owner or admin remove a member who is not an owner, and
  * `POST /api/workspaces/leave` lets anyone but an owner leave.
+ * `POST /api/workspaces/rename` lets an owner or admin rename a workspace,
+ * answering it under its new name and its old slug.
  * The bearer is resolved before any row is touched.
  *
- * Removing and leaving are Better Auth's own `removeMember` and
- * `leaveOrganization`
+ * Removing, leaving, and renaming are Better Auth's own `removeMember`,
+ * `leaveOrganization`, and `updateOrganization`
  * (https://www.better-auth.com/docs/plugins/organization#remove-member),
  * so their bearer is the Mac's Better Auth session, signed, which the bearer
  * plugin reads as the session cookie those calls take; every other path
@@ -107,6 +110,7 @@ const GITHUB_DISCONNECT_PATH = "/api/workspaces/github/disconnect";
 const MEMBERS_PATH = "/api/workspaces/members";
 const MEMBERS_REMOVE_PATH = "/api/workspaces/members/remove";
 const LEAVE_PATH = "/api/workspaces/leave";
+const RENAME_PATH = "/api/workspaces/rename";
 const INVITATIONS_PATH = "/api/workspaces/invitations";
 const INVITATIONS_CANCEL_PATH = "/api/workspaces/invitations/cancel";
 
@@ -127,7 +131,7 @@ const INSTALL_STATE_PARAM = "state";
 /** A workspace's name or id is a few dozen characters, so a body past this is not one. */
 const MAXIMUM_BODY_BYTES = 1_024;
 
-/** The roles that remove a member. */
+/** The roles that remove a member or rename the workspace. */
 const MANAGING_ROLES: ReadonlySet<string> = new Set([WORKSPACE_ROLE.OWNER, WORKSPACE_ROLE.ADMIN]);
 
 export interface WorkspacesAppSeams {
@@ -417,14 +421,40 @@ const leaveEndpoint = Effect.fn("web/workspaceLeaveEndpoint")(function* (
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { workspaceId });
 });
 
-/** A workspace the account is an owner or an admin of; the one whose invitations it manages. */
-const invitingWorkspace = Effect.fn("web/invitingWorkspace")(function* (
+/** A workspace the account is an owner or an admin of; the one whose invitations it manages or that it renames. */
+const managedWorkspace = Effect.fn("web/managedWorkspace")(function* (
   userId: string,
   organizationId: string,
 ): Effect.fn.Return<Workspace, HostedRefusal, DatabaseServices> {
   const workspace = yield* answeredWorkspace(userId, organizationId);
   if (!MANAGING_ROLES.has(workspace.role)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
   return workspace;
+});
+
+/**
+ * POST: an owner or admin renames a workspace, answered with it as it then
+ * stands. Note that the plugin is handed the name alone, because a slug it
+ * was handed would move every link's first step with it.
+ */
+const renameEndpoint = Effect.fn("web/workspaceRenameEndpoint")(function* (
+  seams: WorkspacesAppSeams,
+): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, Requirements> {
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  if (incoming.method !== HTTP_METHOD.POST) {
+    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
+  }
+  const { userId, headers } = yield* sessionAccountOf(seams);
+  const body = yield* readJsonBodyEffect(MAXIMUM_BODY_BYTES);
+  const asked = readEither(workspaceRenameRequestSchema)(body);
+  if (Result.isFailure(asked)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  const { workspaceId, name } = asked.success;
+  const workspace = yield* managedWorkspace(userId, workspaceId);
+  yield* pluginCallOrRefused(
+    seams.members.updateOrganization({ headers, organizationId: workspace.id, name }),
+  );
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
+    workspace: yield* answeredWorkspace(userId, workspace.id),
+  });
 });
 
 /** The service's own origin, which an accept link is built on. */
@@ -455,7 +485,7 @@ const inviteEndpoint = Effect.fn("web/workspaceInviteEndpoint")(function* (
   const asked = readEither(workspaceInviteRequestSchema)(body);
   if (Result.isFailure(asked)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   const { workspaceId, email, role } = asked.success;
-  const workspace = yield* invitingWorkspace(userId, workspaceId);
+  const workspace = yield* managedWorkspace(userId, workspaceId);
   const made = yield* pluginCallOrRefused(
     seams.members.inviteMember({ headers, organizationId: workspace.id, email, role }),
   );
@@ -484,7 +514,7 @@ const invitationsEndpoint = Effect.fn("web/workspaceInvitationsEndpoint")(functi
   if (named.length !== 1 || Result.isFailure(asked)) {
     return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   }
-  const workspace = yield* invitingWorkspace(userId, asked.success);
+  const workspace = yield* managedWorkspace(userId, asked.success);
   const invitations = yield* pendingOf(seams, headers, workspace.id);
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { invitations });
 });
@@ -502,7 +532,7 @@ const cancelInvitationEndpoint = Effect.fn("web/workspaceInvitationCancelEndpoin
   const asked = readEither(workspaceInvitationCancelSchema)(body);
   if (Result.isFailure(asked)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   const { workspaceId, invitationId } = asked.success;
-  const workspace = yield* invitingWorkspace(userId, workspaceId);
+  const workspace = yield* managedWorkspace(userId, workspaceId);
   // Note that only a pending invitation of this workspace is canceled,
   // because the plugin checks the caller's role in whichever workspace the
   // id names, not the one the body names.
@@ -515,7 +545,7 @@ const cancelInvitationEndpoint = Effect.fn("web/workspaceInvitationCancelEndpoin
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { invitations });
 });
 
-/** The group: the workspaces path, the two GitHub paths, the three members paths, the two invitations paths, and the hosted vocabulary's own refusal for any other. */
+/** The group: the workspaces path, the rename, the two GitHub paths, the three members paths, the two invitations paths, and the hosted vocabulary's own refusal for any other. */
 export function workspacesApp(
   seams: WorkspacesAppSeams,
 ): WebRoutes<DatabaseServices | HttpClient.HttpClient | GitHubApp> {
@@ -526,6 +556,7 @@ export function workspacesApp(
     HttpRouter.add(ANY_METHOD, MEMBERS_PATH, hostedRefusing(membersEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, MEMBERS_REMOVE_PATH, hostedRefusing(removeEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, LEAVE_PATH, hostedRefusing(leaveEndpoint(seams))),
+    HttpRouter.add(ANY_METHOD, RENAME_PATH, hostedRefusing(renameEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, INVITATIONS_PATH, hostedRefusing(invitationsEndpoint(seams))),
     HttpRouter.add(
       ANY_METHOD,

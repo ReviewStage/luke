@@ -16,6 +16,7 @@ import {
   workspaceInvitationsAnswerSchema,
 } from "@luke/features/workspace-invitation-wire";
 import {
+  WORKSPACE_BOUNDS,
   WORKSPACE_ROLE,
   type Workspace,
   workspaceAnswerSchema,
@@ -87,6 +88,7 @@ const NO_SESSION: SessionSeams = {
     cancelInvitation: () => Effect.die("no member write without a session"),
     removeMember: () => Effect.die("no member write without a session"),
     leaveOrganization: () => Effect.die("no member write without a session"),
+    updateOrganization: () => Effect.die("no member write without a session"),
   },
   resolveSessionUserId: () => Effect.succeed(Option.none()),
 };
@@ -708,6 +710,22 @@ const removing = (plugin: WorkspacePlugin, userId: string, workspaceId: string, 
 const leaving = (plugin: WorkspacePlugin, userId: string, workspaceId: string) =>
   postedInSession(plugin, userId, HOSTED_SERVICE_PATH.WORKSPACES_LEAVE, { workspaceId });
 
+/** The account renaming the workspace, under its session. */
+const renaming = (plugin: WorkspacePlugin, userId: string, workspaceId: string, name: string) =>
+  postedInSession(plugin, userId, HOSTED_SERVICE_PATH.WORKSPACES_RENAME, { workspaceId, name });
+
+/** A workspace's name and slug, as the plugin's row holds them. */
+const organizationOf = (organizationId: string) =>
+  Effect.map(
+    Database.use((db) =>
+      db
+        .select({ name: organization.name, slug: organization.slug })
+        .from(organization)
+        .where(eq(organization.id, organizationId)),
+    ),
+    ([row]) => row ?? assert.fail(`no organization ${organizationId}`),
+  );
+
 /** Who is in a workspace, by account and role, as the plugin's rows hold them. */
 const membersOf = (organizationId: string) =>
   Database.use((db) =>
@@ -856,7 +874,82 @@ it.effect("an owner cannot leave, and a member leaves", () =>
 );
 
 it.effect(
-  "a removal or a leaving under the Mac's OAuth token rather than its session is refused as unauthenticated",
+  "an owner and an admin rename the workspace, its ends trimmed and its slug left as it was, and a member is refused",
+  () =>
+    Effect.gen(function* () {
+      const plugin = yield* openWorkspacePlugin;
+      yield* Effect.gen(function* () {
+        const ada = yield* openGithubAccount("Ada Lovelace");
+        const grace = yield* openGithubAccount("Grace Hopper");
+        const alan = yield* openGithubAccount("Alan Turing");
+        const acme = yield* openTeam(plugin.api, ada, [
+          { userId: grace, role: "admin" },
+          { userId: alan, role: "member" },
+        ]);
+        const slug = `acme-${ada}`;
+
+        const byOwner = readAs(
+          yield* renaming(plugin, ada, acme, "  Acme Labs "),
+          workspaceAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+        ).workspace;
+        const byAdmin = readAs(
+          yield* renaming(plugin, grace, acme, "Acme Research"),
+          workspaceAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+        ).workspace;
+        const byMember = yield* renaming(plugin, alan, acme, "Alan's");
+
+        assert.deepEqual(
+          { name: byOwner.name, slug: byOwner.slug, role: byOwner.role },
+          { name: "Acme Labs", slug, role: WORKSPACE_ROLE.OWNER },
+        );
+        assert.deepEqual(
+          { name: byAdmin.name, slug: byAdmin.slug, role: byAdmin.role },
+          { name: "Acme Research", slug, role: WORKSPACE_ROLE.ADMIN },
+        );
+        assert.deepEqual(
+          byMember,
+          refusedAs(HOSTED_HTTP_STATUS.FORBIDDEN, HOSTED_API_ERROR.NOT_PERMITTED),
+        );
+        assert.deepEqual(yield* organizationOf(acme), { name: "Acme Research", slug });
+      }).pipe(Effect.provide(plugin.database));
+    }),
+);
+
+it.effect(
+  "a rename to a blank name or one past the bound is refused as invalid, and one of a workspace the account is not in as not found",
+  () =>
+    Effect.gen(function* () {
+      const plugin = yield* openWorkspacePlugin;
+      yield* Effect.gen(function* () {
+        const ada = yield* openGithubAccount("Ada Lovelace");
+        const mallory = yield* openGithubAccount("Mallory");
+        const acme = yield* openTeam(plugin.api, ada, []);
+
+        const blank = yield* renaming(plugin, ada, acme, "   ");
+        const long = yield* renaming(
+          plugin,
+          ada,
+          acme,
+          "a".repeat(WORKSPACE_BOUNDS.MAX_NAME_CHARS + 1),
+        );
+        const outsider = yield* renaming(plugin, mallory, acme, "Mallory's");
+
+        const invalid = refusedAs(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
+        assert.deepEqual(blank, invalid);
+        assert.deepEqual(long, invalid);
+        assert.deepEqual(
+          outsider,
+          refusedAs(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+        assert.deepEqual(yield* organizationOf(acme), { name: "Acme", slug: `acme-${ada}` });
+      }).pipe(Effect.provide(plugin.database));
+    }),
+);
+
+it.effect(
+  "a removal, a leaving, or a rename under the Mac's OAuth token rather than its session is refused as unauthenticated",
   () =>
     Effect.gen(function* () {
       const plugin = yield* openWorkspacePlugin;
@@ -879,6 +972,10 @@ it.effect(
         const left = yield* underToken(HOSTED_SERVICE_PATH.WORKSPACES_LEAVE, {
           workspaceId: acme,
         });
+        const renamed = yield* underToken(HOSTED_SERVICE_PATH.WORKSPACES_RENAME, {
+          workspaceId: acme,
+          name: "Acme Labs",
+        });
 
         const unauthenticated = refusedAs(
           HOSTED_HTTP_STATUS.UNAUTHORIZED,
@@ -886,6 +983,8 @@ it.effect(
         );
         assert.deepEqual(removed, unauthenticated);
         assert.deepEqual(left, unauthenticated);
+        assert.deepEqual(renamed, unauthenticated);
+        assert.deepEqual(yield* organizationOf(acme), { name: "Acme", slug: `acme-${ada}` });
         assert.deepEqual(yield* membersOf(acme), [
           { userId: grace, role: WORKSPACE_ROLE.MEMBER },
           { userId: ada, role: WORKSPACE_ROLE.OWNER },

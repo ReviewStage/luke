@@ -230,6 +230,48 @@ it.effect(
 );
 
 it.effect(
+  "renames a workspace under the Mac's session with its name trimmed, sends a blank name nowhere, and names a refusal",
+  () =>
+    Effect.gen(function* () {
+      const renamed = { ...ACME, name: "Acme Labs" };
+      const api = fakeCloudApi({
+        "POST /api/workspaces/rename": { answer: () => ({ workspace: renamed }) },
+      });
+      const refusing = fakeCloudApi({
+        "POST /api/workspaces/rename": {
+          answer: () => ({ error: HOSTED_API_ERROR.NOT_PERMITTED }),
+          status: HTTP_STATUS.FORBIDDEN,
+        },
+      });
+      const workspaces = client();
+
+      const answered = yield* Effect.provide(workspaces.rename(ACME.id, "  Acme Labs "), api.layer);
+      const blank = yield* Effect.provide(workspaces.rename(ACME.id, "   "), api.layer);
+      const refused = yield* Effect.provide(
+        workspaces.rename(ACME.id, "Acme Labs"),
+        refusing.layer,
+      );
+
+      assert.deepEqual(answered, { ok: true, answer: renamed });
+      assert.deepEqual(blank, { ok: false, failure: WORKSPACE_CALL_FAILURE.UNANSWERED });
+      assert.deepEqual(refused, { ok: false, failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED });
+      assert.deepEqual(api.credentials(), ["session-1"]);
+      assert.deepEqual(
+        api.requests().map(({ method, pathname, body }) => ({
+          route: `${method} ${pathname}`,
+          body: body === undefined ? undefined : JSON.parse(body),
+        })),
+        [
+          {
+            route: "POST /api/workspaces/rename",
+            body: { workspaceId: ACME.id, name: "Acme Labs" },
+          },
+        ],
+      );
+    }),
+);
+
+it.effect(
   "names a removal or a leave the service refused, and reads a malformed answer as none",
   () =>
     Effect.gen(function* () {

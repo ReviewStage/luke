@@ -229,6 +229,11 @@ function fixture() {
           asked.push(`create:${params.name}`);
           return host.notPermitted ? refusal() : { workspace: { ...ACME, name: params.name } };
         }),
+      workspaceRename: (params) =>
+        Effect.sync(() => {
+          asked.push(`rename:${params.workspaceId}:${params.name}`);
+          return host.notPermitted ? refusal() : { workspace: { ...ACME, name: params.name } };
+        }),
       workspaceGitHubConnect: (params) =>
         Effect.sync((): PlanningWorkspaceGitHubConnectAnswer => {
           asked.push(`connect:${params.workspaceId}`);
@@ -456,6 +461,10 @@ it.effect(
         { kind: ACT_KIND.WORKSPACE_CREATE, payload: { name: "Relay Labs" } },
         PANEL,
       );
+      const renamed = yield* f.router.performAct(
+        { kind: ACT_KIND.WORKSPACE_RENAME, payload: { ...workspace, name: "  Acme Labs " } },
+        PANEL,
+      );
       const connected = yield* f.router.performAct(
         { kind: ACT_KIND.WORKSPACE_GITHUB_CONNECT, payload: workspace },
         PANEL,
@@ -485,6 +494,10 @@ it.effect(
         status: ACT_OUTCOME_STATUS.DONE,
         value: { ...ACME, name: "Relay Labs" },
       });
+      assert.deepEqual(renamed, {
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: { ...ACME, name: "Acme Labs" },
+      });
       assert.equal(connected.status, ACT_OUTCOME_STATUS.DONE);
       assert.equal(disconnected.status, ACT_OUTCOME_STATUS.DONE);
       assert.deepEqual(members, { status: ACT_OUTCOME_STATUS.DONE, value: [GRACE] });
@@ -493,6 +506,7 @@ it.effect(
       assert.equal(fromVoice.status, ACT_OUTCOME_STATUS.REFUSED);
       assert.deepEqual(f.asked, [
         "create:Relay Labs",
+        `rename:${ACME.id}:Acme Labs`,
         `connect:${ACME.id}`,
         `disconnect:${ACME.id}`,
         `members:${ACME.id}`,
@@ -586,6 +600,10 @@ it.effect(
           PANEL,
         ),
         f.router.performAct({ kind: ACT_KIND.WORKSPACE_LEAVE, payload: workspace }, PANEL),
+        f.router.performAct(
+          { kind: ACT_KIND.WORKSPACE_RENAME, payload: { ...workspace, name: "Acme Labs" } },
+          PANEL,
+        ),
       ]);
       f.host.notPermitted = false;
       const unread = yield* f.router.performAct(
@@ -597,7 +615,13 @@ it.effect(
         status: ACT_OUTCOME_STATUS.REFUSED,
         reason: WORKSPACE_NOT_PERMITTED_REFUSAL,
       };
-      assert.deepEqual(refusedNow, [notPermitted, notPermitted, notPermitted, notPermitted]);
+      assert.deepEqual(refusedNow, [
+        notPermitted,
+        notPermitted,
+        notPermitted,
+        notPermitted,
+        notPermitted,
+      ]);
       assert.deepEqual(unread, {
         status: ACT_OUTCOME_STATUS.REFUSED,
         reason: ACT[ACT_KIND.WORKSPACE_MEMBERS_READ].refusal,

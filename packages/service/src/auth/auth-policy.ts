@@ -53,8 +53,9 @@ export const ACCOUNT_TOKEN_STORAGE = {
  * Every organization write a browser could reach is shut as well, but for
  * the invitations. A session free to create an organization, or to rename
  * its own, could take a slug before the team it belongs to arrives, so
- * workspaces are created and their members removed only by Luke's server,
- * through the server-only `auth.api` calls, which these paths do not reach.
+ * workspaces are created, renamed, and their members removed only by Luke's
+ * server, through the server-only `auth.api` calls, which these paths do not
+ * reach; a rename there hands the plugin a name and never a slug.
  *
  * A teammate joins by invitation, Better Auth's own
  * (https://www.better-auth.com/docs/plugins/organization#invitations). An

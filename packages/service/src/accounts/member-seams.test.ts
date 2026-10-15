@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import { Database } from "@luke/database/core/query";
 import { OrganizationRefused } from "@luke/database/models/workspace-seams";
+import { organization } from "@luke/database/schemas/auth";
+import { eq } from "drizzle-orm";
 import { Effect, Exit, Option } from "effect";
 import { openGithubUser } from "../testing/github-app-fake.js";
 import { openWorkspacePlugin } from "../testing/workspace-plugin.js";
@@ -10,7 +13,8 @@ import { memberIdOf } from "./workspace-members.js";
  * The member writes as Better Auth's organization plugin answers them, under
  * a real session over PGlite: a write the plugin refuses comes back as its
  * refusal, by the status it carried, so a route can tell a session the
- * plugin did not take from a write it would not make. Synthetic accounts.
+ * plugin did not take from a write it would not make, and a rename it makes
+ * moves the name alone. Synthetic accounts.
  */
 
 /** The failure an effect ended on, failing the test where it succeeded. */
@@ -63,4 +67,56 @@ it.effect(
         assert.equal(unsigned.status, 401);
       }).pipe(Effect.provide(plugin.database));
     }),
+);
+
+it.effect("a member's rename is the plugin's refusal, and an admin's renames the workspace", () =>
+  Effect.gen(function* () {
+    const plugin = yield* openWorkspacePlugin;
+    yield* Effect.gen(function* () {
+      const ada = yield* openGithubUser();
+      const grace = yield* openGithubUser();
+      const alan = yield* openGithubUser();
+      const acme = yield* Effect.promise(() =>
+        plugin.api.createOrganization({ body: { name: "Acme", slug: "acme", userId: ada } }),
+      );
+      for (const [userId, role] of [
+        [grace, "admin"],
+        [alan, "member"],
+      ] as const) {
+        yield* Effect.promise(() =>
+          plugin.api.addMember({ body: { userId, organizationId: acme.id, role } }),
+        );
+      }
+      const sessionOf = (userId: string) =>
+        Effect.map(
+          plugin.sessionBearerOf(userId),
+          (bearer) => new Headers({ authorization: `Bearer ${bearer}` }),
+        );
+
+      const refused = failureOf(
+        yield* Effect.exit(
+          plugin.members.updateOrganization({
+            headers: yield* sessionOf(alan),
+            organizationId: acme.id,
+            name: "Alan's",
+          }),
+        ),
+      );
+      yield* plugin.members.updateOrganization({
+        headers: yield* sessionOf(grace),
+        organizationId: acme.id,
+        name: "Acme Labs",
+      });
+      const stored = yield* Database.use((db) =>
+        db
+          .select({ name: organization.name, slug: organization.slug })
+          .from(organization)
+          .where(eq(organization.id, acme.id)),
+      );
+
+      assert.ok(refused instanceof OrganizationRefused);
+      assert.equal(refused.status, 403);
+      assert.deepEqual(stored, [{ name: "Acme Labs", slug: "acme" }]);
+    }).pipe(Effect.provide(plugin.database));
+  }),
 );
