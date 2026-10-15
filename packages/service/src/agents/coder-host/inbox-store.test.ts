@@ -368,6 +368,11 @@ it.layer(getTestDB())("the inbox store", (it) => {
           [id, posted2.success.id].sort(),
         );
         assert.deepEqual(
+          (yield* accountWaitingItems(teammate)).map((each) => each.startedBy),
+          [agent.userId, agent.userId],
+          "the teammate's read names who started the agent, whom it asks",
+        );
+        assert.deepEqual(
           (yield* accountInboxPlans(teammate)).map((each) => each.planId),
           [agent.planId],
         );

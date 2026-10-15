@@ -36,6 +36,9 @@
               "agentModel": {
                 "type": "string"
               },
+              "startedBy": {
+                "type": "string"
+              },
               "title": {
                 "type": "string"
               },
