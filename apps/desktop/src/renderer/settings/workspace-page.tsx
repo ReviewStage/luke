@@ -37,7 +37,8 @@ import { ReadFailed, SettingsGroup } from "./settings-group";
  * there is one choice of workspace in the window: a Settings link that names
  * another lists it in the sidebar first. Its head says the account's role in
  * it, and under it an owner or an admin renames the workspace in place and
- * uploads or removes its photo.
+ * uploads or removes its photo; an account's first workspace is named by its
+ * owner's account name, so it shows that name and offers no Rename.
  * The workspace then lists its members as the service holds
  * them now, each with its email and role. An owner or an admin invites
  * people by address and role, sees the invitations still pending with each
@@ -55,7 +56,7 @@ import { ReadFailed, SettingsGroup } from "./settings-group";
  * it was asked. The page draws whole: while the members or the invitations
  * are being read it holds itself back (`.settings-reading`), and a read that
  * failed says so in red with Retry. Every workspace draws the same, the
- * first one made for the account included.
+ * first one made for the account included, but for its Rename.
  */
 
 /** How many pixels a side a workspace's photo is drawn to before it is sent: well past the largest tile's 48, so it stays sharp on a Retina screen. */
@@ -757,7 +758,7 @@ function WorkspacePhoto({ workspace }: { workspace: Workspace }): React.JSX.Elem
   );
 }
 
-/** The page's head: the account's role in the workspace, and for an owner or an admin the workspace's name to rename and its photo to set. */
+/** The page's head: the account's role in the workspace, and for an owner or an admin the workspace's name to rename, or a personal workspace's name alone, and its photo to set. */
 function WorkspaceHead({ workspace }: { workspace: Workspace }): React.JSX.Element {
   return (
     <SettingsGroup>
@@ -766,7 +767,13 @@ function WorkspaceHead({ workspace }: { workspace: Workspace }): React.JSX.Eleme
       </div>
       {managesWorkspace(workspace) ? (
         <Fragment key={workspace.id}>
-          <WorkspaceName workspace={workspace} />
+          {workspace.personal === true ? (
+            <div className="settings-row workspace-name">
+              <RowCopy name="Name" line={workspace.name} />
+            </div>
+          ) : (
+            <WorkspaceName workspace={workspace} />
+          )}
           <WorkspacePhoto workspace={workspace} />
         </Fragment>
       ) : null}

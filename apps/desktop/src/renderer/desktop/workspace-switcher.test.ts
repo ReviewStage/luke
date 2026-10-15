@@ -285,6 +285,36 @@ test("each workspace in the menu wears its tile, its first letter, and a rename 
   assert.equal(tiles([{ ...PERSONAL, name: "🐙 Octo" }])[0]?.[0], "🐙");
 });
 
+test("each workspace in the menu says who shares it under its name, to the eye and to a screen reader, as the head does: the account's own first workspace of one as personal, a team's members counted, and nothing where the service counts none", () => {
+  const solo: Workspace = { ...ACME, id: "workspace-solo", name: "Solo", memberCount: 1 };
+  const uncounted: Workspace = { ...ACME, id: "workspace-uncounted", name: "Uncounted" };
+  const page = mount({
+    workspaces: [
+      { ...PERSONAL, memberCount: 1 },
+      { ...CONNECTED, memberCount: 5 },
+      solo,
+      uncounted,
+    ],
+    workspace: CONNECTED,
+  });
+
+  open(page.switcher());
+  const rows = menuItems()
+    .slice(0, 4)
+    .map((item) => [
+      labelOf(item),
+      item.querySelector(".menu-item-detail")?.textContent,
+      item.getAttribute("aria-label"),
+    ]);
+
+  assert.deepEqual(rows, [
+    ["Personal", "Personal workspace", "Personal, Personal workspace"],
+    ["acme", "5 members", "acme, 5 members"],
+    ["Solo", "1 member", "Solo, 1 member"],
+    ["Uncounted", undefined, null],
+  ]);
+});
+
 test("the head says who shares the workspace, to the eye and to a screen reader: its members counted beside a people glyph, the account's own first workspace of one as personal in words alone, a team of one as its one member, and nothing where the service counts none", () => {
   const shared = (memberCount?: number, first = true) => {
     const workspace = memberCount === undefined ? ACME : { ...ACME, memberCount };

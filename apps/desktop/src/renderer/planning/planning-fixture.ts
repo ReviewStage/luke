@@ -44,19 +44,20 @@ import {
  */
 
 /**
- * The fixture account's workspaces: its first one, which the sidebar
- * lists, with the account's own GitHub connected, and Acme, a team's it
- * administers, whose GitHub organization is connected, so the captures
+ * The fixture account's workspaces: its first one, named for the account as
+ * the service names it, which the sidebar lists, with the account's own
+ * GitHub connected, and Acme, a team's it administers, whose GitHub organization is connected, so the captures
  * draw the sidebar's switcher with every item. Each workspace's plans are
  * about repositories its own GitHub reaches, as the service keeps them, so
  * no plan here is one stranded in a workspace that cannot reach it.
  */
 const FIXTURE_FIRST: Workspace = {
   id: "workspace-personal",
-  name: "Personal",
+  name: "Ada Lovelace",
   slug: "personal",
   role: WORKSPACE_ROLE.OWNER,
   github: { login: "ada", active: true },
+  personal: true,
 };
 const FIXTURE_TEAM: Workspace = {
   id: "workspace-acme",
