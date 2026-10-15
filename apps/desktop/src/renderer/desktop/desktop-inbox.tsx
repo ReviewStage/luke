@@ -235,6 +235,11 @@ export function DesktopInbox({ plans }: { plans: PlansControl }): React.JSX.Elem
     holdings.some((holding) => !read.items.has(holding.planId)) ||
     plans.inboxPlanless.some((each) => !planless.items.has(each.agentId));
   const columns = useInboxColumns(chosen?.item.id, true);
+  // A row's press and Next's open their item alike, the keyboard following it.
+  const open = (listed: InboxListed) => {
+    choose(listed);
+    columns.onOpen(listed.item.id);
+  };
   const pager = useInboxPager(list, chosen?.item.id, choose, {
     shown: plans.shown,
     folded: folds.folded,
@@ -245,7 +250,7 @@ export function DesktopInbox({ plans }: { plans: PlansControl }): React.JSX.Elem
     ({ holder, item }) => (
       <ItemMark holder={holder} agentId={item.agentId} models={named.models} readerId={plans.me} />
     ),
-    choose,
+    open,
     folds.folded,
   );
   // A choice that asks for its item opens it once, the one column the Inbox shows being the
@@ -287,10 +292,7 @@ export function DesktopInbox({ plans }: { plans: PlansControl }): React.JSX.Elem
                 onRetry={onRetry}
               />
             }
-            onChoose={(listed) => {
-              choose(listed);
-              columns.onOpen(listed.item.id);
-            }}
+            onChoose={open}
           />
           {chosen === undefined ? (
             <section

@@ -1073,6 +1073,35 @@ test("a settled item offers, where its box stood, the next item that needs you, 
   assert.equal(offered(), null);
 });
 
+test("Next hands the keyboard to the item it opens, its way back one column wide and its row split, and the item opens at its thread's top", async () => {
+  const { page } = mount();
+  await settle();
+  const next = () => page.querySelector<HTMLButtonElement>(".inbox-view-items button.inbox-next");
+  act(() => rowNamed(page, "How is a failed email retried?").click());
+  const board = page.querySelector<HTMLElement>(".inbox-view-items .inbox-board");
+  assert.ok(board, "the item's thread");
+  board.scrollTop = 600;
+  next()?.focus();
+  act(() => next()?.click());
+  assert.equal(readTitle(page), "Alert at 80%?");
+  assert.ok(
+    document.activeElement === rowNamed(page, "Alert at 80%?"),
+    "split, the keyboard is on its row",
+  );
+  assert.equal(board.scrollTop, 0, "the next item opens at its top");
+
+  layOut(page, 800);
+  act(() => backToList(page).click());
+  act(() => rowNamed(page, "How is a failed email retried?").click());
+  next()?.focus();
+  act(() => next()?.click());
+  assert.equal(readTitle(page), "Alert at 80%?");
+  assert.ok(
+    document.activeElement === backToList(page),
+    "one column wide, the keyboard is on its way back",
+  );
+});
+
 /** An answer the act gives the renderer, the view it carries settled now. */
 function answered(value: CodingAgentInboxAnswerView): Promise<ReadOutcome> {
   return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });

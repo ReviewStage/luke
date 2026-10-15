@@ -197,6 +197,11 @@ function PlanInboxTab({
   const chosen = listedItems(list).find(({ item }) => item.id === asked) ?? firstChoice(list);
   const columns = useInboxColumns(chosen?.item.id, listedItems(list).length > 1);
   const choose = ({ item }: InboxListed) => setAsked(item.id);
+  // A row's press and Next's open their item alike, the keyboard following it.
+  const open = (listed: InboxListed) => {
+    choose(listed);
+    columns.onOpen(listed.item.id);
+  };
   // Note that the column is hidden, though drawn, while the side panel fills the window.
   const pager = useInboxPager(list, chosen?.item.id, choose, {
     shown: plans.shown && !plans.sidePanel.fullScreen,
@@ -213,7 +218,7 @@ function PlanInboxTab({
         readerId={plans.me}
       />
     ),
-    choose,
+    open,
     NO_FOLDS,
   );
   return (
@@ -243,10 +248,7 @@ function PlanInboxTab({
             <EmptyState icon={<InboxIcon />}>{NEEDS_YOU.NONE}</EmptyState>
           ) : null
         }
-        onChoose={({ item }) => {
-          setAsked(item.id);
-          columns.onOpen(item.id);
-        }}
+        onChoose={open}
       />
       {chosen === undefined ? (
         <section

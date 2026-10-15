@@ -22,7 +22,7 @@ import type { CodeRef } from "@luke/features/plan-wire";
 import { BackIcon, ChevronRightIcon, CodingAgentsIcon } from "@luke/ui";
 import { copiedLines, fileRefText } from "@luke/voice/code-pane-model";
 import { CheckIcon, ClockIcon } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { ActorLine, ActorRef, AutomationCard } from "../actor-ref";
 import { Message, MessageContent } from "../ai-elements/message";
@@ -1046,6 +1046,11 @@ export function InboxPane({
   next: InboxNext | undefined;
 }): React.JSX.Element {
   const now = useMinute();
+  const board = useRef<HTMLDivElement>(null);
+  // Note that the pane stands for every item in turn, so another item opens at its thread's top rather than where the last was scrolled.
+  useLayoutEffect(() => {
+    if (board.current !== null) board.current.scrollTop = 0;
+  }, [item.id]);
   const by: ItemAgent = {
     subject: agentSubject(agents, item.agentId, NOTHING_HELD, false),
     models: agents.models,
@@ -1072,6 +1077,7 @@ export function InboxPane({
           // The box docks under the thread as an agent's composer does under its log, which runs up to the card and fades there.
           className={`inbox-board ph-no-capture flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto pt-(--section-gap) ${open ? "agent-log-over-composer" : "pb-5"}`}
           data-item-id={item.id}
+          ref={board}
         >
           <Message from="assistant">
             <Byline by={by} did="asked" at={item.postedAt} now={now} />
