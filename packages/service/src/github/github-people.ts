@@ -66,7 +66,7 @@ function idsOf(people: PullRequestPeople): readonly number[] {
 }
 
 /** The workspace's members whose linked GitHub account is one of the ids given, by GitHub's id. */
-export const linkedMembers = /* @__PURE__ */ Effect.fnUntraced(function* (
+const linkedMembers = /* @__PURE__ */ Effect.fnUntraced(function* (
   organizationId: string,
   githubIds: readonly number[],
 ) {
@@ -92,7 +92,7 @@ function personOf(
 }
 
 /** The people as the wire carries them. */
-export function changesPeopleOf(
+function changesPeopleOf(
   people: PullRequestPeople,
   linked: ReadonlyMap<number, string>,
   lukeBotId: number | undefined,
