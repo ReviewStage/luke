@@ -4,7 +4,7 @@ import { shownFiles } from "@luke/voice/code-pane-model";
 import { ChevronsLeftIcon, ChevronsRightIcon, ListIcon } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { CardHead, CardNote, HoverCard } from "../hover-card";
-import { ChangesCard } from "../planning/agent-changes-tab";
+import { ChangesCard, peopleOf } from "../planning/agent-changes-tab";
 import { agentCardReading, agentSubject } from "../planning/agent-ref";
 import { AgentTabCard } from "../planning/agent-tab-card";
 import { agentTabLabel } from "../planning/coding-agent-model";
@@ -366,6 +366,7 @@ function withCards(
           subject={subject}
           models={agents.models}
           pullRequest={offer.pullRequest}
+          people={peopleOf(agents.changesPeople.get(offer.agent.id), offer.pullRequest)}
           onOpenAgent={() => onOpenAgent(offer.agent.id)}
         />
       );

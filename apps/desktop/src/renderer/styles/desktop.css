@@ -1018,7 +1018,14 @@ body,
   align-items: center;
 }
 
-.actor-stack > :is(.actor-mark, .actor-stack-more) {
+/* A pile of faces that hang their cards is a list, drawn as the pile. */
+ul.actor-stack {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.actor-stack > :is(.actor-mark, .actor-stack-more, .actor-stack-face) {
   margin-left: -5px;
   box-shadow: 0 0 0 2px var(--actor-stack-ground, var(--desktop-ground));
 }
@@ -1032,6 +1039,67 @@ body,
   box-shadow:
     inset 0 0 0 1px var(--hairline-strong),
     0 0 0 2px var(--actor-stack-ground, var(--desktop-ground));
+}
+
+/* A face that hangs its card holds its mark and, at its corner, its badge,
+   cut from the ground as the face is. The ring is the mark's own, so the face
+   itself draws none. */
+.actor-stack > .actor-stack-face {
+  position: relative;
+  display: inline-flex;
+  box-shadow: none;
+}
+
+/* A pile whose faces wear badges stands them apart, so each badge reads clear of the next face. */
+.actor-stack:has(.actor-stack-badge) > .actor-stack-face {
+  margin-left: var(--space-4);
+}
+
+.actor-stack:has(.actor-stack-badge) > .actor-stack-face:first-child {
+  margin-left: 0;
+}
+
+.actor-stack-face > .actor-mark {
+  box-shadow: 0 0 0 2px var(--actor-stack-ground, var(--desktop-ground));
+}
+
+/* Note that the badge stands over the next face, which overlaps this one's corner. */
+.actor-stack-badge {
+  position: absolute;
+  z-index: 1;
+  right: -3px;
+  bottom: -3px;
+  display: grid;
+  width: 10px;
+  height: 10px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--actor-stack-ground, var(--desktop-ground));
+}
+
+.actor-stack-badge svg {
+  width: 8px;
+  height: 8px;
+  stroke-width: 3;
+}
+
+/* The rest a pile's count stands for, each by their mark and what their face would say. */
+/* However many it counts, the list stays inside the window and scrolls within the card. */
+.actor-more-list {
+  display: flex;
+  max-height: min(240px, 40vh);
+  flex-direction: column;
+  gap: var(--space-6);
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.actor-more-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
 }
 
 .actor-stack-more {

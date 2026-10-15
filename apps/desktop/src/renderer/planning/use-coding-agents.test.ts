@@ -273,3 +273,42 @@ test("another agent named with no plan open holds nothing of the last, even wher
   assert.equal(tab.control().agents, undefined, "the last agent is not drawn for the next");
   assert.equal(tab.control().listFailed, true);
 });
+
+test("a read of an agent's changes keeps who its pull request names, by agent and with the pull request read, so its Changes card says them wherever it hangs; only the agent's newest read is kept, and a read naming no pull request drops them", async () => {
+  const tab = mount({ planId: undefined, agentId: AGENT, repository: null });
+  const url = "https://github.com/acme/relay/pull/42";
+  const answerWith = (state: "requested" | "approved") => ({
+    pullRequest: {
+      url,
+      files: [],
+      truncated: false,
+      author: { login: "luke[bot]", bot: true, luke: true },
+      reviewers: [{ by: { login: "octocat", bot: false }, state }],
+    },
+  });
+  let land: (answer: ReturnType<typeof answerWith>) => void = () => undefined;
+  const older = new Promise<ReturnType<typeof answerWith>>((resolve) => {
+    land = resolve;
+  });
+  tab.answer(ACT_KIND.CODING_AGENTS_CHANGES, older, answerWith("approved"), {
+    pullRequest: null,
+  });
+  await tab.mount();
+  assert.equal(tab.control().changesPeople.get(AGENT), undefined);
+
+  // The first read lands after the second, which was asked later, and is not kept over it.
+  const first = tab.control().readChanges(AGENT);
+  await act(() => tab.control().readChanges(AGENT));
+  land(answerWith("requested"));
+  await act(() => first);
+  assert.deepEqual(tab.control().changesPeople.get(AGENT), {
+    url,
+    people: {
+      author: { login: "luke[bot]", bot: true, luke: true },
+      reviewers: [{ by: { login: "octocat", bot: false }, state: "approved" }],
+    },
+  });
+
+  await act(() => tab.control().readChanges(AGENT));
+  assert.equal(tab.control().changesPeople.get(AGENT), undefined, "no pull request names nobody");
+});
