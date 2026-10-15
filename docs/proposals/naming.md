@@ -1,8 +1,11 @@
 # Research: a better domain, or a better name
 
 Status: research for Dean's ask, written 2026-10-15 against main at
-`5ff5948d`. A second pass the same day looked for .com domains (§5) and
-moved the recommendation (§6). Nothing was registered, bought, or reserved,
+`5ff5948d`. Three passes ran the same day, each on a new ask from Dean.
+§1–4 cover the domain and the first rename brainstorm, §5–6 cover the .com
+pass, and §7 covers abstract devtool names. **§7 is the current
+recommendation**: the second and third asks overruled the voice- and
+planning-themed names of §3 and §5. Nothing was registered, bought, or reserved,
 and no seller was contacted. Each domain below was checked from the sandbox
 on 2026-10-15: RDAP at the TLD's registry (WHOIS where a TLD has no RDAP),
 then `dig` for NS and A records, then the site's own page for a parked or
@@ -11,9 +14,30 @@ registry. Only a registrar's checkout shows that, and none was opened.
 
 Dean's ask: "Kick off a worker to brainstorm better product/domain names.
 tryluke.dev sucks." Then: "Look for .com URLs." And: the name "doesn't have
-to be a person's name".
+to be a person's name". Then: "it can be any random devtool sounding domain
+and I don't want it to be tied to talking or speaking or even planning."
 
 ## TL;DR
+
+**Current (third pass, §7):** rename the product to **Tyndo**.
+
+- **Domains:** tyndo.com is about **$1,118** buy-now on its own sale page.
+  tyndo.dev and tyndo.app are unregistered.
+- **Conflicts:** nothing uses the name in software, and there's no live
+  mark.
+- **Sound:** two syllables, abstract, the way Turso or Modal are. The y has
+  to be spelled once.
+- **Runners-up:**
+  - **Baven:** baven.com, $6,000, clean, but it rhymes with Maven.
+  - **Tavik:** tavik.com, $4,457, the crispest sound, but a tiny npm CLI
+    for AI-agent skills holds the name.
+  - **Fernrail** at $0, with .com, .dev and .app all unregistered.
+- **What stays:** the teammate keeps the name Luke, so the product-only
+  rename in §4.2 applies (about a week plus a new mark). The scheme becomes
+  `tyndo://`, and the app still reads `tryluke:` and `tryluke.dev` links
+  forever.
+
+The first two passes, kept for the record:
 
 - **Every credible `luke.*` is someone's.** luke.dev, luke.app, luke.so,
   luke.io, luke.sh, luke.to, luke.computer, and luke.co are other Lukes'
@@ -417,7 +441,7 @@ Out of the ten: saykit.com ($2,795, medium), sayspec.com ($3,995, high),
 lukeai.com ($3,279) and callluke.com ($4,111) (Luke, high), and
 hashout.com (held, not listed; high).
 
-## 6. Recommendation
+## 6. Recommendation (second pass, superseded by §7)
 
 1. **Now: keep Luke, move to `luke.build`.** It's the only short, free,
    on-brand `luke.*`, its link reads well, and the move is small and
@@ -452,6 +476,150 @@ search by hand) for the chosen name in classes 9 and 42, and check the
 registry price of the chosen domain at a registrar. Neither was possible
 from here.
 
+## 7. Third pass: abstract devtool names
+
+Dean's brief: "any random devtool sounding domain", not tied to talking,
+speaking, or planning, in the mold of Vercel, Linear, Raycast, Zed, Warp,
+Retool, Railway, Supabase, Modal, and Turso. Talkship, VoiceShip,
+Planspoke, Plansay, Talkspec, and their kin are out. The teammate keeps the
+name Luke inside the product, so the product name only has to be a good
+devtool name.
+
+### 7.1 What the .com market looks like
+
+About 2,000 .coms were checked (Verisign RDAP, then `dig` and the page):
+
+- **330 hand-picked short words**, real and invented: tool and
+  joinery words (kerf, tenon, rivet, gantry, trellis, gimbal), landforms
+  (esker, scree, talus, cairn, moraine), minerals and elements (rutile,
+  spinel, zircon, osmium, hafnium), constellations (vela, pyxis, fornax,
+  lacerta), and coinages (zelt, vorra, tessar, quilo, corvel, ostro).
+  **None is unregistered.** The listed ones ask from about $4,000 to over
+  $1M:
+  - kerf.com, $1,285,000
+  - dowel.com, $985,000
+  - navik.com, $585,000
+  - nimbo.com, $300,000
+  - cirro.com, $250,000
+  - quarx.com, $55,000
+  - zarn.com, $43,265
+  - colvo.com, $35,000
+- **About 1,600 generated two-syllable coinages** (CV + CVC, 4–7
+  letters). 49 are unregistered, and every one is unpronounceable (brylyx,
+  paxndo, nyndr).
+- **About 100 Raycast-style compounds.** 13 are unregistered: fernrail,
+  tarncast, kilnwell, hexkiln, tinkiln, fernkiln, eskerbase, screebase, and
+  others. HugeDomains lists more (driftbase, tidewire, flintcast,
+  slatecast, embercast, flintwork, mossway), but its prices now sit behind
+  a captcha. Atom (zelt, kavla, barite) refuses automated reads.
+
+So a short, abstract .com is a purchase. The under-$10k listings with a
+visible price, all buy-now:
+
+| .com | Price | Where |
+| --- | --- | --- |
+| tyndo.com | ~$1,118 | own sale page |
+| ravra.com | $2,635 | BrandBucket |
+| tyrin.com, dorvo.com | $2,995, $3,495 | Afternic |
+| zembo.com | $3,999 | Afternic |
+| kydel.com | $4,111 | brand marketplace |
+| tessar.com | $4,299 | Afternic |
+| morvo.com | $4,385 | BrandBucket |
+| tavik.com | $4,457 | Afternic |
+| zerek.com | $5,251 | Afternic |
+| nymbo.com | $5,988 | Afternic |
+| baven.com | $6,000 | Afternic |
+| sorvo.com | $7,595 | Afternic |
+| lovra.com, tynto.com | $7,777, $8,245 | brand marketplaces |
+| verek.com, pineforge.com | $9,995 each | Afternic |
+
+Over budget: taven.com ($17,999), codel.com ($20,000), rundel.com
+($20,700), toven.com ($32,999), railwire.com ($34,430), vinto.com
+($48,500), solto.com ($65,000), and sotra.com ($99,500).
+
+### 7.2 Conflict pass
+
+Web, GitHub, npm, App Store, and Trademarkia; a search, not clearance.
+
+| Name | Conflict | What turned up |
+| --- | --- | --- |
+| **Tyndo** | Low | Nothing exact. No TYNDO mark; TINDO (class 9) was abandoned in 2018. Tydo (YC S20) is inactive. github.com/Tyndo is an empty account. Heard as "Tindo"; *tondo* (Italian, "round") and *tinda* (Hindi, a gourd) are harmless |
+| **Baven** | Low | Nothing exact, no mark, npm free. Rhymes with Apache Maven (an archived "Maven for BASH" repo is called baven). Hindi *bāvan* = fifty-two |
+| **Tavik** | Low–medium | Every TAVIK mark is dead (a surf brand's). **npm `tavik` is a CLI for AI-agent guidance and skills** (v0.1.3, April 2026, ~19 downloads a month): tiny, but in our category. Tavus, Tavily, and Tavant are nearby AI names |
+| **Verek** | Low | Nothing exact, no mark. Verk.ai (AI "virtual employees") is near. Hungarian *verek* = "I hit". Starts like Vercel |
+| **Fernrail** | Low | Nothing. Fern (an SDK generator) and Railway each echo one half. German *Fern-* = long-distance |
+| **Tarncast** | Low | Nothing. github.com/Tarncast is an empty account. "-cast" leans toward broadcasting, the theme Dean ruled out |
+| Sorvo | Low–medium | sorvo.app is "Sorvo: Rate every drink" (a consumer app). Heard as *servo* (Mozilla's Servo). Portuguese *sorvo* = a sip |
+| Kydel | Low–medium | Nothing exact, no mark. Written down it looks like *Kindle*; said as KY-del, KID-el, or KEE-del |
+| Ravra | Low–medium | Nothing exact. RAVA is live in class 9 (Crestron) and pending in class 42. Awkward to say |
+| Kilnwell | Low–medium | Exact name clean. **KILN is Microsoft's** (class 9, live). Kiln-AI is a popular fine-tuning tool |
+| Zembo | Low–medium | YEMBO (AI SaaS) is live in class 42. Swahili *uzembe* = negligence, *-zembe* = lazy |
+| Zerek | Medium | Zerek.ai Ltd (Kazakh messaging SaaS) holds github.com/zerek |
+| Dorvo | Medium | One letter from **Qorvo** (Nasdaq: QRVO), which has class 42 filings |
+| Tynto | Medium | Heard as *tinto* (Spanish red wine). TYTO is live in classes 9 and 42 |
+| Nymbo | Medium–high | "Nymbo" is a known Hugging Face creator (502 Spaces). NIMBO is live in class 42. nymbo.app is a SaaS |
+| Tessar | Medium–high | **ZEISS holds TESSAR** (live since 1906, optics), and Tessary is an AI-agent tool |
+| Tyrin | Medium–high | Heard as *Tyrion*. Tyrion.AI sells an enterprise agent platform. Dow holds TYRIN (resins) |
+| Morvo | High | "Morvo: AI Personal Shopper" (Shopify, 2026). Heard as Spanish *morbo* |
+| Lovra | High | "Lovra AI: Girlfriend Simulator" on the App Store. Lovrabet is an AI dev platform |
+
+### 7.3 The best ten
+
+| # | Name | .com | Price | .dev / .app | Conflict | Scheme |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | **Tyndo** | for sale | ~$1,118 | free / free | Low | `tyndo://` |
+| 2 | **Baven** | for sale | $6,000 | free / free | Low | `baven://` |
+| 3 | **Tavik** | for sale | $4,457 | free / taken | Low–medium | `tavik://` |
+| 4 | Verek | for sale | $9,995 | free / free | Low | `verek://` |
+| 5 | **Fernrail** | unregistered | ~$11/yr | free / free | Low | `fernrail://` |
+| 6 | Sorvo | for sale | $7,595 | free / taken | Low–medium | `sorvo://` |
+| 7 | Kydel | for sale | $4,111 | free / free | Low–medium | `kydel://` |
+| 8 | Tarncast | unregistered | ~$11/yr | free / free | Low | `tarncast://` |
+| 9 | Ravra | for sale | $2,635 | free / free | Low–medium | `ravra://` |
+| 10 | Kilnwell | unregistered | ~$11/yr | free / free | Low–medium | `kilnwell://` |
+
+None of the ten schemes is a known registered URL scheme. Each is the name
+itself, which is distinctive enough that the `try` prefix #2697 needed for
+`luke://` isn't needed. The app goes on registering and reading `tryluke:`
+for links already written.
+
+### 7.4 Recommendation (current)
+
+1. **Rename the product to Tyndo, and keep Luke as the teammate.**
+   - **Domains:** the cheapest clean bare .com found (about $1,118
+     buy-now), with .dev and .app unregistered beside it.
+   - **Conflicts:** no software product or live mark.
+   - **Sound:** two neutral syllables with no meaning to outgrow, like
+     Turso or Modal. A link reads `tyndo.com/acme/plan/…` and the scheme is
+     `tyndo://`.
+   - **The cost:** say "with a y" once. People will write "Tindo" from
+     hearing it.
+2. **Runners-up:**
+   - **Baven** ($6,000) is just as clean and easier to spell from hearing
+     it, but sits next to Maven in every developer's ear.
+   - **Tavik** ($4,457) has the sharpest sound, but its npm name is held by
+     an AI-agent CLI.
+   - If the budget is $0, take **Fernrail**: .com, .dev, and .app are all
+     unregistered and nothing uses the name.
+3. **The move itself** is §4.1 (domain) plus §4.2 (product-only rename):
+   - Point the link host at the new domain.
+   - Read tryluke.dev and `tryluke:` links forever.
+   - Keep tryluke.dev serving `/api/*` and the voice socket for builds
+     already in the field.
+   - Migrate the app's state directory and Keychain entry with the app
+     name.
+   - Leave the bundle id and `@luke/*` alone.
+   - Redraw the mark: the face keeps its two eyes over a new initial (see
+     the mock page).
+   - Skip luke.build: with a rename coming, move links once.
+4. **Before buying:**
+   - A real trademark clearance in classes 9 and 42 (Trademarkia covered
+     only exact names and page one of near ones).
+   - A look at the listing through a registrar, so the price is the
+     registrar's and not a scraped page's.
+   - Nothing was bought, offered on, or reserved here, and no seller was
+     contacted.
+
 ## Sources
 
 Domain status comes from registry RDAP (`pubapi.registry.google/rdap` for
@@ -485,6 +653,16 @@ Conflicts come from [getluke.app](https://www.getluke.app),
 [tryluke.com (Luke AI)](https://www.tryluke.com),
 [hashitout.ai](https://hashitout.ai),
 [SaySpec](https://sayspec.app), and
-[saykit on npm](https://saykit.js.org). The mock page with each shortlisted
+[saykit on npm](https://saykit.js.org),
+[Afternic: tavik.com](https://www.afternic.com/domain/tavik.com),
+[Afternic: baven.com](https://www.afternic.com/domain/baven.com),
+[Afternic: verek.com](https://www.afternic.com/domain/verek.com),
+[Afternic: sorvo.com](https://www.afternic.com/domain/sorvo.com),
+[Afternic: tessar.com](https://www.afternic.com/domain/tessar.com),
+[Trademarkia: tyndo](https://www.trademarkia.com/search/trademarks?q=tyndo),
+[Trademarkia: tessar](https://www.trademarkia.com/search/trademarks?q=tessar),
+[Morvo on Shopify](https://apps.shopify.com/morvo),
+[Nymbo on Hugging Face](https://huggingface.co/Nymbo), and
+[Kiln-AI](https://github.com/Kiln-AI/Kiln). The mock page with each shortlisted
 name in a title bar, link, and icon tile is served through `conductor
 preview` from a copy outside the repository.
