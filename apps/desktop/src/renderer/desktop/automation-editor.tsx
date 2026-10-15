@@ -46,14 +46,7 @@ import type { ModelChoice } from "@luke/features/models-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
-import {
-  BuildingIcon,
-  ChevronRightIcon,
-  LockIcon,
-  PlayIcon,
-  Trash2Icon,
-  ZapIcon,
-} from "lucide-react";
+import { ChevronRightIcon, PlayIcon, Trash2Icon, ZapIcon } from "lucide-react";
 import { useId, useRef, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { AnchoredPopover, POPOVER_ALIGN } from "../anchored-popover";
@@ -73,21 +66,22 @@ import { SwitchRow } from "../settings/switch-row";
 import { BusyLabel, Spinner } from "../spinner";
 import { Switch } from "../switch";
 import { useDisclosure } from "../use-disclosure";
+import { OWNER_MARK_SIZE, OwnerMark } from "./automation-owner";
 import { AutomationRunsPanel } from "./automation-runs-panel";
 import { useAutomationRuns } from "./use-automation-runs";
 import { type AgentsRead, type RunChoices, useRunChoices } from "./use-run-choices";
 
 /**
- * automation-editor.tsx -- one automation's page, or a new one's: under breadcrumbs that name its owner, its name, its schedule, its task, its repository, and who owns it, saved by an explicit Create or Save.
+ * automation-editor.tsx -- one automation's page, or a new one's: who owns it, its name, its schedule, its task, and its repository, saved by an explicit Create or Save.
  *
  * It stands where the list stood, in the plan's place, and the first crumb
  * goes back to the list. Its form is drawn as a Settings page is, from
  * Settings' own rows: a group per part, each a card of rows naming a
  * setting and why on the left and its control on the right, every pick a
  * Settings picker on the window's menu and every yes or no a switch. Who
- * owns it is said three times over, since it is what the list must never
- * leave in doubt: in the crumbs, under its name, and in the Owner row a
- * team workspace offers. Where its runs land is picked: a new agent each
+ * owns it is the form's first row, wherever a team workspace offers the
+ * choice: Personal under the account's own picture, or the workspace under
+ * its photo (`automation-owner.tsx`). Where its runs land is picked: a new agent each
  * run, on the agent box's model chip and archived once it succeeds where
  * asked, or the same agent, chosen from the workspace's agents on its
  * repository. Its runs stand in the panel on
@@ -230,38 +224,64 @@ function ownerName(owner: AutomationScope, workspace: Workspace | undefined): st
   return owner === AUTOMATION_SCOPE.WORKSPACE ? (workspace?.name ?? "Workspace") : "Personal";
 }
 
-/** The line under the name that says who sees and changes it. */
-function ownerLine(
-  owner: AutomationScope,
-  workspace: Workspace | undefined,
-  offersOwner: boolean,
-): string {
-  if (owner === AUTOMATION_SCOPE.WORKSPACE) {
-    return `A workspace automation: everyone in ${workspace?.name ?? "the workspace"} sees and runs it.`;
-  }
-  return offersOwner
-    ? "A personal automation: only you see and change it."
-    : "Your automation, in your personal workspace.";
-}
-
-/** Who owns it, as a glyph and its name. */
-function OwnerMark({
+/**
+ * Who owns it, the form's first row: Personal under the account's own
+ * picture, or the workspace under its photo, on the chip and in its menu
+ * alike.
+ */
+function OwnerRow({
   owner,
+  owners,
+  mine,
   workspace,
+  onOwner,
 }: {
   owner: AutomationScope;
+  owners: readonly { value: AutomationScope; label: string }[];
+  /** Whether the reading account made it, so Personal is drawn as its own; a new one is. */
+  mine: boolean;
   workspace: Workspace | undefined;
+  onOwner: (owner: AutomationScope) => void;
 }): React.JSX.Element {
-  const name = ownerName(owner, workspace);
+  const parse = optionValue(owners);
+  const detailId = useId();
   return (
-    <span className="automation-owner" data-owner={owner} title={name}>
-      {owner === AUTOMATION_SCOPE.WORKSPACE ? (
-        <BuildingIcon aria-hidden="true" />
-      ) : (
-        <LockIcon aria-hidden="true" />
-      )}
-      <span className="automation-owner-name">{name}</span>
-    </span>
+    <PickerRow
+      copy={
+        <>
+          <strong>Owner</strong>
+          <small id={detailId}>
+            {owner === AUTOMATION_SCOPE.WORKSPACE
+              ? `Everyone in ${workspace?.name ?? "the workspace"} sees it, runs it, and turns it off. You, owners, and admins change it.`
+              : "Only you see and change it. Owners and admins can see it and turn it off."}
+          </small>
+        </>
+      }
+      label="Owner"
+      describedBy={detailId}
+      value={owner}
+      valueLabel={ownerName(owner, workspace)}
+      valueIcon={
+        <OwnerMark owner={owner} workspace={workspace} mine={mine} size={OWNER_MARK_SIZE.INLINE} />
+      }
+      rows={owners.map((each) => ({
+        id: each.value,
+        label: each.label,
+        icon: (
+          <OwnerMark
+            owner={each.value}
+            workspace={workspace}
+            mine={mine}
+            size={OWNER_MARK_SIZE.ROW}
+          />
+        ),
+      }))}
+      noMatch="No owner matches"
+      onPick={(id) => {
+        const picked = parse(id);
+        if (picked !== undefined) onOwner(picked);
+      }}
+    />
   );
 }
 
@@ -393,9 +413,7 @@ function ScheduleRows({
 
 /** The editor's toolbar: the crumbs back to the list, then where the draft stands, its save, its switch, and its delete. */
 function EditorToolbar({
-  draft,
   automation,
-  workspace,
   dirty,
   saving,
   onBack,
@@ -405,9 +423,7 @@ function EditorToolbar({
   running,
   onRunNow,
 }: {
-  draft: AutomationDraft;
   automation: AutomationSummary | undefined;
-  workspace: Workspace | undefined;
   dirty: boolean;
   saving: boolean;
   onBack: () => void;
@@ -434,8 +450,6 @@ function EditorToolbar({
             <ZapIcon />
             Automations
           </button>
-          <ChevronRightIcon aria-hidden="true" />
-          <OwnerMark owner={draft.owner} workspace={workspace} />
           <ChevronRightIcon aria-hidden="true" />
           <span className="automation-crumb">
             {automation === undefined ? "New automation" : automation.name}
@@ -1084,6 +1098,17 @@ function EditorForm({
   ] as const;
   return (
     <div className="automation-form">
+      {offersOwner ? (
+        <SettingsGroup title="Sharing">
+          <OwnerRow
+            owner={draft.owner}
+            owners={owners}
+            mine={automation === undefined || automation.mine === true}
+            workspace={workspace}
+            onOwner={(owner) => onDraft({ owner })}
+          />
+        </SettingsGroup>
+      ) : null}
       <SettingsGroup title="Trigger">
         <SelectRow
           label="Type"
@@ -1145,22 +1170,6 @@ function EditorForm({
         repositories={repositories}
         onDraft={onDraft}
       />
-      {offersOwner ? (
-        <SettingsGroup title="Sharing">
-          <SelectRow
-            label="Owner"
-            detail={
-              draft.owner === AUTOMATION_SCOPE.WORKSPACE
-                ? `Everyone in ${workspace?.name ?? "the workspace"} sees it, runs it, and turns it off. You, owners, and admins change it.`
-                : "Only you see and change it. Owners and admins can see it and turn it off."
-            }
-            value={draft.owner}
-            options={owners}
-            parse={optionValue(owners)}
-            onChange={(owner) => onDraft({ owner })}
-          />
-        </SettingsGroup>
-      ) : null}
     </div>
   );
 }
@@ -1303,9 +1312,7 @@ export function AutomationEditor({
   return (
     <section className="automations-view" aria-label="Automation">
       <EditorToolbar
-        draft={draft}
         automation={automation}
-        workspace={workspace}
         dirty={dirty}
         saving={saving}
         onBack={onBack}
@@ -1331,10 +1338,6 @@ export function AutomationEditor({
                 {problems[DRAFT_FIELD.NAME]}
               </p>
             ) : null}
-            <p className="automation-owner-line">
-              <OwnerMark owner={draft.owner} workspace={workspace} />
-              {ownerLine(draft.owner, workspace, offersOwner)}
-            </p>
             {refusal === undefined ? null : (
               <p className="error-message automation-save-refusal" role="alert">
                 {refusal}
