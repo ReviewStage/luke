@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
+import type { Plan } from "@luke/features/plan-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
@@ -104,6 +105,49 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
+/** The shell's props over `plans`, every other door ignored, the sidebar folded unless patched. */
+function shellProps(
+  plans: PlansControl,
+  tab: PanelTab,
+  onTabChange: (tab: PanelTab) => void,
+  sidebarPatch: Partial<SidebarCollapse>,
+): Parameters<typeof DesktopShell>[0] {
+  return {
+    gates: {
+      accountRequired: false,
+      onBeginSignIn: ignore,
+      onCancelSignIn: ignore,
+    },
+    tab,
+    onTabChange,
+    plans,
+    history: {
+      canGoBack: false,
+      canGoForward: false,
+      onBack: ignore,
+      onForward: ignore,
+      onLeaveVersionHistory: ignore,
+    },
+    sidebar: {
+      collapsed: true,
+      compact: false,
+      overlay: SIDEBAR_OVERLAY.CLOSED,
+      width: 264,
+      onToggle: ignore,
+      onOverlay: ignore,
+      onResize: ignore,
+      staged: false,
+      ...sidebarPatch,
+    },
+    call: undefined,
+    captions: {
+      caption: { content: undefined, shown: false },
+      volumeHint: { wanted: false, text: "", onDismiss: ignore },
+    },
+    settings: SETTINGS,
+  };
+}
+
 /**
  * The window's shell on the home page with the sidebar folded, the Inbox
  * open over it or not, New plan opening its dialog and Cancel putting it
@@ -124,53 +168,21 @@ function mount(
   const control = plansControl();
   function Shell() {
     const [asked, setAsked] = useState(false);
-    return createElement(DesktopShell, {
-      gates: {
-        accountRequired: false,
-        onBeginSignIn: ignore,
-        onCancelSignIn: ignore,
+    const plans = plansControl({
+      page: PLANS_PAGE.HOME,
+      restoring,
+      inboxView: {
+        open: inboxOpen,
+        chosen: undefined,
+        onOpen: ignore,
+        onClose: ignore,
+        onChoose: ignore,
       },
-      tab,
-      onTabChange,
-      plans: plansControl({
-        page: PLANS_PAGE.HOME,
-        restoring,
-        inboxView: {
-          open: inboxOpen,
-          chosen: undefined,
-          onOpen: ignore,
-          onClose: ignore,
-          onChoose: ignore,
-        },
-        onNewPlan: () => setAsked(true),
-        newPlan: { ...control.newPlan, open: asked, onClose: () => setAsked(false) },
-        ...overrides,
-      }),
-      history: {
-        canGoBack: false,
-        canGoForward: false,
-        onBack: ignore,
-        onForward: ignore,
-        onLeaveVersionHistory: ignore,
-      },
-      sidebar: {
-        collapsed: true,
-        compact: false,
-        overlay: SIDEBAR_OVERLAY.CLOSED,
-        width: 264,
-        onToggle: ignore,
-        onOverlay: ignore,
-        onResize: ignore,
-        staged: false,
-        ...sidebarPatch,
-      },
-      call: undefined,
-      captions: {
-        caption: { content: undefined, shown: false },
-        volumeHint: { wanted: false, text: "", onDismiss: ignore },
-      },
-      settings: SETTINGS,
+      onNewPlan: () => setAsked(true),
+      newPlan: { ...control.newPlan, open: asked, onClose: () => setAsked(false) },
+      ...overrides,
     });
+    return createElement(DesktopShell, shellProps(plans, tab, onTabChange, sidebarPatch));
   }
   act(() => root?.render(onRegistry(registry, createElement(Shell))));
   return container;
@@ -332,6 +344,115 @@ test("a plan opened on its Inbox tab rather than its own is read at once, its ro
 
   assert.equal(unreadOnOpen(false), "false");
   assert.equal(unreadOnOpen(true), "true");
+});
+
+/** A second plan beside `DOCUMENT_PLAN`, saved after it. */
+const NOTES_PLAN: Plan = {
+  ...DOCUMENT_PLAN,
+  id: "0c9a3f1e-6b2d-4e8f-a1c7-3d5e7f9a1b2c",
+  name: "Release notes",
+  createdAt: 4,
+  updatedAt: 5,
+};
+
+/**
+ * The shell with the sidebar unfolded on `listed`, each looked at up to
+ * the instant `looks` gives it, redrawn over whichever plan `open` names
+ * next and the home page for none, the same shell throughout.
+ */
+function mountListing(
+  listed: readonly Plan[],
+  looks: Readonly<Record<string, number>>,
+): (open: Plan | undefined) => void {
+  window.localStorage.setItem("luke.planLooks", JSON.stringify(looks));
+  window.localStorage.setItem("luke.planLooksSeeded", "1");
+  const container = document.createElement("div");
+  document.body.append(container);
+  root = createRoot(container);
+  const registry = AtomRegistry.make();
+  return (open) => {
+    const plans = plansControl({
+      page: open === undefined ? PLANS_PAGE.HOME : PLANS_PAGE.DOCUMENT,
+      plans: listed.map((plan) => (plan.id === open?.id ? open : plan)),
+      activePlanId: open?.id,
+      region:
+        open === undefined
+          ? { kind: DOCUMENT_REGION.NONE }
+          : { kind: DOCUMENT_REGION.READY, plan: open },
+    });
+    const props = shellProps(plans, PANEL_TAB.PLANS, ignore, { collapsed: false });
+    act(() => root?.render(onRegistry(registry, createElement(DesktopShell, props))));
+  };
+}
+
+/** The sidebar's row for the plan of this name. */
+function sidebarRow(name: string): HTMLButtonElement {
+  const row = [...document.querySelectorAll<HTMLButtonElement>("button.sidebar-plan")].find(
+    (each) => each.querySelector(".sidebar-plan-name")?.textContent === name,
+  );
+  assert.ok(row, `the sidebar lists ${name}`);
+  return row;
+}
+
+/** Whether the plan's row is drawn in the unread weight. */
+function rowUnread(name: string): string | null {
+  return sidebarRow(name).getAttribute("data-unread");
+}
+
+/** The read mark the row's right-click menu offers, chosen when `choose` says so. */
+function rowReadMark(name: string, choose = false): string | undefined {
+  act(() => {
+    sidebarRow(name).dispatchEvent(new MouseEvent("contextmenu", { bubbles: true }));
+  });
+  const menu = document.querySelector('[role="menu"]');
+  assert.ok(menu, `${name}'s menu opens`);
+  const item = [...menu.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find((each) =>
+    /^Mark as (un)?read$/u.test(each.textContent ?? ""),
+  );
+  act(() => {
+    if (choose) item?.click();
+    else menu.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+  assert.equal(document.querySelector('[role="menu"]') === null, true, "the menu closes");
+  return item?.textContent ?? undefined;
+}
+
+test("Mark as unread on the task being looked at draws its row unread through a save landing as it stays, and until it is opened again", () => {
+  const draw = mountListing([DOCUMENT_PLAN, NOTES_PLAN], {
+    [DOCUMENT_PLAN.id]: DOCUMENT_PLAN.updatedAt,
+    [NOTES_PLAN.id]: NOTES_PLAN.updatedAt,
+  });
+  draw(DOCUMENT_PLAN);
+  assert.equal(rowUnread(DOCUMENT_NAME), "false");
+  assert.equal(rowReadMark(DOCUMENT_NAME, true), "Mark as unread");
+  assert.equal(rowUnread(DOCUMENT_NAME), "true");
+
+  draw({ ...DOCUMENT_PLAN, updatedAt: DOCUMENT_PLAN.updatedAt + 1 });
+  assert.equal(rowUnread(DOCUMENT_NAME), "true");
+
+  draw(NOTES_PLAN);
+  assert.equal(rowUnread(DOCUMENT_NAME), "true");
+
+  draw(DOCUMENT_PLAN);
+  assert.equal(rowUnread(DOCUMENT_NAME), "false");
+});
+
+test("a task's menu offers Mark as read while its row is unread, which draws it read, and Mark as unread after", () => {
+  const draw = mountListing([DOCUMENT_PLAN, NOTES_PLAN], {
+    [DOCUMENT_PLAN.id]: DOCUMENT_PLAN.updatedAt,
+    [NOTES_PLAN.id]: NOTES_PLAN.updatedAt - 1,
+  });
+  draw(undefined);
+  assert.equal(rowUnread(NOTES_PLAN.name), "true");
+  assert.equal(rowReadMark(DOCUMENT_NAME), "Mark as unread");
+
+  assert.equal(rowReadMark(NOTES_PLAN.name, true), "Mark as read");
+  assert.equal(rowUnread(NOTES_PLAN.name), "false");
+  assert.equal(rowReadMark(NOTES_PLAN.name), "Mark as unread");
+
+  assert.equal(rowReadMark(NOTES_PLAN.name, true), "Mark as unread");
+  assert.equal(rowUnread(NOTES_PLAN.name), "true");
+  assert.equal(rowReadMark(NOTES_PLAN.name), "Mark as read");
 });
 
 /** Lets every promise settled so far run its continuations. */

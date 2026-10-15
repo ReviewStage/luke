@@ -43,7 +43,7 @@ import { TOOL_TARGET, type ToolTarget } from "../planning/tool-call-model";
 import { MAIN_TAB, type MainTab } from "../planning/use-main-tabs";
 import { useOpenLink } from "../planning/use-open-link";
 import { type PlanInboxControl, usePlanInbox } from "../planning/use-plan-inbox";
-import type { PlanLooks } from "../planning/use-plan-looks";
+import { type PlanLooks, useReadMarks } from "../planning/use-plan-looks";
 import { AUTOMATIONS_PAGE, type PlansControl } from "../planning/use-plans-tab";
 import { SIDE_PANEL_TAB } from "../planning/use-side-panel";
 import { workRowsOf } from "../planning/work-model";
@@ -335,6 +335,7 @@ function PlanDocument({
   // The clock the plan's tab's card counts its update back from.
   const now = useMinute();
   const automationsOn = useExperiment(EXPERIMENT.AUTOMATIONS);
+  const reads = useReadMarks();
   const { onOpen: onOpenAutomations } = plans.automationsView;
   const openAutomation = useCallback(
     (automationId: string) => onOpenAutomations({ kind: AUTOMATIONS_PAGE.EDIT, automationId }),
@@ -681,6 +682,10 @@ function PlanDocument({
                             onDraftName: (name) => plans.onDraftName(plan.id, name),
                           })}
                       looks={looks}
+                      readMark={{
+                        unread: reads.markedUnread(plan.id),
+                        onMark: (unread) => reads.mark(plan, unread),
+                      }}
                       sectionLinks={sectionLinksOf(plan.id, workspace)}
                       crumb={
                         home === undefined ? undefined : (

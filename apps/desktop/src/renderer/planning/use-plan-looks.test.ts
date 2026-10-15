@@ -13,7 +13,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { onRegistry } from "#testing/copy-feedback";
 import { DOCUMENT_PLAN } from "#testing/document-plan";
-import { NO_LOOKS, usePlanLooks, useUnreadPlans } from "./use-plan-looks";
+import { NO_LOOKS, usePlanLooks, useReadMarks, useUnreadPlans } from "./use-plan-looks";
 
 /**
  * use-plan-looks.test.ts -- the sections a reader is shown as changed since
@@ -100,18 +100,21 @@ interface Drawn {
   unread: boolean;
 }
 
-/** A window as a test drives it: what it drew last, and a render with a plan open or none. */
+/** A window as a test drives it: what it drew last, a render with a plan open or none, and `summary` marked unread or read from a menu. */
 interface TestWindow {
   readonly drawn: Drawn;
   readonly draw: (open: Plan | undefined) => void;
+  readonly mark: (unread: boolean) => void;
 }
 
 /** A window drawing `summary`'s row and, while `open` is given, that plan open, re-rendered by `draw`. */
 function windowOn(summary: PlanSummary): TestWindow {
   const drawn: Drawn = { changed: [], unread: false };
+  let marks: ReturnType<typeof useReadMarks> | undefined;
   function Window({ open }: { open: Plan | undefined }) {
     drawn.changed = [...usePlanLooks(open, DEAN.userId).changed].sort();
     drawn.unread = useUnreadPlans([summary], { listRead: true, staged: false })(summary);
+    marks = useReadMarks();
     return null;
   }
   const root = createRoot(document.createElement("div"));
@@ -119,7 +122,8 @@ function windowOn(summary: PlanSummary): TestWindow {
   const registry = AtomRegistry.make();
   const draw = (open: Plan | undefined) =>
     act(() => root.render(onRegistry(registry, createElement(Window, { open }))));
-  return { drawn, draw };
+  const mark = (unread: boolean) => act(() => marks?.mark(summary, unread));
+  return { drawn, draw, mark };
 }
 
 test("a plan opened is read at once, and still lights what changed since the last look for that visit alone", () => {
@@ -143,6 +147,27 @@ test("a plan opened is read at once, and still lights what changed since the las
 
   draw(plan);
   assert.deepEqual(drawn, { changed: [], unread: false });
+});
+
+test("a plan marked unread lights, as it next opens, what changed since its last look and nothing before it", () => {
+  const plan: Plan = {
+    ...DOCUMENT_PLAN,
+    updatedAt: LOOKED_AT + 1,
+    sectionEdits: [
+      { section: "Approach", actor: PLAN_ACTOR.DEVELOPER, by: CHARLES, at: LOOKED_AT - 1 },
+      { section: "Context", actor: PLAN_ACTOR.NOTETAKER, at: LOOKED_AT + 1 },
+    ].map((edit) => ({ ...edit, duringCall: false })),
+  };
+  window.localStorage.setItem("luke.planLooks", JSON.stringify({ [plan.id]: LOOKED_AT }));
+  window.localStorage.setItem("luke.planLooksSeeded", "1");
+  const { drawn, draw, mark } = windowOn(plan);
+
+  draw(undefined);
+  mark(true);
+  assert.deepEqual(drawn, { changed: [], unread: true });
+
+  draw(plan);
+  assert.deepEqual(drawn, { changed: ["Context"], unread: false });
 });
 
 test("a save landing while the plan stays open is read as it lands, and stays read once the plan is left", () => {
