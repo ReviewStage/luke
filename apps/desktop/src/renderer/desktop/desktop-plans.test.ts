@@ -1,16 +1,23 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { INBOX_CURSOR_START } from "@luke/features/inbox-wire";
+import {
+  INBOX_CURSOR_START,
+  INBOX_RESPONSE,
+  INBOX_STATUS,
+  INBOX_WIRE_VERSION,
+  type InboxItem,
+} from "@luke/features/inbox-wire";
 import type { Plan } from "@luke/features/plan-wire";
 import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
-import { test } from "vitest";
+import { afterEach, test, vi } from "vitest";
 import { onRegistry } from "#testing/copy-feedback";
 import { codingAgentsControl, plansControl, UNPINNED_SUMMARY } from "#testing/plans-control";
+import { relayout } from "#testing/resize-observer";
 import { DOCUMENT_REGION, PLANS_PAGE } from "../planning/planning-model";
 import { MAIN_TAB } from "../planning/use-main-tabs";
 import { NO_LOOKS } from "../planning/use-plan-looks";
@@ -27,6 +34,10 @@ const PLAN: Plan = {
   repository: null,
   document: { body: "", assumptions: [] },
 };
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 test("the Call tab draws each call's spoken lines as the developer's bubbles and Luke's messages, left out of the screen recording", () => {
   const markup = renderToStaticMarkup(
@@ -87,7 +98,7 @@ test("the Call tab draws each call's spoken lines as the developer's bubbles and
   assert.match(call.textContent ?? "", /Live/u);
 });
 
-test("a plan's Inbox tab whose read holds nothing says nothing needs you under the Inbox's glyph, rather than standing blank", async () => {
+test("a plan's Inbox tab whose read holds nothing says nothing needs you under the Inbox's glyph, or under its list where the list stands alone, rather than standing blank", async () => {
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
     value: () => ({
@@ -131,9 +142,97 @@ test("a plan's Inbox tab whose read holds nothing says nothing needs you under t
   await act(async () => {
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
   });
-  const tab = container.querySelector('section.inbox-view[aria-label="Inbox"]');
+  const tab = container.querySelector<HTMLElement>('section.inbox-view[aria-label="Inbox"]');
   assert.ok(tab, "the plan's Inbox tab");
   assert.match(tab.textContent ?? "", /Nothing needs you/u);
+  // Too narrow for the pane beside it, the list standing alone says so.
+  vi.spyOn(tab, "getBoundingClientRect").mockReturnValue(
+    DOMRect.fromRect({ width: 700, height: 800 }),
+  );
+  act(() => relayout());
+  const shown = [...tab.querySelectorAll(".inbox-plans, .inbox-view-items")].filter(
+    (column) => !column.hasAttribute("hidden"),
+  );
+  assert.match(shown.map((column) => column.textContent).join(""), /Nothing needs you/u);
+  act(() => root.unmount());
+  container.remove();
+});
+
+test("a plan's Inbox tab too narrow for its list and the item side by side shows its list alone, a press opening the item alone under a way back to the list", async () => {
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    value: () => ({
+      matches: false,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    }),
+  });
+  const agentId = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
+  const asked: InboxItem = {
+    id: "a1b2c3d4-0000-4000-8000-000000000001",
+    agentId,
+    key: "0001",
+    revision: 1,
+    version: INBOX_WIRE_VERSION,
+    title: "Expire after 7 days?",
+    blocks: [],
+    response: { type: INBOX_RESPONSE.APPROVAL },
+    needsReply: true,
+    status: INBOX_STATUS.OPEN,
+    postedAt: 1_000,
+    updatedAt: 1_000,
+  };
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  act(() =>
+    root.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(DesktopPlans, {
+          summary: UNPINNED_SUMMARY,
+          looks: NO_LOOKS,
+          captions: undefined,
+          plans: plansControl({
+            page: PLANS_PAGE.DOCUMENT,
+            activePlanId: PLAN.id,
+            region: { kind: DOCUMENT_REGION.READY, plan: PLAN },
+            mainTabs: {
+              ...plansControl().mainTabs,
+              tabs: [MAIN_TAB.PLAN, MAIN_TAB.INBOX],
+              tab: MAIN_TAB.INBOX,
+            },
+            agents: codingAgentsControl({
+              agentIds: [agentId],
+              readInbox: ({ after }) =>
+                after === INBOX_CURSOR_START
+                  ? Promise.resolve({ items: [asked], cursor: "1" })
+                  : new Promise(() => undefined),
+            }),
+          }),
+        }),
+      ),
+    ),
+  );
+  await act(async () => {
+    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+  });
+  const tab = container.querySelector<HTMLElement>('section.inbox-view[aria-label="Inbox"]');
+  assert.ok(tab, "the plan's Inbox tab");
+  vi.spyOn(tab, "getBoundingClientRect").mockReturnValue(
+    DOMRect.fromRect({ width: 700, height: 800 }),
+  );
+  act(() => relayout());
+  const list = tab.querySelector(".inbox-plans");
+  const pane = () => tab.querySelector(".inbox-view-items");
+  assert.deepEqual([list?.hasAttribute("hidden"), pane()?.hasAttribute("hidden")], [false, true]);
+
+  const row = tab.querySelector<HTMLButtonElement>(".inbox-plans .sidebar-plan");
+  act(() => row?.click());
+  assert.deepEqual([list?.hasAttribute("hidden"), pane()?.hasAttribute("hidden")], [true, false]);
+  const back = tab.querySelector<HTMLButtonElement>("button.inbox-back");
+  assert.equal(back?.textContent, "Inbox");
+  act(() => back?.click());
+  assert.deepEqual([list?.hasAttribute("hidden"), pane()?.hasAttribute("hidden")], [false, true]);
   act(() => root.unmount());
   container.remove();
 });

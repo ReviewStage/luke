@@ -11,6 +11,7 @@ import { useAppCommand } from "../app-commands";
 import { EmptyState } from "../empty-state";
 import { FindScope } from "../find-in-tab";
 import { ArchivedBanner } from "../planning/archived-plan";
+import { INBOX_COLUMNS, useInboxColumns } from "../planning/inbox-columns";
 import { InboxList } from "../planning/inbox-list";
 import {
   firstChoice,
@@ -142,7 +143,8 @@ function NewTabChord({ onNewTab }: { onNewTab: () => void }): null {
  * read. With nothing chosen, the first item that waits stands chosen, else
  * the newest; a plan whose read holds nothing says so under the Inbox's
  * glyph. The pane's plan crumb chooses the plan's tab and its agent crumb
- * the agent's.
+ * the agent's. Too narrow for both, it shows the list or the item a press
+ * opened, as the window's Inbox does (`inbox-columns.ts`).
  */
 function PlanInboxTab({
   plans,
@@ -170,11 +172,19 @@ function PlanInboxTab({
     chosen: asked,
   });
   const chosen = listedItems(list).find(({ item }) => item.id === asked) ?? firstChoice(list);
+  const columns = useInboxColumns(chosen?.item.id);
   return (
-    <section className="inbox-view" role="tabpanel" aria-label="Inbox">
+    <section
+      ref={columns.ref}
+      className="inbox-view"
+      role="tabpanel"
+      aria-label="Inbox"
+      data-columns={columns.shown}
+    >
       <InboxList
         view={list}
         chosen={chosen?.item.id}
+        columns={columns.shown}
         head={undefined}
         models={plans.agents.models}
         note={
@@ -184,12 +194,22 @@ function PlanInboxTab({
             <div className="sidebar-note">
               <ReadFailure line="The inbox could not be read." onRetry={inbox.onRetry} />
             </div>
+          ) : inbox.read && items.length === 0 && columns.shown !== INBOX_COLUMNS.BOTH ? (
+            // Note that the list standing alone says what the hidden pane would.
+            <p className="sidebar-note">{NEEDS_YOU.NONE}</p>
           ) : null
         }
-        onChoose={({ item }) => setAsked(item.id)}
+        onChoose={({ item }) => {
+          setAsked(item.id);
+          columns.onOpen(item.id);
+        }}
       />
       {chosen === undefined ? (
-        <section className="inbox-view-items" aria-label="Inbox">
+        <section
+          className="inbox-view-items"
+          aria-label="Inbox"
+          hidden={columns.shown !== INBOX_COLUMNS.BOTH}
+        >
           {inbox.read && items.length === 0 ? (
             <EmptyState icon={<InboxIcon />}>{NEEDS_YOU.NONE}</EmptyState>
           ) : null}
@@ -200,6 +220,8 @@ function PlanInboxTab({
           item={chosen.item}
           control={inbox}
           agents={plans.agents}
+          hidden={columns.shown === INBOX_COLUMNS.LIST}
+          onBack={columns.onBack}
           doors={{
             onOpenPlan,
             planCard: planCardOf(plans, plan, now),

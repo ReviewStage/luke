@@ -331,7 +331,9 @@ body,
 .desktop-shell[data-sidebar-collapsed="false"] .title-bar-controls:not([data-edge]),
 .desktop-shell[data-sidebar-overlay="peek"] .title-bar-controls:not([data-edge]),
 .desktop-shell[data-sidebar-overlay="open"] .title-bar-controls:not([data-edge]),
-.desktop-shell[data-sidebar-collapsed="true"]:has(.desktop-main > .inbox-view)
+.desktop-shell[data-sidebar-collapsed="true"]:has(
+    .desktop-main > .inbox-view:not([data-columns="item"])
+  )
   .title-bar-controls:not([data-edge]) {
   --title-bar-ground: var(--desktop-sidebar);
 }
@@ -2974,6 +2976,21 @@ body:has(.app-stage[data-capture="true"])
   grid-template-columns: auto minmax(0, 1fr);
 }
 
+/* Too narrow for both, the Inbox shows its list or the item a press opened,
+   the whole Inbox wide (`inbox-columns.ts`); the list then needs no edge to
+   part it from the item. */
+.inbox-view:is([data-columns="list"], [data-columns="item"]) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.inbox-view[data-columns="list"] .inbox-plans {
+  border-right: 0;
+}
+
+.inbox-view > [hidden] {
+  display: none;
+}
+
 .inbox-plans {
   position: relative;
   display: flex;
@@ -3013,6 +3030,16 @@ body:has(.app-stage[data-capture="true"])
 .desktop-shell[data-sidebar-collapsed="true"] .inbox-plans-bar .desktop-toolbar-actions {
   grid-column: 3;
   justify-self: end;
+}
+
+/* The list standing alone is a page rather than a column, so its name leads
+   its bar past the title bar's buttons, as a page's title does. */
+.desktop-shell[data-sidebar-collapsed="true"]
+  .desktop-main
+  .inbox-view[data-columns="list"]
+  .inbox-plans-bar {
+  display: flex;
+  padding-left: var(--sidebar-toggle-clearance);
 }
 
 .inbox-plans-scroll {
@@ -3089,6 +3116,16 @@ body:has(.app-stage[data-capture="true"])
    keeps its own inset then. */
 .desktop-shell[data-sidebar-collapsed="true"] .inbox-view-items .desktop-toolbar {
   padding-left: var(--column-inset);
+}
+
+/* An item standing alone in the window's Inbox is its first column, so its
+   bar, led by the way back, leaves the title bar's buttons their room. */
+.desktop-shell[data-sidebar-collapsed="true"]
+  .desktop-main
+  > .inbox-view[data-columns="item"]
+  .inbox-view-items
+  .desktop-toolbar {
+  padding-left: var(--sidebar-toggle-clearance);
 }
 
 /* Settings ------------------------------------------------------------------- */

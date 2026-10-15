@@ -544,6 +544,9 @@ function SidebarInboxRow({
   );
 }
 
+/** The layers that answer their own Escape before a floating sidebar is put away. */
+const KEY_LAYERS = '[role="menu"], [role="dialog"], [role="alertdialog"]';
+
 /** What the sidebar is drawn with while it floats, or could. */
 interface FloatingSidebar {
   readonly ref: React.RefObject<HTMLElement | null>;
@@ -559,7 +562,8 @@ interface FloatingSidebar {
 /**
  * The floating sidebar's doors: a press in a peek opens it, the pointer
  * leaving a peek puts it away, though not for the toggle standing over its
- * head, and Escape puts it away while no menu in it took the key first.
+ * head, and Escape puts it away while no menu in it took the key first,
+ * wherever the keyboard stands, a peek leaving it in the work under it.
  * Opened from away, it takes the keyboard, which Escape gives back. It goes
  * with the sidebar, so a menu's way to Settings or a version history, or
  * any other way off the plans, leaves it away for their return.
@@ -585,6 +589,26 @@ function useFloatingSidebar(sidebar: SidebarCollapse): FloatingSidebar {
     first?.focus();
   }, [overlay]);
   useEffect(() => () => onOverlay(SIDEBAR_OVERLAY.CLOSED), [onOverlay]);
+  // Note that a floating sidebar need not hold the keyboard, a peek or one a
+  // bare press opened leaving it in the work under it, so Escape is heard at
+  // the window before the work's layers hear it. A key aimed into the
+  // sidebar is left to its own handler, and one aimed into a menu or a
+  // dialog to that layer, which may have been raised from the sidebar.
+  useEffect(() => {
+    if (!floating) return;
+    const putAway = (event: KeyboardEvent) => {
+      const held = ref.current;
+      const target = event.target instanceof Element ? event.target : null;
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      if (target !== null && (held?.contains(target) || target.closest(KEY_LAYERS) !== null)) {
+        return;
+      }
+      event.preventDefault();
+      onOverlay(SIDEBAR_OVERLAY.CLOSED);
+    };
+    window.addEventListener("keydown", putAway, true);
+    return () => window.removeEventListener("keydown", putAway, true);
+  }, [floating, onOverlay]);
   return {
     ref,
     inSight: !sidebar.collapsed || floating,

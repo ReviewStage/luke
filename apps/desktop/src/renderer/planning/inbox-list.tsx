@@ -15,6 +15,7 @@ import { SidebarGroupHeader } from "../desktop/sidebar-group-header";
 import { EDGE_SIDE, useResizableEdge } from "../desktop/use-resizable-edge";
 import { Tooltip } from "../tooltip";
 import { AgentRef, lineSubject } from "./agent-ref";
+import { INBOX_COLUMNS, type InboxColumnsShown } from "./inbox-columns";
 import {
   INBOX_GROUPING,
   type InboxGrouping,
@@ -58,7 +59,9 @@ import { cardTitle } from "./tool-call-model";
  * checked; both are kept across launches. The plan page's own Inbox lists
  * one plan's items, so its list has neither head nor groups. Either list
  * is resized from its right edge as the sidebar is, and keeps one width
- * between them across launches.
+ * between them across launches; an Inbox showing one column at a time
+ * draws its list the whole Inbox wide, with no edge, and hides it while an
+ * item stands in its place (`inbox-columns.ts`).
  */
 
 /** What the head's menu button is called. */
@@ -71,19 +74,23 @@ const NEEDS_YOU_PRESS = {
 } as const;
 
 /**
- * What the list leaves the pane beside it, in CSS pixels: the list is
- * dragged no wider than the Inbox less this.
+ * What the list leaves the item beside it, in CSS pixels: the list is
+ * dragged no wider than the Inbox less this, so the item keeps the room a
+ * question, a code card, and its options read in. An Inbox too narrow for
+ * both at their least shows one at a time (`inbox-columns.ts`).
  */
-const PANE_RESERVE = 360;
+const PANE_RESERVE = 560;
 
 /**
  * The width the list is drawn at: the one kept, held no wider than the
  * Inbox less the pane's reserve, though never under the least, so a window
  * narrowed under a wide list still leaves the pane its room, and widened
- * again gives the list back as it was kept. The Inbox is the container the
- * width is measured against (`.inbox-view` in desktop.css).
+ * again gives the list back as it was kept; the whole Inbox wide where it
+ * stands alone. The Inbox is the container the width is measured against
+ * (`.inbox-view` in desktop.css).
  */
-function drawnWidth(width: number): string {
+function drawnWidth(width: number, alone: boolean): string | undefined {
+  if (alone) return undefined;
   return `min(${width}px, max(${INBOX_LIST_WIDTH.MIN}px, 100cqw - ${PANE_RESERVE}px))`;
 }
 
@@ -287,6 +294,7 @@ export function InboxList({
   head,
   note,
   models,
+  columns,
   onChoose,
 }: {
   view: InboxListView;
@@ -297,6 +305,8 @@ export function InboxList({
   head: InboxListHead | undefined;
   /** What stands under the rows: the list's empty line, a spinner, or a read that did not answer. */
   note: React.ReactNode;
+  /** Which of the Inbox's columns stand. */
+  columns: InboxColumnsShown;
   onChoose: (listed: InboxListed) => void;
 }): React.JSX.Element {
   const now = useMinute();
@@ -320,7 +330,12 @@ export function InboxList({
     />
   );
   return (
-    <nav className="inbox-plans" aria-label="Inbox items" style={{ width: drawnWidth(width) }}>
+    <nav
+      className="inbox-plans"
+      aria-label="Inbox items"
+      hidden={columns === INBOX_COLUMNS.ITEM}
+      style={{ width: drawnWidth(width, columns !== INBOX_COLUMNS.BOTH) }}
+    >
       {head === undefined ? null : (
         <ListHead shown={head.shown} choices={head.choices} waiting={head.waiting} />
       )}
@@ -350,7 +365,7 @@ export function InboxList({
         )}
         {note}
       </div>
-      <SidebarResizeEdge edge={edge} />
+      {columns === INBOX_COLUMNS.BOTH ? <SidebarResizeEdge edge={edge} /> : null}
     </nav>
   );
 }

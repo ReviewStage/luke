@@ -22,12 +22,15 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "#shared/messages/acts";
 import type { AppInboxPlanHolding } from "#shared/messages/app-state";
+import { APP_COMMAND } from "#shared/shortcuts";
 import { onRegistry } from "#testing/copy-feedback";
 import { plansControl, waitingOf } from "#testing/plans-control";
+import { relayout } from "#testing/resize-observer";
 import { readSegmented, segment, segmentedGroup } from "#testing/segmented";
+import { runAppCommand } from "../app-commands";
 import type { InboxChoice } from "../planning/use-plans-tab";
 import { DesktopInbox } from "./desktop-inbox";
 
@@ -171,17 +174,20 @@ afterEach(() => {
   act(() => root?.unmount());
   root = undefined;
   document.body.innerHTML = "";
+  vi.restoreAllMocks();
 });
 
 /** What the Inbox was asked to open, leaving it. */
 interface Asked {
   readonly shownPlans: string[];
   readonly shownAgents: [string, string][];
+  /** How many times it was asked to close. */
+  closed: number;
 }
 
 /** The Inbox over the two plans, its own view real, as the plans tab holds it, and every press that leaves it recorded. */
 function mount() {
-  const asked: Asked = { shownPlans: [], shownAgents: [] };
+  const asked: Asked = { shownPlans: [], shownAgents: [], closed: 0 };
   function Page() {
     const [chosen, setChosen] = useState<InboxChoice | undefined>(undefined);
     const [holding, setHeld] = useState(HOLDING);
@@ -200,7 +206,9 @@ function mount() {
           open: true,
           chosen,
           onOpen: () => undefined,
-          onClose: () => undefined,
+          onClose: () => {
+            asked.closed += 1;
+          },
           onChoose: setChosen,
         },
         onShowPlan: (planId) => asked.shownPlans.push(planId),
@@ -599,11 +607,24 @@ test("a folded plan counts what in it needs you, and one where nothing does coun
   );
 });
 
+/** Lays the Inbox out this wide, as the window would, and tells it so. */
+function layOut(page: HTMLElement, width: number): void {
+  const view = page.querySelector<HTMLElement>(".inbox-view");
+  assert.ok(view, "the Inbox is drawn");
+  vi.spyOn(view, "getBoundingClientRect").mockReturnValue(DOMRect.fromRect({ width, height: 800 }));
+  act(() => relayout());
+}
+
+/** The edge the list is resized by, while it stands. */
+function listEdge(page: HTMLElement): HTMLElement | null {
+  return page.querySelector<HTMLElement>('.inbox-plans [role="separator"]');
+}
+
 test("the list is resized from its edge between its bounds, and keeps its width across a relaunch", async () => {
   let { page } = mount();
   await settle();
   const edge = () => {
-    const separator = page.querySelector<HTMLElement>('.inbox-plans [role="separator"]');
+    const separator = listEdge(page);
     assert.ok(separator, "the list has an edge to resize it by");
     return separator;
   };
@@ -613,27 +634,110 @@ test("the list is resized from its edge between its bounds, and keeps its width 
       edge().dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
     });
   };
-  assert.equal(
-    width(),
-    360,
-    "wide enough to centre the Inbox's name past the folded sidebar's buttons",
-  );
+  assert.equal(width(), 320, "a mail app's list, narrower than the item it reads");
   press("ArrowRight");
-  assert.equal(width(), 376);
+  assert.equal(width(), 336);
   press("End");
-  assert.equal(width(), 520);
+  assert.equal(width(), 440);
   press("ArrowRight");
-  assert.equal(width(), 520, "no wider than its greatest width");
+  assert.equal(width(), 440, "no wider than its greatest width");
 
   act(() => root?.unmount());
   root = undefined;
   ({ page } = mount());
   await settle();
-  assert.equal(width(), 520);
+  assert.equal(width(), 440);
   press("Home");
   assert.equal(width(), 300);
   press("ArrowLeft");
   assert.equal(width(), 300, "no narrower than its least width");
+
+  layOut(page, 900);
+  press("End");
+  assert.equal(width(), 340, "no wider than leaves the item its room");
+});
+
+/** Which of the Inbox's columns a reader finds standing: the list, the item, or both. */
+function columnsShown(page: HTMLElement): string[] {
+  const list = page.querySelector(".inbox-plans");
+  const item = page.querySelector(".inbox-view-items");
+  return [
+    ...(list === null || list.hasAttribute("hidden") ? [] : ["list"]),
+    ...(item === null || item.hasAttribute("hidden") ? [] : ["item"]),
+  ];
+}
+
+/** The way back from the item standing alone to the list. */
+function backToList(page: HTMLElement): HTMLButtonElement {
+  const back = page.querySelector<HTMLButtonElement>(".inbox-view-items button.inbox-back");
+  assert.ok(back, "the item standing alone has a way back");
+  return back;
+}
+
+test("an Inbox too narrow for the list and the item side by side shows its list alone, the whole Inbox wide; a press opens the item alone under a way back, which, Back's chord, and Escape each take, the keyboard landing on the item's row, before Escape leaves the Inbox", async () => {
+  const { page, asked } = mount();
+  await settle();
+  layOut(page, 800);
+  assert.deepEqual(columnsShown(page), ["list"]);
+  assert.equal(listEdge(page), null, "a list standing alone has no edge to drag");
+
+  act(() => rowNamed(page, "Alert at 80%?").click());
+  assert.deepEqual(columnsShown(page), ["item"]);
+  assert.equal(page.querySelector("[data-inbox-title]")?.textContent, "Alert at 80%?");
+  assert.equal(backToList(page).textContent, "Inbox");
+  assert.ok(document.activeElement === backToList(page), "the keyboard lands on the way back");
+
+  act(() => backToList(page).click());
+  assert.deepEqual(columnsShown(page), ["list"]);
+  assert.ok(
+    document.activeElement === rowNamed(page, "Alert at 80%?"),
+    "the keyboard is on its row",
+  );
+
+  act(() => rowNamed(page, "Expire after 7 days?").click());
+  act(() => runAppCommand(APP_COMMAND.BACK));
+  assert.deepEqual(columnsShown(page), ["list"]);
+  assert.ok(
+    document.activeElement === rowNamed(page, "Expire after 7 days?"),
+    "the keyboard is on its row",
+  );
+
+  act(() => rowNamed(page, "Expire after 7 days?").click());
+  act(() => runAppCommand(APP_COMMAND.EXIT_INBOX));
+  assert.deepEqual([columnsShown(page), asked.closed], [["list"], 0]);
+  act(() => runAppCommand(APP_COMMAND.EXIT_INBOX));
+  assert.equal(asked.closed, 1, "from the list, Escape leaves the Inbox");
+});
+
+test("the Inbox splits again only once widened past the band, an item a press opened standing beside the list, and joins again only once narrowed past it; narrowed with nothing pressed, it lands on its list, the keyboard on the chosen row where the item held it", async () => {
+  const { page } = mount();
+  await settle();
+  layOut(page, 900);
+  assert.deepEqual(columnsShown(page), ["list", "item"]);
+  layOut(page, 860);
+  assert.deepEqual(columnsShown(page), ["list", "item"], "within the band it stays split");
+  const option = page.querySelector<HTMLElement>(".inbox-view-items button");
+  assert.ok(option, "the item offers a press");
+  option.focus();
+  layOut(page, 850);
+  assert.deepEqual(columnsShown(page), ["list"], "the item it chose for itself is not opened");
+  assert.ok(
+    document.activeElement === rowNamed(page, "Alert at 80%?"),
+    "the keyboard leaves the hidden item for its row",
+  );
+
+  act(() => rowNamed(page, "Expire after 7 days?").click());
+  layOut(page, 880);
+  assert.deepEqual(columnsShown(page), ["item"], "within the band it stays one column");
+  layOut(page, 900);
+  assert.deepEqual(columnsShown(page), ["list", "item"]);
+  assert.deepEqual(
+    listed(page).filter((row) => row.startsWith("▸")),
+    ["▸ *Expire after 7 days?"],
+  );
+  assert.equal(page.querySelector(".inbox-view-items button.inbox-back"), null);
+  layOut(page, 800);
+  assert.deepEqual(columnsShown(page), ["item"], "an item a press opened stays open");
 });
 
 /** An answer the act gives the renderer, the view it carries settled now. */

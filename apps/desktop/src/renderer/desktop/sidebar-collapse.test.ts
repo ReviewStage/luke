@@ -302,3 +302,52 @@ test("a floating sidebar left for Settings by its chord is away when the plans c
   act(() => back.click());
   assert.equal(standing(page), "away");
 });
+
+test("Escape puts a peek away while the keyboard stays in the work under it, and the window's layers beneath do not hear it", () => {
+  const page = mount(1000);
+  const main = page.querySelector("main.desktop-main");
+  const edge = page.querySelector("[data-sidebar-peek-edge]");
+  assert.ok(main && edge);
+  const work = main.querySelector<HTMLButtonElement>("button");
+  assert.ok(work, "the work offers a press to hold the keyboard");
+  work.focus();
+  pointerCross(main, edge);
+  assert.equal(standing(page), "floating");
+  const press = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+  act(() => {
+    work.dispatchEvent(press);
+  });
+  assert.deepEqual([standing(page), press.defaultPrevented], ["away", true]);
+});
+
+test("a dialog raised from the open sidebar takes Escape first, leaving the sidebar open behind it", () => {
+  const page = mount(1000);
+  act(() => toggle(page).click());
+  const dialog = document.body.appendChild(document.createElement("div"));
+  dialog.setAttribute("role", "dialog");
+  const field = dialog.appendChild(document.createElement("button"));
+  field.focus();
+  const press = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+  act(() => {
+    field.dispatchEvent(press);
+  });
+  assert.deepEqual([standing(page), press.defaultPrevented], ["floating", false]);
+});
+
+test("a peek opened by a press on no control keeps the keyboard in the work, and Escape there still puts it away", () => {
+  const page = mount(1000);
+  const main = page.querySelector("main.desktop-main");
+  const edge = page.querySelector("[data-sidebar-peek-edge]");
+  const work = main?.querySelector<HTMLButtonElement>("button");
+  assert.ok(main && edge && work);
+  work.focus();
+  pointerCross(main, edge);
+  pressDown(sidebarOf(page).querySelector(".sidebar-rule") ?? sidebarOf(page));
+  pointerCross(sidebarOf(page), main);
+  assert.equal(standing(page), "floating", "pressed, the peek is open");
+  const press = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+  act(() => {
+    work.dispatchEvent(press);
+  });
+  assert.deepEqual([standing(page), press.defaultPrevented], ["away", true]);
+});

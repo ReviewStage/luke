@@ -19,10 +19,11 @@ import {
 } from "@luke/features/inbox-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import type { CodeRef, PlanSummary } from "@luke/features/plan-wire";
-import { ChevronRightIcon } from "@luke/ui";
+import { BackIcon, ChevronRightIcon } from "@luke/ui";
 import { copiedLines, fileRefText } from "@luke/voice/code-pane-model";
 import { CheckIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { APP_COMMAND } from "#shared/shortcuts";
 import { Message, MessageContent } from "../ai-elements/message";
 import {
   PROMPT_INPUT_STATUS,
@@ -103,7 +104,7 @@ import type { InboxImage, PlanInboxControl } from "./use-plan-inbox";
  * naming a newer Luke, so the rest still reads. The pane's bar is its
  * path, plan › agent, each crumb drawn as its tab in the plan's column,
  * opening what it names and hanging the card its sidebar row or tab
- * hangs. Wherever the thread names the agent, its bylines and the line
+ * hangs, after a way back to the list where the item stands alone. Wherever the thread names the agent, its bylines and the line
  * saying an answer was sent to it, the name is the agent's own reference
  * (`agent-ref.tsx`): its tab's card on hover, its tab on a press, an
  * archived agent's card saying so. Every time shows its moment in the
@@ -142,6 +143,9 @@ const THREAD_TIME_CLASS =
 
 /** What the box's Send is called. */
 const SEND = "Send to agent";
+
+/** What the way back from an item standing alone to the list says it does. */
+const BACK_TO_INBOX = "Back to inbox";
 
 /** A link block: a press where it is a web page, as a transcript's links are, else its label with the address beside it to copy. */
 function LinkBlock({
@@ -938,6 +942,9 @@ function Crumbs({
  * stand with the developer's pick marked, and the developer's reply follows
  * as their bubble, with what they did, when, and whether it reached the
  * agent; or the agent's own message says it took the item back, and why.
+ * Where the item stands alone, the whole Inbox wide, the crumbs follow a
+ * way back to the list (`inbox-columns.ts`), its tooltip naming Back's
+ * chord, which goes back as Escape does.
  */
 export function InboxPane({
   plan,
@@ -945,6 +952,8 @@ export function InboxPane({
   control,
   agents,
   doors,
+  hidden,
+  onBack,
 }: {
   plan: PlanSummary;
   item: InboxItem;
@@ -952,6 +961,10 @@ export function InboxPane({
   control: PlanInboxControl;
   agents: CodingAgentsControl;
   doors: InboxPaneDoors;
+  /** Whether the list stands alone in the item's place. */
+  hidden: boolean;
+  /** Goes back to the list, where the item stands alone. */
+  onBack: (() => void) | undefined;
 }): React.JSX.Element {
   const now = useMinute();
   const by: ItemAgent = {
@@ -962,8 +975,16 @@ export function InboxPane({
   const open = item.status === INBOX_STATUS.OPEN;
   const draft = control.draftOf(item);
   return (
-    <section className="inbox-view-items" aria-label={cardTitle(item.title)}>
+    <section className="inbox-view-items" aria-label={cardTitle(item.title)} hidden={hidden}>
       <header className="desktop-toolbar">
+        {onBack === undefined ? null : (
+          <Tooltip label={BACK_TO_INBOX} command={APP_COMMAND.BACK}>
+            <button type="button" className="toolbar-button inbox-back" onClick={onBack}>
+              <BackIcon />
+              Inbox
+            </button>
+          </Tooltip>
+        )}
         <Crumbs plan={plan} by={by} doors={doors} />
       </header>
       <div className="desktop-inbox">
