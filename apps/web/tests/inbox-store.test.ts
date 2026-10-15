@@ -133,7 +133,7 @@ const openPlanlessAgent = openPlanlessAgentOf(false);
 
 it.layer(getTestDB())("the inbox store", (it) => {
   it.effect(
-    "the account's read carries an open item of an agent with no plan under its own keys, by its automation and repository, for every member of the workspace and no one else, never among the plans' items, and names a personal automation only to who may read it",
+    "the account's read carries an open item of an agent with no plan under its own keys, by its automation and repository, for every member of the workspace and no one else, never among the plans' items, and names a personal automation, by name or id, only to who may read it",
     () =>
       Effect.gen(function* () {
         const { agent, workspaceId, automationId } = yield* openPlanlessAgentOf(true);
@@ -163,7 +163,7 @@ it.layer(getTestDB())("the inbox store", (it) => {
         assert.ok(!theirs.items.some((entry) => entry.id === posted.success.id));
         assert.deepEqual([others.planless, others.automations], [[], []]);
 
-        // Made personal, the automation's runs stay the workspace's, and its name its creator's.
+        // Made personal, the automation's runs stay the workspace's, and which automation it is its creator's.
         yield* Database.use((db) =>
           db
             .update(automationTable)
@@ -173,12 +173,20 @@ it.layer(getTestDB())("the inbox store", (it) => {
         const teammateRead = yield* accountInboxPast(teammate, INBOX_CURSOR_START);
         const creatorRead = yield* accountInboxPast(agent.userId, INBOX_CURSOR_START);
         assert.deepEqual(
-          teammateRead.planless?.map((entry) => [entry.id, entry.automationName]),
-          [[posted.success.id, null]],
+          teammateRead.planless?.map((entry) => [
+            entry.id,
+            entry.automationId,
+            entry.automationName,
+          ]),
+          [[posted.success.id, null, null]],
         );
         assert.deepEqual(
-          creatorRead.planless?.map((entry) => entry.automationName),
-          ["Flaky-test sweep"],
+          teammateRead.automations?.map((group) => [group.automationId, group.items]),
+          [[null, 1]],
+        );
+        assert.deepEqual(
+          creatorRead.planless?.map((entry) => [entry.automationId, entry.automationName]),
+          [[automationId, "Flaky-test sweep"]],
         );
       }),
   );

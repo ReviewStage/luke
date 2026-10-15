@@ -564,7 +564,7 @@ const findPlanlessWaitingItems = SqlSchema.findAll({
           agentId: inboxItem.agentId,
           agentTitle: codingAgent.title,
           agentModel: codingAgent.model,
-          automationId: codingAgent.automationId,
+          automationId: automation.id,
           automationName: automation.name,
           repository: codingAgent.repository,
           title: inboxItem.title,
@@ -575,7 +575,7 @@ const findPlanlessWaitingItems = SqlSchema.findAll({
         })
         .from(inboxItem)
         .innerJoin(codingAgent, eq(codingAgent.id, inboxItem.agentId))
-        // The automation's name is told only to an account that may read the automation itself.
+        // The automation, its id as its name, is told only to an account that may read the automation itself.
         .leftJoin(
           automation,
           and(eq(automation.id, codingAgent.automationId), automationReadableBy(userId)),
@@ -641,7 +641,8 @@ const AutomationItemsRowSchema = Schema.Struct({
  * Every automation whose runs' agents with no plan hold an item in the
  * account's workspaces, open or settled, whichever member's agent posted
  * it, the automation whose item changed latest first, as the plans are
- * listed.
+ * listed; one the account may not read is listed as none, beside the
+ * agents no standing automation names.
  */
 const findAutomationsWithItems = SqlSchema.findAll({
   Request: AccountRequestSchema,
@@ -649,12 +650,17 @@ const findAutomationsWithItems = SqlSchema.findAll({
   execute: ({ userId }) =>
     Database.use((db) =>
       db
-        .select({ automationId: codingAgent.automationId, items: count(), updatedAt: LATEST_ITEM })
+        .select({ automationId: automation.id, items: count(), updatedAt: LATEST_ITEM })
         .from(inboxItem)
         .innerJoin(codingAgent, eq(codingAgent.id, inboxItem.agentId))
+        // An automation the account may not read groups with the agents no standing automation names.
+        .leftJoin(
+          automation,
+          and(eq(automation.id, codingAgent.automationId), automationReadableBy(userId)),
+        )
         .where(and(isNull(inboxItem.planId), itemReachableBy(userId)))
-        .groupBy(codingAgent.automationId)
-        .orderBy(desc(LATEST_ITEM), desc(codingAgent.automationId)),
+        .groupBy(automation.id)
+        .orderBy(desc(LATEST_ITEM), desc(automation.id)),
     ),
 });
 
