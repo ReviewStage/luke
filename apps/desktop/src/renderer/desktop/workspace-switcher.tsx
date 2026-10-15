@@ -18,7 +18,7 @@ import { TILE_SIZE, WorkspaceTile } from "./workspace-tile";
  * of every workspace the account is a member of from its left edge, each by
  * its tile, the listed one checked and each other counting what waits on the
  * developer there, as a dot by the head's chevron says something does
- * (`workspace-inbox.ts`), then New workspace, which asks a name
+ * (`use-plans-tab.ts`), then New workspace, which asks a name
  * and lists the workspace made, and Workspace settings, which opens Settings
  * on the listed workspace's page, where its members and its GitHub are
  * managed. Nothing else stands in the menu. The head stands whenever an
