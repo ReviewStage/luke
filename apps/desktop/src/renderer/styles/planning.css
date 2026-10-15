@@ -187,21 +187,18 @@
   color: var(--text-primary);
 }
 
-/* The repository as a chip (plan-crumb.tsx): a pill at the crumb's own
-   type, smaller than the composer's, its owner's picture before its name. */
-.plan-crumb .plan-crumb-repository {
-  height: 22px;
-  min-height: 0;
-  padding: 0 var(--space-6) 0 var(--space-4);
-  gap: var(--space-4);
-  font-size: 12px;
-  font-weight: 500;
+/* The repository drawn as the workspace before it is (plan-crumb.tsx): its
+   owner's picture at the workspace tile's size, then its name cut short
+   rather than wrapped. It presses nowhere, so it wears no hover fill. */
+.plan-crumb-repository :is(.repository-picture, .provider-mark) {
+  width: var(--menu-glyph);
+  height: var(--menu-glyph);
 }
 
-.plan-crumb .plan-crumb-repository :is(.repository-picture, .provider-mark) {
-  width: 14px;
-  height: 14px;
-  border-radius: 3px;
+.plan-crumb-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* The repository's card names its default branch beside a branch glyph. */

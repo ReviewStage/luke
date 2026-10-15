@@ -2,13 +2,11 @@ import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import type { PlanningRepositoriesAnswer } from "@luke/features/planning-view";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { SETTINGS_SECTION, SETTINGS_VIEW } from "@luke/settings/settings-views";
-import { ComposeIcon, ExternalIcon, ProviderMark } from "@luke/ui";
+import { ProviderMark } from "@luke/ui";
 import { memberActor, ROLE_WORDS } from "@luke/ui/actor-model";
 import { ChevronRightIcon, GitBranchIcon, LockIcon } from "lucide-react";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, ActorStack, YouBadge } from "../actor-ref";
-import { CHIP_LOOK, Chip } from "../chip";
-import { ActionMenu, dropBelowStart, type MenuAction, useActionMenu } from "../desktop/action-menu";
 import { WORKSPACE_REF_SIZE, WorkspaceCard, WorkspaceRef } from "../desktop/workspace-ref";
 import { WorkspaceTile } from "../desktop/workspace-tile";
 import { CardHead, CardNote, CardRule, HoverCard } from "../hover-card";
@@ -18,7 +16,7 @@ import { RepositoryPicture } from "../repository-picture";
 import { Tooltip } from "../tooltip";
 
 /**
- * plan-crumb.tsx -- the line over a plan's title that says where it lives and who can edit it: "Acme › acme-corp/relay", then "5 can edit".
+ * plan-crumb.tsx -- the line over a plan's title that says where it lives and who can edit it: "Acme › relay", then "5 can edit".
  *
  * A plan belongs to one workspace, and everyone in it can read and edit the
  * plan, join its calls, and message its agents, so the plan says so where
@@ -27,10 +25,11 @@ import { Tooltip } from "../tooltip";
  * the workspace's tile and name (`workspace-ref.tsx`), which opens that
  * workspace's home page, the window switching to it first where another is
  * listed, and hangs the workspace's card. Then, where the plan is about a
- * repository, the repository as a chip: its owner's picture and `owner/name`,
- * hanging a card saying its default branch and the workspace's GitHub
- * account it comes through, and dropping a menu: Open on GitHub, New plan in
- * this repository, and Change repository where the plan takes one. At its end
+ * repository, the repository drawn as the workspace is: its owner's picture
+ * and its name alone, as the sidebar says it, hanging a card saying its
+ * `owner/name`, its default branch, and the workspace's GitHub account it
+ * comes through. It presses nowhere: the plan's own menu opens it on GitHub
+ * and changes it, and the sidebar starts a new task in it. At its end
  * stands who can edit: the first few members' faces and "5 can edit", or a
  * lock and "Only you" for a workspace of one. Resting on it hangs a card
  * listing everyone by name and role, and pressing it opens the workspace's
@@ -154,16 +153,14 @@ function People({
   );
 }
 
-/** What the repository's chip reaches: its owner's picture, its default branch, and its menu's presses. */
+/** What the repository's crumb says and reaches: its name, its owner's picture, and its default branch. */
 interface RepositoryCrumbDoors {
+  /** Says a repository as the sidebar's header does: its name, or `owner/name` where another shares the name. */
+  readonly label: (repository: string) => string;
   /** Whether owners' pictures are drawn at all: not in a fixture run. */
   readonly pictures: boolean;
   /** Reads the repositories the plan's workspace reaches, which say each one's default branch. */
   readonly read: () => Promise<PlanningRepositoriesAnswer>;
-  readonly onOpenGitHub: () => void;
-  readonly onNewPlanIn: (repository: string) => void;
-  /** Change repository, where the plan takes one: not while it is archived. */
-  readonly onChange: (() => void) | undefined;
 }
 
 /** Where the crumb's presses go. */
@@ -207,7 +204,7 @@ function RepositoryCard({
   branch: DefaultBranch;
   onShown: () => void;
 }): React.JSX.Element {
-  // Note that asking twice reads once, because the chip holds the read.
+  // Note that asking twice reads once, because the crumb holds the read.
   useEffect(() => onShown(), [onShown]);
   const { github } = workspace;
   return (
@@ -239,7 +236,7 @@ function RepositoryCard({
   );
 }
 
-/** The repository as a chip: its owner's picture and `owner/name`, its card on rest, and its menu on a press. */
+/** The repository as the workspace stands before it: its owner's picture and its name, its card on rest. */
 function RepositoryCrumb({
   repository,
   workspace,
@@ -249,7 +246,6 @@ function RepositoryCrumb({
   workspace: Workspace;
   doors: RepositoryCrumbDoors;
 }): React.JSX.Element {
-  const menu = useActionMenu(true);
   const [branch, setBranch] = useState<DefaultBranch>(undefined);
   const reading = useRef(false);
   const readBranch = () => {
@@ -260,64 +256,28 @@ function RepositoryCrumb({
       () => setBranch(null),
     );
   };
-  const actions: MenuAction[] = [
-    { label: "Open on GitHub", icon: <ExternalIcon />, onSelect: doors.onOpenGitHub },
-    {
-      label: "New task in this repository",
-      icon: <ComposeIcon />,
-      onSelect: () => doors.onNewPlanIn(repository),
-    },
-  ];
-  const change: MenuAction[] =
-    doors.onChange === undefined
-      ? []
-      : [
-          {
-            label: "Change repository",
-            icon: <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />,
-            onSelect: doors.onChange,
-          },
-        ];
   return (
-    <>
-      <Tooltip
-        label={repository}
-        card={
-          menu.drawn === undefined ? (
-            <RepositoryCard
-              repository={repository}
-              workspace={workspace}
-              pictures={doors.pictures}
-              branch={branch}
-              onShown={readBranch}
-            />
-          ) : undefined
-        }
-      >
-        <Chip
-          look={CHIP_LOOK.PILL}
-          className="plan-crumb-repository"
-          aria-label={`Repository: ${repository}`}
-          chevron
-          {...menu.trigger(dropBelowStart)}
-        >
-          <RepositoryPicture
-            repository={repository}
-            pictures={doors.pictures}
-            fallback={<ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />}
-          />
-          <span className="chip-name">{repository}</span>
-        </Chip>
-      </Tooltip>
-      {menu.drawn === undefined ? null : (
-        <ActionMenu
-          label="Repository"
-          menu={menu.drawn}
-          groups={change.length === 0 ? [actions] : [actions, change]}
-          onClose={menu.close}
+    <Tooltip
+      label={repository}
+      card={
+        <RepositoryCard
+          repository={repository}
+          workspace={workspace}
+          pictures={doors.pictures}
+          branch={branch}
+          onShown={readBranch}
         />
-      )}
-    </>
+      }
+    >
+      <span className="plan-crumb-item plan-crumb-repository">
+        <RepositoryPicture
+          repository={repository}
+          pictures={doors.pictures}
+          fallback={<ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />}
+        />
+        <span className="plan-crumb-name">{doors.label(repository)}</span>
+      </span>
+    </Tooltip>
   );
 }
 

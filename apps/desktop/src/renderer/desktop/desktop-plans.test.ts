@@ -291,43 +291,47 @@ test("the crumb's workspace opens that workspace's home page, the window switchi
   assert.deepEqual(asked, ["home", `choose ${personal.id}`, "home"]);
 });
 
-test("the crumb's New task in this repository starts in the plan's own workspace, the window switching to it first where another is listed", () => {
-  const acme = { id: "workspace-acme", name: "Acme", role: WORKSPACE_ROLE.MEMBER, github: null };
-  const personal = { ...acme, id: PLAN.workspaceId, name: "Personal" };
+test("the crumb says the plan's repository as the sidebar does: its name alone, or owner/name where another listed shares the name", () => {
+  const home = {
+    id: PLAN.workspaceId,
+    name: "Personal",
+    role: WORKSPACE_ROLE.MEMBER,
+    github: null,
+  };
   const plan = { ...PLAN, repository: "acme/web" };
-  const asked: string[] = [];
-  const container = document.body.appendChild(document.createElement("div"));
-  const root = createRoot(container);
-  act(() =>
-    root.render(
-      onRegistry(
-        AtomRegistry.make(),
-        createElement(DesktopPlans, {
-          summary: UNPINNED_SUMMARY,
-          looks: NO_LOOKS,
-          plans: plansControl({
-            page: PLANS_PAGE.DOCUMENT,
-            activePlanId: plan.id,
-            region: { kind: DOCUMENT_REGION.READY, plan },
-            workspaces: [personal, acme],
-            workspace: acme,
-            onChooseWorkspace: (workspaceId) => asked.push(`choose ${workspaceId}`),
-            onNewPlanIn: (repository) => asked.push(`new plan in ${repository}`),
+  const summary = { ...plan, updatedAt: 2 };
+  const said = (others: readonly string[]) => {
+    const container = document.body.appendChild(document.createElement("div"));
+    const root = createRoot(container);
+    const listed = others.map((repository, at) => ({
+      ...summary,
+      id: `plan-${at}`,
+      repository,
+    }));
+    act(() =>
+      root.render(
+        onRegistry(
+          AtomRegistry.make(),
+          createElement(DesktopPlans, {
+            summary: UNPINNED_SUMMARY,
+            looks: NO_LOOKS,
+            plans: plansControl({
+              page: PLANS_PAGE.DOCUMENT,
+              activePlanId: plan.id,
+              region: { kind: DOCUMENT_REGION.READY, plan },
+              workspaces: [home],
+              workspace: home,
+              plans: [summary, ...listed],
+            }),
           }),
-        }),
+        ),
       ),
-    ),
-  );
-  const chip = container.querySelector<HTMLButtonElement>(".plan-crumb-repository");
-  assert.ok(chip, "the crumb names the plan's repository as a chip");
-  act(() => chip.click());
-  const item = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
-    (each) => each.textContent === "New task in this repository",
-  );
-  assert.ok(item, "the chip's menu offers New task in this repository");
-  act(() => item.click());
-  act(() => root.unmount());
-  container.remove();
+    );
+    const words = container.querySelector(".plan-crumb-repository")?.textContent;
+    act(() => root.unmount());
+    container.remove();
+    return words;
+  };
 
-  assert.deepEqual(asked, [`choose ${personal.id}`, "new plan in acme/web"]);
+  assert.deepEqual([said([]), said(["acme/api"]), said(["other/web"])], ["web", "web", "acme/web"]);
 });
