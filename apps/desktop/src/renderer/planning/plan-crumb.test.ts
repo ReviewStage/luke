@@ -15,6 +15,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
+import { signedInAs } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { MemberDirectory } from "../member-directory";
 import { OpenSettingsProvider } from "../open-settings";
@@ -36,6 +37,13 @@ const ACME: Workspace = {
   github: null,
   memberCount: 3,
 };
+
+/** Main's document with Sam, the reader, signed in. */
+const SIGNED_IN_AS_SAM = signedInAs({
+  id: "user-sam",
+  email: "sam@example.com",
+  name: "Sam Okafor",
+});
 
 /** Acme as a service that counts no members answers it. */
 const { memberCount: _uncounted, ...UNCOUNTED } = ACME;
@@ -107,6 +115,8 @@ async function crumb(
     configurable: true,
     value: {
       recordSurfaceEvent: () => undefined,
+      onAppState: () => () => undefined,
+      requestAppState: () => Promise.resolve(SIGNED_IN_AS_SAM),
       act: (request: Act): Promise<ActOutcome> =>
         Promise.resolve(
           request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ && held !== undefined
@@ -377,4 +387,18 @@ test("the reader's own task says it was created by you, and a task whose creator
 
   assert.equal(await said(mine), "Created by S you");
   assert.equal(await said(undefined), undefined);
+});
+
+test("a task the list names by its owner's id alone is the reader's own where that id is theirs, though the members could not be read", async () => {
+  const { nav } = await crumb(ACME, "acme-corp/relay", undefined, false, {
+    ownerId: "user-sam",
+    createdAt: 1,
+  });
+  const people =
+    nav.querySelector<HTMLElement>(".plan-crumb-people") ?? assert.fail("who can edit");
+  act(() => {
+    people.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+  });
+  const line = document.querySelector("[data-people-card] .plan-crumb-created")?.textContent;
+  assert.equal(line?.replace(/ · .*$/u, ""), "Created by S you");
 });

@@ -4,12 +4,12 @@ import { moreText, PLAN_ROW_MARK, planRowMark } from "@luke/features/plan-agents
 import type { PlanAgentLine, PlanPullRequestLine, PlanSummary } from "@luke/features/plan-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { ProviderMark } from "@luke/ui";
-import { ACTOR_KIND, actorName, creatorActor, SOMEONE_REASON } from "@luke/ui/actor-model";
+import { ACTOR_KIND, actorName, SOMEONE_REASON } from "@luke/ui/actor-model";
 import { repositoryPageUrl } from "@luke/ui/planning-model";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
 import { AttentionMark } from "../attention-mark";
 import { CardHead, CardRule, HoverCard } from "../hover-card";
-import { useMemberDirectory } from "../member-directory";
+import { useCreator } from "../member-directory";
 import { agentTabLabel, pullRequestNumberLabel } from "../planning/coding-agent-model";
 import { PullRequestMark } from "../planning/pull-request-mark";
 import { RelativeTime } from "../planning/relative-time";
@@ -166,8 +166,16 @@ export function RepositoryDetail({
  * Charles Pan · 3d ago", "Created by you", or a member who left saying so,
  * read against the members of the directory around the card.
  */
-function CreatorDetail({ plan, now }: { plan: PlanSummary; now: number }): React.JSX.Element {
-  const creator = creatorActor(plan, useMemberDirectory(), undefined);
+function CreatorDetail({
+  plan,
+  readerId,
+  now,
+}: {
+  plan: PlanSummary;
+  readerId: string | undefined;
+  now: number;
+}): React.JSX.Element {
+  const creator = useCreator(plan, readerId);
   const left = creator.kind === ACTOR_KIND.SOMEONE && creator.reason === SOMEONE_REASON.FORMER;
   return (
     <span className="plan-card-detail plan-card-creator">
@@ -262,10 +270,13 @@ export function PlanCard({
   onShowAgent,
   stranded,
   shared = false,
+  readerId,
 }: {
   plan: PlanSummary;
   /** Whether others share the plan's workspace, where the card says who created it. */
   shared?: boolean;
+  /** The reader's account id, which says "you" of their own task outside a member directory. */
+  readerId?: string | undefined;
   /** The catalog as last read, which names each agent's model; empty before the first read. */
   models: readonly CatalogModel[];
   /** Whether owners' pictures are drawn at all: not in a fixture run. */
@@ -292,7 +303,7 @@ export function PlanCard({
         <RepositoryDetail repository={repository} pictures={pictures} onOpenGitHub={onOpenGitHub} />
       )}
       {shared && (plan.createdBy !== undefined || plan.ownerId !== undefined) ? (
-        <CreatorDetail plan={plan} now={now} />
+        <CreatorDetail plan={plan} readerId={readerId} now={now} />
       ) : null}
       {stranded === undefined ? null : (
         <span className="plan-card-detail">
@@ -340,6 +351,19 @@ export function PlanCard({
 }
 
 /**
+ * Whether others share a plan's workspace: more than one member counted, or,
+ * from a service that counts none, any workspace but the account's first.
+ */
+function sharedWorkspace(
+  plans: Pick<PlansControl, "workspaces">,
+  plan: Pick<PlanSummary, "workspaceId">,
+): boolean {
+  const workspace = plans.workspaces.find((each) => each.id === plan.workspaceId);
+  if (workspace?.memberCount !== undefined) return workspace.memberCount > 1;
+  return workspace !== undefined && plans.workspaces[0]?.id !== workspace.id;
+}
+
+/**
  * The plan's card as every place naming the plan hangs it, read from the
  * window's plans: its sidebar row, its tab in its own column, and the
  * Inbox's crumb. An agent's line opens the plan on that agent's tab.
@@ -353,7 +377,8 @@ export function planCardOf(
     <PlanCard
       plan={plan}
       stranded={strandedHome(plans, plan)}
-      shared={(plans.workspaces.find((each) => each.id === plan.workspaceId)?.memberCount ?? 0) > 1}
+      shared={sharedWorkspace(plans, plan)}
+      readerId={plans.me}
       models={plans.agents.models ?? []}
       pictures={plans.repositories.pictures}
       now={now}

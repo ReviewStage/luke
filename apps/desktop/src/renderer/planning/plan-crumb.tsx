@@ -4,14 +4,14 @@ import type { PlanningRepositoriesAnswer } from "@luke/features/planning-view";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { SETTINGS_SECTION, SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { ProviderMark } from "@luke/ui";
-import { type Actor, actorName, creatorActor, memberActor, ROLE_WORDS } from "@luke/ui/actor-model";
+import { type Actor, actorName, memberActor, ROLE_WORDS } from "@luke/ui/actor-model";
 import { ChevronRightIcon, GitBranchIcon, LockIcon } from "lucide-react";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, ActorStack, YouBadge } from "../actor-ref";
 import { WORKSPACE_REF_SIZE, WorkspaceCard, WorkspaceRef } from "../desktop/workspace-ref";
 import { WorkspaceTile } from "../desktop/workspace-tile";
 import { CardHead, CardNote, CardRule, HoverCard } from "../hover-card";
-import { useMemberDirectory } from "../member-directory";
+import { useCreator, useMemberDirectory } from "../member-directory";
 import { useOpenSettings } from "../open-settings";
 import { RepositoryPicture } from "../repository-picture";
 import { Tooltip } from "../tooltip";
@@ -66,18 +66,13 @@ interface Creation {
 }
 
 /** What a task's creation says to the crumb; none where the list names no creator. */
-function creationOf(
+function useCreation(
   created: Pick<PlanSummary, "createdBy" | "ownerId" | "createdAt"> | undefined,
-  members: readonly WorkspaceMember[] | undefined,
-  readerId: string | undefined,
 ): Creation | undefined {
+  const creator = useCreator(created ?? {});
   const userId = created?.createdBy?.userId ?? created?.ownerId;
   if (created === undefined || userId === undefined) return undefined;
-  return {
-    creator: creatorActor(created, { members, readerId }, undefined),
-    userId,
-    at: created.createdAt,
-  };
+  return { creator, userId, at: created.createdAt };
 }
 
 /** The members with the task's creator first, the rest in the members' own order. */
@@ -369,7 +364,7 @@ export function PlanCrumb({
 }): React.JSX.Element {
   const openSettings = useOpenSettings();
   const { members, readerId } = useMemberDirectory();
-  const creation = creationOf(created, members, readerId);
+  const creation = useCreation(created);
   const count = editorsOf(workspace, members);
   const page = { page: SETTINGS_VIEW.WORKSPACE, workspaceId: workspace.id };
   return (

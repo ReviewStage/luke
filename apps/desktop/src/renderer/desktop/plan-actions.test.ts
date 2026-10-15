@@ -509,3 +509,22 @@ test("a task's card says who created it where others share its workspace, the re
   // A service that names no creator leaves the card as it was.
   assert.deepEqual(details(OTHER, STAGE), []);
 });
+
+test("a task's card says you of the reader's own task outside a member directory, and treats a workspace the service counts no members of as shared unless it is the account's first", () => {
+  const { memberCount: _uncounted, ...stage } = STAGE;
+  const { memberCount: _alone, ...personal } = PERSONAL;
+  const lines = (plan: PlanSummary, workspaces: readonly Workspace[]) => {
+    const plans = plansControl({ me: DEAN.userId, workspaces: [...workspaces] });
+    const card = mount(planCardOf(plans, plan, plan.updatedAt));
+    const said = [...card.querySelectorAll(".plan-card-detail")].map((line) =>
+      heard(line).replace(/ · .*$/u, ""),
+    );
+    unmountAll();
+    return said;
+  };
+  const mine = { ...OTHER, workspaceId: STAGE.id, ownerId: DEAN.userId, createdBy: DEAN };
+
+  assert.deepEqual(lines(mine, [PERSONAL, STAGE]), ["Created by you"]);
+  assert.deepEqual(lines(mine, [PERSONAL, stage]), ["Created by you"]);
+  assert.deepEqual(lines({ ...mine, workspaceId: PERSONAL.id }, [personal, stage]), []);
+});
