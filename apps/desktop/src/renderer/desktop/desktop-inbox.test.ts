@@ -1044,6 +1044,18 @@ test("a folded plan's items have no row, so K and J pass over them and the pager
   act(() => keys.unmount());
 });
 
+test("the chosen item keeps its place when its own plan folds, so J still reaches the rows below, and once left the folded rows are passed over", async () => {
+  const { page } = mount();
+  await settle();
+  const keys = standKeymap();
+  act(() => headerNamed(page, "Billing usage alerts").click());
+  pressKey("j");
+  assert.equal(readTitle(page), "Expire after 7 days?");
+  pressKey("k");
+  assert.equal(readTitle(page), "Expire after 7 days?", "the folded plan holds no row above");
+  act(() => keys.unmount());
+});
+
 /** An answer the act gives the renderer, the view it carries settled now. */
 function answered(value: CodingAgentInboxAnswerView): Promise<ReadOutcome> {
   return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
