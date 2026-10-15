@@ -1196,7 +1196,11 @@ function SidebarColumn({
               onClear={() => taskView.onCreatedBy(undefined)}
             />
           ) : null}
-          {createdBy !== undefined && tasks.length === 0 && plans.listRead && !plans.listFailed ? (
+          {createdBy !== undefined &&
+          tasks.length === 0 &&
+          !unlisted &&
+          plans.listRead &&
+          !plans.listFailed ? (
             <p className="sidebar-note">
               {createdBy === plans.me ? "None of your tasks here." : "None of their tasks here."}{" "}
               <button

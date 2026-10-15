@@ -359,3 +359,10 @@ test("in one run, a task with no repository says so on its row", async () => {
     face: true,
   });
 });
+
+test("an empty workspace under a filter says only that it holds no tasks", async () => {
+  const sidebar = await mountRead(ACME, []);
+  choose(sidebar, "Created by", "Me");
+  const notes = [...sidebar.querySelectorAll(".sidebar-note")].map((note) => note.textContent);
+  assert.deepEqual(notes, ["No tasks yet."]);
+});
