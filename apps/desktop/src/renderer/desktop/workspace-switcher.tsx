@@ -14,7 +14,9 @@ import { TILE_SIZE, WorkspaceTile } from "./workspace-tile";
  * sidebar's top left, where Slack, Linear, and Vercel name the scope
  * everything under it belongs to (`docs/proposals/workspace-clarity.md`,
  * variant A): the workspace's tile, its name, and under it who shares it,
- * "5 members", or "Personal workspace" for a workspace of one. A press
+ * "5 members", or "Personal workspace" for the account's own first
+ * workspace while no one else is in it (`automations-page.tsx` reads the
+ * first listed as the account's own too). A press
  * drops the menu of every workspace the account is a member of from its left
  * edge, each by its tile, the listed one checked, then New workspace, which
  * asks a name and lists the workspace made, and Workspace settings, which
@@ -48,19 +50,31 @@ function workspaceMenuGroups(
   ];
 }
 
-/** Who shares a workspace in words: "Personal workspace" for a workspace of one, its members counted otherwise, nothing from a service that does not count them. */
-export function sharedWords(count: number | undefined): string | undefined {
+/**
+ * Who shares a workspace in words: "Personal workspace" for the account's
+ * own first workspace while no one else is in it, its members counted
+ * otherwise, a team made a moment ago and joined by no one yet included;
+ * nothing from a service that does not count them.
+ */
+export function sharedWords(count: number | undefined, personal: boolean): string | undefined {
   if (count === undefined) return undefined;
-  return count <= 1 ? "Personal workspace" : `${count} members`;
+  if (count <= 1) return personal ? "Personal workspace" : "1 member";
+  return `${count} members`;
 }
 
 /** The head's line saying who shares the workspace, a people glyph before a team's members counted. */
-function SharedLine({ count }: { count: number | undefined }): React.JSX.Element | null {
-  const words = sharedWords(count);
+function SharedLine({
+  count,
+  personal,
+}: {
+  count: number | undefined;
+  personal: boolean;
+}): React.JSX.Element | null {
+  const words = sharedWords(count, personal);
   if (count === undefined || words === undefined) return null;
   return (
     <span className="sidebar-workspace-shared">
-      {count <= 1 ? null : <UsersIcon aria-hidden="true" />}
+      {personal && count <= 1 ? null : <UsersIcon aria-hidden="true" />}
       {words}
     </span>
   );
@@ -82,13 +96,14 @@ export function WorkspaceSwitcher({
   const menu = useActionMenu(plans.shown && inSight);
   const listed = plans.workspace;
   if (listed === undefined) return null;
+  const personal = plans.workspaces[0]?.id === listed.id;
   return (
     <div className="sidebar-workspace">
       <button
         type="button"
         className="sidebar-workspace-toggle"
         // The name a reader hears says who shares it too, since the label stands for the button's text.
-        aria-label={[`Workspace: ${listed.name}`, sharedWords(listed.memberCount)]
+        aria-label={[`Workspace: ${listed.name}`, sharedWords(listed.memberCount, personal)]
           .filter((part) => part !== undefined)
           .join(", ")}
         {...menu.trigger(dropBelowStart)}
@@ -96,7 +111,7 @@ export function WorkspaceSwitcher({
         <WorkspaceTile workspace={listed} size={TILE_SIZE.HEAD} />
         <span className="sidebar-workspace-copy">
           <span className="sidebar-workspace-name">{listed.name}</span>
-          <SharedLine count={listed.memberCount} />
+          <SharedLine count={listed.memberCount} personal={personal} />
         </span>
         <ChevronDownIcon />
       </button>

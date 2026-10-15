@@ -213,6 +213,18 @@ test("the dialog lists the other workspaces, disables one whose GitHub cannot re
   assert.equal(dialog(), null, "a move landed puts the dialog away");
 });
 
+test("a row calls the account's own first workspace personal while no one else is in it, and counts the one member of a team no one has joined yet", () => {
+  const personal: Workspace = { ...STUDIO, id: "ws-personal", name: "Dana", memberCount: 1 };
+  const fresh: Workspace = { ...NORTHWIND, id: "ws-fresh", name: "Platform", memberCount: 1 };
+  openMenu(openTab({ ...PLAN, repository: null }, [personal, STUDIO, fresh]));
+
+  const rows = [...chooseMove().querySelectorAll('[role="radio"] .move-row-line')].map(
+    (line) => line.textContent,
+  );
+
+  assert.deepEqual(rows, ["Personal workspace", "1 member"]);
+});
+
 test("a refused move keeps the dialog up, saying so under the list", async () => {
   openMenu(openTab({ ...PLAN, repository: null }, [STUDIO, NORTHWIND]));
   const moving = chooseMove();

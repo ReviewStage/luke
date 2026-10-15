@@ -285,10 +285,13 @@ test("each workspace in the menu wears its tile, its first letter, and a rename 
   assert.equal(tiles([{ ...PERSONAL, name: "🐙 Octo" }])[0]?.[0], "🐙");
 });
 
-test("the head says who shares the workspace, to the eye and to a screen reader: its members counted beside a people glyph, a personal workspace in words alone, and nothing where the service counts none", () => {
-  const shared = (memberCount?: number) => {
+test("the head says who shares the workspace, to the eye and to a screen reader: its members counted beside a people glyph, the account's own first workspace of one as personal in words alone, a team of one as its one member, and nothing where the service counts none", () => {
+  const shared = (memberCount?: number, first = true) => {
     const workspace = memberCount === undefined ? ACME : { ...ACME, memberCount };
-    const page = mount({ workspaces: [workspace], workspace });
+    const page = mount({
+      workspaces: first ? [workspace, PERSONAL] : [PERSONAL, workspace],
+      workspace,
+    });
     const head = page.switcher();
     const line = head?.querySelector(".sidebar-workspace-shared");
     const said = line ? [line.textContent, line.querySelectorAll("svg").length] : null;
@@ -304,5 +307,6 @@ test("the head says who shares the workspace, to the eye and to a screen reader:
     ["Personal workspace", 0],
     "Workspace: acme, Personal workspace",
   ]);
+  assert.deepEqual(shared(1, false), ["A", ["1 member", 1], "Workspace: acme, 1 member"]);
   assert.deepEqual(shared(undefined), ["A", null, "Workspace: acme"]);
 });
