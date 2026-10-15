@@ -84,6 +84,7 @@ it.layer(getTestDB())("an account's workspaces over effect/unstable/sql", (it) =
           slug: `personal-${userId}`,
           role: WORKSPACE_ROLE.OWNER,
           github: null,
+          memberCount: 1,
         },
       ]);
     }),
@@ -119,6 +120,7 @@ it.layer(getTestDB())("an account's workspaces over effect/unstable/sql", (it) =
           slug: `personal-${userId}`,
           role: WORKSPACE_ROLE.OWNER,
           github: null,
+          memberCount: 1,
         },
       ]);
     }),
@@ -151,6 +153,7 @@ it.layer(getTestDB())("an account's workspaces over effect/unstable/sql", (it) =
             slug: `personal-${userId}`,
             role: WORKSPACE_ROLE.OWNER,
             github: null,
+            memberCount: 1,
           },
         ]);
       }),
@@ -183,6 +186,7 @@ it.layer(getTestDB())("an account's workspaces over effect/unstable/sql", (it) =
             slug: listed?.slug,
             role: WORKSPACE_ROLE.OWNER,
             github: null,
+            memberCount: 1,
           },
         ]);
       }),
@@ -208,9 +212,10 @@ it.layer(getTestDB())("an account's workspaces over effect/unstable/sql", (it) =
             slug: `personal-${owner}`,
             role: WORKSPACE_ROLE.OWNER,
             github: null,
+            memberCount: 1,
           },
-          { ...acme, name: "Acme", role: WORKSPACE_ROLE.MEMBER, github: null },
-          { ...zeta, name: "Zeta", role: WORKSPACE_ROLE.OWNER, github: null },
+          { ...acme, name: "Acme", role: WORKSPACE_ROLE.MEMBER, github: null, memberCount: 2 },
+          { ...zeta, name: "Zeta", role: WORKSPACE_ROLE.OWNER, github: null, memberCount: 2 },
         ]);
         assert.deepEqual(yield* listWorkspaces(teammate), [
           {
@@ -219,9 +224,10 @@ it.layer(getTestDB())("an account's workspaces over effect/unstable/sql", (it) =
             slug: `personal-${teammate}`,
             role: WORKSPACE_ROLE.OWNER,
             github: null,
+            memberCount: 1,
           },
-          { ...acme, name: "Acme", role: WORKSPACE_ROLE.OWNER, github: null },
-          { ...zeta, name: "Zeta", role: WORKSPACE_ROLE.MEMBER, github: null },
+          { ...acme, name: "Acme", role: WORKSPACE_ROLE.OWNER, github: null, memberCount: 2 },
+          { ...zeta, name: "Zeta", role: WORKSPACE_ROLE.MEMBER, github: null, memberCount: 2 },
         ]);
       }),
   );
@@ -289,6 +295,7 @@ it.effect(
             slug: gracesSlug?.slug,
             role: WORKSPACE_ROLE.OWNER,
             github: null,
+            memberCount: 1,
           },
         ]);
       }).pipe(Effect.provide(database));
