@@ -186,9 +186,28 @@ function changeRuns(rows: readonly DiffRow[]): readonly ChangeRun[] {
   return runs;
 }
 
-/** The lines of a run, git's notes left out, which pair line for line with the other side's. */
-function linesOf(run: readonly DiffRow[]): readonly DiffRow[] {
-  return run.filter((row) => row.kind !== DIFF_ROW.NOTE);
+/** One line of a run and git's notes after it, which stand under it on its own side. */
+interface NotedLine {
+  readonly line: DiffRow;
+  readonly notes: readonly DiffRow[];
+}
+
+/** A run's lines, each with the notes that follow it; a run starts with a line, since a note joins the run of the line before it. */
+function notedLines(run: readonly DiffRow[]): readonly NotedLine[] {
+  const lines: { line: DiffRow; notes: DiffRow[] }[] = [];
+  for (const row of run) {
+    const before = lines.at(-1);
+    if (row.kind === DIFF_ROW.NOTE && before !== undefined) before.notes.push(row);
+    else lines.push({ line: row, notes: [] });
+  }
+  return lines;
+}
+
+/** Two lines side by side, either none, then the notes under each, row for row. */
+function besideEachOther(old: NotedLine | undefined, next: NotedLine | undefined): SplitRow[] {
+  const length = Math.max(old?.notes.length ?? 0, next?.notes.length ?? 0);
+  const notes = Array.from({ length }, (_, at) => ({ old: old?.notes[at], new: next?.notes[at] }));
+  return [{ old: old?.line, new: next?.line }, ...notes];
 }
 
 /** Joins each span to the one before it where both are changed or both are not. */
@@ -238,8 +257,8 @@ export function markChangedWords(rows: readonly DiffRow[]): readonly DiffRow[] {
   const marked = new Map<DiffRow, DiffRow>();
   for (const run of changeRuns(rows)) {
     if ("context" in run) continue;
-    const olds = linesOf(run.removed);
-    const news = linesOf(run.added);
+    const olds = notedLines(run.removed).map((noted) => noted.line);
+    const news = notedLines(run.added).map((noted) => noted.line);
     olds.slice(0, news.length).forEach((old, at) => {
       const partner = news[at];
       const words = partner === undefined ? undefined : changedWords(old.text, partner.text);
@@ -254,13 +273,17 @@ export function markChangedWords(rows: readonly DiffRow[]): readonly DiffRow[] {
 /**
  * A hunk's rows laid side by side: each removed line beside the added line
  * at the same place in the run after it, the longer run's rest beside
- * nothing, and each line of context on both sides.
+ * nothing, and each line of context on both sides. Note that git's notes
+ * are not lines and pair with none: each stands under the line it speaks
+ * of, beside nothing.
  */
 export function splitRows(rows: readonly DiffRow[]): readonly SplitRow[] {
   return changeRuns(rows).flatMap((run) => {
     if ("context" in run) return [{ old: run.context, new: run.context }];
-    const length = Math.max(run.removed.length, run.added.length);
-    return Array.from({ length }, (_, at) => ({ old: run.removed[at], new: run.added[at] }));
+    const olds = notedLines(run.removed);
+    const news = notedLines(run.added);
+    const length = Math.max(olds.length, news.length);
+    return Array.from({ length }, (_, at) => besideEachOther(olds[at], news[at])).flat();
   });
 }
 

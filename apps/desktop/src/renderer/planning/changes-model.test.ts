@@ -78,6 +78,18 @@ test("git's note stays on the side of the line it follows, and on both sides aft
   ]);
 });
 
+test("git's note pairs with no line, so a longer run's rest still stands beside nothing after it", () => {
+  const rows = rowsOf(
+    ["@@ -1,2 +1 @@", "-first", "-second", "+only", "\\ No newline at end of file"].join("\n"),
+  );
+
+  assert.deepEqual(splitRows(rows).map(sides), [
+    ["first", "only"],
+    [null, " No newline at end of file"],
+    ["second", null],
+  ]);
+});
+
 test("a removed line and the added line beside it mark the words only their own side holds, and every other row is left whole", () => {
   const rows = rowsOf(
     [
