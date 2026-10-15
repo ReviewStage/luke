@@ -4613,10 +4613,19 @@ body:has(.app-stage[data-capture="true"])
   min-width: 0;
 }
 
+/* The Runs panel's pane, its width the developer's (`useRunsPanel`), its left
+   edge the side panel's own resize edge. */
+.automation-runs-pane {
+  position: relative;
+  display: flex;
+  min-height: 0;
+  flex: none;
+}
+
 .automation-runs {
   display: flex;
-  width: 340px; /* off-scale */
-  flex: none;
+  min-width: 0;
+  flex: 1;
   flex-direction: column;
   gap: var(--space-8);
   overflow-y: auto;

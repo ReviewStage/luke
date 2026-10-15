@@ -962,6 +962,47 @@ test("the list's Owner column draws the workspace by its tile, the account's own
   assert.equal(markOf(FAILING.name), "someone");
 });
 
+test("the Runs panel hides and shows by its toggle and by the side panel's chord, and stays as it was left", async () => {
+  window.localStorage.clear();
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+  assert.ok(page.querySelector("aside[aria-label='Runs']"), "it stands at first");
+
+  act(() => button("Hide runs").click());
+  assert.equal(page.querySelector("aside[aria-label='Runs']"), null);
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  const again = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+  assert.equal(again.querySelector("aside[aria-label='Runs']"), null, "folded as it was left");
+  act(() => runAppCommand(APP_COMMAND.TOGGLE_SIDE_PANEL));
+  assert.ok(again.querySelector("aside[aria-label='Runs']"), "⌥⌘B brings it back");
+  window.localStorage.clear();
+});
+
+test("the Runs panel's edge resizes it within its bounds, and the width stands on the next page", async () => {
+  window.localStorage.clear();
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+  const pane = () => document.querySelector<HTMLElement>(".automation-runs-pane");
+  const edge = page.querySelector<HTMLElement>("[role=separator][aria-label='Resize runs']");
+  assert.ok(edge, "the panel has a resize edge");
+  assert.equal(pane()?.style.width, "340px");
+
+  act(() => edge.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true })));
+  assert.equal(pane()?.style.width, "356px", "the arrow away from the panel widens it");
+  act(() => edge.dispatchEvent(new KeyboardEvent("keydown", { key: "Home", bubbles: true })));
+  assert.equal(pane()?.style.width, "280px", "Home is its least width");
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+  assert.equal(pane()?.style.width, "280px");
+  window.localStorage.clear();
+});
+
 test("the list and an automation's page each say they are an experiment, and each Send feedback is about Automations", async () => {
   const list = mountPages({ kind: AUTOMATIONS_PAGE.LIST });
   await settle();

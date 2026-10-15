@@ -19,7 +19,9 @@ import { INBOX_GROUPING, type InboxGrouping } from "../planning/inbox-model";
  * and so are its two view choices, Needs you and how it groups, and its
  * list's width; a task's own Inbox keeps a Needs you of its own, one for
  * every task, apart from the window's; a fixture run draws no inbox, so it has nothing staged to
- * keep apart.
+ * keep apart. An automation's Runs panel keeps its width and whether it
+ * stands on the same terms, one for every automation, as the side panel
+ * keeps one for every plan.
  */
 
 /** Where the folds are kept in the renderer's storage. */
@@ -32,6 +34,14 @@ const STORAGE_KEY = {
   TASK_INBOX_WAITING_ONLY: "luke.taskInboxWaitingOnly",
   INBOX_GROUPING: "luke.inboxGrouping",
   INBOX_LIST_WIDTH: "luke.inboxListWidth",
+  RUNS_PANEL: "luke.automationRunsPanel",
+} as const;
+
+/** How wide an automation's Runs panel may stand, as the side panel is bounded. */
+export const RUNS_PANEL_WIDTH = {
+  MIN: 280,
+  MAX: 560,
+  DEFAULT: 340,
 } as const;
 
 /**
@@ -58,6 +68,11 @@ const storedPlans = Schema.fromJsonString(Schema.Array(Schema.String));
 
 /** How wide the Inbox's list stands. */
 const storedWidth = Schema.fromJsonString(Schema.Finite);
+
+/** How wide the Runs panel stands, and whether it stands at all. */
+const storedRunsPanel = Schema.fromJsonString(
+  Schema.Struct({ width: Schema.Finite, open: Schema.Boolean }),
+);
 
 /** How the Inbox groups its items. */
 const storedGrouping = Schema.fromJsonString(Schema.Literals(Object.values(INBOX_GROUPING)));
@@ -250,5 +265,40 @@ export function useInboxListWidth(): InboxListWidth {
       setWidth(next);
       writeKept(STORAGE_KEY.INBOX_LIST_WIDTH, storedWidth, next);
     },
+  };
+}
+
+/** A Runs panel width held within its bounds, in whole pixels. */
+function clampRunsWidth(width: number): number {
+  return Math.min(RUNS_PANEL_WIDTH.MAX, Math.max(RUNS_PANEL_WIDTH.MIN, Math.round(width)));
+}
+
+/** An automation's Runs panel: how wide it stands, whether it stands, and the presses that change them. */
+export interface RunsPanel {
+  /** Always within {@link RUNS_PANEL_WIDTH}. */
+  width: number;
+  open: boolean;
+  /** Asks for a width; it is clamped to the bounds before it is kept. */
+  onResize: (width: number) => void;
+  onToggle: () => void;
+}
+
+/** The Runs panel's width and fold, open at the default width until changed, and kept as they are. */
+export function useRunsPanel(): RunsPanel {
+  const [kept, setKept] = useState(() => {
+    const read = readKept(STORAGE_KEY.RUNS_PANEL, storedRunsPanel, {
+      width: RUNS_PANEL_WIDTH.DEFAULT,
+      open: true,
+    });
+    return { width: clampRunsWidth(read.width), open: read.open };
+  });
+  const keep = (next: { width: number; open: boolean }) => {
+    setKept(next);
+    writeKept(STORAGE_KEY.RUNS_PANEL, storedRunsPanel, next);
+  };
+  return {
+    ...kept,
+    onResize: (asked) => keep({ ...kept, width: clampRunsWidth(asked) }),
+    onToggle: () => keep({ ...kept, open: !kept.open }),
   };
 }

@@ -11,7 +11,9 @@ import { EmptyState } from "../empty-state";
 import { momentText, sinceText, useMinute } from "../planning/plan-time";
 import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { GLYPH_STATE, type GlyphState, StateGlyph, stateEndMark } from "../state-glyph";
+import { RUNS_PANEL_WIDTH, type RunsPanel } from "./folded-groups";
 import type { RunsRead } from "./use-automation-runs";
+import { EDGE_SIDE, useResizableEdge } from "./use-resizable-edge";
 
 /**
  * automation-runs-panel.tsx -- the panel on an automation's page's right: its runs, newest first, each opening its agent.
@@ -70,44 +72,67 @@ function RunRow({
   );
 }
 
-/** The runs panel: the runs, or that there are none yet, or that they could not be read. */
+/** What the room beside the panel keeps for the form, as the side panel keeps the document's. */
+const FORM_RESERVE = 480;
+
+/**
+ * The runs panel: the runs, or that there are none yet, or that they could
+ * not be read. Its left edge resizes it as the side panel's does, and a
+ * drag past its least width folds it away; nothing stands while it is folded.
+ */
 export function AutomationRunsPanel({
+  panel,
   created,
   runs,
   onRetry,
   onOpenAgent,
 }: {
+  /** How wide it stands and whether it stands, kept by the window (`folded-groups.ts`). */
+  panel: RunsPanel;
   /** Whether the automation exists yet, so has runs to read. */
   created: boolean;
   runs: RunsRead;
   onRetry: () => void;
   onOpenAgent: (agentId: string) => void;
-}): React.JSX.Element {
+}): React.JSX.Element | null {
   const now = useMinute();
+  const edge = useResizableEdge({
+    side: EDGE_SIDE.LEFT,
+    width: panel.width,
+    bounds: RUNS_PANEL_WIDTH,
+    reserve: () => FORM_RESERVE,
+    label: "Resize runs",
+    onResize: panel.onResize,
+    onToggleCollapsed: panel.onToggle,
+  });
+  if (!panel.open) return null;
   return (
-    <aside className="automation-runs" aria-label="Runs">
-      <h2 className="settings-group-title">Runs</h2>
-      {!created ? (
-        <EmptyState icon={<ClockIcon />} title={NO_RUNS_TITLE}>
-          Create it, then Run now to try it.
-        </EmptyState>
-      ) : runs === undefined ? null : "failed" in runs ? (
-        <ReadFailure
-          line="Its runs could not be read."
-          onRetry={onRetry}
-          place={READ_FAILURE_PLACE.INLINE}
-        />
-      ) : runs.runs.length === 0 ? (
-        <EmptyState icon={<ClockIcon />} title={NO_RUNS_TITLE}>
-          Run now to try it.
-        </EmptyState>
-      ) : (
-        <div className="automation-runs-list">
-          {runs.runs.map((run) => (
-            <RunRow key={run.id} run={run} now={now} onOpenAgent={onOpenAgent} />
-          ))}
-        </div>
-      )}
-    </aside>
+    <div className="automation-runs-pane" style={{ width: panel.width }}>
+      <div className="side-panel-resize" {...edge} />
+      <aside className="automation-runs" aria-label="Runs">
+        <h2 className="settings-group-title">Runs</h2>
+        {!created ? (
+          <EmptyState icon={<ClockIcon />} title={NO_RUNS_TITLE}>
+            Create it, then Run now to try it.
+          </EmptyState>
+        ) : runs === undefined ? null : "failed" in runs ? (
+          <ReadFailure
+            line="Its runs could not be read."
+            onRetry={onRetry}
+            place={READ_FAILURE_PLACE.INLINE}
+          />
+        ) : runs.runs.length === 0 ? (
+          <EmptyState icon={<ClockIcon />} title={NO_RUNS_TITLE}>
+            Run now to try it.
+          </EmptyState>
+        ) : (
+          <div className="automation-runs-list">
+            {runs.runs.map((run) => (
+              <RunRow key={run.id} run={run} now={now} onOpenAgent={onOpenAgent} />
+            ))}
+          </div>
+        )}
+      </aside>
+    </div>
   );
 }
