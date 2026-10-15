@@ -1,3 +1,4 @@
+import { matchRanges } from "@luke/ui/search-tokens";
 import { type ReactNode, useMemo } from "react";
 import Markdown, { type AllowElement, type Components, type Options } from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -204,6 +205,50 @@ const drawEdit =
     }
   };
 
+/** An element of the tree, and what it may hold. */
+type HastElement = Extract<HastNode, { type: "element" }>;
+type HastElementChild = HastElement["children"][number];
+
+/** The class a search's words are marked with, as `search-field.tsx`'s `Highlighted` marks them. */
+const SEARCH_MATCH_CLASS = "search-match";
+
+/** One run of text with the words a search asks for marked where they landed. */
+function foundIn(text: HastText, tokens: readonly string[]): readonly HastElementChild[] {
+  const ranges = matchRanges(text.value, tokens);
+  if (ranges.length === 0) return [text];
+  const parts: HastElementChild[] = [];
+  let from = 0;
+  for (const range of ranges) {
+    if (range.start > from)
+      parts.push({ type: "text", value: text.value.slice(from, range.start) });
+    parts.push({
+      type: "element",
+      tagName: "mark",
+      properties: { className: [SEARCH_MATCH_CLASS] },
+      children: [{ type: "text", value: text.value.slice(range.start, range.end) }],
+    });
+    from = range.end;
+  }
+  if (from < text.value.length) parts.push({ type: "text", value: text.value.slice(from) });
+  return parts;
+}
+
+/** Marks a search's words in every run of text under an element. */
+function markFoundIn(element: HastElement, tokens: readonly string[]): void {
+  element.children = element.children.flatMap((child) => {
+    if (child.type === "text") return foundIn(child, tokens);
+    if (child.type === "element") markFoundIn(child, tokens);
+    return [child];
+  });
+}
+
+/** The rehype step that marks where a search's words landed, block by block; the breaks between blocks hold no words. */
+const markFound =
+  (tokens: readonly string[]) =>
+  (tree: HastParent): void => {
+    for (const child of tree.children) if (child.type === "element") markFoundIn(child, tokens);
+  };
+
 /**
  * GitHub's dialect, which is the one coding agents write: tables,
  * strikethrough, and task lists, with a single tilde left as the character it
@@ -297,6 +342,7 @@ export function MarkdownMessage({
   className,
   edit,
   link,
+  found,
 }: {
   words: string;
   className?: string;
@@ -304,9 +350,12 @@ export function MarkdownMessage({
   edit?: MarkdownEdit | undefined;
   /** Draws the links the place knows better, a mention's chip say; every link is drawn as words without one. */
   link?: LinkDrawer | undefined;
+  /** The words a search asks for, marked where they landed. */
+  found?: readonly string[] | undefined;
 }): React.JSX.Element {
   const rehypePlugins: NonNullable<Options["rehypePlugins"]> = [];
   if (edit !== undefined) rehypePlugins.push([drawEdit, edit, words.length]);
+  if (found !== undefined && found.length > 0) rehypePlugins.push([markFound, found]);
   // Note that a place drawing its own links is handed every destination,
   // since only it knows which it draws; any it leaves is drawn as above,
   // so a destination that is not the web's is still words alone.

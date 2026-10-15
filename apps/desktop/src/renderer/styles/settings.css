@@ -632,9 +632,11 @@
 }
 
 /* Settings › Integrations: a connected row's tools opened in place under
-   it. The chevron that opens a row, after its count, turns down while its
-   tools show; the tools scroll inside their own bound, past the row's
-   mark. */
+   it, over a hairline. The chevron that opens a row, after its count, turns
+   down while its tools show. The tools stand in a column of their own,
+   which scrolls, and the page of the one it holds beside them, which
+   scrolls apart; where the page is too narrow for both, the column stands
+   above the page, which still scrolls within its own bound. */
 .integration-tools-toggle {
   display: inline-flex;
   align-items: center;
@@ -663,8 +665,47 @@
 }
 
 .settings-card > .integration-tools-panel {
-  max-height: 360px;
-  padding: var(--space-4) var(--space-8) var(--space-8) calc(var(--space-16) + 20px);
+  border-top: 1px solid var(--hairline);
+  container-type: inline-size;
+}
+
+.integration-tools-split {
+  display: grid;
+  height: 420px;
+  grid-template-columns: minmax(200px, 42%) minmax(0, 1fr);
+}
+
+.integration-tools-list {
+  min-height: 0;
+  padding: var(--space-4);
   overflow-y: auto;
+  border-right: 1px solid var(--hairline);
   overscroll-behavior: contain;
+}
+
+/* The column is too narrow for a title and a name both, so it says the
+   title alone, and the page beside it says the name of the one it holds. */
+.integration-tools-list .integration-tool-title + .integration-tool-id {
+  display: none;
+}
+
+.integration-tools-panel .integration-tool-detail-head {
+  border-bottom: 0;
+}
+
+.integration-tools-panel .integration-tool-detail-body {
+  padding-top: var(--space-2);
+}
+
+@container (max-width: 480px) {
+  .integration-tools-split {
+    height: 560px;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: 180px minmax(0, 1fr);
+  }
+
+  .integration-tools-list {
+    border-right: 0;
+    border-bottom: 1px solid var(--hairline);
+  }
 }

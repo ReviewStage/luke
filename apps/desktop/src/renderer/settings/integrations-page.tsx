@@ -11,6 +11,7 @@ import {
   type SignIn,
   signInLine,
 } from "@luke/features/integration-sign-in";
+import { byName } from "@luke/features/integration-tool-model";
 import type { IntegrationStatusView } from "@luke/features/integration-view";
 import {
   INTEGRATION_NAME,
@@ -33,7 +34,7 @@ import { useAppCommand } from "../app-commands";
 import { type GitHubConnectControl, useGitHubConnection } from "../github-connect";
 import { GRANT_OUTCOME, grantedBySignIn, useIntegrationGrant } from "../integration-grant";
 import { type IntegrationStatuses, useIntegrationStatuses } from "../integration-statuses";
-import { IntegrationToolList } from "../integration-tool-list";
+import { IntegrationToolDetail, IntegrationToolList, keepInView } from "../integration-tool-list";
 import { useIntegrationTools } from "../integration-tools";
 import { focusSearchField, Highlighted } from "../search-field";
 import { Shortcut } from "../shortcut";
@@ -77,9 +78,13 @@ import { ReadFailed, SettingsGroup } from "./settings-group";
  *
  * A connected row whose server answered with its tools opens in place onto
  * them, drawn as the MCP popover draws a server's page
- * (`../integration-tool-list.tsx`): alphabetical, each badged only by its
- * server's own annotations, a press on one opening it onto the whole of
- * what it does.
+ * (`../integration-tool-list.tsx`): alphabetical, one line each, badged only
+ * by its server's own annotations, and beside the list the page of the tool
+ * it holds, drawn as the popover draws a tool's page: the first at first,
+ * then whichever a press or the arrows move to. The list is one stop for
+ * Tab, whose arrows, Home, and End move through the tools; Return or Right
+ * hands the focus to the tool's page, whose arrows scroll it, and Escape or
+ * Left hands it back.
  *
  * The page has a search of its own above its rows, for the integrations and
  * their tools, apart from Settings' search in the sidebar, which finds pages
@@ -262,7 +267,16 @@ function ToolsLine({
   );
 }
 
-/** A row's tools, opened in place under it. */
+/** The keys that move the list's tool, by how far each moves it in a list of `count`. */
+function movedTo(key: string, at: number, count: number): number | undefined {
+  if (key === "ArrowDown") return Math.min(at + 1, count - 1);
+  if (key === "ArrowUp") return Math.max(at - 1, 0);
+  if (key === "Home") return 0;
+  if (key === "End") return count - 1;
+  return undefined;
+}
+
+/** A row's tools, opened in place under it: the list, and beside it the page of the tool it holds. */
 function RowToolsPanel({
   id,
   name,
@@ -272,9 +286,72 @@ function RowToolsPanel({
   name: string;
   tools: RowTools;
 }): React.JSX.Element {
+  const shown = byName(tools.shown);
+  const [held, setHeld] = useState<string | undefined>(undefined);
+  const rows = useRef(new Map<string, HTMLButtonElement>());
+  const body = useRef<HTMLDivElement>(null);
+  const list = useRef<HTMLDivElement>(null);
+  // A tool the search no longer finds hands its place to the first that it does.
+  const current = shown.find((tool) => tool.name === held) ?? shown[0];
+
+  const hold = (tool: IntegrationTool | undefined) => {
+    if (tool === undefined) return;
+    setHeld(tool.name);
+    const row = rows.current.get(tool.name);
+    row?.focus({ preventScroll: true });
+    keepInView(list.current, row?.closest(".integration-tool") ?? null);
+  };
+
+  const onRowKey = (event: React.KeyboardEvent<HTMLButtonElement>, tool: IntegrationTool) => {
+    const at = shown.indexOf(tool);
+    const to = movedTo(event.key, at, shown.length);
+    if (to !== undefined) {
+      event.preventDefault();
+      hold(shown[to]);
+    } else if (event.key === "Enter" || event.key === "ArrowRight") {
+      event.preventDefault();
+      setHeld(tool.name);
+      body.current?.focus();
+    }
+  };
+
+  const onBodyKey = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "Escape" && event.key !== "ArrowLeft") return;
+    // Note that Escape stops here, because it hands the focus back to the list rather than leaving Settings.
+    event.preventDefault();
+    event.stopPropagation();
+    if (current !== undefined) rows.current.get(current.name)?.focus({ preventScroll: true });
+  };
+
   return (
     <div id={id} className="integration-tools-panel">
-      <IntegrationToolList server={name} tools={tools.shown} tokens={tools.tokens} />
+      <div className="integration-tools-split">
+        <div ref={list} className="integration-tools-list">
+          <IntegrationToolList
+            server={name}
+            tools={shown}
+            tokens={tools.tokens}
+            current={current?.name}
+            onOpen={hold}
+            onKeyDown={onRowKey}
+            rowRef={(tool, button) => {
+              if (button === null) rows.current.delete(tool.name);
+              else rows.current.set(tool.name, button);
+            }}
+          />
+        </div>
+        {current !== undefined ? (
+          <IntegrationToolDetail
+            // Note that a tool held is a page of its own, so it opens at its top rather than where the last was scrolled.
+            key={current.name}
+            server={name}
+            tool={current}
+            tokens={tools.tokens}
+            bodyRef={body}
+            onBodyKeyDown={onBodyKey}
+          />
+        ) : null}
+      </div>
     </div>
   );
 }

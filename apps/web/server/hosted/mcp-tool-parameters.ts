@@ -176,9 +176,19 @@ function closedSet(
   if ("const" in schema) return [schema.const];
   const branches = branchesOf(schema);
   if (branches.length === 0 || depth >= MAX_DEPTH) return undefined;
-  // Note that a union's branch that closes nothing (a `null`, say) adds no value of its own to the set.
-  const sets = branches.map((branch) => valuesOf(branch, walk, depth + 1));
-  return sets.some((set) => set.length > 0) ? sets.flat() : undefined;
+  // Note that a union closes the set only where every branch does: a `null`
+  // branch closes it on nothing a list would show, and any open branch
+  // opens the whole union, so its closed branches are never listed as if
+  // they were every choice.
+  const sets: UnparsedWireValue[][] = [];
+  for (const branch of branches) {
+    if (constraintsOf(branch, walk, depth + 1).schemas.some((each) => each.type === "null"))
+      continue;
+    const set = valuesOf(branch, walk, depth + 1);
+    if (set.length === 0) return undefined;
+    sets.push([...set]);
+  }
+  return sets.length > 0 ? sets.flat() : undefined;
 }
 
 /** The values a value meeting `schema` may take: those every one of its schemas that closes the set allows. */
@@ -250,6 +260,7 @@ export function toolParameters(
   // An argument two parts both declare must meet both declarations; it stands where it first does.
   const declarations = new Map<string, WireValue[]>();
   const required = new Set<string>();
+  const others: WireValue[] = [];
   for (const part of parts) {
     if (part.properties !== undefined && !isRecord(part.properties)) return undefined;
     for (const [name, schema] of Object.entries(part.properties ?? {})) {
@@ -258,8 +269,20 @@ export function toolParameters(
     if (Array.isArray(part.required)) {
       for (const name of part.required.filter(isWireString)) required.add(name);
     }
+    if (isRecord(part.additionalProperties)) others.push(part.additionalProperties);
   }
-  return [...declarations]
+  // A key the schema requires without declaring it is an argument too, of
+  // whatever schema it gives every undeclared key.
+  for (const name of required) {
+    if (!declarations.has(name)) declarations.set(name, others.length > 0 ? others : [{}]);
+  }
+  // Note that the required stand first before the bound, so a long list of
+  // optional arguments never crowds out one a call must give.
+  const named = [...declarations];
+  return [
+    ...named.filter(([name]) => required.has(name)),
+    ...named.filter(([name]) => !required.has(name)),
+  ]
     .slice(0, MAX_PARAMETERS)
     .map(([name, schemas]) => parameterOf(name, schemas, required.has(name), inputSchema));
 }

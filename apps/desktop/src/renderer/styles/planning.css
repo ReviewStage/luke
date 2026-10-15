@@ -2538,6 +2538,8 @@ button.agent-ref:hover .agent-ref-name {
 /* A tool a search found: its name in the code face at the row's size, and
    its server's name after it as the count is drawn. */
 .agent-servers-hit .integration-tool-id {
+  flex: 0 1 auto;
+  color: var(--text-primary);
   font-size: 12px;
 }
 
@@ -2576,6 +2578,15 @@ button.agent-ref:hover .agent-ref-name {
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* A tool's page, in the server page's place: its body as tall as the list
+   and the field above it together, at most, so stepping in and back keeps
+   the popover's size where the list is full, and never grows past the
+   room the window leaves. */
+.agent-servers-tool-page .integration-tool-detail-body {
+  height: clamp(200px, 100vh - 280px, 440px);
+  flex: none;
 }
 
 /* Manage in Settings, pinned under the list: a quiet row, its gear a glyph's size. */
