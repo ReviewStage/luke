@@ -2,7 +2,7 @@ import { AVATAR_SESSION_ASSET } from "../avatar-session/contract";
 import { bundleAtom } from "../bundle-loader";
 
 /**
- * avatar-session-bundle.ts -- the avatar session bundle, loaded once by the call window the first time an avatar is shown, and kept for the window's life.
+ * avatar-session-bundle.ts -- the avatar session bundle, loaded once by the panel the first time an avatar is shown, and kept for the window's life.
  */
 
 /** Why the avatar could not be shown where its bundle failed to load. */

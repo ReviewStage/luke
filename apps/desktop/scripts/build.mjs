@@ -320,7 +320,7 @@ await Promise.all([
     logLevel: "info",
   }),
   // A call's avatar, its own bundle so the bundle every window parses never
-  // carries Keyframe's SDK or the LiveKit client under it; the call window
+  // carries Keyframe's SDK or the LiveKit client under it; the panel
   // loads it the first time an avatar is shown
   // (`src/renderer/avatar-session/contract.ts`).
   build({

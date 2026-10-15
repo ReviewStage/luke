@@ -737,10 +737,11 @@ only when you press Send.
   Voice, which it is not until you turn it on. Each call that shows Luke on
   video opens one avatar session at Keyframe: our service asks Keyframe for it
   on our key, naming the stock persona Luke appears as and nothing about you,
-  and hands the session's one-time pass to your Mac, where only the floating
-  call window holds it. The call window then sends Keyframe Luke's synthesized
-  voice as he speaks, which carries what he says about your plan, and plays back
-  the video and audio Keyframe renders from it. Your microphone never reaches
+  and hands the session's one-time pass to your Mac, where only Luke's main
+  window holds it. That window then sends Keyframe Luke's synthesized voice as
+  he speaks, which carries what he says about your plan, and plays back the
+  video, at the top of the plan's Call tab, and the audio Keyframe renders
+  from it. Your microphone never reaches
   Keyframe, nor does anything else on your Mac or in your account: the voice it
   receives is Luke's alone. Our service logs only whether a session started, the
   Keyframe server it opened on, and, when one could not, why, and keeps, with

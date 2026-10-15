@@ -121,7 +121,7 @@ function fixture() {
   return Effect.gen(function* () {
     const state = new AppStateStore(initialAppState(RUN, false), Context.empty());
     const { host, move, grant, setVideo, restarts } = yield* fakeHost();
-    /** What reached the call window's page: each grant handed over, and each feed relayed. */
+    /** What reached the panel's page: each grant handed over, and each feed relayed. */
     const grants: (AvatarGrant | undefined)[] = [];
     const feeds: AvatarFeed[] = [];
     const page = { grants, feeds };
@@ -130,7 +130,7 @@ function fixture() {
     const avatar = yield* linkAvatar({
       host,
       state,
-      callWindow: { showAvatarSession: (granted) => page.grants.push(granted) },
+      panel: { showAvatarSession: (granted) => page.grants.push(granted) },
       setVideo: (on) =>
         Effect.sync(() => {
           asked.push(on);
@@ -151,7 +151,7 @@ function fixture() {
     const router = createActRouter(avatarActRows({ avatar }) as ActRows);
     const reports = avatarReports({
       state,
-      callWindow: { feedAvatar: (feed) => page.feeds.push(feed) },
+      panel: { feedAvatar: (feed) => page.feeds.push(feed) },
       voiceOwns: (sender) => sender === senders[ROLE.VOICE],
     });
     const senderOf = (role: Role): ActSender => ({
@@ -187,7 +187,7 @@ function fixture() {
 type ACT_KIND_UNDER_TEST = typeof ACT_KIND.AVATAR_REPORT | typeof ACT_KIND.VOICE_SET_VIDEO;
 
 it.effect(
-  "the host's start is written at once, so the call window opens before it has a grant",
+  "the host's start is written at once, so the tile stands before the panel has a grant",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
@@ -196,7 +196,7 @@ it.effect(
     }),
 );
 
-it.effect("the host's grant goes to the call window, and the window's report then stands", () =>
+it.effect("the host's grant goes to the panel, and the panel's report then stands", () =>
   Effect.gen(function* () {
     const f = yield* fixture();
     yield* f.moved({ status: LIVE_AVATAR_STATUS.STARTING });
@@ -204,29 +204,29 @@ it.effect("the host's grant goes to the call window, and the window's report the
     assert.deepEqual(f.page.grants, [GRANT]);
     assert.deepEqual(f.avatarNow(), { status: AVATAR_STATUS.STARTING });
 
-    assert.equal(yield* f.perform(ROLE.CALL, ACT_KIND.AVATAR_REPORT, { status: "live" }), "done");
+    assert.equal(yield* f.perform(ROLE.PANEL, ACT_KIND.AVATAR_REPORT, { status: "live" }), "done");
     assert.deepEqual(f.avatarNow(), { status: AVATAR_STATUS.LIVE });
   }),
 );
 
-it.effect("the window's report is not heard while the host holds no grant", () =>
+it.effect("the panel's report is not heard while the host holds no grant", () =>
   Effect.gen(function* () {
     const f = yield* fixture();
     yield* f.moved({ status: LIVE_AVATAR_STATUS.STARTING });
-    yield* f.perform(ROLE.CALL, ACT_KIND.AVATAR_REPORT, { status: AVATAR_STATUS.LIVE });
+    yield* f.perform(ROLE.PANEL, ACT_KIND.AVATAR_REPORT, { status: AVATAR_STATUS.LIVE });
     assert.deepEqual(f.avatarNow(), { status: AVATAR_STATUS.STARTING });
   }),
 );
 
-it.effect("the call's end keeps its reason over the window's own end on the grant withdrawn", () =>
+it.effect("the call's end keeps its reason over the panel's own end on the grant withdrawn", () =>
   Effect.gen(function* () {
     const f = yield* fixture();
     yield* f.moved({ status: LIVE_AVATAR_STATUS.STARTING });
     yield* f.granted;
-    yield* f.perform(ROLE.CALL, ACT_KIND.AVATAR_REPORT, { status: AVATAR_STATUS.LIVE });
+    yield* f.perform(ROLE.PANEL, ACT_KIND.AVATAR_REPORT, { status: AVATAR_STATUS.LIVE });
 
     yield* f.moved({ status: LIVE_AVATAR_STATUS.ENDED, end: { by: LIVE_AVATAR_END.CALL_ENDED } });
-    yield* f.perform(ROLE.CALL, ACT_KIND.AVATAR_REPORT, {
+    yield* f.perform(ROLE.PANEL, ACT_KIND.AVATAR_REPORT, {
       status: AVATAR_STATUS.ENDED,
       endReason: AVATAR_END_REASON.USER,
     });
@@ -245,9 +245,9 @@ it.effect(
       const f = yield* fixture();
       yield* f.moved({ status: LIVE_AVATAR_STATUS.STARTING });
       yield* f.granted;
-      yield* f.perform(ROLE.CALL, ACT_KIND.AVATAR_REPORT, { status: AVATAR_STATUS.LIVE });
+      yield* f.perform(ROLE.PANEL, ACT_KIND.AVATAR_REPORT, { status: AVATAR_STATUS.LIVE });
 
-      yield* f.perform(ROLE.CALL, ACT_KIND.AVATAR_REPORT, {
+      yield* f.perform(ROLE.PANEL, ACT_KIND.AVATAR_REPORT, {
         status: AVATAR_STATUS.ENDED,
         endReason: AVATAR_END_REASON.SERVER_CLOSED,
       });
@@ -257,21 +257,23 @@ it.effect(
     }),
 );
 
-it.effect("a panel's or the voice window's report or toggle is refused and changes nothing", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture();
-    yield* f.moved({ status: LIVE_AVATAR_STATUS.STARTING });
-    yield* f.granted;
-    for (const role of [ROLE.PANEL, ROLE.VOICE]) {
-      assert.equal(
-        yield* f.perform(role, ACT_KIND.AVATAR_REPORT, { status: AVATAR_STATUS.LIVE }),
-        "refused",
-      );
-      assert.equal(yield* f.perform(role, ACT_KIND.VOICE_SET_VIDEO, { on: false }), "refused");
-    }
-    assert.deepEqual(f.avatarNow(), { status: AVATAR_STATUS.STARTING });
-    assert.deepEqual(f.asked, []);
-  }),
+it.effect(
+  "the floating call window's or the voice window's report or toggle is refused and changes nothing",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      yield* f.moved({ status: LIVE_AVATAR_STATUS.STARTING });
+      yield* f.granted;
+      for (const role of [ROLE.CALL, ROLE.VOICE]) {
+        assert.equal(
+          yield* f.perform(role, ACT_KIND.AVATAR_REPORT, { status: AVATAR_STATUS.LIVE }),
+          "refused",
+        );
+        assert.equal(yield* f.perform(role, ACT_KIND.VOICE_SET_VIDEO, { on: false }), "refused");
+      }
+      assert.deepEqual(f.avatarNow(), { status: AVATAR_STATUS.STARTING });
+      assert.deepEqual(f.asked, []);
+    }),
 );
 
 it.effect(
@@ -289,7 +291,7 @@ it.effect(
         { status: "paused" },
       ];
       for (const payload of cases) {
-        assert.equal(yield* f.perform(ROLE.CALL, ACT_KIND.AVATAR_REPORT, payload), "refused");
+        assert.equal(yield* f.perform(ROLE.PANEL, ACT_KIND.AVATAR_REPORT, payload), "refused");
       }
       assert.deepEqual(f.avatarNow(), { status: AVATAR_STATUS.STARTING });
     }),
@@ -298,8 +300,8 @@ it.effect(
 it.effect("the tile's Restart video and Video off reach the host's toggle", () =>
   Effect.gen(function* () {
     const f = yield* fixture();
-    assert.equal(yield* f.perform(ROLE.CALL, ACT_KIND.VOICE_SET_VIDEO, { on: true }), "done");
-    assert.equal(yield* f.perform(ROLE.CALL, ACT_KIND.VOICE_SET_VIDEO, { on: false }), "done");
+    assert.equal(yield* f.perform(ROLE.PANEL, ACT_KIND.VOICE_SET_VIDEO, { on: true }), "done");
+    assert.equal(yield* f.perform(ROLE.PANEL, ACT_KIND.VOICE_SET_VIDEO, { on: false }), "done");
     assert.deepEqual(f.asked, [true, false]);
     assert.deepEqual(f.avatarNow(), {
       status: AVATAR_STATUS.ENDED,
@@ -322,7 +324,7 @@ it.effect(
         endReason: AVATAR_END_REASON.SERVER_CLOSED,
       });
 
-      yield* f.perform(ROLE.CALL, ACT_KIND.VOICE_SET_VIDEO, { on: false });
+      yield* f.perform(ROLE.PANEL, ACT_KIND.VOICE_SET_VIDEO, { on: false });
 
       assert.deepEqual(f.asked, [false]);
       assert.deepEqual(f.avatarNow(), {
@@ -339,16 +341,16 @@ it.effect(
       const f = yield* fixture();
       yield* f.moved({ status: LIVE_AVATAR_STATUS.STARTING });
       yield* f.granted;
-      yield* f.perform(ROLE.CALL, ACT_KIND.AVATAR_REPORT, { status: AVATAR_STATUS.LIVE });
+      yield* f.perform(ROLE.PANEL, ACT_KIND.AVATAR_REPORT, { status: AVATAR_STATUS.LIVE });
 
       // The close asks the host for a restart, and the off lands before its start is written.
       f.restarts.told = false;
-      yield* f.perform(ROLE.CALL, ACT_KIND.AVATAR_REPORT, {
+      yield* f.perform(ROLE.PANEL, ACT_KIND.AVATAR_REPORT, {
         status: AVATAR_STATUS.ENDED,
         endReason: AVATAR_END_REASON.SERVER_CLOSED,
       });
       assert.equal(f.avatarNow().status, AVATAR_STATUS.ENDED);
-      yield* f.perform(ROLE.CALL, ACT_KIND.VOICE_SET_VIDEO, { on: false });
+      yield* f.perform(ROLE.PANEL, ACT_KIND.VOICE_SET_VIDEO, { on: false });
 
       assert.deepEqual(f.asked, [false]);
       assert.deepEqual(f.avatarNow(), {
@@ -358,23 +360,21 @@ it.effect(
     }),
 );
 
-it.effect(
-  "the voice window's feed reaches the call window while the avatar starts or is live",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture();
-      f.feed(ROLE.VOICE, CHUNK);
-      yield* f.moved({ status: LIVE_AVATAR_STATUS.STARTING });
-      f.feed(ROLE.VOICE, CHUNK);
-      yield* f.granted;
-      yield* f.perform(ROLE.CALL, ACT_KIND.AVATAR_REPORT, { status: AVATAR_STATUS.LIVE });
-      f.feed(ROLE.VOICE, { kind: AVATAR_FEED_KIND.TURN_END });
-      // A panel's feed, or the call window's own, is not the voice window's.
-      f.feed(ROLE.PANEL, CHUNK);
-      f.feed(ROLE.CALL, CHUNK);
-      yield* f.moved({ status: LIVE_AVATAR_STATUS.ENDED, end: { by: LIVE_AVATAR_END.CALL_ENDED } });
-      f.feed(ROLE.VOICE, CHUNK);
+it.effect("the voice window's feed reaches the panel while the avatar starts or is live", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture();
+    f.feed(ROLE.VOICE, CHUNK);
+    yield* f.moved({ status: LIVE_AVATAR_STATUS.STARTING });
+    f.feed(ROLE.VOICE, CHUNK);
+    yield* f.granted;
+    yield* f.perform(ROLE.PANEL, ACT_KIND.AVATAR_REPORT, { status: AVATAR_STATUS.LIVE });
+    f.feed(ROLE.VOICE, { kind: AVATAR_FEED_KIND.TURN_END });
+    // The panel's own feed, or the call window's, is not the voice window's.
+    f.feed(ROLE.PANEL, CHUNK);
+    f.feed(ROLE.CALL, CHUNK);
+    yield* f.moved({ status: LIVE_AVATAR_STATUS.ENDED, end: { by: LIVE_AVATAR_END.CALL_ENDED } });
+    f.feed(ROLE.VOICE, CHUNK);
 
-      assert.deepEqual(f.page.feeds, [CHUNK, { kind: AVATAR_FEED_KIND.TURN_END }]);
-    }),
+    assert.deepEqual(f.page.feeds, [CHUNK, { kind: AVATAR_FEED_KIND.TURN_END }]);
+  }),
 );

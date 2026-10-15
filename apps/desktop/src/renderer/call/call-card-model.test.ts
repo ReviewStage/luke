@@ -6,8 +6,14 @@ import {
 } from "@sidecar/features/planning-view";
 import { LIVE_STATUS } from "@sidecar/live";
 import { test } from "vitest";
+import {
+  AVATAR_END_REASON,
+  AVATAR_OFF,
+  AVATAR_STATUS,
+  type AvatarState,
+} from "#shared/messages/avatar";
 import { IDLE_VOICE_VIEW, type VoiceView } from "#shared/messages/voice-view";
-import { callBarPlanId, callCard, callCardShown } from "./call-card-model";
+import { callBarPlanId, callCard, callCardShown, callTabVideoStatus } from "./call-card-model";
 
 const INVITES = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const BILLING = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
@@ -129,4 +135,23 @@ test("the call bar is on screen only on a plan's document, and not under its ver
   assert.equal(callBarPlanId({ ...onPlan, sidePanelFullScreen: true }), undefined);
   assert.equal(callBarPlanId({ ...onPlan, documentPage: false }), undefined);
   assert.equal(callBarPlanId({ ...onPlan, plansTab: false }), undefined);
+});
+
+test("the Call tab draws the video on the call's own plan alone, while the call is in progress and the tile is up", () => {
+  const live: AvatarState = { status: AVATAR_STATUS.LIVE };
+  const drawn = (view: VoiceView, avatar: AvatarState, planId: string) =>
+    callTabVideoStatus({ view, avatar, planId });
+  assert.equal(drawn(LISTENING, live, INVITES), AVATAR_STATUS.LIVE);
+  assert.equal(
+    drawn(LISTENING, { status: AVATAR_STATUS.STARTING }, INVITES),
+    AVATAR_STATUS.STARTING,
+  );
+  const restartable = { status: AVATAR_STATUS.ENDED, endReason: AVATAR_END_REASON.SERVER_CLOSED };
+  assert.equal(drawn(LISTENING, restartable, INVITES), AVATAR_STATUS.ENDED);
+  // Another plan's Call tab, a call that is over, an avatar turned off, or none asked for draws nothing.
+  assert.equal(drawn(LISTENING, live, BILLING), AVATAR_STATUS.OFF);
+  assert.equal(drawn(IDLE_VOICE_VIEW, live, INVITES), AVATAR_STATUS.OFF);
+  const turnedOff = { status: AVATAR_STATUS.ENDED, endReason: AVATAR_END_REASON.USER };
+  assert.equal(drawn(LISTENING, turnedOff, INVITES), AVATAR_STATUS.OFF);
+  assert.equal(drawn(LISTENING, AVATAR_OFF, INVITES), AVATAR_STATUS.OFF);
 });

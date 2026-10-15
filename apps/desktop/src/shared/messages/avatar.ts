@@ -6,7 +6,7 @@ import { Schema as EffectSchema, Result } from "effect";
 /**
  * Where the avatar stands, as main holds it in the document: `OFF` until the
  * developer asks for video, `STARTING` while the service mints the session
- * and the call window waits on its first frame, `LIVE` once that frame has
+ * and the panel waits on its first frame, `LIVE` once that frame has
  * drawn, and `ENDED` once it is down while the call goes on as voice, which
  * is when the tile offers to restart it.
  */
@@ -39,7 +39,7 @@ export type AvatarEndReason = (typeof AVATAR_END_REASON)[keyof typeof AVATAR_END
 /**
  * The avatar as the document carries it, with why it went down once it has.
  * Keyframe's session grant is never here, because the document reaches every
- * window and the grant may reach the call window alone.
+ * window and the grant may reach the panel window alone.
  */
 export interface AvatarState {
   status: AvatarStatus;
@@ -51,7 +51,7 @@ export interface AvatarState {
 export const AVATAR_OFF: AvatarState = { status: AVATAR_STATUS.OFF };
 
 /**
- * The avatar as the call window reports it: starting, live, or ended with a
+ * The avatar as the panel reports it: starting, live, or ended with a
  * reason beside `ENDED` and nowhere else, so a report cannot say the avatar
  * is live for a reason or ended for none. It never reports `OFF`: whether
  * video was asked for is main's to say, from the host.
@@ -79,8 +79,8 @@ const AVATAR_RESTART_REASONS: ReadonlySet<AvatarEndReason> = new Set([
 ]);
 
 /**
- * Whether the avatar's tile is drawn in place of the call card: while the
- * avatar is starting or live, and once it ended for a reason the tile offers
+ * Whether the avatar's tile is up at the top of the call's Call tab: while
+ * the avatar is starting or live, and once it ended for a reason the tile offers
  * to restart it from. Read beside whether the call stands, which the tile
  * never outlives.
  */
@@ -136,7 +136,7 @@ const pcmChunk = EffectSchema.String.check(
 );
 
 /**
- * One message of the feed the voice window sends main for the call window:
+ * One message of the feed the voice window sends main for the panel:
  * Luke's voice off the WebRTC track, cut into 40 ms chunks; the end of his
  * turn, which Keyframe's bridge maps to `endAudioTurn`; or the developer
  * cutting in, which it maps to `endAudioTurn` then `interrupt`.

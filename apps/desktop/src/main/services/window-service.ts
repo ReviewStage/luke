@@ -142,8 +142,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
   // of what any window here may navigate to or speak from.
   const voiceHtmlPath = path.join(config.resourceDirectory, "renderer", "voice.html");
   const voiceUrl = pathToFileURL(voiceHtmlPath).href;
-  // The call window's document, on the same terms: the one bundle, and the
-  // one host its avatar's session reaches.
+  // The call window's document, on the same terms: the one bundle, no host.
   const callHtmlPath = path.join(config.resourceDirectory, "renderer", "call.html");
   const callUrl = pathToFileURL(callHtmlPath).href;
 
@@ -173,7 +172,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       config.report(`Voice window replaced: ${reason}`);
       // The window that held the exchange is gone, so what every panel draws
       // in its place is an idle voice; the document says so by holding no
-      // view at all, and keeps the avatar, which the host and the call window say.
+      // view at all, and keeps the avatar, which the host and the panel say.
       state.update({ voice: voiceWindowGone(state.snapshot().voice) });
       panels.setVoiceExchange(false);
     },
@@ -244,7 +243,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     if (call) send(call.webContents, voiceWindowState(held));
     // The call window follows the document it draws, so it stands and goes
     // on the same version every window is told.
-    callPresence.voiceChanged(held.voice.view, held.voice.avatar);
+    callPresence.voiceChanged(held.voice.view);
   }
 
   function sendToVoice<Payload>(channel: string, payload: Payload): void {

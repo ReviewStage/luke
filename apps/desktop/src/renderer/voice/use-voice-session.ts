@@ -201,7 +201,7 @@ export function useVoiceSession(
     orchestrator.surround(surroundings);
   }, [orchestrator, state]);
 
-  // The avatar's status as the call window reported it, for the call to hand
+  // The avatar's status as the panel reported it, for the call to hand
   // Luke's voice over to it, or take it back.
   const avatarStatus = state?.voice.avatar.status ?? AVATAR_STATUS.OFF;
   useEffect(() => {

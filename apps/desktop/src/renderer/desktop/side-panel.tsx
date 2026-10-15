@@ -16,6 +16,7 @@ import { ACT_KIND } from "#shared/messages/acts";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "../act";
 import { useAppCommand } from "../app-commands";
+import { CallTabVideo } from "../call/panel-avatar";
 import { EmptyState } from "../empty-state";
 import { FindScope } from "../find-in-tab";
 import { AgentChangesTab, ChangesCard } from "../planning/agent-changes-tab";
@@ -1155,6 +1156,7 @@ function TabContent({
           shown={shown}
           models={agents.models}
           reveal={transcript.reveal ?? work.reveal}
+          video={<CallTabVideo planId={planId} />}
         />
       );
   }

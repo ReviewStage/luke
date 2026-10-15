@@ -1,12 +1,12 @@
 /**
- * avatar-link.ts -- Luke's avatar as the host holds it, bound to the call window and written into the document.
+ * avatar-link.ts -- Luke's avatar as the host holds it, bound to the panel and written into the document.
  *
  * The host says where the avatar stands and hands over each grant in process
- * (`HostAvatar`); the call window says whether it drew the avatar. Both write
- * `state.voice.avatar`, and the host wins: the window's word stands only
- * while the host holds a grant, which is the one stretch the window alone
- * knows more than the host. A grant reaches the call window's page and
- * nothing else here: it is never written, logged, or kept.
+ * (`HostAvatar`); the panel says whether it played the avatar. Both write
+ * `state.voice.avatar`, and the host wins: the panel's word stands only
+ * while the host holds a grant, which is the one stretch the panel alone
+ * knows more than the host. A grant reaches the panel's page and nothing
+ * else here: it is never written, logged, or kept.
  */
 
 import {
@@ -31,14 +31,14 @@ import {
   type AvatarState,
 } from "#shared/messages/avatar";
 import type { AppStateStore } from "../app-state";
-import type { CallWindow } from "../window/call-window";
+import type { PanelManager } from "../window/panel-manager";
 
-/** The avatar as the call window reports it. */
+/** The avatar as the panel reports it. */
 export type AvatarReport = ActPayload<typeof ACT_KIND.AVATAR_REPORT>;
 
 /**
- * The call window's ends this side did not start, as the service is told
- * them: Keyframe closed the room, or the session failed. The window's own
+ * The panel's ends this side did not start, as the service is told them:
+ * Keyframe closed the room, or the session failed. The panel's own
  * close reasons reach the document as these end reasons (`call-avatar.ts`),
  * and this is the one place they go back to the service's vocabulary.
  */
@@ -78,10 +78,10 @@ function endReasonOf(end: LiveAvatarEnd): AvatarEndReason {
 
 /**
  * The avatar the document holds next, from what it holds now, where the host
- * stands, and the call window's report where one arrived. A host move is
- * written as the host says it, except a grant, which leaves the document to
- * the window that runs it. The window's report stands only while the host
- * holds a grant, so the window's own end on a withdrawn grant cannot write
+ * stands, and the panel's report where one arrived. A host move is written
+ * as the host says it, except a grant, which leaves the document to the
+ * window that runs it. The panel's report stands only while the host holds
+ * a grant, so the panel's own end on a withdrawn grant cannot write
  * over the reason the host withdrew it for.
  */
 export function avatarAfter(input: {
@@ -105,7 +105,7 @@ export function avatarAfter(input: {
 
 /** The avatar's two doors main's acts reach. */
 export interface AvatarLink {
-  /** The call window's report, written where the host lets it stand, and a close this side did not start told to the host. */
+  /** The panel's report, written where the host lets it stand, and a close this side did not start told to the host. */
   report(report: AvatarReport): void;
   /** Video on or off from the tile; off where the host had nothing to stop takes an ended avatar's tile down here. */
   setVideo(on: boolean): Effect.Effect<void>;
@@ -114,20 +114,20 @@ export interface AvatarLink {
 export interface AvatarLinkDependencies {
   host: HostAvatar;
   state: AppStateStore;
-  callWindow: Pick<CallWindow, "showAvatarSession">;
+  panel: Pick<PanelManager, "showAvatarSession">;
   /** The host's `voice.setVideo`, over the Gateway. */
   setVideo: (on: boolean) => Effect.Effect<boolean>;
 }
 
 /**
  * The link for the launch's scope. Both streams are read from the launch on,
- * because the grants are kept for no subscriber that joins late; the call
- * window's relay keeps the standing grant for a page that draws after it.
+ * because the grants are kept for no subscriber that joins late; the
+ * panel's relay keeps the standing grant for a page that draws after it.
  */
 export const linkAvatar = Effect.fnUntraced(function* ({
   host,
   state,
-  callWindow,
+  panel,
   setVideo,
 }: AvatarLinkDependencies): Effect.fn.Return<AvatarLink, never, Scope.Scope> {
   let standing: LiveAvatarState = { status: LIVE_AVATAR_STATUS.OFF };
@@ -147,9 +147,7 @@ export const linkAvatar = Effect.fnUntraced(function* ({
     ),
   );
   yield* Effect.forkScoped(
-    Stream.runForEach(host.grants, (grant) =>
-      Effect.sync(() => callWindow.showAvatarSession(grant)),
-    ),
+    Stream.runForEach(host.grants, (grant) => Effect.sync(() => panel.showAvatarSession(grant))),
   );
   return {
     report: (report) => {

@@ -2,7 +2,7 @@ import { useRef } from "react";
 import type { AvatarFeedActs } from "./live-call";
 import { useVoiceSession } from "./use-voice-session";
 
-/** Luke's voice for his avatar, sent to main, which relays it to the call window while the avatar stands. */
+/** Luke's voice for his avatar, sent to main, which relays it to the panel while the avatar stands. */
 const AVATAR_FEED: AvatarFeedActs = { feed: (feed) => window.luke.feedAvatar(feed) };
 
 /**

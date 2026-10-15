@@ -355,9 +355,9 @@ export const ACT_KIND = {
   VOICE_COMMAND: "voice.command",
   /** The call card's way back: Luke's window brought forward on the call's own plan. */
   CALL_SHOW_PLAN: "call.showPlan",
-  /** The call window's word on Luke's avatar: starting, live on its first frame, or ended and why. Taken from that window alone. */
+  /** The panel's word on Luke's avatar: starting, live on its first frame, or ended and why. Taken from the panel alone. */
   AVATAR_REPORT: "avatar.report",
-  /** The video tile's Video off and Restart video: Luke's avatar asked for on the standing call, or taken down. Taken from the call window alone. */
+  /** The video tile's Video off and Restart video: Luke's avatar asked for on the standing call, or taken down. Taken from the panel alone. */
   VOICE_SET_VIDEO: "voice.setVideo",
   /**
    * The voice window as a GPT Live peer: its SDP offer handed to the host,

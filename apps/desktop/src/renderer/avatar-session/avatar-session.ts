@@ -7,7 +7,7 @@ import type {
 } from "./contract";
 
 /**
- * avatar-session.ts -- one call's Keyframe avatar as the call window holds it: its two tracks, the audio fed to it, whether it is speaking, and why it closed.
+ * avatar-session.ts -- one call's Keyframe avatar as the panel holds it: its two tracks, the audio fed to it, whether it is speaking, and why it closed.
  *
  * The session is written over the slice of Keyframe's `PersonaSession` the
  * bundle hands over (`./contract.ts`), the way `../voice/live-peer.ts` is
