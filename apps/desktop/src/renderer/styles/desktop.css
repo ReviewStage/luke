@@ -21,6 +21,10 @@
   --actor-luke-ink: #04222e;
   --desktop-ground: #0c0c0e;
   --desktop-sidebar: #111114;
+  /* A sidebar row's words at rest, a step under the primary ink and clear of
+     the time's tertiary, so the open, hovered, and unread rows stand out by
+     going up to the primary. */
+  --sidebar-ink: rgba(255, 255, 255, 0.7);
   --desktop-well: #0f0f12;
   /* What floats over the window, a menu or a dialog:
      the sidebar's step above the ground in the dark, where lighter is nearer,
@@ -154,6 +158,7 @@
   :root {
     --desktop-ground: #fcfcfc;
     --desktop-sidebar: #f3f3f4;
+    --sidebar-ink: rgba(0, 0, 0, 0.68);
     --desktop-well: #f8f8f9;
     --surface-popover: #fff;
     --find-match: rgba(255, 204, 0, 0.42);
@@ -385,6 +390,11 @@ body,
   padding: 0 var(--column-inset) var(--column-inset);
   border-right: 1px solid var(--hairline);
   background: var(--desktop-sidebar);
+  /* Note that the sidebar draws its words without the Mac's font smoothing,
+     as Linear, Slack, and the website do, because the smoothing thickens
+     every stroke, light on dark most of all, until a regular name reads
+     nearly as heavy as an unread one. */
+  -webkit-font-smoothing: antialiased;
 }
 
 .luke-identity {
@@ -421,22 +431,31 @@ body,
   letter-spacing: -0.01em;
 }
 
-/* New plan reads as a row of the list it heads: no ground at rest, the body's
-   weight a read plan's name takes, and the plan rows' own hover and selection,
-   since its page is a place like theirs. Search beneath it is drawn the same,
-   and a hairline under it parts the two from the list. */
+/* New plan reads as a row of the list it heads: no ground at rest, a read
+   plan's weight, ink, and height, and the plan rows' own hover and
+   selection, since its page is a place like theirs. Search beneath it is
+   drawn the same, and a hairline under it parts the two from the list. */
 .sidebar-new-plan,
 .sidebar-search {
   display: flex;
   align-items: center;
   gap: var(--glyph-gap);
-  height: 36px;
+  height: var(--control-height);
   margin: 0 0 var(--list-gap);
   padding: 0 var(--row-inset);
   border-radius: 9px;
   background: none;
+  color: var(--sidebar-ink);
   font-size: 13px;
-  transition: background-color var(--duration-hover) ease;
+  transition:
+    background-color var(--duration-hover) ease,
+    color var(--duration-hover) ease;
+}
+
+.sidebar-new-plan:hover:not(:disabled),
+.sidebar-search:hover:not(:disabled),
+.sidebar-search[aria-current="page"] {
+  color: var(--text-primary);
 }
 
 .sidebar-rule {
@@ -681,8 +700,9 @@ body,
 }
 
 .sidebar-skeleton-row {
-  padding: var(--space-8) var(--row-inset);
+  padding: var(--space-6) var(--row-inset);
   font-size: 13px;
+  line-height: var(--sidebar-row-line);
 }
 
 .sidebar-plans {
@@ -704,6 +724,35 @@ body,
   background: none;
   text-align: left;
   transition: background-color var(--duration-hover) ease;
+}
+
+/* In the sidebar a row is a control's height, as New plan's is, its line set
+   rather than left to the font, so every row of the column stands as tall
+   whatever the font measures. */
+.desktop-sidebar {
+  --sidebar-row-line: 18px;
+}
+
+.desktop-sidebar .sidebar-plan-item {
+  line-height: var(--sidebar-row-line);
+}
+
+/* Note that the row's height is set rather than grown from its padding,
+   because the smaller time, set on the name's baseline, sits a pixel lower
+   in its line and would make the row a pixel taller than New plan's. */
+.desktop-sidebar .sidebar-plan {
+  display: flex;
+  height: var(--control-height);
+  align-items: center;
+  padding-block: 0;
+}
+
+.desktop-sidebar .sidebar-plan > .sidebar-plan-line {
+  flex: 1;
+}
+
+.desktop-sidebar .sidebar-plan-marks {
+  top: calc((var(--control-height) - var(--sidebar-row-line)) / 2);
 }
 
 /* A plan's row fills while the pointer is anywhere on its item, its own
@@ -952,9 +1001,22 @@ body,
 }
 
 /* A plan's name reads in the body's weight, the open one too, whose fill is
-   what marks it. */
+   what marks it. In the sidebar a read name is in the quieter ink, and the
+   open one and the one under the pointer go up to the primary. */
 .sidebar-plan-name {
   font-size: 13px;
+}
+
+.desktop-sidebar :is(.sidebar-plan-name, .sidebar-pinned-tab-name) {
+  color: var(--sidebar-ink);
+  transition: color var(--duration-hover) ease;
+}
+
+.desktop-sidebar
+  .sidebar-plan[aria-current="page"]
+  :is(.sidebar-plan-name, .sidebar-pinned-tab-name),
+.desktop-sidebar .sidebar-plan-item:hover :is(.sidebar-plan-name, .sidebar-pinned-tab-name) {
+  color: var(--text-primary);
 }
 
 /* The one unread mark: what the developer has not seen, a plan saved since
@@ -962,11 +1024,17 @@ body,
    another was chosen, and an Inbox item that needs them, reads in the
    heavier weight and the primary ink until they look, as a chat app's
    channels do. Only what waits on them, the Inbox item, also wears the
-   blue dot (`.inbox-row-dot`). */
+   blue dot (`.inbox-row-dot`). In the sidebar, where a read name is in the
+   quieter ink and drawn without the Mac's smoothing, the ink carries half
+   the step, so a semibold is enough. */
 .sidebar-plan[data-unread="true"] .sidebar-plan-name,
 .tab[data-unread="true"] .tab-label {
   color: var(--text-primary);
   font-weight: 680;
+}
+
+.desktop-sidebar .sidebar-plan[data-unread="true"] .sidebar-plan-name {
+  font-weight: 600;
 }
 
 /* A sidebar plan renamed in place keeps its row: the field takes the name's
@@ -1153,6 +1221,12 @@ body,
   font-weight: 500;
   text-align: left;
   transition: color var(--duration-hover) ease;
+}
+
+/* A header in the sidebar stands as tall as the rows under it. */
+.desktop-sidebar .sidebar-repository-toggle {
+  padding-block: calc((var(--control-height) - var(--sidebar-row-line)) / 2);
+  line-height: var(--sidebar-row-line);
 }
 
 .sidebar-repository-header:hover .sidebar-repository-toggle {
