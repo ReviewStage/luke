@@ -179,9 +179,9 @@ export function FoldSummary({
 }
 
 /**
- * The chevron at a card's head, turned down while the fold is open; a
- * transcript row wears none, its own icon leading and the whole line the
- * target. Note that it reads its own fold's state rather than the
+ * The chevron at a card's head, or a transcript fold's over the rows it
+ * holds, turned down while the fold is open; a call's row wears none, its
+ * own icon leading and the whole line the target. Note that it reads its own fold's state rather than the
  * `details` element's open state through a CSS group, because folds nest,
  * and an ancestor's open would turn every chevron inside it.
  */
