@@ -4,6 +4,15 @@
    weight. */
 
 :root {
+  /* A workspace's tile (`workspace-tile.tsx`): six muted hues, each holding
+     its white letter at AA, the only colour a workspace wears. */
+  --workspace-hue-1: #4f63b8;
+  --workspace-hue-2: #2b7f78;
+  --workspace-hue-3: #9a6a1e;
+  --workspace-hue-4: #a24a63;
+  --workspace-hue-5: #6c55b3;
+  --workspace-hue-6: #477a3a;
+  --workspace-tile-ink: #fff;
   --desktop-ground: #0c0c0e;
   --desktop-sidebar: #111114;
   --desktop-well: #0f0f12;
@@ -142,6 +151,12 @@
     --desktop-well: #f8f8f9;
     --surface-popover: #fff;
     --find-match: rgba(255, 204, 0, 0.42);
+    --workspace-hue-1: #4a5fc0;
+    --workspace-hue-2: #23766f;
+    --workspace-hue-3: #94631a;
+    --workspace-hue-4: #a8435f;
+    --workspace-hue-5: #6a4fbd;
+    --workspace-hue-6: #3f7434;
   }
 }
 
@@ -453,6 +468,42 @@ body,
 .sidebar-inbox:hover > .sidebar-inbox-waiting ~ .row-shortcut,
 :root[data-keyboard="true"] .sidebar-inbox:focus-visible > .sidebar-inbox-waiting ~ .row-shortcut {
   display: inline-flex;
+}
+
+/* A workspace's tile: a square of its hue with its first letter as its text,
+   at a row's glyph size. */
+.workspace-tile {
+  display: inline-grid;
+  width: var(--menu-glyph);
+  height: var(--menu-glyph);
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 4px;
+  background: var(--workspace-hue-1);
+  color: var(--workspace-tile-ink);
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 1;
+}
+
+.workspace-tile[data-hue="2"] {
+  background: var(--workspace-hue-2);
+}
+
+.workspace-tile[data-hue="3"] {
+  background: var(--workspace-hue-3);
+}
+
+.workspace-tile[data-hue="4"] {
+  background: var(--workspace-hue-4);
+}
+
+.workspace-tile[data-hue="5"] {
+  background: var(--workspace-hue-5);
+}
+
+.workspace-tile[data-hue="6"] {
+  background: var(--workspace-hue-6);
 }
 
 /* The workspace the plans are, drawn as a repository's header is, in the
