@@ -27,6 +27,7 @@ import { RelativeTime } from "../planning/relative-time";
 import { AgentGlyph, agentEndMark } from "../planning/tab-look";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { SIDE_PANEL_TAB, SIDE_PANEL_TAB_KIND } from "../planning/use-side-panel";
+import { useWaitingItems, type WaitingItems } from "../planning/use-waiting-items";
 import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { GLYPH_STATE, stateEndMark } from "../state-glyph";
 import { Tooltip } from "../tooltip";
@@ -44,6 +45,7 @@ import {
   type FactoryWork,
   factoryBoard,
   factoryMovedAt,
+  factoryWaiting,
 } from "./factory-model";
 import { paneTiming } from "./pane-motion";
 import { planCardOf } from "./plan-card";
@@ -54,10 +56,10 @@ import { planCardOf } from "./plan-card";
  * It stands in the plan's place beside the sidebar, as the Inbox does, and
  * is a live view rather than a report: no totals, only where work stands
  * now and what moved in the last day (`factory-model.ts`), read from the
- * plan list, main's Inbox read, and the call. Three stations run left to
- * right, each a card counting the rows it lists: Talk, the task on a call
- * with Luke; Build, the agents at work; and Ship, what merged in the last
- * day. Every row reads as Home's does: a glyph, what it is, the task it is
+ * plan list, every member's open Inbox items as Home reads them, and the
+ * call. Three stations run left to right, each a card counting the rows it
+ * lists: Talk, the task on a call with Luke; Build, the agents at work; and
+ * Ship, what merged in the last day. Every row reads as Home's does: a glyph, what it is, the task it is
  * about in the faint context ink, a teammate's face, and when it moved, the
  * time slot holding nothing but a time. What waits on the developer stands
  * first in the station it holds up, in the unread weight with its dot,
@@ -110,13 +112,35 @@ function buildingWords(pullRequest: PlanPullRequestLine): string {
     : `#${pullRequest.number} checks running`;
 }
 
-/** The board as the window holds it now: the workspace's tasks, what main says waits, and the call. */
-function useFactoryBoard(plans: PlansControl, now: number): FactoryBoard {
+/** The board as the window holds it now, and the read of what waits it was drawn from, which may have failed. */
+interface FactoryRead {
+  readonly board: FactoryBoard;
+  readonly questions: WaitingItems;
+}
+
+/**
+ * The board as the window holds it now: the workspace's tasks, every open
+ * Inbox item of theirs as Home reads them, so Factory and Home count the
+ * same questions, and the call.
+ */
+function useFactoryBoard(plans: PlansControl, now: number): FactoryRead {
   const listed = plans.listed.plans;
-  return useMemo(
-    () => factoryBoard({ plans: listed, waiting: plans.inbox, callPlanId: plans.callPlanId, now }),
-    [listed, plans.inbox, plans.callPlanId, now],
+  const questions = useWaitingItems(plans);
+  // Note that main's own count stands in only for a plan the Inbox has not read as it stands now, because such a read is newer than main's, and an item it shows answered must not come back; a plan changed since its last read, its reread out or failed, keeps main's count.
+  const { items, readPlans } = questions;
+  const waiting = useMemo(
+    () =>
+      factoryWaiting(
+        items,
+        plans.inbox.filter((each) => !readPlans.has(each.planId)),
+      ),
+    [items, readPlans, plans.inbox],
   );
+  const board = useMemo(
+    () => factoryBoard({ plans: listed, waiting, callPlanId: plans.callPlanId, now }),
+    [listed, waiting, plans.callPlanId, now],
+  );
+  return { board, questions };
 }
 
 /**
@@ -450,11 +474,14 @@ function Summary({ board }: { board: FactoryBoard }): React.JSX.Element {
 /** What the list says where it could not be read, as the sidebar says it. */
 const UNREAD_LINE = "Your tasks could not be read.";
 
+/** What Factory says where a task's questions could not be read, as Home says it of its items. */
+const QUESTIONS_UNREAD_LINE = "Some questions could not be read.";
+
 /** The window's Factory, in the plan's place: the line as it stands now. */
 export function DesktopFactory({ plans }: { plans: PlansControl }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_FACTORY, plans.factoryView.onClose);
   const now = useMinute();
-  const board = useFactoryBoard(plans, now);
+  const { board, questions } = useFactoryBoard(plans, now);
   const [root, setRoot] = useState<HTMLElement | null>(null);
   useRowSlide(root, board);
   const empty =
@@ -476,6 +503,10 @@ export function DesktopFactory({ plans }: { plans: PlansControl }): React.JSX.El
         </div>
       </header>
       <div className="factory-scroll">
+        {/* A question that could not be read is not shown as though none waits. */}
+        {questions.failed ? (
+          <ReadFailure line={QUESTIONS_UNREAD_LINE} onRetry={questions.onRetry} />
+        ) : null}
         {/* Until the list is read nothing stands, since what the line says hangs on it. A read that failed with nothing listed says so in the line's place; one that failed over a list read before says so above it. */}
         {plans.listFailed && empty ? (
           <ReadFailure

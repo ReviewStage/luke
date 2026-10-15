@@ -4,6 +4,7 @@ import {
   CODING_AGENT_STATUS,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
+import { INBOX_RESPONSE, INBOX_STATUS, INBOX_WIRE_VERSION } from "@luke/features/inbox-wire";
 import type {
   PlanAgentLine,
   PlanAgentsSummary,
@@ -12,6 +13,7 @@ import type {
 } from "@luke/features/plan-wire";
 import type { AppInboxPlan } from "@luke/host/app-state";
 import { test } from "vitest";
+import { INBOX_HOLDER, planHolder } from "../planning/inbox-model";
 import {
   FACTORY_BLOCK,
   FACTORY_STOP,
@@ -20,6 +22,7 @@ import {
   type FactoryStop,
   type FactoryWork,
   factoryBoard,
+  factoryWaiting,
   LOOKBACK_MS,
 } from "./factory-model";
 
@@ -329,4 +332,58 @@ test("a draft's failing checks are its own work still, standing in Build; only a
     [43],
   );
   assert.deepEqual(work(drawn.working), ["#42 (Draft)"]);
+});
+
+test("what waits is every open item the Inbox read of the listed plans and main's own besides, an item both name standing once, and an agent's with no plan left to its own place", () => {
+  const billing = plan(1, "Mercury payouts", HOUR);
+  const invites = plan(2, "Invitations", HOUR);
+  const item = (id: string, title: string) => ({
+    id,
+    agentId: "a1",
+    key: id,
+    revision: 1,
+    version: INBOX_WIRE_VERSION,
+    title,
+    blocks: [],
+    response: { type: INBOX_RESPONSE.TEXT },
+    needsReply: true,
+    status: INBOX_STATUS.OPEN,
+    postedAt: NOW - HOUR,
+    updatedAt: NOW - HOUR,
+  });
+  const waiting = factoryWaiting(
+    [
+      { holder: planHolder(billing), item: item("i1", "Which account pays out?") },
+      { holder: planHolder(invites), item: item("i2", "Expire after a week?") },
+      {
+        holder: {
+          kind: INBOX_HOLDER.AUTOMATION,
+          automationId: null,
+          name: "Nightly flake sweep",
+          repository: "acme/relay",
+          agents: new Map(),
+        },
+        item: item("i3", "Quarantine the flaky test?"),
+      },
+    ],
+    [
+      {
+        planId: billing.id,
+        items: [
+          { id: "i1", agentId: "a1", title: "Which account pays out?", postedAt: NOW - HOUR },
+        ],
+      },
+      {
+        planId: invites.id,
+        items: [{ id: "i4", agentId: "a2", title: "Send a reminder?", postedAt: NOW - MINUTE }],
+      },
+    ],
+  );
+  assert.deepEqual(
+    waiting.map(({ planId, items }) => [planId, items.map((each) => each.title)]),
+    [
+      [billing.id, ["Which account pays out?"]],
+      [invites.id, ["Expire after a week?", "Send a reminder?"]],
+    ],
+  );
 });

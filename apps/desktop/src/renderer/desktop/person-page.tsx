@@ -35,12 +35,13 @@ import { holderName, INBOX_HOLDER, type InboxListed } from "../planning/inbox-mo
 import { useMinute } from "../planning/plan-time";
 import { RelativeTime } from "../planning/relative-time";
 import { AUTOMATIONS_PAGE, type PlansControl } from "../planning/use-plans-tab";
+import { useWaitingItems } from "../planning/use-waiting-items";
 import { RetryButton } from "../retry-button";
 import { SPINNER_SIZE, Spinner } from "../spinner";
 import { Tooltip } from "../tooltip";
 import { useExperiment } from "../use-app-state";
 import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
-import { RecentRow, useWaitingItems } from "./desktop-home";
+import { RecentRow } from "./desktop-home";
 import { useArchivedView, useTaskListView } from "./task-list-view";
 import { useAutomations } from "./use-automations";
 

@@ -7,6 +7,7 @@ import type { PlanAgentLine, PlanPullRequestLine, PlanSummary } from "@luke/feat
 import type { AppInboxPlan, AppInboxWaitingItem } from "@luke/host/app-state";
 import { TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
 import { agentStillWriting } from "../planning/coding-agent-model";
+import { INBOX_HOLDER, type InboxListed } from "../planning/inbox-model";
 
 /**
  * factory-model.ts -- what the Factory tab draws: the task on a call with Luke, the agents building tasks, and what ships, each station leading with what waits on the developer, from the plan list, main's Inbox read, and the call.
@@ -16,7 +17,8 @@ import { agentStillWriting } from "../planning/coding-agent-model";
  * Mac's call with Luke, being talked through. Build lists each agent still
  * at work with its task, and each pull request still in checks or a draft;
  * it leads with what stops an agent until the developer acts, the Inbox's
- * open items and the agents whose turn failed in the last day. Ship lists
+ * open items, every member's as the Inbox lists them, and the agents whose
+ * turn failed in the last day. Ship lists
  * the pull requests merged in the last day, and leads with what stops a
  * merge: failing checks, then pull requests ready to merge, since nothing
  * merges without the developer. The wire carries no merge instant, so a
@@ -97,7 +99,7 @@ export interface FactoryShipped {
 export interface FactoryInput {
   /** The plans the sidebar lists. */
   readonly plans: readonly PlanSummary[];
-  /** What main's Inbox read says waits, by plan. */
+  /** What waits, by plan: every member's open items, as the Inbox reads them (`factoryWaiting`). */
   readonly waiting: readonly AppInboxPlan[];
   /** The plan on this Mac's call, or none. */
   readonly callPlanId: string | undefined;
@@ -260,4 +262,29 @@ export function factoryBoard(input: FactoryInput): FactoryBoard {
     shipped: placed.flatMap((each) => each.shipped).toSorted((a, b) => b.at - a.at),
     agentsWorking: plans.reduce((sum, plan) => sum + (plan.agents?.working ?? 0), 0),
   };
+}
+
+/**
+ * What waits, by plan: every open item the Inbox read of the listed plans,
+ * a teammate's agent's among them, and main's own count of the account's
+ * besides where the caller hands it, which it does only while the Inbox's
+ * reads are still out or did not answer. An item both name stands once.
+ */
+export function factoryWaiting(
+  read: readonly InboxListed[],
+  main: readonly AppInboxPlan[],
+): AppInboxPlan[] {
+  const byPlan = new Map<string, Map<string, AppInboxWaitingItem>>();
+  const add = (planId: string, item: AppInboxWaitingItem) => {
+    const items = byPlan.get(planId) ?? new Map<string, AppInboxWaitingItem>();
+    if (!items.has(item.id)) items.set(item.id, item);
+    byPlan.set(planId, items);
+  };
+  for (const { holder, item } of read) {
+    if (holder.kind !== INBOX_HOLDER.PLAN) continue;
+    const { id, agentId, title, postedAt } = item;
+    add(holder.plan.id, { id, agentId, title, postedAt });
+  }
+  for (const { planId, items } of main) for (const item of items) add(planId, item);
+  return [...byPlan].map(([planId, items]) => ({ planId, items: [...items.values()] }));
 }
