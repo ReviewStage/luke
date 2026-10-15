@@ -39,8 +39,8 @@ const PICTURE_OPENER = String.raw`(?<!(?<!\\)(?:\\\\)*\\)!\[`;
 /** An image's alt text: escaped characters, bracketed phrases one level deep, and any other character but a line break, bounded as the address's steps are. */
 const PICTURE_ALT = String.raw`(?:\\.|\[(?:\\.|[^\[\]\\\n]){0,1000}\]|[^\[\]\\\n]){0,1000}`;
 
-/** What may follow an image's address before its link closes: a caption in either quote, then the `)`. */
-const PICTURE_CLOSE = String.raw`(?:[ \t]+(?:"(?:\\.|[^"\\\n]){0,1000}"|'(?:\\.|[^'\\\n]){0,1000}'))?[ \t]*\)`;
+/** What may follow an image's address before its link closes: a caption in either quote or in parentheses, as Markdown allows, then the `)`. */
+const PICTURE_CLOSE = String.raw`(?:[ \t]+(?:"(?:\\.|[^"\\\n]){0,1000}"|'(?:\\.|[^'\\\n]){0,1000}'|\((?:\\.|[^()\\\n]){0,1000}\)))?[ \t]*\)`;
 
 /**
  * Every picture a text draws by an address of a plan's picture, whole: its

@@ -222,15 +222,16 @@ test("a correction that leaves a picture's address drawing no picture, as a link
   }
 });
 
-test("a picture whose alt text holds a bracketed phrase is kept like any other", () => {
-  const text = `## Approach\n\n![Mock [v2]](${PICTURE_ADDRESS})\n`;
-  const note: PlanNote = {
-    kind: NOTE_KIND.REPLACE,
-    find: `![Mock [v2]](${PICTURE_ADDRESS})`,
-    text: "No mock",
-  };
+test("a picture whose alt text holds a bracketed phrase, or whose caption stands in single quotes or parentheses, is kept like any other", () => {
+  for (const line of [
+    `![Mock [v2]](${PICTURE_ADDRESS})`,
+    `![Mock](${PICTURE_ADDRESS} 'Version two')`,
+    `![Mock](${PICTURE_ADDRESS} (Version two))`,
+  ]) {
+    const note: PlanNote = { kind: NOTE_KIND.REPLACE, find: line, text: "No mock" };
 
-  assert.deepEqual(applyNotesToText(text, [note]).missed, [note]);
+    assert.deepEqual(applyNotesToText(`## Approach\n\n${line}\n`, [note]).missed, [note], line);
+  }
 });
 
 test("a correction that rewords a picture's alt text and caption, or moves it within the phrase it corrects, keeping its address, is taken", () => {
