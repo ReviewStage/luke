@@ -46,12 +46,12 @@ const openAgent = Effect.gen(function* () {
     task: null,
   });
   assert.ok(Option.isSome(started));
-  const agent: PostingAgent = {
+  const agent = {
     userId,
     planId: plan.id,
     agentId: started.value.agent.id,
     repository: "acme/relay",
-  };
+  } satisfies PostingAgent;
   return agent;
 });
 

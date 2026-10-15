@@ -342,7 +342,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
   /** The instructions the agent's session runs under, composed on what its row names and whether its token reads the repository's CI. */
   const promptOf = (agent: CodingAgent, ciReadable: boolean): CoderSessionPrompt => {
     const brief = agent.task === null ? CODING_AGENT_BRIEF.PLAN : CODING_AGENT_BRIEF.TASK;
-    const text = coderInstructions(agent.repository, brief, ciReadable);
+    const text = coderInstructions(agent.repository, brief, ciReadable, agent.planId !== null);
     return { text, hash: promptHashOf(text), ciReadable };
   };
 
@@ -546,8 +546,6 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         const found = yield* agentOf(admitted);
         if (Result.isFailure(found)) return inboxRejected(INBOX_REFUSAL.NO_AGENT);
         const { id: agentId, planId, repository } = found.success;
-        // An agent with no plan has no inbox yet; its questions go in its final message.
-        if (planId === null) return inboxRejected(INBOX_REFUSAL.PLANLESS);
         const agent = { userId: admitted.target.userId, planId, agentId };
         switch (call.tool) {
           case INBOX_TOOL.POST:

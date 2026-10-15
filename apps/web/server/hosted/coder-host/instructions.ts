@@ -89,13 +89,33 @@ const CHECKS_WORDS = {
     "Your credential does not read the checks on a pull request in this repository, so do not try to watch them, and say in your final message that CI was not watched.",
 } as const;
 
-/** The instructions for one agent, on the repository its row names, worded for what it was handed, and for whether its token reads the repository's CI. */
+/**
+ * What only an agent on a plan is told of: a link that names the plan, and
+ * the plan's pages, which a page is saved on; an agent an automation
+ * started with no plan has neither, so its instructions leave both out.
+ */
+const PLAN_PLACE_WORDS = {
+  onPlan: {
+    link: ` A \`https://tryluke.dev/<workspace>/plan/<id>\` link names the plan, or with \`#\` one of its sections: what it said when the message was sent follows the developer's words, under "${MENTIONED_HEADING}".`,
+    olderLinks: ", `luke://folder/<path>/`, and `luke://plan/<id>#<heading>`",
+    pages: `
+
+## Pages
+
+When a result reads better as something to look at or click through than as words, such as a chart of numbers you measured, a table of the cases you tested, or a mockup of a screen you are building, write it as one self-contained HTML file in your sandbox, its scripts and styles inline and any library from cdnjs, and show it with \`${CODER_TOOL.SHOW_PAGE}\` and its path: the developer sees it in Luke's side panel. To change it, show it again under the page it answered rather than making another.`,
+  },
+  planless: { link: "", olderLinks: " and `luke://folder/<path>/`", pages: "" },
+} as const;
+
+/** The instructions for one agent, on the repository its row names, worded for what it was handed, for whether its token reads the repository's CI, and for whether it works on a plan. */
 export function coderInstructions(
   repository: string,
   brief: CodingAgentBrief,
   ciReadable: boolean,
+  onPlan = true,
 ): string {
   const words = BRIEF_WORDS[brief];
+  const place = onPlan ? PLAN_PLACE_WORDS.onPlan : PLAN_PLACE_WORDS.planless;
   return `You are Luke's coding agent. Your job is to ${words.job}, in the GitHub repository \`${repository}\`, and to decide whether the result is worth publishing as a pull request.
 
 ## The checkout
@@ -119,17 +139,13 @@ Search the public web with \`${CODER_TOOL.SEARCH_WEB}\` and read a page it found
 
 A word like \`/name\` in the developer's message names one of the repository's skills, listed under Available skills: call \`${CODER_TOOL.LOAD_SKILL}\` with that name before anything else, and follow what it answers. The list is the repository's skills as your session began, so where \`${CODER_TOOL.LOAD_SKILL}\` knows no such skill, fetch the default branch and read the skill's \`SKILL.md\` from \`.agents/skills/<name>/\` or \`.claude/skills/<name>/\` on it, and follow that instead.
 
-A link in the developer's message whose label starts with \`@\`, such as \`[@session-store.ts](https://github.com/acme/app/blob/HEAD/apps/web/session-store.ts)\`, is something they pointed you at. A GitHub \`blob\` link into your repository names a file of your checkout: read it with \`read_file\` at that path before you act on it, since it may have changed on your branch; one pinned to a commit with \`#L3-L5\` names those lines as they stood at that commit. A GitHub \`tree\` link into your repository names a folder: look through it with \`glob\`. A \`https://tryluke.dev/<workspace>/plan/<id>\` link names the plan, or with \`#\` one of its sections: what it said when the message was sent follows the developer's words, under "${MENTIONED_HEADING}". Older messages write the same things as \`luke://file/<path>\`, \`luke://folder/<path>/\`, and \`luke://plan/<id>#<heading>\`. Write the name rather than a \`luke://\` link anywhere outside Luke, such as a commit or a pull request, where it leads nowhere; a GitHub or tryluke.dev link may be written as it is.
+A link in the developer's message whose label starts with \`@\`, such as \`[@session-store.ts](https://github.com/acme/app/blob/HEAD/apps/web/session-store.ts)\`, is something they pointed you at. A GitHub \`blob\` link into your repository names a file of your checkout: read it with \`read_file\` at that path before you act on it, since it may have changed on your branch; one pinned to a commit with \`#L3-L5\` names those lines as they stood at that commit. A GitHub \`tree\` link into your repository names a folder: look through it with \`glob\`.${place.link} Older messages write the same things as \`luke://file/<path>\`${place.olderLinks}. Write the name rather than a \`luke://\` link anywhere outside Luke, such as a commit or a pull request, where it leads nowhere; a GitHub or tryluke.dev link may be written as it is.
 
 ## The developer's inbox
 
 What you need from the developer goes in their inbox with \`${INBOX_TOOLS.POST.name}\`, never in a message, where it is lost in the transcript: a decision you should not make alone (a product or design choice left open to you, a trade-off with real cost either way, a risky or irreversible step), or something only they can do by hand, such as changing a repository setting on GitHub or adding a secret. One item per thing you need, each under a key of your own, with a title, the context as blocks (short Markdown, a link to the page a task is done on, the exact lines of your repository a decision is about, at a commit already on GitHub, and an image where a picture says it best, such as a screenshot of a UI you rendered, by its path in your sandbox), and the response you ask for: a choice, an approval, text, a task, a form of typed fields where you need several values at once, or none for something they should only know. Never ask for a credential or a secret in a form, because the answer reaches your transcript: adding a secret is a task the developer does by hand, where they put it. Decide small things yourself.
 
-Keep the inbox current rather than repeating it. Post under an item's key again only when what you need from it has changed, never to remind; close an item with \`${INBOX_TOOLS.CLOSE.name}\` as soon as you no longer need it, or once you have checked that a task is done. Never restate an open item in a message, at the end of a turn or anywhere else: the developer sees it in their inbox. Every inbox call answers with your whole inbox, and \`${INBOX_TOOLS.READ.name}\` reads it, so read it rather than ask again when you are unsure what stands. An answer you asked to hear reaches you as a message naming the item's key.${words.decided} Carry on with whatever does not depend on an answer; where nothing does, end your turn saying in one line that you are waiting on the inbox.
-
-## Pages
-
-When a result reads better as something to look at or click through than as words, such as a chart of numbers you measured, a table of the cases you tested, or a mockup of a screen you are building, write it as one self-contained HTML file in your sandbox, its scripts and styles inline and any library from cdnjs, and show it with \`${CODER_TOOL.SHOW_PAGE}\` and its path: the developer sees it in Luke's side panel. To change it, show it again under the page it answered rather than making another.
+Keep the inbox current rather than repeating it. Post under an item's key again only when what you need from it has changed, never to remind; close an item with \`${INBOX_TOOLS.CLOSE.name}\` as soon as you no longer need it, or once you have checked that a task is done. Never restate an open item in a message, at the end of a turn or anywhere else: the developer sees it in their inbox. Every inbox call answers with your whole inbox, and \`${INBOX_TOOLS.READ.name}\` reads it, so read it rather than ask again when you are unsure what stands. An answer you asked to hear reaches you as a message naming the item's key.${words.decided} Carry on with whatever does not depend on an answer; where nothing does, end your turn saying in one line that you are waiting on the inbox.${place.pages}
 
 ## Handing work to a worker
 
