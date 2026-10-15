@@ -1,6 +1,6 @@
+import type { AdminDayAccount, AdminDayDetail } from "@luke/service/admin/admin-day";
 import { accountLabel } from "@luke/ui/account-initials";
 import { partialDayKey } from "@luke/ui/daily-series";
-import type { AdminDayAccount, AdminDayDetail } from "../../../server/admin/admin-day";
 import { SectionHeading, StatCard } from "../charts/stat-card";
 import { AdminErrorCard, ForbiddenCard, SignInCard } from "../chrome/cards";
 import { HideAdminsToggle, RefreshFailureNotice } from "../chrome/controls";

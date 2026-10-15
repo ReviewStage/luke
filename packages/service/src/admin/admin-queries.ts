@@ -4,12 +4,6 @@ import { utcDayKey } from "@luke/database/models/quota";
 import { account, session, user } from "@luke/database/schemas/auth";
 import { adminFavorite } from "@luke/database/schemas/favorite";
 import { hostedUsage } from "@luke/database/schemas/usage";
-import { isAdminRole, USER_ROLE } from "@luke/service/admin/admin-access";
-import {
-  ADMIN_METRICS_SCOPE,
-  type AdminMetricsScope,
-  type AdminMetricsWindow,
-} from "@luke/service/admin/http";
 import {
   and,
   asc,
@@ -30,6 +24,7 @@ import {
 } from "drizzle-orm";
 import { Duration, Effect, Option, Result, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
+import { isAdminRole, USER_ROLE } from "./admin-access.js";
 import { ADMIN_DAY_ACCOUNTS_LIMIT, type AdminDaySource } from "./admin-day.js";
 import {
   ADMIN_RETENTION_WEEKS,
@@ -49,6 +44,7 @@ import {
   lastSeenInstant,
   searchLikePattern,
 } from "./admin-users.js";
+import { ADMIN_METRICS_SCOPE, type AdminMetricsScope, type AdminMetricsWindow } from "./http.js";
 
 /** How many of the most active hosted-tier accounts the overview names. */
 const ADMIN_TOP_USERS_LIMIT = 10;

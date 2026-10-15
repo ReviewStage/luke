@@ -1,5 +1,6 @@
 import type { DatabaseServices } from "@luke/database/core/query";
-import type { AdminViewer } from "@luke/service/admin/admin-access";
+import { Clock, Effect } from "effect";
+import type { AdminViewer } from "./admin-access.js";
 import {
   ADMIN_ERROR,
   ADMIN_HTTP_STATUS,
@@ -10,8 +11,7 @@ import {
   adminUsersSearch,
   errorResponse,
   jsonResponse,
-} from "@luke/service/admin/http";
-import { Clock, Effect } from "effect";
+} from "./http.js";
 import { type AdminSeamEffect, unavailableSeam } from "./seam.js";
 
 /**

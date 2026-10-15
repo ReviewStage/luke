@@ -1,5 +1,5 @@
+import type { AdminMetrics, AdminRetentionCell } from "@luke/service/admin/admin-metrics";
 import { Fragment } from "react";
-import type { AdminMetrics, AdminRetentionCell } from "../../../server/admin/admin-metrics";
 import { formatDayTick, formatNumber } from "../format";
 
 /**

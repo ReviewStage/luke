@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { noDatabase } from "@luke/database/testing/no-database";
-import type { AdminViewer } from "@luke/service/admin/admin-access";
-import { ADMIN_ERROR } from "@luke/service/admin/http";
 import { Cause, Effect, Layer, Logger } from "effect";
 import { HttpEffect } from "effect/http";
 import { test } from "vitest";
-import { adminViewerGate } from "../server/admin/gate";
-import { unavailableSeam } from "../server/admin/seam";
+import type { AdminViewer } from "./admin-access.js";
+import { adminViewerGate } from "./gate.js";
+import { ADMIN_ERROR } from "./http.js";
+import { unavailableSeam } from "./seam.js";
 
 const ADMIN_VIEWER: AdminViewer = { userId: "admin-1", role: "admin" };
 

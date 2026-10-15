@@ -1,3 +1,4 @@
+import type { AdminDailyUsage, AdminTrend } from "@luke/service/admin/admin-metrics";
 import {
   type ChartConfig,
   ChartContainer,
@@ -6,7 +7,6 @@ import {
 } from "@luke/ui/chart";
 import { partialDayKey, seriesHasNoData } from "@luke/ui/daily-series";
 import { Bar, BarChart, CartesianGrid, Cell, XAxis, YAxis } from "recharts";
-import type { AdminDailyUsage, AdminTrend } from "../../../server/admin/admin-metrics";
 import { formatDayTick, formatTooltipDay, PARTIAL_DAY_OPACITY } from "../format";
 import { ChartHeading } from "./chart-heading";
 
