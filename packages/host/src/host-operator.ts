@@ -168,6 +168,19 @@ import {
   planningWorkspacePhotoAnswerSchema,
 } from "@luke/features/planning-view";
 import {
+  type PrRunCommandsAnswer,
+  type PrRunLocation,
+  type PrRunOutcome,
+  type PrRunPullRequest,
+  type PrRunSetCommandParams,
+  type PrRunStateEvent,
+  prRunCommandsAnswerSchema,
+  prRunLocationSchema,
+  prRunOutcomeSchema,
+  prRunOutputEventSchema,
+  prRunStateEventSchema,
+} from "@luke/features/pr-run-view";
+import {
   type TerminalCreatedActAnswer,
   type TerminalResumedActAnswer,
   type TerminalStateEvent,
@@ -540,6 +553,27 @@ export interface HostOperator {
   ): () => void;
   /** How an attached shell's connection stands, by its connection. */
   onTerminalState(listener: (state: TerminalStateEvent) => void): () => void;
+  /** Every run command set on this Mac for the account signed in; none where the host could not answer. */
+  prRunCommands(): Effect.Effect<PrRunCommandsAnswer | undefined>;
+  /** One repository's run command set, or cleared with null; done or why not. */
+  prRunSetCommand(params: PrRunSetCommandParams): Effect.Effect<PrRunOutcome | undefined>;
+  /** A pull request run for the connection given, whose port already stands; done or why not. */
+  prRunStart(
+    params: PrRunPullRequest & { connectionId: string },
+  ): Effect.Effect<PrRunOutcome | undefined>;
+  /** A pull request's run stopped, its checkout kept. */
+  prRunStop(params: PrRunPullRequest): Effect.Effect<void>;
+  prRunAck(params: { connectionId: string; bytes: number }): Effect.Effect<void>;
+  /** A connection let go, which stops the run it drew. */
+  prRunRelease(params: { connectionId: string }): Effect.Effect<void>;
+  /** Where a pull request's checkout stands on disk; none where the host could not answer. */
+  prRunLocate(params: PrRunPullRequest): Effect.Effect<PrRunLocation | undefined>;
+  /** A pull request's checkout deleted; done or why not. */
+  prRunDelete(params: PrRunPullRequest): Effect.Effect<PrRunOutcome | undefined>;
+  /** What a pull request run printed, by its connection. */
+  onPrRunOutput(listener: (output: { connectionId: string; data: Uint8Array }) => void): () => void;
+  /** Where a pull request run stands, by its connection. */
+  onPrRunState(listener: (state: PrRunStateEvent) => void): () => void;
 }
 
 /** The host's answer to a terminal call, read by its schema; none where the host refused it or the shape is not read. */
@@ -548,6 +582,15 @@ function terminalAnswer<Answer, Encoded>(schema: EffectSchema.Codec<Answer, Enco
     answer.ok
       ? Result.getOrUndefined(readEither(schema, { excess: EXCESS_KEYS.DROP })(answer.result))
       : undefined;
+}
+
+/** A pull request as a call's params carry it. */
+function pullRequestParams(pullRequest: PrRunPullRequest) {
+  return {
+    workspaceId: pullRequest.workspaceId,
+    repository: pullRequest.repository,
+    number: pullRequest.number,
+  };
 }
 
 interface HostOperatorOptions {
@@ -1505,6 +1548,68 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       on(
         GATEWAY_EVENT.TERMINAL_STATE,
         (payload) => Result.getOrUndefined(readEither(terminalStateEventSchema)(payload)),
+        listener,
+      ),
+    prRunCommands: () =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.PR_RUNS_COMMANDS),
+        terminalAnswer(prRunCommandsAnswerSchema),
+      ),
+    prRunSetCommand: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.PR_RUNS_SET_COMMAND, {
+          workspaceId: params.workspaceId,
+          repository: params.repository,
+          command: params.command,
+        }),
+        terminalAnswer(prRunOutcomeSchema),
+      ),
+    prRunStart: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.PR_RUNS_START, {
+          connectionId: params.connectionId,
+          ...pullRequestParams(params),
+        }),
+        terminalAnswer(prRunOutcomeSchema),
+      ),
+    prRunStop: (params) =>
+      fire(client.call(GATEWAY_METHOD.PR_RUNS_STOP, pullRequestParams(params))),
+    prRunAck: (params) =>
+      fire(
+        client.call(GATEWAY_METHOD.PR_RUNS_ACK, {
+          connectionId: params.connectionId,
+          bytes: params.bytes,
+        }),
+      ),
+    prRunRelease: (params) =>
+      fire(client.call(GATEWAY_METHOD.PR_RUNS_RELEASE, { connectionId: params.connectionId })),
+    prRunLocate: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.PR_RUNS_LOCATE, pullRequestParams(params)),
+        terminalAnswer(prRunLocationSchema),
+      ),
+    prRunDelete: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.PR_RUNS_DELETE, pullRequestParams(params)),
+        terminalAnswer(prRunOutcomeSchema),
+      ),
+    onPrRunOutput: (listener) =>
+      on(
+        GATEWAY_EVENT.PR_RUN_OUTPUT,
+        (payload) => {
+          const output = Result.getOrUndefined(readEither(prRunOutputEventSchema)(payload));
+          if (output === undefined) return undefined;
+          const bytes = Base64.decode(output.data);
+          return Result.isSuccess(bytes)
+            ? { connectionId: output.connectionId, data: bytes.success }
+            : undefined;
+        },
+        listener,
+      ),
+    onPrRunState: (listener) =>
+      on(
+        GATEWAY_EVENT.PR_RUN_STATE,
+        (payload) => Result.getOrUndefined(readEither(prRunStateEventSchema)(payload)),
         listener,
       ),
     onSessionReplayChanged: (listener) =>

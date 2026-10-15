@@ -1,3 +1,4 @@
+import { PR_RUN_PORT_CHANNEL } from "@luke/features/pr-run-view";
 import { TERMINAL_PORT_CHANNEL } from "@luke/features/terminal-acts";
 import type { UnparsedWireValue } from "@luke/wire";
 import * as Sentry from "@sentry/electron/renderer";
@@ -47,4 +48,9 @@ contextBridge.exposeInMainWorld("luke", exposedBridge());
 // it back by the channel and checks the ticket (`renderer/terminal/terminal-port.ts`).
 ipcRenderer.on(TERMINAL_PORT_CHANNEL, (event, ticket: UnparsedWireValue) => {
   window.postMessage({ channel: TERMINAL_PORT_CHANNEL, ticket }, "*", [...event.ports]);
+});
+
+// A pull request run's port is handed in the same way (`renderer/planning/pr-run-port.ts`).
+ipcRenderer.on(PR_RUN_PORT_CHANNEL, (event, ticket: UnparsedWireValue) => {
+  window.postMessage({ channel: PR_RUN_PORT_CHANNEL, ticket }, "*", [...event.ports]);
 });

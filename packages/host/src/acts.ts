@@ -149,6 +149,12 @@ import {
   planningWorkspaceTransferParamsSchema,
 } from "@luke/features/planning-view";
 import {
+  type PrRunCommandsAnswer,
+  prRunCommandsAnswerSchema,
+  prRunPullRequestSchema,
+  prRunSetCommandParamsSchema,
+} from "@luke/features/pr-run-view";
+import {
   type TerminalCreatedActAnswer,
   type TerminalResumedActAnswer,
   type TerminalsActAnswer,
@@ -439,6 +445,20 @@ export const ACT_KIND = {
   TERMINAL_RESUME: "terminal.resume",
   TERMINAL_ATTACH: "terminal.attach",
   TERMINAL_DETACH: "terminal.detach",
+  /**
+   * Running a pull request on this Mac (`@luke/features/pr-run-view`): the
+   * account's run commands read and set in Settings; a run started from a
+   * pull request's tab, stopped, and closed with its tab; and its checkout
+   * shown in Finder or deleted. What a run prints travels on the port a
+   * start posts to the asking panel, never on an act.
+   */
+  PR_RUN_COMMANDS: "prRun.commands",
+  PR_RUN_SET_COMMAND: "prRun.setCommand",
+  PR_RUN_START: "prRun.start",
+  PR_RUN_STOP: "prRun.stop",
+  PR_RUN_CLOSE: "prRun.close",
+  PR_RUN_SHOW_IN_FINDER: "prRun.showInFinder",
+  PR_RUN_DELETE_CHECKOUT: "prRun.deleteCheckout",
   VOICE_COMMAND: "voice.command",
   /** The call card's way back: Luke's window brought forward on the call's own plan. */
   CALL_SHOW_PLAN: "call.showPlan",
@@ -1241,6 +1261,41 @@ export const ACT = {
     payload: actSchema(terminalShellParamsSchema),
     result: answersNothing,
     refusal: "Could not close that shell.",
+  },
+  [ACT_KIND.PR_RUN_COMMANDS]: {
+    payload: noPayload,
+    result: wireResult<PrRunCommandsAnswer>(isReadable(prRunCommandsAnswerSchema)),
+    refusal: "Could not read the run commands set on this Mac.",
+  },
+  [ACT_KIND.PR_RUN_SET_COMMAND]: {
+    payload: actSchema(prRunSetCommandParamsSchema),
+    result: answersNothing,
+    refusal: "Could not save the run command.",
+  },
+  [ACT_KIND.PR_RUN_START]: {
+    payload: actSchema(prRunPullRequestSchema),
+    result: answersNothing,
+    refusal: "Could not run this pull request on this Mac.",
+  },
+  [ACT_KIND.PR_RUN_STOP]: {
+    payload: actSchema(prRunPullRequestSchema),
+    result: answersNothing,
+    refusal: "Could not stop the run.",
+  },
+  [ACT_KIND.PR_RUN_CLOSE]: {
+    payload: actSchema(prRunPullRequestSchema),
+    result: answersNothing,
+    refusal: "Could not close the run.",
+  },
+  [ACT_KIND.PR_RUN_SHOW_IN_FINDER]: {
+    payload: actSchema(prRunPullRequestSchema),
+    result: answersNothing,
+    refusal: "There is no local checkout of this pull request to show.",
+  },
+  [ACT_KIND.PR_RUN_DELETE_CHECKOUT]: {
+    payload: actSchema(prRunPullRequestSchema),
+    result: answersNothing,
+    refusal: "Could not delete the local checkout.",
   },
   [ACT_KIND.VOICE_COMMAND]: {
     payload: record({

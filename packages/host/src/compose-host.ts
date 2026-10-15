@@ -5,6 +5,7 @@ import {
   HostedIntegrationsClient,
   HostedMacCommandClient,
   HostedPlanClient,
+  HostedPrFetchClient,
   HostedTerminalClient,
   HostedWorkspaceClient,
   type PlanActivityFrame,
@@ -32,6 +33,7 @@ import { composeIntegrations } from "./compose-integrations.js";
 import { composeLive } from "./compose-live.js";
 import { composeMacCommands } from "./compose-mac-commands.js";
 import { composePlanning } from "./compose-planning.js";
+import { composePrRuns, prRunTools } from "./compose-pr-runs.js";
 import { composeSettings } from "./compose-settings.js";
 import { composeTerminals } from "./compose-terminals.js";
 import type { Composer, DuplicateGatewayMethod } from "./composer.js";
@@ -47,6 +49,7 @@ import {
 } from "./effect/seams.js";
 import { shutdownStepsClosingLiveSession, shutdownStepsFlushingEvents } from "./lifecycle.js";
 import { HOST_NODE_CAPABILITY } from "./node-capabilities.js";
+import { revokeInstallationToken } from "./pr-run-credential.js";
 import { createGatewayService } from "./service.js";
 import { openTerminalSocketOverWs } from "./terminal/socket-over-ws.js";
 
@@ -61,6 +64,7 @@ const HOST_CONCERN = {
   INTEGRATIONS: "integrations",
   MAC_COMMANDS: "macCommands",
   TERMINALS: "terminals",
+  PR_RUNS: "prRuns",
 } as const;
 
 type HostConcern = (typeof HOST_CONCERN)[keyof typeof HOST_CONCERN];
@@ -204,6 +208,20 @@ export const hostAssemblyLayer: Layer.Layer<
       }),
       openSocket: openTerminalSocketOverWs,
     });
+    const prRuns = yield* composePrRuns({
+      kernel,
+      account,
+      store: settings.store,
+      client: new HostedPrFetchClient({
+        serviceBaseUrl: kernel.hostedServiceBaseUrl,
+        ...account.token,
+      }),
+      revoke: revokeInstallationToken,
+      sourceUrl: (repository) => `https://github.com/${repository}.git`,
+      ...(yield* prRunTools),
+      // Note that the credential helper is this app's own runtime run as Node, so it needs nothing installed beside Git.
+      helper: { path: process.execPath, environment: { ELECTRON_RUN_AS_NODE: "1" } },
+    });
     activePlanId = planning.activePlanId;
     showPlanDraft = planning.showDraft;
     showPlanActivity = planning.showActivity;
@@ -226,6 +244,7 @@ export const hostAssemblyLayer: Layer.Layer<
     const closeCapabilities = Effect.gen(function* () {
       yield* planning.reset;
       yield* terminals.reset;
+      yield* prRuns.reset;
       yield* account.applyVoiceCredential;
       yield* settings.emitSettings();
     });
@@ -256,6 +275,7 @@ export const hostAssemblyLayer: Layer.Layer<
       [HOST_CONCERN.INTEGRATIONS]: integrations,
       [HOST_CONCERN.MAC_COMMANDS]: macCommands,
       [HOST_CONCERN.TERMINALS]: terminals,
+      [HOST_CONCERN.PR_RUNS]: prRuns,
     } satisfies Readonly<Record<HostConcern, Composer>>;
 
     /**

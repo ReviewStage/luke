@@ -189,6 +189,21 @@ export const GATEWAY_METHOD = {
   TERMINALS_ACK: "terminals.ack",
   TERMINALS_DISCONNECT: "terminals.disconnect",
   TERMINALS_WAKE: "terminals.wake",
+  /**
+   * Running a pull request on this Mac (`@luke/features/pr-run-view`): the
+   * account's run commands read and set; a run started for one panel under a
+   * connection id the desktop minted, stopped, acked, and let go; and a pull
+   * request's checkout located and deleted. What a run prints is heard as
+   * `PR_RUN_OUTPUT` events, never answered.
+   */
+  PR_RUNS_COMMANDS: "prRuns.commands",
+  PR_RUNS_SET_COMMAND: "prRuns.setCommand",
+  PR_RUNS_START: "prRuns.start",
+  PR_RUNS_STOP: "prRuns.stop",
+  PR_RUNS_ACK: "prRuns.ack",
+  PR_RUNS_RELEASE: "prRuns.release",
+  PR_RUNS_LOCATE: "prRuns.locate",
+  PR_RUNS_DELETE: "prRuns.delete",
   /** Everything a window's bootstrap reads of the host, in one answer. */
   CLIENT_BOOTSTRAP: "client.bootstrap",
   SETTINGS_SNAPSHOT: "settings.snapshot",
@@ -480,6 +495,10 @@ export const GATEWAY_EVENT = {
   TERMINAL_OUTPUT: "terminal.output",
   /** How an attached shell's connection stands, named by its connection. */
   TERMINAL_STATE: "terminal.state",
+  /** What a pull request run on this Mac printed, named by its connection, for the one panel that connection's port reaches. */
+  PR_RUN_OUTPUT: "prRun.output",
+  /** Where a pull request run on this Mac stands, named by its connection. */
+  PR_RUN_STATE: "prRun.state",
 } as const;
 
 export type GatewayEventKind = (typeof GATEWAY_EVENT)[keyof typeof GATEWAY_EVENT];
