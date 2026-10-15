@@ -57,6 +57,10 @@ export interface AgentTranscriptControl {
   runStartedAt: number | undefined;
   /** Where the agent, or the worker, stood as the last page said; nothing before one landed. */
   pageStatus: CodingAgentStatus | undefined;
+  /** Whether the last page read came back with nothing more on it, so every message written by then is read. */
+  caughtUp: boolean;
+  /** How many pages have been read, which an ask counts from to know a page landed after it. */
+  pages: number;
   /** What the agent, or the worker, is titled as the last page said; nothing before one landed or a title did. */
   pageTitle: string | undefined;
   /** The title of each of the agent's workers that has one, by the call that started it, as the last page said; none on a worker's. */
@@ -82,6 +86,10 @@ interface Held {
   context: CodingAgentContext | undefined;
   runStartedAt: number | undefined;
   pageStatus: CodingAgentStatus | undefined;
+  /** Whether the last page read came back with nothing more on it, so every message written by then is read. */
+  caughtUp: boolean;
+  /** How many pages have been read, which an ask counts from to know a page landed after it. */
+  pages: number;
   pageTitle: string | undefined;
   subagentTitles: ReadonlyMap<string, string>;
   delegations: ReadonlyMap<string, number>;
@@ -100,6 +108,8 @@ function fresh(agentId: string): Held {
     context: undefined,
     runStartedAt: undefined,
     pageStatus: undefined,
+    caughtUp: false,
+    pages: 0,
     pageTitle: undefined,
     subagentTitles: new Map(),
     delegations: new Map(),
@@ -171,6 +181,8 @@ export function useAgentTranscript(input: {
           context: answer.context,
           runStartedAt: answer.runStartedAt,
           pageStatus: answer.status,
+          caughtUp: answer.messages.length === 0,
+          pages: was.pages + 1,
           pageTitle: answer.title ?? undefined,
           subagentTitles: new Map(
             (answer.subagentTitles ?? []).map((titled) => [titled.callId, titled.title]),
@@ -221,6 +233,8 @@ export function useAgentTranscript(input: {
     context: held.context,
     runStartedAt: held.runStartedAt,
     pageStatus: held.pageStatus,
+    caughtUp: held.caughtUp,
+    pages: held.pages,
     pageTitle: held.pageTitle,
     subagentTitles: held.subagentTitles,
     delegations: held.delegations,

@@ -98,6 +98,7 @@ import {
   withUndrawnPassed,
 } from "./closed-tabs";
 import { agentTabLabel } from "./coding-agent-model";
+import type { MessageReveal } from "./message-links";
 import type { SectionReveal } from "./plan-body";
 import { REVISION_SOURCE, type RevisionSource } from "./plan-history-model";
 import {
@@ -410,6 +411,10 @@ export interface PlansControl {
    * the place's own read, which is checked against them.
    */
   onOpenLink: (link: ReadLink) => void;
+  /** The last ask to bring one of an agent's messages into view, which a link to it makes; let go once its tab answers it (`message-links.tsx`). */
+  messageReveal: MessageReveal | undefined;
+  /** The agent's tab answered the ask, so a later visit to the agent does not answer it again. */
+  onMessageRevealed: (ask: number) => void;
   /** The last ask to show a section, under the plan it was asked of, so a section of a plan not yet open is shown once it is drawn; let go once shown. */
   sectionReveal: { readonly planId: string; readonly reveal: SectionReveal } | undefined;
   /** The plan's page showed the section an ask named, so a later visit to the plan does not show it again. */
@@ -811,6 +816,8 @@ export function usePlansTab(input: {
   >(undefined);
   const [reveal, setReveal] = useState<SourceReveal | undefined>(undefined);
   const [sectionReveal, setSectionReveal] = useState<PlansControl["sectionReveal"]>(undefined);
+  const [messageReveal, setMessageReveal] = useState<MessageReveal | undefined>(undefined);
+  const messageAsks = useRef(0);
   /** The asks to show a section made so far, so each is its own even after the last was let go. */
   const sectionAsks = useRef(0);
   /** The tabs closed in the window, the latest last, which ⇧⌘T opens again (`closed-tabs.ts`). */
@@ -1787,8 +1794,8 @@ export function usePlansTab(input: {
   /**
    * A Luke link's place opened through the door each kind already has: the
    * task's tabs, its side panel, its version history, or what stands in the
-   * plan's place. One of an agent's messages opens the agent's tab until it
-   * has a door of its own. Note
+   * plan's place. One of an agent's messages opens the agent's tab and asks
+   * it to bring the message into view. Note
    * that nothing is checked here: a place the account cannot read is read
    * all the same, and its read says it is not there.
    */
@@ -1834,10 +1841,21 @@ export function usePlansTab(input: {
         showPanelTab(place.planId, { changes: place.agentId });
         return;
       case LINK_PLACE.AGENT:
+        if (place.planId === undefined)
+          standInFor({ kind: STAND_IN.AGENT, agentId: place.agentId });
+        else showColumnTab(place.planId, { agent: place.agentId });
+        return;
+      // Each ask is its own, so the same message asked twice is brought into view twice.
       case LINK_PLACE.MESSAGE:
         if (place.planId === undefined)
           standInFor({ kind: STAND_IN.AGENT, agentId: place.agentId });
         else showColumnTab(place.planId, { agent: place.agentId });
+        messageAsks.current += 1;
+        setMessageReveal({
+          agentId: place.agentId,
+          messageId: place.messageId,
+          ask: messageAsks.current,
+        });
         return;
       case LINK_PLACE.INBOX:
         listLinked(workspace);
@@ -2235,6 +2253,9 @@ export function usePlansTab(input: {
     // Each ask is its own, so the same section asked twice scrolls twice.
     onShowMention: guard(showMention),
     onOpenLink: guard((link: ReadLink) => openLink(link)),
+    messageReveal,
+    // Only the ask answered is let go; a newer one stands until its agent's tab answers it.
+    onMessageRevealed: (ask) => setMessageReveal((last) => (last?.ask === ask ? undefined : last)),
     sectionReveal,
     // Only the ask shown is let go; a newer one stands until its own plan shows it.
     onSectionRevealed: (ask) =>

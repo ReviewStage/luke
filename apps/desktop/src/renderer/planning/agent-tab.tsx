@@ -37,6 +37,7 @@ import { FailureNote } from "../failure-note";
 import { useMemberDirectory, usePerson } from "../member-directory";
 import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { SPINNER_SIZE, Spinner } from "../spinner";
+import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { Tooltip } from "../tooltip";
 import { AgentComposer } from "./agent-composer";
 import {
@@ -75,6 +76,12 @@ import {
   workerToolState,
 } from "./coding-agent-model";
 import { CopyMessageAction } from "./copy-message";
+import {
+  agentMessagePlace,
+  MESSAGE_GONE,
+  MessagePlaceProvider,
+  useMessageReveal,
+} from "./message-links";
 import { SentWords, useSkill } from "./skill-chip";
 import type { SkillSource } from "./skill-picker";
 import { SkillCard } from "./skill-ref";
@@ -558,9 +565,12 @@ function PlanCard({
   title = cardTitle(text),
   sender,
   body,
+  messageId,
 }: {
   text: string;
   lead: TranscriptLead;
+  /** The message the card draws, which a link to it is brought into view by; none where it draws no message of the transcript's. */
+  messageId?: string | undefined;
   /** The card's line: the text's first line as plain words, unless the transcript names it otherwise. */
   title?: string | undefined;
   /** The line naming who sent it (`TranscriptOrigin`); none where the transcript names nobody. */
@@ -569,7 +579,7 @@ function PlanCard({
   body?: string | undefined;
 }): ReactNode {
   return (
-    <Message from={MESSAGE_ROLE.USER} className="agent-origin">
+    <Message from={MESSAGE_ROLE.USER} className="agent-origin" data-message-id={messageId}>
       {sender == null ? null : <span className="message-sender">{sender}</span>}
       <Plan data-plan-card="" aria-label={lead.label} className="agent-origin-card">
         <PlanHeader>
@@ -806,13 +816,14 @@ export function AgentMessage({
         title={briefTitle}
         sender={origin?.sender}
         body={origin?.body}
+        messageId={message.id}
       />
     );
   }
   const named = sender === undefined ? null : <MessageSender actor={sender} />;
   if (message.role === MESSAGE_ROLE.USER) {
     return (
-      <Message from={message.role}>
+      <Message from={message.role} data-message-id={message.id}>
         {named}
         <AttachedFileChips files={messageFileChips(message)} />
         {words === "" ? null : (
@@ -820,7 +831,7 @@ export function AgentMessage({
             <MessageContent>
               <SentWords text={words} />
             </MessageContent>
-            <CopyMessageAction words={words} />
+            <CopyMessageAction words={words} messageId={message.id} />
           </>
         )}
       </Message>
@@ -843,7 +854,7 @@ export function AgentMessage({
     );
   // A spoken turn's words were Luke's line, so they get no Copy, and its "Worked for" line stays inside its fold.
   return (
-    <Message from={message.role}>
+    <Message from={message.role} data-message-id={message.id}>
       {named}
       <MessageContent>
         <TranscriptRows
@@ -858,7 +869,7 @@ export function AgentMessage({
         </TranscriptRows>
       </MessageContent>
       {said ? null : workedFor}
-      {words === "" || said ? null : <CopyMessageAction words={words} />}
+      {words === "" || said ? null : <CopyMessageAction words={words} messageId={message.id} />}
     </Message>
   );
 }
@@ -1235,36 +1246,49 @@ export function AgentTab({
   });
   const copyWithToast = useCopyToast();
   const openGitHub = (url: string) => tell(ACT_KIND.GITHUB_OPEN, { url });
+  // A link to one of its messages is answered once the transcript has landed, here or by saying it is gone.
+  const toast = useToast();
+  useMessageReveal({
+    agentId: agent.id,
+    shown,
+    caughtUp: transcript.caughtUp,
+    pages: transcript.pages,
+    settled: !agentStillWriting(agent.status),
+    drawn: (messageId) => messages.some((message) => message.id === messageId),
+    gone: () => toast({ words: MESSAGE_GONE, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED }),
+  });
   return (
-    <AgentTabView
-      agent={agent}
-      models={control.models}
-      readModels={control.readModels}
-      transcript={transcript}
-      composer={composer}
-      model={model}
-      servers={servers}
-      published={published}
-      doors={{
-        openGitHub,
-        copy: copyWithToast,
-        openChanges: onOpenChanges,
-      }}
-      startedAt={shown ? agent.runStartedAt : undefined}
-      delegationStarts={shown ? transcript.delegations : undefined}
-      onStop={() => control.onStop(agent.id)}
-      onUnarchive={control.onUnarchive}
-      onOpenSubagent={onOpenSubagent}
-      onOpenTarget={onOpenTarget}
-      cards={cards}
-      openGitHub={openGitHub}
-      onOpenApiKeys={control.onOpenApiKeys}
-      keywords={control.keywords}
-      skills={control.readSkills}
-      starter={teammateStarter(agent.startedBy, control.me)}
-      readerId={control.me}
-      run={run}
-    />
+    <MessagePlaceProvider value={agentMessagePlace(agent, messages)}>
+      <AgentTabView
+        agent={agent}
+        models={control.models}
+        readModels={control.readModels}
+        transcript={transcript}
+        composer={composer}
+        model={model}
+        servers={servers}
+        published={published}
+        doors={{
+          openGitHub,
+          copy: copyWithToast,
+          openChanges: onOpenChanges,
+        }}
+        startedAt={shown ? agent.runStartedAt : undefined}
+        delegationStarts={shown ? transcript.delegations : undefined}
+        onStop={() => control.onStop(agent.id)}
+        onUnarchive={control.onUnarchive}
+        onOpenSubagent={onOpenSubagent}
+        onOpenTarget={onOpenTarget}
+        cards={cards}
+        openGitHub={openGitHub}
+        onOpenApiKeys={control.onOpenApiKeys}
+        keywords={control.keywords}
+        skills={control.readSkills}
+        starter={teammateStarter(agent.startedBy, control.me)}
+        readerId={control.me}
+        run={run}
+      />
+    </MessagePlaceProvider>
   );
 }
 

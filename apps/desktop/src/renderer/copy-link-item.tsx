@@ -33,6 +33,15 @@ function copyLinkItem(
   };
 }
 
+/** The copy of a place's link under the workspace the surface hands down, saying Link copied; none where it hands down none. */
+export function useCopyLink(): ((place: LinkPlace) => void) | undefined {
+  const workspace = useContext(LinkWorkspaceContext);
+  const copy = useCopyToast();
+  return workspace === undefined
+    ? undefined
+    : (place) => copy(linkOf(place, workspace), LINK_COPY.COPIED);
+}
+
 /** Copy link for a place, under the workspace the surface hands down; none where it hands down none. */
 export function useCopyLinkItem(): (place: LinkPlace) => MenuAction | undefined {
   const workspace = useContext(LinkWorkspaceContext);
