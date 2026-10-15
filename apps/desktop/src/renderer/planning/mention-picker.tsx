@@ -10,9 +10,10 @@ import {
 import { planSections } from "@luke/features/plan-document";
 import { PLAN_TREE_ENTRY } from "@luke/features/plan-wire";
 import { DocumentIcon, ProviderMark } from "@luke/ui";
+import type { SkillOption } from "@luke/ui/skill-mention";
 import { fileFolder, fileName } from "@luke/voice/code-pane-model";
 import { defaultFilter } from "cmdk";
-import { FolderIcon, HashIcon } from "lucide-react";
+import { BookOpenIcon, FolderIcon, HashIcon } from "lucide-react";
 import { type RefObject, useEffect, useId, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";
@@ -35,8 +36,9 @@ import { FileTypeIcon } from "./file-type-icon";
  * typed, through the same listing ⌘K finds files with
  * (`ACT_KIND.PLANNING_TREE`, the whole tree at the default branch).
  *
- * Where the editor's words go to an agent, the list offers the account's
- * connected MCP servers too, and once a word is typed each one's tools, read
+ * Where the editor's words go to an agent, the list offers the repository's
+ * skills too, a pick written as the `/name` chip the `/` list writes
+ * (`skill-picker.tsx`), and the account's connected MCP servers, and once a word is typed each one's tools, read
  * while the list stands open through the same read the agent's servers
  * popover draws its tools from (`../integration-tools.ts`); a mention of one
  * hands the agent's next turn that server whatever its switch says
@@ -52,8 +54,12 @@ import { FileTypeIcon } from "./file-type-icon";
 const MENTION_GROUP = {
   FILES: "Files and folders",
   PLAN: "Plan",
+  SKILLS: "Skills",
   SERVERS: "MCP servers",
 } as const;
+
+/** What a skill's row says beside its name. */
+const SKILL_DETAIL = "Skill";
 
 /** What a server's row says beside its name. */
 const SERVER_DETAIL = "MCP server";
@@ -63,6 +69,13 @@ const TOOL_DETAIL = "Tool";
 
 /** What stands between a server's name and its tool's in a tool's mention. */
 const TOOL_JOIN = " · ";
+
+/** The repository's skills as an `@` list offers them: as read, the ask to read them, and the pick that writes one as its `/name` chip. */
+export interface MentionSkills {
+  readonly known: readonly SkillOption[] | undefined;
+  readonly ask: () => void;
+  readonly onChoose: (name: string) => void;
+}
 
 /** The servers of a list that offers none. */
 const NO_SERVERS: readonly IntegrationProvider[] = [];
@@ -93,14 +106,13 @@ type MenuPlace =
   | { readonly left: number; readonly top: number }
   | { readonly left: number; readonly top: "auto"; readonly bottom: number };
 
-/** One row the list offers: what it mentions, the name its mention is written with, and a muted detail. */
-interface MentionRow {
-  readonly mention: Mention;
+/** One row the list offers: what it mentions, or the skill it names, the name it is written with, and a muted detail. */
+type MentionRow = {
   readonly name: string;
   readonly detail: string | undefined;
   /** The words it is found by. */
   readonly terms: string;
-}
+} & ({ readonly mention: Mention } | { readonly skill: string });
 
 interface MentionGroup {
   readonly label: string;
@@ -192,6 +204,16 @@ function serverRows(
   });
 }
 
+/** Each of the repository's skills' rows, found by its name and what it says it is for. */
+function skillRows(skills: readonly SkillOption[]): MentionRow[] {
+  return skills.map((skill) => ({
+    skill: skill.name,
+    name: skill.name,
+    detail: SKILL_DETAIL,
+    terms: `${skill.name} ${skill.description}`,
+  }));
+}
+
 /** The rows matching the query, best first, as many as a group lists; every row in order for no query. */
 function best(rows: readonly MentionRow[], query: string): readonly MentionRow[] {
   if (query.trim() === "") return rows.slice(0, PER_GROUP);
@@ -208,18 +230,22 @@ function groupsFor(
   query: string,
   paths: readonly RepositoryPath[] | undefined,
   plan: readonly MentionRow[],
+  skills: readonly MentionRow[],
   servers: readonly MentionRow[],
 ): readonly MentionGroup[] {
   const files = query.trim() === "" || paths === undefined ? [] : best(paths.map(pathRow), query);
   return [
     { label: MENTION_GROUP.FILES, rows: files },
     { label: MENTION_GROUP.PLAN, rows: best(plan, query) },
+    { label: MENTION_GROUP.SKILLS, rows: best(skills, query) },
     { label: MENTION_GROUP.SERVERS, rows: best(servers, query) },
   ].filter((group) => group.rows.length > 0);
 }
 
 /** A row's glyph, as its chip wears it. */
-function RowGlyph({ mention }: { mention: Mention }): React.JSX.Element {
+function RowGlyph({ row }: { row: MentionRow }): React.JSX.Element {
+  if ("skill" in row) return <BookOpenIcon aria-hidden="true" />;
+  const { mention } = row;
   switch (mention.kind) {
     case MENTION_KIND.FILE:
       return <FileTypeIcon name={fileName(mention.path)} />;
@@ -278,7 +304,7 @@ function MentionMenu({
               const mine = index;
               return (
                 <button
-                  key={JSON.stringify(row.mention)}
+                  key={"skill" in row ? row.skill : JSON.stringify(row.mention)}
                   id={optionId(id, mine)}
                   type="button"
                   role="option"
@@ -289,7 +315,7 @@ function MentionMenu({
                   onClick={() => onChoose(row)}
                 >
                   <span className="menu-item-glyph">
-                    <RowGlyph mention={row.mention} />
+                    <RowGlyph row={row} />
                   </span>
                   <span className="plan-compose-menu-name">{row.name}</span>
                   {row.detail === undefined ? null : (
@@ -345,12 +371,15 @@ export interface MentionSource {
  */
 export function useMentionPicker({
   source,
+  skills,
   servers = NO_SERVERS,
   room,
   side,
   onChoose,
 }: {
   source: MentionSource | undefined;
+  /** The repository's skills, where the words go to an agent; none for the plan's own words. */
+  skills?: MentionSkills | undefined;
   /** The account's connected MCP servers, where the words go to an agent; none for the plan's own words. */
   servers?: readonly IntegrationProvider[];
   /** The element the list is placed in, by the word. */
@@ -405,6 +434,14 @@ export function useMentionPicker({
     };
   }, [open, read, act, planId, repository]);
 
+  // The skills are asked for as each `@` word opens the list, as the `/` list asks for them; a read
+  // that answered is kept, and one that failed is asked again by the next word.
+  const askSkills = skills?.ask;
+  const askedAt = open ? trigger.start : undefined;
+  useEffect(() => {
+    if (askedAt !== undefined) askSkills?.();
+  }, [askedAt, askSkills]);
+
   // Each server's tools are read while the list stands open, and forgotten once it closes.
   const tools = useIntegrationTools(open ? servers : NO_SERVERS);
   const groups = open
@@ -412,6 +449,7 @@ export function useMentionPicker({
         trigger.query,
         read,
         planRows(planId, source.planName, source.text()),
+        skillRows(skills?.known ?? []),
         serverRows(servers, tools, trigger.query),
       )
     : [];
@@ -424,8 +462,11 @@ export function useMentionPicker({
       ? highlight.at
       : 0;
   const at = Math.min(held, Math.max(rows.length - 1, 0));
+  // A skill is written as the `/name` chip its own list writes; anything else as its mention.
   const choose = (row: MentionRow) =>
-    onChoose({ name: row.name, target: encodeMention(row.mention, place) });
+    "skill" in row
+      ? skills?.onChoose(row.skill)
+      : onChoose({ name: row.name, target: encodeMention(row.mention, place) });
 
   const onKey = (event: KeyboardEvent): boolean => {
     if (!open) return false;
