@@ -46,9 +46,11 @@ import {
 import type { PlanTranscript } from "@luke/features/transcript-wire";
 import type { WorkspaceInvitation } from "@luke/features/workspace-invitation-wire";
 import {
+  WORKSPACE_PHOTO_TYPE,
   WORKSPACE_ROLE,
   type Workspace,
   type WorkspaceMember,
+  type WorkspacePhotoType,
 } from "@luke/features/workspace-wire";
 import {
   GATEWAY_CLIENT_ROLE,
@@ -163,6 +165,8 @@ interface FakeService extends PlanningClient {
   members: Record<string, WorkspaceMember[]>;
   /** Each workspace's pending invitations, by its id. */
   invitations: Record<string, WorkspaceInvitation[]>;
+  /** Each workspace's photo, by its id: its type and its bytes in base64; one with none is not found. */
+  photos: Record<string, { contentType: WorkspacePhotoType; base64: string }>;
   /** Whether a write is refused as the account's role not allowing it. */
   notPermitted: boolean;
   /** The account's GitHub as the service last says it; none answers nothing, as a service that did not answer. */
@@ -277,6 +281,7 @@ function fakeService(plans: Plan[]): FakeService {
     workspacesGate: Effect.void,
     members: {},
     invitations: {},
+    photos: {},
     notPermitted: false,
     connection: { connected: false, login: null },
     githubGate: Effect.void,
@@ -365,6 +370,14 @@ function fakeService(plans: Plan[]): FakeService {
           return members === undefined
             ? UNANSWERED_WORKSPACE
             : ({ ok: true, answer: members } as const);
+        }),
+      photo: (workspaceId) =>
+        Effect.sync(() => {
+          service.reads.push(`photo:${workspaceId}`);
+          const photo = service.photos[workspaceId];
+          return photo === undefined
+            ? ({ ok: false, failure: WORKSPACE_CALL_FAILURE.NOT_FOUND } as const)
+            : ({ ok: true, answer: photo } as const);
         }),
       removeMember: (workspaceId, userId) =>
         Effect.sync(() => {
@@ -1339,6 +1352,25 @@ it.effect(
         `remove:${ACME.id}:${GRACE.userId}`,
         "workspaces",
       ]);
+    }),
+);
+
+it.effect(
+  "a workspace's photo is read on the service with nothing else, answered as its bytes or as none where it has none",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      service.memberships = [PERSONAL, ACME];
+      const photo = { contentType: WORKSPACE_PHOTO_TYPE.PNG, base64: "iVBORw0KGgo=" };
+      service.photos[ACME.id] = photo;
+      const { call } = yield* subject(service);
+
+      const read = yield* call(GATEWAY_METHOD.WORKSPACES_PHOTO, { workspaceId: ACME.id });
+      const none = yield* call(GATEWAY_METHOD.WORKSPACES_PHOTO, { workspaceId: PERSONAL.id });
+
+      assert.deepEqual(read, photo);
+      assert.deepEqual(none, { failure: WORKSPACE_CALL_FAILURE.NOT_FOUND });
+      assert.deepEqual(service.reads, [`photo:${ACME.id}`, `photo:${PERSONAL.id}`]);
     }),
 );
 

@@ -374,6 +374,11 @@ export function inboxItemPath(itemId: string): string {
   return `/api/inbox/${encodeURIComponent(itemId)}`;
 }
 
+/** One workspace's photo, as its bytes under its own media type (GET), served to the workspace's members alone. */
+export function workspacePhotoPath(workspaceId: string): string {
+  return `${HOSTED_SERVICE_PATH.WORKSPACES}/${encodeURIComponent(workspaceId)}/photo`;
+}
+
 /** One attachment of an inbox item, an image block's picture, as its bytes under its own media type (GET), served to the item's account alone. */
 export function inboxAttachmentPath(itemId: string, attachmentId: string): string {
   return `${inboxItemPath(itemId)}/attachments/${encodeURIComponent(attachmentId)}`;

@@ -5,7 +5,7 @@ import { Effect } from "effect";
 import { HOSTED_API_ERROR } from "./service-wire.js";
 import { WORKSPACE_CALL_FAILURE } from "./workspace-call.js";
 import { HostedWorkspaceClient, type HostedWorkspaceClientOptions } from "./workspace-client.js";
-import { WORKSPACE_ROLE } from "./workspace-wire.js";
+import { WORKSPACE_PHOTO_TYPE, WORKSPACE_ROLE } from "./workspace-wire.js";
 
 const PERSONAL = {
   id: "org-personal-1",
@@ -468,5 +468,44 @@ it.effect(
       assert.deepEqual(notAnAddress, { ok: false, failure: WORKSPACE_CALL_FAILURE.UNANSWERED });
       assert.deepEqual(asOwner, { ok: false, failure: WORKSPACE_CALL_FAILURE.UNANSWERED });
       assert.equal(api.requests().length, 1);
+    }),
+);
+
+/** The photo of `org-acme-1` read against a service answering `response`, and the paths it asked. */
+const photoAgainst = (response: () => Response) =>
+  Effect.gen(function* () {
+    const service = recordingHttpClient(response);
+    const photo = yield* Effect.provide(client().photo(ACME.id), service.layer);
+    return { photo, paths: service.requests.map((request) => request.pathname) };
+  });
+
+it.effect("reads a workspace's photo as its bytes in base64 under the type it was served as", () =>
+  Effect.gen(function* () {
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    const { photo, paths } = yield* photoAgainst(
+      () => new Response(png, { headers: { "content-type": WORKSPACE_PHOTO_TYPE.PNG } }),
+    );
+
+    assert.deepEqual(photo, {
+      ok: true,
+      answer: { contentType: WORKSPACE_PHOTO_TYPE.PNG, base64: "iVBORw0KGgo=" },
+    });
+    assert.deepEqual(paths, [`/api/workspaces/${ACME.id}/photo`]);
+  }),
+);
+
+it.effect(
+  "reads a photo the service did not find as not found, and one of another type as unanswered",
+  () =>
+    Effect.gen(function* () {
+      const missing = yield* photoAgainst(() =>
+        jsonResponse({ error: HOSTED_API_ERROR.NOT_FOUND }, HTTP_STATUS.NOT_FOUND),
+      );
+      const otherType = yield* photoAgainst(
+        () => new Response("<svg/>", { headers: { "content-type": "image/svg+xml" } }),
+      );
+
+      assert.deepEqual(missing.photo, { ok: false, failure: WORKSPACE_CALL_FAILURE.NOT_FOUND });
+      assert.deepEqual(otherType.photo, { ok: false, failure: WORKSPACE_CALL_FAILURE.UNANSWERED });
     }),
 );

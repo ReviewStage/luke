@@ -11,7 +11,7 @@ import {
   type PlanningStartAnswer,
   type PlanningWorkspaceGitHubConnectAnswer,
 } from "@luke/features/planning-view";
-import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
+import { WORKSPACE_PHOTO_TYPE, WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { highlightSnippet } from "@luke/host";
 import {
   ACT,
@@ -248,6 +248,13 @@ function fixture() {
         Effect.sync(() => {
           asked.push(`members:${params.workspaceId}`);
           return params.workspaceId === ACME.id ? { members: [GRACE] } : refusal();
+        }),
+      workspacePhoto: (params) =>
+        Effect.sync(() => {
+          asked.push(`photo:${params.workspaceId}`);
+          return params.workspaceId === ACME.id
+            ? { contentType: WORKSPACE_PHOTO_TYPE.PNG, base64: "iVBORw0KGgo=" }
+            : ({ failure: WORKSPACE_CALL_FAILURE.NOT_FOUND } as const);
         }),
       workspaceMemberRemove: (params) =>
         Effect.sync(() => {
@@ -514,6 +521,38 @@ it.effect(
         `leave:${ACME.id}`,
       ]);
       assert.deepEqual(f.opened, [INSTALL_URL]);
+    }),
+);
+
+it.effect(
+  "a workspace's photo is read through the host from a panel, its absence answered rather than refused, and never from the voice window",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+
+      const read = yield* f.router.performAct(
+        { kind: ACT_KIND.WORKSPACE_PHOTO_READ, payload: { workspaceId: ACME.id } },
+        PANEL,
+      );
+      const none = yield* f.router.performAct(
+        { kind: ACT_KIND.WORKSPACE_PHOTO_READ, payload: { workspaceId: "workspace-plain" } },
+        PANEL,
+      );
+      const fromVoice = yield* f.router.performAct(
+        { kind: ACT_KIND.WORKSPACE_PHOTO_READ, payload: { workspaceId: ACME.id } },
+        VOICE,
+      );
+
+      assert.deepEqual(read, {
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: { contentType: WORKSPACE_PHOTO_TYPE.PNG, base64: "iVBORw0KGgo=" },
+      });
+      assert.deepEqual(none, {
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: { failure: WORKSPACE_CALL_FAILURE.NOT_FOUND },
+      });
+      assert.equal(fromVoice.status, ACT_OUTCOME_STATUS.REFUSED);
+      assert.deepEqual(f.asked, [`photo:${ACME.id}`, "photo:workspace-plain"]);
     }),
 );
 

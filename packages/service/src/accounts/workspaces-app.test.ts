@@ -95,14 +95,16 @@ const NO_SESSION: SessionSeams = {
 
 /**
  * One request answered by the workspaces group and the install group over
- * the ambient database and the GitHub given; an OAuth bearer stands for the
- * account it names, and a session bearer is read by the plugin itself.
+ * the ambient database and the GitHub given, its response read by `read`
+ * before the handler is let go; an OAuth bearer stands for the account it
+ * names, and a session bearer is read by the plugin itself.
  */
-const send = (
+const answered = <A>(
   seams: WorkspaceSeams,
   github: FakeGitHub,
   request: Request,
-  session: SessionSeams = NO_SESSION,
+  session: SessionSeams,
+  read: (response: Response) => Promise<A>,
 ) =>
   Effect.gen(function* () {
     // The handler runs on the router's own fiber, so it is handed the test's clock: an intent's expiry and a token's are read off it.
@@ -129,8 +131,20 @@ const send = (
       { disableLogger: true },
     );
     const response = yield* Effect.promise(() => handler(request));
-    const text = yield* Effect.promise(() => response.text());
+    const result = yield* Effect.promise(() => read(response));
     yield* Effect.promise(() => dispose());
+    return result;
+  });
+
+/** One request answered as `answered` answers it, its body read as the JSON it is, or a redirect's location. */
+const send = (
+  seams: WorkspaceSeams,
+  github: FakeGitHub,
+  request: Request,
+  session: SessionSeams = NO_SESSION,
+) =>
+  answered(seams, github, request, session, async (response): Promise<Answer> => {
+    const text = await response.text();
     // SAFETY: the groups answer JSON or a redirect; the test compares the body as the wire value it is.
     const body = (text === "" ? undefined : JSON.parse(text)) as WireBoundaryInput;
     return { status: response.status, body, location: response.headers.get("location") };
@@ -805,6 +819,72 @@ it.effect(
           unnamed,
           refusedAs(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
         );
+      }).pipe(Effect.provide(database));
+    }),
+);
+
+/** Where the group serves a workspace's photo, its workspace in the query the path's rewrite moves it into. */
+const photoAt = (workspaceId: string) =>
+  `/api/workspaces/photo?${new URLSearchParams({ id: workspaceId })}`;
+
+/** A photo read under the bearer's account, as its status, the headers it was served under, and its bytes in base64. */
+const readPhoto = (seams: WorkspaceSeams, userId: string | undefined, workspaceId: string) =>
+  answered(
+    seams,
+    NO_GITHUB_TO_READ,
+    bearerRequest(photoAt(workspaceId), userId),
+    NO_SESSION,
+    async (response) => ({
+      status: response.status,
+      contentType: response.headers.get("content-type"),
+      nosniff: response.headers.get("x-content-type-options"),
+      cacheControl: response.headers.get("cache-control"),
+      base64: Buffer.from(await response.arrayBuffer()).toString("base64"),
+    }),
+  );
+
+it.effect(
+  "a workspace's photo is served as its bytes under its type to a member, and is not found to anyone else or where there is none",
+  () =>
+    Effect.gen(function* () {
+      const { api, seams, database } = yield* openWorkspacePlugin;
+      yield* Effect.gen(function* () {
+        const ada = yield* openGithubAccount("Ada Lovelace");
+        const grace = yield* openGithubAccount("Grace Hopper");
+        const mallory = yield* openGithubAccount("Mallory");
+        const acme = yield* openTeam(api, ada, [{ userId: grace, role: "member" }]);
+        const png = "iVBORw0KGgo=";
+        const keepLogo = (logo: string | null) =>
+          Database.use((db) =>
+            db.update(organization).set({ logo }).where(eq(organization.id, acme)),
+          );
+        yield* keepLogo(`data:image/png;base64,${png}`);
+
+        const member = yield* readPhoto(seams, grace, acme);
+        const outsider = yield* readPhoto(seams, mallory, acme);
+        const anonymous = yield* readPhoto(seams, undefined, acme);
+        yield* keepLogo("https://example.test/acme.png");
+        const notAPhoto = yield* readPhoto(seams, ada, acme);
+        yield* keepLogo(null);
+        const none = yield* readPhoto(seams, ada, acme);
+
+        assert.deepEqual(member, {
+          status: HOSTED_HTTP_STATUS.OK,
+          contentType: "image/png",
+          nosniff: "nosniff",
+          cacheControl: "private, no-store",
+          base64: png,
+        });
+        assert.equal(outsider.status, HOSTED_HTTP_STATUS.NOT_FOUND);
+        assert.equal(anonymous.status, HOSTED_HTTP_STATUS.UNAUTHORIZED);
+        assert.equal(notAPhoto.status, HOSTED_HTTP_STATUS.NOT_FOUND);
+        assert.equal(none.status, HOSTED_HTTP_STATUS.NOT_FOUND);
+        const refusal = yield* send(
+          seams,
+          NO_GITHUB_TO_READ,
+          bearerRequest(photoAt(acme), mallory),
+        );
+        assert.deepEqual(refusal.body, { error: HOSTED_API_ERROR.NOT_FOUND });
       }).pipe(Effect.provide(database));
     }),
 );

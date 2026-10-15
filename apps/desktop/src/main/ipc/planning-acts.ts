@@ -46,6 +46,8 @@ import type {
   PlanningWorkspaceMembersAnswer,
   PlanningWorkspaceMembersParams,
   PlanningWorkspaceParams,
+  PlanningWorkspacePhotoAnswer,
+  PlanningWorkspacePhotoParams,
   PlanningWorkspaceRenameParams,
 } from "@luke/features/planning-view";
 import { GITHUB_DISCONNECT_FAILURE } from "@luke/features/planning-view";
@@ -112,6 +114,9 @@ export interface PlanningActsDependencies {
     workspaceMembers(
       params: PlanningWorkspaceMembersParams,
     ): Effect.Effect<PlanningWorkspaceMembersAnswer>;
+    workspacePhoto(
+      params: PlanningWorkspacePhotoParams,
+    ): Effect.Effect<PlanningWorkspacePhotoAnswer>;
     workspaceMemberRemove(
       params: PlanningWorkspaceMemberRemoveParams,
     ): Effect.Effect<PlanningWorkspaceMembersAnswer>;
@@ -183,6 +188,7 @@ type PlanningActKind =
   | typeof ACT_KIND.WORKSPACE_GITHUB_CONNECT
   | typeof ACT_KIND.WORKSPACE_GITHUB_DISCONNECT
   | typeof ACT_KIND.WORKSPACE_MEMBERS_READ
+  | typeof ACT_KIND.WORKSPACE_PHOTO_READ
   | typeof ACT_KIND.WORKSPACE_MEMBER_REMOVE
   | typeof ACT_KIND.WORKSPACE_LEAVE;
 
@@ -500,6 +506,13 @@ export function planningActRows(
           ? Effect.succeed(answer.members)
           : refusedWorkspace(ACT_KIND.WORKSPACE_MEMBERS_READ, answer.failure),
       );
+    },
+    // Note that the photo's answer, a failure among them, is the panel's to
+    // read, as an inbox image's is, because a tile that hears none draws its
+    // letter rather than a refusal.
+    [ACT_KIND.WORKSPACE_PHOTO_READ]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.WORKSPACE_PHOTO_READ, sender);
+      return host.workspacePhoto(params);
     },
     [ACT_KIND.WORKSPACE_MEMBER_REMOVE]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.WORKSPACE_MEMBER_REMOVE, sender);

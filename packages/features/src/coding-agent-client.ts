@@ -6,7 +6,6 @@ import {
 } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Effect, Result, type Schema } from "effect";
-import { Base64 } from "effect/encoding";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
   type AccountCallEffects,
@@ -65,6 +64,7 @@ import {
   codingAgentStartRequestSchema,
 } from "./coding-agent-wire.js";
 import { dictationAnswerSchema, dictationRequestSchema } from "./dictation-wire.js";
+import { imageBodyOf } from "./image-body.js";
 import {
   type InboxAnswerRequest,
   inboxAnsweredSchema,
@@ -218,21 +218,7 @@ function refusedAs(payload: UnparsedWireValue, named: NamedRefusals): Failed {
 
 /** An image's bytes read whole and spelled in base64 under the type the service named, or unanswered where the type is none an image block may be or the body could not be read. */
 function readImage(response: Response): Effect.Effect<CodingAgentInboxAttachmentView> {
-  const contentType = Result.getOrUndefined(
-    readEither(inboxImageTypeSchema)(unparsedWire(response.headers.get("content-type"))),
-  );
-  if (contentType === undefined) return Effect.succeed(UNANSWERED);
-  return Effect.promise(() =>
-    response
-      .arrayBuffer()
-      .then(
-        (bytes): CodingAgentInboxAttachmentView => ({
-          contentType,
-          base64: Base64.encode(new Uint8Array(bytes)),
-        }),
-      )
-      .catch(() => UNANSWERED),
-  );
+  return Effect.map(imageBodyOf(response, inboxImageTypeSchema), (image) => image ?? UNANSWERED);
 }
 
 /**

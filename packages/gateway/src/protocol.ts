@@ -72,6 +72,8 @@ export const GATEWAY_METHOD = {
   WORKSPACES_GITHUB_DISCONNECT: "workspaces.githubDisconnect",
   /** One workspace's members, read from the service now; answered to the caller, never held in the view. */
   WORKSPACES_MEMBERS: "workspaces.members",
+  /** One workspace's photo, read from the service now as its bytes in base64; answered to the caller, never held in the view. */
+  WORKSPACES_PHOTO: "workspaces.photo",
   /** One member removed from a workspace on the service, answered with the members who remain; the view's workspaces are read again. */
   WORKSPACES_MEMBER_REMOVE: "workspaces.memberRemove",
   /** The account left one workspace on the service; the view's workspaces and plans are read again. */

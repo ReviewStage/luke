@@ -422,7 +422,14 @@ you delete your account, as every workspace you own does, with only your
 membership removed. A workspace you create is a record
 named as you name it, holding you as its owner; every member of a workspace
 sees every other member's name, email address, and
-role in it, and an owner or admin of it can remove a member. When an owner
+role in it, and an owner or admin of it can remove a member. A workspace may
+show a photo an owner or admin of it uploads: the service keeps it with the
+workspace, a PNG, JPEG, or WebP image, and serves its bytes only to Luke
+signed in as one of the workspace's members, never caching it on the way;
+the list of your workspaces names only a short digest of it, so your Mac
+reads the photo again only when it changes. Your own first workspace, while
+it has no photo, shows your profile picture, from the address your sign-in
+gave us where it is Google's or GitHub's, and only to you. When an owner
 or admin connects GitHub to a workspace, the
 service keeps beside the workspace GitHub's ids for that installation and the
 account it is on, its login, whether it is a user or an organization, and
@@ -848,7 +855,8 @@ only when you press Send.
   when you quit; and for the picture of each repository owner the app names,
   an organization's logo or a person's avatar, carrying only the owner's name.
 - Google or GitHub, asked by your Mac itself for your own profile picture,
-  from the address your sign-in gave us, carrying no referrer.
+  from the address your sign-in gave us, carrying no referrer, beside your
+  name and on your own first workspace while it has no photo.
 
 We do not sell your information or use it for advertising.
 

@@ -9,6 +9,7 @@ import {
   createWorkspace,
   ensurePersonalWorkspace,
   listWorkspaces,
+  readWorkspacePhoto,
   type Workspace,
   workspaceOf,
 } from "@luke/database/models/workspace-store";
@@ -32,12 +33,7 @@ import {
 } from "@luke/features/workspace-wire";
 import { readEither } from "@luke/wire/effect";
 import { type Cause, Clock, Effect, Layer, Option, Result } from "effect";
-import {
-  type HttpClient,
-  HttpRouter,
-  HttpServerRequest,
-  type HttpServerResponse,
-} from "effect/http";
+import { type HttpClient, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { unparsedWire } from "../core.js";
 import { GitHubApp } from "../github/github-app.js";
 import {
@@ -85,6 +81,8 @@ import { listMembers, memberIdOf } from "./workspace-members.js";
  * `POST /api/workspaces/leave` lets anyone but an owner leave.
  * `POST /api/workspaces/rename` lets an owner or admin rename a workspace,
  * answering it under its new name and its old slug.
+ * `GET /api/workspaces/<id>/photo` serves a workspace's photo as its bytes
+ * to a member of it; the list names only which version of it stands.
  * The bearer is resolved before any row is touched.
  *
  * Removing, leaving, and renaming are Better Auth's own `removeMember`,
@@ -113,6 +111,22 @@ const LEAVE_PATH = "/api/workspaces/leave";
 const RENAME_PATH = "/api/workspaces/rename";
 const INVITATIONS_PATH = "/api/workspaces/invitations";
 const INVITATIONS_CANCEL_PATH = "/api/workspaces/invitations/cancel";
+/** GET serves a workspace's photo; the rewrite moves the path's workspace id into the `id` query. */
+const PHOTO_PATH = "/api/workspaces/photo";
+
+/** The query the photo's rewrite names its workspace under. */
+const PHOTO_QUERY = { ID: "id" } as const;
+
+/**
+ * The headers a photo's bytes are served under beside their type: the
+ * browser is told not to sniff them for another type, since the type is
+ * the one the photo was kept under, and nothing on the way may keep a copy,
+ * since the bytes are the workspace's members' alone.
+ */
+const PHOTO_HEADERS = {
+  "x-content-type-options": "nosniff",
+  "cache-control": "private, no-store",
+} as const;
 
 /** The plugin's word for an invitation not yet accepted, rejected, or canceled. */
 const INVITATION_PENDING = "pending";
@@ -368,6 +382,34 @@ const membersEndpoint = Effect.fn("web/workspaceMembersEndpoint")(function* (
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { members });
 });
 
+/**
+ * GET: a workspace's photo as its bytes under its media type, to a member
+ * of it alone. A workspace the account is not in, an id that names none,
+ * and one with no photo are all not found, so a non-member learns nothing.
+ */
+const photoEndpoint = Effect.fn("web/workspacePhotoEndpoint")(function* (
+  seams: WorkspacesAppSeams,
+): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, Requirements> {
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  if (incoming.method !== HTTP_METHOD.GET) {
+    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
+  }
+  const userId = yield* accountOf(seams);
+  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  const named = new URL(request.url).searchParams.getAll(PHOTO_QUERY.ID);
+  const asked = readEither(workspaceIdSchema)(unparsedWire(named[0]));
+  if (named.length !== 1 || Result.isFailure(asked)) {
+    return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  }
+  const photo = yield* hostedStoreOrUnavailable(readWorkspacePhoto(userId, asked.success));
+  if (Option.isNone(photo)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  return HttpServerResponse.uint8Array(photo.value.bytes, {
+    status: HOSTED_HTTP_STATUS.OK,
+    contentType: photo.value.contentType,
+    headers: PHOTO_HEADERS,
+  });
+});
+
 /** POST: an owner or admin removes a member who is not an owner, answered with those who remain. */
 const removeEndpoint = Effect.fn("web/workspaceMemberRemoveEndpoint")(function* (
   seams: WorkspacesAppSeams,
@@ -545,7 +587,7 @@ const cancelInvitationEndpoint = Effect.fn("web/workspaceInvitationCancelEndpoin
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { invitations });
 });
 
-/** The group: the workspaces path, the rename, the two GitHub paths, the three members paths, the two invitations paths, and the hosted vocabulary's own refusal for any other. */
+/** The group: the workspaces path, the rename, the two GitHub paths, the three members paths, the photo's path, the two invitations paths, and the hosted vocabulary's own refusal for any other. */
 export function workspacesApp(
   seams: WorkspacesAppSeams,
 ): WebRoutes<DatabaseServices | HttpClient.HttpClient | GitHubApp> {
@@ -557,6 +599,7 @@ export function workspacesApp(
     HttpRouter.add(ANY_METHOD, MEMBERS_REMOVE_PATH, hostedRefusing(removeEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, LEAVE_PATH, hostedRefusing(leaveEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, RENAME_PATH, hostedRefusing(renameEndpoint(seams))),
+    HttpRouter.add(ANY_METHOD, PHOTO_PATH, hostedRefusing(photoEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, INVITATIONS_PATH, hostedRefusing(invitationsEndpoint(seams))),
     HttpRouter.add(
       ANY_METHOD,

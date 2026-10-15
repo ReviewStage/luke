@@ -138,6 +138,8 @@ import {
   type PlanningWorkspaceMembersAnswer,
   type PlanningWorkspaceMembersParams,
   type PlanningWorkspaceParams,
+  type PlanningWorkspacePhotoAnswer,
+  type PlanningWorkspacePhotoParams,
   type PlanningWorkspaceRenameParams,
   planningEditAnswerSchema,
   planningFileAnswerSchema,
@@ -159,6 +161,7 @@ import {
   planningWorkspaceInvitationsAnswerSchema,
   planningWorkspaceLeaveAnswerSchema,
   planningWorkspaceMembersAnswerSchema,
+  planningWorkspacePhotoAnswerSchema,
 } from "@luke/features/planning-view";
 import {
   type TerminalCreatedActAnswer,
@@ -365,6 +368,8 @@ export interface HostOperator {
   workspaceMembers(
     params: PlanningWorkspaceMembersParams,
   ): Effect.Effect<PlanningWorkspaceMembersAnswer>;
+  /** One workspace's photo, its bytes in base64 under its media type; or why there is none. */
+  workspacePhoto(params: PlanningWorkspacePhotoParams): Effect.Effect<PlanningWorkspacePhotoAnswer>;
   /** One member removed from a workspace; the members who remain, or why none was removed. */
   workspaceMemberRemove(
     params: PlanningWorkspaceMemberRemoveParams,
@@ -968,6 +973,11 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.WORKSPACES_MEMBERS, { workspaceId: params.workspaceId }),
         workspaceAnswer(planningWorkspaceMembersAnswerSchema),
+      ),
+    workspacePhoto: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.WORKSPACES_PHOTO, { workspaceId: params.workspaceId }),
+        workspaceAnswer(planningWorkspacePhotoAnswerSchema),
       ),
     workspaceMemberRemove: (params) =>
       Effect.map(

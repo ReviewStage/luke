@@ -288,6 +288,7 @@ const EFFECT_MODULE_SCHEMAS = {
     planTranscriptAnswerSchema: transcriptWire.planTranscriptAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof transcriptWire>,
   "workspace-wire": {
+    workspacePhotoTypeSchema: workspaceWire.workspacePhotoTypeSchema,
     workspaceGithubSchema: workspaceWire.workspaceGithubSchema,
     workspaceSchema: workspaceWire.workspaceSchema,
     workspacesAnswerSchema: workspaceWire.workspacesAnswerSchema,
