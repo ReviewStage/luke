@@ -1,5 +1,6 @@
 import { Schema as EffectSchema, Result } from "effect";
 import { Base64 } from "effect/encoding";
+import { sniffImageType } from "./image-signature.js";
 import { workspaceIdSchema } from "./plan-wire.js";
 import { countedNumber } from "./service-wire.js";
 
@@ -152,7 +153,9 @@ export function workspacePhotoOfDataUrl(text: string): WorkspacePhoto | undefine
     return undefined;
   }
   const bytes = Base64.decode(base64);
-  return Result.isSuccess(bytes) ? { contentType, bytes: bytes.success } : undefined;
+  // Note that the bytes must be the image the label names, because a tile draws them as one.
+  if (Result.isFailure(bytes) || sniffImageType(bytes.success) !== contentType) return undefined;
+  return { contentType, bytes: bytes.success };
 }
 
 /** A photo to set, as the `data:` URL it is kept as: one `workspacePhotoOfDataUrl` reads, within `WORKSPACE_PHOTO_BOUNDS.MAX_BYTES`. */

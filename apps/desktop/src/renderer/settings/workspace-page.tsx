@@ -704,7 +704,16 @@ function WorkspacePhoto({ workspace }: { workspace: Workspace }): React.JSX.Elem
       .finally(() => setBusy(false));
   };
   const actions = set
-    ? [{ label: "Remove photo", icon: <TrashIcon />, danger: true, onSelect: remove.ask }]
+    ? [
+        // An upload still under way would put a photo back after its removal, so none is asked meanwhile.
+        {
+          label: "Remove photo",
+          icon: <TrashIcon />,
+          danger: true,
+          disabled: busy,
+          onSelect: remove.ask,
+        },
+      ]
     : [];
   return (
     <>

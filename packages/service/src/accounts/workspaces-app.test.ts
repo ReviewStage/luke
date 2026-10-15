@@ -1051,8 +1051,19 @@ it.effect(
 );
 
 /** A photo's `data:` URL of the type given, holding `bytes` bytes. */
-const photoOfBytes = (type: string, bytes: number) =>
-  `data:${type};base64,${Buffer.alloc(bytes, 7).toString("base64")}`;
+/** Each photo type's signature, which a photo's bytes must open with to be the image its label names. */
+const PHOTO_SIGNATURES: Readonly<Record<string, readonly number[]>> = {
+  "image/png": [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a],
+  "image/jpeg": [0xff, 0xd8, 0xff],
+  "image/webp": [0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x45, 0x42, 0x50],
+};
+
+/** A photo of `bytes` bytes of the type given as its `data:` URL: its signature, then filler. */
+const photoOfBytes = (type: string, bytes: number) => {
+  const buffer = Buffer.alloc(bytes, 7);
+  buffer.set(PHOTO_SIGNATURES[type] ?? []);
+  return `data:${type};base64,${buffer.toString("base64")}`;
+};
 
 it.effect(
   "an owner and an admin set the workspace's photo, which the list then versions and the photo's path serves, null removes it, and a member is refused",
@@ -1133,7 +1144,7 @@ it.effect(
 );
 
 it.effect(
-  "a photo that is not a PNG, JPEG, or WebP data: URL, or is past the byte bound, is refused as invalid, one of a workspace the account is not in as not found, and one at the bound is set",
+  "a photo that is not a PNG, JPEG, or WebP data: URL, whose bytes are not the image its label names, or is past the byte bound, is refused as invalid, one of a workspace the account is not in as not found, and one at the bound is set",
   () =>
     Effect.gen(function* () {
       const plugin = yield* openWorkspacePlugin;
@@ -1149,6 +1160,7 @@ it.effect(
           "data:image/svg+xml;base64,PHN2Zy8+",
           "https://example.test/acme.png",
           "data:image/png;base64,not base64",
+          "data:image/png;base64,aGVsbG8=",
           photoOfBytes("image/png", WORKSPACE_PHOTO_BOUNDS.MAX_BYTES + 1),
         ]) {
           refusals.push(yield* settingPhoto(plugin, ada, acme, photo));
@@ -1158,7 +1170,7 @@ it.effect(
         const set = yield* settingPhoto(plugin, ada, acme, atBound);
 
         const invalid = refusedAs(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
-        assert.deepEqual(refusals, [invalid, invalid, invalid, invalid, invalid]);
+        assert.deepEqual(refusals, [invalid, invalid, invalid, invalid, invalid, invalid]);
         assert.deepEqual(
           outsider,
           refusedAs(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),

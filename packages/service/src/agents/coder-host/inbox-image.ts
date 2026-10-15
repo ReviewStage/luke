@@ -1,5 +1,6 @@
 import { posix } from "node:path";
-import { INBOX_BOUNDS, INBOX_IMAGE_TYPE, type InboxImageType } from "@luke/features/inbox-wire";
+import { SIGNATURE_BYTES, sniffImageType } from "@luke/features/image-signature";
+import { INBOX_BOUNDS, type InboxImageType } from "@luke/features/inbox-wire";
 import { Effect, Result } from "effect";
 import type { SandboxSession } from "eve/sandbox";
 import type { InboxImage } from "../../inbox/inbox-store.js";
@@ -34,26 +35,6 @@ const INBOX_IMAGE_REFUSAL = {
   TOO_LARGE: `Not posted: an image block names a file larger than ${(INBOX_BOUNDS.MAX_IMAGE_BYTES / 1_000_000).toFixed(1)} MB; render it smaller, or at one screen scale:`,
   UNREADABLE: "Not posted: an image block's file could not be read from your sandbox:",
 } as const;
-
-/** The bytes a signature is read from: WebP's reaches the twelfth. */
-const SIGNATURE_BYTES = 12;
-
-const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a] as const;
-const JPEG_SIGNATURE = [0xff, 0xd8, 0xff] as const;
-const RIFF = [0x52, 0x49, 0x46, 0x46] as const;
-const WEBP = [0x57, 0x45, 0x42, 0x50] as const;
-
-function startsWith(bytes: Uint8Array, signature: readonly number[], at = 0): boolean {
-  return signature.every((byte, index) => bytes[at + index] === byte);
-}
-
-/** The type the bytes' signature says they are, or nothing for bytes that are none of the three. */
-function sniffImageType(bytes: Uint8Array): InboxImageType | undefined {
-  if (startsWith(bytes, PNG_SIGNATURE)) return INBOX_IMAGE_TYPE.PNG;
-  if (startsWith(bytes, JPEG_SIGNATURE)) return INBOX_IMAGE_TYPE.JPEG;
-  if (startsWith(bytes, RIFF) && startsWith(bytes, WEBP, 8)) return INBOX_IMAGE_TYPE.WEBP;
-  return undefined;
-}
 
 /** The chunks as one array. */
 function joined(chunks: readonly Uint8Array[], length: number): Uint8Array {

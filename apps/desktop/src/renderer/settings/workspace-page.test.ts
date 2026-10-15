@@ -397,6 +397,13 @@ interface Drawn {
   readonly canvas: readonly number[];
 }
 
+/** A WebP's bytes as the encoder answers them: its RIFF and WEBP signature, then filler, `length` bytes in all. */
+function webpBytes(length = 16): Uint8Array<ArrayBuffer> {
+  const bytes = new Uint8Array(length);
+  bytes.set([0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x45, 0x42, 0x50]);
+  return bytes;
+}
+
 /**
  * The platform's image decoder and canvas, which jsdom has not got, standing
  * in at the browser's edge: every picture decodes at `width` by `height`, and
@@ -443,7 +450,7 @@ async function pickPhoto(page: HTMLElement, file: File): Promise<void> {
 }
 
 test("an owner's picked photo is sent drawn as its centre square in WebP, 256 pixels a side, and Upload… opens the picker", async () => {
-  const webp = new Uint8Array([82, 73, 70, 70, 0, 1, 2, 3]);
+  const webp = webpBytes();
   const drawn = stubCanvas(400, 300, webp);
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
   const row = rowNamed(page, "Photo");
@@ -467,7 +474,7 @@ test("an owner's picked photo is sent drawn as its centre square in WebP, 256 pi
 });
 
 test("a photo the service refuses, a file that is no PNG, JPEG, or WebP, and a photo past the bound are said under the row", async () => {
-  stubCanvas(300, 300, new Uint8Array([1, 2, 3]));
+  stubCanvas(300, 300, webpBytes());
   refusePhoto = true;
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
   const said = () => page.querySelector('.menu-row + [role="alert"]')?.textContent;
@@ -477,13 +484,30 @@ test("a photo the service refuses, a file that is no PNG, JPEG, or WebP, and a p
   await pickPhoto(page, new File(["<svg/>"], "team.svg", { type: "image/svg+xml" }));
   const kind = said();
   vi.restoreAllMocks();
-  stubCanvas(300, 300, new Uint8Array(WORKSPACE_PHOTO_BOUNDS.MAX_BYTES + 1));
+  stubCanvas(300, 300, webpBytes(WORKSPACE_PHOTO_BOUNDS.MAX_BYTES + 1));
   await pickPhoto(page, new File(["x"], "huge.jpg", { type: "image/jpeg" }));
 
   assert.equal(refused, WORKSPACE_NOT_PERMITTED_REFUSAL);
   assert.equal(kind, "team.svg isn't a PNG, JPEG, or WebP image.");
   assert.equal(said(), "huge.jpg is too large for a workspace photo.");
   assert.equal(photos().length, 1);
+});
+
+test("Remove photo stands disabled while an upload is still under way, so the upload cannot put a removed photo back", async () => {
+  // The picked image is still being drawn: the encoder's bitmap never arrives.
+  vi.stubGlobal("createImageBitmap", () => new Promise(() => undefined));
+  const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER, photoVersion: "v1" });
+  await pickPhoto(page, new File(["x"], "team.png", { type: "image/png" }));
+  const ellipsis =
+    rowNamed(page, "Photo").querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]') ??
+    assert.fail("the row draws no ⋯");
+  act(() => ellipsis.click());
+  const remove =
+    [...document.querySelectorAll<HTMLButtonElement>('[role="menu"] [role="menuitem"]')].find(
+      (each) => each.textContent === "Remove photo",
+    ) ?? assert.fail("no Remove photo in the row's menu");
+
+  assert.equal(remove.disabled || remove.getAttribute("aria-disabled") === "true", true);
 });
 
 test("Remove photo, offered only where a photo is set, asks first and then sends no photo", async () => {
