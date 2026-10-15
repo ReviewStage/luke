@@ -291,11 +291,16 @@ test("the pointer at the window's left edge peeks the folded sidebar out, which 
   assert.equal(standing(page), "pinned");
 });
 
-test("a floating sidebar left for Settings by its chord is away when the plans come back", () => {
+test("a floating sidebar left for Settings by its chord is away when the plans come back", async () => {
   const page = mount(1000);
   act(() => toggle(page).click());
   assert.equal(standing(page), "floating");
   act(() => runAppCommand(APP_COMMAND.SETTINGS));
+  // Settings is its own chunk, so the test waits for it as the window does.
+  await act(async () => {
+    await import("./desktop-settings");
+    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+  });
   assert.equal(page.querySelector("aside.desktop-sidebar"), null, "Settings draws its own list");
   const back = page.querySelector<HTMLButtonElement>("button.settings-pages-back");
   assert.ok(back, "Settings has its way back");
