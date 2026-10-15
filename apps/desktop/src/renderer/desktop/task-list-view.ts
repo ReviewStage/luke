@@ -9,6 +9,7 @@ import {
 import { Schema } from "effect";
 import { useState } from "react";
 import { readKept, writeKept } from "./folded-groups";
+import type { ArchivedView } from "./sidebar-task-view";
 
 /**
  * task-list-view.ts -- how each workspace's task list is grouped, ordered, and filtered in the sidebar, kept per workspace on this Mac.
@@ -77,5 +78,49 @@ export function useTaskListView(
           ? { grouping: view.grouping, order: view.order }
           : { ...view, createdBy },
       ),
+  };
+}
+
+/** Where the window keeps the workspace its list stands turned to the archived tasks of, for its own life alone. */
+const ARCHIVED_KEY = "luke.sidebarArchivedIn";
+
+/** The workspace the list stands turned to the archived tasks of, or none where nothing is held or storage refuses the read. */
+function readArchivedIn(): string | undefined {
+  try {
+    return window.sessionStorage.getItem(ARCHIVED_KEY) ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Holds the workspace, or lets go; a write that fails costs only the view on the sidebar's return. */
+function writeArchivedIn(workspaceId: string | undefined): void {
+  try {
+    if (workspaceId === undefined) window.sessionStorage.removeItem(ARCHIVED_KEY);
+    else window.sessionStorage.setItem(ARCHIVED_KEY, workspaceId);
+  } catch {
+    // The list opens on the tasks when the sidebar comes back.
+  }
+}
+
+/**
+ * Whether the listed workspace's list stands turned to its archived tasks,
+ * and the press that turns it. It is held in the window's session storage,
+ * so Settings or a version history, which the sidebar steps aside for, find
+ * it as they left it, while another workspace or the next launch opens on
+ * the tasks. A fixture run holds nothing.
+ */
+export function useArchivedView(workspaceId: string | undefined, staged: boolean): ArchivedView {
+  const [held, setHeld] = useState(() => (staged ? undefined : readArchivedIn()));
+  const hold = (next: string | undefined) => {
+    if (!staged) writeArchivedIn(next);
+    setHeld(next);
+  };
+  // Note that the view is let go of as the workspace changes, rather than
+  // only hidden, so coming back to the workspace opens on its tasks.
+  if (held !== undefined && held !== workspaceId) hold(undefined);
+  return {
+    shown: held !== undefined && held === workspaceId,
+    onShown: (shown) => hold(shown ? workspaceId : undefined),
   };
 }
