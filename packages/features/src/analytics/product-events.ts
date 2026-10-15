@@ -305,6 +305,7 @@ export const ProductSettingValueSchema = Schema.Literals(Object.values(PRODUCT_S
 export const PRODUCT_EXPERIMENT = {
   FACTORY: "factory",
   AUTOMATIONS: "automations",
+  VIDEO_CALLS: "video-calls",
 } as const;
 
 export type ProductExperiment = (typeof PRODUCT_EXPERIMENT)[keyof typeof PRODUCT_EXPERIMENT];

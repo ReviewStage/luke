@@ -12,6 +12,8 @@ export const EXPERIMENT = {
   FACTORY: "factory",
   /** Coding agents started on a schedule, listed and made on their own page. */
   AUTOMATIONS: "automations",
+  /** Calls that open with Luke on video, a Keyframe avatar at the top of the Call tab. */
+  VIDEO_CALLS: "video-calls",
 } as const;
 
 export type Experiment = (typeof EXPERIMENT)[keyof typeof EXPERIMENT];
@@ -35,6 +37,15 @@ export interface ExperimentEntry {
  * there is no status to drift and every experiment is off until turned on.
  */
 export const EXPERIMENTS = [
+  {
+    key: EXPERIMENT.VIDEO_CALLS,
+    name: "Video calls",
+    detail:
+      "Calls open with Luke on video at the top of the Call tab. Keyframe Labs animates him from his " +
+      "voice, so what he says about your plan reaches Keyframe. Your own voice never does.",
+    owner: "Charles",
+    since: "2026-10-15",
+  },
   {
     key: EXPERIMENT.AUTOMATIONS,
     name: "Automations",

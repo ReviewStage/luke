@@ -195,7 +195,6 @@ const SAMPLE_VALUE = {
   openAtLogin: false,
   voice: LIVE_VOICE.MARIN,
   voiceCaptions: true,
-  voiceVideo: true,
   voiceHotkey: "Shift+Command+L",
   stopHotkey: "Control+Alt+P",
   duckOtherMedia: false,
