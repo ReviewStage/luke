@@ -166,15 +166,16 @@ function githubEventOf(event: string, payload: UnparsedWireValue): GitHubEventRe
         return {
           event: GITHUB_TRIGGER_EVENT.PULL_REQUEST_MERGED,
           repository: repository.full_name,
-          labels: pull.labels.map((each) => each.name),
-          branch: pull.head.ref,
+          // A merge carries no label event of its own, so a label filter has nothing to read.
+          labels: [],
+          branch: pull.base.ref,
           firing: {
             kind: AUTOMATION_FIRING.GITHUB,
             event: GITHUB_TRIGGER_EVENT.PULL_REQUEST_MERGED,
             repository: repository.full_name,
             number: pull.number,
             title: pull.title,
-            branch: pull.head.ref,
+            branch: pull.base.ref,
             url: pull.html_url,
           },
         };
