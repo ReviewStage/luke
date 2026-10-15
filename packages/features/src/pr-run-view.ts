@@ -59,12 +59,10 @@ const runCommand = EffectSchema.String.check(
 );
 
 /** A repository of a workspace, which a run command is kept for. */
-export const prRunRepositorySchema = EffectSchema.Struct({
+const prRunRepositorySchema = EffectSchema.Struct({
   workspaceId: workspaceIdSchema,
   repository: githubRepositoryFullNameSchema,
 });
-
-export type PrRunRepository = typeof prRunRepositorySchema.Type;
 
 /** One pull request of a workspace's repository, which a run, its checkout, and its tab are named by. */
 export const prRunPullRequestSchema = EffectSchema.Struct({
@@ -93,7 +91,7 @@ export const prRunCommandsAnswerSchema = EffectSchema.Struct({
 export type PrRunCommandsAnswer = typeof prRunCommandsAnswerSchema.Type;
 
 /** Where a run stands, as its tab draws it. */
-export const prRunStateSchema = EffectSchema.Struct({
+const prRunStateSchema = EffectSchema.Struct({
   phase: EffectSchema.Literals(Object.values(PR_RUN_PHASE)),
   /** The commit checked out and run, once it is known. */
   sha: EffectSchema.optional(commitShaSchema),

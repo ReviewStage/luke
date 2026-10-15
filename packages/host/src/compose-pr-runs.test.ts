@@ -203,8 +203,10 @@ it.effect(
 
         const answered = yield* start();
 
-        assert.ok(typeof answered === "object" && answered !== null && "refused" in answered);
-        assert.match(String(answered.refused), /Settings/u);
+        assert.deepEqual(answered, {
+          refused:
+            "Set a run command for octocat/relay in Settings, under This Mac, then run it again.",
+        });
         assert.deepEqual(asked, []);
         assert.equal(existsSync(checkout), false);
       }),

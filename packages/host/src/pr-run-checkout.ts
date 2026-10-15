@@ -181,7 +181,7 @@ function entryKind(at: string): Effect.Effect<"none" | "folder" | "other"> {
  * of them a link: what lets a removal or a reveal trust the path it was
  * built from. Note that the root itself is under the state root Luke made.
  */
-export function placeContained(place: CheckoutPlace): Effect.Effect<boolean> {
+function placeContained(place: CheckoutPlace): Effect.Effect<boolean> {
   return Effect.gen(function* () {
     const relative = path.relative(place.root, place.folder);
     if (relative === "" || relative.startsWith("..") || path.isAbsolute(relative)) return false;
@@ -194,11 +194,17 @@ export function placeContained(place: CheckoutPlace): Effect.Effect<boolean> {
   });
 }
 
+/** A stream's bytes as they are kept: the chunks, and how many bytes they hold. */
+interface Collected {
+  readonly chunks: Uint8Array[];
+  readonly bytes: number;
+}
+
 /** The bytes a stream wrote, kept up to the bound and the rest drained. */
 function collected(stream: Stream.Stream<Uint8Array, unknown>): Effect.Effect<string> {
   return Stream.runFold(
     stream,
-    () => ({ chunks: [] as Uint8Array[], bytes: 0 }),
+    (): Collected => ({ chunks: [], bytes: 0 }),
     (held, chunk) => {
       if (held.bytes >= MAX_GIT_OUTPUT_BYTES) return held;
       held.chunks.push(chunk);

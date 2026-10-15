@@ -124,7 +124,11 @@ const openAccounts = () =>
       [`Bearer ${owner}`, owner],
       [`Bearer ${other}`, other],
     ]);
-    const ask = (userId: string, body: object, method = "POST") =>
+    const ask = (
+      userId: string,
+      body: Readonly<Record<string, string | number>>,
+      method = "POST",
+    ) =>
       answer(
         bearers,
         github,

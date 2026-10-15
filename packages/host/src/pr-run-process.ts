@@ -17,7 +17,7 @@ import { ChildProcess, type ChildProcessSpawner } from "effect/process";
  * SIGKILL `KILL_GRACE` later. A command that could not be started fails.
  */
 
-export const PR_RUN_PROCESS = {
+const PR_RUN_PROCESS = {
   /** How long the group has to end after SIGTERM before it is sent SIGKILL. */
   KILL_GRACE: Duration.seconds(3),
   /** How long the output is read once the command exited, for what it wrote just before. */
@@ -30,7 +30,7 @@ export interface RunShell {
 }
 
 /** What the command's environment adds to the app's own: nothing that pages, git asking nothing, and where the checkout is. */
-function commandEnvironment(folder: string): Record<string, string> {
+function commandEnvironment(folder: string) {
   return {
     PAGER: "cat",
     GIT_PAGER: "cat",

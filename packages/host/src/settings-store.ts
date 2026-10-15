@@ -305,7 +305,7 @@ function storedExperiments(value: UnparsedWireValue): PersistedExperiments | und
  * nor erases them. They are this Mac's alone, never an account preference
  * synced to the service, and never in the snapshot every window is sent.
  */
-export type PrRunCommands = Readonly<
+type PrRunCommands = Readonly<
   Record<string, Readonly<Record<string, Readonly<Record<string, string>>>>>
 >;
 

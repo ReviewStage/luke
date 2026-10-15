@@ -1,3 +1,4 @@
+import { ACCOUNT_STATUS } from "@luke/credentials";
 import { PR_FETCH_REFUSAL, type PrFetchOutcome, type PrFetchRefusal } from "@luke/features";
 import type { PrFetchRequest } from "@luke/features/pr-fetch-wire";
 import {
@@ -98,7 +99,7 @@ import type { SettingsStore } from "./settings-store.js";
 const MAX_HEAD_ATTEMPTS = 3;
 
 /** The shell a run command runs in where the environment names none: macOS's own default. */
-export const DEFAULT_RUN_SHELL = "/bin/zsh";
+const DEFAULT_RUN_SHELL = "/bin/zsh";
 
 /** The variables of the app's environment a run's Git keeps: where programs are, the home folder, the temporary folder, and the network's proxies. */
 const GIT_KEPT_VARIABLES = [
@@ -132,7 +133,7 @@ export const prRunTools = Effect.gen(function* () {
 });
 
 /** The service's side of a run, as this concern asks it. */
-export interface PrFetchClient {
+interface PrFetchClient {
   fetch(request: PrFetchRequest): Effect.Effect<PrFetchOutcome, never, HttpClient.HttpClient>;
 }
 
@@ -229,7 +230,7 @@ function composed(
   const gate = () => kernel.runMode.sendsNetwork && account.capabilitiesActive();
   const accountEmail = () => {
     const snapshot = account.snapshot();
-    return "email" in snapshot && typeof snapshot.email === "string" ? snapshot.email : undefined;
+    return snapshot.status === ACCOUNT_STATUS.SIGNED_IN ? snapshot.email : undefined;
   };
 
   /** The pull request's slot, made the first time it is named. */
@@ -396,7 +397,7 @@ function composed(
     Effect.map(
       Effect.orElseSucceed(
         store.prRunCommandsOf(owner),
-        () => ({}) as Record<string, Record<string, string>>,
+        (): Readonly<Record<string, Readonly<Record<string, string>>>> => ({}),
       ),
       (byWorkspace) => {
         const repositories = Object.hasOwn(byWorkspace, pullRequest.workspaceId)
