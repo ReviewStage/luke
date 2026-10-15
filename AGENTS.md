@@ -359,6 +359,12 @@ Commit messages and PR titles follow Conventional Commits 1.0.0
 (https://www.conventionalcommits.org/en/v1.0.0/) and branch names follow
 Conventional Branch 1.1.0 (https://conventionalbranch.org/), both exactly.
 
+## Merging
+
+To merge a PR, run `gh pr merge --auto` right away; the merge queue waits on
+CI, so do not, and do not rebase onto `main` unless it conflicts. In a stack,
+arm a PR only once it targets `main`.
+
 ## TypeScript
 
 - No stringly typed fixed value sets. Use `as const` SCREAMING_SNAKE_CASE objects,
