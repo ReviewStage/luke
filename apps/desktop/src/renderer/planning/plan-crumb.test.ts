@@ -31,6 +31,9 @@ const ACME: Workspace = {
   memberCount: 3,
 };
 
+/** Acme as a service that counts no members answers it. */
+const { memberCount: _uncounted, ...UNCOUNTED } = ACME;
+
 const MEMBERS: readonly WorkspaceMember[] = [
   {
     userId: "user-dana",
@@ -150,7 +153,7 @@ test("the workspace opens its Settings page, and who can edit opens its members"
 });
 
 test("a workspace whose members are counted nowhere and could not be read says nothing of who can edit, rather than only you", async () => {
-  const { nav } = await crumb({ ...ACME, memberCount: undefined }, "acme-corp/relay", undefined);
+  const { nav } = await crumb(UNCOUNTED, "acme-corp/relay", undefined);
 
   assert.equal(nav.textContent, "AAcmerelay");
 });
