@@ -17,13 +17,13 @@ import {
   holdSandbox,
   releaseCredentialRenewal,
 } from "@luke/database/models/sandbox-terminal-lease";
+import { type InteractiveShell, SandboxUnavailable } from "@luke/service/agents/vercel-sandbox-api";
 import type { GitHubApp } from "@luke/service/github/github-app";
 import { Duration, Effect, Option, Redacted, Schedule } from "effect";
 import { HttpClient } from "effect/http";
 import { WebSocket } from "ws";
 import { agentRepositoryToken } from "../hosted/coder-host/checkout.js";
 import { AgentSandbox, agentSandboxLayer } from "../hosted/terminal/agent-sandbox.js";
-import { type InteractiveShell, SandboxUnavailable } from "../hosted/vercel-sandbox-api.js";
 import { voiceSocket } from "../voice/socket.js";
 import type { RelayDependencies } from "./relay.js";
 

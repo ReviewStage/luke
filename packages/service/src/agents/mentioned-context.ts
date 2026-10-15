@@ -12,7 +12,7 @@ import {
 import { planSections } from "@luke/features/plan-document";
 import { planMarkdown } from "@luke/features/plan-markdown";
 import type { Plan } from "@luke/features/plan-wire";
-import { CONNECTION_TOOL } from "./connection-tools.js";
+import { CONNECTION_TOOL } from "../integrations/connection-tools.js";
 
 /**
  * mentioned-context.ts -- what a coding agent's message mentions that the agent cannot read for itself, as it stood when the message was sent.

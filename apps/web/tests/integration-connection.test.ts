@@ -8,10 +8,21 @@ import { getTestDB, joinWorkspace, startPlan } from "@luke/database/testing";
 import { INTEGRATION_PROVIDER, INTEGRATION_PROVIDER_LIST } from "@luke/features/integration-wire";
 import { GitHubApp } from "@luke/service/github/github-app";
 import {
+  type ConnectorService,
+  INTEGRATION_CONNECT_FAILURE,
+  IntegrationConnectFailure,
+  vercelConnector,
+} from "@luke/service/integrations/integration-connect";
+import {
+  beginIntegrationSignIn,
+  completeIntegrationSignIn,
+} from "@luke/service/integrations/integration-store";
+import {
   GITHUB_APP_SETTINGS,
   openGithubUser,
   standingGithubRow,
 } from "@luke/service/testing/github-app-fake";
+import { noNetwork } from "@luke/service/testing/no-network";
 import { ConnectError } from "@vercel/connect";
 import { eq } from "drizzle-orm";
 import { Effect, Layer, Logger, Option, Redacted, Result } from "effect";
@@ -25,23 +36,12 @@ import {
 import { type BrainHost, brainHost } from "../server/hosted/brain-host/host";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import {
-  type ConnectorService,
-  INTEGRATION_CONNECT_FAILURE,
-  IntegrationConnectFailure,
-  vercelConnector,
-} from "../server/hosted/integration-connect";
-import {
   type IntegrationAdmission,
   integrationAccessToken,
   integrationConnection,
   integrationUnavailable,
 } from "../server/hosted/integration-connection";
-import {
-  beginIntegrationSignIn,
-  completeIntegrationSignIn,
-} from "../server/hosted/integration-store";
 import { CONNECTOR_ASKED_NOTHING, integrationConnectOf } from "./support/integration-connect";
-import { noNetwork } from "./support/no-network";
 
 /**
  * The one connection per integration all four agents register, through the

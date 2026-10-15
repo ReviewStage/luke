@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { storedRemoteCall } from "../server/hosted/connection-tools";
+import { storedRemoteCall } from "./connection-tools.js";
 
 /**
  * A nested call of an integration's own tool, as a transcript stores it:

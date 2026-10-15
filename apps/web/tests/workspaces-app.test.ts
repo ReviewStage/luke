@@ -29,6 +29,7 @@ import {
   githubReaching,
   openGithubUser,
 } from "@luke/service/testing/github-app-fake";
+import { openWorkspacePlugin } from "@luke/service/testing/workspace-plugin";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { eq } from "drizzle-orm";
@@ -38,7 +39,6 @@ import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { githubInstallApp } from "../server/github-install-app";
 import { type WorkspacesAppSeams, workspacesApp } from "../server/workspaces-app";
-import { openWorkspacePlugin } from "./support/workspace-plugin";
 
 /**
  * The account's workspaces, answered by their group the way a function

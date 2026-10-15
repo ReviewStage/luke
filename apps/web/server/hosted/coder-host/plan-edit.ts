@@ -2,13 +2,13 @@ import type { DatabaseServices } from "@luke/database/core/query";
 import { NOTE_KIND, type PlanNote, planNotesSchema, readNotes } from "@luke/features/plan-template";
 import { PLAN_ACTOR } from "@luke/features/plan-wire";
 import { ACTION_RESULT_STATUS, isRecord, type UnparsedWireValue } from "@luke/service/core";
-import { Effect } from "effect";
 import {
   PLAN_SAVE_STATUS,
   type PlanDocumentBinding,
   type PlanNoteAuthor,
   saveNotes,
-} from "../plan-notes.js";
+} from "@luke/service/plans/plan-notes";
+import { Effect } from "effect";
 
 /**
  * plan-edit.ts -- the coding agent's `edit_plan` tool: the notetaker's own notes, taken into the agent's plan.

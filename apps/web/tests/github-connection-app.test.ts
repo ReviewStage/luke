@@ -13,6 +13,7 @@ import {
   SESSION_BEARER,
 } from "@luke/service/auth/auth-policy";
 import type { WireValue } from "@luke/service/core";
+import { type GitHubUnlink, githubUnlink } from "@luke/service/github/github-unlink";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import type { WireBoundaryInput } from "@luke/wire";
 import { betterAuth } from "better-auth";
@@ -26,7 +27,6 @@ import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { afterEach, beforeEach, vi } from "vitest";
 import { githubConnectionApp } from "../server/github-connection-app";
-import { type GitHubUnlink, githubUnlink } from "../server/hosted/github-unlink";
 
 /**
  * Connecting an account's GitHub, end to end over Better Auth as `auth.ts`

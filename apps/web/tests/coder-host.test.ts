@@ -27,6 +27,7 @@ import {
   unparsedWire,
 } from "@luke/service/core";
 import { githubReaching, openGithubUser } from "@luke/service/testing/github-app-fake";
+import { noNetwork } from "@luke/service/testing/no-network";
 import { isReasoningUIPart, isTextUIPart, isToolUIPart, type LanguageModel } from "ai";
 import { eq } from "drizzle-orm";
 import { Clock, Effect, Layer, Option, Redacted, Result, Schema } from "effect";
@@ -43,7 +44,6 @@ import { CODER_TOOL, CODER_TOOL_SET } from "../server/hosted/coder-host/tool-set
 import { CURSOR_START, transcriptPast } from "../server/hosted/coder-host/transcript";
 import { modelCatalogOf, type OfferedModel } from "../server/hosted/model-catalog";
 import { stampedEveEvent } from "./support/eve-events";
-import { noNetwork } from "./support/no-network";
 
 /**
  * The coding-agent host through the same functions the coder project's

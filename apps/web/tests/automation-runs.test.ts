@@ -27,6 +27,7 @@ import {
 } from "@luke/features/automation-wire";
 import { INBOX_RESPONSE } from "@luke/features/inbox-wire";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
+import { closeInboxItem, postInboxItem } from "@luke/service/inbox/inbox-store";
 import {
   connectWorkspaceGitHub,
   githubReaching,
@@ -45,7 +46,6 @@ import {
   type EveMessage,
   type EveSessions,
 } from "../server/hosted/brain-host/eve-sessions";
-import { closeInboxItem, postInboxItem } from "../server/hosted/inbox-store";
 import { modelCatalogOf, type OfferedModel } from "../server/hosted/model-catalog";
 
 /**

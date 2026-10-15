@@ -4,8 +4,8 @@ import {
   CODING_AGENT_DELEGATE_TOOL,
   type CodingAgentBrief,
 } from "@luke/features/coding-agent-wire";
-import { COMMAND_DESCRIPTION_INSTRUCTION } from "../command-description.js";
-import { INTEGRATION_NAMES_SAID } from "../integrations.js";
+import { COMMAND_DESCRIPTION_INSTRUCTION } from "@luke/service/agents/command-description";
+import { INTEGRATION_NAMES_SAID } from "@luke/service/integrations/integrations";
 import { CODER } from "./bounds.js";
 import { INBOX_TOOLS } from "./inbox.js";
 import { EDIT_PLAN_TOOL } from "./plan-edit.js";

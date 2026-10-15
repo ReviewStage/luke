@@ -25,6 +25,7 @@ import {
 } from "@luke/live";
 import { MESSAGE_ROLE } from "@luke/service/core";
 import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
+import { added } from "@luke/service/testing/plan-contents";
 import { sidebandOverSocket } from "@luke/voice/live-session";
 import { FakeLiveSocket } from "@luke/voice/testing";
 import type { LanguageModel } from "ai";
@@ -48,7 +49,6 @@ import { hostedLiveExchange } from "../server/voice/live-exchange";
 import type { PlanDraft } from "../server/voice/plan-scribe";
 import { FIRST_EVE_TURN, spokenTurn } from "./support/eve-turns";
 import { delegated, heard, said, sessionStarted } from "./support/live-events";
-import { added } from "./support/plan-contents";
 import { scriptedScribeModel } from "./support/scribe-model";
 import { settled } from "./support/settle";
 

@@ -8,7 +8,7 @@ import {
   type ConnectSdk,
   INTEGRATION_CONNECT_FAILURE,
   vercelConnector,
-} from "../server/hosted/integration-connect";
+} from "./integration-connect.js";
 
 /**
  * A connector's two asks of a sign-in, against a fake Vercel Connect at

@@ -14,12 +14,8 @@ import {
 } from "@luke/features/mention-link";
 import type { Plan } from "@luke/features/plan-wire";
 import { test } from "vitest";
-import { eveContent, receivedMessage } from "../server/hosted/attached-files";
-import {
-  MENTIONED_BOUNDS,
-  mentionedContext,
-  mentionedServers,
-} from "../server/hosted/mentioned-context";
+import { eveContent, receivedMessage } from "./attached-files.js";
+import { MENTIONED_BOUNDS, mentionedContext, mentionedServers } from "./mentioned-context.js";
 
 /**
  * What a coding agent's message mentions of its plan, handed beside its

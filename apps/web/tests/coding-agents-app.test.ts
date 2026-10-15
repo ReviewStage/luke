@@ -67,6 +67,7 @@ import {
   linkInstallation,
 } from "@luke/service/github/github-installations";
 import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
+import { answerInboxItem, type InboxImage, postInboxItem } from "@luke/service/inbox/inbox-store";
 import {
   connectWorkspaceGitHub,
   type FakeGitHub,
@@ -106,7 +107,6 @@ import {
 import { CODER } from "../server/hosted/coder-host/bounds";
 import { CODER_TOOL_SET } from "../server/hosted/coder-host/tool-set";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../server/hosted/environment";
-import { answerInboxItem, type InboxImage, postInboxItem } from "../server/hosted/inbox-store";
 import { modelCatalogOf, type OfferedModel } from "../server/hosted/model-catalog";
 import { plansApp } from "../server/plans-app";
 

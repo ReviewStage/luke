@@ -14,7 +14,6 @@ import {
   INTEGRATION_PROVIDER_LIST,
   type IntegrationProvider,
 } from "@luke/features/integration-wire";
-import { type Config, ConfigProvider, Effect, Layer, Redacted } from "effect";
 import {
   CONNECT_SIGN_IN_RESULT,
   type ConnectorService,
@@ -24,7 +23,8 @@ import {
   IntegrationConnectFailure,
   type IntegrationConnectService,
   integrationConnectFromEnvironment,
-} from "../../server/hosted/integration-connect.js";
+} from "@luke/service/integrations/integration-connect";
+import { type Config, ConfigProvider, Effect, Layer, Redacted } from "effect";
 
 /** Every provider's connector, as the suite builds each one. */
 export function integrationConnectOf(

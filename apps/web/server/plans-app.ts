@@ -56,6 +56,12 @@ import {
   readJsonBodyEffect,
   type UserIdResolver,
 } from "@luke/service/http/http-effect";
+import {
+  PLAN_SAVE_REFUSAL,
+  PLAN_SAVE_STATUS,
+  restoreRevision,
+  saveDeveloperEdit,
+} from "@luke/service/plans/plan-notes";
 import { ANY_METHOD, type WebRoutes } from "@luke/service/route";
 import { readEither } from "@luke/wire/effect";
 import { Clock, Data, Effect, Layer, Option, Result } from "effect";
@@ -78,12 +84,6 @@ import {
 import type { ModelCatalog } from "./hosted/model-catalog.js";
 import { withPlanAgents } from "./hosted/plan-agents.js";
 import { readPlanFile } from "./hosted/plan-file.js";
-import {
-  PLAN_SAVE_REFUSAL,
-  PLAN_SAVE_STATUS,
-  restoreRevision,
-  saveDeveloperEdit,
-} from "./hosted/plan-notes.js";
 import { readPlanSkills } from "./hosted/plan-skills.js";
 import { readPlanTree } from "./hosted/plan-tree.js";
 import { readPlanCode, readPlanWork } from "./hosted/plan-work-store.js";
@@ -106,7 +106,7 @@ import { workspaceRepository } from "./hosted/workspace-repository.js";
  * it touches is one the bearer's account owns: a plan id another account
  * owns answers exactly as one that names nothing, so nothing is learned
  * about plans the caller does not hold. The developer writes a document in
- * two ways here, each through the plan's one write (`hosted/plan-notes.ts`)
+ * two ways here, each through the plan's one write (`packages/service/src/plans/plan-notes.ts`)
  * that the notetaker and the coding agents save their notes through: `POST
  * /api/plans/{id}/edit` is their edit of the document, saved, or answered as
  * a conflict with the text as it stands now where Luke wrote it meanwhile and

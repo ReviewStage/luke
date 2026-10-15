@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
 import type { AccountInboxAnswer } from "@luke/features/account-inbox-wire";
 import type { InboxAnswer } from "@luke/features/inbox-wire";
-import { Clock, type Duration, Effect, Schedule } from "effect";
 import {
   accountInboxAutomations,
   accountInboxPlans,
@@ -12,7 +11,8 @@ import {
   type InboxStoreEffect,
   planInboxItems,
   planInboxStamps,
-} from "../inbox-store.js";
+} from "@luke/service/inbox/inbox-store";
+import { Clock, type Duration, Effect, Schedule } from "effect";
 import { CODER } from "./bounds.js";
 
 /**

@@ -1,10 +1,10 @@
 import { recordVoiceSeconds, spendHostedMeter } from "@luke/database/models/quota";
 import { voiceSessionRecord } from "@luke/database/models/voice-session-record";
+import { CRON_ENVIRONMENT } from "@luke/service/maintenance/maintenance-bounds";
 import { HOSTED_OPENAI_ENVIRONMENT } from "@luke/service/providers/openai";
 import { Effect, Redacted } from "effect";
 import { hostedUserInfo, userIdForAuthorization } from "../hosted/bearer.js";
 import { deploymentEveOrigin } from "../hosted/brain-host/eve-origin.js";
-import { CRON_ENVIRONMENT } from "../hosted/maintenance-bounds.js";
 import { runWeb } from "../runtime.js";
 import type { VoiceAccounts } from "./accounts.js";
 import { deploymentExchange } from "./deployment-exchange.js";

@@ -12,9 +12,9 @@
 
 import { turnsNamed } from "@luke/database/models/message-reads";
 import type { TurnRecord } from "@luke/features/coding-agent-wire";
+import { turnRecordOf } from "@luke/service/agents/turn-record";
 import { Effect } from "effect";
 import type { SubagentJournal } from "../voice/plan-work.js";
-import { turnRecordOf } from "./turn-record.js";
 
 /** What each subagent's newest task ran on and spent, by the call its session is read under; none where its journal names no turn row. */
 export function subagentRecordsByCall(

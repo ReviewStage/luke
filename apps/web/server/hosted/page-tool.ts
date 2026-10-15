@@ -14,11 +14,11 @@ import {
   wireUuidSchema,
 } from "@luke/service/core";
 import { logStoreFailure } from "@luke/service/http/store-failure";
+import { isSecretFile } from "@luke/service/plans/shown-file";
 import { describeWire, readEither } from "@luke/wire/effect";
 import { Effect, Option, Result, Schema } from "effect";
 import type { SandboxSession } from "eve/sandbox";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
-import { isSecretFile } from "./shown-file.js";
 
 /**
  * page-tool.ts -- `show_page`, every agent's one tool for a page: an interactive HTML document written for the plan and shown in the developer's side panel.

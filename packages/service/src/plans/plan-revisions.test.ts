@@ -16,13 +16,8 @@ import { PLAN_ACTOR, type PlanRevisionLine } from "@luke/features/plan-wire";
 import { eq } from "drizzle-orm";
 import { Duration, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
-import {
-  PLAN_SAVE_REFUSAL,
-  PLAN_SAVE_STATUS,
-  restoreRevision,
-  saveNotes,
-} from "../server/hosted/plan-notes";
-import { added } from "./support/plan-contents";
+import { added } from "../testing/plan-contents.js";
+import { PLAN_SAVE_REFUSAL, PLAN_SAVE_STATUS, restoreRevision, saveNotes } from "./plan-notes.js";
 
 /**
  * A plan's history, through the plan's one write and the store's reads:

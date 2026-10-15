@@ -1,6 +1,9 @@
 import { VOICE_SERVICE_PATH } from "@luke/features";
 import { TERMINAL_RELAY } from "@luke/features/terminal-wire";
-import { MAINTENANCE_SWEEP, MAINTENANCE_SWEEP_PATH } from "./hosted/maintenance-bounds.js";
+import {
+  MAINTENANCE_SWEEP,
+  MAINTENANCE_SWEEP_PATH,
+} from "@luke/service/maintenance/maintenance-bounds";
 
 /**
  * A WebSocket connection to a Vercel Function lives as long as the function

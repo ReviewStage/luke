@@ -29,6 +29,7 @@ import {
   workspaceLeaveRequestSchema,
   workspaceMemberRemovalSchema,
 } from "@luke/features/workspace-wire";
+import { listMembers, memberIdOf } from "@luke/service/accounts/workspace-members";
 import { unparsedWire } from "@luke/service/core";
 import { GitHubApp } from "@luke/service/github/github-app";
 import {
@@ -59,7 +60,6 @@ import {
   HttpServerRequest,
   type HttpServerResponse,
 } from "effect/http";
-import { listMembers, memberIdOf } from "./hosted/workspace-members.js";
 
 /**
  * workspaces-app.ts -- the account's workspaces as the Mac reads and asks for them: the list, a workspace created, a GitHub organization connected or disconnected, and its members read, removed, or left.

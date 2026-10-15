@@ -31,6 +31,14 @@ import {
   readJsonBodyEffect,
   type UserIdResolver,
 } from "@luke/service/http/http-effect";
+import { makeRateBrake, type RateBrake } from "@luke/service/http/rate-brake";
+import { MAINTENANCE_PROVIDER_KEYS_REWRAP_PATH } from "@luke/service/maintenance/maintenance-bounds";
+import {
+  checkFastAccess,
+  checkProviderKey,
+  PROVIDER_KEY_CHECK,
+  providerKeyHint,
+} from "@luke/service/providers/provider-key-check";
 import { ANY_METHOD, type WebRoutes } from "@luke/service/route";
 import { unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
@@ -42,22 +50,14 @@ import {
   type HttpServerResponse,
 } from "effect/http";
 import { HostedEnvironment } from "./hosted/environment.js";
-import { MAINTENANCE_PROVIDER_KEYS_REWRAP_PATH } from "./hosted/maintenance-bounds.js";
-import {
-  checkFastAccess,
-  checkProviderKey,
-  PROVIDER_KEY_CHECK,
-  providerKeyHint,
-} from "./hosted/provider-key-check.js";
 import { handleProviderKeyRewrap } from "./hosted/provider-key-rewrap.js";
-import { makeRateBrake, type RateBrake } from "./hosted/rate-brake.js";
 
 /**
  * provider-keys-app.ts -- the account's own Anthropic and OpenAI API keys: read what they are, save one, remove one.
  *
  * `GET /api/account/provider-keys` answers the account's keys as hints and
  * statuses; `PUT` saves one, first asking the provider whether it accepts
- * it (`hosted/provider-key-check.ts`), and keeps it sealed
+ * it (`packages/service/src/providers/provider-key-check.ts`), and keeps it sealed
  * (`@luke/database/models/provider-key-seal`) only where it does; `DELETE` with the
  * provider in the query removes one. Every answer is the keys as they then
  * stand and none carries a key: the one body that holds a key is the

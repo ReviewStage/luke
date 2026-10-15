@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
 import { Effect } from "effect";
-import { listMcpTools, MCP_TOOLS_FAILURE } from "../server/hosted/mcp-tools.js";
+import { listMcpTools, MCP_TOOLS_FAILURE } from "./mcp-tools.js";
 
 /**
  * What the tools read keeps of a provider's MCP server: each tool's title in

@@ -13,8 +13,6 @@ import {
 } from "@luke/service/github/github-app";
 import { logGitHubReadFailure, logWorkspaceReadFailure } from "@luke/service/github/github-refusal";
 import { readBranchHead, readRepositoryFile } from "@luke/service/github/repository-file";
-import { Effect, Option } from "effect";
-import type * as HttpClient from "effect/http/HttpClient";
 import {
   fileLines,
   holdsNul,
@@ -23,7 +21,9 @@ import {
   type ShownFileRefusal,
   shownFileRefusal,
   shownLine,
-} from "./shown-file.js";
+} from "@luke/service/plans/shown-file";
+import { Effect, Option } from "effect";
+import type * as HttpClient from "effect/http/HttpClient";
 
 /**
  * plan-file.ts -- a whole file of a plan's repository for the Mac's File tab, read a window at a time from GitHub as it stands now or at a commit.

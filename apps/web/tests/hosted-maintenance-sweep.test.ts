@@ -1,15 +1,15 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { noDatabase } from "@luke/database/testing/no-database";
+import type { SessionSandboxSweepOutcome } from "@luke/service/agents/session-sandboxes";
 import { HOSTED_API_ERROR } from "@luke/service/http/http";
+import { MAINTENANCE_SWEEP_PATH } from "@luke/service/maintenance/maintenance-bounds";
+import type { TerminalLeaseSweepOutcome } from "@luke/service/maintenance/terminal-lease-sweep";
 import { Effect, Redacted } from "effect";
-import { MAINTENANCE_SWEEP_PATH } from "../server/hosted/maintenance-bounds";
 import {
   handleMaintenanceSweep,
   type MaintenanceSweepOptions,
 } from "../server/hosted/maintenance-sweep";
-import type { SessionSandboxSweepOutcome } from "../server/hosted/session-sandboxes";
-import type { TerminalLeaseSweepOutcome } from "../server/hosted/terminal-lease-sweep";
 import type { VoiceOrphanSweepOutcome } from "../server/voice/orphan-sweep";
 
 const CRON_SECRET = Redacted.make("cron-secret-1");

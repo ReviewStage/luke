@@ -25,9 +25,9 @@ import {
   type PlanDocument,
   type PlanSectionEdit,
 } from "@luke/features/plan-wire";
-import { logStoreFailure, type StoreFailure } from "@luke/service/http/store-failure";
 import { Clock, Effect, Option, Result } from "effect";
 import { SqlClient } from "effect/sql";
+import { logStoreFailure, type StoreFailure } from "../http/store-failure.js";
 
 /**
  * plan-notes.ts -- the plan's one write: take the notetaker's notes, the developer's edit of the text, or their restore of a revision, into a plan and read back what was saved.

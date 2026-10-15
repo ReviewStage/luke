@@ -18,6 +18,8 @@ import { CODING_AGENT_DEFAULT_CHOICE } from "@luke/features/models-wire";
 import { planMarkdown } from "@luke/features/plan-markdown";
 import type { Plan } from "@luke/features/plan-wire";
 import { failureKind } from "@luke/runtime/effect";
+import { eveContent } from "@luke/service/agents/attached-files";
+import { mentionedContext, mentionedServers } from "@luke/service/agents/mentioned-context";
 import type { GitHubApp } from "@luke/service/github/github-app";
 import {
   HOSTED_REFUSAL,
@@ -27,14 +29,12 @@ import {
 } from "@luke/service/http/http-effect";
 import { Effect, Option } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
-import { eveContent } from "../attached-files.js";
 import { BRAIN_HOST_TURN } from "../brain-host/bounds.js";
 import {
   describeUnreachable,
   EVE_SEND_OUTCOME,
   type EveSessions,
 } from "../brain-host/eve-sessions.js";
-import { mentionedContext, mentionedServers } from "../mentioned-context.js";
 import {
   acceptedModelChoice,
   type ModelCatalog,

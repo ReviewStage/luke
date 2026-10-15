@@ -1,11 +1,11 @@
 import { wireValidatedTool } from "@luke/service/core";
+import { connectionToolEntries } from "@luke/service/integrations/connection-tools";
 import { WireValueSchema } from "@luke/wire";
 import { verbatimJsonSchema } from "@luke/wire/effect";
 import type { ToolSet } from "ai";
 import type { MessageStreamEvent } from "eve/client";
 import { AGENT_ROLE } from "../agent-runtime/role.js";
 import { AGENT_TOOL, toolsOf } from "../agent-runtime/tools.js";
-import { connectionToolEntries } from "../connection-tools.js";
 
 /**
  * tool-set.ts -- every tool a coding agent's rows may name, as the store writer holds them.

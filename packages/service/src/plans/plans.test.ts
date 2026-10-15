@@ -28,15 +28,15 @@ import { PLAN_HEADING, type PlanNote } from "@luke/features/plan-template";
 import type { PlanDocument } from "@luke/features/plan-wire";
 import { Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
+import { added } from "../testing/plan-contents.js";
+import { INVITATIONS_TEXT, makeDocumentPlan } from "../testing/plan-documents.js";
 import {
   PLAN_SAVE_REFUSAL,
   PLAN_SAVE_STATUS,
   type PlanDocumentBinding,
   type PlanSaveResult,
   saveNotes,
-} from "../server/hosted/plan-notes";
-import { added } from "./support/plan-contents";
-import { INVITATIONS_TEXT, makeDocumentPlan } from "./support/plan-documents";
+} from "./plan-notes.js";
 
 /**
  * The named plans and their one document, through the store's public

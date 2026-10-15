@@ -13,6 +13,7 @@ import {
   jsonResponse,
 } from "@luke/service/http/http";
 import type { UserIdResolver } from "@luke/service/http/http-effect";
+import { makeRateBrake } from "@luke/service/http/rate-brake";
 import {
   type PosthogBatch,
   type PosthogBatchItem,
@@ -23,7 +24,6 @@ import {
 import { Clock, Effect, type Layer, Option, type Schema } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import type * as HttpClient from "effect/http/HttpClient";
-import { makeRateBrake } from "./rate-brake.js";
 
 /**
  * Records what the signed-in desktop counted about its own use. The desktop

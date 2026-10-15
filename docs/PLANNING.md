@@ -321,7 +321,7 @@ both draw on. It shows in the side panel's Board tab, beside the document.
   sends the whole diagram each time: labelled boxes, ellipses, and diamonds,
   text, and arrows between ids. It replaces his previous drawing and leaves
   what the developer drew. The service only stores it
-  (`apps/web/server/hosted/board-tool.ts`). The voice hands a request to
+  (`packages/service/src/plans/board-tool.ts`). The voice hands a request to
   draw to the planning model, as it does any other request.
 - **The Mac converts it.** The canvas turns Luke's drawing into Excalidraw
   elements with Excalidraw's own converter, marks them as his, and puts them
@@ -376,7 +376,7 @@ sidebar does (`desktop/side-panel.tsx`, `planning/use-side-panel.ts`).
   (`GET /api/plans/{id}/file`, `hosted/plan-file.ts`), from GitHub at the
   head of the default branch through the Luke GitHub App, since no checkout
   stands outside a call, under the rule `show_code` keeps
-  (`hosted/shown-file.ts`); a file changed since is drawn as it is now, and
+  (`packages/service/src/plans/shown-file.ts`); a file changed since is drawn as it is now, and
   one not on that branch, or not read at all, says so over the lines Luke
   showed of it. A File tab opened from a code block of the plan's Inbox is
   read at the commit the agent named instead. Over the first line of each
@@ -574,7 +574,7 @@ speakers' words from the call's sideband and the planning model's replies as
 research notes. Once the developer has been quiet for about a second, it makes
 one `gpt-5.6-luna` call over the plan's saved text and what was said since
 its last note, under its own instructions (`SCRIBE_INSTRUCTIONS`), and saves
-the answer through `saveNotes` (`apps/web/server/hosted/plan-notes.ts`). Its
+the answer through `saveNotes` (`packages/service/src/plans/plan-notes.ts`). Its
 runs never overlap, so no run of its own races another, and a run that fails
 moves nothing forward.
 
@@ -737,7 +737,7 @@ was opened.
 Restore this version asks first, in the window's dialog, and then puts the
 revision's text back through the plan's one locked save
 (`POST /api/plans/{id}/revisions/{seq}/restore`, `restoreRevision` in
-`hosted/plan-notes.ts`). The restore is a revision of the developer's
+`packages/service/src/plans/plan-notes.ts`). The restore is a revision of the developer's
 ("You") naming the one it brought back, "Restored the version from Oct 11,
 2:14 PM"; it joins no revision and none joins it, so a restore is undone by
 restoring the revision before it, and it is allowed during a call. It takes

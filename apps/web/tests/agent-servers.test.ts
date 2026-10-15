@@ -14,6 +14,7 @@ import {
 } from "@luke/features/integration-wire";
 import { GitHubApp } from "@luke/service/github/github-app";
 import { GITHUB_APP_SETTINGS, openGithubUser } from "@luke/service/testing/github-app-fake";
+import { noNetwork } from "@luke/service/testing/no-network";
 import { Effect, Layer, Option, Result } from "effect";
 import type { SessionAuth } from "eve/context";
 import { CONNECTION_POLICY } from "../server/hosted/agent-runtime/role";
@@ -29,7 +30,6 @@ import {
   integrationConnectOf,
   integrationConnectOver,
 } from "./support/integration-connect";
-import { noNetwork } from "./support/no-network";
 
 /**
  * The MCP servers an agent's turn is handed, read as the turn starts under

@@ -172,7 +172,7 @@ token, and its steps are its starter's spend, whichever member messages it.
 A workspace's members are read, removed, and left through
 `server/workspaces-app.ts`. `GET /api/workspaces/members?workspaceId=`
 answers a workspace's members to a member under the Mac's OAuth token, read
-through Drizzle (`hosted/workspace-members.ts`), owners first, then admins,
+through Drizzle (`packages/service/src/accounts/workspace-members.ts`), owners first, then admins,
 then members, since the plugin's own `listMembers` takes a session.
 `POST /api/workspaces/members/remove` lets an owner or an admin remove a
 member who is not an owner, and `POST /api/workspaces/leave` lets anyone but
@@ -186,7 +186,7 @@ account is not in is `not-found`; a role that does not allow it,
 `not-permitted`; a session the service does not take,
 `invalid-token`, which is the Mac's cue to ask for a new one through the
 hand-off page (`desktop-session.html`). `tests/workspaces-app.test.ts` holds
-each over the plugin on PGlite, and `tests/member-seams.test.ts` the
+each over the plugin on PGlite, and `packages/service/src/accounts/member-seams.test.ts` the
 plugin's own refusals.
 
 Dynamic client registration stays disabled. One public client is compiled in:
@@ -668,7 +668,7 @@ the account is shown is the provider, a hint of the key's prefix and last
 four characters (`sk-ant-…abcd`), when it was added, and its status —
 `verified`, `invalid`, `quota_exceeded`, or `unreadable` where the ring
 below can no longer open it. A save asks the provider first, with one read
-of its model list, which bills nothing (`server/hosted/provider-key-check.ts`):
+of its model list, which bills nothing (`packages/service/src/providers/provider-key-check.ts`):
 a 200 keeps the key as verified, a 401 or 403 keeps nothing and answers
 `rejected: invalid`, anything else keeps nothing and answers `unreachable`,
 and a key spelled as the other provider's is answered `wrong_provider`
@@ -766,7 +766,7 @@ elicitation mode, and the agent asks the developer and calls Executor's
 elicitation instead, which eve's client never answers, so Executor's
 connection stays on the plain URL, and the mode is fixed in the grant
 whatever URL a client later opens it at (https://executor.sh/docs/mcp). A connection belongs to the account, so it reaches every plan and
-project the account has. `server/hosted/integrations.ts` is the one table of
+project the account has. `packages/service/src/integrations/integrations.ts` is the one table of
 providers: the variable each connector's UID is read from, the one naming
 the accounts it is offered to, its MCP server
 and what the model is told of it, and the name its nested calls are stored
@@ -819,7 +819,7 @@ that table.
   or the provider refused it) is ended here and named once in
   `signInFailures`, `reason` `canceled` or `error`, with the first line of
   Connect's error message, cut to 200 characters, where it is shaped like no
-  credential (`credentialFreeLine` in `server/hosted/mcp-tools.ts`).
+  credential (`credentialFreeLine` in `packages/service/src/integrations/mcp-tools.ts`).
 - `POST /api/account/integrations/{provider}/connect` asks Connect's
   `startAuthorization` for the account, with Luke's own user id as the
   subject and `/api/account/integrations/connected?state=…` as the callback,
@@ -842,7 +842,7 @@ that table.
   provider's server offers the account's agents, `{ tools: [{ name, title?,
   description, annotations?, parameters? }] }`, for the composer's MCP
   popover and Settings › Integrations. It reads them as an MCP client does
-  (`server/hosted/mcp-tools.ts`: `initialize`, then `tools/list` page by
+  (`packages/service/src/integrations/mcp-tools.ts`: `initialize`, then `tools/list` page by
   page, JSON or event-stream answers), with the account's token from
   Connect. A title is the tool's own, else its annotations', the spec's
   order; a description is kept whole up to 8,000 characters; the hints are
@@ -851,7 +851,7 @@ that table.
   `$defs` references, each its name, its type in a few words,
   whether it is required, and its description, values, and default where
   the schema gives them, the required first and 64 at most, and none at all where the schema
-  cannot be read as an object's (`server/hosted/mcp-tool-parameters.ts`).
+  cannot be read as an object's (`packages/service/src/integrations/mcp-tool-parameters.ts`).
   None of it is what a model is handed. It is held in the instance's memory
   for five minutes per account and provider. A provider the account has not
   connected is refused as unavailable before any token is read.
@@ -896,7 +896,7 @@ tried it; every other tool, and the run, carries on. Workers stay read-only
 in the checkout and change an integration only when their task explicitly
 asks them to.
 
-**Transcripts** (`server/hosted/connection-tools.ts`). eve offers a
+**Transcripts** (`packages/service/src/integrations/connection-tools.ts`). eve offers a
 connection through `connection_search` and `connection_execute`, and tells a
 remote call as a call of its own nested under the `connection_execute` that
 ran it, named `<provider>__<tool>`, with id `<wrapper>:1`. The relay stores
@@ -1323,7 +1323,7 @@ code block pins its lines, on a token `repositoryReadToken` mints for that one
 repository with contents read, after the same reach check the checkout
 makes. The token is used for the one read and enters no answer, log line,
 or trace. What is shown is decided by the rule `show_code` is held to
-(`server/hosted/shown-file.ts`): a secret file is refused before GitHub is
+(`packages/service/src/plans/shown-file.ts`): a secret file is refused before GitHub is
 asked, and so is a path with an empty, `.`, or `..` segment; a link, a
 directory, a missing file, a file past a megabyte, or one with a NUL among
 its first bytes is refused by name, a path GitHub finds nothing at with the
@@ -1346,7 +1346,7 @@ revision's content and the content before it, null for the first, each
 formatted under the plan's name as it stands now, so a rename since is no
 difference between them. `POST /api/plans/{id}/revisions/{seq}/restore`
 puts that revision's text back through the plan's one
-locked save (`server/hosted/plan-notes.ts`'s `restoreRevision`), kept as a
+locked save (`packages/service/src/plans/plan-notes.ts`'s `restoreRevision`), kept as a
 revision of the developer's naming the one restored, and answers the plan.
 It takes no body and no base: what it replaced is the revision before it,
 so a restore over a save that landed meanwhile is undone by restoring that.
@@ -1385,7 +1385,7 @@ is `other-workspace`, naming that workspace, since one installation stands
 for one workspace and moving the plan there is what reaches the repository:
 a plan a personal workspace held before #2524 is left that way.
 
-A plan's text has one write, `server/hosted/plan-notes.ts`, and four
+A plan's text has one write, `packages/service/src/plans/plan-notes.ts`, and four
 writers. `POST /api/plans/{id}/edit` takes the developer's edit of the
 whole text against the base it was made on (`saveDeveloperEdit`), saved
 where the text still holds that base, laid over what Luke wrote meanwhile
@@ -1405,7 +1405,7 @@ a plan deleted meanwhile, which a save never recreates because it is an
 each leaving the prior document in place.
 `readPlan` is the read the planning model starts and resumes from, with the
 conversation `attachPlanConversation` associated, and it moves nothing.
-`tests/hosted-plans.test.ts` and `tests/plans-app.test.ts` hold both halves
+`packages/service/src/plans/plans.test.ts` and `tests/plans-app.test.ts` hold both halves
 against a real dialect.
 
 The planning model is the hosted brain run over a `plan` conversation, which
@@ -2641,7 +2641,7 @@ double, reading every run for the token and never finding it.
 `vercel.json` schedules it every minute (`* * * * *`) and
 `server/function-durations.ts` gives its function group, `maintenance-sweep`,
 a 60-second duration (`MAINTENANCE_SWEEP.MAX_DURATION_SECONDS` in
-`server/hosted/maintenance-bounds.ts`). The logic lives in
+`packages/service/src/maintenance/maintenance-bounds.ts`). The logic lives in
 `server/hosted/maintenance-sweep.ts`; the route, through
 `server/maintenance-app.ts`, hands it the deployment's seams. Vercel crons run
 only on production deployments.
@@ -2767,7 +2767,7 @@ the addresses; `tests/automations-app.test.ts` holds the routes over a fake
 eve, a scripted GitHub, a fixed catalog, and PGlite.
 
 A GitHub trigger fires on the Luke App's own webhook
-(`server/github-webhook-app.ts`, through `hosted/automation-github.ts`): a
+(`server/github-webhook-app.ts`, through `packages/service/src/automations/automation-github.ts`): a
 pull request opened or labelled, an issue opened or labelled, a check suite
 that completed as `failure` or `timed_out`, and a push to a branch, each in
 the repository of the automation's plan (matched the way GitHub folds a

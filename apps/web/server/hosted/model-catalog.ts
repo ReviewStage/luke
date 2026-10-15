@@ -7,12 +7,12 @@ import {
   type ModelProvider,
 } from "@luke/features/models-wire";
 import { FAST_ACCESS, type FastAccess } from "@luke/features/provider-key-wire";
+import { checkFastAccess } from "@luke/service/providers/provider-key-check";
 import { Context, Data, Duration, Effect, Exit, Layer, Option, Result, Schema } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import { HostedEnvironment } from "./environment.js";
-import { checkFastAccess } from "./provider-key-check.js";
 
 /**
  * model-catalog.ts -- the models a coding agent may run on, read from AI Gateway's public catalog.

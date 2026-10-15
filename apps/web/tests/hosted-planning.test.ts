@@ -16,6 +16,7 @@ import {
   NO_GITHUB,
   openGithubUser,
 } from "@luke/service/testing/github-app-fake";
+import { noNetwork } from "@luke/service/testing/no-network";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import {
   generateText,
@@ -51,7 +52,6 @@ import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { modelCatalogOf } from "../server/hosted/model-catalog";
 import type { RepositorySandboxDoor } from "../server/hosted/repository-shell";
 import { stampedEveEvent } from "./support/eve-events";
-import { noNetwork } from "./support/no-network";
 import { sandboxDouble } from "./support/repository-sandbox";
 
 /**

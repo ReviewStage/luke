@@ -1,10 +1,10 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import { readBoardImage } from "@luke/database/models/board-store";
 import { LOOK_AT_BOARD_TOOL_NAME } from "@luke/features/board-vocabulary";
+import type { PlanDocumentBinding } from "@luke/service/plans/plan-notes";
 import { isRecord, type UnparsedWireValue, unparsedWire } from "@luke/wire";
 import { Duration, Effect, Option, Schedule, Schema } from "effect";
 import type { ToolModelOutput } from "eve/tools";
-import type { PlanDocumentBinding } from "./plan-notes.js";
 
 /**
  * board-look.ts -- `look_at_board`, the planning model's eyes on the plan's whiteboard: its latest drawing as the developer's Mac drew it, handed back as an image.
