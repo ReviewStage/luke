@@ -99,8 +99,8 @@ export function recentRepositories(plans: PlanningView["plans"]): string[] {
 
 /**
  * Whether a workspace's GitHub reaches a repository, as far as the window can
- * tell before the service is asked: its installation is on the repository's
- * owner. Since #2524 a workspace reaches only its own installation's
+ * tell before the service is asked: its installation is active and on the
+ * repository's owner. Since #2524 a workspace reaches only its own installation's
  * repositories, so one with no GitHub connected reaches none, whatever its
  * plans still name. The service's read is the last word, since an
  * installation on the owner may not have been given the repository.
@@ -109,8 +109,9 @@ export function workspaceReaches(
   workspace: Pick<Workspace, "github">,
   repository: string,
 ): boolean {
+  const { github } = workspace;
   const [owner] = repository.split("/");
-  return workspace.github?.login.toLowerCase() === owner?.toLowerCase();
+  return github != null && github.active && github.login.toLowerCase() === owner?.toLowerCase();
 }
 
 /**

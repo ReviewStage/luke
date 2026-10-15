@@ -1387,16 +1387,21 @@ export function usePlansTab(input: {
    */
   const repositoriesIn = (workspaceId: string | undefined): RepositoryChooser => {
     const workspace = viewed.workspaces.find((each) => each.id === workspaceId);
-    const recent = recentRepositories(
+    const own =
       workspaceId === undefined
         ? planning.plans
-        : planning.plans.filter((plan) => plan.workspaceId === workspaceId),
-    );
+        : planning.plans.filter((plan) => plan.workspaceId === workspaceId);
+    // Note that the plans are filtered before the recent ones are counted,
+    // because a few newer stranded plans would otherwise crowd out an older
+    // repository the workspace does reach.
+    const offered =
+      workspace === undefined
+        ? own
+        : own.filter(
+            (plan) => plan.repository !== null && workspaceReaches(workspace, plan.repository),
+          );
     return {
-      recent:
-        workspace === undefined
-          ? recent
-          : recent.filter((repository) => workspaceReaches(workspace, repository)),
+      recent: recentRepositories(offered),
       read: () =>
         fixture !== undefined
           ? Promise.resolve(fixtureRepositories(workspaceId))

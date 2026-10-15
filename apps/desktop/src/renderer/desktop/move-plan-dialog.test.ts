@@ -9,6 +9,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { plansControl, UNPINNED_SUMMARY } from "#testing/plans-control";
 import { installScrollIntoView } from "#testing/scroll-into-view";
+import { MAIN_TAB } from "../planning/use-main-tabs";
 import { NO_LOOKS } from "../planning/use-plan-looks";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { DesktopPlans } from "./desktop-plans";
@@ -282,10 +283,12 @@ test("a plan whose repository its workspace cannot reach and another of the acco
   assert.deepEqual(moves, [[PLAN.id, ACME.id]]);
 });
 
-test("no banner stands over a plan its own workspace reaches, one no other workspace reaches, one with no repository, or a teammate's", () => {
+test("no banner stands over a plan its own workspace reaches, one no other workspace's active GitHub reaches, one with no repository, or a teammate's, nor over the plan's other tabs", () => {
+  const suspended = { ...ACME, github: { login: "acme-corp", active: false } };
   const cases: [Plan, readonly Workspace[]][] = [
     [{ ...PLAN, workspaceId: ACME.id }, [STUDIO, ACME]],
     [PLAN, [STUDIO, NORTHWIND, OCTO]],
+    [PLAN, [STUDIO, suspended]],
     [{ ...PLAN, repository: null }, [STUDIO, ACME]],
     [{ ...PLAN, ownerId: SAM }, [STUDIO, ACME]],
   ];
@@ -295,6 +298,12 @@ test("no banner stands over a plan its own workspace reaches, one no other works
     unmountAll();
     return found;
   });
+  const plans = openTab(PLAN, [STUDIO, ACME]);
+  const inbox = openPlan({
+    ...plans,
+    mainTabs: { ...plans.mainTabs, tabs: [MAIN_TAB.PLAN, MAIN_TAB.INBOX], tab: MAIN_TAB.INBOX },
+  });
 
-  assert.deepEqual(banners, [false, false, false, false]);
+  assert.deepEqual(banners, [false, false, false, false, false]);
+  assert.equal(strandedBanner(inbox), null, "the banner is the plan tab's alone");
 });

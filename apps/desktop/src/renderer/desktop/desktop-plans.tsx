@@ -554,9 +554,9 @@ function PlanDocument({
               active={plans.shown && !sideFocused}
               subject={{ plan: plan.id, tab }}
             >
-              {archived ? (
-                <ArchivedBanner onUnarchive={unarchive} />
-              ) : (
+              {archived ? <ArchivedBanner onUnarchive={unarchive} /> : null}
+              {/* The stranded plan's banner is the plan's own, so it stands over the plan's tab alone. */}
+              {archived || tab !== MAIN_TAB.PLAN ? null : (
                 <StrandedPlanBanner plans={plans} plan={listed} />
               )}
               <section
