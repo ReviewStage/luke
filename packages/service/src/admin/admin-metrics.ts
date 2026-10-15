@@ -1,5 +1,7 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import { utcDayKey } from "@luke/database/models/quota";
+import { Clock, Effect } from "effect";
+import { DAY_MS } from "../core.js";
 import {
   ADMIN_ERROR,
   ADMIN_HTTP_STATUS,
@@ -9,9 +11,7 @@ import {
   adminMetricsWindow,
   errorResponse,
   jsonResponse,
-} from "@luke/service/admin/http";
-import { DAY_MS } from "@luke/service/core";
-import { Clock, Effect } from "effect";
+} from "./http.js";
 import { type AdminSeamEffect, unavailableSeam } from "./seam.js";
 
 /**

@@ -1,15 +1,6 @@
 import type { DatabaseServices } from "@luke/database/core/query";
-import {
-  ADMIN_ERROR,
-  ADMIN_HTTP_STATUS,
-  type AdminMetricsWindow,
-  adminMetricsWindow,
-  adminUserId,
-  errorResponse,
-  jsonResponse,
-} from "@luke/service/admin/http";
-import { DAY_MS } from "@luke/service/core";
 import { Clock, Effect } from "effect";
+import { DAY_MS } from "../core.js";
 import {
   ADMIN_TREND_DAYS,
   type AdminDailyUsage,
@@ -18,6 +9,15 @@ import {
   sum,
   trailingTrend,
 } from "./admin-metrics.js";
+import {
+  ADMIN_ERROR,
+  ADMIN_HTTP_STATUS,
+  type AdminMetricsWindow,
+  adminMetricsWindow,
+  adminUserId,
+  errorResponse,
+  jsonResponse,
+} from "./http.js";
 import { type AdminSeamEffect, unavailableSeam } from "./seam.js";
 
 /**

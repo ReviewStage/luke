@@ -1,5 +1,5 @@
-import { ADMIN_ERROR, ADMIN_HTTP_STATUS } from "@luke/service/admin/http";
 import { HttpServerResponse } from "effect/http";
+import { ADMIN_ERROR, ADMIN_HTTP_STATUS } from "./http.js";
 
 /**
  * The admin response vocabulary as the refusals the dashboard's route group

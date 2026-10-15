@@ -1,16 +1,16 @@
 import type { DatabaseServices } from "@luke/database/core/query";
-import type { AdminViewer } from "@luke/service/admin/admin-access";
-import { ADMIN_ROUTE_PATH } from "@luke/service/admin/http";
-import { ANY_METHOD, ANY_PATH, type WebRoutes } from "@luke/service/route";
 import { type Cause, type Effect, Layer } from "effect";
 import { HttpRouter, type HttpServerRequest, type HttpServerResponse } from "effect/http";
-import { type AdminDayOptions, handleAdminDay } from "./admin/admin-day.js";
-import { type AdminFavoriteOptions, handleAdminFavorite } from "./admin/admin-favorite.js";
-import { type AdminMetricsOptions, handleAdminMetrics } from "./admin/admin-metrics.js";
-import { type AdminUserOptions, handleAdminUser } from "./admin/admin-user.js";
-import { type AdminUsersOptions, handleAdminUsers } from "./admin/admin-users.js";
-import { adminViewerGate } from "./admin/gate.js";
-import { ADMIN_REFUSAL, adminRefusalResponse } from "./admin/http-effect.js";
+import { ANY_METHOD, ANY_PATH, type WebRoutes } from "../route.js";
+import type { AdminViewer } from "./admin-access.js";
+import { type AdminDayOptions, handleAdminDay } from "./admin-day.js";
+import { type AdminFavoriteOptions, handleAdminFavorite } from "./admin-favorite.js";
+import { type AdminMetricsOptions, handleAdminMetrics } from "./admin-metrics.js";
+import { type AdminUserOptions, handleAdminUser } from "./admin-user.js";
+import { type AdminUsersOptions, handleAdminUsers } from "./admin-users.js";
+import { adminViewerGate } from "./gate.js";
+import { ADMIN_ROUTE_PATH } from "./http.js";
+import { ADMIN_REFUSAL, adminRefusalResponse } from "./http-effect.js";
 
 /**
  * The dashboard as the one route group its five functions serve: four reads

@@ -1,7 +1,7 @@
 import type { DatabaseServices, QueryError } from "@luke/database/core/query";
 import { causeKind, unlessInterrupted } from "@luke/runtime/effect";
-import { ADMIN_ERROR, ADMIN_HTTP_STATUS, errorResponse } from "@luke/service/admin/http";
 import { type Cause, Effect, type Schema } from "effect";
+import { ADMIN_ERROR, ADMIN_HTTP_STATUS, errorResponse } from "./http.js";
 
 /**
  * What a dashboard read or write answers: an effect over the ambient client,

@@ -1,9 +1,9 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import { catchAllButInterrupt, causeKind } from "@luke/runtime/effect";
-import type { AdminViewer } from "@luke/service/admin/admin-access";
-import { isAdminRole } from "@luke/service/admin/admin-access";
 import { type Cause, Effect } from "effect";
 import { HttpServerRequest, HttpServerResponse } from "effect/http";
+import type { AdminViewer } from "./admin-access.js";
+import { isAdminRole } from "./admin-access.js";
 import { ADMIN_REFUSAL, type AdminRefusal, adminRefusalResponse } from "./http-effect.js";
 
 /**

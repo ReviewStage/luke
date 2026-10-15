@@ -1,4 +1,4 @@
-import type { AdminTrend } from "../../../server/admin/admin-metrics";
+import type { AdminTrend } from "@luke/service/admin/admin-metrics";
 import { formatNumber, formatTrendMove, trendTone } from "../format";
 
 /**

@@ -1,5 +1,5 @@
+import type { AdminIntegration, AdminMetrics } from "@luke/service/admin/admin-metrics";
 import type { AdminMetricsWindow } from "@luke/service/admin/http";
-import type { AdminIntegration, AdminMetrics } from "../../../server/admin/admin-metrics";
 import { ACCOUNTS_TABLE_MIN_WIDTH, AccountsTable } from "../accounts-table/accounts-table";
 import { RetentionGrid } from "../charts/retention-grid";
 import { SignInMethodsChart, SignupsChart } from "../charts/signups-chart";
