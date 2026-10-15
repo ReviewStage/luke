@@ -468,4 +468,20 @@ it("a failure message keeps its words and loses every run shaped like a credenti
     "id [redacted] and [redacted] refused",
   );
   assert.equal(redactCredentials("Invalid API key provided"), "Invalid API key provided");
+  assert.equal(
+    redactCredentials(`{"accessToken": "fixture.value"} client_secret:fixture refused`),
+    `{"[redacted]"} [redacted] refused`,
+  );
+});
+
+it("a name however long its prefix still loses its whole value", () => {
+  // Note that the value carries a dot, so the bare run cannot take it in the name's place.
+  assert.equal(
+    redactCredentials(`${"a".repeat(60)}api_key=fixture.value refused`),
+    "[redacted] refused",
+  );
+  assert.equal(
+    redactCredentials(`${"a".repeat(100)}_api_key=fixture.value refused`),
+    "[redacted][redacted] refused",
+  );
 });
