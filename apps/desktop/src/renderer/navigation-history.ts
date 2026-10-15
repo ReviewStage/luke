@@ -43,6 +43,7 @@ const PLACE_KIND = {
   VERSION_HISTORY: "version-history",
   HOME: "home",
   INBOX: "inbox",
+  AGENT: "agent",
   SETTINGS: "settings",
 } as const;
 
@@ -56,6 +57,7 @@ type Place =
     }
   | { readonly kind: typeof PLACE_KIND.HOME }
   | { readonly kind: typeof PLACE_KIND.INBOX }
+  | { readonly kind: typeof PLACE_KIND.AGENT; readonly agentId: string }
   | { readonly kind: typeof PLACE_KIND.SETTINGS; readonly view: SettingsView };
 
 interface Trail {
@@ -65,10 +67,11 @@ interface Trail {
 
 const EMPTY_TRAIL: Trail = { places: [], at: -1 };
 
-/** Whether two places are one step of the history: the same plan, the same plan's version history, the home page, the Inbox on any plan, or Settings on any page. */
+/** Whether two places are one step of the history: the same plan, the same plan's version history, the home page, the Inbox on any plan, the same agent's page, or Settings on any page. */
 function sameStep(one: Place | undefined, other: Place): boolean {
   if (one === undefined || one.kind !== other.kind) return false;
   if ("planId" in one && "planId" in other) return one.planId === other.planId;
+  if ("agentId" in one && "agentId" in other) return one.agentId === other.agentId;
   return true;
 }
 
@@ -227,6 +230,7 @@ export function useWindowHistory(input: {
     | "onLeavePlan"
     | "history"
     | "inboxView"
+    | "agentView"
     | "restoring"
   >;
 }): WindowHistory {
@@ -235,6 +239,7 @@ export function useWindowHistory(input: {
   const historyOpen = plans.history.open;
   const { spot } = plans.history;
   const inboxOpen = plans.inboxView.open;
+  const pageAgent = plans.agentView.agentId;
   // A launch reopening the plan last open stands nowhere until it opens, so
   // the home page it waits on is no place to go back to.
   const known = input.known && !plans.restoring;
@@ -245,11 +250,12 @@ export function useWindowHistory(input: {
     if (!known) return undefined;
     if (tab === PANEL_TAB.SETTINGS) return { kind: PLACE_KIND.SETTINGS, view: settingsView };
     if (inboxOpen) return { kind: PLACE_KIND.INBOX };
+    if (pageAgent !== undefined) return { kind: PLACE_KIND.AGENT, agentId: pageAgent };
     if (boundFor === undefined) return { kind: PLACE_KIND.HOME };
     return historyOpen
       ? { kind: PLACE_KIND.VERSION_HISTORY, planId: boundFor, spot }
       : { kind: PLACE_KIND.PLAN, planId: boundFor };
-  }, [known, tab, settingsView, boundFor, historyOpen, spot, inboxOpen]);
+  }, [known, tab, settingsView, boundFor, historyOpen, spot, inboxOpen, pageAgent]);
   const reachable = (to: Place) => {
     if (!("planId" in to) || to.planId === boundFor) return true;
     if (plans.archived.some((plan) => plan.id === to.planId)) return false;
@@ -270,8 +276,13 @@ export function useWindowHistory(input: {
       plans.inboxView.onOpen();
       return;
     }
-    // Every other place of the Plans tab is the plan's, which the Inbox stands over.
+    if (to.kind === PLACE_KIND.AGENT) {
+      plans.agentView.onOpen(to.agentId);
+      return;
+    }
+    // Every other place of the Plans tab is the plan's, which the Inbox and an agent's page stand over.
     if (inboxOpen) plans.inboxView.onClose();
+    if (pageAgent !== undefined) plans.agentView.onClose();
     // Note that a version history is opened on its spot even where it is
     // still open under Settings, because a version history out of sight
     // keeps no version chosen.

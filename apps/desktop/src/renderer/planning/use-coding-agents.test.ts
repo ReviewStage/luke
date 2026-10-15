@@ -34,6 +34,7 @@ const STARTED: CodingAgentSummary = {
 
 interface Standing {
   planId: string | undefined;
+  agentId?: string;
   repository: string | null;
   archived?: boolean;
 }
@@ -88,6 +89,7 @@ function mount(initial: Standing, registry?: AtomRegistry) {
         },
       },
       planId: held.planId,
+      agentId: held.agentId,
       repository: held.repository,
       archived: held.archived === true,
       onOpenIntegrations: () => undefined,
@@ -216,4 +218,30 @@ test("a draft asks nothing of the service, one per plan, until its first message
   await tab.stand({ planId: OTHER_PLAN });
   assert.equal(tab.control().draft?.id, other, "another plan's draft stands");
   assert.equal(tab.control().start.note, undefined, "the toolbar's Start says nothing of it");
+});
+
+test("with no plan open, the agent named is read as its page and held as a list of one, so its title from a transcript page moves it", async () => {
+  const planless = { ...STARTED, planId: null, status: CODING_AGENT_STATUS.RUNNING };
+  const tab = mount({ planId: undefined, agentId: AGENT, repository: null });
+  tab.answer(ACT_KIND.CODING_AGENTS_PAGE, {
+    agent: {
+      ...planless,
+      automationId: null,
+      workspaceId: "workspace-1",
+      repository: "acme/relay",
+    },
+  });
+  await tab.mount();
+
+  assert.deepEqual(
+    tab.asked.filter((each) => each.kind !== ACT_KIND.CODING_AGENTS_PULL_REQUEST),
+    [{ kind: ACT_KIND.CODING_AGENTS_PAGE, payload: { agentId: AGENT } }],
+    "no plan's list is read, only the agent named",
+  );
+  assert.deepEqual(
+    tab.control().agents?.map((agent) => [agent.id, agent.planId, agent.status]),
+    [[AGENT, null, CODING_AGENT_STATUS.RUNNING]],
+  );
+  act(() => tab.control().onTitle(AGENT, "Sweep the flaky tests"));
+  assert.equal(tab.control().agents?.[0]?.title, "Sweep the flaky tests");
 });

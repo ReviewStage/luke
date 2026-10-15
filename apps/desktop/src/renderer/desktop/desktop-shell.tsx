@@ -20,6 +20,7 @@ import type { SettingsPanelProps } from "../settings/settings-panel";
 import { SignInGate } from "../sign-in-gate";
 import { Tooltip } from "../tooltip";
 import { useColumnDock } from "./column-dock";
+import { DesktopAgentPage } from "./desktop-agent-page";
 import { DesktopInbox } from "./desktop-inbox";
 import { DesktopPlans } from "./desktop-plans";
 import { DesktopSidebar } from "./desktop-sidebar";
@@ -235,6 +236,9 @@ function titleSubject(
   const { signedIn } = plans;
   if (tab === PANEL_TAB.SETTINGS) return { signedIn, subject: "Settings", workspace: undefined };
   if (plans.inboxView.open) return { signedIn, subject: "Inbox", workspace: plans.workspace };
+  if (plans.agentView.agentId !== undefined) {
+    return { signedIn, subject: "Agent", workspace: plans.workspace };
+  }
   if (shownPlan === undefined) return { signedIn, subject: undefined, workspace: plans.workspace };
   // Note that a plan whose workspace is not read yet is named alone, because the listed one may not be its.
   const workspace = plans.workspaces.find((each) => each.id === shownPlan.workspaceId);
@@ -302,15 +306,17 @@ export function DesktopShell({
   useColumnDock(
     shell,
     plans.sidePanel.fullScreen,
-    `${tab}:${plans.page}:${plans.history.open}:${plans.inboxView.open}:${sidebar.collapsed}`,
+    `${tab}:${plans.page}:${plans.history.open}:${plans.inboxView.open}:${plans.agentView.agentId}:${sidebar.collapsed}`,
   );
-  // The window's title names what stands in it, the plan only while it is on screen, and its workspace.
+  // The window's title names what stands in it, the plan only while it is on screen, and its workspace;
+  // the Inbox or an agent's page standing in its place is not the plan.
+  const standingIn = plans.inboxView.open || plans.agentView.agentId !== undefined;
   const shownPlan =
-    tab === PANEL_TAB.PLANS && !plans.inboxView.open && region.kind === DOCUMENT_REGION.READY
+    tab === PANEL_TAB.PLANS && !standingIn && region.kind === DOCUMENT_REGION.READY
       ? region.plan
       : undefined;
   useWindowTitle(titleSubject(tab, plans, shownPlan));
-  // The plan is looked at only while it is on screen, which the Inbox standing in its place is not.
+  // The plan is looked at only while it is on screen.
   const looks = usePlanLooks(shownPlan, plans.me);
   if (gated) {
     return (
@@ -369,9 +375,10 @@ export function DesktopShell({
   }
   // Note that the shell says whether the panel's toggle stands, because the
   // toolbar beneath it leaves the toggle room then and only then. The Inbox
-  // stands in the plan's place, so it draws no panel to toggle.
+  // and an agent's page stand in the plan's place, so they draw no panel to toggle.
   const inboxOpen = plans.inboxView.open;
-  const panelToggle = plans.page === PLANS_PAGE.DOCUMENT && !inboxOpen;
+  const pageAgent = plans.agentView.agentId;
+  const panelToggle = plans.page === PLANS_PAGE.DOCUMENT && !standingIn;
   const planDrawn = panelToggle && plans.region.kind === DOCUMENT_REGION.READY;
   // Note that a panel filling the window hides the plan's column, call bar
   // and all, so the captions float in its place then.
@@ -402,6 +409,8 @@ export function DesktopShell({
       <main className="desktop-main">
         {inboxOpen ? (
           <DesktopInbox plans={plans} />
+        ) : pageAgent !== undefined ? (
+          <DesktopAgentPage plans={plans} agentId={pageAgent} />
         ) : (
           <DesktopPlans
             plans={plans}

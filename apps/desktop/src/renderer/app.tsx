@@ -448,6 +448,7 @@ export function App(): React.JSX.Element {
       if (runAppCommand(APP_COMMAND.EXIT_SETTINGS)) return;
       if (runAppCommand(APP_COMMAND.EXIT_VERSION_HISTORY)) return;
       if (runAppCommand(APP_COMMAND.EXIT_INBOX)) return;
+      if (runAppCommand(APP_COMMAND.EXIT_AGENT_PAGE)) return;
       // An open plan unwinds to the home page, which leaves it and ends
       // its call. That page is home, so a press there does nothing.
       plans.back();
