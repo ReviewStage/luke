@@ -73,5 +73,3 @@ export const linearIssuesAnswerSchema = EffectSchema.Struct({
     EffectSchema.isMaxLength(LINEAR_BOUNDS.MAX_ISSUES),
   ),
 });
-
-export type LinearIssuesAnswer = typeof linearIssuesAnswerSchema.Type;
