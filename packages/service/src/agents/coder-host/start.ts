@@ -18,29 +18,29 @@ import { CODING_AGENT_DEFAULT_CHOICE } from "@luke/features/models-wire";
 import { planMarkdown } from "@luke/features/plan-markdown";
 import type { Plan } from "@luke/features/plan-wire";
 import { failureKind } from "@luke/runtime/effect";
-import { eveContent } from "@luke/service/agents/attached-files";
-import { BRAIN_HOST_TURN } from "@luke/service/agents/brain-host/bounds";
-import {
-  describeUnreachable,
-  EVE_SEND_OUTCOME,
-  type EveSessions,
-} from "@luke/service/agents/brain-host/eve-sessions";
-import { mentionedContext, mentionedServers } from "@luke/service/agents/mentioned-context";
-import type { GitHubApp } from "@luke/service/github/github-app";
-import { workspaceRepository } from "@luke/service/github/workspace-repository";
+import { Effect, Option } from "effect";
+import type * as HttpClient from "effect/http/HttpClient";
+import type { GitHubApp } from "../../github/github-app.js";
+import { workspaceRepository } from "../../github/workspace-repository.js";
 import {
   HOSTED_REFUSAL,
   type HostedRefusal,
   hostedStoreOrArchived,
   hostedStoreOrUnavailable,
-} from "@luke/service/http/http-effect";
+} from "../../http/http-effect.js";
 import {
   acceptedModelChoice,
   type ModelCatalog,
   type ModelChoiceRefused,
-} from "@luke/service/providers/model-catalog";
-import { Effect, Option } from "effect";
-import type * as HttpClient from "effect/http/HttpClient";
+} from "../../providers/model-catalog.js";
+import { eveContent } from "../attached-files.js";
+import { BRAIN_HOST_TURN } from "../brain-host/bounds.js";
+import {
+  describeUnreachable,
+  EVE_SEND_OUTCOME,
+  type EveSessions,
+} from "../brain-host/eve-sessions.js";
+import { mentionedContext, mentionedServers } from "../mentioned-context.js";
 import { anthropicFastAccess } from "./account-keys.js";
 
 /**

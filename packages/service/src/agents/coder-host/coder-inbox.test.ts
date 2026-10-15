@@ -6,13 +6,13 @@ import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB, startPlan } from "@luke/database/testing";
 import { INBOX_BLOCK, INBOX_REPLY, INBOX_RESPONSE, INBOX_STATUS } from "@luke/features/inbox-wire";
-import type { InboxSandboxDoor } from "@luke/service/agents/coder-host/inbox-image";
-import { ACTION_RESULT_STATUS } from "@luke/service/core";
-import { answerInboxItem, planInboxItems } from "@luke/service/inbox/inbox-store";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { Duration, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
-import { closeInInbox, type PostingAgent, postToInbox } from "../server/hosted/coder-host/inbox";
+import { ACTION_RESULT_STATUS } from "../../core.js";
+import { answerInboxItem, planInboxItems } from "../../inbox/inbox-store.js";
+import { closeInInbox, type PostingAgent, postToInbox } from "./inbox.js";
+import type { InboxSandboxDoor } from "./inbox-image.js";
 
 /**
  * The coding agent's inbox tools, through their public functions against a

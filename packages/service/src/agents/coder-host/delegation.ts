@@ -4,14 +4,14 @@ import { childConversationId } from "@luke/database/models/ids";
 import type { ConversationTarget } from "@luke/database/models/writer";
 import { codingAgentDelegationInputSchema } from "@luke/features/coding-agent-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
-import { openChildConversation } from "@luke/service/agents/brain-host/conversation";
+import { Effect, Result, type Schema } from "effect";
+import { SqlClient } from "effect/sql";
 import {
   MODEL_CHOICE_REFUSAL,
   type OfferedModel,
   validateModelChoice,
-} from "@luke/service/providers/model-catalog";
-import { Effect, Result, type Schema } from "effect";
-import { SqlClient } from "effect/sql";
+} from "../../providers/model-catalog.js";
+import { openChildConversation } from "../brain-host/conversation.js";
 
 /**
  * delegation.ts -- what a coding agent chooses for a worker: the model and effort, checked as a Start checks its own.

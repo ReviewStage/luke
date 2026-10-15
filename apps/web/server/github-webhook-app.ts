@@ -5,6 +5,7 @@ import {
   type GitHubInstallationStatus,
 } from "@luke/database/github-installation-vocabulary";
 import { listCodingAgentsOnBranches } from "@luke/database/models/coding-agent-store";
+import { agentPublished } from "@luke/service/agents/coder-host/published";
 import { queueGithubRuns } from "@luke/service/automations/automation-github";
 import { HostedEnvironment } from "@luke/service/environment";
 import { clearRevokedAuthorization, type GitHubApp } from "@luke/service/github/github-app";
@@ -29,7 +30,6 @@ import {
   HttpServerRequest,
   type HttpServerResponse,
 } from "effect/http";
-import { agentPublished } from "./hosted/coder-host/published.js";
 
 /**
  * github-webhook-app.ts -- the Luke GitHub App's webhook: a delivery about a pull request or its checks reads what the agents on that branch published again, one about an installation marks its workspace active or not, and a revoked authorization clears that GitHub user's tokens.
@@ -44,7 +44,7 @@ import { agentPublished } from "./hosted/coder-host/published.js";
  * names are read, and none of them is kept or logged: the branch finds the
  * agents whose rows stand on it, of whichever account, and what each
  * published is read again from GitHub on its owner's own token, exactly as
- * the agent's tab reads it (`hosted/coder-host/published.ts`), which writes
+ * the agent's tab reads it (`packages/service/src/agents/coder-host/published.ts`), which writes
  * it on the agent's row for the plan list. A delivery is therefore
  * idempotent: GitHub redelivering it reads the same pull request again. A
  * read that fails is logged by its kind alone and the delivery is still

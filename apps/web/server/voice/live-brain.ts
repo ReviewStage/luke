@@ -20,6 +20,7 @@ import {
   stopAsk,
 } from "@luke/service/agents/brain-host/brain-ask";
 import { RUN_IN_REPOSITORY_TOOL } from "@luke/service/agents/repository-shell";
+import { projectTurnEvents } from "@luke/service/agents/turn-events";
 import {
   ASK_ORIGIN,
   isSettledToolPartState,
@@ -55,7 +56,6 @@ import { PLANNER_DELEGATION_TOOLS, PLANNING_EXPLORE_ASK } from "../hosted/brain-
 import { HOSTED_TOOL_SET } from "../hosted/brain-tool-set.js";
 import { subagentRecordsByCall } from "../hosted/child-models.js";
 import { plannerDelegationJournalsOf } from "../hosted/plan-work-store.js";
-import { projectTurnEvents } from "../hosted/turn-events.js";
 import { VOICE_DETACH_GRACE_MS } from "./orphan-sweep.js";
 import {
   callsSendingToEarlierTasks,

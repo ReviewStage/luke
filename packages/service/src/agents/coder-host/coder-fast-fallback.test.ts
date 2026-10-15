@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
-import type { OfferedModel } from "@luke/service/providers/model-catalog";
 import { jsonResponse } from "@luke/wire/testing";
 import { generateText, streamText } from "ai";
 import { Redacted, Result, Schema } from "effect";
 import { test } from "vitest";
-import { coderModel, type ProviderKeys } from "../server/hosted/coder-host/model";
-import { usageOfTurns } from "../server/hosted/coder-host/usage";
+import type { OfferedModel } from "../../providers/model-catalog.js";
+import { coderModel, type ProviderKeys } from "./model.js";
+import { usageOfTurns } from "./usage.js";
 
 /**
  * A fast step Anthropic refuses, as a coding agent's step meets it on Luke's

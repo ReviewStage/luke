@@ -11,13 +11,6 @@ import {
   PROVIDER_KEY_STATUS,
   type ProviderKeyStatus,
 } from "@luke/features/provider-key-wire";
-import { type MeterSeams, meteredModel } from "@luke/service/agents/agent-runtime/meter";
-import { CODER_REFUSAL, type CoderRefusal } from "@luke/service/agents/coder-host/bounds";
-import {
-  FAST_PROVIDERS,
-  type ProviderModel,
-  providerModelOf,
-} from "@luke/service/providers/model-catalog";
 import {
   APICallError,
   type LanguageModel,
@@ -26,6 +19,13 @@ import {
 } from "ai";
 import { Redacted, Result } from "effect";
 import type { AgentModelOptionsDefinition } from "eve";
+import {
+  FAST_PROVIDERS,
+  type ProviderModel,
+  providerModelOf,
+} from "../../providers/model-catalog.js";
+import { type MeterSeams, meteredModel } from "../agent-runtime/meter.js";
+import { CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
 
 /**
  * model.ts -- the model one step of a coding agent runs on, reached at its provider directly on Luke's own key.

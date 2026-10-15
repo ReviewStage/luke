@@ -1,9 +1,9 @@
 import { AGENT_ROLE } from "@luke/service/agents/agent-runtime/role";
 import { environment, openSandbox } from "@luke/service/agents/agent-runtime/sandbox";
+import { CheckoutRefused } from "@luke/service/agents/coder-host/checkout";
 import { Effect, Redacted, Result } from "effect";
 import { authenticateGitHub } from "eve/extensions/code/sandbox";
 import { defineSandbox } from "eve/sandbox";
-import { CheckoutRefused } from "../server/hosted/coder-host/checkout.js";
 import { runWeb } from "../server/runtime.js";
 import { host } from "./host.js";
 

@@ -8,13 +8,13 @@ import {
   PROVIDER_KEY_PROVIDER,
   type ProviderKeyProvider,
 } from "@luke/features/provider-key-wire";
-import { CODER_REFUSAL } from "@luke/service/agents/coder-host/bounds";
 import { jsonResponse } from "@luke/wire/testing";
 import { generateText } from "ai";
 import { Redacted, Result } from "effect";
 import { afterAll, test } from "vitest";
-import { accountProviderKeys } from "../server/hosted/coder-host/account-keys";
-import { coderModel, type LukeKeys } from "../server/hosted/coder-host/model";
+import { accountProviderKeys } from "./account-keys.js";
+import { CODER_REFUSAL } from "./bounds.js";
+import { coderModel, type LukeKeys } from "./model.js";
 
 /**
  * The key a coding agent's step runs on, read from the account's rows over a
