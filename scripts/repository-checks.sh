@@ -528,4 +528,23 @@ if [[ -n "$node_reaching_effect" ]]; then
     exit 1
 fi
 
+# This is the one scan for secrets the repository runs (AGENTS.md's "Never"), and
+# a test fixture shaped like a provider's live credential is what GitHub's
+# secret scanning raises an alert on, which history keeps open once pushed. So
+# a tracked file may hold no literal in the shape of a live provider key, a
+# GitHub token, a Slack token, an AWS access key id, or a private key block:
+# a test that needs one builds it at run time or uses a low-entropy fake.
+provider_shaped_literals=$(git -C "$LUKE_REPO_ROOT" grep -nIE \
+    -e 'sk_live_[0-9A-Za-z]{24,}' \
+    -e 'gh[pousr]_[A-Za-z0-9]{36}' \
+    -e 'github_pat_[A-Za-z0-9_]{22,}' \
+    -e 'xox[baprs]-[0-9]+-' \
+    -e 'AKIA[0-9A-Z]{16}' \
+    -e '-----BEGIN [A-Z ]*PRIVATE KEY-----' || true)
+if [[ -n "$provider_shaped_literals" ]]; then
+    printf 'error: a tracked file holds a literal shaped like a provider credential; use a low-entropy fake or build the value at run time:\n%s\n' \
+        "$provider_shaped_literals" >&2
+    exit 1
+fi
+
 printf 'Repository contract checks passed.\n'
