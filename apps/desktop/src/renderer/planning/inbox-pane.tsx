@@ -22,7 +22,7 @@ import type { CodeRef } from "@luke/features/plan-wire";
 import { BackIcon, ChevronRightIcon, CodingAgentsIcon } from "@luke/ui";
 import { copiedLines, fileRefText } from "@luke/voice/code-pane-model";
 import { CheckIcon, ClockIcon } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { ActorLine, ActorRef, AutomationCard } from "../actor-ref";
 import { Message, MessageContent } from "../ai-elements/message";
@@ -73,7 +73,7 @@ import {
   withChoice,
   withValue,
 } from "./inbox-model";
-import { type InboxPager, InboxPagerControls } from "./inbox-pager";
+import { type InboxNext, InboxNextUp, type InboxPager, InboxPagerControls } from "./inbox-pager";
 import { useMinute } from "./plan-time";
 import { RelativeTime } from "./relative-time";
 import { type KindLook, TAB_KIND, tabLook } from "./tab-look";
@@ -1010,7 +1010,9 @@ function Crumbs({
  * the box is docked at the pane's foot. Once it is settled, the options
  * stand with the developer's pick marked, and the developer's reply follows
  * as their bubble, with what they did, when, and whether it reached the
- * agent; or the agent's own message says it took the item back, and why.
+ * agent; or the agent's own message says it took the item back, and why;
+ * and where the box stood, the next item that needs the developer is
+ * offered (`inbox-pager.tsx`).
  * Where the item stands alone, the whole Inbox wide, the crumbs follow a
  * way back to the list (`inbox-columns.ts`), its tooltip naming Back's
  * chord, which goes back as Escape does, and the bar ends in the pager,
@@ -1025,6 +1027,7 @@ export function InboxPane({
   hidden,
   onBack,
   pager,
+  next,
 }: {
   /** What holds the item: its plan, or the automation that started its agent with no plan. */
   holder: InboxHolder;
@@ -1039,8 +1042,15 @@ export function InboxPane({
   onBack: (() => void) | undefined;
   /** Where the item stands in the list and the steps either side, drawn at the bar's end where the item stands alone among others. */
   pager: InboxPager | undefined;
+  /** The next item that needs the developer, offered where the box stood once the item is settled. */
+  next: InboxNext | undefined;
 }): React.JSX.Element {
   const now = useMinute();
+  const board = useRef<HTMLDivElement>(null);
+  // Note that the pane stands for every item in turn, so another item opens at its thread's top rather than where the last was scrolled.
+  useLayoutEffect(() => {
+    if (board.current !== null) board.current.scrollTop = 0;
+  }, [item.id]);
   const by: ItemAgent = {
     subject: agentSubject(agents, item.agentId, NOTHING_HELD, false),
     models: agents.models,
@@ -1067,6 +1077,7 @@ export function InboxPane({
           // The box docks under the thread as an agent's composer does under its log, which runs up to the card and fades there.
           className={`inbox-board ph-no-capture flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto pt-(--section-gap) ${open ? "agent-log-over-composer" : "pb-5"}`}
           data-item-id={item.id}
+          ref={board}
         >
           <Message from="assistant">
             <Byline by={by} did="asked" at={item.postedAt} now={now} />
@@ -1100,7 +1111,11 @@ export function InboxPane({
             <ReadFailure line={INBOX_FAILED_LINE} onRetry={control.onRetry} />
           ) : null}
         </div>
-        {open ? <AnswerBox item={item} control={control} /> : null}
+        {open ? (
+          <AnswerBox item={item} control={control} />
+        ) : next === undefined ? null : (
+          <InboxNextUp next={next} />
+        )}
       </div>
     </section>
   );

@@ -78,7 +78,8 @@ function shownColumns(
  * whether the list holds more than it (`backable`). An Inbox that measures
  * nothing is not laid out, and keeps the two columns it starts with. Going
  * one way or the other by a press hands the keyboard on, to the item's bar
- * once an item opens and to its row once the list is back; a resize does so
+ * once an item opens and to its row once the list is back, or split, to the
+ * row of the item a press opened from outside the list; a resize does so
  * only where it hid the column holding the keyboard, so the keyboard is
  * never left in what cannot be seen. Note that the keyboard is moved before
  * the window paints, while the hidden control still holds it.
@@ -118,7 +119,8 @@ export function useInboxColumns(chosen: string | undefined, backable: boolean): 
     if (shown === INBOX_COLUMNS.ITEM) {
       held.querySelector<HTMLElement>(".inbox-view-items:not([hidden]) header button")?.focus();
     }
-    if (shown !== INBOX_COLUMNS.LIST) return;
+    // Split, a press that opens an item from outside the list, as Next does, hands the keyboard to its row.
+    if (shown === INBOX_COLUMNS.ITEM) return;
     const rows = held.querySelectorAll<HTMLElement>(".inbox-plans [data-item-id]");
     [...rows].find((row) => row.dataset.itemId === chosen)?.focus();
   }, [shown, chosen]);
@@ -135,8 +137,9 @@ export function useInboxColumns(chosen: string | undefined, backable: boolean): 
   return {
     ref,
     shown,
-    onOpen: () => {
-      pressed.current = single;
+    onOpen: (itemId) => {
+      // Note that only a press that changes what stands is kept, since one that changes nothing draws nothing to hand the keyboard to, and a later resize would take it.
+      pressed.current = itemId !== chosen || shown === INBOX_COLUMNS.LIST;
       setListAsked(false);
     },
     onBack: back,
