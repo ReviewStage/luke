@@ -75,6 +75,7 @@ import {
   integrationLandingPath,
   integrationProviderFromWire,
 } from "@luke/features/integration-wire";
+import type { GitHubApp } from "@luke/service/github/github-app";
 import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import {
   HOSTED_REFUSAL,
@@ -90,7 +91,6 @@ import { ANY_METHOD, type WebRoutes } from "@luke/service/route";
 import { Effect, Layer, Option, Redacted, Result } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import type * as HttpClient from "effect/http/HttpClient";
-import type { GitHubApp } from "./github/github-app.js";
 import {
   GITHUB_GRANT_REFUSAL,
   githubIntegrationStatus,

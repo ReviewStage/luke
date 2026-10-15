@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { getTestDB } from "@luke/database/testing";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import { openGithubUser } from "@luke/service/testing/github-app-fake";
 import { Effect, Layer, Redacted } from "effect";
 import {
   beginIntegrationSignIn,
@@ -12,7 +13,6 @@ import {
   readIntegrationConnection,
   readIntegrationConnections,
 } from "../server/hosted/integration-store";
-import { openGithubUser } from "./support/github-app-fake";
 import { noNetwork } from "./support/no-network";
 
 /**

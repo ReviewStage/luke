@@ -39,9 +39,9 @@ import {
   type IntegrationProvider,
 } from "@luke/features/integration-wire";
 import { causeKind } from "@luke/runtime/effect";
+import type { GitHubApp } from "@luke/service/github/github-app";
 import { Effect, Option, Result, type Schema } from "effect";
 import type { SessionAuth } from "eve/context";
-import type { GitHubApp } from "../../github/github-app.js";
 import type { ConversationAdmission } from "../brain-host/conversation.js";
 import { githubOffered } from "../github-integration.js";
 import { accountIntegrationConnect, type IntegrationConnect } from "../integration-connect.js";

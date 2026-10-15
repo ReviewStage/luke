@@ -15,13 +15,19 @@ import {
   isWireString,
   type WireRecord,
 } from "@luke/service/core";
+import type { GitHubApp } from "@luke/service/github/github-app";
 import { LINK_OUTCOME } from "@luke/service/github/github-installations";
+import {
+  connectWorkspaceGitHub,
+  githubReaching,
+  type InstallationFixture,
+  NO_GITHUB,
+} from "@luke/service/testing/github-app-fake";
 import { Effect, Layer, Option, Redacted, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
 import type { ToolContext as EveToolContext } from "eve/tools";
 import { afterAll, test } from "vitest";
-import type { GitHubApp } from "../server/github/github-app";
 import {
   BRAIN_HOST_ATTRIBUTE,
   BRAIN_HOST_HEADER,
@@ -46,12 +52,6 @@ import {
 } from "../server/hosted/coding-agent-tools";
 import { END_CALL_TOOL } from "../server/hosted/end-call";
 import { modelCatalogOf, type OfferedModel } from "../server/hosted/model-catalog";
-import {
-  connectWorkspaceGitHub,
-  githubReaching,
-  type InstallationFixture,
-  NO_GITHUB,
-} from "./support/github-app-fake";
 
 /**
  * The planning tools as eve runs them through the host's `runTool`, over the

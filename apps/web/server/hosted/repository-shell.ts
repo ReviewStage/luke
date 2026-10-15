@@ -1,11 +1,11 @@
 import type { DatabaseServices } from "@luke/database/core/query";
+import { GitHubApp } from "@luke/service/github/github-app";
 import type { UnparsedWireValue } from "@luke/wire";
 import { describeWire, readEither } from "@luke/wire/effect";
 import { Data, Duration, Effect, Option, Redacted, Result, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { SandboxSession } from "eve/sandbox";
 import type { VercelSandboxSession } from "eve/sandbox/vercel";
-import { GitHubApp } from "../github/github-app.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import { COMMAND_DESCRIPTION } from "./command-description.js";
 import type { PlanDocumentBinding } from "./plan-notes.js";

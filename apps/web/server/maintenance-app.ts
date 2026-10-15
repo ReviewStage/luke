@@ -4,6 +4,7 @@ import { hostedStore } from "@luke/database/models/hosted-store";
 import { recordVoiceSeconds } from "@luke/database/models/quota";
 import { voiceSessionRecord } from "@luke/database/models/voice-session-record";
 import { storeWriter } from "@luke/database/models/writer";
+import type { GitHubApp } from "@luke/service/github/github-app";
 import {
   effectPassthrough,
   HOSTED_REFUSAL,
@@ -12,7 +13,6 @@ import {
 import { ANY_METHOD, type WebRoutes } from "@luke/service/route";
 import { Effect, Layer, Redacted } from "effect";
 import { HttpClient, HttpRouter } from "effect/http";
-import type { GitHubApp } from "./github/github-app.js";
 import type { EveForAccount } from "./hosted/automation-runs.js";
 import { sweepAutomations } from "./hosted/automation-sweep.js";
 import { deploymentEveOrigin } from "./hosted/brain-host/eve-origin.js";

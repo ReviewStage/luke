@@ -18,10 +18,10 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import { type PlanStoreFailure, readPlan } from "@luke/database/models/plan-store";
 import { PLAN_FILE_REFUSAL, type PlanSkillsAnswer } from "@luke/features/plan-wire";
+import type { GitHubApp } from "@luke/service/github/github-app";
+import { logGitHubReadFailure } from "@luke/service/github/github-refusal";
 import { Effect, Option } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
-import type { GitHubApp } from "../github/github-app.js";
-import { logGitHubReadFailure } from "../github/github-refusal.js";
 import { reachPlanRepository, refused } from "./plan-file.js";
 import { readRepositorySkills, skillFilePath } from "./repository-skills.js";
 

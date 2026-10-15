@@ -93,7 +93,7 @@ type GitHubAccountTokens = typeof GitHubAccountTokensSchema.Type;
 
 /**
  * The account's newest GitHub row, the one the service's user-token read
- * takes where a user somehow has two (`apps/web/server/github/github-app.ts`'s
+ * takes where a user somehow has two (`packages/service/src/github/github-app.ts`'s
  * `lockGithubAccount`), so the connection is judged on the row the service
  * would use.
  */

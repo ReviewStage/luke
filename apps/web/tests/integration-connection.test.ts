@@ -6,12 +6,17 @@ import { storeWriter } from "@luke/database/models/writer";
 import { account } from "@luke/database/schemas/auth";
 import { getTestDB, joinWorkspace, startPlan } from "@luke/database/testing";
 import { INTEGRATION_PROVIDER, INTEGRATION_PROVIDER_LIST } from "@luke/features/integration-wire";
+import { GitHubApp } from "@luke/service/github/github-app";
+import {
+  GITHUB_APP_SETTINGS,
+  openGithubUser,
+  standingGithubRow,
+} from "@luke/service/testing/github-app-fake";
 import { ConnectError } from "@vercel/connect";
 import { eq } from "drizzle-orm";
 import { Effect, Layer, Logger, Option, Redacted, Result } from "effect";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
 import { test } from "vitest";
-import { GitHubApp } from "../server/github/github-app";
 import {
   BRAIN_HOST_ATTRIBUTE,
   BRAIN_HOST_PRINCIPAL_TYPE,
@@ -35,7 +40,6 @@ import {
   beginIntegrationSignIn,
   completeIntegrationSignIn,
 } from "../server/hosted/integration-store";
-import { GITHUB_APP_SETTINGS, openGithubUser, standingGithubRow } from "./support/github-app-fake";
 import { CONNECTOR_ASKED_NOTHING, integrationConnectOf } from "./support/integration-connect";
 import { noNetwork } from "./support/no-network";
 

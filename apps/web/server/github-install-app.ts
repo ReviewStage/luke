@@ -47,6 +47,12 @@ import {
   HOSTED_SERVICE_PATH,
 } from "@luke/features";
 import {
+  GitHubApp,
+  type GitHubAuthorizeReturn,
+  type GitHubReadFailure,
+  type GitHubWorkspaceReadFailure,
+} from "@luke/service/github/github-app";
+import {
   type ConnectedInstallation,
   GITHUB_CONNECT_ROLES,
   LINK_OUTCOME,
@@ -54,18 +60,12 @@ import {
   recordConnectAuthorization,
   spendConnectIntent,
 } from "@luke/service/github/github-installations";
+import { logGitHubReadFailure, logWorkspaceReadFailure } from "@luke/service/github/github-refusal";
 import { hostedNotFoundRoute } from "@luke/service/http/http-effect";
 import { ANY_METHOD, type WebRoutes } from "@luke/service/route";
 import { generateRandomString } from "better-auth/crypto";
 import { Effect, Layer, Option } from "effect";
 import { type HttpClient, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
-import {
-  GitHubApp,
-  type GitHubAuthorizeReturn,
-  type GitHubReadFailure,
-  type GitHubWorkspaceReadFailure,
-} from "./github/github-app.js";
-import { logGitHubReadFailure, logWorkspaceReadFailure } from "./github/github-refusal.js";
 
 /** The query GitHub puts on the Setup URL. */
 const SETUP_QUERY = {

@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { OrganizationRefused } from "@luke/database/models/workspace-seams";
+import { openGithubUser } from "@luke/service/testing/github-app-fake";
 import { Effect, Exit, Option } from "effect";
 import { memberIdOf } from "../server/hosted/workspace-members";
-import { openGithubUser } from "./support/github-app-fake";
 import { openWorkspacePlugin } from "./support/workspace-plugin";
 
 /**

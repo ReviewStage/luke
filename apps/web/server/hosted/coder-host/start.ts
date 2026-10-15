@@ -18,6 +18,7 @@ import { CODING_AGENT_DEFAULT_CHOICE } from "@luke/features/models-wire";
 import { planMarkdown } from "@luke/features/plan-markdown";
 import type { Plan } from "@luke/features/plan-wire";
 import { failureKind } from "@luke/runtime/effect";
+import type { GitHubApp } from "@luke/service/github/github-app";
 import {
   HOSTED_REFUSAL,
   type HostedRefusal,
@@ -26,7 +27,6 @@ import {
 } from "@luke/service/http/http-effect";
 import { Effect, Option } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
-import type { GitHubApp } from "../../github/github-app.js";
 import { eveContent } from "../attached-files.js";
 import { BRAIN_HOST_TURN } from "../brain-host/bounds.js";
 import {

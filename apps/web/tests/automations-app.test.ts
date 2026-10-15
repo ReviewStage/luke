@@ -40,6 +40,12 @@ import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
+import {
+  connectWorkspaceGitHub,
+  githubReaching,
+  type InstallationFixture,
+  openGithubUser,
+} from "@luke/service/testing/github-app-fake";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { eq } from "drizzle-orm";
@@ -54,12 +60,6 @@ import {
   type EveSessions,
 } from "../server/hosted/brain-host/eve-sessions";
 import { modelCatalogOf, type OfferedModel } from "../server/hosted/model-catalog";
-import {
-  connectWorkspaceGitHub,
-  githubReaching,
-  type InstallationFixture,
-  openGithubUser,
-} from "./support/github-app-fake";
 
 /**
  * The automation routes, answered by the group the way a function answers

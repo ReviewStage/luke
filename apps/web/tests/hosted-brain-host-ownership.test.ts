@@ -10,6 +10,7 @@ import {
   startPlan,
 } from "@luke/database/testing";
 import { ACTION_RESULT_STATUS, BRAIN_TURN_TRIGGER } from "@luke/service/core";
+import { NO_GITHUB } from "@luke/service/testing/github-app-fake";
 import { generateText } from "ai";
 import { Effect, Layer, Option, Redacted, Result } from "effect";
 import { routeAuth } from "eve/channels/auth";
@@ -38,7 +39,6 @@ import type { BrainHostSeams } from "../server/hosted/brain-host/production";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { modelCatalogOf } from "../server/hosted/model-catalog";
 import { QUEUE_QUESTION_TOOL } from "../server/hosted/queue-question";
-import { NO_GITHUB } from "./support/github-app-fake";
 
 /**
  * Session ownership is the host's alone: eve authenticates a request and

@@ -1,8 +1,8 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import { webSqlClient } from "@luke/service/db/sql-client";
+import { type GitHubApp, githubAppFromEnvironment } from "@luke/service/github/github-app";
 import { ConfigProvider, Effect, Layer, Logger, ManagedRuntime } from "effect";
 import { FetchHttpClient, type HttpClient } from "effect/http";
-import { type GitHubApp, githubAppFromEnvironment } from "./github/github-app.js";
 import { hostedEnvironment } from "./hosted/environment.js";
 import {
   type IntegrationConnect,

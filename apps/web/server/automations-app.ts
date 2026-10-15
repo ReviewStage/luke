@@ -37,6 +37,7 @@ import {
   automationCreateRequestSchema,
   automationRunRequestSchema,
 } from "@luke/features/automation-wire";
+import type { GitHubApp } from "@luke/service/github/github-app";
 import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import {
   HOSTED_REFUSAL,
@@ -54,7 +55,6 @@ import { readEither } from "@luke/wire/effect";
 import { Clock, Effect, Layer, Option, Result } from "effect";
 import { HttpRouter, HttpServerRequest, type HttpServerResponse } from "effect/http";
 import type * as HttpClient from "effect/http/HttpClient";
-import type { GitHubApp } from "./github/github-app.js";
 import { executeAutomationRun } from "./hosted/automation-runs.js";
 import { acceptedAgentChoice } from "./hosted/coder-host/start.js";
 import { type AgentTurnStanding, codingAgentStatusOf } from "./hosted/coder-host/status.js";

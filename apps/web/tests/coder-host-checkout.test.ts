@@ -3,9 +3,6 @@ import { it } from "@effect/vitest";
 import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { getTestDB, startPlan } from "@luke/database/testing";
 import { LINK_OUTCOME } from "@luke/service/github/github-installations";
-import { Effect, Option, Redacted } from "effect";
-import { checkOutAgentRepository } from "../server/hosted/coder-host/checkout";
-import { REPOSITORY_SANDBOX_CONTRACT } from "../server/hosted/repository-shell";
 import {
   connectWorkspaceGitHub,
   GITHUB_FIXTURE_BOT,
@@ -13,7 +10,10 @@ import {
   githubReaching,
   type InstallationFixture,
   openGithubUser,
-} from "./support/github-app-fake";
+} from "@luke/service/testing/github-app-fake";
+import { Effect, Option, Redacted } from "effect";
+import { checkOutAgentRepository } from "../server/hosted/coder-host/checkout";
+import { REPOSITORY_SANDBOX_CONTRACT } from "../server/hosted/repository-shell";
 import { sandboxDouble } from "./support/repository-sandbox";
 
 /**

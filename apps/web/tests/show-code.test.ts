@@ -3,16 +3,20 @@ import { it } from "@effect/vitest";
 import { getTestDB, startPlan } from "@luke/database/testing";
 import { SHOWN_CODE_BOUNDS } from "@luke/features/plan-wire";
 import { ACTION_RESULT_STATUS } from "@luke/service/core";
+import type { GitHubApp } from "@luke/service/github/github-app";
+import {
+  connectWorkspaceGitHub,
+  githubReaching,
+  openGithubUser,
+} from "@luke/service/testing/github-app-fake";
 import { unparsedWire, type WireRecord } from "@luke/wire";
 import { Effect, type Layer } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
-import type { GitHubApp } from "../server/github/github-app";
 import {
   REPOSITORY_SANDBOX_CONTRACT,
   type RepositoryCall,
 } from "../server/hosted/repository-shell";
 import { runShowCode, SHOW_CODE_REFUSAL } from "../server/hosted/show-code";
-import { connectWorkspaceGitHub, githubReaching, openGithubUser } from "./support/github-app-fake";
 import { type CheckoutFiles, sandboxDouble } from "./support/repository-sandbox";
 
 /**

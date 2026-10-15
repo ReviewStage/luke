@@ -1,17 +1,13 @@
 import assert from "node:assert/strict";
 import { openMigratedPglite, sqlClientOverPglite } from "@luke/database/testing";
-import { authDatabaseAdapter } from "@luke/service/auth/auth-database";
-import {
-  ACCOUNT_TOKEN_STORAGE,
-  DISABLED_AUTH_PATHS,
-  GITHUB_SIGN_IN,
-} from "@luke/service/auth/auth-policy";
-import type { WireValue } from "@luke/service/core";
 import { betterAuth } from "better-auth";
 import { drizzle } from "drizzle-orm/pglite";
 import { Effect, Schema } from "effect";
 import { afterEach, test, vi } from "vitest";
-import { clearRevokedAuthorization } from "../server/github/github-app";
+import type { WireValue } from "../core.js";
+import { clearRevokedAuthorization } from "../github/github-app.js";
+import { authDatabaseAdapter } from "./auth-database.js";
+import { ACCOUNT_TOKEN_STORAGE, DISABLED_AUTH_PATHS, GITHUB_SIGN_IN } from "./auth-policy.js";
 
 /**
  * Linking GitHub to an account, configured as `auth.ts` configures it, over a

@@ -30,13 +30,13 @@ import {
   type WireRecord,
   wireUuidSchema,
 } from "@luke/service/core";
+import type { GitHubApp } from "@luke/service/github/github-app";
 import type { HostedRefusal } from "@luke/service/http/http-effect";
 import { logStoreFailure, type StoreFailure } from "@luke/service/http/store-failure";
 import { describeWire } from "@luke/wire/effect";
 import { isTextUIPart } from "ai";
 import { Clock, Effect, Option, Result, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
-import type { GitHubApp } from "../github/github-app.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import type { EveSessions } from "./brain-host/eve-sessions.js";
 import { agentPublished } from "./coder-host/published.js";
