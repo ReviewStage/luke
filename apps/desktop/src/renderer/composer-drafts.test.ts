@@ -31,6 +31,7 @@ import { SidebarPlan } from "./desktop/plan-actions";
 import { DRAFT_WORD } from "./draft-mark";
 import type { MessageSender } from "./planning/use-agent-composer";
 import { MAIN_TAB } from "./planning/use-main-tabs";
+import { type PlanInboxControl, usePlanInbox } from "./planning/use-plan-inbox";
 import { NO_LOOKS } from "./planning/use-plan-looks";
 
 /**
@@ -485,4 +486,53 @@ test("an inbox card's note outlasts a reload, its task's row marked meanwhile, a
   const changed = await inboxOn(approval(2));
   assert.equal(changed.note().value, "", "the agent's change starts the card afresh");
   assert.equal(changed.drafted(), false, "and the draft it outdated is let go");
+});
+
+/** One item of an agent's with no plan, open and asking for an approval, at `revision`. */
+function planlessItem(agentId: string, id: string, revision: number): InboxItem {
+  return { ...approval(revision), id, agentId };
+}
+
+/** An agent's own inbox with no plan, read through its reader as the Inbox page reads it, answering `items`. */
+async function planlessInbox(agentId: string, items: readonly InboxItem[]) {
+  let control: PlanInboxControl | undefined;
+  function Probe(): null {
+    control = usePlanInbox({
+      planId: agentId,
+      reader: (after) =>
+        after === INBOX_CURSOR_START
+          ? Promise.resolve({ items, cursor: "1" })
+          : new Promise(() => undefined),
+      shown: true,
+      waiting: true,
+      agents: {
+        heldIds: [agentId],
+        readInbox: () => new Promise(() => undefined),
+        answerInbox: () => new Promise(() => undefined),
+        readInboxImage: () => new Promise(() => undefined),
+        onRetryList: () => undefined,
+      },
+    });
+    return null;
+  }
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(root);
+  await act(async () => root.render(onRegistry(AtomRegistry.make(), createElement(Probe))));
+  await settle();
+  return control ?? assert.fail("the inbox is held");
+}
+
+test("an agent with no plan lets go of its own outdated answers as its inbox is read, and never another agent's", async () => {
+  const mine = planlessItem(INVITES.agent.id, "b1b2c3d4-0000-4000-8000-000000000001", 1);
+  const theirs = planlessItem(BILLING.agent.id, "b1b2c3d4-0000-4000-8000-000000000002", 1);
+  const first = await planlessInbox(INVITES.agent.id, [mine]);
+  act(() => first.onDraft(mine, { choices: [], values: [], note: "Only teammates" }));
+  const other = await planlessInbox(BILLING.agent.id, [theirs]);
+  act(() => other.onDraft(theirs, { choices: [], values: [], note: "Weekly" }));
+
+  await planlessInbox(INVITES.agent.id, [{ ...mine, revision: 2 }]);
+  const reread = await planlessInbox(INVITES.agent.id, [mine]);
+  assert.equal(reread.draftOf(mine).note, "", "the answer its agent outdated is let go");
+  const kept = await planlessInbox(BILLING.agent.id, [theirs]);
+  assert.equal(kept.draftOf(theirs).note, "Weekly");
 });

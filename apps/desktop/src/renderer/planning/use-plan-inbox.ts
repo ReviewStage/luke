@@ -219,6 +219,8 @@ export function usePlanInbox(input: {
   // shares them, under the plan, or under none where the inbox is an agent's with no plan.
   const ownPlan = input.reader === undefined ? planId : undefined;
   const draftsOn = ownPlan ?? null;
+  // Note that an agent with no plan is the planId its inbox is read by.
+  const readAgent = input.reader === undefined ? undefined : planId;
   const drafts = useInboxDrafts(draftsOn);
   const writer = useDraftWriter();
   const attempts = useRef(new Map<string, Attempt>());
@@ -361,13 +363,14 @@ export function usePlanInbox(input: {
     });
   }, []);
 
-  // A plan's read lets go of the drafts of its items no longer open at the revision they were
-  // written against; an agent with no plan reads only its own, so it lets none go.
+  // A read lets go of the drafts of the items it covers that are no longer open at the revision
+  // they were written against: a plan's, or, for an agent with no plan, that agent's alone.
   const { drop } = writer;
   useEffect(() => {
-    if (!held.read || ownPlan === undefined) return;
+    if (!held.read || (ownPlan === undefined && readAgent === undefined)) return;
     const stale = drafts.filter(
       (kept) =>
+        (ownPlan !== undefined || kept.place.agentId === readAgent) &&
         !held.items.some(
           (item) =>
             item.id === kept.place.itemId &&
@@ -377,7 +380,7 @@ export function usePlanInbox(input: {
     );
     if (stale.length === 0) return;
     drop((place) => stale.some((kept) => Equal.equals(kept.place, place)));
-  }, [held.read, held.items, ownPlan, drafts, drop]);
+  }, [held.read, held.items, ownPlan, readAgent, drafts, drop]);
 
   const board = useMemo(() => inboxBoard(held.items), [held.items]);
   const draftOf = useCallback(
@@ -394,7 +397,13 @@ export function usePlanInbox(input: {
   const onDraft = useCallback(
     (item: InboxItem, draft: InboxDraft) =>
       writer.update(
-        { kind: DRAFT_PLACE.INBOX, planId: draftsOn, itemId: item.id, revision: item.revision },
+        {
+          kind: DRAFT_PLACE.INBOX,
+          planId: draftsOn,
+          agentId: item.agentId,
+          itemId: item.id,
+          revision: item.revision,
+        },
         (was) => ({ ...was, text: draft.note, choices: draft.choices, values: draft.values }),
       ),
     [writer, draftsOn],

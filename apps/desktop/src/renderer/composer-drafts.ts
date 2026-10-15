@@ -66,6 +66,8 @@ const draftPlaceSchema = Schema.Union([
     kind: Schema.Literal(DRAFT_PLACE.INBOX),
     /** The item's plan, which the sidebar marks; null for an inbox of an agent with no plan. */
     planId: Schema.NullOr(Schema.String),
+    /** The agent that posted the item, whose own inbox, where it has no plan, is all that reads it. */
+    agentId: Schema.String,
     itemId: Schema.String,
     /** The item's revision the answer was written against; the agent changing the item starts its card afresh. */
     revision: Schema.Number,
