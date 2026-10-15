@@ -210,14 +210,27 @@ test("a correction that drops a picture the plan held is not taken", () => {
   assert.deepEqual(taken.missed, [note]);
 });
 
-test("a correction that leaves a picture's address as a link, drawing no picture, is not taken", () => {
+test("a correction that leaves a picture's address drawing no picture, as a link, a line left open, or behind an escaped !, is not taken", () => {
+  for (const broken of [
+    `[Members page with two pending invites](${PICTURE_ADDRESS})`,
+    `![Members page with two pending invites](${PICTURE_ADDRESS}`,
+    `\\![Members page with two pending invites](${PICTURE_ADDRESS})`,
+  ]) {
+    const note: PlanNote = { kind: NOTE_KIND.REPLACE, find: PICTURE_LINE, text: broken };
+
+    assert.deepEqual(applyNotesToText(PICTURED, [note]).missed, [note], broken);
+  }
+});
+
+test("a picture whose alt text holds a bracketed phrase is kept like any other", () => {
+  const text = `## Approach\n\n![Mock [v2]](${PICTURE_ADDRESS})\n`;
   const note: PlanNote = {
     kind: NOTE_KIND.REPLACE,
-    find: PICTURE_LINE,
-    text: `[Members page with two pending invites](${PICTURE_ADDRESS})`,
+    find: `![Mock [v2]](${PICTURE_ADDRESS})`,
+    text: "No mock",
   };
 
-  assert.deepEqual(applyNotesToText(PICTURED, [note]).missed, [note]);
+  assert.deepEqual(applyNotesToText(text, [note]).missed, [note]);
 });
 
 test("a correction that rewords a picture's alt text and caption, or moves it within the phrase it corrects, keeping its address, is taken", () => {

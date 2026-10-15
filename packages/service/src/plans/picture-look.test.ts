@@ -146,6 +146,8 @@ it.layer(getTestDB())("look_at_picture", (it) => {
           statuses.push((yield* look(lookCall(owner, planId, looks), address)).status);
         }
         const past = yield* look(lookCall(owner, planId, looks), address);
+        // Past the bound nothing is read, so a picture the plan does not hold is refused for the bound too.
+        const pastMissing = yield* look(lookCall(owner, planId, looks), missing);
         const next = yield* look(lookCall(owner, planId, looks, "turn-2"), address);
 
         assert.deepEqual(statuses, [
@@ -157,6 +159,7 @@ it.layer(getTestDB())("look_at_picture", (it) => {
           pictureNotLooked(PICTURE_LOOK_REFUSAL.NO_PICTURE),
         ]);
         assert.deepEqual(past, pictureNotLooked(PICTURE_LOOK_REFUSAL.TOO_MANY));
+        assert.deepEqual(pastMissing, pictureNotLooked(PICTURE_LOOK_REFUSAL.TOO_MANY));
         assert.equal(next.status, PICTURE_LOOK_STATUS.LOOKED);
       }),
   );

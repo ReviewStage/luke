@@ -135,6 +135,10 @@ export function runLookAtPicture(
   if (named === undefined || named.planId !== call.plan.planId) {
     return Effect.succeed(pictureNotLooked(PICTURE_LOOK_REFUSAL.ELSEWHERE));
   }
+  // A turn with no look left reads no picture's bytes only to refuse them.
+  if (call.looks.exhausted(call.turnId)) {
+    return Effect.succeed(pictureNotLooked(PICTURE_LOOK_REFUSAL.TOO_MANY));
+  }
   return readPlanAttachment(call.plan.userId, call.plan.planId, named.attachmentId).pipe(
     Effect.map((picture) => {
       if (Option.isNone(picture)) return pictureNotLooked(PICTURE_LOOK_REFUSAL.NO_PICTURE);

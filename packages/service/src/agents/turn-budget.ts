@@ -16,6 +16,11 @@ export class TurnBudget {
     this.tracked = tracked;
   }
 
+  /** Whether `turnId` has spent every call the bound admits, spending nothing. */
+  exhausted(turnId: string): boolean {
+    return (this.used.get(turnId) ?? 0) >= this.limit;
+  }
+
   /** Spends one call for `turnId`; answers whether the bound still admitted it. */
   take(turnId: string): boolean {
     const spent = this.used.get(turnId) ?? 0;
