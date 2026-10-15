@@ -208,8 +208,10 @@ beside the task's conversation or the agent's transcript the call is written
 to, which names the picture by an id rather than carrying it; a conversation
 or transcript keeps up to 200 MB of pictures. A larger picture, one past
 that, or one of another kind is not kept, and the record says only its kind
-and size. Kept pictures are readable by our own operators, like the
-transcript, and go when it does.
+and size. A coding agent's kept pictures, and its workers', are served only
+to Luke signed in as a member of the workspace who can read the agent. Kept
+pictures are readable by our own operators, like the transcript, and go
+when it does.
 
 **Your own API keys.** If you add an Anthropic or OpenAI API key in Settings,
 your Mac sends it once, over HTTPS, to our service, which keeps it only if the

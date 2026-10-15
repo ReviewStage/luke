@@ -10,7 +10,8 @@ import {
   readCodingAgent,
   takeCodingAgentMentionedServers,
 } from "@luke/database/models/coding-agent-store";
-import { sentLineId } from "@luke/database/models/ids";
+import { keepConversationPicture } from "@luke/database/models/conversation-pictures";
+import { childConversationId, sentLineId } from "@luke/database/models/ids";
 import { sentLineStands } from "@luke/database/models/message-reads";
 import { openPlanConversation, savePlanText, updatePlan } from "@luke/database/models/plan-store";
 import { claimRuntimeSession } from "@luke/database/models/recorded-session";
@@ -20,7 +21,7 @@ import { user } from "@luke/database/schemas/auth";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { githubInstallation } from "@luke/database/schemas/github-installation";
 import { conversations } from "@luke/database/schemas/storage";
-import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
+import { CONVERSATION_KIND, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import {
   fakeWorkspaceSeams,
   getTestDB,
@@ -380,6 +381,7 @@ function request(
     call?: string;
     archived?: string | undefined;
     attachment?: string;
+    picture?: string;
   } = {},
 ): Request {
   const url = new URL(path, ORIGIN);
@@ -388,6 +390,7 @@ function request(
   if (init.after !== undefined) url.searchParams.set("after", init.after);
   if (init.call !== undefined) url.searchParams.set("call", init.call);
   if (init.attachment !== undefined) url.searchParams.set("attachment", init.attachment);
+  if (init.picture !== undefined) url.searchParams.set("picture", init.picture);
   return new Request(url, {
     method: init.method ?? "GET",
     headers: bearer === undefined ? {} : { authorization: `Bearer ${bearer}` },
@@ -1710,6 +1713,87 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
           ),
           refusal(HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED, HOSTED_API_ERROR.METHOD_NOT_ALLOWED),
         );
+      }),
+  );
+});
+
+const AGENT_PICTURE = "/api/agents/picture";
+
+/** A picture a tool answered: its bytes, the type they were sniffed to be, and its size; synthetic, as the store keeps what it is handed. */
+const picture = (mark: number) => ({
+  bytes: Uint8Array.from([...PNG, mark]),
+  contentType: INBOX_IMAGE_TYPE.PNG,
+  width: 1200,
+  height: 720,
+});
+
+it.layer(getTestDB())("an agent's pictures", (it) => {
+  it.effect(
+    "a picture a tool answered an agent or its worker is served as its bytes, not to be sniffed and not to be cached, to whoever may read the agent, and through its own transcript alone",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, plan, ask, fetch } = yield* openPlan();
+        const { agent, target } = yield* startedAgent(owner, plan.id, ask);
+        const callId = "call-worker";
+        const workerConversation = childConversationId(target.conversationId, callId);
+        const db = yield* Database;
+        yield* db.insert(conversations).values({
+          id: workerConversation,
+          userId: owner,
+          kind: CONVERSATION_KIND.CHILD,
+          parentConversationId: target.conversationId,
+        });
+        const agentPicture = Option.getOrThrow(yield* keepConversationPicture(target, picture(1)));
+        const workerPicture = Option.getOrThrow(
+          yield* keepConversationPicture(
+            { userId: owner, conversationId: workerConversation },
+            picture(2),
+          ),
+        );
+        const at = (bearer: string | undefined, pictureId: string, call?: string) =>
+          request(AGENT_PICTURE, bearer, {
+            id: agent.id,
+            picture: pictureId,
+            ...(call === undefined ? undefined : { call }),
+          });
+        const notFound = refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
+
+        const served = yield* fetch(at(owner, agentPicture.id));
+        assert.equal(served.status, HOSTED_HTTP_STATUS.OK);
+        assert.equal(served.headers.get("content-type"), INBOX_IMAGE_TYPE.PNG);
+        assert.equal(served.headers.get("x-content-type-options"), "nosniff");
+        assert.equal(served.headers.get("cache-control"), "private, no-store");
+        assert.deepEqual(
+          new Uint8Array(yield* Effect.promise(() => served.arrayBuffer())),
+          picture(1).bytes,
+        );
+        const workerServed = yield* fetch(at(owner, workerPicture.id, callId));
+        assert.deepEqual(
+          new Uint8Array(yield* Effect.promise(() => workerServed.arrayBuffer())),
+          picture(2).bytes,
+        );
+
+        assert.deepEqual(yield* ask(at(other, agentPicture.id)), notFound, "not a member");
+        assert.deepEqual(
+          yield* ask(at(owner, workerPicture.id)),
+          notFound,
+          "a worker's picture is not the agent's",
+        );
+        assert.deepEqual(
+          yield* ask(at(owner, agentPicture.id, callId)),
+          notFound,
+          "the agent's picture is not its worker's",
+        );
+        assert.deepEqual(yield* ask(at(owner, randomUUID())), notFound);
+        assert.deepEqual(yield* ask(at(owner, "members.png")), notFound);
+        assert.deepEqual(
+          yield* ask(at(undefined, agentPicture.id)),
+          refusal(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN),
+        );
+
+        yield* joinWorkspace(plan.workspaceId, other);
+        const teammate = yield* fetch(at(other, agentPicture.id));
+        assert.equal(teammate.status, HOSTED_HTTP_STATUS.OK, "a member of the agent's workspace");
       }),
   );
 });

@@ -98,6 +98,7 @@ import {
   agentInboxPath,
   agentMessagesPath,
   agentPath,
+  agentPicturePath,
   agentPullRequestPath,
   agentStopPath,
   agentSubagentMessagesPath,
@@ -679,6 +680,35 @@ export class HostedCodingAgentClient {
         path: `${HOSTED_SERVICE_PATH.INBOX}?${new URLSearchParams({ after })}`,
       }),
       (answer) => readAnswer(answer, accountInboxAnswerSchema, {}),
+    );
+  }
+
+  /**
+   * One picture a tool answered an agent, or one of its workers where
+   * `callId` names the delegation call, fetched under the account: its
+   * bytes in base64 under the media type the service kept, as an inbox
+   * image is; not found where the agent is not one the account reaches or
+   * its transcript keeps no such picture; unanswered for anything else.
+   */
+  agentPicture(
+    agentId: string,
+    pictureId: string,
+    callId?: string,
+  ): Effect.Effect<CodingAgentInboxAttachmentView, never, HttpClient.HttpClient> {
+    return Effect.flatMap(
+      this.#call.send({
+        method: HTTP_METHOD.GET,
+        path: agentPicturePath(agentId, pictureId, callId),
+      }),
+      (answer) => {
+        if (!callAnswered(answer)) return Effect.succeed(UNANSWERED);
+        if (!answer.response.ok) {
+          return Effect.map(jsonOf(answer.response), (body) =>
+            refusedAs(unparsedWire(body), ROW_REFUSALS),
+          );
+        }
+        return readImage(answer.response);
+      },
     );
   }
 

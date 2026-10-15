@@ -10,6 +10,7 @@ import {
   updateCodingAgentChoice,
   updateCodingAgentServers,
 } from "@luke/database/models/coding-agent-store";
+import { readConversationPicture } from "@luke/database/models/conversation-pictures";
 import { childConversationId } from "@luke/database/models/ids";
 import { readPlan } from "@luke/database/models/plan-store";
 import { isWorkspaceMember, readAccountNames } from "@luke/database/models/workspace-store";
@@ -206,6 +207,8 @@ const AGENTS_PATH = {
   INBOX: "/api/inbox",
   /** GET serves one attachment of an inbox item, an image block's picture; the rewrite moves the item id into the `id` query and the attachment id into `attachment`. */
   INBOX_ATTACHMENT: "/api/inbox/attachment",
+  /** GET serves one picture a tool answered the agent, or one of its workers where the query names the delegation call; the rewrite moves the agent id into the `id` query, the call into `call`, and the picture into `picture`. */
+  PICTURE: "/api/agents/picture",
   /** GET lists a workspace's agents, newest started first, on one repository where the query names one. */
   OF_WORKSPACE: "/api/agents",
 } as const;
@@ -215,7 +218,13 @@ const WORKSPACE_AGENTS_LIMIT = 50;
 
 const HTTP_METHOD = { GET: "GET", POST: "POST", PATCH: "PATCH" } as const;
 
-const QUERY = { ID: "id", AFTER: "after", CALL: "call", ATTACHMENT: "attachment" } as const;
+const QUERY = {
+  ID: "id",
+  AFTER: "after",
+  CALL: "call",
+  ATTACHMENT: "attachment",
+  PICTURE: "picture",
+} as const;
 
 /**
  * The headers an attachment's bytes are served under beside their type: the
@@ -272,6 +281,9 @@ const idOf = (request: Request) => uuidOf(request, QUERY.ID);
 
 /** The one attachment the path named under `attachment`. */
 const attachmentIdOf = (request: Request) => uuidOf(request, QUERY.ATTACHMENT);
+
+/** The one picture the path named under `picture`. */
+const pictureIdOf = (request: Request) => uuidOf(request, QUERY.PICTURE);
 
 /** The delegation call the path named under `query`, or not found for one that is no call id. */
 const callIdOf = /* @__PURE__ */ Effect.fnUntraced(function* (
@@ -846,6 +858,37 @@ const inboxAttachmentEndpoint = /* @__PURE__ */ Effect.fn("web/inboxAttachmentEn
   });
 });
 
+/**
+ * GET serves one picture a tool answered an agent, kept beside its
+ * transcript (`brain-host/relay-pictures.ts`), as its bytes under the media
+ * type the service sniffed them to be, to whoever may read the agent; one of
+ * its workers' where the path names the delegation call, read from that
+ * worker's own transcript. A picture of another agent's transcript, or of
+ * another worker's, is not found, as an agent the account cannot reach is.
+ */
+const pictureEndpoint = /* @__PURE__ */ Effect.fn("web/agentPictureEndpoint")(function* (
+  seams: CodingAgentsAppSeams,
+): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  if (incoming.method !== HTTP_METHOD.GET) {
+    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
+  }
+  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  const pictureId = yield* pictureIdOf(request);
+  const worker = new URL(request.url).searchParams.has(QUERY.CALL);
+  const callId = worker ? yield* callIdOf(request) : undefined;
+  const { agent } = yield* reachedAgent(seams, request);
+  const conversationId =
+    callId === undefined ? agent.conversationId : childConversationId(agent.conversationId, callId);
+  const found = yield* hostedStoreOrUnavailable(readConversationPicture(conversationId, pictureId));
+  if (Option.isNone(found)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  return HttpServerResponse.uint8Array(found.value.bytes, {
+    status: HOSTED_HTTP_STATUS.OK,
+    contentType: found.value.contentType,
+    headers: ATTACHMENT_HEADERS,
+  });
+});
+
 /** An item as an answer comes back with it, and whether the answer was taken. */
 function inboxAnswered(item: InboxItem, taken: boolean): HttpServerResponse.HttpServerResponse {
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { item, taken });
@@ -1000,6 +1043,7 @@ export function codingAgentsApp(seams: CodingAgentsAppSeams): WebRoutes<CodingAg
           AGENTS_PATH.INBOX_ATTACHMENT,
           hostedRefusing(inboxAttachmentEndpoint(seams)),
         ),
+        HttpRouter.add(ANY_METHOD, AGENTS_PATH.PICTURE, hostedRefusing(pictureEndpoint(seams))),
         hostedNotFoundRoute,
       ),
     ),
