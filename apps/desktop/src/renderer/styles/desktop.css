@@ -2228,9 +2228,14 @@ ul.actor-stack {
   -webkit-text-fill-color: color-mix(in srgb, currentColor 45%, var(--surface-fill));
 }
 
+/* What it holds draws in that faded ink however it draws, words, a glyph's
+   stroke, or a wait's spinning arc, each in `currentColor`. Set on what the
+   button holds directly, so whatever is nested deeper inherits it and fades
+   once. */
 :is(.toolbar-button, .icon-button, .primary-button, .danger-button):where([aria-disabled="true"])
-  svg {
+> * {
   color: color-mix(in srgb, currentColor 45%, var(--surface-fill));
+  -webkit-text-fill-color: currentColor;
 }
 
 :is(.toolbar-button, .icon-button):where([aria-disabled="true"]) svg {
