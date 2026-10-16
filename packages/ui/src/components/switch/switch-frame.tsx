@@ -42,7 +42,7 @@ export function SwitchButtonFrame({
       role="switch"
       aria-checked={checked}
       aria-label={label}
-      aria-describedby={describedBy}
+      aria-describedby={describedBy ?? button["aria-describedby"]}
       className={switchClass(className)}
       data-checked={checked}
       onClick={(event) => onChange(!checked, event)}
