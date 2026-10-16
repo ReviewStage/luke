@@ -230,7 +230,7 @@ function PlanRows({
             at={taskRowTime(row, context.order)}
             repository={repository?.(row)}
             face={face}
-            shown={context.plans.shown}
+            shown={context.plans.shown && context.inSight}
             onOpen={() => context.onOpenAgent(row.agent.id)}
           />
         ),

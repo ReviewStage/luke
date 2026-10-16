@@ -17,6 +17,7 @@ import { newestToastSays } from "#testing/toast";
 import { appCommandOffered, runAppCommand } from "../app-commands";
 import { ToastHost } from "../toast";
 import { DesktopSidebar } from "./desktop-sidebar";
+import { SIDEBAR_OVERLAY } from "./sidebar-collapse";
 
 /**
  * task-list-view.test.ts -- the sidebar's Tasks section groups, orders,
@@ -761,4 +762,46 @@ test("a one-off agent's row offers Copy link on a right-click, copying the agent
 
   assert.deepEqual(copied, ["https://tryluke.dev/acme/agent/a-1"]);
   assert.equal(newestToastSays(), "Link copied");
+});
+
+test("a one-off agent's menu goes with a floating sidebar as it is put away", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const registry = AtomRegistry.make();
+  const props = sidebarProps(
+    plansControl({
+      plans: [...TASKS],
+      workspace: { ...ACME, slug: "acme" },
+      workspaces: [{ ...ACME, slug: "acme" }],
+      me: DEAN,
+      listedAgents: { standing: [TRIAGE], archived: [] },
+    }),
+  );
+  const float = (overlay: (typeof SIDEBAR_OVERLAY)[keyof typeof SIDEBAR_OVERLAY]) =>
+    act(() =>
+      root.render(
+        onRegistry(
+          registry,
+          createElement(DesktopSidebar, {
+            ...props,
+            sidebar: { ...props.sidebar, collapsed: true, overlay },
+          }),
+        ),
+      ),
+    );
+  float(SIDEBAR_OVERLAY.OPEN);
+  await act(async () => undefined);
+  const row = container.querySelector<HTMLButtonElement>(".sidebar-agent");
+  assert.ok(row, "the agent's row stands");
+  act(() => {
+    row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+  });
+  const opened = document.querySelectorAll('[role="menuitem"]').length;
+
+  float(SIDEBAR_OVERLAY.CLOSED);
+
+  assert.equal(opened, 1);
+  assert.equal(document.querySelectorAll('[role="menuitem"]').length, 0);
 });

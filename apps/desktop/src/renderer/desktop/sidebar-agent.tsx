@@ -65,7 +65,7 @@ export function SidebarAgent({
   repository?: string | undefined;
   /** Whether a teammate's agent wears their face, which a group by creator says instead. */
   face?: boolean;
-  /** Whether the sidebar is on screen, which the row's menu does not outlive. */
+  /** Whether the sidebar is on screen and in sight, which the row's menu does not outlive. */
   shown: boolean;
   onOpen: () => void;
 }): React.JSX.Element {
