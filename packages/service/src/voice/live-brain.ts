@@ -20,6 +20,7 @@ import {
   type LiveBrain,
   type LiveBrainCancel,
   type LiveBrainJoin,
+  type LiveBrainQuestion,
   type LiveBrainRecoveredRun,
   type LiveBrainRecovery,
   type LiveBrainRunEnd,
@@ -300,7 +301,22 @@ const MISSED_MAX_CHARS = 1_200;
 
 /** A join that found nothing to take up and set nothing off. */
 function nothingJoined(joined: boolean): LiveBrainJoin {
-  return { joined, runs: [], missed: undefined, follow: Effect.void };
+  return { joined, runs: [], missed: undefined, questions: [], follow: Effect.void };
+}
+
+/** The questions queued past the position given and not taken back since, oldest first. */
+function questionsOf(events: readonly TurnEvent[], heard: number): LiveBrainQuestion[] {
+  const queued: LiveBrainQuestion[] = [];
+  for (const event of events) {
+    if (event.seq <= heard) continue;
+    if (event.kind === TURN_EVENT_KIND.QUESTION_QUEUED) {
+      queued.push({ question: event.question, recommendation: event.recommendation });
+    } else if (event.kind === TURN_EVENT_KIND.QUESTION_WITHDRAWN) {
+      const at = queued.findIndex((held) => held.question === event.question);
+      if (at >= 0) queued.splice(at, 1);
+    }
+  }
+  return queued;
 }
 
 /** The newest of the sentences that fit the bound, oldest first; one too long alone is cut from its start. */
@@ -877,7 +893,8 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
 
   /**
    * What of one earlier call's turn nobody heard: the sentences past the last
-   * event told, which the call back is handed as its catch-up, and the
+   * event told, which the call back is handed as its catch-up, the questions
+   * queued since and not taken back, which it asks in turn, and the
    * position everything the turn holds now is to count as told from, so its
    * follow says nothing of it again, a goodbye's end of the call included.
    * None where the turn's journal cannot be read.
@@ -898,6 +915,7 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
       sentences: held.flatMap((event) =>
         event.kind === TURN_EVENT_KIND.REPLY_SENTENCE && event.seq > heard ? [event.sentence] : [],
       ),
+      questions: questionsOf(events, heard),
     };
   });
 
@@ -905,11 +923,13 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
    * A call back takes up the work earlier calls left: each spoken ask of the
    * conversation not yet told to its end nor stopped, made inside the
    * window a follow could still hear its turn end in. What its turn said
-   * unheard becomes the catch-up and is counted told, on the row as on the
-   * turn, so neither this call's follow nor the next call says it again; a
-   * turn already over is done with there, and one still running, or an ask
-   * eve has not started, is followed from here under revision zero, below
-   * any ask this call makes. Note that this reads and writes through the
+   * unheard becomes the catch-up, and the questions it queued are handed on;
+   * this call's follow starts past all of it, and the follow the caller runs
+   * once it has handed them over counts them told on the row, so the next
+   * call says none of it again, while a call that went before then leaves
+   * them for the next. A turn already over is done with there, and one still
+   * running, or an ask eve has not started, is followed from there under
+   * revision zero, below any ask this call makes. Note that this reads and writes through the
    * same standing reads the asks are followed by, so an ask the account no
    * longer reaches is passed over as the follow would pass it.
    */
@@ -923,6 +943,8 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
     );
     const runs: string[] = [];
     const missed: string[] = [];
+    const questions: LiveBrainQuestion[] = [];
+    const heardAll: ReturnType<typeof options.asks.asks.told>[] = [];
     const turns = new Map<string, { readonly seq: number; readonly ended: boolean }>();
     for (const ask of unended) {
       const standing = yield* askStanding(reads, options.conversation.userId, ask.id);
@@ -945,21 +967,35 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
           continue;
         }
         missed.push(...unheard.sentences);
+        questions.push(...unheard.questions);
         recoveredSeq.set(turn.id, Math.max(recoveredSeq.get(turn.id) ?? 0, unheard.seq));
         read = unheard;
         turns.set(turn.id, read);
       }
-      yield* options.asks.asks.told(
-        ask.id,
-        read.ended ? { seq: read.seq, endAt: new Date(now) } : { seq: read.seq },
+      heardAll.push(
+        options.asks.asks.told(
+          ask.id,
+          read.ended ? { seq: read.seq, endAt: new Date(now) } : { seq: read.seq },
+        ),
       );
       if (!read.ended) runs.push(ask.id);
     }
+    // A position that could not be written leaves the catch-up for the next call to hand again.
+    const heard = Effect.all(heardAll, { discard: true }).pipe(
+      Effect.tapError(logStoreFailure),
+      Effect.catch(() =>
+        Effect.sync(() => options.report("How far a call back caught up could not be written")),
+      ),
+    );
     return {
       joined: true,
       runs,
       missed: missedOf(missed),
-      follow: Effect.forEach(runs, (runId) => follow(runId, 0), { discard: true }).pipe(
+      questions,
+      follow: Effect.andThen(
+        heard,
+        Effect.forEach(runs, (runId) => follow(runId, 0), { discard: true }),
+      ).pipe(
         Effect.provideService(SqlClient.SqlClient, sql),
         Effect.provideService(Database, database),
       ),

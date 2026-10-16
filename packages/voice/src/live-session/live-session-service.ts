@@ -720,8 +720,12 @@ export class LiveSessionService {
   #join(session: StandingSession): void {
     this.#start(
       Effect.gen({ self: this }, function* () {
+        const revision = session.revisions;
         const join = yield* this.#brain.join(session.sessionId);
-        if (this.#standing !== session) return;
+        // A developer who has asked something since the join began is answered by that ask, which
+        // reads the plan's history itself: nothing joined stands, nothing is caught up on and
+        // nothing counted heard, so the next call is handed it all again.
+        if (this.#standing !== session || session.revisions !== revision) return;
         for (const runId of join.runs) this.#registerWoken(runId);
         const working = join.joined && join.runs.length > 0;
         if (join.missed !== undefined) {
@@ -729,6 +733,8 @@ export class LiveSessionService {
         } else if (working) {
           this.#append(session, thinkingAppend(this.#input(null, STILL_WORKING_NOTE)));
         }
+        session.questions.push(...join.questions);
+        if (!session.holdingQuestion) this.#handQuestion(session, null);
         yield* join.follow;
       }),
     );

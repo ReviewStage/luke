@@ -50,6 +50,7 @@ import {
 } from "../agents/public-research.js";
 import { ASK_ORIGIN, TURN_SLOW_STEP } from "../core.js";
 import { HOSTED_TOOL_SET } from "../tasks/brain-tool-set.js";
+import { QUEUE_QUESTION_TOOL, WITHDRAW_QUESTION_TOOL } from "../tasks/queue-question.js";
 import { stampedEveEvent } from "../testing/eve-events.js";
 import { FIRST_EVE_TURN, spokenTurn } from "../testing/eve-turns.js";
 import {
@@ -899,6 +900,7 @@ it.live(
       );
       assert.deepEqual(joined.runs, []);
       assert.equal(joined.missed, "One agent finished. Another is waiting on you.");
+      yield* Effect.promise(() => database.run(joined.follow));
       yield* Effect.promise(() => back.stop());
 
       const after = yield* Effect.promise(() => stand(target));
@@ -932,5 +934,107 @@ it.live(
       assert.deepEqual([joined.runs, joined.missed], [[], undefined]);
       assert.deepEqual(intruder.eve.opened, []);
       yield* Effect.promise(() => intruder.stop());
+    }),
+);
+
+it.live(
+  "a call back that goes before it hands its catch-up over counts nothing heard, so the next call is handed the same",
+  () =>
+    Effect.gen(function* () {
+      const target = yield* Effect.promise(() => account());
+      const first = yield* Effect.promise(() => stand(target));
+      const accepted = yield* Effect.promise(() =>
+        database.run(first.brain.submitAsk(spokenAsk("q"))),
+      );
+      assert.equal(accepted.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
+      if (accepted.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
+      yield* Effect.promise(() => first.stop());
+      const standing = yield* Effect.promise(() => turnStanding(target, accepted.runId));
+      yield* Effect.promise(() => play(spokenTurn(FIRST_EVE_TURN, NOW), standing));
+
+      // The call joins, then goes before its follow runs.
+      const gone = yield* Effect.promise(() => stand(target));
+      const unheard = yield* Effect.promise(() =>
+        database.run(gone.brain.join(`voice_${randomUUID()}`)),
+      );
+      assert.equal(unheard.missed, "One agent finished. Another is waiting on you.");
+      yield* Effect.promise(() => gone.stop());
+
+      const back = yield* Effect.promise(() => stand(target));
+      const joined = yield* Effect.promise(() =>
+        database.run(back.brain.join(`voice_${randomUUID()}`)),
+      );
+      assert.equal(joined.missed, "One agent finished. Another is waiting on you.");
+      yield* Effect.promise(() => database.run(joined.follow));
+      yield* Effect.promise(() => back.stop());
+
+      const after = yield* Effect.promise(() => stand(target));
+      const nothing = yield* Effect.promise(() =>
+        database.run(after.brain.join(`voice_${randomUUID()}`)),
+      );
+      assert.equal(nothing.missed, undefined);
+      yield* Effect.promise(() => after.stop());
+    }),
+);
+
+it.live(
+  "a call back is handed the questions Luke queued while no call was up, less any he took back",
+  () =>
+    Effect.gen(function* () {
+      const target = yield* Effect.promise(() => account());
+      const first = yield* Effect.promise(() => stand(target));
+      const accepted = yield* Effect.promise(() =>
+        database.run(first.brain.submitAsk(spokenAsk("q"))),
+      );
+      assert.equal(accepted.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
+      if (accepted.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
+      yield* Effect.promise(() => first.stop());
+      const standing = yield* Effect.promise(() => turnStanding(target, accepted.runId));
+      const stamped = <Event extends Omit<MessageStreamEvent, "meta">>(event: Event) =>
+        stampedEveEvent(event, NOW);
+      const turnId = FIRST_EVE_TURN;
+      const sequence = 0;
+      const call = (callId: string, toolName: string, input: Record<string, string>) =>
+        stamped({
+          type: "actions.requested",
+          data: {
+            turnId,
+            sequence,
+            stepIndex: 0,
+            actions: [{ kind: "tool-call", callId, toolName, input }],
+          },
+        });
+      yield* Effect.promise(() =>
+        play(
+          [
+            stampedEveEvent({ type: "turn.started", data: { turnId, sequence } }, NOW),
+            stamped({ type: "message.received", data: { turnId, sequence, message: "q" } }),
+            stamped({
+              type: "step.started",
+              data: { turnId, sequence, stepIndex: 0, modelId: "m" },
+            }),
+            call("call-1", QUEUE_QUESTION_TOOL.name, {
+              question: "Which email provider?",
+              recommendation: "Postmark.",
+            }),
+            call("call-2", QUEUE_QUESTION_TOOL.name, {
+              question: "Resend after a day?",
+              recommendation: "Yes.",
+            }),
+            call("call-3", WITHDRAW_QUESTION_TOOL.name, { question: "Resend after a day?" }),
+          ],
+          standing,
+        ),
+      );
+
+      const back = yield* Effect.promise(() => stand(target));
+      const joined = yield* Effect.promise(() =>
+        database.run(back.brain.join(`voice_${randomUUID()}`)),
+      );
+      assert.deepEqual(joined.questions, [
+        { question: "Which email provider?", recommendation: "Postmark." },
+      ]);
+      assert.deepEqual(joined.runs, [accepted.runId]);
+      yield* Effect.promise(() => back.stop());
     }),
 );
