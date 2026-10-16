@@ -9,8 +9,10 @@ import { MarkdownMessage } from "../markdown-message";
  * asking for one where there is none; a press swaps in a field holding its
  * text. Leaving the field, or ⌘Return, sends what was typed, and the field
  * stays open until the service keeps it, so a refused save keeps every word
- * and says so beside it; Escape puts back the description it opened on and
- * sends nothing. Text left as it was sends nothing either.
+ * and says so beside it; while the save is out the field takes no typing
+ * and no Escape, so nothing typed then is lost and nothing sent is taken
+ * back. Escape before then puts back the description it opened on and sends
+ * nothing. Text left as it was sends nothing either.
  */
 
 /** What stands where an issue has no description. */
@@ -30,7 +32,7 @@ export function IssueDescription({
   // Note that a draft stands only while the field is open, so at rest the issue's own description is drawn.
   const [draft, setDraft] = useState<string | undefined>(undefined);
   const [refused, setRefused] = useState(false);
-  const saving = useRef(false);
+  const [saving, setSaving] = useState(false);
   const field = useRef<HTMLTextAreaElement>(null);
   const editing = draft !== undefined;
   useLayoutEffect(() => {
@@ -45,19 +47,21 @@ export function IssueDescription({
     setDraft(description);
   };
   const save = () => {
-    if (draft === undefined || saving.current) return;
+    if (draft === undefined || saving) return;
     if (draft === description) {
       setDraft(undefined);
       return;
     }
-    saving.current = true;
+    setSaving(true);
     onSave(draft).then((kept) => {
-      saving.current = false;
+      setSaving(false);
       if (kept) setDraft(undefined);
       setRefused(!kept);
     });
   };
+  // Note that a save under way is not taken back, since it is already on its way to the service.
   const revert = () => {
+    if (saving) return;
     setRefused(false);
     setDraft(undefined);
   };
@@ -71,6 +75,8 @@ export function IssueDescription({
           aria-label="Description"
           value={draft}
           maxLength={ISSUE_BOUNDS.MAX_DESCRIPTION_CHARS}
+          readOnly={saving}
+          aria-busy={saving}
           onChange={(event) => setDraft(event.target.value)}
           onBlur={save}
           onKeyDown={(event) => {

@@ -614,3 +614,33 @@ test("a save the service refused keeps every word typed in the field and says so
   assert.equal(kept?.value, "Steps to reproduce");
   assert.match(page.textContent ?? "", /Couldn't save the description/u);
 });
+
+test("while a description's save is out the field takes no typing and no Escape, and closes once the save is kept", async () => {
+  standing = [issue(1)];
+  const page = await openIssue(issue(1).id);
+  heldChanges = [];
+  const held = heldChanges;
+
+  const field = openDescription(page);
+  type(field, "First draft");
+  act(() => {
+    field.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", metaKey: true, bubbles: true }),
+    );
+  });
+  await settle();
+  const lockedWhileOut = field.readOnly;
+  act(() => {
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+  await settle();
+  const standsWhileOut = page.querySelector("textarea[aria-label='Description']") !== null;
+  act(() => held[0]?.());
+  await settle();
+
+  assert.ok(lockedWhileOut, "the field takes no typing while its save is out");
+  assert.ok(standsWhileOut, "Escape does not take back a save under way");
+  assert.equal(page.querySelector("textarea[aria-label='Description']"), null);
+  assert.equal(page.querySelector(".issue-description")?.textContent, "First draft");
+  assert.deepEqual(changes, [{ issueId: issue(1).id, change: { description: "First draft" } }]);
+});
