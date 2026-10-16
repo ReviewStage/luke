@@ -77,6 +77,8 @@ const DECLARED_TABLES = [
   "plan",
   "plan_attachment",
   "plan_board",
+  "plan_comment",
+  "plan_comment_thread",
   "plan_page_version",
   "plan_pin",
   "plan_revision",

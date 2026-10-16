@@ -1,0 +1,122 @@
+{
+  "anyOf": [
+    {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": [
+            "reply"
+          ]
+        },
+        "clientKey": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "words": {
+          "type": "string",
+          "maxLength": 8000
+        }
+      },
+      "required": [
+        "action",
+        "clientKey",
+        "words"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": [
+            "edit"
+          ]
+        },
+        "entry": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 36
+        },
+        "words": {
+          "type": "string",
+          "maxLength": 8000
+        }
+      },
+      "required": [
+        "action",
+        "entry",
+        "words"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": [
+            "delete"
+          ]
+        },
+        "entry": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 36
+        }
+      },
+      "required": [
+        "action",
+        "entry"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": [
+            "resolve"
+          ]
+        }
+      },
+      "required": [
+        "action"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": [
+            "reopen"
+          ]
+        }
+      },
+      "required": [
+        "action"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": [
+            "delete-thread"
+          ]
+        }
+      },
+      "required": [
+        "action"
+      ],
+      "additionalProperties": false
+    }
+  ]
+}

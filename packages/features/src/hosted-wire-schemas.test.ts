@@ -22,6 +22,7 @@ import * as liveContract from "./live-contract.js";
 import * as modelsWire from "./models-wire.js";
 import * as pictureWire from "./picture-wire.js";
 import * as planAttachmentWire from "./plan-attachment-wire.js";
+import * as planCommentWire from "./plan-comment-wire.js";
 import * as planDocumentTemplate from "./plan-document-template.js";
 import * as planEdit from "./plan-edit.js";
 import * as providerKeyWire from "./provider-key-wire.js";
@@ -256,6 +257,21 @@ const EFFECT_MODULE_SCHEMAS = {
     planAttachmentRequestSchema: planAttachmentWire.planAttachmentRequestSchema,
     planAttachmentAnswerSchema: planAttachmentWire.planAttachmentAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof planAttachmentWire>,
+  "plan-comment-wire": {
+    planCommentWordsSchema: planCommentWire.planCommentWordsSchema,
+    planCommentClientKeySchema: planCommentWire.planCommentClientKeySchema,
+    planCommentSpanSchema: planCommentWire.planCommentSpanSchema,
+    planCommentWriterSchema: planCommentWire.planCommentWriterSchema,
+    planCommentAskedSchema: planCommentWire.planCommentAskedSchema,
+    planCommentEntrySchema: planCommentWire.planCommentEntrySchema,
+    planCommentThreadSchema: planCommentWire.planCommentThreadSchema,
+    planCommentsCursorSchema: planCommentWire.planCommentsCursorSchema,
+    planCommentsAnswerSchema: planCommentWire.planCommentsAnswerSchema,
+    planCommentStartRequestSchema: planCommentWire.planCommentStartRequestSchema,
+    planCommentActionRequestSchema: planCommentWire.planCommentActionRequestSchema,
+    planCommentThreadAnswerSchema: planCommentWire.planCommentThreadAnswerSchema,
+    planCommentAnchorsSchema: planCommentWire.planCommentAnchorsSchema,
+  } satisfies RecordedEffectJsonSchemas<typeof planCommentWire>,
   "task-wire": {
     workspaceIdSchema: taskWire.workspaceIdSchema,
     agentEditLineSchema: taskWire.agentEditLineSchema,
