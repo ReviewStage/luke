@@ -1209,15 +1209,19 @@ button.file-ref:hover .file-ref-path {
   display: none;
 }
 
-/* A panel too narrow for a tab and its pane side by side draws the pane
-   over the tab's right edge, shut until its own toggle opens it, a press
-   beside it or Escape closing it again; the toggle at the bar's end opens
-   it there, and its count stands under the tab. One width drives every
-   tab's narrow layout: a side panel under 360px, below the panel's default
-   width (`SIDE_PANEL_WIDTH.DEFAULT`), so a panel left as it opens keeps
-   its tab and pane side by side and only a panel dragged narrower folds. */
+/* A panel too narrow for a tab and its pane side by side floats the pane
+   over the tab's right edge instead (`usePaneRoom`), as the main sidebar
+   floats over the work in a narrow window: away until the pointer rests
+   on its toggle or at the tab's right edge, or the toggle is pressed, and
+   away again once a peek is left, at a press beside it, at Escape, or at a
+   choice in it. Its count stands under the tab. A peek waits a beat before
+   it slides, so a pointer passing on its way elsewhere leaves before
+   anything covers the tab. Each pane folds at its own width: a tree below
+   a 360px panel, under the panel's default width
+   (`SIDE_PANEL_WIDTH.DEFAULT`), so a File or Changes tab left as it opens
+   keeps its tree beside it, and only a panel dragged narrower folds. */
 @container side-panel (max-width: 359px) {
-  .file-view :is(.file-tree-pane, .terminal-shells) {
+  .file-view .file-tree-pane {
     position: absolute;
     z-index: 1;
     inset-block: 0;
@@ -1227,12 +1231,16 @@ button.file-ref:hover .file-ref-path {
     box-shadow: var(--menu-shadow);
   }
 
-  .file-view[data-pane-over="true"] :is(.file-tree-pane, .terminal-shells) {
+  .file-view:is([data-pane-over="peek"], [data-pane-over="open"]) .file-tree-pane {
     display: flex;
     animation: pane-over-in var(--duration-pane) var(--motion-pane) backwards;
   }
 
-  .file-view[data-pane-over="false"] :is(.file-tree-pane, .terminal-shells) {
+  .file-view[data-pane-over="peek"] .file-tree-pane {
+    animation-delay: var(--duration-quick);
+  }
+
+  .file-view[data-pane-over="closed"] .file-tree-pane {
     display: none;
   }
 
@@ -1250,6 +1258,41 @@ button.file-ref:hover .file-ref-path {
 
   .file-view[data-pane-beside] > .file-tree-foot {
     display: block;
+  }
+}
+
+/* A Terminal tab's shells float the same way below a 480px panel, so the
+   screen beside them never falls under forty columns: at the panel's
+   default width the screen has the whole tab, the shells a hover away. */
+@container side-panel (max-width: 479px) {
+  .terminal-tab .terminal-shells {
+    position: absolute;
+    z-index: 1;
+    inset-block: 0;
+    right: 0;
+    width: min(264px, calc(100% - var(--space-48)));
+    box-shadow: var(--menu-shadow);
+  }
+
+  .terminal-tab:is([data-pane-over="peek"], [data-pane-over="open"]) .terminal-shells {
+    display: flex;
+    animation: pane-over-in var(--duration-pane) var(--motion-pane) backwards;
+  }
+
+  .terminal-tab[data-pane-over="peek"] .terminal-shells {
+    animation-delay: var(--duration-quick);
+  }
+
+  .terminal-tab[data-pane-over="closed"] .terminal-shells {
+    display: none;
+  }
+
+  .terminal-tab .file-tree-toggle[data-place="beside"] {
+    display: none;
+  }
+
+  .terminal-tab .file-tree-toggle[data-place="over"] {
+    display: inline-flex;
   }
 }
 

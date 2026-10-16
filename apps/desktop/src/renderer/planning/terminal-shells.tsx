@@ -7,6 +7,7 @@ import { CloseIcon, PlusIcon } from "@luke/ui";
 import { PencilIcon, TerminalIcon, Trash2Icon } from "lucide-react";
 import { type RefObject, useRef, useState } from "react";
 import { ActionMenu, useActionMenu } from "../desktop/action-menu";
+import type { FloatingBox } from "../desktop/hover-pane";
 import { PlanNameField } from "../desktop/plan-name-field";
 import { ConfirmDialog, useConfirmDialog } from "../settings/confirm-dialog";
 import { Tooltip } from "../tooltip";
@@ -156,6 +157,7 @@ export function TerminalShells({
   session,
   onOpenAgent,
   pane,
+  float,
   leaving,
   surfaceOpen,
 }: {
@@ -165,6 +167,8 @@ export function TerminalShells({
   onOpenAgent: () => void;
   /** The list's box, which slides in and out (`usePaneSlide`). */
   pane: RefObject<HTMLElement | null>;
+  /** What the list answers while it may float over the screen (`hover-pane.ts`). */
+  float: FloatingBox;
   leaving: boolean;
   /** Whether the tab is on screen: a question asked from the list goes as the panel closes. */
   surfaceOpen: boolean;
@@ -178,6 +182,9 @@ export function TerminalShells({
       aria-label="Shells"
       data-leaving={leaving ? "" : undefined}
       inert={leaving}
+      onPointerDown={float.onPointerDown}
+      onPointerLeave={float.onPointerLeave}
+      onKeyDown={float.onKeyDown}
     >
       <div className="terminal-shells-head">
         Shells

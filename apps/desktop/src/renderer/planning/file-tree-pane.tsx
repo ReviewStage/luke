@@ -4,6 +4,7 @@ import { CloseIcon, SearchIcon } from "@luke/ui";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { ListFilterIcon } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
+import type { FloatingBox } from "../desktop/hover-pane";
 import type { FileMark, FileTreeHandle, FolderEntry, ReadFolder } from "../file-tree/contract";
 import { Tooltip } from "../tooltip";
 import { fileTreeModuleAtom, TREE_LOAD_FAILED } from "./file-tree-bundle";
@@ -48,16 +49,18 @@ const SEARCH_SCOPE = {
 
 type SearchScope = (typeof SEARCH_SCOPE)[keyof typeof SEARCH_SCOPE];
 
-/** The pane's search field over the tree: Escape clears what is typed, then lets go of the caret. */
+/** The pane's search field over the tree: Escape clears what is typed, then lets go of the caret, or, in a tree floating over its tab, puts the tree away. */
 function TreeSearch({
   field,
   query,
   scope,
+  floating,
   onQuery,
 }: {
   field: React.RefObject<HTMLInputElement | null>;
   query: string;
   scope: SearchScope;
+  floating: boolean;
   onQuery: (query: string) => void;
 }): React.JSX.Element {
   return (
@@ -73,9 +76,11 @@ function TreeSearch({
         value={query}
         onChange={(event) => onQuery(event.target.value)}
         onKeyDown={(event) => {
+          if (event.key !== "Escape" || event.nativeEvent.isComposing) return;
+          // A floating tree hears an Escape with nothing typed, to put itself away.
+          if (query.length === 0 && floating) return;
           // Note that an Escape is stopped here, because the window's own
           // Escape would close the panel behind the field.
-          if (event.key !== "Escape" || event.nativeEvent.isComposing) return;
           event.stopPropagation();
           if (query.length > 0) onQuery("");
           else field.current?.blur();
@@ -109,6 +114,7 @@ export function FileTreePane({
   readWhole,
   onOpen,
   pane,
+  float,
   leaving = false,
 }: {
   /** The File tab's file, revealed in the tree. */
@@ -130,6 +136,8 @@ export function FileTreePane({
   onOpen: (path: string, newTab: boolean) => void;
   /** The pane's own box, which its slide in and out plays on (`file-view.tsx`). */
   pane?: React.Ref<HTMLElement> | undefined;
+  /** What the pane answers while it may float over its tab (`hover-pane.ts`). */
+  float?: FloatingBox | undefined;
   /** Whether it is on its way out: drawn over the file's edge rather than beside it, and out of reach. */
   leaving?: boolean;
 }): React.JSX.Element {
@@ -218,7 +226,10 @@ export function FileTreePane({
       aria-label={label}
       data-leaving={leaving ? "" : undefined}
       inert={leaving}
+      onPointerDown={float?.onPointerDown}
+      onPointerLeave={float?.onPointerLeave}
       onKeyDown={(event) => {
+        float?.onKeyDown(event);
         if (event.key.toLowerCase() !== "f" || !(event.metaKey || event.ctrlKey)) return;
         // Note that the press goes no further, because the window's ⌘F would
         // open the tab's find bar over the field it just put the caret in.
@@ -229,7 +240,13 @@ export function FileTreePane({
       }}
     >
       <search className="file-tree-search">
-        <TreeSearch field={field} query={query} scope={scope} onQuery={setQuery} />
+        <TreeSearch
+          field={field}
+          query={query}
+          scope={scope}
+          floating={float?.floating ?? false}
+          onQuery={setQuery}
+        />
         {shown === undefined ? null : (
           <Tooltip label={shown.length === 0 ? "Luke has shown no files yet" : filterLabel}>
             <button

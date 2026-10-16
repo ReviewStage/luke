@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { afterEach, beforeAll, test } from "vitest";
+import { act } from "react";
+import { afterEach, beforeAll, test, vi } from "vitest";
 import { layContainersAt } from "#testing/container-width";
 import {
   drawChangesTab,
@@ -27,7 +28,10 @@ beforeAll(() => {
   // Note that the setup is given longer than most, because jsdom takes seconds to lay the stylesheets.
 }, 30_000);
 
-afterEach(unmountTabs);
+afterEach(() => {
+  unmountTabs();
+  vi.restoreAllMocks();
+});
 
 /**
  * Whether the stylesheets draw the element itself, which is where every
@@ -65,6 +69,21 @@ test("a Changes tab stands its tree beside the diff as the panel holds it, the c
       .map((number) => number.textContent),
     ["", "2"],
   );
+});
+
+test("the tab's right edge floats nothing while the tree has room beside the diff", async () => {
+  const tab = await drawChangesTab();
+  const body = tab.querySelector(".file-view-body") ?? assert.fail("the diff's body is drawn");
+  const diff = body.firstElementChild ?? assert.fail("the diff is drawn");
+  vi.spyOn(body, "getBoundingClientRect").mockReturnValue(
+    new DOMRect(0, 0, SIDE_PANEL_WIDTH.DEFAULT, 400),
+  );
+  act(() => {
+    diff.dispatchEvent(
+      new PointerEvent("pointermove", { bubbles: true, clientX: SIDE_PANEL_WIDTH.DEFAULT - 2 }),
+    );
+  });
+  assert.equal(tab.querySelector(".file-view")?.getAttribute("data-pane-over"), "closed");
 });
 
 test("a note of Luke's says its age and its link in words", async () => {
