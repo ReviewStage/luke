@@ -17,9 +17,10 @@
      deepened until its white exclamation holds on it, in the dark as in the
      light, where the orange is deep already. */
   --attention-mark-ground: #c4620c;
-  /* An actor's square in a facepile (`actor-ref.tsx`): Luke's face in his
-     own blue, an agent's harness, or an automation's clock, each on one
-     solid neutral, so the face it overlaps never shows through it. */
+  /* An actor's tile (`actor-ref.tsx`): under a person's circle, a pile's
+     count, and, in a facepile alone, Luke's face in his own blue, an agent's
+     harness, or an automation's clock, so the face a square overlaps never
+     shows through it. */
   --actor-tile: #2a2a30;
   --actor-tile-ink: rgba(255, 255, 255, 0.92);
   --desktop-ground: #0c0c0e;
