@@ -208,6 +208,11 @@ function fixture(answered: CodingAgentAgentAnswer = STARTED) {
           asked.push(`overview:${agentId}`);
           return { pullRequest: null };
         }),
+      codingAgentGitHubImage: ({ agentId }) =>
+        Effect.sync(() => {
+          asked.push(`github-image:${agentId}`);
+          return { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND } as const;
+        }),
       providerKeysRead: () =>
         Effect.sync(() => {
           asked.push("keys");

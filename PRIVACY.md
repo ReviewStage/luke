@@ -356,10 +356,14 @@ nothing of the file is stored.
 pull request as GitHub holds it, in two views. Each time a view first opens, or
 you refresh it, our service reads it from GitHub with a token the Luke GitHub
 App mints for that one repository on the workspace's installation. The
-overview reads its title, description, branches, and whether it would merge;
-the name, App, state, and times of up to 100 checks on its head; its
-reviewers; and up to its 100 newest comments and reviews, each with its author
-and up to 8,000 characters of its words. Files changed reads each changed
+overview reads its title, branches, and whether it would merge; its description
+and up to its 100 newest comments and reviews, each with its author, as GitHub
+renders them (or, for a comment too long for that, up to 8,000 characters of
+its words); the name, App, state, and times of up to 100 checks on its head;
+and its reviewers. An image in the description or a comment is read by our
+service too, never by your Mac: an upload with the same one-repository token,
+through a fresh signed address GitHub gives for it, and any other image through
+GitHub's own image proxy, each up to 8 MB; other images are shown as links. Files changed reads each changed
 file's name and patch, for up to 300 files, leaving out a patch over 100,000
 characters. It stores none of it, and Luke holds it in memory while the tab is
 open, never on disk, except that downloading a patch writes it where you save

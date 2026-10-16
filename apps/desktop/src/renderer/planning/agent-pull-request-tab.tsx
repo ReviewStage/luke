@@ -16,9 +16,11 @@ import {
   PULL_REQUEST_STATE,
   type PullRequestCheck,
 } from "@luke/features/coding-agent-wire";
+import { githubImageOf } from "@luke/features/github-image";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { CopyIcon, ProviderMark } from "@luke/ui";
+import { PICTURE_STATE, usePicture } from "@luke/ui/picture-cache";
 import {
   CheckIcon,
   CircleDotIcon,
@@ -28,7 +30,7 @@ import {
   RotateCwIcon,
   XIcon,
 } from "lucide-react";
-import type { ReactNode } from "react";
+import { type ReactNode, useCallback } from "react";
 import { useAct } from "../act";
 import { useCopyToast } from "../copy-feedback";
 import { ActionMenu, type MenuAction, useActionMenu } from "../desktop/action-menu";
@@ -50,7 +52,12 @@ import {
   ReviewStanding,
 } from "./pull-request-people";
 import { RelativeTime } from "./relative-time";
-import { TranscriptWords } from "./transcript-blocks";
+import {
+  type GitHubPictureDrawer,
+  GitHubPictureLink,
+  GitHubWords,
+  TranscriptWords,
+} from "./transcript-blocks";
 import type { CodingAgentsControl } from "./use-coding-agents";
 import { useOpenLink } from "./use-open-link";
 import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel";
@@ -68,16 +75,20 @@ import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel";
  * pull request yet says that.
  *
  * Under a bar like a File tab's, which wears the pull request's mark and the
- * word for where it stands, its branches, and its doors (the agent's Changes
- * tab, GitHub, and the ⋯), the page reads as a pull request's page on
- * GitHub does, drawn in the window's own parts: its title and number; who
+ * word for where it stands, the switch between its overview and its files
+ * (`AgentChangesTab`), and on the overview its doors (GitHub and the ⋯), the
+ * page reads as a pull request's page on GitHub does, drawn in the window's
+ * own parts: its title, number, and branches; who
  * opened it and when, as the Changes tab names them
  * (`pull-request-people.tsx`), with its reviewers' faces wearing where each
  * stands; while it is open, whether it would merge as it stands, in
  * GitHub's own terms; every check on its head, those that failed first,
- * then those still running, each opening its page; its description as
- * markdown, drawn as a transcript's words are (`TranscriptWords`); and its
- * comments and reviews in time order. Every name and word here is the
+ * then those still running, each opening its page; and its description and
+ * its comments and reviews in time order, as GitHub renders them
+ * (`body_html`), drawn through the transcript's own markdown drawing
+ * (`GitHubWords`), with an image GitHub serves read through the service on
+ * the App's token (`GitHubPicture`) and any other drawn as its link, as
+ * ReviewStage/stage draws them. Every name and word here is the
  * repository's, so the tab is left out of the screen recording
  * (`ph-no-capture`).
  */
@@ -88,6 +99,7 @@ const PULL_REQUEST_WORDS = {
   FAILED: "The pull request could not be read.",
   NO_PULL_REQUEST: "No pull request yet.",
   NO_DESCRIPTION: "No description provided.",
+  LONG_DESCRIPTION: "This description is too long to show here. Read it on GitHub",
   NO_CHECKS: "No checks have run on this pull request.",
   NO_CONVERSATION: "Nobody has commented yet.",
   CUT: "Read the rest on GitHub",
@@ -390,15 +402,81 @@ function MergeLine({ pullRequest }: { pullRequest: CodingAgentOverview }): React
   );
 }
 
+/**
+ * One picture GitHub's rendering names, read through the service on the
+ * App's token as the agent's (`githubImageOf`), drawn from its `data:` URL
+ * once read, a quiet box while it is, and its link where GitHub answered
+ * none the window draws.
+ */
+function GitHubPicture({
+  agentId,
+  src,
+  alt,
+}: {
+  agentId: string;
+  src: string;
+  alt: string;
+}): React.JSX.Element {
+  const { act } = useAct();
+  const read = useCallback(
+    (owner: string, address: string) =>
+      act(ACT_KIND.CODING_AGENTS_GITHUB_IMAGE, { agentId: owner, src: address }),
+    [act],
+  );
+  const state = usePicture(agentId, src, read);
+  if (state.kind === PICTURE_STATE.READY) {
+    return <img className="pull-request-picture" src={state.url} alt={alt} />;
+  }
+  if (state.kind === PICTURE_STATE.READING) {
+    return <span className="pull-request-picture-waiting" role="img" aria-label={alt} />;
+  }
+  return <GitHubPictureLink src={src} alt={alt} />;
+}
+
+/** How the tab draws a picture GitHub's rendering names: one it may read through the service as the agent's, and none else. */
+function usePictureDrawer(agentId: string): GitHubPictureDrawer {
+  return useCallback(
+    (src, alt) =>
+      githubImageOf(src) === undefined ? undefined : (
+        <GitHubPicture agentId={agentId} src={src} alt={alt} />
+      ),
+    [agentId],
+  );
+}
+
+/** Words GitHub rendered, or, where it rendered none the read could carry, the words as markdown. */
+function EntryWords({
+  entry,
+  picture,
+}: {
+  entry: ConversationEntry;
+  picture: GitHubPictureDrawer;
+}): React.JSX.Element | null {
+  if (entry.html !== null) {
+    return (
+      <div className="pull-request-words">
+        <GitHubWords html={entry.html} picture={picture} />
+      </div>
+    );
+  }
+  return entry.body === "" ? null : (
+    <div className="pull-request-words">
+      <TranscriptWords text={entry.body} />
+    </div>
+  );
+}
+
 /** One comment or review: who, where a review left them, and when; then their words. */
 function EntryCard({
   entry,
   agent,
   now,
+  picture,
 }: {
   entry: ConversationEntry;
   agent: PullRequestAgent;
   now: number;
+  picture: GitHubPictureDrawer;
 }): React.JSX.Element {
   const openLink = useOpenLink();
   return (
@@ -408,11 +486,7 @@ function EntryCard({
         {entry.state === undefined ? null : <ReviewStanding state={entry.state} />}
         <RelativeTime className="changes-comment-time" at={entry.at} now={now} />
       </span>
-      {entry.body === "" ? null : (
-        <div className="pull-request-words">
-          <TranscriptWords text={entry.body} />
-        </div>
-      )}
+      <EntryWords entry={entry} picture={picture} />
       {entry.cut ? (
         <button type="button" className="pull-request-more" onClick={() => openLink(entry.url)}>
           {PULL_REQUEST_WORDS.CUT}
@@ -424,13 +498,17 @@ function EntryCard({
 
 /** The page under the bar: the title, who opened it and its reviewers, whether it merges, its checks, its description, and its conversation. */
 function PullRequestPage({
+  agentId,
   pullRequest,
   agent,
 }: {
+  agentId: string;
   pullRequest: CodingAgentOverview;
   agent: PullRequestAgent;
 }): React.JSX.Element {
   const now = useMinute();
+  const openLink = useOpenLink();
+  const picture = usePictureDrawer(agentId);
   const { author, reviewers, conversation, mergedAt } = pullRequest;
   const open =
     pullRequest.state === PULL_REQUEST_STATE.OPEN || pullRequest.state === PULL_REQUEST_STATE.DRAFT;
@@ -461,13 +539,21 @@ function PullRequestPage({
       {open ? <MergeLine pullRequest={pullRequest} /> : null}
       <Checks checks={pullRequest.checks} />
       <Section title="Description">
-        {pullRequest.body.trim() === "" ? (
+        {pullRequest.cut ? (
+          <button
+            type="button"
+            className="pull-request-more pull-request-none"
+            onClick={() => openLink(pullRequest.url)}
+          >
+            {PULL_REQUEST_WORDS.LONG_DESCRIPTION}
+          </button>
+        ) : pullRequest.html === "" ? (
           <p className="pull-request-quiet pull-request-none">
             {PULL_REQUEST_WORDS.NO_DESCRIPTION}
           </p>
         ) : (
           <div className="pull-request-words">
-            <TranscriptWords text={pullRequest.body} />
+            <GitHubWords html={pullRequest.html} picture={picture} />
           </div>
         )}
       </Section>
@@ -482,7 +568,7 @@ function PullRequestPage({
         ) : (
           <ol className="pull-request-conversation">
             {conversation.map((entry) => (
-              <EntryCard key={entry.url} entry={entry} agent={agent} now={now} />
+              <EntryCard key={entry.url} entry={entry} agent={agent} now={now} picture={picture} />
             ))}
           </ol>
         )}
@@ -493,9 +579,11 @@ function PullRequestPage({
 
 /** The overview read and drawn: a wait, a failure with its retry, no pull request yet, or the page. */
 function OverviewView({
+  agentId,
   read,
   agent,
 }: {
+  agentId: string;
   read: {
     readonly answer: CodingAgentOverviewAnswerView | undefined;
     readonly out: boolean;
@@ -524,7 +612,7 @@ function OverviewView({
       <EmptyState icon={<GitPullRequestIcon />}>{PULL_REQUEST_WORDS.NO_PULL_REQUEST}</EmptyState>
     );
   }
-  return <PullRequestPage pullRequest={answer.pullRequest} agent={agent} />;
+  return <PullRequestPage agentId={agentId} pullRequest={answer.pullRequest} agent={agent} />;
 }
 
 /**
@@ -571,7 +659,7 @@ export function AgentPullRequestTab({
         overview={onOverview ? { reading: read.out, onRefresh: read.ask } : undefined}
       />
       <div className="pull-request-view" hidden={!onOverview}>
-        <OverviewView read={read} agent={agent} />
+        <OverviewView agentId={agentId} read={read} agent={agent} />
       </div>
       <div className="pull-request-view" hidden={onOverview}>
         <AgentChangesTab

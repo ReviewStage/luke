@@ -72,12 +72,32 @@ function check(name: string, state: (typeof CHECK_STATE)[keyof typeof CHECK_STAT
   };
 }
 
+/** An upload in the description, as GitHub's rendering names it. */
+const UPLOAD = "https://github.com/user-attachments/assets/4f2c1a3b-5d6e-4f70-8a9b-0c1d2e3f4a5b";
+
+/** The image the service reads for it, a transparent pixel. */
+const PIXEL = { contentType: "image/png", base64: "iVBORw0KGgo=" } as const;
+
 const OVERVIEW: CodingAgentOverview = {
   number: 42,
   title: "Expire invitations",
   url: PAGE,
   state: PULL_REQUEST_STATE.OPEN,
-  body: "Expires invitations after **seven days**.",
+  html: [
+    '<div class="markdown-heading" dir="auto"><h2 class="heading-element">Summary</h2>',
+    '<a id="user-content-summary" class="anchor" aria-label="Permalink: Summary" href="#summary"><svg></svg></a></div>',
+    '<p dir="auto">Expires invitations after <strong>seven days</strong>, as ',
+    '<a class="user-mention notranslate" href="https://github.com/charlespan">@charlespan</a> asked.</p>',
+    '<div class="highlight highlight-source-ts notranslate position-relative overflow-auto" dir="auto">',
+    '<pre><span class="pl-k">const</span> days = 7;\n\nexport default days;</pre></div>',
+    '<ul class="contains-task-list"><li class="task-list-item">',
+    '<input type="checkbox" class="task-list-item-checkbox" disabled="" checked=""> Sweep</li></ul>',
+    `<p dir="auto"><a target="_blank" href="${UPLOAD}"><img src="${UPLOAD}" alt="before and after"></a></p>`,
+    '<p dir="auto"><img src="https://tracker.example.com/pixel.png" alt="pixel"></p>',
+    '<p dir="auto">Run <code class="notranslate">pnpm test</code> first.</p>',
+    "<script>window.stolen = true;</script>",
+  ].join(""),
+  cut: false,
   base: "main",
   head: "luke/expiry-job",
   createdAt: 1_000,
@@ -95,7 +115,8 @@ const OVERVIEW: CodingAgentOverview = {
       kind: CONVERSATION_ENTRY.REVIEW,
       by: CHARLES_ON_GITHUB,
       state: REVIEW_STATE.CHANGES_REQUESTED,
-      body: "Rename the flag.",
+      html: '<p dir="auto">Rename the flag.</p>',
+      body: "",
       cut: false,
       at: 2_000,
       url: `${PAGE}#pullrequestreview-1`,
@@ -103,7 +124,8 @@ const OVERVIEW: CodingAgentOverview = {
     {
       kind: CONVERSATION_ENTRY.COMMENT,
       by: CHARLES_ON_GITHUB,
-      body: "Also, a very long note",
+      html: null,
+      body: "Also, a very **long** note",
       cut: true,
       at: 3_000,
       url: `${PAGE}#issuecomment-2`,
@@ -113,17 +135,24 @@ const OVERVIEW: CodingAgentOverview = {
 
 let root: Root | undefined;
 let opened: string[] = [];
+/** Every image the tab asked the service for, by its address. */
+let images: string[] = [];
 
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
 beforeEach(() => {
   opened = [];
+  images = [];
   Object.defineProperty(window, "luke", {
     configurable: true,
     value: {
       recordSurfaceEvent: () => undefined,
       act: (request: Act) => {
         if (request.kind === ACT_KIND.GITHUB_OPEN) opened.push(request.payload.url);
+        if (request.kind === ACT_KIND.CODING_AGENTS_GITHUB_IMAGE) {
+          images.push(request.payload.src);
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: PIXEL });
+        }
         return Promise.resolve(
           request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
             ? { status: ACT_OUTCOME_STATUS.DONE, value: [CHARLES] }
@@ -252,12 +281,59 @@ test("the tab draws the pull request as a page: its standing and branches, wheth
 
   const description =
     tab.querySelector('[aria-label="Description"]') ?? assert.fail("the description stands");
+  assert.equal(description.querySelector("h2")?.textContent, "Summary", "GitHub's heading stands");
+  assert.equal(
+    description.querySelector("a.anchor, [href='#summary']"),
+    null,
+    "its permalink does not",
+  );
   assert.equal(description.querySelector('[data-streamdown="strong"]')?.textContent, "seven days");
+  assert.match(
+    description.textContent ?? "",
+    /@charlespan asked\./u,
+    "a mention stands as GitHub drew it",
+  );
+  assert.equal(description.querySelector(".transcript-code-language")?.textContent, "ts");
+  assert.equal(
+    description.querySelector(".transcript-code-body")?.textContent,
+    "const days = 7;\n\nexport default days;",
+    "a highlighted block is the window's own code block in its language, a blank line in it kept",
+  );
+  assert.ok(description.querySelector('input[type="checkbox"][disabled]'), "a task list stands");
+  assert.equal(
+    description.querySelectorAll(".transcript-code").length,
+    1,
+    "inline code stays inline",
+  );
+  assert.match(description.textContent ?? "", /Run pnpm test first\./u);
+  assert.equal(description.querySelector("script"), null, "a script never stands");
+  assert.ok(!("stolen" in window), "nor does it run");
+  await settle();
+  assert.deepEqual(
+    images,
+    [UPLOAD],
+    "only an image GitHub serves is asked for, through the service",
+  );
+  const upload =
+    description.querySelector<HTMLImageElement>('img[alt="before and after"]') ??
+    assert.fail("the upload is drawn");
+  assert.equal(upload.src, `data:${PIXEL.contentType};base64,${PIXEL.base64}`);
+  assert.equal(
+    description.querySelector('img[alt="pixel"]'),
+    null,
+    "an image elsewhere is not drawn",
+  );
+  assert.match(description.textContent ?? "", /pixel/u, "it stands as its link");
 
   const entries = [...tab.querySelectorAll(".pull-request-entry")];
   assert.equal(entries.length, 2);
   assert.match(entries[0]?.textContent ?? "", /Changes requested/u);
   assert.match(entries[0]?.textContent ?? "", /Rename the flag\./u);
+  assert.equal(
+    entries[1]?.querySelector('[data-streamdown="strong"]')?.textContent,
+    "long",
+    "a comment too long for its rendering stands as its words",
+  );
   const more =
     entries[1]?.querySelector<HTMLButtonElement>(".pull-request-more") ??
     assert.fail("a cut comment sends the reader to GitHub");
@@ -305,7 +381,7 @@ test("a merged pull request says so on the bar, as its overview read it, says no
     ...OVERVIEW,
     state: PULL_REQUEST_STATE.MERGED,
     mergedAt: 9_000,
-    body: "",
+    html: "",
     checks: [],
     conversation: [],
   };

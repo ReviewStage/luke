@@ -62,6 +62,7 @@ interface PullOverrides {
   readonly merged_at?: string | null;
   readonly mergeable_state?: string;
   readonly body?: string | null;
+  readonly body_html?: string | null;
 }
 
 /** The pull request as GitHub answers it whole, open and ready unless said otherwise. */
@@ -78,6 +79,7 @@ function pull(overrides: PullOverrides = {}) {
     deletions: 3,
     changed_files: 2,
     body: "Sends the invite **once**.",
+    body_html: '<p dir="auto">Sends the invite <strong>once</strong>.</p>',
     base: { ref: "main" },
     head: { ref: "luke/invite-once", sha: HEAD_SHA },
     created_at: "2026-10-15T09:00:00Z",
@@ -111,6 +113,11 @@ function repository(answers: {
 }): RepositoryScript {
   return (sent) => {
     const { pathname } = new URL(sent.url);
+    // Note that the bodies are GitHub's to render, so a read of one that does not ask for its rendering is refused.
+    const rendered = sent.headers.get("accept") === "application/vnd.github.full+json";
+    if ([PULL, COMMENTS, `${PULL}/reviews`].includes(pathname) && !rendered) {
+      return Response.json({ message: "Unsupported Media Type" }, { status: 415 });
+    }
     if (pathname === PULL && answers.pull !== undefined) return Response.json(answers.pull);
     if (pathname === `${COMMIT}/check-runs`) {
       const runs = answers.checkRuns ?? [];
@@ -182,12 +189,14 @@ it.layer(getTestDB())("a pull request's overview", (it) => {
               {
                 user: CHARLES,
                 body: "Why twice before?",
+                body_html: '<p dir="auto">Why twice before?</p>',
                 created_at: "2026-10-15T10:00:00Z",
                 html_url: `${PAGE}#issuecomment-1`,
               },
               {
                 user: PRIYA,
                 body: "   ",
+                body_html: "",
                 created_at: "2026-10-15T10:01:00Z",
                 html_url: `${PAGE}#issuecomment-2`,
               },
@@ -210,6 +219,7 @@ it.layer(getTestDB())("a pull request's overview", (it) => {
                 user: PRIYA,
                 state: "CHANGES_REQUESTED",
                 body: "Rename the flag.",
+                body_html: '<p dir="auto">Rename the flag.</p>',
                 submitted_at: "2026-10-15T09:45:00Z",
                 html_url: `${PAGE}#pullrequestreview-4`,
               },
@@ -226,7 +236,8 @@ it.layer(getTestDB())("a pull request's overview", (it) => {
         const asPriya = { login: PRIYA.login, bot: false, avatarUrl: PRIYA.avatar_url };
         assert.ok(overview !== undefined);
         assert.equal(overview.state, PULL_REQUEST_STATE.OPEN);
-        assert.equal(overview.body, "Sends the invite **once**.");
+        assert.equal(overview.html, '<p dir="auto">Sends the invite <strong>once</strong>.</p>');
+        assert.equal(overview.cut, false);
         assert.equal(overview.base, "main");
         assert.equal(overview.head, "luke/invite-once");
         assert.equal(overview.createdAt, Date.parse("2026-10-15T09:00:00Z"));
@@ -259,7 +270,8 @@ it.layer(getTestDB())("a pull request's overview", (it) => {
             kind: CONVERSATION_ENTRY.REVIEW,
             by: asPriya,
             state: REVIEW_STATE.CHANGES_REQUESTED,
-            body: "Rename the flag.",
+            html: '<p dir="auto">Rename the flag.</p>',
+            body: "",
             cut: false,
             at: Date.parse("2026-10-15T09:45:00Z"),
             url: `${PAGE}#pullrequestreview-4`,
@@ -267,7 +279,8 @@ it.layer(getTestDB())("a pull request's overview", (it) => {
           {
             kind: CONVERSATION_ENTRY.COMMENT,
             by: asCharles,
-            body: "Why twice before?",
+            html: '<p dir="auto">Why twice before?</p>',
+            body: "",
             cut: false,
             at: Date.parse("2026-10-15T10:00:00Z"),
             url: `${PAGE}#issuecomment-1`,
@@ -276,6 +289,7 @@ it.layer(getTestDB())("a pull request's overview", (it) => {
             kind: CONVERSATION_ENTRY.REVIEW,
             by: asCharles,
             state: REVIEW_STATE.APPROVED,
+            html: null,
             body: "",
             cut: false,
             at: Date.parse("2026-10-15T11:00:00Z"),
@@ -286,7 +300,7 @@ it.layer(getTestDB())("a pull request's overview", (it) => {
   );
 
   it.effect(
-    "a merged pull request says when, one GitHub has not yet worked out reads as unknown, a comment past the bound is cut and says so, and checks the App may not read are listed as none",
+    "a merged pull request says when, one GitHub has not yet worked out reads as unknown, a description or comment whose rendering runs past its bound says so, and checks the App may not read are listed as none",
     () =>
       Effect.gen(function* () {
         const workspace = yield* openWorkspace(yield* linkedAccount(CHARLES.id));
@@ -299,13 +313,15 @@ it.layer(getTestDB())("a pull request's overview", (it) => {
               merged: true,
               merged_at: "2026-10-16T12:00:00Z",
               mergeable_state: "unknown",
-              body: null,
+              body: "A long description.",
+              body_html: `<p>${"x".repeat(OVERVIEW_BOUNDS.MAX_BODY_HTML_CHARS)}</p>`,
             }),
             checkRuns: Response.json({ message: "Resource not accessible" }, { status: 403 }),
             comments: [
               {
                 user: CHARLES,
                 body: long,
+                body_html: `<p>${"x".repeat(OVERVIEW_BOUNDS.MAX_ENTRY_HTML_CHARS)}</p>`,
                 created_at: "2026-10-15T10:00:00Z",
                 html_url: `${PAGE}#issuecomment-1`,
               },
@@ -317,8 +333,14 @@ it.layer(getTestDB())("a pull request's overview", (it) => {
         assert.equal(overview.state, PULL_REQUEST_STATE.MERGED);
         assert.equal(overview.mergedAt, Date.parse("2026-10-16T12:00:00Z"));
         assert.equal(overview.merge, MERGE_STATE.UNKNOWN);
-        assert.equal(overview.body, "");
+        assert.equal(overview.html, "");
+        assert.equal(overview.cut, true, "a description too long to carry says so");
         assert.deepEqual(overview.checks, []);
+        assert.equal(
+          overview.conversation[0]?.html,
+          null,
+          "a rendering past its bound gives way to the words",
+        );
         assert.equal(overview.conversation[0]?.cut, true);
         assert.equal(overview.conversation[0]?.body.length, OVERVIEW_BOUNDS.MAX_ENTRY_CHARS);
       }),

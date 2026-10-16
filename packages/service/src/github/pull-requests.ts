@@ -175,6 +175,7 @@ const ReviewsSchema = Schema.Array(
     body: Schema.NullOr(Schema.String),
     submitted_at: Schema.optionalKey(Schema.NullOr(Schema.String)),
     html_url: Schema.optionalKey(Schema.String),
+    body_html: Schema.optionalKey(Schema.NullOr(Schema.String)),
   }),
 );
 
@@ -599,11 +600,13 @@ const everyPage = /* @__PURE__ */ Effect.fnUntraced(function* <A>(
   path: string,
   schema: Schema.Codec<readonly A[], unknown>,
   maxPages: number,
+  rendered = false,
 ) {
   const listed: A[] = [];
   for (let page = 1; page <= maxPages; page += 1) {
     const request = githubRead(path, token).pipe(
       HttpClientRequest.setUrlParams({ per_page: String(PEOPLE_PER_PAGE), page: String(page) }),
+      rendered ? withRendering : (each) => each,
     );
     const read = Option.getOrElse(yield* readOptional(request, schema), () => []);
     listed.push(...read);
@@ -650,10 +653,25 @@ export const pullRequestPeople = /* @__PURE__ */ Effect.fn("web/pullRequestPeopl
   };
 });
 
+/**
+ * GitHub's media type that answers a body beside its own rendering of it
+ * (`body_html`): the markdown rendered as github.com renders it, mentions,
+ * references, and emoji included, its uploads named by their assets.
+ */
+const FULL_MEDIA_TYPE = "application/vnd.github.full+json";
+
+/** A read asking for GitHub's rendering of every body it answers, beside the body. */
+function withRendering(
+  request: HttpClientRequest.HttpClientRequest,
+): HttpClientRequest.HttpClientRequest {
+  return HttpClientRequest.setHeader(request, "accept", FULL_MEDIA_TYPE);
+}
+
 /** A pull request read whole for its overview: what its pill says, and its description, branches, times, mergeability, and people. */
 const OverviewPullSchema = Schema.Struct({
   ...PullRequestSchema.fields,
   body: Schema.NullOr(Schema.String),
+  body_html: Schema.optionalKey(Schema.NullOr(Schema.String)),
   base: Schema.Struct({ ref: Schema.String }),
   created_at: Schema.String,
   merged_at: Schema.NullOr(Schema.String),
@@ -696,6 +714,7 @@ const IssueCommentsSchema = Schema.Array(
   Schema.Struct({
     user: Schema.NullOr(GitHubAccountSchema),
     body: Schema.optionalKey(Schema.NullOr(Schema.String)),
+    body_html: Schema.optionalKey(Schema.NullOr(Schema.String)),
     created_at: Schema.String,
     html_url: Schema.String,
   }),
@@ -727,7 +746,8 @@ const SUCCESS = "success";
 /** A pull request's overview as GitHub holds it, every account as GitHub names it. */
 export interface GitHubOverview {
   readonly pullRequest: GitHubPullRequest;
-  readonly body: string;
+  readonly html: string;
+  readonly cut: boolean;
   readonly base: string;
   readonly head: string;
   readonly createdAt: number;
@@ -744,6 +764,7 @@ export interface GitHubConversationEntry {
   readonly kind: (typeof CONVERSATION_ENTRY)[keyof typeof CONVERSATION_ENTRY];
   readonly account: GitHubAccount;
   readonly state: ReviewState | undefined;
+  readonly html: string | null;
   readonly body: string;
   readonly cut: boolean;
   readonly at: number;
@@ -854,17 +875,28 @@ function readListed<A>(
   );
 }
 
-/** An entry's words as a read carries them, and whether they were cut to fit. */
+/** An entry's words as a read carries them: GitHub's rendering, or the markdown and whether it was cut to fit. */
 interface EntryWords {
+  readonly html: string | null;
   readonly body: string;
   readonly cut: boolean;
+  /** Whether the entry said anything at all. */
+  readonly said: boolean;
 }
 
-/** An entry's words cut to the bound, and whether they were. */
-function wordsOf(body: string | null | undefined): EntryWords {
+/**
+ * An entry's words: GitHub's rendering where it sent one within its bound,
+ * else the markdown cut to its own bound, and whether it was.
+ */
+function wordsOf(body: string | null | undefined, html: string | null | undefined): EntryWords {
   const words = body?.trim() ?? "";
+  const rendered = html?.trim() ?? "";
+  if (rendered !== "" && rendered.length <= OVERVIEW_BOUNDS.MAX_ENTRY_HTML_CHARS) {
+    return { html: rendered, body: "", cut: false, said: words !== "" };
+  }
   const cut = words.length > OVERVIEW_BOUNDS.MAX_ENTRY_CHARS;
-  return { body: cut ? words.slice(0, OVERVIEW_BOUNDS.MAX_ENTRY_CHARS) : words, cut };
+  const kept = cut ? words.slice(0, OVERVIEW_BOUNDS.MAX_ENTRY_CHARS) : words;
+  return { html: null, body: kept, cut, said: words !== "" };
 }
 
 /**
@@ -880,8 +912,8 @@ function conversationOf(
   pageUrl: string,
 ): readonly GitHubConversationEntry[] {
   const said = comments.flatMap((comment): GitHubConversationEntry[] => {
-    const words = wordsOf(comment.body);
-    if (comment.user === null || words.body === "") return [];
+    const { said, ...words } = wordsOf(comment.body, comment.body_html);
+    if (comment.user === null || !said) return [];
     return [
       {
         kind: CONVERSATION_ENTRY.COMMENT,
@@ -895,9 +927,9 @@ function conversationOf(
   });
   const reviewed = reviews.flatMap((review): GitHubConversationEntry[] => {
     const state = GITHUB_REVIEW_STATE.get(review.state);
-    const words = wordsOf(review.body);
+    const { said, ...words } = wordsOf(review.body, review.body_html);
     if (review.user === null || state === undefined) return [];
-    if (state === REVIEW_STATE.COMMENTED && words.body === "") return [];
+    if (state === REVIEW_STATE.COMMENTED && !said) return [];
     return [
       {
         kind: CONVERSATION_ENTRY.REVIEW,
@@ -910,6 +942,14 @@ function conversationOf(
     ];
   });
   return [...said, ...reviewed].sort((a, b) => a.at - b.at).slice(-OVERVIEW_BOUNDS.MAX_ENTRIES);
+}
+
+/** The description as GitHub renders it, or none, with `cut`, where it runs past its bound. */
+function descriptionOf(html: string | null | undefined): { html: string; cut: boolean } {
+  const rendered = html?.trim() ?? "";
+  return rendered.length > OVERVIEW_BOUNDS.MAX_BODY_HTML_CHARS
+    ? { html: "", cut: true }
+    : { html: rendered, cut: false };
 }
 
 /**
@@ -925,7 +965,7 @@ export const pullRequestOverview = /* @__PURE__ */ Effect.fn("web/pullRequestOve
   number: number,
 ): Effect.fn.Return<Option.Option<GitHubOverview>, PullRequestReadFailure, HttpClient.HttpClient> {
   const path = `${repositoryPath(fullName)}/pulls/${number}`;
-  const read = yield* readOptional(githubRead(path, token), OverviewPullSchema);
+  const read = yield* readOptional(withRendering(githubRead(path, token)), OverviewPullSchema);
   if (Option.isNone(read)) return Option.none();
   const pull = read.value;
   const [checks, comments, reviews] = yield* Effect.all(
@@ -936,15 +976,16 @@ export const pullRequestOverview = /* @__PURE__ */ Effect.fn("web/pullRequestOve
         `${repositoryPath(fullName)}/issues/${number}/comments`,
         IssueCommentsSchema,
         COMMENTS_MAX_PAGES,
+        true,
       ),
-      everyPage(token, `${path}/reviews`, ReviewsSchema, PEOPLE_MAX_PAGES.REVIEWS),
+      everyPage(token, `${path}/reviews`, ReviewsSchema, PEOPLE_MAX_PAGES.REVIEWS, true),
     ],
     { concurrency: "unbounded" },
   );
   const pullRequest = pullRequestOf(pull);
   return Option.some({
     pullRequest,
-    body: (pull.body ?? "").slice(0, OVERVIEW_BOUNDS.MAX_BODY_CHARS),
+    ...descriptionOf(pull.body_html),
     base: nameOf(pull.base.ref),
     head: nameOf(pull.head.ref),
     createdAt: timeOf(pull.created_at) ?? 0,

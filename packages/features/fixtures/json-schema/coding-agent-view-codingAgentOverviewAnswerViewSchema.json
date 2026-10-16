@@ -27,9 +27,12 @@
                     "closed"
                   ]
                 },
-                "body": {
+                "html": {
                   "type": "string",
-                  "maxLength": 65536
+                  "maxLength": 200000
+                },
+                "cut": {
+                  "type": "boolean"
                 },
                 "base": {
                   "type": "string",
@@ -271,6 +274,17 @@
                           "requested"
                         ]
                       },
+                      "html": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "maxLength": 16000
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
                       "body": {
                         "type": "string",
                         "maxLength": 8000
@@ -289,6 +303,7 @@
                     "required": [
                       "kind",
                       "by",
+                      "html",
                       "body",
                       "cut",
                       "at",
@@ -304,7 +319,8 @@
                 "title",
                 "url",
                 "state",
-                "body",
+                "html",
+                "cut",
                 "base",
                 "head",
                 "createdAt",

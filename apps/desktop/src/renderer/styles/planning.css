@@ -1860,6 +1860,37 @@ button.pull-request-check:hover {
   font-size: 12.5px;
 }
 
+/* A task list stands as GitHub draws one: its boxes in the bullets' place. */
+.pull-request-words ul:has(> li > input[type="checkbox"]) {
+  padding-left: 0;
+  list-style: none;
+}
+
+.pull-request-words li > input[type="checkbox"] {
+  margin: 0 var(--space-6) 0 0;
+  vertical-align: middle;
+}
+
+/* A picture GitHub's rendering names, read through the service: as wide as
+   the words around it at most, at its own shape, and a quiet box of a
+   screenshot's shape while it is read. */
+.pull-request-picture {
+  display: inline-block;
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--space-4);
+  vertical-align: middle;
+}
+
+.pull-request-picture-waiting {
+  display: inline-block;
+  width: min(100%, 240px);
+  aspect-ratio: 16 / 10;
+  border-radius: var(--space-4);
+  background: var(--raised);
+  vertical-align: middle;
+}
+
 .pull-request-entry .changes-comment-state {
   flex: 0 0 auto;
   white-space: nowrap;

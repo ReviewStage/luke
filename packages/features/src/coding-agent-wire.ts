@@ -817,8 +817,10 @@ export const CONVERSATION_ENTRY = {
 } as const;
 
 export const OVERVIEW_BOUNDS = {
-  /** The most characters of a pull request's description a read carries: GitHub's own most, so none is cut. */
-  MAX_BODY_CHARS: 65_536,
+  /** The most characters of GitHub's rendering of a pull request's description a read carries; a longer one is carried as none, and says so. */
+  MAX_BODY_HTML_CHARS: 200_000,
+  /** The most characters of GitHub's rendering of one entry a read carries; a longer one is carried as its words in markdown, cut. */
+  MAX_ENTRY_HTML_CHARS: 16_000,
   /** The most checks one read lists; a head with more lists its first. */
   MAX_CHECKS: 100,
   /** The most entries of the conversation one read carries, the newest kept. */
@@ -853,13 +855,18 @@ export type PullRequestCheck = typeof pullRequestCheckSchema.Type;
 
 /**
  * One entry of a pull request's conversation: a comment on it, or a review
- * and where it left its reviewer; who; their words as markdown, cut at the
- * bound where `cut` says so; when, in epoch milliseconds; and its page.
+ * and where it left its reviewer; who; their words as GitHub renders them
+ * (`body_html`), or, where that runs past its bound or GitHub sent none,
+ * null with their words as markdown in `body`, cut at its bound where `cut`
+ * says so, and empty otherwise; when, in epoch milliseconds; and its page.
  */
 const conversationEntrySchema = EffectSchema.Struct({
   kind: EffectSchema.Literals(Object.values(CONVERSATION_ENTRY)),
   by: githubPersonSchema,
   state: EffectSchema.optionalKey(reviewStateSchema),
+  html: EffectSchema.NullOr(
+    EffectSchema.String.check(EffectSchema.isMaxLength(OVERVIEW_BOUNDS.MAX_ENTRY_HTML_CHARS)),
+  ),
   body: EffectSchema.String.check(EffectSchema.isMaxLength(OVERVIEW_BOUNDS.MAX_ENTRY_CHARS)),
   cut: EffectSchema.Boolean,
   at: countedNumber,
@@ -870,7 +877,9 @@ export type ConversationEntry = typeof conversationEntrySchema.Type;
 
 /**
  * One agent's pull request as its Pull request tab draws it (GET): where it
- * stands, its title, number, and page; its description as markdown; the
+ * stands, its title, number, and page; its description as GitHub renders
+ * it (`body_html`), empty where it has none, and none with `cut` where it
+ * runs past its bound; the
  * branch it merges into and the one it merges from; when it was opened, and
  * merged where it was; whether it would merge as it stands; every check on
  * its head; who opened it, who the agent writes as on GitHub, and its
@@ -885,7 +894,10 @@ export const codingAgentOverviewAnswerSchema = EffectSchema.Struct({
       title: EffectSchema.String,
       url: EffectSchema.String,
       state: EffectSchema.Literals(Object.values(PULL_REQUEST_STATE)),
-      body: EffectSchema.String.check(EffectSchema.isMaxLength(OVERVIEW_BOUNDS.MAX_BODY_CHARS)),
+      html: EffectSchema.String.check(
+        EffectSchema.isMaxLength(OVERVIEW_BOUNDS.MAX_BODY_HTML_CHARS),
+      ),
+      cut: EffectSchema.Boolean,
       base: overviewName,
       head: overviewName,
       createdAt: countedNumber,

@@ -21,6 +21,7 @@ import {
   type CodingAgentAgentAnswer,
   type CodingAgentChangesAnswerView,
   type CodingAgentDefaultAnswer,
+  type CodingAgentGitHubImageView,
   type CodingAgentInboxAnsweredView,
   type CodingAgentInboxAnswerView,
   type CodingAgentInboxAttachmentView,
@@ -37,6 +38,8 @@ import {
   codingAgentChooseParamsSchema,
   codingAgentDefaultAnswerViewSchema,
   codingAgentDefaultWriteParamsSchema,
+  codingAgentGitHubImageParamsSchema,
+  codingAgentGitHubImageViewSchema,
   codingAgentInboxAnsweredViewSchema,
   codingAgentInboxAnswerParamsSchema,
   codingAgentInboxAnswerViewSchema,
@@ -415,6 +418,8 @@ export const ACT_KIND = {
   CODING_AGENTS_CHANGES: "codingAgents.changes",
   /** One agent's pull request's description, checks, reviewers, and conversation, which its Pull request tab draws. */
   CODING_AGENTS_OVERVIEW: "codingAgents.overview",
+  /** One image an agent's pull request's overview names, its bytes read by the service on the App's token. */
+  CODING_AGENTS_GITHUB_IMAGE: "codingAgents.githubImage",
   /** The account's automations: listed, made, changed, deleted, run now, and one's runs read. */
   AUTOMATIONS_LIST: "automations.list",
   AUTOMATIONS_CREATE: "automations.create",
@@ -1199,6 +1204,11 @@ export const ACT = {
       isReadable(codingAgentOverviewAnswerViewSchema),
     ),
     refusal: "Could not read the agent's pull request on this system.",
+  },
+  [ACT_KIND.CODING_AGENTS_GITHUB_IMAGE]: {
+    payload: actSchema(codingAgentGitHubImageParamsSchema),
+    result: wireResult<CodingAgentGitHubImageView>(isReadable(codingAgentGitHubImageViewSchema)),
+    refusal: "Could not read the pull request's image on this system.",
   },
   [ACT_KIND.AUTOMATIONS_LIST]: {
     payload: actSchema(automationListParamsSchema),

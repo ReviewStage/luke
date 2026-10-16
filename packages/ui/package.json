@@ -22,6 +22,7 @@
     "./task-list-model": "./src/task-list-model.js",
     "./integration-search": "./src/integration-search.js",
     "./agent-servers-model": "./src/agent-servers-model.js",
+    "./github-html": "./src/github-html.js",
     "./held-link": "./src/held-link.js",
     "./link-route": "./src/link-route.js",
     "./link-glue": "./src/link-glue.js",

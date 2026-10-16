@@ -29,6 +29,8 @@ import {
   type CodingAgentChangesAnswerView,
   type CodingAgentChooseParams,
   type CodingAgentDefaultAnswer,
+  type CodingAgentGitHubImageParams,
+  type CodingAgentGitHubImageView,
   type CodingAgentInboxAnsweredView,
   type CodingAgentInboxAnswerParams,
   type CodingAgentInboxAnswerView,
@@ -57,6 +59,7 @@ import {
   codingAgentAgentAnswerSchema,
   codingAgentChangesAnswerViewSchema,
   codingAgentDefaultAnswerViewSchema,
+  codingAgentGitHubImageViewSchema,
   codingAgentInboxAnsweredViewSchema,
   codingAgentInboxAnswerViewSchema,
   codingAgentInboxAttachmentViewSchema,
@@ -500,6 +503,10 @@ export interface HostOperator {
   codingAgentChanges(
     params: CodingAgentPullRequestParams,
   ): Effect.Effect<CodingAgentChangesAnswerView>;
+  /** One image an agent's pull request's overview names, read by the service on the App's token; or why there is none. */
+  codingAgentGitHubImage(
+    params: CodingAgentGitHubImageParams,
+  ): Effect.Effect<CodingAgentGitHubImageView>;
   /** One agent's pull request as its Pull request tab draws it: its description, checks, reviewers, and conversation as GitHub holds them; or why there is none. */
   codingAgentOverview(
     params: CodingAgentPullRequestParams,
@@ -1439,6 +1446,11 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_CHANGES, { agentId: params.agentId }),
         codingAgentAnswer(codingAgentChangesAnswerViewSchema),
+      ),
+    codingAgentGitHubImage: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_GITHUB_IMAGE, params),
+        codingAgentAnswer(codingAgentGitHubImageViewSchema),
       ),
     codingAgentOverview: (params) =>
       Effect.map(

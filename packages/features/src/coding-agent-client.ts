@@ -23,6 +23,7 @@ import {
   type CodingAgentCallFailure,
   type CodingAgentChangesAnswerView,
   type CodingAgentDefaultAnswer,
+  type CodingAgentGitHubImageView,
   type CodingAgentInboxAnsweredView,
   type CodingAgentInboxAnswerView,
   type CodingAgentInboxAttachmentView,
@@ -35,6 +36,7 @@ import {
   type CodingAgentWorkspaceListParams,
   type DictationTranscribeAnswerView,
   type DictationTranscribeParams,
+  githubImageTypeSchema,
   type PlanTemplateAnswerView,
   type PlanTemplateRevisionAnswerView,
   type PlanTemplateRevisionParams,
@@ -98,6 +100,7 @@ import {
 import { type RepositoryUnreached, repositoryNotReachableSchema } from "./repository-reach-wire.js";
 import {
   agentChangesPath,
+  agentGitHubImagePath,
   agentInboxPath,
   agentMessagesPath,
   agentOverviewPath,
@@ -737,6 +740,33 @@ export class HostedCodingAgentClient {
           );
         }
         return readImage(answer.response);
+      },
+    );
+  }
+
+  /**
+   * One image an agent's pull request's overview names, by the address
+   * GitHub's rendering spelled, fetched under the account: its bytes in
+   * base64 under the type GitHub served; not found where GitHub answers no
+   * image the window draws; unanswered for anything else.
+   */
+  githubImage(
+    agentId: string,
+    src: string,
+  ): Effect.Effect<CodingAgentGitHubImageView, never, HttpClient.HttpClient> {
+    return Effect.flatMap(
+      this.#call.send({ method: HTTP_METHOD.GET, path: agentGitHubImagePath(agentId, src) }),
+      (answer): Effect.Effect<CodingAgentGitHubImageView> => {
+        if (!callAnswered(answer)) return Effect.succeed(UNANSWERED);
+        if (!answer.response.ok) {
+          return Effect.map(jsonOf(answer.response), (body) =>
+            refusedAs(unparsedWire(body), ROW_REFUSALS),
+          );
+        }
+        return Effect.map(
+          imageBodyOf(answer.response, githubImageTypeSchema),
+          (image) => image ?? UNANSWERED,
+        );
       },
     );
   }

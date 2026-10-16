@@ -16,6 +16,7 @@ import {
   codingAgentSummarySchema,
 } from "./coding-agent-wire.js";
 import { dictationAnswerSchema, dictationRequestSchema } from "./dictation-wire.js";
+import { GITHUB_IMAGE_BOUNDS, GITHUB_IMAGE_TYPE } from "./github-image.js";
 import {
   inboxAnsweredSchema,
   inboxAnswerRequestSchema,
@@ -428,3 +429,32 @@ export const codingAgentInboxAttachmentViewSchema = EffectSchema.Union([
 ]);
 
 export type CodingAgentInboxAttachmentView = typeof codingAgentInboxAttachmentViewSchema.Type;
+
+/** One image an agent's pull request's overview names, as the window asks for it: the agent, and the address GitHub's rendering spelled. */
+export const codingAgentGitHubImageParamsSchema = EffectSchema.Struct({
+  agentId: EffectSchema.NonEmptyString,
+  src: EffectSchema.NonEmptyString.check(
+    EffectSchema.isMaxLength(GITHUB_IMAGE_BOUNDS.MAX_URL_CHARS),
+  ),
+});
+
+export type CodingAgentGitHubImageParams = typeof codingAgentGitHubImageParamsSchema.Type;
+
+/** The media types an image read from GitHub may be. */
+export const githubImageTypeSchema = EffectSchema.Literals(Object.values(GITHUB_IMAGE_TYPE));
+
+/**
+ * That image, as the window hears it: its bytes in base64 under the type
+ * GitHub served, which the window draws from a `data:` URL of its own
+ * making, or why there is none. The service read it on the App's token, so
+ * the window holds no signed address and asks GitHub nothing itself.
+ */
+export const codingAgentGitHubImageViewSchema = EffectSchema.Union([
+  EffectSchema.Struct({
+    contentType: githubImageTypeSchema,
+    base64: EffectSchema.String,
+  }),
+  failed,
+]);
+
+export type CodingAgentGitHubImageView = typeof codingAgentGitHubImageViewSchema.Type;
