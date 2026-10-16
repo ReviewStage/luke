@@ -193,7 +193,9 @@ new-task page, which leaves the task, and the new-task page closes the panel. Es
 - A pinned task stands under **Pinned**, a section above Tasks drawn only
   while any task is pinned, newest pinned first, which no view filters. A
   pinned agent with no task stands there among the pinned tasks, ordered the
-  same way, and leaves its place among the tasks.
+  same way, and leaves its place among the tasks. ⌘K offers Pin task or
+  Unpin task for the task on screen, through its row menu's own Pin, and
+  none for an archived task.
 - An archived task leaves the list. View options' **Archived tasks** turns
   the Tasks section to the archived tasks, grouped and ordered as the view
   says, the pins standing aside, with an Archived chip whose × goes back; it
