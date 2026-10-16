@@ -395,6 +395,27 @@
     outline-offset: var(--focus-ring-offset);
   }
 
+  /* The keyboard scrolls a control in with its ring's reach to spare, so a
+     row brought to a scroller's edge is not left with its ring sliced off
+     there; a scroller that fades an edge scroll-pads by the fade as well, so
+     the row is not left under it. Every control rather than the one focused,
+     because the scroll is measured as focus lands, before a rule on the
+     focus could take part. */
+  :is(
+    button,
+    a[href],
+    summary,
+    input[type="checkbox"],
+    [role="button"],
+    [role="tab"],
+    [role="switch"],
+    [role="option"],
+    [role="menuitem"],
+    [role="menuitemcheckbox"]
+  ) {
+    scroll-margin: var(--focus-ring-reach);
+  }
+
   :root:not([data-keyboard="true"])
     :focus-visible:not(textarea, [contenteditable], input:not([type="checkbox"])) {
     outline: none; /* no ring: a press moved focus, not the keyboard */

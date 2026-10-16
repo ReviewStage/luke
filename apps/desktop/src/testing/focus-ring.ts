@@ -226,6 +226,16 @@ export function ringOf(element: Element): Ring | undefined {
   };
 }
 
+/** How far past an element its scroll stops short, `scroll-margin`, in pixels: the room the keyboard scrolls it in with. */
+export function scrollRoomOf(element: Element): number {
+  return Number.parseFloat(getComputedStyle(element).getPropertyValue("scroll-margin")) || 0;
+}
+
+/** How far a ring stands past its element's edge, its reach; none where it is drawn inside. */
+export function reachOf(ring: Ring): number {
+  return Math.max(0, ring.offset + ring.width);
+}
+
 /** How far a box that clips lets what it holds be drawn past its edge: an `overflow: clip` box's margin, none for any other. */
 function clipRoom(style: CSSStyleDeclaration): number {
   if (style.overflow !== "clip") return 0;
@@ -242,7 +252,7 @@ function clipRoom(style: CSSStyleDeclaration): number {
  */
 export function ringClippedBy(element: Element): Element | undefined {
   const ring = ringOf(element);
-  if (ring === undefined || ring.offset + ring.width <= 0) return undefined;
+  if (ring === undefined || reachOf(ring) === 0) return undefined;
   // Note that the window's own root boxes are left out: they clip at the window's edge, which nothing is drawn against.
   for (
     let box = element.parentElement;
@@ -252,7 +262,7 @@ export function ringClippedBy(element: Element): Element | undefined {
     const style = getComputedStyle(box);
     const axes = [style.overflow, style.overflowX, style.overflowY];
     if (!axes.some((value) => value === "hidden" || value === "clip")) continue;
-    if (clipRoom(style) < ring.offset + ring.width) return box;
+    if (clipRoom(style) < reachOf(ring)) return box;
   }
   return undefined;
 }

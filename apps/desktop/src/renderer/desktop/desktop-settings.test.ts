@@ -16,6 +16,13 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { onRegistry } from "#testing/copy-feedback";
+import {
+  focusByKeyboard,
+  layWindowStyles,
+  reachOf,
+  ringOf,
+  scrollRoomOf,
+} from "#testing/focus-ring";
 import { useAct } from "../act";
 import { runAppCommand } from "../app-commands";
 import { type CallCardInput, callControls } from "../call/call-card";
@@ -396,6 +403,46 @@ test("the Integrations page's search is cleared when another page is turned to",
   openPage(page, "Integrations");
 
   assert.equal(fieldNamed(page, PAGE_SEARCH)?.value, "");
+});
+
+test("the keyboard scrolls a page's row in with its ring to spare, and the plan template's words in clear of the fade at its top", async () => {
+  const styles = await layWindowStyles();
+  Object.defineProperty(window, "luke", {
+    configurable: true,
+    value: {
+      ...window.luke,
+      act: (request: { kind: string }) =>
+        Promise.resolve(
+          request.kind === ACT_KIND.PLAN_TEMPLATE_READ
+            ? { status: ACT_OUTCOME_STATUS.DONE, value: { template: "# Context\n", custom: false } }
+            : { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." },
+        ),
+    },
+  });
+  const page = mount(createElement(SettingsHarness, { opensOn: SETTINGS_VIEW.PLAN_TEMPLATE }));
+  await act(async () => {
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
+  for (const row of pageButtons(page)) {
+    focusByKeyboard(row);
+    const ring = ringOf(row);
+    assert.ok(ring, `${row.textContent} rings`);
+    assert.ok(
+      scrollRoomOf(row) >= reachOf(ring),
+      `${row.textContent} scrolls in with its ring's reach to spare`,
+    );
+  }
+  const scroller = page.querySelector(".template-document .plan-document-scroll");
+  assert.ok(scroller, "the template's words scroll");
+  const fade = Number.parseFloat(
+    getComputedStyle(document.documentElement).getPropertyValue("--scroll-fade"),
+  );
+  assert.ok(fade > 0, "the scroller's top fades");
+  assert.ok(
+    Number.parseFloat(getComputedStyle(scroller).getPropertyValue("scroll-padding-top")) >= fade,
+    "what the keyboard reaches there is scrolled in past the fade",
+  );
+  styles.remove();
 });
 
 test("the plan template's version history keeps a call's card at the foot of its versions, as Settings' page list held it, and its way back asks for the call's plan", async () => {
