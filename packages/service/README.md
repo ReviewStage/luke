@@ -863,7 +863,10 @@ server (`mcp.linear.app`), whose tokens Linear's GraphQL API refuses with a
 (`vercel connect create linear`), whose Linear API OAuth tokens the GraphQL
 API takes, and Linear's MCP server takes too, for the agents a workspace's
 grant is handed to. Give it the `read` scope at least, and user subjects.
-Without the variable, no workspace can connect Linear.
+Without the variable, no workspace can connect Linear. Since Linear's MCP
+server takes those tokens too, `LINEAR_CONNECTOR_UID` may name the same
+connector, which keeps Luke one app in Linear; its Linear app must be public
+for a workspace of any other Linear organization to sign in.
 
 **Slack's connector.** Slack's MCP server serves user tokens alone, and only
 ones issued by its own authorization server
