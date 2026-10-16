@@ -938,11 +938,18 @@ export const CODING_AGENT_SENDER = {
  * service words it, and what kind of sender it is, so the window draws Luke
  * as Luke, an automation as one, and GitHub as the login named; the kind is
  * absent from a service older than it. The window names nobody over the reader's own.
+ * Another coding agent of the workspace is named with no kind and marked
+ * `agent` instead, because a window reads `kind` as one of the words it
+ * knows and would refuse the whole page over a word it was built before,
+ * while it drops a key it does not know: an older build draws the agent as a
+ * sender it cannot place, under its name, and a newer one as an agent.
  */
 const codingAgentSenderSchema = EffectSchema.Struct({
   name: EffectSchema.String,
   userId: EffectSchema.optionalKey(EffectSchema.String),
   kind: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(CODING_AGENT_SENDER))),
+  /** That another coding agent of the workspace sent it, by its name; absent for any other sender and from a service older than it. */
+  agent: EffectSchema.optionalKey(EffectSchema.Literal(true)),
 });
 
 export type CodingAgentSender = typeof codingAgentSenderSchema.Type;

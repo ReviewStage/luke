@@ -1551,10 +1551,11 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           HOSTED_HTTP_STATUS.ACCEPTED,
           yield* ask(messageAs(other, agent.id, { text: "Not five.", clientKey: randomUUID() })),
         );
-        // Luke's line from a call and an automation's run's, written as their sends write them.
+        // Luke's line from a call, an automation's run's, and another coding agent's, written as their sends write them.
         for (const [text, sender] of [
           ["Rebase on main.", { kind: MESSAGE_SENDER.LUKE }],
           ["Triage the failures.", { kind: MESSAGE_SENDER.AUTOMATION, name: "Nightly triage" }],
+          ["Take the split view.", { kind: MESSAGE_SENDER.AGENT, name: "Add PR overview tab" }],
         ] as const) {
           yield* writer.writeAwaitingLine(
             target,
@@ -1584,6 +1585,8 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
             "Triage the failures.",
             { name: "Nightly triage", kind: CODING_AGENT_SENDER.AUTOMATION },
           ],
+          // Another agent is marked as one beside its name, with no kind an older window would refuse.
+          ["Take the split view.", { name: "Add PR overview tab", agent: true }],
         ];
         assert.deepEqual(yield* sendersAs(owner), named);
         assert.deepEqual(yield* sendersAs(other), named);

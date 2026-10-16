@@ -91,6 +91,12 @@
                   "automation",
                   "github"
                 ]
+              },
+              "agent": {
+                "type": "boolean",
+                "enum": [
+                  true
+                ]
               }
             },
             "required": [
