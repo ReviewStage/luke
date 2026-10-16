@@ -10,7 +10,7 @@ import {
 import { promptHashOf } from "@luke/database/models/content-addressed";
 import { childConversationId, hostTurnId } from "@luke/database/models/ids";
 import { sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
-import { CHAT_TOOL } from "@luke/features/chat-wire";
+import { CHAT_TOOL, MEMBER_KIND } from "@luke/features/chat-wire";
 import { CODING_AGENT_BRIEF, CONTEXT_WINDOW } from "@luke/features/coding-agent-wire";
 import { INBOX_TOOL } from "@luke/features/inbox-wire";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
@@ -39,6 +39,7 @@ import { delegatedChildOf, type HostAdmission, hostAdmission } from "../agent-ru
 import type { AgentSkill } from "../agent-runtime/skills.js";
 import { turnKindOf } from "../brain-host/auth.js";
 import { RELAY_TURN } from "../brain-host/bounds.js";
+import { wakingDoors } from "../brain-host/chat-wake.js";
 import {
   type AdmittedConversation,
   admitConversation,
@@ -87,7 +88,6 @@ import {
   readAsAgent,
   resolveAsAgent,
 } from "./chat.js";
-import { HELD_DOORS } from "./chat-notify.js";
 import {
   agentCiReadable,
   agentCoAuthor,
@@ -798,7 +798,8 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         const found = yield* agentOf(admitted);
         if (Result.isFailure(found)) return chatRejected(CHAT_TOOL_REFUSAL.NO_AGENT);
         const { id: agentId, taskId: planId, repository } = found.success;
-        const reader = { userId: admitted.target.userId, agentId, planId };
+        const self = { kind: MEMBER_KIND.AGENT, agentId };
+        const reader = { userId: admitted.target.userId, planId, self };
         if (call.tool === CHAT_TOOL.READ) return yield* readAsAgent(reader, call.input);
         if (call.tool === CHAT_TOOL.RESOLVE) return yield* resolveAsAgent(reader, call.input);
         // A notice reaches the receiving agent's session as the deployment acting for that agent's
@@ -811,7 +812,12 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
           secret === undefined || origin === undefined
             ? EVE_UNREACHED
             : compose({ origin, caller: { secret, account: starter }, mount: EVE_MOUNT.CODER });
-        const telling = { eveFor, writer: seams.writer(), doors: HELD_DOORS };
+        // A message to the plan's Luke wakes it on the planning brain, as the deployment for the account.
+        const brainEveFor = (account: string) =>
+          secret === undefined || origin === undefined
+            ? EVE_UNREACHED
+            : compose({ origin, caller: { secret, account } });
+        const telling = { eveFor, writer: seams.writer(), doors: wakingDoors(brainEveFor) };
         const { clientKey, postsInTurn, sandbox } = call;
         return yield* postAsAgent({ ...reader, repository, telling }, call.input, {
           clientKey,

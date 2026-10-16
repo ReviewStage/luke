@@ -61,7 +61,7 @@ export const ASK_REFUSAL = {
 type AskPost = typeof postChatAskInputSchema.Type;
 
 /** One ask as the agent reads it back: its key and place, where it stands, what it asks while open, and what came of it. */
-export interface AskLine {
+export type AskLine = {
   readonly key: string;
   readonly seq: number;
   readonly in: string;
@@ -73,7 +73,7 @@ export interface AskLine {
   readonly answer?: ChatReply;
   readonly answeredBy?: string;
   readonly closedReason?: string;
-}
+};
 
 /** What a post's pictures came to: the blocks as the message keeps them, each image by its attachment, and the pictures to keep. */
 export interface PostPictures {
@@ -122,13 +122,17 @@ function responseRefusal(response: ChatResponse): string | undefined {
 }
 
 /**
- * A code block's own refusal: lines of another repository than the agent's
- * own, which the desktop reads through the plan's repository alone, or a
- * range running backwards or past the bound. Note that GitHub spells a
- * repository's name in any case, so the names are compared without it.
+ * A code block's own refusal: lines of another repository than the
+ * poster's own, which the desktop reads through the plan's repository
+ * alone, so a plan with none takes no code block, or a range running
+ * backwards or past the bound. Note that GitHub spells a repository's name
+ * in any case, so the names are compared without it.
  */
-function codeRefusal(blocks: readonly ChatPostBlock[], repository: string): string | undefined {
-  const own = repository.toLowerCase();
+function codeRefusal(
+  blocks: readonly ChatPostBlock[],
+  repository: string | null,
+): string | undefined {
+  const own = repository?.toLowerCase();
   for (const block of blocks) {
     if (block.type !== CHAT_BLOCK.CODE) continue;
     if (block.repo.toLowerCase() !== own) return ASK_REFUSAL.CODE_REPOSITORY;
@@ -138,7 +142,7 @@ function codeRefusal(blocks: readonly ChatPostBlock[], repository: string): stri
 }
 
 /** A post's own refusal, before the store is asked: what its blocks' and its ask's shapes admit but a message cannot carry or ask, its words among its blocks. */
-export function askPostRefusal(post: AskPost, repository: string): string | undefined {
+export function askPostRefusal(post: AskPost, repository: string | null): string | undefined {
   if ((post.blocks?.length ?? 0) >= CHAT_BOUNDS.MAX_BLOCKS) return ASK_REFUSAL.TOO_MANY_BLOCKS;
   const blocks = codeRefusal(post.blocks ?? [], repository);
   if (blocks !== undefined) return blocks;

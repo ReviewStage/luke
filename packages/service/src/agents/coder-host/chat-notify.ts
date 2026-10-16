@@ -66,7 +66,8 @@ import { steerCodingAgent } from "./steer.js";
  * nothing is stamped, since each can be undone: its session and transcript
  * are its starter's, and workspace chat reaches no one outside it; one whose session eve no longer runs has left for good and
  * is stamped so, and hears nothing more. A notice that could not be handed
- * over is let go, so the next one is told. A post sent again under its key
+ * over is let go, so the next one is told; one the deployment reaches no eve
+ * for is held for the agent's next read. A post sent again under its key
  * is told again: the notice's key and the one outstanding notice keep that
  * from steering anyone twice, and it finishes a telling the first send did
  * not. A plan's planner and a person are handed to doors of
@@ -97,12 +98,12 @@ export type NoticeOutcome = (typeof NOTICE_OUTCOME)[keyof typeof NOTICE_OUTCOME]
  * What a post's poster reads back: the handles told now, held, and left, and the handles mentioned that name no member.
  * @public
  */
-export interface ChatReceipt {
+export type ChatReceipt = {
   readonly told: readonly string[];
   readonly held: readonly string[];
   readonly left: readonly string[];
   readonly unresolved: readonly string[];
-}
+};
 
 /**
  * A message as a door tells it: the message, the line that tells it, and who posted it.
@@ -114,10 +115,17 @@ export interface ChatNotice {
   readonly from: ChatMemberRow;
 }
 
+/** One door: a member told of a notice under the telling that posted it, answering what that came to. */
+export type ChatNoticeDoor = (
+  member: ChatMemberRow,
+  notice: ChatNotice,
+  telling: ChatTelling,
+) => Effect.Effect<NoticeOutcome, never, DatabaseServices>;
+
 /** How a planner and a person are told, each a door its own chain fills. */
 export interface ChatNoticeDoors {
-  readonly planner: (member: ChatMemberRow, notice: ChatNotice) => Effect.Effect<NoticeOutcome>;
-  readonly human: (member: ChatMemberRow, notice: ChatNotice) => Effect.Effect<NoticeOutcome>;
+  readonly planner: ChatNoticeDoor;
+  readonly human: ChatNoticeDoor;
 }
 
 /** The doors before Luke's report turn and the window's announcement fill them: each holds the message for the member's next read. */
@@ -128,11 +136,11 @@ export const HELD_DOORS: ChatNoticeDoors = {
 
 /**
  * What a door's caller needs to steer a coding agent: eve as the account an
- * agent was started by, which each notice is minted for, the writer, and
- * the account posting.
+ * agent was started by, which each notice is minted for, or nothing where
+ * the deployment reaches no eve, the writer, and the account posting.
  */
 export interface ChatTelling {
-  readonly eveFor: (starterUserId: string) => EveSessions;
+  readonly eveFor: (starterUserId: string) => EveSessions | undefined;
   readonly writer: Effect.Effect<StoreWriter>;
   readonly userId: string;
   readonly organizationId: string;
@@ -174,6 +182,20 @@ function senderOf(from: ChatMemberRow): LineSender {
     return { kind: MESSAGE_SENDER.MEMBER, userId: from.userId };
   }
   return { kind: MESSAGE_SENDER.AGENT, name: from.handle };
+}
+
+/**
+ * Who a notice's row says wrote it: the poster, by the kind of member it is
+ * and its handle, from the chat at the message's place.
+ * @public
+ */
+export function noticeMetadata(notice: ChatNotice) {
+  return {
+    author: AUTHOR_OF_KIND[notice.from.kind],
+    channel: MESSAGE_CHANNEL.CHAT,
+    chat_seq: notice.message.seq,
+    from: notice.from.handle,
+  } as const;
 }
 
 /** One block as a notice's line reads it, and a read of the chat: words as written, anything else named by what it is. */
@@ -264,28 +286,20 @@ function tellAgent(
       isWorkspaceMember(agent.value.userId, organizationId),
     );
     if (!starterStays) return NOTICE_OUTCOME.LEFT;
+    // A deployment that reaches no eve steers nothing, so the agent reads the message when it next reads.
+    const eve = telling.eveFor(agent.value.userId);
+    if (eve === undefined) return NOTICE_OUTCOME.HELD;
     const claimed = yield* hostedStoreOrUnavailable(
       markNoticed(userId, organizationId, member.id, notice.message.channelId, place),
     );
     if (!claimed) return NOTICE_OUTCOME.HELD;
     // Note that eve is the starter's, whose turn it steers, while the plan is read as the poster's, who may stay when the starter leaves.
-    const steered = yield* steerCodingAgent(
-      telling.eveFor(agent.value.userId),
-      telling.writer,
-      userId,
-      agent.value,
-      {
-        text: notice.text,
-        clientKey: chatNoticeKey(notice.message.id, notice.message.askRevision ?? 0, member.id),
-        sender: senderOf(notice.from),
-        metadata: {
-          author: AUTHOR_OF_KIND[notice.from.kind],
-          channel: MESSAGE_CHANNEL.CHAT,
-          chat_seq: notice.message.seq,
-          from: notice.from.handle,
-        },
-      },
-    ).pipe(Effect.result);
+    const steered = yield* steerCodingAgent(eve, telling.writer, userId, agent.value, {
+      text: notice.text,
+      clientKey: chatNoticeKey(notice.message.id, notice.message.askRevision ?? 0, member.id),
+      sender: senderOf(notice.from),
+      metadata: noticeMetadata(notice),
+    }).pipe(Effect.result);
     if (Result.isSuccess(steered)) return NOTICE_OUTCOME.TOLD;
     yield* hostedStoreOrUnavailable(releaseNotice(userId, organizationId, member.id, place));
     if (steered.failure.error === HOSTED_REFUSAL.AGENT_RETIRED.error) {
@@ -340,12 +354,12 @@ export function tellMessage(
         case MEMBER_KIND.AGENT:
           return Effect.map(tellAgent(telling, member, notice), (outcome) => ({ member, outcome }));
         case MEMBER_KIND.PLANNER:
-          return Effect.map(telling.doors.planner(member, notice), (outcome) => ({
+          return Effect.map(telling.doors.planner(member, notice, telling), (outcome) => ({
             member,
             outcome,
           }));
         case MEMBER_KIND.HUMAN:
-          return Effect.map(telling.doors.human(member, notice), (outcome) => ({
+          return Effect.map(telling.doors.human(member, notice, telling), (outcome) => ({
             member,
             outcome,
           }));

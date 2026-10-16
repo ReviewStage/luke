@@ -5,6 +5,7 @@ import {
   CHAT_REFUSAL,
   type ChatChannelRow,
   type ChatMemberRow,
+  type ChatMemberSubject,
   type ChatMessageRow,
   type ChatPost,
   type ChatPosted,
@@ -21,8 +22,10 @@ import {
   memberNamed,
   openAsksOf,
   openTopicChannel,
+  peekUnread,
   postAsk,
   postMessage,
+  readThrough,
   resolveAsk,
   roster,
   seqsOf,
@@ -63,13 +66,15 @@ import { blockWords, type ChatReceipt, type ChatTelling, tellMessage } from "./c
 import type { InboxSandboxDoor } from "./inbox-image.js";
 
 /**
- * chat.ts -- the coding agent's chat tools: post a message in its workspace's chat, and read it.
+ * chat.ts -- the chat tools of a coding agent and of its plan's Luke: post a message in the workspace's chat, and read it.
  *
  * A coding agent is a member of its plan's workspace's chat, `@agent-N`,
  * minted the first time it posts or reads (`chat-store.ts`), and talks
  * there with the other agents, the plan's Luke, and the people of the
- * workspace. A post goes to the agent's plan channel, or a planless
- * agent's to its workspace's general channel, unless it names a
+ * workspace. The plan's Luke, `@luke`, runs the same tools as the agent of
+ * this module's words, bound in the planner's own host
+ * (`../brain-host/chat.ts`). A post goes to the agent's plan channel, or a
+ * planless agent's to its workspace's general channel, unless it names a
  * channel by `#name`, which a name no channel holds opens as a topic
  * channel, a member's DM by `@handle`, or a message to answer in its
  * thread; it is told to the members it addresses through the one door a
@@ -179,27 +184,27 @@ export const CHAT_TOOL_REFUSAL = {
 } as const;
 
 /** A member as a read lists it: its handle, its kind, and whether it has left. */
-interface MemberLine {
+type MemberLine = {
   readonly handle: string;
   readonly kind: MemberKind;
   readonly left?: true;
-}
+};
 
 /** A channel as a read lists it: how a post names it, its kind, and what the reader has not read in it. */
-interface ChannelLine {
+type ChannelLine = {
   readonly name: string;
   readonly kind: ChannelKind;
   readonly unread: number;
-}
+};
 
 /** A message as the agent reads it: its place, where it was said, who said it, the thread it replies in by its root's place, and its words. */
-interface MessageLine {
+export type MessageLine = {
   readonly seq: number;
   readonly in: string;
   readonly from: string;
   readonly thread?: number;
   readonly text: string;
-}
+};
 
 /**
  * What a post answers: its place, where it was said or the root of the
@@ -208,13 +213,13 @@ interface MessageLine {
  * addresses failed, who read it when they next read; and the agent's asks
  * where it asked.
  */
-interface PostedLine extends ChatReceipt {
+type PostedLine = ChatReceipt & {
   readonly seq: number;
   readonly in?: string;
   readonly thread?: number;
   readonly untold?: true;
   readonly asks?: readonly AskLine[];
-}
+};
 
 /** What a call answers, as the model reads it: the post's receipt, the chat as read, or why the call did nothing. */
 export type ChatToolResult =
@@ -231,16 +236,19 @@ export type ChatToolResult =
   | { readonly status: typeof ACTION_RESULT_STATUS.ACCEPTED; readonly asks: readonly AskLine[] }
   | { readonly status: typeof ACTION_RESULT_STATUS.REJECTED; readonly reason: string };
 
-/** The agent a read is made for: the account that started it, whose standing reaches the chat, the agent, and its plan, none for a planless agent. */
+/** Who a call speaks as: a coding agent, or the plan's Luke. */
+type ChatSelf = Exclude<ChatMemberSubject, { readonly kind: typeof MEMBER_KIND.HUMAN }>;
+
+/** The agent a read is made for: the account whose standing reaches the chat, the plan the agent is on, none for a planless agent, and the member it speaks as. */
 export interface ChatReader {
   readonly userId: string;
-  readonly agentId: string;
   readonly planId: string | null;
+  readonly self: ChatSelf;
 }
 
-/** The agent a post is made for: its repository as `owner/name`, which its code blocks must name, and how its posts are told. */
+/** The agent a post is made for: its repository as `owner/name`, which its code blocks must name, nothing where it has none, and how its posts are told. */
 export interface ChatAgent extends ChatReader {
-  readonly repository: string;
+  readonly repository: string | null;
   readonly telling: Omit<ChatTelling, "userId" | "organizationId">;
 }
 
@@ -322,7 +330,9 @@ function atHandle(handle: string): string {
 function homeOf(agent: ChatReader): ChatStoreEffect<Option.Option<ChatChannelRow>> {
   return Effect.gen(function* () {
     if (agent.planId !== null) return yield* ensurePlanChannel(agent.userId, agent.planId);
-    const workspace = yield* agentWorkspace(agent.userId, agent.agentId);
+    // Only a coding agent is planless; a plan's Luke always stands on its plan.
+    if (agent.self.kind !== MEMBER_KIND.AGENT) return Option.none();
+    const workspace = yield* agentWorkspace(agent.userId, agent.self.agentId);
     if (Option.isNone(workspace)) return Option.none();
     return yield* ensureGeneral(agent.userId, workspace.value);
   });
@@ -349,10 +359,7 @@ function seatOf(
     yield* Effect.forEach(unminted, (each) =>
       ensureMember(userId, organizationId, { kind: MEMBER_KIND.AGENT, agentId: each.id }),
     );
-    const self = yield* ensureMember(userId, organizationId, {
-      kind: MEMBER_KIND.AGENT,
-      agentId: agent.agentId,
-    });
+    const self = yield* ensureMember(userId, organizationId, agent.self);
     return Option.map(self, (member) => ({ organizationId, home: home.value, self: member }));
   });
 }
@@ -854,8 +861,8 @@ export function chatDigest(
       const found = yield* seatOf(agent);
       if (Option.isNone(found)) return undefined;
       const { organizationId, self } = found.value;
-      const noticed =
-        self.noticeSeq !== null && self.noticeSeq > self.readSeq ? self.noticeSeq : undefined;
+      // A notice that stands is one not read past, since a read past it lets it go.
+      const noticed = self.noticeSeq ?? undefined;
       const read = yield* unreadFor(userId, organizationId, self.id, { limit: DIGEST_MESSAGES });
       const { messages: unread, more } = Option.getOrElse(read, () => ({
         messages: [],
@@ -879,4 +886,52 @@ export function chatDigest(
     Effect.tapError(logStoreFailure),
     Effect.catch(() => Effect.succeed(undefined)),
   );
+}
+
+/**
+ * What the agent has not read, as lines, marking nothing: at most the
+ * bound, oldest change first, whether more wait past them, and the place
+ * `readThroughAsAgent` moves its cursor to once they are taken in. What a
+ * turn opens with, where its tools would read the same; nothing where the
+ * agent has no seat.
+ */
+export function peekAsAgent(
+  agent: ChatReader,
+  limit: number,
+): ChatStoreEffect<
+  Option.Option<{
+    readonly messages: readonly MessageLine[];
+    readonly more: boolean;
+    readonly through: number;
+  }>
+> {
+  return Effect.gen(function* () {
+    const { userId } = agent;
+    const found = yield* seatOf(agent);
+    if (Option.isNone(found)) return Option.none();
+    const { organizationId, self } = found.value;
+    const unread = yield* peekUnread(userId, organizationId, self.id, limit);
+    if (Option.isNone(unread)) return Option.none();
+    const { messages, more, through } = unread.value;
+    const members = new Map((yield* roster(userId, organizationId)).map((row) => [row.id, row]));
+    const names = channelNames(yield* channelsOf(userId, organizationId), self, members);
+    const roots = yield* seqsOf(
+      userId,
+      organizationId,
+      messages.flatMap((message) => (message.parentId === null ? [] : [message.parentId])),
+    );
+    const named = { names, members, roots };
+    const lines = messages.map((message) => lineOf(message, named));
+    return Option.some({ messages: lines, more, through });
+  });
+}
+
+/** Marks what the agent has not read as read through the place a peek named, never back; nothing where the agent has no seat. */
+export function readThroughAsAgent(agent: ChatReader, through: number): ChatStoreEffect<void> {
+  return Effect.gen(function* () {
+    const found = yield* seatOf(agent);
+    if (Option.isNone(found)) return;
+    const { organizationId, self } = found.value;
+    yield* readThrough(agent.userId, organizationId, self.id, through);
+  });
 }

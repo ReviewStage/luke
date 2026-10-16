@@ -242,6 +242,10 @@ operators, like an agent's transcript. Every person in the workspace can
 read every channel and every direct message, one between two other people
 included; a coding agent and Luke read the channels and only their own
 direct messages, and only a direct message's two members post in it.
+Luke's planning model posts as its plan's Luke where you ask it to, and at
+the start of each of its turns reads what was said in the chat since it last
+read, up to 20 messages, sent to the model provider with the rest of the
+turn.
 Deleting a plan deletes its channel with its messages, deleting your account
 deletes your messages, and deleting the workspace deletes its chat.
 

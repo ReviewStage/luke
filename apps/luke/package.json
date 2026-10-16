@@ -19,6 +19,7 @@
     "@better-auth/oauth-provider": "1.7.7",
     "@effect/sql-pg": "catalog:",
     "@luke/database": "workspace:*",
+    "@luke/features": "workspace:*",
     "@luke/service": "workspace:*",
     "@luke/wire": "workspace:*",
     "@vercel/connect": "2.4.1",

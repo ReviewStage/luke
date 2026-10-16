@@ -105,6 +105,7 @@ import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
 import { TASK_LIST_ARCHIVED, taskListAnswerSchema } from "@luke/features/task-wire";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
+import { isTextUIPart } from "ai";
 import { and, eq } from "drizzle-orm";
 import {
   Clock,
@@ -155,6 +156,7 @@ import {
 } from "../testing/github-app-fake.js";
 import { CONNECTOR_ASKED_NOTHING, integrationConnectOf } from "../testing/integration-connect.js";
 import { BRAIN_HOST_TURN } from "./brain-host/bounds.js";
+import { wakingDoors } from "./brain-host/chat-wake.js";
 import {
   EVE_CANCEL_OUTCOME,
   EVE_RESET_OUTCOME,
@@ -163,6 +165,7 @@ import {
   type EveSessions,
   EveUnreachable,
 } from "./brain-host/eve-sessions.js";
+import { CHAT_TURN_SIGN, PLANNING_INSTRUCTIONS } from "./brain-host/planning.js";
 import { CODER } from "./coder-host/bounds.js";
 import {
   CHAT_DIGEST_HEADING,
@@ -2482,6 +2485,73 @@ it.layer(getTestDB())("telling a chat message to the agents it addresses", (it) 
     });
 
   it.effect(
+    "a DM to @luke opens a turn on the plan's conversation as a chat-marked line, a second while Luke has not read is held, and one after it reads is told",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const opened = yield* openChat(eve);
+        const chat = {
+          ...opened,
+          telling: {
+            ...opened.telling,
+            doors: wakingDoors((account) => eve.eve(`Bearer ${account}`)),
+          },
+        };
+        const post = (author: { readonly id: string }, text: string, channelId: string) =>
+          postChat(chat.telling, {
+            authorMemberId: author.id,
+            to: { channelId },
+            blocks: [{ type: CHAT_BLOCK.MARKDOWN, text }],
+            mentions: mentionedHandles(text),
+            clientKey: randomUUID(),
+          }).pipe(Effect.provide(chat.github.layer));
+        const luke = Option.getOrThrow(
+          yield* ensureMember(chat.owner, chat.workspace, {
+            kind: MEMBER_KIND.PLANNER,
+            planId: chat.plan.id,
+          }),
+        );
+        const dm = Option.getOrThrow(
+          yield* findOrMakeDm(chat.owner, chat.workspace, chat.first.member.id, luke.id),
+        );
+        const opensBefore = eve.opened.length;
+
+        const sent = yield* post(chat.first.member, "Who owns the invite table?", dm.id);
+        assert.deepEqual(sent.receipt.told, ["luke"]);
+        const conversation = Option.getOrThrow(
+          yield* openPlanConversation(chat.owner, chat.plan.id),
+        );
+        assert.deepEqual(
+          eve.opened.slice(opensBefore).map((each) => each.message.conversationId),
+          [conversation.conversationId],
+        );
+        // The notice is the plan conversation's one line, marked as the agent's chat, not the developer typing.
+        const [line] = yield* chat.rowsOf({
+          userId: conversation.ownerId,
+          conversationId: conversation.conversationId,
+        });
+        assert.ok(line?.message.role === MESSAGE_ROLE.USER);
+        // The line opens with the sign the planning instructions tell Luke a chat turn by.
+        const words = line.message.parts.find(isTextUIPart)?.text ?? "";
+        assert.ok(words.startsWith(`${CHAT_TURN_SIGN}agent-1`), words);
+        assert.ok(PLANNING_INSTRUCTIONS.includes(`"${CHAT_TURN_SIGN}"`));
+        assert.deepEqual(line.message.metadata, {
+          author: MESSAGE_AUTHOR.AGENT,
+          channel: MESSAGE_CHANNEL.CHAT,
+          chat_seq: sent.message.seq,
+          from: "agent-1",
+        });
+
+        const held = yield* post(chat.first.member, "And the emails?", dm.id);
+        assert.deepEqual(held.receipt.held, ["luke"]);
+        assert.equal(eve.opened.length + eve.sent.length, opensBefore + 1);
+        yield* unreadFor(chat.owner, chat.workspace, luke.id);
+        const told = yield* post(chat.first.member, "Never mind, found it.", dm.id);
+        assert.deepEqual(told.receipt.told, ["luke"]);
+      }),
+  );
+
+  it.effect(
     "a DM steers the other agent once as a chat-marked line of its own, a second while the first is unread is held, and one after it reads is told",
     () =>
       Effect.gen(function* () {
@@ -2852,8 +2922,8 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
         );
         agents.push({
           userId: opened.owner,
-          agentId: started.agent.id,
           planId: opened.task.id,
+          self: { kind: MEMBER_KIND.AGENT, agentId: started.agent.id },
           repository: RELAY_FULL_NAME,
           telling,
         });
@@ -3113,7 +3183,7 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
         yield* db
           .update(codingAgent)
           .set({ taskId: null })
-          .where(eq(codingAgent.id, chat.first.agentId));
+          .where(eq(codingAgent.id, "agentId" in chat.first.self ? chat.first.self.agentId : ""));
         const planless = { ...chat.first, planId: null };
         const posted = yield* chat.post(planless, { text: "@luke who owns the invite table?" });
         assert.ok("seq" in posted);
