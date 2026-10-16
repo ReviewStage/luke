@@ -1340,12 +1340,10 @@ export function workerLines(
   messages: readonly CodingAgentMessage[],
 ): readonly CodingAgentMessage[] {
   // A worker opened by its link carries no task's words, so the service's own first row's are the task.
-  if (task === "") {
-    const first = messages.find((message) => message.role === MESSAGE_ROLE.USER);
-    if (first !== undefined) return workerLines(messageWords(first), messages);
-  }
+  const first = messages.find((message) => message.role === MESSAGE_ROLE.USER);
+  const words = task === "" && first !== undefined ? messageWords(first) : task;
   return [
-    { id: TASK_ROW_ID, role: MESSAGE_ROLE.USER, parts: [{ type: AGENT_PART.TEXT, text: task }] },
+    { id: TASK_ROW_ID, role: MESSAGE_ROLE.USER, parts: [{ type: AGENT_PART.TEXT, text: words }] },
     ...messages.filter((message) => message.role !== MESSAGE_ROLE.USER),
   ];
 }

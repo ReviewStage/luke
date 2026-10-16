@@ -1721,3 +1721,38 @@ test("an item a link names is not found though another task's read failed, and i
     "the keyboard lands on the list, not the hidden notice",
   );
 });
+
+test("an item a link names under an agent that is not there, deleted or another's, is not found once its page's read says so, and no other item is chosen", async () => {
+  const { page } = mount();
+  await settle();
+  act(() =>
+    chooseFromOutside({
+      agentId: "0f0e0d0c-0000-4000-8000-0000000a9e47",
+      itemId: "0f0e0d0c-0000-4000-8000-00000000beef",
+      opened: true,
+    }),
+  );
+  await settle();
+
+  assert.match(page.querySelector(".inbox-view-items")?.textContent ?? "", /Not found/u);
+  assert.equal(page.querySelector('.inbox-plans [aria-current="page"]'), null);
+});
+
+test("an item a link names under a task with no agent and nothing in its Inbox is not found, and no other task's item is chosen", async () => {
+  const quiet = { ...INVITES, id: "0f0e0d0c-0000-4000-8000-00000000a11e", name: "Quiet task" };
+  listedAgents = [];
+  const { page } = mount();
+  await settle();
+  act(() => setPlans([BILLING, INVITES, quiet]));
+  act(() =>
+    chooseFromOutside({
+      planId: quiet.id,
+      itemId: "0f0e0d0c-0000-4000-8000-00000000beef",
+      opened: true,
+    }),
+  );
+  await settle();
+
+  assert.match(page.querySelector(".inbox-view-items")?.textContent ?? "", /Not found/u);
+  assert.equal(page.querySelector('.inbox-plans [aria-current="page"]'), null);
+});

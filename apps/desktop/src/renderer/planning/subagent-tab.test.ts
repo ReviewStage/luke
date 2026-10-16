@@ -166,3 +166,13 @@ test("a worker opened by its link, which carries no task's words, draws the task
   assert.match(container.textContent ?? "", /Audit retries\./u);
   assert.equal(container.querySelectorAll(".is-user:not(.agent-origin)").length, 0);
 });
+
+test("a worker opened by its link whose own first row has no words still draws its work", async () => {
+  const container = await workerTab(
+    CODING_AGENT_STATUS.COMPLETED,
+    [{ type: "text", text: "Both writers quote fields the same way." }],
+    { task: "", first: "" },
+  );
+
+  assert.match(container.textContent ?? "", /Both writers quote fields the same way\./u);
+});

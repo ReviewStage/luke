@@ -236,12 +236,20 @@ export function DesktopInbox({ plans }: { plans: PlansControl }): React.JSX.Elem
   const chosen = listedItems(list).find(({ item }) => item.id === asked?.itemId);
   // Note that a chosen item whose plan or agent is listed but not read yet keeps its place, because
   // it may be listed once the read lands; one whose plan left the list, archived elsewhere, gives way.
+  // A holder whose agents' read answered none, or that it is not there, holds no Inbox to read;
+  // one whose agents are not read yet may still hold the item.
+  const holderEmpty = agents.listMissing || agents.heldIds?.length === 0;
+  const agentsUnread = agents.heldIds === undefined && !agents.listFailed && !agents.listMissing;
   const chosenWaits =
     (planId !== undefined &&
-      holdings.some((holding) => holding.planId === planId) &&
-      !read.items.has(planId) &&
-      !live.read) ||
-    (chosenAgentId !== undefined && !planless.items.has(chosenAgentId) && !live.read);
+      ((holdings.some((holding) => holding.planId === planId) &&
+        !read.items.has(planId) &&
+        !live.read) ||
+        agentsUnread)) ||
+    (chosenAgentId !== undefined &&
+      !planless.items.has(chosenAgentId) &&
+      !live.read &&
+      !agents.listMissing);
   const reading =
     holdings.some((holding) => !read.items.has(holding.planId)) ||
     plans.inboxPlanless.some((each) => !planless.items.has(each.agentId));
@@ -251,9 +259,9 @@ export function DesktopInbox({ plans }: { plans: PlansControl }): React.JSX.Elem
   // Note that only the asked holder's own reads are waited on, since another's that failed says nothing of this item.
   const holderRead =
     planId !== undefined
-      ? read.items.has(planId) || live.read
+      ? read.items.has(planId) || live.read || holderEmpty
       : chosenAgentId !== undefined
-        ? live.read || planless.items.has(chosenAgentId)
+        ? live.read || planless.items.has(chosenAgentId) || holderEmpty
         : true;
   const missing = asked?.opened === true && chosen === undefined && !chosenWaits && holderRead;
   const standIn = chosen === undefined && !chosenWaits && !missing ? firstChoice(list) : undefined;
