@@ -232,6 +232,8 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
   held = { sources: new Map(), lead: opened.lead, ending: opened.ending };
   const editor: Editor = new Editor({
     element: host,
+    // Note that TipTap's own base rules would go in as an inline `<style>`, which the panel's policy (`style-src 'self'`, `../index.html`) refuses; `planning.css` styles the text instead.
+    injectCSS: false,
     extensions: [
       ...extensions,
       Placeholder.configure({ placeholder: "Write the plan" }),
