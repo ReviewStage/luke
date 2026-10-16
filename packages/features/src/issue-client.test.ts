@@ -128,14 +128,18 @@ it.effect(
 );
 
 it.effect(
-  "a body that stalls after its headers answers unanswered once the deadline passes, rather than never",
+  "a body that stalls after its headers answers unanswered once the deadline passes, rather than never, and is let go",
   () =>
     Effect.gen(function* () {
+      let cancelled = false;
       const stalled = recordingHttpClient(
         () =>
           new Response(
             new ReadableStream({
               start: (controller) => controller.enqueue(new TextEncoder().encode('{"issues":')),
+              cancel: () => {
+                cancelled = true;
+              },
             }),
             { status: 200, headers: { "content-type": "application/json" } },
           ),
@@ -148,5 +152,6 @@ it.effect(
       const listed = yield* Fiber.join(asked);
 
       assert.deepEqual(listed, { failure: ISSUE_CALL_FAILURE.UNANSWERED });
+      assert.ok(cancelled, "the stalled body is let go");
     }),
 );

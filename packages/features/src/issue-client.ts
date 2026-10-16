@@ -5,13 +5,14 @@ import {
   type WireBoundaryInput,
 } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { Duration, Effect, Result, type Schema } from "effect";
+import { Clock, Duration, Effect, Result, type Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
   type AccountCallEffects,
   accountBearer,
   accountCall,
   type CallAnswer,
+  type CallRequest,
   callAnswered,
 } from "./account-call.js";
 import type { AccountToken } from "./account-token.js";
@@ -67,25 +68,40 @@ const REFUSALS = {
   [HOSTED_API_ERROR.INVALID_REQUEST]: ISSUE_CALL_FAILURE.INVALID,
 } satisfies NamedRefusals;
 
-/** A response's body as JSON, or nothing where it is not JSON at all. */
-function jsonOf(response: Response): Effect.Effect<WireBoundaryInput> {
-  return Effect.promise((): Promise<WireBoundaryInput> => response.json().catch(() => undefined));
+/** A body's text, read to its end. */
+function textOf(reader: ReadableStreamDefaultReader<Uint8Array>): Effect.Effect<string, unknown> {
+  return Effect.gen(function* () {
+    const decoder = new TextDecoder();
+    let text = "";
+    for (;;) {
+      const { done, value } = yield* Effect.tryPromise(() => reader.read());
+      if (done) return text + decoder.decode();
+      text += decoder.decode(value, { stream: true });
+    }
+  });
 }
 
 /**
- * A response's body as JSON within the deadline, or nothing where it has
- * not arrived by then. Note that the account call's
- * own deadline ends with the headers, so a body that stalls after them is
- * bounded here, or the call would never answer.
+ * A response's body as JSON, read within what is left of the call's
+ * deadline; nothing where it is not JSON at all, and nothing, its stream
+ * cancelled so its connection is let go, where it has not ended by then.
+ * Note that the account call's own deadline ends with the headers, so a
+ * body that stalls after them is bounded here, or the call would never
+ * answer.
  */
-function jsonWithin(
-  response: Response,
-  deadline: Duration.Duration,
-): Effect.Effect<WireBoundaryInput> {
-  return jsonOf(response).pipe(
+function jsonWithin(response: Response, left: Duration.Duration): Effect.Effect<WireBoundaryInput> {
+  const reader = response.body?.getReader();
+  if (reader === undefined) return Effect.succeed(undefined);
+  const parsed = Effect.flatMap(textOf(reader), (text) =>
+    Effect.promise(
+      (): Promise<WireBoundaryInput> => new Response(text).json().catch(() => undefined),
+    ),
+  );
+  return parsed.pipe(
+    Effect.catch(() => Effect.succeed(undefined)),
     Effect.timeoutOrElse({
-      duration: deadline,
-      orElse: () => Effect.succeed(undefined),
+      duration: left,
+      orElse: () => Effect.as(Effect.ignore(Effect.tryPromise(() => reader.cancel())), undefined),
     }),
   );
 }
@@ -97,14 +113,14 @@ function refusedAs(payload: UnparsedWireValue, named: NamedRefusals): Failed {
   return failure === undefined ? UNANSWERED : { failure };
 }
 
-/** An answer read whole within the deadline: the body the schema admits, a key a newer service added dropped, or why there is none. */
+/** An answer read whole within what is left of the deadline: the body the schema admits, a key a newer service added dropped, or why there is none. */
 function readAnswer<Answer, Encoded>(
   answer: CallAnswer,
   schema: Schema.Codec<Answer, Encoded>,
-  deadline: Duration.Duration,
+  left: Duration.Duration,
 ): Effect.Effect<Answer | Failed> {
   if (!callAnswered(answer)) return Effect.succeed(UNANSWERED);
-  return Effect.map(jsonWithin(answer.response, deadline), (body): Answer | Failed => {
+  return Effect.map(jsonWithin(answer.response, left), (body): Answer | Failed => {
     const payload = unparsedWire(body);
     if (!answer.response.ok) return refusedAs(payload, REFUSALS);
     return Result.getOrUndefined(readServiceAnswer(schema)(payload)) ?? UNANSWERED;
@@ -121,7 +137,6 @@ function listQuery(params: IssueListParams): string {
 /** The window's reads and writes of a workspace's issues. */
 export class HostedIssueClient {
   readonly #call: AccountCallEffects;
-  readonly #deadline: Duration.Duration;
 
   constructor(options: HostedIssueClientOptions) {
     this.#call = accountCall({
@@ -129,25 +144,36 @@ export class HostedIssueClient {
       credential: accountBearer(options),
       requestTimeoutMs: options.requestTimeoutMs,
     });
-    this.#deadline = Duration.millis(this.#call.requestTimeoutMs);
+  }
+
+  /** One call sent and its answer read, the body within what the call's deadline has left once the headers arrive. */
+  #asked<Answer, Encoded>(
+    request: CallRequest,
+    schema: Schema.Codec<Answer, Encoded>,
+  ): Effect.Effect<Answer | Failed, never, HttpClient.HttpClient> {
+    const deadline = this.#call.requestTimeoutMs;
+    return Effect.flatMap(Clock.currentTimeMillis, (started) =>
+      Effect.flatMap(this.#call.send(request), (answer) =>
+        Effect.flatMap(Clock.currentTimeMillis, (now) =>
+          readAnswer(answer, schema, Duration.millis(Math.max(0, deadline - (now - started)))),
+        ),
+      ),
+    );
   }
 
   /** The workspace's issues, standing or archived, the most recently changed first. */
   list(params: IssueListParams): Effect.Effect<IssueListView, never, HttpClient.HttpClient> {
-    return Effect.flatMap(
-      this.#call.send({
-        method: HTTP_METHOD.GET,
-        path: `${HOSTED_SERVICE_PATH.ISSUES}${listQuery(params)}`,
-      }),
-      (answer) => readAnswer(answer, issueListAnswerSchema, this.#deadline),
+    return this.#asked(
+      { method: HTTP_METHOD.GET, path: `${HOSTED_SERVICE_PATH.ISSUES}${listQuery(params)}` },
+      issueListAnswerSchema,
     );
   }
 
   /** One issue, archived or not. */
   read(params: IssueIdParams): Effect.Effect<IssueView, never, HttpClient.HttpClient> {
-    return Effect.flatMap(
-      this.#call.send({ method: HTTP_METHOD.GET, path: issuePath(params.issueId) }),
-      (answer) => readAnswer(answer, issueAnswerSchema, this.#deadline),
+    return this.#asked(
+      { method: HTTP_METHOD.GET, path: issuePath(params.issueId) },
+      issueAnswerSchema,
     );
   }
 
@@ -155,13 +181,13 @@ export class HostedIssueClient {
   create(params: IssueCreateParams): Effect.Effect<IssueView, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(issueCreateParamsSchema)(params));
     if (admitted === undefined) return Effect.succeed(INVALID);
-    return Effect.flatMap(
-      this.#call.send({
+    return this.#asked(
+      {
         method: HTTP_METHOD.POST,
         path: HOSTED_SERVICE_PATH.ISSUES,
         body: JSON.stringify(admitted),
-      }),
-      (answer) => readAnswer(answer, issueAnswerSchema, this.#deadline),
+      },
+      issueAnswerSchema,
     );
   }
 
@@ -169,13 +195,13 @@ export class HostedIssueClient {
   change(params: IssueChangeParams): Effect.Effect<IssueView, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(issueChangeParamsSchema)(params));
     if (admitted === undefined) return Effect.succeed(INVALID);
-    return Effect.flatMap(
-      this.#call.send({
+    return this.#asked(
+      {
         method: HTTP_METHOD.PATCH,
         path: issuePath(admitted.issueId),
         body: JSON.stringify(admitted.change),
-      }),
-      (answer) => readAnswer(answer, issueAnswerSchema, this.#deadline),
+      },
+      issueAnswerSchema,
     );
   }
 }
