@@ -6476,10 +6476,6 @@ button.automation-run:hover {
 .tab-strip {
   display: flex;
   min-width: 0;
-  /* While it hides tabs, the strip ends at its last whole tab (tab-strip.tsx
-     sets the length), so the tab it cuts leaves no gap and the chevron
-     stands straight after the last tab drawn. */
-  max-width: var(--tabs-shown, none);
   align-items: center;
   gap: var(--list-gap);
   overflow-x: auto;
@@ -6554,24 +6550,6 @@ button.automation-run:hover {
 .tab-strip .tab[data-hidden="true"] {
   opacity: 0;
   pointer-events: none;
-}
-
-/* The chevron counts the tabs it lists beside its glyph, and is as quiet as
-   the "+" beside it: no fill at rest, the hover fill under the pointer, and
-   that fill while its menu stands. */
-.tab-overflow {
-  width: auto;
-  flex: none;
-  gap: var(--space-2);
-  padding: 0 var(--space-4) 0 var(--space-6);
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-  font-weight: 560;
-}
-
-.tab-overflow svg {
-  width: 14px;
-  height: 14px;
 }
 
 .tab:hover {
