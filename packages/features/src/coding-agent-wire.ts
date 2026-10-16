@@ -1005,6 +1005,18 @@ export const codingAgentMessageSchema = EffectSchema.Struct({
   metadata: EffectSchema.optionalKey(storedObjectSchema),
   /** What sent one of the developer's messages to a coding agent (`codingAgentSenderSchema`); absent on every other row, on a message written before senders were kept, and from a service older than it. */
   sentBy: EffectSchema.optionalKey(codingAgentSenderSchema),
+  /**
+   * Where in a turn under way one of the developer's lines arrived: the
+   * journal of the turn that took it in, by its message id, and how many
+   * of that journal's steps had begun before it, so the tab draws the line
+   * among the turn's work after those steps rather than ahead of the turn.
+   * Absent on a line that opened its turn or still awaits one, on every
+   * other row, on a line taken before places were kept, and from a service
+   * older than it.
+   */
+  arrivedIn: EffectSchema.optionalKey(
+    EffectSchema.Struct({ journalId: EffectSchema.String, afterStep: countedNumber }),
+  ),
   /** Epoch milliseconds the turn began, as a working line counts it: its start, or its queueing where eve has not started it; absent on the developer's rows, and from a service older than it. */
   startedAt: EffectSchema.optionalKey(countedNumber),
   /** Epoch milliseconds the turn answered or ended; absent while it is still written, on the developer's rows, and from a service older than it. */

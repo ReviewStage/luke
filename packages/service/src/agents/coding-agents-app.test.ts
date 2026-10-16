@@ -93,6 +93,7 @@ import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import {
+  AssistantMessageBuilder,
   BRAIN_REQUEST_STATUS,
   BRAIN_RUN_EVENT,
   BRAIN_TURN_ORIGIN,
@@ -1006,6 +1007,56 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         );
       return { ...opened, agent, target, sessionId, writer, turnId, transcript, sent };
     });
+
+  it.effect(
+    "a message the running turn took in after its second step reads as arriving after that step of the turn's journal, which closes behind it, while the line that opened the turn names no place",
+    () =>
+      Effect.gen(function* () {
+        const { agent, ask, owner, target, writer, turnId, sent } = yield* startedAgent(fakeEve(), {
+          running: true,
+        });
+        const turn = { conversationId: sessionKey(target.conversationId), turnId };
+        /** The turn's step begun, as the relay tells the step's start. */
+        const stepBegun = (step: number) =>
+          writer.consume(target, {
+            ...turn,
+            kind: BRAIN_RUN_EVENT.STEP_STARTED,
+            sequence: step + 2,
+            step,
+          });
+        yield* stepBegun(1);
+        yield* stepBegun(2);
+        yield* sent("Rename the subject line too.");
+        yield* writer.takeAwaitingLine(target, { text: "Rename the subject line too.", turnId });
+        yield* stepBegun(3);
+        const answer = new AssistantMessageBuilder();
+        for (const _step of [1, 2, 3]) answer.stepStart();
+        answer.text("Renamed it.");
+        yield* writer.consume(target, {
+          ...turn,
+          kind: BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
+          sequence: 6,
+          message: answer.finish(randomUUID()),
+        });
+
+        const page = readAnswer(
+          codingAgentMessagesAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(AGENT_MESSAGES, owner, { id: agent.id })),
+        );
+        const journal = page.messages.find((each) => each.role === MESSAGE_ROLE.ASSISTANT);
+        assert.ok(journal);
+        // The closed journal stands behind the line it took, so the order alone would draw the line ahead of the turn.
+        assert.deepEqual(
+          page.messages.map((each) => [each.role, each.arrivedIn]),
+          [
+            [MESSAGE_ROLE.USER, undefined],
+            [MESSAGE_ROLE.USER, { journalId: journal.id, afterStep: 2 }],
+            [MESSAGE_ROLE.ASSISTANT, undefined],
+          ],
+        );
+      }),
+  );
 
   it.effect(
     "a member of the plan's workspace lists, reads, and messages an agent a teammate started, named as its starter, the line landing in the starter's conversation",

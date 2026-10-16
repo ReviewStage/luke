@@ -152,6 +152,14 @@ export const messages = pgTable(
      * would have every delete look through every message for its lines.
      */
     senderName: text("sender_name"),
+    /**
+     * The steps of its turn begun before the turn took the line in, on a
+     * developer's line a coding agent's turn under way took after its first
+     * step, so a reader draws the line among the turn's work where it
+     * arrived; null on every other row, and on a line taken before this was
+     * kept.
+     */
+    takenAfterStep: integer("taken_after_step"),
   },
   (table) => [
     unique("messages_conversation_client").on(table.conversationId, table.clientId),

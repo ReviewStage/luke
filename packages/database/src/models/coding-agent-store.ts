@@ -28,6 +28,7 @@ import {
   type SQL,
   sql,
 } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { DateTime, Effect, Option, Schema, SchemaTransformation } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError, queryBuilder } from "../core/query.js";
@@ -1639,6 +1640,67 @@ export function lineSendersOf(
           return sent === undefined ? [] : [[row.id, sent] as const];
         }),
       ),
+  );
+}
+
+/** Where in a turn under way one of the developer's lines arrived: the turn's journal, by its row, and the steps it had begun before the line. */
+export interface LinePlace {
+  readonly journalId: string;
+  readonly afterStep: number;
+}
+
+/** The journal of the turn that took a line in, which shares the turn's id as its client id. */
+const takingJournal = alias(messages, "taking_journal");
+
+const findLinePlaces = SqlSchema.findAll({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    conversationId: Schema.String,
+    messageIds: Schema.Array(Schema.String),
+  }),
+  Result: Schema.Struct({ id: Schema.String, journalId: Schema.String, afterStep: Schema.Int }),
+  execute: ({ userId, conversationId, messageIds }) =>
+    Database.use((db) =>
+      db
+        .select({
+          id: messages.id,
+          journalId: takingJournal.id,
+          afterStep: sql<number>`${messages.takenAfterStep}`.mapWith(Number),
+        })
+        .from(messages)
+        .innerJoin(
+          takingJournal,
+          and(
+            eq(takingJournal.conversationId, messages.conversationId),
+            eq(takingJournal.clientId, sql`${messages.turnId}::text`),
+          ),
+        )
+        .where(
+          and(
+            inArray(messages.id, [...messageIds]),
+            eq(messages.userId, userId),
+            eq(messages.conversationId, conversationId),
+            isNotNull(messages.takenAfterStep),
+          ),
+        ),
+    ),
+});
+
+/**
+ * Where each of these rows of the account's conversation arrived in the
+ * turn that took it in, by row, for the developer's lines a turn under way
+ * took after its first step: every other row, a line that opened its turn,
+ * and one taken before places were kept, names none. None asked, none read.
+ */
+export function linePlacesOf(
+  target: ConversationTarget,
+  messageIds: readonly string[],
+): CodingAgentStoreEffect<ReadonlyMap<string, LinePlace>> {
+  if (messageIds.length === 0) return Effect.succeed(new Map());
+  return Effect.map(
+    findLinePlaces({ userId: target.userId, conversationId: target.conversationId, messageIds }),
+    (rows) =>
+      new Map(rows.map(({ id, journalId, afterStep }) => [id, { journalId, afterStep }] as const)),
   );
 }
 
