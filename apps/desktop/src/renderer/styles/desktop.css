@@ -17,9 +17,10 @@
      deepened until its white exclamation holds on it, in the dark as in the
      light, where the orange is deep already. */
   --attention-mark-ground: #c4620c;
-  /* An actor's square (`actor-ref.tsx`): Luke's face in his own blue, an
-     agent's harness, or an automation's clock, each on one solid neutral, so
-     a tile reads as one object on any ground beneath it. */
+  /* An actor's tile (`actor-ref.tsx`): under a person's circle, a pile's
+     count, and, in a facepile alone, Luke's face in his own blue, an agent's
+     harness, or an automation's clock, so the face a square overlaps never
+     shows through it. */
   --actor-tile: #2a2a30;
   --actor-tile-ink: rgba(255, 255, 255, 0.92);
   --desktop-ground: #0c0c0e;
@@ -935,8 +936,9 @@ button.sidebar-section-head-name:hover {
 }
 
 /* Whoever did something (`actor-ref.tsx`): a person on a circle, their
-   picture or their letter on a hue; Luke, an agent, or an automation on a
-   solid rounded square; someone the window cannot name on a quiet outline.
+   picture or their letter on a hue; Luke, an agent, or an automation by its
+   glyph alone in a rounded square's box, on a solid tile in a facepile;
+   someone the window cannot name on a quiet outline.
    One size per place, so a byline, a facepile, and a row read level whoever
    is in them. A square's corner is rounder than a workspace tile's of its
    size, and it never holds a letter, so the two never read as one. */
@@ -980,7 +982,7 @@ button.sidebar-section-head-name:hover {
   --actor-size: 48px;
 }
 
-/* An App's bot on GitHub stands on the same square, its avatar on the neutral tile. */
+/* An App's bot on GitHub stands in the same square, its robot until its avatar loads. */
 .actor-mark:is(
   [data-kind="luke"],
   [data-kind="agent"],
@@ -990,9 +992,23 @@ button.sidebar-section-head-name:hover {
   border-radius: calc(var(--actor-size) * 0.36);
 }
 
-/* Luke wears his blue on his face, not his tile, the colour his voice and
-   the Transcript's face already answer in: 8.4:1 on the dark tile and 4.3:1
-   on the light one. */
+/* Note that a square outside a facepile stands bare, its glyph alone on the
+   ground beneath it as a tab's is, in the same box, so the rows and lines it
+   stands in keep their alignment; a facepile tiles its squares instead
+   (`ActorStack`), so a face never shows through the one overlapping it. */
+.actor-mark:is(
+  [data-kind="luke"],
+  [data-kind="agent"],
+  [data-kind="automation"],
+  [data-kind="github"][data-bot="true"]
+):not([data-tiled="true"]) {
+  background: none;
+}
+
+/* Luke wears his blue on his face, the colour his voice and the
+   Transcript's face already answer in: 8.4:1 on the dark tile and 4.3:1 on
+   the light one, and at least 8.9:1 and 4.2:1 bare on the window's grounds,
+   a hovered or chosen row's included. */
 .actor-mark[data-kind="luke"] {
   color: var(--voice-luke);
 }

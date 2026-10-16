@@ -1,20 +1,23 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { ACTOR_KIND, ACTOR_STATE, type Actor, SOMEONE_REASON } from "@luke/ui/actor-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { onRegistry } from "#testing/copy-feedback";
-import { ActorMark, ActorRef, ActorStack } from "./actor-ref";
+import { ACTOR_SIZE, ActorMark, ActorRef, ActorStack } from "./actor-ref";
 
 /**
  * Whoever did something is drawn one way: a person by their picture once it
  * loads and their letter until then, Luke, an agent, and an automation each
  * by their own mark, someone unnamed by an outline; named in a line, an
  * actor with a page is a press that opens it and a person is not; a
- * facepile counts the rest only where asked. Synthetic people.
+ * facepile counts the rest only where asked, and tiles the squares it
+ * overlaps, which stand bare everywhere else. Synthetic people.
  */
 
 const PICTURE = "https://avatars.githubusercontent.com/u/9";
@@ -32,6 +35,15 @@ const AGENT: Actor = {
   provider: undefined,
   state: ACTOR_STATE.REST,
 };
+/** Every actor drawn on a square: Luke, an agent, an automation, and an App's bot on GitHub. */
+const SQUARES: readonly Actor[] = [
+  { kind: ACTOR_KIND.LUKE },
+  AGENT,
+  { kind: ACTOR_KIND.AUTOMATION, name: "Morning triage", state: ACTOR_STATE.REST },
+  { kind: ACTOR_KIND.GITHUB, login: "devin-ai-integration[bot]", bot: true },
+];
+/** The window's own stylesheet, which says what each mark stands on. */
+const DESKTOP_CSS = readFileSync(path.join(import.meta.dirname, "styles/desktop.css"), "utf8");
 
 let root: Root | undefined;
 
@@ -39,6 +51,7 @@ afterEach(() => {
   act(() => root?.unmount());
   root = undefined;
   document.body.innerHTML = "";
+  document.head.innerHTML = "";
 });
 
 function draw(element: ReactElement): HTMLElement {
@@ -123,6 +136,59 @@ test("a facepile draws its first few and counts the rest only where its words do
     createElement(ActorStack, { actors: [DANA, SAM, LEE], drawn: 2, counted: false }),
   );
   assert.equal(uncounted.querySelector(".actor-stack-more"), null);
+});
+
+/** What a mark stands on as the window's stylesheet draws it: "none" where its glyph stands bare on the ground. */
+function groundOf(mark: Element): string {
+  if (document.head.querySelector("style") === null) {
+    document.head.appendChild(document.createElement("style")).textContent = DESKTOP_CSS;
+  }
+  return getComputedStyle(mark).getPropertyValue("background");
+}
+
+test("Luke, an agent, an automation, and an App's bot stand bare outside a facepile, their glyph alone on the ground, where a person keeps their circle's fill", () => {
+  const view = draw(
+    createElement(
+      "div",
+      null,
+      SQUARES.map((actor, index) => createElement(ActorRef, { key: index, actor })),
+      createElement(ActorMark, { actor: AGENT, size: ACTOR_SIZE.CARD }),
+      createElement(ActorMark, { actor: DANA }),
+    ),
+  );
+  const marks = [...view.querySelectorAll(".actor-mark")];
+
+  assert.equal(marks.length, SQUARES.length + 2);
+  assert.deepEqual(
+    marks.map((mark) => groundOf(mark) === "none"),
+    [...SQUARES.map(() => true), true, false],
+  );
+});
+
+test("a facepile stands each square on its solid tile, so the face it overlaps never shows through, while the same actor named beside the pile stands bare", () => {
+  const view = draw(
+    createElement(
+      "div",
+      null,
+      createElement(ActorStack, { actors: SQUARES, drawn: SQUARES.length }),
+      createElement(ActorStack, {
+        actors: SQUARES,
+        drawn: SQUARES.length,
+        faces: SQUARES.map(() => ({})),
+        label: "Reviewers",
+      }),
+      createElement(ActorRef, { actor: AGENT }),
+    ),
+  );
+  const piled = [...view.querySelectorAll(".actor-stack .actor-mark")];
+  const named = view.querySelector(".actor-ref .actor-mark") ?? assert.fail("the agent is named");
+
+  assert.equal(piled.length, SQUARES.length * 2);
+  assert.ok(
+    piled.every((mark) => groundOf(mark) !== "none"),
+    "every piled square is tiled",
+  );
+  assert.equal(groundOf(named), "none");
 });
 
 /** The words of the card an actor named in a line hangs once the pointer rests on its name. */
