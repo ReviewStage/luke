@@ -50,11 +50,21 @@ const PLAYWRIGHT_VERSION = "1.64.1";
 const INSTALL_GTK =
   "if command -v dnf >/dev/null 2>&1; then $SUDO dnf install -y gtk3; else $SUDO apt-get install -y --no-install-recommends libgtk-3-0t64 || $SUDO apt-get install -y --no-install-recommends libgtk-3-0; fi";
 
+/**
+ * Makes every `apt-get` after it wait up to ten minutes for dpkg's lock
+ * rather than fail at once. A freshly booted image can have another
+ * `apt-get` holding it as `prepare` starts, and Playwright's own
+ * `--with-deps` install takes no option to wait, so the wait is set in apt's
+ * configuration, where it and every install here read it.
+ */
+const WAIT_FOR_DPKG_LOCK = `if [ -d /etc/apt/apt.conf.d ]; then echo 'DPkg::Lock::Timeout "600";' | if [ "$(id -u)" = 0 ]; then tee /etc/apt/apt.conf.d/90luke-dpkg-lock-timeout; else sudo -n tee /etc/apt/apt.conf.d/90luke-dpkg-lock-timeout; fi >/dev/null; fi`;
+
 /** The commands `prepare` runs on the snapshot, after the code extension's tooling. */
 const PREPARE_SCRIPT = [
   "set -e",
   "git --version",
   "node --version",
+  WAIT_FOR_DPKG_LOCK,
   "command -v pnpm >/dev/null 2>&1 || npm install -g pnpm",
   "if ! command -v python3 >/dev/null 2>&1; then",
   '  if [ "$(id -u)" = 0 ]; then apt-get update && apt-get install -y python3; else sudo -n apt-get update && sudo -n apt-get install -y python3; fi',
