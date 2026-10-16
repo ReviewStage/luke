@@ -35,7 +35,10 @@
 # deployed tree is the one already deployed, whatever the commits between.
 # Every doubt builds: a branch with no deployment yet, a commit that cannot
 # be fetched, or a diff that errors exits 1. Note that the script sets no
-# `-e` or `-u`, and every path ends in an explicit `exit 0` or `exit 1`.
+# `-e` or `-u`, and every path ends in an explicit `exit 0` or `exit 1`, and
+# that the fetch is bounded by git's own low-speed limit rather than
+# coreutils' `timeout`, which macOS lacks, so the release's checks on a Mac
+# run the script as Vercel's Linux build does.
 
 DEPLOYED_PATHS=(
     :/apps/web
@@ -64,7 +67,8 @@ if [[ -z $previous ]]; then
     exit 1
 fi
 if ! git cat-file -e "$previous^{commit}" 2>/dev/null &&
-    ! GIT_TERMINAL_PROMPT=0 timeout 30 git fetch --quiet --depth=1 origin "$previous" 2>/dev/null; then
+    ! GIT_TERMINAL_PROMPT=0 git -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=30 \
+        fetch --quiet --depth=1 origin "$previous" 2>/dev/null; then
     printf 'vercel-ignore: building (the last deployment, %s, could not be fetched)\n' "$previous"
     exit 1
 fi

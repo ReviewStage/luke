@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { copyFileSync, mkdirSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { chmodSync, copyFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { delimiter, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { temporaryDirectory } from "@luke/runtime/testing";
 import { type TestContext, test } from "vitest";
@@ -70,12 +70,12 @@ function commit(root: string, path: string, content?: string): string {
 }
 
 /** Runs the project's Ignored Build Step at the head, as Vercel does, from the repository's root. */
-function decide(root: string, previous?: string): Verdict {
+function decide(root: string, previous?: string, path = process.env.PATH): Verdict {
   const ran = spawnSync("bash", ["-c", IGNORED_BUILD_STEP], {
     cwd: root,
     encoding: "utf8",
     env: {
-      PATH: process.env.PATH,
+      PATH: path,
       HOME: root,
       GIT_CONFIG_NOSYSTEM: "1",
       // Note that a branch with no successful deployment yet carries the variable empty.
@@ -155,4 +155,19 @@ test("a rebased branch whose deployed tree is the one already deployed is skippe
   assert.equal(decide(clone, deployed), VERDICT.SKIP);
   commit(clone, "apps/web/src/main.tsx", "web v2\n");
   assert.equal(decide(clone, deployed), VERDICT.BUILD);
+});
+
+test("a host whose `timeout` is missing still fetches the last deployment by sha, as a Mac does", async (t) => {
+  const origin = await repository(t);
+  commit(origin, "README.md");
+  const clone = await temporaryDirectory(t, "luke-vercel-ignore-clone-");
+  git(clone, "clone", "-q", `file://${origin}`, ".");
+  const deployed = commit(origin, "apps/web/src/main.tsx", "web v1\n");
+  commit(clone, "apps/desktop/src/main/main.ts");
+  commit(clone, "apps/web/src/main.tsx", "web v1\n");
+  // Note that a `timeout` answering 127 first on the PATH is the shell's own "command not found".
+  const bin = await temporaryDirectory(t, "luke-vercel-ignore-bin-");
+  writeFileSync(join(bin, "timeout"), "#!/bin/sh\nexit 127\n");
+  chmodSync(join(bin, "timeout"), 0o755);
+  assert.equal(decide(clone, deployed, `${bin}${delimiter}${process.env.PATH}`), VERDICT.SKIP);
 });
