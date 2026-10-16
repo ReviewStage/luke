@@ -7,7 +7,6 @@ import {
   type AutomationAction,
   type AutomationFiring,
   type AutomationGuards,
-  type AutomationPause,
   type AutomationRunReason,
   type AutomationRunStatus,
   type AutomationScope,
@@ -16,7 +15,6 @@ import {
   automationActionSchema,
   automationFiringSchema,
   automationGuardsSchema,
-  automationPauseSchema,
   automationRunReasonSchema,
   automationRunStatusSchema,
   automationScopeSchema,
@@ -85,7 +83,6 @@ const AutomationRowSchema = Schema.Struct({
   planRepository: Schema.NullOr(Schema.String),
   name: Schema.String,
   enabled: Schema.Boolean,
-  pausedReason: Schema.NullOr(automationPauseSchema),
   trigger: automationTriggerSchema,
   action: automationActionSchema,
   guards: automationGuardsSchema,
@@ -119,7 +116,6 @@ const AUTOMATION_COLUMNS = {
   planRepository: plan.repository,
   name: automation.name,
   enabled: automation.enabled,
-  pausedReason: automation.pausedReason,
   trigger: automation.trigger,
   action: automation.action,
   guards: automation.guards,
@@ -168,7 +164,6 @@ export interface NewAutomation {
 export interface AutomationChanges {
   readonly name?: string;
   readonly enabled?: boolean;
-  readonly pausedReason?: AutomationPause | null;
   readonly trigger?: AutomationTrigger;
   readonly action?: AutomationAction;
   readonly guards?: AutomationGuards;
@@ -443,7 +438,6 @@ const writeAutomation = SqlSchema.findAll({
     access: automationAccessSchema,
     name: Schema.optionalKey(Schema.String),
     enabled: Schema.optionalKey(Schema.Boolean),
-    pausedReason: Schema.optionalKey(Schema.NullOr(automationPauseSchema)),
     trigger: Schema.optionalKey(automationTriggerSchema),
     action: Schema.optionalKey(automationActionSchema),
     guards: Schema.optionalKey(automationGuardsSchema),

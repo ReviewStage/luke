@@ -155,8 +155,6 @@ export type AutomationRunStanding =
 export const AUTOMATION_NEXT = {
   /** It is turned off. */
   OFF: "off",
-  /** The service paused it. */
-  PAUSED: "paused",
   /** No instant is due: it fires on an event, or its schedule has no next run. */
   UNSCHEDULED: "unscheduled",
   /** It is due at an instant. */
@@ -165,7 +163,6 @@ export const AUTOMATION_NEXT = {
 
 export type AutomationNext =
   | { readonly kind: typeof AUTOMATION_NEXT.OFF }
-  | { readonly kind: typeof AUTOMATION_NEXT.PAUSED }
   | { readonly kind: typeof AUTOMATION_NEXT.UNSCHEDULED }
   | { readonly kind: typeof AUTOMATION_NEXT.AT; readonly at: number };
 
@@ -296,10 +293,9 @@ export function automationRunStanding(run: AutomationRunSummary | null): Automat
   }
 }
 
-/** When an automation runs next: off and paused before any instant, since neither fires at all. */
+/** When an automation runs next: off before any instant, since it fires at all. */
 export function automationNext(automation: AutomationSummary): AutomationNext {
   if (!automation.enabled) return { kind: AUTOMATION_NEXT.OFF };
-  if (automation.pausedReason !== null) return { kind: AUTOMATION_NEXT.PAUSED };
   if (automation.nextRunAt === null) return { kind: AUTOMATION_NEXT.UNSCHEDULED };
   return { kind: AUTOMATION_NEXT.AT, at: automation.nextRunAt };
 }

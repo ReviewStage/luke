@@ -28,7 +28,6 @@ import {
   AUTOMATION_BOUNDS,
   AUTOMATION_DEFAULT_GUARDS,
   AUTOMATION_FIRING,
-  AUTOMATION_PAUSE,
   AUTOMATION_RUN_STATUS,
   AUTOMATION_SCOPE,
   AUTOMATION_TARGET,
@@ -216,12 +215,12 @@ const weekdays = (planId: string) => ({
   action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: PROMPT },
 });
 
-/** A row an older build paused after its failed starts, as one may still stand; nothing pauses an automation now. */
+/** A row an older build paused after its failed starts, as its pause stands now its reason column is gone: turned off. */
 const pausedByAnOlderBuild = (id: string) =>
   Database.use((db) =>
     db
       .update(automationTable)
-      .set({ enabled: false, pausedReason: AUTOMATION_PAUSE.FAILURES, nextRunAt: null })
+      .set({ enabled: false, nextRunAt: null })
       .where(eq(automationTable.id, id)),
   );
 
@@ -545,7 +544,11 @@ it.layer(getTestDB())("the automation routes", (it) => {
         ).automation;
 
         assert.equal(paused.enabled, false);
-        assert.equal(paused.pausedReason, AUTOMATION_PAUSE.FAILURES);
+        assert.equal(
+          paused.pausedReason,
+          null,
+          "a desktop from before still reads the key, always null",
+        );
         assert.equal(paused.nextRunAt, null);
         assert.equal(resumed.enabled, true);
         assert.equal(resumed.pausedReason, null);

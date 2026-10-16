@@ -274,7 +274,7 @@ const summaryOf = /* @__PURE__ */ Effect.fnUntraced(function* (
       : { workspaceId: automation.organizationId }),
     name: automation.name,
     enabled: automation.enabled,
-    pausedReason: automation.pausedReason,
+    pausedReason: null,
     trigger: automation.trigger,
     action: automation.action,
     guards: automation.guards,
@@ -544,8 +544,6 @@ const changesOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   const changes: AutomationChanges = {
     ...(asked.name === undefined ? undefined : { name: asked.name }),
     ...(asked.enabled === undefined ? undefined : { enabled: asked.enabled }),
-    // The owner resuming or pausing it is the owner's word, so why the service paused it goes.
-    ...(asked.enabled === undefined ? undefined : { pausedReason: null }),
     ...(newTrigger === undefined ? undefined : { trigger: newTrigger }),
     ...(action === undefined ? undefined : { action }),
     ...(asked.guards === undefined ? undefined : { guards: asked.guards }),

@@ -720,7 +720,6 @@ it.layer(getTestDB())("an automation's runs", (it) => {
         );
         const standing = Option.getOrThrow(yield* readAutomation(owner, automation.id));
         assert.equal(standing.enabled, true);
-        assert.equal(standing.pausedReason, null);
         assert.deepEqual(eve.opened, []);
       }),
   );

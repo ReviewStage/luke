@@ -1357,8 +1357,10 @@ for the run's new agent, as a Start's draft switches them off; every other
 server the owner connected is handed to it.
 A refused start is a failed run with one fixed word
 (`AUTOMATION_RUN_REASON`), and nothing pauses an automation for failing:
-the next firing tries again. A `paused_reason` an older build wrote still
-reads, and a resume clears it. The agent's
+the next firing tries again. A row an older build paused for its failures
+stands turned off, its reason's column read no longer (and dropped by the
+release after), and the answer's
+`pausedReason` is always null, kept for the desktops that read it. The agent's
 questions reach the Inbox and its end the finished-agent notification as
 any agent's do.
 
