@@ -1,7 +1,10 @@
 import {
+  ISSUE_PRIORITY,
   ISSUE_PRIORITY_RANK,
+  ISSUE_STATUS,
   ISSUE_STATUS_ORDER,
   type Issue,
+  type IssuePriority,
   type IssueStatus,
 } from "./issue-wire.js";
 
@@ -22,6 +25,24 @@ const FALLBACK_PREFIX = "ISSUE";
 
 /** The most characters a prefix spells. */
 const MAX_PREFIX_CHARS = 4;
+
+/** Each status as a group's heading and a picker's row say it. */
+export const ISSUE_STATUS_WORDS = {
+  [ISSUE_STATUS.BACKLOG]: "Backlog",
+  [ISSUE_STATUS.TODO]: "Todo",
+  [ISSUE_STATUS.IN_PROGRESS]: "In Progress",
+  [ISSUE_STATUS.DONE]: "Done",
+  [ISSUE_STATUS.CANCELED]: "Canceled",
+} as const satisfies Record<IssueStatus, string>;
+
+/** Each priority as a row's mark and a picker's row say it. */
+export const ISSUE_PRIORITY_WORDS = {
+  [ISSUE_PRIORITY.NONE]: "No priority",
+  [ISSUE_PRIORITY.URGENT]: "Urgent",
+  [ISSUE_PRIORITY.HIGH]: "High",
+  [ISSUE_PRIORITY.MEDIUM]: "Medium",
+  [ISSUE_PRIORITY.LOW]: "Low",
+} as const satisfies Record<IssuePriority, string>;
 
 /** One status's issues, as the list draws them under its heading. */
 export interface IssueGroup {

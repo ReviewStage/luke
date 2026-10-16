@@ -65,6 +65,7 @@ const PLACE_KIND = {
   FACTORY: "factory",
   AUTOMATIONS: "automations",
   CHAT: "chat",
+  ISSUES: "issues",
   SETTINGS: "settings",
 } as const;
 
@@ -99,6 +100,7 @@ type Place =
       /** The workspace listed as Chat stood, whose chat it read. */
       readonly workspaceId: string | undefined;
     }
+  | { readonly kind: typeof PLACE_KIND.ISSUES }
   | { readonly kind: typeof PLACE_KIND.SETTINGS; readonly view: SettingsView };
 
 interface Trail {
@@ -336,6 +338,7 @@ export function useWindowHistory(input: {
     | "factoryView"
     | "automationsView"
     | "chatView"
+    | "issuesView"
     | "restoring"
     | "leaveGuard"
   >;
@@ -356,6 +359,8 @@ export function useWindowHistory(input: {
   const automationsOn = useExperiment(EXPERIMENT.AUTOMATIONS);
   const chatOpen = plans.chatView.open;
   const chatOn = useChatOn();
+  const issuesOpen = plans.issuesView.open;
+  const issuesOn = useExperiment(EXPERIMENT.ISSUES);
   // A launch reopening the plan last open stands nowhere until it opens, so
   // the home page it waits on is no place to go back to.
   const known = input.known && !plans.restoring;
@@ -385,6 +390,7 @@ export function useWindowHistory(input: {
       return { kind: PLACE_KIND.AUTOMATIONS, page: automationsPage, workspaceId: listedWorkspace };
     }
     if (chatOpen) return { kind: PLACE_KIND.CHAT, workspaceId: listedWorkspace };
+    if (issuesOpen) return { kind: PLACE_KIND.ISSUES };
     if (boundFor === undefined) return { kind: PLACE_KIND.HOME };
     return historyOpen
       ? { kind: PLACE_KIND.VERSION_HISTORY, taskId: boundFor, spot }
@@ -405,9 +411,10 @@ export function useWindowHistory(input: {
     automationsOpen,
     automationsPage,
     chatOpen,
+    issuesOpen,
   ]);
   const reachable = (to: Place) => {
-    // Factory and the Automations page are experiments, so back and forward pass over each while it is off.
+    // Factory, the Automations page, and the Issues page are experiments, so back and forward pass over each while it is off.
     if (to.kind === PLACE_KIND.FACTORY) return factoryOn;
     // An automation's page is of the workspace it stood in, whose automations alone it reads, so Back passes over it once another is listed, and once it is deleted.
     if (to.kind === PLACE_KIND.AUTOMATIONS) {
@@ -417,6 +424,7 @@ export function useWindowHistory(input: {
     }
     // Chat is the chat of the workspace it stood in, so Back passes over it once another is listed.
     if (to.kind === PLACE_KIND.CHAT) return chatOn && to.workspaceId === listedWorkspace;
+    if (to.kind === PLACE_KIND.ISSUES) return issuesOn;
     // A person's page is theirs in the workspace it stood in, so Back passes over it once another is listed.
     if (to.kind === PLACE_KIND.PERSON) return to.workspaceId === listedWorkspace;
     if (!("taskId" in to) || to.taskId === boundFor) return true;
@@ -458,13 +466,18 @@ export function useWindowHistory(input: {
       plans.chatView.onOpen();
       return;
     }
-    // Every other place of the Plans tab is the plan's, which the Inbox, an agent's or a person's page, Factory, the Automations page, and Chat stand over.
+    if (to.kind === PLACE_KIND.ISSUES) {
+      plans.issuesView.onOpen();
+      return;
+    }
+    // Every other place of the Plans tab is the plan's, which the Inbox, an agent's or a person's page, Factory, the Automations page, Chat, and the Issues page stand over.
     if (inboxOpen) plans.inboxView.onClose();
     if (pageAgent !== undefined) plans.agentView.onClose();
     if (pagePerson !== undefined) plans.personView.onClose();
     if (factoryOpen) plans.factoryView.onClose();
     if (automationsOpen) plans.automationsView.onClose();
     if (chatOpen) plans.chatView.onClose();
+    if (issuesOpen) plans.issuesView.onClose();
     // Note that a version history is opened on its spot even where it is
     // still open under Settings, because a version history out of sight
     // keeps no version chosen.

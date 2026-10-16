@@ -77,6 +77,7 @@ export const FIND_PAGE = {
   INBOX: "inbox",
   FACTORY: "factory",
   AUTOMATIONS: "automations",
+  ISSUES: "issues",
   VERSION_HISTORY: "version-history",
   PERSON: "person",
 } as const;

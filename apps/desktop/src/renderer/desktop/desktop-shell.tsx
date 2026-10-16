@@ -64,6 +64,24 @@ const AutomationsPage = lazy(() =>
 );
 
 /**
+ * The Issues page, loaded as a chunk of its own the first time it opens,
+ * as the Automations pages are and for the same reason.
+ */
+const IssuesPage = lazy(() =>
+  import("./issues-page").then((loaded) => ({ default: loaded.IssuesPage })),
+);
+
+/**
+ * What stands while the Issues page's chunk loads: its empty frame, and its
+ * own way out, so Escape pressed in that frame closes Issues as the list
+ * would rather than falling through to the plan behind it.
+ */
+function IssuesLoading({ onExit }: { onExit: () => void }): React.JSX.Element {
+  useAppCommand(APP_COMMAND.EXIT_ISSUES, onExit);
+  return <section className="issues-view" aria-label="Issues" />;
+}
+
+/**
  * What stands while the Automations pages' chunk loads: their empty frame,
  * and their own way out, so Escape pressed in that frame closes Automations
  * as the list would rather than falling through to the plan behind it.
@@ -163,6 +181,17 @@ function usePlaceCommands(
       ? () => {
           if (tab !== PANEL_TAB.TASKS) onTabChange(PANEL_TAB.TASKS);
           tasks.inboxView.onOpen();
+        }
+      : undefined,
+  );
+  // The Issues page is an experiment on the same terms as Factory.
+  const issuesOn = useExperiment(EXPERIMENT.ISSUES);
+  useAppCommand(
+    APP_COMMAND.ISSUES,
+    pastGate && tasks.signedIn && issuesOn
+      ? () => {
+          if (tab !== PANEL_TAB.TASKS) onTabChange(PANEL_TAB.TASKS);
+          tasks.issuesView.onOpen();
         }
       : undefined,
   );
@@ -272,6 +301,7 @@ function titleSubject(
     return { signedIn, subject: "Automations", workspace: tasks.workspace };
   }
   if (tasks.chatView.open) return { signedIn, subject: "Chat", workspace: tasks.workspace };
+  if (tasks.issuesView.open) return { signedIn, subject: "Issues", workspace: tasks.workspace };
   if (shownTask === undefined) return { signedIn, subject: undefined, workspace: tasks.workspace };
   // Note that a plan whose workspace is not read yet is named alone, because the listed one may not be its.
   const workspace = tasks.workspaces.find((each) => each.id === shownTask.workspaceId);
@@ -356,12 +386,17 @@ export function DesktopShell({
   useEffect(() => {
     if (chatShown && !chatOn) closeChat();
   }, [chatShown, chatOn, closeChat]);
+  const issuesOn = useExperiment(EXPERIMENT.ISSUES);
+  const { open: issuesShown, onClose: closeIssues } = tasks.issuesView;
+  useEffect(() => {
+    if (issuesShown && !issuesOn) closeIssues();
+  }, [issuesShown, issuesOn, closeIssues]);
   const { region } = tasks;
   // The folded sidebar's call card stands over the column's foot, clear of its dock.
   useColumnDock(
     shell,
     tasks.sidePanel.fullScreen,
-    `${tab}:${tasks.page}:${tasks.history.open}:${tasks.inboxView.open}:${tasks.agentView.agentId}:${tasks.personView.userId}:${tasks.factoryView.open}:${tasks.automationsView.open}:${tasks.chatView.open}:${sidebar.collapsed}`,
+    `${tab}:${tasks.page}:${tasks.history.open}:${tasks.inboxView.open}:${tasks.agentView.agentId}:${tasks.personView.userId}:${tasks.factoryView.open}:${tasks.automationsView.open}:${tasks.chatView.open}:${tasks.issuesView.open}:${sidebar.collapsed}`,
   );
   // The window's title names what stands in it, the plan only while it is on screen, and its workspace;
   // the Inbox, an agent's or a person's page, Factory, the Automations page, or Chat standing in its place is not the plan.
@@ -371,7 +406,8 @@ export function DesktopShell({
     tasks.personView.userId !== undefined ||
     tasks.factoryView.open ||
     tasks.automationsView.open ||
-    tasks.chatView.open;
+    tasks.chatView.open ||
+    tasks.issuesView.open;
   const shownTask =
     tab === PANEL_TAB.TASKS && !standingIn && region.kind === DOCUMENT_REGION.READY
       ? region.task
@@ -467,6 +503,7 @@ export function DesktopShell({
   const factoryOpen = tasks.factoryView.open && factoryOn;
   const automationsOpen = tasks.automationsView.open && automationsOn;
   const chatOpen = tasks.chatView.open && chatOn;
+  const issuesOpen = tasks.issuesView.open && issuesOn;
   const planToggle = tasks.page === TASKS_PAGE.DOCUMENT && !standingIn;
   const panelToggle = planToggle || pageAgent !== undefined;
   const taskDrawn = planToggle && tasks.region.kind === DOCUMENT_REGION.READY;
@@ -530,6 +567,12 @@ export function DesktopShell({
             ) : factoryOpen ? (
               <PageFind page={FIND_PAGE.FACTORY} active={tasks.shown}>
                 <DesktopFactory tasks={tasks} />
+              </PageFind>
+            ) : issuesOpen ? (
+              <PageFind page={FIND_PAGE.ISSUES} active={tasks.shown}>
+                <Suspense fallback={<IssuesLoading onExit={tasks.issuesView.onClose} />}>
+                  <IssuesPage tasks={tasks} />
+                </Suspense>
               </PageFind>
             ) : automationsOpen ? (
               <PageFind
