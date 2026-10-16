@@ -163,6 +163,14 @@ export const messages = pgTable(
      */
     senderModel: text("sender_model"),
     /**
+     * The coding agent that sent the line, by its id, which a reader opens
+     * it and reads its card by; null on every other row, and on an agent's
+     * line sent before it was kept. Note that it is no reference, as
+     * `senderName` is none: an agent goes with its task, and a line it sent
+     * another then names an agent no longer there, which reads as none.
+     */
+    senderAgentId: uuid("sender_agent_id"),
+    /**
      * The steps of its turn begun before the turn took the line in, on a
      * developer's line a coding agent's turn under way took after its first
      * step, so a reader draws the line among the turn's work where it

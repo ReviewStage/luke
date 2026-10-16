@@ -13,6 +13,7 @@ import {
   type CodingAgentSender,
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
+import { LINK_PLACE, type LinkPlace, type ReadLink } from "@luke/features/luke-link";
 import {
   WORKSPACE_ROLE,
   type Workspace,
@@ -29,6 +30,7 @@ import { onRegistry } from "#testing/copy-feedback";
 import { codingAgentsControl } from "#testing/tasks-control";
 import { MemberDirectory } from "../member-directory";
 import { AgentTab } from "./agent-tab";
+import { OpenLinkProvider } from "./use-open-link";
 
 /**
  * agent-senders.test.ts -- in an agent's tab, a message a teammate sent the
@@ -63,6 +65,24 @@ const MEMBERS: readonly WorkspaceMember[] = [
     pictureUrl: CHARLES_PICTURE,
   },
 ];
+
+/** The agent that sent the Claude line, on a task of its own. */
+const SENDER_ID = "2f9e8d7c-6b5a-4c3d-9e8f-7a6b5c4d3e2f";
+const SENDER_TASK = "5a4b3c2d-1e0f-4a9b-8c7d-6e5f4a3b2c1d";
+
+/** That agent as its task's agents are read now: renamed since it sent the line, and moved to another model. */
+const SENDER_NOW: CodingAgentSummary = {
+  id: SENDER_ID,
+  planId: SENDER_TASK,
+  model: "openai/gpt-6.1-sol",
+  effort: "high",
+  title: "Split view, merged",
+  createdAt: 1_000,
+  status: CODING_AGENT_STATUS.COMPLETED,
+  turnId: null,
+  brief: CODING_AGENT_BRIEF.PROMPT,
+  startedBy: DEAN,
+};
 
 const AGENT: CodingAgentSummary = {
   id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
@@ -108,11 +128,13 @@ const MESSAGES: readonly CodingAgentMessage[] = [
   }),
   line("left", "Keep the banner.", { userId: "user-ana", name: "Ana Ruiz", kind: MEMBER }),
   line("agent", "Thanks, that's everything I need.", { name: "Add PR overview tab", agent: true }),
-  // A service that keeps the sending agent answers the model it runs on, which its harness is read off.
+  // A service that keeps the sending agent answers the model it ran on, which its harness is read off, and the agent on its task.
   line("claude-agent", "The split view is merged.", {
     name: "Split view",
     agent: true,
     model: "anthropic/claude-opus-5.5",
+    agentId: SENDER_ID,
+    taskId: SENDER_TASK,
   }),
   // A service older than the sender's kind names Luke by name alone.
   line("older", "Rebase again.", { name: "Luke" }),
@@ -129,8 +151,8 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The developer's messages as `reader` sees the tab drawn, one element for each of `MESSAGES`. */
-async function drawnFor(reader: string): Promise<readonly Element[]> {
+/** The developer's messages as `reader` sees the tab drawn, one element for each of `MESSAGES`, every place a press opened kept in `opened`. */
+async function drawnFor(reader: string, opened: LinkPlace[] = []): Promise<readonly Element[]> {
   Object.defineProperty(window, "luke", {
     configurable: true,
     value: {
@@ -139,7 +161,9 @@ async function drawnFor(reader: string): Promise<readonly Element[]> {
         Promise.resolve(
           request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
             ? { status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS }
-            : { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." },
+            : request.kind === ACT_KIND.CODING_AGENTS_LIST
+              ? { status: ACT_OUTCOME_STATUS.DONE, value: { agents: [SENDER_NOW] } }
+              : { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." },
         ),
     },
   });
@@ -165,15 +189,18 @@ async function drawnFor(reader: string): Promise<readonly Element[]> {
     root?.render(
       onRegistry(
         AtomRegistry.make(),
-        createElement(MemberDirectory, {
-          workspace: ACME,
-          readerId: reader,
-          children: createElement(AgentTab, {
-            agent: AGENT,
-            control,
-            shown: true,
-            onOpenSubagent: () => undefined,
-            onHeld: () => undefined,
+        createElement(OpenLinkProvider, {
+          value: (link: ReadLink) => opened.push(link.place),
+          children: createElement(MemberDirectory, {
+            workspace: ACME,
+            readerId: reader,
+            children: createElement(AgentTab, {
+              agent: AGENT,
+              control,
+              shown: true,
+              onOpenSubagent: () => undefined,
+              onHeld: () => undefined,
+            }),
           }),
         }),
       ),
@@ -273,6 +300,31 @@ function readingOrder(message: Element, words: string): readonly string[] {
     )
     .map((each) => each.name);
 }
+
+test("another agent named as a line's sender opens its tab on a press and hangs its card as it stands now, while its mark stays the one it sent under", async () => {
+  const opened: LinkPlace[] = [];
+  const drawn = await drawnFor(DEAN.userId, opened);
+  const sender = drawn[
+    MESSAGES.findIndex((message) => message.id === "claude-agent")
+  ]?.querySelector<HTMLElement>(".message-sender .actor-ref");
+  assert.ok(sender instanceof HTMLButtonElement, "the sender is a door");
+
+  await act(async () => {
+    sender.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
+  const card = document.querySelector(".tooltip-card")?.textContent ?? "";
+  act(() => {
+    sender.dispatchEvent(new MouseEvent("pointerout", { bubbles: true }));
+  });
+  act(() => sender.click());
+
+  assert.ok(card.includes("Split view, merged"), card);
+  // The line still wears Claude Code's mark it was sent under, though the agent runs on Codex now.
+  assert.equal(sender.querySelector(".harness-mark")?.tagName.toLowerCase(), "svg");
+  assert.deepEqual(opened, [{ kind: LINK_PLACE.AGENT, planId: SENDER_TASK, agentId: SENDER_ID }]);
+  Reflect.deleteProperty(window, "luke");
+});
 
 test("a sent message keeps its bubble on top, with its Copy, who sent it, and when on the line under it", async () => {
   const drawn = await drawnFor(DEAN.userId);

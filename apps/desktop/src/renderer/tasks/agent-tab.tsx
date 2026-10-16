@@ -11,6 +11,7 @@ import {
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
 import { FAILURE_REASON, type FailureReason } from "@luke/features/failure-remedy";
+import { LINK_PLACE } from "@luke/features/luke-link";
 import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
 import { CALL_KIND, CALL_WORDS } from "@luke/features/turn-rows";
 import { ACT_KIND } from "@luke/host/acts";
@@ -20,7 +21,14 @@ import { MESSAGE_ROLE } from "@luke/wire";
 import { BotIcon, WebhookIcon, ZapIcon } from "lucide-react";
 import { Fragment, type ReactNode, useEffect, useMemo, useRef } from "react";
 import { useAct } from "../act";
-import { ActorLine, ActorRef, AutomationCard, automationActor } from "../actor-ref";
+import {
+  ACTOR_SIZE,
+  ActorLine,
+  ActorMark,
+  ActorRef,
+  AutomationCard,
+  automationActor,
+} from "../actor-ref";
 import {
   Conversation,
   ConversationContent,
@@ -34,6 +42,7 @@ import { TOOL_STATE } from "../ai-elements/tool";
 import { useAutomation } from "../automation-directory";
 import { useCopyToast } from "../copy-feedback";
 import { FailureNote } from "../failure-note";
+import { CardHead, HoverCard } from "../hover-card";
 import { useMemberDirectory, usePerson } from "../member-directory";
 import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { SPINNER_SIZE, Spinner } from "../spinner";
@@ -80,6 +89,7 @@ import {
   workerToolState,
 } from "./coding-agent-model";
 import { CopyMessageAction } from "./copy-message";
+import { MentionedAgentCard } from "./mentioned-agent-card";
 import {
   agentMessagePlace,
   MESSAGE_GONE,
@@ -125,6 +135,7 @@ import { useAgentPullRequest } from "./use-agent-pull-request";
 import { useAgentServers } from "./use-agent-servers";
 import { type AgentTranscriptControl, useAgentTranscript } from "./use-agent-transcript";
 import type { CodingAgentsControl } from "./use-coding-agents";
+import { useOpenPlace } from "./use-open-link";
 import { WorkedFor, WorkingLine } from "./working-time";
 
 /**
@@ -826,9 +837,56 @@ function agentOrigin(input: {
 function MessageSender({ actor }: { actor: Actor }): React.JSX.Element {
   return (
     <span className="message-sender">
-      <ActorRef actor={actor} />
+      {actor.kind === ACTOR_KIND.AGENT && actor.agentId !== undefined ? (
+        <SendingAgent actor={actor} agentId={actor.agentId} />
+      ) : (
+        <ActorRef actor={actor} />
+      )}
     </span>
   );
+}
+
+/**
+ * Another coding agent named as a line's sender, by the id the service
+ * answered for it: its harness's mark and its name, as it sent the line,
+ * hanging its tab's card as it stands now, read as the card is first hung
+ * (`mentioned-agent-card.tsx`), and opening its tab on a press.
+ */
+function SendingAgent({
+  actor,
+  agentId,
+}: {
+  actor: Extract<Actor, { kind: typeof ACTOR_KIND.AGENT }>;
+  agentId: string;
+}): React.JSX.Element {
+  const { workspaceId } = useMemberDirectory();
+  const openPlace = useOpenPlace();
+  const { taskId } = actor;
+  // Its own card stands while the agent is read, and where the read answers nothing.
+  const fallback = (
+    <HoverCard>
+      <CardHead glyph={<ActorMark actor={actor} size={ACTOR_SIZE.CARD} />} name={actor.name} />
+    </HoverCard>
+  );
+  const card = (
+    <MentionedAgentCard
+      agentId={agentId}
+      taskId={taskId}
+      name={actor.name}
+      workspaceId={workspaceId}
+      fallback={fallback}
+    />
+  );
+  const open =
+    openPlace === undefined
+      ? undefined
+      : () =>
+          openPlace({
+            kind: LINK_PLACE.AGENT,
+            ...(taskId === undefined ? undefined : { planId: taskId }),
+            agentId,
+          });
+  return <ActorRef actor={actor} card={card} onOpen={open} />;
 }
 
 /** When one of the developer's lines was sent, in the words a finished turn's line ends on (`WorkedFor`), after who sent it where anyone is named. */

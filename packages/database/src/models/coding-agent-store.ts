@@ -1804,7 +1804,8 @@ export function delegationStartsOf(
  * their account is gone; Luke; an automation by the name its run kept; or
  * GitHub by the login the line kept; or another coding agent by the name
  * its send kept, and the model it ran on then, which its harness is read
- * off, where the line kept one.
+ * off, where the line kept one, and the agent itself, by its id and the
+ * task it works on, where the line kept it and it still stands.
  */
 export type LineSent =
   | {
@@ -1818,7 +1819,14 @@ export type LineSent =
       readonly kind: typeof MESSAGE_SENDER.AGENT;
       readonly name: string;
       readonly model: string | undefined;
+      readonly agent: SendingAgent | undefined;
     };
+
+/** The coding agent that sent a line, as it stands now: its id, and the task it works on, none for one on no task. */
+export interface SendingAgent {
+  readonly id: string;
+  readonly taskId: string | undefined;
+}
 
 /** A line's sender as its row keeps it, with the member's account where it still stands. */
 const LineSenderRowSchema = Schema.Struct({
@@ -1828,6 +1836,8 @@ const LineSenderRowSchema = Schema.Struct({
   memberName: Schema.NullOr(Schema.String),
   senderName: Schema.NullOr(Schema.String),
   senderModel: Schema.NullOr(Schema.String),
+  agentId: Schema.NullOr(Schema.String),
+  agentTaskId: Schema.NullOr(Schema.String),
 });
 
 const findLineSenders = SqlSchema.findAll({
@@ -1847,9 +1857,12 @@ const findLineSenders = SqlSchema.findAll({
           memberName: user.name,
           senderName: messages.senderName,
           senderModel: messages.senderModel,
+          agentId: codingAgent.id,
+          agentTaskId: codingAgent.taskId,
         })
         .from(messages)
         .leftJoin(user, eq(user.id, messages.senderUserId))
+        .leftJoin(codingAgent, eq(codingAgent.id, messages.senderAgentId))
         .where(
           and(
             inArray(messages.id, [...messageIds]),
@@ -1889,6 +1902,10 @@ function lineSentOf(row: typeof LineSenderRowSchema.Type): LineSent | undefined 
             kind: MESSAGE_SENDER.AGENT,
             name: row.senderName,
             model: row.senderModel ?? undefined,
+            agent:
+              row.agentId === null
+                ? undefined
+                : { id: row.agentId, taskId: row.agentTaskId ?? undefined },
           };
   }
 }

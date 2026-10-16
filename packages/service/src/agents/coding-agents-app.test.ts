@@ -1713,7 +1713,12 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           ["Triage the failures.", { kind: MESSAGE_SENDER.AUTOMATION, name: "Nightly triage" }],
           [
             "Take the split view.",
-            { kind: MESSAGE_SENDER.AGENT, name: "Add PR overview tab", model: agent.model },
+            {
+              kind: MESSAGE_SENDER.AGENT,
+              agentId: agent.id,
+              name: "Add PR overview tab",
+              model: agent.model,
+            },
           ],
         ] as const) {
           yield* writer.writeAwaitingLine(
@@ -1744,10 +1749,16 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
             "Triage the failures.",
             { name: "Nightly triage", kind: CODING_AGENT_SENDER.AUTOMATION },
           ],
-          // Another agent is marked as one beside its name and its model, with no kind an older window would refuse.
+          // Another agent is marked as one beside its name, its model, and itself on its task, with no kind an older window would refuse.
           [
             "Take the split view.",
-            { name: "Add PR overview tab", agent: true, model: agent.model },
+            {
+              name: "Add PR overview tab",
+              agent: true,
+              model: agent.model,
+              agentId: agent.id,
+              taskId: task.id,
+            },
           ],
         ];
         assert.deepEqual(yield* sendersAs(owner), named);

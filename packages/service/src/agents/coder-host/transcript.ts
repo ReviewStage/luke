@@ -261,6 +261,8 @@ function senderOf(sent: LineSent): CodingAgentSender {
         name: sent.name,
         agent: true,
         ...(sent.model === undefined ? undefined : { model: sent.model }),
+        ...(sent.agent === undefined ? undefined : { agentId: sent.agent.id }),
+        ...(sent.agent?.taskId === undefined ? undefined : { taskId: sent.agent.taskId }),
       };
   }
 }

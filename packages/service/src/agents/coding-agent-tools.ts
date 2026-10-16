@@ -904,6 +904,7 @@ function messageLine(
     text: line,
     sender: {
       kind: MESSAGE_SENDER.AGENT,
+      agentId: caller.agent.id,
       name: agentName(caller.agent),
       model: caller.agent.model,
     },

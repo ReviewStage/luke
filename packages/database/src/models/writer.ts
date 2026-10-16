@@ -306,7 +306,8 @@ type UserMessageWriteResult = Result.Result<
  * What sent a line to a coding agent, as its row keeps it: the member by
  * their account, Luke, an automation by its name as it stands at the send,
  * GitHub by the login of who caused what it tells of, or another coding
- * agent by its name and the model it runs on as they stand at the send.
+ * agent by its id, and its name and the model it runs on as they stand at
+ * the send.
  */
 export type LineSender =
   | { readonly kind: typeof MESSAGE_SENDER.MEMBER; readonly userId: string }
@@ -315,6 +316,7 @@ export type LineSender =
   | { readonly kind: typeof MESSAGE_SENDER.GITHUB; readonly login: string }
   | {
       readonly kind: typeof MESSAGE_SENDER.AGENT;
+      readonly agentId: string;
       readonly name: string;
       readonly model: string;
     };
@@ -599,6 +601,7 @@ const MessageInsertSchema = Schema.Struct({
   senderUserId: Schema.NullOr(Schema.String),
   senderName: Schema.NullOr(Schema.String),
   senderModel: Schema.NullOr(Schema.String),
+  senderAgentId: Schema.NullOr(Schema.String),
 });
 
 const lockConversation = SqlSchema.findOneOption({
@@ -747,6 +750,7 @@ const insertMessageRow = SqlSchema.findOneOption({
           senderUserId: row.senderUserId,
           senderName: row.senderName,
           senderModel: row.senderModel,
+          senderAgentId: row.senderAgentId,
         })
         .returning({ id: messages.id }),
     ),
@@ -1214,6 +1218,7 @@ const insertMessage = /* @__PURE__ */ Effect.fnUntraced(function* (
     senderUserId: row.sender?.kind === MESSAGE_SENDER.MEMBER ? row.sender.userId : null,
     senderName: senderNameOf(row.sender),
     senderModel: row.sender?.kind === MESSAGE_SENDER.AGENT ? row.sender.model : null,
+    senderAgentId: row.sender?.kind === MESSAGE_SENDER.AGENT ? row.sender.agentId : null,
   });
   const written = yield* required(inserted, "the message insert answered no row");
   return { id: written.id, seq };

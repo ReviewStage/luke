@@ -1006,6 +1006,14 @@ const codingAgentSenderSchema = EffectSchema.Struct({
    * older than it.
    */
   model: EffectSchema.optionalKey(recordedChoice),
+  /**
+   * That agent's id, which the window opens its tab and reads its card by;
+   * absent for any other sender, for an agent's line sent before it was
+   * kept, once that agent is gone, and from a service older than it.
+   */
+  agentId: EffectSchema.optionalKey(wireUuidSchema),
+  /** The task that agent works on, where `agentId` is given and it works on one. */
+  taskId: EffectSchema.optionalKey(wireUuidSchema),
 });
 
 export type CodingAgentSender = typeof codingAgentSenderSchema.Type;
