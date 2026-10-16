@@ -6,8 +6,10 @@ import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { VOICE_KEYLESS_NOTE } from "@luke/voice/microphone-access";
 import { test } from "vitest";
 import {
+  ISSUE_MATCH_LIMIT,
   MICROPHONE_PRESS,
   markedView,
+  matchingIssues,
   microphoneButton,
   pendingMark,
   positionedView,
@@ -163,4 +165,31 @@ test("an unpin given here takes the pin's place with it, so a pin made again sta
   ).tasks[0];
   assert.equal(unpinned?.pinnedAt, undefined);
   assert.equal(unpinned?.pinPosition, undefined);
+});
+
+test("New task offers the Linear issues whose title or key holds every word typed, the key or number typed whole first, then word starts, then Linear's own order", () => {
+  const issues = [
+    { identifier: "ENG-9", title: "Handle 400 errors from Linear" },
+    { identifier: "ENG-12", title: "Restack the deploy queue" },
+    { identifier: "ENG-7", title: "Add support for stacked PRs" },
+    { identifier: "ENG-3", title: "Show the merge queue" },
+    { identifier: "OPS-40", title: "Rotate the deploy key" },
+  ];
+  const keys = (typed: string) => matchingIssues(issues, typed).map((issue) => issue.identifier);
+
+  assert.deepEqual(keys("stack"), ["ENG-7", "ENG-12"]);
+  assert.deepEqual(keys("DEPLOY q"), ["ENG-12"]);
+  assert.deepEqual(keys("40"), ["OPS-40", "ENG-9"]);
+  assert.deepEqual(keys("ops-40"), ["OPS-40"]);
+  assert.deepEqual(keys("refactor billing"), []);
+  assert.deepEqual(keys("   "), []);
+});
+
+test("New task offers at most a handful of issues however many match", () => {
+  const issues = Array.from({ length: ISSUE_MATCH_LIMIT + 4 }, (_, index) => ({
+    identifier: `ENG-${index + 1}`,
+    title: `Task ${index + 1}`,
+  }));
+
+  assert.equal(matchingIssues(issues, "task").length, ISSUE_MATCH_LIMIT);
 });

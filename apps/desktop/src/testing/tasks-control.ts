@@ -306,7 +306,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
       repositoriesIn: () => NO_REPOSITORIES,
       start: () => Promise.resolve(undefined),
       onClose: ignore,
-      linear: undefined,
+      linearIssuesIn: () => undefined,
     },
     onLeaveTask: ignore,
     onGoHome: ignore,
