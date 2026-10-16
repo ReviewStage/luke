@@ -47,13 +47,13 @@ export function Checkbox({
         type="checkbox"
         id={id}
         name={name}
-        // Note that a mixed box holds the native box unchecked whatever
-        // `checked` says, because the box toggles its own state under the
-        // dash, and a press on a mixed group must ask for checked.
-        checked={mixed ? false : checked}
+        checked={checked}
         disabled={disabled}
         aria-describedby={describedBy}
-        onChange={(event) => onChange(event.target.checked)}
+        // Note that a mixed box asks for checked whatever its box toggled
+        // to under the dash, while the box itself keeps the caller's
+        // `checked`, so a form it stands in still submits what the caller holds.
+        onChange={(event) => onChange(mixed ? true : event.target.checked)}
       />
       <span className="luke-checkbox-words">{children}</span>
     </label>
