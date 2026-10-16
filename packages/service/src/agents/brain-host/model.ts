@@ -1,6 +1,4 @@
-import { createOpenAI } from "@ai-sdk/openai";
-import type { LanguageModel } from "ai";
-import { Redacted, type Result } from "effect";
+import type { Result } from "effect";
 import type { MeterSeams } from "../agent-runtime/meter.js";
 import type { CoderRefusal } from "../coder-host/bounds.js";
 import { type CoderModelSelection, coderModel } from "../coder-host/model.js";
@@ -34,13 +32,4 @@ export function brainModelSelection(
     // The brain runs on OpenAI alone, which has no fast version Luke runs, so no fast step is refused.
     async () => undefined,
   );
-}
-
-/** OpenAI's Responses model on Luke's own key, as the AI SDK reaches it. */
-export function openAiBrainModel(
-  apiKey: Redacted.Redacted,
-  modelId: string,
-): Exclude<LanguageModel, string> {
-  // The key is revealed here alone, into the SDK client that puts it on its requests.
-  return createOpenAI({ apiKey: Redacted.value(apiKey) }).responses(modelId);
 }

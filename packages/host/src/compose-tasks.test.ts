@@ -9,6 +9,7 @@ import {
   VOICE_SERVICE_FRAME,
   WORKSPACE_CALL_FAILURE,
 } from "@luke/features";
+import { AGENT_TOOL } from "@luke/features/agent-tools";
 import type { Board } from "@luke/features/board-wire";
 import {
   CODING_AGENT_CALL_FAILURE,
@@ -2307,5 +2308,56 @@ it.effect(
       );
       const open = last()?.document;
       assert.equal(open?.status === TASKS_READ.READY ? open.task?.workspaceId : undefined, ACME.id);
+    }),
+);
+
+it.effect(
+  "with no call up, the open plan's document is read again as Luke's turn writes the plan, and once more as the turn stops writing",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
+      const { call, tasks, viewLands, conversations } = yield* subject(service);
+      yield* tasks.lifetime;
+      yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
+      yield* conversations.nextAsk;
+      const editing: CodingAgentMessage = {
+        id: "turn-1",
+        role: MESSAGE_ROLE.ASSISTANT,
+        parts: [
+          { type: "text", text: "Writing it down." },
+          {
+            type: `tool-${AGENT_TOOL.EDIT_PLAN}`,
+            toolCallId: "call-1",
+            state: "output-available",
+            input: { notes: [] },
+            output: "Started task edit_plan-1.",
+          },
+        ],
+      };
+      // The save lands behind the call's receipt, and the next page of the turn carries the call again.
+      service.tasks = [task(INVITES, "Teammate invitations", "# Draft\n\n- Invites expire.", 20)];
+      const saved = yield* viewLands(
+        (view) =>
+          view.document?.status === TASKS_READ.READY &&
+          view.document.task?.document.body.endsWith("Invites expire.") === true,
+      );
+      yield* conversations.answer(
+        INVITES,
+        conversationPage([editing], "1:1", CODING_AGENT_STATUS.RUNNING),
+      );
+      yield* saved;
+
+      service.tasks = [task(INVITES, "Teammate invitations", "# Draft\n\n- Resend daily.", 30)];
+      assert.deepEqual(yield* conversations.nextAsk, [INVITES, CONVERSATION_READ.AFTER, "1:1"]);
+      const after = yield* viewLands(
+        (view) =>
+          view.document?.status === TASKS_READ.READY &&
+          view.document.task?.document.body.endsWith("Resend daily.") === true,
+      );
+      yield* conversations.answer(
+        INVITES,
+        conversationPage([journal("turn-1", "Done.")], "2:2", CODING_AGENT_STATUS.COMPLETED),
+      );
+      yield* after;
     }),
 );

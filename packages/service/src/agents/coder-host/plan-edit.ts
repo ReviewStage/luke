@@ -34,7 +34,7 @@ import { type InboxSandboxDoor, readSandboxImage, type SandboxImageTerms } from 
  * An agent that meets something the plan does not settle, verifies a fact
  * the plan has wrong, or makes a decision the plan left open does not stop
  * and does not keep it to itself: it takes notes on the plan exactly as the
- * planning call's notetaker does (`tasks/plan-scribe.ts`), under the same
+ * planning model does (`../brain-host/plan-edit.ts`), under the same
  * schema and through the plan's one write (`plan-notes.ts`), which journals
  * the save under the agent's id, so the planning model and the developer
  * read them on the next call and see which agent wrote what. A call's notes
@@ -247,7 +247,7 @@ function refused(
 }
 
 /** A note that missed, in the words the model reads: its kind and where it was aimed, a long find cut. */
-function missedNote(note: PlanNote): string {
+export function missedNote(note: PlanNote): string {
   if (note.kind === NOTE_KIND.ADD) return `${note.kind} under ${note.section}`;
   const find =
     note.find.length > MISSED_FIND_CHARS ? `${note.find.slice(0, MISSED_FIND_CHARS)}…` : note.find;

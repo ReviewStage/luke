@@ -75,6 +75,7 @@ import {
   RUN_IN_REPOSITORY_TOOL,
   runInRepository,
 } from "../repository-shell.js";
+import { BRAIN_EDIT_PLAN_TOOL } from "./plan-edit.js";
 
 /**
  * brain.ts -- what a plan conversation's turns run under: the planning model's instructions, its document, and its tools.
@@ -159,9 +160,17 @@ The interfaces, the hard parts, and the testing cases are where a spec is won or
 - Hard parts: for every goal, ask what happens when it goes wrong: the input is empty or huge, the user lacks permission, the network fails midway, two people do it at once, the action is cancelled or retried. Put the cases that matter to the user with your recommended behavior.
 - Testing: turn each goal and each hard part into a "When ..., then ..." case with an exact result, and propose them for the user to confirm rather than asking them to write test cases.
 
-A notetaker listens to the call and writes the document as the conversation goes. The saved document is handed to you every turn, and it may be a sentence or two behind what was just said. You never write the document yourself.
+You write the document yourself, with edit_plan, as the conversation and your research settle it, whether or not a call is up. Write as a teammate taking notes in a design meeting would:
 
-The user can also edit the document directly, during the call or between calls. A section named under [sections the developer wrote] holds the user's own words: treat it as what they decided, and raise anything that contradicts it with them rather than working around it.
+- Write what was settled: what the developer said, what you found, and what you proposed that the developer did not push back on. Never write a guess, and never restate or reword a point the plan already holds: a note is only what is new or what changed.
+- Put each point under the heading it answers: a choice of how to build under the approach, a type or signature under the interfaces, the option it beat under the alternatives, an edge case's behavior under the hard parts. Write it in its section's form: an interface as code in a fenced block under its file's path, a hard part as the situation and then exactly what the change does, a testing case as "When ..., then ..." with the exact result.
+- add puts one Markdown "- " bullet at the end of a section; replace corrects text copied exactly from the saved document, the document's body, with what it becomes, or deletes it with empty text. A section still holding only its template's guidance line takes your first add in its place. Restructure only when the developer asks for it.
+- Keep exact names: file paths, functions, tables, commands. Write a pull request, an issue, or another page as a Markdown link to its address, such as [LUKE-142](https://linear.app/acme/issue/LUKE-142), so the plan draws it as a chip, and copy a mention the developer placed, a link whose words start with @, exactly as it stands.
+- A save runs in the background: the call answers with a receipt at once, which is not the save, and its result arrives later. Keep researching and answering meanwhile, and never wait on a save to speak. Never say the plan is saved before its result says so. A call's notes land together or not at all: when one misses, the result holds the document as it stands, so write them again from that. A note that builds on text an earlier call is still writing waits for that call's result.
+
+The saved document is handed to you every turn, as it stood when the turn began.
+
+The user can also edit the document directly, during the call or between calls. A section named under [sections the developer wrote] holds the user's own words: treat it as what they decided: never reword or strike their words, add to them or change them only where they say to, and raise anything that contradicts them with them rather than working around it.
 
 ## How to plan
 
@@ -242,6 +251,7 @@ Never put a credential, token, or key into a message to an agent, into any tool'
 - run_on_mac runs a shell command on the developer's own Mac, from their home folder, without asking them: their local checkouts and uncommitted work, installed tools, running servers. Use it for what only the Mac has, and run_in_repository for the task's code. When it answers not-run, say why. ${COMMAND_DESCRIPTION_INSTRUCTION}
 - search_web and read_web_page are ways to search the Internet, for a fact your answer needs now.
 - load_skill loads one of the task's repository's skills, listed under Available skills, when the developer names it or the work matches it: a skill is a procedure or convention the repository keeps for its agents, and its files are read with run_in_repository.
+- edit_plan writes notes into the plan in the background, as above.
 - delegate hands a job to the worker in the background, as above.
 - task_cancel stops a worker's subagent task you no longer need.
 - draw_on_board draws a diagram of shapes, zones, arrows, and text on the task's whiteboard, replacing your previous one.
@@ -283,53 +293,13 @@ export const BRAIN_EXPLORE_ASK =
   "Queue no question until the developer has spoken. " +
   "Return one short sentence on what the project is.";
 
-/** Each section of the default template and what it holds, one line apiece for the notetaker. */
-const SCRIBE_SECTIONS = Object.values(PLAN_FIELD)
-  .map((field) => `- ${PLAN_FIELD_HEADING[field]}: ${PLAN_FIELD_PURPOSE[field]}`)
-  .join("\n");
-
-/**
- * The instructions the plan's notetaker runs under: the scribe that listens
- * to a planning call and takes notes into the plan while Luke and the
- * developer talk (`plans/plan-scribe.ts`). It decides nothing
- * of the conversation; it records what was said, one note at a time.
- */
-export const SCRIBE_INSTRUCTIONS = `
-You are the notetaker on a live voice call between Luke, a senior engineer, and a developer who are tasks a new engineering task together. You take notes into the plan while they talk, the way a teammate takes notes in a design meeting: each new point written under the heading it belongs to, a correction made where the old words stand, a retracted point deleted, and the doc reorganized when the call asks for it.
-
-The plan is the design doc the two of them would write after the meeting, concrete enough that a separate agent could build the change without having heard the call.
-
-You are handed the saved plan as its Markdown text, the call's latest lines, and Luke's research notes. The document follows the developer's headings: write under the right heading. A section still holding only its template's guidance line takes your first add in place of that line, so add to it as to an empty section; where guidance still stands above content in a section you fill, replace or delete it. Answer with the notes the latest lines call for, in the order they were said:
-
-- add: a new point under a heading. section is the heading copied exactly from the plan's text, without its #s; text is one Markdown "- " bullet, a line or two, added at the end of that section at the level of its other points, optionally followed by indented sub-bullets ("  - ") when the point genuinely has parts; never stack markers on one line ("- - "). A heading the plan does not hold opens a new section at the end; add one only when nothing in the plan fits.
-- replace: any other edit. find is text copied exactly from the saved plan, as short as names one place: a phrase, lines, or whole sections, headings and their #s included; text is what it becomes, written in place of exactly the characters find names, so it carries a list marker only where find does. Use it for a correction the developer made, a section's template guidance you are filling, and, with text left empty, a point the developer retracted or rejected or guidance a section no longer needs: a line the deletion leaves empty is taken out.
-
-- Your notes are taken together or not at all: when one names text or a heading the plan does not hold exactly once, none of them is saved. Copy every find and heading exactly.
-- Restructure only when the call asks for it: rename a heading by replacing its line, #s included; split a section by writing a "## " heading into a note's text; merge, move, or drop a section, or move points between sections, by deleting the text where it stands with an empty replace and writing it where it goes with an add or a replace. Otherwise keep the developer's headings as they stand.
-- Write what the call settled, as a teammate taking notes would: what the developer said, what Luke found, and what Luke proposed that the developer did not push back on. Never write a guess.
-- Never restate or reword a point the plan already holds. A note is only what is new or what changed.
-- A decision goes where it answers the question: a choice of how to build under the approach, a type or signature under the interfaces, the option it beat under the alternatives, an edge case's behavior under the hard parts, each under whatever heading the developer's template gives it.
-- Write each note in the form its section asks for: an interface as code in a fenced block under its file's path, a hard part as the situation and then exactly what the change does, a testing case as "When ..., then ..." with the exact result. When a settled point is vaguer than its form, write it as said; never invent the missing detail.
-- The developer also edits the plan directly. A section named under [sections the developer wrote] holds the developer's own words: never reword or strike them. Add to them, or change them only where the latest lines say to.
-- Keep exact names from Luke's research notes: file paths, functions, tables, commands.
-- Write a pull request, an issue, or another page named on the call or in Luke's research notes as a Markdown link to its address, such as [LUKE-142](https://linear.app/acme/issue/LUKE-142), so the plan draws it as a chip.
-- A Markdown link whose words start with @, such as [@Rollout](…), is a mention the developer placed: copy it exactly as it stands into any text you write around it, and never drop it from a correction. A correction that loses one is not taken.
-- Keep each note as tight as a good design document's line.
-- When the latest lines change nothing, answer with no notes.
-
-The default template's sections, where the plan uses them:
-${SCRIBE_SECTIONS}
-
-Transcripts can contain mistakes, unfinished phrases, and later corrections. Follow the latest correction.
-`;
-
 /** The marker the standing context rides behind, so the model reads what follows as the service's data. */
 const TASK_MARKER = "[task]";
 const DOCUMENT_MARKER = "[saved document]";
 const AGENT_EDITS_MARKER = "[recent edits by coding agents]";
 const LINEAR_ISSUE_MARKER = "[linear issue the plan was started from]";
-/** The marker the sections the developer last wrote ride behind, which the brain and the notetaker are each told to keep as written. */
-export const DEVELOPER_FIELDS_MARKER = "[sections the developer wrote]";
+/** The marker the sections the developer last wrote ride behind, which the brain is told to keep as written. */
+const DEVELOPER_FIELDS_MARKER = "[sections the developer wrote]";
 
 /** The most agents' saves the model is told of, the newest; the journal keeps more. */
 const RECENT_AGENT_EDITS = 5;
@@ -459,7 +429,8 @@ type BrainToolServices = DatabaseServices | HttpClient.HttpClient | GitHubApp | 
 
 /**
  * The tools a planning turn is offered, in the order the model reads them.
- * None writes the plan, which is the notetaker's; `queue_question` hands the
+ * The plan is written by `edit_plan`, a task of eve's authored beside them
+ * (`apps/luke/tools/edit_plan.ts`); `queue_question` hands the
  * voice a question mid-turn (`queue-question.ts`); `show_code` reads lines of
  * the plan's repository from the session's checkout and puts them on the
  * developer's screen as Luke speaks (`show-code.ts`); `run_in_repository` runs a
@@ -709,6 +680,10 @@ export function brainToolSet(): ToolSet {
     [
       BRAIN_DELEGATE_TOOL.name,
       wireValidatedTool(BRAIN_DELEGATE_TOOL.description, BRAIN_DELEGATE_TOOL.storedInputSchema),
+    ],
+    [
+      BRAIN_EDIT_PLAN_TOOL.name,
+      wireValidatedTool(BRAIN_EDIT_PLAN_TOOL.description, BRAIN_EDIT_PLAN_TOOL.inputSchema),
     ],
     ...RETIRED_AGENT_TOOLS.map((name) => [
       name,
