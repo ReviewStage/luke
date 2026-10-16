@@ -188,10 +188,13 @@ let root: Root | undefined;
 let inboxRefused = false;
 /** Whether the automations' reads are refused, as a read that failed is. */
 let automationsRefused = false;
+/** Whether the Inbox's reads are still out, answering nothing yet. */
+let inboxHeld = false;
 
 beforeEach(() => {
   inboxRefused = false;
   automationsRefused = false;
+  inboxHeld = false;
   window.localStorage.clear();
   Object.defineProperty(window, "luke", {
     configurable: true,
@@ -199,6 +202,10 @@ beforeEach(() => {
       onMenuCommand: () => () => undefined,
       recordSurfaceEvent: () => undefined,
       act: (request: Act) => {
+        const inbox =
+          request.kind === ACT_KIND.CODING_AGENTS_INBOX ||
+          request.kind === ACT_KIND.CODING_AGENTS_AGENT_INBOX;
+        if (inbox && inboxHeld) return new Promise(() => undefined);
         if (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ) {
           return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS });
         }
@@ -526,4 +533,17 @@ test("automations that could not be read say so and offer Retry, never passing f
 
   assert.doesNotMatch(page.textContent ?? "", /could not be read/u);
   assert.match(page.textContent ?? "", /Nothing of theirs here yet\./u);
+});
+
+test("automations that could not be read leave the Inbox still being read saying so, each read saying its own state", async () => {
+  handState(experimentsOn(EXPERIMENT.AUTOMATIONS));
+  automationsRefused = true;
+  inboxHeld = true;
+  const { page } = mount("user-sam");
+  await settle();
+
+  assert.match(page.textContent ?? "", /Their automations could not be read\./u);
+  // The Inbox still being read stands as its own wait beside the automations' failure.
+  assert.equal(page.querySelectorAll('.person-column .spinner[role="status"]').length, 1);
+  assert.doesNotMatch(page.textContent ?? "", /Nothing of theirs here yet/u);
 });

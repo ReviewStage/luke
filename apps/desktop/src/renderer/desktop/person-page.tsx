@@ -446,18 +446,24 @@ function PersonColumn({
               <span>Some Inbox items could not be read.</span>
               <RetryButton onRetry={read.onRetry} />
             </div>
+          ) : waiting.length === 0 && read.reading ? (
+            <Spinner label="Loading inbox" size={SPINNER_SIZE.INLINE} />
           ) : null}
           {theirAutomations.failed ? (
             <div className="sidebar-note person-empty flex items-center gap-2" role="alert">
               <span>{you ? "Your" : "Their"} automations could not be read.</span>
               <RetryButton onRetry={theirAutomations.onRetry} />
             </div>
-          ) : null}
-          {read.failed || theirAutomations.failed ? null : waiting.length === 0 && read.reading ? (
-            <Spinner label="Loading inbox" size={SPINNER_SIZE.INLINE} />
           ) : theirAutomations.reading ? (
             <Spinner label="Loading automations" size={SPINNER_SIZE.INLINE} />
-          ) : personPageEmpty(page) && waiting.length === 0 && automations.length === 0 ? (
+          ) : null}
+          {/* Note that the page is said to be empty only once both reads have answered, since either may yet name something. */}
+          {read.failed ||
+          read.reading ||
+          theirAutomations.failed ||
+          theirAutomations.reading ? null : personPageEmpty(page) &&
+            waiting.length === 0 &&
+            automations.length === 0 ? (
             <p className="sidebar-note person-empty">
               {you ? "Nothing of yours here yet." : "Nothing of theirs here yet."}
             </p>
