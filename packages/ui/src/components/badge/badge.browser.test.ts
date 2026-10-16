@@ -49,26 +49,31 @@ for (const surface of [
   });
 }
 
-test("a label wider than its row stays inside the row, every word still shown", async () => {
-  const label = "Waiting for administrator approval";
-  const { container } = await mount(
-    createElement(
-      "div",
-      { style: { width: "120px" } },
+for (const label of ["Waiting for administrator approval", "WaitingForAdministratorApproval"]) {
+  test(`a label wider than its row stays inside the badge and the row, every word still shown: ${label}`, async () => {
+    const { container } = await mount(
       createElement(
-        Inline,
-        null,
-        createElement(Badge, { tone: BADGE_TONE.ATTENTION, children: label }),
+        "div",
+        { style: { width: "120px" } },
+        createElement(
+          Inline,
+          null,
+          createElement(Badge, { tone: BADGE_TONE.ATTENTION, children: label }),
+        ),
       ),
-    ),
-  );
-  const row = container.querySelector(".luke-inline");
-  const badge = container.querySelector(".luke-badge");
-  if (!(row instanceof HTMLElement) || !(badge instanceof HTMLElement))
-    throw new Error("not drawn");
-  expect(badge.textContent).toBe(label);
-  expect(badge.getBoundingClientRect().right).toBeLessThanOrEqual(
-    row.getBoundingClientRect().right,
-  );
-  expect(badge.scrollWidth).toBeLessThanOrEqual(badge.clientWidth);
-});
+    );
+    const row = container.querySelector(".luke-inline");
+    const badge = container.querySelector(".luke-badge");
+    if (!(row instanceof HTMLElement) || !(badge instanceof HTMLElement))
+      throw new Error("not drawn");
+    const words = document.createRange();
+    words.selectNodeContents(badge);
+    expect(badge.textContent).toBe(label);
+    expect(words.getBoundingClientRect().right).toBeLessThanOrEqual(
+      badge.getBoundingClientRect().right,
+    );
+    expect(badge.getBoundingClientRect().right).toBeLessThanOrEqual(
+      row.getBoundingClientRect().right,
+    );
+  });
+}

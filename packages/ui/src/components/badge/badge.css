@@ -26,6 +26,14 @@
     font-size: var(--luke-type-caption-size);
     line-height: var(--luke-type-caption-leading);
     font-weight: var(--luke-weight-medium);
+  }
+
+  /* Note that the words are an element of their own that may shrink below
+     its longest word, because text left loose in the badge keeps that word's
+     width and paints past the pill; it breaks a word only where the word
+     alone overflows, never where wrapping at a space would do. */
+  .luke-badge-words {
+    min-width: 0;
     overflow-wrap: break-word;
   }
 

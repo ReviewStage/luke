@@ -38,7 +38,7 @@ export function Badge({
   return (
     <span className="luke-badge" data-tone={tone}>
       {icon}
-      {children}
+      <span className="luke-badge-words">{children}</span>
     </span>
   );
 }
