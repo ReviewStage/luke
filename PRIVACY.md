@@ -886,7 +886,13 @@ only when you press Send.
   words it gives to describe a command) and output — is written to your
   account's conversation as described under "Your account". Archiving an agent
   stops a running turn and sets the agent aside; its transcript, with your
-  files, and its pull request are kept, and you can bring it back. The sandbox
+  files, and its pull request are kept, and you can bring it back. Luke and
+  coding agents can archive an idle agent of the workspace too, a teammate's
+  included, for the member they act for, and bring one back; neither archives
+  one that is still working. The agent records who archived it (you, or Luke
+  or the archiving agent's title on your behalf) and any reason given, which
+  every member of the workspace sees on the archived agent until it is
+  brought back, when the record is cleared. The sandbox
   has ordinary Internet access and runs the repository's own checks; the agent
   searches the web as described above. The sandbox stops when a turn ends or
   you stop it, and its checkout, with the agent's changes, stays in a snapshot

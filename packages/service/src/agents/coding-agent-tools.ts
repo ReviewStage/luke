@@ -1,15 +1,21 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import {
+  archiveCodingAgent,
+  archiveUnmovedCodingAgent,
   awaitingLinesOfReached,
   type CodingAgent,
+  codingAgentLineSeq,
   latestTurnsOfReached,
+  readCodingAgent,
   readCodingAgentByKey,
 } from "@luke/database/models/coding-agent-store";
 import { listJournals } from "@luke/database/models/message-reads";
 import { listTasks } from "@luke/database/models/task-store";
 import type { LineSender, StoreWriter } from "@luke/database/models/writer";
+import type { StoredArchive } from "@luke/database/schemas/coding-agent";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import {
+  CODING_AGENT_ARCHIVER,
   CODING_AGENT_BOUNDS,
   CODING_AGENT_STATUS,
   type CodingAgentFailure,
@@ -97,7 +103,16 @@ import {
  * checked against the catalog, whose choices the refusal lists. An agent a
  * coding agent starts is told in that note which agent started it and how
  * to report back, and its choice leaves the member's default as it stood.
- * Each tool reaches eve as the deployment acting for the caller's member,
+ * An archive takes the rule the Archive agent menu's does for the member
+ * the caller acts for: any agent of the workspace that member could
+ * archive, a teammate's among them, with the stamp the menu writes, and
+ * beside it who archived it, the caller on that member's behalf, and the
+ * reason given, which the archived agent's banner shows. Where the menu asks
+ * the developer before it stops a working agent, a tool has no one to ask,
+ * so only an idle agent is archived, and only while its conversation stands
+ * where it was read idle; an agent archives no one while it works and never
+ * itself. An archive or an unarchive already standing answers as done, so
+ * a call eve runs again does nothing twice. Each tool reaches eve as the deployment acting for the caller's member,
  * which the coder channel's table admits for exactly this
  * (`coder-host/channel.ts`). Every answer is data the model reads, never a
  * credential.
@@ -155,6 +170,20 @@ export const CODING_AGENT_TOOL_REFUSAL = {
     "Not sent: that agent's task is archived, so its agents take no message until a member unarchives it.",
   AGENT_ARCHIVED:
     "Not sent: that agent is archived, so it takes no message and is not woken until a member unarchives it.",
+} as const;
+
+/** Why an archive or an unarchive changed nothing, in words the model can act on. */
+export const ARCHIVE_AGENT_REFUSAL = {
+  UNREADABLE:
+    `Not run: name the agent by the id ${AGENT_TOOL.LIST_AGENTS} answered, and a reason as text of at ` +
+    `most ${CODING_AGENT_BOUNDS.MAX_ARCHIVE_REASON_CHARS} characters or none.`,
+  SELF: "Not archived: that id is your own, and an agent does not archive itself; say you are done, and the developer archives you.",
+  WORKING:
+    "Not archived: that agent is still starting or working, and archiving it would stop a turn no one gets back. " +
+    "Wait until it is idle, or ask the developer, who can stop and archive it.",
+  MOVED:
+    "Not archived: that agent's conversation moved as it was read, so it may be working again; " +
+    `read it again with ${AGENT_TOOL.LIST_AGENTS} and call again if it is idle.`,
 } as const;
 
 /** Why a start made nothing, in words the model can act on; a choice the catalog refused is said with the choices (`choiceRefusal`). */
@@ -290,6 +319,23 @@ const START_AGENT_INPUT = Schema.Struct({
 });
 
 const readAgentRef = Schema.decodeUnknownResult(READ_AGENT_INPUT);
+
+const ARCHIVE_AGENT_INPUT = Schema.Struct({
+  agentId: AGENT_ID,
+  reason: Schema.optionalKey(
+    describeWire(
+      Schema.Trim.check(
+        Schema.isNonEmpty(),
+        Schema.isMaxLength(CODING_AGENT_BOUNDS.MAX_ARCHIVE_REASON_CHARS),
+      ),
+      "Why it is archived, in a short sentence the developer reads on the archived agent's " +
+        "banner beside your name, such as its pull request having merged; leave it out where " +
+        "there is nothing to say.",
+    ),
+  ),
+});
+
+const readArchive = Schema.decodeUnknownResult(ARCHIVE_AGENT_INPUT);
 const readMessage = Schema.decodeUnknownResult(MESSAGE_AGENT_INPUT);
 /** A start as a call carries it: one Luke made under the tool's earlier words names its prompt `task`. */
 const START_AGENT_CALL = Schema.Struct({
@@ -349,6 +395,33 @@ export const START_AGENT_TOOL = {
     "is open, or `rejected` and why nothing was started; a rejected model or effort lists the " +
     "choices.",
   inputSchema: START_AGENT_INPUT,
+} as const;
+
+export const ARCHIVE_AGENT_TOOL = {
+  name: AGENT_TOOL.ARCHIVE_AGENT,
+  description:
+    "Archive a coding agent of your workspace by its id, as the developer's Archive agent " +
+    "would, on behalf of the developer you work for: it leaves the sidebar, its task's tabs, " +
+    "and every list but the archived ones, takes no message, and is not woken, while its " +
+    "transcript, branch, and pull request are kept, and any member can unarchive it. Archive " +
+    "a helper or worker agent whose work is done, such as one whose pull request merged, or " +
+    "one the developer asked you to clean up; never a teammate's agent still in use unless " +
+    "the developer asked for it. Only an idle agent is archived: one still starting or " +
+    "running is refused, and no agent archives itself. Give a short reason, which the " +
+    "archived agent's banner shows with your name. Answers `accepted`, also for an agent " +
+    "already archived, or `rejected` and why. Then say which agent you archived and why.",
+  inputSchema: ARCHIVE_AGENT_INPUT,
+} as const;
+
+export const UNARCHIVE_AGENT_TOOL = {
+  name: AGENT_TOOL.UNARCHIVE_AGENT,
+  description:
+    "Bring an archived coding agent of your workspace back by its id, as the developer's " +
+    "Unarchive would: it stands in its task and the lists again and takes messages, its " +
+    "transcript and pull request as they were. Unarchive one archived by mistake, or one the " +
+    "developer asks for. Answers `accepted`, also for an agent not archived, or `rejected` " +
+    "and why.",
+  inputSchema: READ_AGENT_INPUT,
 } as const;
 
 /** A list of tasks names its words to look for at most, and how many of the matching tasks to pass over. */
@@ -866,6 +939,107 @@ export function runStartAgent(
           callerTask(caller),
         ),
       };
+    }),
+  );
+}
+
+/** Who an archive is by: Luke, or the calling coding agent by its id and name, for the member the caller acts for, with the reason given. */
+function archiverOf(caller: AgentCaller, reason: string | undefined): StoredArchive {
+  const why = reason === undefined ? undefined : { reason };
+  if (caller.kind === AGENT_CALLER.LUKE) {
+    return { by: CODING_AGENT_ARCHIVER.LUKE, userId: caller.plan.userId, ...why };
+  }
+  return {
+    by: CODING_AGENT_ARCHIVER.AGENT,
+    userId: caller.agent.userId,
+    agentId: caller.agent.id,
+    agentName: agentName(caller.agent),
+    ...why,
+  };
+}
+
+/** An archive or an unarchive as the model reads it: the agent, whether it now stands archived, and whether it already stood so before the call. */
+function archiveAnswer(
+  agent: CodingAgent,
+  task: AgentTaskReading,
+  archived: boolean,
+  already: boolean,
+): WireRecord {
+  return {
+    status: ACTION_RESULT_STATUS.ACCEPTED,
+    agent: {
+      id: agent.id,
+      title: agentName(agent),
+      task: task.task === null ? null : { ...task.task },
+      onYourTask: task.onYourTask,
+    },
+    archived,
+    already,
+  };
+}
+
+/** One call of `archive_agent`: an idle agent of the caller's workspace archived for the caller's member, by the caller and for the reason given, or why it was not. */
+export function runArchiveAgent(
+  call: CodingAgentCall,
+  input: UnparsedWireValue,
+): Effect.Effect<WireRecord, never, CodingAgentToolServices> {
+  const asked = readArchive(input);
+  if (Result.isFailure(asked)) {
+    return Effect.succeed(agentToolRejected(ARCHIVE_AGENT_REFUSAL.UNREADABLE));
+  }
+  const { agentId, reason } = asked.success;
+  const { caller } = call;
+  if (caller.kind === AGENT_CALLER.AGENT && agentId === caller.agent.id) {
+    return Effect.succeed(agentToolRejected(ARCHIVE_AGENT_REFUSAL.SELF));
+  }
+  return orStoreRefusal(
+    Effect.gen(function* () {
+      const found = yield* workspaceAgentOf(caller, agentId);
+      if (Option.isNone(found)) return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_AGENT);
+      const { agent, task } = found.value;
+      if (agent.archivedAt !== null) return archiveAnswer(agent, task, true, true);
+      const userId = callerUserId(caller);
+      // Note that how far its lines ran is read before where it stands, so a turn begun after
+      // the read below moves them and the archive takes nothing, rather than archive it at work.
+      const seen = yield* codingAgentLineSeq(userId, agent.id);
+      if (Option.isNone(seen)) return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_AGENT);
+      const { status } = (yield* standingsOf([agent]))(agent);
+      if (status === CODING_AGENT_STATUS.STARTING || status === CODING_AGENT_STATUS.RUNNING) {
+        return agentToolRejected(ARCHIVE_AGENT_REFUSAL.WORKING);
+      }
+      const archiver = archiverOf(caller, reason);
+      if (yield* archiveUnmovedCodingAgent(userId, agent.id, seen.value, archiver)) {
+        return archiveAnswer(agent, task, true, false);
+      }
+      // One archived meanwhile, by a member or a call run twice, is done; one that moved is not.
+      const now = yield* readCodingAgent(userId, agent.id);
+      if (Option.isSome(now) && now.value.archivedAt !== null) {
+        return archiveAnswer(agent, task, true, true);
+      }
+      return agentToolRejected(ARCHIVE_AGENT_REFUSAL.MOVED);
+    }),
+  );
+}
+
+/** One call of `unarchive_agent`: an archived agent of the caller's workspace brought back, as a member's Unarchive brings it. */
+export function runUnarchiveAgent(
+  call: CodingAgentCall,
+  input: UnparsedWireValue,
+): Effect.Effect<WireRecord, never, CodingAgentToolServices> {
+  const asked = readAgentRef(input);
+  if (Result.isFailure(asked)) {
+    return Effect.succeed(agentToolRejected(ARCHIVE_AGENT_REFUSAL.UNREADABLE));
+  }
+  const { caller } = call;
+  return orStoreRefusal(
+    Effect.gen(function* () {
+      const found = yield* workspaceAgentOf(caller, asked.success.agentId);
+      if (Option.isNone(found)) return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_AGENT);
+      const { agent, task } = found.value;
+      if (agent.archivedAt === null) return archiveAnswer(agent, task, false, true);
+      const back = yield* archiveCodingAgent(callerUserId(caller), agent.id, false);
+      if (Option.isNone(back)) return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_AGENT);
+      return archiveAnswer(agent, task, false, false);
     }),
   );
 }

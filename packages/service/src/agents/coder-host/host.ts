@@ -50,10 +50,12 @@ import {
   AGENT_CALLER,
   agentToolRejected,
   CODING_AGENT_TOOL_REFUSAL,
+  runArchiveAgent,
   runListAgents,
   runListTasks,
   runMessageAgent,
   runStartAgent,
+  runUnarchiveAgent,
 } from "../coding-agent-tools.js";
 import {
   type ReadWebPageResult,
@@ -361,6 +363,8 @@ export interface AgentToolCall {
     | typeof CODER_TOOL.LIST_AGENTS
     | typeof CODER_TOOL.MESSAGE_AGENT
     | typeof CODER_TOOL.START_AGENT
+    | typeof CODER_TOOL.ARCHIVE_AGENT
+    | typeof CODER_TOOL.UNARCHIVE_AGENT
     | typeof CODER_TOOL.LIST_TASKS;
   readonly input: UnparsedWireValue;
   readonly callId: string;
@@ -371,6 +375,8 @@ const AGENT_TOOL_RUN = {
   [CODER_TOOL.LIST_AGENTS]: runListAgents,
   [CODER_TOOL.MESSAGE_AGENT]: runMessageAgent,
   [CODER_TOOL.START_AGENT]: runStartAgent,
+  [CODER_TOOL.ARCHIVE_AGENT]: runArchiveAgent,
+  [CODER_TOOL.UNARCHIVE_AGENT]: runUnarchiveAgent,
   [CODER_TOOL.LIST_TASKS]: runListTasks,
 } as const;
 

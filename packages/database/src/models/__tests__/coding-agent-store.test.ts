@@ -4,6 +4,7 @@ import { it } from "@effect/vitest";
 import { BRAIN_RUN_EVENT, BRAIN_TURN_ORIGIN, BRAIN_TURN_TRIGGER } from "@luke/features/brain";
 import {
   CHECK_SUMMARY,
+  CODING_AGENT_ARCHIVER,
   CODING_AGENT_AUTHOR,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
@@ -29,6 +30,7 @@ import { getTestDB, joinWorkspace } from "../../testing/index.js";
 import {
   archiveCodingAgent,
   archiveUnmovedCodingAgent,
+  codingAgentLineSeq,
   delegationsOf,
   linePlacesOf,
   lineSendersOf,
@@ -454,6 +456,45 @@ it.layer(getTestDB())("the coding-agent store's archive of an agent left as it w
 
         assert.deepEqual([stale, current, again], [false, true, false]);
         assert.ok(Option.getOrThrow(yield* readCodingAgent(starter, agentId)).archivedAt !== null);
+      }),
+  );
+});
+
+it.layer(getTestDB())("the coding-agent store's record of who archived an agent", (it) => {
+  it.effect(
+    "a member's archive records the member, one made for a member records who made it and why, an unarchive clears it, and an outsider reads no line count",
+    () =>
+      Effect.gen(function* () {
+        const starter = yield* openAccount;
+        const teammate = yield* openAccount;
+        const outsider = yield* openAccount;
+        const workspace = yield* openWorkspace(starter);
+        yield* joinWorkspace(workspace, teammate);
+        yield* openWorkspace(outsider);
+        const { agentId } = yield* tasklessAgent(starter, workspace);
+        const byAgent = {
+          by: CODING_AGENT_ARCHIVER.AGENT,
+          userId: teammate,
+          agentId: randomUUID(),
+          agentName: "Billing helper",
+          reason: "Its pull request merged.",
+        };
+
+        const byMember = yield* archiveCodingAgent(teammate, agentId, true);
+        assert.deepEqual(Option.getOrThrow(byMember).archivedBy, {
+          by: CODING_AGENT_ARCHIVER.MEMBER,
+          userId: teammate,
+        });
+        yield* archiveCodingAgent(teammate, agentId, false);
+        const seq = Option.getOrThrow(yield* codingAgentLineSeq(teammate, agentId));
+        assert.equal(yield* archiveUnmovedCodingAgent(teammate, agentId, seq, byAgent), true);
+        assert.deepEqual(
+          Option.getOrThrow(yield* readCodingAgent(starter, agentId)).archivedBy,
+          byAgent,
+        );
+        const back = Option.getOrThrow(yield* archiveCodingAgent(starter, agentId, false));
+        assert.deepEqual([back.archivedAt, back.archivedBy], [null, null]);
+        assert.ok(Option.isNone(yield* codingAgentLineSeq(outsider, agentId)));
       }),
   );
 });

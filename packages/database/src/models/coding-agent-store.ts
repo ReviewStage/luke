@@ -1,5 +1,6 @@
 import { automationFiringSchema } from "@luke/features/automation-wire";
 import {
+  CODING_AGENT_ARCHIVER,
   CODING_AGENT_AUTHOR,
   CONTEXT_WINDOW,
   type CodingAgentAuthor,
@@ -38,6 +39,7 @@ import {
   codingAgent,
   codingAgentDelegation,
   type StoredAgentStep,
+  type StoredArchive,
   type StoredAutomationOrigin,
 } from "../schemas/coding-agent.js";
 import { task } from "../schemas/plan.js";
@@ -157,6 +159,8 @@ export interface CodingAgent {
   readonly title: string | null;
   /** When the developer archived the agent; null while it is not. */
   readonly archivedAt: Date | null;
+  /** Who archived the agent, and why; null while it is not, and for an archive no one was recorded for. */
+  readonly archivedBy: StoredArchive | null;
   /** The MCP servers switched off for this agent, which its next turns are not handed; empty where none is. */
   readonly disabledServers: readonly string[];
   /** Who the agent's commits are by and its pull request is opened as; null until its first session settles it. */
@@ -244,6 +248,7 @@ const CODING_AGENT_COLUMNS = {
   branch: codingAgent.branch,
   title: codingAgent.title,
   archivedAt: codingAgent.archivedAt,
+  archivedBy: codingAgent.archivedBy,
   disabledServers: codingAgent.disabledServers,
   author: codingAgent.author,
   createdAt: codingAgent.createdAt,
@@ -282,6 +287,16 @@ const AutomationOriginColumnSchema = Schema.NullOr(
     body: Schema.optionalKey(Schema.String),
   }),
 );
+/** The `archived_by` column as a row holds it. */
+const ArchivedByColumnSchema = Schema.NullOr(
+  Schema.Struct({
+    by: Schema.Literals(Object.values(CODING_AGENT_ARCHIVER)),
+    userId: Schema.String,
+    agentId: Schema.optionalKey(Schema.String),
+    agentName: Schema.optionalKey(Schema.String),
+    reason: Schema.optionalKey(Schema.String),
+  }),
+);
 /** An author as the agent's row holds it. */
 const AuthorColumnSchema = Schema.Literals(Object.values(CODING_AGENT_AUTHOR));
 
@@ -302,6 +317,7 @@ const CodingAgentRowSchema = Schema.Struct({
   branch: Schema.NullOr(Schema.String),
   title: Schema.NullOr(Schema.String),
   archivedAt: Schema.NullOr(InstantColumnSchema),
+  archivedBy: ArchivedByColumnSchema,
   disabledServers: DisabledServersColumnSchema,
   author: Schema.NullOr(AuthorColumnSchema),
   createdAt: InstantColumnSchema,
@@ -576,13 +592,14 @@ const updateUnmovedArchived = SqlSchema.findAll({
     agentId: Schema.String,
     seenSeq: Schema.Number,
     archivedAt: Schema.Date,
+    archivedBy: ArchivedByColumnSchema,
   }),
   Result: IdRowSchema,
-  execute: ({ userId, agentId, seenSeq, archivedAt }) =>
+  execute: ({ userId, agentId, seenSeq, archivedAt, archivedBy }) =>
     Database.use((db) =>
       db
         .update(codingAgent)
-        .set({ archivedAt })
+        .set({ archivedAt, archivedBy })
         .where(
           and(
             reachableAgent(userId, agentId),
@@ -609,13 +626,14 @@ const updateAgentArchived = SqlSchema.findOneOption({
     userId: Schema.String,
     agentId: Schema.String,
     archivedAt: Schema.NullOr(Schema.Date),
+    archivedBy: ArchivedByColumnSchema,
   }),
   Result: CodingAgentRowSchema,
-  execute: ({ userId, agentId, archivedAt }) =>
+  execute: ({ userId, agentId, archivedAt, archivedBy }) =>
     Database.use((db) =>
       db
         .update(codingAgent)
-        .set({ archivedAt })
+        .set({ archivedAt, archivedBy })
         .where(reachableAgent(userId, agentId))
         .returning(CODING_AGENT_COLUMNS),
     ),
@@ -1309,14 +1327,44 @@ export function renameCodingAgent(
   return updateAgentTitle({ userId, agentId, title });
 }
 
-/** The account's agent archived, stamped now, or brought back; its conversation and what it published are kept either way. Nothing for an agent the account does not own. */
+/** The account's agent archived, stamped now with who archived it, by default the account itself, or brought back, which clears who did; its conversation and what it published are kept either way. Nothing for an agent of a workspace the account is not in. */
 export function archiveCodingAgent(
   userId: string,
   agentId: string,
   archived: boolean,
+  archivedBy: StoredArchive = { by: CODING_AGENT_ARCHIVER.MEMBER, userId },
 ): CodingAgentStoreEffect<Option.Option<CodingAgent>> {
   return Effect.flatMap(DateTime.nowAsDate, (now) =>
-    updateAgentArchived({ userId, agentId, archivedAt: archived ? now : null }),
+    updateAgentArchived({
+      userId,
+      agentId,
+      archivedAt: archived ? now : null,
+      archivedBy: archived ? archivedBy : null,
+    }),
+  );
+}
+
+const findAgentSeq = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String }),
+  Result: Schema.Struct({ seq: Schema.Number }),
+  execute: ({ userId, agentId }) =>
+    Database.use((db) =>
+      db
+        .select({ seq: conversations.nextMessageSeq })
+        .from(codingAgent)
+        .innerJoin(conversations, eq(conversations.id, codingAgent.conversationId))
+        .where(reachableAgent(userId, agentId)),
+    ),
+});
+
+/** How far the agent's conversation's lines have run, which `archiveUnmovedCodingAgent` holds an archive to; nothing for an agent of a workspace the account is not in. */
+export function codingAgentLineSeq(
+  userId: string,
+  agentId: string,
+): CodingAgentStoreEffect<Option.Option<number>> {
+  return Effect.map(
+    findAgentSeq({ userId, agentId }),
+    Option.map((row) => row.seq),
   );
 }
 
@@ -1367,19 +1415,21 @@ export function codingAgentConversation(
 }
 
 /**
- * Archives the agent as `archiveCodingAgent` does, but only where it stands
- * unarchived and its conversation's lines have run no further than the
- * `seenSeq` its reader saw, so an agent a message woke since stands;
- * answers whether it was archived.
+ * Archives the agent as `archiveCodingAgent` does, under who archived it
+ * where one is named, but only where it stands unarchived and its
+ * conversation's lines have run no further than the `seenSeq` its reader
+ * saw, so an agent a message woke since stands; answers whether it was
+ * archived.
  */
 export function archiveUnmovedCodingAgent(
   userId: string,
   agentId: string,
   seenSeq: number,
+  archivedBy: StoredArchive | null = null,
 ): CodingAgentStoreEffect<boolean> {
   return Effect.flatMap(DateTime.nowAsDate, (archivedAt) =>
     Effect.map(
-      updateUnmovedArchived({ userId, agentId, seenSeq, archivedAt }),
+      updateUnmovedArchived({ userId, agentId, seenSeq, archivedAt, archivedBy }),
       (rows) => rows.length > 0,
     ),
   );

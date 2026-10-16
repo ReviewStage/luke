@@ -32,6 +32,8 @@ export const AGENT_TOOL = {
   READ_AGENT: "read_agent",
   MESSAGE_AGENT: "message_agent",
   START_AGENT: "start_agent",
+  ARCHIVE_AGENT: "archive_agent",
+  UNARCHIVE_AGENT: "unarchive_agent",
   LIST_TASKS: "list_tasks",
   // The public reads, every role's.
   SEARCH_WEB: "search_web",

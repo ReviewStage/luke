@@ -1017,7 +1017,12 @@ acting for the agent's starter, kept under the sending agent's name
 agent or one of another workspace refuses; `start_agent`, which starts
 another on its own task, or on another task of its workspace by the
 `taskId` that `list_tasks` answers, by the Start button's own path, telling
-it which agent started it; and `list_tasks`, the workspace's open tasks. The
+it which agent started it; `archive_agent` and `unarchive_agent`, which
+archive an idle agent of the workspace, never itself or one still working,
+on the rule the Archive agent menu keeps for the agent's starter, recording
+the archiving agent and its reason on the archived agent's row
+(`archived_by`), and bring one back; and `list_tasks`, the workspace's open
+tasks. The
 extension itself is not mounted, since its `worker` subagent runs on an AI
 Gateway model and its `gh` tool on Vercel Connect, and Luke runs neither.
 `gh` and `git` run through the shell, authenticated at the firewall. The
@@ -1778,10 +1783,11 @@ and the tools are Luke's list alone: `run_in_repository` bound to the
 task the conversation belongs to (`readTaskOfConversation`), the two public
 research reads beside it, `queue_question`
 (`src/tasks/queue-question.ts`), which runs nothing: its journaled call is
-how a question reaches the voice while the turn still runs, and the four
+how a question reaches the voice while the turn still runs, and the
 tools about coding agents (`src/agents/coding-agent-tools.ts`), the same
-`list_agents`, `message_agent`, `start_agent`, and `list_tasks` every coding
-agent is offered and `read_agent` beside them: a list
+`list_agents`, `message_agent`, `start_agent`, `archive_agent`,
+`unarchive_agent`, and `list_tasks` every coding agent is offered and
+`read_agent` beside them: a list
 of the task's workspace's agents, on any task and by any member, with each
 agent's status, task, and what it published, narrowed to this task or
 another where asked (`src/agents/workspace-agents.ts`), one agent's recent
