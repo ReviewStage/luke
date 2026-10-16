@@ -127,7 +127,7 @@ export function RecentRow({
  * read, failed, or none. It is headed by the Inbox's name, the place a press
  * on a row opens, and says it holds nothing waiting in the Inbox's own words.
  */
-function HomeInbox({ plans, now }: { plans: PlansControl; now: number }): React.JSX.Element {
+function HomeInbox({ plans, now }: { plans: PlansControl; now: number }): React.JSX.Element | null {
   const waiting = useWaitingItems(plans);
   const { inboxView } = plans;
   const open = ({ holder, item }: InboxListed) => {
@@ -139,6 +139,8 @@ function HomeInbox({ plans, now }: { plans: PlansControl; now: number }): React.
     );
   };
   const empty = waiting.items.length === 0;
+  // Note that a refused list read says nothing here, because what waits hangs on the list, which Recent says could not be read.
+  if (empty && plans.listFailed) return null;
   return (
     <section className="home-section" aria-labelledby="home-inbox">
       <h2 className="home-section-title" id="home-inbox">

@@ -360,6 +360,7 @@ test("a refused read of the task list says so under Recent, with Retry, which as
   act(() => button(page, "Retry").click());
 
   assert.equal(page.querySelector("h1")?.textContent, "Welcome back, Dean");
+  assert.doesNotMatch(page.textContent ?? "", /Nothing needs you/u, "the Inbox claims nothing");
   assert.match(said ?? "", /^Your tasks could not be read\./u);
   assert.equal(retries, 1);
 });

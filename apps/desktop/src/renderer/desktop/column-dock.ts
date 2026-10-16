@@ -23,7 +23,8 @@ function dockHeight(column: Element): number {
 /**
  * From the window's foot to the top of the highest docked part standing
  * under `over`, in any column, or nothing where none does. A part drawn at
- * no height (one hidden) stands under nothing.
+ * no height, or kept laid out but invisible (the plan's column under a side
+ * panel filling the window), stands under nothing.
  */
 export function dockUnder(over: Element): number {
   const span = over.getBoundingClientRect();
@@ -32,6 +33,7 @@ export function dockUnder(over: Element): number {
   for (const part of document.querySelectorAll(DOCKED)) {
     const box = part.getBoundingClientRect();
     if (box.height === 0 || box.right <= span.left || box.left >= span.right) continue;
+    if (getComputedStyle(part).visibility === "hidden") continue;
     top = Math.min(top, box.top);
   }
   return Math.max(0, foot - top);

@@ -7187,16 +7187,21 @@ button.automation-run:hover {
   outline: none; /* no ring: the highlighted row marks it */
 }
 
-/* A row's name keeps its whole width, up to most of the row, and the detail
-   after it is what gives way: an action's name is short and says what the
-   row does, where its detail (the task it acts on) can run long. */
 .command-palette-name {
-  max-width: 70%;
-  flex: none;
+  min-width: 0;
+  flex: 0 1 auto;
   overflow: hidden;
   font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* A name with a detail after it keeps its whole width, up to most of the
+   row, and the detail is what gives way: an action's name is short and says
+   what the row does, where its detail (the task it acts on) can run long. */
+.command-palette-name:has(+ .command-palette-detail) {
+  max-width: 70%;
+  flex: none;
 }
 
 /* A plan's repository follows its name, as the sidebar's row says it. */

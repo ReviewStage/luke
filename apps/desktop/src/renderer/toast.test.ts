@@ -156,8 +156,18 @@ test("the stack stands clear of a call bar docked at the window's foot under it,
   });
   act(relayout);
 
+  const beside = stack.style.getPropertyValue("--toast-dock");
+  // The bar spans the window again, but its column is hidden under a side panel filling the window.
+  layOut({
+    "toast-stack": new DOMRect(404, 504, 340, 0),
+    "desktop-call-bar": new DOMRect(0, 460, 760, 60),
+  });
+  bar.style.visibility = "hidden";
+  act(relayout);
+
   assert.equal(over, "60px");
-  assert.equal(stack.style.getPropertyValue("--toast-dock"), "0px");
+  assert.equal(beside, "0px");
+  assert.equal(stack.style.getPropertyValue("--toast-dock"), "0px", "a hidden bar is not under it");
   assert.match(
     getComputedStyle(stack).bottom,
     /var\(--toast-dock/u,
