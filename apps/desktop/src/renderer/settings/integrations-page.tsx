@@ -628,7 +628,6 @@ function IntegrationRow({
               type="button"
               className="toolbar-button quiet-button"
               disabled={connecting}
-              title={`Open the ${name} sign-in in your browser again`}
               onClick={connect}
             >
               {SIGN_IN_ACTION.REOPEN}
@@ -649,9 +648,6 @@ function IntegrationRow({
             type="button"
             className="toolbar-button bordered-button"
             disabled={connecting}
-            title={
-              bySignIn ? "Connect GitHub in your browser" : `Sign in to ${name} in your browser`
-            }
             onClick={connect}
           >
             {grantLabel(status, signIn)}

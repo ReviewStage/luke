@@ -1,9 +1,9 @@
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import type { InboxItem } from "@luke/features/inbox-wire";
-import { PLAN_CALL_FAILURE } from "@luke/features/planning-view";
+import { TASK_CALL_FAILURE } from "@luke/features/tasks-view";
 import type { AppInboxWaitingItem } from "@luke/host/app-state";
 import { CONFIRM_STAGE } from "@luke/ui/confirm-state";
-import { DOCUMENT_REGION, PLANS_PAGE } from "@luke/ui/planning-model";
+import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import type { SummaryPin } from "../renderer/desktop/plan-summary";
@@ -63,7 +63,7 @@ function versionHistoryControl(
 /** A repository chip's list read from nowhere, which answers that the service did not. */
 const NO_REPOSITORIES = {
   recent: [],
-  read: () => Promise.resolve({ failure: PLAN_CALL_FAILURE.UNANSWERED }),
+  read: () => Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED }),
   openGitHub: ignore,
   pictures: true,
   manages: true,
@@ -133,7 +133,7 @@ export function codingAgentsControl(
  */
 export function plansControl(overrides: Partial<PlansControl> = {}): PlansControl {
   return {
-    page: PLANS_PAGE.HOME,
+    page: TASKS_PAGE.HOME,
     restoring: false,
     shown: true,
     signedIn: true,
@@ -164,7 +164,7 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
     listRead: true,
     region: { kind: DOCUMENT_REGION.NONE },
     copy: { onPress: ignore },
-    edit: () => Promise.resolve({ failure: PLAN_CALL_FAILURE.UNANSWERED }),
+    edit: () => Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED }),
     microphone: { label: "Talk about this task", enabled: true, muted: false, onPress: ignore },
     speaker: { muted: false, onPress: ignore },
     stop: { shown: false, onPress: ignore },
@@ -285,7 +285,7 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
       onOpen: ignore,
       onClose: ignore,
     },
-    callPlanId: undefined,
+    callTaskId: undefined,
     onShowFile: ignore,
     onOpenPinnedTab: ignore,
     onReopenClosedTab: undefined,

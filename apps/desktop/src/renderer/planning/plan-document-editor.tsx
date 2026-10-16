@@ -5,7 +5,7 @@ import {
   DOCUMENT_EDITOR_STATE,
   type DocumentEditor,
 } from "@luke/features/plan-edit-model";
-import { PLAN_ACTOR, PLAN_BOUNDS, type Plan } from "@luke/features/plan-wire";
+import { PLAN_ACTOR, TASK_BOUNDS, type Task } from "@luke/features/task-wire";
 import { Duration, Effect } from "effect";
 import { AsyncResult } from "effect/reactivity";
 import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -186,14 +186,14 @@ function caretAtEnd(element: HTMLElement): void {
 
 /** The title's words as a name: trimmed, and cut to the bound as the name field's own `maxLength` cuts a paste. */
 function typedName(element: HTMLElement): string {
-  return (element.textContent ?? "").trim().slice(0, PLAN_BOUNDS.MAX_NAME_CHARS).trim();
+  return (element.textContent ?? "").trim().slice(0, TASK_BOUNDS.MAX_NAME_CHARS).trim();
 }
 
 /** The title's words held to the bound as they are typed, as the name field's `maxLength` holds its own, so no word stands past what is saved. */
 function boundTitle(element: HTMLElement): void {
   const words = element.textContent ?? "";
-  if (words.length <= PLAN_BOUNDS.MAX_NAME_CHARS) return;
-  element.textContent = words.slice(0, PLAN_BOUNDS.MAX_NAME_CHARS);
+  if (words.length <= TASK_BOUNDS.MAX_NAME_CHARS) return;
+  element.textContent = words.slice(0, TASK_BOUNDS.MAX_NAME_CHARS);
   caretAtEnd(element);
 }
 
@@ -494,7 +494,7 @@ function MountedPlanEditor({
 function useMergedAnswers(
   editor: DocumentEditor,
   editing: PlanEditing,
-  plan: Plan,
+  plan: Task,
   handle: React.RefObject<PlanEditorHandle | undefined>,
 ): void {
   const seen = useRef({ base: editor.base, updatedAt: plan.updatedAt });
@@ -562,7 +562,7 @@ export function PlanDocumentEditor({
   hostOf,
   mentions,
 }: {
-  plan: Plan;
+  plan: Task;
   editor: DocumentEditor;
   editing: PlanEditing;
   drawn: ReactNode;
@@ -603,6 +603,7 @@ export function PlanDocumentEditor({
       text,
       pages: page?.pages,
       agents: page?.agents,
+      readAgents: page?.readAgents,
     },
     room,
     side: MENTION_MENU_SIDE.BELOW,

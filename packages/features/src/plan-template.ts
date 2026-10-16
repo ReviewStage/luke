@@ -8,9 +8,9 @@ import {
 import { describeWire, readEither } from "@luke/wire/effect";
 import { Schema as EffectSchema, Result } from "effect";
 import { mentionLinksIn } from "./mention-link.js";
-import { planPicturesIn } from "./plan-attachment-link.js";
+import { taskPicturesIn } from "./plan-attachment-link.js";
 import { openFenceAt, type PlanSection, planSections } from "./plan-document.js";
-import { PLAN_BOUNDS, PLAN_SECTION_BOUNDS, type PlanField } from "./plan-wire.js";
+import { PLAN_SECTION_BOUNDS, type PlanField, TASK_BOUNDS } from "./task-wire.js";
 
 /**
  * plan-template.ts -- the default template's sections and what each asks, the notes Luke takes into a plan's text, and the agents' journal of them.
@@ -255,7 +255,7 @@ const addNoteSchema = EffectSchema.Struct({
   kind: EffectSchema.Literal(NOTE_KIND.ADD),
   section: planNoteSectionSchema,
   text: describeWire(
-    trimmedText(PLAN_BOUNDS.MAX_BODY_CHARS),
+    trimmedText(TASK_BOUNDS.MAX_BODY_CHARS),
     "The new point, added at the end of the section: Markdown, a bullet where the section " +
       "is a list.",
   ),
@@ -264,12 +264,12 @@ const addNoteSchema = EffectSchema.Struct({
 const replaceNoteSchema = EffectSchema.Struct({
   kind: EffectSchema.Literal(NOTE_KIND.REPLACE),
   find: describeWire(
-    trimmedText(PLAN_BOUNDS.MAX_BODY_CHARS),
+    trimmedText(TASK_BOUNDS.MAX_BODY_CHARS),
     "Text copied exactly from the plan's saved text, as much as names one place: a phrase, " +
       "lines, or whole sections, headings and their #s included.",
   ),
   text: describeWire(
-    EffectSchema.Trim.check(EffectSchema.isMaxLength(PLAN_BOUNDS.MAX_BODY_CHARS)),
+    EffectSchema.Trim.check(EffectSchema.isMaxLength(TASK_BOUNDS.MAX_BODY_CHARS)),
     "What that text becomes, which may open headings of its own; empty to delete it, and a " +
       "line the deletion leaves empty is taken out.",
   ),
@@ -302,7 +302,7 @@ const journaledNoteSchema = EffectSchema.Union([
 ]);
 
 /** The most saves by coding agents a plan keeps word of; older ones fall off the front. */
-const PLAN_AGENT_EDITS_KEPT = 50;
+const TASK_AGENT_EDITS_KEPT = 50;
 
 /** The most of a replaced text the journal keeps: the bound the deployment before this one reads a phrase under. */
 const JOURNAL_FIND_CHARS = 500;
@@ -340,7 +340,7 @@ export function withAgentEdit(
   edit: { readonly agentId: string; readonly at: number; readonly notes: readonly PlanNote[] },
 ): readonly PlanAgentEdit[] {
   return [...journal, { ...edit, notes: edit.notes.map(journaledNote) }].slice(
-    -PLAN_AGENT_EDITS_KEPT,
+    -TASK_AGENT_EDITS_KEPT,
   );
 }
 
@@ -576,7 +576,7 @@ function keepsMentions(before: string, after: string): boolean {
  * plan is kept as surely as one of this plan.
  */
 function keepsPictures(before: string, after: string): boolean {
-  return keepsAddresses(before, after, planPicturesIn);
+  return keepsAddresses(before, after, taskPicturesIn);
 }
 
 /**

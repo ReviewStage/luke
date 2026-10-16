@@ -31,23 +31,23 @@ function parseAnswer<Value, Encoded>(
 
 test("a create request carries the offer and the plan it is about, and nothing else", () => {
   const offer = "v=0\r\no=- 1 1 IN IP4 127.0.0.1\r\n";
-  const planId = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
-  assert.deepEqual(parse(voiceCreateLiveSessionParamsSchema, { sdp: offer, planId }), {
+  const taskId = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
+  assert.deepEqual(parse(voiceCreateLiveSessionParamsSchema, { sdp: offer, taskId }), {
     sdp: offer,
-    planId,
+    taskId,
   });
   assert.equal(parse(voiceCreateLiveSessionParamsSchema, {}), undefined);
   // Every call is about a plan: an offer about none is refused.
   assert.equal(parse(voiceCreateLiveSessionParamsSchema, { sdp: offer }), undefined);
-  assert.equal(parse(voiceCreateLiveSessionParamsSchema, { sdp: "", planId }), undefined);
+  assert.equal(parse(voiceCreateLiveSessionParamsSchema, { sdp: "", taskId }), undefined);
   assert.equal(
-    parse(voiceCreateLiveSessionParamsSchema, { sdp: offer, planId, voice: "marin" }),
+    parse(voiceCreateLiveSessionParamsSchema, { sdp: offer, taskId, voice: "marin" }),
     undefined,
   );
   assert.equal(
     parse(voiceCreateLiveSessionParamsSchema, {
       sdp: "a".repeat(LIVE_SDP_MAX_CHARACTERS + 1),
-      planId,
+      taskId,
     }),
     undefined,
   );

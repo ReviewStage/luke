@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { PLAN_ACTOR, type Plan } from "@luke/features/plan-wire";
+import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -46,7 +46,7 @@ function mount(element: ReactElement): HTMLElement {
 
 /** What the sidebar row and the plan's "Edited" line say of a plan the developer last saved at `at`. */
 function saidOf(at: number) {
-  const plan: Plan = {
+  const plan: Task = {
     ...DOCUMENT_PLAN,
     updatedAt: at,
     lastEdit: { actor: PLAN_ACTOR.DEVELOPER, at, duringCall: false, by: DANA },

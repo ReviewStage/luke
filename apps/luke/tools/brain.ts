@@ -1,5 +1,5 @@
+import { BRAIN_TOOL_NAMES, tasksModelOutput } from "@luke/service/agents/brain-host/brain";
 import { eveTurnIdOf, type HostedToolBinding } from "@luke/service/agents/brain-host/host";
-import { PLANNER_TOOL_NAMES, planningModelOutput } from "@luke/service/agents/brain-host/planning";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { Effect, Result } from "effect";
 import type { SessionAuth } from "eve/context";
@@ -20,7 +20,7 @@ import { runAgent } from "../runtime.js";
  * pictures as its image (`planningModelOutput`).
  */
 export function hostedTools(
-  offered: ReadonlySet<string> = PLANNER_TOOL_NAMES,
+  offered: ReadonlySet<string> = BRAIN_TOOL_NAMES,
   admit: (auth: SessionAuth, sessionId: string) => ReturnType<typeof host.admit> = host.admit,
 ) {
   return defineDynamic({
@@ -53,7 +53,7 @@ export function hostedTools(
                       : { endsTurn: declared.endsTurn }),
                     // SAFETY: eve hands this the JSON the tool's own execute answered; the reader parses it as wire input.
                     toModelOutput: (output) =>
-                      planningModelOutput(name, unparsedWire(output as WireBoundaryInput)),
+                      tasksModelOutput(name, unparsedWire(output as WireBoundaryInput)),
                     execute: (input, toolContext) =>
                       runAgent(
                         host.runTool(

@@ -8,15 +8,15 @@ import {
 } from "@luke/features/coding-agent-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
 import type { PageLine } from "@luke/features/page-wire";
-import type { CodeRef } from "@luke/features/plan-wire";
-import { PLAN_WORK_STATE, type PlanCodeShowing } from "@luke/features/planning-view";
+import type { CodeRef } from "@luke/features/task-wire";
+import { TASK_WORK_STATE, type TaskCodeShowing } from "@luke/features/tasks-view";
 import { TERMINAL_ASK, TERMINAL_TARGET, terminalTarget } from "@luke/features/terminal-entry";
 import { ACT_KIND } from "@luke/host/acts";
 import { CollapseIcon, ExpandIcon, SidePanelIcon } from "@luke/ui";
 import {
   agentOfTab,
   type ChangesStripTab,
-  inPlanOrder,
+  inTaskOrder,
   isChangesTab,
   isFileTab,
   isPageTab,
@@ -569,7 +569,7 @@ function stripTabs(input: {
   pages: readonly DrawnPage[];
   terminals: readonly TerminalStripTab[];
   /** Every code Luke showed on the plan, whose newest note on a file its tab's card says. */
-  shown: readonly PlanCodeShowing[];
+  shown: readonly TaskCodeShowing[];
   /** The plan's repository, whose showings alone a file tab's card reads its note from. */
   repository: string | null;
   held: HeldTranscripts;
@@ -760,7 +760,7 @@ function PanelTabs({
   /** Each file Luke showed on the plan, which the "+" offers. */
   shownFiles: readonly ShownFile[];
   /** Every code Luke showed on the plan, whose notes the file tabs' cards say. */
-  shown: readonly PlanCodeShowing[];
+  shown: readonly TaskCodeShowing[];
   /** The plan's repository, whose showings alone the file tabs' cards read. */
   repository: string | null;
   /** The plan's pages, which the "+" offers. */
@@ -796,7 +796,7 @@ function PanelTabs({
     onOpenAgent,
     shownAgent,
   });
-  const strip = inPlanOrder(kinds, panel.order, (entry) => entry.tab);
+  const strip = inTaskOrder(kinds, panel.order, (entry) => entry.tab);
   const copyLink = useCopyLinkItem();
   // ⌘W closes the tab chosen, as its menu's Close does; with none, the key
   // falls through to the menu bar, which closes the window (`app-menu.ts`).
@@ -944,7 +944,7 @@ function workerStanding(worker: WorkWorkerBlock): Pick<DrawnSubagent, "state" | 
   else if (workFailed(worker.session?.record)) state = GLYPH_STATE.FAILED;
   return {
     state,
-    stateWords: glyphStateWords(state, worker.call.state === PLAN_WORK_STATE.FAILED),
+    stateWords: glyphStateWords(state, worker.call.state === TASK_WORK_STATE.FAILED),
   };
 }
 
@@ -1136,7 +1136,7 @@ export function planCards(input: {
   held: HeldTranscripts;
   chosen: (tab: StripTab) => boolean;
   /** Every code Luke showed on the plan, whose note on a `show_code` call's lines its row's card says. */
-  shownCode: readonly PlanCodeShowing[];
+  shownCode: readonly TaskCodeShowing[];
   /** The plan's task, which an agent's plan card names as its sender. */
   task?: BriefTask | undefined;
 }): PlanCards {
@@ -1185,7 +1185,7 @@ export function planCards(input: {
 /** Where a planning worker stands, as its tab's working line reads it: running while it moves, failed where it failed, and done otherwise. */
 function workerStatus(worker: WorkWorkerBlock): CodingAgentStatus {
   if (worker.call.running) return CODING_AGENT_STATUS.RUNNING;
-  return worker.call.state === PLAN_WORK_STATE.FAILED
+  return worker.call.state === TASK_WORK_STATE.FAILED
     ? CODING_AGENT_STATUS.FAILED
     : CODING_AGENT_STATUS.COMPLETED;
 }
@@ -1229,7 +1229,7 @@ function TabContent({
   /** The plan's repository, which a file's tab is read from as it stands now. */
   repository: string | null;
   board: Board | undefined;
-  shownCode: readonly PlanCodeShowing[] | undefined;
+  shownCode: readonly TaskCodeShowing[] | undefined;
   /** The open file tabs, which a file's tab reads its lit lines from. */
   files: readonly OpenFile[];
   /** The plan's pages, which a page's tab draws its newest version of. */
@@ -1304,7 +1304,7 @@ function TabContent({
         planId={planId}
         page={page}
         readSource={(version) =>
-          act(ACT_KIND.PLANNING_PAGE_SOURCE, { planId, pageId: page.id, version })
+          act(ACT_KIND.TASKS_PAGE_SOURCE, { taskId: planId, pageId: page.id, version })
         }
         findActive={findActive}
       />
@@ -1340,9 +1340,9 @@ function TabContent({
           file={file}
           snippet={snippetOf(shownCode, file)}
           shownCode={shownCode}
-          readFile={(window) => act(ACT_KIND.PLANNING_FILE, { planId, ...window })}
-          readFolder={(path) => act(ACT_KIND.PLANNING_TREE, { planId, path })}
-          readWhole={() => act(ACT_KIND.PLANNING_TREE, { planId, path: "", recursive: true })}
+          readFile={(window) => act(ACT_KIND.TASKS_FILE, { taskId: planId, ...window })}
+          readFolder={(path) => act(ACT_KIND.TASKS_TREE, { planId, path })}
+          readWhole={() => act(ACT_KIND.TASKS_TREE, { planId, path: "", recursive: true })}
           openGitHub={(url) => tell(ACT_KIND.GITHUB_OPEN, { url })}
           treeOpen={fileTree.open}
           onToggleTree={fileTree.onToggle}
@@ -1679,7 +1679,7 @@ export function SidePanel({
   repository: string | null;
   board: Board | undefined;
   /** Every code Luke showed on the plan, oldest first. */
-  shownCode: readonly PlanCodeShowing[] | undefined;
+  shownCode: readonly TaskCodeShowing[] | undefined;
   /** The pages agents wrote for the plan, each by its newest version; none where it has none. */
   pages: readonly PageLine[] | undefined;
   transcript: SidePanelTranscript;

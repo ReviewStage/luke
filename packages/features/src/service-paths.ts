@@ -57,9 +57,10 @@ export const HOSTED_SERVICE_PATH = {
   INBOX: "/api/inbox",
   /**
    * A workspace's agents, on a plan or with none, newest started first and
-   * the archived ones left out, narrowed to one repository where the query
-   * names one (GET), what an automation's Same agent is chosen from; the
-   * plan list's answer (`coding-agent-wire.ts`).
+   * the archived ones left out unless the query asks for them, narrowed to
+   * one repository where the query names one (GET), what an automation's
+   * Same agent and an `@` list's agents are chosen from; the plan list's
+   * answer (`coding-agent-wire.ts`).
    */
   AGENTS: "/api/agents",
   /**
@@ -80,13 +81,13 @@ export const HOSTED_SERVICE_PATH = {
   /**
    * The account's named feature plans: list them, newest started first
    * (GET), or start one (POST) with its name and, where one is chosen, the
-   * GitHub repository it is about. `plan-wire.ts` declares both.
+   * GitHub repository it is about. `task-wire.ts` declares both.
    */
-  PLANS: "/api/plans",
+  TASKS: "/api/plans",
   /**
    * The repositories the account pinned in the sidebar: read them, newest
    * pinned first (GET), or pin or unpin one (PUT), answered with them all as
-   * they then stand. `plan-wire.ts` declares both.
+   * they then stand. `task-wire.ts` declares both.
    */
   REPOSITORY_PINS: "/api/repository-pins",
   /**
@@ -119,6 +120,14 @@ export const HOSTED_SERVICE_PATH = {
    * `github-repositories-wire.ts`'s, null where there is none to draw.
    */
   GITHUB_REPOSITORY_PULL_REQUEST: "/api/github/repositories/pull-request",
+  /**
+   * One issue of a repository a workspace's installation reaches, as GitHub
+   * holds it now (GET), named as `GITHUB_REPOSITORY_PULL_REQUEST` names a
+   * pull request, for a link to it to draw its title and where it stands;
+   * the answer is `github-repositories-wire.ts`'s, null where there is none
+   * to draw.
+   */
+  GITHUB_REPOSITORY_ISSUE: "/api/github/repositories/issue",
   /**
    * Sends the browser to GitHub to install the Luke GitHub App, or to change
    * which repositories it reaches (GET). GitHub returns the browser to
@@ -272,23 +281,23 @@ export function automationRunsPath(automationId: string): string {
 }
 
 /** One plan the caller owns: open it with its saved document (GET), change its name or its repository (PATCH), or delete it (DELETE). */
-export function planPath(planId: string): string {
-  return `${HOSTED_SERVICE_PATH.PLANS}/${encodeURIComponent(planId)}`;
+export function taskPath(taskId: string): string {
+  return `${HOSTED_SERVICE_PATH.TASKS}/${encodeURIComponent(taskId)}`;
 }
 
 /** One plan's whiteboard: read it with Luke's latest drawing (GET), or write its scene whole (PUT). */
-export function planBoardPath(planId: string): string {
-  return `${planPath(planId)}/board`;
+export function taskBoardPath(taskId: string): string {
+  return `${taskPath(taskId)}/board`;
 }
 
 /** The developer's edit of one plan's document (POST). */
-export function planEditPath(planId: string): string {
-  return `${planPath(planId)}/edit`;
+export function planEditPath(taskId: string): string {
+  return `${taskPath(taskId)}/edit`;
 }
 
 /** What was said on one plan's calls (GET). */
-export function planTranscriptPath(planId: string): string {
-  return `${planPath(planId)}/transcript`;
+export function taskTranscriptPath(taskId: string): string {
+  return `${taskPath(taskId)}/transcript`;
 }
 
 /**
@@ -296,8 +305,8 @@ export function planTranscriptPath(planId: string): string {
  * newest of all or, with `before`, the newest queued before that turn, and
  * on the newest page every code Luke showed on it.
  */
-export function planWorkPath(planId: string, before?: string): string {
-  const path = `${planPath(planId)}/work`;
+export function taskWorkPath(taskId: string, before?: string): string {
+  const path = `${taskPath(taskId)}/work`;
   if (before === undefined) return path;
   const query = new URLSearchParams({ before });
   return `${path}?${query}`;
@@ -309,11 +318,11 @@ export function planWorkPath(planId: string, before?: string): string {
  * open while a turn runs; with no cursor, its newest turns; with `before`,
  * the turns queued before that one.
  */
-export function planMessagesPath(
-  planId: string,
+export function taskMessagesPath(
+  taskId: string,
   page: { after?: string; before?: string },
 ): string {
-  const path = `${planPath(planId)}/messages`;
+  const path = `${taskPath(taskId)}/messages`;
   const query = new URLSearchParams({
     ...(page.after === undefined ? undefined : { after: page.after }),
     ...(page.before === undefined ? undefined : { before: page.before }),
@@ -322,19 +331,19 @@ export function planMessagesPath(
 }
 
 /** One planning worker's transcript past a cursor (GET), under the plan and the call that started it, held open while the worker runs; the same answer as `planMessagesPath`'s read. */
-export function planSubagentMessagesPath(planId: string, callId: string, after: string): string {
+export function taskSubagentMessagesPath(taskId: string, callId: string, after: string): string {
   const query = new URLSearchParams({ after });
-  return `${planPath(planId)}/subagents/${encodeURIComponent(callId)}/messages?${query}`;
+  return `${taskPath(taskId)}/subagents/${encodeURIComponent(callId)}/messages?${query}`;
 }
 
 /** Every code Luke showed on one plan, oldest first (GET). */
-export function planCodePath(planId: string): string {
-  return `${planPath(planId)}/code`;
+export function taskCodePath(taskId: string): string {
+  return `${taskPath(taskId)}/code`;
 }
 
 /** One window of a file of one plan's repository, as GitHub holds it now (GET): the path, and its first and last line; `raw=1` for its whole text uncut. */
-export function planFilePath(
-  planId: string,
+export function taskFilePath(
+  taskId: string,
   window: {
     readonly path: string;
     readonly firstLine: number;
@@ -350,15 +359,15 @@ export function planFilePath(
   });
   if (window.raw === true) query.set("raw", "1");
   if (window.ref !== undefined) query.set("ref", window.ref);
-  return `${planPath(planId)}/file?${query}`;
+  return `${taskPath(taskId)}/file?${query}`;
 }
 
 /** One folder of one plan's repository, as GitHub holds it now (GET): its path from the root, the root itself for an empty one, and `recursive=1` for everything under it. */
-export function planTreePath(
-  planId: string,
+export function taskTreePath(
+  taskId: string,
   folder: { readonly path: string; readonly recursive?: boolean },
 ): string {
-  const path = `${planPath(planId)}/tree`;
+  const path = `${taskPath(taskId)}/tree`;
   const query = new URLSearchParams();
   if (folder.path !== "") query.set("path", folder.path);
   if (folder.recursive === true) query.set("recursive", "1");
@@ -366,8 +375,8 @@ export function planTreePath(
 }
 
 /** The skills a developer may choose of one plan's repository, as GitHub holds it now (GET). */
-export function planSkillsPath(planId: string): string {
-  return `${planPath(planId)}/skills`;
+export function taskSkillsPath(taskId: string): string {
+  return `${taskPath(taskId)}/skills`;
 }
 
 /** A repository as a read with no plan names it: the workspace whose installation reaches it, and the repository, `owner/name`. */
@@ -407,27 +416,34 @@ export function repositoryPullRequestPath(place: RepositoryPlace, number: number
   return `${HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_PULL_REQUEST}?${query}`;
 }
 
+/** One issue of a repository a workspace reaches, by its number, as GitHub holds it now (GET). */
+export function repositoryIssuePath(place: RepositoryPlace, number: number): string {
+  const query = repositoryPlaceQuery(place);
+  query.set(GITHUB_REPOSITORIES_QUERY.NUMBER, String(number));
+  return `${HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_ISSUE}?${query}`;
+}
+
 /** One plan's history (GET): a page of its revisions, the newest of all or, with `before`, the newest before that revision. */
-export function planRevisionsPath(planId: string, before?: number): string {
-  const path = `${planPath(planId)}/revisions`;
+export function planRevisionsPath(taskId: string, before?: number): string {
+  const path = `${taskPath(taskId)}/revisions`;
   if (before === undefined) return path;
   const query = new URLSearchParams({ before: String(before) });
   return `${path}?${query}`;
 }
 
 /** One revision of one plan: its content beside the content before it (GET). */
-export function planRevisionPath(planId: string, seq: number): string {
-  return `${planRevisionsPath(planId)}/${seq}`;
+export function planRevisionPath(taskId: string, seq: number): string {
+  return `${planRevisionsPath(taskId)}/${seq}`;
 }
 
 /** One revision of one plan put back as its content (POST). */
-export function planRestorePath(planId: string, seq: number): string {
-  return `${planRevisionPath(planId, seq)}/restore`;
+export function taskRestorePath(taskId: string, seq: number): string {
+  return `${planRevisionPath(taskId, seq)}/restore`;
 }
 
 /** One plan's pictures: one kept on the plan (POST). */
 export function planAttachmentsPath(planId: string): string {
-  return `${planPath(planId)}/attachments`;
+  return `${taskPath(planId)}/attachments`;
 }
 
 /** One picture of one plan, as its bytes (GET). */
@@ -436,13 +452,13 @@ export function planAttachmentPath(planId: string, attachmentId: string): string
 }
 
 /** One plan's pages (GET): each page's newest version, the most recently written first. */
-export function planPagesPath(planId: string): string {
-  return `${planPath(planId)}/pages`;
+export function taskPagesPath(taskId: string): string {
+  return `${taskPath(taskId)}/pages`;
 }
 
 /** One version of one page of one plan, with its HTML (GET). */
-export function planPageVersionPath(planId: string, pageId: string, version: number): string {
-  return `${planPagesPath(planId)}/${encodeURIComponent(pageId)}/versions/${version}`;
+export function planPageVersionPath(taskId: string, pageId: string, version: number): string {
+  return `${taskPagesPath(taskId)}/${encodeURIComponent(pageId)}/versions/${version}`;
 }
 
 /** One revision of the account's plan template: its text beside the text before it (GET). */
@@ -456,8 +472,8 @@ export function planTemplateRestorePath(seq: number): string {
 }
 
 /** One plan's coding agents: list them with their status (GET), or start one (POST). `coding-agent-wire.ts` declares both. */
-export function planAgentsPath(planId: string): string {
-  return `${planPath(planId)}/agents`;
+export function taskAgentsPath(taskId: string): string {
+  return `${taskPath(taskId)}/agents`;
 }
 
 /**
@@ -465,8 +481,8 @@ export function planAgentsPath(planId: string): string {
  * past a cursor (GET), held open while nothing changed, as an agent's
  * transcript is. `inbox-wire.ts` declares the answer.
  */
-export function planInboxPath(planId: string, after?: string): string {
-  const path = `${planPath(planId)}/inbox`;
+export function taskInboxPath(taskId: string, after?: string): string {
+  const path = `${taskPath(taskId)}/inbox`;
   if (after === undefined) return path;
   const query = new URLSearchParams({ after });
   return `${path}?${query}`;

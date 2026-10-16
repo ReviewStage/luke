@@ -16,7 +16,7 @@ import {
   INBOX_WIRE_VERSION,
   type InboxItem,
 } from "@luke/features/inbox-wire";
-import type { PlanSummary } from "@luke/features/plan-wire";
+import type { TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
@@ -41,7 +41,7 @@ const DAY = 86_400_000;
 const NOW = Date.now();
 
 /** A plan of the personal workspace, saved `ago` before now. */
-function plan(n: number, name: string, ago: number, repository: string | null): PlanSummary {
+function plan(n: number, name: string, ago: number, repository: string | null): TaskSummary {
   return {
     id: `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`,
     workspaceId: "workspace-personal",
@@ -54,7 +54,7 @@ function plan(n: number, name: string, ago: number, repository: string | null): 
 
 const INVITES = plan(1, "Teammate invitations", 4 * 60_000, "acme/relay");
 const BILLING = plan(2, "Billing export", 2 * 3_600_000, "acme/ledger");
-const PLANS: readonly PlanSummary[] = [
+const PLANS: readonly TaskSummary[] = [
   plan(3, "Usage alerts", 5 * DAY, "acme/relay"),
   INVITES,
   plan(4, "Onboarding checklist", 12 * DAY, null),
@@ -129,12 +129,12 @@ const AGENT_INBOXES = new Map<string, readonly InboxItem[]>([[SWEEP_AGENT, [QUAR
 /** The plans holding items, and those of them with an item waiting, as main reads the account. */
 const HOLDING: Pick<PlansControl, "inbox" | "inboxPlans"> = {
   inbox: [
-    { planId: INVITES.id, items: [waitingOf(EMAIL)] },
-    { planId: BILLING.id, items: [waitingOf(ACCOUNT)] },
+    { taskId: INVITES.id, items: [waitingOf(EMAIL)] },
+    { taskId: BILLING.id, items: [waitingOf(ACCOUNT)] },
   ],
   inboxPlans: [
-    { planId: INVITES.id, items: 2, updatedAt: EMAIL.updatedAt },
-    { planId: BILLING.id, items: 1, updatedAt: ACCOUNT.updatedAt },
+    { taskId: INVITES.id, items: 2, updatedAt: EMAIL.updatedAt },
+    { taskId: BILLING.id, items: 1, updatedAt: ACCOUNT.updatedAt },
   ],
 };
 
@@ -189,7 +189,7 @@ beforeEach(() => {
           return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
         }
         const value: CodingAgentInboxAnswerView = {
-          items: INBOXES.get(request.payload.planId) ?? [],
+          items: INBOXES.get(request.payload.taskId) ?? [],
           cursor: "1",
         };
         return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
@@ -436,7 +436,7 @@ test("Home lists every open item of the listed plans, a teammate's agent's inclu
     listed: {
       plans: PLANS,
       archived: [],
-      inbox: [{ planId: INVITES.id, items: [waitingOf(EMAIL)] }],
+      inbox: [{ taskId: INVITES.id, items: [waitingOf(EMAIL)] }],
       inboxPlans: HOLDING.inboxPlans,
     },
   });

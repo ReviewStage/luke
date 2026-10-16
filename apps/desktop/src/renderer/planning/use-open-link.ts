@@ -32,9 +32,9 @@ export const OpenLinkProvider = OpenLinkContext.Provider;
 
 /** The place a mention of a plan, or of one of its sections, names. */
 function placeOfMention(mention: PlanMention): LinkPlace {
-  return mention.kind === MENTION_KIND.PLAN
-    ? { kind: LINK_PLACE.TASK, planId: mention.planId }
-    : { kind: LINK_PLACE.SECTION, planId: mention.planId, anchor: mention.anchor };
+  return mention.kind === MENTION_KIND.TASK
+    ? { kind: LINK_PLACE.TASK, planId: mention.taskId }
+    : { kind: LINK_PLACE.SECTION, planId: mention.taskId, anchor: mention.anchor };
 }
 
 /** The window's opener for a plan, or one of its sections, as a mention's chip names it; nothing outside the window. */
@@ -64,7 +64,7 @@ function lukeLinkOf(href: string): ReadLink | undefined {
   if (read !== undefined) return read;
   // Note that no repository is handed, so a GitHub page is never read as a file here: it opens on GitHub.
   const mention = decodeMention(href, null);
-  return mention?.kind === MENTION_KIND.PLAN || mention?.kind === MENTION_KIND.SECTION
+  return mention?.kind === MENTION_KIND.TASK || mention?.kind === MENTION_KIND.SECTION
     ? { workspace: "", place: placeOfMention(mention) }
     : undefined;
 }

@@ -3,16 +3,17 @@ import { it } from "@effect/vitest";
 import { WORKSPACE_CALL_FAILURE } from "@luke/features";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import { PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
+import { ISSUE_STATE } from "@luke/features/github-repositories-wire";
 import { PICTURE_TYPE } from "@luke/features/picture-wire";
-import { PLAN_FILE_REFUSAL } from "@luke/features/plan-wire";
+import { TASK_FILE_REFUSAL } from "@luke/features/task-wire";
 import {
   GITHUB_DISCONNECT_FAILURE,
-  PLAN_CALL_FAILURE,
-  type PlanningGitHubDisconnectAnswer,
-  type PlanningGitHubPageAnswer,
-  type PlanningStartAnswer,
-  type PlanningWorkspaceGitHubConnectAnswer,
-} from "@luke/features/planning-view";
+  TASK_CALL_FAILURE,
+  type TasksGitHubDisconnectAnswer,
+  type TasksGitHubPageAnswer,
+  type TasksStartAnswer,
+  type TasksWorkspaceGitHubConnectAnswer,
+} from "@luke/features/tasks-view";
 import { WORKSPACE_PHOTO_TYPE, WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { highlightSnippet } from "@luke/host";
 import {
@@ -79,6 +80,14 @@ const PULL_REQUEST = {
   state: PULL_REQUEST_STATE.OPEN,
 };
 const PULL_REQUEST_NONE = 43;
+/** The one issue the fake host's service holds; it holds none numbered `ISSUE_NONE`, and answers nothing for any other number. */
+const ISSUE = {
+  number: 7,
+  title: "Invitations expire too soon",
+  url: "https://github.com/acme/relay/issues/7",
+  state: ISSUE_STATE.CLOSED,
+};
+const ISSUE_NONE = 8;
 
 /** The plan the host has open, as the fixture's main process reads it. */
 interface OpenPlan {
@@ -87,7 +96,7 @@ interface OpenPlan {
 
 /** What the host answers a start with, and whether voice could open a call now. */
 interface StartScript {
-  answer: PlanningStartAnswer;
+  answer: TasksStartAnswer;
   voiceReady: boolean;
   /** Whether a call is already in progress, about whichever plan. */
   callStanding: boolean;
@@ -124,144 +133,151 @@ function fixture() {
       ? ({ failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED } as const)
       : ({ failure: WORKSPACE_CALL_FAILURE.UNANSWERED } as const);
   const start: StartScript = {
-    answer: { failure: PLAN_CALL_FAILURE.UNANSWERED },
+    answer: { failure: TASK_CALL_FAILURE.UNANSWERED },
     voiceReady: true,
     callStanding: false,
   };
   const rows = planningActRows({
     host: {
-      planningRefresh: () => Effect.sync(() => void asked.push("refresh")),
-      planningWorkEarlier: () => Effect.sync(() => void asked.push("earlier")),
-      planningConversationEarlier: () => Effect.sync(() => void asked.push("conversation-earlier")),
-      planningMessages: (params) =>
+      tasksRefresh: () => Effect.sync(() => void asked.push("refresh")),
+      tasksWorkEarlier: () => Effect.sync(() => void asked.push("earlier")),
+      tasksConversationEarlier: () => Effect.sync(() => void asked.push("conversation-earlier")),
+      tasksMessages: (params) =>
         Effect.sync(() => {
-          asked.push(`messages:${params.planId}:${params.callId}:${params.after}`);
+          asked.push(`messages:${params.taskId}:${params.callId}:${params.after}`);
           return { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
         }),
-      planningClose: () => Effect.sync(() => void asked.push("close")),
-      planningOpen: (planId) =>
+      tasksClose: () => Effect.sync(() => void asked.push("close")),
+      tasksOpen: (planId) =>
         Effect.sync(() => {
           asked.push(`open:${planId}`);
           return true;
         }),
-      planningDelete: (planId) =>
+      tasksDelete: (planId) =>
         Effect.sync(() => {
           asked.push(`delete:${planId}`);
           return true;
         }),
-      planningRename: (params) =>
+      tasksRename: (params) =>
         Effect.sync(() => {
-          asked.push(`rename:${params.planId}:${params.name}`);
+          asked.push(`rename:${params.taskId}:${params.name}`);
           return true;
         }),
-      planningPin: (params) =>
+      tasksPin: (params) =>
         Effect.sync(() => {
-          asked.push(`pin:${params.planId}:${params.pinned}`);
+          asked.push(`pin:${params.taskId}:${params.pinned}`);
           return true;
         }),
-      planningPinRepository: (params) =>
+      tasksPinRepository: (params) =>
         Effect.sync(() => {
           asked.push(`pin-repository:${params.repository}:${params.pinned}`);
           return true;
         }),
-      planningArchive: (params) =>
+      tasksArchive: (params) =>
         Effect.sync(() => {
-          asked.push(`archive:${params.planId}:${params.archived}`);
+          asked.push(`archive:${params.taskId}:${params.archived}`);
           return false;
         }),
-      planningStart: (request) =>
+      tasksStart: (request) =>
         Effect.sync(() => {
           asked.push(`start:${request.repository}`);
           return start.answer;
         }),
-      planningRepositories: (params) =>
+      tasksRepositories: (params) =>
         Effect.sync(() => {
           asked.push(`repositories:${params.workspaceId}`);
-          return { failure: PLAN_CALL_FAILURE.UNANSWERED } as const;
+          return { failure: TASK_CALL_FAILURE.UNANSWERED } as const;
         }),
-      planningSetRepository: (params) =>
+      tasksSetRepository: (params) =>
         Effect.sync(() => {
-          asked.push(`repository:${params.planId}:${params.repository}`);
+          asked.push(`repository:${params.taskId}:${params.repository}`);
           return { repository: params.repository };
         }),
-      planningMove: (params) =>
+      tasksMove: (params) =>
         Effect.sync(() => {
-          asked.push(`move:${params.planId}:${params.workspaceId}`);
+          asked.push(`move:${params.taskId}:${params.workspaceId}`);
           return { workspaceId: params.workspaceId };
         }),
-      planningEdit: (params) =>
+      tasksEdit: (params) =>
         Effect.sync(() => {
           const value = "document" in params.edit ? params.edit.document.value : "";
-          asked.push(`edit:${params.planId}:${value}`);
+          asked.push(`edit:${params.taskId}:${value}`);
           return { saved: true } as const;
         }),
-      planningBoardSave: (params) =>
-        Effect.sync(() => void asked.push(`board:${params.planId}:${params.appliedDrawing}`)),
-      planningFile: (params) =>
+      tasksBoardSave: (params) =>
+        Effect.sync(() => void asked.push(`board:${params.taskId}:${params.appliedDrawing}`)),
+      tasksFile: (params) =>
         Effect.sync(() => {
           asked.push(`file:${params.path}:${params.firstLine}-${params.lastLine}`);
-          return { refusal: PLAN_FILE_REFUSAL.MISSING } as const;
+          return { refusal: TASK_FILE_REFUSAL.MISSING } as const;
         }),
-      planningTree: (params) =>
+      tasksTree: (params) =>
         Effect.sync(() => {
           asked.push(`tree:${params.path}`);
-          return { refusal: PLAN_FILE_REFUSAL.NOT_REACHABLE } as const;
+          return { refusal: TASK_FILE_REFUSAL.NOT_REACHABLE } as const;
         }),
-      planningSkills: (params) =>
+      tasksSkills: (params) =>
         Effect.sync(() => {
           asked.push(`skills:${"planId" in params ? params.planId : params.repository}`);
-          return { refusal: PLAN_FILE_REFUSAL.NO_REPOSITORY } as const;
+          return { refusal: TASK_FILE_REFUSAL.NO_REPOSITORY } as const;
         }),
-      planningPullRequest: (params) =>
+      tasksPullRequest: (params) =>
         Effect.sync(() => {
           asked.push(`pullRequest:${params.repository}:${params.number}`);
           if (params.number === PULL_REQUEST.number) return { pullRequest: PULL_REQUEST };
           if (params.number === PULL_REQUEST_NONE) return { pullRequest: null };
-          return { failure: PLAN_CALL_FAILURE.UNANSWERED } as const;
+          return { failure: TASK_CALL_FAILURE.UNANSWERED } as const;
         }),
-      planningRevisions: (params) =>
+      tasksIssue: (params) =>
         Effect.sync(() => {
-          asked.push(`revisions:${params.planId}:${params.before}`);
+          asked.push(`issue:${params.repository}:${params.number}`);
+          if (params.number === ISSUE.number) return { issue: ISSUE };
+          if (params.number === ISSUE_NONE) return { issue: null };
+          return { failure: TASK_CALL_FAILURE.UNANSWERED } as const;
+        }),
+      tasksRevisions: (params) =>
+        Effect.sync(() => {
+          asked.push(`revisions:${params.taskId}:${params.before}`);
           return { revisions: [] };
         }),
-      planningRevision: (params) =>
+      tasksRevision: (params) =>
         Effect.sync(() => {
           asked.push(`revision:${params.seq}`);
-          return { failure: PLAN_CALL_FAILURE.UNANSWERED } as const;
+          return { failure: TASK_CALL_FAILURE.UNANSWERED } as const;
         }),
-      planningRestore: (params) =>
+      tasksRestore: (params) =>
         Effect.sync(() => {
           asked.push(`restore:${params.seq}`);
           return true;
         }),
-      planningPictureKeep: (params) =>
+      tasksPictureKeep: (params) =>
         Effect.sync(() => {
           asked.push(`keep:${params.planId}`);
           return { id: PICTURE_ID };
         }),
-      planningPicture: (params) =>
+      tasksPicture: (params) =>
         Effect.sync(() => {
           asked.push(`picture:${params.planId}:${params.attachmentId}`);
           return params.attachmentId === PICTURE_ID
             ? { contentType: PICTURE_TYPE.WEBP, base64: "UklGRg==" }
-            : ({ failure: PLAN_CALL_FAILURE.NOT_FOUND } as const);
+            : ({ failure: TASK_CALL_FAILURE.NOT_FOUND } as const);
         }),
-      planningPage: (params) =>
+      tasksPage: (params) =>
         Effect.sync(() => {
           asked.push(`page:${params.pageId}:${params.version}`);
           const { html } = page;
-          if (html === undefined) return { failure: PLAN_CALL_FAILURE.UNANSWERED } as const;
+          if (html === undefined) return { failure: TASK_CALL_FAILURE.UNANSWERED } as const;
           return { page: { id: params.pageId, title: "Invite funnel", version: 2, at: 0, html } };
         }),
       githubConnect: () =>
-        Effect.sync((): PlanningGitHubPageAnswer => {
+        Effect.sync((): TasksGitHubPageAnswer => {
           asked.push("github-connect");
           return host.githubUnanswered
-            ? { failure: PLAN_CALL_FAILURE.UNANSWERED }
+            ? { failure: TASK_CALL_FAILURE.UNANSWERED }
             : { url: host.connectPage };
         }),
       githubDisconnect: () =>
-        Effect.sync((): PlanningGitHubDisconnectAnswer => {
+        Effect.sync((): TasksGitHubDisconnectAnswer => {
           asked.push("github-disconnect");
           return host.lastSignIn
             ? { failure: GITHUB_DISCONNECT_FAILURE.NOT_PERMITTED }
@@ -284,7 +300,7 @@ function fixture() {
           return { workspace: params.photo === null ? ACME : { ...ACME, photoVersion: "v2" } };
         }),
       workspaceGitHubConnect: (params) =>
-        Effect.sync((): PlanningWorkspaceGitHubConnectAnswer => {
+        Effect.sync((): TasksWorkspaceGitHubConnectAnswer => {
           asked.push(`connect:${params.workspaceId}`);
           return host.notPermitted ? refusal() : { url: host.connectUrl };
         }),
@@ -294,7 +310,7 @@ function fixture() {
           return host.notPermitted ? refusal() : { workspace: ACME };
         }),
       workspaceLinearConnect: (params) =>
-        Effect.sync((): PlanningWorkspaceGitHubConnectAnswer => {
+        Effect.sync((): TasksWorkspaceGitHubConnectAnswer => {
           asked.push(`linear-connect:${params.workspaceId}`);
           return host.notPermitted ? refusal() : { url: host.linearConnectUrl };
         }),
@@ -386,9 +402,9 @@ it.effect(
     Effect.gen(function* () {
       const f = fixture();
       const edit = {
-        kind: ACT_KIND.PLANNING_EDIT,
+        kind: ACT_KIND.TASKS_EDIT,
         payload: {
-          planId: PLAN_ID,
+          taskId: PLAN_ID,
           edit: { document: { base: "", value: "Invites expire." } },
         },
       } as const;
@@ -447,26 +463,46 @@ it.effect(
     }),
 );
 
+it.effect("a started task opens its call, and one started without planning opens none", () =>
+  Effect.gen(function* () {
+    const f = fixture();
+    f.start.answer = { planId: PLAN_ID };
+
+    const planned = yield* f.router.performAct(
+      { kind: ACT_KIND.TASKS_START, payload: { name: "Invitations" } },
+      PANEL,
+    );
+    const unplanned = yield* f.router.performAct(
+      { kind: ACT_KIND.TASKS_START, payload: { name: "Typo", planning: false } },
+      PANEL,
+    );
+
+    assert.deepEqual(planned, { status: ACT_OUTCOME_STATUS.DONE, value: { planId: PLAN_ID } });
+    assert.deepEqual(unplanned, planned);
+    assert.deepEqual(f.talked, [PLAN_ID]);
+  }),
+);
+
 it.effect("the voice window does not reach the plans", () =>
   Effect.gen(function* () {
     const f = fixture();
-    const board = { planId: PLAN_ID, elements: [], appliedDrawing: 0 };
+    const board = { taskId: PLAN_ID, elements: [], appliedDrawing: 0 };
 
     const selected = yield* f.router.performAct(
-      { kind: ACT_KIND.PLANNING_SELECT, payload: { planId: PLAN_ID } },
+      { kind: ACT_KIND.TASKS_SELECT, payload: { taskId: PLAN_ID } },
       VOICE,
     );
     const saved = yield* f.router.performAct(
-      { kind: ACT_KIND.PLANNING_BOARD_SAVE, payload: board },
+      { kind: ACT_KIND.TASKS_BOARD_SAVE, payload: board },
       VOICE,
     );
     assert.deepEqual(selected, {
       status: ACT_OUTCOME_STATUS.REFUSED,
-      reason: ACT[ACT_KIND.PLANNING_SELECT].refusal,
+      reason: ACT[ACT_KIND.TASKS_SELECT].refusal,
     });
     assert.deepEqual(saved, {
       status: ACT_OUTCOME_STATUS.REFUSED,
-      reason: ACT[ACT_KIND.PLANNING_BOARD_SAVE].refusal,
+      reason: ACT[ACT_KIND.TASKS_BOARD_SAVE].refusal,
     });
     assert.deepEqual(f.asked, []);
   }),
@@ -478,8 +514,8 @@ it.effect(
     Effect.gen(function* () {
       const f = fixture();
       const source = {
-        kind: ACT_KIND.PLANNING_PAGE_SOURCE,
-        payload: { planId: PLAN_ID, pageId: "page-funnel", version: 2 },
+        kind: ACT_KIND.TASKS_PAGE_SOURCE,
+        payload: { taskId: PLAN_ID, pageId: "page-funnel", version: 2 },
       } as const;
       const long = `<p>${"a".repeat(70_000)}</p>`;
 
@@ -492,7 +528,7 @@ it.effect(
 
       assert.deepEqual(unanswered, {
         status: ACT_OUTCOME_STATUS.DONE,
-        value: { failure: PLAN_CALL_FAILURE.UNANSWERED },
+        value: { failure: TASK_CALL_FAILURE.UNANSWERED },
       });
       assert.ok(read.status === ACT_OUTCOME_STATUS.DONE && "lines" in read.value);
       const { lines } = read.value;
@@ -503,7 +539,7 @@ it.effect(
       assert.ok(lines[0]?.some((run) => run.color !== undefined));
       assert.deepEqual(fromVoice, {
         status: ACT_OUTCOME_STATUS.REFUSED,
-        reason: ACT[ACT_KIND.PLANNING_PAGE_SOURCE].refusal,
+        reason: ACT[ACT_KIND.TASKS_PAGE_SOURCE].refusal,
       });
       assert.deepEqual(plain, {
         status: ACT_OUTCOME_STATUS.DONE,
@@ -519,8 +555,8 @@ it.effect(
     Effect.gen(function* () {
       const f = fixture();
       const page = {
-        kind: ACT_KIND.PLANNING_MESSAGES,
-        payload: { planId: PLAN_ID, callId: "call-models", after: "0:0" },
+        kind: ACT_KIND.TASKS_MESSAGES,
+        payload: { taskId: PLAN_ID, callId: "call-models", after: "0:0" },
       } as const;
 
       const read = yield* f.router.performAct(page, PANEL);
@@ -675,7 +711,7 @@ it.effect(
     Effect.gen(function* () {
       const f = fixture();
       const ask = (attachmentId: string) => ({
-        kind: ACT_KIND.PLANNING_PICTURE_READ,
+        kind: ACT_KIND.TASKS_PICTURE_READ,
         payload: { planId: "plan-1", attachmentId },
       });
 
@@ -689,7 +725,7 @@ it.effect(
       });
       assert.deepEqual(gone, {
         status: ACT_OUTCOME_STATUS.DONE,
-        value: { failure: PLAN_CALL_FAILURE.NOT_FOUND },
+        value: { failure: TASK_CALL_FAILURE.NOT_FOUND },
       });
       assert.equal(fromVoice.status, ACT_OUTCOME_STATUS.REFUSED);
     }),
@@ -701,7 +737,7 @@ it.effect(
     Effect.gen(function* () {
       const f = fixture();
       const keep = {
-        kind: ACT_KIND.PLANNING_PICTURE_KEEP,
+        kind: ACT_KIND.TASKS_PICTURE_KEEP,
         payload: { planId: "plan-1", picture: "data:image/png;base64,iVBORw0KGgo=" },
       };
 
@@ -852,7 +888,7 @@ it.effect(
       const f = fixture();
       const ask = (number: number) =>
         ({
-          kind: ACT_KIND.PLANNING_PULL_REQUEST,
+          kind: ACT_KIND.TASKS_PULL_REQUEST,
           payload: { workspaceId: ACME.id, repository: "acme/relay", number },
         }) as const;
 
@@ -863,7 +899,7 @@ it.effect(
 
       const refused = {
         status: ACT_OUTCOME_STATUS.REFUSED,
-        reason: ACT[ACT_KIND.PLANNING_PULL_REQUEST].refusal,
+        reason: ACT[ACT_KIND.TASKS_PULL_REQUEST].refusal,
       };
       assert.deepEqual(fromVoice, refused);
       assert.deepEqual(read, { status: ACT_OUTCOME_STATUS.DONE, value: PULL_REQUEST });
@@ -873,6 +909,38 @@ it.effect(
         `pullRequest:acme/relay:${PULL_REQUEST.number}`,
         `pullRequest:acme/relay:${PULL_REQUEST_NONE}`,
         "pullRequest:acme/relay:44",
+      ]);
+    }),
+);
+
+it.effect(
+  "an issue is answered to a panel as the host read it, or as none, a service that did not answer is refused in its kind's own words, and the voice window is refused before the host is asked",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const ask = (number: number) =>
+        ({
+          kind: ACT_KIND.TASKS_ISSUE,
+          payload: { workspaceId: ACME.id, repository: "acme/relay", number },
+        }) as const;
+
+      const fromVoice = yield* f.router.performAct(ask(ISSUE.number), VOICE);
+      const read = yield* f.router.performAct(ask(ISSUE.number), PANEL);
+      const none = yield* f.router.performAct(ask(ISSUE_NONE), PANEL);
+      const unanswered = yield* f.router.performAct(ask(9), PANEL);
+
+      const refused = {
+        status: ACT_OUTCOME_STATUS.REFUSED,
+        reason: ACT[ACT_KIND.TASKS_ISSUE].refusal,
+      };
+      assert.deepEqual(fromVoice, refused);
+      assert.deepEqual(read, { status: ACT_OUTCOME_STATUS.DONE, value: ISSUE });
+      assert.deepEqual(none, { status: ACT_OUTCOME_STATUS.DONE, value: null });
+      assert.deepEqual(unanswered, refused);
+      assert.deepEqual(f.asked, [
+        `issue:acme/relay:${ISSUE.number}`,
+        `issue:acme/relay:${ISSUE_NONE}`,
+        "issue:acme/relay:9",
       ]);
     }),
 );

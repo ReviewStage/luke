@@ -292,6 +292,10 @@
     "dest": "/api/default.js?route=github/repositories"
   },
   {
+    "src": "/api/github/repositories/issue",
+    "dest": "/api/default.js?route=github/repositories/issue"
+  },
+  {
     "src": "/api/github/repositories/pull-request",
     "dest": "/api/default.js?route=github/repositories/pull-request"
   },

@@ -1,5 +1,5 @@
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
-import type { PlanSummary } from "@luke/features/plan-wire";
+import type { TaskSummary } from "@luke/features/task-wire";
 import type { FormerMember, Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { type Actor, accountActor, creatorActor, personActor } from "@luke/ui/actor-model";
 import { createContext, type ReactNode, useContext } from "react";
@@ -74,7 +74,7 @@ export function usePerson(
  * someone's; `readerId` stands for the reader outside a directory.
  */
 export function useCreator(
-  plan: Pick<PlanSummary, "createdBy" | "ownerId">,
+  plan: Pick<TaskSummary, "createdBy" | "ownerId">,
   readerId?: string | undefined,
 ): Actor {
   const directory = useMemberDirectory();

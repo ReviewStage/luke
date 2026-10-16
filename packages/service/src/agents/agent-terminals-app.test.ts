@@ -4,7 +4,7 @@ import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { archiveCodingAgent, createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { claimRuntimeSession } from "@luke/database/models/recorded-session";
-import { getTestDB, startPlan } from "@luke/database/testing";
+import { getTestDB, startTask } from "@luke/database/testing";
 import { HOSTED_API_ERROR } from "@luke/features";
 import {
   SANDBOX_STATE,
@@ -72,9 +72,9 @@ function scriptedSandbox(state: SandboxState) {
 /** An account with an agent on a plan, its session claimed, as a started agent stands. */
 const openAgent = Effect.gen(function* () {
   const userId = yield* openGithubUser();
-  const plan = yield* startPlan(userId, { name: "Terminal tab", repository: "acme/relay" });
+  const task = yield* startTask(userId, { name: "Terminal tab", repository: "acme/relay" });
   const started = yield* createCodingAgent(userId, {
-    planId: plan.id,
+    taskId: task.id,
     idempotencyKey: `start-${randomUUID()}`,
     model: "anthropic/claude-opus-5.5",
     effort: "high",

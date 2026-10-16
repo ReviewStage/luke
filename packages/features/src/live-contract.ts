@@ -10,9 +10,9 @@ import { EXCESS_KEYS, isWireString, SCHEMA_REFUSAL, type UnparsedWireValue } fro
 import { declareReader, emitJsonSchema, readEither, wireRefusal } from "@luke/wire/effect";
 import { Result, Schema, SchemaGetter } from "effect";
 import { AVATAR_GRANT_BOUNDS, avatarGrantSchema } from "./avatar-grant.js";
-import { planDocumentSchema, planSectionEditSchema } from "./plan-wire.js";
-import { planActivitySchema, planShownCodeSchema, planWorkTurnSchema } from "./planning-view.js";
 import { hostedQuotaSchema, wireUuidSchema } from "./service-wire.js";
+import { planDocumentSchema, planSectionEditSchema } from "./task-wire.js";
+import { taskActivitySchema, taskShownCodeSchema, taskWorkTurnSchema } from "./tasks-view.js";
 
 /**
  * The desktop's contract with the hosted voice service: the Vercel Function
@@ -22,6 +22,10 @@ import { hostedQuotaSchema, wireUuidSchema } from "./service-wire.js";
  * between the desktop and OpenAI untouched. The desktop reaches it over one
  * WebSocket per function connection, and what travels on that socket before
  * the Live events do is declared here, once, for both ends.
+ *
+ * Note that `planId`, `planner`, and the `plan.*` frames keep the wire's legacy spelling of a task, because a
+ * released desktop sends and reads them; they are renamed with the wire in a
+ * follow-up, with no alias.
  */
 
 /** The origin of Luke's own service, the same one every hosted call is addressed to. */
@@ -149,7 +153,7 @@ export const VOICE_SERVICE_FRAME = {
    * notetaker, sent whole each time any of them changes, so the Plans tab
    * says each part's own state rather than one word for all of them.
    */
-  PLAN_ACTIVITY: "plan.activity",
+  TASK_ACTIVITY: "plan.activity",
   /**
    * The service's fourth frame to the desktop, on a planning call alone:
    * code of the plan's repository Luke is about to talk about, with its
@@ -157,21 +161,21 @@ export const VOICE_SERVICE_FRAME = {
    * sent as he starts to speak, so the Plans tab's code pane draws it as he
    * says it.
    */
-  PLAN_CODE: "plan.code",
+  TASK_CODE: "plan.code",
   /**
    * The service's fifth frame to the desktop, on a planning call alone: one
    * planning turn's work as it stands, what the model wrote and each call
    * it made with its output, sent whole each time it changes, so the Plans
    * tab's Work tab reads like an agent's own transcript.
    */
-  PLAN_WORK: "plan.work",
+  TASK_WORK: "plan.work",
   /**
    * The service's sixth frame to the desktop, on a planning call alone: the
    * developer said they are done and Luke is saying goodbye, so the desktop
    * hangs up through its own hang-up once that goodbye has played, and keeps
    * the call up if the developer speaks first. It carries no words.
    */
-  PLAN_CALL_ENDING: "plan.call_ending",
+  TASK_CALL_ENDING: "plan.call_ending",
   /**
    * The desktop's ask for Luke's avatar on the call: the service mints a
    * Keyframe session for this voice session on its own key and answers
@@ -397,13 +401,13 @@ export const planDraftFrameSchema = Schema.Struct({
 export type PlanDraftFrame = typeof planDraftFrameSchema.Type;
 
 /** The activity on the call about the plan named, as the service sends it to the desktop. */
-export const planActivityFrameSchema = Schema.Struct({
-  type: Schema.Literal(VOICE_SERVICE_FRAME.PLAN_ACTIVITY),
+export const taskActivityFrameSchema = Schema.Struct({
+  type: Schema.Literal(VOICE_SERVICE_FRAME.TASK_ACTIVITY),
   planId: wireUuidSchema,
-  ...planActivitySchema.fields,
+  ...taskActivitySchema.fields,
 });
 
-export type PlanActivityFrame = typeof planActivityFrameSchema.Type;
+export type TaskActivityFrame = typeof taskActivityFrameSchema.Type;
 
 /**
  * Code Luke put on screen on the call about the plan named, with its lines
@@ -411,30 +415,30 @@ export type PlanActivityFrame = typeof planActivityFrameSchema.Type;
  * call and turn that showed it, as the plan's work reads them back, so the
  * desktop holds a call's code and the record's copy of it once.
  */
-export const planCodeFrameSchema = Schema.Struct({
-  type: Schema.Literal(VOICE_SERVICE_FRAME.PLAN_CODE),
+export const taskCodeFrameSchema = Schema.Struct({
+  type: Schema.Literal(VOICE_SERVICE_FRAME.TASK_CODE),
   planId: wireUuidSchema,
-  ...planShownCodeSchema.fields,
+  ...taskShownCodeSchema.fields,
 });
 
-export type PlanCodeFrame = typeof planCodeFrameSchema.Type;
+export type TaskCodeFrame = typeof taskCodeFrameSchema.Type;
 
 /** One planning turn's work on the call about the plan named, as the service sends it to the desktop. */
-export const planWorkFrameSchema = Schema.Struct({
-  type: Schema.Literal(VOICE_SERVICE_FRAME.PLAN_WORK),
+export const taskWorkFrameSchema = Schema.Struct({
+  type: Schema.Literal(VOICE_SERVICE_FRAME.TASK_WORK),
   planId: wireUuidSchema,
-  turn: planWorkTurnSchema,
+  turn: taskWorkTurnSchema,
 });
 
-export type PlanWorkFrame = typeof planWorkFrameSchema.Type;
+export type TaskWorkFrame = typeof taskWorkFrameSchema.Type;
 
 /** Luke is ending the call about the plan named, once his goodbye has played. */
-export const planCallEndingFrameSchema = Schema.Struct({
-  type: Schema.Literal(VOICE_SERVICE_FRAME.PLAN_CALL_ENDING),
+export const taskCallEndingFrameSchema = Schema.Struct({
+  type: Schema.Literal(VOICE_SERVICE_FRAME.TASK_CALL_ENDING),
   planId: wireUuidSchema,
 });
 
-export type PlanCallEndingFrame = typeof planCallEndingFrameSchema.Type;
+export type TaskCallEndingFrame = typeof taskCallEndingFrameSchema.Type;
 
 /**
  * Why the desktop took the avatar down: the developer turned video off,
@@ -623,25 +627,25 @@ export function planDraftFrameFromWire(value: UnparsedWireValue): PlanDraftFrame
 }
 
 /** What each part of Luke is doing on a planning call, read the same answering way. */
-export function planActivityFrameFromWire(value: UnparsedWireValue): PlanActivityFrame | undefined {
-  return admittedAnswer(planActivityFrameSchema, value);
+export function taskActivityFrameFromWire(value: UnparsedWireValue): TaskActivityFrame | undefined {
+  return admittedAnswer(taskActivityFrameSchema, value);
 }
 
 /** The code Luke put on screen on a planning call, read the same answering way. */
-export function planCodeFrameFromWire(value: UnparsedWireValue): PlanCodeFrame | undefined {
-  return admittedAnswer(planCodeFrameSchema, value);
+export function taskCodeFrameFromWire(value: UnparsedWireValue): TaskCodeFrame | undefined {
+  return admittedAnswer(taskCodeFrameSchema, value);
 }
 
 /** One planning turn's work on a planning call, read the same answering way. */
-export function planWorkFrameFromWire(value: UnparsedWireValue): PlanWorkFrame | undefined {
-  return admittedAnswer(planWorkFrameSchema, value);
+export function taskWorkFrameFromWire(value: UnparsedWireValue): TaskWorkFrame | undefined {
+  return admittedAnswer(taskWorkFrameSchema, value);
 }
 
 /** Luke ending a planning call, read the same answering way. */
-export function planCallEndingFrameFromWire(
+export function taskCallEndingFrameFromWire(
   value: UnparsedWireValue,
-): PlanCallEndingFrame | undefined {
-  return admittedAnswer(planCallEndingFrameSchema, value);
+): TaskCallEndingFrame | undefined {
+  return admittedAnswer(taskCallEndingFrameSchema, value);
 }
 
 export function avatarRequestFrameFromWire(

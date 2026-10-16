@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { PLAN_ACTOR, type Plan } from "@luke/features/plan-wire";
+import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
 import { ACT_OUTCOME_STATUS, type ActOutcome } from "@luke/host/acts";
 import { CONFIRM_STAGE } from "@luke/ui/confirm-state";
 import { act, createElement, type ReactNode } from "react";
@@ -35,7 +35,7 @@ const LINKS = [
   "Not `https://linear.app/acme/issue/LUKE-9`.",
 ].join(" ");
 
-const PLAN: Plan = {
+const PLAN: Task = {
   ...DOCUMENT_PLAN,
   id: PLAN_ID,
   repository: REPOSITORY,

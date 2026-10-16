@@ -26,7 +26,7 @@ export function sidebarProps(plans: PlansControl): ComponentProps<typeof Desktop
     },
     history: { canGoBack: false, canGoForward: false, onBack: ignore, onForward: ignore },
     plans,
-    tab: PANEL_TAB.PLANS,
+    tab: PANEL_TAB.TASKS,
     onTabChange: ignore,
     onPressWithin: ignore,
     account: {

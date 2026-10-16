@@ -43,7 +43,7 @@ const openCall = Effect.gen(function* () {
       userId,
       liveSessionId: `live-${randomUUID()}`,
       delegationMode: VOICE_DELEGATION_MODE.CLIENT,
-      planId: randomUUID(),
+      taskId: randomUUID(),
     })
     .returning({ id: voiceSessions.id });
   assert.ok(row);

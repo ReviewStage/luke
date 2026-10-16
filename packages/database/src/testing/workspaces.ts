@@ -7,7 +7,7 @@ import {
   GITHUB_ACCOUNT_TYPE,
   GITHUB_INSTALLATION_STATUS,
 } from "../github-installation-vocabulary.js";
-import { createPlan, type NewPlan } from "../models/plan-store.js";
+import { createTask, type NewTask } from "../models/task-store.js";
 import type { WorkspaceSeams } from "../models/workspace-seams.js";
 import { member, organization } from "../schemas/auth.js";
 import { githubInstallation } from "../schemas/github-installation.js";
@@ -17,7 +17,7 @@ import { githubInstallation } from "../schemas/github-installation.js";
  *
  * Every plan belongs to a workspace, a Better Auth `organization` the
  * account is a `member` of. A test that is about something else starts its
- * plans through `startPlan`, which puts them in one workspace the account
+ * plans through `startTask`, which puts them in one workspace the account
  * owns, made the first time it is asked for. The rows are written straight
  * over the plugin's tables, as the plugin would leave them, since a test
  * stands no Better Auth, and `fakeWorkspaceSeams` is the plugin's
@@ -25,8 +25,8 @@ import { githubInstallation } from "../schemas/github-installation.js";
  * is `workspace-store.test.ts`.
  */
 
-/** A plan to start in the account's test workspace: what `createPlan` takes, without the workspace. */
-export type TestPlan = Omit<NewPlan, "organizationId">;
+/** A plan to start in the account's test workspace: what `createTask` takes, without the workspace. */
+export type TestTask = Omit<NewTask, "organizationId">;
 
 export { WORKSPACE_ROLE };
 
@@ -148,7 +148,7 @@ const workspaceOf = (userId: string) =>
   });
 
 /** Starts a plan under the account in its test workspace. */
-export const startPlan = (userId: string, started: TestPlan) =>
+export const startTask = (userId: string, started: TestTask) =>
   Effect.flatMap(workspaceOf(userId), (organizationId) =>
-    createPlan(userId, { ...started, organizationId }),
+    createTask(userId, { ...started, organizationId }),
   );

@@ -1,9 +1,9 @@
 import {
   AVATAR_STOP_REASON,
-  type PlanActivityFrame,
-  type PlanCodeFrame,
   type PlanDraftFrame,
-  type PlanWorkFrame,
+  type TaskActivityFrame,
+  type TaskCodeFrame,
+  type TaskWorkFrame,
 } from "@luke/features";
 import { PRODUCT_EVENT, PRODUCT_VOICE_SESSION_SOURCE } from "@luke/features/analytics";
 import {
@@ -44,17 +44,17 @@ export interface LiveDependencies {
     readonly voiceCapabilities: Pick<AccountComposer["voiceCapabilities"], "liveSessions">;
   };
   /** The plan the panel has open, the one plan a planning call may be created about; nothing while it has none. */
-  activePlanId: () => string | undefined;
+  activeTaskId: () => string | undefined;
   /** Where a draft of the open plan goes as the service's notetaker writes it during a planning call. */
   showPlanDraft: (draft: PlanDraftFrame) => void;
   /** Where the service's word of what each part of Luke is doing on a planning call goes, and the call's end clearing it. */
-  showPlanActivity: (activity: PlanActivityFrame) => void;
+  showTaskActivity: (activity: TaskActivityFrame) => void;
   /** Where code Luke puts on screen during a planning call goes. */
-  showPlanCode: (code: PlanCodeFrame) => void;
+  showTaskCode: (code: TaskCodeFrame) => void;
   /** Where each planning turn's work during a planning call goes. */
-  showPlanWork: (work: PlanWorkFrame) => void;
+  showTaskWork: (work: TaskWorkFrame) => void;
   /** Where a planning call's end goes, so the code it put on screen is cleared with it. */
-  planCallEnded: (planId: string) => void;
+  taskCallEnded: (taskId: string) => void;
 }
 
 /**
@@ -101,10 +101,10 @@ export const composeLive = /* @__PURE__ */ Effect.fn("host/composeLive")(functio
     // The plan a planning call is writing, as the service's notetaker drafts it.
     onPlanDraft: (draft) => dependencies.showPlanDraft(draft),
     // What each part of Luke is doing on the call, as the service says it.
-    onPlanActivity: (activity) => dependencies.showPlanActivity(activity),
-    onPlanCode: (code) => dependencies.showPlanCode(code),
-    onPlanWork: (work) => dependencies.showPlanWork(work),
-    onPlanCallEnded: (planId) => dependencies.planCallEnded(planId),
+    onTaskActivity: (activity) => dependencies.showTaskActivity(activity),
+    onTaskCode: (code) => dependencies.showTaskCode(code),
+    onTaskWork: (work) => dependencies.showTaskWork(work),
+    onTaskCallEnded: (taskId) => dependencies.taskCallEnded(taskId),
   });
 
   const methods: GatewayMethodTable = {
@@ -120,12 +120,12 @@ export const composeLive = /* @__PURE__ */ Effect.fn("host/composeLive")(functio
         // An offer about a plan the window no longer has open (another was
         // opened, or the window closed, while the offer was out) is refused, so
         // no call about one plan is created while another is on screen.
-        if (request.planId !== dependencies.activePlanId()) {
+        if (request.taskId !== dependencies.activeTaskId()) {
           return yield* Effect.fail(
             new RefusedRefusal({ message: "the plan is not the one the panel has open" }),
           );
         }
-        const created = yield* service.createSession(request.sdp, request.planId);
+        const created = yield* service.createSession(request.sdp, request.taskId);
         if (!created)
           return yield* Effect.fail(
             new RefusedRefusal({ message: "no live session could be created" }),

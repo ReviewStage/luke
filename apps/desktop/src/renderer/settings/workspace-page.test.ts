@@ -1088,7 +1088,7 @@ test("an admin's leave says the invitations they sent stay valid, and a member's
   const admin = await linesAs(WORKSPACE_ROLE.ADMIN);
   const member = await linesAs(WORKSPACE_ROLE.MEMBER);
 
-  assert.equal(admin.includes("Invitations you sent stay valid: they're the workspace's."), true);
+  assert.equal(admin.includes("Invitations you sent stay valid."), true);
   assert.equal(
     member.some((line) => line?.startsWith("Invitations")),
     false,
@@ -1120,8 +1120,8 @@ test("a member leaves after confirming, which names what stays and what stops, s
 
   assert.equal(line, "You lose its tasks, agents, and Inbox until someone invites you again.");
   assert.deepEqual(named, [
-    "Tasks you wrote stay in acme, for its members to keep.",
-    "Agents you started stay in its history, named as a former member, and any still working stop.",
+    "Tasks you wrote stay in acme.",
+    "Agents you started that are still working stop.",
     "Automations you created stop running.",
     "Your own workspace, Dana, isn't affected.",
   ]);

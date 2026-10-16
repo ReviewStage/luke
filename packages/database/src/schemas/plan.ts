@@ -1,5 +1,5 @@
 import type { BoardElement, DrawingElement } from "@luke/features/board-wire";
-import type { PlanLinearIssue } from "@luke/features/linear-wire";
+import type { TaskLinearIssue } from "@luke/features/linear-wire";
 import type { PlanAgentEdit } from "@luke/features/plan-template";
 import { sql } from "drizzle-orm";
 import { index, integer, jsonb, pgTable, text, uuid } from "drizzle-orm/pg-core";
@@ -25,7 +25,7 @@ import { conversations } from "./storage.js";
  * standing with none. The row cascades with its account, so deleting an
  * account is still one statement, and with its workspace.
  */
-export const plan = pgTable(
+export const task = pgTable(
   "plan",
   {
     id: uuid("id").primaryKey().defaultRandom(),
@@ -57,7 +57,7 @@ export const plan = pgTable(
      * planning turn is told to research. Kept whatever becomes of the
      * connection; null for a plan started from no issue.
      */
-    linearIssue: jsonb("linear_issue").$type<PlanLinearIssue>(),
+    linearIssue: jsonb("linear_issue").$type<TaskLinearIssue>(),
     /**
      * @deprecated A pin is its reader's own now, in `plan_pin`
      * (`plan-pin.ts`), and nothing writes or reads this. It was the
@@ -92,10 +92,10 @@ export const plan = pgTable(
  * drawing, each whole and each the last write winning (`board-store.ts`).
  * The row goes with its plan.
  */
-export const planBoard = pgTable("plan_board", {
-  planId: uuid("plan_id")
+export const taskBoard = pgTable("plan_board", {
+  taskId: uuid("plan_id")
     .primaryKey()
-    .references(() => plan.id, { onDelete: "cascade" }),
+    .references(() => task.id, { onDelete: "cascade" }),
   elements: jsonb("elements").$type<readonly BoardElement[]>().notNull().default(sql`'[]'::jsonb`),
   /** The number of Luke's drawing the scene holds; 0 before it holds any. */
   appliedDrawing: integer("applied_drawing").notNull().default(0),

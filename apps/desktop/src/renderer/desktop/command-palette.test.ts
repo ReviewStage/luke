@@ -13,13 +13,13 @@ import {
   CODING_AGENT_STATUS,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
-import { PLAN_TREE_ENTRY, type Plan } from "@luke/features/plan-wire";
-import type { PlanCodeShowing, PlanningTreeAnswer } from "@luke/features/planning-view";
+import { TASK_TREE_ENTRY, type Task } from "@luke/features/task-wire";
+import type { TaskCodeShowing, TasksTreeAnswer } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
 import { settingsView } from "@luke/settings/testing";
-import { DOCUMENT_REGION, PLAN_MARK, PLANS_PAGE } from "@luke/ui/planning-model";
+import { DOCUMENT_REGION, TASK_MARK, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { shownFiles } from "@luke/voice/code-pane-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
@@ -92,7 +92,7 @@ function WindowPalette({
 /** The palette over a window on its Plans tab, opened by ⌘K's command, every page it opens recorded. */
 function openPalette(
   plans: PlansControl = plansControl(),
-  readFiles: (planId: string) => Promise<PlanningTreeAnswer> = () =>
+  readFiles: (planId: string) => Promise<TasksTreeAnswer> = () =>
     Promise.reject(new Error("no repository is open")),
   page?: { agentId: string; workspaceId: string },
 ): Sent {
@@ -105,7 +105,7 @@ function openPalette(
     root.render(
       createElement(WindowPalette, {
         available: true,
-        tab: PANEL_TAB.PLANS,
+        tab: PANEL_TAB.TASKS,
         onTabChange: (tab) => sent.tabs.push(tab),
         plans,
         settings: {
@@ -135,7 +135,7 @@ function paletteOverPlan(): (looked: typeof DOCUMENT_PLAN | undefined) => void {
   roots.push(root);
   const registry = AtomRegistry.make();
   const plans = plansControl({
-    region: { kind: DOCUMENT_REGION.READY, plan: DOCUMENT_PLAN },
+    region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_PLAN },
     activePlanId: DOCUMENT_PLAN.id,
   });
   return (looked) =>
@@ -149,7 +149,7 @@ function paletteOverPlan(): (looked: typeof DOCUMENT_PLAN | undefined) => void {
             createElement(Looker, { looked }),
             createElement(WindowPalette, {
               available: true,
-              tab: PANEL_TAB.PLANS,
+              tab: PANEL_TAB.TASKS,
               onTabChange: () => undefined,
               plans,
               settings: {
@@ -507,7 +507,7 @@ test("an agent's card in ⌘K names the automation that started it, the listed w
     roots.push(root);
     const palette = createElement(WindowPalette, {
       available: true,
-      tab: PANEL_TAB.PLANS,
+      tab: PANEL_TAB.TASKS,
       onTabChange: () => undefined,
       plans,
       settings: {
@@ -622,7 +622,7 @@ test("while an agent's page holds the side panel, ⌘K offers none of the open p
           repository: "acme/relay",
         },
       ],
-      region: { kind: DOCUMENT_REGION.READY, plan: { ...DOCUMENT_PLAN, repository: "acme/relay" } },
+      region: { kind: DOCUMENT_REGION.READY, task: { ...DOCUMENT_PLAN, repository: "acme/relay" } },
       agentView: { ...control.agentView, agentId: "agent-page-1" },
       agents: codingAgentsControl({
         agents: [agent],
@@ -666,7 +666,7 @@ test("while an agent's page holds the side panel, ⌘K offers none of the open p
 test('a file found wears the look the side panel\'s "+" gives it, hangs its card with Luke\'s note, and opens through the panel\'s one door for a file, as the "+" row of a file whose tab stands does', async () => {
   const path = "src/invites/accept.ts";
   const note = "A used invite is refused here.";
-  const showing: PlanCodeShowing = {
+  const showing: TaskCodeShowing = {
     callId: "c",
     turnId: "t",
     shownAt: 1_000,
@@ -707,7 +707,7 @@ test('a file found wears the look the side panel\'s "+" gives it, hangs its card
         path: "",
         repository: "acme/relay",
         branch: "main",
-        entries: [{ name: path, kind: PLAN_TREE_ENTRY.FILE }],
+        entries: [{ name: path, kind: TASK_TREE_ENTRY.FILE }],
         truncated: false,
       },
     }),
@@ -885,11 +885,11 @@ const LINKED_AGENT = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 
 /** A task drawn in Acme, its agent's tab chosen in the work column and the agent named. */
 const ON_AGENT_TAB: PlansControl = plansControl({
-  page: PLANS_PAGE.DOCUMENT,
+  page: TASKS_PAGE.DOCUMENT,
   activePlanId: DOCUMENT_PLAN.id,
   region: {
     kind: DOCUMENT_REGION.READY,
-    plan: { ...DOCUMENT_PLAN, workspaceId: "workspace-acme" },
+    task: { ...DOCUMENT_PLAN, workspaceId: "workspace-acme" },
   },
   workspaces: [
     { id: "workspace-acme", name: "Acme", slug: "acme", role: WORKSPACE_ROLE.MEMBER, github: null },
@@ -1208,14 +1208,14 @@ test("on a one-off agent's page, ⌘K offers Pin agent, or Unpin agent once it i
 
 /** The task on screen, listed in the sidebar beside the palette, its pin landing where the row menu's would. */
 function PinnableTask(): React.JSX.Element {
-  const [listed, setListed] = useState<Plan>(DOCUMENT_PLAN);
+  const [listed, setListed] = useState<Task>(DOCUMENT_PLAN);
   const plans = plansControl({
     plans: [listed],
-    region: { kind: DOCUMENT_REGION.READY, plan: listed },
+    region: { kind: DOCUMENT_REGION.READY, task: listed },
     activePlanId: listed.id,
     onMarkPlan: (planId, mark) => {
       assert.equal(planId, listed.id);
-      setListed(mark === PLAN_MARK.PIN ? { ...DOCUMENT_PLAN, pinnedAt: 5 } : DOCUMENT_PLAN);
+      setListed(mark === TASK_MARK.PIN ? { ...DOCUMENT_PLAN, pinnedAt: 5 } : DOCUMENT_PLAN);
     },
   });
   return createElement(
@@ -1225,7 +1225,7 @@ function PinnableTask(): React.JSX.Element {
     createElement(DesktopSidebar, sidebarProps(plans)),
     createElement(WindowPalette, {
       available: true,
-      tab: PANEL_TAB.PLANS,
+      tab: PANEL_TAB.TASKS,
       onTabChange: () => undefined,
       plans,
       settings: {

@@ -1,6 +1,6 @@
-import { type PlanlessAgent, PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
+import { PULL_REQUEST_STATE, type TasklessAgent } from "@luke/features/coding-agent-wire";
 import { LINK_PLACE, type LinkPlace } from "@luke/features/luke-link";
-import type { PlanAgentLine, PlanPullRequestLine, PlanSummary } from "@luke/features/plan-wire";
+import type { TaskAgentLine, TaskPullRequestLine, TaskSummary } from "@luke/features/task-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { type Actor, personActor, teammateCreator } from "@luke/ui/actor-model";
 import { TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
@@ -109,7 +109,7 @@ function count(n: number, one: string, many: string): string {
 }
 
 /** A pull request opens on GitHub, where it is worked on and merged; one the service sent no page for opens its plan. */
-function openPullRequest(plans: PlansControl, plan: PlanSummary, pullRequest: PlanPullRequestLine) {
+function openPullRequest(plans: PlansControl, plan: TaskSummary, pullRequest: TaskPullRequestLine) {
   if (pullRequest.url === undefined) plans.onSelect(plan.id);
   else plans.repositories.openGitHub(pullRequest.url);
 }
@@ -118,14 +118,14 @@ function openPullRequest(plans: PlansControl, plan: PlanSummary, pullRequest: Pl
 type RowLink = { readonly place: LinkPlace } | { readonly url: string };
 
 /** What a pull request's row copies: its page on GitHub, which it opens, or its task where the service sent no page. */
-function pullRequestLink(plan: PlanSummary, pullRequest: PlanPullRequestLine): RowLink {
+function pullRequestLink(plan: TaskSummary, pullRequest: TaskPullRequestLine): RowLink {
   return pullRequest.url === undefined
     ? { place: { kind: LINK_PLACE.TASK, planId: plan.id } }
     : { url: pullRequest.url };
 }
 
 /** What a pull request still being built says: a draft, or its checks running. */
-function buildingWords(pullRequest: PlanPullRequestLine): string {
+function buildingWords(pullRequest: TaskPullRequestLine): string {
   return pullRequest.state === PULL_REQUEST_STATE.DRAFT
     ? `#${pullRequest.number} draft`
     : `#${pullRequest.number} checks running`;
@@ -151,7 +151,7 @@ function useFactoryBoard(plans: PlansControl, now: number): FactoryRead {
     () =>
       factoryWaiting(
         items,
-        plans.inbox.filter((each) => !readPlans.has(each.planId)),
+        plans.inbox.filter((each) => !readPlans.has(each.taskId)),
       ),
     [items, readPlans, plans.inbox],
   );
@@ -171,12 +171,12 @@ function useFactoryBoard(plans: PlansControl, now: number): FactoryRead {
       factoryBoard({
         plans: listed,
         waiting,
-        callPlanId: plans.callPlanId,
+        callTaskId: plans.callTaskId,
         oneOff,
         oneOffWaiting,
         now,
       }),
-    [listed, waiting, plans.callPlanId, oneOff, oneOffWaiting, now],
+    [listed, waiting, plans.callTaskId, oneOff, oneOffWaiting, now],
   );
   return { board, questions };
 }
@@ -388,7 +388,7 @@ function Arrow(): React.JSX.Element {
 }
 
 /** Who a row names: whoever started its agent where that is a teammate, else whoever created its task where that is. */
-function useWho(): (plan: PlanSummary, agent?: PlanAgentLine) => Actor | undefined {
+function useWho(): (plan: TaskSummary, agent?: TaskAgentLine) => Actor | undefined {
   const reader = useMemberDirectory();
   const started = useStarter();
   return (plan, agent) =>
@@ -396,7 +396,7 @@ function useWho(): (plan: PlanSummary, agent?: PlanAgentLine) => Actor | undefin
 }
 
 /** Who started an agent, where that is a teammate; an agent with no task names no creator besides. */
-function useStarter(): (agent: Pick<PlanlessAgent, "startedBy">) => Actor | undefined {
+function useStarter(): (agent: Pick<TasklessAgent, "startedBy">) => Actor | undefined {
   const reader = useMemberDirectory();
   return ({ startedBy }) =>
     startedBy === undefined || startedBy.userId === reader.readerId
@@ -414,15 +414,15 @@ function Line({
   board: FactoryBoard;
   now: number;
 }): React.JSX.Element {
-  const card = (plan: PlanSummary) => planCardOf(plans, plan, now);
+  const card = (plan: TaskSummary) => planCardOf(plans, plan, now);
   const who = useWho();
   const started = useStarter();
   const models = plans.agents.models;
-  const ask = (plan: PlanSummary, itemId: string) => {
+  const ask = (plan: TaskSummary, itemId: string) => {
     plans.inboxView.onOpen();
     plans.inboxView.onChoose({ planId: plan.id, itemId });
   };
-  const talkRow = (plan: PlanSummary) => (
+  const talkRow = (plan: TaskSummary) => (
     <FactoryRow
       key={plan.id}
       slide={plan.id}
@@ -695,9 +695,7 @@ export function DesktopFactory({ plans }: { plans: PlansControl }): React.JSX.El
             place={READ_FAILURE_PLACE.CENTRED}
           />
         ) : !plans.listRead && !plans.listFailed ? null : empty ? (
-          <EmptyState icon={<FactoryIcon />} title="No agents at work">
-            Agents you and your team start show here as they work.
-          </EmptyState>
+          <EmptyState icon={<FactoryIcon />}>No agents at work</EmptyState>
         ) : (
           <>
             {plans.listFailed ? (

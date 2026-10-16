@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { Plan } from "@luke/features/plan-wire";
-import { DOCUMENT_REGION, PLANS_PAGE } from "@luke/ui/planning-model";
+import type { Task } from "@luke/features/task-wire";
+import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -37,7 +37,7 @@ const TOOLBAR = {
   WIDE: 736,
 } as const;
 
-const PLAN: Plan = {
+const PLAN: Task = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
   workspaceId: "workspace-personal",
   name: "Teammate invitations",
@@ -64,9 +64,9 @@ afterEach(() => {
 function drawnAt(width: number, agents: Partial<CodingAgentsControl> = {}): HTMLElement {
   layContainersAt({ "plan-toolbar": width });
   const control = plansControl({
-    page: PLANS_PAGE.DOCUMENT,
+    page: TASKS_PAGE.DOCUMENT,
     activePlanId: PLAN.id,
-    region: { kind: DOCUMENT_REGION.READY, plan: PLAN },
+    region: { kind: DOCUMENT_REGION.READY, task: PLAN },
     agents: codingAgentsControl({
       start: { available: true, reason: undefined, busy: false, note: undefined, onPress: ignore },
       ...agents,

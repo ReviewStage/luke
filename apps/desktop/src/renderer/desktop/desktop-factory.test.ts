@@ -5,8 +5,8 @@ import type { CodingAgentInboxAnswerView } from "@luke/features/coding-agent-vie
 import {
   CHECK_SUMMARY,
   CODING_AGENT_STATUS,
-  type PlanlessAgent,
   PULL_REQUEST_STATE,
+  type TasklessAgent,
 } from "@luke/features/coding-agent-wire";
 import {
   INBOX_RESPONSE,
@@ -14,7 +14,7 @@ import {
   INBOX_WIRE_VERSION,
   type InboxItem,
 } from "@luke/features/inbox-wire";
-import type { PlanSummary } from "@luke/features/plan-wire";
+import type { TaskSummary } from "@luke/features/task-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import { EXPERIMENT, type Experiment } from "@luke/settings";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -34,7 +34,7 @@ const MINUTE = 60_000;
 const HOUR = 3_600_000;
 const AGENT_ID = "a0000000-0000-4000-8000-000000000001";
 
-function plan(n: number, name: string, ago: number, patch: Partial<PlanSummary> = {}): PlanSummary {
+function plan(n: number, name: string, ago: number, patch: Partial<TaskSummary> = {}): TaskSummary {
   return {
     id: `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`,
     workspaceId: "workspace-personal",
@@ -129,7 +129,7 @@ interface Opened {
 }
 
 /** Factory over `listed`, what waits, and the call, every door it opens recorded. */
-function mount(listed: readonly PlanSummary[], overrides: Partial<PlansControl> = {}) {
+function mount(listed: readonly TaskSummary[], overrides: Partial<PlansControl> = {}) {
   const opened: Opened = { plans: [], inbox: [], github: [], agents: [], feedback: [] };
   const base = plansControl();
   const plans = plansControl({
@@ -169,7 +169,7 @@ function mount(listed: readonly PlanSummary[], overrides: Partial<PlansControl> 
   /** The same page drawn again with some of its control changed, as a newer read hands it. */
   const redraw = (patch: Partial<PlansControl>) => draw({ ...plans, ...patch });
   /** The same page drawn again over another read of the plan list. */
-  const rerender = (next: readonly PlanSummary[]) =>
+  const rerender = (next: readonly TaskSummary[]) =>
     draw({ ...plans, plans: next, listed: { ...plans.listed, plans: next } });
   return { page: container, opened, redraw, rerender };
 }
@@ -209,7 +209,7 @@ test("each plan stands in its station, and what waits on the developer leads the
   const { page } = mount([DRAFT, SEARCH, BILLING, INVITES], {
     inbox: [
       {
-        planId: BILLING.id,
+        taskId: BILLING.id,
         items: [
           {
             id: "i1",
@@ -249,10 +249,10 @@ test("each plan stands in its station, and what waits on the developer leads the
 
 test("a question opens the Inbox on its item, an agent its page, a pull request ready to merge opens on GitHub, a plan opens itself, and Send feedback is about Factory", () => {
   const { page, opened } = mount([DRAFT, SEARCH, BILLING, INVITES], {
-    callPlanId: DRAFT.id,
+    callTaskId: DRAFT.id,
     inbox: [
       {
-        planId: BILLING.id,
+        taskId: BILLING.id,
         items: [{ id: "i1", agentId: AGENT_ID, title: QUESTION, postedAt: NOW - HOUR }],
       },
     ],
@@ -275,12 +275,12 @@ test("a question opens the Inbox on its item, an agent its page, a pull request 
 
 test("the task on the call stands in Talk however old, and with nothing standing anywhere the page is the empty state, offering nothing to press", () => {
   const old = plan(5, "Factory tab", 10 * 24 * HOUR);
-  const call = mount([old], { callPlanId: old.id });
+  const call = mount([old], { callTaskId: old.id });
   assert.deepEqual(rows(call.page, "talk"), ["Factory tab · On a call with Luke"]);
   act(() => root?.unmount());
 
   const { page } = mount([old]);
-  assert.equal(page.querySelector(".empty-state h3")?.textContent, "No agents at work");
+  assert.equal(page.querySelector(".empty-state p")?.textContent, "No agents at work");
   assert.equal(page.querySelector("section[data-step]"), null);
   assert.equal(page.querySelector(".factory-scroll button"), null);
 });
@@ -428,7 +428,7 @@ test("a row wears a teammate's face before its time, whoever started its agent, 
         },
       },
     ],
-    { me: dean.userId, callPlanId: DRAFT.id },
+    { me: dean.userId, callTaskId: DRAFT.id },
   );
 
   const face = (words: string) =>
@@ -463,7 +463,7 @@ test("a question's hover says it whole, which its one line cuts short", () => {
   const { page } = mount([BILLING], {
     inbox: [
       {
-        planId: BILLING.id,
+        taskId: BILLING.id,
         items: [{ id: "i1", agentId: AGENT_ID, title: QUESTION, postedAt: NOW - HOUR }],
       },
     ],
@@ -508,7 +508,7 @@ test("a question a teammate's agent asks, which main does not count as the reade
           return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
         }
         const value: CodingAgentInboxAnswerView = {
-          items: request.payload.planId === BILLING.id ? [asked] : [],
+          items: request.payload.taskId === BILLING.id ? [asked] : [],
           cursor: "1",
         };
         return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
@@ -522,7 +522,7 @@ test("a question a teammate's agent asks, which main does not count as the reade
       plans: [SEARCH, BILLING],
       archived: [],
       inbox: [],
-      inboxPlans: [{ planId: BILLING.id, items: 1, updatedAt: NOW - HOUR }],
+      inboxPlans: [{ taskId: BILLING.id, items: 1, updatedAt: NOW - HOUR }],
     },
   });
   await settle();
@@ -544,7 +544,7 @@ function answerInbox(answer: (planId: string) => readonly InboxItem[] | undefine
           return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
         }
         counted.reads += 1;
-        const items = answer(request.payload.planId);
+        const items = answer(request.payload.taskId);
         if (items === undefined) {
           return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "No service." });
         }
@@ -561,7 +561,7 @@ test("a question answered since main last counted it leaves Build once the Inbox
   const { page } = mount([SEARCH, BILLING], {
     inbox: [
       {
-        planId: BILLING.id,
+        taskId: BILLING.id,
         items: [{ id: "i1", agentId: AGENT_ID, title: QUESTION, postedAt: NOW - HOUR }],
       },
     ],
@@ -569,7 +569,7 @@ test("a question answered since main last counted it leaves Build once the Inbox
       plans: [SEARCH, BILLING],
       archived: [],
       inbox: [],
-      inboxPlans: [{ planId: BILLING.id, items: 1, updatedAt: NOW - HOUR }],
+      inboxPlans: [{ taskId: BILLING.id, items: 1, updatedAt: NOW - HOUR }],
     },
   });
   await settle();
@@ -581,7 +581,7 @@ test("questions that could not be read say so with Retry, and the reader's own s
   const { page } = mount([SEARCH, BILLING], {
     inbox: [
       {
-        planId: BILLING.id,
+        taskId: BILLING.id,
         items: [{ id: "i1", agentId: AGENT_ID, title: QUESTION, postedAt: NOW - HOUR }],
       },
     ],
@@ -589,7 +589,7 @@ test("questions that could not be read say so with Retry, and the reader's own s
       plans: [SEARCH, BILLING],
       archived: [],
       inbox: [],
-      inboxPlans: [{ planId: BILLING.id, items: 1, updatedAt: NOW - HOUR }],
+      inboxPlans: [{ taskId: BILLING.id, items: 1, updatedAt: NOW - HOUR }],
     },
   });
   await settle();
@@ -612,7 +612,7 @@ test("one plan's failed Inbox read keeps main's count for that plan alone: a que
   const { page } = mount([SEARCH, BILLING, other], {
     inbox: [
       {
-        planId: BILLING.id,
+        taskId: BILLING.id,
         items: [{ id: "i1", agentId: AGENT_ID, title: QUESTION, postedAt: NOW - HOUR }],
       },
     ],
@@ -621,8 +621,8 @@ test("one plan's failed Inbox read keeps main's count for that plan alone: a que
       archived: [],
       inbox: [],
       inboxPlans: [
-        { planId: BILLING.id, items: 1, updatedAt: NOW - HOUR },
-        { planId: other.id, items: 1, updatedAt: NOW - HOUR },
+        { taskId: BILLING.id, items: 1, updatedAt: NOW - HOUR },
+        { taskId: other.id, items: 1, updatedAt: NOW - HOUR },
       ],
     },
   });
@@ -644,7 +644,7 @@ test("a question read that fails says so even while a refresh of the task list h
       plans: [SEARCH, BILLING],
       archived: [],
       inbox: [],
-      inboxPlans: [{ planId: BILLING.id, items: 1, updatedAt: NOW - HOUR }],
+      inboxPlans: [{ taskId: BILLING.id, items: 1, updatedAt: NOW - HOUR }],
     },
   });
   await settle();
@@ -660,10 +660,10 @@ test("a question main counts after a plan's last read stands while that plan's r
     plans: [SEARCH, BILLING],
     archived: [],
     inbox: [],
-    inboxPlans: [{ planId: BILLING.id, items: 1, updatedAt }],
+    inboxPlans: [{ taskId: BILLING.id, items: 1, updatedAt }],
   });
   const asked = {
-    planId: BILLING.id,
+    taskId: BILLING.id,
     items: [{ id: "i9", agentId: AGENT_ID, title: QUESTION, postedAt: NOW }],
   };
   const { page, redraw } = mount([SEARCH, BILLING], { listed: listed(NOW - HOUR) });
@@ -677,7 +677,7 @@ test("a question main counts after a plan's last read stands while that plan's r
 });
 
 test("↓ from the window reaches the first row and moves on through the stations, and ↑ from the window the last", () => {
-  const { page } = mount([DRAFT, SEARCH, INVITES], { callPlanId: DRAFT.id });
+  const { page } = mount([DRAFT, SEARCH, INVITES], { callTaskId: DRAFT.id });
   const press = (key: string) =>
     act(() => {
       window.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
@@ -707,7 +707,7 @@ test("an agent that fails while its row holds the keyboard keeps it, its row now
   assert.equal(name(), "Plan index");
   const working = SEARCH.agents;
   assert.ok(working);
-  const failed: PlanSummary = {
+  const failed: TaskSummary = {
     ...SEARCH,
     agents: {
       ...working,
@@ -733,7 +733,7 @@ test("a row's right-click offers Copy link, copying what a press on it opens: it
     },
   });
   const { page } = mount([DRAFT, SEARCH, BILLING, INVITES], {
-    callPlanId: DRAFT.id,
+    callTaskId: DRAFT.id,
     workspace: {
       id: "workspace-personal",
       slug: "acme",
@@ -743,7 +743,7 @@ test("a row's right-click offers Copy link, copying what a press on it opens: it
     },
     inbox: [
       {
-        planId: BILLING.id,
+        taskId: BILLING.id,
         items: [{ id: "i1", agentId: AGENT_ID, title: QUESTION, postedAt: NOW - HOUR }],
       },
     ],
@@ -774,7 +774,7 @@ test("a row's right-click offers Copy link, copying what a press on it opens: it
 });
 
 test("an agent with no task stands in Build by its automation, opens its own page, and copies its own link", async () => {
-  const sweep: PlanlessAgent = {
+  const sweep: TasklessAgent = {
     id: "c0000000-0000-4000-8000-000000000001",
     planId: null,
     model: "anthropic/claude-opus-5.5",
@@ -789,7 +789,7 @@ test("an agent with no task stands in Build by its automation, opens its own pag
     repository: "acme/relay",
     activityAt: NOW - 3 * MINUTE,
   };
-  const failed: PlanlessAgent = {
+  const failed: TasklessAgent = {
     ...sweep,
     id: "c0000000-0000-4000-8000-000000000002",
     title: "Bump deps",

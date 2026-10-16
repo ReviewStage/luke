@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { Plan } from "@luke/features/plan-wire";
-import type { PlanCodeShowing } from "@luke/features/planning-view";
-import { DOCUMENT_REGION, PLANS_PAGE } from "@luke/ui/planning-model";
+import type { Task } from "@luke/features/task-wire";
+import type { TaskCodeShowing } from "@luke/features/tasks-view";
+import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -22,7 +22,7 @@ import { SIDE_PANEL_TAB } from "./use-side-panel";
  * lines, and the card's path opens it on the card's lines.
  */
 
-const PLAN: Plan = {
+const PLAN: Task = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
   workspaceId: "workspace-personal",
   name: "Teammate invitations",
@@ -37,7 +37,7 @@ const PATH = "src/invites/accept.ts";
 const NOTE = "A used invite is refused here.";
 
 /** Lines 3–5 of the file, as Luke showed them with a note, read at a commit. */
-const SHOWING: PlanCodeShowing = {
+const SHOWING: TaskCodeShowing = {
   callId: "c",
   turnId: "t",
   shownAt: 1_000,
@@ -68,7 +68,7 @@ afterEach(() => {
  */
 function mount(
   opened: unknown[][],
-  shownCode: readonly PlanCodeShowing[] = [SHOWING],
+  shownCode: readonly TaskCodeShowing[] = [SHOWING],
   commit?: string,
 ): HTMLElement {
   const container = document.body.appendChild(document.createElement("div"));
@@ -77,9 +77,9 @@ function mount(
   const base = plansControl();
   const tab = { path: PATH, range: { startLine: 3, endLine: 5 }, opened: 1 };
   const plans = plansControl({
-    page: PLANS_PAGE.DOCUMENT,
+    page: TASKS_PAGE.DOCUMENT,
     activePlanId: PLAN.id,
-    region: { kind: DOCUMENT_REGION.READY, plan: PLAN },
+    region: { kind: DOCUMENT_REGION.READY, task: PLAN },
     shownCode,
     sidePanel: {
       ...base.sidePanel,
@@ -157,12 +157,12 @@ test("a code card's head says its lines as Lines 3–5, and a press on it opens 
 });
 
 test("a file's tab read at a commit hangs Luke's note on the lines he showed at that commit, never a later showing's, nor another repository's", () => {
-  const later: PlanCodeShowing = {
+  const later: TaskCodeShowing = {
     ...SHOWING,
     callId: "d",
     code: { ...SHOWING.code, commit: "fedcba9876543210", note: "Sends the email." },
   };
-  const elsewhere: PlanCodeShowing = {
+  const elsewhere: TaskCodeShowing = {
     ...SHOWING,
     callId: "e",
     code: { ...SHOWING.code, repository: "acme/other", note: "Another repository's file." },

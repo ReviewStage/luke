@@ -7,9 +7,9 @@ import {
   type CodingAgentSummary,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
-import type { Plan, PlanSummary } from "@luke/features/plan-wire";
-import { PLAN_WORK_STATE } from "@luke/features/planning-view";
-import { DOCUMENT_REGION, PLANS_PAGE } from "@luke/ui/planning-model";
+import type { Task, TaskSummary } from "@luke/features/task-wire";
+import { TASK_WORK_STATE } from "@luke/features/tasks-view";
+import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -29,7 +29,7 @@ import { DesktopPlans } from "./desktop-plans";
  * that strip's "+" menu wears, and the plan's own tab hangs the plan's card.
  */
 
-const PLAN: Plan = {
+const PLAN: Task = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
   workspaceId: "workspace-personal",
   name: "Teammate invitations",
@@ -39,7 +39,7 @@ const PLAN: Plan = {
   document: { body: "", assumptions: [] },
 };
 
-const SUMMARY: PlanSummary = {
+const SUMMARY: TaskSummary = {
   id: PLAN.id,
   workspaceId: PLAN.workspaceId,
   name: PLAN.name,
@@ -96,7 +96,7 @@ const DRAFT = "draft-1";
 
 /** A planning worker still at work, on a model whose harness Luke knows. */
 const READER = worker("w", "Read the invite emails.", {
-  state: PLAN_WORK_STATE.RUNNING,
+  state: TASK_WORK_STATE.RUNNING,
   model: "anthropic/claude-sonnet-5",
   title: "Invite emails",
 });
@@ -121,10 +121,10 @@ function mount(): HTMLElement {
   roots.push(root);
   const base = plansControl();
   const plans = plansControl({
-    page: PLANS_PAGE.DOCUMENT,
+    page: TASKS_PAGE.DOCUMENT,
     plans: [SUMMARY],
     activePlanId: PLAN.id,
-    region: { kind: DOCUMENT_REGION.READY, plan: PLAN },
+    region: { kind: DOCUMENT_REGION.READY, task: PLAN },
     mainTabs: {
       ...base.mainTabs,
       tabs: [MAIN_TAB.PLAN, { agent: WORKING.id }, { draft: DRAFT }],
@@ -142,7 +142,7 @@ function mount(): HTMLElement {
     work: {
       ...base.work,
       conversation: conversationOf([
-        workTurn(PLAN_WORK_STATE.RUNNING, [workerCall(READER)], { workers: [READER] }),
+        workTurn(TASK_WORK_STATE.RUNNING, [workerCall(READER)], { workers: [READER] }),
       ]),
       callLive: true,
     },

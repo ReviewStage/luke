@@ -1,5 +1,5 @@
 import { encodeMention, MENTION_KIND, type MentionPlace } from "@luke/features/mention-link";
-import type { PlanSummary } from "@luke/features/plan-wire";
+import type { TaskSummary } from "@luke/features/task-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { PencilIcon } from "@luke/ui";
 import { HistoryIcon, LinkIcon, MailIcon, MailOpenIcon } from "lucide-react";
@@ -21,7 +21,7 @@ import type { MenuAction } from "../desktop/action-menu";
 /** Where a plan's links are written: its workspace by slug, or by id until the workspaces are read, and its repository. */
 export function planLinkPlace(
   workspaces: readonly Workspace[],
-  plan: Pick<PlanSummary, "workspaceId" | "repository">,
+  plan: Pick<TaskSummary, "workspaceId" | "repository">,
 ): MentionPlace {
   const home = workspaces.find((each) => each.id === plan.workspaceId);
   return { workspace: home?.slug ?? plan.workspaceId, repository: plan.repository };
@@ -37,7 +37,7 @@ export function copyPlanLinkItem(
     label: LINK_COPY.LABEL,
     icon: <LinkIcon aria-hidden="true" />,
     onSelect: () =>
-      copy(encodeMention({ kind: MENTION_KIND.PLAN, planId }, place), LINK_COPY.COPIED),
+      copy(encodeMention({ kind: MENTION_KIND.TASK, taskId: planId }, place), LINK_COPY.COPIED),
   };
 }
 

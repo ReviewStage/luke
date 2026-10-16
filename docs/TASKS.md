@@ -360,7 +360,7 @@ both draw on. It shows in the side panel's Board tab, beside the document.
   sends the whole diagram each time: labelled boxes, ellipses, and diamonds,
   text, and arrows between ids. It replaces his previous drawing and leaves
   what the developer drew. The service only stores it
-  (`packages/service/src/plans/board-tool.ts`). The voice hands a request to
+  (`packages/service/src/tasks/board-tool.ts`). The voice hands a request to
   draw to the backend, as it does any other request.
 - **The Mac converts it.** The canvas turns Luke's drawing into Excalidraw
   elements with Excalidraw's own converter, marks them as his, and puts them
@@ -398,7 +398,7 @@ sidebar does (`desktop/side-panel.tsx`, `planning/use-side-panel.ts`).
   column beside the task's own ("Agent tabs" below). The Work tab, what Luke wrote
   and ran on the task's calls, is told live during a call and read back
   from the task's conversation when the task opens
-  (`GET /api/plans/{id}/work`, `packages/service/src/plans/plan-work-store.ts`), so a restart
+  (`GET /api/plans/{id}/work`, `packages/service/src/tasks/task-work-store.ts`), so a restart
   or a switch to another task and back loses neither it nor the code. The
   read answers twenty turns a page, the newest first; scrolling to the
   oldest turn drawn reads the page before it (`?before=<turn>`), and the
@@ -412,10 +412,10 @@ sidebar does (`desktop/side-panel.tsx`, `planning/use-side-panel.ts`).
   one per file, the snippet's lines lit; opening a file already open chooses
   its tab and moves the lit lines, and the "+" lists every file shown under
   Files. The file is read a window of 500 lines at a time as the tab scrolls
-  (`GET /api/plans/{id}/file`, `packages/service/src/plans/plan-file.ts`), from GitHub at the
+  (`GET /api/plans/{id}/file`, `packages/service/src/tasks/task-file.ts`), from GitHub at the
   head of the default branch through the Luke GitHub App, since no checkout
   stands outside a call, under the rule `show_code` keeps
-  (`packages/service/src/plans/shown-file.ts`); a file changed since is drawn as it is now, and
+  (`packages/service/src/tasks/shown-file.ts`); a file changed since is drawn as it is now, and
   one not on that branch, or not read at all, says so over the lines Luke
   showed of it. A File tab opened from a code block of the task's Inbox is
   read at the commit the agent named instead. Over the first line of each
@@ -612,13 +612,13 @@ of the turn's words under it (`planning/plan-transcript.tsx`,
 ### The notetaker
 
 A task's plan is written during a call by a notetaker beside it
-(`packages/service/src/plans/plan-scribe.ts`), following GPT-Live's guidance to
+(`packages/service/src/tasks/plan-scribe.ts`), following GPT-Live's guidance to
 react to the transcript on a small model while speech goes on. It keeps both
 speakers' words from the call's sideband and Luke's replies as
 research notes. Once the developer has been quiet for about a second, it makes
 one `gpt-5.6-luna` call over the plan's saved text and what was said since
 its last note, under its own instructions (`SCRIBE_INSTRUCTIONS`), and saves
-the answer through `saveNotes` (`packages/service/src/plans/plan-notes.ts`). Its
+the answer through `saveNotes` (`packages/service/src/tasks/plan-notes.ts`). Its
 runs never overlap, so no run of its own races another, and a run that fails
 moves nothing forward.
 
@@ -789,7 +789,7 @@ was opened.
 Restore this version asks first, in the window's dialog, and then puts the
 revision's text back through the plan's one locked save
 (`POST /api/plans/{id}/revisions/{seq}/restore`, `restoreRevision` in
-`packages/service/src/plans/plan-notes.ts`). The restore is a revision of the developer's
+`packages/service/src/tasks/plan-notes.ts`). The restore is a revision of the developer's
 ("You") naming the one it brought back, "Restored the version from Oct 11,
 2:14 PM"; it joins no revision and none joins it, so a restore is undone by
 restoring the revision before it, and it is allowed during a call. It takes
@@ -942,7 +942,7 @@ comparative evaluation.
 - **Microphone button.** One press starts talking to Luke about the open task.
   The call opens if none stands, and the microphone opens. A call just
   opened is Luke's to begin: the voice service creates it with the opening
-  in its startup history (`planningOpeningHistory`), asking what to build on an untouched plan
+  in its startup history (`callOpeningHistory`), asking what to build on an untouched plan
   and the plan's next question on one under way, in its first turn and
   without waiting on the backend, while a call re-attached after a dropped
   socket opens nothing again. The call's seed says which the plan is: an
@@ -1005,7 +1005,7 @@ repository is no longer reachable through the App, or the checkout failed;
 in every case nothing of the code has been read, and Luke never describes it
 as read.
 
-`show_code` (`packages/service/src/plans/show-code.ts`) reads from the same
+`show_code` (`packages/service/src/tasks/show-code.ts`) reads from the same
 checkout: the file named and a window of at most 200 lines around the lines
 pointed at, each line cut to 400 characters, with the path resolved inside
 the checkout root and a `.env` file never read. The call carries a note of
@@ -1016,7 +1016,7 @@ note. The lines and the note are the call's answer, so they are journaled with t
 `code_shown` turn event once the call has answered, held until Luke next
 starts to speak, and sent to the Mac on the `plan.code` frame with the
 repository they came from; the Mac colours and draws them and reads nothing
-of its own (`packages/host/src/plan-code.ts`). Every answered call's lines
+of its own (`packages/host/src/task-code.ts`). Every answered call's lines
 are read back from the journals with the task's work when the task opens,
 picked by their parts in the statement and read by the same reading
 (`shownCodeOf`), which holds to the secret-file rule again, so the Code tab
@@ -1299,7 +1299,7 @@ the exact shape.
 | Microphone and notices | `microphoneAccessRow`, `voiceAttentionNote`, `MICROPHONE_UNGRANTED_NOTE`, `hostedVoiceUnavailableNote` (`@luke/voice/microphone-access`) | None. |
 | The call | The hidden `VoiceWindow` and `VoiceHost` / `useVoiceSession` / `LiveCall` (`renderer/voice/`); `LiveVoiceOrchestrator` (`@luke/voice`); the sessions route `/api/voice/sessions` with client delegation | The call is associated with the open task, and the orchestrator gains the Tasks tab's toggle beside the held talk key (LUKE-340); the talk key names the open task while one is open (LUKE-347). |
 | Start, agent tabs, Settings › Coding agents | The toolbar and the task's column's tabs (`desktop/main-tabs.tsx`, `planning/use-main-tabs.ts`), on the side panel's strip (`desktop/strip-tabs.tsx`, `@luke/ui/tab-strip-model`); the Transcript tab's AI Elements components; the account preferences route | The split button (`desktop/start-agent-button.tsx`), the agent tab (`planning/agent-tab.tsx`), their control (`planning/use-coding-agents.ts`) and the held transcript read (`planning/use-agent-transcript.ts`), and the Settings page (`settings/coding-agents-page.tsx`). |
-| Luke and the plan | Hosted storage and the brain host (`apps/web/server/hosted/`); the account client (`packages/features`, `packages/credentials`) | The task record and its plan's one write, `saveNotes` (LUKE-334), the instructions (LUKE-336), research (LUKE-339), the default template (`packages/features/src/plan-document-template.ts`), the headings and notes it is written in (`packages/features/src/plan-template.ts`, LUKE-352), and the notetaker that writes the plan during a call (`packages/service/src/plans/plan-scribe.ts`). |
+| Luke and the plan | Hosted storage and the brain host (`apps/web/server/hosted/`); the account client (`packages/features`, `packages/credentials`) | The task record and its plan's one write, `saveNotes` (LUKE-334), the instructions (LUKE-336), research (LUKE-339), the default template (`packages/features/src/plan-document-template.ts`), the headings and notes it is written in (`packages/features/src/plan-template.ts`, LUKE-352), and the notetaker that writes the plan during a call (`packages/service/src/tasks/plan-scribe.ts`). |
 
 Two existing rules carry over unchanged:
 

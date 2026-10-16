@@ -161,6 +161,12 @@ its number, title, page, and state (`src/github/pull-requests.ts`), on a
 token minted for that one repository; a repository the installation does not
 reach and a number it holds no pull request under both answer
 `{ pullRequest: null }`.
+`GET /api/github/repositories/issue` reads one issue the same way
+(`src/github/issues.ts`), its state `open`, `closed`, or `not-planned`, on a
+token minted for that one repository with `issues: read` alone; an
+installation that does not grant the App issues mints nothing and answers
+`{ issue: null }`, as an unreached repository, a pull request's number, a
+missing number, and a repository with its issues turned off do.
 `src/github/github-repositories-app.test.ts` holds the route and
 `src/github/github-app.test.ts` the reads beneath it, over
 `src/testing/github-app-fake.ts`.
@@ -1017,7 +1023,18 @@ acting for the agent's starter, kept under the sending agent's name
 agent or one of another workspace refuses; `start_agent`, which starts
 another on its own task, or on another task of its workspace by the
 `taskId` that `list_tasks` answers, by the Start button's own path, telling
-it which agent started it; and `list_tasks`, the workspace's open tasks. The
+it which agent started it; `archive_agent` and `unarchive_agent`, which
+archive an idle agent of the workspace, never itself or one still working,
+on the rule the Archive agent menu keeps for the agent's starter, recording
+the archiving agent and its reason on the archived agent's row
+(`archived_by`), and bring one back; and `list_tasks`, the workspace's open
+tasks. A list, a read, or a start of an agent, a list of tasks, and
+`show_page` answer each thing's mention ready to write, `[@name](link)` under
+the workspace's slug (`src/agents/written-mentions.ts`), and the agent's
+instructions show it the mention of every kind it names, under its own
+task's link, so its replies, Inbox items, and plan notes draw them as chips.
+A line from another coding agent hands the agent it reaches no MCP server it
+mentions, since an agent's servers are its developer's to switch. The
 extension itself is not mounted, since its `worker` subagent runs on an AI
 Gateway model and its `gh` tool on Vercel Connect, and Luke runs neither.
 `gh` and `git` run through the shell, authenticated at the firewall. The
@@ -1045,7 +1062,7 @@ session. Luke delegates through the same shape
 (`apps/luke/tools/delegate.ts`, `PLANNER_DELEGATE_TOOL`), always in the background
 and on its own model, its worker declared hidden too; the Work tab reads its
 calls as worker calls under either name, eve's `worker` in earlier
-transcripts (`PLANNER_DELEGATION_TOOLS`). A worker's row in an agent's tab
+transcripts (`BRAIN_DELEGATION_TOOLS`). A worker's row in an agent's tab
 says where the worker's own session stands (the page's `subagents`), since
 the call settles at the receipt.
 Its step fills the pair in from the agent's own row, holds it to the same
@@ -1561,7 +1578,7 @@ fire.
 
 ## The tasks group
 
-`src/plans/plans-app.ts` is the Mac's Tasks tab's route group over the account's
+`src/tasks/tasks-app.ts` is the Mac's Tasks tab's route group over the account's
 named tasks (`docs/TASKS.md`): `GET /api/plans` lists them, newest
 started first and the archived ones left out unless `?archived=include` asks
 for them, so a build from before archiving never draws one, `POST /api/plans`
@@ -1582,12 +1599,12 @@ teammate), into a workspace they are a member of (`not-found` otherwise)
 whose installation reaches the task's repository, refused as a repository
 change would be otherwise, and its coding agents go with it, and
 `DELETE /api/plans/{id}` deletes it, its coding agents' rows going with it
-and their conversations stamped deleted beside the task's own (`deletePlan`),
+and their conversations stamped deleted beside the task's own (`deleteTask`),
 the id moved into
 the query by the rewrite `apps/web/server/function-rewrites.ts` makes of every
 segment-captured id.
 Each row of the list carries `agents` where the task has a coding agent
-(`src/agents/plan-agents.ts`): how many it has and how many are starting
+(`src/agents/task-agents.ts`): how many it has and how many are starting
 or running, the three it names (those at work first, then the newest), each
 with its title, model, effort, status, since when, and the member who
 started it while their account stands, and the pull requests they opened,
@@ -1595,9 +1612,9 @@ each number once and at most three, as GitHub last answered a read of them.
 Four statements answer the whole list: the agents of every task listed with
 `coding_agent.published` (migration 0078), their newest turns, the lines
 awaiting a turn, and their starters' names; the list asks GitHub nothing.
-`packages/features/src/plan-wire.ts` declares every request and answer. Each
+`packages/features/src/task-wire.ts` declares every request and answer. Each
 endpoint resolves the bearer first, and every statement in
-`packages/database/src/models/plan-store.ts` names the account beside the task and gates on
+`packages/database/src/models/task-store.ts` names the account beside the task and gates on
 its membership of the task's workspace, so a teammate's task reads and
 writes as the account's own, and a task of a workspace the account is not in
 answers exactly as none does.
@@ -1659,19 +1676,19 @@ refused and stays there. `src/accounts/workspaces-app.test.ts` holds
 all of it over the plugin on PGlite and a scripted GitHub.
 
 `GET /api/plans/{id}/work` reads back what Luke wrote and
-ran on the task's calls (`src/plans/plan-work-store.ts`): the task's
+ran on the task's calls (`src/tasks/task-work-store.ts`): the task's
 conversation's turns, twenty a page newest first, each read from its
-row and journal by the same `src/plans/plan-work.ts` a live call tells them
+row and journal by the same `src/tasks/task-work.ts` a live call tells them
 through, and `?before=<turn id>` for the page before that turn; the answer
 names the turn the next older page is read before while one stands. The
 newest page also carries every answered `show_code` call in the
 conversation, oldest first, picked by its parts in the statement and read
 through `shownCodeOf`, so what the call refused and a secret file are
-never read back. `packages/features/src/planning-view.ts` declares the
-answer (`planWorkAnswerSchema`).
+never read back. `packages/features/src/tasks-view.ts` declares the
+answer (`taskWorkAnswerSchema`).
 
 `GET /api/plans/{id}/file?path=&first=&last=` reads a window of one file of
-the task's repository for the Mac's File tab (`src/plans/plan-file.ts`),
+the task's repository for the Mac's File tab (`src/tasks/task-file.ts`),
 at most 500 lines a window. No sandbox stands outside one of Luke's turns, so it
 reads GitHub's contents API at the head of the default branch, not the
 session's checkout, or with `ref=` at that commit, a whole 40-character
@@ -1680,14 +1697,14 @@ code block pins its lines, on a token `repositoryReadToken` mints for that one
 repository with contents read, after the same reach check the checkout
 makes. The token is used for the one read and enters no answer, log line,
 or trace. What is shown is decided by the rule `show_code` is held to
-(`src/plans/shown-file.ts`): a secret file is refused before GitHub is
+(`src/tasks/shown-file.ts`): a secret file is refused before GitHub is
 asked, and so is a path with an empty, `.`, or `..` segment; a link, a
 directory, a missing file, a file past a megabyte, or one with a NUL among
 its first bytes is refused by name, a path GitHub finds nothing at with the
 branch or the commit it was looked for at; and each line is cut to 400
 characters.
-`packages/features/src/plan-wire.ts` declares the request and the answer
-(`planFileRequestSchema`, `planFileAnswerSchema`). The file's `path` query
+`packages/features/src/task-wire.ts` declares the request and the answer
+(`taskFileRequestSchema`, `taskFileAnswerSchema`). The file's `path` query
 reaches the route because the grouped function's dispatcher reads its own
 path override from `route-path` (`apps/web/server/function-dispatch.ts`): it once
 read `path`, and every File tab read was answered 404.
@@ -1703,13 +1720,13 @@ revision's content and the content before it, null for the first, each
 formatted under the task's name as it stands now, so a rename since is no
 difference between them. `POST /api/plans/{id}/revisions/{seq}/restore`
 puts that revision's text back through the plan's one
-locked save (`src/plans/plan-notes.ts`'s `restoreRevision`), kept as a
+locked save (`src/tasks/plan-notes.ts`'s `restoreRevision`), kept as a
 revision of the developer's naming the one restored, and answers the plan.
 It takes no body and no base: what it replaced is the revision before it,
 so a restore over a save that landed meanwhile is undone by restoring that.
 Every member of the task's workspace reads the history any of them wrote;
 a task of a workspace the account is not in reads as an empty history and
-restores as `not-found`. `packages/features/src/plan-wire.ts` declares the answers
+restores as `not-found`. `packages/features/src/task-wire.ts` declares the answers
 (`planRevisionsAnswerSchema`, `planRevisionAnswerSchema`).
 
 A task's repository is `plan.repository` (migration 0063), the full name
@@ -1743,14 +1760,14 @@ is `other-workspace`, naming that workspace, since an installation stands
 for one workspace alone and moving the task there is what reaches the repository:
 a task a personal workspace held before #2524 is left that way.
 
-A plan's text has one write, `src/plans/plan-notes.ts`, and four
+A plan's text has one write, `src/tasks/plan-notes.ts`, and four
 writers. `POST /api/plans/{id}/edit` takes the developer's edit of the
 whole text against the base it was made on (`saveDeveloperEdit`), saved
 where the text still holds that base, laid over what Luke wrote meanwhile
 where it can be, and answered as a conflict with the text as it stands, with
 nothing saved, where it cannot (`packages/features/src/plan-edit.ts`); a
 restore above is the second. A call's notetaker
-(`src/plans/plan-scribe.ts`) and a coding agent's `edit_plan`
+(`src/tasks/plan-scribe.ts`) and a coding agent's `edit_plan`
 (`src/agents/coder-host/plan-edit.ts`) answer with notes
 (`packages/features/src/plan-template.ts`): a point added under a heading, a
 phrase corrected, or a line struck. `saveNotes` takes them in order over the
@@ -1761,27 +1778,28 @@ why nothing was: a text past its bound,
 a task deleted meanwhile, which a save never recreates because it is an
 `update` over the row that stands, and a store that could not be reached,
 each leaving the prior document in place.
-`readPlan` is the read Luke starts and resumes from, with the
-conversation `attachPlanConversation` associated, and it moves nothing.
-`src/plans/plans.test.ts` and `apps/web/tests/plans-app.test.ts` hold both halves
+`readTask` is the read Luke starts and resumes from, with the
+conversation `attachTaskConversation` associated, and it moves nothing.
+`src/tasks/tasks.test.ts` and `apps/web/tests/plans-app.test.ts` hold both halves
 against a real dialect.
 
 Luke's judgment is the hosted brain run over a task conversation (`plan`), which
-`openPlanConversation` opens once per task and attaches; deleting the task
+`openTaskConversation` opens once per task and attaches; deleting the task
 stamps it cleared, so the purge takes its words thirty days on. A task's is
 the only conversation any code still opens, and the host runs every
 conversation it admits as one, which fixes three things
-(`src/agents/brain-host/planning.ts`): the prompt is
+(`src/agents/brain-host/brain.ts`): the prompt is
 Luke's authored instructions, the standing context each turn opens with is
 the task's name and saved plan read again from the row,
 and the tools are Luke's list alone: `run_in_repository` bound to the
-task the conversation belongs to (`readPlanOfConversation`), the two public
+task the conversation belongs to (`readTaskOfConversation`), the two public
 research reads beside it, `queue_question`
-(`src/plans/queue-question.ts`), which runs nothing: its journaled call is
-how a question reaches the voice while the turn still runs, and the four
+(`src/tasks/queue-question.ts`), which runs nothing: its journaled call is
+how a question reaches the voice while the turn still runs, and the
 tools about coding agents (`src/agents/coding-agent-tools.ts`), the same
-`list_agents`, `message_agent`, `start_agent`, and `list_tasks` every coding
-agent is offered and `read_agent` beside them: a list
+`list_agents`, `message_agent`, `start_agent`, `archive_agent`,
+`unarchive_agent`, and `list_tasks` every coding agent is offered and
+`read_agent` beside them: a list
 of the task's workspace's agents, on any task and by any member, with each
 agent's status, task, and what it published, narrowed to this task or
 another where asked (`src/agents/workspace-agents.ts`), one agent's recent
@@ -1847,7 +1865,7 @@ inference on Luke's key, so each one is counted as one of the calling account's
 hosted uses before it is sent; a count that cannot be written is logged and stops
 nothing.
 `src/agents/public-research.test.ts` holds both against scripted HTTP and DNS.
-`src/agents/brain-host/planning.test.ts` runs the scripted model through the host and
+`src/agents/brain-host/brain.test.ts` runs the scripted model through the host and
 the relay, and the `brain-host` eval runs a task conversation through eve.
 
 The developer talks to Luke through the ordinary voice
@@ -1857,14 +1875,14 @@ account holds before anything is spent; a create naming none is refused. It is c
 the call's instructions (`sessionInstructions()` in
 `@luke/live`), whose delegation policy hands the developer's words to the backend and says back the
 finding and its one next question. A call just created speaks first: it is
-created with `planningOpeningHistory()` as the last developer message of its
+created with `callOpeningHistory()` as the last developer message of its
 startup history, the Live conversations guide's way to greet before the
 caller speaks, so Luke opens the conversation with nothing appended,
 acknowledged, or cued after `session.started`, and a re-attach, which creates
 nothing, opens nothing again. The plan seed's first line says whether the
 plan is new (the untouched template and no assumption) or under way, which
 is what the opening picks its first question from. The exchange lands every spoken ask and
-the session's record in the task's conversation (`openPlanConversation`),
+the session's record in the task's conversation (`openTaskConversation`),
 so the delegation reaches
 Luke with the plan, his tools, and the conversation so far.
 The recent words ride the delegation as context, and whether an answer
@@ -1906,7 +1924,7 @@ could not be read, a sandbox that could not
 be opened or carries no firewall, and a clone that failed, with git's words,
 each check nothing out. `src/agents/repository-shell.test.ts` holds it over a
 sandbox double at eve's boundary (`src/testing/repository-sandbox.ts`), a
-scripted GitHub, and PGlite, and `src/agents/brain-host/planning.test.ts` drives the
+scripted GitHub, and PGlite, and `src/agents/brain-host/brain.test.ts` drives the
 scripted model's read through the host and the relay, reading the record
 back for the listing and never the token. The old `plan_command` table, the
 Mac's claim and settle routes, and the Mac's command runner are gone
@@ -1942,7 +1960,7 @@ less the `prompts` table it drew and less the `tool_sets` table
 `0039_dead_tool_sets` dropped: a turn keeps the composed prompt's hash and the
 tool set's and nothing else of either, because nothing replays them, and the
 tool set is the build's own and read from the build that offered it. A
-conversation row names its kind (`plan`, which `packages/database/src/models/plan-store.ts`
+conversation row names its kind (`plan`, which `packages/database/src/models/task-store.ts`
 opens, and `coding_agent`, which `packages/database/src/models/coding-agent-store.ts` opens,
 are the two any code still opens), the
 runtime's own session id, its soft-delete instant, and the counter that
@@ -2383,7 +2401,7 @@ reported. `src/voice/exchange-attachment.ts` is what the function passes:
 the task's conversation resolved at the session's start, under whichever
 member of its workspace opened it, the function's writer, eve reached as the
 deployment for the calling account, and the plan's
-notetaker (`src/plans/plan-scribe.ts`), which runs only where the
+notetaker (`src/tasks/plan-scribe.ts`), which runs only where the
 deployment holds the OpenAI key.
 
 eve is reached as the deployment acting for the one account the session

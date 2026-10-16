@@ -9,9 +9,9 @@ import {
   INBOX_WIRE_VERSION,
   type InboxItem,
 } from "@luke/features/inbox-wire";
-import type { PlanSummary } from "@luke/features/plan-wire";
-import { PLAN_CALL_FAILURE } from "@luke/features/planning-view";
-import type { AppInboxPlanlessItem } from "@luke/host/app-state";
+import type { TaskSummary } from "@luke/features/task-wire";
+import { TASK_CALL_FAILURE } from "@luke/features/tasks-view";
+import type { AppInboxTasklessItem } from "@luke/host/app-state";
 import { test } from "vitest";
 import {
   CODE_READ,
@@ -315,7 +315,7 @@ test("a settled choice keeps every option the agent offered with the developer's
 });
 
 /** A plan of the account's, holding inbox items. */
-function plan(id: string, name: string): PlanSummary {
+function plan(id: string, name: string): TaskSummary {
   return {
     id,
     workspaceId: "workspace-personal",
@@ -489,7 +489,7 @@ test("a code block near the file's top reads from its first line, a file that en
     "a file ending inside the lines draws none of them, rather than some as if all",
   );
   assert.equal(codeReadOf({ ...block, startLine: 1, endLine: 1 }, short).kind, CODE_READ.READY);
-  assert.deepEqual(codeReadOf(block, { failure: PLAN_CALL_FAILURE.UNANSWERED }), {
+  assert.deepEqual(codeReadOf(block, { failure: TASK_CALL_FAILURE.UNANSWERED }), {
     kind: CODE_READ.NOTICE,
     line: "These lines could not be read.",
     again: true,
@@ -510,8 +510,8 @@ test("a code block near the file's top reads from its first line, a file that en
 /** An item of an agent with no plan as main's read lists it. */
 function waitingPlanless(
   agentId: string,
-  patch: Partial<AppInboxPlanlessItem> = {},
-): AppInboxPlanlessItem {
+  patch: Partial<AppInboxTasklessItem> = {},
+): AppInboxTasklessItem {
   return {
     id: `item-${agentId}`,
     agentId,

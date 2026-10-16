@@ -57,12 +57,12 @@ export function sessionSkills(
   auth: SessionAuth,
   sessionId: string,
 ): Promise<readonly AgentSkill[]> {
-  return edge.sessionSkills(AGENT_ROLE.PLANNER, auth, sessionId);
+  return edge.sessionSkills(AGENT_ROLE.BRAIN, auth, sessionId);
 }
 
 /** Every integration one of this project's agents is handed, for that agent's own `connections/integrations.ts`. */
 export function integrationConnectionsFor(
-  role: typeof AGENT_ROLE.PLANNER | typeof AGENT_ROLE.PLANNER_WORKER,
+  role: typeof AGENT_ROLE.BRAIN | typeof AGENT_ROLE.BRAIN_WORKER,
 ) {
   return edge.integrationConnections(role);
 }

@@ -4,7 +4,7 @@ import { readBoard } from "@luke/database/models/board-store";
 import { promptHashOf, toolSetHashOf } from "@luke/database/models/content-addressed";
 import { hostTurnId } from "@luke/database/models/ids";
 import { listMessagesPast, type MessageCursor } from "@luke/database/models/message-reads";
-import { readPlanOfConversation } from "@luke/database/models/plan-store";
+import { readTaskOfConversation } from "@luke/database/models/task-store";
 import type { ConversationTarget } from "@luke/database/models/writer";
 import { EMPTY_BOARD } from "@luke/features/board-wire";
 import { isTextUIPart } from "ai";
@@ -23,9 +23,9 @@ import {
   type WireRecord,
 } from "../../core.js";
 import type { GitHubApp } from "../../github/github-app.js";
-import { planWorkspace } from "../../github/workspace-repository.js";
-import { HOSTED_TOOL_SET } from "../../plans/brain-tool-set.js";
+import { taskWorkspace } from "../../github/workspace-repository.js";
 import { type ModelCatalog, providerModelOf } from "../../providers/model-catalog.js";
+import { HOSTED_TOOL_SET } from "../../tasks/brain-tool-set.js";
 import { delegatedChildOf, type HostAdmission, hostAdmission } from "../agent-runtime/host-core.js";
 import { type AgentSkill, repositorySkills } from "../agent-runtime/skills.js";
 import type { CoderModelSelection } from "../coder-host/model.js";
@@ -42,6 +42,14 @@ import {
   type BrainHostTurn,
   RELAY_TURN,
 } from "./bounds.js";
+import {
+  BRAIN_INSTRUCTIONS,
+  brainStandingContext,
+  brainToolDeclarations,
+  EVE_DELEGATION_TOOL,
+  type HostedToolDeclaration,
+  runBrainTool,
+} from "./brain.js";
 import { readRecentMessages } from "./context.js";
 import {
   type AdmittedConversation,
@@ -51,14 +59,6 @@ import {
 } from "./conversation.js";
 import { EVE_MOUNT, eveSessionsComposer } from "./eve-sessions.js";
 import { brainModelSelection } from "./model.js";
-import {
-  EVE_DELEGATION_TOOL,
-  type HostedToolDeclaration,
-  PLANNING_INSTRUCTIONS,
-  planningStandingContext,
-  planningToolDeclarations,
-  runPlanningTool,
-} from "./planning.js";
 import type { BrainHostSeams } from "./production.js";
 import { type RelayStanding, type RelayStateStore, StreamRelay } from "./relay.js";
 import { rotationSeedText } from "./seed.js";
@@ -75,7 +75,7 @@ import { carryStop } from "./stop-carrier.js";
  * store's writer, which is the sole consumer and the only thing that writes
  * a message row. A conversation is a plan's: its turns run under the
  * planning model's instructions, its saved document as the standing context,
- * and the planning tools (`planning.ts`), and every write runs under the
+ * and the planning tools (`brain.ts`), and every write runs under the
  * conversation the session was admitted for. A worker is named from the
  * task it is handed by the same small call that names a coding agent
  * (`coder-host/title.ts`), on its child conversation.
@@ -212,7 +212,7 @@ export interface BrainHost extends HostAdmission {
 }
 
 /** The body a planning skill loads as: where it stands in the plan's repository, which \`run_in_repository\` reads, and then its own words. */
-function planningSkillMarkdown(skill: RepositorySkill): string {
+function brainSkillMarkdown(skill: RepositorySkill): string {
   return `This skill is \`${skill.folder}/SKILL.md\` in the task's repository; read the files it names with \`run_in_repository\`, relative to \`${skill.folder}/\`.\n\n${skill.markdown}`;
 }
 
@@ -264,9 +264,9 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
   };
 
   /** The plan the admitted conversation belongs to, as the caller reaches it now; nothing once it is deleted or out of reach. */
-  const planOf = (admitted: AdmittedConversation) =>
+  const taskOf = (admitted: AdmittedConversation) =>
     Effect.map(
-      readPlanOfConversation(admitted.caller, admitted.target.conversationId),
+      readTaskOfConversation(admitted.caller, admitted.target.conversationId),
       Option.getOrUndefined,
     );
 
@@ -292,7 +292,7 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
       // declarations the tools resolver hands eve, so the hash names what
       // the model is offered and not a list kept beside it.
       const toolSetHash =
-        event.type === "turn.started" ? toolSetHashOf(planningToolDeclarations()) : undefined;
+        event.type === "turn.started" ? toolSetHashOf(brainToolDeclarations()) : undefined;
       const writer = yield* seams.writer();
       const eve = yield* eveSessionsComposer;
       const relay = new StreamRelay({
@@ -355,15 +355,15 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
       };
     },
 
-    prompt: () => ({ text: PLANNING_INSTRUCTIONS, hash: promptHashOf(PLANNING_INSTRUCTIONS) }),
+    prompt: () => ({ text: BRAIN_INSTRUCTIONS, hash: promptHashOf(BRAIN_INSTRUCTIONS) }),
 
     standingContext: (admitted) =>
       Effect.gen(function* () {
-        const plan = yield* planOf(admitted);
+        const task = yield* taskOf(admitted);
         const board =
-          plan === undefined ? Option.none() : yield* readBoard(admitted.caller, plan.plan.id);
-        return planningStandingContext(
-          plan,
+          task === undefined ? Option.none() : yield* readBoard(admitted.caller, task.task.id);
+        return brainStandingContext(
+          task,
           Option.getOrElse(board, () => EMPTY_BOARD),
           seams.now(),
         );
@@ -375,7 +375,7 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
         (recent) => rotationSeedText(recent, seams.now()),
       ),
 
-    toolDeclarations: () => planningToolDeclarations(),
+    toolDeclarations: () => brainToolDeclarations(),
 
     runTool: (name, binding, input, context) =>
       Effect.gen(function* () {
@@ -393,7 +393,7 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
         // The caller is who acts: the plan, its repository, the research meter, and the agents are
         // reached and paid for as the member speaking, whoever opened the conversation.
         const { caller } = standing.success;
-        const plan = yield* planOf(standing.success);
+        const task = yield* taskOf(standing.success);
         // A message to a coding agent reaches its session as the deployment acting for the
         // caller, as a Stop does above: the planning session holds no bearer of the caller's.
         const secret = seams.deploymentSecret();
@@ -403,16 +403,16 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
           secret === undefined || origin === undefined
             ? undefined
             : eve({ origin, caller: { secret, account: caller }, mount: EVE_MOUNT.CODER });
-        return yield* runPlanningTool(
+        return yield* runBrainTool(
           name,
-          plan === undefined
+          task === undefined
             ? undefined
             : {
-                plan: { userId: caller, planId: plan.plan.id },
+                task: { userId: caller, taskId: task.task.id },
                 // The repository as the row holds it now, so a plan given one mid-conversation reads it on its next call.
                 repository: {
-                  plan: { userId: caller, planId: plan.plan.id },
-                  repository: plan.plan.repository,
+                  task: { userId: caller, taskId: task.task.id },
+                  repository: task.task.repository,
                   sandbox: () => context.getSandbox(),
                 },
                 research: {
@@ -427,7 +427,7 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
                 agents: {
                   caller: {
                     kind: AGENT_CALLER.LUKE,
-                    plan: { userId: caller, planId: plan.plan.id },
+                    plan: { userId: caller, taskId: task.task.id },
                   },
                   eve: coder,
                   writer: seams.writer(),
@@ -469,15 +469,15 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
 
     skills: (admitted) =>
       Effect.gen(function* () {
-        const plan = yield* planOf(admitted);
-        const repository = plan?.plan.repository ?? null;
-        if (plan === undefined || repository === null) return [];
+        const task = yield* taskOf(admitted);
+        const repository = task?.task.repository ?? null;
+        if (task === undefined || repository === null) return [];
         // The repository is read through the plan's workspace installation, as every planning read of it is.
         return yield* repositorySkills(
           { userId: admitted.caller, conversationId: admitted.target.conversationId },
-          planWorkspace(admitted.caller, plan.plan.id),
+          taskWorkspace(admitted.caller, task.task.id),
           repository,
-          planningSkillMarkdown,
+          brainSkillMarkdown,
         );
       }),
 

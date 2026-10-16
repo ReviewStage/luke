@@ -16,14 +16,7 @@ import {
   sectionAnchors,
 } from "@luke/features/mention-link";
 import { placeChipLook } from "@luke/features/place-chip-model";
-import {
-  CallIcon,
-  CodingAgentsIcon,
-  DocumentIcon,
-  GearIcon,
-  ProviderMark,
-  UserIcon,
-} from "@luke/ui";
+import { CallIcon, DocumentIcon, GearIcon, ProviderMark, UserIcon } from "@luke/ui";
 import type { Actor } from "@luke/ui/actor-model";
 import { fileName } from "@luke/voice/code-pane-model";
 import {
@@ -46,6 +39,7 @@ import { Tooltip } from "../tooltip";
 import { FileCard } from "./file-ref";
 import { shortCommit } from "./file-tab-model";
 import { FileTypeIcon } from "./file-type-icon";
+import { IssueMark } from "./issue-mark";
 import { PullRequestMark } from "./pull-request-mark";
 import { AgentMark } from "./tab-look";
 import { useKnownNames } from "./use-known-names";
@@ -67,9 +61,10 @@ import { useOpenLink } from "./use-open-link";
  * place can open none. An MCP server or one of its tools opens nothing
  * either, wearing its server's mark; a page of an integration's, a Linear
  * issue say, wears the integration's mark and opens the page in the
- * browser, its card saying its address. A Linear issue's chip and a pull
- * request's say the state it stands in after their name, a pull request's
- * wearing its mark for it, and a bare one is called by its key and title, as
+ * browser, its card saying its address. A Linear issue's chip, a pull
+ * request's, and a GitHub issue's say the state it stands in after their
+ * name, a pull request's and a GitHub issue's wearing GitHub's mark for it,
+ * and a bare one is called by its key and title, as
  * the workspace's own Linear or GitHub App answers them on the service
  * (`use-link-standing.ts`). A page an agent showed on a plan
  * wears its tab's glyph, and one of a plan's coding agents its harness's
@@ -141,7 +136,7 @@ export function retargetedMention(
   change: HeadingsChange,
 ): string | undefined {
   const mention = decodeMention(target, place.repository);
-  if (mention?.kind !== MENTION_KIND.SECTION || mention.planId !== planId) return undefined;
+  if (mention?.kind !== MENTION_KIND.SECTION || mention.taskId !== planId) return undefined;
   const was = sectionAnchors(change.before);
   const is = sectionAnchors(change.after);
   const at = was.indexOf(mention.anchor);
@@ -159,12 +154,16 @@ const SERVER_WORDS = "An MCP server";
 /** What a page's card says of it. */
 const PAGE_WORDS = "A page on this task";
 
-/** What an agent's card says of it, where the place has no card of its tab. */
-const AGENT_WORDS = "A coding agent on this task";
+/** What an agent's card says of it, where the place has no card of its tab: on this task, another, or none. */
+const AGENT_WORDS = {
+  THIS_TASK: "A coding agent on this task",
+  OTHER_TASK: "A coding agent on another task",
+  NO_TASK: "A coding agent on no task",
+} as const;
 
 /** Whether what the mention names is there to open: a section of this plan is there while a heading of the plan spells its anchor. */
 function mentionState(mention: Mention, doors: MentionDoors): MentionState {
-  if (mention.kind !== MENTION_KIND.SECTION || mention.planId !== doors.planId) {
+  if (mention.kind !== MENTION_KIND.SECTION || mention.taskId !== doors.planId) {
     return MENTION_STATE.FOUND;
   }
   return doors.anchors.has(mention.anchor) ? MENTION_STATE.FOUND : MENTION_STATE.GONE;
@@ -189,7 +188,7 @@ function pressOf(
     case MENTION_KIND.SERVER:
     case MENTION_KIND.TOOL:
       return undefined;
-    case MENTION_KIND.PLAN:
+    case MENTION_KIND.TASK:
       return () => doors.onOpenPlan(mention);
     case MENTION_KIND.SECTION:
       // A gone section opens the plan it was in, at its top.
@@ -197,7 +196,7 @@ function pressOf(
         doors.onOpenPlan(
           state === MENTION_STATE.FOUND
             ? mention
-            : { kind: MENTION_KIND.PLAN, planId: mention.planId },
+            : { kind: MENTION_KIND.TASK, taskId: mention.taskId },
         );
     // A page or an agent opens its tab as its Luke link does, through the window's opener, under the workspace it was written in.
     case MENTION_KIND.PAGE:
@@ -221,10 +220,12 @@ function MentionGlyph({
       <PullRequestMark pullRequest={{ ...standing.pullRequest, checks: CHECK_SUMMARY.NONE }} />
     );
   }
+  // And a GitHub issue its own, as GitHub draws it.
+  if (standing?.issue !== undefined) return <IssueMark issue={standing.issue} />;
   switch (mention.kind) {
     case MENTION_KIND.SECTION:
       return <HashIcon aria-hidden="true" />;
-    case MENTION_KIND.PLAN:
+    case MENTION_KIND.TASK:
       return <DocumentIcon />;
     case MENTION_KIND.FILE:
       return <FileTypeIcon name={fileName(mention.path)} />;
@@ -237,7 +238,7 @@ function MentionGlyph({
     case MENTION_KIND.PAGE:
       return <AppWindowIcon aria-hidden="true" />;
     case MENTION_KIND.AGENT: {
-      const look = doors.agentOf?.(mention.agentId);
+      const look = mention.taskId === doors.planId ? doors.agentOf?.(mention.agentId) : undefined;
       return look === undefined ? (
         <AgentMark provider={undefined} />
       ) : (
@@ -248,14 +249,17 @@ function MentionGlyph({
 }
 
 /** What a chip's card says of what it names, beside its name, where the name alone does not say it. */
-function noteOf(mention: Mention, state: MentionState): string | undefined {
+function noteOf(mention: Mention, state: MentionState, planId: string): string | undefined {
   if (state === MENTION_STATE.GONE) return GONE_WORDS;
   if (mention.kind === MENTION_KIND.SERVER) return SERVER_WORDS;
   if (mention.kind === MENTION_KIND.TOOL)
     return `A tool of ${INTEGRATION_NAME[mention.provider]}'s MCP server`;
   if (mention.kind === MENTION_KIND.LINK) return mention.url;
   if (mention.kind === MENTION_KIND.PAGE) return PAGE_WORDS;
-  if (mention.kind === MENTION_KIND.AGENT) return AGENT_WORDS;
+  if (mention.kind === MENTION_KIND.AGENT) {
+    if (mention.taskId === undefined) return AGENT_WORDS.NO_TASK;
+    return mention.taskId === planId ? AGENT_WORDS.THIS_TASK : AGENT_WORDS.OTHER_TASK;
+  }
   return undefined;
 }
 
@@ -286,11 +290,14 @@ function MentionCard({
   if (mention.kind === MENTION_KIND.FILE) {
     return <FileCard path={mention.path} note={linesNote(mention.lines)} />;
   }
+  // Only an agent of the page's own task has a tab here, so only its chip hangs that tab's card.
   const tabCard =
-    mention.kind === MENTION_KIND.AGENT ? doors.agentOf?.(mention.agentId)?.card : undefined;
+    mention.kind === MENTION_KIND.AGENT && mention.taskId === doors.planId
+      ? doors.agentOf?.(mention.agentId)?.card
+      : undefined;
   if (tabCard !== undefined) return tabCard;
   const whole = mention.kind === MENTION_KIND.FOLDER ? `${mention.path}/` : name;
-  const note = noteOf(mention, state);
+  const note = noteOf(mention, state, doors.planId);
   return (
     <HoverCard data-mention-card="">
       <CardHead
@@ -324,8 +331,8 @@ function bareName(
   switch (mention.kind) {
     case MENTION_KIND.LINK:
       return standing === undefined ? written : `${standing.key} ${standing.title}`;
-    case MENTION_KIND.PLAN:
-      return known.plans.get(mention.planId) ?? written;
+    case MENTION_KIND.TASK:
+      return known.plans.get(mention.taskId) ?? written;
     case MENTION_KIND.PAGE:
       return known.pages.get(mention.pageId) ?? written;
     case MENTION_KIND.AGENT:
@@ -414,7 +421,7 @@ function PlaceGlyph({ kind }: { kind: LinkPlace["kind"] }): React.JSX.Element {
     case LINK_PLACE.CALL:
       return <CallIcon />;
     case LINK_PLACE.AGENT:
-      return <CodingAgentsIcon />;
+      return <AgentMark provider={undefined} />;
     case LINK_PLACE.WORKER:
       return <BotIcon aria-hidden="true" />;
     case LINK_PLACE.CHANGES:

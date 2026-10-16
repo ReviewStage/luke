@@ -9,7 +9,7 @@ import {
   readMessagesByConversationTyped,
   readTurnById,
   readTurnsByConversation,
-  startPlan,
+  startTask,
 } from "@luke/database/testing";
 import { CODING_AGENT_TODO_STATUS } from "@luke/features/coding-agent-wire";
 import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "@luke/service/agents/brain-host/bounds";
@@ -120,7 +120,7 @@ function startAgent(run: Run, planId: string): Promise<CodingAgent> {
   return run(
     Effect.map(
       createCodingAgent(LOCAL_DEV_PRINCIPAL, {
-        planId,
+        taskId: planId,
         idempotencyKey: `eval-${Date.now()}-${Math.random()}`,
         model: "anthropic/claude-opus-5.5",
         effort: "high",
@@ -148,7 +148,7 @@ export default defineEval({
     const run: Run = (effect) => runtime.runPromise(effect);
     try {
       await ensureLocalDevUser(run);
-      const plan = await run(startPlan(LOCAL_DEV_PRINCIPAL, { ...PLAN, repository: REPOSITORY }));
+      const plan = await run(startTask(LOCAL_DEV_PRINCIPAL, { ...PLAN, repository: REPOSITORY }));
       const agent = await startAgent(run, plan.id);
 
       /** The Start as the route makes it: the first message of a typed turn on the agent's conversation, answered once the door has recorded the session on the conversation row. */

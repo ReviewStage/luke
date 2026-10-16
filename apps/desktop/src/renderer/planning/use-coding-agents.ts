@@ -300,7 +300,7 @@ function listRead(
   agentId: string | undefined,
 ): Promise<PageList> {
   if (planId !== undefined) {
-    return act(ACT_KIND.CODING_AGENTS_LIST, { planId, includeArchived: true });
+    return act(ACT_KIND.CODING_AGENTS_LIST, { taskId: planId, includeArchived: true });
   }
   // Note that a page names no automation by null where a summary leaves the key out.
   return act(ACT_KIND.CODING_AGENTS_PAGE, { agentId: agentId ?? "" }).then((answer): PageList => {
@@ -485,10 +485,10 @@ export function useCodingAgents(input: {
   /** One Start asked of the service on the plan, held as under way until it answers. */
   const askStart = (
     on: string,
-    asked: Omit<ActPayload<typeof ACT_KIND.CODING_AGENTS_START>, "planId">,
+    asked: Omit<ActPayload<typeof ACT_KIND.CODING_AGENTS_START>, "taskId">,
   ): Promise<CodingAgentAgentAnswer> => {
     setStarting(true);
-    return act(ACT_KIND.CODING_AGENTS_START, { planId: on, ...asked })
+    return act(ACT_KIND.CODING_AGENTS_START, { taskId: on, ...asked })
       .catch((): CodingAgentAgentAnswer => ({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }))
       .then((answer) => {
         setStarting(false);
@@ -872,11 +872,11 @@ export function useCodingAgents(input: {
     if (planId !== undefined) {
       return repository === null
         ? undefined
-        : keptSkills(() => act(ACT_KIND.PLANNING_SKILLS, { planId }));
+        : keptSkills(() => act(ACT_KIND.TASKS_SKILLS, { planId }));
     }
     if (workspaceId === undefined || agentRepository === undefined) return undefined;
     return keptSkills(() =>
-      act(ACT_KIND.PLANNING_SKILLS, { workspaceId, repository: agentRepository }),
+      act(ACT_KIND.TASKS_SKILLS, { workspaceId, repository: agentRepository }),
     );
   }, [act, planId, workspaceId, agentRepository, repository]);
 

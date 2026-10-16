@@ -274,7 +274,18 @@ export function githubReaching(
       if (installation.suspendedAt !== undefined) {
         return Response.json({ message: "This installation has been suspended" }, { status: 403 });
       }
-      const forRepositories = "repositories" in JSON.parse(sent.body);
+      const asked: { repositories?: unknown; permissions?: Record<string, string> } = JSON.parse(
+        sent.body,
+      );
+      // Note that GitHub refuses a mint naming a permission the installation never granted, at any level.
+      const granted = installation.permissions ?? FIXTURE_INSTALLATION_PERMISSIONS;
+      if (Object.keys(asked.permissions ?? {}).some((permission) => !(permission in granted))) {
+        return Response.json(
+          { message: "The permissions requested are not granted to this installation." },
+          { status: 422 },
+        );
+      }
+      const forRepositories = asked.repositories !== undefined;
       return Response.json(
         {
           token: forRepositories

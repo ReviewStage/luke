@@ -251,12 +251,12 @@ function composed(dependencies: CodingAgentsDependencies): CodingAgentsComposer 
       }),
     [GATEWAY_METHOD.CODING_AGENTS_LIST]: (params) =>
       Effect.gen(function* () {
-        const { planId, includeArchived } = yield* read(
+        const { taskId, includeArchived } = yield* read(
           codingAgentListParamsSchema,
           params,
           "listing a plan's agents names one plan",
         );
-        const answer = yield* asked(client.list(planId, includeArchived));
+        const answer = yield* asked(client.list(taskId, includeArchived));
         return carried<CodingAgentListAnswer>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_WORKSPACE_LIST]: (params) =>
@@ -270,12 +270,12 @@ function composed(dependencies: CodingAgentsDependencies): CodingAgentsComposer 
       }),
     [GATEWAY_METHOD.CODING_AGENTS_START]: (params) =>
       Effect.gen(function* () {
-        const { planId, ...request } = yield* read(
+        const { taskId, ...request } = yield* read(
           codingAgentStartParamsSchema,
           params,
           "starting an agent names a plan and the press's own key",
         );
-        const answer = yield* asked(client.start(planId, request));
+        const answer = yield* asked(client.start(taskId, request));
         return carried<CodingAgentAgentAnswer>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_MESSAGES]: (params) =>
@@ -410,12 +410,12 @@ function composed(dependencies: CodingAgentsDependencies): CodingAgentsComposer 
       }),
     [GATEWAY_METHOD.CODING_AGENTS_INBOX]: (params) =>
       Effect.gen(function* () {
-        const { planId, after } = yield* read(
+        const { taskId, after } = yield* read(
           codingAgentInboxParamsSchema,
           params,
           "reading a plan's inbox names the plan and a cursor",
         );
-        const answer = yield* asked(client.inbox(planId, after));
+        const answer = yield* asked(client.inbox(taskId, after));
         return carried<CodingAgentInboxAnswerView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_AGENT_INBOX]: (params) =>

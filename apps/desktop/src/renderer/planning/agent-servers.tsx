@@ -36,7 +36,7 @@ import { searchTokens } from "@luke/ui/search-tokens";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { AnchoredPopover, POPOVER_ALIGN } from "../anchored-popover";
 import { CHIP_LOOK, Chip } from "../chip";
-import { grantedBySignIn, useIntegrationGrant } from "../integration-grant";
+import { useIntegrationGrant } from "../integration-grant";
 import type { IntegrationStatuses } from "../integration-statuses";
 import { IntegrationToolDetail, IntegrationToolList, keepInView } from "../integration-tool-list";
 import { useIntegrationTools } from "../integration-tools";
@@ -405,11 +405,6 @@ function ServersPopover({
             className="agent-servers-connect"
             onMouseDown={keepFieldFocus}
             disabled={connecting === row.connection}
-            title={
-              grantedBySignIn(row.provider)
-                ? "Connect GitHub in your browser"
-                : `Sign in to ${row.name} in your browser`
-            }
             onClick={(event) => {
               event.stopPropagation();
               connect(row.connection);
@@ -426,7 +421,6 @@ function ServersPopover({
               className="agent-servers-connect"
               onMouseDown={keepFieldFocus}
               disabled={connecting === row.connection}
-              title={`Open the ${row.name} sign-in in your browser again`}
               onClick={(event) => {
                 event.stopPropagation();
                 connect(row.connection);
@@ -456,7 +450,6 @@ function ServersPopover({
             className="agent-servers-connect"
             onMouseDown={keepFieldFocus}
             disabled={connecting === row.connection}
-            title={`Sign in to ${row.name} in your browser`}
             onClick={(event) => {
               event.stopPropagation();
               connect(row.connection);

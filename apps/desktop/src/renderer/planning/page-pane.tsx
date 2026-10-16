@@ -1,6 +1,6 @@
 import { pageFrameUrl } from "@luke/features/page-frame";
 import type { PageLine } from "@luke/features/page-wire";
-import type { CodeLines, PlanningPageSourceAnswer } from "@luke/features/planning-view";
+import type { CodeLines, TasksPageSourceAnswer } from "@luke/features/tasks-view";
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -66,7 +66,7 @@ type SourceRead =
   | { readonly kind: typeof SOURCE_READ.FAILED };
 
 /** Reads one version's source: the answer, or a rejection where main refused the act. */
-export type ReadPageSource = (version: number) => Promise<PlanningPageSourceAnswer>;
+export type ReadPageSource = (version: number) => Promise<TasksPageSourceAnswer>;
 
 /** The source's lines as the page's text. */
 function sourceText(lines: CodeLines): string {
@@ -306,7 +306,7 @@ export function PagePane({
             key={reloads}
             className="page-view-frame"
             title={page.title}
-            src={pageFrameUrl({ planId, pageId: page.id, version })}
+            src={pageFrameUrl({ taskId: planId, pageId: page.id, version })}
             sandbox={PAGE_SANDBOX}
             allow=""
             referrerPolicy="no-referrer"

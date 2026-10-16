@@ -4,8 +4,8 @@ import { NO_NOTES_TAKEN, type NotesTaken } from "@luke/service/agents/coder-host
 import { defineState } from "eve/context";
 
 /**
- * The session's prompt as its content address, and whether it said the
- * repository's CI is readable, in eve's durable session state: written by
+ * The session's prompt as its content address, and the facts it was
+ * composed on (`CoderSessionPromptRecord`), in eve's durable session state: written by
  * the instructions resolver that composes the prompt at the session's start
  * and read by the store hook as each turn starts, so the turn row names the
  * prompt the model reads rather than one composed again.

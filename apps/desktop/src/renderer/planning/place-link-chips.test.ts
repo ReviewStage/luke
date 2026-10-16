@@ -3,8 +3,8 @@
 import assert from "node:assert/strict";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import { LINK_PLACE, type LinkPlace, type ReadLink } from "@luke/features/luke-link";
-import type { PlanSummary } from "@luke/features/plan-wire";
-import { IDLE_PLANNING_VIEW } from "@luke/features/planning-view";
+import type { TaskSummary } from "@luke/features/task-wire";
+import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import {
   WORKSPACE_ROLE,
   type Workspace,
@@ -61,7 +61,7 @@ const MEMBERS: readonly WorkspaceMember[] = [
   { userId: SAM, name: "Sam Okafor", email: "sam@example.com", role: WORKSPACE_ROLE.MEMBER },
 ];
 
-const TASK: PlanSummary = {
+const TASK: TaskSummary = {
   id: PLAN,
   workspaceId: ACME.id,
   name: "Teammate invitations",
@@ -90,10 +90,10 @@ const STATE: AppStateSnapshot = (() => {
   const snapshot = signedInAs({ id: SAM, email: "sam@example.com", name: "Sam Okafor" });
   return {
     ...snapshot,
-    planning: {
-      ...IDLE_PLANNING_VIEW,
-      plans: [TASK],
-      planlessAgents: [
+    tasks: {
+      ...IDLE_TASKS_VIEW,
+      tasks: [TASK],
+      tasklessAgents: [
         {
           id: TRIAGE_AGENT,
           planId: null,
@@ -116,7 +116,7 @@ const STATE: AppStateSnapshot = (() => {
       ...snapshot.inbox,
       waiting: [
         {
-          planId: PLAN,
+          taskId: PLAN,
           items: [{ id: ITEM, agentId: AGENT, title: "Keep expired links?", postedAt: AT }],
         },
       ],
@@ -202,7 +202,7 @@ test("a bare link to a place the window knows is called by its name, the task's 
     ["place", "Keep expired links?"],
     ["place", "Message from Expire old invitations"],
     ["place", "Sam Okafor"],
-    ["place", "Triage new Sentry issues"],
+    ["agent", "Triage new Sentry issues"],
     ["place", "Nightly triage"],
   ]);
   assert.deepEqual(
@@ -244,4 +244,13 @@ test("a press on a place's chip opens the place in the window", async () => {
     { kind: LINK_PLACE.AGENT, planId: PLAN, agentId: AGENT },
     { kind: LINK_PLACE.PERSON, userId: SAM },
   ]);
+});
+
+test("an agent's chip the window knows no harness for holds its glyph's box empty, rather than a stand-in glyph, its name saying whose it is", async () => {
+  const container = await drawn(`${HOME}/plan/${PLAN}/agent/${UNNAMED_AGENT}`, []);
+  const chip = container.querySelector<HTMLElement>('.mention-chip[data-kind="agent"]');
+  const glyph = chip?.querySelector(".mention-chip-glyph > svg") ?? assert.fail("a box stands");
+
+  assert.equal(glyph.childElementCount, 0, "the box draws no glyph");
+  assert.equal(chip?.querySelector(".mention-chip-label")?.textContent, "Agent");
 });

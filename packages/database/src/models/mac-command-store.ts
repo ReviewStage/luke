@@ -8,7 +8,7 @@ import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { Database } from "../core/query.js";
 import { macCommand, macCommandListener } from "../schemas/mac-command.js";
-import type { PlanStoreEffect } from "./plan-store.js";
+import type { TaskStoreEffect } from "./task-store.js";
 
 /**
  * mac-command-store.ts -- the shell commands an account's agents queued for its Mac, and when a Mac last listened for them.
@@ -151,22 +151,22 @@ const deleteCommand = SqlSchema.void({
 });
 
 /** Records that a Mac of the account is listening now. */
-export function markMacListening(userId: string): PlanStoreEffect<void> {
+export function markMacListening(userId: string): TaskStoreEffect<void> {
   return Effect.flatMap(DateTime.nowAsDate, (now) => upsertListener({ userId, now }));
 }
 
 /** Whether a Mac of the account listened at or after the instant given. */
-export function macListeningSince(userId: string, since: Date): PlanStoreEffect<boolean> {
+export function macListeningSince(userId: string, since: Date): TaskStoreEffect<boolean> {
   return Effect.map(findListener({ userId, since }), Option.isSome);
 }
 
 /** Queues one command for the account's Mac, under the id its caller minted. */
-export function queueMacCommand(userId: string, queued: MacCommand): PlanStoreEffect<void> {
+export function queueMacCommand(userId: string, queued: MacCommand): TaskStoreEffect<void> {
   return Effect.flatMap(DateTime.nowAsDate, (now) => insertCommand({ ...queued, userId, now }));
 }
 
 /** Whether any command of the account queued at or after `queuedSince` waits to be claimed, which is what a held read looks at. */
-export function macCommandsWaiting(userId: string, queuedSince: Date): PlanStoreEffect<boolean> {
+export function macCommandsWaiting(userId: string, queuedSince: Date): TaskStoreEffect<boolean> {
   return Effect.map(findWaiting({ userId, queuedSince }), (rows) => rows.length > 0);
 }
 
@@ -174,7 +174,7 @@ export function macCommandsWaiting(userId: string, queuedSince: Date): PlanStore
 export function claimMacCommands(
   userId: string,
   queuedSince: Date,
-): PlanStoreEffect<readonly MacCommand[]> {
+): TaskStoreEffect<readonly MacCommand[]> {
   return Effect.flatMap(DateTime.nowAsDate, (now) => claimWaiting({ userId, queuedSince, now }));
 }
 
@@ -183,7 +183,7 @@ export function settleMacCommand(
   userId: string,
   id: string,
   result: MacCommandResult,
-): PlanStoreEffect<boolean> {
+): TaskStoreEffect<boolean> {
   return Effect.map(writeResult({ userId, id, result }), (rows) => rows.length > 0);
 }
 
@@ -191,7 +191,7 @@ export function settleMacCommand(
 export function macCommandResult(
   userId: string,
   id: string,
-): PlanStoreEffect<Option.Option<MacCommandResult>> {
+): TaskStoreEffect<Option.Option<MacCommandResult>> {
   return Effect.map(
     findResult({ userId, id }),
     Option.map((row) => row.result),
@@ -199,6 +199,6 @@ export function macCommandResult(
 }
 
 /** Withdraws a command, settled or not, once its call stops waiting on it. */
-export function withdrawMacCommand(userId: string, id: string): PlanStoreEffect<void> {
+export function withdrawMacCommand(userId: string, id: string): TaskStoreEffect<void> {
   return deleteCommand({ userId, id });
 }

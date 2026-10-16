@@ -133,7 +133,7 @@ async function target(): Promise<VoiceTarget> {
     sessionRecord.register({
       userId,
       sessionId: liveSessionId,
-      planId: randomUUID(),
+      taskId: randomUUID(),
       attachId: randomUUID(),
       model: LIVE_DEFAULTS.MODEL,
     }),

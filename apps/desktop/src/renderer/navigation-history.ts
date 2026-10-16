@@ -343,7 +343,7 @@ export function useWindowHistory(input: {
       input.onSettingsViewChange(to.view);
       return;
     }
-    if (tab !== PANEL_TAB.PLANS) input.onTabChange(PANEL_TAB.PLANS);
+    if (tab !== PANEL_TAB.TASKS) input.onTabChange(PANEL_TAB.TASKS);
     if (to.kind === PLACE_KIND.INBOX) {
       plans.inboxView.onOpen();
       return;

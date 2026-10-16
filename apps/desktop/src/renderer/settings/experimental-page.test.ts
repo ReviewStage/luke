@@ -104,12 +104,11 @@ test("an experiment's Send feedback opens the dialog about that experiment", () 
   ]);
 });
 
-test("with no experiment standing, the page draws the empty state with its title", () => {
+test("with no experiment standing, the page draws the empty state", () => {
   const page = draw({ entries: [], experiments: NO_EXPERIMENTS, signedIn: true });
 
   assert.equal(page.querySelector('[role="switch"]'), null);
-  assert.equal(page.querySelector("h3")?.textContent, "No experiments right now");
-  assert.ok(page.textContent?.includes("New features show up here to try before they ship."));
+  assert.equal(page.textContent, "No experiments");
 });
 
 test("signed out, the page says to sign in rather than drawing switches no account holds", () => {

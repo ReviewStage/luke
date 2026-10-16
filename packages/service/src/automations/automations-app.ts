@@ -15,7 +15,7 @@ import {
   updateAutomation,
 } from "@luke/database/models/automation-store";
 import { readCodingAgent } from "@luke/database/models/coding-agent-store";
-import { readPlan } from "@luke/database/models/plan-store";
+import { readTask } from "@luke/database/models/task-store";
 import { isWorkspaceMember, personalWorkspaceOf } from "@luke/database/models/workspace-store";
 import { wireUuidSchema } from "@luke/features";
 import { nextScheduledRun, readSchedule } from "@luke/features/automation-schedule";
@@ -267,8 +267,8 @@ const summaryOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   const [lastRun] = yield* runSummaries(userId, newest);
   return {
     id: automation.id,
-    planId: automation.planId,
-    planName: automation.planName,
+    planId: automation.taskId,
+    planName: automation.taskName,
     ...(automation.organizationId === null
       ? undefined
       : { workspaceId: automation.organizationId }),
@@ -337,19 +337,19 @@ const listEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   request: Request,
 ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, RouteServices> {
   const query = new URL(request.url).searchParams;
-  const plans = query.getAll(AUTOMATION_LIST_QUERY.PLAN_ID);
+  const tasks = query.getAll(AUTOMATION_LIST_QUERY.TASK_ID);
   const workspaces = query.getAll(AUTOMATION_LIST_QUERY.WORKSPACE_ID);
-  if (plans.length > 1 || workspaces.length > 1) {
+  if (tasks.length > 1 || workspaces.length > 1) {
     return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   }
-  const [named] = plans;
+  const [named] = tasks;
   const [organizationId] = workspaces;
-  const plan = named === undefined ? undefined : readEither(wireUuidSchema)(unparsedWire(named));
-  if ((plan !== undefined && Result.isFailure(plan)) || organizationId === "") {
+  const task = named === undefined ? undefined : readEither(wireUuidSchema)(unparsedWire(named));
+  if ((task !== undefined && Result.isFailure(task)) || organizationId === "") {
     return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   }
   const automations = yield* hostedStoreOrUnavailable(
-    listAutomations(userId, { planId: plan?.success, organizationId }),
+    listAutomations(userId, { taskId: task?.success, organizationId }),
   );
   const summaries = yield* Effect.forEach(automations, (each) => summaryOf(userId, each));
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { automations: summaries });
@@ -376,7 +376,7 @@ const reachedRepositories = /* @__PURE__ */ Effect.fnUntraced(function* (
 
 /** Where a new automation stands: its plan, as the plan names its workspace and repository, or a workspace and the repositories named, each reached through it. */
 interface Standing {
-  readonly planId: string | null;
+  readonly taskId: string | null;
   readonly organizationId: string;
   readonly repositories: readonly string[] | undefined;
 }
@@ -395,14 +395,14 @@ const standingOf = /* @__PURE__ */ Effect.fnUntraced(function* (
     if (made.workspaceId !== undefined || made.repositories !== undefined) {
       return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
     }
-    const plan = yield* hostedStoreOrUnavailable(readPlan(userId, made.planId));
-    if (Option.isNone(plan)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-    if (plan.value.plan.repository === null) {
+    const task = yield* hostedStoreOrUnavailable(readTask(userId, made.planId));
+    if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+    if (task.value.task.repository === null) {
       return yield* Effect.fail(HOSTED_REFUSAL.NO_REPOSITORY);
     }
     return {
-      planId: made.planId,
-      organizationId: plan.value.plan.workspaceId,
+      taskId: made.planId,
+      organizationId: task.value.task.workspaceId,
       repositories: undefined,
     };
   }
@@ -412,7 +412,7 @@ const standingOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   const member = yield* hostedStoreOrUnavailable(isWorkspaceMember(userId, made.workspaceId));
   if (!member) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const repositories = yield* reachedRepositories(made.workspaceId, made.repositories);
-  return { planId: null, organizationId: made.workspaceId, repositories };
+  return { taskId: null, organizationId: made.workspaceId, repositories };
 });
 
 /** POST: an automation made on one of the account's plans with a repository, or on a workspace of the account's with the repositories its runs work in. */
@@ -438,7 +438,7 @@ const createEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
     made.trigger.kind === AUTOMATION_TRIGGER.WEBHOOK ? mintWebhookSecret() : undefined;
   const created = yield* hostedStoreOrUnavailable(
     createAutomation(userId, {
-      planId: standing.planId,
+      taskId: standing.taskId,
       organizationId: standing.organizationId,
       repositories: standing.repositories,
       name: made.name,
@@ -532,7 +532,7 @@ const changesOf = /* @__PURE__ */ Effect.fnUntraced(function* (
     asked.target === undefined ? undefined : yield* checkedTarget(userId, asked.target);
   // Note that new repositories are read through the automation's own workspace, as its runs will
   // reach them, and that one standing on a plan takes its plan's repository and no other.
-  if (asked.repositories !== undefined && standing.planId !== null) {
+  if (asked.repositories !== undefined && standing.taskId !== null) {
     return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   }
   const repositories =

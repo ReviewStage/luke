@@ -23,6 +23,7 @@ import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { GLYPH_STATE, type GlyphState, StateGlyph, stateEndMark } from "../state-glyph";
 import { ActionMenu, useActionMenu } from "./action-menu";
 import { RUNS_PANEL_WIDTH, type RunsPanel } from "./folded-groups";
+import { usePaneSlide } from "./pane-motion";
 import type { RunsRead } from "./use-automation-runs";
 import { EDGE_SIDE, useResizableEdge } from "./use-resizable-edge";
 
@@ -49,7 +50,7 @@ const CREATOR = "its creator";
 const RUN_ACTIONS = "Run actions";
 
 /** What the panel says while the automation has no run, over how to have one. */
-const NO_RUNS_TITLE = "No runs yet";
+const NO_RUNS_LINE = "No runs yet";
 
 /** The glyph each standing of a run wears. */
 export const STANDING_GLYPH = {
@@ -168,6 +169,9 @@ const FORM_RESERVE = 480;
  * The runs panel: the runs, or that there are none yet, or that they could
  * not be read. Its left edge resizes it as the side panel's does, and a
  * drag past its least width folds it away; nothing stands while it is folded.
+ * It comes and goes as the window's panes do (`usePaneSlide`): in from the
+ * page's right edge as it is shown, and out past it as it is folded, held
+ * drawn, out of the layout and out of reach, until that slide has played.
  */
 export function AutomationRunsPanel({
   panel,
@@ -203,16 +207,23 @@ export function AutomationRunsPanel({
     onResize: panel.onResize,
     onToggleCollapsed: panel.onToggle,
   });
-  if (!panel.open) return null;
+  const slide = usePaneSlide(panel.open);
+  if (!slide.drawn) return null;
   return (
-    <div className="automation-runs-pane" style={{ width: panel.width }}>
+    <div
+      ref={(node) => {
+        slide.pane.current = node;
+      }}
+      className="automation-runs-pane"
+      data-leaving={slide.leaving ? "" : undefined}
+      inert={slide.leaving}
+      style={{ width: panel.width }}
+    >
       <div className="side-panel-resize" {...edge} />
       <aside className="automation-runs scroll-fade-top" aria-label="Runs">
         <h2 className="settings-group-title">Runs</h2>
         {!created ? (
-          <EmptyState icon={<ClockIcon />} title={NO_RUNS_TITLE}>
-            Create it, then Run now to try it.
-          </EmptyState>
+          <EmptyState icon={<ClockIcon />}>{NO_RUNS_LINE}</EmptyState>
         ) : runs === undefined ? null : "failed" in runs ? (
           <ReadFailure
             line="Its runs could not be read."
@@ -220,9 +231,7 @@ export function AutomationRunsPanel({
             place={READ_FAILURE_PLACE.INLINE}
           />
         ) : runs.runs.length === 0 ? (
-          <EmptyState icon={<ClockIcon />} title={NO_RUNS_TITLE}>
-            Run now to try it.
-          </EmptyState>
+          <EmptyState icon={<ClockIcon />}>{NO_RUNS_LINE}</EmptyState>
         ) : (
           <div className="automation-runs-list">
             {runs.runs.map((run) => (

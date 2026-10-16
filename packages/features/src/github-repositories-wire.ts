@@ -14,7 +14,8 @@ import { countedNumber } from "./service-wire.js";
  * is the one form a plan stores and a coding agent checks out. One pull
  * request of such a repository is read the same way, by its number, and
  * travels as no more than a link to it draws: its number, title, page, and
- * where it stands.
+ * where it stands; and so is one issue, by its number, open, closed as
+ * done, or closed as not planned.
  */
 
 const GITHUB_REPOSITORY_BOUNDS = {
@@ -111,28 +112,63 @@ export const githubRepositoryPullRequestAnswerSchema = EffectSchema.Struct({
 
 export type GitHubRepositoryPullRequestAnswer = typeof githubRepositoryPullRequestAnswerSchema.Type;
 
-/** GitHub's own host, whose `/<owner>/<name>/pull/<number>` pages are its pull requests. */
+/**
+ * Where an issue stands, as GitHub draws its mark: open, closed as done,
+ * or closed as not planned, which a duplicate is closed as too, under the
+ * same grey mark.
+ */
+export const ISSUE_STATE = {
+  OPEN: "open",
+  CLOSED: "closed",
+  NOT_PLANNED: "not-planned",
+} as const;
+
+export type IssueState = (typeof ISSUE_STATE)[keyof typeof ISSUE_STATE];
+
+/** One issue of a repository as a link to it is drawn: its number, its title, its own page on GitHub, and where it stands. */
+export const githubIssueSummarySchema = EffectSchema.Struct({
+  number: githubPullRequestNumberSchema,
+  title: EffectSchema.String,
+  /** The issue's own page on GitHub. */
+  url: EffectSchema.String,
+  state: EffectSchema.Literals(Object.values(ISSUE_STATE)),
+});
+
+export type GitHubIssueSummary = typeof githubIssueSummarySchema.Type;
+
+/**
+ * One issue of a repository a workspace's installation reaches (GET), by
+ * its number: null where the repository holds no issue of that number, a
+ * pull request's number among them, where its issues are turned off, where
+ * the installation does not reach the repository, or where it does not
+ * grant the App issues read, which the answer does not tell apart, since a
+ * link to any of them draws the same.
+ */
+export const githubRepositoryIssueAnswerSchema = EffectSchema.Struct({
+  issue: EffectSchema.NullOr(githubIssueSummarySchema),
+});
+
+export type GitHubRepositoryIssueAnswer = typeof githubRepositoryIssueAnswerSchema.Type;
+
+/** GitHub's own host, whose `/<owner>/<name>/pull/<number>` pages are its pull requests and `/<owner>/<name>/issues/<number>` its issues. */
 const GITHUB_HOST = "github.com";
 
-/** The step before a pull request's number in its page's path. */
-const PULL_STEP = "pull";
+/** The step before a numbered page's number in its path: a pull request's, or an issue's. */
+const NUMBERED_STEP = { PULL: "pull", ISSUES: "issues" } as const;
 
-/** A pull request's number as its page's path spells it: whole, from one. */
-const PULL_NUMBER = /^[1-9]\d{0,8}$/u;
+type NumberedStep = (typeof NUMBERED_STEP)[keyof typeof NUMBERED_STEP];
 
-/** A pull request a page's address names: its repository, `owner/name`, and its number. */
-export interface PullRequestAddress {
+/** A pull request's or an issue's number as its page's path spells it: whole, from one. */
+const PAGE_NUMBER = /^[1-9]\d{0,8}$/u;
+
+/** A pull request or an issue a page's address names: its repository, `owner/name`, and its number. */
+export interface NumberedAddress {
   readonly repository: string;
   readonly number: number;
 }
 
-/**
- * The pull request a page of GitHub's is, `acme/relay` and `42` from
- * `https://github.com/acme/relay/pull/42` or any page under it, its Files
- * tab say; nothing for any other address, another of GitHub's pages among
- * them.
- */
-export function pullRequestAddressOf(href: string): PullRequestAddress | undefined {
+/** The repository and number a page of GitHub's under the step given names; nothing for any other address. */
+function numberedAddressOf(href: string, wanted: NumberedStep): NumberedAddress | undefined {
   let url: URL;
   try {
     url = new URL(href);
@@ -141,12 +177,31 @@ export function pullRequestAddressOf(href: string): PullRequestAddress | undefin
   }
   if (url.hostname !== GITHUB_HOST) return undefined;
   const [first, owner, name, step, number] = url.pathname.split("/");
-  if (first !== "" || owner === undefined || name === undefined || step !== PULL_STEP) {
+  if (first !== "" || owner === undefined || name === undefined || step !== wanted) {
     return undefined;
   }
-  if (number === undefined || !PULL_NUMBER.test(number)) return undefined;
+  if (number === undefined || !PAGE_NUMBER.test(number)) return undefined;
   const repository = `${owner}/${name}`;
   return EffectSchema.is(githubRepositoryFullNameSchema)(repository)
     ? { repository, number: Number(number) }
     : undefined;
+}
+
+/**
+ * The pull request a page of GitHub's is, `acme/relay` and `42` from
+ * `https://github.com/acme/relay/pull/42` or any page under it, its Files
+ * tab say; nothing for any other address, another of GitHub's pages among
+ * them.
+ */
+export function pullRequestAddressOf(href: string): NumberedAddress | undefined {
+  return numberedAddressOf(href, NUMBERED_STEP.PULL);
+}
+
+/**
+ * The issue a page of GitHub's is, `acme/relay` and `7` from
+ * `https://github.com/acme/relay/issues/7`; nothing for any other address,
+ * the repository's list of issues among them.
+ */
+export function issueAddressOf(href: string): NumberedAddress | undefined {
+  return numberedAddressOf(href, NUMBERED_STEP.ISSUES);
 }

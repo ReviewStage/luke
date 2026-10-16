@@ -87,7 +87,7 @@ function fixture(answered: CodingAgentAgentAnswer = STARTED) {
       observePublished: (agentId, pullRequest) => {
         noted.push(`published:${agentId}=${pullRequest?.number ?? "none"}`);
       },
-      observePlanGone: (planId) => {
+      observeTaskGone: (planId) => {
         noted.push(`gone:${planId}`);
       },
       shown: (agentId) => {
@@ -118,14 +118,14 @@ function fixture(answered: CodingAgentAgentAnswer = STARTED) {
           asked.push(`default:${choice.model}:${choice.effort}`);
           return { choice };
         }),
-      codingAgentList: ({ planId, includeArchived }) =>
+      codingAgentList: ({ taskId: planId, includeArchived }) =>
         Effect.sync(() => {
           asked.push(includeArchived === true ? `list:${planId}:archived` : `list:${planId}`);
           return { agents: [] };
         }),
       codingAgentStart: (params) =>
         Effect.sync(() => {
-          asked.push(`start:${params.planId}:${params.idempotencyKey}`);
+          asked.push(`start:${params.taskId}:${params.idempotencyKey}`);
           return STARTED;
         }),
       codingAgentMessages: ({ agentId, after, callId }) =>
@@ -172,7 +172,7 @@ function fixture(answered: CodingAgentAgentAnswer = STARTED) {
           asked.push(`pin:${agentId}:${String(pinned)}`);
           return answered;
         }),
-      planningRefresh: () =>
+      tasksRefresh: () =>
         Effect.sync(() => {
           asked.push("refresh");
         }),
@@ -260,7 +260,7 @@ function fixture(answered: CodingAgentAgentAnswer = STARTED) {
           asked.push(`transcribe:${audio}:${keywords.join(",")}`);
           return { text: "Run the tests" };
         }),
-      codingAgentInbox: ({ planId, after }) =>
+      codingAgentInbox: ({ taskId: planId, after }) =>
         Effect.sync(() => {
           asked.push(`inbox:${planId}:${after}`);
           return { items: [ITEM], cursor: "7" };
@@ -296,7 +296,7 @@ it.effect(
       const outcome = yield* router.performAct(
         {
           kind: ACT_KIND.CODING_AGENTS_START,
-          payload: { planId: PLAN_ID, idempotencyKey: "press-1" },
+          payload: { taskId: PLAN_ID, idempotencyKey: "press-1" },
         },
         PANEL,
       );

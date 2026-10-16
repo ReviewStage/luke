@@ -66,7 +66,7 @@ const config = bootstrapDesktop({
   report: reportToStderr,
   openExternal: (url) => shell.openExternal(url),
   quit: () => app.quit(),
-  showMenuBar: menuBarDrawer(app.name, (template) =>
+  showMenuBar: menuBarDrawer({ appName: app.name, packaged: app.isPackaged }, (template) =>
     Menu.setApplicationMenu(Menu.buildFromTemplate(template)),
   ),
   initializeCrashReporting,

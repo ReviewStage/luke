@@ -8,6 +8,14 @@
     "repository": {
       "type": "string",
       "minLength": 1
+    },
+    "words": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "includeArchived": {
+      "type": "boolean"
     }
   },
   "required": [

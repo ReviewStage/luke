@@ -12,11 +12,11 @@ import {
 } from "./call-window-presence";
 
 const CALLING = {
-  view: { voiceStatus: LIVE_STATUS.LISTENING, callPlanId: "plan_1" },
+  view: { voiceStatus: LIVE_STATUS.LISTENING, callTaskId: "plan_1" },
   avatar: AVATAR_OFF,
 } as const;
 const HUNG_UP = {
-  view: { voiceStatus: LIVE_STATUS.IDLE, callPlanId: undefined },
+  view: { voiceStatus: LIVE_STATUS.IDLE, callTaskId: undefined },
   avatar: AVATAR_OFF,
 } as const;
 

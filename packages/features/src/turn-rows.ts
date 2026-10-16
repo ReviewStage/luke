@@ -60,6 +60,8 @@ export const CALL_KIND = {
   READ_AGENT: "read-agent",
   MESSAGE_AGENT: "message-agent",
   START_AGENT: "start-agent",
+  ARCHIVE_AGENT: "archive-agent",
+  UNARCHIVE_AGENT: "unarchive-agent",
   END_CALL: "end-call",
   SHOW_PAGE: "show-page",
   /** Pictures a coding agent showed from its sandbox (`show_image`), drawn as a row only where the call was refused; a shown set draws as its pictures. */
@@ -100,6 +102,8 @@ export const CALL_WORDS = {
   [CALL_KIND.READ_AGENT]: { verb: "Read the coding agent", code: false },
   [CALL_KIND.MESSAGE_AGENT]: { verb: "Messaged the coding agent", code: false },
   [CALL_KIND.START_AGENT]: { verb: "Started a coding agent", code: false },
+  [CALL_KIND.ARCHIVE_AGENT]: { verb: "Archived the coding agent", code: false },
+  [CALL_KIND.UNARCHIVE_AGENT]: { verb: "Unarchived the coding agent", code: false },
   [CALL_KIND.END_CALL]: { verb: "Ended the call", code: false },
   [CALL_KIND.SHOW_PAGE]: { verb: "Showed a page:", code: false },
   [CALL_KIND.SHOW_IMAGE]: { verb: "Showed", code: true },

@@ -2,8 +2,8 @@
 
 import assert from "node:assert/strict";
 import type { PlanEditRequest } from "@luke/features/plan-edit";
-import { PLAN_ACTOR, type Plan } from "@luke/features/plan-wire";
-import type { PlanningEditAnswer } from "@luke/features/planning-view";
+import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
+import type { TasksEditAnswer } from "@luke/features/tasks-view";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
@@ -92,14 +92,14 @@ async function settle(): Promise<void> {
  * script, and the names it renamed to; `render` draws another plan, through
  * its own door where given.
  */
-function mount(answers: readonly PlanningEditAnswer[] = []) {
+function mount(answers: readonly TasksEditAnswer[] = []) {
   const sent: PlanEditRequest[] = [];
   const renamed: string[] = [];
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  const saved: PlanningEditAnswer = { saved: true };
+  const saved: TasksEditAnswer = { saved: true };
   const onEdit = (request: PlanEditRequest) => {
     sent.push(request);
     return Promise.resolve(answers[sent.length - 1] ?? saved);
@@ -108,7 +108,7 @@ function mount(answers: readonly PlanningEditAnswer[] = []) {
     renamed.push(name);
     return Promise.resolve(true);
   };
-  const render = (plan: Plan, door: typeof onEdit = onEdit) =>
+  const render = (plan: Task, door: typeof onEdit = onEdit) =>
     act(() => root.render(createElement(PlanBody, { plan, live: false, onEdit: door, onRename })));
   render(DOCUMENT_PLAN);
   const unmount = () => {
@@ -233,6 +233,24 @@ test("a press on the name in a section's byline opens no editor, while a press o
   assert.equal(open().markdown, BODY);
 });
 
+test("a click on the panel's empty room opens an empty plan's text with the caret at its start, and opens nothing on a plan with text", () => {
+  const { container, render } = mount();
+  const scroller =
+    container.querySelector<HTMLElement>(".plan-document-scroll") ??
+    assert.fail("the document scrolls");
+
+  act(() => scroller.click());
+  // Note that the check is a boolean, because a failing comparison would print the whole editor's DOM.
+  assert.ok(container.querySelector(".plan-document-editor") === null, "no editor opened");
+
+  render({ ...DOCUMENT_PLAN, document: { body: "", assumptions: [] } });
+  act(() => scroller.click());
+
+  assert.equal(open().markdown, "");
+  assert.equal(open().placement, undefined, "the caret at the text's start");
+  assert.equal(title(container).textContent, DOCUMENT_NAME, "the title stays over the text");
+});
+
 test("words handed over and not yet saved are sent when the developer leaves the plan", async () => {
   const { container, sent, unmount } = mount();
   act(() => block(container, "Goal").click());
@@ -249,7 +267,7 @@ test("words typed in one plan are saved to that plan when another opens", async 
   const doors: string[] = [];
   const door = (planId: string) => () => {
     doors.push(planId);
-    return Promise.resolve<PlanningEditAnswer>({ saved: true });
+    return Promise.resolve<TasksEditAnswer>({ saved: true });
   };
   const other = { ...DOCUMENT_PLAN, id: "0c4f2e9a-7d1b-4a3e-8f6c-2b9d5e1a7c40" };
   render(DOCUMENT_PLAN, door(DOCUMENT_PLAN.id));

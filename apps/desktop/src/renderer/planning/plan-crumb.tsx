@@ -1,6 +1,6 @@
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import type { PlanSummary } from "@luke/features/plan-wire";
-import type { PlanningRepositoriesAnswer } from "@luke/features/planning-view";
+import type { TaskSummary } from "@luke/features/task-wire";
+import type { TasksRepositoriesAnswer } from "@luke/features/tasks-view";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { ProviderMark } from "@luke/ui";
 import { type Actor, actorName, memberActor, ROLE_WORDS } from "@luke/ui/actor-model";
@@ -71,7 +71,7 @@ interface Creation {
 
 /** What a task's creation says to the crumb; none where the list names no creator. */
 function useCreation(
-  created: Pick<PlanSummary, "createdBy" | "ownerId" | "createdAt"> | undefined,
+  created: Pick<TaskSummary, "createdBy" | "ownerId" | "createdAt"> | undefined,
 ): Creation | undefined {
   const creator = useCreator(created ?? {});
   const userId = created?.createdBy?.userId ?? created?.ownerId;
@@ -175,9 +175,7 @@ function PeopleCard({
         sub={only ? `${workspace.name} has no other members` : `${count} members`}
       />
       {only || creation === undefined ? null : <CreatedBy creation={creation} />}
-      <CardNote>
-        {only ? "Invite someone to this workspace and they can read and edit its tasks." : note}
-      </CardNote>
+      {only ? null : <CardNote>{note}</CardNote>}
       {only || members === undefined ? null : (
         <>
           <CardRule />
@@ -261,7 +259,7 @@ interface RepositoryCrumbDoors {
   /** Whether owners' pictures are drawn at all: not in a fixture run. */
   readonly pictures: boolean;
   /** Reads the repositories the plan's workspace reaches, which say each one's default branch. */
-  readonly read: () => Promise<PlanningRepositoriesAnswer>;
+  readonly read: () => Promise<TasksRepositoriesAnswer>;
 }
 
 /** Where the crumb's presses go. */
@@ -277,7 +275,7 @@ export interface PlanCrumbDoors {
 type DefaultBranch = string | null | undefined;
 
 /** The default branch the read names for a repository, or null where it names none or failed. */
-function defaultBranchOf(answer: PlanningRepositoriesAnswer, repository: string): string | null {
+function defaultBranchOf(answer: TasksRepositoriesAnswer, repository: string): string | null {
   if ("failure" in answer) return null;
   const named = repository.toLowerCase();
   const found = answer.repositories.repositories.find(
@@ -400,7 +398,7 @@ export function PlanCrumb({
   repository: string | null;
   archived: boolean;
   /** Who created the task and when, as the list names them; none where it names nobody. */
-  created?: Pick<PlanSummary, "createdBy" | "ownerId" | "createdAt"> | undefined;
+  created?: Pick<TaskSummary, "createdBy" | "ownerId" | "createdAt"> | undefined;
   doors: PlanCrumbDoors;
 }): React.JSX.Element {
   const { members, readerId } = useMemberDirectory();

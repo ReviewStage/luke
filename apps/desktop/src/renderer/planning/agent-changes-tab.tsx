@@ -469,7 +469,7 @@ export function AgentChangesTab({
     return { paths, marks: changeMarks(files), folders: changedFolders(paths) };
   }, [pullRequest]);
   const { closeOver } = room;
-  // A file chosen in the tree standing over the diff takes the tree down, to show the file.
+  // A file chosen in the tree floating over the diff takes the tree down, to show the file.
   const choose = useCallback(
     (path: string) => {
       closeOver();
@@ -548,6 +548,7 @@ export function AgentChangesTab({
             listFolder={changed.folders}
             onOpen={choose}
             pane={room.beside.pane}
+            float={room.pane}
             leaving={room.beside.leaving}
           />
         ) : null}

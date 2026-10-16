@@ -19,14 +19,14 @@ afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
 });
 
-const plan = (planId: string): PlanMention => ({ kind: MENTION_KIND.PLAN, planId });
+const task = (taskId: string): PlanMention => ({ kind: MENTION_KIND.TASK, taskId });
 
 /** The opener drawn behind a gate that `stand` moves, every plan it opened kept; `arriving` is handed in the commit the gate moves in, before its effects run. */
 function opener() {
   const opened: string[] = [];
   let handTo: ((mention: PlanMention) => void) | undefined;
   function Probe({ gated, arriving }: { gated: boolean; arriving?: PlanMention }): null {
-    const open = useLinkOpener<PlanMention>(gated, (mention) => opened.push(mention.planId));
+    const open = useLinkOpener<PlanMention>(gated, (mention) => opened.push(mention.taskId));
     handTo = open;
     useLayoutEffect(() => {
       if (arriving !== undefined) open(arriving);
@@ -47,8 +47,8 @@ test("a link handed behind the sign-in gate opens once it gives way, the latest 
   const { opened, stand, hand } = opener();
 
   stand(true);
-  hand(plan("first"));
-  hand(plan("latest"));
+  hand(task("first"));
+  hand(task("latest"));
   const whileGated = [...opened];
   stand(false);
 
@@ -60,7 +60,7 @@ test("a link handed while signed in opens at once, and none held is opened twice
   const { opened, stand, hand } = opener();
 
   stand(false);
-  hand(plan("now"));
+  hand(task("now"));
   stand(true);
   stand(false);
 
@@ -71,8 +71,8 @@ test("a link handed as the gate gives way, before the held one opens, stays the 
   const { opened, stand, hand } = opener();
 
   stand(true);
-  hand(plan("older"));
-  stand(false, plan("newer"));
+  hand(task("older"));
+  stand(false, task("newer"));
 
   assert.deepEqual(opened, ["newer"]);
 });

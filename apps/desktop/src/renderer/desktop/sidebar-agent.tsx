@@ -1,4 +1,4 @@
-import type { PlanlessAgent } from "@luke/features/coding-agent-wire";
+import type { TasklessAgent } from "@luke/features/coding-agent-wire";
 import { PinIcon, UnpinIcon } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor, teammateCreator } from "@luke/ui/actor-model";
 import { agentRow, taskRowName } from "@luke/ui/task-list-model";
@@ -32,7 +32,7 @@ const ACTIONS_LABEL = "Agent actions";
 
 /** Who started the agent, as its row's end wears them: its automation, or a teammate's face where it has none and `face` allows it. */
 function starterOf(
-  agent: PlanlessAgent,
+  agent: TasklessAgent,
   face: boolean,
   reader: ReturnType<typeof useMemberDirectory>,
 ): Actor | undefined {
@@ -44,7 +44,7 @@ function starterOf(
 }
 
 /** Pin or Unpin, whichever the agent is not yet, as a task's row offers them. */
-function pinItem(agent: PlanlessAgent, onPin: (pinned: boolean) => void): MenuAction {
+function pinItem(agent: TasklessAgent, onPin: (pinned: boolean) => void): MenuAction {
   return agent.pinnedAt === undefined
     ? { label: "Pin", icon: <PinIcon />, onSelect: () => onPin(true) }
     : { label: "Unpin", icon: <UnpinIcon />, onSelect: () => onPin(false) };
@@ -63,7 +63,7 @@ export function SidebarAgent({
   onOpen,
   onPin,
 }: {
-  agent: PlanlessAgent;
+  agent: TasklessAgent;
   /** Whether this agent's page is the one standing. */
   current: boolean;
   /** Whether its turn ended while the developer was not looking at it. */

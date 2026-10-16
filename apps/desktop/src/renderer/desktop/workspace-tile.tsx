@@ -1,4 +1,4 @@
-import type { PlanningWorkspacePhotoAnswer } from "@luke/features/planning-view";
+import type { TasksWorkspacePhotoAnswer } from "@luke/features/tasks-view";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { identityHue, identityLetter } from "@luke/ui/actor-model";
@@ -53,7 +53,7 @@ type TileSize = (typeof TILE_SIZE)[keyof typeof TILE_SIZE];
 function keptPhoto(
   workspaceId: string,
   version: string,
-  read: () => Promise<PlanningWorkspacePhotoAnswer>,
+  read: () => Promise<TasksWorkspacePhotoAnswer>,
 ): KeptPhoto {
   const versions = keptPhotos.get(workspaceId) ?? new Map<string, KeptPhoto>();
   keptPhotos.set(workspaceId, versions);

@@ -3,7 +3,7 @@
  *
  * The read answers facts, never a decision: whether a folder stands at the
  * path on the branch, and each entry's name and what git holds it as, which
- * `plans/plan-tree.ts` decides on. The folder is named to GitHub as the
+ * `tasks/task-tree.ts` decides on. The folder is named to GitHub as the
  * tree-ish `<branch>:<path>`, the root as `<branch>:`, so the listing is of
  * the branch as it stands at the read, as `repository-file.ts` reads a file;
  * a path GitHub would resolve outside the repository (an empty, `.`, or `..`

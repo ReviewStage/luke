@@ -23,6 +23,8 @@ import { githubShapes, wholeRendering } from "@luke/ui/github-html";
 import { gluedRun, LINK_GLUE } from "@luke/ui/link-glue";
 import {
   AppWindowIcon,
+  ArchiveIcon,
+  ArchiveRestoreIcon,
   BookOpenIcon,
   BotIcon,
   CircleCheckIcon,
@@ -45,11 +47,11 @@ import {
   PencilLineIcon,
   PhoneOffIcon,
   PlayIcon,
+  ScrollTextIcon,
   SearchIcon,
   SendIcon,
   TerminalIcon,
   TimerIcon,
-  WorkflowIcon,
   WrenchIcon,
 } from "lucide-react";
 import {
@@ -518,7 +520,7 @@ export function TranscriptReasoning({ text }: { text: string }): ReactNode {
   );
 }
 
-/** Each kind of call's icon: a verb's own, or, for a call about something the window draws a glyph for, that glyph's likeness: the Code tab's brackets for code shown, the Coding agents glyph for an agent read (`CodingAgentsIcon`), never the terminal a shell command wears. A list of the agents is a list's own, rows each led by its mark, since it reads them all rather than one. */
+/** Each kind of call's icon: a verb's own, or, for a call about something the window draws a glyph for, that glyph's likeness: the Code tab's brackets for code shown, the transcript's scroll for an agent read, as Copy full transcript wears it, never the terminal a shell command wears. A list of the agents is a list's own, rows each led by its mark, since it reads them all rather than one. */
 const CALL_ICON = {
   [CALL_KIND.COMMAND]: TerminalIcon,
   [CALL_KIND.MAC_COMMAND]: LaptopIcon,
@@ -544,9 +546,11 @@ const CALL_ICON = {
   [CALL_KIND.WORKER_WAIT]: HourglassIcon,
   [CALL_KIND.WORKER_CANCEL]: CircleStopIcon,
   [CALL_KIND.LIST_AGENTS]: LayoutListIcon,
-  [CALL_KIND.READ_AGENT]: WorkflowIcon,
+  [CALL_KIND.READ_AGENT]: ScrollTextIcon,
   [CALL_KIND.MESSAGE_AGENT]: SendIcon,
   [CALL_KIND.START_AGENT]: PlayIcon,
+  [CALL_KIND.ARCHIVE_AGENT]: ArchiveIcon,
+  [CALL_KIND.UNARCHIVE_AGENT]: ArchiveRestoreIcon,
   [CALL_KIND.END_CALL]: PhoneOffIcon,
   [CALL_KIND.SHOW_PAGE]: AppWindowIcon,
   [CALL_KIND.SHOW_IMAGE]: ImageIcon,

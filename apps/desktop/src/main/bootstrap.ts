@@ -1,7 +1,11 @@
 import path from "node:path";
 import type { AppLinkInbox } from "@luke/features/app-links";
 import { type RunMode, runModeFor } from "@luke/host";
-import { buildCarriesDeveloperIdSigning, resolveAppName } from "@luke/host/app-identity";
+import {
+  buildCarriesDeveloperIdSigning,
+  resolveAppName,
+  resolveInstance,
+} from "@luke/host/app-identity";
 import { RUN_PROFILE } from "@luke/host/app-state";
 import { buildCommit } from "@luke/host/build-commit";
 import type { MenuBarChange } from "./app-menu";
@@ -61,9 +65,19 @@ export function bootstrapDesktop(dependencies: BootstrapDependencies): DesktopCo
   // Which Luke this process is decides where its state lives and which Keychain
   // entry protects its credentials; see app-identity.ts for why a development
   // run must never share the release's. Applied before anything derives a path.
+  // A named development instance (`run.sh --instance`) answers to a name of
+  // its own, so its state, lock, and Keychain entry are its own too.
+  const requested = environment.LUKE_INSTANCE || undefined;
+  const instance = resolveInstance({ packaged: app.isPackaged, requested });
+  if (!app.isPackaged && requested !== undefined && instance === undefined) {
+    dependencies.report(
+      `LUKE_INSTANCE "${requested}" is not an instance name; running as the plain one`,
+    );
+  }
   const appName = resolveAppName({
     packaged: app.isPackaged,
     developerIdSigned: buildCarriesDeveloperIdSigning(),
+    instance,
   });
   app.setName(appName);
   const stateRoot = path.join(app.getPath("appData"), appName);
@@ -87,6 +101,7 @@ export function bootstrapDesktop(dependencies: BootstrapDependencies): DesktopCo
 
   return {
     stateRoot,
+    ...(instance === undefined ? undefined : { instance }),
     runMode,
     appVersion: app.getVersion(),
     ...(commit ? { commit } : undefined),

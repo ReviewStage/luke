@@ -91,7 +91,7 @@ export type LinearIssueSummary = typeof linearIssueSummarySchema.Type;
  * workspace's grant when the plan started: what the planning call is told
  * to research, and kept on the plan whatever becomes of the connection.
  */
-export const planLinearIssueSchema = EffectSchema.Struct({
+export const taskLinearIssueSchema = EffectSchema.Struct({
   identifier: EffectSchema.String,
   title: EffectSchema.String,
   url: EffectSchema.String,
@@ -101,7 +101,7 @@ export const planLinearIssueSchema = EffectSchema.Struct({
   ),
 });
 
-export type PlanLinearIssue = typeof planLinearIssueSchema.Type;
+export type TaskLinearIssue = typeof taskLinearIssueSchema.Type;
 
 export const linearIssuesAnswerSchema = EffectSchema.Struct({
   issues: EffectSchema.Array(linearIssueSummarySchema).check(

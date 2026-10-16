@@ -1,5 +1,5 @@
-import { PLAN_TREE_ENTRY, type PlanTreeEntry } from "@luke/features/plan-wire";
-import { PLAN_CALL_FAILURE, type PlanningTreeAnswer } from "@luke/features/planning-view";
+import { TASK_TREE_ENTRY, type TaskTreeEntry } from "@luke/features/task-wire";
+import { TASK_CALL_FAILURE, type TasksTreeAnswer } from "@luke/features/tasks-view";
 import type { FolderEntry, FolderListing } from "../file-tree/contract";
 import { refusalLine, refusalPasses } from "./file-tab-model";
 
@@ -16,11 +16,11 @@ import { refusalLine, refusalPasses } from "./file-tab-model";
  */
 
 /** Lists one folder of the repository, the root for the empty path. */
-export type ListFolder = (path: string) => Promise<PlanningTreeAnswer>;
+export type ListFolder = (path: string) => Promise<TasksTreeAnswer>;
 
 /** Lists folders through `read`, each kept once it is listed; a rejection reads as unanswered. */
 export function keptListings(read: ListFolder): ListFolder {
-  const kept = new Map<string, Promise<PlanningTreeAnswer>>();
+  const kept = new Map<string, Promise<TasksTreeAnswer>>();
   return (path) => {
     const standing = kept.get(path);
     if (standing !== undefined) return standing;
@@ -29,9 +29,9 @@ export function keptListings(read: ListFolder): ListFolder {
         if (!("folder" in answer)) kept.delete(path);
         return answer;
       },
-      (): PlanningTreeAnswer => {
+      (): TasksTreeAnswer => {
         kept.delete(path);
-        return { failure: PLAN_CALL_FAILURE.UNANSWERED };
+        return { failure: TASK_CALL_FAILURE.UNANSWERED };
       },
     );
     kept.set(path, listing);
@@ -40,15 +40,15 @@ export function keptListings(read: ListFolder): ListFolder {
 }
 
 /** A listing's entries as the tree hears them, each by its name or, listed whole, its path. */
-export function entriesOf(entries: readonly PlanTreeEntry[]): readonly FolderEntry[] {
+export function entriesOf(entries: readonly TaskTreeEntry[]): readonly FolderEntry[] {
   return entries.map((entry) => ({
     name: entry.name,
-    folder: entry.kind === PLAN_TREE_ENTRY.FOLDER,
+    folder: entry.kind === TASK_TREE_ENTRY.FOLDER,
   }));
 }
 
 /** A folder's listing as the tree hears it: its entries, or why it is not listed and whether listing again may help. */
-export function listingOf(answer: PlanningTreeAnswer): FolderListing {
+export function listingOf(answer: TasksTreeAnswer): FolderListing {
   if ("folder" in answer) {
     return {
       entries: entriesOf(answer.folder.entries),

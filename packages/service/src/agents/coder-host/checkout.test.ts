@@ -9,7 +9,7 @@ import {
   readCodingAgent,
 } from "@luke/database/models/coding-agent-store";
 import { user } from "@luke/database/schemas/auth";
-import { getTestDB, startPlan } from "@luke/database/testing";
+import { getTestDB, startTask } from "@luke/database/testing";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -110,19 +110,19 @@ const openAgent = (
 ) =>
   Effect.gen(function* () {
     const userId = options.userId ?? (yield* openGithubUser());
-    const plan = yield* startPlan(userId, {
+    const task = yield* startTask(userId, {
       name: "Teammate invitations",
       repository: RELAY_FULL_NAME,
     });
     assert.equal(
-      yield* connectWorkspaceGitHub(plan.workspaceId, installation),
+      yield* connectWorkspaceGitHub(task.workspaceId, installation),
       LINK_OUTCOME.LINKED,
     );
     const automation =
       options.byAutomation === true
         ? Option.getOrThrow(
             yield* createAutomation(userId, {
-              planId: plan.id,
+              taskId: task.id,
               name: "Nightly invitations",
               trigger: { kind: AUTOMATION_TRIGGER.SCHEDULE, cron: "0 9 * * 1-5", timezone: "UTC" },
               action: {
@@ -138,7 +138,7 @@ const openAgent = (
           )
         : undefined;
     const started = yield* createCodingAgent(userId, {
-      planId: plan.id,
+      taskId: task.id,
       idempotencyKey: "start-1",
       model: "anthropic/claude-opus-5.5",
       effort: "high",

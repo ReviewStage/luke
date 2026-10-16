@@ -17,6 +17,7 @@ import { TOOL_STATE } from "../ai-elements/tool";
 import {
   AGENT_PART,
   agentLines,
+  agentListCallIds,
   agentParts,
   agentWorkingPhase,
   checkoutCommand,
@@ -39,7 +40,6 @@ import {
   type SentLine,
   settledPlanEdits,
   showsPublishedRow,
-  startedAgentIds,
   startedAgentOf,
   unreadSentLines,
 } from "./coding-agent-model";
@@ -398,39 +398,32 @@ test("the plan edits that have answered are counted, not the ones still out or t
   assert.equal(settledPlanEdits([]), 0);
 });
 
-test("the agents an agent started are those its start_agent calls answered, in order, under the tool's name or the one it had; a start refused or still out names none", () => {
-  const start = (callId: string, state: string, output?: WireRecord, tool = "start_agent") => ({
+test("the calls that move a task's agents are its starts, archives, and unarchives once answered, by call id, under a start's earlier name too; a call still out or of another tool names none", () => {
+  const call = (callId: string, tool: string, state: string, output?: WireRecord) => ({
     type: `tool-${tool}`,
     toolCallId: callId,
     state,
-    input: { prompt: "Write the expiry migration." },
+    input: { agentId: "agent-2" },
     ...(output === undefined ? undefined : { output }),
   });
+  const accepted = { status: "accepted", agent: { id: "agent-2" } };
   const messages: CodingAgentMessage[] = [
     {
       id: "m1",
       role: MESSAGE_ROLE.ASSISTANT,
       parts: [
-        start("c1", "output-available", { status: "accepted", agent: { id: "agent-2" } }),
-        start("c2", "output-available", { status: "rejected", reason: "Not started." }),
-        start("c3", "input-available"),
-      ],
-    },
-    {
-      id: "m2",
-      role: MESSAGE_ROLE.ASSISTANT,
-      parts: [
-        start(
-          "c4",
-          "output-available",
-          { status: "accepted", agent: { id: "agent-3" } },
-          "start_coding_agent",
-        ),
+        call("c1", "start_agent", "output-available", accepted),
+        call("c2", "archive_agent", "output-available", accepted),
+        call("c3", "unarchive_agent", "input-available"),
+        call("c4", "message_agent", "output-available", accepted),
+        call("c5", "start_coding_agent", "output-available", accepted),
+        call("c6", "unarchive_agent", "output-available", accepted),
       ],
     },
   ];
-  assert.deepEqual(startedAgentIds(messages), ["agent-2", "agent-3"]);
-  assert.deepEqual(startedAgentIds([]), []);
+
+  assert.deepEqual(agentListCallIds(messages), ["c1", "c2", "c5", "c6"]);
+  assert.deepEqual(agentListCallIds([]), []);
 });
 
 test("a working agent is starting until its turn opens, thinking until the turn draws a row, and working after, a steering line leaving the turn under way as it was and a closing turn ending as working", () => {
@@ -520,7 +513,7 @@ test("a message refused for a repository out of reach names the plan's remedy on
   const onPlan = messageFailureNote(refused, "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10");
   const planless = messageFailureNote(refused, null);
 
-  assert.equal("planId" in onPlan && onPlan.planId, "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10");
+  assert.equal("taskId" in onPlan && onPlan.taskId, "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10");
   assert.deepEqual(planless, {
     reason: FAILURE_REASON.OTHER,
     text: messageFailureWords(CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE),

@@ -7,7 +7,7 @@ import {
   integrationProviderSchema,
 } from "./integration-wire.js";
 import { isLinkHome, LINK_ORIGIN } from "./link-home.js";
-import { PLAN_SECTION_BOUNDS } from "./plan-wire.js";
+import { PLAN_SECTION_BOUNDS } from "./task-wire.js";
 
 /**
  * mention-link.ts -- a mention as what it names, and the link it is written into words as: the one module that knows the link's form.
@@ -40,7 +40,10 @@ import { PLAN_SECTION_BOUNDS } from "./plan-wire.js";
  * - A page an agent showed on a plan is the plan's address with
  *   `/page/<pageId>` after it, and one of the plan's coding agents with
  *   `/agent/<agentId>`, the links the window already opens them by
- *   (`luke-link.ts`): ids alone, never the page's title or the agent's.
+ *   (`luke-link.ts`): ids alone, never the page's title or the agent's. A
+ *   coding agent on no task, as an automation's run or a one-off starts
+ *   one, is the workspace's address with `/agent/<agentId>` after it, its
+ *   own link, so any agent of the workspace can be mentioned.
  * - A section's anchor is its heading as GitHub spells a Markdown heading's
  *   (`sectionAnchors`): lower case, its punctuation dropped, a space a
  *   hyphen, and `-1`, `-2` after a heading the plan already held, so the
@@ -80,7 +83,7 @@ import { PLAN_SECTION_BOUNDS } from "./plan-wire.js";
  */
 
 export const MENTION_KIND = {
-  PLAN: "plan",
+  TASK: "plan",
   SECTION: "section",
   FILE: "file",
   FOLDER: "folder",
@@ -97,7 +100,7 @@ const MENTION_BOUNDS = {
   /** The most characters an anchor may spell: a heading at its bound, each character lowered into as many as two, and a suffix telling it from an earlier one. */
   MAX_ANCHOR_CHARS: PLAN_SECTION_BOUNDS.MAX_HEADING_CHARS * 2 + 16,
   /** The most characters a plan's id may spell; the service mints them far shorter. */
-  MAX_PLAN_ID_CHARS: 200,
+  MAX_TASK_ID_CHARS: 200,
   /** The most characters a repository path may spell. */
   MAX_PATH_CHARS: 1_000,
   /** The most characters a page's web address may spell. */
@@ -113,7 +116,7 @@ const MENTION_SIGIL = "@";
 
 /** The settled form: a plan's address on Luke's home (`link-home.ts`), by the web's scheme or the desktop's. */
 const LINK = {
-  PLAN_STEP: "plan",
+  TASK_STEP: "plan",
   PAGE_STEP: "page",
   AGENT_STEP: "agent",
 } as const;
@@ -130,7 +133,7 @@ const GITHUB = {
 const LEGACY = {
   PROTOCOL: "luke:",
   HOST: {
-    [MENTION_KIND.PLAN]: "plan",
+    [MENTION_KIND.TASK]: "plan",
     [MENTION_KIND.FILE]: "file",
     [MENTION_KIND.FOLDER]: "folder",
     [MENTION_KIND.SERVER]: "mcp",
@@ -200,14 +203,14 @@ const INDENTED_LINE = /^(?: {4}|\t)/u;
 /** A line that opens an item of a list, whose following indented lines are the item's rather than code. */
 const LIST_ITEM_LINE = /^ {0,3}(?:[-*+]|\d{1,9}[.)])(?:\s|$)/u;
 
-const planIdSchema = EffectSchema.String.check(
+const taskIdSchema = EffectSchema.String.check(
   EffectSchema.isNonEmpty(),
-  EffectSchema.isMaxLength(MENTION_BOUNDS.MAX_PLAN_ID_CHARS),
+  EffectSchema.isMaxLength(MENTION_BOUNDS.MAX_TASK_ID_CHARS),
 );
 
 /** A page's or an agent's id as the service mints one, as a Luke link holds it: letters, digits, `_`, and `-`. */
 const thingIdSchema = EffectSchema.String.check(
-  EffectSchema.isMaxLength(MENTION_BOUNDS.MAX_PLAN_ID_CHARS),
+  EffectSchema.isMaxLength(MENTION_BOUNDS.MAX_TASK_ID_CHARS),
   EffectSchema.isPattern(/^[A-Za-z0-9_-]+$/u),
 );
 
@@ -243,12 +246,12 @@ const linesSchema = EffectSchema.Struct({
 
 const mentionSchema = EffectSchema.Union([
   EffectSchema.Struct({
-    kind: EffectSchema.Literal(MENTION_KIND.PLAN),
-    planId: planIdSchema,
+    kind: EffectSchema.Literal(MENTION_KIND.TASK),
+    taskId: taskIdSchema,
   }),
   EffectSchema.Struct({
     kind: EffectSchema.Literal(MENTION_KIND.SECTION),
-    planId: planIdSchema,
+    taskId: taskIdSchema,
     anchor: EffectSchema.String.check(
       EffectSchema.isMaxLength(MENTION_BOUNDS.MAX_ANCHOR_CHARS),
       EffectSchema.isPattern(ANCHOR),
@@ -285,12 +288,13 @@ const mentionSchema = EffectSchema.Union([
   }),
   EffectSchema.Struct({
     kind: EffectSchema.Literal(MENTION_KIND.PAGE),
-    planId: planIdSchema,
+    taskId: taskIdSchema,
     pageId: thingIdSchema,
   }),
   EffectSchema.Struct({
     kind: EffectSchema.Literal(MENTION_KIND.AGENT),
-    planId: planIdSchema,
+    /** The task the agent works on; absent for an agent on none. */
+    taskId: EffectSchema.optionalKey(taskIdSchema),
     agentId: thingIdSchema,
   }),
 ]);
@@ -300,10 +304,10 @@ export type Mention = typeof mentionSchema.Type;
 /** A mention of the plan or one of its sections. */
 export type PlanMention = Extract<
   Mention,
-  { readonly kind: typeof MENTION_KIND.PLAN | typeof MENTION_KIND.SECTION }
+  { readonly kind: typeof MENTION_KIND.TASK | typeof MENTION_KIND.SECTION }
 >;
 
-/** A mention of something the plan holds beside its words: a page an agent showed on it, or one of its coding agents. */
+/** A mention of something the workspace holds beside a plan's words: a page an agent showed on a plan, or a coding agent, on a task or on none. */
 export type TaskMention = Extract<
   Mention,
   { readonly kind: typeof MENTION_KIND.PAGE | typeof MENTION_KIND.AGENT }
@@ -421,40 +425,43 @@ function legacyFields(url: URL) {
       if (tool === undefined) return { kind: MENTION_KIND.SERVER, ...server };
       return { kind: MENTION_KIND.TOOL, ...server, tool: decodedPart(tool) };
     }
-    case LEGACY.HOST[MENTION_KIND.PLAN]: {
-      const planId = decodedPart(url.pathname.replace(/^\//u, ""));
-      if (url.hash === "") return { kind: MENTION_KIND.PLAN, planId };
+    case LEGACY.HOST[MENTION_KIND.TASK]: {
+      const taskId = decodedPart(url.pathname.replace(/^\//u, ""));
+      if (url.hash === "") return { kind: MENTION_KIND.TASK, taskId };
       // Note that a heading's words name the first section under them, as its anchor without a suffix does.
       const heading = decodedPart(url.hash.slice(1));
       if (heading === undefined || heading === "") return undefined;
-      return { kind: MENTION_KIND.SECTION, planId, anchor: headingAnchor(heading) };
+      return { kind: MENTION_KIND.SECTION, taskId, anchor: headingAnchor(heading) };
     }
     default:
       return undefined;
   }
 }
 
-/** The fields a page's or an agent's address under its plan spells after the plan's id: `/page/<id>` or `/agent/<id>`, with no fragment. */
-function taskFields(planId: string | undefined, rest: readonly string[], hash: string) {
+/** The fields a page's or an agent's address spells after its task's id, or after the workspace for an agent on no task: `/page/<id>` or `/agent/<id>`, with no fragment. */
+function taskFields(taskId: string | undefined, rest: readonly string[], hash: string) {
   const [step, id, ...more] = rest;
   if (id === undefined || more.length > 0 || hash !== "") return undefined;
-  if (step === LINK.PAGE_STEP) return { kind: MENTION_KIND.PAGE, planId, pageId: decodedPart(id) };
-  if (step === LINK.AGENT_STEP)
-    return { kind: MENTION_KIND.AGENT, planId, agentId: decodedPart(id) };
-  return undefined;
+  // A page always stands on a task, so one with none reads as nothing to the schema.
+  if (step === LINK.PAGE_STEP) return { kind: MENTION_KIND.PAGE, taskId, pageId: decodedPart(id) };
+  if (step !== LINK.AGENT_STEP) return undefined;
+  const agentId = decodedPart(id);
+  return taskId === undefined
+    ? { kind: MENTION_KIND.AGENT, agentId }
+    : { kind: MENTION_KIND.AGENT, taskId, agentId };
 }
 
-/** The fields a plan's address on tryluke.dev spells, by either scheme: `/<workspace>/plan/<id>`, perhaps `#<anchor>`, or a page's or an agent's under it. */
+/** The fields a plan's address on tryluke.dev spells, by either scheme: `/<workspace>/plan/<id>`, perhaps `#<anchor>`, or a page's or an agent's under it; or an agent's on no task, `/<workspace>/agent/<id>`. */
 function planFields(url: URL) {
   const [first, workspace, step, id, ...rest] = url.pathname.split("/");
-  if (first !== "" || workspace === "" || step !== LINK.PLAN_STEP || id === undefined) {
-    return undefined;
-  }
+  if (first !== "" || workspace === "" || id === undefined) return undefined;
+  if (step === LINK.AGENT_STEP) return taskFields(undefined, [step, id, ...rest], url.hash);
+  if (step !== LINK.TASK_STEP) return undefined;
   if (rest.length > 0) return taskFields(decodedPart(id), rest, url.hash);
-  const planId = decodedPart(id);
-  if (url.hash === "" || url.hash === "#") return { kind: MENTION_KIND.PLAN, planId };
+  const taskId = decodedPart(id);
+  if (url.hash === "" || url.hash === "#") return { kind: MENTION_KIND.TASK, taskId };
   const anchor = decodedPart(url.hash.slice(1))?.toLowerCase();
-  return { kind: MENTION_KIND.SECTION, planId, anchor };
+  return { kind: MENTION_KIND.SECTION, taskId, anchor };
 }
 
 /** The lines a GitHub page's fragment names at a commit; nothing where it names none, or the page is a branch's. */
@@ -673,8 +680,8 @@ export function sectionAnchors(headings: readonly string[]): readonly string[] {
 }
 
 /** A plan's address, a section's with its anchor; the plan's own where the anchor is empty. */
-function planTarget(planId: string, place: MentionPlace, anchor: string): string {
-  const plan = `${LINK_ORIGIN}/${encodedPart(place.workspace)}/${LINK.PLAN_STEP}/${encodedPart(planId)}`;
+function taskTarget(taskId: string, place: MentionPlace, anchor: string): string {
+  const plan = `${LINK_ORIGIN}/${encodedPart(place.workspace)}/${LINK.TASK_STEP}/${encodedPart(taskId)}`;
   return anchor === "" ? plan : `${plan}#${encodedPart(anchor)}`;
 }
 
@@ -706,10 +713,10 @@ export function encodeMention(mention: Mention, place: MentionPlace): string {
       return repositoryTarget(mention.kind, mention.path, place, mention.lines);
     case MENTION_KIND.FOLDER:
       return repositoryTarget(mention.kind, mention.path, place, undefined);
-    case MENTION_KIND.PLAN:
-      return planTarget(mention.planId, place, "");
+    case MENTION_KIND.TASK:
+      return taskTarget(mention.taskId, place, "");
     case MENTION_KIND.SECTION:
-      return planTarget(mention.planId, place, mention.anchor);
+      return taskTarget(mention.taskId, place, mention.anchor);
     // An MCP server has no page of its own, so it keeps the app's own form, wherever it is written.
     case MENTION_KIND.SERVER:
       return `${LEGACY.PROTOCOL}//${LEGACY.HOST[MENTION_KIND.SERVER]}/${mention.connection ?? mention.provider}`;
@@ -718,9 +725,15 @@ export function encodeMention(mention: Mention, place: MentionPlace): string {
     case MENTION_KIND.LINK:
       return linkAddress(mention.url);
     case MENTION_KIND.PAGE:
-      return `${planTarget(mention.planId, place, "")}/${LINK.PAGE_STEP}/${encodedPart(mention.pageId)}`;
-    case MENTION_KIND.AGENT:
-      return `${planTarget(mention.planId, place, "")}/${LINK.AGENT_STEP}/${encodedPart(mention.agentId)}`;
+      return `${taskTarget(mention.taskId, place, "")}/${LINK.PAGE_STEP}/${encodedPart(mention.pageId)}`;
+    case MENTION_KIND.AGENT: {
+      // An agent on no task stands under its workspace, as its own Luke link does.
+      const owner =
+        mention.taskId === undefined
+          ? `${LINK_ORIGIN}/${encodedPart(place.workspace)}`
+          : taskTarget(mention.taskId, place, "");
+      return `${owner}/${LINK.AGENT_STEP}/${encodedPart(mention.agentId)}`;
+    }
   }
 }
 
@@ -793,7 +806,7 @@ export function mentionName(label: string): string {
 
 /** What a bare link's chip names a plan, a page, and an agent by, since its address holds no name of theirs. */
 const BARE_NAME = {
-  PLAN: "Plan",
+  TASK: "Plan",
   PAGE: "Page",
   AGENT: "Agent",
 } as const;
@@ -812,8 +825,8 @@ function linesName(path: string, lines: MentionLines | undefined): string {
 /** What a mention written as its bare address is named: what the address itself says of the thing. */
 function bareName(mention: Mention): string {
   switch (mention.kind) {
-    case MENTION_KIND.PLAN:
-      return BARE_NAME.PLAN;
+    case MENTION_KIND.TASK:
+      return BARE_NAME.TASK;
     case MENTION_KIND.SECTION:
       return mention.anchor;
     case MENTION_KIND.FILE:

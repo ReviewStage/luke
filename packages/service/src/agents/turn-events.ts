@@ -16,14 +16,14 @@ import {
   type TurnStatus,
   UI_PART_TYPE,
 } from "../core.js";
-import { END_CALL_TOOL, endsCall } from "../plans/end-call.js";
+import { END_CALL_TOOL, endsCall } from "../tasks/end-call.js";
 import {
   QUEUE_QUESTION_TOOL,
   queuedQuestionOf,
   WITHDRAW_QUESTION_TOOL,
   withdrawnQuestionOf,
-} from "../plans/queue-question.js";
-import { SHOW_CODE_TOOL, shownCodeOf } from "../plans/show-code.js";
+} from "../tasks/queue-question.js";
+import { SHOW_CODE_TOOL, shownCodeOf } from "../tasks/show-code.js";
 import { RUN_IN_REPOSITORY_TOOL } from "./repository-shell.js";
 
 /**

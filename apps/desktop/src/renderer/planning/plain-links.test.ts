@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { Plan } from "@luke/features/plan-wire";
-import { PLAN_ACTOR } from "@luke/features/plan-wire";
+import type { Task } from "@luke/features/task-wire";
+import { PLAN_ACTOR } from "@luke/features/task-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { Effect } from "effect";
@@ -43,7 +43,7 @@ const WORDS = [
   `[the docs](${DOCS}), and ${BARE}.`,
 ].join(" ");
 
-const PLAN: Plan = {
+const PLAN: Task = {
   ...DOCUMENT_PLAN,
   id: PLAN_ID,
   repository: REPOSITORY,

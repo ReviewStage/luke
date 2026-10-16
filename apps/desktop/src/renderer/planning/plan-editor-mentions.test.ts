@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { Plan } from "@luke/features/plan-wire";
-import { PLAN_TREE_ENTRY } from "@luke/features/plan-wire";
+import type { Task } from "@luke/features/task-wire";
+import { TASK_TREE_ENTRY } from "@luke/features/task-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { ACTOR_KIND, ACTOR_STATE } from "@luke/ui/actor-model";
 import type { TiptapEditorHTMLElement } from "@tiptap/core";
@@ -23,7 +23,7 @@ import { PlanMentions, type PlanMentionsValue } from "./plan-mentions";
  * repository.
  */
 
-const PLAN: Plan = {
+const PLAN: Task = {
   ...DOCUMENT_PLAN,
   document: { body: "## Goal\n\nInvite by email.\n\n## Rollout\n\nStore first.", assumptions: [] },
 };
@@ -38,7 +38,7 @@ beforeEach(() => {
     value: {
       act: (request: Act): Promise<ActOutcome> =>
         Promise.resolve(
-          request.kind === ACT_KIND.PLANNING_TREE
+          request.kind === ACT_KIND.TASKS_TREE
             ? {
                 status: ACT_OUTCOME_STATUS.DONE,
                 value: {
@@ -47,8 +47,8 @@ beforeEach(() => {
                     repository: "acme/relay",
                     branch: "main",
                     entries: [
-                      { name: "apps/web/rollout-store.ts", kind: PLAN_TREE_ENTRY.FILE },
-                      { name: "apps/web", kind: PLAN_TREE_ENTRY.FOLDER },
+                      { name: "apps/web/rollout-store.ts", kind: TASK_TREE_ENTRY.FILE },
+                      { name: "apps/web", kind: TASK_TREE_ENTRY.FOLDER },
                     ],
                     truncated: false,
                   },
@@ -226,5 +226,41 @@ test("on the plan's page an @ typed in the plan offers its pages and its agents 
   assert.deepEqual(
     listed(plan.container).map(([group]) => group),
     ["Plan", "Pages", "Agents"],
+  );
+});
+
+test("on the plan's page an @ typed in the plan offers the workspace's other agents after its own, each labelled by its task", async () => {
+  const agent = (id: string, name: string) => ({
+    id,
+    name,
+    actor: { kind: ACTOR_KIND.AGENT, name, provider: undefined, state: ACTOR_STATE.REST },
+  });
+  const page: PlanMentionsValue = {
+    planId: PLAN.id,
+    planName: PLAN.name,
+    workspace: "acme",
+    repository: PLAN.repository,
+    text: () => PLAN.document.body,
+    agents: [agent("agent-2", "Wire the desktop")],
+    readAgents: () =>
+      Promise.resolve([
+        { ...agent("agent-3", "Bill by seat"), task: { id: "task-billing", name: "Billing" } },
+        agent("agent-4", "Sweep flaky tests"),
+      ]),
+    doors: {
+      planId: PLAN.id,
+      place: { workspace: "acme", repository: PLAN.repository },
+      anchors: new Set(["goal", "rollout"]),
+      onOpenPlan: () => undefined,
+      onOpenFile: undefined,
+    },
+  };
+  const plan = await opened(page);
+
+  await plan.typeAtEnd(" @");
+
+  assert.deepEqual(
+    listed(plan.container).find(([group]) => group === "Agents"),
+    ["Agents", ["Wire the desktop", "Bill by seat", "Sweep flaky tests"]],
   );
 });

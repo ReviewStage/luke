@@ -6,7 +6,7 @@ import {
   type PlanMention,
   sectionAnchors,
 } from "@luke/features/mention-link";
-import { PLAN_ACTOR, type Plan, type PlanLastEdit } from "@luke/features/plan-wire";
+import { PLAN_ACTOR, type PlanLastEdit, type Task } from "@luke/features/task-wire";
 import { EllipsisIcon } from "@luke/ui";
 import { actorName } from "@luke/ui/actor-model";
 import { LinkIcon } from "lucide-react";
@@ -72,7 +72,11 @@ import { NO_LOOKS, type PlanLooks } from "./use-plan-looks";
  * version history, where each earlier version is. Each section says the
  * same of the save that last changed it, quietly, while the pointer or the
  * keyboard is on it, leading with the writer's face, and its time opens the
- * version history on the revision that save made. The sections changed since
+ * version history on the revision that save made. The words before the
+ * first heading have no heading's line for it to stand at, so they carry no
+ * line in the text, where it would stand over their words or a picture; a
+ * picture of the plan, opened over the window, says who last changed its
+ * section in the viewer's header instead. The sections changed since
  * the developer last looked at the plan on this Mac wear a still tint,
  * counted under that line beside a face for each who changed them, until
  * they dismiss them or leave the plan (`use-plan-looks.ts`).
@@ -151,7 +155,7 @@ interface PlanChase {
  * The plan's last edit: its newest revision, or, from a service before
  * history, the newest save a coding agent made, which was all it could name.
  */
-export function lastEditOf(plan: Plan): PlanLastEdit | undefined {
+export function lastEditOf(plan: Task): PlanLastEdit | undefined {
   if (plan.lastEdit !== undefined) return plan.lastEdit;
   // The journal is oldest first, so the newest save is its last.
   const journaled = plan.agentEdits?.at(-1);
@@ -299,11 +303,13 @@ interface SectionMarks {
 /**
  * The section's quiet line: who last changed the section under `heading`,
  * on their face, and when, "[Luke] Luke during Charles Pan’s call · 2h ago",
- * shown while the pointer or the keyboard is on it; none where no save has.
- * Where the window offers the version history, the time opens it on the
- * revision that save made.
+ * shown while the pointer or the keyboard is on it; none where no save has,
+ * or for the words before the first heading, which have no heading's line
+ * for it to stand at. Where the window offers the version history, the time
+ * opens it on the revision that save made.
  */
 function bylineOf(marks: SectionMarks, heading: string): React.JSX.Element | null {
+  if (heading === "") return null;
   const edit = marks.edits.get(heading);
   if (edit === undefined) return null;
   const { onShowHistory, place } = marks;
@@ -319,6 +325,26 @@ function bylineOf(marks: SectionMarks, heading: string): React.JSX.Element | nul
         label={`${named}. Show version history`}
         onShow={onShowHistory === undefined ? undefined : () => onShowHistory(edit.at)}
       />
+    </span>
+  );
+}
+
+/**
+ * What the picture viewer says of a picture of the plan: who last changed
+ * the section under `heading` it stands in, and when, "Edited by [Charles]
+ * Charles Pan · 2h ago"; none where no save has. Note that the time is
+ * words rather than the history's door, which would open behind the viewer.
+ */
+function pictureNoteOf(marks: SectionMarks, heading: string): React.JSX.Element | null {
+  const edit = marks.edits.get(heading);
+  if (edit === undefined) return null;
+  const { place } = marks;
+  return (
+    <span className="actor-line">
+      {edit.actor === PLAN_ACTOR.EARLIER ? "Edited" : "Edited by "}
+      <EditedBy edit={edit} place={place} sentence />
+      {" · "}
+      <span>{agoText(edit.at, place.now)}</span>
     </span>
   );
 }
@@ -341,7 +367,23 @@ const CHANGED_CLASS = "plan-changed";
 /** The presses that say the developer is reading somewhere of their own, which the caret stops following. */
 const SCROLL_INTENT_EVENTS = ["wheel", "pointerdown", "keydown"] as const;
 
-function opened(plan: Plan): Chase {
+/** The class of the column the title and the text stand in. */
+const BODY_CLASS = "plan-body";
+
+/**
+ * Whether a click in the document's scroller landed on its empty room: the
+ * scroller itself, or the column around the title, rather than on anything
+ * drawn in it, and with no selection made by the press.
+ */
+function landsOnEmptyRoom(event: React.MouseEvent<HTMLElement>): boolean {
+  const { target, currentTarget } = event;
+  const selection = window.getSelection();
+  if (selection !== null && !selection.isCollapsed) return false;
+  if (target === currentTarget) return true;
+  return target instanceof Element && target.classList.contains(BODY_CLASS);
+}
+
+function opened(plan: Task): Chase {
   const { body } = plan.document;
   return {
     planId: plan.id,
@@ -356,7 +398,7 @@ function opened(plan: Plan): Chase {
  * plan, a fresh start for another. Note that only the reader's own edit lands
  * at once, because a teammate's arrives unseen and types in as Luke's does.
  */
-function aimed(chase: Chase, plan: Plan, reader: PlanReader): Chase {
+function aimed(chase: Chase, plan: Task, reader: PlanReader): Chase {
   if (chase.planId !== plan.id) return opened(plan);
   const { body } = plan.document;
   // The reader's own edit lands at once: they watched it being typed already.
@@ -377,7 +419,7 @@ function aimed(chase: Chase, plan: Plan, reader: PlanReader): Chase {
  * behind. A document arriving mid-typing is aimed at from what is shown, so
  * the typing carries on toward it without a jump.
  */
-function usePlanChase(plan: Plan, live: boolean, reader: PlanReader): PlanChase {
+function usePlanChase(plan: Task, live: boolean, reader: PlanReader): PlanChase {
   const [chase, setChase] = useState(() => opened(plan));
   let current = chase;
   if (chase.planId !== plan.id || chase.body !== plan.document.body) {
@@ -530,7 +572,7 @@ function SectionMenu({
   // Note that the link is the section's bare address, as every Copy link copies, so it pastes into Slack or a pull request as a link rather than as markdown.
   const copyLink = () =>
     copy(
-      encodeMention({ kind: MENTION_KIND.SECTION, planId: linked.planId, anchor }, linked.place),
+      encodeMention({ kind: MENTION_KIND.SECTION, taskId: linked.planId, anchor }, linked.place),
       LINK_COPY.COPIED,
     );
   const item: MenuAction = {
@@ -624,7 +666,9 @@ function DocumentUnit({
  * revision of the save it names. With `onEdit`, the text is edited whole in
  * place, and with `onRename` the title too, its words drawn as the plan's
  * name through `onDraftName` as they are typed; without them the document is
- * drawn read-only. With `page` the document is drawn as a Settings page,
+ * drawn read-only. An editable plan with no text yet opens it, the caret at
+ * its start, from a click anywhere on the panel's empty room, since it has no
+ * section to click into. With `page` the document is drawn as a Settings page,
  * as the plan template is: the page's actions end the title's line, and the
  * "Edited by" line and the page's note stand under the title. `looks` are the sections changed since the developer last
  * looked, which the plan's region keeps (`use-plan-looks.ts`); without them
@@ -647,7 +691,7 @@ export function PlanBody({
   agents,
   crumb,
 }: {
-  plan: Plan;
+  plan: Task;
   live: boolean;
   onShowHistory?: ShowHistory;
   onEdit?: PlanEditDoor;
@@ -825,6 +869,9 @@ export function PlanBody({
       <EditedLine edit={edited} place={place} onShowHistory={onShowHistory} />
     );
   const titled = editable && onRename !== undefined;
+  // An editable plan with no text yet has no section to click into, so a
+  // click on the panel's empty room opens the text with the caret at its start.
+  const blank = editable && editing.editor === undefined && plan.document.body.trim() === "";
   const titleMenu =
     linked === undefined || page !== undefined ? null : (
       <TitleMenu
@@ -837,12 +884,28 @@ export function PlanBody({
       />
     );
   return (
-    <PlanPictures planId={plan.id} text={plan.document.body}>
-      <div ref={scroller} className="plan-document-scroll scroll-fade">
+    <PlanPictures
+      planId={plan.id}
+      text={plan.document.body}
+      sectionNote={(heading) => pictureNoteOf(marks, heading)}
+    >
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: the click is the pointer's way into an empty plan; the keyboard's is the title's Return or ↓. */}
+      {/* biome-ignore lint/a11y/useKeyWithClickEvents: the keyboard reaches the text through the title, which Tab enters. */}
+      <div
+        ref={scroller}
+        className="plan-document-scroll scroll-fade"
+        onClick={
+          blank
+            ? (event) => {
+                if (landsOnEmptyRoom(event)) editing.open();
+              }
+            : undefined
+        }
+      >
         {page === undefined ? crumb : null}
         {page === undefined ? editedNote : null}
         <ChangedLine looks={looks} marks={marks} />
-        <div className="plan-body">
+        <div className={BODY_CLASS}>
           {titled ? (
             attributed(
               // Keyed by the plan, so words typed for one are saved to it as another opens.

@@ -4,8 +4,8 @@ import type {
   AccountPreferencesWrite,
   AccountSeamEffect,
 } from "@luke/database/models/account-store";
-import type { PlanStoreFailure } from "@luke/database/models/plan-store";
 import type { StandingSession } from "@luke/database/models/recorded-session";
+import type { TaskStoreFailure } from "@luke/database/models/task-store";
 import { contextWindowSchema } from "@luke/features/coding-agent-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
 import { CODING_AGENT_DEFAULT_CHOICE } from "@luke/features/models-wire";
@@ -17,8 +17,8 @@ import {
   type PlanTemplateRevisionsAnswer,
   planTemplateWriteRequestSchema,
 } from "@luke/features/plan-document-template";
-import { planRevisionSeqSchema } from "@luke/features/plan-wire";
 import type { FastAccess } from "@luke/features/provider-key-wire";
+import { planRevisionSeqSchema } from "@luke/features/task-wire";
 import { failureKind } from "@luke/runtime/effect";
 import { accountPreferencesFromWire, experimentChoicesFrom, NO_EXPERIMENTS } from "@luke/settings";
 import { isRecord, type UnparsedWireValue, unparsedWire } from "@luke/wire";
@@ -121,7 +121,7 @@ export interface AccountAppSeams extends EveReach {
   /** Whether the Anthropic key the account's agents run on may run fast mode, by which its coding-agent choice may name a fast version (`offeredToAccount`). */
   anthropicFastAccess: (
     userId: string,
-  ) => Effect.Effect<FastAccess | undefined, PlanStoreFailure, DatabaseServices | ModelCatalog>;
+  ) => Effect.Effect<FastAccess | undefined, TaskStoreFailure, DatabaseServices | ModelCatalog>;
   /** Writes each part the write carries and answers the snapshot as it then stands. */
   writePreferences: (
     userId: string,

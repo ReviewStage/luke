@@ -1,7 +1,7 @@
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import { INBOX_CURSOR_START, type InboxItem } from "@luke/features/inbox-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import type { AppInboxPlanlessItem } from "@luke/host/app-state";
+import type { AppInboxTasklessItem } from "@luke/host/app-state";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act";
 
@@ -41,7 +41,7 @@ interface Read {
 
 /** The items main lists as waiting on each agent, by id in id order: what an agent is read again on, an item answered or opened since moving it. */
 function waitingPerAgent(
-  waiting: readonly AppInboxPlanlessItem[],
+  waiting: readonly AppInboxTasklessItem[],
 ): ReadonlyMap<string, readonly string[]> {
   const ids = new Map<string, string[]>();
   for (const item of waiting) {
@@ -60,7 +60,7 @@ function sameItems(one: readonly string[] | undefined, other: readonly string[])
 }
 
 export function usePlanlessInboxItems(
-  waiting: readonly AppInboxPlanlessItem[],
+  waiting: readonly AppInboxTasklessItem[],
 ): PlanlessInboxItems {
   const { act } = useAct();
   const [reads, setReads] = useState<ReadonlyMap<string, Read>>(new Map());

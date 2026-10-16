@@ -132,7 +132,7 @@ test("on a plan's page a plan's link, a file's lines, and a Linear page are chip
   for (const chip of container.querySelectorAll<HTMLButtonElement>("button.mention-chip")) {
     act(() => chip.click());
   }
-  assert.deepEqual(opened, [{ kind: MENTION_KIND.SECTION, planId: PLAN_ID, anchor: "rollout" }]);
+  assert.deepEqual(opened, [{ kind: MENTION_KIND.SECTION, taskId: PLAN_ID, anchor: "rollout" }]);
   assert.deepEqual(files, [
     { path: "apps/web/store.ts", lines: { commit: COMMIT, startLine: 3, endLine: 5 } },
   ]);

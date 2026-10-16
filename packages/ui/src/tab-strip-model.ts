@@ -14,7 +14,7 @@
  * Each strip keeps, per plan, the order the developer moved its tabs into
  * and the tabs they viewed, the latest last. What follows is how both
  * strips read and change those two lists alike: a tab the order does not
- * hold stands after those it does, in its kind's place (`inPlanOrder`); a
+ * hold stands after those it does, in its kind's place (`inTaskOrder`); a
  * tab opened goes to the strip's end (`openedOrder`); a move takes the tab
  * out and puts it back before the tab standing at its new place
  * (`movedOrder`); and closing the chosen tab chooses the one viewed before
@@ -218,7 +218,7 @@ export function tabKey(tab: StripTab): string {
  * there, then the rest as they stood. Note that a tab never moved, such as
  * one just opened, so stands after every tab that was.
  */
-export function inPlanOrder<T>(
+export function inTaskOrder<T>(
   drawn: readonly T[],
   order: readonly StripTab[],
   tabOf: (each: T) => StripTab,

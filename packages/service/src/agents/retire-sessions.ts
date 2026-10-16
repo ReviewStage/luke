@@ -43,7 +43,7 @@ export type EveAt = (
 
 /** The eve service a conversation's session runs under: a coding agent's under the coder mount, every other under the planning brain's. */
 function mountOf(session: StandingSession): EveMount {
-  return session.kind === CONVERSATION_KIND.CODING_AGENT ? EVE_MOUNT.CODER : EVE_MOUNT.PLANNING;
+  return session.kind === CONVERSATION_KIND.CODING_AGENT ? EVE_MOUNT.CODER : EVE_MOUNT.TASKS;
 }
 
 /** One session retired, or why not, written down by its outcome alone. */

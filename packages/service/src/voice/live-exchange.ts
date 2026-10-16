@@ -7,7 +7,7 @@ import {
   voiceWriter,
 } from "@luke/database/models/voice-writer";
 import type { ConversationTarget, StoreWriter } from "@luke/database/models/writer";
-import type { PlanActivity, PlanShownCode, PlanWorkTurn } from "@luke/features/planning-view";
+import type { TaskActivity, TaskShownCode, TaskWorkTurn } from "@luke/features/tasks-view";
 import { serialQueue } from "@luke/runtime/effect";
 import { liveBrainLayer, liveRecordLayer } from "@luke/voice/effect";
 import {
@@ -20,7 +20,7 @@ import type { LanguageModel } from "ai";
 import { Cause, Effect, Layer, Result, type Schema, type Scope } from "effect";
 import type { WebSocket } from "ws";
 import type { EveSessions } from "../agents/brain-host/eve-sessions.js";
-import { type PlanDraft, planScribe } from "../plans/plan-scribe.js";
+import { type PlanDraft, planScribe } from "../tasks/plan-scribe.js";
 import { type HostedLiveBrain, hostedLiveBrain } from "./live-brain.js";
 import { hostedLiveRecord } from "./live-record.js";
 import { observedSideband } from "./live-sideband.js";
@@ -62,7 +62,7 @@ export interface HostedLiveExchangeOptions {
    * model key, which then writes nothing.
    */
   readonly scribe?: {
-    readonly planId: string;
+    readonly taskId: string;
     readonly model: LanguageModel;
     /** Where each draft of the plan goes as the notetaker writes it; nowhere where the service sends nothing. */
     readonly onDraft?: ((draft: PlanDraft) => void) | undefined;
@@ -78,11 +78,11 @@ export interface HostedLiveExchangeOptions {
   readonly createId: () => string;
   readonly report: (message: string) => void;
   /** What the voice, the brain, and the notetaker are doing, told whole on each change; the device is shown it. */
-  readonly onActivity?: (activity: PlanActivity) => void;
+  readonly onActivity?: (activity: TaskActivity) => void;
   /** Code Luke is about to talk about, with its lines, told as he starts to speak; a planning call's device is shown it. */
-  readonly onCode?: (shown: PlanShownCode) => void;
+  readonly onCode?: (shown: TaskShownCode) => void;
   /** Each planning turn's work, told whole on each change; a planning call's device is shown it. */
-  readonly onWork?: (work: PlanWorkTurn) => void;
+  readonly onWork?: (work: TaskWorkTurn) => void;
   /** The developer said they are done and Luke is saying goodbye; a planning call's device hangs up once it has played. */
   readonly onCallEnding?: () => void;
   /** Each hand-off the session traces, ids and words left out; the service writes it to its log. */
@@ -94,7 +94,7 @@ export interface AttachedSession {
   readonly accountId: string;
   readonly sessionId: string;
   /** The plan the call is bound to, which its asks and its record land in. */
-  readonly planId: string;
+  readonly taskId: string;
   /** The socket the service attached to the session, which the relay pipes and the exchange reads its sideband over. */
   readonly sideband: WebSocket;
   /** Whether the session is already running: a fresh connection to a standing session finds it started, and hears no `session.started` again. */
@@ -102,11 +102,11 @@ export interface AttachedSession {
   /** The device's door for the plan as its notetaker has it now; absent where the service sends it nothing of its own. */
   readonly onPlanDraft?: ((draft: PlanDraft) => void) | undefined;
   /** The device's door for what each part of Luke is doing on the call; absent where the service sends it nothing of its own. */
-  readonly onActivity?: ((activity: PlanActivity) => void) | undefined;
+  readonly onActivity?: ((activity: TaskActivity) => void) | undefined;
   /** The device's door for code Luke puts on screen on the call; absent where the route sends it nothing of its own. */
-  readonly onCode?: ((shown: PlanShownCode) => void) | undefined;
+  readonly onCode?: ((shown: TaskShownCode) => void) | undefined;
   /** The device's door for each planning turn's work on the call; absent where the route sends it nothing of its own. */
-  readonly onWork?: ((work: PlanWorkTurn) => void) | undefined;
+  readonly onWork?: ((work: TaskWorkTurn) => void) | undefined;
   /** The device's door for Luke ending the call; absent where the route sends it nothing of its own. */
   readonly onCallEnding?: (() => void) | undefined;
   /** The service's door for each hand-off the session traces; absent where the route logs none. */
@@ -219,15 +219,15 @@ export const hostedLiveExchange = /* @__PURE__ */ Effect.fn("web/hostedLiveExcha
    * one snapshot the device is told whole each time either changes, so the
    * device holds the frame as it stands and derives nothing from a sequence.
    */
-  let status: LiveSessionStatus = { voice: undefined, planner: undefined };
+  let status: LiveSessionStatus = { voice: undefined, brain: undefined };
   let notes = false;
   const tellActivity = () => {
-    const { voice: phase, planner } = status;
+    const { voice: phase, brain } = status;
     options.onActivity?.({
       ...(phase === undefined ? undefined : { voice: phase }),
-      ...(planner === undefined
+      ...(brain === undefined
         ? undefined
-        : { planner: planner.action === undefined ? {} : { action: planner.action } }),
+        : { planner: brain.action === undefined ? {} : { action: brain.action } }),
       notes,
     });
   };
@@ -237,7 +237,7 @@ export const hostedLiveExchange = /* @__PURE__ */ Effect.fn("web/hostedLiveExcha
       ? undefined
       : yield* planScribe({
           userId: accountId,
-          planId: options.scribe.planId,
+          taskId: options.scribe.taskId,
           liveSessionId,
           model: options.scribe.model,
           ...(options.scribe.onDraft === undefined

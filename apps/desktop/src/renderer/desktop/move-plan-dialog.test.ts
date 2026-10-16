@@ -4,9 +4,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
-import type { Plan } from "@luke/features/plan-wire";
+import type { Task } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
-import { DOCUMENT_REGION, PLANS_PAGE } from "@luke/ui/planning-model";
+import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
@@ -65,7 +65,7 @@ const ACME: Workspace = {
   memberCount: 5,
 };
 
-const PLAN: Plan = {
+const PLAN: Task = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
   workspaceId: STUDIO.id,
   name: "Checkout retries",
@@ -117,16 +117,16 @@ async function settle(): Promise<void> {
 
 /** The open plan's tab, read by Dana, the plan as given open and listed. */
 function openTab(
-  plan: Plan,
+  plan: Task,
   workspaces: readonly Workspace[],
   onMovePlan: PlansControl["onMovePlan"] = () => Promise.resolve(false),
 ): PlansControl {
   return plansControl({
-    page: PLANS_PAGE.DOCUMENT,
+    page: TASKS_PAGE.DOCUMENT,
     me: DANA,
     plans: [plan],
     activePlanId: plan.id,
-    region: { kind: DOCUMENT_REGION.READY, plan },
+    region: { kind: DOCUMENT_REGION.READY, task: plan },
     workspaces,
     workspace: workspaces.find((workspace) => workspace.id === plan.workspaceId),
     onMovePlan,
@@ -396,7 +396,7 @@ test("a stranded plan's banner stands over every tab of the plan: its Inbox too 
 
 test("no banner stands over any tab of a plan its own workspace reaches, one no other workspace's active GitHub reaches, one with no repository, or a teammate's", () => {
   const suspended = { ...ACME, github: { login: "acme-corp", active: false } };
-  const cases: [Plan, readonly Workspace[]][] = [
+  const cases: [Task, readonly Workspace[]][] = [
     [{ ...PLAN, workspaceId: ACME.id }, [STUDIO, ACME]],
     [PLAN, [STUDIO, NORTHWIND, OCTO]],
     [PLAN, [STUDIO, suspended]],

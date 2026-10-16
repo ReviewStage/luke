@@ -1,6 +1,6 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import { keepConversationPicture } from "@luke/database/models/conversation-pictures";
-import type { PlanStoreFailure } from "@luke/database/models/plan-store";
+import type { TaskStoreFailure } from "@luke/database/models/task-store";
 import type { ConversationTarget } from "@luke/database/models/writer";
 import {
   CONVERSATION_PICTURE_BOUNDS,
@@ -28,7 +28,7 @@ import { Effect, Option } from "effect";
  * and nothing the model was handed changes, since eve reads its own copy.
  */
 
-type PictureEffect<A> = Effect.Effect<A, PlanStoreFailure, DatabaseServices>;
+type PictureEffect<A> = Effect.Effect<A, TaskStoreFailure, DatabaseServices>;
 
 /** The kinds of content block an MCP tool answers, as eve reads them (`tool-result.js`). */
 const MCP_BLOCK = {

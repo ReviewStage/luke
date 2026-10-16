@@ -39,8 +39,8 @@ import {
   userMetadataOf,
 } from "../../core.js";
 import { isRemoteToolName, storedRemoteCall } from "../../integrations/connection-tools.js";
-import { LOOK_AT_BOARD_TOOL, storedLookOutput } from "../../plans/board-look.js";
-import { LOOK_AT_PICTURE_TOOL, storedPictureLookOutput } from "../../plans/picture-look.js";
+import { LOOK_AT_BOARD_TOOL, storedLookOutput } from "../../tasks/board-look.js";
+import { LOOK_AT_PICTURE_TOOL, storedPictureLookOutput } from "../../tasks/picture-look.js";
 import { type ReceivedMessage, receivedMessage } from "../attached-files.js";
 import {
   BRAIN_HOST_TURN,

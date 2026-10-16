@@ -1,9 +1,9 @@
 import { ACCOUNT_STATUS, type AccountProvider } from "@luke/credentials/snapshot";
-import type { Plan } from "@luke/features/plan-wire";
+import type { Task } from "@luke/features/task-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { ComposeIcon, SidebarIcon } from "@luke/ui";
-import { DOCUMENT_REGION, PLANS_PAGE } from "@luke/ui/planning-model";
+import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
 import { lazy, Suspense, useEffect, useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
@@ -32,6 +32,7 @@ import { DesktopInbox } from "./desktop-inbox";
 import { DesktopPlans } from "./desktop-plans";
 import { DesktopSidebar } from "./desktop-sidebar";
 import { DesktopVersionHistory, planVersionSubject } from "./desktop-version-history";
+import { useFloatDismiss } from "./hover-pane";
 import { PaneGlide } from "./pane-motion";
 import { PersonPage } from "./person-page";
 import { useSummaryPin } from "./plan-summary";
@@ -140,7 +141,7 @@ function usePlaceCommands(
     APP_COMMAND.NEW_PLAN,
     pastGate && plans.signedIn
       ? () => {
-          if (tab !== PANEL_TAB.PLANS) onTabChange(PANEL_TAB.PLANS);
+          if (tab !== PANEL_TAB.TASKS) onTabChange(PANEL_TAB.TASKS);
           plans.onNewPlan();
         }
       : undefined,
@@ -150,7 +151,7 @@ function usePlaceCommands(
     APP_COMMAND.HOME,
     pastGate && plans.signedIn
       ? () => {
-          if (tab !== PANEL_TAB.PLANS) onTabChange(PANEL_TAB.PLANS);
+          if (tab !== PANEL_TAB.TASKS) onTabChange(PANEL_TAB.TASKS);
           plans.onGoHome();
         }
       : undefined,
@@ -159,7 +160,7 @@ function usePlaceCommands(
     APP_COMMAND.INBOX,
     pastGate && plans.signedIn
       ? () => {
-          if (tab !== PANEL_TAB.PLANS) onTabChange(PANEL_TAB.PLANS);
+          if (tab !== PANEL_TAB.TASKS) onTabChange(PANEL_TAB.TASKS);
           plans.inboxView.onOpen();
         }
       : undefined,
@@ -170,7 +171,7 @@ function usePlaceCommands(
     APP_COMMAND.FACTORY,
     pastGate && plans.signedIn && factoryOn
       ? () => {
-          if (tab !== PANEL_TAB.PLANS) onTabChange(PANEL_TAB.PLANS);
+          if (tab !== PANEL_TAB.TASKS) onTabChange(PANEL_TAB.TASKS);
           plans.factoryView.onOpen();
         }
       : undefined,
@@ -181,7 +182,7 @@ function usePlaceCommands(
     APP_COMMAND.AUTOMATIONS,
     pastGate && plans.signedIn && automationsOn
       ? () => {
-          if (tab !== PANEL_TAB.PLANS) onTabChange(PANEL_TAB.PLANS);
+          if (tab !== PANEL_TAB.TASKS) onTabChange(PANEL_TAB.TASKS);
           plans.automationsView.onOpen();
         }
       : undefined,
@@ -191,7 +192,7 @@ function usePlaceCommands(
     APP_COMMAND.REOPEN_CLOSED_TAB,
     pastGate && plans.signedIn && onReopenClosedTab !== undefined
       ? () => {
-          if (tab !== PANEL_TAB.PLANS) onTabChange(PANEL_TAB.PLANS);
+          if (tab !== PANEL_TAB.TASKS) onTabChange(PANEL_TAB.TASKS);
           onReopenClosedTab();
         }
       : undefined,
@@ -232,32 +233,6 @@ function TitleBarNewPlan({ plans }: { plans: PlansControl }): React.JSX.Element 
 }
 
 /**
- * Puts the floating sidebar away at a press anywhere outside it and its
- * toggle, answering the handler they take the press with. Note that the
- * press is heard at the document as it bubbles, after the sidebar's own
- * handlers, so one inside it, a menu or a dialog it opened included, since
- * React carries their presses through the sidebar, is marked before the
- * document asks.
- */
-function useOverlayDismiss(sidebar: SidebarCollapse): () => void {
-  const within = useRef(false);
-  const floating = sidebar.overlay !== SIDEBAR_OVERLAY.CLOSED;
-  const { onOverlay } = sidebar;
-  useEffect(() => {
-    if (!floating) return;
-    const press = () => {
-      if (!within.current) onOverlay(SIDEBAR_OVERLAY.CLOSED);
-      within.current = false;
-    };
-    document.addEventListener("pointerdown", press);
-    return () => document.removeEventListener("pointerdown", press);
-  }, [floating, onOverlay]);
-  return () => {
-    within.current = true;
-  };
-}
-
-/**
  * Whether the open plan's Transcript is on screen with its words, streaming
  * a call's as they are said. A Call tab standing behind another chosen
  * tab is not on screen, and one still reading, or failed, shows no words.
@@ -280,7 +255,7 @@ function transcriptStreaming(plans: PlansControl): boolean {
 function titleSubject(
   tab: PanelTab,
   plans: PlansControl,
-  shownPlan: Plan | undefined,
+  shownPlan: Task | undefined,
 ): Parameters<typeof useWindowTitle>[0] {
   const { signedIn } = plans;
   if (tab === PANEL_TAB.SETTINGS) return { signedIn, subject: "Settings", workspace: undefined };
@@ -357,7 +332,7 @@ export function DesktopShell({
 }): React.JSX.Element {
   const { account } = settings;
   const shell = useRef<HTMLDivElement>(null);
-  const keepOverlay = useOverlayDismiss(sidebar);
+  const keepOverlay = useFloatDismiss({ state: sidebar.overlay, onState: sidebar.onOverlay });
   // A fixture run keeps the summary's pin as it keeps the sidebar's fold: not at all.
   const summary = useSummaryPin(sidebar.staged);
   const gated = gates.accountRequired && account.status !== ACCOUNT_STATUS.SIGNED_IN;
@@ -389,8 +364,8 @@ export function DesktopShell({
     plans.factoryView.open ||
     plans.automationsView.open;
   const shownPlan =
-    tab === PANEL_TAB.PLANS && !standingIn && region.kind === DOCUMENT_REGION.READY
-      ? region.plan
+    tab === PANEL_TAB.TASKS && !standingIn && region.kind === DOCUMENT_REGION.READY
+      ? region.task
       : undefined;
   useWindowTitle(titleSubject(tab, plans, shownPlan));
   // The plan is looked at the moment it is on screen, whichever of its column's tabs is chosen.
@@ -412,7 +387,7 @@ export function DesktopShell({
   }
   // Settings takes the whole window, its pages listed where the plans were.
   if (tab === PANEL_TAB.SETTINGS) {
-    const exitSettings = history.canGoBack ? history.onBack : () => onTabChange(PANEL_TAB.PLANS);
+    const exitSettings = history.canGoBack ? history.onBack : () => onTabChange(PANEL_TAB.TASKS);
     return (
       <div className="desktop-shell">
         <Suspense fallback={<SettingsLoading onExit={exitSettings} />}>
@@ -458,7 +433,7 @@ export function DesktopShell({
   const pagePerson = plans.personView.userId;
   const factoryOpen = plans.factoryView.open && factoryOn;
   const automationsOpen = plans.automationsView.open && automationsOn;
-  const planToggle = plans.page === PLANS_PAGE.DOCUMENT && !standingIn;
+  const planToggle = plans.page === TASKS_PAGE.DOCUMENT && !standingIn;
   const panelToggle = planToggle || pageAgent !== undefined;
   const planDrawn = planToggle && plans.region.kind === DOCUMENT_REGION.READY;
   // Note that a panel filling the window hides the plan's column, call bar

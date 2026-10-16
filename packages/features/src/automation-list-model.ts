@@ -51,7 +51,7 @@ const RUN_REASON_WORDS = {
   [AUTOMATION_RUN_REASON.CONCURRENCY]: "Skipped: an earlier run's agent was still at work.",
   [AUTOMATION_RUN_REASON.DAILY_CAP]:
     "Skipped: it had already started as many runs today as it may.",
-  [AUTOMATION_RUN_REASON.PLAN_UNREACHABLE]:
+  [AUTOMATION_RUN_REASON.TASK_UNREACHABLE]:
     "Its task is gone, or no longer in one of your workspaces.",
   [AUTOMATION_RUN_REASON.CREATOR_LEFT]: "Its creator is no longer in the workspace.",
   [AUTOMATION_RUN_REASON.NO_REPOSITORY]: "It names no repository to work in.",

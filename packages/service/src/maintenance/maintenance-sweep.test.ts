@@ -59,7 +59,7 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
         recorded.purged.push(now);
         return 2;
       }),
-    purgeDeletedPlanCalls: (now) =>
+    purgeDeletedTaskCalls: (now) =>
       Effect.sync(() => {
         recorded.purgedCalls.push(now);
         return 3;

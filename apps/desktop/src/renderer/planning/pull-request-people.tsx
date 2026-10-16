@@ -1,10 +1,11 @@
-import type {
-  CodingAgentAuthor,
-  CodingAgentChangesPeople,
-  GitHubPerson,
-  ReviewState,
+import {
+  CODING_AGENT_AUTHOR,
+  type CodingAgentAuthor,
+  type CodingAgentChangesPeople,
+  type GitHubPerson,
+  REVIEW_STATE,
+  type ReviewState,
 } from "@luke/features/coding-agent-wire";
-import { CODING_AGENT_AUTHOR, REVIEW_STATE } from "@luke/features/coding-agent-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { ACTOR_KIND, type Actor, githubActor } from "@luke/ui/actor-model";
 import {

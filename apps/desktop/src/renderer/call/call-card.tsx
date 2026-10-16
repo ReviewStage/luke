@@ -11,7 +11,7 @@
  * validates and hands to the voice window, which holds the call.
  */
 
-import { IDLE_PLANNING_VIEW } from "@luke/features/planning-view";
+import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
 import { ReturnIcon } from "@luke/ui";
@@ -107,7 +107,7 @@ export function cardVideo(
 export function callControls(tell: ActHandle["tell"], speakerMuted: boolean): CallControls {
   const command = (sent: VoiceCommand) => tell(ACT_KIND.VOICE_COMMAND, { command: sent });
   return {
-    onReturn: () => tell(ACT_KIND.CALL_SHOW_PLAN),
+    onReturn: () => tell(ACT_KIND.CALL_SHOW_TASK),
     onToggleMicrophone: () => command(VOICE_COMMAND.TOGGLE_MICROPHONE),
     onToggleSpeaker: () =>
       command(speakerMuted ? VOICE_COMMAND.UNMUTE_SPEAKER : VOICE_COMMAND.MUTE_SPEAKER),
@@ -146,7 +146,7 @@ function CallCard({
   const inWindow = surface === CALL_CARD_SURFACE.WINDOW;
   const name = (
     <span className="call-card-plan" ref={title} data-overflow={clipped}>
-      {card.planName}
+      {card.taskName}
     </span>
   );
   // The floating window is too small to hold a tooltip, so there the
@@ -155,8 +155,8 @@ function CallCard({
     <button
       type="button"
       className="icon-button"
-      aria-label={returnLabel(card.planName)}
-      title={inWindow ? returnLabel(card.planName) : undefined}
+      aria-label={returnLabel(card.taskName)}
+      title={inWindow ? returnLabel(card.taskName) : undefined}
       onClick={controls.onReturn}
     >
       <ReturnIcon />
@@ -191,7 +191,7 @@ function CallCard({
         {inWindow ? (
           returnButton
         ) : (
-          <Tooltip label={returnLabel(card.planName)}>{returnButton}</Tooltip>
+          <Tooltip label={returnLabel(card.taskName)}>{returnButton}</Tooltip>
         )}
       </div>
       {/* A block of its own, as the plan's page holds it, so the bar spans the card. */}
@@ -281,7 +281,7 @@ export function CallWindowCard(): React.JSX.Element {
   const track = useAvatarView(videoStatus === AVATAR_STATUS.LIVE);
   return (
     <CallCard
-      card={callCard({ view, planning: state?.planning ?? IDLE_PLANNING_VIEW })}
+      card={callCard({ view, tasks: state?.tasks ?? IDLE_TASKS_VIEW })}
       speakerMuted={view.speakerMuted}
       controls={callControls(tell, view.speakerMuted)}
       video={cardVideo(videoStatus, track, tell)}

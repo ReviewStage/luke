@@ -1,11 +1,12 @@
 import type { CodingAgent, CodingAgentLatestTurn } from "@luke/database/models/coding-agent-store";
-import type { StoredAutomationOrigin } from "@luke/database/schemas/coding-agent";
+import type { StoredArchive, StoredAutomationOrigin } from "@luke/database/schemas/coding-agent";
 import { AUTOMATION_FIRING } from "@luke/features/automation-wire";
 import {
   CODING_AGENT_BRIEF,
   CODING_AGENT_FAILURE,
   CODING_AGENT_STATUS,
   CONTEXT_WINDOW,
+  type CodingAgentArchivedBy,
   type CodingAgentFailure,
   type CodingAgentOrigin,
   type CodingAgentPage,
@@ -169,6 +170,22 @@ export function codingAgentActivityAt(
   );
 }
 
+/** Who archived an agent as its banner says it: the member, where their account stands, the agent acting for them, and why. */
+function archivedByOf(
+  archive: StoredArchive,
+  names: ReadonlyMap<string, string>,
+): CodingAgentArchivedBy {
+  const member = names.get(archive.userId);
+  return {
+    by: archive.by,
+    ...(member === undefined ? undefined : { member: { userId: archive.userId, name: member } }),
+    ...(archive.agentId === undefined
+      ? undefined
+      : { agent: { id: archive.agentId, name: archive.agentName ?? "" } }),
+    ...(archive.reason === undefined ? undefined : { reason: archive.reason }),
+  };
+}
+
 /** What every read of one agent says of it but its plan, its status read at `now`. */
 function summaryFields(
   agent: CodingAgent,
@@ -193,6 +210,9 @@ function summaryFields(
     turnId: standing.turn?.id ?? null,
     brief: agent.prompt === null ? CODING_AGENT_BRIEF.PLAN : CODING_AGENT_BRIEF.PROMPT,
     ...(agent.archivedAt === null ? undefined : { archivedAt: agent.archivedAt.getTime() }),
+    ...(agent.archivedAt === null || agent.archivedBy === null
+      ? undefined
+      : { archivedBy: archivedByOf(agent.archivedBy, names) }),
     ...(agent.disabledServers.length === 0
       ? undefined
       : { disabledServers: agent.disabledServers }),
@@ -220,7 +240,7 @@ export function codingAgentSummary(
   now: number,
   names: ReadonlyMap<string, string>,
 ): CodingAgentSummary {
-  return { id: agent.id, planId: agent.planId, ...summaryFields(agent, standing, now, names) };
+  return { id: agent.id, planId: agent.taskId, ...summaryFields(agent, standing, now, names) };
 }
 
 /**
@@ -257,12 +277,17 @@ function originOf(
   };
 }
 
-/** The accounts an agent's page names: its starter, and whoever asked for the run that started it. */
+/** The accounts an agent's summary names: its starter, and the member it was archived by or for. */
+export function summaryAccounts(agent: CodingAgent): readonly string[] {
+  return agent.archivedBy === null ? [agent.userId] : [agent.userId, agent.archivedBy.userId];
+}
+
+/** The accounts an agent's page names: its summary's, and whoever asked for the run that started it. */
 export function pageAccounts(agent: CodingAgent): readonly string[] {
   const firing = agent.automationOrigin?.firing;
   return firing?.kind === AUTOMATION_FIRING.MANUAL && firing.userId !== undefined
-    ? [agent.userId, firing.userId]
-    : [agent.userId];
+    ? [...summaryAccounts(agent), firing.userId]
+    : summaryAccounts(agent);
 }
 
 /** One agent as its own page reads it, on a plan or with none, its status read at `now`. */
@@ -274,7 +299,7 @@ export function codingAgentPage(
 ): CodingAgentPage {
   return {
     id: agent.id,
-    planId: agent.planId,
+    planId: agent.taskId,
     ...summaryFields(agent, standing, now, names),
     automationId: agent.automationId,
     ...(agent.automationOrigin === null

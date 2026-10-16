@@ -28,12 +28,12 @@ import {
   DEFAULT_PLAN_TEMPLATE,
   type PlanTemplateRevisionLine,
 } from "@luke/features/plan-document-template";
-import { PLAN_ACTOR } from "@luke/features/plan-wire";
 import {
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_STATUS,
   type ProviderKeySummary,
 } from "@luke/features/provider-key-wire";
+import { PLAN_ACTOR } from "@luke/features/task-wire";
 import { GATEWAY_CLIENT_ROLE, GATEWAY_METHOD, type GatewayMethod } from "@luke/gateway";
 import type { WireRecord } from "@luke/wire";
 import { Effect } from "effect";
@@ -47,12 +47,12 @@ const TEMPLATE_REVISION: PlanTemplateRevisionLine = {
   changes: 1,
 };
 
-const PLAN_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
+const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 
 const AGENT: CodingAgentSummary = {
   id: AGENT_ID,
-  planId: PLAN_ID,
+  planId: TASK_ID,
   model: "anthropic/claude-opus-5.5",
   effort: "high",
   title: null,
@@ -168,7 +168,7 @@ const ITEM: InboxItem = {
 /** That item as what waits across the account carries it. */
 const WAITING: AccountInboxEntry = {
   id: ITEM.id,
-  planId: PLAN_ID,
+  planId: TASK_ID,
   agentId: AGENT_ID,
   agentTitle: null,
   agentModel: AGENT.model,
@@ -200,9 +200,9 @@ function fakeService() {
         asked.push(`default:${choice.model}:${choice.effort}`);
         return { choice };
       }),
-    list: (planId, includeArchived) =>
+    list: (taskId, includeArchived) =>
       Effect.sync(() => {
-        asked.push(includeArchived === true ? `list:${planId}:archived` : `list:${planId}`);
+        asked.push(includeArchived === true ? `list:${taskId}:archived` : `list:${taskId}`);
         return { agents: [AGENT] };
       }),
     listWorkspace: ({ workspaceId, repository }) =>
@@ -210,9 +210,9 @@ function fakeService() {
         asked.push(`workspace:${workspaceId}:${repository ?? "any"}`);
         return { agents: [AGENT] };
       }),
-    start: (planId, request) =>
+    start: (taskId, request) =>
       Effect.sync(() => {
-        asked.push(`start:${planId}:${request.idempotencyKey}:${request.model ?? "default"}`);
+        asked.push(`start:${taskId}:${request.idempotencyKey}:${request.model ?? "default"}`);
         return { agent: { ...AGENT, status: CODING_AGENT_STATUS.STARTING } };
       }),
     messages: (agentId, after, callId) =>
@@ -349,9 +349,9 @@ function fakeService() {
         asked.push(`transcribe:${clip.audio}:${clip.keywords.join(",")}`);
         return { text: "Run the tests" };
       }),
-    inbox: (planId, after) =>
+    inbox: (taskId, after) =>
       Effect.sync(() => {
-        asked.push(`inbox:${planId}:${after}`);
+        asked.push(`inbox:${taskId}:${after}`);
         return { items: [ITEM], cursor: "7" };
       }),
     inboxAttachment: (itemId, attachmentId) =>
@@ -420,11 +420,11 @@ it.effect("each method asks the service once and answers what it said, whole", (
       }),
       { choice: { model: "openai/gpt-6.1-sol", effort: "xhigh" } },
     );
-    assert.deepEqual(yield* call(GATEWAY_METHOD.CODING_AGENTS_LIST, { planId: PLAN_ID }), {
+    assert.deepEqual(yield* call(GATEWAY_METHOD.CODING_AGENTS_LIST, { taskId: TASK_ID }), {
       agents: [AGENT],
     });
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_LIST, { planId: PLAN_ID, includeArchived: true }),
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_LIST, { taskId: TASK_ID, includeArchived: true }),
       { agents: [AGENT] },
     );
     assert.deepEqual(
@@ -436,7 +436,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
     );
     assert.deepEqual(
       yield* call(GATEWAY_METHOD.CODING_AGENTS_START, {
-        planId: PLAN_ID,
+        taskId: TASK_ID,
         idempotencyKey: "press-1",
       }),
       { agent: { ...AGENT, status: CODING_AGENT_STATUS.STARTING } },
@@ -538,7 +538,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
     );
     assert.deepEqual(
       yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX, {
-        planId: PLAN_ID,
+        taskId: TASK_ID,
         after: INBOX_CURSOR_START,
       }),
       { items: [ITEM], cursor: "7" },
@@ -586,10 +586,10 @@ it.effect("each method asks the service once and answers what it said, whole", (
       "models",
       "default",
       "default:openai/gpt-6.1-sol:xhigh",
-      `list:${PLAN_ID}`,
-      `list:${PLAN_ID}:archived`,
+      `list:${TASK_ID}`,
+      `list:${TASK_ID}:archived`,
       "workspace:workspace-1:acme/relay",
-      `start:${PLAN_ID}:press-1:default`,
+      `start:${TASK_ID}:press-1:default`,
       `messages:${AGENT_ID}:${CODING_AGENT_CURSOR_START}`,
       `worker:${AGENT_ID}:call-7:${CODING_AGENT_CURSOR_START}`,
       `message:${AGENT_ID}:send-1:Also expire them after a week.`,
@@ -605,7 +605,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `changes:${AGENT_ID}`,
       `overview:${AGENT_ID}`,
       `github-image:${AGENT_ID}:https://camo.githubusercontent.com/abc`,
-      `inbox:${PLAN_ID}:${INBOX_CURSOR_START}`,
+      `inbox:${TASK_ID}:${INBOX_CURSOR_START}`,
       `attachment:${ITEM.id}:${ATTACHMENT_ID}`,
       `picture:${AGENT_ID}:${PICTURE_ID}:call-worker`,
       `answer:${ITEM.id}:2:${INBOX_REPLY.DECLINED}:Not before the freeze lifts.:answer-1`,
@@ -625,7 +625,7 @@ it.effect(
         failure: CODING_AGENT_CALL_FAILURE.UNANSWERED,
       });
       assert.deepEqual(
-        yield* offline.call(GATEWAY_METHOD.CODING_AGENTS_LIST, { planId: PLAN_ID }),
+        yield* offline.call(GATEWAY_METHOD.CODING_AGENTS_LIST, { taskId: TASK_ID }),
         { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
       );
       assert.deepEqual(signedOut.asked, []);

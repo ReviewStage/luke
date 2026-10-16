@@ -1,8 +1,8 @@
 import { LINK_PLACE, type LinkPlace, linkOf, type ReadLink } from "@luke/features/luke-link";
 import type { Workspace } from "@luke/features/workspace-wire";
 import type { SettingsView } from "@luke/settings/settings-views";
-import { DOCUMENT_REGION } from "@luke/ui/planning-model";
 import { isAgentTab, isChangesTab, isPageTab, isSubagentTab } from "@luke/ui/tab-strip-model";
+import { DOCUMENT_REGION } from "@luke/ui/tasks-model";
 import { createContext, useContext, useEffect, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "./app-commands";
@@ -122,7 +122,7 @@ function panelThing(place: LinkPlace): LinkThing | undefined {
 function taskLinks(plans: PlansControl, at: WindowAt): readonly LinkAtHand[] {
   const { region } = plans;
   if (region.kind !== DOCUMENT_REGION.READY) return [];
-  const { plan } = region;
+  const { task: plan } = region;
   const workspace = slugOf(plans.workspaces, plan.workspaceId);
   const task: LinkAtHand = {
     link: { workspace, place: { kind: LINK_PLACE.TASK, planId: plan.id } },

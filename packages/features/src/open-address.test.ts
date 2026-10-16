@@ -10,7 +10,7 @@ import { openTargetOf } from "./open-address.js";
  * place. Synthetic ids.
  */
 
-const PLAN_ID = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
+const TASK_ID = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
 const AGENT_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 
 /** The app link the page hands over for an address, alone. */
@@ -24,16 +24,16 @@ afterEach(() => {
 
 test("a task's address, or a section's, opens that task in the app, whichever host served the page", () => {
   assert.equal(
-    appLinkFromAddress(`/acme/plan/${PLAN_ID}`, ""),
-    `tryluke://tryluke.dev/acme/plan/${PLAN_ID}`,
+    appLinkFromAddress(`/acme/plan/${TASK_ID}`, ""),
+    `tryluke://tryluke.dev/acme/plan/${TASK_ID}`,
   );
   assert.equal(
-    appLinkFromAddress(`/acme/plan/${PLAN_ID}/`, "#rollout"),
-    `tryluke://tryluke.dev/acme/plan/${PLAN_ID}#rollout`,
+    appLinkFromAddress(`/acme/plan/${TASK_ID}/`, "#rollout"),
+    `tryluke://tryluke.dev/acme/plan/${TASK_ID}#rollout`,
   );
   assert.equal(
-    appLinkFromAddress(`/acme/plan/${PLAN_ID}`, "#rollout"),
-    `tryluke://tryluke.dev/acme/plan/${PLAN_ID}#rollout`,
+    appLinkFromAddress(`/acme/plan/${TASK_ID}`, "#rollout"),
+    `tryluke://tryluke.dev/acme/plan/${TASK_ID}#rollout`,
   );
 });
 
@@ -41,19 +41,19 @@ test("a picture's address opens the plan it is of, and nothing else of it", () =
   const picture = "0b6f6b52-2c1e-4f8e-9a4d-7f1c2e9d5a01";
 
   assert.equal(
-    appLinkFromAddress(`/acme/plan/${PLAN_ID}/files/${picture}`, ""),
-    `tryluke://tryluke.dev/acme/plan/${PLAN_ID}`,
+    appLinkFromAddress(`/acme/plan/${TASK_ID}/files/${picture}`, ""),
+    `tryluke://tryluke.dev/acme/plan/${TASK_ID}`,
   );
-  assert.equal(appLinkFromAddress(`/acme/plan/${PLAN_ID}/files/not-an-id`, ""), undefined);
+  assert.equal(appLinkFromAddress(`/acme/plan/${TASK_ID}/files/not-an-id`, ""), undefined);
 });
 
 test("an agent's, an Inbox item's, or an automation's address opens it in the app, the page told its kind", () => {
-  assert.deepEqual(openTargetOf(`/acme/plan/${PLAN_ID}/agent/${AGENT_ID}/`, ""), {
-    appLink: `tryluke://tryluke.dev/acme/plan/${PLAN_ID}/agent/${AGENT_ID}`,
+  assert.deepEqual(openTargetOf(`/acme/plan/${TASK_ID}/agent/${AGENT_ID}/`, ""), {
+    appLink: `tryluke://tryluke.dev/acme/plan/${TASK_ID}/agent/${AGENT_ID}`,
     kind: LINK_PLACE.AGENT,
   });
-  assert.deepEqual(openTargetOf(`/acme/plan/${PLAN_ID}/inbox/${AGENT_ID}`, ""), {
-    appLink: `tryluke://tryluke.dev/acme/plan/${PLAN_ID}/inbox/${AGENT_ID}`,
+  assert.deepEqual(openTargetOf(`/acme/plan/${TASK_ID}/inbox/${AGENT_ID}`, ""), {
+    appLink: `tryluke://tryluke.dev/acme/plan/${TASK_ID}/inbox/${AGENT_ID}`,
     kind: LINK_PLACE.INBOX_ITEM,
   });
   assert.deepEqual(openTargetOf(`/acme/automation/${AGENT_ID}`, "#runs"), {
@@ -66,10 +66,10 @@ test("an address that names no place opens nothing", () => {
   for (const [pathname, hash] of [
     ["/acme/plans/x", ""],
     ["/acme/agent/Fix%20billing", ""],
-    [`/acme/plan/${PLAN_ID}/files`, ""],
+    [`/acme/plan/${TASK_ID}/files`, ""],
     ["/acme", ""],
-    [`/acme/plan/${PLAN_ID}/more`, ""],
-    [`/acme/plan/${PLAN_ID}`, "#a%20b"],
+    [`/acme/plan/${TASK_ID}/more`, ""],
+    [`/acme/plan/${TASK_ID}`, "#a%20b"],
   ] as const) {
     assert.equal(appLinkFromAddress(pathname, hash), undefined, `${pathname}${hash}`);
   }
@@ -79,8 +79,8 @@ test("a browser without URL.parse, as Safari before 18 is, still opens the place
   vi.stubGlobal("URL", Object.assign(class extends URL {}, { parse: undefined }));
 
   assert.equal(
-    appLinkFromAddress(`/acme/plan/${PLAN_ID}`, "#rollout"),
-    `tryluke://tryluke.dev/acme/plan/${PLAN_ID}#rollout`,
+    appLinkFromAddress(`/acme/plan/${TASK_ID}`, "#rollout"),
+    `tryluke://tryluke.dev/acme/plan/${TASK_ID}#rollout`,
   );
   assert.equal(
     appLinkFromAddress(`/acme/agent/${AGENT_ID}`, ""),

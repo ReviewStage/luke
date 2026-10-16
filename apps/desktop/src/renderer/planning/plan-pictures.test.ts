@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { planAttachmentAddress } from "@luke/features/plan-attachment-link";
-import { PLAN_ACTOR, type Plan } from "@luke/features/plan-wire";
+import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { forgetPictures } from "@luke/ui/picture-cache";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
@@ -10,6 +10,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
+import { lineWords } from "#testing/actor-line";
 import { onRegistry } from "#testing/copy-feedback";
 import { DOCUMENT_PLAN } from "#testing/document-plan";
 import { MarkdownMessage } from "../markdown-message";
@@ -33,6 +34,11 @@ const PNG_BASE64 = "iVBORw0KGgo=";
 const MOCK = "0b6f6b52-2c1e-4f8e-9a4d-7f1c2e9d5a01";
 const SECOND = "3c9e1a77-58b2-4d0f-8e6a-1b2c3d4e5f02";
 const GONE = "d1e2f3a4-5b6c-4d7e-8f90-a1b2c3d4e506";
+
+/** Who edits a plan here, as the service names a member. */
+const LEE = { userId: "user-lee", name: "Lee Park" };
+
+const HOUR = 60 * 60 * 1000;
 
 let root: Root | undefined;
 
@@ -59,7 +65,7 @@ function standHost(
     value: {
       recordSurfaceEvent: () => undefined,
       act: (request: Act): Promise<ActOutcome> => {
-        if (request.kind !== ACT_KIND.PLANNING_PICTURE_READ) {
+        if (request.kind !== ACT_KIND.TASKS_PICTURE_READ) {
           return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
         }
         asked.push(request.payload.attachmentId);
@@ -85,12 +91,12 @@ async function drawn(element: ReactElement): Promise<HTMLElement> {
 }
 
 /** A plan of its own id, so the window's pictures read for one test stand apart from another's. */
-function planOf(id: string, body: string): Plan {
+function planOf(id: string, body: string): Task {
   return { ...DOCUMENT_PLAN, id, document: { body, assumptions: [] } };
 }
 
 const picture = (planId: string, id: string) =>
-  planAttachmentAddress({ planId, attachmentId: id }, "acme");
+  planAttachmentAddress({ taskId: planId, attachmentId: id }, "acme");
 
 test("a plan's picture is drawn from its bytes under its caption, and one this reader cannot reach as its words", async () => {
   const planId = "7a1d4e90-0c3f-4b6a-9d2e-5f6a7b8c9d03";
@@ -132,6 +138,47 @@ test("a press on a picture opens the plan's pictures over the window, named by t
   assert.ok(viewer, "the viewer stands over the window");
   assert.equal(viewer.querySelector(".attachment-viewer-title")?.textContent, "Members page");
   assert.equal(viewer.querySelector(".attachment-viewer-place")?.textContent, "2 of 2");
+});
+
+test("who last changed a picture's section is said in the viewer over the window, not over the picture in the words before the first heading", async () => {
+  const planId = "5b8e2d40-7f1a-4e3c-9a6b-0c1d2e3f4a07";
+  standHost(new Set([MOCK, SECOND]), []);
+  const now = Date.now();
+  const body = [
+    `![Invite email](${picture(planId, MOCK)})`,
+    `The members page's address is \`${picture(planId, SECOND)}\`, drawn under Approach.`,
+    "## Approach",
+    `![Members page](${picture(planId, SECOND)})`,
+  ].join("\n\n");
+  const plan: Task = {
+    ...planOf(planId, body),
+    sectionEdits: [
+      { section: "", actor: PLAN_ACTOR.DEVELOPER, by: LEE, at: now, duringCall: false },
+      { section: "Approach", actor: PLAN_ACTOR.NOTETAKER, at: now - 2 * HOUR, duringCall: false },
+    ],
+  };
+  const view = await drawn(createElement(PlanBody, { plan, live: false }));
+
+  assert.deepEqual(
+    [...view.querySelectorAll(".plan-unit-byline")].map((line) => lineWords(line)),
+    ["Luke · 2h ago"],
+    "only the section with a heading carries its line in the words",
+  );
+
+  act(() => {
+    view.querySelector<HTMLButtonElement>(".picture-frame")?.click();
+  });
+  const note = () => lineWords(document.querySelector(".attachment-viewer-note .actor-line"));
+  assert.equal(note(), "Edited by Lee Park · now");
+
+  act(() => {
+    document.querySelector<HTMLButtonElement>('[aria-label="Next file"]')?.click();
+  });
+  assert.equal(
+    note(),
+    "Edited by Luke · 2h ago",
+    "the next picture, by the section that draws it rather than one naming its address",
+  );
 });
 
 test("a picture from outside Luke is a link to it, and nothing is read for it", async () => {

@@ -36,10 +36,10 @@ import { Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError, queryBuilder } from "../core/query.js";
 import { codingAgent } from "../schemas/coding-agent.js";
-import { plan } from "../schemas/plan.js";
+import { task } from "../schemas/plan.js";
 import { conversations } from "../schemas/storage.js";
 import { CONVERSATION_KIND } from "../storage-vocabulary.js";
-import { agentReachableBy, planReachableBy } from "./workspace-store.js";
+import { agentReachableBy, taskReachableBy } from "./workspace-store.js";
 import type { ConversationTarget } from "./writer.js";
 
 const StandingSessionSchema = Schema.Struct({
@@ -90,8 +90,8 @@ const parentConversation = alias(conversations, "parent_conversation");
 
 /** The condition that a plan or a coding agent, whichever workspace holds it, names this conversation as its own. */
 function namedByWork(conversationId: SQLWrapper): SQL {
-  const byPlan = exists(
-    queryBuilder.select({ one: plan.id }).from(plan).where(eq(plan.conversationId, conversationId)),
+  const byTask = exists(
+    queryBuilder.select({ one: task.id }).from(task).where(eq(task.conversationId, conversationId)),
   );
   const byAgent = exists(
     queryBuilder
@@ -99,7 +99,7 @@ function namedByWork(conversationId: SQLWrapper): SQL {
       .from(codingAgent)
       .where(eq(codingAgent.conversationId, conversationId)),
   );
-  return sql`(${byPlan} or ${byAgent})`;
+  return sql`(${byTask} or ${byAgent})`;
 }
 
 /** The condition that the conversation the row was delegated from still stands. */
@@ -122,9 +122,9 @@ function namedByReachableWork(userId: string, conversationId: SQLWrapper): SQL |
   return or(
     exists(
       queryBuilder
-        .select({ one: plan.id })
-        .from(plan)
-        .where(and(eq(plan.conversationId, conversationId), planReachableBy(userId))),
+        .select({ one: task.id })
+        .from(task)
+        .where(and(eq(task.conversationId, conversationId), taskReachableBy(userId))),
     ),
     exists(
       queryBuilder
