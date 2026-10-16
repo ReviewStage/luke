@@ -8,18 +8,17 @@ import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
 import { GitHubApp } from "../github/github-app.js";
-import { ErrorReports } from "../observability/error-reports.js";
 import { modelCatalogOf } from "../providers/model-catalog.js";
 import { noNetwork } from "../testing/no-network.js";
-import { recordingSentryTransport, reportingErrors } from "../testing/sentry-transport.js";
+import { recordingSentry, type SentItem, sentOfType } from "../testing/sentry-transport.js";
 import { maintenanceApp } from "./maintenance-app.js";
 import { MAINTENANCE_SWEEP_PATH } from "./maintenance-bounds.js";
 
 /**
- * The sweep's group as the cron reaches it, told to Sentry's monitor
- * through a recording transport. A sweep that runs does so over an empty
- * migrated database, so it finds nothing to do and reaches no provider; what
- * each sweep does is `maintenance-sweep.test.ts`'s.
+ * The sweep's group as the cron reaches it, told to Sentry's Crons through a
+ * recording transport. A sweep that runs does so over an empty migrated
+ * database, so it finds nothing to do and reaches no provider; what each
+ * sweep does is `maintenance-sweep.test.ts`'s.
  */
 
 const CRON_SECRET = "cron-secret-1";
@@ -37,6 +36,14 @@ function environment(cronSecret: string | undefined): HostedEnvironmentValues {
     githubWebhookSecret: undefined,
     providerKeyEncryptionKeys: undefined,
   };
+}
+
+/** Each check-in's monitor and status, in the order they were sent. */
+function checkIns(sent: readonly SentItem[]): string[][] {
+  return sentOfType(sent, "check_in").map((item) => [
+    item.payload.monitor_slug ?? "",
+    item.payload.status ?? "",
+  ]);
 }
 
 /** The services a run of the sweep reads: the test's own database and clock, since the handler runs on the router's fiber. */
@@ -61,7 +68,6 @@ const sweep = (
       Layer.succeed(HostedEnvironment, environment(cronSecret)),
       GitHubApp.layer(undefined),
       modelCatalogOf([]),
-      Layer.succeed(ErrorReports, yield* ErrorReports),
     );
     const { handler, dispose } = HttpRouter.toWebHandler(
       maintenanceApp().pipe(HttpRouter.provideRequest(services)),
@@ -77,42 +83,43 @@ const sweep = (
 
 it.effect("a sweep the deployment cannot run checks in as failed", () =>
   Effect.gen(function* () {
-    const { sent, transport } = recordingSentryTransport();
-    const status = yield* sweep(undefined, CRON_SECRET).pipe(
-      Effect.provide(reportingErrors(transport)),
-    );
+    const sentry = recordingSentry();
+    const status = yield* sweep(undefined, CRON_SECRET).pipe(Effect.provide(sentry.layer));
     assert.equal(status, 503);
-    assert.deepEqual(
-      sent.checkIns.map((checkIn) => [checkIn.monitor_slug, checkIn.status]),
-      [["maintenance-sweep", "error"]],
-    );
+    assert.deepEqual(checkIns(sentry.sent), [["maintenance-sweep", "error"]]);
   }),
 );
 
 it.effect("a call that is not the cron's checks nothing in", () =>
   Effect.gen(function* () {
-    const { sent, transport } = recordingSentryTransport();
-    const status = yield* sweep(CRON_SECRET, "not-the-secret").pipe(
-      Effect.provide(reportingErrors(transport)),
-    );
+    const sentry = recordingSentry();
+    const status = yield* sweep(CRON_SECRET, "not-the-secret").pipe(Effect.provide(sentry.layer));
     assert.equal(status, 401);
-    assert.deepEqual(sent.checkIns, []);
+    assert.deepEqual(checkIns(sentry.sent), []);
   }),
 );
 
 it.layer(getTestDB())("a sweep that runs", (it) => {
-  it.effect("checks in as ok", () =>
+  it.effect("checks in as it starts and as it ends, with the monitor's schedule", () =>
     Effect.gen(function* () {
-      const { sent, transport } = recordingSentryTransport();
+      const sentry = recordingSentry();
       const database = yield* testDatabase;
       const status = yield* sweep(CRON_SECRET, CRON_SECRET, database).pipe(
-        Effect.provide(reportingErrors(transport)),
+        Effect.provide(sentry.layer),
       );
+      const [started] = sentOfType(sentry.sent, "check_in");
       assert.equal(status, 200);
-      assert.deepEqual(
-        sent.checkIns.map((checkIn) => [checkIn.monitor_slug, checkIn.status]),
-        [["maintenance-sweep", "ok"]],
-      );
+      assert.deepEqual(checkIns(sentry.sent), [
+        ["maintenance-sweep", "in_progress"],
+        ["maintenance-sweep", "ok"],
+      ]);
+      assert.deepEqual(started?.payload.monitor_config, {
+        schedule: { type: "crontab", value: "* * * * *" },
+        checkin_margin: 1,
+        max_runtime: 1,
+        failure_issue_threshold: 3,
+        timezone: "Etc/UTC",
+      });
     }),
   );
 });

@@ -1,6 +1,7 @@
 import { readFile, rm, writeFile } from "node:fs/promises";
 import { join, relative } from "node:path";
-import { build } from "esbuild";
+import { sentryEsbuildPlugin } from "@sentry/esbuild-plugin";
+import { type BuildOptions, build } from "esbuild";
 import {
   BUILD_OUTPUT_DIRECTORY,
   emitBuildOutput,
@@ -43,10 +44,42 @@ const WEB = join(import.meta.dirname, "..");
 /** Where `vite build` and `prerender.ts` leave the site, copied whole under the output's `static/`. */
 const SITE_DIRECTORY = "dist";
 
+/**
+ * The bundles' source maps, uploaded to Sentry's `luke-web` project as its
+ * esbuild guide sets it up, so a function's stack trace reads as the source.
+ * The maps are written beside the bundles, uploaded, and deleted before the output is
+ * emitted, so none ships in a function. Only a build that holds
+ * `SENTRY_AUTH_TOKEN` uploads; any other bundles as before. The plugin names
+ * the release from the deployment's commit and writes it into each bundle,
+ * which is the release the SDK then reports under.
+ */
+function withSentrySourceMaps(options: BuildOptions): BuildOptions {
+  const authToken = process.env.SENTRY_AUTH_TOKEN;
+  if (!authToken) return options;
+  return {
+    ...options,
+    // Sentry's guide asks for "hidden" maps; esbuild spells that `external`,
+    // a map written beside the bundle and named by no comment in it.
+    sourcemap: "external",
+    plugins: [
+      ...(options.plugins ?? []),
+      // Sentry's plugin goes after all others.
+      sentryEsbuildPlugin({
+        org: "stage-review",
+        project: "luke-web",
+        authToken,
+        sourcemaps: {
+          filesToDeleteAfterUpload: [join(WEB, FUNCTION_BUNDLE_DIRECTORY, "**/*.map")],
+        },
+      }),
+    ],
+  };
+}
+
 const task = await functionBundlePlan(WEB);
 // Emptied first, so a bundle an earlier plan emitted can never sit beside the shipping ones and be read as one of them.
 await rm(join(WEB, FUNCTION_BUNDLE_DIRECTORY), { recursive: true, force: true });
-const result = await build({ ...task.options, write: true });
+const result = await build({ ...withSentrySourceMaps(task.options), metafile: true, write: true });
 
 /** esbuild's own helper module, recorded in the metafile as an external import of every bundle it shimmed a `require` in; not a dependency. */
 const ESBUILD_RUNTIME = "<runtime>";

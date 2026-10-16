@@ -801,27 +801,41 @@ while it runs; one that never reaches a sign-in belongs to nobody, so
 deleting your account does not reach it — we have no way to tell it was
 yours.
 
-**Crash reports.** In ordinary runs, Luke sends Sentry anonymous reports of
-unhandled exceptions in its Electron main, preload, and renderer code, along
-with anonymous process-session status and native minidumps when an Electron
-main, renderer, or GPU process crashes. Sentry's default reports include the
-exception message and code path, breadcrumbs, and Electron, operating-system,
-runtime, and device context; its breadcrumbs can include messages Luke wrote
-to its console and the addresses of requests it made, and Sentry sees your
-Mac's network address. Luke does not attach your Luke account or user
-identity, and does not enable PII collection, tracing, Sentry Replay,
-screenshots, profiling, or manual reports of handled errors. Fixture and
-evidence runs send no crash reports.
+**Crash and performance reports from the Mac app.** In ordinary runs, Luke
+sends Sentry reports of unhandled exceptions in its Electron main, preload,
+and renderer code, process-session status, and native minidumps when an
+Electron main, renderer, or GPU process crashes. It also sends performance
+traces: how long Luke took to start, how each window's page loaded, and the
+requests each made. Luke uses Sentry's default data collection, so reports
+and traces carry the exception message and code path, breadcrumbs (among them
+messages Luke wrote to its console and the addresses of requests it made),
+the headers, bodies, and query parameters of requests Luke made, Electron,
+operating-system, runtime, and device context, and your Mac's IP address.
+Sentry replaces a value whose name looks like a credential, such as an
+authorization header or a token parameter, before it is sent, and Luke drops
+any report that names a call's avatar access token. Luke does not attach your
+Luke account, and does not enable Sentry Replay, screenshots, or profiling.
+Fixture and evidence runs send nothing to Sentry.
 
-**Error reports from our service.** When our service or Luke's agents fail in
-a way the code did not expect, our service sends Sentry a report of it: the
-error's type, its message, the line of code it came from, the log line that
-reported it, the deployment, and the release. Any part of those words shaped
-like a key, a token, or a secret is replaced before the report leaves. Our
-service attaches no request and does not attach your account to a report,
-and our voice service and terminal relay send none, so nothing said on a
-call and no Terminal tab's bytes reach Sentry from them. Each minute's run of the scheduled sweep also tells Sentry whether
-it ran, so a missed run is noticed.
+**Error, performance, and agent reports from our service.** Our service and
+Luke's agents send Sentry what its SDK collects by default, so that we can find
+and fix failures. That is: every error our service did not handle, with its
+message, stack trace, the lines of code around it, and the values of local
+variables; performance traces of each request our service answers, each
+database query, and each request it makes, with their headers, bodies, query
+parameters, and database query parameters, and the IP address a request came
+from; every line our service logs; counts and timings; and, each minute,
+whether the scheduled sweep ran. Luke's agents also send Sentry's agent
+traces of each turn: the instructions and messages sent to the model (which
+include the plan, the conversation, what was said on a call, and what Luke and
+his workers read, such as code, a command's output from your Mac, and an
+integration's answer), the model's replies, and each tool call with its
+arguments and result. Sentry replaces a value whose name looks like a
+credential (such as `auth`, `token`, `secret`, `password`, `key`, or `session`)
+before it leaves, but not a credential written in free text, such as a key
+pasted into a conversation. Terminal tabs' bytes are not sent. What reaches
+Sentry is kept under Sentry's retention, not tied to your account, and is not
+erased when you delete your account.
 
 **What earlier versions left on our service.** Earlier versions of Luke
 followed your coding agent sessions, kept a notebook, and pushed briefings to
@@ -865,7 +879,8 @@ only when you press Send.
   Luke's transits our service; keeps only the lines and the call record
   described under "Your account"; logs status and close codes, event names,
   the kind of any failure, and counts, never what was said or an error's own
-  words; and counts each session's billed seconds once. Luke's judgment is a
+  words, apart from the reports to Sentry described under "Error, performance,
+  and agent reports from our service"; and counts each session's billed seconds once. Luke's judgment is a
   separate run of calls to OpenAI's Responses API, one for each step of a
   turn, made from our service on our key when you ask him something on a call,
   carrying the task conversation's working memory: the saved plan, the
@@ -873,7 +888,8 @@ only when you press Send.
   it, such as the repository's code, a command's output from your Mac, an
   integration's answer, a skill, or a web page. Your Mac makes no such call.
   Our service logs none of the request or the reply and keeps only the record
-  described under "Your account"; OpenAI keeps them under its own retention
+  described under "Your account", apart from the reports to Sentry described under "Error, performance,
+  and agent reports from our service"; OpenAI keeps them under its own retention
   policy. Every model call and notetaker run is counted in your daily usage. A
   development build run from a checkout can write a local trace of the voice
   traffic when its developer asks; a packaged build cannot.
@@ -895,8 +911,9 @@ only when you press Send.
   task is likely to contain — its repository's name, its title, and the file
   paths it names — so they are spelled right. Only the text comes back, into
   the box at the caret, and it goes nowhere until you send it. Our service
-  stores and logs neither the recording nor the text, and counts only the clip
-  and its length in your daily usage; OpenAI keeps the request and its reply
+  stores and logs neither the recording nor the text, apart from the reports to Sentry described under "Error, performance,
+  and agent reports from our service", and counts
+  only the clip and its length in your daily usage; OpenAI keeps the request and its reply
   under its own retention policy.
 - Keyframe Labs, for video calls, only while the Video calls experiment is on
   in Settings › Experimental, which it is not until you turn it on. The
@@ -924,9 +941,9 @@ only when you press Send.
   no referrer and nothing of yours is sent with it.
 - PostHog, for usage data and screen recordings from the Mac app. The counts
   go through our own service; the recordings go from Luke to PostHog directly.
-- Sentry, for the anonymous exception, process-session, and native crash
-  reports from the Mac app, and the error reports from our service,
-  described above.
+- Sentry, for the Mac app's crash and performance reports, and our service's
+  and Luke's agents' error, performance, log, and agent reports, described
+  above.
 - Anthropic and OpenAI, for a coding agent. When you, or Luke on a call, start
   one on a task, our service runs it in a Vercel Sandbox of its own with the
   task's repository checked out, and calls the model chosen (or your default)
@@ -1106,7 +1123,7 @@ keeps your account and, unsealed, your conversation in our database, which
 Neon hosts, beside what earlier versions left there; a
 task's checkout and a coding agent's changes are held in a Vercel Sandbox and
 its snapshot; usage counts and recordings are held by PostHog, and crash
-and error reports by Sentry.
+and error, performance, and agent reports by Sentry.
 
 ## Your choices
 
@@ -1146,9 +1163,8 @@ and error reports by Sentry.
   versions left there — and asks PostHog to erase your usage data and
   recordings, which does not reach a recording never attached to your account.
   Luke stops recording for the rest of the session, and starts again the next
-  time you open it or sign in. Sentry reporting continues, and earlier
-  anonymous crash reports cannot be identified as yours and targeted through
-  account deletion. Deleting does not affect your Google or GitHub account
+  time you open it or sign in. Sentry reporting continues, and what Sentry
+  already received is not tied to your account and is not erased with it. Deleting does not affect your Google or GitHub account
   or the account at any service you connected, and does not revoke the Luke
   GitHub App (revoke it in GitHub's settings). It asks Vercel Connect to
   revoke every integration's grant it holds; if Vercel Connect cannot

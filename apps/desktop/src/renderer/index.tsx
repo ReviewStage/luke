@@ -13,7 +13,15 @@ import { rendererRegistry } from "./renderer-runtime";
 import { appStateFirstRead } from "./use-app-state";
 import { VoiceHost } from "./voice/voice-host";
 
-Sentry.init({ beforeBreadcrumb: withoutAccessTokens, beforeSend: eventWithoutAccessTokens });
+// Every window's tracing, as Sentry's Electron guide sets up a renderer; the
+// DSN, release, and environment are main's, which every renderer event goes
+// through.
+Sentry.init({
+  integrations: [Sentry.browserTracingIntegration()],
+  tracesSampleRate: 1.0,
+  beforeBreadcrumb: withoutAccessTokens,
+  beforeSend: eventWithoutAccessTokens,
+});
 
 // The panel's avatar is subscribed to before anything is drawn, because main
 // hands a page the standing grant once it has drawn its first frame. No other
