@@ -468,7 +468,7 @@ it.layer(getTestDB())("the repositories route", (it) => {
   );
 
   it.effect(
-    "a member reads one pull request of a repository the workspace's installation reaches by its number, its number, title, page, state, and who opened it and nothing more, a merged one as merged, and one whose author's account is gone naming no one",
+    "a member reads one pull request of a repository the workspace's installation reaches by its number, its number, title, page, state, who opened it, and the lines it adds and removes and nothing more, a merged one as merged, and one whose author's account is gone naming no one",
     () =>
       Effect.gen(function* () {
         const github = githubReaching(
@@ -506,6 +506,8 @@ it.layer(getTestDB())("the repositories route", (it) => {
               url: "https://github.com/acme/relay/pull/42",
               state: PULL_REQUEST_STATE.OPEN,
               author: "octo-dev",
+              additions: 12,
+              deletions: 3,
             },
           },
         });
@@ -515,6 +517,8 @@ it.layer(getTestDB())("the repositories route", (it) => {
             title: "Retry a bounced invitation",
             url: "https://github.com/acme/relay/pull/43",
             state: PULL_REQUEST_STATE.MERGED,
+            additions: 12,
+            deletions: 3,
           },
         });
       }),
