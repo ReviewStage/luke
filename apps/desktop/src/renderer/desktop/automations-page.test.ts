@@ -747,6 +747,13 @@ function pick(page: HTMLElement, label: string, option: string): void {
   act(() => row.click());
 }
 
+/** The titles of the page's cards, in order. */
+function cards(page: HTMLElement): string[] {
+  return [...page.querySelectorAll(".settings-group-title")].map(
+    (title) => title.textContent ?? "",
+  );
+}
+
 /** The switch named, wherever it is drawn. */
 function switchNamed(name: string): HTMLButtonElement {
   const found = document.querySelector<HTMLButtonElement>(`[role=switch][aria-label="${name}"]`);
@@ -1907,4 +1914,74 @@ test("a link to a run opens its automation's editor with that run marked current
     [...page.querySelectorAll(".automation-run")].map((row) => row.getAttribute("aria-current")),
     [null, "true"],
   );
+});
+
+test("an automation whose task opens with no code review settings shows no Code review card", async () => {
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+
+  assert.ok(!cards(page).includes("Code review"));
+});
+
+test("a new automation started from Code review is made on pull requests opened or updated, archiving its successful runs, at most five at once and fifty a day", async () => {
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
+  await settle();
+
+  // Note that the press fills the draft in at once, so a Create pressed straight after it saves the review.
+  // Note that the owner is chosen first, as Dean asked, and the preset is offered under it.
+  assert.deepEqual(cards(page).slice(0, 3), ["Sharing", "Start from", "Trigger"]);
+  act(() => button("Start from Code review").click());
+  assert.equal(
+    pickerDetail(page, "Type"),
+    "When a pull request by people or Luke's agents is opened, marked ready, or pushed to in acme/ledger",
+  );
+  // Its own settings, Cursor Bugbot's kind, in a card of their own and written into the lines its task opens with.
+  assert.ok(cards(page).includes("Code review"));
+  act(() => switchNamed("Comment when no issues are found").click());
+  pick(page, "Most findings", "3");
+  type(page.querySelector("input[aria-label='Rules file']"), ".cursor/BUGBOT.md");
+  act(() => button("Create").click());
+  await settle();
+
+  const made = creates[0];
+  assert.ok(made, "the automation is made");
+  assert.deepEqual(
+    {
+      name: made.name,
+      trigger: made.trigger,
+      archiveSuccessful: made.archiveSuccessful,
+      guards: made.guards,
+      target: made.target,
+      repositories: made.repositories,
+    },
+    {
+      name: "Code review",
+      trigger: {
+        kind: AUTOMATION_TRIGGER.GITHUB,
+        event: "pull-request-updated",
+        senders: ["people", "luke-agents"],
+        moments: ["opened", "ready", "pushed"],
+        drafts: false,
+        forks: false,
+      },
+      archiveSuccessful: true,
+      guards: { maxConcurrentRuns: 5, dailyRunCap: 50 },
+      target: { kind: AUTOMATION_TARGET.NEW_AGENT },
+      repositories: ["acme/ledger"],
+    },
+  );
+  assert.match(made.action.prompt, /post what you find as one GitHub review/u);
+  assert.ok(
+    made.action.prompt.startsWith(
+      [
+        "Code review settings:",
+        "- Comment when you find nothing: no",
+        "- Most findings to post: 3",
+        "- Rules file: .cursor/BUGBOT.md",
+        "- Fix what you find: no",
+      ].join("\n"),
+    ),
+    "the settings open the task the agent is handed",
+  );
+  assert.equal(made.action.choice, undefined, "it runs on the creator's own model");
 });
