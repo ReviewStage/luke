@@ -82,7 +82,9 @@ const AUTOMATIONS = [
 ];
 
 const PRIYA_PICTURE = "https://avatars.githubusercontent.com/u/11";
-const FORMER = [{ ...PRIYA, pictureUrl: PRIYA_PICTURE }];
+/** Someone who left having only revised a task, whom no task or agent names. */
+const OLA = { userId: "user-ola", name: "Ola Berg" };
+const FORMER = [{ ...PRIYA, pictureUrl: PRIYA_PICTURE }, OLA];
 const MEMBERS: readonly WorkspaceMember[] = [
   { ...DEAN, email: "dean@example.com", role: WORKSPACE_ROLE.OWNER },
   { ...CHARLES, email: "charles@example.com", role: WORKSPACE_ROLE.MEMBER },
@@ -586,4 +588,12 @@ test("automations that could not be read leave the Inbox still being read saying
   // The Inbox still being read stands as its own wait beside the automations' failure.
   assert.equal(page.querySelectorAll('.person-column .spinner[role="status"]').length, 1);
   assert.doesNotMatch(page.textContent ?? "", /Nothing of theirs here yet/u);
+});
+
+test("a link to someone who left whom only the former members read names opens their page, not Not found", async () => {
+  const { page } = mount(OLA.userId);
+  await settle();
+
+  assert.deepEqual(head(page), [OLA.name, "Former member"]);
+  assert.doesNotMatch(page.textContent ?? "", /Not found/u);
 });
