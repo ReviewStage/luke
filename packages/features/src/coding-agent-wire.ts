@@ -63,6 +63,8 @@ export const CODING_AGENT_BOUNDS = {
   MAX_LINE_ID_CHARS: 128,
   /** The most characters an agent's title may spell, generated or renamed: a tab's width of words. */
   MAX_TITLE_CHARS: 80,
+  /** The most characters the reason an agent was archived for may spell: a line of the archived agent's banner, never a report. */
+  MAX_ARCHIVE_REASON_CHARS: 500,
   /** The most MCP servers one agent's list may name, and the most characters one name may spell: room for every provider and then some, never a document. */
   MAX_SERVERS: 32,
   MAX_SERVER_CHARS: 64,
@@ -449,6 +451,37 @@ export const CODING_AGENT_LIST_ARCHIVED = {
 } as const;
 
 /**
+ * Who archived an agent: a member from the window, Luke on a call for the
+ * member on it, or another coding agent of the workspace for the member who
+ * started that agent, through its `archive_agent` tool.
+ */
+export const CODING_AGENT_ARCHIVER = {
+  MEMBER: "member",
+  LUKE: "luke",
+  AGENT: "agent",
+} as const;
+
+export type CodingAgentArchiver =
+  (typeof CODING_AGENT_ARCHIVER)[keyof typeof CODING_AGENT_ARCHIVER];
+
+/**
+ * Who archived an agent, as its banner and card say it: a member, or Luke or
+ * another agent on a member's behalf, the member absent once their account
+ * is gone, the agent by its id and its title as it stood then, and the
+ * reason it was archived for where one was given.
+ */
+export const codingAgentArchivedBySchema = EffectSchema.Struct({
+  by: EffectSchema.Literals(Object.values(CODING_AGENT_ARCHIVER)),
+  member: EffectSchema.optionalKey(memberRefSchema),
+  agent: EffectSchema.optionalKey(
+    EffectSchema.Struct({ id: wireUuidSchema, name: EffectSchema.String }),
+  ),
+  reason: EffectSchema.optionalKey(EffectSchema.String),
+});
+
+export type CodingAgentArchivedBy = typeof codingAgentArchivedBySchema.Type;
+
+/**
  * One agent as the tabs draw it: the plan it works on, its title, what it
  * runs on, when it started, where it stands, which turn that is, and when
  * that run began. The plan is null for an agent an automation started with
@@ -495,6 +528,8 @@ export const codingAgentSummarySchema = EffectSchema.Struct({
   brief: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(CODING_AGENT_BRIEF))),
   /** Epoch milliseconds the agent was archived; absent while it is not, and from a service before archiving. */
   archivedAt: EffectSchema.optionalKey(countedNumber),
+  /** Who archived the agent, and why where they said; absent while it is not archived, for an archive from before the record, and from a service before it. */
+  archivedBy: EffectSchema.optionalKey(codingAgentArchivedBySchema),
   /** The MCP servers switched off for the agent; absent where none is, and from a service before the switch. */
   disabledServers: EffectSchema.optionalKey(disabledServersSchema),
   /**

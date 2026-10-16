@@ -6,10 +6,12 @@ import loadSkill from "eve/tools/load_skill";
 import { SHOW_PAGE_TOOL } from "../../tasks/page-tool.js";
 import { LOOK_AT_PICTURE_TOOL } from "../../tasks/picture-look.js";
 import {
+  ARCHIVE_AGENT_TOOL,
   LIST_AGENTS_TOOL,
   LIST_TASKS_TOOL,
   MESSAGE_AGENT_TOOL,
   START_AGENT_TOOL,
+  UNARCHIVE_AGENT_TOOL,
 } from "../coding-agent-tools.js";
 import { RUN_ON_MAC_TOOL } from "../mac-command.js";
 import { READ_WEB_PAGE_TOOL, SEARCH_WEB_TOOL } from "../public-research.js";
@@ -117,6 +119,14 @@ const AUTHORED_TOOLS = {
   [CODER_TOOL.START_AGENT]: {
     description: START_AGENT_TOOL.description,
     inputSchema: emitJsonSchema(START_AGENT_TOOL.inputSchema),
+  },
+  [CODER_TOOL.ARCHIVE_AGENT]: {
+    description: ARCHIVE_AGENT_TOOL.description,
+    inputSchema: emitJsonSchema(ARCHIVE_AGENT_TOOL.inputSchema),
+  },
+  [CODER_TOOL.UNARCHIVE_AGENT]: {
+    description: UNARCHIVE_AGENT_TOOL.description,
+    inputSchema: emitJsonSchema(UNARCHIVE_AGENT_TOOL.inputSchema),
   },
   [CODER_TOOL.LIST_TASKS]: {
     description: LIST_TASKS_TOOL.description,

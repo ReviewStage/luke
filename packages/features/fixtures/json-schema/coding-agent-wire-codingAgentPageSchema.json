@@ -82,6 +82,60 @@
       "type": "number",
       "minimum": 0
     },
+    "archivedBy": {
+      "type": "object",
+      "properties": {
+        "by": {
+          "type": "string",
+          "enum": [
+            "member",
+            "luke",
+            "agent"
+          ]
+        },
+        "member": {
+          "type": "object",
+          "properties": {
+            "userId": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "userId",
+            "name"
+          ],
+          "additionalProperties": false
+        },
+        "agent": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 36
+            },
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "name"
+          ],
+          "additionalProperties": false
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "by"
+      ],
+      "additionalProperties": false
+    },
     "disabledServers": {
       "type": "array",
       "items": {

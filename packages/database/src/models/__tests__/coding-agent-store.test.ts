@@ -4,6 +4,7 @@ import { it } from "@effect/vitest";
 import { BRAIN_RUN_EVENT, BRAIN_TURN_ORIGIN, BRAIN_TURN_TRIGGER } from "@luke/features/brain";
 import {
   CHECK_SUMMARY,
+  CODING_AGENT_ARCHIVER,
   CODING_AGENT_AUTHOR,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
@@ -28,8 +29,10 @@ import { CONVERSATION_KIND, MESSAGE_SENDER } from "../../storage-vocabulary.js";
 import { getTestDB, joinWorkspace } from "../../testing/index.js";
 import {
   archiveCodingAgent,
+  archiveIdleCodingAgent,
   archiveUnmovedCodingAgent,
   delegationsOf,
+  IDLE_ARCHIVE,
   linePlacesOf,
   lineSendersOf,
   listCodingAgentsOnPullRequest,
@@ -44,6 +47,7 @@ import {
   recordTurnFastRefused,
   settleCodingAgentAuthor,
   turnUsagesOf,
+  unarchiveCodingAgentFrom,
   writeDelegation,
 } from "../coding-agent-store.js";
 import { sentLineId } from "../ids.js";
@@ -491,6 +495,64 @@ it.layer(getTestDB())("the coding-agent store's archive of an agent left as it w
 
         assert.deepEqual([stale, current, again], [false, true, false]);
         assert.ok(Option.getOrThrow(yield* readCodingAgent(starter, agentId)).archivedAt !== null);
+      }),
+  );
+});
+
+it.layer(getTestDB())("the coding-agent store's record of who archived an agent", (it) => {
+  it.effect(
+    "a member's archive records the member, an idle agent's archive made for a member records who made it and why once, a working one stands, and an unarchive clears only the archive its reader saw",
+    () =>
+      Effect.gen(function* () {
+        const starter = yield* openAccount;
+        const teammate = yield* openAccount;
+        const outsider = yield* openAccount;
+        const workspace = yield* openWorkspace(starter);
+        yield* joinWorkspace(workspace, teammate);
+        yield* openWorkspace(outsider);
+        const { agentId } = yield* tasklessAgent(starter, workspace);
+        const byAgent = {
+          by: CODING_AGENT_ARCHIVER.AGENT,
+          userId: teammate,
+          agentId: randomUUID(),
+          agentName: "Billing helper",
+          reason: "Its pull request merged.",
+        };
+        const idle = () => Effect.succeed(true);
+
+        const byMember = yield* archiveCodingAgent(teammate, agentId, true);
+        assert.deepEqual(Option.getOrThrow(byMember).archivedBy, {
+          by: CODING_AGENT_ARCHIVER.MEMBER,
+          userId: teammate,
+        });
+        const seen = Option.getOrThrow(byMember).archivedAt;
+        assert.ok(seen !== null);
+        assert.equal(yield* unarchiveCodingAgentFrom(teammate, agentId, seen), true);
+        // The archive made again is made later, as any archive after a read of the last one is.
+        yield* TestClock.adjust("1 second");
+        assert.equal(
+          yield* archiveIdleCodingAgent(teammate, agentId, byAgent, () => Effect.succeed(false)),
+          IDLE_ARCHIVE.WORKING,
+        );
+        assert.equal(
+          yield* archiveIdleCodingAgent(teammate, agentId, byAgent, idle),
+          IDLE_ARCHIVE.ARCHIVED,
+        );
+        assert.equal(
+          yield* archiveIdleCodingAgent(starter, agentId, { ...byAgent, reason: "Again." }, idle),
+          IDLE_ARCHIVE.ALREADY,
+        );
+        const archived = Option.getOrThrow(yield* readCodingAgent(starter, agentId));
+        assert.deepEqual(archived.archivedBy, byAgent);
+        assert.equal(
+          yield* archiveIdleCodingAgent(outsider, agentId, byAgent, idle),
+          IDLE_ARCHIVE.NOT_FOUND,
+        );
+        // An unarchive from the archive a reader saw before it was made again takes nothing.
+        assert.equal(yield* unarchiveCodingAgentFrom(starter, agentId, seen), false);
+        assert.ok(Option.getOrThrow(yield* readCodingAgent(starter, agentId)).archivedAt !== null);
+        const back = Option.getOrThrow(yield* archiveCodingAgent(starter, agentId, false));
+        assert.deepEqual([back.archivedAt, back.archivedBy], [null, null]);
       }),
   );
 });

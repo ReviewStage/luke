@@ -1,6 +1,7 @@
 import type { AutomationFiring } from "@luke/features/automation-wire";
 import {
   CONTEXT_WINDOW,
+  type CodingAgentArchiver,
   type CodingAgentAuthor,
   type CodingAgentPullRequest,
   type ContextWindow,
@@ -51,6 +52,9 @@ import { conversations } from "./storage.js";
  * `archived_at` is when the developer put the agent away, which leaves it
  * out of every list but the one that asks for archived agents, and null
  * while it stands; its conversation and pull request are kept either way.
+ * `archived_by` is who archived it (`StoredArchive`), written with
+ * `archived_at` and cleared with it; null for an archive from before the
+ * column, and for one an automation's sweep made.
  * `disabled_servers` is the MCP servers, by connection name (one account
  * at an integration: `notion`, `notion-2`, the first account's name being
  * its provider's), the developer switched off for this agent from its
@@ -114,6 +118,19 @@ export interface StoredAutomationOrigin {
   readonly body?: string;
 }
 
+/**
+ * Who archived an agent, and why: a member from the window, or Luke or
+ * another coding agent acting for one, the member always, the agent by its
+ * id and its title as it stood, and the reason where one was given.
+ */
+export interface StoredArchive {
+  readonly by: CodingAgentArchiver;
+  readonly userId: string;
+  readonly agentId?: string;
+  readonly agentName?: string;
+  readonly reason?: string;
+}
+
 export const codingAgent = pgTable(
   "coding_agent",
   {
@@ -164,6 +181,8 @@ export const codingAgent = pgTable(
     published: jsonb("published").$type<CodingAgentPullRequest>(),
     /** When the developer archived the agent; null while it is not. */
     archivedAt: timestamptz("archived_at"),
+    /** Who archived the agent, and why; null while it is not, and for an archive no one was recorded for. */
+    archivedBy: jsonb("archived_by").$type<StoredArchive>(),
     /** The MCP servers switched off for this agent, by integration provider; null switches none off. */
     disabledServers: jsonb("disabled_servers").$type<readonly string[]>(),
     /** The MCP servers mentioned since the agent's last turn started, by integration provider; null for none. */

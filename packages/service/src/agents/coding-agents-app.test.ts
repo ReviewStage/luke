@@ -50,6 +50,7 @@ import {
   GITHUB_TRIGGER_EVENT,
 } from "@luke/features/automation-wire";
 import {
+  CODING_AGENT_ARCHIVER,
   CODING_AGENT_BOUNDS,
   CODING_AGENT_BRIEF,
   CODING_AGENT_SENDER,
@@ -1037,6 +1038,29 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         );
       return { ...opened, agent, target, sessionId, writer, turnId, transcript, sent };
     });
+
+  it.effect(
+    "a member's Archive of a teammate's agent records the member on it, which its summary names, and an Unarchive clears it",
+    () =>
+      Effect.gen(function* () {
+        const { other, task, agent, ask } = yield* startedAgent(fakeEve(), { running: false });
+        yield* joinWorkspace(task.workspaceId, other);
+        const changed = (archived: boolean) =>
+          Effect.map(
+            ask(request(AGENT, other, { method: "PATCH", id: agent.id, body: { archived } })),
+            (answered) =>
+              readAnswer(codingAgentAnswerSchema, HOSTED_HTTP_STATUS.OK, answered).agent,
+          );
+
+        const archived = yield* changed(true);
+        assert.ok(archived.archivedAt !== undefined);
+        assert.equal(archived.archivedBy?.by, CODING_AGENT_ARCHIVER.MEMBER);
+        assert.equal(archived.archivedBy?.member?.userId, other);
+        assert.equal(archived.archivedBy?.agent, undefined);
+        const back = yield* changed(false);
+        assert.deepEqual([back.archivedAt, back.archivedBy], [undefined, undefined]);
+      }),
+  );
 
   it.effect(
     "a message the running turn took in after its second step reads as arriving after that step of the turn's journal, which closes behind it, while the line that opened the turn names no place",
