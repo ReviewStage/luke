@@ -4418,6 +4418,7 @@ body:has(.app-stage[data-capture="true"])
    over what fires it, its owner, when it runs next in the tertiary ink, a
    failure's mark, and its switch, divided by the card's hairlines. */
 .automation-row {
+  position: relative;
   display: flex;
   min-height: 52px; /* off-scale */
   align-items: center;
@@ -4503,6 +4504,21 @@ body:has(.app-stage[data-capture="true"])
   background: none;
   color: inherit;
   text-align: left;
+}
+
+/* Note that the press reaches past its own box to the row's, because the
+   gap before the switch and the inset after it would otherwise be filled
+   by the hover yet answer no press; the switch stands above it. */
+.automation-row-open::after {
+  position: absolute;
+  border-radius: inherit;
+  content: "";
+  inset: 0;
+}
+
+.automation-row > .switch {
+  position: relative;
+  z-index: 1;
 }
 
 .automation-row-open > .state-glyph {
