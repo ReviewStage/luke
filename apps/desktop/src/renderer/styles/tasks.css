@@ -131,7 +131,7 @@
   border-top-color: var(--accent);
   border-radius: 50%;
   vertical-align: 0.05em;
-  animation: spinner-turn 900ms linear infinite;
+  animation: luke-spinner-turn 900ms linear infinite;
   animation-play-state: var(--loop-motion);
   content: "";
 }

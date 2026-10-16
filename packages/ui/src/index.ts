@@ -5,6 +5,7 @@ export * from "./components/chip/chip.js";
 export * from "./components/form-field/form-field.js";
 export * from "./components/layout/layout.js";
 export * from "./components/segmented/segmented.js";
+export * from "./components/spinner/spinner.js";
 export * from "./components/switch/switch.js";
 export * from "./components/text/text.js";
 export * from "./components/text-field/text-field.js";

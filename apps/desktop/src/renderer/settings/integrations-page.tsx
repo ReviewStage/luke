@@ -232,7 +232,7 @@ function RowLineText({ line }: { line: RowLine }): React.JSX.Element {
   return (
     <small className="settings-state" data-state={line.state}>
       {line.state === LINE_STATE.WAITING ? (
-        <span className="spinner" data-size={SPINNER_SIZE.INLINE}>
+        <span className="luke-spinner" data-size={SPINNER_SIZE.INLINE}>
           <SpinnerRing />
         </span>
       ) : null}
