@@ -288,3 +288,28 @@ test("a deleted automation's page is passed over by Back, which returns to the p
 
   assert.deepEqual(opened, [kept]);
 });
+
+/** The window with Chat standing or not, in the workspace given, each time Chat is asked to open counted in `opened`. */
+function onChat(open: boolean, opened: string[], workspaceId = "workspace-acme"): TasksControl {
+  const base = tasksControl();
+  return tasksControl({
+    workspace: { id: workspaceId, name: workspaceId, role: WORKSPACE_ROLE.MEMBER, github: null },
+    chatView: { ...base.chatView, open, onOpen: () => opened.push(workspaceId) },
+  });
+}
+
+test("Chat is the chat of the workspace it stood in, so Back returns to it in that workspace and passes over it once another is listed", async () => {
+  handState(experimentsOn(EXPERIMENT.CHAT));
+  const opened: string[] = [];
+  const same = mount(onChat(true, opened));
+  await settle();
+  same.stand(onChat(false, opened));
+  assert.equal(same.history().canGoBack, true);
+  act(() => same.history().onBack());
+  assert.deepEqual(opened, ["workspace-acme"]);
+
+  const other = mount(onChat(true, opened));
+  await settle();
+  other.stand(onChat(false, opened, "workspace-platform"));
+  assert.equal(other.history().canGoBack, false, "Chat of another workspace is no step back");
+});

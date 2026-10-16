@@ -12,7 +12,13 @@ import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
 import { tasksControl } from "#testing/tasks-control";
-import { type FixtureChat, fixtureChat } from "../tasks/chat-fixture";
+import {
+  type FixtureChat,
+  fixtureChat,
+  type Staged,
+  stagedAnswer,
+  stagedPost,
+} from "../tasks/chat-fixture";
 import { DesktopChat } from "./desktop-chat";
 
 /** The moment the fixture's messages are stamped before. */
@@ -40,12 +46,19 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The window's Chat over the fixture's chat, changed as the test asks, its place its own, as the plans tab holds it. */
+/** The window's Chat over the fixture's chat, changed as the test asks, its place and its posts its own, as the plans tab holds them. */
 function mount(change: (chat: FixtureChat) => FixtureChat = (chat) => chat): HTMLElement {
-  const staged = fixtureChat({ fixtureMode: true }, AT);
-  const chat = staged === undefined ? undefined : change(staged);
   function Page() {
     const [place, setPlace] = useState<ChatPlace>(FOR_YOU);
+    const [chat, setChat] = useState<FixtureChat | undefined>(() => {
+      const staged = fixtureChat({ fixtureMode: true }, AT);
+      return staged === undefined ? undefined : change(staged);
+    });
+    const stage = (staged: (held: FixtureChat) => Staged) => {
+      const landed = chat === undefined ? { refused: "No chat." } : staged(chat);
+      if ("chat" in landed) setChat(landed.chat);
+      return Promise.resolve("refused" in landed ? landed.refused : undefined);
+    };
     return createElement(DesktopChat, {
       accountName: "Dean Stratakos",
       tasks: tasksControl({
@@ -56,6 +69,8 @@ function mount(change: (chat: FixtureChat) => FixtureChat = (chat) => chat): HTM
           onOpen: () => undefined,
           onClose: () => undefined,
           onChoose: setPlace,
+          onPost: (post) => stage((held) => stagedPost(held, post, AT)),
+          onAnswer: (answer) => stage((held) => stagedAnswer(held, answer, AT)),
         },
       }),
     });
@@ -134,7 +149,9 @@ test("a press on a channel shows its messages in the order posted, a thread fold
     "Invite emails",
     "Dean Stratakos",
   ]);
-  const toggle = page.querySelector<HTMLButtonElement>(".chat-thread-toggle");
+  const toggle = page.querySelector<HTMLButtonElement>(
+    '.chat-message[data-seq="43"] .chat-thread-toggle',
+  );
   assert.equal(toggle?.textContent, "View thread · 2 replies");
   act(() => toggle?.click());
   assert.deepEqual(stream(page).slice(0, 4), [
@@ -171,4 +188,185 @@ test("an ask posted in a direct message is listed among For you's asks as a dire
     "Invite emails direct message",
     "Invite emails in #teammate-invitations",
   ]);
+});
+
+/** Types the words into a box, as a person typing them would leave it, the caret at their end. */
+function typeInto(field: HTMLTextAreaElement, text: string): void {
+  const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+  act(() => {
+    setValue?.call(field, text);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
+function press(field: HTMLElement, key: string): void {
+  act(() => field.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true })));
+}
+
+/** Lets every promise settled so far run its continuations. */
+async function settle(): Promise<void> {
+  await act(async () => {
+    for (let tick = 0; tick < 6; tick += 1) await Promise.resolve();
+  });
+}
+
+function boxNamed(page: HTMLElement, label: string): HTMLTextAreaElement {
+  const box = page.querySelector<HTMLTextAreaElement>(`textarea[aria-label="${label}"]`);
+  assert.ok(box, `no box ${label}`);
+  return box;
+}
+
+/** The text of every message's words in the pane, in order, a reply's indented. */
+function words(page: HTMLElement): string[] {
+  return [...page.querySelectorAll(".chat-message, .chat-reply")].map((node) => {
+    const indent = node.classList.contains("chat-reply") ? "  ↳ " : "";
+    const body = node.querySelector(":scope > .chat-message-body > .chat-words");
+    return `${indent}${body?.textContent?.trim() ?? ""}`;
+  });
+}
+
+test("a channel's composer offers its members as an @ is typed, writes the one chosen, and posts to the channel on Enter, leaving the box empty", async () => {
+  const page = mount();
+  act(() => railRow(page, "teammate-invitations").click());
+  const box = boxNamed(page, "Message #teammate-invitations");
+  typeInto(box, "@age");
+  const options = [...page.querySelectorAll('[role="option"]')].map((row) => row.textContent);
+  assert.deepEqual(options, ["@agent-1Add teammate invitations", "@agent-2Invite emails"]);
+  press(box, "ArrowDown");
+  press(box, "Enter");
+  assert.equal(box.value, "@agent-2 ");
+  assert.equal(page.querySelector('[role="listbox"]'), null);
+  typeInto(box, "@agent-2 hold the template until #214 lands");
+  press(box, "Enter");
+  await settle();
+  assert.equal(box.value, "");
+  assert.equal(words(page).at(-1), "@agent-2 hold the template until #214 lands");
+  assert.equal(stream(page).at(-1), "Dean Stratakos");
+});
+
+test("an open choice in For you is answered by a pick and its send, which marks the pick, says who answered, and leaves For you's count one less", async () => {
+  const page = mount();
+  const card = page.querySelector<HTMLElement>('.chat-ask[data-status="open"]');
+  assert.ok(card, "the choice's card stands open");
+  const fourteen = [...card.querySelectorAll<HTMLButtonElement>(".inbox-option")].find((option) =>
+    option.textContent?.startsWith("14 days"),
+  );
+  act(() => fourteen?.click());
+  const send = card.querySelector<HTMLButtonElement>('button[aria-label="Send"]');
+  assert.equal(send?.disabled, false);
+  act(() => send?.click());
+  await settle();
+  assert.equal(rail(page)[0], "▸ For you (3)");
+  // The answered ask leaves For you, so the channel shows it settled.
+  act(() => railRow(page, "teammate-invitations").click());
+  const settled = page.querySelector('.chat-ask[data-status="answered"]');
+  assert.equal(
+    settled?.querySelector('[data-picked="true"]')?.textContent?.startsWith("14 days"),
+    true,
+  );
+  assert.equal(
+    settled?.querySelector(".chat-ask-settled")?.textContent,
+    'Dean Stratakos: Chose "14 days".',
+  );
+});
+
+test("an approval is answered by its press, and a reply typed under an opened thread lands in that thread", async () => {
+  const page = mount();
+  const approval = [...page.querySelectorAll<HTMLElement>('.chat-ask[data-status="open"]')].find(
+    (card) => card.querySelector(".chat-ask-kind")?.textContent === "Ask · Approval",
+  );
+  const approve = [...(approval?.querySelectorAll("button") ?? [])].find(
+    (button) => button.textContent === "Approve",
+  );
+  act(() => approve?.click());
+  await settle();
+  assert.equal(rail(page)[0], "▸ For you (3)");
+
+  act(() => railRow(page, "teammate-invitations").click());
+  const toggle = page.querySelector<HTMLButtonElement>(
+    '.chat-message[data-seq="48"] .chat-thread-toggle',
+  );
+  act(() => toggle?.click());
+  const reply = boxNamed(page, "Reply in thread");
+  typeInto(reply, "Thanks, both.");
+  press(reply, "Enter");
+  await settle();
+  assert.deepEqual(
+    words(page).filter((line) => line.startsWith("  ↳ ")),
+    [
+      "  ↳ Fine by me. I'll keep off memberships until it lands.",
+      "  ↳ Holding the template until #214 merges; doing the resend endpoint meanwhile.",
+      "  ↳ Thanks, both.",
+    ],
+  );
+});
+
+test("a form's answer stands under its card field by field, and the reply in its thread says the same", async () => {
+  const page = mount((chat) => ({
+    ...chat,
+    answer: {
+      ...chat.answer,
+      messages: chat.answer.messages.map((message) =>
+        message.seq === 51 && message.ask !== undefined
+          ? {
+              ...message,
+              ask: {
+                ...message.ask,
+                title: "Where do the seats go?",
+                response: {
+                  type: CHAT_ASK.FORM,
+                  fields: [
+                    { type: "text", label: "Region", required: true },
+                    { type: "number", label: "Seats" },
+                  ],
+                },
+              },
+            }
+          : message,
+      ),
+    },
+  }));
+  const card = [...page.querySelectorAll<HTMLElement>('.chat-ask[data-status="open"]')].find(
+    (each) => each.querySelector(".chat-ask-title")?.textContent === "Where do the seats go?",
+  );
+  assert.ok(card, "the form's card stands open");
+  const [region, seats] = [...card.querySelectorAll<HTMLInputElement>("input")];
+  assert.ok(region && seats);
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  act(() => {
+    setValue?.call(region, "US");
+    region.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  act(() => {
+    setValue?.call(seats, "12");
+    seats.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  act(() => card.querySelector<HTMLButtonElement>('button[aria-label="Send"]')?.click());
+  await settle();
+  act(() => railRow(page, "teammate-invitations").click());
+  const settled = page.querySelector('.chat-message[data-seq="51"] .chat-ask-settled');
+  assert.deepEqual(
+    [...(settled?.querySelectorAll(".chat-ask-values li") ?? [])].map((row) => row.textContent),
+    ["Region: US", "Seats: 12"],
+  );
+  act(() =>
+    page
+      .querySelector<HTMLButtonElement>('.chat-message[data-seq="51"] .chat-thread-toggle')
+      ?.click(),
+  );
+  assert.match(words(page).join("\n"), /↳ Filled in the form\.\s*Region: US\s*Seats: 12/u);
+});
+
+test("an Enter that confirms what an input method composed leaves the mention list's word as typed", () => {
+  const page = mount();
+  act(() => railRow(page, "teammate-invitations").click());
+  const box = boxNamed(page, "Message #teammate-invitations");
+  typeInto(box, "@age");
+  act(() =>
+    box.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", isComposing: true, bubbles: true }),
+    ),
+  );
+  assert.equal(box.value, "@age");
+  assert.ok(page.querySelector('[role="listbox"]'), "the list stays open");
 });

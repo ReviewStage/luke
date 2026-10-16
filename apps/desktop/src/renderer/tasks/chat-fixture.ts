@@ -3,14 +3,20 @@ import {
   CHANNEL_KIND,
   CHAT_ASK,
   CHAT_BLOCK,
+  CHAT_TARGET_SIGIL,
   type ChatAnswer,
+  type ChatChannel,
   type ChatMessage,
+  formValueLines,
   GENERAL_CHANNEL,
   MEMBER_KIND,
+  mentionedHandles,
   PLANNER_HANDLE,
+  replyWords,
 } from "@luke/features/chat-wire";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import type { TaskAgentLine } from "@luke/features/task-wire";
+import type { ChatAskAnswer, ChatPost } from "@luke/ui/chat-model";
 import { FIXTURE_TASK_ID } from "./tasks-fixture";
 
 /**
@@ -25,6 +31,12 @@ import { FIXTURE_TASK_ID } from "./tasks-fixture";
  * name here is invented; nothing is read from an account. Each message is
  * stamped some minutes before the moment the run asks for it, so the times
  * read as a morning's talk whenever the capture is taken.
+ *
+ * A post or an answer made in a fixture run lands in this chat alone, as
+ * the service would answer it: a post as the developer's next message in
+ * the place it names, mentioning the members its words name; an answer as
+ * the ask answered at the revision read and the developer's reply in its
+ * thread. Neither moves the developer's cursor. Nothing leaves the window.
  */
 
 /** The agents the fixture's chat names, as a plan's summary would list them. */
@@ -289,7 +301,10 @@ export interface FixtureChat {
 }
 
 /** The chat a fixture run draws, its messages stamped before `at`; nothing for a live run, which reads its own. */
-export function fixtureChat(run: { readonly fixtureMode: boolean }, at: number) {
+export function fixtureChat(
+  run: { readonly fixtureMode: boolean },
+  at: number,
+): FixtureChat | undefined {
   if (!run.fixtureMode) return undefined;
   const dm = (id: string, other: string) => ({
     id,
@@ -352,5 +367,129 @@ export function fixtureChat(run: { readonly fixtureMode: boolean }, at: number) 
     messages: messages(at),
     cursor: "52",
   };
-  return { answer, agents: [AGENT_ONE, AGENT_TWO] } satisfies FixtureChat;
+  return { answer, agents: [AGENT_ONE, AGENT_TWO] };
+}
+
+/** A fixture's post or answer as it landed: the chat with it in, or why it was refused. */
+export type Staged = { readonly chat: FixtureChat } | { readonly refused: string };
+
+/** What a fixture's post or answer refuses with: a place, a message, or a revision that is not the chat's. */
+const STAGED_REFUSAL = {
+  NO_PLACE: "There is no such channel or member.",
+  NO_MESSAGE: "That message is not in this chat.",
+  STALE: "The ask changed since you read it.",
+} as const;
+
+/** The channel a post goes to: its thread's, a channel by `#name`, or the developer's DM with a member by `@handle`. */
+function placeOf(chat: ChatAnswer, post: ChatPost): ChatChannel | undefined {
+  if (post.replyTo !== undefined) {
+    const root = chat.messages.find((message) => message.seq === post.replyTo);
+    return chat.channels.find((channel) => channel.id === root?.channelId);
+  }
+  const to = post.to ?? "";
+  const name = to.slice(1);
+  if (to.startsWith(CHAT_TARGET_SIGIL.CHANNEL)) {
+    return chat.channels.find(
+      (channel) => channel.kind !== CHANNEL_KIND.DM && channel.name === name,
+    );
+  }
+  const member = chat.members.find((each) => each.handle === name);
+  return chat.channels.find(
+    (channel) =>
+      channel.kind === CHANNEL_KIND.DM &&
+      member !== undefined &&
+      (channel.members ?? []).includes(member.id) &&
+      (channel.members ?? []).includes(chat.self),
+  );
+}
+
+/** The chat with one more message of the developer's at the next place in its sequence, which their own unread counts never count. */
+function withMessage(
+  chat: ChatAnswer,
+  at: number,
+  message: {
+    readonly channelId: string;
+    readonly parentId: string | undefined;
+    readonly blocks: ChatMessage["blocks"];
+  },
+  touched: (seq: number) => readonly ChatMessage[],
+): ChatAnswer {
+  const seq = Math.max(0, ...chat.messages.map((each) => each.touchedSeq)) + 1;
+  const words = message.blocks.flatMap((block) => ("text" in block ? [block.text] : []));
+  const mentions = mentionedHandles(words.join("\n")).flatMap(
+    (handle) => chat.members.find((member) => member.handle === handle)?.id ?? [],
+  );
+  const posted: ChatMessage = {
+    id: crypto.randomUUID(),
+    seq,
+    touchedSeq: seq,
+    channelId: message.channelId,
+    authorId: chat.self,
+    blocks: message.blocks,
+    mentions,
+    postedAt: at,
+  };
+  // A root carries no parent at all, as the service answers one.
+  const placed =
+    message.parentId === undefined ? posted : { ...posted, parentId: message.parentId };
+  return {
+    ...chat,
+    messages: [...touched(seq), placed],
+    cursor: String(seq),
+  };
+}
+
+/** The fixture's chat with the developer's post in it, or why it was refused. */
+export function stagedPost(read: FixtureChat, post: ChatPost, at: number): Staged {
+  const chat = read.answer;
+  const channel = placeOf(chat, post);
+  if (channel === undefined) return { refused: STAGED_REFUSAL.NO_PLACE };
+  // Note that a reply to a reply joins its root's thread, as every thread has one root.
+  const replied = chat.messages.find((message) => message.seq === post.replyTo);
+  const parentId = replied === undefined ? undefined : (replied.parentId ?? replied.id);
+  const answer = withMessage(
+    chat,
+    at,
+    { channelId: channel.id, blocks: words(post.text), parentId },
+    () => chat.messages,
+  );
+  return { chat: { ...read, answer } };
+}
+
+/** The fixture's chat with the ask answered and the developer's reply in its thread, or why it was refused. */
+export function stagedAnswer(read: FixtureChat, answered: ChatAskAnswer, at: number): Staged {
+  const chat = read.answer;
+  const asked = chat.messages.find((message) => message.seq === answered.seq);
+  if (asked?.ask === undefined) return { refused: STAGED_REFUSAL.NO_MESSAGE };
+  if (asked.ask.revision !== answered.revision || asked.ask.status !== ASK_STATUS.OPEN) {
+    return { refused: STAGED_REFUSAL.STALE };
+  }
+  const { reply } = answered;
+  // The reply in the thread says what the card says: the answer, a form's fields, and the note.
+  const text = [
+    replyWords(reply),
+    ...(reply.values === undefined ? [] : [formValueLines(reply.values)]),
+    ...(reply.note === undefined ? [] : [reply.note]),
+  ].join("\n\n");
+  const answer = withMessage(
+    chat,
+    at,
+    { channelId: asked.channelId, blocks: words(text), parentId: asked.parentId ?? asked.id },
+    (seq) =>
+      chat.messages.map((message) =>
+        message.id !== asked.id || message.ask === undefined
+          ? message
+          : {
+              ...message,
+              touchedSeq: seq,
+              ask: {
+                ...message.ask,
+                status: ASK_STATUS.ANSWERED,
+                answer: reply,
+                answeredBy: chat.self,
+              },
+            },
+      ),
+  );
+  return { chat: { ...read, answer } };
 }
