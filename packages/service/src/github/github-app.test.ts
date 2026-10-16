@@ -684,6 +684,39 @@ it.layer(getTestDB())("a workspace's repositories through its installation", (it
   );
 
   it.effect(
+    "a kept reach whose installation the account reinstalled since mints through the installation the workspace now links, at once",
+    () =>
+      Effect.gen(function* () {
+        const before: InstallationFixture = { ...relayInstallation(210), accountId: 60_210 };
+        const after: InstallationFixture = { ...relayInstallation(211), accountId: 60_210 };
+        const installations = [before];
+        const fake = githubReaching(installations);
+        const workspace = yield* openWorkspace(yield* openGithubUser());
+        yield* connectWorkspaceGitHub(workspace, before);
+        const app = yield* GitHubApp;
+        const ask = () =>
+          app
+            .repositoryPullRequestToken(workspace, "octo-org/relay")
+            .pipe(Effect.provide(fake.layer));
+
+        const first = yield* ask();
+        installations.splice(0, 1, after);
+        yield* connectWorkspaceGitHub(workspace, after);
+        const reinstalled = yield* ask();
+
+        assert.ok(Option.isSome(first) && Option.isSome(reinstalled));
+        assert.deepEqual(
+          fake.sent
+            .filter(
+              (one) => one.url.endsWith("/access_tokens") && "repositories" in JSON.parse(one.body),
+            )
+            .map((one) => new URL(one.url).pathname),
+          ["/app/installations/210/access_tokens", "/app/installations/211/access_tokens"],
+        );
+      }).pipe(Effect.provide(GitHubApp.layer(GITHUB_APP_SETTINGS))),
+  );
+
+  it.effect(
     "a mint GitHub refused, a repository not yet reached, and a token GitHub expires within the margin are never kept: the next ask asks GitHub again",
     () =>
       Effect.gen(function* () {

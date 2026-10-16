@@ -28,8 +28,11 @@
  * the permissions it is cut to, until shortly before GitHub expires it. A
  * token is still minted for the one repository alone, with the permissions
  * it always had, and a reach is kept only under the workspace that reached
- * it, so nothing kept crosses workspaces. A failure, and a repository not
- * reached, are never kept. A write token leaves for a sandbox's whole run
+ * it, so nothing kept crosses workspaces. A kept reach is used only while
+ * the store still links its installation to the workspace, running, so a
+ * disconnect, or a removal GitHub's webhook reported, stops it at once; and
+ * GitHub itself ends a token's access to a repository removed from its
+ * installation. A failure, and a repository not reached, are never kept. A write token leaves for a sandbox's whole run
  * rather than for one request, so it is minted afresh with its whole hour
  * every time it is asked for.
  *
@@ -1370,6 +1373,29 @@ function githubAppService(
     });
 
     /**
+     * The kept reach of the repository, where the store still links its
+     * installation to the workspace and running; a reach afresh otherwise.
+     * Note that we read the links on every ask, because an installation the
+     * workspace disconnected, or one GitHub replaced, removed, or suspended
+     * as a webhook told the store, must stop minting at once rather than
+     * when the kept reach lapses.
+     */
+    const standingReach = (key: ReachKey) =>
+      Effect.gen(function* () {
+        const linked = yield* installationsOfWorkspace(key.organizationId);
+        const kept = yield* Cache.get(reaches, key);
+        if (Result.isFailure(kept)) return kept;
+        const throughId = kept.success.installation.id;
+        const stands = linked.some(
+          (one) =>
+            one.installationId === throughId && one.status === GITHUB_INSTALLATION_STATUS.ACTIVE,
+        );
+        if (stands) return kept;
+        yield* Cache.invalidate(reaches, key);
+        return yield* Cache.get(reaches, key);
+      });
+
+    /**
      * A token minted as the App for the one repository the workspace
      * reaches, cut to the permissions chosen for its installation, kept as
      * asked; none where it does not reach it, or where its installation
@@ -1383,7 +1409,7 @@ function githubAppService(
       keeping: TokenKeeping = TOKEN_KEEPING.KEPT,
     ) =>
       Effect.gen(function* () {
-        const reached = yield* Cache.get(reaches, new ReachKey({ organizationId, fullName }));
+        const reached = yield* standingReach(new ReachKey({ organizationId, fullName }));
         if (Result.isFailure(reached)) return Option.none();
         const { installation: on, repository } = reached.success;
         const permissions = permissionsOn(on);
