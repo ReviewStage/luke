@@ -4,11 +4,10 @@
    what an issue adds is drawn here: its identifier, its status and priority
    marks, its properties' row, and its description's editor. Tokens only. */
 
-/* The toolbar's field files an issue on Return; it stands at a control's height. */
-.issues-new-title {
-  width: min(320px, 40vw);
-  height: var(--control-height);
-  padding-block: 0;
+/* The pages and the new issue's card share one root, which C is read
+   against; it draws no box of its own. */
+.issues-pages {
+  display: contents;
 }
 
 .issue-row-identifier {
