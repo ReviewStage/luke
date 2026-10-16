@@ -178,9 +178,9 @@ export const steerCodingAgent = /* @__PURE__ */ Effect.fn("web/steerCodingAgent"
   // only where eve took them; a store failure on the way is read as eve hearing nothing, which writes
   // nothing and is answered as an outage, since what failed may have been before the hand-over.
   const services = yield* Effect.context<DatabaseServices>();
-  // Note that another coding agent's line hands no server, because which servers an agent is handed is its developer's to switch, never another agent's.
+  // Note that another coding agent's line, or GitHub's carrying a reviewer's words, hands no server, because which servers an agent is handed is its developer's to switch, never another agent's or a reviewer's.
   const servers =
-    line.sender.kind === MESSAGE_SENDER.AGENT
+    line.sender.kind === MESSAGE_SENDER.AGENT || line.sender.kind === MESSAGE_SENDER.GITHUB
       ? []
       : mentionedServers(line.text, task?.task.repository ?? null);
   const dispatch = dispatchMentioningServers(userId, agent.id, servers, handOver).pipe(
