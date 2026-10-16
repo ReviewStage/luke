@@ -2371,6 +2371,36 @@ button.pull-request-check:hover {
   border-radius: var(--control-radius);
 }
 
+/* A review thread on its line in Files changed (agent-pull-request-tab.tsx's
+   InlineThread): Pierre stands it under its line, in the diff's light DOM,
+   so the window's own type and card draw it, inset from the code's edges
+   as GitHub's are; an outdated one stands in a list above the diff. */
+.diff-note {
+  padding: var(--space-6) var(--space-12);
+  font-family: var(--luke-font-sans);
+  white-space: normal;
+}
+
+.diff-inline-thread {
+  --focus-ring-offset: var(--focus-ring-inset);
+  max-width: 720px;
+  overflow: clip;
+  border: 1px solid var(--hairline);
+  border-radius: var(--control-radius);
+  background: var(--section-fill);
+}
+
+.diff-outdated-threads {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: var(--space-6);
+  margin: 0;
+  padding: var(--space-8) var(--space-12);
+  list-style: none;
+  border-bottom: 1px solid var(--hairline);
+}
+
 .pull-request-thread-head {
   display: flex;
   min-width: 0;
