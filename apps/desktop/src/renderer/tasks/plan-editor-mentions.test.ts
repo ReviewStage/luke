@@ -202,6 +202,20 @@ test("Escape closes the list and leaves the editor open", async () => {
   assert.notEqual(task.container.querySelector(".plan-document-text"), null);
 });
 
+test("words typed past a space that match nothing close the list, and words that match keep it", async () => {
+  const task = await opened();
+
+  await task.typeAtEnd(" See @zzq");
+  const oneWord = task.container.querySelector(".mention-menu")?.textContent ?? "";
+  await task.typeAtEnd(" later");
+  const proseClosed = task.container.querySelector(".mention-menu") === null;
+  await task.typeAtEnd(" Ask @Teammate inv");
+
+  assert.match(oneWord, /Nothing matches/u);
+  assert.ok(proseClosed, "the list closes once the words past a space match nothing");
+  assert.deepEqual(listed(task.container), [["Plan", ["Teammate invitations"]]]);
+});
+
 test("a heading just renamed is offered by its new words, before the editor hands its draft over", async () => {
   const task = await opened();
 
