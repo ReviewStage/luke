@@ -19,7 +19,26 @@ export interface Mounted {
   readonly container: HTMLElement;
 }
 
+declare global {
+  var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
+}
+
 const roots: Root[] = [];
+
+/**
+ * Runs `work` under React's `act`, and tells React it is under one only for
+ * as long as it is. Note that the flag is not left on, because a browser
+ * test's updates come from trusted events the page dispatches outside any
+ * `act`, and React would report each of those as a mistake.
+ */
+async function inAct(work: () => void): Promise<void> {
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  try {
+    await act(async () => work());
+  } finally {
+    globalThis.IS_REACT_ACT_ENVIRONMENT = false;
+  }
+}
 
 /** Draws `element` into a fresh container on a page at `surface`, the desktop's dark unless asked. */
 export async function mount(
@@ -33,14 +52,14 @@ export async function mount(
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  await act(async () => root.render(element));
+  await inAct(() => root.render(element));
   return { container };
 }
 
 /** Unmounts every component mounted since the last call and empties the page. */
 export async function unmountAll(): Promise<void> {
   for (const root of roots.splice(0)) {
-    await act(async () => root.unmount());
+    await inAct(() => root.unmount());
   }
   document.body.replaceChildren();
 }
