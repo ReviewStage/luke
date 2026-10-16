@@ -260,6 +260,55 @@ function RowBody(props: {
   );
 }
 
+/**
+ * A menu's rows drawn in place rather than dropped: each a button of its own
+ * in the page's order, in a row's look, under its section's heading as the
+ * menu heads it, with no search and no highlight of its own, as the side
+ * panel's well offers what its "+" offers with every tab closed.
+ */
+export function MenuRowList({
+  rows,
+  onPick,
+}: {
+  rows: readonly MenuRow[];
+  onPick: (id: string) => void;
+}): React.JSX.Element {
+  return (
+    <>
+      {sectionsOf(rows).map((section) => {
+        const buttons = section.rows.map(({ row }) => (
+          <button
+            key={row.id}
+            type="button"
+            className="menu-item"
+            disabled={row.disabled !== undefined}
+            onClick={() => onPick(row.id)}
+          >
+            <RowBody
+              icon={row.icon}
+              label={row.label}
+              detail={row.detail}
+              hint={<RowHint row={row} />}
+              end={null}
+            />
+          </button>
+        ));
+        const first = section.rows[0]?.row.id;
+        return section.heading === undefined ? (
+          <Fragment key={first}>{buttons}</Fragment>
+        ) : (
+          <section key={first} aria-label={section.heading}>
+            <div className="menu-heading" aria-hidden="true">
+              {section.heading}
+            </div>
+            {buttons}
+          </section>
+        );
+      })}
+    </>
+  );
+}
+
 export function SearchableMenu(props: {
   /** The menu's id, which its trigger's `aria-controls` names. */
   id: string;

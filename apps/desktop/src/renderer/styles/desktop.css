@@ -3797,8 +3797,9 @@ body:has(.app-stage[data-capture="true"])
 }
 
 /* A searchable menu's words fade where they are cut rather than end in an
-   ellipsis, as a tab's label does. */
-.searchable-menu .plan-compose-menu-name {
+   ellipsis, as a tab's label does, and so do the same rows offered in an
+   empty side panel. */
+:is(.searchable-menu, .side-panel-no-tabs) .plan-compose-menu-name {
   text-overflow: clip;
 }
 
@@ -6498,8 +6499,9 @@ button.automation-run:hover {
 }
 
 /* Nothing in the "+" is ever the one chosen, so its rows draw no end slot
-   for a check and stand inset alike at both sides. */
-.tab-add-menu .plan-compose-menu-list .menu-item-end {
+   for a check and stand inset alike at both sides, in its menu and in an
+   empty side panel alike. */
+:is(.tab-add-menu .plan-compose-menu-list, .side-panel-no-tabs) .menu-item-end {
   display: none;
 }
 
@@ -6507,26 +6509,28 @@ button.automation-run:hover {
    a deep path never hides which file the row opens, and a repository's row
    its name rather than its owner (`repository-chip.tsx`); either fades where
    it is cut. A row with no folder gives its name the whole width. */
-:is(.tab-add-menu, .repository-chip) .plan-compose-menu-name:has(+ .plan-compose-menu-detail) {
+:is(.tab-add-menu, .side-panel-no-tabs, .repository-chip)
+.plan-compose-menu-name:has(+ .plan-compose-menu-detail) {
   flex: 0 0 auto;
   max-width: 70%;
 }
 
-:is(.tab-add-menu, .repository-chip) .plan-compose-menu-detail {
+:is(.tab-add-menu, .side-panel-no-tabs, .repository-chip) .plan-compose-menu-detail {
   min-width: 0;
   flex: 0 1 auto;
   overflow: hidden;
 }
 
-/* With every tab closed, the panel offers what the "+" menu offers, as the
-   same rows, at the top of its well. */
+/* With every tab closed, the panel offers all that the "+" menu offers, as
+   the same rows under the same headings, at the top of its well, in a column
+   300px wide at most. A plan offering more than the well holds scrolls it,
+   the scroller spanning the panel so its bar stands at the panel's edge. */
 .side-panel-no-tabs {
   display: flex;
-  width: 100%;
-  max-width: 300px;
+  min-height: 0;
   flex-direction: column;
-  margin: 0 auto;
-  padding: var(--space-48) var(--space-16);
+  overflow-y: auto;
+  padding: var(--space-48) max(var(--space-16), calc((100% - 300px) / 2 + var(--space-16)));
 }
 
 .side-panel-no-tabs-line {
@@ -6926,8 +6930,8 @@ button.automation-run:hover {
    chosen, or dragged. */
 .tab-label[data-overflow="true"],
 .plan-summary-label[data-overflow="true"],
-.searchable-menu .plan-compose-menu-name[data-overflow="true"],
-.searchable-menu .plan-compose-menu-detail[data-overflow="true"],
+:is(.searchable-menu, .side-panel-no-tabs) .plan-compose-menu-name[data-overflow="true"],
+:is(.searchable-menu, .side-panel-no-tabs) .plan-compose-menu-detail[data-overflow="true"],
 .subagent-job[data-overflow="true"],
 .agent-published-title[data-overflow="true"],
 .card-name[data-one-line][data-overflow="true"],

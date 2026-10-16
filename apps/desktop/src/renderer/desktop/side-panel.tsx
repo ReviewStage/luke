@@ -112,11 +112,10 @@ import {
   workFailed,
   workRowsOf,
 } from "../planning/work-model";
-import type { MenuRow } from "../searchable-menu";
+import { type MenuRow, MenuRowList } from "../searchable-menu";
 import { SpinnerRegion } from "../spinner";
 import { GLYPH_STATE, type GlyphState, glyphStateWords, stateEndMark } from "../state-glyph";
 import { Tooltip } from "../tooltip";
-import { type MenuAction, MenuItem } from "./action-menu";
 import { paneTiming } from "./pane-motion";
 import {
   type AddEntry,
@@ -365,14 +364,6 @@ export function changesTabOf(
   open: readonly ChangesStripTab[],
 ): ChangesStripTab {
   return { changes: changesAgentOf(agents, agentId, open) };
-}
-
-/** The empty panel's row that opens a tab of the kind. */
-function kindAction(
-  tab: FixedSidePanelTab,
-  onChoose: (tab: FixedSidePanelTab) => void,
-): MenuAction {
-  return { ...tabLook({ kind: TAB_KIND.PANEL, tab }), onSelect: () => onChoose(tab) };
 }
 
 /** The "+" menu's row for a kind: its glyph and its name, whether or not its tab is open. */
@@ -702,15 +693,13 @@ function PanelTabs({
   unread,
   agents,
   subagents,
-  workers,
   files,
   changes,
   pages,
   terminals,
-  shownFiles,
   shown,
   repository,
-  offeredPages,
+  offers,
   held,
   readWorker,
   actionsSlot,
@@ -727,8 +716,6 @@ function PanelTabs({
   agents: CodingAgentsControl;
   /** The open subagent tabs the plan draws, in the strip's order. */
   subagents: readonly DrawnSubagent[];
-  /** Every subagent the plan's work holds, in the order started, which the "+" offers. */
-  workers: readonly WorkWorkerBlock[];
   /** The open file tabs of files shown on the plan, in the strip's order. */
   files: readonly OpenFile[];
   /** The open Changes tabs of the plan's agents, in the order opened. */
@@ -737,14 +724,12 @@ function PanelTabs({
   pages: readonly DrawnPage[];
   /** The open Terminal tabs of the plan's agents, in the order opened. */
   terminals: readonly TerminalStripTab[];
-  /** Each file Luke showed on the plan, which the "+" offers. */
-  shownFiles: readonly ShownFile[];
   /** Every code Luke showed on the plan, whose notes the file tabs' cards say. */
   shown: readonly TaskCodeShowing[];
   /** The plan's repository, whose showings alone the file tabs' cards read. */
   repository: string | null;
-  /** The plan's pages, which the "+" offers. */
-  offeredPages: readonly PageLine[];
+  /** What the "+" offers (`panelEntries`), which the empty panel offers too. */
+  offers: readonly AddEntry[];
   /** What the agents' and the delegated workers' tabs last drew, which the workers' hover cards preview. */
   held: HeldTranscripts;
   /** Reads a planning worker's session past a cursor, the plan standing in the agent's place. */
@@ -757,8 +742,6 @@ function PanelTabs({
   shownAgent: string | undefined;
 }): React.JSX.Element {
   const copied = useTranscriptCopier();
-  // The panel's "+" asks for a new shell where the panel already holds the keys.
-  const openTerminal = useOpenTerminal(panel, noFocusMove);
   const kinds = stripTabs({
     panel,
     unread,
@@ -831,18 +814,7 @@ function PanelTabs({
         label="Open a tab"
         placeholder="Search tabs"
         noMatch="No tabs match"
-        entries={panelEntries({
-          panel,
-          kinds: HOLDER_KINDS[holder],
-          workers,
-          files: shownFiles,
-          changes: changesOffers(agents, changes),
-          pages: offeredPages,
-          terminals: {
-            offers: terminalOffers(agents, panel),
-            onNew: (agentId) => openTerminal(agentId, TERMINAL_ASK.NEW),
-          },
-        })}
+        entries={offers}
         onOpen={undefined}
         asked={panel.newTabAsked}
         answers={keys}
@@ -852,21 +824,15 @@ function PanelTabs({
   );
 }
 
-/** The panel with every tab closed: what it holds, offered as the "+" menu offers it. */
-function NoTabs({
-  kinds,
-  onChoose,
-}: {
-  kinds: readonly FixedSidePanelTab[];
-  onChoose: (tab: FixedSidePanelTab) => void;
-}): React.JSX.Element {
+/** The panel with every tab closed: every row its "+" menu offers, under the menu's own headings, each opening what it names as its row there does. */
+function NoTabs({ entries }: { entries: readonly AddEntry[] }): React.JSX.Element {
   return (
     <div className="side-panel-no-tabs">
       <p className="side-panel-no-tabs-line">No tabs open</p>
-      {kinds.map((kind) => {
-        const action = kindAction(kind, onChoose);
-        return <MenuItem key={kind} action={action} inMenu={false} onChoose={action.onSelect} />;
-      })}
+      <MenuRowList
+        rows={entries.map((entry) => entry.row)}
+        onPick={(id) => entries.find((entry) => entry.row.id === id)?.onPick()}
+      />
     </div>
   );
 }
@@ -1752,6 +1718,22 @@ export function SidePanel({
   );
   const revealed = useCallback(() => setCodeReveal(undefined), []);
   const keys = shown && leaving === PANEL_LEAVING.NONE;
+  // The panel's "+" asks for a new shell where the panel already holds the keys.
+  const openTerminal = useOpenTerminal(panel, noFocusMove);
+  const offers = panelEntries({
+    panel,
+    kinds: HOLDER_KINDS[holder],
+    workers,
+    files: offered,
+    changes: changesOffers(agents, changes),
+    pages: planPages,
+    terminals: {
+      offers: terminalOffers(agents, panel),
+      onNew: (agentId) => openTerminal(agentId, TERMINAL_ASK.NEW),
+    },
+  });
+  // Something on offer past the fixed kinds, which an empty panel offers in place as a closed kind is.
+  const offersMore = offers.some((entry) => entry.row.section !== undefined);
 
   useLayoutEffect(() => {
     if (leaving === PANEL_LEAVING.NONE || aside.current === null) return;
@@ -1785,15 +1767,13 @@ export function SidePanel({
             unread={unread}
             agents={agents}
             subagents={subagents}
-            workers={workers}
             files={files}
             changes={changes}
             pages={pageTabs}
             terminals={terminals}
-            shownFiles={offered}
             shown={shownCode ?? []}
             repository={repository}
-            offeredPages={planPages}
+            offers={offers}
             held={drawnTranscripts}
             readWorker={work.readWorker}
             actionsSlot={actionsSlot}
@@ -1808,13 +1788,12 @@ export function SidePanel({
           />
         </div>
         {panel.fullScreen ? banner : null}
-        {/* A plan that has used no tab stands empty, the "+" above offering
-            any; one whose tabs were closed offers them again in place. */}
+        {/* A panel with nothing to offer but kinds it has never closed stands
+            empty, the "+" above offering any; otherwise every tab closed, it
+            offers in place all that the "+" offers. */}
         {tab === undefined ? (
           <div className="side-panel-content">
-            {panel.closedTabs.length === 0 ? null : (
-              <NoTabs kinds={HOLDER_KINDS[holder]} onChoose={panel.onChoose} />
-            )}
+            {panel.closedTabs.length === 0 && !offersMore ? null : <NoTabs entries={offers} />}
           </div>
         ) : (
           // The Board is drawn on a canvas, which keeps a find of its own, and
