@@ -47,7 +47,10 @@ export function Checkbox({
         type="checkbox"
         id={id}
         name={name}
-        checked={checked}
+        // Note that a mixed box holds the native box unchecked whatever
+        // `checked` says, because the box toggles its own state under the
+        // dash, and a press on a mixed group must ask for checked.
+        checked={mixed ? false : checked}
         disabled={disabled}
         aria-describedby={describedBy}
         onChange={(event) => onChange(event.target.checked)}
