@@ -5,7 +5,7 @@ import { FIND_STEP, type FindSource, useFindSource } from "../find-in-tab";
 import { Shortcut } from "../shortcut";
 import { TERMINAL_FIND, type TerminalFind } from "../terminal/contract";
 import { AgentRef, agentSubject, NOTHING_HELD } from "./agent-ref";
-import { TreeToggle, useTreeSlide } from "./file-view";
+import { TreeToggle, usePaneRoom } from "./file-view";
 import { AgentGlyph } from "./tab-look";
 import { TERMINAL_LOAD_FAILED } from "./terminal-bundle";
 import { TerminalShells } from "./terminal-shells";
@@ -126,22 +126,28 @@ export function TerminalTab({
   const session = useTerminalSession(agentId, shown, onClose);
   useFindSource(useScrollbackFind(session.find));
   const look = terminalLook(session.state);
-  const slide = useTreeSlide(shells.open);
+  const room = usePaneRoom(shells);
   return (
-    <div className="terminal-tab file-view ph-no-capture" data-state={session.state.kind}>
+    <div
+      className="terminal-tab file-view ph-no-capture"
+      data-state={session.state.kind}
+      {...room.root}
+    >
       <header className="file-view-bar">
         <span className="terminal-tab-title">
           <AgentRef subject={subject} models={agents.models} onOpen={onOpenAgent}>
             <AgentGlyph agent={subject.agent} />
             <span className="agent-ref-name terminal-tab-agent">{subject.name}</span>
           </AgentRef>
-          <span className="terminal-tab-standing">· sandbox · {look.words}</span>
+          <span className="terminal-tab-standing">
+            <span className="terminal-tab-sandbox">· sandbox </span>· {look.words}
+          </span>
         </span>
         <div className="file-view-actions">
-          <TreeToggle open={shells.open} onToggle={shells.onToggle} words={SHELLS_TOGGLE} />
+          <TreeToggle toggles={room.toggles} words={SHELLS_TOGGLE} />
         </div>
       </header>
-      <div className="terminal-tab-body">
+      <div className="terminal-tab-body" {...room.body}>
         <div className="terminal-tab-host">
           {look.bar === undefined ? null : <StateBar bar={look.bar} onAction={session.onAction} />}
           {session.failed ? (
@@ -150,14 +156,21 @@ export function TerminalTab({
             <div ref={session.screen} className="terminal-tab-screen" data-dim={String(look.dim)} />
           )}
         </div>
-        {slide.drawn ? (
+        {room.drawn ? (
           <TerminalShells
             subject={subject}
             models={agents.models}
-            session={session}
+            session={{
+              ...session,
+              // A shell chosen in the list standing over the screen takes the list down, to show the shell.
+              onChoose: (id) => {
+                room.closeOver();
+                session.onChoose(id);
+              },
+            }}
             onOpenAgent={onOpenAgent}
-            pane={slide.pane}
-            leaving={slide.leaving}
+            pane={room.beside.pane}
+            leaving={room.beside.leaving}
             surfaceOpen={shown}
           />
         ) : null}

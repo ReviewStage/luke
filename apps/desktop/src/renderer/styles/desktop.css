@@ -6308,6 +6308,9 @@ button.automation-run:hover {
   --reading-room: calc((100% - var(--reading-width)) / 2);
   --code-reading-room: calc((100% - var(--code-reading-width)) / 2);
   position: relative;
+  /* The container every tab answers its width from (`@container
+     side-panel`, planning.css), so one width lays out every tab narrow. */
+  container: side-panel / inline-size;
   display: flex;
   min-height: 0;
   flex: 1;

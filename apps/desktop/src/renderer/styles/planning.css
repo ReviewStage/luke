@@ -29,6 +29,33 @@
   inset: 0;
 }
 
+/* A board narrower than Excalidraw's phone breakpoint draws its phone
+   toolbar, a row of tools wider than the side panel at its narrowest,
+   centred and cut off at both edges. There the row wraps within the board
+   instead, clear of the column of tools Excalidraw stands at its right, so
+   every tool is in reach. Note that these name Excalidraw's own classes,
+   which hold for the version the workspace pins. */
+.plan-board .excalidraw--mobile .App-top-bar > section {
+  width: 100%;
+  padding-right: var(--default-button-size);
+}
+
+.plan-board .excalidraw--mobile .App-top-bar > section > .Stack,
+.plan-board .excalidraw--mobile .App-toolbar-container {
+  display: flex;
+  justify-content: center;
+}
+
+.plan-board .excalidraw--mobile .App-toolbar--mobile {
+  min-width: 0;
+}
+
+.plan-board .excalidraw--mobile .App-toolbar--mobile > .Stack_horizontal {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
 /* The document is the record: it reads as text and is selectable, so Cmd-C
    on a selection copies it. Note that it sets its own accent, because
    `--accent` is only ever set by a `data-state` ancestor and nothing above
@@ -963,6 +990,7 @@ button.file-ref:hover .file-ref-path {
    so the file's own name stays in sight, clipped past the keyboard's ring
    on a crumb, which stands as tall as the path. */
 .file-breadcrumbs {
+  position: relative;
   min-width: 0;
   flex: 0 1 auto;
   overflow: clip;
@@ -978,15 +1006,31 @@ button.file-ref:hover .file-ref-path {
   list-style: none;
 }
 
+/* Each crumb keeps its full width, its chevron before it, while there are
+   folders left to fold into the "…" (file-breadcrumbs.tsx); with every
+   folder folded the repository gives way, cut short at its end, and with
+   the repository folded too, the file. */
 .file-breadcrumbs li {
   display: flex;
   min-width: 0;
-  flex: 0 1 auto;
+  flex: 0 0 auto;
+  align-items: center;
 }
 
-.file-breadcrumbs li:last-child,
+.file-breadcrumbs[data-fold="folders"] li[data-crumb="0"],
+.file-breadcrumbs[data-fold="all"] li[data-crumb] {
+  flex-shrink: 1;
+}
+
 .file-breadcrumbs .file-breadcrumb-separator {
   flex-shrink: 0;
+}
+
+/* With nothing folded, the "…" is laid out out of sight, so its width can
+   be measured. */
+.file-breadcrumbs li[data-folded-crumb="false"] {
+  position: absolute;
+  visibility: hidden;
 }
 
 .file-breadcrumb {
@@ -1040,6 +1084,10 @@ button.file-ref:hover .file-ref-path {
   outline: none; /* no ring: the tree's own row carries it */
 }
 
+.file-crumb-tree .file-tree-host {
+  --trees-bg-override: var(--surface-popover);
+}
+
 .file-crumb-notice {
   margin: 0;
   padding: var(--space-4) var(--space-8);
@@ -1073,6 +1121,72 @@ button.file-ref:hover .file-ref-path {
   background: var(--desktop-well);
 }
 
+/* A pane beside a tab, a File or Changes tab's tree or a Terminal tab's
+   shells, stands there while the panel holds it open or it slides out; it
+   may be drawn for its place over the tab alone, which a wide panel does
+   not show (`usePaneRoom`). Its count stands under the tab while it stands
+   nowhere beside it. Note that each rule here and under the query names
+   one selector, so each weighs only its own. */
+.file-view[data-pane-beside="false"] :is(.file-tree-pane, .terminal-shells) {
+  display: none;
+}
+
+.file-view[data-pane-beside="true"] > .file-tree-foot {
+  display: none;
+}
+
+.file-tree-toggle[data-place="over"] {
+  display: none;
+}
+
+/* A panel too narrow for a tab and its pane side by side draws the pane
+   over the tab's right edge, shut until its own toggle opens it, a press
+   beside it or Escape closing it again; the toggle at the bar's end opens
+   it there, and its count stands under the tab. One width drives every
+   tab's narrow layout: a side panel under 420px. */
+@container side-panel (max-width: 419px) {
+  .file-view :is(.file-tree-pane, .terminal-shells) {
+    position: absolute;
+    z-index: 1;
+    inset-block: 0;
+    right: 0;
+    width: min(264px, calc(100% - var(--space-48)));
+    background: var(--desktop-well);
+    box-shadow: var(--menu-shadow);
+  }
+
+  .file-view[data-pane-over="true"] :is(.file-tree-pane, .terminal-shells) {
+    display: flex;
+    animation: pane-over-in var(--duration-pane) var(--motion-pane) backwards;
+  }
+
+  .file-view[data-pane-over="false"] :is(.file-tree-pane, .terminal-shells) {
+    display: none;
+  }
+
+  .file-tree-pane > .file-tree-foot {
+    display: none;
+  }
+
+  .file-tree-toggle[data-place="beside"] {
+    display: none;
+  }
+
+  .file-tree-toggle[data-place="over"] {
+    display: inline-flex;
+  }
+
+  .file-view[data-pane-beside] > .file-tree-foot {
+    display: block;
+  }
+}
+
+@keyframes pane-over-in {
+  from {
+    transform: translateX(100%);
+  }
+}
+
 /* A page's tab (page-pane.tsx): a File tab's bar over the page's frame,
    which takes the rest of the pane. The frame sets no background of its
    own: a page that names no colour scheme is a light document, and
@@ -1090,6 +1204,22 @@ button.file-ref:hover .file-ref-path {
   color: var(--text-secondary);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+/* A narrow panel counts the versions without words between the steps,
+   leaving the page's title its room. */
+.page-view-version-count {
+  display: none;
+}
+
+@container side-panel (max-width: 419px) {
+  .page-view-version-words {
+    display: none;
+  }
+
+  .page-view-version-count {
+    display: inline;
+  }
 }
 
 .page-view-frame {
@@ -1163,6 +1293,15 @@ button.file-ref:hover .file-ref-path {
   font-style: italic;
 }
 
+/* A narrow panel numbers a diff's lines on the new side alone, so the
+   code keeps the room a second gutter would take; a removed line, which
+   has no new number, still reads by its tint. */
+@container side-panel (max-width: 419px) {
+  .code-line[data-diff] > .code-line-number:first-child {
+    display: none;
+  }
+}
+
 /* The tree's search field and its filter, in one row over the tree: the
    app's search well, a step shorter to sit in the panel's heading row. */
 .file-tree-search {
@@ -1205,9 +1344,12 @@ button.file-ref:hover .file-ref-path {
    the panel's words, its fills, and its focus ring, so the tree reads as
    the panel's own list, beside a File tab and under a crumb alike. The ring
    is the window's width drawn inside the row, because the tree's scroller
-   lays its rows edge to edge with no room for one outside. */
+   lays its rows edge to edge with no room for one outside. Its ground is
+   the opaque ground it stands on, never transparent, because the tree
+   cuts a long name in its middle by painting the cut over in that ground:
+   a transparent one drew both halves of the name over one another. */
 .file-tree-host {
-  --trees-bg-override: transparent;
+  --trees-bg-override: var(--desktop-well);
   --trees-bg-muted-override: var(--raised);
   --trees-fg-override: var(--text-primary);
   --trees-fg-muted-override: var(--text-secondary);
@@ -1463,6 +1605,7 @@ button.file-ref:hover .file-ref-path {
   align-items: center;
   gap: var(--space-6);
   padding: var(--space-4);
+  overflow: hidden;
   border: 0;
   border-radius: 6px;
   background: none;
@@ -1504,6 +1647,15 @@ button.file-ref:hover .file-ref-path {
   color: var(--text-tertiary);
 }
 
+/* The lines give way before the header's parts would stand on one another. */
+.file-note-lines {
+  min-width: 0;
+  flex-shrink: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Folded, the note's words stand in the header cut to one line. */
 .file-note-preview {
   min-width: 0;
@@ -1514,12 +1666,34 @@ button.file-ref:hover .file-ref-path {
 }
 
 .file-note-show {
+  display: flex;
   flex: 0 0 auto;
+  align-items: center;
   padding: 0;
   border: 0;
   background: none;
   color: var(--text-secondary);
   font: inherit;
+  white-space: nowrap;
+}
+
+.file-note-show > svg {
+  display: none;
+  width: 14px;
+  height: 14px;
+}
+
+/* A narrow panel's note says its age in the link's pill, and the link
+   draws the Code tab's glyph alone, named still. */
+@container side-panel (max-width: 419px) {
+  .file-note-time,
+  .file-note-show-words {
+    display: none;
+  }
+
+  .file-note-show > svg {
+    display: block;
+  }
 }
 
 .file-note-show:hover {
@@ -2582,6 +2756,14 @@ button.attached-file-face:hover img {
   flex: 0 0 auto;
 }
 
+/* A narrow panel leaves out the word "sandbox" the tab's name already
+   implies, so the agent's name keeps more of the bar. */
+@container side-panel (max-width: 419px) {
+  .terminal-tab-sandbox {
+    display: none;
+  }
+}
+
 /* The screen and the shells beside it; the list slides in past the body's
    right edge and out over the screen, so the body clips what stands past
    it, with `clip` rather than `hidden`, as a File tab's body does. */
@@ -2803,13 +2985,16 @@ button.attached-file-face:hover img {
   font-size: 12px;
 }
 
+/* Where the words and the action do not fit one line, the action drops to
+   a line of its own at the right, so the words never give way to nothing. */
 .terminal-bar {
   display: flex;
   flex: 0 0 auto;
+  flex-wrap: wrap;
   min-height: 28px;
   align-items: center;
-  gap: var(--space-8);
-  padding: 0 var(--space-12) 0 var(--space-16);
+  gap: var(--space-2) var(--space-8);
+  padding: var(--space-4) var(--space-12) var(--space-4) var(--space-16);
   border-bottom: 1px solid var(--hairline);
   background: var(--raised);
   color: var(--text-secondary);
@@ -2840,6 +3025,7 @@ button.attached-file-face:hover img {
 }
 
 .terminal-bar-words {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -3476,6 +3662,25 @@ button.subagent-line:hover {
 @container subagent-row (max-width: 319px) {
   .subagent-line > [data-subagent-pair] {
     display: none;
+  }
+}
+
+/* A narrow panel's Call tab gives a subagent's job two lines before it
+   cuts it, so the time and marks beside it leave more than a word of it. */
+@container side-panel (max-width: 419px) {
+  .subagent-line {
+    height: auto;
+    min-height: 28px;
+    padding-block: var(--space-2);
+  }
+
+  .subagent-job {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow-wrap: anywhere;
+    white-space: normal;
   }
 }
 

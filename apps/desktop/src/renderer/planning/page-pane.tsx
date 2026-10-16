@@ -14,6 +14,7 @@ import { FindScope } from "../find-in-tab";
 import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { SpinnerRegion } from "../spinner";
 import { Tooltip } from "../tooltip";
+import { useClipped } from "../use-clipped";
 import { CodeLineRows } from "./code-pane";
 import { LinesMenu } from "./file-menu";
 import { useLinesLook } from "./file-tab";
@@ -227,6 +228,7 @@ export function PagePane({
     if (showingSource && source === undefined) ask(version);
   }, [showingSource, source, version, ask]);
   const toggleLabel = showingSource ? "View page" : "View source";
+  const [titleBox, titleClipped] = useClipped();
   return (
     <FindScope
       className="page-view-find"
@@ -235,7 +237,11 @@ export function PagePane({
     >
       <div className="page-view file-view ph-no-capture">
         <header className="file-view-bar">
-          <span className="page-view-title">{page.title}</span>
+          <Tooltip label={titleClipped ? page.title : undefined}>
+            <span ref={titleBox} className="page-view-title">
+              {page.title}
+            </span>
+          </Tooltip>
           <div className="file-view-actions">
             {page.version > 1 ? (
               <>
@@ -245,8 +251,14 @@ export function PagePane({
                   icon={<ChevronLeftIcon aria-hidden="true" />}
                   onStep={step}
                 />
+                {/* In a narrow panel the count stands alone (planning.css). */}
                 <span className="page-view-version">
-                  Version {version} of {page.version}
+                  <span className="page-view-version-words">
+                    Version {version} of {page.version}
+                  </span>
+                  <span className="page-view-version-count">
+                    {version}/{page.version}
+                  </span>
                 </span>
                 <VersionStep
                   label="Later version"
