@@ -198,6 +198,17 @@ test("a facepile of who did a thing draws each of them once, where they first st
   ]);
 });
 
+test("two who left under one name each keep a face, told apart by their account ids", () => {
+  const left = (userId: string) => ({
+    kind: ACTOR_KIND.SOMEONE,
+    reason: SOMEONE_REASON.FORMER,
+    name: "Alex",
+    userId,
+  });
+
+  assert.equal(distinctActors([left("user-1"), left("user-2"), left("user-1")]).length, 2);
+});
+
 test("two agents of one name each keep a face, told apart by their ids, and agents an older service sent no id for are told apart by name", () => {
   const edit = (agentId?: string) => ({
     actor: PLAN_ACTOR.AGENT,

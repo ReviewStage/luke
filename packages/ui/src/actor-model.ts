@@ -447,7 +447,7 @@ function sameAgent(
   return one.agentId === other.agentId;
 }
 
-/** Whether two actors are one: a member by their id, an agent as `sameAgent` says, an automation by its name, someone by why and the name they go by, someone on GitHub by their login in any case. */
+/** Whether two actors are one: a member by their id, an agent as `sameAgent` says, an automation by its name, someone by why, their account id, and the name they go by, someone on GitHub by their login in any case. */
 function sameActor(one: Actor, other: Actor): boolean {
   switch (one.kind) {
     case ACTOR_KIND.PERSON:
@@ -459,8 +459,12 @@ function sameActor(one: Actor, other: Actor): boolean {
     case ACTOR_KIND.AUTOMATION:
       return other.kind === one.kind && other.name === one.name;
     case ACTOR_KIND.SOMEONE:
+      // Note that two who left may share a name, so their account ids tell them apart.
       return (
-        other.kind === ACTOR_KIND.SOMEONE && other.reason === one.reason && other.name === one.name
+        other.kind === ACTOR_KIND.SOMEONE &&
+        other.reason === one.reason &&
+        other.userId === one.userId &&
+        other.name === one.name
       );
     case ACTOR_KIND.GITHUB:
       // Note that GitHub reads a login whatever its case, and its answers do not always spell one alike.
