@@ -102,9 +102,12 @@ function isPriority(id: string): id is IssuePriority {
 /** The chip naming where an issue stands, and the menu that moves it. */
 export function StatusMenu({
   status,
+  disabled,
   onPick,
 }: {
   status: IssueStatus;
+  /** Whether the chip takes no pick now, as while what it picks for is being sent. */
+  disabled?: boolean | undefined;
   onPick: (status: IssueStatus) => void;
 }): React.JSX.Element {
   return (
@@ -116,6 +119,7 @@ export function StatusMenu({
       rows={STATUS_ROWS}
       noMatch="No such status"
       align={PICKER_ALIGN.START}
+      disabled={disabled}
       onPick={(id) => {
         if (isStatus(id) && id !== status) onPick(id);
       }}
@@ -126,9 +130,12 @@ export function StatusMenu({
 /** The chip naming how much an issue matters, and the menu that weighs it. */
 export function PriorityMenu({
   priority,
+  disabled,
   onPick,
 }: {
   priority: IssuePriority;
+  /** Whether the chip takes no pick now, as while what it picks for is being sent. */
+  disabled?: boolean | undefined;
   onPick: (priority: IssuePriority) => void;
 }): React.JSX.Element {
   return (
@@ -140,6 +147,7 @@ export function PriorityMenu({
       rows={PRIORITY_ROWS}
       noMatch="No such priority"
       align={PICKER_ALIGN.START}
+      disabled={disabled}
       onPick={(id) => {
         if (isPriority(id) && id !== priority) onPick(id);
       }}

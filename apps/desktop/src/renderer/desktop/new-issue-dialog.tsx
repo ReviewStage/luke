@@ -99,8 +99,8 @@ function NewIssueCard({
         }}
       />
       <div className="issue-properties">
-        <StatusMenu status={status} onPick={setStatus} />
-        <PriorityMenu priority={priority} onPick={setPriority} />
+        <StatusMenu status={status} disabled={creating} onPick={setStatus} />
+        <PriorityMenu priority={priority} disabled={creating} onPick={setPriority} />
       </div>
       {refused ? (
         <p className="error-message" role="alert">

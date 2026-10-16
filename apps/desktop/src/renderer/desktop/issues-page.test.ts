@@ -69,6 +69,8 @@ let reads: string[] = [];
 let changes: unknown[] = [];
 /** The changes held unanswered, each answered by its resolver, where changes are held at all. */
 let heldChanges: (() => void)[] | undefined;
+/** The filings held unanswered, each answered by its resolver, where filings are held at all. */
+let heldCreates: (() => void)[] | undefined;
 /** Whether a change is refused. */
 let changeRefused = false;
 
@@ -84,6 +86,7 @@ beforeEach(() => {
   reads = [];
   changes = [];
   heldChanges = undefined;
+  heldCreates = undefined;
   changeRefused = false;
   Object.defineProperty(window, "luke", {
     configurable: true,
@@ -112,7 +115,10 @@ beforeEach(() => {
             ...(priority === undefined ? undefined : { priority }),
           });
           standing = [made, ...standing];
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { issue: made } });
+          const done = { status: ACT_OUTCOME_STATUS.DONE, value: { issue: made } };
+          const held = heldCreates;
+          if (held === undefined) return Promise.resolve(done);
+          return new Promise((resolve) => held.push(() => resolve(done)));
         }
         if (request.kind === ACT_KIND.ISSUES_READ) {
           reads.push(request.payload.issueId);
@@ -775,4 +781,42 @@ test("a refused rename answered while the title is written again puts nothing ba
   await settle();
 
   assert.equal(titleOf(page), "Second try, still typing");
+});
+
+test("while a new issue is being filed its card's chips take no pick", async () => {
+  mount();
+  await settle();
+  heldCreates = [];
+  const held = heldCreates;
+
+  file("Flaky checkout test");
+  await settle();
+  const chips = [
+    ...document.querySelectorAll<HTMLButtonElement>("[role=dialog] .settings-picker-chip"),
+  ];
+  const lockedWhileOut = chips.length === 2 && chips.every((chip) => chip.disabled);
+  act(() => held[0]?.());
+  await settle();
+
+  assert.ok(lockedWhileOut, "both chips are disabled while the filing is out");
+  assert.equal(composerField(), null);
+});
+
+test("a filing answered once another workspace is listed puts away no card of the workspace listed now", async () => {
+  mount();
+  await settle();
+  heldCreates = [];
+  const held = heldCreates;
+
+  file("Meant for Acme");
+  await settle();
+  list({ ...WORKSPACE, id: "workspace-initech", name: "Initech" });
+  await settle();
+  const field = composerField();
+  assert.ok(field, "the card stands, fresh, for the workspace listed now");
+  typeInto(field, "Meant for Initech");
+  act(() => held[0]?.());
+  await settle();
+
+  assert.equal(composerField()?.value, "Meant for Initech");
 });

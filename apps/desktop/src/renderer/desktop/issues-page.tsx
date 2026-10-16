@@ -213,6 +213,8 @@ export function IssuesPage({ tasks: plans }: { tasks: TasksControl }): React.JSX
   const [cameFrom, setCameFrom] = useState<string | undefined>(undefined);
   const [composing, setComposing] = useState(false);
   const pages = useRef<HTMLDivElement>(null);
+  const listedNow = useRef(workspace?.id);
+  listedNow.current = workspace?.id;
   /**
    * The new issue's card asked for. Note that the page must hold the
    * keyboard, or the window itself, and no field of the page may, because C
@@ -258,7 +260,10 @@ export function IssuesPage({ tasks: plans }: { tasks: TasksControl }): React.JSX
         key={workspace?.id}
         open={composing}
         onCreate={onCreate}
-        onClose={() => setComposing(false)}
+        onClose={() => {
+          // Note that a card filed in a workspace no longer listed puts away no card of the one listed now.
+          if (listedNow.current === workspace?.id) setComposing(false);
+        }}
       />
     </div>
   );
