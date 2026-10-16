@@ -117,4 +117,16 @@ test("a picture is added to a plan's text as its own last paragraph, escaped, an
     undefined,
     "an addition no longer standing is left for the developer to take out",
   );
+  const afterBlank = withPictureLine("Intro\n\n", line);
+  assert.equal(afterBlank.added, `${line}\n`, "no line break is added after a blank line");
+  assert.equal(
+    withoutPictureLine(`Intro\n\nSee ${line}\nNext`, afterBlank.added),
+    undefined,
+    "a line moved into the developer's words is no paragraph of its own, and is left alone",
+  );
+  assert.equal(
+    withoutPictureLine(`${afterBlank.text}More words after it.\n`, afterBlank.added),
+    undefined,
+    "a line the developer wrote straight under is part of their paragraph, and is left alone",
+  );
 });

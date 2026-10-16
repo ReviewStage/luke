@@ -147,12 +147,25 @@ export function withPictureLine(text: string, line: string): PictureAddition {
   return { text: `${text}${added}`, added };
 }
 
+/** Whether the addition found at `at` still stands as a paragraph of its own: its line opening the text or after a blank line, and ending the text or a line. */
+function standsAlone(text: string, at: number, added: string): boolean {
+  const lineAt = at + (added.length - added.replace(/^\n+/u, "").length);
+  const end = at + added.length;
+  const opens = lineAt === 0 || text.slice(Math.max(0, lineAt - 2), lineAt) === "\n\n";
+  const closes = end === text.length || text[end] === "\n";
+  return opens && closes;
+}
+
 /**
  * The plan's text with an addition taken back out, as Undo takes back Add
- * to plan: its last occurrence, exactly; nothing where it no longer stands.
+ * to plan: its last occurrence still standing as a paragraph of its own,
+ * exactly; nothing where none does. Note that a line the developer moved
+ * into their words, or wrote straight under, is theirs now, and is left.
  */
 export function withoutPictureLine(text: string, added: string): string | undefined {
-  const at = text.lastIndexOf(added);
-  if (at < 0) return undefined;
-  return `${text.slice(0, at)}${text.slice(at + added.length)}`;
+  for (let at = text.lastIndexOf(added); at >= 0; at = text.lastIndexOf(added, at - 1)) {
+    if (standsAlone(text, at, added)) return `${text.slice(0, at)}${text.slice(at + added.length)}`;
+    if (at === 0) break;
+  }
+  return undefined;
 }
