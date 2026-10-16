@@ -1,7 +1,7 @@
 /* layout.css -- Stack and Inline: a flex box whose gap is a role and whose
    alignment is a word. A list keeps none of the user agent's markers or
    indent, since an arrangement that is a list says so to a reader by its
-   element, not by its bullets. */
+   element and its role, not by its bullets. */
 
 @layer components {
   :is(.luke-stack, .luke-inline) {
@@ -21,9 +21,11 @@
   }
 
   /* An item may give way below its content's width, so a long label
-     shrinks or wraps before the row overflows. */
+     shrinks or wraps before the row overflows, breaking inside an unbroken
+     word where it has to rather than painting past its box. */
   :is(.luke-stack, .luke-inline) > * {
     min-width: 0;
+    overflow-wrap: anywhere;
   }
 
   [data-gap="none"]:is(.luke-stack, .luke-inline) {

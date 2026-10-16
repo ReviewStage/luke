@@ -64,6 +64,25 @@ test("items stand where the arrangement aligns them, along it and across it", as
   );
 });
 
+test("an Inline that holds its line breaks an unbroken word inside its item rather than painting past it", async () => {
+  const { container } = await mount(
+    box(
+      150,
+      createElement(Inline, {
+        wrap: false,
+        children: [
+          createElement("span", { key: "a" }, "Model"),
+          createElement("span", { key: "b" }, "acme/a-repository-whose-name-runs-long"),
+        ],
+      }),
+    ),
+  );
+  const row = container.querySelector(".luke-inline")?.getBoundingClientRect();
+  const long = container.querySelectorAll("span")[1];
+  expect(long && long.scrollWidth <= long.clientWidth).toBe(true);
+  expect(long?.getBoundingClientRect().right).toBeLessThanOrEqual(row?.right ?? 0);
+});
+
 test("a Stack drawn as a list reads as a list, with its items flush to its edge", async () => {
   const { container } = await mount(
     createElement(Stack, {
@@ -74,7 +93,7 @@ test("a Stack drawn as a list reads as a list, with its items flush to its edge"
       ),
     }),
   );
-  await expect.element(page.getByRole("list", { name: "Members" })).toBeInTheDocument();
+  await expect.element(page.getByRole("list", { name: "Members" })).toHaveAttribute("role", "list");
   expect(page.getByRole("listitem").elements()).toHaveLength(2);
   const list = container.querySelector("ul")?.getBoundingClientRect();
   expect(container.querySelector("li")?.getBoundingClientRect().left).toBe(list?.left);

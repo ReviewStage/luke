@@ -56,6 +56,14 @@ export const LAYOUT_ELEMENT = {
 
 export type LayoutElement = (typeof LAYOUT_ELEMENT)[keyof typeof LAYOUT_ELEMENT];
 
+/**
+ * The role a list keeps once its markers are gone: Safari's VoiceOver stops
+ * reading a list styled without them as a list unless it says so.
+ */
+function listRole(element: LayoutElement): "list" | undefined {
+  return element === LAYOUT_ELEMENT.UL || element === LAYOUT_ELEMENT.OL ? "list" : undefined;
+}
+
 interface LayoutProps {
   gap?: Gap;
   align?: Align;
@@ -81,6 +89,7 @@ export function Stack({
   return (
     <Element
       className="luke-stack"
+      role={listRole(Element)}
       data-gap={gap}
       data-align={align}
       data-justify={justify}
@@ -104,6 +113,7 @@ export function Inline({
   return (
     <Element
       className="luke-inline"
+      role={listRole(Element)}
       data-gap={gap}
       data-align={align}
       data-justify={justify}
