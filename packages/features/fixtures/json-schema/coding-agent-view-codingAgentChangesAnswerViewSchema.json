@@ -112,6 +112,16 @@
                   ],
                   "additionalProperties": false
                 },
+                "writtenAs": {
+                  "type": "string",
+                  "enum": [
+                    "developer",
+                    "app-unlinked",
+                    "app-no-push",
+                    "app-automation",
+                    "app-unread"
+                  ]
+                },
                 "reviewers": {
                   "type": "array",
                   "items": {

@@ -9,7 +9,8 @@
  * member of the agent's own workspace, so the answer never says which Luke
  * account stands behind someone outside it. The App's bot is told apart by
  * GitHub's id for it, read on the same token (`appBot`), since it is the
- * account an agent's commits and pull requests are by.
+ * account an agent's commits and pull requests are by, or, where the agent
+ * writes as its developer, the co-author its commits name.
  *
  * Who a pull request names rides beside its files and is never what the
  * files wait on: a read of the people that fails is said once in the log and

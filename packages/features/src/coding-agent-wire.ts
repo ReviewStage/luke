@@ -667,8 +667,8 @@ export const REVIEW_STATE = {
 /**
  * Someone a pull request names on GitHub: their login, their avatar where
  * GitHub's own avatar host serves it, whether they are an App's bot, and
- * whether that bot is Luke's own App, whose commits and pull requests are
- * its agents'; and the Luke account whose linked GitHub account it is,
+ * whether that bot is Luke's own App, whose commits and pull requests, or
+ * co-authorship beside a developer, are its agents'; and the Luke account whose linked GitHub account it is,
  * where that account is a member of the agent's workspace.
  */
 const githubPersonSchema = EffectSchema.Struct({
@@ -704,9 +704,11 @@ const reviewCommentSchema = EffectSchema.Struct({
  * GitHub, its files in the order GitHub lists them now, and whether the
  * list was cut short at the bound; or null where it has opened none yet,
  * which is not the same as a pull request that changes nothing. Who opened
- * it, its reviewers and where each stands, who authored its commits, and
- * its reviews that said something ride beside the files, each absent from
- * a service before them.
+ * it, who the agent writes as on GitHub (`CODING_AGENT_AUTHOR`), its
+ * reviewers and where each stands, who authored its commits, and its
+ * reviews that said something ride beside the files, each absent from a
+ * service before them, and who the agent writes as absent too for an agent
+ * whose first session never settled it.
  */
 export const codingAgentChangesAnswerSchema = EffectSchema.Struct({
   pullRequest: EffectSchema.NullOr(
@@ -717,6 +719,9 @@ export const codingAgentChangesAnswerSchema = EffectSchema.Struct({
       ),
       truncated: EffectSchema.Boolean,
       author: EffectSchema.optionalKey(githubPersonSchema),
+      writtenAs: EffectSchema.optionalKey(
+        EffectSchema.Literals(Object.values(CODING_AGENT_AUTHOR)),
+      ),
       reviewers: EffectSchema.optionalKey(
         EffectSchema.Array(pullRequestReviewerSchema).check(
           EffectSchema.isMaxLength(CHANGES_BOUNDS.MAX_PEOPLE),
@@ -741,7 +746,7 @@ type CodingAgentChanges = NonNullable<(typeof codingAgentChangesAnswerSchema.Typ
 /** Who an agent's pull request names, as its changes carry them; every key absent from a service before them, or where they could not be read. */
 export type CodingAgentChangesPeople = Pick<
   CodingAgentChanges,
-  "author" | "reviewers" | "commitAuthors" | "comments"
+  "author" | "writtenAs" | "reviewers" | "commitAuthors" | "comments"
 >;
 
 /**

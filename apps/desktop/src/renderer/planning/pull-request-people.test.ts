@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   CHANGED_FILE_STATUS,
   CHECK_SUMMARY,
+  CODING_AGENT_AUTHOR,
   CODING_AGENT_STATUS,
   type CodingAgentChangesPeople,
   type CodingAgentSummary,
@@ -126,32 +127,36 @@ async function draw(element: ReactElement): Promise<HTMLElement> {
   return container;
 }
 
-/** The plan's agents, the one whose pull request it is among them. */
-const control = codingAgentsControl({
-  agents: [AGENT],
-  agentIds: [AGENT.id],
-  models: [],
-  pullRequests: new Map([[AGENT.id, PULL_REQUEST]]),
-  readChanges: () =>
-    Promise.resolve({
-      pullRequest: {
-        url: PULL_REQUEST.url,
-        truncated: false,
-        files: [
-          {
-            path: "src/expiry.ts",
-            previousPath: null,
-            status: CHANGED_FILE_STATUS.MODIFIED,
-            additions: 1,
-            deletions: 0,
-            omitted: null,
-            patch: "@@ -1 +1,2 @@\n const a = 1;\n+const b = 2;\n",
-          },
-        ],
-        ...PEOPLE,
-      },
-    }),
-});
+/** The plan's agents, the one whose pull request it is among them, its changes naming the people given. */
+function controlNaming(people: CodingAgentChangesPeople) {
+  return codingAgentsControl({
+    agents: [AGENT],
+    agentIds: [AGENT.id],
+    models: [],
+    pullRequests: new Map([[AGENT.id, PULL_REQUEST]]),
+    readChanges: () =>
+      Promise.resolve({
+        pullRequest: {
+          url: PULL_REQUEST.url,
+          truncated: false,
+          files: [
+            {
+              path: "src/expiry.ts",
+              previousPath: null,
+              status: CHANGED_FILE_STATUS.MODIFIED,
+              additions: 1,
+              deletions: 0,
+              omitted: null,
+              patch: "@@ -1 +1,2 @@\n const a = 1;\n+const b = 2;\n",
+            },
+          ],
+          ...people,
+        },
+      }),
+  });
+}
+
+const control = controlNaming(PEOPLE);
 
 /** Rests the pointer on a control, which hangs its card. */
 function hover(control: Element): void {
@@ -208,6 +213,62 @@ test("the Changes tab says who opened the pull request, its reviewers by where e
       face.getAttribute("aria-label"),
     ),
     ["Expiry job", "Charles Pan"],
+  );
+});
+
+test("a pull request the agent opened as its developer names them and Luke among the commit authors, and one it opened as the App says why", async () => {
+  const strip = async (people: CodingAgentChangesPeople) => {
+    const tab = await draw(
+      createElement(AgentChangesTab, {
+        agentId: AGENT.id,
+        control: controlNaming(people),
+        shown: true,
+        repository: "acme/relay",
+        tree: { open: false, onToggle: () => undefined },
+      }),
+    );
+    const found =
+      tab.querySelector(".changes-people") ?? assert.fail("the people stand under the bar");
+    const opener = found.querySelector(".actor-words") ?? assert.fail("who opened it is named");
+    const commits = [
+      ...found.querySelectorAll('[aria-label="Commit authors"] .actor-stack-face'),
+    ].map((face) => face.getAttribute("aria-label"));
+    act(() => root?.unmount());
+    document.body.innerHTML = "";
+    return {
+      opener: opener.querySelector(".actor-ref-name")?.textContent,
+      line: opener.textContent ?? "",
+      commits,
+    };
+  };
+
+  const developer = await strip({
+    author: CHARLES_ON_GITHUB,
+    writtenAs: CODING_AGENT_AUTHOR.DEVELOPER,
+    commitAuthors: [CHARLES_ON_GITHUB, LUKE_BOT],
+  });
+  const unlinked = await strip({
+    author: LUKE_BOT,
+    writtenAs: CODING_AGENT_AUTHOR.APP_UNLINKED,
+    commitAuthors: [LUKE_BOT],
+  });
+
+  assert.equal(developer.opener, "Charles Pan");
+  assert.doesNotMatch(developer.line, /as the GitHub App/u);
+  assert.deepEqual(developer.commits, ["Charles Pan", "Expiry job"]);
+  const lapsed = await strip({
+    author: LUKE_BOT,
+    writtenAs: CODING_AGENT_AUTHOR.DEVELOPER,
+    commitAuthors: [CHARLES_ON_GITHUB, LUKE_BOT],
+  });
+  assert.match(
+    lapsed.line,
+    /Expiry job as the GitHub App, since its starter's GitHub sign-in could not be used$/u,
+  );
+  assert.equal(unlinked.opener, "Expiry job");
+  assert.match(
+    unlinked.line,
+    /Expiry job as the GitHub App, since its starter has no GitHub linked$/u,
   );
 });
 
