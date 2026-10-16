@@ -246,7 +246,6 @@ export function usePaneRoom(shown: {
     focusAt: paneFocus,
     stays: OVER_TOGGLE,
     ref: beside.pane,
-    holdsKeyboard: true,
     floatsNow: floatsAround,
   });
   const closeOver = pane.close;

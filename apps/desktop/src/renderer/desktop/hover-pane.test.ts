@@ -9,7 +9,8 @@ import { PANE_FLOAT, type PaneFloat, useFloatDismiss, useHoverPane } from "./hov
 /**
  * A pane that floats as the sidebar does, drawn through the module's two
  * hooks alone: its toggle opens it, its edge peeks it, and its one row is
- * a choice. The work beside it holds a button of its own.
+ * a choice. A menu it raised stands beside it, and the work beside it
+ * holds a button of its own.
  */
 function Floating(): React.JSX.Element {
   const [state, onState] = useState<PaneFloat>(PANE_FLOAT.CLOSED);
@@ -38,15 +39,14 @@ function Floating(): React.JSX.Element {
       "aside",
       {
         ref: pane.ref,
-        onPointerDown: () => {
-          keep();
-          pane.onPress();
-        },
+        onPointerDown: keep,
         onPointerLeave: pane.onPointerLeave,
         onKeyDown: pane.onKeyDown,
       },
       createElement("button", { type: "button", className: "row", onClick: choose }, "Row"),
     ),
+    // A menu the pane raised, which stands outside it, as a portal's does.
+    createElement("div", { role: "menu", className: "menu" }),
     createElement(
       "main",
       null,
@@ -153,4 +153,35 @@ test("the press on the toggle that opens the pane is no press inside it when the
   assert.equal(standing(page), PANE_FLOAT.OPEN);
   pressDown(part(page, "main"));
   assert.equal(standing(page), PANE_FLOAT.CLOSED);
+});
+
+test("a press in a peek leaves it a peek, gone once the pointer leaves, though not for a menu it raised", () => {
+  const page = mount();
+  const aside = part(page, "aside");
+  const work = part(page, ".work");
+  pointerCross(work, part(page, ".edge"));
+  pressDown(aside);
+  assert.equal(standing(page), PANE_FLOAT.PEEK, "the press opens nothing past the peek");
+  pointerCross(aside, part(page, ".menu"));
+  assert.equal(standing(page), PANE_FLOAT.PEEK, "a menu it raised is no way out");
+  pointerCross(aside, work);
+  assert.equal(standing(page), PANE_FLOAT.CLOSED);
+});
+
+test("a pane opened from away holds the keyboard against Tab until Escape hands it back", () => {
+  const page = mount();
+  const toggle = part(page, ".toggle");
+  toggle.focus();
+  act(() => toggle.click());
+  // jsdom walks no focus for Tab, so the walk out is the key, then the focus it lands.
+  act(() => {
+    part(page, ".row").dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
+    part(page, ".work").focus();
+  });
+  assert.ok(
+    document.activeElement === part(page, ".row"),
+    "the keyboard is brought back into the pane",
+  );
+  pressEscape(part(page, ".row"));
+  assert.ok(document.activeElement === toggle, "Escape hands it back");
 });

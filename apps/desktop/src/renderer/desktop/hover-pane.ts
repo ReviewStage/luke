@@ -16,9 +16,9 @@ import { useCallback, useEffect, useRef } from "react";
 export const PANE_FLOAT = {
   /** Away, docked beside the work or out of sight. */
   CLOSED: "closed",
-  /** Peeked by the pointer, and put away once it leaves the pane. */
+  /** Peeked by the pointer, and put away once it leaves the pane, a press in it or not, as Linear's sidebar is. */
   PEEK: "peek",
-  /** Opened by its toggle, its chord, or a press in a peek, and put away by a choice in it, Escape, or a press outside. */
+  /** Opened by its toggle or its chord, and put away by a choice in it, Escape, or a press outside. */
   OPEN: "open",
 } as const;
 
@@ -47,7 +47,6 @@ export interface HoverPane {
   readonly close: () => void;
   /** Opens the pane from its toggle, from away or from a peek, which takes the keyboard into it. */
   readonly open: () => void;
-  readonly onPress: () => void;
   readonly onPointerLeave: (event: { readonly relatedTarget: EventTarget | null }) => void;
   readonly onKeyDown: (event: React.KeyboardEvent<HTMLElement>) => void;
 }
@@ -62,13 +61,15 @@ export interface FloatingBox {
 }
 
 /**
- * The floating pane's doors: a press in a peek opens it, the pointer leaving
- * a peek puts it away, though not for the box `stays` names, where its
- * toggle stands, and Escape puts it away while no menu in it took the key
- * first, wherever the keyboard stands, a peek leaving it in the work under
- * it. Opened from away, it takes the keyboard where `focusAt` says, which
- * Escape gives back, and where `holdsKeyboard` asks, holds it until then.
- * A pane let go while it floats is put away with it.
+ * The floating pane's doors: the pointer leaving a peek puts it away, though
+ * not for the box `stays` names, where its toggle stands, nor for a menu or
+ * a dialog it raised, and Escape puts it away while no menu in it took the
+ * key first, wherever the keyboard stands, a peek leaving it in the work
+ * under it. Nothing keeps a pane floating past those: a press in a peek
+ * leaves it a peek, as Linear's sidebar is. Opened from away, or from a peek
+ * by its toggle, it takes the keyboard where `focusAt` says and holds it
+ * there against Tab until Escape gives it back. A pane let go while it
+ * floats is put away with it.
  */
 export function useHoverPane(
   float: FloatState,
@@ -79,8 +80,6 @@ export function useHoverPane(
     readonly stays: string;
     /** The pane's box where its owner already holds one. */
     readonly ref?: React.RefObject<HTMLElement | null>;
-    /** Whether the keyboard, once the pane opened from away took it, is held in it until the pane is put away. */
-    readonly holdsKeyboard?: boolean;
     /** Whether the pane still floats, where its owner may dock it without putting it away; one docked again is put away. */
     readonly floatsNow?: (pane: HTMLElement) => boolean;
   },
@@ -91,7 +90,7 @@ export function useHoverPane(
   const { state, onState } = float;
   const was = useRef(state);
   const floating = state !== PANE_FLOAT.CLOSED;
-  const { focusAt, stays, holdsKeyboard = false, floatsNow = alwaysFloats } = look;
+  const { focusAt, stays, floatsNow = alwaysFloats } = look;
   // The state as last drawn, which a focus moving after a press outside reads.
   const drawn = useRef(state);
   drawn.current = state;
@@ -126,7 +125,7 @@ export function useHoverPane(
   // whose rows are no elements of the pane's own to count.
   useEffect(() => {
     const held = ref.current;
-    if (!holdsKeyboard || state !== PANE_FLOAT.OPEN || held === null) return;
+    if (state !== PANE_FLOAT.OPEN || held === null) return;
     let tabbing = false;
     const tab = (event: KeyboardEvent) => {
       tabbing = event.key === "Tab" && !event.defaultPrevented;
@@ -146,7 +145,7 @@ export function useHoverPane(
       held.removeEventListener("keydown", tab);
       document.removeEventListener("focusin", hold);
     };
-  }, [holdsKeyboard, state, focusAt, floatsNow, close, ref]);
+  }, [state, focusAt, floatsNow, close, ref]);
   // Note that a floating pane need not hold the keyboard, a peek or one a
   // bare press opened leaving it in the work under it, so Escape is heard at
   // the window before the work's layers hear it. A key aimed into the pane
@@ -183,9 +182,6 @@ export function useHoverPane(
       },
     close,
     open,
-    onPress: () => {
-      if (state === PANE_FLOAT.PEEK) onState(PANE_FLOAT.OPEN);
-    },
     onPointerLeave: (event) => {
       if (state !== PANE_FLOAT.PEEK) return;
       const to = event.relatedTarget;

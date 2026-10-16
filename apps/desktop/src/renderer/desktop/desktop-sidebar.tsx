@@ -1032,11 +1032,12 @@ function NewPlanButton({
  * folds it away. Folded away, it is inert as well as out of sight, so no key
  * reaches a row nobody can see, until it floats open over the work
  * (`sidebar-collapse.ts`). A floating sidebar is put away by a choice in it,
- * by Escape, or once the pointer leaves a peek; a press in a peek opens it,
- * so a menu it raises outlasts the pointer. Opened from away, it takes the
- * keyboard at the row it marks, else at New plan, and Escape gives the
- * keyboard back where it was. Floating, it has no edge to drag, since only a
- * pinned sidebar is resized.
+ * by Escape, by a press outside, or once the pointer leaves a peek, a press
+ * in it or not, though not for a menu it raised (`hover-pane.ts`). Opened
+ * from away, it takes the keyboard at the row it marks, else at New plan,
+ * holds it there against Tab, and Escape gives the keyboard back where it
+ * was. Floating, it has no edge to drag, since only a pinned sidebar is
+ * resized.
  */
 function SidebarColumn({
   sidebar,
@@ -1256,10 +1257,7 @@ function SidebarColumn({
       ref={overlay.ref}
       className="desktop-sidebar"
       inert={!overlay.inSight}
-      onPointerDown={() => {
-        onPressWithin();
-        overlay.onPress();
-      }}
+      onPointerDown={onPressWithin}
       onPointerLeave={overlay.onPointerLeave}
       onKeyDown={overlay.onKeyDown}
     >
