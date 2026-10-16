@@ -41,7 +41,7 @@ export interface CoderHostSeams {
   readonly ownership: SessionOwnership;
   /** The secret the deployment acts for an account under at eve's door, sealed; nothing while the environment names none. */
   readonly deploymentSecret: () => Redacted.Redacted | undefined;
-  /** The origin eve answers on for a message one agent sends another, which no request carries; nothing on a machine neither configured nor deployed. */
+  /** The origin eve answers on for a message one agent sends another, or a chat notice it steers into another agent's session, which no request carries; nothing on a machine neither configured nor deployed. */
   readonly eveOrigin: () => string | undefined;
   /** The keys the account's step runs on: its own where it saved one, Luke's where it did not, each absent where neither stands. */
   readonly keys: (userId: string) => TaskStoreEffect<ProviderKeys>;

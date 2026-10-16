@@ -10,6 +10,7 @@ import {
 import { promptHashOf } from "@luke/database/models/content-addressed";
 import { childConversationId, hostTurnId } from "@luke/database/models/ids";
 import { sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
+import { CHAT_TOOL } from "@luke/features/chat-wire";
 import { CODING_AGENT_BRIEF, CONTEXT_WINDOW } from "@luke/features/coding-agent-wire";
 import { INBOX_TOOL } from "@luke/features/inbox-wire";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
@@ -20,6 +21,7 @@ import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionContext } from "eve/context";
 import type { UnparsedWireValue, WireRecord } from "../../core.js";
 import type { GitHubApp } from "../../github/github-app.js";
+import { HOSTED_HTTP_STATUS } from "../../http/http.js";
 import { logStoreFailure } from "../../http/store-failure.js";
 import {
   ModelCatalog,
@@ -44,7 +46,14 @@ import {
   claimRuntimeSession,
   SESSION_STANDING,
 } from "../brain-host/conversation.js";
-import { EVE_MOUNT, eveSessionsComposer } from "../brain-host/eve-sessions.js";
+import {
+  EVE_CANCEL_OUTCOME,
+  EVE_MOUNT,
+  EVE_RESET_OUTCOME,
+  EVE_SEND_OUTCOME,
+  type EveSessions,
+  eveSessionsComposer,
+} from "../brain-host/eve-sessions.js";
 import type { SessionPromptRecord } from "../brain-host/host.js";
 import { type RelayStanding, type RelayStateStore, StreamRelay } from "../brain-host/relay.js";
 import {
@@ -69,6 +78,16 @@ import type { RepositorySandbox } from "../repository-shell.js";
 import { workspaceStepOf } from "../written-mentions.js";
 import { anthropicFastAccess } from "./account-keys.js";
 import { CODER, CODER_MODEL_FIXTURE, CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
+import {
+  CHAT_TOOL_REFUSAL,
+  type ChatToolResult,
+  chatDigest,
+  chatRejected,
+  postAsAgent,
+  readAsAgent,
+  resolveAsAgent,
+} from "./chat.js";
+import { HELD_DOORS } from "./chat-notify.js";
 import {
   agentCiReadable,
   agentCoAuthor,
@@ -288,6 +307,20 @@ export interface CoderHost extends HostAdmission {
     call: InboxCall,
   ): Effect.Effect<InboxToolResult, never, DatabaseServices>;
   /**
+   * Runs one of the agent's chat tools (`chat.ts`): a post, told to each
+   * agent it addresses through eve as the deployment acting for that agent's
+   * starter, and held for its next read where the deployment names no secret
+   * or no origin for eve; a read; or a resolve.
+   */
+  chat(
+    admitted: AdmittedConversation,
+    call: ChatCall,
+  ): Effect.Effect<ChatToolResult, never, DatabaseServices | HttpClient.HttpClient | GitHubApp>;
+  /** What the agent has not read in its workspace's chat, as a turn opens with it (`chat.ts`); nothing where nothing waits or the conversation is no agent's. */
+  chatDigest(
+    admitted: AdmittedConversation,
+  ): Effect.Effect<string | undefined, never, DatabaseServices>;
+  /**
    * Runs one of the agent's public reads, the planning model's own
    * (`../public-research.ts`): a search or a page read, under the turn's
    * budget, the search on Luke's key and counted on the account's meter.
@@ -386,6 +419,47 @@ const AGENT_TOOL_RUN = {
   [CODER_TOOL.UNARCHIVE_AGENT]: runUnarchiveAgent,
   [CODER_TOOL.LIST_TASKS]: runListTasks,
 } as const;
+
+/** One call of the agent's chat tools, by the tool's name and the input eve held to its schema; a post carries its call's id, its key, how many posts its turn has made, and the door to the session's sandbox, where its pictures are read. */
+export type ChatCall =
+  | {
+      readonly tool: typeof CHAT_TOOL.POST;
+      readonly input: UnparsedWireValue;
+      readonly clientKey: string;
+      readonly postsInTurn: number;
+      readonly sandbox: InboxSandboxDoor;
+    }
+  | { readonly tool: typeof CHAT_TOOL.READ; readonly input: UnparsedWireValue }
+  | { readonly tool: typeof CHAT_TOOL.RESOLVE; readonly input: UnparsedWireValue };
+
+/**
+ * eve as a deployment that names no secret or no origin for it reaches it:
+ * every call answered as failed, so a chat post still lands and a member it
+ * addresses, whose notice could not be handed over, reads it when it next
+ * reads, as one whose steer eve refused does (`chat-notify.ts`).
+ */
+const EVE_UNREACHED: EveSessions = {
+  open: () =>
+    Effect.succeed({
+      outcome: EVE_SEND_OUTCOME.FAILED,
+      status: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
+    }),
+  send: () =>
+    Effect.succeed({
+      outcome: EVE_SEND_OUTCOME.FAILED,
+      status: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
+    }),
+  cancel: () =>
+    Effect.succeed({
+      outcome: EVE_CANCEL_OUTCOME.FAILED,
+      status: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
+    }),
+  reset: () =>
+    Effect.succeed({
+      outcome: EVE_RESET_OUTCOME.FAILED,
+      status: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
+    }),
+};
 
 /** A failure as a log line carries it: the checkout's reason, or a store failure's kind alone, since its message may name a statement. */
 function describeFailure(failure: CheckoutFailure): string {
@@ -717,6 +791,47 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
       }).pipe(
         Effect.tapError(logStoreFailure),
         Effect.catch(() => Effect.succeed(pullRequestRejected(PULL_REQUEST_UNAVAILABLE))),
+      ),
+
+    chat: (admitted, call) =>
+      Effect.gen(function* () {
+        const found = yield* agentOf(admitted);
+        if (Result.isFailure(found)) return chatRejected(CHAT_TOOL_REFUSAL.NO_AGENT);
+        const { id: agentId, taskId: planId, repository } = found.success;
+        const reader = { userId: admitted.target.userId, agentId, planId };
+        if (call.tool === CHAT_TOOL.READ) return yield* readAsAgent(reader, call.input);
+        if (call.tool === CHAT_TOOL.RESOLVE) return yield* resolveAsAgent(reader, call.input);
+        // A notice reaches the receiving agent's session as the deployment acting for that agent's
+        // starter, whose principal its turn runs under, as the planning model's message to an
+        // agent does: no bearer stands here.
+        const secret = seams.deploymentSecret();
+        const origin = seams.eveOrigin();
+        const compose = yield* eveSessionsComposer;
+        const eveFor = (starter: string) =>
+          secret === undefined || origin === undefined
+            ? EVE_UNREACHED
+            : compose({ origin, caller: { secret, account: starter }, mount: EVE_MOUNT.CODER });
+        const telling = { eveFor, writer: seams.writer(), doors: HELD_DOORS };
+        const { clientKey, postsInTurn, sandbox } = call;
+        return yield* postAsAgent({ ...reader, repository, telling }, call.input, {
+          clientKey,
+          postsInTurn,
+          sandbox,
+        });
+      }).pipe(
+        Effect.tapError(logStoreFailure),
+        Effect.catch(() => Effect.succeed(chatRejected(CHAT_TOOL_REFUSAL.UNAVAILABLE))),
+      ),
+
+    chatDigest: (admitted) =>
+      Effect.gen(function* () {
+        const found = yield* agentOf(admitted);
+        if (Result.isFailure(found)) return undefined;
+        const { id: agentId, taskId: planId } = found.success;
+        return yield* chatDigest({ userId: admitted.target.userId, agentId, planId });
+      }).pipe(
+        Effect.tapError(logStoreFailure),
+        Effect.catch(() => Effect.succeed(undefined)),
       ),
 
     showPage: (admitted, input, sandbox) =>

@@ -8,10 +8,13 @@ import { sessionPrompt } from "../session-prompt.js";
 /**
  * The instructions a session runs under, set once at its start and standing
  * for the session's life, with the content address kept in the session's
- * state so every turn row names the prompt the model actually reads. The
- * plan itself is the session's first message and no instruction. A session
- * the host does not admit, or whose conversation is no agent's, runs under
- * nothing.
+ * state so every turn row names the prompt the model actually reads, and
+ * what the agent has not read in its workspace's chat, which each turn
+ * opens with as its own instruction, replaced each turn and remembered by
+ * none, as the planning brain's standing context is (`../../eve/instructions/prompt.ts`).
+ * The plan itself is the session's first message and no instruction. A
+ * session the host does not admit, or whose conversation is no agent's,
+ * runs under nothing.
  */
 export default defineDynamic({
   events: {
@@ -37,5 +40,14 @@ export default defineDynamic({
         }),
       );
     },
+    "turn.started": (_event, ctx) =>
+      runWeb(
+        Effect.gen(function* () {
+          const admitted = yield* host.admit(ctx.session.auth, ctx.session.id);
+          if (Result.isFailure(admitted)) return null;
+          const digest = yield* host.chatDigest(admitted.success);
+          return digest === undefined ? null : defineInstructions({ content: digest });
+        }),
+      ),
   },
 });

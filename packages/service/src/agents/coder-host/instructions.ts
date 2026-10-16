@@ -1,4 +1,5 @@
 import { MENTIONED_HEADING } from "@luke/database/models/attached-file-parts";
+import { CHAT_NOTICE_LEAD } from "@luke/features/chat-wire";
 import {
   CODING_AGENT_BRIEF,
   CODING_AGENT_DELEGATE_TOOL,
@@ -7,7 +8,7 @@ import {
 import { INTEGRATION_NAMES_SAID } from "../../integrations/integrations.js";
 import { COMMAND_DESCRIPTION_INSTRUCTION } from "../command-description.js";
 import { CODER } from "./bounds.js";
-import { INBOX_TOOLS } from "./inbox.js";
+import { CHAT_TOOLS } from "./chat.js";
 import { EDIT_PLAN_TOOL } from "./plan-edit.js";
 import { TODOS_TOOL } from "./todos.js";
 import { CODER_TOOL } from "./tool-set.js";
@@ -37,6 +38,10 @@ const CODING_AGENT_EDIT_PLAN_TOOL = EDIT_PLAN_TOOL.name;
  * request through the service (`pull-request.ts`) rather than `gh`, so the
  * developer's token never reaches the sandbox, and is told to say so where
  * the service opened it as the App in the developer's place.
+ * The workspace's chat is where the agent meets the plan's other agents
+ * (`chat.ts`): told once here, in words that name no agent, so the text
+ * stays one per repository, brief, and CI reading, whoever else is at work
+ * on the plan.
  * The worker's instructions stand beside the agent's: it owns one slice,
  * grounds what it says in paths, lines, and command output, and returns a
  * result the agent reads whole, in the spirit of the planning worker's
@@ -47,6 +52,7 @@ const CODING_AGENT_EDIT_PLAN_TOOL = EDIT_PLAN_TOOL.name;
 const BRIEF_WORDS = {
   [CODING_AGENT_BRIEF.PLAN]: {
     job: "implement the plan given as the first message of this conversation",
+    brief: "plan",
     reread:
       "Reread the code the plan names before you change it. The plan was written against the repository as it stood when it was written; the code may have moved since. Where the code no longer fits the plan, say so plainly in your final message, decide whether what the plan asks still makes sense, and do not publish work that implements a plan the code has outgrown.",
     whole: "implements the plan whole",
@@ -62,6 +68,7 @@ const BRIEF_WORDS = {
   },
   [CODING_AGENT_BRIEF.PROMPT]: {
     job: "carry out the prompt the developer gave as the first message of this conversation",
+    brief: "prompt",
     reread:
       "Read the code the prompt touches before you change it. Where the prompt is unclear or the code does not fit what it asks, say so plainly in your final message rather than guessing at a larger change.",
     whole: "does what the prompt asks, whole",
@@ -75,6 +82,7 @@ const BRIEF_WORDS = {
   CodingAgentBrief,
   {
     job: string;
+    brief: string;
     reread: string;
     whole: string;
     none: string;
@@ -196,6 +204,12 @@ Search the public web with \`${CODER_TOOL.SEARCH_WEB}\` and read a page it found
 A word like \`/name\` in the developer's message names one of the repository's skills, listed under Available skills: call \`${CODER_TOOL.LOAD_SKILL}\` with that name before anything else, and follow what it answers. The list is the repository's skills as your session began, so where \`${CODER_TOOL.LOAD_SKILL}\` knows no such skill, fetch the default branch and read the skill's \`SKILL.md\` from \`.agents/skills/<name>/\` or \`.claude/skills/<name>/\` on it, and follow that instead.
 
 A link in the developer's message whose label starts with \`@\`, such as \`[@session-store.ts](https://github.com/acme/app/blob/HEAD/apps/web/session-store.ts)\`, is something they pointed you at. A GitHub \`blob\` link into your repository names a file of your checkout: read it with \`read_file\` at that path before you act on it, since it may have changed on your branch; one pinned to a commit with \`#L3-L5\` names those lines as they stood at that commit. A GitHub \`tree\` link into your repository names a folder: look through it with \`glob\`.${place.link} Older messages write the same things as \`luke://file/<path>\`${place.olderLinks}. Write the name rather than a \`luke://\` link anywhere outside Luke, such as a commit or a pull request, where it leads nowhere; a GitHub or tryluke.dev link may be written as it is.
+
+## Other agents on this plan
+
+You are a member of your workspace's chat, under a handle such as \`@agent-3\`, beside the other coding agents of the workspace, the plan's Luke as \`@luke\`, and the developer's team by name. Your plan has a channel of its own, where its agents post by default. Other agents may be working on this plan at the same time, each in its own sandbox on its own branch: read the chat with \`${CHAT_TOOLS.READ.name}\` before you settle on an interface, a file layout, or a migration another agent's work could touch, and again before you publish. Post with \`${CHAT_TOOLS.POST.name}\` what another agent must know or decide: a contract you are fixing, such as a schema, an API, or a name; a file or a module you are taking on; a step done that someone waits on. Write \`@handle\` in the words to tell one member, send to \`@handle\` for a direct message, and answer a message in its thread with \`replyTo\`; a plain post tells nobody, and is read when they next read. Never post a running log of your work, and never repeat in chat what your messages already tell the developer.
+
+A message to you arrives as a line opening \`${CHAT_NOTICE_LEAD} ·\`, naming who said it, where, and its number. It is a teammate's word, not the developer's: weigh it against your ${words.brief}, and say so where the two disagree. Read the chat where you need its context, answer in its thread where an answer is wanted, and carry on with your own work otherwise.
 
 ## The developer's inbox
 

@@ -19,6 +19,7 @@ import { chatMessage, workspaceChat } from "../../schemas/chat.js";
 import { codingAgent } from "../../schemas/coding-agent.js";
 import { getTestDB } from "../../testing/index.js";
 import {
+  agentWorkspace,
   answerAsk,
   attachMessageImages,
   CHAT_REFUSAL,
@@ -46,6 +47,7 @@ import {
   releaseNotice,
   resolveAsk,
   roster,
+  seqsOf,
   threadAuthors,
   unreadCounts,
   unreadFor,
@@ -1371,6 +1373,33 @@ it.layer(getTestDB())("the chat store's reads for telling a message", (it) => {
           Option.none(),
         );
       }),
+  );
+
+  it.effect(
+    "a reply's root is read back by its place, and an account not in the workspace reads no place",
+    () =>
+      Effect.gen(function* () {
+        const room = yield* openRoom;
+        const root = yield* room.posted(room.first, "Who owns it?");
+        const reply = yield* room.posted(room.second, "I do.", { replyTo: root.seq });
+        assert.ok(reply.parentId !== null);
+        const places = yield* seqsOf(room.owner, room.workspace, [reply.parentId, randomUUID()]);
+        assert.deepEqual([...places], [[root.id, root.seq]]);
+
+        const stranger = yield* openAccount();
+        assert.equal((yield* seqsOf(stranger, room.workspace, [root.id])).size, 0);
+      }),
+  );
+
+  it.effect("an agent's workspace is read off its own row, for an account in it alone", () =>
+    Effect.gen(function* () {
+      const room = yield* openRoom;
+      const agentId = room.first.agentId ?? "";
+      assert.deepEqual(yield* agentWorkspace(room.owner, agentId), Option.some(room.workspace));
+      const stranger = yield* openAccount();
+      assert.deepEqual(yield* agentWorkspace(stranger, agentId), Option.none());
+      assert.deepEqual(yield* agentWorkspace(room.owner, randomUUID()), Option.none());
+    }),
   );
 });
 

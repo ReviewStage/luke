@@ -13,9 +13,11 @@ import { keepPlanAttachment, PLAN_ATTACHMENT_KEEP } from "@luke/database/models/
 import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
 import { openTaskConversation, readTask } from "@luke/database/models/task-store";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
+import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { conversations, turns } from "@luke/database/schemas/storage";
 import { CONVERSATION_KIND, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { getTestDB, startTask } from "@luke/database/testing";
+import { CHAT_TOOL } from "@luke/features/chat-wire";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import { PICTURE_TYPE } from "@luke/features/picture-wire";
@@ -795,6 +797,52 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
         assert.ok(!asked.includes("the invite table is mine"));
         const titled = Option.getOrThrow(yield* readCodingAgent(userId, agent.id));
         assert.equal(titled.title, "Teammate invitations by email");
+      }),
+  );
+
+  it.effect(
+    "a planless agent reaches its chat through the host, its own channel its workspace's general one",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { agent, admitted } = yield* openAgent(host);
+        const db = yield* Database;
+        yield* db.update(codingAgent).set({ planId: null }).where(eq(codingAgent.id, agent.id));
+        const read = yield* host
+          .chat(admitted, { tool: CHAT_TOOL.READ, input: unparsedWire({}) })
+          .pipe(Effect.provide(reachingRelay()));
+        assert.ok("channels" in read, JSON.stringify(read));
+        assert.deepEqual(
+          read.channels.map((channel) => channel.name),
+          ["#general"],
+        );
+      }),
+  );
+
+  it.effect(
+    "a chat post lands where the deployment names no secret or no origin for eve, the members it addresses left to read it next",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { admitted } = yield* openAgent(host);
+        const posted = yield* host
+          .chat(admitted, {
+            tool: CHAT_TOOL.POST,
+            input: unparsedWire({ text: "Taking the invite table." }),
+            clientKey: "call-1",
+            postsInTurn: 0,
+            sandbox: () => Promise.reject(new Error("the sandbox was opened")),
+          })
+          .pipe(Effect.provide(reachingRelay()));
+        assert.equal(posted.status, ACTION_RESULT_STATUS.ACCEPTED);
+        const read = yield* host
+          .chat(admitted, { tool: CHAT_TOOL.READ, input: unparsedWire({}) })
+          .pipe(Effect.provide(reachingRelay()));
+        assert.ok("channels" in read);
+        assert.deepEqual(
+          read.channels.map((channel) => channel.name),
+          ["#teammate-invitations"],
+        );
       }),
   );
 });

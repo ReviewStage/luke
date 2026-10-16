@@ -176,8 +176,8 @@ function senderOf(from: ChatMemberRow): LineSender {
   return { kind: MESSAGE_SENDER.AGENT, name: from.handle };
 }
 
-/** One block as a notice's line reads it: words as written, anything else named by what it is. */
-function blockWords(block: ChatReadBlock): string {
+/** One block as a notice's line reads it, and a read of the chat: words as written, anything else named by what it is. */
+export function blockWords(block: ChatReadBlock): string {
   switch (block.type) {
     case CHAT_BLOCK.MARKDOWN:
       return "text" in block ? block.text : "";
