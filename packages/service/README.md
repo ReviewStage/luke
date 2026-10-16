@@ -1028,7 +1028,13 @@ archive an idle agent of the workspace, never itself or one still working,
 on the rule the Archive agent menu keeps for the agent's starter, recording
 the archiving agent and its reason on the archived agent's row
 (`archived_by`), and bring one back; and `list_tasks`, the workspace's open
-tasks. The
+tasks. A list, a read, or a start of an agent, a list of tasks, and
+`show_page` answer each thing's mention ready to write, `[@name](link)` under
+the workspace's slug (`src/agents/written-mentions.ts`), and the agent's
+instructions show it the mention of every kind it names, under its own
+task's link, so its replies, Inbox items, and plan notes draw them as chips.
+A line from another coding agent hands the agent it reaches no MCP server it
+mentions, since an agent's servers are its developer's to switch. The
 extension itself is not mounted, since its `worker` subagent runs on an AI
 Gateway model and its `gh` tool on Vercel Connect, and Luke runs neither.
 `gh` and `git` run through the shell, authenticated at the firewall. The

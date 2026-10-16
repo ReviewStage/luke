@@ -1,6 +1,7 @@
 import { posix } from "node:path";
 import type { DatabaseServices } from "@luke/database/core/query";
 import { writePage } from "@luke/database/models/plan-pages";
+import { MENTION_KIND } from "@luke/features/mention-link";
 import {
   PAGE_BOUNDS,
   type PageWrite,
@@ -11,6 +12,7 @@ import { describeWire, readEither } from "@luke/wire/effect";
 import { Effect, Option, Result, Schema } from "effect";
 import type { SandboxSession } from "eve/sandbox";
 import { AGENT_TOOL } from "../agents/agent-runtime/tools.js";
+import { taskStepOf, writtenMention } from "../agents/written-mentions.js";
 import {
   ACTION_RESULT_STATUS,
   type UnparsedWireValue,
@@ -31,7 +33,8 @@ import { isSecretFile } from "./shown-file.js";
  * its own file tools reach the sandbox by, bounded and never read whole past
  * the bound. Naming a page shown before writes its next version, and naming
  * none makes a new page, so an agent revises a page rather than piling up
- * copies of it. The answer carries the page's id and version and never the
+ * copies of it. The answer carries the page's id and version, and its
+ * mention ready to write (`../agents/written-mentions.ts`), and never the
  * HTML, which the model wrote and need not read again.
  *
  * Note that the account and plan are the binding the service built from
@@ -106,7 +109,8 @@ export const SHOW_PAGE_TOOL = {
     "fetch, post, open links or windows, store anything, or load images from the web, so put its " +
     "data in the page. Never put a secret in a page. Call it again with the `page` it answered to " +
     "replace that page with a new version rather than making another. Answers `accepted` with the " +
-    "page's id and version, or `rejected` and why nothing was shown.",
+    "page's id, its version, and its mention, the `[@title](link)` to name it by in your words, " +
+    "or `rejected` and why nothing was shown.",
   inputSchema: SHOW_PAGE_INPUT,
 } as const;
 
@@ -183,6 +187,28 @@ function htmlRefusal(html: string): string | undefined {
   return html.length > PAGE_BOUNDS.MAX_HTML_CHARS ? SHOW_PAGE_REFUSAL.TOO_LARGE : undefined;
 }
 
+/**
+ * The page's mention as the agent writes it, its title as its name; none
+ * where its task's workspace cannot be read just now, since the page was
+ * shown all the same.
+ */
+const pageMentionOf = (binding: PageToolBinding, pageId: string, title: string) =>
+  taskStepOf(binding.userId, binding.taskId).pipe(
+    Effect.tapError(logStoreFailure),
+    Effect.option,
+    Effect.map((step) =>
+      Option.getOrUndefined(
+        Option.map(Option.flatten(step), (workspace) =>
+          writtenMention(
+            { kind: MENTION_KIND.PAGE, taskId: binding.taskId, pageId },
+            title,
+            workspace,
+          ),
+        ),
+      ),
+    ),
+  );
+
 /** One call of `show_page` under the plan the service bound, answered as the result the model reads. */
 export function runShowPage(
   binding: PageToolBinding,
@@ -204,19 +230,17 @@ export function runShowPage(
       Effect.tapError(logStoreFailure),
       Effect.option,
     );
-    return Option.match(written, {
-      onNone: () => showPageRejected(SHOW_PAGE_REFUSAL.UNAVAILABLE),
-      onSome: (shown) =>
-        Option.match(shown, {
-          onNone: () =>
-            showPageRejected(
-              page === undefined ? SHOW_PAGE_REFUSAL.NO_TASK : SHOW_PAGE_REFUSAL.NO_PAGE,
-            ),
-          onSome: ({ id, version }): WireRecord => ({
-            status: ACTION_RESULT_STATUS.ACCEPTED,
-            page: { id, version },
-          }),
-        }),
-    });
+    if (Option.isNone(written)) return showPageRejected(SHOW_PAGE_REFUSAL.UNAVAILABLE);
+    if (Option.isNone(written.value)) {
+      return showPageRejected(
+        page === undefined ? SHOW_PAGE_REFUSAL.NO_TASK : SHOW_PAGE_REFUSAL.NO_PAGE,
+      );
+    }
+    const { id, version } = written.value.value;
+    const mention = yield* pageMentionOf(binding, id, title);
+    return {
+      status: ACTION_RESULT_STATUS.ACCEPTED,
+      page: { id, version, ...(mention === undefined ? undefined : { mention }) },
+    } satisfies WireRecord;
   });
 }

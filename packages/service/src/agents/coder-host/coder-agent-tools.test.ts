@@ -8,6 +8,7 @@ import {
   fillCodingAgentTitle,
   lineSendersOf,
   readCodingAgent,
+  takeCodingAgentMentionedServers,
 } from "@luke/database/models/coding-agent-store";
 import { sentLineId } from "@luke/database/models/ids";
 import { readMessageByClientId, sentLineStands } from "@luke/database/models/message-reads";
@@ -342,7 +343,7 @@ async function openWorkspaces() {
   };
 }
 
-test("list_agents names every other agent of the caller's workspace, on any task and by any member, each with its task, archived ones marked, and none of another workspace's; it narrows to one task by its id or to the caller's own", async () => {
+test("list_agents names every other agent of the caller's workspace, on any task and by any member, each with its task and the mention it is named by, archived ones marked, and none of another workspace's; it narrows to one task by its id or to the caller's own", async () => {
   const { workspaceId, plans, agents } = await openWorkspaces();
   const eve = await fakeCoderEve(workspaceId);
   const call = await peerCaller(hostOf(true), agents.caller, eve.services);
@@ -362,6 +363,7 @@ test("list_agents names every other agent of the caller's workspace, on any task
     task: { id: plans.invitations, name: "Teammate invitations", archived: false },
     onYourTask: true,
     archived: true,
+    mention: `[@${OPUS}](https://tryluke.dev/workspace-${workspaceId}/plan/${plans.invitations}/agent/${agents.archived.id})`,
   };
   const teammates = {
     ...reading,
@@ -372,6 +374,7 @@ test("list_agents names every other agent of the caller's workspace, on any task
     task: { id: plans.billing, name: "Billing", archived: false },
     onYourTask: false,
     archived: false,
+    mention: `[@${OPUS}](https://tryluke.dev/workspace-${workspaceId}/plan/${plans.billing}/agent/${agents.teammates.id})`,
   };
 
   const listed = await call(CODER_TOOL.LIST_AGENTS, {});
@@ -444,6 +447,24 @@ test("message_agent reaches a teammate's agent on another plan as the deployment
   assert.ok(delivered.length <= CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS, String(delivered.length));
 });
 
+test("an MCP server or a Linear page another coding agent's message mentions is not handed to the agent it reaches, whose servers are its developer's to switch", async () => {
+  const { workspaceId, agents } = await openWorkspaces();
+  const { caller, teammates } = agents;
+  const eve = await fakeCoderEve(workspaceId);
+  const call = await peerCaller(hostOf(true), caller, eve.services);
+
+  const sent = await call(CODER_TOOL.MESSAGE_AGENT, {
+    agentId: teammates.id,
+    text: "See [@Linear](luke://mcp/linear) and [@LUKE-142 Token refresh fails](https://linear.app/acme/issue/LUKE-142).",
+  });
+
+  assert.equal(sent.delivery, STEER_OUTCOME.SENT, JSON.stringify(sent));
+  assert.deepEqual(
+    await database.run(takeCodingAgentMentionedServers(teammates.userId, teammates.conversationId)),
+    [],
+  );
+});
+
 test("message_agent sends nothing to an archived agent, an agent of another workspace, or the caller itself, and a deployment with no secret sends nothing", async () => {
   const { workspaceId, agents } = await openWorkspaces();
   const eve = await fakeCoderEve(workspaceId);
@@ -492,7 +513,7 @@ test("message_agent sends nothing to an archived agent, an agent of another work
   assert.equal(eve.sent.length, 0);
 });
 
-test("start_agent starts an agent on the caller's own task as the deployment acting for its starter, telling it which agent started it and how to report back, leaves the starter's default as it stood, and starts once under the call's key", async () => {
+test("start_agent starts an agent on the caller's own task as the deployment acting for its starter, answering the mention it is named by, telling it which agent started it and how to report back, leaves the starter's default as it stood, and starts once under the call's key", async () => {
   const { workspaceId, plans, agents } = await openWorkspaces();
   const { caller } = agents;
   const eve = await fakeCoderEve(workspaceId);
@@ -509,6 +530,11 @@ test("start_agent starts an agent on the caller's own task as the deployment act
   const startedId = started.agent.id;
   const stored = Option.getOrThrow(await database.run(readCodingAgent(caller.userId, startedId)));
   assert.equal(stored.taskId, plans.invitations);
+  // The agent is answered with the mention its starter names it by, its title the model's until one is written.
+  assert.equal(
+    started.agent.mention,
+    `[@${OPUS}](https://tryluke.dev/workspace-${workspaceId}/plan/${plans.invitations}/agent/${startedId})`,
+  );
   assert.deepEqual([stored.model, stored.effort], [OPUS, "low"]);
 
   assert.equal(eve.sent.length, 1);
@@ -528,7 +554,7 @@ test("start_agent starts an agent on the caller's own task as the deployment act
   assert.equal(eve.sent.length, 1, "the same call run again starts no second agent");
 });
 
-test("list_tasks names the open tasks of the caller's workspace, its own marked, and none of another's; start_agent starts on another of them by its taskId, refuses one of another workspace, and an agent on no task names its task or is refused", async () => {
+test("list_tasks names the open tasks of the caller's workspace, each with the mention it is named by, its own marked, and none of another's; start_agent starts on another of them by its taskId, refuses one of another workspace, and an agent on no task names its task or is refused", async () => {
   const { workspaceId, elsewhere, plans, agents } = await openWorkspaces();
   const { caller } = agents;
   const eve = await fakeCoderEve(workspaceId);
@@ -538,13 +564,26 @@ test("list_tasks names the open tasks of the caller's workspace, its own marked,
   assert.equal(listed.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(listed));
   assert.ok(Array.isArray(listed.tasks));
   const tasks = listed.tasks.flatMap((task) =>
-    isRecord(task) ? [{ id: task.id, name: task.name, isYourTask: task.isYourTask }] : [],
+    isRecord(task)
+      ? [{ id: task.id, name: task.name, isYourTask: task.isYourTask, mention: task.mention }]
+      : [],
   );
+  const home = `https://tryluke.dev/workspace-${workspaceId}/plan`;
   assert.deepEqual(
     [...tasks].sort((a, b) => String(a.name).localeCompare(String(b.name))),
     [
-      { id: plans.billing, name: "Billing", isYourTask: false },
-      { id: plans.invitations, name: "Teammate invitations", isYourTask: true },
+      {
+        id: plans.billing,
+        name: "Billing",
+        isYourTask: false,
+        mention: `[@Billing](${home}/${plans.billing})`,
+      },
+      {
+        id: plans.invitations,
+        name: "Teammate invitations",
+        isYourTask: true,
+        mention: `[@Teammate invitations](${home}/${plans.invitations})`,
+      },
     ],
   );
 
