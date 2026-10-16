@@ -1457,7 +1457,8 @@ function EditorForm({
  * One automation's page, or a new one's where none is given. A new one,
  * opened from a suggestion on the list, starts filled in from its preset;
  * once made, it is handed to `onCreated`, which stands its own page where
- * this one stood. A deleted one goes back to the list.
+ * this one stood. A deleted one is handed to `onDeleted`, which goes back
+ * to the list.
  */
 export function AutomationEditor({
   automation,
@@ -1468,6 +1469,7 @@ export function AutomationEditor({
   writes,
   onBack,
   onCreated,
+  onDeleted,
   onOpenAgent,
   linked,
   leaveGuard,
@@ -1482,6 +1484,7 @@ export function AutomationEditor({
   writes: AutomationWrites;
   onBack: () => void;
   onCreated: (automationId: string) => void;
+  onDeleted: (automationId: string) => void;
   /** Opens a run's agent on its own page. */
   onOpenAgent: (agentId: string) => void;
   /**
@@ -1617,7 +1620,7 @@ export function AutomationEditor({
             reason: SAVE_REFUSAL_WORDS[answer.failure],
           };
         }
-        leaveGuard.pass(onBack);
+        leaveGuard.pass(() => onDeleted(automation.id));
         return ACCEPTED;
       });
     },

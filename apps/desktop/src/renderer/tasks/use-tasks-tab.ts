@@ -278,7 +278,11 @@ export const AUTOMATIONS_PAGE = {
 } as const;
 
 export type AutomationsPlace =
-  | { readonly kind: typeof AUTOMATIONS_PAGE.LIST }
+  | {
+      readonly kind: typeof AUTOMATIONS_PAGE.LIST;
+      /** The automation whose page was left for the list by deleting it, which the window's history passes over from then on. */
+      readonly deleted?: string;
+    }
   | {
       readonly kind: typeof AUTOMATIONS_PAGE.NEW;
       /** The suggestion on the list it was opened from, whose preset fills its draft in; none for a blank one. */
@@ -289,6 +293,8 @@ export type AutomationsPlace =
       readonly automationId: string;
       /** The run a link named, which its runs mark and bring into view. */
       readonly runId?: string;
+      /** Opened by the new automation's page that made it, as its Create landed, so it takes that page's step in the window's history. */
+      readonly created?: true;
     };
 
 /** The list, where the Automations pages open with none asked for. */
