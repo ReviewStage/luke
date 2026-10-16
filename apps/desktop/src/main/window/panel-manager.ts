@@ -1,6 +1,7 @@
 import type { AvatarGrant } from "@luke/features/avatar-grant";
 import type { RunMode } from "@luke/host";
 import type { AvatarFeed } from "@luke/voice/avatar";
+import type { AvatarViewSignal } from "@luke/voice/avatar-view";
 import type { UnparsedWireValue } from "@luke/wire";
 import {
   app,
@@ -185,6 +186,11 @@ export class PanelManager {
   /** One message of Luke's voice feed, for the avatar to lip-sync. */
   feedAvatar(feed: AvatarFeed): void {
     this.#avatar.feedAvatar(feed);
+  }
+
+  /** The call window's offer or close for its view of the avatar's video, for the panel to answer. */
+  signalAvatarView(signal: AvatarViewSignal): void {
+    this.#avatar.signalView(signal);
   }
 
   /** Every living panel window, for what each one applies itself: the zoom. */

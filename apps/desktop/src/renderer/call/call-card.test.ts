@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { WINDOW_ROLE } from "@luke/gateway/window-session";
 import type { AppStateSnapshot } from "@luke/host/app-state";
 import { LIVE_STATUS } from "@luke/live";
 import { EXPERIMENT } from "@luke/settings";
@@ -13,7 +14,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { stateWith } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
-import { CALL_CARD_SURFACE, CallCardDock, type CallCardInput } from "./call-card";
+import { CALL_CARD_SURFACE, CallCardDock, type CallCardInput, CallWindowCard } from "./call-card";
 import { CALL_VIDEO_LABEL } from "./call-video-tile";
 import { CallTabVideo, useCallCardVideo } from "./panel-avatar";
 
@@ -73,11 +74,16 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-/** Main's document on a call in progress with the avatar as given and Video calls on. */
-function onCall(avatar: AvatarState, version = 1): AppStateSnapshot {
+/** Main's document on a call in progress with the avatar as given and Video calls on, as the panel or the call window is handed it. */
+function onCall(
+  avatar: AvatarState,
+  version = 1,
+  role: AppStateSnapshot["window"]["role"] = WINDOW_ROLE.PANEL,
+): AppStateSnapshot {
   return {
     ...stateWith(experimentsOn(EXPERIMENT.VIDEO_CALLS), {
       voice: { view: LISTENING, avatar },
+      window: { role, fullScreen: false },
     }),
     version,
   };
@@ -95,6 +101,9 @@ function handBridge(first: AppStateSnapshot): void {
       },
       onAvatarSession: () => () => undefined,
       onAvatarFeed: () => () => undefined,
+      onAvatarViewSignal: () => () => undefined,
+      signalAvatarView: () => undefined,
+      onCallWindowMoved: () => () => undefined,
       onMenuCommand: () => () => undefined,
       recordSurfaceEvent: () => undefined,
       act: (request: { kind: string; payload?: unknown }) => {
@@ -205,4 +214,41 @@ test("the card's Video off and Video on are the Call tab's own toggle, and both 
   });
   await settle();
   assert.deepEqual(sent.at(-1), { kind: "voice.setVideo", payload: { on: true } });
+});
+
+test("the floating call window draws Luke's video while the avatar is live, its Video off is the same act, and once video is down it is the card alone", async () => {
+  handBridge(onCall({ status: AVATAR_STATUS.LIVE }, 1, WINDOW_ROLE.CALL));
+  const page = mount(createElement(CallWindowCard));
+  await settle();
+  const windowCard = card(page);
+  assert.equal(windowCard?.dataset.surface, CALL_CARD_SURFACE.WINDOW);
+  const tile = tileIn(windowCard);
+  assert.ok(tile, "the window's card draws the video tile");
+  // jsdom has no WebRTC, so the panel's frames never reach it: Luke's still face, not a black box.
+  assert.equal(tile.querySelector("video"), null);
+  assert.ok(tile.querySelector(".call-video-face"));
+
+  act(() => button(tile, CALL_VIDEO_LABEL.VIDEO_OFF).click());
+  await settle();
+  assert.deepEqual(sent, [{ kind: "voice.setVideo", payload: { on: false } }]);
+
+  // The experiment off with no avatar standing is today's card, with nothing of video on it.
+  act(() =>
+    deliver({
+      ...stateWith(
+        {},
+        {
+          voice: {
+            view: LISTENING,
+            avatar: { status: AVATAR_STATUS.ENDED, endReason: AVATAR_END_REASON.USER },
+          },
+          window: { role: WINDOW_ROLE.CALL, fullScreen: false },
+        },
+      ),
+      version: 2,
+    }),
+  );
+  await settle();
+  assert.equal(tileIn(card(page)), null);
+  assert.equal(page.querySelector(`button[aria-label="${CALL_VIDEO_LABEL.VIDEO_ON}"]`), null);
 });

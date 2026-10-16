@@ -11,6 +11,7 @@ import {
   AVATAR_STATUS,
   type AvatarFeed,
 } from "@luke/voice/avatar";
+import { AVATAR_VIEW_SIGNAL, type AvatarViewSignal } from "@luke/voice/avatar-view";
 import {
   LIVE_AVATAR_END,
   LIVE_AVATAR_STATUS,
@@ -121,10 +122,12 @@ function fixture() {
   return Effect.gen(function* () {
     const state = new AppStateStore(initialAppState(RUN, false), Context.empty());
     const { host, move, grant, setVideo, restarts } = yield* fakeHost();
-    /** What reached the panel's page: each grant handed over, and each feed relayed. */
+    /** What reached the panel's page: each grant handed over, each feed and view signal relayed; and what reached the call window's. */
     const grants: (AvatarGrant | undefined)[] = [];
     const feeds: AvatarFeed[] = [];
-    const page = { grants, feeds };
+    const views: AvatarViewSignal[] = [];
+    const callViews: AvatarViewSignal[] = [];
+    const page = { grants, feeds, views, callViews };
     /** What the Gateway's `voice.setVideo` was asked, the host being a process apart. */
     const asked: boolean[] = [];
     const avatar = yield* linkAvatar({
@@ -151,7 +154,15 @@ function fixture() {
     const router = createActRouter(avatarActRows({ avatar }) as ActRows);
     const reports = avatarReports({
       state,
-      panel: { feedAvatar: (feed) => page.feeds.push(feed) },
+      panel: {
+        feedAvatar: (feed) => page.feeds.push(feed),
+        signalAvatarView: (signal) => page.views.push(signal),
+        owns: (sender) => sender === senders[ROLE.PANEL],
+      },
+      callWindow: {
+        signalAvatarView: (signal) => page.callViews.push(signal),
+        owns: (sender) => sender === senders[ROLE.CALL],
+      },
       voiceOwns: (sender) => sender === senders[ROLE.VOICE],
     });
     const senderOf = (role: Role): ActSender => ({
@@ -170,6 +181,8 @@ function fixture() {
       });
     const feed = (role: Role, sent: AvatarFeed) =>
       reports.feedAvatar({ sender: senders[role] }, sent);
+    const signal = (role: Role, sent: AvatarViewSignal) =>
+      reports.signalAvatarView({ sender: senders[role] }, sent);
     const moved = (next: LiveAvatarState) =>
       Effect.andThen(
         Effect.sync(() => move(next)),
@@ -180,7 +193,7 @@ function fixture() {
       settle(),
     );
     const avatarNow = () => state.snapshot().voice.avatar;
-    return { perform, feed, moved, granted, avatarNow, page, asked, restarts };
+    return { perform, feed, signal, moved, granted, avatarNow, page, asked, restarts };
   });
 }
 
@@ -258,7 +271,7 @@ it.effect(
 );
 
 it.effect(
-  "the floating call window's or the voice window's report or toggle is refused and changes nothing",
+  "the floating call window's or the voice window's report, or the voice window's toggle, is refused and changes nothing",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
@@ -269,10 +282,56 @@ it.effect(
           yield* f.perform(role, ACT_KIND.AVATAR_REPORT, { status: AVATAR_STATUS.LIVE }),
           "refused",
         );
-        assert.equal(yield* f.perform(role, ACT_KIND.VOICE_SET_VIDEO, { on: false }), "refused");
       }
+      assert.equal(
+        yield* f.perform(ROLE.VOICE, ACT_KIND.VOICE_SET_VIDEO, { on: false }),
+        "refused",
+      );
       assert.deepEqual(f.avatarNow(), { status: AVATAR_STATUS.STARTING });
       assert.deepEqual(f.asked, []);
+    }),
+);
+
+it.effect("the floating call window's tile turns video off and on as the panel's does", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture();
+    assert.equal(yield* f.perform(ROLE.CALL, ACT_KIND.VOICE_SET_VIDEO, { on: true }), "done");
+    assert.equal(yield* f.perform(ROLE.CALL, ACT_KIND.VOICE_SET_VIDEO, { on: false }), "done");
+    assert.deepEqual(f.asked, [true, false]);
+    assert.deepEqual(f.avatarNow(), {
+      status: AVATAR_STATUS.ENDED,
+      endReason: AVATAR_END_REASON.USER,
+    });
+  }),
+);
+
+it.effect(
+  "the call window's view of the video is signalled between the call window and the panel alone, and offered only while the avatar stands",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const offer = { kind: AVATAR_VIEW_SIGNAL.OFFER, view: "view-1", sdp: "v=0 offer" } as const;
+      const answer = {
+        kind: AVATAR_VIEW_SIGNAL.ANSWER,
+        view: "view-1",
+        sdp: "v=0 answer",
+      } as const;
+      const close = { kind: AVATAR_VIEW_SIGNAL.CLOSE, view: "view-1" } as const;
+      // No avatar up: the offer reaches nothing.
+      f.signal(ROLE.CALL, offer);
+      yield* f.moved({ status: LIVE_AVATAR_STATUS.STARTING });
+      yield* f.granted;
+      yield* f.perform(ROLE.PANEL, ACT_KIND.AVATAR_REPORT, { status: AVATAR_STATUS.LIVE });
+      f.signal(ROLE.CALL, offer);
+      f.signal(ROLE.PANEL, answer);
+      // Neither end speaks for the other, and the voice window speaks for neither.
+      f.signal(ROLE.PANEL, offer);
+      f.signal(ROLE.VOICE, offer);
+      f.signal(ROLE.CALL, answer);
+      f.signal(ROLE.VOICE, answer);
+      f.signal(ROLE.CALL, close);
+      assert.deepEqual(f.page.views, [offer, close]);
+      assert.deepEqual(f.page.callViews, [answer]);
     }),
 );
 

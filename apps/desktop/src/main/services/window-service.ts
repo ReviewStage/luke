@@ -261,9 +261,9 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     if (voice && !voice.isDestroyed()) send(voice.webContents, voiceWindowState(held));
     const call = callWindow.current();
     if (call) send(call.webContents, voiceWindowState(held));
-    // The call window follows the document it draws, so it stands and goes
-    // on the same version every window is told.
-    callPresence.voiceChanged(held.voice.view);
+    // The call window follows the document it draws, so it stands, goes, and
+    // grows for the avatar on the same version every window is told.
+    callPresence.voiceChanged(held.voice);
   }
 
   function sendToVoice<Payload>(channel: string, payload: Payload): void {
