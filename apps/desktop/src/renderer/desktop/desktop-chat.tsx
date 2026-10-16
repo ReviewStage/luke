@@ -1,0 +1,174 @@
+import type { TaskAgentLine } from "@luke/features/task-wire";
+import {
+  CHAT_PLACE,
+  type ChatNames,
+  type ChatPlace,
+  type ChatRailRow,
+  chatRail,
+  FOR_YOU,
+} from "@luke/ui/chat-model";
+import { AtSignIcon, HashIcon, MessagesSquareIcon } from "lucide-react";
+import { useMemo } from "react";
+import { EmptyState } from "../empty-state";
+import { ChatPane, MemberMark } from "../tasks/chat-pane";
+import { useMinute } from "../tasks/task-time";
+import { useOpenLink } from "../tasks/use-open-link";
+import type { TasksControl } from "../tasks/use-tasks-tab";
+
+/**
+ * desktop-chat.tsx -- the window's Chat: the workspace's channels and direct messages in a rail of their own, and For you or the channel chosen read beside it.
+ *
+ * It stands in the plan's place beside the sidebar, whose Chat row is
+ * marked while it does, as the window's Inbox (`desktop-inbox.tsx`) does.
+ * The rail is drawn from the sidebar's own pieces: For you at its head,
+ * counting what waits on the developer, then the channels, then the direct
+ * messages, each row counting what in it the developer has not read and
+ * in the unread weight while anything is (`chat-model.ts`). A direct
+ * message's row leads with the other member's mark and names their agent's
+ * title or plan after their handle. A press on a row shows its place in
+ * the pane beside the rail (`chat-pane.tsx`). The agents are named from
+ * the plans' summaries, the way the sidebar names them, and from the lines
+ * the chat read carries where those name more. With nothing read, it says
+ * so under Chat's glyph. Any row of the sidebar leaves it for the plan it
+ * stood over; Escape does not, as it does not leave the Inbox, so a stray
+ * press never loses the place being read.
+ */
+
+/** What the view says where no chat is read. */
+const NO_CHAT = "Chat is not available yet.";
+
+/** Whether a row stands for the place shown. */
+function shows(place: ChatPlace, row: ChatRailRow): boolean {
+  return place.kind === CHAT_PLACE.CHANNEL && place.channelId === row.channel.id;
+}
+
+/** A row's unread count at its end, nothing at none. */
+function Count({ count }: { count: number }): React.JSX.Element | null {
+  if (count === 0) return null;
+  return (
+    <span className="chat-rail-count">
+      {count}
+      <span className="visually-hidden"> unread</span>
+    </span>
+  );
+}
+
+/** One channel's or direct message's row: its glyph or the other member's mark, its name, what it says after, and its count. */
+function RailRow({
+  row,
+  current,
+  onChoose,
+}: {
+  row: ChatRailRow;
+  current: boolean;
+  onChoose: () => void;
+}): React.JSX.Element {
+  return (
+    <li className="sidebar-task-item chat-rail-row">
+      <button
+        type="button"
+        className="sidebar-task"
+        aria-current={current ? "page" : undefined}
+        data-unread={String(row.unread > 0)}
+        data-channel-id={row.channel.id}
+        onClick={onChoose}
+      >
+        <span className="sidebar-task-line">
+          <span className="sidebar-pinned-tab-glyph">
+            {row.other === undefined ? <HashIcon /> : <MemberMark who={row.other} small />}
+          </span>
+          <span className="sidebar-task-name">{row.label}</span>
+          {row.sub === undefined ? null : <span className="chat-rail-sub">{row.sub}</span>}
+          <Count count={row.unread} />
+        </span>
+      </button>
+    </li>
+  );
+}
+
+/** The window's Chat, in the plan's place: the rail, and the place chosen beside it. */
+export function DesktopChat({
+  tasks,
+  accountName,
+}: {
+  tasks: TasksControl;
+  accountName: string | undefined;
+}): React.JSX.Element {
+  const view = tasks.chatView;
+  const now = useMinute();
+  const openLink = useOpenLink();
+  const read = view.chat;
+  const listed = tasks.tasks;
+  const names = useMemo((): ChatNames => {
+    const lines: TaskAgentLine[] = [
+      ...listed.flatMap((task) => task.agents?.agents ?? []),
+      ...(read?.agents ?? []),
+    ];
+    return {
+      agents: new Map(lines.map((line) => [line.id, line])),
+      plans: new Map(listed.map((task) => [task.id, task.name])),
+      selfName: accountName,
+    };
+  }, [listed, read, accountName]);
+  if (read === undefined) {
+    return (
+      <div className="chat-view">
+        <section className="chat-stream" aria-label="Chat">
+          <header className="desktop-toolbar" />
+          <EmptyState icon={<MessagesSquareIcon />}>{NO_CHAT}</EmptyState>
+        </section>
+      </div>
+    );
+  }
+  const chat = read.answer;
+  const rail = chatRail(chat, names);
+  const row = (each: ChatRailRow) => (
+    <RailRow
+      key={each.channel.id}
+      row={each}
+      current={shows(view.place, each)}
+      onChoose={() => view.onChoose({ kind: CHAT_PLACE.CHANNEL, channelId: each.channel.id })}
+    />
+  );
+  return (
+    <div className="chat-view">
+      <nav className="chat-rail" aria-label="Chat">
+        <header className="desktop-toolbar chat-rail-bar">
+          <div className="desktop-toolbar-heading">
+            <h1 className="desktop-toolbar-title">Chat</h1>
+          </div>
+        </header>
+        <div className="chat-rail-scroll">
+          <ul className="sidebar-tasks">
+            <li className="sidebar-task-item chat-rail-row">
+              <button
+                type="button"
+                className="sidebar-task"
+                aria-current={view.place.kind === CHAT_PLACE.FOR_YOU ? "page" : undefined}
+                data-unread={String(rail.forYou > 0)}
+                onClick={() => view.onChoose(FOR_YOU)}
+              >
+                <span className="sidebar-task-line">
+                  <span className="sidebar-pinned-tab-glyph">
+                    <AtSignIcon />
+                  </span>
+                  <span className="sidebar-task-name">For you</span>
+                  <Count count={rail.forYou} />
+                </span>
+              </button>
+            </li>
+          </ul>
+          <h2 className="chat-rail-heading">Channels</h2>
+          <ul className="sidebar-tasks">{rail.channels.map(row)}</ul>
+          {rail.direct.length === 0 ? null : (
+            <>
+              <h2 className="chat-rail-heading">Direct messages</h2>
+              <ul className="sidebar-tasks">{rail.direct.map(row)}</ul>
+            </>
+          )}
+        </div>
+      </nav>
+      <ChatPane chat={chat} names={names} place={view.place} now={now} openLink={openLink} />
+    </div>
+  );
+}

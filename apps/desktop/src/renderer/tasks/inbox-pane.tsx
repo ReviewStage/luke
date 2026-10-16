@@ -179,7 +179,7 @@ const SEND = "Send to agent";
 const BACK_TO_INBOX = "Back to inbox";
 
 /** A link block: a plain link where it is a web page, as a transcript's links are, else its label with the address beside it to copy. */
-function LinkBlock({
+export function LinkBlock({
   url,
   label,
   openLink,

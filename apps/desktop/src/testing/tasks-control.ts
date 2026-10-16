@@ -2,6 +2,7 @@ import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import type { InboxItem } from "@luke/features/inbox-wire";
 import { TASK_CALL_FAILURE } from "@luke/features/tasks-view";
 import type { AppInboxWaitingItem } from "@luke/host/app-state";
+import { FOR_YOU } from "@luke/ui/chat-model";
 import { CONFIRM_STAGE } from "@luke/ui/confirm-state";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
@@ -288,6 +289,14 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
       onClose: ignore,
     },
     callTaskId: undefined,
+    chatView: {
+      open: false,
+      chat: undefined,
+      place: FOR_YOU,
+      onOpen: ignore,
+      onClose: ignore,
+      onChoose: ignore,
+    },
     onShowFile: ignore,
     onOpenPinnedTab: ignore,
     onReopenClosedTab: undefined,

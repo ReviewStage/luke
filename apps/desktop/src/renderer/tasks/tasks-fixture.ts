@@ -111,8 +111,11 @@ const FIXTURE_TEXT = [
     "- An invite expires after 7 days.",
 ].join("\n\n");
 
+/** The reference journey's task, by the id its chat channel names it by too (`chat-fixture.ts`). */
+export const FIXTURE_TASK_ID = "0f6a2c4e-8b1d-4e3f-9a57-1c2b3d4e5f60";
+
 const FIXTURE_TASK: Task = {
-  id: "0f6a2c4e-8b1d-4e3f-9a57-1c2b3d4e5f60",
+  id: FIXTURE_TASK_ID,
   workspaceId: FIXTURE_FIRST.id,
   name: "Teammate invitations",
   createdAt: 1,
