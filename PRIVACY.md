@@ -389,7 +389,10 @@ App mints for that one repository on the workspace's installation. The overview
 reads its title, branches, and whether it would merge; its description and up
 to its 100 newest comments and reviews, each whole with its author, as GitHub
 renders them; the name, App, state, and times of up to 100 checks on its head;
-and its reviewers. An image in the description or a comment is read by our
+its reviewers; and up to its 100 newest review threads on lines, each with the
+file and lines it is on, the part of the diff it was made on, whether it was
+resolved or outdated, and up to its first 50 comments, each whole with its
+author, as GitHub renders them. An image in the description or a comment is read by our
 service too, never by your Mac: an upload with the same one-repository token,
 through a fresh signed address GitHub gives for it, and any other image through
 GitHub's own image proxy, each up to 8 MB; other images are shown as links.
