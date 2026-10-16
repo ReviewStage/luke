@@ -61,6 +61,24 @@ test("a mixed box resolves to checked whether its caller last held it checked or
   expect(heard()).toBe("true");
 });
 
+test("a mixed box its caller holds checked still submits with its form", async () => {
+  const { container } = await mount(
+    createElement(
+      "form",
+      null,
+      createElement(Checkbox, {
+        name: "servers",
+        checked: true,
+        mixed: true,
+        onChange: () => undefined,
+        children: "Every server",
+      }),
+    ),
+  );
+  const form = container.querySelector("form");
+  expect(form === null ? null : new FormData(form).get("servers")).toBe("on");
+});
+
 test("an unavailable box changes nothing", async () => {
   await mount(createElement(Signed, { disabled: true }));
   const box = page.getByRole("checkbox", { name: "Include my name and email" });
