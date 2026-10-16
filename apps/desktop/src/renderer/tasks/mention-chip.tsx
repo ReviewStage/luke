@@ -34,6 +34,7 @@ import type { ReactNode } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
 import { CardHead, CardNote, HoverCard } from "../hover-card";
 import type { LinkDrawer } from "../markdown-message";
+import { usePerson } from "../member-directory";
 import type { HeadingsChange, MentionNode } from "../plan-editor/contract";
 import { Tooltip } from "../tooltip";
 import {
@@ -85,7 +86,10 @@ import { useOpenLink } from "./use-open-link";
  * opens its tab through the window's opener for a Luke link, as a link
  * copied to it does, and an agent hangs its tab's own card where the place
  * has one, and otherwise the same card read as it is hung, on any task of
- * the workspace or on none (`mentioned-agent-card.tsx`). A link to any other place in Luke, a member, an Inbox item, an
+ * the workspace or on none (`mentioned-agent-card.tsx`). A person wears
+ * their picture and hangs their card, their email and role, or grayed as
+ * having left, as the workspace's members around the chip say
+ * (`../member-directory.tsx`), and opens their page in the workspace. A link to any other place in Luke, an Inbox item, an
  * automation, an agent's message (`@luke/features/luke-link`), is drawn as
  * the same chip, wearing the place's glyph and named as the window already
  * knows it (`@luke/features/place-chip-model`): the words it was labelled
@@ -215,16 +219,26 @@ function pressOf(
     // A page or an agent opens its tab as its Luke link does, through the window's opener, under the workspace it was written in.
     case MENTION_KIND.PAGE:
     case MENTION_KIND.AGENT:
+    case MENTION_KIND.PERSON:
       return () => openLink(target);
   }
 }
 
+/** A person as the workspace's members around the chip draw them: their picture, or grayed where they left. */
+function PersonGlyph({ userId, name }: { userId: string; name: string }): React.JSX.Element {
+  const person = usePerson({ userId, name });
+  return <ActorMark actor={person} size={ACTOR_SIZE.INLINE} />;
+}
+
 function MentionGlyph({
   mention,
+  name,
   doors,
   standing,
 }: {
   mention: Mention;
+  /** The name the chip calls it by, which a person not among the members read is drawn by. */
+  name: string;
   doors: MentionDoors;
   standing?: LinkStanding | undefined;
 }): React.JSX.Element {
@@ -259,6 +273,8 @@ function MentionGlyph({
         <ActorMark actor={look.actor} size={ACTOR_SIZE.INLINE} />
       );
     }
+    case MENTION_KIND.PERSON:
+      return <PersonGlyph userId={mention.userId} name={name} />;
   }
 }
 
@@ -292,12 +308,15 @@ function linesNote(lines: MentionLines | undefined): string | undefined {
 /** The card a chip hangs: a file's own card, a server's or a tool's its server's row, an agent's tab's where the place has one, or its glyph and whole name, and why it is gone where it is. */
 function MentionCard({
   mention,
+  target,
   name,
   state,
   doors,
   standing,
 }: {
   mention: Mention;
+  /** Its link's target as written, whose workspace a person's card is read in. */
+  target: string;
   name: string;
   state: MentionState;
   doors: MentionDoors;
@@ -337,7 +356,7 @@ function MentionCard({
   const card = (
     <HoverCard data-mention-card="">
       <CardHead
-        glyph={<MentionGlyph mention={mention} doors={doors} standing={standing} />}
+        glyph={<MentionGlyph mention={mention} name={name} doors={doors} standing={standing} />}
         name={standing?.title ?? whole}
         sub={mention.kind === MENTION_KIND.FOLDER ? repository : undefined}
       />
@@ -369,6 +388,15 @@ function MentionCard({
       );
     case MENTION_KIND.PAGE:
       return <PageChipCard taskId={mention.taskId} pageId={mention.pageId} fallback={card} />;
+    // A person hangs their card as the members of the workspace their link names draw them.
+    case MENTION_KIND.PERSON:
+      return (
+        <PersonChipCard
+          userId={mention.userId}
+          workspace={readLink(target)?.workspace ?? doors.place.workspace}
+          fallback={card}
+        />
+      );
     // Any other agent hangs its tab's card all the same, read as the card is hung.
     case MENTION_KIND.AGENT:
       return (
@@ -393,7 +421,7 @@ function OptionalNote({ words }: { words: string | undefined }): ReactNode {
 /**
  * What a chip calls a mention: the name it was written with, unless it was
  * written as its bare address and the window holds better, the name of the
- * plan, the page, or the agent it names, or the key and title a provider
+ * plan, the page, the agent, or the person it names, or the key and title a provider
  * answered for its page.
  */
 function bareName(
@@ -413,6 +441,8 @@ function bareName(
       return known.pages.get(mention.pageId) ?? written;
     case MENTION_KIND.AGENT:
       return known.agents.get(mention.agentId) ?? written;
+    case MENTION_KIND.PERSON:
+      return known.people.get(mention.userId) ?? written;
     default:
       return written;
   }
@@ -447,7 +477,7 @@ function MentionChip({
   const face = (
     <>
       <span className="mention-chip-glyph">
-        <MentionGlyph mention={mention} doors={doors} standing={standing} />
+        <MentionGlyph mention={mention} name={name} doors={doors} standing={standing} />
       </span>
       <span className="mention-chip-label">{name}</span>
       {standing?.state === undefined ? null : (
@@ -456,7 +486,14 @@ function MentionChip({
     </>
   );
   const card = (
-    <MentionCard mention={mention} name={name} state={state} doors={doors} standing={standing} />
+    <MentionCard
+      mention={mention}
+      target={target}
+      name={name}
+      state={state}
+      doors={doors}
+      standing={standing}
+    />
   );
   return (
     <Tooltip label={name} card={card}>
@@ -707,7 +744,8 @@ function pastedName(mention: Mention, said: string, names: PastedNames): string 
  * a plan's, a section's, a page's, or an agent's, by the scheme of the web
  * or the app's own, named as its bare link's chip is (`pastedName`); or a
  * page of an integration's, named by its address's readable form; nothing
- * for any other words, a file of the plan's repository among them.
+ * for any other words, a file of the plan's repository among them, or a
+ * person's page in another workspace than the place's.
  */
 export function pastedMentionNode(
   words: string,
@@ -715,7 +753,11 @@ export function pastedMentionNode(
   names: PastedNames,
 ): MentionNode | undefined {
   const link = pastedLinkMention(words, place.repository);
-  return link === undefined
+  // A person's page is their page in the workspace its link names, so one of another workspace stays the link it is.
+  const elsewhere =
+    link?.mention.kind === MENTION_KIND.PERSON &&
+    readLink(words.trim())?.workspace !== place.workspace;
+  return link === undefined || elsewhere
     ? undefined
     : {
         name: pastedName(link.mention, link.name, names),

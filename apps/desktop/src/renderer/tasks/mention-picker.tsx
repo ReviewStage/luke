@@ -10,9 +10,10 @@ import {
 } from "@luke/features/mention-link";
 import { planSections } from "@luke/features/plan-document";
 import { TASK_TREE_ENTRY } from "@luke/features/task-wire";
+import type { WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { ArrowLeftIcon, ChevronRightIcon, DocumentIcon, ProviderMark } from "@luke/ui";
-import type { Actor } from "@luke/ui/actor-model";
+import { ArrowLeftIcon, ChevronRightIcon, DocumentIcon, ProviderMark, UserIcon } from "@luke/ui";
+import { type Actor, memberActor } from "@luke/ui/actor-model";
 import type { NamedServer } from "@luke/ui/agent-servers-model";
 import type { SkillOption } from "@luke/ui/skill-mention";
 import { fileFolder, fileName } from "@luke/voice/code-pane-model";
@@ -23,11 +24,13 @@ import {
   FolderIcon,
   GitPullRequestIcon,
   HashIcon,
+  UsersIcon,
 } from "lucide-react";
 import { type RefObject, useEffect, useId, useState } from "react";
 import { useAct } from "../act";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
 import { type IntegrationToolsReads, useIntegrationTools } from "../integration-tools";
+import { useMemberDirectory } from "../member-directory";
 import type { ComposerTrigger, MentionNode } from "../plan-editor/contract";
 import { FileTypeIcon } from "./file-type-icon";
 import { NO_TASK } from "./plan-mentions";
@@ -74,6 +77,14 @@ import { AgentMark } from "./tab-look";
  * agent it is sent to is handed what it needs to read by
  * (`packages/service/src/agents/mentioned-context.ts`).
  *
+ * Wherever the words stand in a workspace whose members the window has
+ * read (`../member-directory.tsx`), the list offers its people too, each by
+ * their name and picture, the reader among them as You, found by their name
+ * or their email: a mention of a person names them by their account's id,
+ * so it names them still once they rename themselves, and an agent the
+ * words go to is handed who they are in the workspace. Nobody is notified
+ * of a mention.
+ *
  * Nothing typed after the `@`, the list ends in a row for each kind the
  * place offers ("Mention from"): → or Enter on one narrows the list to that
  * kind, as typing its word and a colon does (`@files:`, `@agents:`, a
@@ -98,6 +109,7 @@ const MENTION_GROUP = {
   PLAN: "Plan",
   PAGES: "Pages",
   AGENTS: "Agents",
+  PEOPLE: "People",
   PULL_REQUESTS: "Pull requests",
   SKILLS: "Skills",
   SERVERS: "MCP servers",
@@ -110,6 +122,7 @@ const MENTION_FROM = {
   PLAN: "plan",
   PAGES: "pages",
   AGENTS: "agents",
+  PEOPLE: "people",
   PULL_REQUESTS: "prs",
   SKILLS: "skills",
   SERVER: "server",
@@ -145,6 +158,9 @@ const AGENT_DETAIL = {
   OTHER_TASK: "Another task",
   ARCHIVED: "Archived",
 } as const;
+
+/** What the reader's own row says beside their name. */
+const YOU_DETAIL = "You";
 
 /** What stands between an agent's task and its being archived in its row's detail. */
 const DETAIL_JOIN = " · ";
@@ -222,7 +238,7 @@ type MentionRow = {
   readonly detail: string | undefined;
   /** The words it is found by. */
   readonly terms: string;
-  /** An agent's tile, which its row wears as its tab does; none for any other row. */
+  /** An agent's tile, or a person's picture, which its row wears; none for any other row. */
   readonly actor?: Actor | undefined;
   /** A pull request, whose mark its row wears for where it stands; none for any other row. */
   readonly pullRequest?: MentionablePullRequest | undefined;
@@ -447,6 +463,23 @@ function agentRows(
   return rows;
 }
 
+/** Each member's row, by their name, wearing their picture, said by their email or as You, found by either. */
+function personRows(
+  members: readonly WorkspaceMember[],
+  readerId: string | undefined,
+): MentionRow[] {
+  return members.map((member) => {
+    const detail = member.userId === readerId ? YOU_DETAIL : member.email;
+    return {
+      mention: { kind: MENTION_KIND.PERSON, userId: member.userId },
+      name: member.name,
+      detail,
+      terms: `${member.name} ${member.email}`,
+      actor: memberActor(member, readerId),
+    };
+  });
+}
+
 /**
  * Each of the task's pull requests' rows, by its number and title, wearing
  * its mark, labelled by the agent that published it: a pick writes its
@@ -558,6 +591,7 @@ interface KindRows {
   readonly plan: readonly MentionRow[];
   readonly pages: readonly MentionRow[];
   readonly agents: readonly MentionRow[];
+  readonly people: readonly MentionRow[];
   readonly pullRequests: readonly MentionRow[];
   readonly skills: readonly MentionRow[];
   /** The connected servers' rows, or the one server's the list is narrowed to. */
@@ -581,6 +615,8 @@ function narrowedRows(
       return best(rows.pages, term, PER_KIND);
     case MENTION_FROM.AGENTS:
       return best(rows.agents, term, PER_KIND);
+    case MENTION_FROM.PEOPLE:
+      return best(rows.people, term, PER_KIND);
     case MENTION_FROM.PULL_REQUESTS:
       return best(rows.pullRequests, term, PER_KIND);
     case MENTION_FROM.SKILLS:
@@ -620,6 +656,7 @@ function groupsFor(
     { label: MENTION_GROUP.PLAN, rows: best(rows.plan, term, PER_GROUP) },
     { label: MENTION_GROUP.PAGES, rows: best(rows.pages, term, PER_GROUP) },
     { label: MENTION_GROUP.AGENTS, rows: best(rows.agents, term, PER_GROUP) },
+    { label: MENTION_GROUP.PEOPLE, rows: best(rows.people, term, PER_GROUP) },
     { label: MENTION_GROUP.PULL_REQUESTS, rows: best(rows.pullRequests, term, PER_GROUP) },
     { label: MENTION_GROUP.SKILLS, rows: best(rows.skills, term, PER_GROUP) },
     { label: MENTION_GROUP.SERVERS, rows: best(rows.servers, term, PER_GROUP) },
@@ -638,6 +675,8 @@ function KindGlyph({ kind }: { kind: MentionKind }): React.JSX.Element {
       return <AppWindowIcon aria-hidden="true" />;
     case MENTION_FROM.AGENTS:
       return <AgentMark provider={undefined} />;
+    case MENTION_FROM.PEOPLE:
+      return <UsersIcon aria-hidden="true" />;
     case MENTION_FROM.PULL_REQUESTS:
       return <GitPullRequestIcon aria-hidden="true" />;
     case MENTION_FROM.SKILLS:
@@ -671,6 +710,12 @@ function RowGlyph({ row }: { row: MentionRow }): React.JSX.Element {
     case MENTION_KIND.AGENT:
       return row.actor === undefined ? (
         <AgentMark provider={undefined} />
+      ) : (
+        <ActorMark actor={row.actor} size={ACTOR_SIZE.INLINE} />
+      );
+    case MENTION_KIND.PERSON:
+      return row.actor === undefined ? (
+        <UserIcon />
       ) : (
         <ActorMark actor={row.actor} size={ACTOR_SIZE.INLINE} />
       );
@@ -853,6 +898,7 @@ export type MentionAgentsReader = (
 const NO_PAGES: readonly MentionablePage[] = [];
 const NO_AGENTS: readonly MentionableAgent[] = [];
 const NO_PULL_REQUESTS: readonly MentionablePullRequest[] = [];
+const NO_MEMBERS: readonly WorkspaceMember[] = [];
 
 /** The plan whose sections and repository the list offers, the workspace it stands in, and its text as it stands now; `NO_PLAN` for a page no plan holds, which offers its repository alone. */
 export interface MentionSource {
@@ -889,7 +935,8 @@ function treeKey(
 /**
  * The kinds the place offers, in the list's order: its repository's files
  * and folders where it names one, the plan and its pages where a plan
- * stands, the workspace's agents where it reads them, the pull requests
+ * stands, the workspace's agents where it reads them, its people where
+ * the window has read them, the pull requests
  * the plan's agents published, the repository's skills where the words go
  * to an agent, and each connected server, the
  * first of each provider narrowed to by the provider's own word.
@@ -899,6 +946,7 @@ function kindsOf(
   self: string | undefined,
   skills: MentionSkills | undefined,
   servers: readonly NamedServer[],
+  people: number,
 ): readonly MentionKind[] {
   const { taskId: planId, repository } = source;
   const pages = planId === NO_TASK ? 0 : (source.pages ?? NO_PAGES).length;
@@ -938,6 +986,15 @@ function kindsOf(
           },
         ]
       : []),
+    ...(people === 0
+      ? []
+      : [
+          {
+            from: MENTION_FROM.PEOPLE,
+            name: MENTION_GROUP.PEOPLE,
+            detail: counted(people, "member", "members"),
+          },
+        ]),
     ...(pullRequests === 0
       ? []
       : [
@@ -1000,6 +1057,7 @@ export function useMentionPicker({
 }): MentionPicker {
   const listId = useId();
   const { act } = useAct();
+  const { members, readerId } = useMemberDirectory();
   const [trigger, setTrigger] = useState<ComposerTrigger | undefined>(undefined);
   const [highlight, setHighlight] = useState<Highlight | undefined>(undefined);
   const [closedAt, setClosedAt] = useState<number | undefined>(undefined);
@@ -1065,7 +1123,7 @@ export function useMentionPicker({
   }, [askedAt, askSkills]);
 
   // The list is narrowed to the kind a key opened or whose word was typed, and searched by the words after it.
-  const kinds = open ? kindsOf(source, self, skills, servers) : [];
+  const kinds = open ? kindsOf(source, self, skills, servers, members?.length ?? 0) : [];
   const scope = open ? scopeOf(trigger, narrowing, kinds) : undefined;
   const term = scope?.term ?? "";
 
@@ -1118,6 +1176,7 @@ export function useMentionPicker({
               self,
               term,
             ),
+            people: personRows(members ?? NO_MEMBERS, readerId),
             pullRequests: pullRequestRows(planId, source.pullRequests ?? NO_PULL_REQUESTS),
             skills: skillRows(skills?.known ?? []),
             // A list narrowed to one server offers its tools before a word is typed.
