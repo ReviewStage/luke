@@ -33,6 +33,7 @@ import {
   type LiveBrain,
   type LiveBrainAsk,
   type LiveBrainCancel,
+  type LiveBrainJoin,
   type LiveBrainRecovery,
   type LiveBrainSubmission,
   LiveSessionService,
@@ -191,9 +192,9 @@ class TurnOpeningBrain implements LiveBrain {
     );
   }
 
-  /** The backend is not set exploring here: the words on record are the developer's asks alone. */
-  explore(): Effect.Effect<LiveBrainSubmission> {
-    return Effect.succeed({ outcome: LIVE_BRAIN_SUBMISSION.REFUSED, refusal: "unreachable" });
+  /** The backend is not set exploring here, nor any earlier work taken up: the words on record are the developer's asks alone. */
+  join(): Effect.Effect<LiveBrainJoin> {
+    return Effect.succeed({ joined: false, runs: [], missed: undefined, follow: Effect.void });
   }
 
   cancelRun(): Effect.Effect<LiveBrainCancel> {

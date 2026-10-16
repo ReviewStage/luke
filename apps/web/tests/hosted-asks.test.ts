@@ -102,3 +102,39 @@ it.effect(
       assert.equal(await asks.latestSession(other, conversationId), undefined);
     }),
 );
+
+it.effect(
+  "a fresh call reads back the conversation's spoken asks from any earlier call that are neither told to their end nor stopped, inside the window, for the account alone",
+  () =>
+    Effect.promise(async () => {
+      const owner = await database.createUser();
+      const other = await database.createUser();
+      const conversationId = await conversation(owner);
+      const spoken = (voiceSessionId: string, at: number) =>
+        asks.record({
+          ...write(owner, conversationId),
+          origin: ASK_ORIGIN.SPOKEN,
+          createdAt: new Date(at),
+          voice: { sessionId: voiceSessionId, revision: 1 },
+        });
+      const old = await spoken("voice-a", NOW - 60_000);
+      const told = await spoken("voice-a", NOW);
+      const stopped = await spoken("voice-a", NOW + 1);
+      const running = await spoken("voice-b", NOW + 2);
+      await asks.record({ ...write(owner, conversationId), createdAt: new Date(NOW + 3) });
+      await database.run(askEffects.told(told.id, { seq: 4, endAt: new Date(NOW + 10) }));
+      await asks.cancelRequested(stopped.id, new Date(NOW + 10));
+      const since = new Date(NOW - 1_000);
+
+      const unended = await database.run(askEffects.unendedSpoken(owner, conversationId, since));
+      assert.deepEqual(
+        unended.map((ask) => ask.id),
+        [running.id],
+      );
+      assert.ok(!unended.some((ask) => ask.id === old.id));
+      assert.deepEqual(
+        await database.run(askEffects.unendedSpoken(other, conversationId, since)),
+        [],
+      );
+    }),
+);
