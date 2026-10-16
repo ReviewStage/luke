@@ -4,6 +4,7 @@ export * from "./components/badge/badge.js";
 export * from "./components/button/button.js";
 export * from "./components/checkbox/checkbox.js";
 export * from "./components/chip/chip.js";
+export * from "./components/empty-state/empty-state.js";
 export * from "./components/form-field/form-field.js";
 export * from "./components/layout/layout.js";
 export * from "./components/segmented/segmented.js";

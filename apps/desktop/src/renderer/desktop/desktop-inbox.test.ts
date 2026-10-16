@@ -1038,7 +1038,7 @@ function backToList(page: HTMLElement): HTMLButtonElement {
 function emptyStateIn(page: HTMLElement, column: string): string | null {
   const shown = page.querySelector(column);
   assert.ok(shown, "the column is drawn");
-  const empty = shown.querySelector(".empty-state");
+  const empty = shown.querySelector(".luke-empty-state");
   return empty === null || shown.hasAttribute("hidden") ? null : (empty.textContent ?? "");
 }
 
@@ -1159,7 +1159,7 @@ function readTitle(page: HTMLElement): string | null | undefined {
 
 /** Needs you's empty state in the list as a reader meets it: its heading, its line, and its one press; none where the list stands none. */
 function needsYouEmpty(page: HTMLElement): readonly (string | null | undefined)[] | null {
-  const empty = page.querySelector(".inbox-tasks:not([hidden]) .empty-state");
+  const empty = page.querySelector(".inbox-tasks:not([hidden]) .luke-empty-state");
   if (empty === null) return null;
   return [
     empty.querySelector("h3")?.textContent,
@@ -1206,7 +1206,7 @@ test("with only settled items, Needs you pressed on lists no row, the item read 
   assert.deepEqual(columnsShown(page), ["list"]);
   assert.equal(needsYouEmpty(page)?.[0], "Nothing needs you");
 
-  const showAll = page.querySelector<HTMLButtonElement>(".inbox-tasks .empty-state button");
+  const showAll = page.querySelector<HTMLButtonElement>(".inbox-tasks .luke-empty-state button");
   assert.ok(showAll, "the empty state offers Show all");
   act(() => showAll.click());
   assert.equal(button().getAttribute("aria-pressed"), "false");

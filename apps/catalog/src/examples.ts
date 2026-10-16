@@ -4,6 +4,7 @@ import { BADGES_EXAMPLE } from "./examples/badges";
 import { BUTTONS_EXAMPLE } from "./examples/buttons";
 import { CHECKBOXES_EXAMPLE } from "./examples/checkboxes";
 import { CHIPS_EXAMPLE } from "./examples/chips";
+import { EMPTY_STATES_EXAMPLE } from "./examples/empty-states";
 import { FORM_FIELD_EXAMPLE } from "./examples/form-field";
 import { LAYOUT_EXAMPLE } from "./examples/layout";
 import { SEGMENTED_EXAMPLE } from "./examples/segmented";
@@ -43,4 +44,5 @@ export const EXAMPLES: readonly Example[] = [
   SKELETONS_EXAMPLE,
   BADGES_EXAMPLE,
   AVATARS_EXAMPLE,
+  EMPTY_STATES_EXAMPLE,
 ];

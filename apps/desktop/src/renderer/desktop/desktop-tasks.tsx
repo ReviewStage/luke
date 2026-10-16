@@ -4,6 +4,7 @@ import { planSections } from "@luke/features/plan-document";
 import { TERMINAL_ASK } from "@luke/features/terminal-entry";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
+import { EmptyState } from "@luke/ui";
 import { agentOfTab, followedAgent, sameTab } from "@luke/ui/tab-strip-model";
 import { repositoryGroups, repositoryLabel, taskRow } from "@luke/ui/task-list-model";
 import { DOCUMENT_REGION, TASK_MARK, TASKS_PAGE } from "@luke/ui/tasks-model";
@@ -14,7 +15,6 @@ import { useAct } from "../act";
 import { useAppCommand } from "../app-commands";
 import { AutomationDirectory } from "../automation-directory";
 import { LinkWorkspaceProvider } from "../copy-link-item";
-import { EmptyState } from "../empty-state";
 import { FIND_PAGE, FindScope, PageFind } from "../find-in-tab";
 import { MemberDirectory } from "../member-directory";
 import { NOT_FOUND_THING, NotFound } from "../not-found";
@@ -435,11 +435,7 @@ function PlanDocument({
         ? "The task could not be read."
         : "Choose a task, or start a new one.";
     // A plan that cannot be drawn offers no menu, so its way back to the home page is said here.
-    const close = (
-      <button type="button" className="toolbar-button" onClick={tasks.onLeaveTask}>
-        Close task
-      </button>
-    );
+    const close = { label: "Close task", onClick: tasks.onLeaveTask };
     return (
       <>
         <Toolbar
@@ -467,7 +463,11 @@ function PlanDocument({
             ) : (
               <p role="alert">{line}</p>
             )}
-            {region.kind === DOCUMENT_REGION.FAILED ? close : null}
+            {region.kind === DOCUMENT_REGION.FAILED ? (
+              <button type="button" className="toolbar-button" onClick={close.onClick}>
+                {close.label}
+              </button>
+            ) : null}
           </section>
         )}
       </>

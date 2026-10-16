@@ -1,4 +1,5 @@
 import type { TaskAgentLine } from "@luke/features/task-wire";
+import { EmptyState } from "@luke/ui";
 import {
   CHAT_PLACE,
   type ChatNames,
@@ -9,7 +10,6 @@ import {
 } from "@luke/ui/chat-model";
 import { AtSignIcon, HashIcon, MessagesSquareIcon } from "lucide-react";
 import { useMemo } from "react";
-import { EmptyState } from "../empty-state";
 import { ChatPane, MemberMark } from "../tasks/chat-pane";
 import { useMinute } from "../tasks/task-time";
 import { useOpenLink } from "../tasks/use-open-link";

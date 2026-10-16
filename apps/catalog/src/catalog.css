@@ -278,3 +278,14 @@ body {
 .catalog-grow {
   flex: 1;
 }
+
+/* A pane's room an empty state fills, tall enough to stand it above the middle. */
+.catalog-empty-room {
+  display: flex;
+  flex-direction: column;
+  height: 280px;
+}
+
+.catalog-empty-room-narrow {
+  width: 200px;
+}

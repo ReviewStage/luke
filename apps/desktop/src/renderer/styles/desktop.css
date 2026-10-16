@@ -2742,62 +2742,18 @@ ul.actor-stack {
   line-height: 1.55;
 }
 
-/* A whole tab with nothing in it yet (empty-state.tsx) fills the room its
-   pane leaves under the pane's header and stands a little above that room's
-   middle, where the eye takes the middle to be: the room above it and the
-   room below it are shared two to three. Where the pane is shorter than the
-   state, both shares are nothing and the state scrolls rather than run under
-   the header. */
-.empty-state {
-  display: flex;
-  min-height: 0;
-  flex: 1 1 0;
-  flex-direction: column;
-  align-items: center;
-  overflow-y: auto;
-}
-
-.empty-state::before,
-.empty-state::after {
-  content: "";
-}
-
-.empty-state::before {
-  flex: 2 1 0;
-}
-
-.empty-state::after {
-  flex: 3 1 0;
-}
-
 /* A pane that scrolls a list lays its empty state out as a column the state
    fills, while it holds one. Settings' column holds its page's name over the
    page, which keep their measure. */
 :is(.automations-scroll, .factory-scroll, .inbox-tasks-scroll, .settings-page-scroll):has(
-  .empty-state
+  .luke-empty-state
 ) {
   display: flex;
   flex-direction: column;
 }
 
-.settings-page-scroll:has(.empty-state) > * {
+.settings-page-scroll:has(.luke-empty-state) > * {
   width: 100%;
-}
-
-/* A whole tab with nothing in it yet (empty-state.tsx): the tab's glyph,
-   large and fainter than the faintest ink, which no token is, over its one
-   line. The stroke is thinned so the glyph keeps the weight of the tab's
-   own at more than twice its size. */
-.empty-state-icon {
-  display: flex;
-  color: var(--text-tertiary);
-  opacity: 0.6;
-}
-
-.empty-state-icon svg {
-  width: 40px;
-  height: 40px;
-  stroke-width: 1.4;
 }
 
 /* Something wanting a hand (`attention-mark.tsx`): a white exclamation on a
@@ -4820,7 +4776,7 @@ button.integration-tool-head:hover,
   flex: 3 1 0;
 }
 
-.automations-empty > .empty-state {
+.automations-empty > .luke-empty-state {
   flex: none;
   overflow: visible;
 }

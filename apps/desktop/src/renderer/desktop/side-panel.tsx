@@ -12,7 +12,7 @@ import type { CodeRef } from "@luke/features/task-wire";
 import { TASK_WORK_STATE, type TaskCodeShowing } from "@luke/features/tasks-view";
 import { TERMINAL_ASK, TERMINAL_TARGET, terminalTarget } from "@luke/features/terminal-entry";
 import { ACT_KIND } from "@luke/host/acts";
-import { CollapseIcon, ExpandIcon, SidePanelIcon } from "@luke/ui";
+import { CollapseIcon, EmptyState, ExpandIcon, SidePanelIcon } from "@luke/ui";
 import {
   agentOfTab,
   type ChangesStripTab,
@@ -47,7 +47,6 @@ import { useAct } from "../act";
 import { useAppCommand } from "../app-commands";
 import { CallTabVideo } from "../call/panel-avatar";
 import { useCopyLinkItem } from "../copy-link-item";
-import { EmptyState } from "../empty-state";
 import { FindScope } from "../find-in-tab";
 import { drawnVisibly, focusSeek } from "../focus-seek";
 import { panelTabPlace } from "../links-at-hand";
