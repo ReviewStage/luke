@@ -36,6 +36,7 @@ const AT = 1_792_000_000_000;
 const MERGED = "https://github.com/acme/relay/pull/42";
 const UNREACHED = "https://github.com/acme/secret/pull/7";
 const OLDER_SERVICE = "https://github.com/acme/relay/pull/44";
+const MANY_LABELS = "https://github.com/acme/relay/pull/45";
 const OPEN_ISSUE = "https://github.com/acme/relay/issues/7";
 const SHELVED_ISSUE = "https://github.com/acme/relay/issues/9";
 const UNREACHED_ISSUE = "https://github.com/acme/secret/issues/3";
@@ -92,6 +93,16 @@ const RELAY_PULLS = new Map([
       ],
       comments: 7,
       commits: 1,
+    },
+  ],
+  [
+    45,
+    {
+      number: 45,
+      title: "Label everything",
+      url: MANY_LABELS,
+      state: PULL_REQUEST_STATE.OPEN,
+      labels: ["a", "b", "c", "d", "e", "f", "g", "h"].map((name) => ({ name, color: "4fd18b" })),
     },
   ],
   [
@@ -362,4 +373,13 @@ test("a pull request's card names its labels, each with a dot of its own colour 
   ]);
   assert.deepEqual(cardNotes(older), ["relay#44 · Open"]);
   assert.deepEqual(cardLabels(older), []);
+});
+
+test("a pull request's card names its first six labels and counts the rest, so a card with many stays short", async () => {
+  const { container } = await drawn(`See ${MANY_LABELS}.`, ACME_WITH_GITHUB);
+
+  assert.deepEqual(
+    cardLabels(container.querySelector(".mention-chip") ?? undefined).map(([name]) => name),
+    ["a", "b", "c", "d", "e", "f", "+2"],
+  );
 });
