@@ -245,3 +245,12 @@ test("a press on a place's chip opens the place in the window", async () => {
     { kind: LINK_PLACE.PERSON, userId: SAM },
   ]);
 });
+
+test("an agent's chip the window knows no harness for holds its glyph's box empty, rather than a stand-in glyph, its name saying whose it is", async () => {
+  const container = await drawn(`${HOME}/plan/${PLAN}/agent/${UNNAMED_AGENT}`, []);
+  const chip = container.querySelector<HTMLElement>('.mention-chip[data-kind="agent"]');
+  const glyph = chip?.querySelector(".mention-chip-glyph > svg") ?? assert.fail("a box stands");
+
+  assert.equal(glyph.childElementCount, 0, "the box draws no glyph");
+  assert.equal(chip?.querySelector(".mention-chip-label")?.textContent, "Agent");
+});

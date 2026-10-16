@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import {
   ACTOR_KIND,
   ACTOR_STATE,
@@ -111,6 +112,36 @@ test("each kind of actor stands on its own kind of mark, which a screen reader s
   );
   assert.ok(marks.every((mark) => mark.getAttribute("aria-hidden") === "true"));
   assert.ok(view.querySelector('[data-kind="luke"] .luke-face'), "Luke wears his face");
+});
+
+test("an agent whose harness is not known yet stands on an empty box the size its harness's mark lands in, named by the words beside it", () => {
+  const view = draw(
+    createElement(
+      "p",
+      null,
+      createElement(ActorRef, { actor: AGENT }),
+      createElement(ActorRef, {
+        actor: { ...AGENT, name: "Ship invites", provider: MODEL_PROVIDER.ANTHROPIC },
+      }),
+    ),
+  );
+  if (document.head.querySelector("style") === null) {
+    document.head.appendChild(document.createElement("style")).textContent = DESKTOP_CSS;
+  }
+  const [waiting, known] = [...view.querySelectorAll('.actor-mark[data-kind="agent"]')].map(
+    (mark) => mark.querySelector(".state-glyph > :is(svg, img)") ?? assert.fail("a box stands"),
+  );
+  assert.ok(waiting && known);
+
+  assert.equal(waiting.childElementCount, 0, "the box draws no glyph");
+  assert.ok(known.classList.contains("harness-mark"), "a known harness wears its mark");
+  const box = (glyph: Element) => {
+    const style = getComputedStyle(glyph);
+    return [style.width, style.height];
+  };
+  assert.notDeepEqual(box(known), ["", ""], "the stylesheet sizes the box");
+  assert.deepEqual(box(waiting), box(known), "the mark lands in the box held for it");
+  assert.equal(view.querySelector(".actor-ref-name")?.textContent, "Fix auth flow");
 });
 
 test("an actor with a page is a press that opens it, and a person's name is words in the line", () => {

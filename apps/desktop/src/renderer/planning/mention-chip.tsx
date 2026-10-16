@@ -16,14 +16,7 @@ import {
   sectionAnchors,
 } from "@luke/features/mention-link";
 import { placeChipLook } from "@luke/features/place-chip-model";
-import {
-  CallIcon,
-  CodingAgentsIcon,
-  DocumentIcon,
-  GearIcon,
-  ProviderMark,
-  UserIcon,
-} from "@luke/ui";
+import { CallIcon, DocumentIcon, GearIcon, ProviderMark, UserIcon } from "@luke/ui";
 import type { Actor } from "@luke/ui/actor-model";
 import { fileName } from "@luke/voice/code-pane-model";
 import {
@@ -428,7 +421,7 @@ function PlaceGlyph({ kind }: { kind: LinkPlace["kind"] }): React.JSX.Element {
     case LINK_PLACE.CALL:
       return <CallIcon />;
     case LINK_PLACE.AGENT:
-      return <CodingAgentsIcon />;
+      return <AgentMark provider={undefined} />;
     case LINK_PLACE.WORKER:
       return <BotIcon aria-hidden="true" />;
     case LINK_PLACE.CHANGES:
