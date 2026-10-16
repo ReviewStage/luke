@@ -10,7 +10,7 @@ import { inPlanOrder, isDraftTab, type StripTab, sameTab, tabKey } from "@luke/u
 import { useEffect, useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
-import { useDraftedAgents } from "../composer-drafts";
+import { type DraftTabs, useDraftedTabs } from "../composer-drafts";
 import { useCopyLinkItem } from "../copy-link-item";
 import { DraftMark } from "../draft-mark";
 import { agentCardReading } from "../planning/agent-ref";
@@ -213,6 +213,24 @@ function AgentMenuTab({
   );
 }
 
+/**
+ * The tabs of the open plan's column that mark a draft of their own, as the
+ * strip draws them (`agentTabs`, the Inbox's): its open agents' but those a
+ * failure's mark stands on instead, its Inbox while open, and its draft
+ * agent's. The plan's sidebar row marks what none of them does.
+ */
+export function drawnDraftTabs(main: MainTabsControl, agents: CodingAgentsControl): DraftTabs {
+  return {
+    agents: (agents.agents ?? []).flatMap((agent) =>
+      main.openAgents?.includes(agent.id) && agentEndMark(agent, false) === undefined
+        ? [agent.id]
+        : [],
+    ),
+    inbox: main.tabs.includes(MAIN_TAB.INBOX),
+    newAgents: agents.draft === undefined ? [] : [agents.draft.id],
+  };
+}
+
 /** One tab the strip draws: the tab, how it looks, how it closes, how its transcript is copied, and the agent it is, for an agent's. */
 interface DrawnTab {
   tab: MainTab;
@@ -228,9 +246,9 @@ interface DrawnTab {
  * through `main`. An agent's transcript is read whole from the service for a
  * copy, since its tab holds it only while shown, and its card previews its
  * latest step from what its tab last held (`heldLatest`). An agent's tab
- * whose box holds a draft wears the draft's pencil at its end while another
- * tab is chosen, since the chosen one's box shows the words, where a
- * failure's mark does not stand there first (`draft-mark.tsx`).
+ * or the draft's whose box holds a draft wears the draft's pencil at its end
+ * while another tab is chosen, since the chosen one's box shows the words,
+ * where a failure's mark does not stand there first (`draft-mark.tsx`).
  */
 function agentTabs(input: {
   main: MainTabsControl;
@@ -238,8 +256,8 @@ function agentTabs(input: {
   unread: readonly StripTab[];
   views: TabViews;
   copied: TranscriptCopier;
-  /** The agents whose box holds a draft, by id. */
-  drafted: readonly string[];
+  /** The plan's tabs whose box holds a draft. */
+  drafted: DraftTabs;
 }): DrawnTab[] {
   const { main, agents, unread, views, copied, drafted } = input;
   const chosen = (tab: MainTab) => sameTab(tab, main.tab);
@@ -263,7 +281,7 @@ function agentTabs(input: {
         ...tabLook({ kind: TAB_KIND.AGENT, name: label, agent }),
         endMark:
           agentEndMark(agent, false) ??
-          (drafted.includes(agent.id) && !chosen(tab) ? <DraftMark /> : undefined),
+          (drafted.agents.includes(agent.id) && !chosen(tab) ? <DraftMark /> : undefined),
         card: <AgentTabCard name={label} models={models} read={readCard} />,
       }),
       close: () => main.onClose(tab),
@@ -277,7 +295,16 @@ function agentTabs(input: {
       : [
           {
             tab: { draft },
-            look: look({ draft }, tabLook({ kind: TAB_KIND.DRAFT })),
+            look: look(
+              { draft },
+              {
+                ...tabLook({ kind: TAB_KIND.DRAFT }),
+                endMark:
+                  drafted.newAgents.includes(draft) && !chosen({ draft }) ? (
+                    <DraftMark />
+                  ) : undefined,
+              },
+            ),
             close: () => {
               main.onClose({ draft });
               agents.onDiscardDraft(draft);
@@ -412,7 +439,7 @@ export function MainTabStrip({
   onOpenTerminal: (agentId: string) => void;
 }): React.JSX.Element {
   const copied = useTranscriptCopier();
-  const drafted = useDraftedAgents();
+  const drafted = useDraftedTabs(plan.id);
   const pinnedOf = (tab: ColumnPinnableTab) =>
     pins.pinned.some((pin) => pin.plan === plan.id && sameTab(pin.tab, tab));
   // A pinned Inbox stands whatever arrives, so it offers no close until unpinned.
@@ -424,6 +451,7 @@ export function MainTabStrip({
           look: {
             ...tabLook({ kind: TAB_KIND.INBOX }),
             detail: inbox === 0 ? undefined : String(inbox),
+            endMark: drafted.inbox && main.tab !== MAIN_TAB.INBOX ? <DraftMark /> : undefined,
             selected: main.tab === MAIN_TAB.INBOX,
             onSelect: () => main.onChoose(MAIN_TAB.INBOX),
           },

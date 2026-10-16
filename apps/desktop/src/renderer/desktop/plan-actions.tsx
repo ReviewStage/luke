@@ -42,6 +42,7 @@ import { ConfirmDialog, type DialogQuestion, useConfirmDialog } from "../setting
 import { Tooltip } from "../tooltip";
 import { useAppState } from "../use-app-state";
 import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
+import { drawnDraftTabs } from "./main-tabs";
 import { strandedHome, useMovePlanDialog } from "./move-plan-dialog";
 import { PlanStatusMark, planCardOf } from "./plan-card";
 import { PlanNameField, usePlanRename } from "./plan-name-field";
@@ -419,13 +420,13 @@ export function PlanActions({
  * it was last updated, led by one mark for a repository that belongs to
  * another workspace, an agent at work, or a pull request (`plan-card.tsx`),
  * the first named in the row's card, before that a pencil while a draft
- * waits in one of its boxes and the plan is not the one open, whose boxes
- * are in sight (`draft-mark.tsx`), and before that, on a task someone else
- * created, its creator's face (`teammateCreator`), read against the members
- * of the directory around the list; the reader's own tasks wear none. Its
- * repository's name, muted, where the list hands one (in one run), and no
- * face where its group is its creator's. Its time is the one the list's
- * order chooses. Pin
+ * waits in one of its boxes, past those its column's tabs mark themselves
+ * while it is the plan open (`draft-mark.tsx`), and before that, on a task
+ * someone else created, its creator's face (`teammateCreator`), read against
+ * the members of the directory around the list; the reader's own tasks wear
+ * none. Its repository's name, muted, where the list hands one (in one run),
+ * and no face where its group is its creator's. Its time is the one the
+ * list's order chooses. Pin
  * and Archive stand in place of all of it while the row is hovered or
  * reached from the keyboard.
  * A press opens it, and a right-click offers its actions where the pointer is. Renamed,
@@ -449,7 +450,7 @@ export function SidebarPlan({
   plan: PlanSummary;
   /** Whether this is the plan the work column is showing. */
   current: boolean;
-  /** Whether the plan is open in the window, which a row the sidebar does not mark may be, as one opened from a pin; the row's own mark unless said. */
+  /** Whether the plan is open in the window, its column's tabs marking their own drafts; a row the sidebar does not mark may be, as one opened from a pin, and is its own mark unless said. */
   open?: boolean;
   /** Whether the plan was saved since the developer last looked at it on this Mac. */
   unread: boolean;
@@ -471,7 +472,10 @@ export function SidebarPlan({
   });
   const teammate = teammateCreator(plan, useMemberDirectory());
   const creator = face ? teammate : undefined;
-  const drafted = usePlanDrafted(plan.id);
+  const drafted = usePlanDrafted(
+    plan.id,
+    open ? drawnDraftTabs(plans.mainTabs, plans.agents) : undefined,
+  );
   const row = useRef<HTMLButtonElement | null>(null);
   const item = useRef<HTMLLIElement | null>(null);
   const refocus = useRef(false);
@@ -523,7 +527,7 @@ export function SidebarPlan({
                 {creator === undefined ? null : (
                   <ActorMark actor={creator} size={ACTOR_SIZE.MARK} />
                 )}
-                {drafted && !open ? <DraftMark /> : null}
+                {drafted ? <DraftMark /> : null}
                 <PlanStatusMark plan={plan} stranded={strandedHome(plans, plan)} />
                 <RelativeTime at={at} now={now} hint={false} />
               </span>
